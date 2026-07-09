@@ -113,6 +113,13 @@ class NebularSEDComponent:
     backend: Any | None = None
     name: str = "nebular"
     _state: NebularSEDComponentState | None = None
+    #: Optional per-Q_H nebular grid (:class:`NebularGridTable`). When attached
+    #: (via :meth:`SEDModel.enable_fast_nebular`) and it carries a photometry
+    #: channel, :meth:`apply` reconstructs ``nebular_phot_lnu_precomp`` as
+    #: ``Q_H x interp(grid)`` instead of the per-eval filter integration — which
+    #: makes the Cue forward dead for the photometry channel (XLA prunes it).
+    #: Typed loosely to avoid an import cycle; it is a ``NebularGridTable``.
+    grid_table: Any | None = None
     # Tuple prefix so the MAPPINGS shock backend (``shock_*``) and the
     # photoionization backends (``neb_*``, ``ionspec_*``, ``gas_*``) all
     # flow through the standard prefix-stripping path. Backends silently
@@ -342,6 +349,27 @@ class NebularSEDComponent:
             )
         raise NotImplementedError(f"NebularSEDComponent unknown backend {self.config.backend!r}.")
 
+    def _grid_interp_point(self, grid, params, state):
+        """Assemble the ionization interp point for :attr:`grid_table`.
+
+        ``neb_logU`` / ``neb_logZ_gas`` are in the (prefix-sliced) ``params`` this
+        component sees; ``met_logzsol`` is **not** (the stellar component owns it),
+        so it is sourced from the stellar-published absolute metallicity history
+        and converted back to relative ``log10(Z/Zsun)`` — the units the grid axis
+        was built in. Returns a dict keyed by ``grid.axis_names`` for
+        :func:`reconstruct_nebular_phot`.
+        """
+        point = {}
+        for name in grid.axis_names:
+            if name == "met_logzsol":
+                from tengri.parameters.translate import LOG10_ZSUN
+
+                log_z_hist = state.derived.get("log_metallicity_history")
+                point[name] = jnp.asarray(log_z_hist)[0] - LOG10_ZSUN
+            else:
+                point[name] = jnp.asarray(params[name])
+        return point
+
     def apply(
         self,
         state: ForwardState,
@@ -465,7 +493,22 @@ class NebularSEDComponent:
             _dig_kwargs = dict(common_kwargs)
             _dig_kwargs["neb_logU"] = common_kwargs["neb_logU"] + jnp.asarray(_dig_delta_logU)
 
-        if self.config.backend == "cue":
+        # FAST path (#950): with a per-Q_H grid attached, the nebular photometry
+        # (this apply) and the emission lines (predict_line_fluxes) reconstruct
+        # from the grid, so the expensive Cue continuum + line-catalog forwards
+        # are not needed. Skip them: ``nebular_sed`` becomes zeros (its only live
+        # consumers are the exact spectrum / dust-continuum paths, which a fast
+        # model does not use — SEDModel.predict_spectrum guards against it), and
+        # the Cue NN forward is genuinely gone (not merely pruned), which is where
+        # the ~1.2 ms/eval saving comes from.
+        use_grid = (
+            self.grid_table is not None
+            and getattr(self.grid_table, "log_phot_per_qh", None) is not None
+        )
+
+        if use_grid:
+            nebular_sed = zeros
+        elif self.config.backend == "cue":
             # Forward Cue's full 12-parameter surface. Backend signature
             # accepts ``**neb_params`` so unrecognized keys are ignored
             # safely; we forward every ``ionspec_*`` and ``gas_*`` we
@@ -542,8 +585,10 @@ class NebularSEDComponent:
 
         # Publish the discrete line catalog (``line_waves`` /
         # ``line_lums``) when the backend supports it. This is what the
-        # legacy ``state_to_emission_lines`` bridge consumes.
-        if hasattr(self.backend, "predict_nebular_line_luminosities"):
+        # legacy ``state_to_emission_lines`` bridge consumes. Skipped on the
+        # fast grid path — predict_line_fluxes reconstructs lines from the grid,
+        # so the Cue line-catalog forward is not run.
+        if not use_grid and hasattr(self.backend, "predict_nebular_line_luminosities"):
             try:
                 if self.config.backend == "cue":
                     # #303: opt into the full Cue catalog (~271 species)
@@ -672,7 +717,27 @@ class NebularSEDComponent:
         # Filter-integrate the nebular SED and publish
         # ``nebular_phot_lnu_precomp`` for consumption by predict_via_precomp.
         derived_overrides = dict(sed_nebular=nebular_sed, sed_shock=zeros)
-        if (
+        grid = self.grid_table
+        if grid is not None and getattr(grid, "log_phot_per_qh", None) is not None:
+            # FAST path (#950): reconstruct the intrinsic nebular photometry from
+            # the per-Q_H grid, ``L_nu = Q_H x interp(grid)``, instead of the
+            # per-eval filter integration below. The downstream contract is
+            # identical — ``predict_via_precomp`` applies the young-limit dust
+            # screen (at the filter level) and the cosmology dimming to this same
+            # ``nebular_phot_lnu_precomp`` key, so only the intrinsic-L_nu source
+            # changes. ``nebular_sed`` (the Cue continuum) is now unread by the
+            # photometry channel, so XLA prunes the Cue forward from
+            # ``predict_photometry``. Q_H is the stellar-published ``nion``.
+            from tengri.components.nebular.nebular_grid_precompute import (
+                reconstruct_nebular_phot,
+            )
+
+            nion = state.derived["nion"]
+            nion = jnp.sum(nion) if jnp.ndim(nion) else nion
+            derived_overrides["nebular_phot_lnu_precomp"] = reconstruct_nebular_phot(
+                nion, self._grid_interp_point(grid, params, state), grid
+            )
+        elif (
             self._state is not None
             and self._state.filter_waves is not None
             and self._state.filter_trans is not None

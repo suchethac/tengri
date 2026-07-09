@@ -458,6 +458,13 @@ class StellarSEDComponentState(SEDComponentState):
     # for fixed-z and free-z (redshift is applied inside the integral).
     phot_fw_padded: Any | None = None
     phot_ft_padded: Any | None = None
+    #: Number of SSP wavelength bins in the ionizing region (lambda < 2*911.76 A),
+    #: a static structural constant of the fixed SSP grid. Computed at build time
+    #: (concrete grid) and carried as static meta so :meth:`apply` can integrate
+    #: Q_H over the ionizing slice ALONE, decoupling ``nion`` from the full-grid
+    #: ``sed_intrinsic`` — that lets the WavePrecomp LUT path prune the full
+    #: stellar SED einsum instead of forcing it just to publish Q_H (#950).
+    n_ion_bins: int | None = None
 
 
 @dataclass(frozen=True)
@@ -649,6 +656,17 @@ class StellarSEDComponent:
         from dataclasses import replace as _replace_state
 
         state = StellarSEDComponentState(name=self.name)
+
+        # Static ionizing-bin count from the concrete build-time SSP grid, so
+        # ``apply`` can compute Q_H over the ionizing slice alone (see the field
+        # docstring). The grid is ascending, so lambda < 2*911.76 A is a prefix.
+        _ssp_for_nion = ssp_data if ssp_data is not None else self.ssp_data
+        if _ssp_for_nion is not None:
+            import numpy as _np
+
+            _wave = _np.asarray(_ssp_for_nion.ssp_wave)
+            n_ion = int(_np.count_nonzero(_wave < 2.0 * _HI_LIMIT_AA))
+            state = _replace_state(state, n_ion_bins=n_ion)
 
         # SpectrumPrecomp — pre-rebin SSP to spectrum pixel centers.
         # Part A (joint): build the spectrum LUT *alongside* the photometry LUT
@@ -1426,7 +1444,22 @@ class StellarSEDComponent:
         # noise at any SSP grid spacing.
         # Q_H via the single-sourced integral (partial-bin Lyman correction
         # lives in _integrate_nion, shared with compute_nion for bit-exactness).
-        nion = _integrate_nion(sed_intrinsic, wave)
+        #
+        # Integrate over the ionizing SLICE alone (lambda < 2*911.76 A, a prefix
+        # of the ascending grid) rather than the full-grid sed_intrinsic. This
+        # decouples nion from the 6000-wave stellar SED: under approx=WavePrecomp
+        # the LUT path can then prune the full stellar einsum, which was
+        # otherwise dragged into the graph solely to publish Q_H for the nebular
+        # backend (#950). Bit-exact — sed_ion == sed_intrinsic[:n_ion]. Falls
+        # back to the full integral when the static bound was not precomputed.
+        _n_ion = self._state.n_ion_bins if self._state is not None else None
+        if _n_ion is not None:
+            _sed_ion = (total_mass * LSUN_ERG_PER_S) * jnp.tensordot(
+                joint_weights, ssp_flux_for_csp[:, :, :_n_ion], axes=([0, 1], [0, 1])
+            )
+            nion = _integrate_nion(_sed_ion, wave[:_n_ion])
+        else:
+            nion = _integrate_nion(sed_intrinsic, wave)
 
         # ── 11b. Project to pipeline wavelength grid ────────────────
         # When the pipeline runs on a panchromatic grid (radio/X-ray
@@ -1823,11 +1856,19 @@ class StellarSEDComponent:
         # Ionizing slice + a buffer so the boundary bin's first non-ionizing
         # point is included; the non-ionizing region contributes zero to the
         # Lyman mask, so slicing is bit-exact with the full-grid integral.
-        mask = wave < (2.0 * _HI_LIMIT_AA)
+        #
+        # The region λ < 2·912Å is a PREFIX of the ascending ``ssp_wave``, so its
+        # length is a concrete structural constant. Take a STATIC slice rather
+        # than a boolean mask: ``ssp.ssp_flux[:, :, mask]`` raises
+        # NonConcreteBooleanIndexError when ``ssp_flux`` is a traced jit input
+        # (the fast nebular line path differentiates through this), whereas a
+        # static-length slice compiles cleanly. ``int(jnp.sum(...))`` is concrete
+        # for the fixed wave grid; it fails loudly if ever handed a traced grid.
+        n_ion = int(jnp.sum(wave < (2.0 * _HI_LIMIT_AA)))
         sed_ion = (total_mass * LSUN_ERG_PER_S) * jnp.tensordot(
-            joint_weights, ssp.ssp_flux[:, :, mask], axes=([0, 1], [0, 1])
+            joint_weights, ssp.ssp_flux[:, :, :n_ion], axes=([0, 1], [0, 1])
         )
-        return _integrate_nion(sed_ion, wave[mask])
+        return _integrate_nion(sed_ion, wave[:n_ion])
 
 
 def _time_weighted_sfr(

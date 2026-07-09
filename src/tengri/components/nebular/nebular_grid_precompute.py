@@ -271,13 +271,40 @@ def reconstruct_nebular_lines(nion, params, redshift, table) -> jnp.ndarray:
     **JIT-compatible / gradient-safe**: yes — node-exact PCHIP interpolation + a
     scalar multiply + the cosmology divisor.
     """
+    return reconstruct_nebular_line_lums(nion, params, table) / _four_pi_dl2(redshift)
+
+
+def reconstruct_nebular_line_lums(nion, params, table) -> jnp.ndarray:
+    r"""Intrinsic line **luminosities** [erg/s] from the grid — no Cue, no cosmology.
+
+    The distance-independent core of :func:`reconstruct_nebular_lines`. Returns
+    the intrinsic (un-reddened) line luminosities so a caller can apply dust
+    attenuation at the line wavelengths and the cosmology dimming itself — the
+    order :meth:`SEDModel.predict_line_fluxes` uses (redden the intrinsic
+    catalog, then convert ``L / 4 pi d_L^2``).
+
+    Parameters
+    ----------
+    nion : float
+        Ionizing photon rate for this evaluation (stellar-published; == q_h).
+    params : Mapping
+        Parameter dict — the free-axis values (``params[name]`` for ``name`` in
+        ``table.axis_names``) locate the query point. Use full public names
+        (``met_logzsol`` / ``neb_logU`` / ``neb_logZ_gas``).
+    table : NebularGridTable
+        The grid from :func:`precompute_nebular_grid`.
+
+    Returns
+    -------
+    ndarray, shape (n_lines,)
+        Intrinsic line luminosities [erg/s].
+    """
     if not table.axis_names:
         log_lpq = table.log_line_per_qh
     else:
         point = tuple(jnp.asarray(params[name]).reshape(()) for name in table.axis_names)
         log_lpq = interp_nd_pchip(table.log_line_per_qh, table.axes, point)
-    lum = jnp.asarray(nion) * (10.0**log_lpq)  # node-exact geometric interp
-    return lum / _four_pi_dl2(redshift)
+    return jnp.asarray(nion) * (10.0**log_lpq)  # node-exact geometric interp
 
 
 def reconstruct_nebular_phot(nion, params, table) -> jnp.ndarray:

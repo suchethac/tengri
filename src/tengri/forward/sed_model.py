@@ -2822,6 +2822,23 @@ class SEDModel:
         # has its own dedicated signature entries above and stays distinct.
         spec_fixed_id = tuple(sorted(self.spec.fixed_params))
 
+        # Fast nebular grid (#950): when attached via ``enable_fast_nebular`` the
+        # nebular photometry + line channels reconstruct from a per-Q_H grid and
+        # the Cue forward is pruned. That is a DIFFERENT compiled graph AND the
+        # kernel closes over the grid arrays, so a fast model must not share a
+        # slot with the exact model, nor with a fast model over different
+        # ionization axes / grid values (would silently reuse a stale kernel —
+        # the color-leak failure mode this signature exists to prevent).
+        _grid = getattr(self, "_nebular_grid_table", None)
+        if _grid is not None:
+            nebular_grid_sig = (
+                "grid",
+                tuple(_grid.axis_names),
+                int(np.asarray(_grid.log_line_per_qh).tobytes().__hash__()),
+            )
+        else:
+            nebular_grid_sig = ("none",)
+
         return (
             ssp_flux_shape,
             ssp_lgmet_shape,
@@ -2874,6 +2891,7 @@ class SEDModel:
             compile_mode,
             approx_resolved,
             spec_fixed_id,
+            nebular_grid_sig,
         )
 
     def predict_photometry(self, params):
@@ -3051,6 +3069,20 @@ class SEDModel:
         predict : Lazy access to all SED and SFH quantities.
         predict_photometry : Filter-integrated flux (simpler, faster).
         """
+        # Fast-nebular guard (#950): with a per-Q_H grid attached the Cue
+        # continuum forward is skipped (nebular_sed = 0), so the spectrum would
+        # be missing the nebular continuum + emission lines. Refuse loudly rather
+        # than silently return a nebular-less spectrum — the fast path is for
+        # photometry + line fluxes only.
+        if getattr(self, "_nebular_grid_table", None) is not None:
+            raise ValueError(
+                "predict_spectrum is not available on a fast-nebular model "
+                "(enable_fast_nebular attached a per-Q_H grid, so the Cue "
+                "continuum forward is skipped and the spectrum would omit the "
+                "nebular emission). Use the exact model (built without "
+                "enable_fast_nebular) for spectra, line ratios, and .lines."
+            )
+
         # A caller-supplied ``wave_obs`` is evaluated directly on that grid,
         # independent of any configured spectroscopy channel or the cached
         # ``predict_observables`` (which is photometry-only on a photometry
@@ -3327,23 +3359,42 @@ class SEDModel:
         # ``ssp_weights`` + ``ssp_log_ages_yr`` and the canonical
         # neb_logZ_gas → absolute-log10(Z) translation.
         #
-        # ``state`` may be supplied by a caller that has already run the
-        # forward (e.g. the joint loss deriving line fluxes + ratios +
-        # indices from ONE ``predict_state`` — see
-        # ``loss_functions._build_prediction``) so the full-grid forward
-        # is not recomputed once per feature channel.
-        if state is None:
-            state = self.predict_state(params)
-        if "line_waves" not in state.derived or "line_lums" not in state.derived:
-            raise ValueError(
-                "Configured nebular backend did not publish a discrete "
-                "line catalog to state.derived (expected keys "
-                "'line_waves' and 'line_lums'). The BakedIn backend bakes "
-                "lines into the SSP grid; ShockBackend publishes a "
-                "continuous line SED instead. Switch to Cue or CloudyGrid."
+        grid = getattr(self, "_nebular_grid_table", None)
+        if grid is not None:
+            # FAST path (#950): reconstruct intrinsic line luminosities from the
+            # per-Q_H grid — no Cue forward. Q_H is the stellar-published ``nion``
+            # (from the passed state when available, else the SED-free
+            # ``compute_nion``); the grid supplies ``L_line / Q_H``. The shared
+            # redden + target-match + cosmology tail below is unchanged.
+            from tengri.components.nebular.nebular_grid_precompute import (
+                reconstruct_nebular_line_lums,
             )
-        all_waves = jnp.asarray(state.derived["line_waves"])
-        all_lums = jnp.asarray(state.derived["line_lums"])
+
+            if state is not None and "nion" in state.derived:
+                nion = state.derived["nion"]
+            else:
+                nion = self._compute_nion(params)
+            nion = jnp.sum(nion) if jnp.ndim(nion) else nion
+            all_waves = jnp.asarray(grid.wavelengths)
+            all_lums = reconstruct_nebular_line_lums(nion, params, grid)
+        else:
+            # ``state`` may be supplied by a caller that has already run the
+            # forward (e.g. the joint loss deriving line fluxes + ratios +
+            # indices from ONE ``predict_state`` — see
+            # ``loss_functions._build_prediction``) so the full-grid forward
+            # is not recomputed once per feature channel.
+            if state is None:
+                state = self.predict_state(params)
+            if "line_waves" not in state.derived or "line_lums" not in state.derived:
+                raise ValueError(
+                    "Configured nebular backend did not publish a discrete "
+                    "line catalog to state.derived (expected keys "
+                    "'line_waves' and 'line_lums'). The BakedIn backend bakes "
+                    "lines into the SSP grid; ShockBackend publishes a "
+                    "continuous line SED instead. Switch to Cue or CloudyGrid."
+                )
+            all_waves = jnp.asarray(state.derived["line_waves"])
+            all_lums = jnp.asarray(state.derived["line_lums"])
 
         # Dust-redden the lines at their wavelengths (single-sourced with the
         # interactive .lines path). The backend publishes INTRINSIC line_lums, so
@@ -3398,6 +3449,110 @@ class SEDModel:
         # photometry+line-flux fit unusable against real data.
         flux = selected_lums / (4.0 * jnp.pi * dl_cm**2)
         return flux
+
+    def enable_fast_nebular(self, target_wavelengths, *, n_grid=16, ranges=None):
+        r"""Attach a per-Q_H nebular grid so lines + photometry skip the Cue forward.
+
+        Builds the adaptive-axis nebular grid
+        (:func:`~tengri.components.nebular.nebular_grid_precompute.precompute_nebular_grid`)
+        from **this** model — running the Cue forward once per grid point at build
+        time — then attaches it to the nebular component. Afterwards:
+
+        * :meth:`predict_photometry` reconstructs the nebular broadband
+          contribution as :math:`Q_H \times \mathrm{interp}(\text{grid})`, and the
+          Cue forward becomes dead for the photometry channel (XLA prunes it);
+        * :meth:`predict_line_fluxes` reconstructs the emission lines the same way.
+
+        Both are **SED-free in** :math:`Q_H` (the stellar-published ``nion``). The
+        grid axes are whichever of ``met_logzsol`` / ``neb_logU`` /
+        ``neb_logZ_gas`` are FREE; fixed ionization params are baked.
+
+        Parameters
+        ----------
+        target_wavelengths : array_like, shape (n_lines,)
+            Rest-frame vacuum line wavelengths [Angstrom] the grid tabulates and
+            :meth:`predict_line_fluxes` serves.
+        n_grid : int, default 16
+            Grid points per free ionization axis. Denser → tighter interpolation.
+        ranges : dict, optional
+            Override ``{param: (lo, hi)}`` grid bounds (defaults to each free
+            param's prior support).
+
+        Returns
+        -------
+        SEDModel
+            ``self`` (configured in place), for chaining.
+
+        Raises
+        ------
+        ValueError
+            If no Q_H-linear nebular backend (Cue) is configured.
+
+        Notes
+        -----
+        **Approximation.** Reconstruction is exact at grid nodes and node-exact
+        PCHIP between them. Photometry error stays ~1 % on the total (nebular is
+        subdominant in broadband); line-flux error is a few percent on a moderate
+        grid, tightest when ``met_logzsol`` is fixed (the gas axes interpolate more
+        smoothly than the ionizing-spectrum-shape metallicity axis). Validate
+        parity for your configuration before production use.
+
+        For the photometry channel the model must be built with
+        ``approx=WavePrecomp()`` (so the grid can capture the intrinsic
+        filter-integrated nebular ``L_nu``); without it only the line channel is
+        reconstructed and photometry stays on the exact path.
+
+        **JIT-compatible**: the resulting :meth:`predict_photometry` /
+        :meth:`predict_line_fluxes` are JIT- and gradient-safe; the one-time grid
+        build is eager.
+        """
+        import dataclasses
+
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.nebular.nebular_grid_precompute import precompute_nebular_grid
+
+        if self._nebular_backend is None or not hasattr(
+            self._nebular_backend, "predict_nebular_line_luminosities"
+        ):
+            raise ValueError(
+                "enable_fast_nebular requires a Q_H-linear nebular backend with "
+                "line prediction (Cue). The configured backend is "
+                f"{type(self._nebular_backend).__name__ if self._nebular_backend else 'none'}."
+            )
+
+        target_wavelengths = jnp.asarray(target_wavelengths)
+        table = precompute_nebular_grid(self, target_wavelengths, n_grid=n_grid, ranges=ranges)
+        self._nebular_grid_table = table
+        # Rebuild the chain from scratch (exact, no grid) and swap in the
+        # grid-carrying nebular component so ``apply`` takes the fast branch.
+        # compile_signature() now differs (nebular_grid_sig), so the next
+        # predict_* builds a fresh kernel over this chain — no stale reuse.
+        chain = self._build_component_chain()
+        self._cached_component_chain = [
+            dataclasses.replace(c, grid_table=table) if isinstance(c, NebularSEDComponent) else c
+            for c in chain
+        ]
+        return self
+
+    def _compute_nion(self, params):
+        """SED-free ionizing photon rate :math:`Q_H` from the stellar component.
+
+        Slices ``params`` to the stellar prefixes and delegates to
+        :meth:`StellarSEDComponent.compute_nion` — the ionizing-slice integral
+        that skips the full-wavelength SED. Used by the fast nebular line path so
+        it never runs :meth:`predict_state`.
+        """
+        from tengri.components.stellar.component import StellarSEDComponent
+        from tengri.forward.orchestrator import slice_params_for_component
+
+        chain = getattr(self, "_cached_component_chain", None)
+        if chain is None:
+            chain = self._cached_component_chain = self._build_component_chain()
+        stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
+        if stellar is None:
+            raise ValueError("No StellarSEDComponent in the chain — cannot compute Q_H.")
+        sliced = slice_params_for_component(stellar, params)
+        return stellar.compute_nion(sliced, ssp_data=self.ssp_data)
 
     def predict_line_ratios(self, params, line_ratio_data, *, state=None):
         """Predict emission line ratios for a :class:`LineRatioData` set.
