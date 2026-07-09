@@ -94,7 +94,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, **recipes.mock_recovery_mi
 
 truth = model.spec.sample(jax.random.PRNGKey(0))
 mock = generate_mock(model, truth, key=jax.random.PRNGKey(1), snr=20.0)
-flux_obs, noise = mock["flux_obs"], mock["noise"]
+flux_obs, noise = mock.flux_obs, mock.noise
 
 # %% [markdown]
 # ## Figure 1 — the posterior gradient
