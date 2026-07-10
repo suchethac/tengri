@@ -325,6 +325,79 @@ class DustSEDComponent:
 
         return DustSEDComponentState(name=self.name)
 
+    def compute_transmission(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        wavelength: jnp.ndarray,
+        ssp_ages_yr: jnp.ndarray,
+    ) -> jnp.ndarray:
+        r"""Age-resolved two-component transmission :math:`T(\lambda, \mathrm{age})`.
+
+        The single source of this component's dust screen. :meth:`apply` calls it
+        on the full SSP wave grid; the FeaturePrecomp fast path
+        (:meth:`SEDModel.predict_spectral_indices` with ``fast=True``) calls it at
+        the index window centers — so the fast path applies **exactly** the dust
+        the forward applies, with no second implementation to keep in sync.
+
+        Resolves per-component (birth-cloud vs diffuse) law parameters — the
+        shared ``dust_<x>`` params with any config overrides layered on top; empty
+        overrides reproduce the original single-slope Charlot & Fall (2000)
+        behavior exactly — then evaluates :func:`two_component_dust`.
+
+        Parameters
+        ----------
+        params : mapping
+            Receives ``dust_tau_bc`` / ``dust_tau_diff`` (+ optional
+            ``dust_f_obscuration`` and per-law override keys).
+        wavelength : ndarray, shape (n_wave,)
+            Rest-frame wavelengths [Å] at which to evaluate the screen.
+        ssp_ages_yr : ndarray, shape (n_age,)
+            SSP lookback ages [yr] — the birth-cloud axis.
+
+        Returns
+        -------
+        ndarray, shape (n_age, n_wave)
+            Transmission in ``[0, 1]``: the youngest bins (age < ``t_birth``)
+            carry birth-cloud + diffuse, older bins the diffuse screen only.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — pure ``jnp`` + registry law resolution.
+        """
+        bc_law_params, diff_law_params = resolve_bc_diff_law_params(
+            params,
+            dict(self.config.bc_law_overrides),
+            dict(self.config.diff_law_overrides),
+        )
+        return self._transmission_from_law_params(
+            params, wavelength, ssp_ages_yr, bc_law_params, diff_law_params
+        )
+
+    def _transmission_from_law_params(
+        self, params, wavelength, ssp_ages_yr, bc_law_params, diff_law_params
+    ) -> jnp.ndarray:
+        """:func:`two_component_dust` evaluated with pre-resolved law params.
+
+        The single call site of the two-component screen. :meth:`apply` resolves
+        ``bc_law_params`` / ``diff_law_params`` once (it reuses them for the
+        nebular-continuum block) and passes them here; :meth:`compute_transmission`
+        resolves and delegates for the fast path.
+        """
+        return two_component_dust(
+            wavelength=jnp.asarray(wavelength),
+            age_grid=jnp.asarray(ssp_ages_yr),
+            tau_v1=jnp.asarray(params["dust_tau_bc"]),
+            tau_v2=jnp.asarray(params["dust_tau_diff"]),
+            law_bc=self.config.law_bc,
+            law_diff=self.config.law_diff,
+            f_obscuration=jnp.asarray(params.get("dust_f_obscuration", 0.0)),
+            t_birth=self.config.t_birth_yr,
+            transition_width=self.config.transition_width_dex,
+            bc_params={k: jnp.asarray(v) for k, v in bc_law_params.items()},
+            diff_params={k: jnp.asarray(v) for k, v in diff_law_params.items()},
+            lyman_cutoff_aa=self.config.lyman_cutoff_aa,
+        )  # (n_age, n_wave), in [0, 1]
+
     def apply(
         self,
         state: ForwardState,
@@ -365,28 +438,17 @@ class DustSEDComponent:
         ssp_ages_yr = jnp.asarray(state.derived["ssp_ages_yr"])
 
         # ── 1. Two-component transmission T(λ, age) ─────────────────────
-        # Resolve per-component (birth-cloud vs diffuse) law parameters: the
-        # shared ``dust_<x>`` params, with any per-component overrides from the
-        # config layered on top. Empty overrides reproduce the original
-        # single-slope Charlot & Fall (2000) behavior exactly.
+        # Resolve per-component (birth-cloud vs diffuse) law parameters once —
+        # reused below for the nebular-continuum screen. The screen itself is
+        # single-sourced with the FeaturePrecomp fast path via
+        # :meth:`_transmission_from_law_params` (see :meth:`compute_transmission`).
         bc_law_params, diff_law_params = resolve_bc_diff_law_params(
             params,
             dict(self.config.bc_law_overrides),
             dict(self.config.diff_law_overrides),
         )
-        transmission = two_component_dust(
-            wavelength=wave,
-            age_grid=ssp_ages_yr,
-            tau_v1=jnp.asarray(params["dust_tau_bc"]),
-            tau_v2=jnp.asarray(params["dust_tau_diff"]),
-            law_bc=self.config.law_bc,
-            law_diff=self.config.law_diff,
-            f_obscuration=jnp.asarray(params.get("dust_f_obscuration", 0.0)),
-            t_birth=self.config.t_birth_yr,
-            transition_width=self.config.transition_width_dex,
-            bc_params={k: jnp.asarray(v) for k, v in bc_law_params.items()},
-            diff_params={k: jnp.asarray(v) for k, v in diff_law_params.items()},
-            lyman_cutoff_aa=self.config.lyman_cutoff_aa,
+        transmission = self._transmission_from_law_params(
+            params, wave, ssp_ages_yr, bc_law_params, diff_law_params
         )  # (n_age, n_wave), in [0, 1]
 
         # ── 2. Apply transmission per age and aggregate ────────────────
