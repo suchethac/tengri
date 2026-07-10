@@ -244,6 +244,17 @@ def load_ssp_data(filepath: str) -> SSPData:
         raise ImportError("h5py required for SSP loading: pip install h5py") from None
 
     import os
+
+    if not os.path.isfile(filepath):
+        raise FileNotFoundError(
+            f"SSP file not found: '{filepath}'. Pre-formatted grids are one "
+            "call away: tengri.download_ssp() fetches the default FSPS grid "
+            "to data/, and tengri.list_known_ssps() shows the alternatives "
+            "(BC03, BPASS, ProGeny, ...). Already have grids elsewhere? "
+            "Point TENGRI_DATA at that directory."
+        )
+
+    import os
     from pathlib import Path
 
     fp = Path(filepath)

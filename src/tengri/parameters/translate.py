@@ -567,3 +567,57 @@ def check_unknown_params(params, param_map):
         from tengri.config.exceptions import UnknownParameterError
 
         raise UnknownParameterError(_unknown_param_msg(unrecognized, param_map))
+
+
+def check_missing_free_params(params, spec, param_map=None):
+    """Raise when a free (non-Fixed) parameter has no value in ``params``.
+
+    Companion to :func:`check_unknown_params` at the ``predict_state``
+    entry. Without it, a missing free parameter survives the
+    ``{**fixed_values, **params}`` merge and surfaces deep inside a
+    component as a bare ``KeyError`` (e.g. ``'dust_tau_bc'``) with no hint
+    that the model simply expected a value for every free parameter —
+    commonly hit by ``model.mock({})`` on a model whose default dust group
+    carries free optical depths.
+
+    Parameters
+    ----------
+    params : Mapping
+        User-supplied parameter dict (public names, short-form aliases, or
+        legacy internal names).
+    spec : Parameters
+        The model's parameter specification.
+    param_map : Mapping, optional
+        ``public_name -> (internal_name, scale, offset)``. When given, a
+        value supplied under the parameter's internal name also counts
+        (mirrors the backwards-compat acceptance in
+        :func:`check_unknown_params`).
+
+    Raises
+    ------
+    MissingParameterError
+        If any free parameter of ``spec`` is absent from ``params`` under
+        its public name, short-form alias, and internal name.
+    """
+    missing = []
+    for pub_name in spec.free_params:
+        if pub_name in params:
+            continue
+        if pub_name == "sfh_field_xi" and "psd_xi" in params:
+            continue
+        if find_short_param(params, pub_name) is not None:
+            continue
+        if param_map is not None and pub_name in param_map and param_map[pub_name][0] in params:
+            continue
+        missing.append(pub_name)
+    if missing:
+        from tengri.config.exceptions import MissingParameterError
+
+        raise MissingParameterError(
+            f"Missing values for free parameters: {missing}. Every non-Fixed "
+            "parameter needs a value at predict time. Draw a complete set with "
+            "``params = model.spec.sample(jax.random.PRNGKey(0))``, or fix "
+            "parameters at build time (``'*': FIXED`` in the group dict, or "
+            "``param=Fixed(value)``). ``model.spec.summary()`` shows which "
+            "parameters are free."
+        )

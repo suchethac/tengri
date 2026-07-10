@@ -103,6 +103,18 @@ _FACILITY_FROM_PREFIX: dict[str, str] = {
 }
 
 
+def _unknown_filter_msg(name: str) -> str:
+    """Did-you-mean error message for an unrecognized filter name."""
+    import difflib
+
+    close = difflib.get_close_matches(name, sorted(FILTER_REGISTRY), n=3, cutoff=0.6)
+    hint = f" Did you mean {close}?" if close else ""
+    return (
+        f"Unknown filter '{name}'.{hint} tengri.list_filters() shows every "
+        "registered name; load_custom_filter() loads arbitrary curve files."
+    )
+
+
 def _infer_facility(name: str) -> str:
     """Infer facility from filter short name prefix."""
     for prefix, facility in _FACILITY_FROM_PREFIX.items():
@@ -223,7 +235,7 @@ def filter_info(name: str, *, cache_dir: str | None = None) -> dict:
 
     """
     if name not in FILTER_REGISTRY:
-        raise KeyError(f"Unknown filter '{name}'. Use list_available_filters() to see options.")
+        raise KeyError(_unknown_filter_msg(name))
     kwargs = {"cache_dir": cache_dir} if cache_dir is not None else {}
     fc = load_filter(name, **kwargs)
     wave_np = np.asarray(fc.wave)
@@ -419,10 +431,7 @@ def load_filter(
 
     """
     if name not in FILTER_REGISTRY:
-        raise KeyError(
-            f"Unknown filter '{name}'. Use list_available_filters() to see "
-            f"valid names, or use load_custom_filter() for arbitrary files."
-        )
+        raise KeyError(_unknown_filter_msg(name))
 
     svo_id = FILTER_REGISTRY[name]
     wave, trans = download_filter(svo_id, cache_dir=cache_dir)
