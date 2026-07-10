@@ -101,8 +101,9 @@ def precompute_line_per_qh(
     """Build the metallicity-indexed ``L_line / nion`` table.
 
     Evaluates the exact nebular forward at a fixed reference SFH across a dense
-    ``met_logzsol`` grid. Because ``line_per_qh`` is SFH-shape-independent, the
-    reference SFH is arbitrary; the table depends only on ``met_logzsol`` (and
+    ``met_logzsol`` grid. ``line_per_qh`` is SFH-shape-independent only to ~0.2 %
+    (#1018), so the reference SFH is nearly but not exactly arbitrary; the table
+    depends (to that accuracy) only on ``met_logzsol`` (and
     the model's fixed nebular ionization).
 
     Parameters

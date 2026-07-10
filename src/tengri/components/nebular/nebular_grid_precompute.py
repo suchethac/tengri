@@ -29,8 +29,8 @@ Interpolation is **node-exact** monotone-cubic PCHIP
 log10-luminosity space, so the reconstruction is exact at grid nodes,
 JIT/gradient-safe, and free of the smoothing bias a kernel smoother introduces on
 the steeply logU-varying lines. The ionizing-spectrum shape is
-**not** a grid axis — it is carried by the ``met_logzsol`` axis (SFH-independent,
-#950). See issue #950.
+**not** a grid axis — it is carried by the ``met_logzsol`` axis (SFH-independent
+to ~0.2 %; #1018). See issue #950.
 """
 
 from __future__ import annotations
@@ -166,8 +166,10 @@ def precompute_nebular_grid(
 
     Auto-detects which of ``met_logzsol`` / ``neb_logU`` / ``neb_logZ_gas`` are
     free in ``model.spec`` and grids exactly those; fixed ones are baked at their
-    spec value. Because the per-Q_H factor is SFH-shape-independent, the reference
-    SFH is arbitrary.
+    spec value. The per-Q_H factor is SFH-shape-independent only to ~0.2 % (#1018:
+    the ionizing-spectrum shape is the Q_H-weighted age mix, so re-weighting the SFH
+    shifts the forbidden-line emissivity slightly), so the reference SFH is nearly
+    but not exactly arbitrary — well inside the interpolation error.
 
     Parameters
     ----------

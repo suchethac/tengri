@@ -1,18 +1,27 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Contract: the FeaturePrecomp line table reconstructs Cue lines without Cue (#950).
 
-Cue line luminosities are exactly linear in Q_H, and the per-Q_H factor is
-SFH-shape-independent (only stellar metallicity + fixed gas conditions matter).
-So ``L_line = nion * interp_met(line_per_qh)`` reproduces the exact
-``predict_line_fluxes`` — replacing the ~3 ms Cue neural forward with a
-metallicity interpolation + a scalar multiply.
+Cue line luminosities are exactly linear in Q_H (scaling the SFH amplitude scales
+every line by the same factor — pinned to rtol=1e-12 below), and the per-Q_H factor
+is SFH-shape-independent **to ~0.2 %**. So ``L_line = nion * interp_met(line_per_qh)``
+reproduces the exact ``predict_line_fluxes`` — replacing the ~3 ms Cue neural
+forward with a metallicity interpolation + a scalar multiply.
+
+.. note::
+   The SFH-shape independence is **approximate, not exact** (#1018). The ionizing
+   spectrum's shape is the Q_H-weighted combination of the young age bins, so a
+   different SFH shape re-weights that mix and shifts the per-Q_H forbidden-line
+   emissivity slightly. Before #1018 the shape was picked from a single
+   ``argmax`` age bin, making it piecewise-constant in the SFH — so this test
+   passed at < 1e-3 as an *artifact of that bug*, not because the physics is exact.
+   Q_H **linearity** (amplitude scaling) remains exact, since it does not change
+   the age-mix.
 
 This pins the accuracy contract: reconstruction from a 40-point metallicity
-table matches the exact forward to < 1e-3 on the strong DESI lines across
-arbitrary (SFH shape, metallicity) — three orders of magnitude below the
-measurement floor. The stellar metallicity enters Cue *nonlinearly*, so the
-test also guards that the grid is dense enough (a coarse grid fails at
-1-60 %, verified during the #950 design).
+table matches the exact forward to < 5e-3 on the strong DESI lines across
+arbitrary (SFH shape, metallicity) — still well below the measurement floor. The
+stellar metallicity enters Cue *nonlinearly*, so the test also guards that the
+grid is dense enough (a coarse grid fails at 1-60 %, verified during #950).
 
 Data-gated: needs the bare-stellar FSPS SSP (Cue requires it); skips in CI.
 """
@@ -88,7 +97,9 @@ def test_line_table_reconstructs_exact_across_sfh_and_metallicity(ssp_data_fsps)
         strong = np.abs(exact) > 1e-3 * np.max(np.abs(exact))
         rel = np.max(np.abs(lut - exact)[strong] / np.maximum(np.abs(exact)[strong], 1e-40))
         worst = max(worst, rel)
-    assert worst < 1e-3, f"line-table reconstruction off by {worst:.2e} (>1e-3) on strong lines"
+    # 5e-3, not 1e-3: the per-Q_H factor carries a genuine ~0.2 % SFH-shape
+    # dependence now that the ionizing shape is the Q_H-weighted age mix (#1018).
+    assert worst < 5e-3, f"line-table reconstruction off by {worst:.2e} (>5e-3) on strong lines"
 
 
 def test_table_is_redshift_independent(ssp_data_fsps):
@@ -118,7 +129,8 @@ def test_table_is_redshift_independent(ssp_data_fsps):
     )
     strong = np.abs(exact_hi) > 1e-3 * np.max(np.abs(exact_hi))
     rel = np.max(np.abs(lut_hi - exact_hi)[strong] / np.maximum(np.abs(exact_hi)[strong], 1e-40))
-    assert rel < 1e-3, f"cross-redshift reconstruction off by {rel:.2e} (table built at z=0.1)"
+    # 5e-3: see the module note — SFH-shape independence is ~0.2 %, not exact (#1018).
+    assert rel < 5e-3, f"cross-redshift reconstruction off by {rel:.2e} (table built at z=0.1)"
 
 
 def test_free_ionization_is_rejected_at_build(ssp_data_fsps):
