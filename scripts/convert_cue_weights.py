@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """Convert Cue neural network weights from TensorFlow pickle files to a single npz.
 
-This script requires dill and numpy (and indirectly sklearn, since the PCA
-pickles contain IncrementalPCA objects). The output npz file does NOT require
-TensorFlow or dill to load.
+Self-contained: requires only numpy and the Python standard library. The
+upstream ``cue`` package, TensorFlow, scikit-learn, dill, and tqdm are NOT
+needed — class references inside the pickles are resolved to lightweight
+stubs instead of being imported (see ``_UpstreamStubUnpickler``). The output
+npz file loads with ``numpy.load(..., allow_pickle=False)``.
+
+The shipped ``data/cue_weights.npz`` was produced by this script; you only
+need to run it to regenerate the file from a new upstream Cue release.
 
 Usage
 -----
-    python scripts/convert_cue_weights.py [--cue-dir /path/to/cue/data] [--output data/cue_weights.npz]
+    git clone https://github.com/yi-jia-li/cue /tmp/cue_astro
+    python scripts/convert_cue_weights.py \
+        [--cue-dir /tmp/cue_astro/src/cue/data] [--output data/cue_weights.npz]
 
 The script reads:
     - speculator_line_new_*.pkl   (16 line sub-network weights)
@@ -26,78 +33,120 @@ References
 """
 
 import argparse
+import pickle
 import sys
-import types
 from pathlib import Path
 
+import numpy as np
+
 # ---------------------------------------------------------------------------
-# Comprehensive TensorFlow mock so dill/pickle can resolve references to
-# TF classes without importing TensorFlow itself (which segfaults on macOS
-# with certain builds).
+# Unpickling without upstream imports.
 #
-# The pickle files reference:
+# The pickle files reference classes by module path, and pickle.load()
+# imports those modules to resolve them:
 #   - tensorflow.python.trackable.data_structures.ListWrapper (just a list)
-#   - Cue's own classes (nn.Speculator, cont_pca.SpectrumPCA) which do
-#     `import tensorflow as tf` at module level and access tf.float32,
-#     tf.function, tf.keras.SEDModel, tf.keras.optimizers.Adam
+#   - cue.nn.Speculator / cue.cont_pca.SpectrumPCA (attribute bags whose
+#     modules `import tensorflow` and crash on NumPy 2.x via np.in1d)
+#   - sklearn IncrementalPCA (we only need .components_ and .mean_)
+#
+# Overriding Unpickler.find_class substitutes stubs for all of these, so
+# none of tensorflow / cue / sklearn / tqdm is ever imported.
 # ---------------------------------------------------------------------------
 
 
-class _MockTFModule(types.ModuleType):
-    """Module that returns child mocks for any attribute access."""
+class _Stub:
+    """Attribute bag standing in for an upstream class during unpickling."""
 
-    def __getattr__(self, name):
-        if name.startswith("_"):
-            raise AttributeError(name)
-        child = types.ModuleType(f"{self.__name__}.{name}")
-        child.__class__ = _MockTFModule
-        sys.modules[child.__name__] = child
-        return child
+    def __new__(cls, *args, **kwargs):
+        return super().__new__(cls)
 
-    def __call__(self, *args, **kwargs):
-        return self
-
-
-def _install_tf_mock():
-    """Install a comprehensive TF mock into sys.modules."""
-    tf = _MockTFModule("tensorflow")
-    tf.float32 = "float32"
-    tf.function = lambda f: f  # decorator passthrough
-
-    class _FakeModel:
+    def __init__(self, *args, **kwargs):
         pass
 
-    keras = _MockTFModule("tensorflow.keras")
-    keras.SEDModel = _FakeModel
-    optimizers = _MockTFModule("tensorflow.keras.optimizers")
-    optimizers.Adam = lambda **kw: None
-    keras.optimizers = optimizers
-    tf.keras = keras
-
-    ds = _MockTFModule("tensorflow.python.trackable.data_structures")
-    ds.ListWrapper = list
-
-    sys.modules["tensorflow"] = tf
-    sys.modules["tensorflow.keras"] = keras
-    sys.modules["tensorflow.keras.optimizers"] = optimizers
-    sys.modules["tensorflow.python"] = _MockTFModule("tensorflow.python")
-    sys.modules["tensorflow.python.trackable"] = _MockTFModule(
-        "tensorflow.python.trackable"
-    )
-    sys.modules["tensorflow.python.trackable.data_structures"] = ds
+    def __setstate__(self, state):
+        if isinstance(state, dict):
+            self.__dict__.update(state)
+        else:
+            self.__dict__["_state"] = state
 
 
-_install_tf_mock()
+def _dill_create_array(f, args, state, npdict=None):
+    """Reimplementation of ``dill._dill._create_array`` (numpy reconstructor).
 
-import dill as pickle
-import numpy as np
+    The upstream pickles were dumped with dill, which wraps every numpy
+    array in this constructor. It is the only dill-specific reference in
+    the streams, so shimming it here removes the dill dependency.
+    """
+    array = f(*args)
+    array.__setstate__(state)
+    if npdict is not None:
+        array.__dict__.update(npdict)
+    return array
+
+
+class _UpstreamStubUnpickler(pickle.Unpickler):
+    """Resolve upstream class references to stubs instead of importing them."""
+
+    def find_class(self, module, name):
+        if module.startswith("tensorflow"):
+            if name == "ListWrapper":
+                return list
+            return _Stub
+        if module == "cue" or module.startswith(("cue.", "sklearn")):
+            return _Stub
+        if module == "dill._dill" and name == "_create_array":
+            return _dill_create_array
+        return super().find_class(module, name)
+
+
+def _load_pickle_with_stubs(filepath: str):
+    """Unpickle a Cue weights file, stubbing out upstream class references.
+
+    Falls back to dill for streams that carry dill-specific constructors
+    (none of the current upstream files do).
+    """
+    with open(filepath, "rb") as f:
+        try:
+            return _UpstreamStubUnpickler(f).load()
+        except ModuleNotFoundError as err:
+            if "dill" not in str(err):
+                raise
+
+    try:
+        import dill
+    except ImportError:
+        sys.exit(
+            f"{filepath} was written with dill-specific constructors; "
+            "install it to convert this file: pip install dill"
+        )
+
+    class _DillStubUnpickler(dill.Unpickler):
+        find_class = _UpstreamStubUnpickler.find_class
+
+    with open(filepath, "rb") as f:
+        return _DillStubUnpickler(f).load()
+
 
 # ---------------------------------------------------------------------------
 # Sub-network names (must match nn_name in cue/utils.py)
 # ---------------------------------------------------------------------------
 LINE_NAMES = [
-    "H1", "He1", "He2", "C1", "C2C3", "C4", "N", "O1",
-    "O2", "O3", "ionE_1", "ionE_2", "S4", "Ar4", "Ne3", "Ne4",
+    "H1",
+    "He1",
+    "He2",
+    "C1",
+    "C2C3",
+    "C4",
+    "N",
+    "O1",
+    "O2",
+    "O3",
+    "ionE_1",
+    "ionE_2",
+    "S4",
+    "Ar4",
+    "Ne3",
+    "Ne4",
 ]
 
 
@@ -110,13 +159,28 @@ def _load_speculator_pkl(filepath: str) -> dict:
      pca_transform_matrix_, n_parameters, n_wavelengths, wavelengths,
      n_pcas, n_hidden, n_layers, architecture]
     """
-    with open(filepath, "rb") as f:
-        attrs = pickle.load(f)
+    attrs = _load_pickle_with_stubs(filepath)
 
-    (W, b, alphas, betas, param_shift, param_scale,
-     pca_shift, pca_scale, log_spec_shift, log_spec_scale,
-     pca_transform_matrix, n_parameters, n_wavelengths, wavelengths,
-     n_pcas, n_hidden, n_layers, architecture) = attrs
+    (
+        W,
+        b,
+        alphas,
+        betas,
+        param_shift,
+        param_scale,
+        pca_shift,
+        pca_scale,
+        log_spec_shift,
+        log_spec_scale,
+        pca_transform_matrix,
+        n_parameters,
+        n_wavelengths,
+        wavelengths,
+        n_pcas,
+        n_hidden,
+        n_layers,
+        architecture,
+    ) = attrs
 
     return {
         "W": W,
@@ -150,8 +214,7 @@ def _load_pca_pkl(filepath: str) -> dict:
 
     inverse_transform(X) = X @ components_ + mean_
     """
-    with open(filepath, "rb") as f:
-        pca_obj = pickle.load(f)
+    pca_obj = _load_pickle_with_stubs(filepath)
 
     return {
         "components": np.asarray(pca_obj.PCA.components_, dtype=np.float32),
@@ -176,10 +239,15 @@ def _flatten_nn_weights(prefix: str, nn: dict, npz_dict: dict) -> None:
     for i, b in enumerate(nn["betas"]):
         npz_dict[f"{prefix}_beta_{i}"] = np.asarray(b, dtype=np.float32)
 
-    for key in ("parameters_shift", "parameters_scale",
-                "pca_shift", "pca_scale",
-                "log_spectrum_shift", "log_spectrum_scale",
-                "pca_transform_matrix"):
+    for key in (
+        "parameters_shift",
+        "parameters_scale",
+        "pca_shift",
+        "pca_scale",
+        "log_spectrum_shift",
+        "log_spectrum_scale",
+        "pca_transform_matrix",
+    ):
         npz_dict[f"{prefix}_{key}"] = nn[key]
 
     npz_dict[f"{prefix}_n_layers"] = np.array(n_layers, dtype=np.int32)
@@ -239,8 +307,7 @@ def convert(cue_dir: str, output_path: str) -> None:
 
     _flatten_nn_weights("cont", cont_nn, npz)
     _flatten_pca_weights("cont", cont_pca, npz)
-    print(f"  continuum: {cont_nn['n_layers']} layers, "
-          f"architecture={cont_nn['architecture']}")
+    print(f"  continuum: {cont_nn['n_layers']} layers, architecture={cont_nn['architecture']}")
 
     # ------------------------------------------------------------------
     # Wavelength grids and line metadata
@@ -293,8 +360,10 @@ def convert(cue_dir: str, output_path: str) -> None:
         npz["cont_wavelength_full"] = np.asarray(cont_lam, dtype=np.float64)
         # Cue uses cont_lam[122:] — wavelengths redward of Lyman limit
         npz["cont_wavelength"] = np.asarray(cont_lam[122:], dtype=np.float64)
-        print(f"  cont_wavelength: {cont_lam[122:].shape} "
-              f"(from {cont_lam[122]:.1f} to {cont_lam[-1]:.1f} A)")
+        print(
+            f"  cont_wavelength: {cont_lam[122:].shape} "
+            f"(from {cont_lam[122]:.1f} to {cont_lam[-1]:.1f} A)"
+        )
     else:
         print(f"  WARNING: {fsps_lam_path} not found")
 
@@ -315,11 +384,22 @@ def convert(cue_dir: str, output_path: str) -> None:
         ele_arr = np.array([n[:4].rstrip() for n in sorted_name])
 
         nn_ion = [
-            ["H  1"], ["He 1"], ["He 2"], ["C  1"], ["C  2", "C  3"], ["C  4"],
-            ["N  1", "N  2", "N  3"], ["O  1"], ["O  2"], ["O  3"],
+            ["H  1"],
+            ["He 1"],
+            ["He 2"],
+            ["C  1"],
+            ["C  2", "C  3"],
+            ["C  4"],
+            ["N  1", "N  2", "N  3"],
+            ["O  1"],
+            ["O  2"],
+            ["O  3"],
             ["Mg 2", "Fe 2", "Si 2", "Al 2", "P  2", "S  2", "Cl 2", "Ar 2"],
             ["Al 3", "Si 3", "S  3", "Cl 3", "Ar 3", "Ne 2"],
-            ["S  4"], ["Ar 4"], ["Ne 3"], ["Ne 4"],
+            ["S  4"],
+            ["Ar 4"],
+            ["Ne 3"],
+            ["Ne 4"],
         ]
 
         # For each sub-network, store which indices in the sorted line
@@ -327,13 +407,13 @@ def convert(cue_dir: str, output_path: str) -> None:
         all_wav_sel = []
         max_n = 0
         for ion_set in nn_ion:
-            flat_ions = [ion for sublist in ([ion_set] if isinstance(ion_set, str) else [ion_set]) for ion in sublist]
+            flat_ions = [ion_set] if isinstance(ion_set, str) else list(ion_set)
             sel = np.where(np.isin(ele_arr, flat_ions))[0]
             all_wav_sel.append(sel)
             max_n = max(max_n, len(sel))
 
         # Store each sub-network's wav selection
-        for i, (name, sel) in enumerate(zip(LINE_NAMES, all_wav_sel)):
+        for name, sel in zip(LINE_NAMES, all_wav_sel):
             npz[f"line_{name}_wav_selection"] = np.asarray(sel, dtype=np.int32)
 
         # The concatenated wavelength array that the NN predicts
@@ -342,11 +422,16 @@ def convert(cue_dir: str, output_path: str) -> None:
 
         # "line_old" index: lines that match the cloudyfsps subset
         line_new_added = np.where(
-            (sorted_lam == 4685.68) | (sorted_lam == 1550.77) |
-            (sorted_lam == 1548.19) | (sorted_lam == 1750.00) |
-            (sorted_lam == 2424.28) | (sorted_lam == 1882.71) |
-            (sorted_lam == 1892.03) | (sorted_lam == 1406.02) |
-            (sorted_lam == 4711.26) | (sorted_lam == 4740.12)
+            (sorted_lam == 4685.68)
+            | (sorted_lam == 1550.77)
+            | (sorted_lam == 1548.19)
+            | (sorted_lam == 1750.00)
+            | (sorted_lam == 2424.28)
+            | (sorted_lam == 1882.71)
+            | (sorted_lam == 1892.03)
+            | (sorted_lam == 1406.02)
+            | (sorted_lam == 4711.26)
+            | (sorted_lam == 4740.12)
         )[0]
         n_total = len(sorted_lam)
         line_old_idx = np.arange(n_total)[~np.isin(np.arange(n_total), line_new_added)]
@@ -366,12 +451,14 @@ def convert(cue_dir: str, output_path: str) -> None:
 
     # Report
     total_params = 0
-    for key, val in npz.items():
+    for val in npz.values():
         if isinstance(val, np.ndarray):
             total_params += val.size
     size_mb = output_path.stat().st_size / 1024 / 1024
-    print(f"\nSaved {len(npz)} arrays ({total_params:,} total elements) "
-          f"to {output_path} ({size_mb:.1f} MB)")
+    print(
+        f"\nSaved {len(npz)} arrays ({total_params:,} total elements) "
+        f"to {output_path} ({size_mb:.1f} MB)"
+    )
 
 
 def main():
@@ -384,11 +471,19 @@ def main():
         help="Path to Cue data directory containing pkl/npy files.",
     )
     parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         default="data/cue_weights.npz",
         help="Output npz file path (relative to tengri root).",
     )
     args = parser.parse_args()
+    if not Path(args.cue_dir).is_dir():
+        sys.exit(
+            f"Cue data directory not found: {args.cue_dir}\n"
+            "Clone upstream Cue first:\n"
+            "    git clone https://github.com/yi-jia-li/cue /tmp/cue_astro\n"
+            "then re-run (or pass --cue-dir /path/to/cue/src/cue/data)."
+        )
     convert(args.cue_dir, args.output)
 
 

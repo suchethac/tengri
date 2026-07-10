@@ -512,8 +512,9 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     # User-provided Z(t) table for ``metallicity_model="table"``.
     # ``met_table_log_age_yr`` is the table's age axis in log10(age/yr),
     # sorted ascending; ``met_table_log_z_abs`` is absolute log10(Z) at
-    # each table age. Both required if and only if
-    # ``metallicity_model == "table"``.
+    # each table age. Leave both None to instead supply the runtime
+    # ``params["met_history"]`` array — log10(Z/Zsun) at the tabular
+    # SFH's ``sfh_t_gyr`` nodes (requires ``sfh_model="table"``; #996).
     met_table_log_age_yr: Any = None
     met_table_log_z_abs: Any = None
 
@@ -923,6 +924,7 @@ class StellarSEDComponent:
             "periodic",
             "sfh2exp",
             "buat08",
+            "table",
         )
         if self.config.sfh_model not in _SUPPORTED_SFH:
             raise NotImplementedError(
@@ -961,6 +963,14 @@ class StellarSEDComponent:
         log_age_grid = make_log_age_grid(n_grid)
         sfh_lbt_grid = 10.0**log_age_grid
 
+        # ── 1b. Cosmology: t_obs from redshift (hoisted above the SFH so
+        # the runtime tabular SFH can convert cosmic time → lookback).
+        # ``age_at_z`` is JIT-compatible (pure JAX under the hood).
+        from tengri.cosmology import age_at_z as _age_at_z
+
+        z = jnp.asarray(params.get("redshift", 0.0))
+        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
+
         # ── 2. Evaluate mean SFH on grid (registry-driven) ──────────────
         # Translate user-facing public params → SFH-function kwargs via
         # the registry's ``internal_param_map``: each entry is
@@ -996,7 +1006,55 @@ class StellarSEDComponent:
             age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
             sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
 
-        sfr_history = sfh_spec.fn(sfh_lbt_grid, **sfh_kwargs)
+        # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
+        # Simulation SFHs arrive as runtime arrays: ``params["sfh_t_gyr"]``
+        # (cosmic time [Gyr]) + ``params["sfh_sfr"]`` [Msun/yr]. The registry
+        # entry is a placeholder; override it with an interp closure so every
+        # consumer (coarse history, sfr_on_ssp, dense CIC integrand, derived
+        # quantities) sees the table through the one SFH function. Dict-key
+        # presence is static under jit; the array VALUES stay traced, so two
+        # calls with different same-length tables share one compile. SFR is
+        # edge-clamped outside the table (the legacy jnp.interp convention);
+        # lookbacks older than t_obs are dropped by the CIC t_obs cutoff.
+        sfh_fn = sfh_spec.fn
+        _tab_lbt_yr = None
+        _tab_order = None
+        if self.config.sfh_model == "table":
+            if self.config.field:
+                raise NotImplementedError(
+                    "sfh_model='table' with field=True is not supported — the "
+                    "GP field draw modulates parametric SFHs only (#996)."
+                )
+            if "sfh_t_gyr" not in params or "sfh_sfr" not in params:
+                raise ValueError(
+                    "sfh_model='table' requires the runtime arrays "
+                    "params['sfh_t_gyr'] (cosmic time [Gyr]) and "
+                    "params['sfh_sfr'] [Msun/yr] (#996)."
+                )
+            # Descending cosmic time == ascending lookback; argsort keeps
+            # the pairing under jit for any input ordering.
+            _tab_order = jnp.argsort(-jnp.asarray(params["sfh_t_gyr"]))
+            _tab_lbt_yr = jnp.maximum(
+                (t_obs_gyr - jnp.asarray(params["sfh_t_gyr"])[_tab_order]) * 1e9, 0.0
+            )
+            _tab_sfr = jnp.asarray(params["sfh_sfr"])[_tab_order]
+
+            def sfh_fn(t_lookback_yr, **_kw):
+                return jnp.interp(t_lookback_yr, _tab_lbt_yr, _tab_sfr)
+        elif "sfh_t_gyr" in params or "sfh_sfr" in params:
+            raise NotImplementedError(
+                "sfh_t_gyr/sfh_sfr passed but sfh_model="
+                f"{self.config.sfh_model!r} — the table would be silently "
+                "ignored. Build with mean_sfh_type='table' (#996)."
+            )
+        if "met_history" in params and self.config.metallicity_model != "table":
+            raise NotImplementedError(
+                "met_history passed but metallicity_model="
+                f"{self.config.metallicity_model!r} — it would be silently "
+                "ignored. Build with met_mode='table' (#996)."
+            )
+
+        sfr_history = sfh_fn(sfh_lbt_grid, **sfh_kwargs)
 
         # ── 2b. GP-field modulation ───────────────────────────────────
         # Multiplicative log-normal modulation: SFR_total = SFR_mean ×
@@ -1042,15 +1100,9 @@ class StellarSEDComponent:
         if self.config.field:
             sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
         else:
-            sfr_on_ssp = sfh_spec.fn(ssp_ages_yr, **sfh_kwargs)
+            sfr_on_ssp = sfh_fn(ssp_ages_yr, **sfh_kwargs)
 
-        # ── 5. Cosmology: t_obs from redshift ───────────────────────────
-        # ``age_at_z`` is JIT-compatible (pure JAX under the hood); keep
-        # everything as JAX arrays so the whole apply() stays traceable.
-        from tengri.cosmology import age_at_z as _age_at_z
-
-        z = jnp.asarray(params.get("redshift", 0.0))
-        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
+        # (t_obs_gyr hoisted to section 1b — needed by the tabular SFH.)
 
         # ── 4. Metallicity history Z(t) on SFH grid + per-SSP-age ───────
         # delta: scalar absolute log10(Z), constant in time.
@@ -1184,16 +1236,31 @@ class StellarSEDComponent:
             )
             log_z_for_mr = lgmet_on_ssp_ages[0]
         elif self.config.metallicity_model == "table":
-            # User-provided Z(t) table on the component's config (settings,
-            # not JAX params — the table is constructor-time data).
-            if self.config.met_table_log_age_yr is None or self.config.met_table_log_z_abs is None:
+            # Z(t) table from either (a) constructor-time config arrays, or
+            # (b) the runtime ``met_history`` param — log10(Z/Zsun) at the
+            # ``sfh_t_gyr`` nodes, the legacy simulation interface (#996).
+            # (b) needs sfh_model='table' to supply the time axis.
+            _has_cfg_table = (
+                self.config.met_table_log_age_yr is not None
+                and self.config.met_table_log_z_abs is not None
+            )
+            if _has_cfg_table:
+                met_log_age_yr = jnp.asarray(self.config.met_table_log_age_yr)
+                met_log_z_abs = jnp.asarray(self.config.met_table_log_z_abs)
+            elif "met_history" in params:
+                if _tab_lbt_yr is None:
+                    raise NotImplementedError(
+                        "met_history needs sfh_model='table' for its time "
+                        "axis (the Z(t) nodes are the sfh_t_gyr nodes, #996)."
+                    )
+                met_log_age_yr = jnp.log10(jnp.maximum(_tab_lbt_yr, 1.0))
+                met_log_z_abs = jnp.asarray(params["met_history"])[_tab_order] + LOG10_ZSUN
+            else:
                 raise ValueError(
                     "metallicity_model='table' requires met_table_log_age_yr "
-                    "and met_table_log_z_abs on StellarSEDComponentConfig "
-                    "(both arrays in absolute log10(Z) and log10(age/yr))."
+                    "+ met_table_log_z_abs on StellarSEDComponentConfig, or "
+                    "the runtime params['met_history'] array (#996)."
                 )
-            met_log_age_yr = jnp.asarray(self.config.met_table_log_age_yr)
-            met_log_z_abs = jnp.asarray(self.config.met_table_log_z_abs)
             lgmet_on_ssp_ages = tabulated_metallicity_on_ssp_grid(
                 ssp.ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs
             )
@@ -1371,12 +1438,16 @@ class StellarSEDComponent:
                 # #765: inject the SFH's exact bin edges as knots so the step
                 # transitions of binned SFHs are represented sharply in the
                 # integrand. Parametric families have no bin edges (None).
-                _edges_yr = _sfh_bin_edges_yr(sfh_spec.fn, sfh_kwargs)
+                _edges_yr = (
+                    _tab_lbt_yr
+                    if _tab_lbt_yr is not None
+                    else _sfh_bin_edges_yr(sfh_spec.fn, sfh_kwargs)
+                )
                 if _edges_yr is not None:
                     _fine_age_yr = _inject_edge_knots(
                         _fine_age_yr, _edges_yr, ssp_ages_yr[0], ssp_ages_yr[-1]
                     )
-                _fine_sfr = sfh_spec.fn(_fine_age_yr, **sfh_kwargs)
+                _fine_sfr = sfh_fn(_fine_age_yr, **sfh_kwargs)
                 age_w_cic, total_mass = _age_weights_cic(
                     _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
                 )
@@ -1417,12 +1488,16 @@ class StellarSEDComponent:
                 # path and their degenerate configurations (constant table,
                 # zero step, ...) reduce to it exactly.
                 _fine_age_yr = _refine_sfh_table_ages(ssp_ages_yr)
-                _edges_yr = _sfh_bin_edges_yr(sfh_spec.fn, sfh_kwargs)
+                _edges_yr = (
+                    _tab_lbt_yr
+                    if _tab_lbt_yr is not None
+                    else _sfh_bin_edges_yr(sfh_spec.fn, sfh_kwargs)
+                )
                 if _edges_yr is not None:
                     _fine_age_yr = _inject_edge_knots(
                         _fine_age_yr, _edges_yr, ssp_ages_yr[0], ssp_ages_yr[-1]
                     )
-                _fine_sfr = sfh_spec.fn(_fine_age_yr, **sfh_kwargs)
+                _fine_sfr = sfh_fn(_fine_age_yr, **sfh_kwargs)
                 joint_weights, total_mass = _joint_weights_cic_met_table(
                     _fine_age_yr,
                     _fine_sfr,

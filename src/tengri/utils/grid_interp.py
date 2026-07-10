@@ -265,6 +265,14 @@ def preintegrate_grid(
         fw_np = np.asarray(fw, dtype=np.float64)
         ft_np = np.asarray(ft, dtype=np.float64)
         grid = np.sort(np.concatenate([wave_obs, fw_np]))
+        # Transmission is identically zero outside the filter table's
+        # support (left=0/right=0 below), so union-grid segments with both
+        # endpoints beyond an edge integrate to exactly zero. Keep one node
+        # past each edge (the straddle segments) and drop the rest — same
+        # clip as precompute_photometry_ztable.
+        lo = max(np.searchsorted(grid, fw_np[0]) - 1, 0)
+        hi = min(np.searchsorted(grid, fw_np[-1], side="right") + 1, grid.size)
+        grid = grid[lo:hi]
         trans_on_grid = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
         tw_grid = trans_on_grid * _filter_weight_np(grid, convention)
         denom = _np_trapezoid(tw_grid, grid)

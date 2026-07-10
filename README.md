@@ -67,10 +67,10 @@ yet.
 ## Installation
 
 ```bash
-pip install astro-tengri
+pip install "astro-tengri[all]"
 ```
 
-The PyPI distribution name is `astro-tengri`; the import name is `tengri`. (`pip install tengri` is a different, unrelated 2017 package.)
+The PyPI distribution name is `astro-tengri`; the import name is `tengri`. (`pip install tengri` is a different, unrelated 2017 package.) The `[all]` extra pulls in the optimizer and sampler backends (`optax`, `blackjax`) that the quick start below uses; a bare `pip install astro-tengri` can build models and predict but not fit.
 
 For development:
 
@@ -80,7 +80,7 @@ cd tengri
 pip install -e ".[dev]"
 ```
 
-**Requirements:** Python ≥ 3.11, JAX ≥ 0.4.20, DSPS 0.4.6 (pinned; 0.4.7 removed `CosmoParams`), NIFTy 8.5+ with the `re` extra.
+**Requirements:** Python ≥ 3.11, JAX ≥ 0.4.20, DSPS 0.4.6–0.4.7 (0.4.8 excluded: its PyPI sdist breaks at install time), NIFTy 8.5+ with the `re` extra.
 
 **JAX backends:**
 
@@ -118,7 +118,7 @@ bash scripts/setup_ssp.sh
 import jax
 import tengri
 from tengri import (
-    SEDModel, Fitter, ForwardModel,
+    SEDModel, Fitter, Fixed, ForwardModel,
     Observation, Photometry, load_ssp_data, recipes,
 )
 
@@ -128,14 +128,19 @@ obs = Observation(photometry=Photometry.from_names(
 ))
 
 # Pick a curated recipe and let it set sensible priors + defaults.
-sed = SEDModel.build(ssp_data=ssp, observation=obs,
-                     **recipes.star_forming_photometry())
+# The mock is at a known redshift, so fix z — the model then builds a
+# single-redshift photometry table in seconds instead of tabulating the
+# full z in (0.01, 6) grid. Leave z free (the recipe default) for real
+# catalogs with unknown redshifts.
+config = recipes.star_forming_photometry()
+config["redshift"] = Fixed(0.05)
+sed = SEDModel.build(ssp_data=ssp, observation=obs, **config)
 forward = ForwardModel.build(sed=sed, observation=obs)
 
 key = jax.random.PRNGKey(0)
 mock = sed.mock(sed.spec.sample(key), key=key)
 
-fitter = Fitter(forward, mock["flux_obs"], mock["noise"])
+fitter = Fitter(forward, mock.flux_obs, mock.noise)
 result = fitter.run("mcmc_nuts")
 print(result.summary_table())
 ```

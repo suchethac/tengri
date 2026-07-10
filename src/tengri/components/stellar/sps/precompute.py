@@ -456,7 +456,144 @@ class PhotometricZTable(NamedTuple):
     ssp_phot_moment_table: jnp.ndarray | None = None
 
 
+# Bump when the quadrature or table layout changes — invalidates every
+# cached z-table built by an older algorithm.
+_ZTABLE_CACHE_VERSION = 1
+
+
+def _ztable_cache_dir():
+    """Resolve the on-disk z-table cache directory, or None when disabled.
+
+    ``TENGRI_DISABLE_PRECOMP_CACHE=1`` opts out;
+    ``TENGRI_PRECOMP_CACHE_DIR`` overrides the location
+    (default ``~/.cache/tengri_precomp``).
+    """
+    import os
+    from pathlib import Path
+
+    if os.environ.get("TENGRI_DISABLE_PRECOMP_CACHE"):
+        return None
+    custom = os.environ.get("TENGRI_PRECOMP_CACHE_DIR")
+    return Path(custom) if custom else Path.home() / ".cache" / "tengri_precomp"
+
+
+def _ztable_cache_key(
+    ssp_data, filter_waves, filter_trans, z_grid, apply_igm, taylor_correction, convention
+) -> str:
+    """Content hash over everything the table depends on."""
+    import hashlib
+
+    h = hashlib.sha256()
+    h.update(f"v{_ZTABLE_CACHE_VERSION}".encode())
+    for arr in (ssp_data.ssp_wave, ssp_data.ssp_flux):
+        a = np.ascontiguousarray(np.asarray(arr))
+        h.update(repr((a.shape, a.dtype.str)).encode())
+        h.update(a)
+    for fw, ft in zip(filter_waves, filter_trans):
+        for arr in (fw, ft):
+            a = np.ascontiguousarray(np.asarray(arr, dtype=np.float64))
+            h.update(a)
+    h.update(np.ascontiguousarray(np.asarray(z_grid, dtype=np.float64)))
+    h.update(repr((bool(apply_igm), bool(taylor_correction), str(convention))).encode())
+    return h.hexdigest()
+
+
 def precompute_photometry_ztable(
+    ssp_data,
+    filter_waves,
+    filter_trans,
+    z_grid=None,
+    z_min=0.001,
+    z_max=3.0,
+    n_z=100,
+    apply_igm=False,
+    taylor_correction: bool = False,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> PhotometricZTable:
+    """Pre-compute SSP broadband fluxes on a redshift grid, disk-cached.
+
+    Thin caching wrapper around :func:`_compute_photometry_ztable` (same
+    signature — see it for parameter semantics). The table depends only on
+    the SSP grid, the filter set, the z grid, and the quadrature flags, so
+    it is content-hashed and persisted under ``~/.cache/tengri_precomp``:
+    the first build of a given (SSP, filters, z-grid) combination pays the
+    quadrature; every later build — any process, any model — loads the npz
+    in well under a second. ``TENGRI_DISABLE_PRECOMP_CACHE=1`` opts out,
+    ``TENGRI_PRECOMP_CACHE_DIR`` relocates the cache.
+
+    Notes
+    -----
+    **JIT-compatible**: no — data precomputation with file I/O.
+    """
+    if z_grid is None:
+        z_grid = jnp.linspace(z_min, z_max, n_z)
+    else:
+        z_grid = jnp.asarray(z_grid)
+
+    cache_dir = _ztable_cache_dir()
+    cache_path = None
+    if cache_dir is not None:
+        key = _ztable_cache_key(
+            ssp_data, filter_waves, filter_trans, z_grid, apply_igm, taylor_correction, convention
+        )
+        cache_path = cache_dir / f"ztable_{key}.npz"
+        if cache_path.is_file():
+            with np.load(cache_path, allow_pickle=False) as d:
+                return PhotometricZTable(
+                    ssp_phot_table=jnp.array(d["ssp_phot_table"]),
+                    eff_waves_rest_table=jnp.array(d["eff_waves_rest_table"]),
+                    flux_scale_table=jnp.array(d["flux_scale_table"]),
+                    z_grid=jnp.array(d["z_grid"]),
+                    n_filters=int(d["n_filters"]),
+                    igm_trans_table=jnp.array(d["igm_trans_table"]),
+                    ssp_phot_moment_table=(
+                        jnp.array(d["ssp_phot_moment_table"])
+                        if "ssp_phot_moment_table" in d.files
+                        else None
+                    ),
+                )
+
+    table = _compute_photometry_ztable(
+        ssp_data,
+        filter_waves,
+        filter_trans,
+        z_grid=z_grid,
+        apply_igm=apply_igm,
+        taylor_correction=taylor_correction,
+        convention=convention,
+    )
+
+    if cache_path is not None:
+        import os
+        import tempfile
+
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "ssp_phot_table": np.asarray(table.ssp_phot_table),
+            "eff_waves_rest_table": np.asarray(table.eff_waves_rest_table),
+            "flux_scale_table": np.asarray(table.flux_scale_table),
+            "z_grid": np.asarray(table.z_grid),
+            "n_filters": np.asarray(table.n_filters),
+            "igm_trans_table": np.asarray(table.igm_trans_table),
+        }
+        if table.ssp_phot_moment_table is not None:
+            payload["ssp_phot_moment_table"] = np.asarray(table.ssp_phot_moment_table)
+        # Atomic publish: concurrent builds of the same key race benignly.
+        fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".npz.tmp")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                np.savez(f, **payload)
+            os.replace(tmp, cache_path)
+        except OSError:
+            import contextlib
+
+            with contextlib.suppress(OSError):
+                os.unlink(tmp)
+
+    return table
+
+
+def _compute_photometry_ztable(
     ssp_data,
     filter_waves,
     filter_trans,
@@ -570,6 +707,16 @@ def precompute_photometry_ztable(
         for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
             fw_np, ft_np = np.asarray(fw), np.asarray(ft)
             grid = np.sort(np.concatenate([wave_obs, fw_np]))
+            # Transmission is identically zero outside the filter table's
+            # support (left=0/right=0 below), so union-grid segments with
+            # both endpoints beyond an edge integrate to exactly zero.
+            # Keep one node past each edge (the straddle segments) and drop
+            # the rest: the SSP grid spans 91 Å–100 µm while a band
+            # transmits over a narrow window, so this cuts the quadrature
+            # ~10–50× at identical integral values.
+            lo = max(np.searchsorted(grid, fw_np[0]) - 1, 0)
+            hi = min(np.searchsorted(grid, fw_np[-1], side="right") + 1, grid.size)
+            grid = grid[lo:hi]
             trans_on_grid = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
             tw_np = trans_on_grid * _filter_weight_np(grid, convention)
             denom = _np_trapezoid(tw_np, grid)

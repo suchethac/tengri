@@ -36,7 +36,8 @@ __all__ = [
 def _load_template() -> tuple[np.ndarray, np.ndarray]:
     """Load Richards+2006 (wavelength, nu·F_nu) tabulation at import time."""
     path = files("tengri.data.agn_bbb") / "richards2006.dat"
-    arr = np.loadtxt(path.open("r"))
+    with path.open("r") as fh:
+        arr = np.loadtxt(fh)
     wave_aa = np.asarray(arr[:, 0], dtype=np.float64)
     nu_fnu = np.asarray(arr[:, 1], dtype=np.float64)
     return wave_aa, nu_fnu
