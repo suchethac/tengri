@@ -48,7 +48,14 @@ class TestFullSEDAmplitudes:
             pytest.skip("SSP data not available")
         spec = Parameters(
             mean_sfh_type="dpl",
-            sfh_dpl_log_total_mass=Fixed(np.log10(3.0)),
+            # 10^10.5 M_sun formed — the MW-like galaxy the docstrings assert.
+            # Pre-#369 this fixture set log_peak_sfr = log10(3 M_sun/yr); the
+            # rename to log_total_mass kept the value, silently turning the
+            # fixture into a 3 M_sun galaxy (10 dex low, #1013).
+            sfh_dpl_log_total_mass=Fixed(10.5),
+            # Explicit age: #1015 raises on missing free params (was a
+            # silent default pre-#1015; fixture class tracked in #1021).
+            sfh_dpl_age_gyr=Fixed(13.0),
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.0),
             sfh_dpl_tau_gyr=Fixed(5.0),
@@ -115,7 +122,14 @@ class TestFullSEDAmplitudes:
         def build(tau):
             spec = Parameters(
                 mean_sfh_type="dpl",
-                sfh_dpl_log_total_mass=Fixed(np.log10(3.0)),
+                # 10^10.5 M_sun formed — the MW-like galaxy the docstrings assert.
+                # Pre-#369 this fixture set log_peak_sfr = log10(3 M_sun/yr); the
+                # rename to log_total_mass kept the value, silently turning the
+                # fixture into a 3 M_sun galaxy (10 dex low, #1013).
+                sfh_dpl_log_total_mass=Fixed(10.5),
+                # Explicit age: #1015 raises on missing free params (was a
+                # silent default pre-#1015; fixture class tracked in #1021).
+                sfh_dpl_age_gyr=Fixed(13.0),
                 sfh_dpl_alpha=Fixed(2.0),
                 sfh_dpl_beta=Fixed(1.0),
                 sfh_dpl_tau_gyr=Fixed(5.0),
