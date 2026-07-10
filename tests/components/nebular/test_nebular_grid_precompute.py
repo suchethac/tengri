@@ -113,13 +113,19 @@ def test_axes_adapt_to_free_ionization():
     # both gas params fixed, SFH free -> met-only axis
     t0 = precompute_nebular_grid(_model({"type": "cue", "*": FIXED}), _LW, n_grid=3)
     assert t0.axis_names == ("met_logzsol",), t0.axis_names
-    # met + logU + logZ_gas all free -> 3 axes
+    # met + logU + logZ_gas all free -> 3 axes; a scalar n_grid auto-densifies the
+    # sharp met axis 2x (physics: the [OIII]-vs-Z peak), gas axes stay at n_grid.
     m3 = _model(
         {"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0), "logZ_gas": Uniform(-1.0, 0.4)}
     )
     t3 = precompute_nebular_grid(m3, _LW, n_grid=3)
     assert t3.axis_names == ("met_logzsol", "neb_logU", "neb_logZ_gas"), t3.axis_names
-    assert t3.log_line_per_qh.shape == (3, 3, 3, len(_LINES))
+    assert t3.log_line_per_qh.shape == (6, 3, 3, len(_LINES)), t3.log_line_per_qh.shape
+    # explicit per-axis dict overrides the auto-scaling
+    t3d = precompute_nebular_grid(
+        m3, _LW, n_grid={"met_logzsol": 5, "neb_logU": 3, "neb_logZ_gas": 4}
+    )
+    assert t3d.log_line_per_qh.shape == (5, 3, 4, len(_LINES)), t3d.log_line_per_qh.shape
     # met fixed (sfh '*':FIXED fixes met), logU+logZ_gas free -> 2 axes
     m2 = _model(
         {"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0), "logZ_gas": Uniform(-1.0, 0.4)},
@@ -223,3 +229,37 @@ def test_phot_channel_absent_without_wave_precomp():
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
     with pytest.raises(ValueError, match="no photometry channel"):
         reconstruct_nebular_phot(_nion(m, p), p, table)
+
+
+def test_met_axis_emits_unreliability_warning():
+    """Freeing met_logzsol (the ionizing-spectrum-shape axis) must warn loudly.
+
+    The #950 convergence study measured 10-33% forbidden-line error on the met
+    axis, non-convergent in n_grid — a silent-bias risk. The fast grid must warn
+    so the user fixes met or falls back to the exact Cue path.
+    """
+    import warnings as _w
+
+    m = _model({"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FREE)
+    with _w.catch_warnings(record=True) as rec:
+        _w.simplefilter("always")
+        t = precompute_nebular_grid(m, _LW, n_grid=3)  # under-resolved met axis
+    assert "met_logzsol" in t.axis_names, "fixture should free met"
+    assert any("met_logzsol" in str(x.message) and "n_grid" in str(x.message) for x in rec), (
+        "expected a loud met-axis under-resolution warning"
+    )
+
+
+def test_gas_only_axes_do_not_warn():
+    """met FIXED + gas axes free (the reliable production config) — no met warning."""
+    import warnings as _w
+
+    m = _model(
+        {"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0), "logZ_gas": Uniform(-1.0, 0.4)},
+        sfh_wild=FIXED,
+    )
+    with _w.catch_warnings(record=True) as rec:
+        _w.simplefilter("always")
+        t = precompute_nebular_grid(m, _LW, n_grid=3)
+    assert t.axis_names == ("neb_logU", "neb_logZ_gas")
+    assert not any("not reliably" in str(x.message).lower() for x in rec)

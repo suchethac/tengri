@@ -3499,10 +3499,19 @@ class SEDModel:
         -----
         **Approximation.** Reconstruction is exact at grid nodes and node-exact
         PCHIP between them. Photometry error stays ~1 % on the total (nebular is
-        subdominant in broadband); line-flux error is a few percent on a moderate
-        grid, tightest when ``met_logzsol`` is fixed (the gas axes interpolate more
-        smoothly than the ionizing-spectrum-shape metallicity axis). Validate
-        parity for your configuration before production use.
+        subdominant in broadband). Line-flux accuracy depends strongly on which
+        ionization params are free (#950 convergence study):
+
+        * **Gas axes** (``logU`` + ``neb_logZ_gas``) drive smooth per-Q_H line
+          changes and converge at ``n_grid`` ~16: worst strong-line systematic
+          **0.46 %** at the default (0.85 % at n=12, < 0.1 % at n=24).
+        * **Free ``met_logzsol``** sets the ionizing-spectrum SHAPE, which drives
+          the forbidden-line ([OIII]/[NII]/[SII]) metallicity signal — the physics
+          you *want* the fit to use. Its [OIII]-vs-Z emissivity peaks at
+          intermediate Z (a sharp, non-monotone feature: 7-15 % error on a coarse
+          met grid), so the grid **auto-densifies the met axis 2x** (32 points from
+          a scalar ``n_grid=16``), reconstructing to **< 0.1 %**. Recombination
+          lines (Balmer) are shape-independent (∝ Q_H) and stay < 1 % always.
 
         For the photometry channel the model must be built with
         ``approx=WavePrecomp()`` (so the grid can capture the intrinsic

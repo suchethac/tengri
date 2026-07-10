@@ -63,6 +63,16 @@ _DEFAULT_RANGE = {
     "neb_logZ_gas": (-1.0, 0.5),
 }
 
+#: Per-axis resolution matched to the physics (#950 convergence study). The gas
+#: conditions (logU, logZ_gas) drive smooth per-Q_H line changes and converge at
+#: ~16 points (< 0.5 %). ``met_logzsol`` sets the ionizing-spectrum SHAPE, and the
+#: [OIII]-vs-metallicity emissivity **peaks at intermediate Z** — a sharp,
+#: non-monotone feature that needs ~2x the resolution (~32 points, < 0.1 %; 7-15 %
+#: at 16). So a scalar ``n_grid`` is auto-scaled by this factor ON THE MET AXIS,
+#: putting grid density where the physics is sharp. Recombination lines (Balmer)
+#: are shape-independent (∝ Q_H) and stay < 1 % at any resolution.
+_MET_AXIS_DENSITY_FACTOR = 2
+
 
 @dataclasses.dataclass(frozen=True)
 class NebularGridTable:
@@ -158,10 +168,14 @@ def precompute_nebular_grid(
         A model with a Q_H-linear nebular backend (Cue / CloudyGrid).
     wavelengths : array_like, shape (n_lines,)
         Rest-frame vacuum target line wavelengths [Angstrom].
-    n_grid : int, default 16
-        Grid points per free axis. Denser → tighter interpolation (the met
-        dependence is nonlinear near solar; 16-24 gives < few e-2 on strong DESI
-        lines with the node-exact PCHIP kernel).
+    n_grid : int or dict, default 16
+        Grid points per free axis, matched to the physics. As a scalar it resolves
+        the smooth gas axes (``neb_logU`` / ``neb_logZ_gas``) at ``n_grid`` and
+        auto-densifies the sharp ``met_logzsol`` axis by
+        :data:`_MET_AXIS_DENSITY_FACTOR` (2x) — the [OIII]-vs-metallicity peak needs
+        ~32 points where the gas axes need ~16 (#950 convergence study). Pass a
+        dict ``{axis_name: n}`` to set each axis explicitly (unspecified axes
+        default to 16). At the default, strong DESI lines reconstruct to < 0.5 %.
     ranges : dict, optional
         Override ``{param: (lo, hi)}`` grid bounds. Defaults to each free param's
         prior support (else :data:`_DEFAULT_RANGE`).
@@ -183,6 +197,31 @@ def precompute_nebular_grid(
     axis_names = tuple(p for p in _CANDIDATE_AXES if p in free)
     ranges = ranges or {}
 
+    # Per-axis resolution matched to the physics. A scalar ``n_grid`` resolves the
+    # smooth gas axes at ``n_grid`` and auto-densifies the sharp met axis by
+    # ``_MET_AXIS_DENSITY_FACTOR``; a dict ``{axis: n}`` sets each explicitly.
+    def _axis_n(name):
+        if isinstance(n_grid, dict):
+            return int(n_grid.get(name, 16))
+        return int(n_grid * _MET_AXIS_DENSITY_FACTOR) if name == "met_logzsol" else int(n_grid)
+
+    # Loud guard: warn only if the met axis is STILL under-resolved after the
+    # physics-driven densification. The [OIII]-vs-stellar-metallicity emissivity
+    # peaks at intermediate Z — a sharp, non-monotone feature needing >=32 points
+    # (7-15 % forbidden-line error at <=16, < 0.1 % at >=32; #950 study). Under the
+    # default factor-2 scaling a scalar n_grid >= 16 already resolves it (= 32), so
+    # this fires only for a coarse explicit override. Balmer lines (recombination,
+    # proportional to Q_H) are shape-independent and stay < 1 % at any resolution.
+    if "met_logzsol" in axis_names and _axis_n("met_logzsol") < 32:
+        warnings.warn(
+            f"nebular fast grid: the met_logzsol axis is resolved at only "
+            f"{_axis_n('met_logzsol')} points, but the [OIII]-vs-metallicity peak "
+            f"needs >= 32 (7-15 % forbidden-line error below that, non-monotone; #950 "
+            f"study). Raise n_grid (a scalar auto-densifies met 2x) or pass "
+            f"n_grid={{'met_logzsol': 32, ...}}. Balmer lines stay < 1 % regardless.",
+            stacklevel=2,
+        )
+
     wavelengths = jnp.asarray(wavelengths)
     if ref_params is None:
         ref_params = dict(spec.sample(jax.random.PRNGKey(0)))
@@ -194,7 +233,7 @@ def precompute_nebular_grid(
     axes = []
     for name in axis_names:
         lo, hi = ranges.get(name, _axis_range(spec, name))
-        axes.append(jnp.linspace(lo, hi, n_grid))
+        axes.append(jnp.linspace(lo, hi, _axis_n(name)))
     axes = tuple(axes)
 
     def _row(point_values):
