@@ -186,8 +186,8 @@ class TestSKIRTORAnalytic:
             warnings.simplefilter("ignore", DeprecationWarning)
             sed_low = skirtor_analytic(wave, agn_tau_skirtor=3.0)
             sed_high = skirtor_analytic(wave, agn_tau_skirtor=11.0)
-        int_low = float(np.trapz(np.array(sed_low), np.array(wave)))
-        int_high = float(np.trapz(np.array(sed_high), np.array(wave)))
+        int_low = float(np.trapezoid(np.array(sed_low), np.array(wave)))
+        int_high = float(np.trapezoid(np.array(sed_high), np.array(wave)))
         if int_low > 0:
             frac_change = abs(int_high - int_low) / int_low
             assert frac_change > 0.01, (
@@ -207,8 +207,8 @@ class TestSKIRTORAnalytic:
             warnings.simplefilter("ignore", DeprecationWarning)
             sed_low = skirtor_analytic(wave, agn_p_skirtor=0.0)
             sed_high = skirtor_analytic(wave, agn_p_skirtor=1.5)
-        int_low = float(np.trapz(np.array(sed_low), np.array(wave)))
-        int_high = float(np.trapz(np.array(sed_high), np.array(wave)))
+        int_low = float(np.trapezoid(np.array(sed_low), np.array(wave)))
+        int_high = float(np.trapezoid(np.array(sed_high), np.array(wave)))
         if int_low > 0:
             frac_change = abs(int_high - int_low) / int_low
             assert frac_change > 0.01, f"p should produce >1% change, got {frac_change * 100:.2f}%"
@@ -226,8 +226,8 @@ class TestSKIRTORAnalytic:
             warnings.simplefilter("ignore", DeprecationWarning)
             sed_low = skirtor_analytic(wave, agn_q_skirtor=0.0)
             sed_high = skirtor_analytic(wave, agn_q_skirtor=1.5)
-        int_low = float(np.trapz(np.array(sed_low), np.array(wave)))
-        int_high = float(np.trapz(np.array(sed_high), np.array(wave)))
+        int_low = float(np.trapezoid(np.array(sed_low), np.array(wave)))
+        int_high = float(np.trapezoid(np.array(sed_high), np.array(wave)))
         if int_low > 0:
             frac_change = abs(int_high - int_low) / int_low
             assert frac_change > 0.01, f"q should produce >1% change, got {frac_change * 100:.2f}%"
@@ -245,8 +245,8 @@ class TestSKIRTORAnalytic:
             warnings.simplefilter("ignore", DeprecationWarning)
             sed_narrow = skirtor_analytic(wave, agn_oa_skirtor=20.0)
             sed_wide = skirtor_analytic(wave, agn_oa_skirtor=60.0)
-        int_narrow = float(np.trapz(np.array(sed_narrow), np.array(wave)))
-        int_wide = float(np.trapz(np.array(sed_wide), np.array(wave)))
+        int_narrow = float(np.trapezoid(np.array(sed_narrow), np.array(wave)))
+        int_wide = float(np.trapezoid(np.array(sed_wide), np.array(wave)))
         if int_narrow > 0:
             frac_change = abs(int_wide - int_narrow) / int_narrow
             assert frac_change > 0.01, (
@@ -266,8 +266,8 @@ class TestSKIRTORAnalytic:
             warnings.simplefilter("ignore", DeprecationWarning)
             sed_face = skirtor_analytic(wave, agn_cos_inc=0.95)
             sed_edge = skirtor_analytic(wave, agn_cos_inc=0.05)
-        int_face = float(np.trapz(np.array(sed_face), np.array(wave)))
-        int_edge = float(np.trapz(np.array(sed_edge), np.array(wave)))
+        int_face = float(np.trapezoid(np.array(sed_face), np.array(wave)))
+        int_edge = float(np.trapezoid(np.array(sed_edge), np.array(wave)))
         if int_face > 0:
             frac_change = abs(int_edge - int_face) / int_face
             assert frac_change > 0.01, f"cos_inc >1% change: {frac_change * 100:.2f}%"
