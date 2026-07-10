@@ -30,6 +30,7 @@ def run_pathfinder(
     n_samples=2000,
     maxiter=30,
     maxcor=10,
+    n_elbo_draws=25,
     verbose=True,
 ):
     """Run BlackJAX Pathfinder for fast approximate posterior.
@@ -55,6 +56,14 @@ def run_pathfinder(
         Maximum L-BFGS iterations along the path.
     maxcor : int
         L-BFGS memory (number of past gradients to store).
+    n_elbo_draws : int
+        Monte-Carlo draws used to estimate the ELBO at each L-BFGS iterate, which
+        is how Pathfinder picks the best Gaussian along the path. Default 25,
+        matching Stan's ``num_elbo_draws``. **This is a memory knob, not an
+        accuracy knob:** the draws are vmapped through the full forward model, so
+        peak memory scales as ``n_elbo_draws * maxiter * <cost of one SED>``.
+        BlackJAX's own default is 200, which drove a 7-parameter photometry fit to
+        26 GB and OOM-killed the slow test tier.
     verbose : bool
         Print progress.
 
@@ -62,6 +71,19 @@ def run_pathfinder(
     -------
     Posterior
         Approximate posterior samples from the best Gaussian along the path.
+
+    Notes
+    -----
+    ``n_samples`` (posterior draws, cheap -- one Gaussian sample each) and
+    ``n_elbo_draws`` (path-selection draws, expensive -- one forward model each)
+    are different quantities. Raising ``n_samples`` costs almost nothing; raising
+    ``n_elbo_draws`` costs a forward evaluation per draw per iterate.
+
+    References
+    ----------
+    .. [1] L. Zhang, B. Carpenter, A. Gelman & A. Vehtari, "Pathfinder:
+       Parallel quasi-Newton variational inference," Journal of Machine Learning
+       Research 23(306), 1-49 (2022). arXiv:2108.03782.
     """
     try:
         import blackjax
@@ -86,10 +108,13 @@ def run_pathfinder(
     # carries ``.approximate`` (AttributeError), whereas the module functions
     # have kept a stable signature across ≥1.3 — so this works on old and new
     # blackjax without pinning.
+    # ``num_samples`` here is blackjax's ELBO-draw count, NOT the posterior draw
+    # count -- it defaults to 200 and each draw is a full forward evaluation.
     state, _info = blackjax.pathfinder.approximate(
         approx_key,
         log_posterior_flat,
         init_flat,
+        num_samples=n_elbo_draws,
         maxiter=maxiter,
         maxcor=maxcor,
     )
