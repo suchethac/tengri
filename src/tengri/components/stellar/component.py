@@ -130,18 +130,18 @@ def _refine_sfh_table_ages(ssp_ages_yr, factor: int = 16):
 
     Notes
     -----
-    **Age-0 anchor templates** (#1016): SSP grids with a leading age = 0
-    template (bc03 stelib) would give ``log_lo = log10(0) = -inf``,
-    collapsing the whole grid to ``[0, ..., 0, age_max]`` — the SFR
-    integrand then evaluates to zero everywhere with support and the CIC
-    total mass (and with it the entire stellar SED) silently vanishes.
-    The span floor of 1 yr keeps the grid finite and strictly ascending;
-    it is a no-op for every physical grid (youngest templates are
-    ~0.1 Myr), and the ``[0, age0]`` lookback sliver is integrated by
-    :func:`_cic_parcels`'s own lookback-0 extension, not by this grid.
+    **Age-0 anchor templates** (#1016, #1030): a leading age = 0 template
+    (bc03 stelib) would give ``log_lo = -inf`` and collapse the grid to
+    ``[0, ..., 0, age_max]`` — the CIC mass then vanishes (#1016) or lands
+    entirely on the youngest node (#1030), depending on the SFH's support.
+    Spanning from the smallest *positive* template age keeps the grid finite
+    and strictly ascending at full per-decade resolution (a 1 yr floor would
+    halve it, #758); the ``[0, age_1]`` sliver is integrated by
+    :func:`_cic_parcels`'s lookback-0 extension, not by this grid.
     """
     n = ssp_ages_yr.shape[0]
-    log_lo = jnp.log10(jnp.maximum(ssp_ages_yr[0], 1.0))
+    lo_yr = jnp.min(jnp.where(ssp_ages_yr > 0.0, ssp_ages_yr, jnp.inf))
+    log_lo = jnp.log10(lo_yr)
     log_hi = jnp.log10(ssp_ages_yr[-1])
     return 10.0 ** jnp.linspace(log_lo, log_hi, (n - 1) * factor + 1)
 

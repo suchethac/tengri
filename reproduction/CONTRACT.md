@@ -72,12 +72,17 @@ Notebooks must render headless without losing figures. Two rules:
   ```bash
   cd reproduction/<slug>
   jupytext --to ipynb 01_<slug>.py
-  PYTHONPATH=../../src jupyter nbconvert --to notebook --execute --inplace 01_<slug>.ipynb
+  PYTHONHASHSEED=0 PYTHONPATH=../..:../../src \
+      jupyter nbconvert --to notebook --execute --inplace 01_<slug>.ipynb
   ```
 
   Worktrees need the gitignored `data/` files symlinked from the main
   checkout first. Prospector additionally needs `SPS_HOME` pointing at
-  an FSPS checkout.
+  an FSPS checkout. `PYTHONHASHSEED=0` pins reference-side dict/set
+  iteration order — Synthesizer's `UnifiedAGN` assembles its emission
+  tree in hash order and its NLR spectrum genuinely changes with the
+  seed (synthesizer §9c) — and the repo root on `PYTHONPATH` resolves
+  the `reproduction.<slug>._drivers` imports.
 
 Never run `ruff format` on `reproduction/*.py`. The percent-format
 cells carry hand-tuned alignment that formatting destroys; lint scope
