@@ -371,31 +371,62 @@ def _window_mean_flux(
     return jnp.sum(flux * weights) / n
 
 
+# ── Single-sourced index arithmetic ───────────────────────────────
+#
+# A break or EW index is a small piece of arithmetic on *window mean fluxes*.
+# There are two ways to get those means — integrate the reconstructed SED
+# (the exact path) or read the precomputed window LUT (the FeaturePrecomp fast
+# path) — but the arithmetic that turns means into an index value is identical.
+# These two helpers ARE that arithmetic, written once. Both the exact
+# ``_measure_*`` functions and the LUT ``measure_indices_from_windows`` call
+# them, so there is no hand-synced "mirror": one measurement, two window-mean
+# sources. Add a new index kind here and both paths get it.
+
+
+def _break_from_means(f_blue: jnp.ndarray, f_red: jnp.ndarray) -> jnp.ndarray:
+    """Break ratio (red continuum mean flux / blue continuum mean flux).
+
+    The single break primitive — shared by :func:`_measure_break` (means from the
+    reconstructed SED) and :func:`measure_indices_from_windows` (means from the
+    window LUT).
+    """
+    return f_red / jnp.maximum(f_blue, 1e-30)
+
+
+def _ew_from_means(
+    cont_means: jnp.ndarray, feat_flux: jnp.ndarray, feat_width: float, units: str
+) -> jnp.ndarray:
+    """Equivalent width from continuum + feature mean fluxes.
+
+    Averages the continuum-window means, forms the continuum-to-feature ratio
+    scaled by the feature width, and (for ``units == "mag"``) converts to a
+    magnitude index. The single EW primitive — shared by :func:`_measure_ew`
+    and :func:`measure_indices_from_windows` so the EW arithmetic (and its
+    ``mag`` variant) is single-sourced.
+    """
+    cont_flux = jnp.mean(jnp.asarray(cont_means))
+    ew = feat_width * (cont_flux - feat_flux) / jnp.maximum(cont_flux, 1e-30)
+    if units == "mag":
+        return -2.5 * jnp.log10(jnp.maximum(1.0 - ew / feat_width, 1e-30))
+    return ew
+
+
 def _measure_break(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
     """Compute spectral break ratio (red window mean flux / blue window mean flux)."""
     blue_lo, blue_hi = idx.continuum[0]
     red_lo, red_hi = idx.continuum[1]
     f_blue = _window_mean_flux(wave, flux, blue_lo, blue_hi)
     f_red = _window_mean_flux(wave, flux, red_lo, red_hi)
-    return f_red / jnp.maximum(f_blue, 1e-30)
+    return _break_from_means(f_blue, f_red)
 
 
 def _measure_ew(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
     """Compute equivalent width from continuum-to-feature flux ratio and feature window width."""
-    cont_fluxes = []
-    for lo, hi in idx.continuum:
-        cont_fluxes.append(_window_mean_flux(wave, flux, lo, hi))
-    cont_flux = jnp.mean(jnp.array(cont_fluxes))
-
+    cont_fluxes = [_window_mean_flux(wave, flux, lo, hi) for lo, hi in idx.continuum]
     feat_lo, feat_hi = idx.feature
     feat_flux = _window_mean_flux(wave, flux, feat_lo, feat_hi)
     feat_width = feat_hi - feat_lo
-
-    ew = feat_width * (cont_flux - feat_flux) / jnp.maximum(cont_flux, 1e-30)
-
-    if idx.units == "mag":
-        return -2.5 * jnp.log10(jnp.maximum(1.0 - ew / feat_width, 1e-30))
-    return ew
+    return _ew_from_means(cont_fluxes, feat_flux, feat_width, idx.units)
 
 
 def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
@@ -488,6 +519,38 @@ def _round_window(lo: float, hi: float) -> tuple[float, float]:
     return (round(float(lo), 4), round(float(hi), 4))
 
 
+def soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width: float = 1.0):
+    """Soft top-hat window integral of every SSP spectrum over ``[lo, hi]``.
+
+    The shared window-integral primitive for both the spectral-index LUT
+    (:func:`precompute_index_windows`) and the emission-line-flux LUT
+    (:func:`tengri.observation.line_measurement.precompute_line_windows`), so the
+    two precomputes integrate the SSP grid identically. Uses the same sigmoid
+    edges as :func:`_window_mean_flux` (``mean = integral / norm``).
+
+    Parameters
+    ----------
+    ssp_wave : ndarray, shape (n_wave,)
+        SSP wavelength grid [Å].
+    ssp_flux : ndarray, shape (n_met, n_age, n_wave)
+        SSP spectra [erg/s/Hz/Msun].
+    lo, hi : float
+        Window bounds [Å].
+    edge_width : float, default 1.0
+        Sigmoid edge width [Å].
+
+    Returns
+    -------
+    integral : ndarray, shape (n_met, n_age)
+        :math:`\\sum_\\lambda \\mathrm{SSP}(\\lambda)\\,W(\\lambda)`.
+    norm : ndarray, shape ()
+        :math:`\\sum_\\lambda W(\\lambda)`.
+    """
+    w = jax.nn.sigmoid((ssp_wave - lo) / edge_width) * jax.nn.sigmoid((hi - ssp_wave) / edge_width)
+    integral = jnp.tensordot(ssp_flux, w, axes=([2], [0]))  # (n_met, n_age)
+    return integral, jnp.maximum(jnp.sum(w), 1e-10)
+
+
 def precompute_index_windows(
     ssp_wave: jnp.ndarray,
     ssp_flux: jnp.ndarray,
@@ -532,12 +595,9 @@ def precompute_index_windows(
         key = _round_window(lo, hi)
         if key in unique:
             return unique[key]
-        w = jax.nn.sigmoid((ssp_wave - lo) / edge_width) * jax.nn.sigmoid(
-            (hi - ssp_wave) / edge_width
-        )
-        # integral over wave for every (met, age): (n_met, n_age)
-        integrals.append(jnp.tensordot(ssp_flux, w, axes=([2], [0])))
-        norms.append(jnp.maximum(jnp.sum(w), 1e-10))
+        integral, norm = soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width)
+        integrals.append(integral)  # (n_met, n_age)
+        norms.append(norm)
         centers.append(0.5 * (float(lo) + float(hi)))
         unique[key] = len(integrals) - 1
         return unique[key]
@@ -596,26 +656,97 @@ def measure_indices_from_windows(
 
     Notes
     -----
-    **JIT-compatible**: yes. Mirrors :func:`_measure_break` / :func:`_measure_ew`
-    exactly, reading precomputed window means instead of integrating the SED.
+    **JIT-compatible**: yes. Calls the same :func:`_break_from_means` /
+    :func:`_ew_from_means` primitives as the exact path — only the window-mean
+    source differs (precomputed LUT here vs integrated SED there), so there is no
+    duplicated index arithmetic to keep in sync.
     """
     out = []
     for kind, payload, meta in precomp.index_slots:
         if kind == "break":
             b, r = payload
-            out.append(window_means[r] / jnp.maximum(window_means[b], 1e-30))
+            out.append(_break_from_means(window_means[b], window_means[r]))
         elif kind == "EW":
             cont_slots, feat = payload
             feat_width, units = meta
-            cont_flux = jnp.mean(jnp.stack([window_means[c] for c in cont_slots]))
-            feat_flux = window_means[feat]
-            ew = feat_width * (cont_flux - feat_flux) / jnp.maximum(cont_flux, 1e-30)
-            if units == "mag":
-                ew = -2.5 * jnp.log10(jnp.maximum(1.0 - ew / feat_width, 1e-30))
-            out.append(ew)
+            cont_means = [window_means[c] for c in cont_slots]
+            out.append(_ew_from_means(cont_means, window_means[feat], feat_width, units))
         else:  # slope
             out.append(jnp.asarray(jnp.nan))
     return jnp.stack(out)
+
+
+def measure_indices_from_window_lut(
+    joint_weights: jnp.ndarray,
+    scale: jnp.ndarray,
+    transmission_at_centers: jnp.ndarray,
+    precomp: IndexWindowPrecomputation,
+) -> jnp.ndarray:
+    """Measure break/EW features from the per-(met,age) window LUT with dust.
+
+    The FeaturePrecomp fast path for baked-in (wNE) templates, where emission
+    lines and indices are spectral features on the SSP and must be measured from
+    the spectrum (no direct line output). Instead of reconstructing the full-grid
+    SED (~1.0 ms) and measuring on it, contract the precomputed SSP window
+    integrals with the published SFH+metallicity weights and apply the
+    age-dependent two-component screen at each window center (~18 µs for this
+    contraction; ~58x the full-grid measurement):
+
+    .. math::
+
+        \\langle F\\rangle_w = \\mathrm{scale}\\cdot \\sum_a
+            T(a, \\lambda_c^w)\\,
+            \\frac{\\sum_m w_{ma}\\,\\Phi_{maw}}{\\mathcal{N}_w}
+
+    where :math:`\\Phi_{maw}` is ``precomp.window_integrals`` and :math:`T(a,
+    \\lambda)` is the two-component transmission per SSP age.
+
+    **Nebular emission through the birth cloud.** The two-component screen gives
+    the youngest SSP age bins (age < ``t_birth``) the FULL birth-cloud + diffuse
+    attenuation and older bins the diffuse screen only. For a baked-in SSP the
+    nebular emission lives in those youngest bins, so applying :math:`T` per age
+    reddens the emission by birth-cloud + diffuse automatically — matching the
+    exact forward's ``lnu_age * transmission`` (validated < 4e-4 on Hα-EW /
+    Dn4000 / Balmer). (For an *additive* nebular backend the emitted SED must be
+    reddened at y=1 explicitly — that is the additive path, not this one.)
+
+    Parameters
+    ----------
+    joint_weights : ndarray, shape (n_met, n_age)
+        Published SFH × metallicity CSP weights (sum to 1).
+    scale : float
+        ``stellar_mass_scale`` = total_mass · L_sun [erg/s per (Msun weight)];
+        cancels for break/EW ratios but keeps the window means physical.
+    transmission_at_centers : ndarray, shape (n_age, n_window)
+        Two-component transmission evaluated at each window center per SSP age
+        (``two_component_dust(window_centers, ssp_ages, tau_bc, tau_diff, ...)``).
+    precomp : IndexWindowPrecomputation
+        Per-(met, age) window integrals from :func:`precompute_index_windows`.
+
+    Returns
+    -------
+    ndarray, shape (n_index,)
+        Index / emission-EW values, matching a full-SED measurement to < 4e-4
+        (the residual is the intra-window transmission variation across the
+        narrow feature windows).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — one ``einsum`` + a weighted age sum + the ratio
+    measurement. This is the per-evaluation hot path replacing the full-grid SED
+    reconstruction + measurement. Measured (CPU, PRSC wNE grid, 4 indices):
+    ~18 µs for this contraction alone and ~60 µs end-to-end including the
+    SED-free weight extract (:meth:`StellarSEDComponent.compute_joint_weights`)
+    and the transmission evaluation, versus ~1.0 ms for the full-grid path — a
+    ~17x per-evaluation win end-to-end (~58x for the measurement step in
+    isolation).
+    """
+    # marginalize metallicity, keep age: (n_age, n_window)
+    wint_age = jnp.einsum("ma,maw->aw", joint_weights, precomp.window_integrals)
+    window_means = (
+        scale * jnp.sum(transmission_at_centers * wint_age, axis=0) / precomp.window_norms
+    )
+    return measure_indices_from_windows(window_means, precomp)
 
 
 # ── Observed data container ───────────────────────────────────────

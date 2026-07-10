@@ -2829,6 +2829,23 @@ class SEDModel:
         # has its own dedicated signature entries above and stays distinct.
         spec_fixed_id = tuple(sorted(self.spec.fixed_params))
 
+        # Fast nebular grid (#950): when attached via ``enable_fast_nebular`` the
+        # nebular photometry + line channels reconstruct from a per-Q_H grid and
+        # the Cue forward is pruned. That is a DIFFERENT compiled graph AND the
+        # kernel closes over the grid arrays, so a fast model must not share a
+        # slot with the exact model, nor with a fast model over different
+        # ionization axes / grid values (would silently reuse a stale kernel —
+        # the color-leak failure mode this signature exists to prevent).
+        _grid = getattr(self, "_nebular_grid_table", None)
+        if _grid is not None:
+            nebular_grid_sig = (
+                "grid",
+                tuple(_grid.axis_names),
+                int(np.asarray(_grid.log_line_per_qh).tobytes().__hash__()),
+            )
+        else:
+            nebular_grid_sig = ("none",)
+
         return (
             ssp_flux_shape,
             ssp_lgmet_shape,
@@ -2882,6 +2899,7 @@ class SEDModel:
             compile_mode,
             approx_resolved,
             spec_fixed_id,
+            nebular_grid_sig,
         )
 
     def predict_photometry(self, params):
@@ -3059,6 +3077,20 @@ class SEDModel:
         predict : Lazy access to all SED and SFH quantities.
         predict_photometry : Filter-integrated flux (simpler, faster).
         """
+        # Fast-nebular guard (#950): with a per-Q_H grid attached the Cue
+        # continuum forward is skipped (nebular_sed = 0), so the spectrum would
+        # be missing the nebular continuum + emission lines. Refuse loudly rather
+        # than silently return a nebular-less spectrum — the fast path is for
+        # photometry + line fluxes only.
+        if getattr(self, "_nebular_grid_table", None) is not None:
+            raise ValueError(
+                "predict_spectrum is not available on a fast-nebular model "
+                "(enable_fast_nebular attached a per-Q_H grid, so the Cue "
+                "continuum forward is skipped and the spectrum would omit the "
+                "nebular emission). Use the exact model (built without "
+                "enable_fast_nebular) for spectra, line ratios, and .lines."
+            )
+
         # A caller-supplied ``wave_obs`` is evaluated directly on that grid,
         # independent of any configured spectroscopy channel or the cached
         # ``predict_observables`` (which is photometry-only on a photometry
@@ -3223,18 +3255,61 @@ class SEDModel:
         sed_erg = self.predict_rest_sed(params).sed
         return sed_erg / L_SUN
 
+    def _has_line_catalog(self):
+        """Whether the nebular backend publishes a discrete line catalog.
+
+        ``True`` for photoionization backends (Cue / CloudyGrid) →
+        :meth:`predict_line_fluxes` works. ``False`` for BakedIn / shock → line
+        fluxes must be *measured* from the spectrum (:meth:`measure_line_fluxes`).
+        """
+        backend = getattr(self, "_nebular_backend", None)
+        return backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
+
+    def _attenuate_line_catalog(self, params, line_waves, line_lums):
+        """Dust-redden a discrete nebular line catalog at its wavelengths.
+
+        THE single source of nebular-line reddening (Charlot & Fall 2000 birth-
+        cloud + diffuse) — used by :meth:`predict_line_fluxes` AND the interactive
+        ``model.predict(params).lines`` catalog, so no public line path is
+        silently intrinsic while carrying an "observed" contract. Backends publish
+        INTRINSIC ``line_lums``; this applies the same operator the continuum
+        nebular SED gets. JIT-safe (pure ``jnp`` via ``attenuate_emission``).
+        """
+        from tengri.forward.emission_helpers import attenuate_emission
+
+        _is_single = self._dust_model == "single_component"
+        return attenuate_emission(
+            line_lums,
+            line_waves,
+            self._neb_dust_mode,
+            jnp.asarray(params.get("dust_tau_bc", params.get("dust_tau_v", 0.0))),
+            jnp.asarray(params.get("dust_tau_diff", 0.0)),
+            self._dust_law_bc_fn,
+            self._dust_law_bc_fn if _is_single else self._dust_law_diff_fn,
+            neb_bc_fn=self._neb_dust_law_bc_fn,
+            dust_slope=jnp.asarray(params.get("dust_slope", -0.7)),
+            dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
+        )
+
     def predict_line_fluxes(
-        self, params, target_wavelengths=None, tolerance_aa=5.0, *, state=None
+        self, params, target_wavelengths=None, tolerance_aa=5.0, *, redden=True, state=None
     ):
-        """Predict observed emission line fluxes.
+        """Predict observed emission line fluxes (dust-reddened by default).
 
-        Calls the nebular backend to compute line luminosities,
-        selects target lines by wavelength matching, and converts
-        from luminosity (erg/s) to observed flux (erg/s/cm^2).
+        The **model's** nebular line emission: calls the photoionization backend
+        (Cue / CloudyGrid) for line luminosities, applies dust attenuation at each
+        line wavelength (Charlot & Fall birth-cloud + diffuse), and converts to
+        observed flux ``L / (4 pi d_L^2)`` [erg/s/cm^2].
 
-        **Raw forward-pass output.** For interactive access to individual
-        named lines (with luminosities, ratios, and BPT diagnostics), see
-        ``model.predict(params).lines.halpha`` etc.
+        See also :meth:`measure_line_fluxes`, which instead *measures* line fluxes
+        off the model spectrum the way a spectroscopic pipeline measures data
+        (continuum-subtract + integrate) — works for any backend (including
+        baked-in wNE) and carries the stellar Balmer absorption self-consistently.
+        The distinction: ``predict_line_fluxes`` = what the galaxy emits;
+        ``measure_line_fluxes`` = what a pipeline would extract from its spectrum.
+
+        For interactive access to individual named lines (luminosities, ratios,
+        BPT diagnostics), see ``model.predict(params).lines.halpha`` etc.
 
         Parameters
         ----------
@@ -3249,6 +3324,13 @@ class SEDModel:
             target and the matched catalog line. Raises ``ValueError`` on
             any miss, listing the offending targets. Pass ``None`` to disable
             (recovers legacy nearest-line-no-matter-what behavior).
+        redden : bool, default True
+            Apply dust attenuation to the lines (HII regions see birth-cloud +
+            diffuse dust; Charlot & Fall 2000). ``True`` returns **observed**
+            fluxes comparable to a raw catalog; set ``False`` for **intrinsic**
+            (un-reddened) fluxes — e.g. when fitting extinction-corrected
+            catalog line fluxes. (Before 2026-07 this was always intrinsic —
+            silently omitting the line reddening; ``redden=True`` is the fix.)
 
         Returns
         -------
@@ -3285,23 +3367,48 @@ class SEDModel:
         # ``ssp_weights`` + ``ssp_log_ages_yr`` and the canonical
         # neb_logZ_gas → absolute-log10(Z) translation.
         #
-        # ``state`` may be supplied by a caller that has already run the
-        # forward (e.g. the joint loss deriving line fluxes + ratios +
-        # indices from ONE ``predict_state`` — see
-        # ``loss_functions._build_prediction``) so the full-grid forward
-        # is not recomputed once per feature channel.
-        if state is None:
-            state = self.predict_state(params)
-        if "line_waves" not in state.derived or "line_lums" not in state.derived:
-            raise ValueError(
-                "Configured nebular backend did not publish a discrete "
-                "line catalog to state.derived (expected keys "
-                "'line_waves' and 'line_lums'). The BakedIn backend bakes "
-                "lines into the SSP grid; ShockBackend publishes a "
-                "continuous line SED instead. Switch to Cue or CloudyGrid."
+        grid = getattr(self, "_nebular_grid_table", None)
+        if grid is not None:
+            # FAST path (#950): reconstruct intrinsic line luminosities from the
+            # per-Q_H grid — no Cue forward. Q_H is the stellar-published ``nion``
+            # (from the passed state when available, else the SED-free
+            # ``compute_nion``); the grid supplies ``L_line / Q_H``. The shared
+            # redden + target-match + cosmology tail below is unchanged.
+            from tengri.components.nebular.nebular_grid_precompute import (
+                reconstruct_nebular_line_lums,
             )
-        all_waves = jnp.asarray(state.derived["line_waves"])
-        all_lums = jnp.asarray(state.derived["line_lums"])
+
+            if state is not None and "nion" in state.derived:
+                nion = state.derived["nion"]
+            else:
+                nion = self._compute_nion(params)
+            nion = jnp.sum(nion) if jnp.ndim(nion) else nion
+            all_waves = jnp.asarray(grid.wavelengths)
+            all_lums = reconstruct_nebular_line_lums(nion, params, grid)
+        else:
+            # ``state`` may be supplied by a caller that has already run the
+            # forward (e.g. the joint loss deriving line fluxes + ratios +
+            # indices from ONE ``predict_state`` — see
+            # ``loss_functions._build_prediction``) so the full-grid forward
+            # is not recomputed once per feature channel.
+            if state is None:
+                state = self.predict_state(params)
+            if "line_waves" not in state.derived or "line_lums" not in state.derived:
+                raise ValueError(
+                    "Configured nebular backend did not publish a discrete "
+                    "line catalog to state.derived (expected keys "
+                    "'line_waves' and 'line_lums'). The BakedIn backend bakes "
+                    "lines into the SSP grid; ShockBackend publishes a "
+                    "continuous line SED instead. Switch to Cue or CloudyGrid."
+                )
+            all_waves = jnp.asarray(state.derived["line_waves"])
+            all_lums = jnp.asarray(state.derived["line_lums"])
+
+        # Dust-redden the lines at their wavelengths (single-sourced with the
+        # interactive .lines path). The backend publishes INTRINSIC line_lums, so
+        # without this the observed flux omits the line reddening entirely.
+        if redden:
+            all_lums = self._attenuate_line_catalog(params, all_waves, all_lums)
 
         if target_wavelengths is not None:
             target_wavelengths = jnp.asarray(target_wavelengths)
@@ -3350,6 +3457,122 @@ class SEDModel:
         # photometry+line-flux fit unusable against real data.
         flux = selected_lums / (4.0 * jnp.pi * dl_cm**2)
         return flux
+
+    def enable_fast_nebular(self, target_wavelengths, *, n_grid=16, ranges=None):
+        r"""Attach a per-Q_H nebular grid so lines + photometry skip the Cue forward.
+
+        Builds the adaptive-axis nebular grid
+        (:func:`~tengri.components.nebular.nebular_grid_precompute.precompute_nebular_grid`)
+        from **this** model — running the Cue forward once per grid point at build
+        time — then attaches it to the nebular component. Afterwards:
+
+        * :meth:`predict_photometry` reconstructs the nebular broadband
+          contribution as :math:`Q_H \times \mathrm{interp}(\text{grid})`, and the
+          Cue forward becomes dead for the photometry channel (XLA prunes it);
+        * :meth:`predict_line_fluxes` reconstructs the emission lines the same way.
+
+        Both are **SED-free in** :math:`Q_H` (the stellar-published ``nion``). The
+        grid axes are whichever of ``met_logzsol`` / ``neb_logU`` /
+        ``neb_logZ_gas`` are FREE; fixed ionization params are baked.
+
+        Parameters
+        ----------
+        target_wavelengths : array_like, shape (n_lines,)
+            Rest-frame vacuum line wavelengths [Angstrom] the grid tabulates and
+            :meth:`predict_line_fluxes` serves.
+        n_grid : int, default 16
+            Grid points per free ionization axis. Denser → tighter interpolation.
+        ranges : dict, optional
+            Override ``{param: (lo, hi)}`` grid bounds (defaults to each free
+            param's prior support).
+
+        Returns
+        -------
+        SEDModel
+            ``self`` (configured in place), for chaining.
+
+        Raises
+        ------
+        ValueError
+            If no Q_H-linear nebular backend (Cue) is configured.
+
+        Notes
+        -----
+        **Approximation.** Reconstruction is exact at grid nodes and node-exact
+        PCHIP between them. Photometry error stays ~1 % on the total (nebular is
+        subdominant in broadband). Line-flux accuracy depends strongly on which
+        ionization params are free (#950 convergence study):
+
+        * **Gas axes** (``logU`` + ``neb_logZ_gas``) drive smooth per-Q_H line
+          changes and converge with ``n_grid``.
+        * **Free ``met_logzsol``** does **NOT** converge for the collisionally
+          excited lines, at any ``n_grid``. The exact Cue forward is *discontinuous*
+          in metallicity — it selects the ionizing-spectrum shape from a single
+          ``argmax``-chosen age bin, so [OIII] steps ~33 % whenever the dominant bin
+          flips. No interpolant crosses a jump: a dense systematic sweep gives
+          [OIII] worst-case ~10-23 % irrespective of resolution. Balmer lines
+          (recombination, ∝ Q_H) are shape-insensitive and do converge.
+
+        Validate accuracy with a **dense sweep strictly inside the grid range** —
+        random parameter draws under-sample the discontinuity and report bounds
+        that are ~100x optimistic.
+
+        For the photometry channel the model must be built with
+        ``approx=WavePrecomp()`` (so the grid can capture the intrinsic
+        filter-integrated nebular ``L_nu``); without it only the line channel is
+        reconstructed and photometry stays on the exact path.
+
+        **JIT-compatible**: the resulting :meth:`predict_photometry` /
+        :meth:`predict_line_fluxes` are JIT- and gradient-safe; the one-time grid
+        build is eager.
+        """
+        import dataclasses
+
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.nebular.nebular_grid_precompute import precompute_nebular_grid
+
+        if self._nebular_backend is None or not hasattr(
+            self._nebular_backend, "predict_nebular_line_luminosities"
+        ):
+            raise ValueError(
+                "enable_fast_nebular requires a Q_H-linear nebular backend with "
+                "line prediction (Cue). The configured backend is "
+                f"{type(self._nebular_backend).__name__ if self._nebular_backend else 'none'}."
+            )
+
+        target_wavelengths = jnp.asarray(target_wavelengths)
+        table = precompute_nebular_grid(self, target_wavelengths, n_grid=n_grid, ranges=ranges)
+        self._nebular_grid_table = table
+        # Rebuild the chain from scratch (exact, no grid) and swap in the
+        # grid-carrying nebular component so ``apply`` takes the fast branch.
+        # compile_signature() now differs (nebular_grid_sig), so the next
+        # predict_* builds a fresh kernel over this chain — no stale reuse.
+        chain = self._build_component_chain()
+        self._cached_component_chain = [
+            dataclasses.replace(c, grid_table=table) if isinstance(c, NebularSEDComponent) else c
+            for c in chain
+        ]
+        return self
+
+    def _compute_nion(self, params):
+        """SED-free ionizing photon rate :math:`Q_H` from the stellar component.
+
+        Slices ``params`` to the stellar prefixes and delegates to
+        :meth:`StellarSEDComponent.compute_nion` — the ionizing-slice integral
+        that skips the full-wavelength SED. Used by the fast nebular line path so
+        it never runs :meth:`predict_state`.
+        """
+        from tengri.components.stellar.component import StellarSEDComponent
+        from tengri.forward.orchestrator import slice_params_for_component
+
+        chain = getattr(self, "_cached_component_chain", None)
+        if chain is None:
+            chain = self._cached_component_chain = self._build_component_chain()
+        stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
+        if stellar is None:
+            raise ValueError("No StellarSEDComponent in the chain — cannot compute Q_H.")
+        sliced = slice_params_for_component(stellar, params)
+        return stellar.compute_nion(sliced, ssp_data=self.ssp_data)
 
     def predict_line_ratios(self, params, line_ratio_data, *, state=None):
         """Predict emission line ratios for a :class:`LineRatioData` set.
@@ -3412,7 +3635,7 @@ class SEDModel:
         den_flux = _match(line_ratio_data.denominator_waves)
         return line_ratio_data.model_ratio(num_flux, den_flux)
 
-    def predict_spectral_indices(self, params, index_defs, *, state=None):
+    def predict_spectral_indices(self, params, index_defs, *, state=None, fast=False):
         """Predict spectral index values from the model SED.
 
         Generates a rest-frame spectrum covering the index wavelength
@@ -3426,6 +3649,22 @@ class SEDModel:
             Parameter values (public names).
         index_defs : tuple of SpectralIndexDef
             Index definitions to measure.
+        state : ForwardState, optional
+            A pre-computed forward state to measure on (shares one
+            ``predict_state`` across channels). Ignored when ``fast=True``.
+        fast : bool, default False
+            Route through the FeaturePrecomp window-LUT fast path
+            (:meth:`_feature_fast_indices`): contract precomputed SSP window
+            integrals with SED-free SFH weights and the model's per-age dust
+            screen, instead of reconstructing the full-grid SED. ~17x faster
+            per evaluation (measured, wNE grid) and bit-exact for the supported
+            configuration — **stellar + two-component (or no) dust + baked-in
+            (or no) nebular, delta metallicity, parametric non-field SFH**. Any
+            other configuration (additive nebular, AGN, non-delta metallicity,
+            GP-field SFH, alpha-Fe grid) **raises** ``ValueError`` rather than
+            silently falling back, because ``fast=True`` is an explicit opt-in;
+            use ``fast=False`` there. Slope indices are filled from the exact
+            SED (they are not window-LUT-expressible).
 
         Returns
         -------
@@ -3434,14 +3673,18 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: yes — routes through
-        :meth:`predict_spectrum` → :meth:`predict_observables_jit`.
+        **JIT-compatible**: yes — both paths are pure ``jnp``. The ``fast`` path
+        builds its window LUT once (cached on the model) from concrete SSP data,
+        so it is safe to call under ``jax.jit``.
 
         Measures spectral indices (equivalent width or break ratio) from a
         rest-frame spectrum covering all wavelength ranges in ``index_defs``.
         """
         from tengri.forward.result import SEDResult
         from tengri.observation.spectral_indices import measure_index_jax
+
+        if fast:
+            return self._feature_fast_indices(params, tuple(index_defs))
 
         # Spectral indices (D4000 / Balmer break / Lick EW) are rest-frame
         # quantities measured on the attenuated galaxy SED. Evaluate the
@@ -3467,6 +3710,246 @@ class SEDModel:
 
         indices = [measure_index_jax(wave_rest, flux_rest, idx_def) for idx_def in index_defs]
         return jnp.array(indices)
+
+    # ── FeaturePrecomp fast path for spectral indices (#950) ──────────
+
+    def _feature_chain(self):
+        """The component chain, reusing the construction-time cache when present."""
+        chain = getattr(self, "_cached_component_chain", None)
+        if chain is None:
+            chain = self._build_component_chain()
+            self._cached_component_chain = chain
+        return chain
+
+    def _index_window_precomp(self, index_defs):
+        """Build (and memoize) the SSP window-integral LUT for ``index_defs``.
+
+        Depends only on the model's (concrete) SSP grid and the index windows,
+        so it is built once per distinct index set and reused across evaluations
+        — the FeaturePrecomp analog of the WavePrecomp SSP x filter LUT. Built
+        from concrete SSP data (not traced params), and forced to eager evaluation
+        so the cached LUT is a true compile-time constant (see below).
+        """
+        from tengri.observation.spectral_indices import precompute_index_windows
+
+        cache = getattr(self, "_index_window_lut_cache", None)
+        if cache is None:
+            cache = {}
+            self._index_window_lut_cache = cache
+        key = tuple(index_defs)
+        pc = cache.get(key)
+        if pc is None:
+            # ``jax.ensure_compile_time_eval`` forces concrete evaluation even when
+            # first reached inside a jit trace; otherwise the cached jnp LUT holds
+            # trace-tied tracers that leak into a later trace (UnexpectedTracerError
+            # under a joint-then-standalone call order). Same fix as
+            # :meth:`_line_window_precomp`.
+            with jax.ensure_compile_time_eval():
+                pc = precompute_index_windows(
+                    self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, index_defs
+                )
+            cache[key] = pc
+        return pc
+
+    def _line_window_precomp(self, line_defs):
+        """Build (and memoize) the SSP line-window LUT for ``line_defs``.
+
+        The line-flux analog of :meth:`_index_window_precomp` — same concrete-
+        SSP, cached-per-line-set contract (JIT-safe).
+        """
+        from tengri.observation.line_measurement import precompute_line_windows
+
+        cache = getattr(self, "_line_window_lut_cache", None)
+        if cache is None:
+            cache = {}
+            self._line_window_lut_cache = cache
+        key = tuple(line_defs)
+        pc = cache.get(key)
+        if pc is None:
+            # Force eager (concrete) evaluation even when first reached inside a
+            # jit trace. Without this, ``precompute_line_windows`` runs its jnp
+            # ops abstractly, the cached ``pc`` holds DynamicJaxprTracers tied to
+            # that trace, and reusing the cache in a later trace raises
+            # UnexpectedTracerError. Inputs are the concrete build-time SSP grid,
+            # so this is a genuine compile-time constant.
+            with jax.ensure_compile_time_eval():
+                pc = precompute_line_windows(
+                    self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, line_defs
+                )
+            cache[key] = pc
+        return pc
+
+    def _require_feature_fast_eligible(self, chain):
+        """Return the stellar component, or raise if the chain is unsupported.
+
+        The window LUT reconstructs indices from ``scale * sum(jw * SSP * T)`` —
+        the baked-in stellar+dust SED only. Any component that adds rest-frame
+        flux the LUT does not model (additive nebular, AGN, radio, …) would make
+        the fast indices silently wrong, so those raise. IGM is rest-frame-
+        neutral (observer-frame, applied after redshifting) and is allowed.
+        """
+        from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.igm.component import IGMSEDComponent
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.stellar.component import StellarSEDComponent
+
+        allowed = (StellarSEDComponent, DustSEDComponent, NebularSEDComponent, IGMSEDComponent)
+        stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
+        if stellar is None:
+            raise ValueError("predict_spectral_indices(fast=True) requires a stellar component.")
+        for c in chain:
+            if not isinstance(c, allowed):
+                raise ValueError(
+                    f"predict_spectral_indices(fast=True) does not support a "
+                    f"{type(c).__name__} in the chain: it adds rest-frame flux the window "
+                    f"LUT does not model. Use fast=False for this model."
+                )
+        neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
+        if neb is not None and getattr(neb.config, "backend", None) != "baked_in":
+            raise ValueError(
+                f"predict_spectral_indices(fast=True) supports baked-in nebular only "
+                f"(chain has backend={getattr(neb.config, 'backend', None)!r}); an additive "
+                f"backend's emission is not in the SSP window integrals. Use fast=False."
+            )
+        return stellar
+
+    def _feature_fast_indices(self, params, index_defs):
+        """FeaturePrecomp window-LUT measurement of ``index_defs`` (``fast=True``).
+
+        Contracts the precomputed SSP window integrals with SED-free SFH+met
+        weights (:meth:`StellarSEDComponent.compute_joint_weights`) and the
+        model's per-age two-component dust screen
+        (:meth:`DustSEDComponent.compute_transmission`) — no full-grid SED. See
+        :meth:`predict_spectral_indices` for the supported-configuration
+        contract; unsupported chains raise here (never silently wrong).
+        """
+        from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
+        from tengri.observation.spectral_indices import (
+            measure_index_jax,
+            measure_indices_from_window_lut,
+        )
+
+        chain = self._feature_chain()
+        stellar = self._require_feature_fast_eligible(chain)
+
+        # SED-free (met, age) weights — raises on unsupported SFH / metallicity.
+        joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(params)
+        scale = total_mass * LSUN_ERG_PER_S  # physical window means; cancels for ratios
+
+        pc = self._index_window_precomp(index_defs)
+
+        # per-age transmission at the window centers, from the model's own dust
+        # (single-sourced with the forward) — or unity when there is no dust.
+        dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
+        if dust is None:
+            transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
+        else:
+            transmission = dust.compute_transmission(params, pc.window_centers, ssp_ages_yr)
+
+        values = measure_indices_from_window_lut(joint_weights, scale, transmission, pc)
+
+        # Slope indices are not a single-window functional → the LUT leaves NaN
+        # in those slots; fill them from one exact rest-frame SED measurement.
+        if pc.has_slope:
+            rest = self.predict_rest_sed(params)
+            slots = pc.index_slots
+            values = jnp.stack(
+                [
+                    measure_index_jax(rest.wavelength, rest.sed, d)
+                    if slots[i][0] == "slope"
+                    else values[i]
+                    for i, d in enumerate(index_defs)
+                ]
+            )
+        return values
+
+    def measure_line_fluxes(self, params, line_defs=None, *, fast=False, state=None):
+        r"""Emission-line fluxes **measured from the model spectrum**, catalog-style.
+
+        The counterpart to :meth:`predict_line_fluxes`: where ``predict_*`` returns
+        what the galaxy *emits* (the backend's nebular line luminosity → flux),
+        ``measure_*`` applies the operator a spectroscopic pipeline applies to
+        *data* — estimate a local continuum from side-bands, subtract it, integrate
+        the emission — to the model's own rest-frame SED. It therefore works for
+        **any** nebular backend (Cue additive, baked-in wNE, …), yields a quantity
+        directly comparable to a catalog's continuum-subtracted line flux, and
+        carries the stellar Balmer absorption under the line self-consistently.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names). ``redshift`` sets the luminosity
+            distance for the observed flux.
+        line_defs : sequence of LineDef, optional
+            Lines + continuum windows to measure. Defaults to
+            :data:`tengri.observation.line_measurement.DESI_LINES`.
+        fast : bool, default False
+            Route through the window-LUT fast path
+            (:func:`~tengri.observation.line_measurement.measure_line_fluxes_from_window_lut`):
+            SED-free SFH weights × precomputed SSP line-window integrals × the
+            per-age dust screen — no full-grid SED. Bit-exact with the exact path
+            for the supported configuration (stellar + two-component/no dust +
+            baked-in/no nebular, delta metallicity, parametric non-field SFH) and
+            **raises** otherwise (same contract as
+            :meth:`predict_spectral_indices` ``fast=True``). An **additive** Cue
+            backend is *not* fast-eligible — its emission is not in the SSP window
+            integrals — so use ``fast=False`` for Cue.
+        state : ForwardState, optional
+            Pre-computed forward state to measure on (exact path only).
+
+        Returns
+        -------
+        jnp.ndarray, shape (n_line,)
+            Observed emission-line fluxes [erg/s/cm^2], in ``line_defs`` order.
+
+        Notes
+        -----
+        **JIT-compatible / differentiable**: yes.
+
+        **Continuum caveat.** The side-band continuum carries the stellar
+        absorption around the line; for baked-in nebular the Balmer flux is
+        continuum-sensitive exactly as a real pipeline's is. See the
+        :mod:`tengri.observation.line_measurement` module docstring.
+        """
+        from tengri.cosmology import luminosity_distance
+        from tengri.forward.result import SEDResult
+        from tengri.observation.line_measurement import (
+            DESI_LINES,
+            measure_line_flux_jax,
+            measure_line_fluxes_from_window_lut,
+        )
+
+        line_defs = tuple(DESI_LINES if line_defs is None else line_defs)
+        z = jnp.asarray(params.get("redshift", 0.0))
+        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+        four_pi_dl2 = 4.0 * jnp.pi * dl_cm**2
+
+        if fast:
+            from tengri.components.dust.two_component import DustSEDComponent
+            from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
+
+            chain = self._feature_chain()
+            stellar = self._require_feature_fast_eligible(chain)
+            joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(params)
+            scale = total_mass * LSUN_ERG_PER_S
+            pc = self._line_window_precomp(line_defs)
+            dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
+            if dust is None:
+                transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
+            else:
+                transmission = dust.compute_transmission(params, pc.window_centers, ssp_ages_yr)
+            return measure_line_fluxes_from_window_lut(
+                joint_weights, scale, transmission, pc, four_pi_dl2
+            )
+
+        if state is None:
+            rest = self.predict_rest_sed(params)
+        else:
+            rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
+        return jnp.stack(
+            [measure_line_flux_jax(rest.wavelength, rest.sed, ld, four_pi_dl2) for ld in line_defs]
+        )
 
     def predict_hbeta(self, params: dict) -> float:
         """Predict Hβ luminosity for use with CLOUDY-informed emission line priors.

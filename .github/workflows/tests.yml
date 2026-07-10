@@ -209,14 +209,17 @@ jobs:
       fail-fast: false
       matrix:
         # Per-suite step budgets sized to the measured serial runtimes:
-        # inference ≈ 45 min, integration ≈ 93 min (the heavy end-to-end fits).
+        # inference ≈ 51 min; integration has grown from ≈ 93 min to 114–118
+        # min on recent main runs (b11f4d36/21b41836/44725252) and timed out
+        # at 120 on #955 — budget re-sized with headroom. The real fix is
+        # pruning/parallelizing the integration tier, not more budget.
         # Kept serial (no xdist) for OOM safety, so each suite needs a budget
         # above its own runtime rather than a shared 40-min cap.
         include:
           - suite: inference
             timeout: 60
           - suite: integration
-            timeout: 120
+            timeout: 180
     # Own concurrency group per suite: do NOT inherit the workflow-level
     # `cancel-in-progress: true` (which kills slow whenever main moves).
     # `cancel-in-progress: false` means newer slow triggers queue behind
@@ -229,7 +232,7 @@ jobs:
       github.event_name == 'schedule'
       || github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-slow-tests'))
-    timeout-minutes: 125
+    timeout-minutes: 185
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
