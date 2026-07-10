@@ -85,3 +85,49 @@ def test_every_declared_param_has_in_bounds_default():
             "``default=<physical_value>``. See docs/dev/parameter-defaults.md (or "
             "the #478 commit message) for rationale."
         )
+
+
+def test_every_sfh_registry_param_has_in_bounds_default():
+    """Every SFH registry ParamDef prior carries a usable default (#1007).
+
+    The SEDModelComponent guard above never reached the SFH registry
+    (``components/stellar/sfh/registry.py`` declares priors via its own
+    ``ParamDef`` NamedTuple, not ``declared_parameters()``), so 102 of its
+    110 priors shipped without ``default=`` — and every ``'*': FIXED``
+    build of a non-dpl SFH type greeted a new user with a wall of
+    midpoint-fallback warnings. Same contract, same failure mode, second
+    declaration surface.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+    from tengri.parameters.priors import Fixed
+
+    offenders: list[str] = []
+    seen: set[int] = set()
+    for sfh_name, entry in sorted(SFH_REGISTRY.items()):
+        if id(entry) in seen:
+            continue  # alias of an already-checked spec
+        seen.add(id(entry))
+        for param_name, pdef in entry.params.items():
+            prior = pdef.default  # ParamDef.default is the prior Distribution
+            if isinstance(prior, Fixed):
+                continue
+            if prior.default is None:
+                offenders.append(f"  {sfh_name}.{param_name}  ({type(prior).__name__})")
+                continue
+            lo, hi = prior.bounds
+            if lo is None or hi is None:
+                continue
+            if not (lo <= float(prior.default) <= hi):
+                offenders.append(
+                    f"  {sfh_name}.{param_name}  default={prior.default} "
+                    f"outside bounds [{lo}, {hi}]"
+                )
+
+    if offenders:
+        raise AssertionError(
+            f"{len(offenders)} SFH registry parameter(s) missing in-bounds defaults:\n"
+            + "\n".join(offenders)
+            + "\n\nEvery ``ParamDef`` prior must either be ``Fixed(value)`` or carry "
+            "``default=<physical_value>`` so ``'*': FIXED`` builds never fall back "
+            "to the prior midpoint (#1007)."
+        )
