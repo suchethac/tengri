@@ -55,6 +55,7 @@ def _params(emit: bool):
         sfh_dpl_alpha=Fixed(2.0),
         sfh_dpl_beta=Fixed(1.0),
         sfh_dpl_tau_gyr=Fixed(1.0),
+        sfh_dpl_age_gyr=Fixed(5.0),
         sfh_dpl_log_total_mass=Fixed(10.0),
         met_logzsol=Fixed(0.0),
         redshift=Fixed(0.05),

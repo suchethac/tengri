@@ -276,6 +276,13 @@ def pytest_configure(config):
     # tests opt back in with monkeypatch.delenv + a tmp_path cache dir.
     os.environ.setdefault("TENGRI_DISABLE_PRECOMP_CACHE", "1")
 
+    # The synthetic SSP fixtures are unphysical by construction (young-bin
+    # log Q_H ≈ 62 vs the physical ~47), which trips the CueBackend wNE
+    # sanity band on every structural Cue test. Downgrade to the guard's
+    # warning path suite-wide; the guard's raise contract is pinned by
+    # tests/contract/test_new_user_errors.py, which delenv's this.
+    os.environ.setdefault("TENGRI_ALLOW_WNE_CUE", "1")
+
     cb19_path = Path(__file__).parent.parent / "data" / "cb19_templates.h5"
     _create_cb19_fixture_if_missing(cb19_path)
     _create_silva04_fixture_if_missing(
