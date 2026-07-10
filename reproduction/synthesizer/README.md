@@ -1,4 +1,4 @@
-# Reproducing Synthesizer with tengri
+# Reproducing Synthesizer's physics with tengri
 
 This folder places Synthesizer (Lovell et al. 2025, OJA, doi:10.33232/001c.145766;
 Roper et al. 2026, JOSS, doi:10.21105/joss.09436 — **cite both**) next to tengri

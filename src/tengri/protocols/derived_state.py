@@ -188,6 +188,10 @@ class DerivedState:
     # Intrinsic (un-reddened) disc monochromatic L_nu at 4400 A [erg/s/Hz];
     # drives radio loudness normalization (B-band). Published by composable AGN.
     L_4400_intrinsic: jnp.ndarray | None = None
+    # AGN cos(i) [dimensionless]. The X-ray corona tilts its Yang+2022
+    # anisotropy to the same sightline as the disc/torus, exactly as
+    # X-CIGALE forwards cos i from the AGN module into yang20 (#980).
+    agn_cos_inc: jnp.ndarray | None = None
     sed_agn: jnp.ndarray | None = None
     sed_grahsp: jnp.ndarray | None = None
     # AGN — filter-integrated LUT. Rest-frame Lν of

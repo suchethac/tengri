@@ -190,7 +190,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    auto_examples/index
 
 .. toctree::
-   :caption: Reproduction
+   :caption: Physics reproduction
    :maxdepth: 1
    :hidden:
 

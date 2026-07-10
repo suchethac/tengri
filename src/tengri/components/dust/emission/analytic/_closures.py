@@ -46,6 +46,15 @@ def modified_blackbody(
     which is then normalized so that the frequency integral equals
     ``L_absorbed``.
 
+    **Convention**: this is the *optically-thin* modified blackbody. CIGALE's
+    ``mbb`` module instead uses the general-opacity form
+    ``(1 - exp(-(200 µm/λ)^β)) ν³ B``-factor, which peaks ~35% redder at
+    T = 35 K (124 vs 91 µm) and carries ~3× more submm flux at fixed
+    bolometric output (parity sweep vs pcigale 2025.1; #1006 tracks an
+    opt-in opacity toggle). Both forms are standard in the literature —
+    for a general-opacity graybody today, use ``casey2012`` (its graybody
+    term is exactly that form).
+
     When ``redshift > 0``, the dust temperature is corrected for CMB
     heating (da Cunha et al. 2013) and the observed flux is reduced by
     the CMB contrast factor.
@@ -124,126 +133,58 @@ def modified_blackbody(
 
 # ── Model 1b: Casey (2012) modified blackbody + mid-IR power law ──
 
-# Empirical coefficients for turnover wavelength (Casey 2012, Eq. 3, errata)
-_CASEY_B1_UM = 26.68  # μm
-_CASEY_B2_UM_PER_K = 6.246e-3  # μm / K
+# Casey (2012) Eqs. 11-12 turnover-fit coefficients: λ_c = (3/4)·λ_turnover
+# with λ_turnover(α, T) = 10³ nm / [(b1 + b2·α)⁻² + (b3 + b4·α)·T].
+_CASEY_B1 = 26.68  # dimensionless
+_CASEY_B2 = 6.246  # dimensionless (per unit α)
+_CASEY_B3_PER_K = 1.905e-4  # 1/K
+_CASEY_B4_PER_K = 7.243e-5  # 1/K (per unit α)
+# Fixed opacity pivot of the general graybody, Casey (2012) Eq. 1.
+_CASEY_LAMBDA0_CM = 200.0e-4  # 200 µm [cm]
 
 
-def _casey_transition_function(
+def _casey_lambda_c_cm(T_eff: float, dust_alpha_mir: float) -> jnp.ndarray:
+    """Power-law turnover wavelength λ_c [cm] — Casey (2012) Eqs. 11-12.
+
+    λ_c = (3/4)·λ_turnover, where the peak-wavelength fit is
+    λ_turnover [nm] = 10³ / [(b1 + b2 α)⁻² + (b3 + b4 α) T].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
+    denom = (_CASEY_B1 + _CASEY_B2 * dust_alpha_mir) ** -2.0 + (
+        _CASEY_B3_PER_K + _CASEY_B4_PER_K * dust_alpha_mir
+    ) * T_eff
+    return (0.75e3 / denom) * 1.0e-7  # nm -> cm
+
+
+def _casey_graybody_nu(
     wavelength_cm: jnp.ndarray,
     T_eff: float,
-) -> jnp.ndarray:
-    """Compute Casey (2012) transition function between power law and MBB.
-
-    Parameters
-    ----------
-    wavelength_cm : array, shape (n_wave,)
-        Wavelength grid in cm. [cm]
-    T_eff : float
-        Effective dust temperature (already CMB-corrected). [K]
-
-    Returns
-    -------
-    array, shape (n_wave,)
-        Transition function f(λ) = 1 / (1 + (λ/λ_0)^2).
-        f→1 at short λ (power law), f→0 at long λ (MBB). [dimensionless]
-
-    Notes
-    -----
-    **JIT-compatible**: yes.
-
-    """
-    # Empirical turnover wavelength (Casey 2012, Eq. 3 with errata)
-    lambda0_cm = (_CASEY_B1_UM + _CASEY_B2_UM_PER_K * T_eff) * 1.0e-4  # μm -> cm
-
-    # Transition function: f(λ) = 1 / (1 + (λ/λ_0)^2)
-    # f→1 at short λ (mid-IR power law dominates), f→0 at long λ (MBB dominates)
-    # Casey 2012 convention: power law for Wien side, MBB for Rayleigh-Jeans
-    return 1.0 / (1.0 + (wavelength_cm / lambda0_cm) ** 2)
-
-
-def _casey_powerlaw_component(
-    nu: jnp.ndarray,
-    nu_ref: float,
-    f_transition: jnp.ndarray,
-    x: jnp.ndarray,
-    dust_alpha_mir: float,
+    dust_beta_ir: float,
     optically_thin: bool,
 ) -> jnp.ndarray:
-    """Compute Casey (2012) mid-IR power-law component.
+    r"""Graybody S_ν shape — the second term of Casey (2012) Eq. 1.
 
-    Parameters
-    ----------
-    nu : array, shape (n_wave,)
-        Frequency in Hz (descending). [Hz]
-    nu_ref : float
-        Reference frequency (100 μm pivot). [Hz]
-    f_transition : array, shape (n_wave,)
-        Transition function from _casey_transition_function. [dimensionless]
-    x : array, shape (n_wave,)
-        Planck argument h*nu/(k*T). [dimensionless]
-    dust_alpha_mir : float
-        Mid-IR power-law slope. [dimensionless]
-    optically_thin : bool
-        If True, return zero (power law suppressed). [dimensionless]
+    .. math::
 
-    Returns
-    -------
-    array, shape (n_wave,)
-        Mid-IR power-law component S_pl(ν). [erg/s/Hz] (before normalization)
+        S_\nu \propto \left(1 - e^{-(\lambda_0/\lambda)^\beta}\right)
+        \frac{\nu^3}{e^{h\nu/kT} - 1},
+        \qquad \lambda_0 = 200\,\mu m
+
+    With ``optically_thin=True`` the opacity factor is replaced by its
+    small-τ limit :math:`(\lambda_0/\lambda)^\beta`, giving the familiar
+    :math:`\nu^{3+\beta} B_\nu` form (Casey 2012, §2).
 
     Notes
     -----
-    **JIT-compatible**: yes.
-
-    The exponential cutoff prevents the power law from diverging at
-    UV/optical wavelengths. This follows Casey (2012) Eq. 2 where the
-    power law implicitly operates only in the IR regime.
-
+    **JIT-compatible**: yes — ``optically_thin`` is a static Python bool.
     """
-    # S_pl(ν) ~ ν^α_mid * f(ν) * exp(-hν/kT) [Wien cutoff]
-    wien_cutoff = jnp.exp(-x)
-    power_law = (nu / nu_ref) ** dust_alpha_mir * f_transition * wien_cutoff
-    power_law = power_law * (1.0 - optically_thin)
-    return power_law
-
-
-def _casey_mbb_component(
-    nu: jnp.ndarray,
-    nu_ref: float,
-    f_transition: jnp.ndarray,
-    x: jnp.ndarray,
-    dust_beta_ir: float,
-) -> jnp.ndarray:
-    """Compute Casey (2012) modified blackbody component.
-
-    Parameters
-    ----------
-    nu : array, shape (n_wave,)
-        Frequency in Hz (descending). [Hz]
-    nu_ref : float
-        Reference frequency (100 μm pivot). [Hz]
-    f_transition : array, shape (n_wave,)
-        Transition function from _casey_transition_function. [dimensionless]
-    x : array, shape (n_wave,)
-        Planck argument h*nu/(k*T). [dimensionless]
-    dust_beta_ir : float
-        Dust emissivity index. [dimensionless]
-
-    Returns
-    -------
-    array, shape (n_wave,)
-        Modified blackbody component S_bb(ν). [erg/s/Hz] (before normalization)
-
-    Notes
-    -----
-    **JIT-compatible**: yes.
-
-    """
-    # S_bb(ν) ~ ν^(3+β) / (exp(hν/kT) - 1) * (1 - f(ν))
-    mbb = (nu / nu_ref) ** (3.0 + dust_beta_ir) / (jnp.exp(x) - 1.0)
-    mbb = mbb * (1.0 - f_transition)
-    return mbb
+    x = jnp.clip(_H_PLANCK * _C_CGS / (wavelength_cm * _K_BOLTZMANN * T_eff), 0.0, 500.0)
+    tau = (_CASEY_LAMBDA0_CM / wavelength_cm) ** dust_beta_ir
+    opacity = tau if optically_thin else -jnp.expm1(-tau)
+    return opacity * (_C_CGS / wavelength_cm) ** 3 / jnp.expm1(x)
 
 
 def casey2012(
@@ -256,88 +197,78 @@ def casey2012(
     redshift: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Casey (2012) modified blackbody + mid-IR power law dust emission.
+    r"""Casey (2012) graybody + mid-IR power law dust emission.
 
-    Combines a modified blackbody (FIR peak from cold/warm dust) with a
-    mid-IR power law (Wien-side excess from warm dust continuum), joined
-    by a smooth sigmoid transition function.
+    Implements Casey (2012) [1]_ Eqs. 1-2: a general-opacity graybody
+    (FIR peak) plus a mid-IR power law rising with wavelength up to the
+    turnover :math:`\lambda_c`, where its amplitude is tied to the
+    graybody (continuity) and a Gaussian cutoff hands over:
 
-    When ``optically_thin=True``, the mid-IR power-law component is zeroed,
-    leaving only the modified blackbody.  This variant is useful for cold
-    dust-dominated galaxies where the power law is unphysical.
+    .. math::
 
-    .. note::
+        S_\nu(\lambda) = N_{bb} \left[
+            \left(1 - e^{-(\lambda_0/\lambda)^\beta}\right)
+            \frac{\nu^3}{e^{h\nu/kT} - 1}
+            + S^{gray}_\nu(\lambda_c)\,
+              (\lambda/\lambda_c)^{\alpha}\, e^{-(\lambda/\lambda_c)^2}
+        \right]
 
-        The mid-IR power-law contribution is only significant for **warm/hot
-        dust** (T ≳ 60 K).  For typical cold ISM dust (T = 25–60 K) the Wien
-        cutoff exp(-hν/kT) kills the power-law component at 8–40 μm (x ≈ 10–51
-        at those wavelengths), so the model produces *less* 8–40 μm flux than a
-        pure MBB normalized to the same L_absorbed.  The 8–40 μm advantage
-        described in Casey (2012) applies to warmer starburst / AGN-heated dust
-        components where T ≳ 80–100 K.
+    with :math:`\lambda_0 = 200\,\mu m` fixed and
+    :math:`\lambda_c(\alpha, T)` from Eqs. 11-12. Every variable:
+    :math:`T` = dust temperature [K], :math:`\beta` = emissivity index,
+    :math:`\alpha` = mid-IR slope, :math:`\nu` = frequency [Hz],
+    :math:`\lambda` = wavelength. The total frequency integral is
+    normalized to ``L_absorbed``.
 
-    The implemented model uses the following convention (see code comments)::
-
-        S(ν) = N_pl * ν^α_mid * f(λ)         [mid-IR power law, f→1 at short λ]
-             + N_bb * ν^(3+β) / (exp(hν/kT) - 1) * (1 - f(λ))   [FIR MBB, 1-f→1 at long λ]
-
-    where the transition function (f→1 selects power law at short λ) is::
-
-        f(λ) = 1 / (1 + (λ / λ_0)^2)
-
-    Note: Casey (2012, MNRAS 425 3094) Eq. 2 defines the carrier function differently;
-    the code's convention has f→1 at short λ (mid-IR) and 1-f→1 at long λ (FIR).
-    The shapes produced are equivalent; only the labeling of f vs (1-f) differs.
-
-    The empirical turnover wavelength is (Eq. 3, with errata)::
-
-        λ_0 = b1 + b2 * T[μm]
-
-    with ``b1 = 26.68 μm``, ``b2 = 6.246e-3 μm/K``.
-
-    Both components are normalized so that the total frequency integral
-    equals ``L_absorbed``.
+    This matches CIGALE's ``casey2012`` module term by term (parity
+    verified against pcigale 2025.1; #1004 — the previous closure carried
+    a spurious Wien factor that annihilated the power law, an inverted
+    power-law slope, and an optically-thin-only graybody).
 
     When ``redshift > 0``, the dust temperature is corrected for CMB
-    heating (da Cunha et al. 2013) and the observed flux is reduced by
-    the CMB contrast factor.
+    heating (da Cunha et al. 2013 [2]_) and the observed flux is reduced
+    by the CMB contrast factor.
 
     Parameters
     ----------
     wavelength_aa : array, shape (n_wave,)
         Wavelength grid in Angstrom (sorted ascending). [Å]
     L_absorbed : float
-        Total absorbed luminosity in Lsun (sets the normalization). [L_sun]
+        Total absorbed luminosity (sets the normalization). Unit-agnostic:
+        the output L_nu is in the same units per Hz.
     dust_T : float
-        Dust temperature in Kelvin.  Typical range: 25--60 K. [K]
+        Dust temperature. Typical range: 20-60. [K]
     dust_beta_ir : float
-        Dust emissivity index for the MBB component.
-        Typical range: 1.5--2.0. [dimensionless]
+        Dust emissivity index. Typical range: 1.5-2.0. [dimensionless]
     dust_alpha_mir : float
-        Mid-IR power-law slope.  Typical range: 1.5--2.5. [dimensionless]
+        Mid-IR power-law slope. Typical range: 1.5-2.5. [dimensionless]
     optically_thin : bool
-        If True, zero the mid-IR power-law component, leaving only the
-        modified blackbody.  Default: False. [dimensionless]
+        If True, use the optically-thin graybody limit
+        :math:`(\lambda_0/\lambda)^\beta \nu^3 / (e^{h\nu/kT}-1)`
+        instead of the general form. The mid-IR power law is present in
+        both variants. Default: False (Casey 2012 Eq. 1). [dimensionless]
     redshift : float
-        Source redshift. When > 0, CMB heating correction is applied.
-        Default 0 (no correction). [dimensionless]
+        Source redshift; > 0 applies the CMB corrections. Default 0.
+        [dimensionless]
 
     Returns
     -------
     array, shape (n_wave,)
-        Dust emission L_nu in Lsun/Hz.
+        Dust emission L_nu in ``[L_absorbed units] / Hz``.
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives;
+    ``optically_thin`` is a static Python bool.
 
     **Gradient-safe**: yes — differentiable everywhere.
 
     References
     ----------
-    Casey, C. M., 2012, MNRAS, 425, 3094.
-    da Cunha, E. et al., 2013, ApJ, 766, 13 (CMB corrections).
-
+    .. [1] Casey, C. M., 2012, MNRAS, 425, 3094, Eqs. 1-2, 11-12.
+       doi:10.1111/j.1365-2966.2012.21455.x, arXiv:1206.1595.
+    .. [2] da Cunha, E. et al., 2013, ApJ, 766, 13 (CMB corrections).
+       doi:10.1088/0004-637X/766/1/13, arXiv:1302.0844.
     """
     # CMB correction (no-op at z=0)
     T_eff = cmb_corrected_temperature(dust_T, redshift, dust_beta_ir)
@@ -345,16 +276,16 @@ def casey2012(
     wavelength_cm = wavelength_aa * _AA_TO_CM
     nu = _C_CGS / wavelength_cm  # Hz, descending
 
-    # Planck argument (shared by both components)
-    x = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * T_eff), 0.0, 500.0)
-    nu_ref = _C_CGS / (100.0e-4)  # 100 μm pivot in Hz
-
-    f_transition = _casey_transition_function(wavelength_cm, T_eff)
-    power_law = _casey_powerlaw_component(
-        nu, nu_ref, f_transition, x, dust_alpha_mir, optically_thin
+    lambda_c_cm = _casey_lambda_c_cm(T_eff, dust_alpha_mir)
+    graybody = _casey_graybody_nu(wavelength_cm, T_eff, dust_beta_ir, optically_thin)
+    # Power-law amplitude tied to the graybody at the turnover (Eq. 2).
+    n_pl = _casey_graybody_nu(jnp.asarray(lambda_c_cm), T_eff, dust_beta_ir, optically_thin)
+    power_law = (
+        n_pl
+        * (wavelength_cm / lambda_c_cm) ** dust_alpha_mir
+        * jnp.exp(-((wavelength_cm / lambda_c_cm) ** 2))
     )
-    mbb = _casey_mbb_component(nu, nu_ref, f_transition, x, dust_beta_ir)
-    shape = power_law + mbb
+    shape = graybody + power_law
 
     # Normalize so integral over frequency = L_absorbed
     # nu is descending (wave ascending), negate for positive integral

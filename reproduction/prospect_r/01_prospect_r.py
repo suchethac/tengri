@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Reproducing ProSpect with tengri
+# # Reproducing ProSpect's physics with tengri
 #
 # ProSpect (Robotham et al. 2020) is a widely used SED generation and
 # fitting code from the GAMA survey, written in R. It pairs the Bruzual &

@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Reproducing Prospector with tengri
+# # Reproducing Prospector's physics with tengri
 #
 # Prospector (Johnson, Leja, Conroy & Speagle 2021) is the most widely
 # used Bayesian SED-fitting framework in extragalactic astronomy. Its
@@ -303,41 +303,25 @@ save_fig("prospector_02_sfh_delayed.png")
 # %% [markdown]
 # ## §2′ Non-parametric star formation histories
 #
-# The delayed-τ form above is the *parametric* SFH. Prospector's defining
-# capability is its family of **non-parametric** histories: piecewise-constant
-# SFR in lookback-time bins, with the bin amplitudes (or mass fractions) free.
-# Prospector builds these in `prospect.models.transforms` — log-SFR ratios or
-# Dirichlet z-fractions → per-bin stellar masses — and feeds the resulting
-# step function to FSPS as a *tabular* SFH (`sfh=3`). tengri implements the
-# same families as analytic step-function SFHs convolved with the SSPs.
+# Prospector's defining capability: piecewise-constant SFR in lookback bins
+# with the amplitudes (or mass fractions) free, lowered through
+# `prospect.models.transforms` into a tabular FSPS SFH (`sfh=3`). tengri
+# implements the same families as analytic step functions convolved with
+# the SSPs. Each panel fixes the same 10^10 M⊙, solar, dust-free galaxy on
+# the shared seven-bin grid `[0, 0.03, 0.1, 0.3, 1, 3, 6, 13.7] Gyr`,
+# overlays the SFR history both codes evaluate, and annotates the optical
+# residual. Both codes order log-SFR ratios youngest-first with the same
+# sign (`ratios[j] = log10(SFR_j / SFR_{j+1})`), so the *same* numbers
+# drive both — matched parameters, not just matched shape.
 #
-# Each panel below fixes the same 10^10 M⊙, solar-metallicity, dust-free
-# galaxy and sweeps the SFH prescription. The left axis overlays the SFR
-# history both codes evaluate; the right axis overlays the resulting stellar
-# `L_ν`, with the optical median residual annotated. The seven-bin lookback
-# grid is shared, so the binning is identical on both sides:
-#
-# `[0, 0.03, 0.1, 0.3, 1, 3, 6, 13.7] Gyr`.
-#
-# **Convention.** Prospector orders log-SFR ratios from the most recent bin in
-# lookback time; `ratios[j] = log10(SFR_j / SFR_{j+1})`. tengri's `ratio_i`
-# uses the same sign and the same youngest-first ordering, so the *same*
-# numbers drive both codes — the comparison is at matched parameters, not just
-# a matched shape.
-#
-# **Reading the residuals.** The remaining 0.3–2 % optical residuals below
-# are comparison-convention differences, not engine errors. tengri's age
-# weights match a dense code-independent quadrature of the same SSP arrays to
-# ~1e-4 per node for every family shown here (#964: the age-weight kernel is
-# cloud-in-cell, the convention FSPS matches; the old DSPS histogram handoff
-# lost the oldest slice of the SFH and was fixed). What remains on this axis:
-# Prospector's `agebins` floor the youngest bin edge at 1 Myr while tengri
-# fills the bin to lookback 0 (a ~3 % SFR-level difference *within* the
-# youngest bin — visible for young-heavy fiducials like dirichlet/flex,
-# canceling for old-heavy mixes like continuity), and the FSPS `sfh=3`
-# tabular path carries its own quadrature. Pinning the sub-Myr edge on
-# both sides changes nothing (#962, measured null); the historical L⊙
-# constant mismatch is rescaled away at SSP load (#969).
+# The remaining 0.3–2 % optical residuals are comparison conventions, not
+# engine errors: tengri's age weights match a dense code-independent
+# quadrature of the same SSP arrays to ~1e-4 per node (#964); Prospector
+# floors the youngest bin edge at 1 Myr where tengri fills to lookback 0
+# (visible for young-heavy dirichlet/flex, canceling for old-heavy
+# continuity; pinning the edge on both sides is a measured null, #962);
+# and FSPS's `sfh=3` tabular path carries its own quadrature. The
+# historical L⊙ constant mismatch is rescaled away at SSP load (#969).
 
 # %%
 # Shared seven-bin lookback grid (tengri's DEFAULT_BIN_EDGES_GYR). Passed
@@ -969,30 +953,23 @@ save_fig("prospector_05_dust_applied.png")
 # `L_IR_emitted ≡ L_absorbed`, to floating point; the residual is
 # annotated on the right.
 #
-# At matched `(q_PAH, U_min, γ)` the DL07 IR now agrees with FSPS in shape
-# (both peak near ~130 µm at `U_min = 1`; the 30–100 µm and submm bands
-# track to ~6 %), not just bolometrically. The DL07 power-law (PDR)
-# luminosity weighting is crucial: `γ` is a dust-*mass* fraction but the
-# PDR dust emits `R = U_max ln(U_max/U_min)/(U_max − U_min) ≈ 14×` more
-# per unit mass (DL07 Eq. 33). With this correction, the warm component
-# receives the correct weight and the IR shape matches FSPS and BAGPIPES
-# observations.
+# At matched `(q_PAH, U_min, γ)` the DL07 IR agrees with FSPS in shape
+# (both peak near ~130 µm at `U_min = 1`; 30–100 µm and submm track to
+# ~6 %). The PDR luminosity weighting matters: `γ` is a dust-*mass*
+# fraction, but PDR dust emits `R ≈ 14×` more per unit mass (DL07 Eq. 33)
+# — with that weight the warm component lands where FSPS puts it.
 #
-# One tabulation difference to know about: FSPS ships DL07 tables with the
-# 3.3 µm PAH feature halved (stated in its `dust/dustem` file headers);
-# tengri carries the original Draine & Li (2007) feature — the two grids
-# agree to ≤1.2 % everywhere else at matched `(q_PAH, U_min)` (#963). Bands
-# on rest-frame 3–3.6 µm (WISE W1 at low z) inherit that choice.
-#
-# **The FIR amplitude differs by construction — the LyC convention (#961).**
-# FSPS re-emits *all* the absorbed luminosity as dust IR (measured
-# `L_IR/L_abs = 0.9996`), Lyman continuum included. tengri's canonical
-# energy balance excludes the LyC (λ < 912 Å): those photons ionize
-# hydrogen and re-emerge as nebular emission, not dust heating — the
-# CIGALE convention (#922). At this star-forming fiducial the LyC carries
-# ~11 % of the absorbed energy, so tengri's far-IR sits ~11 % below
-# Prospector at identical parameters. Both ratios are printed below —
-# the default (LyC-masked) and the opt-in FSPS-parity mode
+# Two conventions to know about. FSPS ships DL07 tables with the 3.3 µm
+# PAH feature halved (stated in its `dust/dustem` headers); tengri carries
+# the original feature — the grids agree to ≤1.2 % everywhere else (#963),
+# and bands on rest-frame 3–3.6 µm (WISE W1 at low z) inherit the choice.
+# And the FIR amplitude differs by construction (#961): FSPS re-emits
+# *all* absorbed luminosity as dust IR (measured `L_IR/L_abs = 0.9996`),
+# LyC included; tengri's canonical energy balance excludes λ < 912 Å —
+# those photons re-emerge as nebular emission, the CIGALE convention
+# (#922). Here the LyC carries ~11 % of the absorbed energy, so tengri's
+# far-IR sits ~11 % below Prospector at identical parameters. Both ratios
+# are printed — the default and the opt-in FSPS-parity mode
 # `dust={'eb_include_lyc': True}`, which closes the gap.
 
 # %%

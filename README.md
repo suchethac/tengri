@@ -241,16 +241,16 @@ For anything that doesn't fit in an issue (collaborations, the
 [astro.tengri@gmail.com](mailto:astro.tengri@gmail.com) or
 [cooraysuchetha@gmail.com](mailto:cooraysuchetha@gmail.com).
 
-## Reproduction
+## Physics reproduction
 
 Cross-validation against the established panchromatic SED codes is
 cataloged in
 [docs/reproduction/](https://suchethacooray.com/tengri/reproduction/index.html).
 Five comparisons are live — [CIGALE](https://cigale.lam.fr/), BAGPIPES,
-Prospector/FSPS, AGNFITTER-RX, and ProSpect. Each is a notebook that
-puts the external code's output and tengri's on the same axes,
-component by component, and closes with a full-SED head-to-head with
-residuals. A Synthesizer comparison is written and under revision.
+Prospector/FSPS, AGNFITTER-RX, and ProSpect; a sixth (Synthesizer) is
+complete and currently unpublished. Each is a notebook that puts the
+external code's output and tengri's on the same axes, component by
+component, and closes with a full-SED head-to-head with residuals.
 Next in line — each with a scoped issue on the tracker — are BEAGLE,
 MAGPHYS, GRAHSP, and GalaPy.
 

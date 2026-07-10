@@ -28,7 +28,7 @@ class TestAGNXRayCoronaPort:
         comp = AGNXRayCoronaSEDComponent()
         params = comp.declared_parameters()
         assert isinstance(params, list)
-        assert len(params) >= 3  # gamma, alpha_ox, e_cut
+        assert len(params) >= 3  # gamma, delta_alpha_ox, e_cut
         assert all(isinstance(p, ParamDeclaration) for p in params)
 
     def test_parameter_units(self):
@@ -82,7 +82,7 @@ class TestAGNXRayCoronaPort:
         sed_in = jnp.zeros_like(wave)
         p = {
             "gamma": jnp.array(1.8),
-            "alpha_ox": jnp.array(-1.4),
+            "delta_alpha_ox": jnp.array(0.0),  # offset on Just+2007 (#981)
             "e_cut": jnp.array(300.0),
         }
         sed_out, published = comp.predict(p, sed_in, wave)
@@ -98,7 +98,7 @@ class TestAGNXRayCoronaPort:
         sed_in = jnp.zeros_like(wave)
         p = {
             "gamma": jnp.array(1.8),
-            "alpha_ox": jnp.array(-1.4),
+            "delta_alpha_ox": jnp.array(0.0),  # offset on Just+2007 (#981)
             "e_cut": jnp.array(300.0),
         }
         # With AGN luminosity
