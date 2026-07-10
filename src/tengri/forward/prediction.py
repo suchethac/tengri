@@ -272,27 +272,27 @@ class EmissionLines(NamedTuple):
     Attributes
     ----------
     lya : jnp.ndarray
-        Lyman-alpha at 1216 Å [Lsun].
+        Lyman-alpha at 1216 Å [erg/s].
     civ_1549 : jnp.ndarray
-        C IV doublet 1548+1551 Å, summed [Lsun].
+        C IV doublet 1548+1551 Å, summed [erg/s].
     oii : jnp.ndarray
-        [OII] doublet 3726+3729 Å, summed [Lsun].
+        [OII] doublet 3726+3729 Å, summed [erg/s].
     hbeta : jnp.ndarray
-        H-beta at 4861 Å [Lsun].
+        H-beta at 4861 Å [erg/s].
     oiii_4959 : jnp.ndarray
-        [OIII] at 4959 Å [Lsun].
+        [OIII] at 4959 Å [erg/s].
     oiii_5007 : jnp.ndarray
-        [OIII] at 5007 Å [Lsun].
+        [OIII] at 5007 Å [erg/s].
     nii_6548 : jnp.ndarray
-        [NII] at 6548 Å [Lsun].
+        [NII] at 6548 Å [erg/s].
     halpha : jnp.ndarray
-        H-alpha at 6563 Å [Lsun].
+        H-alpha at 6563 Å [erg/s].
     nii_6584 : jnp.ndarray
-        [NII] at 6584 Å [Lsun].
+        [NII] at 6584 Å [erg/s].
     sii_6717 : jnp.ndarray
-        [SII] at 6717 Å [Lsun].
+        [SII] at 6717 Å [erg/s].
     sii_6731 : jnp.ndarray
-        [SII] at 6731 Å [Lsun].
+        [SII] at 6731 Å [erg/s].
     all_waves : jnp.ndarray, shape ``(n_lines,)``
         Vacuum rest-frame wavelengths of every species published by the
         active nebular backend [Angstrom]. Empty when the backend does
@@ -300,7 +300,7 @@ class EmissionLines(NamedTuple):
     all_lums : jnp.ndarray, shape ``(n_lines,)``
         Luminosities at ``all_waves``, in the same dust regime as the
         headline fields (i.e. attenuated by the active dust model when
-        present) [Lsun].
+        present) [erg/s].
 
     Returns
     -------
@@ -321,8 +321,8 @@ class EmissionLines(NamedTuple):
 
         pred = model.predict(params)
         lines = pred.lines  # EmissionLines NamedTuple
-        print(float(lines.halpha))  # H-alpha luminosity [Lsun]
-        print(float(lines.oiii_5007))  # [OIII] 5007 Å luminosity [Lsun]
+        print(float(lines.halpha))  # H-alpha luminosity [erg/s]
+        print(float(lines.oiii_5007))  # [OIII] 5007 Å luminosity [erg/s]
         # BPT diagram
         bpt_x = float(lines.nii_6584 / lines.halpha)
         bpt_y = float(lines.oiii_5007 / lines.hbeta)
@@ -358,7 +358,7 @@ class EmissionLines(NamedTuple):
         Returns
         -------
         jnp.ndarray
-            Luminosity at the matched line [Lsun], or ``nan`` if no line
+            Luminosity at the matched line [erg/s], or ``nan`` if no line
             is within ``tol_aa``. Returns ``nan`` if the active backend
             did not publish a discrete catalog.
         """
@@ -651,7 +651,7 @@ class SFHProperties(_CachedBase):
             self._pred._cache["weights"],
             self._pred._cache["ssp_flux_at_z"],
             self._pred._model.ssp_ages_yr,
-            self._pred._model.ssp_data.ssp_wave,
+            self._pred._cache["_state"].wave,
         )
 
     @property
@@ -676,7 +676,7 @@ class SFHProperties(_CachedBase):
             self._pred._cache["weights"],
             self._pred._cache["ssp_flux_at_z"],
             self._pred._model.ssp_ages_yr,
-            self._pred._model.ssp_data.ssp_wave,
+            self._pred._cache["_state"].wave,
             p.get("log_z_abs", 0.0),
             log_z_initial=p.get("log_z_abs_initial"),
             log_z_final=p.get("log_z_abs_final"),
@@ -742,8 +742,15 @@ class SEDProperties(_CachedBase):
     """
 
     def _wave(self):
-        """Get rest-frame wavelength array from model."""
-        return self._pred._model.ssp_data.ssp_wave
+        """Rest-frame wavelength grid of the cached ForwardState.
+
+        The pipeline evaluates on its own grid (auto-extended for dust
+        emission, trimmed to the modeling range) — NOT the raw
+        ``ssp_data.ssp_wave``. Every cached SED array shares the state's
+        axis, so quantities integrating sed × wave must use it too.
+        """
+        self._pred._ensure_sfh()
+        return self._pred._cache["_state"].wave
 
     @property
     def components(self):
@@ -1036,7 +1043,7 @@ class SEDProperties(_CachedBase):
             self._pred._cache["weights"],
             self._pred._cache["ssp_flux_at_z"],
             self._pred._model.ssp_ages_yr,
-            self._pred._model.ssp_data.ssp_wave,
+            self._pred._cache["_state"].wave,
         )
 
     @property
@@ -1059,7 +1066,7 @@ class SEDProperties(_CachedBase):
             self._pred._cache["weights"],
             self._pred._cache["ssp_flux_at_z"],
             self._pred._model.ssp_ages_yr,
-            self._pred._model.ssp_data.ssp_wave,
+            self._pred._cache["_state"].wave,
             p.get("log_z_abs", 0.0),
             log_z_initial=p.get("log_z_abs_initial"),
             log_z_final=p.get("log_z_abs_final"),
@@ -1080,7 +1087,7 @@ class LineProperties(_CachedBase):
     """Lazy property accessor for emission line luminosities and diagnostic ratios.
 
     Accessing any line property triggers the nebular computation
-    if not already cached. All line luminosities are in Lsun. Diagnostic
+    if not already cached. All line luminosities are in erg/s. Diagnostic
     ratios are dimensionless log10 values.
 
     If no nebular model is active, all line luminosities return NaN
@@ -1089,27 +1096,27 @@ class LineProperties(_CachedBase):
     Attributes
     ----------
     lya : property
-        Lyman-alpha [Lsun].
+        Lyman-alpha [erg/s].
     civ_1549 : property
-        C IV doublet [Lsun].
+        C IV doublet [erg/s].
     oii : property
-        [OII] doublet [Lsun].
+        [OII] doublet [erg/s].
     hbeta : property
-        H-beta [Lsun].
+        H-beta [erg/s].
     oiii_4959 : property
-        [OIII] 4959 [Lsun].
+        [OIII] 4959 [erg/s].
     oiii_5007 : property
-        [OIII] 5007 [Lsun].
+        [OIII] 5007 [erg/s].
     nii_6548 : property
-        [NII] 6548 [Lsun].
+        [NII] 6548 [erg/s].
     halpha : property
-        H-alpha [Lsun].
+        H-alpha [erg/s].
     nii_6584 : property
-        [NII] 6584 [Lsun].
+        [NII] 6584 [erg/s].
     sii_6717 : property
-        [SII] 6717 [Lsun].
+        [SII] 6717 [erg/s].
     sii_6731 : property
-        [SII] 6731 [Lsun].
+        [SII] 6731 [erg/s].
     bpt_nii : property
         BPT [NII] diagnostic [dimensionless].
     bpt_sii : property
@@ -1133,8 +1140,8 @@ class LineProperties(_CachedBase):
     Examples
     --------
     >>> pred = model.predict(params)
-    >>> pred.lines.halpha  # Hα luminosity in Lsun
-    Array(1.5e8, dtype=float64)
+    >>> pred.lines.halpha  # Hα luminosity in erg/s
+    Array(2.4e41, dtype=float64)
     >>> pred.lines.bpt_nii  # log10([NII]6584 / Hα)
     Array(-0.45, dtype=float64)
     """
@@ -1155,7 +1162,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [Lsun], or NaN if no nebular model.
+            Line luminosity [erg/s], or NaN if no nebular model.
 
         Notes
         -----
@@ -1171,7 +1178,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Summed line luminosity [Lsun], or NaN if no nebular model.
+            Summed line luminosity [erg/s], or NaN if no nebular model.
 
         Notes
         -----
@@ -1187,7 +1194,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Summed line luminosity [Lsun], or NaN if no nebular model.
+            Summed line luminosity [erg/s], or NaN if no nebular model.
 
         Notes
         -----
@@ -1203,7 +1210,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [Lsun], or NaN if no nebular model.
+            Line luminosity [erg/s], or NaN if no nebular model.
 
         Notes
         -----
@@ -1219,7 +1226,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [Lsun], or NaN if no nebular model.
+            Line luminosity [erg/s], or NaN if no nebular model.
 
         Notes
         -----
@@ -1235,7 +1242,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [Lsun], or NaN if no nebular model.
+            Line luminosity [erg/s], or NaN if no nebular model.
 
         Notes
         -----
@@ -1251,7 +1258,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [Lsun], or NaN if no nebular model.
+            Line luminosity [erg/s], or NaN if no nebular model.
 
         Notes
         -----
@@ -1267,7 +1274,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [Lsun], or NaN if no nebular model.
+            Line luminosity [erg/s], or NaN if no nebular model.
 
         Notes
         -----
@@ -1283,7 +1290,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [Lsun], or NaN if no nebular model.
+            Line luminosity [erg/s], or NaN if no nebular model.
 
         Notes
         -----
@@ -1299,7 +1306,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [Lsun], or NaN if no nebular model.
+            Line luminosity [erg/s], or NaN if no nebular model.
 
         Notes
         -----
@@ -1315,7 +1322,7 @@ class LineProperties(_CachedBase):
         Returns
         -------
         float
-            Line luminosity [Lsun], or NaN if no nebular model.
+            Line luminosity [erg/s], or NaN if no nebular model.
 
         Notes
         -----
@@ -1906,8 +1913,10 @@ class Prediction:
         # Pull the catalog from the orchestrator's NebularSEDComponent
         # publication. BakedIn / Shock backends won't publish it; fall
         # back to all-NaN for those (matches the legacy "no catalog"
-        # behavior without raising).
-        state = model.predict_state(self._params)
+        # behavior without raising). Reuse the ForwardState cached by
+        # _ensure_sfh() — re-running predict_state here doubled the
+        # forward pass (and its transient memory) for pred.lines.
+        state = self._cache["_state"]
         derived = state.derived
         if "line_waves" in derived and "line_lums" in derived:
             waves = jnp.asarray(derived["line_waves"])

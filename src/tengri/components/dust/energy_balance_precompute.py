@@ -48,6 +48,7 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
+import jax
 import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import two_component_dust
@@ -142,7 +143,7 @@ def build_energy_balance_lut(
     bc_params = bc_params or {}
     diff_params = diff_params or {}
 
-    def g_at(tb, td):
+    def g_at(sspm_in, tb, td):
         transmission = two_component_dust(
             wavelength=ssp_wave,
             age_grid=ssp_ages_yr,
@@ -157,12 +158,20 @@ def build_energy_balance_lut(
             diff_params={k: jnp.asarray(v) for k, v in diff_params.items()},
             lyman_cutoff_aa=lyman_cutoff_aa,
         )  # (n_age, n_wave)
-        integrand = sspm * transmission[None, :, :]  # (n_met, n_age, n_wave)
+        integrand = sspm_in * transmission[None, :, :]  # (n_met, n_age, n_wave)
         return jnp.trapezoid(integrand, nu, axis=-1)  # (n_met, n_age)
 
-    # Build-time Python loop over the (small) optical-depth grid.
+    # Build-time Python loop over the (small) optical-depth grid. Eagerly,
+    # the 576-node loop spends its time in per-op Python dispatch inside
+    # the attenuation law, not math — jit once and reuse. The SSP cube is
+    # threaded as an argument so it enters the graph as a runtime input,
+    # not a constant to fold.
+    g_at_compiled = jax.jit(g_at)
     G = jnp.stack(
-        [jnp.stack([g_at(tb, td) for td in tau_diff_grid], axis=-1) for tb in tau_bc_grid],
+        [
+            jnp.stack([g_at_compiled(sspm, tb, td) for td in tau_diff_grid], axis=-1)
+            for tb in tau_bc_grid
+        ],
         axis=-2,
     )  # (n_met, n_age, n_tau_bc, n_tau_diff)
 

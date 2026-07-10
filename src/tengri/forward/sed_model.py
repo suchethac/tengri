@@ -4682,7 +4682,7 @@ class SEDModel:
             via ``all_waves`` / ``all_lums``. See
             :meth:`EmissionLines.get` for nearest-wavelength access to
             species the headline NamedTuple does not name (HeII 1640,
-            [O III] 4363, ...). All luminosities in Lsun.
+            [O III] 4363, ...). All luminosities in erg/s.
 
         Raises
         ------
