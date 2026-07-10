@@ -1367,8 +1367,13 @@ class CueBackend:
             )
         )(ssp_log_ages_yr)
 
-        # Q_H per bin, masked to young bins with positive weights
+        # Q_H per bin, masked to young bins with positive weights.
+        # #1001 defense: a non-finite table row must never win the argmax
+        # below (NaN wins any comparison) nor poison the Q_H sum — zero it
+        # out with a finite dummy so neither forward nor gradient passes
+        # see a NaN.
         qh_per_bin = 10.0**logqion_all  # (n_age,)
+        qh_per_bin = jnp.where(jnp.isfinite(qh_per_bin), qh_per_bin, 0.0)
         weighted_qh = ssp_weights * qh_per_bin  # (n_age,)
         # Zero out old bins and non-positive weights
         weighted_qh = jnp.where(young_mask & (ssp_weights > 0), weighted_qh, 0.0)

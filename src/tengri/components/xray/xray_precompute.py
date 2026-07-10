@@ -149,6 +149,12 @@ def _build_grid_corona(
                     l_2500_30deg_erg_hz=L_2500_REF,
                     gamma=float(g),
                     delta_alpha_ox=float(daox),
+                    # Templates are anchored at the Yang+2020 30° reference
+                    # (anisotropy factor exactly 1). The inclination factor
+                    # is a wavelength-independent scalar — consumers fold
+                    # xray_anisotropy(1, cos_inc) into the runtime scale
+                    # alongside l_2500/L_2500_REF (#980).
+                    apply_anisotropy=False,
                 )
             )
     return precompute_template_photometry(
@@ -182,7 +188,7 @@ def _build_grid_corona_lopez24(
                     l_12um_erg_hz=_L12_REF,
                     gamma=float(g),
                     alpha_irx=float(ai),
-                    apply_anisotropy=False,  # cos_inc handled at runtime
+                    apply_anisotropy=False,  # 30°-anchored, like _build_grid_corona (#980)
                 )
             )
     return precompute_template_photometry(

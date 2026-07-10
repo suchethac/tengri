@@ -1,4 +1,4 @@
-# Reproducing Prospector with tengri
+# Reproducing Prospector's physics with tengri
 
 This folder places Prospector (Johnson, Leja, Conroy & Speagle 2021,
 ApJS 254, 22) next to tengri component by component. Same parameters,

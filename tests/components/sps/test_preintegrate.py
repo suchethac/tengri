@@ -75,57 +75,54 @@ def line_wavelengths():
 class TestPreintegrateGridBasic:
     """Bounds tests: preintegrate_grid() basic functionality."""
 
-    def test_output_shape(self, synthetic_template_3d, tophat_filters):
-        """Output shape is (n_met, n_age, n_filters) with wavelength collapsed."""
-        from tengri.forward.precompute.grid import preintegrate_grid
+    def test_flat_template_returns_its_constant(self, tophat_filters):
+        """A flat L_ν template band-averages to exactly its constant value.
 
-        template, wave = synthetic_template_3d
+        Limit test: Φ = ∫ C·T·w dλ / ∫ T·w dλ = C for any filter and weight
+        convention — the bandpass average of a constant is that constant.
+        Subsumes the old shape-only / finite-only / positivity smoke tests:
+        shapes are asserted and every value is checked exactly.
+        """
+        const = 2.5e28
+        template = jnp.full((3, 5, 1000), const)
+        wave = jnp.linspace(1000.0, 10000.0, 1000)
         filter_waves, filter_trans = tophat_filters
-        n_met, n_age, _ = template.shape
         n_filters = len(filter_waves)
 
         result = preintegrate_grid(
             template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
         )
 
-        chex.assert_shape(result.phot, (n_met, n_age, n_filters))
+        chex.assert_shape(result.phot, (3, 5, n_filters))
         chex.assert_shape(result.effective_wavelengths, (n_filters,))
         chex.assert_shape(result.effective_wavelengths_rest, (n_filters,))
-
-    def test_output_finiteness(self, synthetic_template_3d, tophat_filters):
-        """All output values are finite (no NaN/Inf).
-
-        Bounds test: numerical overflow/underflow.
-        """
-
-        template, wave = synthetic_template_3d
-        filter_waves, filter_trans = tophat_filters
-
-        result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
-        )
-
-        chex.assert_tree_all_finite(result.phot)
-        chex.assert_tree_all_finite(result.effective_wavelengths)
-        chex.assert_tree_all_finite(result.effective_wavelengths_rest)
-        assert jnp.isfinite(result.flux_scale)
-        if result.moment is not None:
-            chex.assert_tree_all_finite(result.moment)
-
-    def test_flux_scale_positive(self, synthetic_template_3d, tophat_filters):
-        """flux_scale is positive.
-
-        Bounds test: photometric scaling must be positive definite.
-        """
-
-        template, wave = synthetic_template_3d
-        filter_waves, filter_trans = tophat_filters
-
-        result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
-        )
-
+        npt.assert_allclose(np.asarray(result.phot), const, rtol=1e-10)
         assert float(result.flux_scale) > 0.0
+
+    def test_photometry_is_linear_and_separable(self, synthetic_template_3d, tophat_filters):
+        """Filter integration is linear in L_ν, so a separable template factorizes.
+
+        The fixture template is base(λ) × met_factor[i] × age_factor[j], so
+        phot[i, j, k] must equal phot[ref_i, ref_j, k] rescaled by the factor
+        ratios — exactly, since Φ is a linear functional of the template.
+        """
+        template, wave = synthetic_template_3d
+        filter_waves, filter_trans = tophat_filters
+        met_factor = np.array([0.5, 1.0, 1.5])
+        age_factor = np.linspace(0.5, 2.0, template.shape[1])
+
+        result = preintegrate_grid(
+            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
+        )
+
+        phot = np.asarray(result.phot)
+        expected = (
+            phot[1, 1, :][None, None, :]
+            * (met_factor / met_factor[1])[:, None, None]
+            * (age_factor / age_factor[1])[None, :, None]
+        )
+        npt.assert_allclose(phot, expected, rtol=1e-10)
+        assert np.all(phot > 0.0)
 
     def test_effective_wavelengths_in_filter_range(self, synthetic_template_3d, tophat_filters):
         """Effective wavelengths lie within their respective filter ranges.
@@ -144,21 +141,6 @@ class TestPreintegrateGridBasic:
             assert float(result.effective_wavelengths[i]) >= float(jnp.min(fw))
             assert float(result.effective_wavelengths[i]) <= float(jnp.max(fw))
 
-    def test_photometry_positive(self, synthetic_template_3d, tophat_filters):
-        """Photometry values are positive (for positive templates).
-
-        Bounds test: flux non-negativity.
-        """
-
-        template, wave = synthetic_template_3d
-        filter_waves, filter_trans = tophat_filters
-
-        result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
-        )
-
-        assert jnp.all(result.phot > 0.0)
-
 
 # ── Tests: energy normalization mode ──────────────────────────────
 
@@ -166,13 +148,27 @@ class TestPreintegrateGridBasic:
 class TestPreintegrateGridEnergyNormalization:
     """Bounds tests: preintegrate_grid() with energy_normalize=True."""
 
-    def test_energy_normalize_output_shape(self, synthetic_template_3d, tophat_filters):
-        """Output shape unchanged with energy_normalize=True."""
+    def test_energy_normalize_divides_by_bolometric_luminosity(
+        self, synthetic_template_3d, tophat_filters
+    ):
+        """energy_normalize divides each grid point by its ∫ L_ν dν.
+
+        The documented contract: templates are normalized to unit bolometric
+        luminosity in FREQUENCY space before filter integration (the
+        historical bug divided by ∫ L_ν dλ instead, a wavelength-shape-
+        dependent error). Recompute ∫ L_ν dν independently with a trapezoid
+        over ν and assert the exact per-grid-point division. Subsumes the old
+        shape-only and 'values comparable' smoke tests.
+        """
+        from tengri.utils.physics_constants import C_AA
 
         template, wave = synthetic_template_3d
         filter_waves, filter_trans = tophat_filters
 
-        result = preintegrate_grid(
+        raw = preintegrate_grid(
+            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
+        )
+        norm = preintegrate_grid(
             template,
             wave,
             filter_waves,
@@ -182,33 +178,14 @@ class TestPreintegrateGridEnergyNormalization:
             energy_normalize=True,
         )
 
-        chex.assert_shape(result.phot, (3, 5, 3))
-
-    def test_energy_normalize_makes_values_comparable(self, synthetic_template_3d, tophat_filters):
-        """With energy_normalize=True, photometry becomes more comparable across filters."""
-
-        template, wave = synthetic_template_3d
-        filter_waves, filter_trans = tophat_filters
-
-        result = preintegrate_grid(
-            template,
-            wave,
-            filter_waves,
-            filter_trans,
-            redshift=0.0,
-            dl_cm=1e28,
-            energy_normalize=True,
+        chex.assert_equal_shape([norm.phot, raw.phot])
+        nu = C_AA / np.asarray(wave)
+        order = np.argsort(nu)
+        bol = np.trapezoid(np.asarray(template)[..., order], nu[order], axis=-1)
+        assert np.all(bol > 0.0)
+        npt.assert_allclose(
+            np.asarray(norm.phot), np.asarray(raw.phot) / bol[..., None], rtol=1e-10
         )
-
-        # Compute bandwidth for each filter (simple estimate)
-        bandwidths = jnp.array([float(jnp.max(fw) - jnp.min(fw)) for fw in filter_waves])
-
-        # Sum weighted by bandwidth, averaged over grid points
-        weighted_sum = jnp.mean(jnp.sum(result.phot * bandwidths[None, None, :], axis=2))
-
-        # Check that the sum is well-defined (not zero, not NaN)
-        assert jnp.isfinite(weighted_sum)
-        assert float(weighted_sum) > 0.0
 
 
 # ── Tests: Taylor moment computation ──────────────────────────────
@@ -216,31 +193,6 @@ class TestPreintegrateGridEnergyNormalization:
 
 class TestPreintegrateGridTaylorMoment:
     """Bounds tests: preintegrate_grid() with taylor=True."""
-
-    def test_taylor_moment_output_shape(self, synthetic_template_3d, tophat_filters):
-        """Taylor moment has same shape as photometry."""
-
-        template, wave = synthetic_template_3d
-        filter_waves, filter_trans = tophat_filters
-
-        result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28, taylor=True
-        )
-
-        assert result.moment is not None
-        chex.assert_equal_shape([result.moment, result.phot])
-
-    def test_taylor_moment_finiteness(self, synthetic_template_3d, tophat_filters):
-        """Taylor moment values are finite."""
-
-        template, wave = synthetic_template_3d
-        filter_waves, filter_trans = tophat_filters
-
-        result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28, taylor=True
-        )
-
-        chex.assert_tree_all_finite(result.moment)
 
     def test_taylor_moment_approximately_zero_for_flat_template(self):
         """For a spectrally flat template, the Taylor moment should be ~zero.
@@ -262,6 +214,8 @@ class TestPreintegrateGridTaylorMoment:
             template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28, taylor=True
         )
 
+        assert result.moment is not None
+        chex.assert_equal_shape([result.moment, result.phot])
         # Moment should be small (not exactly zero due to numerical integration)
         abs_moment = jnp.abs(result.moment)
         max_moment = jnp.max(abs_moment)
@@ -274,21 +228,8 @@ class TestPreintegrateGridTaylorMoment:
 class TestPreintegrateLines:
     """Bounds tests: preintegrate_lines() basic functionality."""
 
-    def test_output_shape(self, tophat_filters, line_wavelengths):
-        """Output shape is (n_lines, n_filters)."""
-        from tengri.forward.precompute.grid import preintegrate_lines
-
-        filter_waves, filter_trans = tophat_filters
-        lines = line_wavelengths
-        n_lines = len(lines)
-        n_filters = len(filter_waves)
-
-        result = preintegrate_lines(lines, filter_waves, filter_trans, redshift=0.0)
-
-        chex.assert_shape(result.line_filter_weights, (n_lines, n_filters))
-
     def test_output_nonnegative(self, tophat_filters, line_wavelengths):
-        """Line weights are non-negative.
+        """Line weights are non-negative, finite, of shape (n_lines, n_filters).
 
         Bounds test: weights must be ≥ 0.
         """
@@ -298,17 +239,9 @@ class TestPreintegrateLines:
 
         result = preintegrate_lines(lines, filter_waves, filter_trans, redshift=0.0)
 
-        assert jnp.all(result.line_filter_weights >= 0.0)
-
-    def test_output_finite(self, tophat_filters, line_wavelengths):
-        """Line weights are finite."""
-
-        filter_waves, filter_trans = tophat_filters
-        lines = line_wavelengths
-
-        result = preintegrate_lines(lines, filter_waves, filter_trans, redshift=0.0)
-
+        chex.assert_shape(result.line_filter_weights, (len(lines), len(filter_waves)))
         chex.assert_tree_all_finite(result.line_filter_weights)
+        assert jnp.all(result.line_filter_weights >= 0.0)
 
     def test_lines_outside_filters_have_small_weight(self, tophat_filters):
         """Lines far outside filter ranges have near-zero weight.
@@ -368,32 +301,21 @@ class TestPreintegrateLines:
 class TestInterpNdTriweight1D:
     """Bounds tests: interp_nd_triweight() basic functionality in 1D."""
 
-    def test_output_shape_1d(self):
-        """1D interpolation returns correct output shape."""
-        from tengri.forward.precompute.grid import interp_nd_triweight
-        from tengri.utils.interpolation import edges_for_grid
+    def test_constant_grid_interpolates_to_constant_1d(self):
+        """Interpolating a constant grid returns exactly the constant.
 
+        Limit test: any convex kernel-weighted average of a constant field is
+        that constant — shape (trailing dims) asserted, every value exact.
+        Subsumes the old shape-only and finite-only tests.
+        """
         axes = (jnp.linspace(0.0, 1.0, 10),)
         edges = (edges_for_grid(axes[0]),)
-        grid_values = jnp.ones((10, 5))  # 10 nodes, 5 trailing dims
+        grid_values = jnp.full((10, 5), 7.25)
 
-        result = interp_nd_triweight(grid_values, axes, edges, (0.5,))
+        result = interp_nd_triweight(grid_values, axes, edges, (0.37,))
 
         chex.assert_shape(result, (5,))
-
-    def test_output_finite_1d(self):
-        """1D interpolation produces finite values.
-
-        Bounds test: numerical stability.
-        """
-
-        axes = (jnp.linspace(0.0, 1.0, 20),)
-        edges = (edges_for_grid(axes[0]),)
-        grid_values = jnp.abs(jax.random.normal(jax.random.PRNGKey(0), (20, 4)))
-
-        result = interp_nd_triweight(grid_values, axes, edges, (0.5,))
-
-        chex.assert_tree_all_finite(result)
+        npt.assert_allclose(np.asarray(result), 7.25, rtol=1e-12)
 
     def test_query_at_grid_node_returns_value(self):
         """Querying at a grid node returns approximately that node's value.
@@ -455,39 +377,22 @@ class TestInterpNdTriweight1D:
 class TestInterpNdTriweight2D:
     """Bounds tests: interp_nd_triweight() with 2D grid."""
 
-    def test_output_shape_2d(self):
-        """2D interpolation returns correct output shape.
+    def test_constant_grid_interpolates_to_constant_2d(self):
+        """2D interpolation of a constant grid returns exactly the constant.
 
-        Bounds test: output dimensionality.
+        Limit test: subsumes the old 2D shape-only and finite-only tests.
         """
-
         axes = (
             jnp.linspace(0.0, 1.0, 5),
             jnp.linspace(0.0, 1.0, 4),
         )
         edges = (edges_for_grid(axes[0]), edges_for_grid(axes[1]))
-        grid_values = jnp.ones((5, 4, 3))  # 5×4 grid, 3 trailing dims
+        grid_values = jnp.full((5, 4, 3), -3.5)
 
-        result = interp_nd_triweight(grid_values, axes, edges, (0.5, 0.5))
+        result = interp_nd_triweight(grid_values, axes, edges, (0.41, 0.63))
 
         chex.assert_shape(result, (3,))
-
-    def test_output_finite_2d(self):
-        """2D interpolation produces finite values.
-
-        Bounds test: numerical stability in 2D.
-        """
-
-        axes = (
-            jnp.linspace(0.0, 1.0, 8),
-            jnp.linspace(0.0, 1.0, 6),
-        )
-        edges = (edges_for_grid(axes[0]), edges_for_grid(axes[1]))
-        grid_values = jnp.abs(jax.random.normal(jax.random.PRNGKey(1), (8, 6, 4)))
-
-        result = interp_nd_triweight(grid_values, axes, edges, (0.5, 0.5))
-
-        chex.assert_tree_all_finite(result)
+        npt.assert_allclose(np.asarray(result), -3.5, rtol=1e-12)
 
     def test_query_at_grid_corner_2d(self):
         """Querying at a 2D grid corner returns approximately that corner's value.
@@ -548,20 +453,17 @@ class TestGradientAndJIT:
             err_msg="interp_nd_triweight: FD check ∂/∂x",
         )
 
-    def test_interp_1d_jit_compatible(self):
-        """interp_nd_triweight works inside jax.jit."""
+    def test_interp_1d_jit_matches_eager(self):
+        """interp_nd_triweight under jax.jit matches the eager result (rtol=1e-6)."""
 
         axes = (jnp.linspace(0.0, 1.0, 15),)
         edges = (edges_for_grid(axes[0]),)
-        grid_values = jnp.ones((15, 3))
+        grid_values = jnp.array([jnp.sin(axes[0]), jnp.cos(axes[0]), axes[0] ** 2]).T
 
-        @jax.jit
         def compute(x):
-            result = interp_nd_triweight(grid_values, axes, edges, (x,))
-            return jnp.sum(result)
+            return interp_nd_triweight(grid_values, axes, edges, (x,))
 
-        result = compute(0.5)
-        assert jnp.isfinite(result)
+        chex.assert_trees_all_close(jax.jit(compute)(0.5), compute(0.5), rtol=1e-6)
 
 
 # ── Tests: Edge cases and numerical stability ─────────────────────
@@ -570,39 +472,31 @@ class TestGradientAndJIT:
 class TestEdgeCasesAndStability:
     """Bounds tests: Edge cases and numerical robustness."""
 
-    def test_very_small_template_values(self, tophat_filters):
-        """Very small template values (near machine epsilon) are handled.
+    @pytest.mark.parametrize("scale", [1e-30, 1e30], ids=["underflow", "overflow"])
+    def test_extreme_template_scales_stay_linear(self, tophat_filters, scale):
+        """Photometry scales exactly linearly at extreme template amplitudes.
 
-        Bounds test: underflow protection.
+        Bounds test: under/overflow protection. Φ is linear in L_ν, so
+        phot(s·1) must equal s·phot(1) with no loss of precision at
+        s = 1e±30 — a stronger statement than the old finite-only checks.
         """
 
-        template = jnp.ones((2, 3, 100)) * 1e-30
         wave = jnp.linspace(1000.0, 10000.0, 100)
         filter_waves, filter_trans = tophat_filters
 
-        result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
+        unit = preintegrate_grid(
+            jnp.ones((2, 3, 100)), wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
+        )
+        scaled = preintegrate_grid(
+            jnp.ones((2, 3, 100)) * scale,
+            wave,
+            filter_waves,
+            filter_trans,
+            redshift=0.0,
+            dl_cm=1e28,
         )
 
-        # Should not produce NaN/Inf
-        chex.assert_tree_all_finite(result.phot)
-
-    def test_very_large_template_values(self, tophat_filters):
-        """Very large template values are handled without overflow.
-
-        Bounds test: overflow protection.
-        """
-
-        template = jnp.ones((2, 3, 100)) * 1e30
-        wave = jnp.linspace(1000.0, 10000.0, 100)
-        filter_waves, filter_trans = tophat_filters
-
-        result = preintegrate_grid(
-            template, wave, filter_waves, filter_trans, redshift=0.0, dl_cm=1e28
-        )
-
-        # Should not produce NaN/Inf
-        chex.assert_tree_all_finite(result.phot)
+        npt.assert_allclose(np.asarray(scaled.phot), np.asarray(unit.phot) * scale, rtol=1e-10)
 
     def test_narrow_filter_bandwidth(self):
         """Narrow filter (small bandwidth) is handled correctly.

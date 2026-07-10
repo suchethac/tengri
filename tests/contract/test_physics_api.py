@@ -31,13 +31,38 @@ _needs_ssp = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
 
 
 class TestPlanckLnuExtracted:
-    def test_phys_module_exists(self):
-        from tengri.components.agn import _phys  # noqa: F401
+    def test_phys_module_exists_planck_lnu_and_deprecated_imports_resolve(self):
+        """All physics imports must resolve (deprecation guarantees).
 
-    def test_planck_lnu_importable(self):
+        Test ensures these surfaces remain importable for backward compatibility:
+        - _phys module (physics constants and helpers)
+        - disc, torus, skirtor (AGN models using _planck_lnu)
+        - eline_catalog (emission line catalog)
+        - build_line_design_matrix (unified line matrix builder)
+        """
+        # _phys module must import cleanly
+        from tengri.components.agn import _phys
+
+        assert _phys is not None
+
+        # All deprecated surfaces must resolve
         from tengri.components.agn._phys import planck_lnu
 
         assert callable(planck_lnu)
+
+        from tengri.components.agn import disc, skirtor, torus
+
+        assert disc is not None
+        assert torus is not None
+        assert skirtor is not None
+
+        from tengri.observation import eline_catalog
+
+        assert eline_catalog is not None
+
+        from tengri.observation.eline_marginalization import build_line_design_matrix
+
+        assert callable(build_line_design_matrix)
 
     def test_planck_lnu_finite_for_solar_T(self):
         from tengri.components.agn._phys import planck_lnu
@@ -53,16 +78,6 @@ class TestPlanckLnuExtracted:
         nu = jnp.array([1e14])
         result = planck_lnu(nu, 0.0)  # temperature = 0 → clamp to 1 K
         chex.assert_tree_all_finite(result)
-
-    def test_disc_still_importable(self):
-        """disc.py must still import cleanly after removing local _planck_lnu."""
-        from tengri.components.agn import disc  # noqa: F401
-
-    def test_torus_still_importable(self):
-        from tengri.components.agn import torus  # noqa: F401
-
-    def test_skirtor_still_importable(self):
-        from tengri.components.agn import skirtor  # noqa: F401
 
 
 class TestLinesToSed:
@@ -179,9 +194,6 @@ class TestLineEfficiencyExposed:
 
 
 class TestEmissionLineCatalog:
-    def test_eline_catalog_importable(self):
-        from tengri.observation import eline_catalog  # noqa: F401
-
     def test_emission_lines_dict_has_required_keys(self):
         from tengri.observation.eline_catalog import EMISSION_LINES
 
@@ -230,11 +242,6 @@ class TestEmissionLineCatalog:
 
 
 class TestBuildLineDesignMatrix:
-    def test_build_line_design_matrix_importable(self):
-        from tengri.observation.eline_marginalization import (
-            build_line_design_matrix,  # noqa: F401
-        )
-
     def test_narrow_only_matches_eline_design_matrix(self):
         from tengri.observation.eline_marginalization import (
             build_eline_design_matrix,

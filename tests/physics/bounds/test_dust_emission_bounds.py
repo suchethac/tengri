@@ -392,15 +392,14 @@ class TestCasey2012DetailedBounds:
         assert not jnp.allclose(sed_low[mir_mask], sed_high[mir_mask], rtol=0.01)
 
     def test_mid_ir_excess_vs_pure_mbb(self, wave_ir):
-        """For T=35K cold dust, casey2012 has LESS 8–40 μm flux than a pure MBB.
+        """casey2012 has MORE 8–40 μm flux than a pure MBB — the mid-IR excess.
 
-        The Casey (2012) model blends a power-law (short-λ) with the MBB (long-λ)
-        using a transition function f(λ).  At 8–40 μm the MBB component is
-        suppressed by (1-f) while the power-law Wien cutoff exp(-hν/kT) is
-        negligible for T=35K (x ≈ 10–51 at 40–8 μm).  The casey2012 mid-IR
-        flux is therefore lower than a pure MBB normalized to the same L_absorbed.
-        The model's value lies in its shape flexibility: alpha_mir controls the
-        power-law slope for hotter dust / warmer galaxies.
+        The mid-IR power law is the point of Casey (2012) Eq. 1: it fills the
+        8–40 μm side that a single-temperature MBB underpredicts, with its
+        amplitude tied to the graybody at the turnover λ_c (Eq. 2). Before
+        #1004 this test asserted the opposite ordering, because the closure
+        carried a spurious Wien exp(-hν/kT) factor that annihilated the power
+        law (e⁻⁴¹ at 10 μm for T = 35 K) — the docstring rationalized the bug.
         """
         from tengri.components.dust.emission import casey2012, modified_blackbody
 
@@ -408,6 +407,6 @@ class TestCasey2012DetailedBounds:
         sed_casey = casey2012(wave_ir, L_absorbed=L_abs, dust_T=35.0)
         sed_mbb = modified_blackbody(wave_ir, L_absorbed=L_abs, dust_T=35.0)
 
-        # 8–40 μm in Angstrom — casey2012 MBB suppressed by (1-f) transition factor
+        # 8–40 μm in Angstrom — the Casey power law adds mid-IR flux
         mir_mask = (wave_ir > 8e4) & (wave_ir < 4e5)
-        assert jnp.sum(sed_casey[mir_mask]) < jnp.sum(sed_mbb[mir_mask])
+        assert jnp.sum(sed_casey[mir_mask]) > jnp.sum(sed_mbb[mir_mask])

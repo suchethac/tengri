@@ -1,4 +1,4 @@
-# Reproduction
+# Physics reproduction
 
 The community has been doing galaxy SED inference for a long time. A
 new code should earn trust by reproducing the outputs of the codes
@@ -49,4 +49,4 @@ prospect_r
 
 Comparisons with BEAGLE, MAGPHYS, GRAHSP, and GalaPy are scoped on the
 [issue tracker](https://github.com/suchethac/tengri/issues) and will
-land as their notebooks come together.
+land as their physics reproduction notebooks come together.

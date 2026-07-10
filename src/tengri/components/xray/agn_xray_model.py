@@ -70,13 +70,13 @@ class AGNXRayCoronaSEDComponentConfig(SEDComponentConfig):
 class AGNXRayCoronaSEDComponent(SEDModelComponent):
     """SEDComponent for AGN X-ray corona emission.
 
-    Computes X-ray continuum from AGN bolometric luminosity via the
-    alpha_ox (optical-to-X-ray) scaling relation. Implements Lusso &
-    Risaliti 2016 AGN X-ray corona model.
+    Computes X-ray continuum from the AGN disc UV luminosity via the
+    empirical alpha_ox(L_2500) relation (Just+2007 by default), following
+    the X-CIGALE corona treatment.
 
     Free parameters (3):
     - agn_xray_gamma: X-ray photon index (Gamma)
-    - agn_xray_alpha_ox: alpha_ox parameter (UV-to-X-ray slope)
+    - agn_xray_delta_alpha_ox: offset [dex] on the Just+2007 alpha_ox(L_2500)
     - agn_xray_e_cut: high-energy cutoff [keV]
 
     Notes
@@ -84,6 +84,11 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
     **JIT-compatible**: yes.
     **Optional inputs**: reads L_agn_bol with fallback to 0.0.
     Component returns zero X-ray if no AGN luminosity.
+
+    The corona is evaluated at the Yang+2020 30° reference inclination
+    (anisotropy factor exactly 1): this component has no inclination input,
+    so it stays at the anchor where the alpha_ox relation is defined —
+    same policy as ``XRayAirdSEDComponent`` (#980).
     """
 
     def __init__(self) -> None:
@@ -101,7 +106,10 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
         units="dimensionless",
         default=1.9,
     )
-    alpha_ox = Fixed(-1.4, description="Lusso & Risaliti alpha_ox", units="dimensionless")
+    # Offset on the empirical alpha_ox(L_2500), NOT an absolute alpha_ox.
+    # The absolute default -1.4 was silently re-applied on top of Just+2007
+    # (alpha_ox ~ -2.8, a 3.6 dex under-prediction) until #981.
+    delta_alpha_ox = Fixed(0.0, description="Offset on Just+2007 alpha_ox(L_2500)", units="dex")
     e_cut = Fixed(300.0, description="High-energy cutoff", units="keV")
 
     # Reads AGN bolometric luminosity with fallback
@@ -130,7 +138,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
         Parameters
         ----------
         p : mapping[str, ndarray]
-            Parameters with prefix stripped: gamma, alpha_ox, e_cut.
+            Parameters with prefix stripped: gamma, delta_alpha_ox, e_cut.
         sed_in : ndarray
             Input SED (stellar + nebular + radio).
         wave : ndarray
@@ -153,15 +161,15 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
         L_2500_fallback = L_agn_bol / (5.15 * 1.199e15)  # erg/s/Hz
         L_2500 = jnp.where(L_2500_30deg > 0.0, L_2500_30deg, L_2500_fallback)
 
-        # alpha_ox is no longer a free parameter; the new corona derives it
-        # from L_2500 via Just+2007. The component's "alpha_ox" knob is
-        # forwarded as the delta-offset around that empirical prior.
+        # alpha_ox is derived from L_2500 via Just+2007 inside the corona;
+        # the component knob is the delta offset around that empirical prior
+        # (default 0.0 — #981 fixed the absolute -1.4 being fed here).
         L_xray = xray_agn_corona(
             wave,
             l_2500_30deg_erg_hz=L_2500,
             gamma=jnp.asarray(p["gamma"]),
             E_cut=jnp.asarray(p["e_cut"]),
-            delta_alpha_ox=jnp.asarray(p["alpha_ox"]),
+            delta_alpha_ox=jnp.asarray(p["delta_alpha_ox"]),
         )
 
         # Integrate X-ray luminosity over spectrum

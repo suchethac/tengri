@@ -93,7 +93,7 @@ class TestRichards2006DiscBlock:
         sort_idx = np.argsort(freq)
         freq_sorted = freq[sort_idx]
         lnu_sorted = template_lnu[sort_idx]
-        template_bol_integral = np.trapz(lnu_sorted, freq_sorted)
+        template_bol_integral = np.trapezoid(lnu_sorted, freq_sorted)
 
         # Test at a reference bolometric luminosity (e.g., log L_bol = 45).
         log_lbol = 45.0
@@ -111,7 +111,7 @@ class TestRichards2006DiscBlock:
         sort_idx_block = np.argsort(freq_block)
         freq_block_sorted = freq_block[sort_idx_block]
         L_nu_sorted = L_nu[sort_idx_block]
-        block_bol_integral = np.trapz(L_nu_sorted, freq_block_sorted)
+        block_bol_integral = np.trapezoid(L_nu_sorted, freq_block_sorted)
 
         # The block's integral should match the target (normalized) luminosity.
         # Allow 5% tolerance for interpolation/integration artifacts.
@@ -286,7 +286,7 @@ class TestBorosonGreenFeiiBlock:
         sort_idx_freq = np.argsort(freq)
         freq_sorted = freq[sort_idx_freq]
         fe2_lnu_sorted = fe2_lnu[sort_idx_freq]
-        fe2_bol_integral = np.trapz(fe2_lnu_sorted, freq_sorted)
+        fe2_bol_integral = np.trapezoid(fe2_lnu_sorted, freq_sorted)
 
         # FeII integral should be positive (non-zero emission).
         assert fe2_bol_integral > 0.0, "FeII bolometric integral should be positive"

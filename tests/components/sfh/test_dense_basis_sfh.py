@@ -209,10 +209,6 @@ class TestGPCumulativeMassAccuracy:
 class TestDenseBasisSFH:
     """Tests for the main dense_basis function."""
 
-    def test_output_shape(self) -> None:
-        sfr = dense_basis(AGE_YR, **DEFAULT_KW)
-        chex.assert_equal_shape([sfr, AGE_YR])
-
     def test_non_negative(self) -> None:
         sfr = dense_basis(AGE_YR, **DEFAULT_KW)
         assert jnp.all(sfr >= 0)
@@ -251,11 +247,11 @@ class TestDenseBasisSFH:
         ratio = m11 / m10
         assert 5.0 < ratio < 20.0, f"Mass ratio {ratio:.1f} not ~10"
 
-    def test_is_jittable(self) -> None:
-        fn_jit = jax.jit(dense_basis)
-        sfr = fn_jit(AGE_YR, **DEFAULT_KW)
-        sfr_ref = dense_basis(AGE_YR, **DEFAULT_KW)
-        assert jnp.allclose(sfr, sfr_ref, atol=1e-10)
+    def test_jit_parity_vs_eager(self) -> None:
+        """JIT output matches eager evaluation (JAX correctness)."""
+        sfr_eager = dense_basis(AGE_YR, **DEFAULT_KW)
+        sfr_jit = jax.jit(dense_basis)(AGE_YR, **DEFAULT_KW)
+        chex.assert_trees_all_close(sfr_eager, sfr_jit, rtol=1e-6)
 
     def test_has_gradient_log_total_mass(self) -> None:
         def _sfr_sum(m: float) -> float:

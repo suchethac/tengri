@@ -72,22 +72,40 @@ class TestResolvesCosmo:
         expected = luminosity_distance(0.5, h0=70.0, om0=0.3)
         assert jnp.allclose(result, expected)
 
-    def test_raise_on_both_cosmo_and_h0_kwargs_only(self):
-        """Should raise if both cosmo and h0/om0 provided as kwargs (not positional)."""
-        # Note: positional h0/om0 take priority, so we can't test the error path with them.
-        # This test just documents that the internal _resolve_cosmo would raise.
-        # For practical purposes, positional args always win, which is the design.
-        pass
+
+# z: (DC [Mpc], DL [Mpc], age(z) [Gyr], lookback [Gyr]) frozen from
+# astropy 7.2.0 Planck18 (Planck Collaboration 2020, A&A 641, A6,
+# TT,TE,EE+lowE+lensing — the parameter set PLANCK18 pins, see #401).
+_PLANCK18_ASTROPY_REFERENCE = {
+    0.1: (432.5657, 475.8223, 12.441687, 1.345198),
+    0.5: (1946.4166, 2919.6250, 8.590646, 5.196240),
+    1.0: (3395.6345, 6791.2689, 5.851343, 7.935542),
+    2.0: (5308.1889, 15924.5667, 3.276830, 10.510055),
+    5.0: (7946.2934, 47677.7604, 1.170706, 12.616179),
+    10.0: (9636.2851, 105999.1359, 0.471415, 13.315471),
+}
+
+
+class TestPlanck18FrozenReference:
+    """Distances and times match astropy.cosmology.Planck18 reference values.
+
+    DSPS integrates the Friedmann equation on a fixed quadrature grid, which
+    agrees with astropy to ≤0.7% for z ≤ 10, hence rtol=1e-2 (the
+    scalar-physics tolerance). Catches any unit, h-convention, or
+    (1+z)-factor error outright.
+    """
+
+    @pytest.mark.parametrize("z", sorted(_PLANCK18_ASTROPY_REFERENCE))
+    def test_distances_and_times_match_astropy_planck18(self, z):
+        dc_ref, dl_ref, age_ref, tlb_ref = _PLANCK18_ASTROPY_REFERENCE[z]
+        assert_allclose(float(comoving_distance_mpc(z)), dc_ref, rtol=1e-2)
+        assert_allclose(float(luminosity_distance_mpc(z)), dl_ref, rtol=1e-2)
+        assert_allclose(float(age_at_z(z)), age_ref, rtol=1e-2)
+        assert_allclose(float(lookback_time(z)), tlb_ref, rtol=1e-2)
 
 
 class TestDistances:
     """Test distance functions and consistency."""
-
-    def test_luminosity_distance_positive(self):
-        """Luminosity distance should be positive for all z > 0."""
-        z_vals = jnp.array([0.1, 0.5, 1.0, 2.0, 5.0])
-        dls = jnp.array([luminosity_distance(z) for z in z_vals])
-        assert jnp.all(dls > 0.0)
 
     def test_luminosity_distance_mpc_matches(self):
         """luminosity_distance_mpc should match luminosity_distance / MPC_CM."""
@@ -95,12 +113,6 @@ class TestDistances:
         dl_cm = luminosity_distance(z)
         dl_mpc = luminosity_distance_mpc(z)
         assert jnp.allclose(dl_cm, dl_mpc * MPC_CM)
-
-    def test_comoving_distance_positive(self):
-        """Comoving distance should be positive for all z > 0."""
-        z_vals = jnp.array([0.1, 0.5, 1.0, 2.0, 5.0])
-        dcs = jnp.array([comoving_distance(z) for z in z_vals])
-        assert jnp.all(dcs > 0.0)
 
     def test_luminosity_distance_relation(self):
         """luminosity_distance = comoving_distance × (1+z)."""
@@ -132,12 +144,6 @@ class TestDistances:
         da_mpc = angular_diameter_distance_mpc(z)
         assert jnp.allclose(da_cm, da_mpc * MPC_CM)
 
-    def test_angular_diameter_distance_positive(self):
-        """Angular diameter distance should be positive."""
-        z_vals = jnp.array([0.1, 0.5, 1.0, 2.0, 5.0])
-        das = jnp.array([angular_diameter_distance(z) for z in z_vals])
-        assert jnp.all(das > 0.0)
-
     def test_distance_decreases_with_h0(self):
         """Comoving distance should decrease with increasing H0."""
         z = 0.5
@@ -145,25 +151,20 @@ class TestDistances:
         dc_high_h0 = comoving_distance(z, h0=75.0, om0=0.315)
         assert dc_low_h0 > dc_high_h0
 
-    def test_distance_increases_with_om0(self):
-        """Comoving distance generally increases with Ω_m (more curvature)."""
+    def test_distance_decreases_with_om0(self):
+        """Comoving distance decreases with Ω_m at fixed H0.
+
+        In flat ΛCDM, raising Ω_m trades dark energy for matter, so H(z)
+        is larger at every z > 0 and D_C = ∫ c dz / H(z) shrinks.
+        """
         z = 0.5
         dc_low_om = comoving_distance(z, h0=67.4, om0=0.2)
         dc_high_om = comoving_distance(z, h0=67.4, om0=0.4)
-        # More matter -> higher density -> more curved -> distances decrease
-        # Actually, for w=-1 LCDM, higher Om0 makes universe slower, so distances
-        # are larger. Let's just check they're different.
-        assert not jnp.allclose(dc_low_om, dc_high_om)
+        assert dc_low_om > dc_high_om
 
 
 class TestDistanceModulus:
     """Test distance modulus calculations."""
-
-    def test_distance_modulus_positive(self):
-        """Distance modulus should be positive for z > 0."""
-        z_vals = jnp.array([0.1, 0.5, 1.0, 2.0])
-        mus = jnp.array([distance_modulus(z) for z in z_vals])
-        assert jnp.all(mus > 0.0)
 
     def test_distance_modulus_increases_with_z(self):
         """Distance modulus should increase with redshift."""
@@ -204,33 +205,27 @@ class TestTimes:
         ts = jnp.array([lookback_time(z) for z in z_vals])
         assert jnp.all(ts < age0)
 
-    def test_age_at_z0_positive(self):
-        """Age of universe at z=0 should be positive."""
-        age0 = age_at_z0()
-        assert age0 > 0.0
+    def test_age_at_z0_planck18(self):
+        """Age of universe with PLANCK18 is 13.787 ± 0.020 Gyr (Planck 2020).
 
-    def test_age_at_z0_planck18_plausible(self):
-        """Age of universe with PLANCK18 should be ~13.8 Gyr."""
-        age0 = age_at_z0()
-        # Planck 2018: 13.787 ± 0.020 Gyr
-        assert 13.5 < age0 < 14.0
-
-    def test_age_at_z0_scalar(self):
-        """age_at_z0() should return scalar."""
+        Scalar output shape is part of the contract (DSPS returns a 0-d
+        array; the wrapper unwraps it).
+        """
         age0 = age_at_z0()
         assert jnp.ndim(age0) == 0
+        assert_allclose(float(age0), 13.787, rtol=1e-2)
 
-    def test_age_at_z_scalar(self):
-        """age_at_z(scalar) should return scalar (wrapped from DSPS)."""
-        age = age_at_z(0.5)
-        # Our wrapper unwraps DSPS's array to return true scalar
-        assert jnp.ndim(age) == 0
+    def test_age_at_z_array_matches_scalar_calls(self):
+        """age_at_z on an array equals the elementwise scalar results exactly.
 
-    def test_age_at_z_array(self):
-        """age_at_z(array) should return array."""
+        Subsumes the old scalar-shape / array-shape-only tests.
+        """
         z_vals = jnp.array([0.0, 0.5, 1.0])
         ages = age_at_z(z_vals)
         chex.assert_equal_shape([ages, z_vals])
+        assert jnp.ndim(age_at_z(0.5)) == 0
+        expected = jnp.stack([age_at_z(float(z)) for z in z_vals])
+        chex.assert_trees_all_close(ages, expected, rtol=1e-12)
 
     def test_age_at_z_at_z0(self):
         """age_at_z(0.0) should equal age_at_z0()."""
@@ -255,18 +250,6 @@ class TestTimes:
 
 class TestAngularScales:
     """Test angular scale functions."""
-
-    def test_arcsec_per_kpc_positive(self):
-        """arcsec_per_kpc should be positive."""
-        z_vals = jnp.array([0.1, 0.5, 1.0, 2.0])
-        scales = jnp.array([arcsec_per_kpc(z) for z in z_vals])
-        assert jnp.all(scales > 0.0)
-
-    def test_kpc_per_arcsec_positive(self):
-        """kpc_per_arcsec should be positive."""
-        z_vals = jnp.array([0.1, 0.5, 1.0, 2.0])
-        scales = jnp.array([kpc_per_arcsec(z) for z in z_vals])
-        assert jnp.all(scales > 0.0)
 
     def test_arcsec_and_kpc_are_inverses(self):
         """kpc_per_arcsec ≈ 1 / arcsec_per_kpc."""
@@ -386,17 +369,11 @@ class TestBackwardCompat:
 class TestComovingVolumeElement:
     """Test differential comoving volume element."""
 
-    def test_comoving_volume_element_positive(self):
-        """Comoving volume element should be positive."""
+    def test_comoving_volume_element_increases_with_z(self):
+        """Comoving volume element is positive and increases with z (LCDM, z ≲ 2)."""
         z_vals = jnp.array([0.1, 0.5, 1.0, 2.0])
         dvs = jnp.array([comoving_volume_element(z) for z in z_vals])
         assert jnp.all(dvs > 0.0)
-
-    def test_comoving_volume_element_increases_with_z(self):
-        """Comoving volume element should generally increase with z."""
-        z_vals = jnp.array([0.1, 0.5, 1.0, 2.0])
-        dvs = jnp.array([comoving_volume_element(z) for z in z_vals])
-        # Should be monotonically increasing for LCDM
         assert jnp.all(jnp.diff(dvs) > 0.0)
 
 
@@ -440,27 +417,17 @@ class TestEdgeCases:
         da = angular_diameter_distance(0.0)
         assert jnp.allclose(da, 0.0, atol=1e-10)
 
-    def test_high_redshift(self):
-        """Functions should handle high redshift."""
-        z = 10.0
-        # Just check that functions return finite values
-        assert jnp.isfinite(luminosity_distance(z))
-        assert jnp.isfinite(comoving_distance(z))
-        assert jnp.isfinite(age_at_z(z))
-        assert jnp.isfinite(lookback_time(z))
+    def test_very_small_redshift_recovers_hubble_law(self):
+        """As z → 0⁺ the luminosity distance recovers the Hubble law.
 
-    def test_very_small_redshift(self):
-        """Functions should handle very small redshift."""
+        Limit test: d_L → c z / H0 to leading order in z, so at z = 1e-6 the
+        relative deviation must be below 1e-4 (corrections are O(z)).
+        """
         z = 1e-6
-        assert jnp.isfinite(luminosity_distance(z))
+        dl_mpc = float(luminosity_distance_mpc(z))
+        hubble_mpc = z * 299792.458 / DEFAULT_H0  # c [km/s] / H0 [km/s/Mpc]
+        assert_allclose(dl_mpc, hubble_mpc, rtol=1e-4)
         assert jnp.isfinite(distance_modulus(z))
-
-    def test_age_at_z_array_input(self):
-        """age_at_z should handle array input."""
-        z_vals = jnp.linspace(0.0, 3.0, 10)
-        ages = age_at_z(z_vals)
-        chex.assert_equal_shape([ages, z_vals])
-        chex.assert_tree_all_finite(ages)
 
 
 class TestNumericalStability:
