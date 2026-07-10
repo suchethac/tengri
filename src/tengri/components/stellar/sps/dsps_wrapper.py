@@ -50,6 +50,11 @@ class SSPData(NamedTuple):
     ssp_alpha_fe : array, optional
         Alpha enhancement grid (for future use). Currently None.
         When implemented: ssp_flux will be (n_met, n_alpha, n_age, n_wave).
+    nebular : str, optional
+        Nebular provenance: ``"included"`` (wNE — nebular continuum and
+        lines baked in), ``"bare"``, or ``"unknown"`` (default). Resolved
+        by :func:`load_ssp_data` from the ``nebular_included`` HDF5
+        attribute, else the ``wNE`` filename convention (#1014).
 
     Notes
     -----
@@ -99,10 +104,22 @@ class SSPData(NamedTuple):
     # ``<code>_<isochrone>_<library>_<imf>`` token convention. Empty when
     # unknown. Metadata only — never a JIT leaf.
     source: str = ""
+    # Nebular provenance of the grid (#1014): ``"included"`` (wNE
+    # post-processed — nebular continuum and lines baked into the templates
+    # at fixed logU/logZ_gas), ``"bare"`` (pure stellar), or ``"unknown"``
+    # (no metadata). Resolved by :func:`load_ssp_data` from the
+    # ``nebular_included`` HDF5 attribute when present (stamp existing files
+    # with ``tools/stamp_ssp_nebular_attrs.py``), else from the ``wNE``
+    # filename convention. The Cue / CloudyGrid backends refuse
+    # ``"included"`` grids — a retained-LyC wNE grid is indistinguishable
+    # from bare by any Q_H heuristic, so the flag is the only reliable
+    # signal. Metadata only — never a JIT leaf.
+    nebular: str = "unknown"
 
 
 def _sspdata_flatten(s):
-    # ``imf``/``source`` are metadata, not JIT leaves — keep strings out of the trace.
+    # ``imf``/``source``/``nebular`` are metadata, not JIT leaves — keep
+    # strings out of the trace.
     children = (
         s.ssp_wave,
         s.ssp_flux,
@@ -111,12 +128,12 @@ def _sspdata_flatten(s):
         s.ssp_mass_remaining,
         s.ssp_alpha_fe,
     )
-    aux = (s.imf, s.source)
+    aux = (s.imf, s.source, s.nebular)
     return children, aux
 
 
 def _sspdata_unflatten(aux, children):
-    return SSPData(*children, imf=aux[0], source=aux[1])
+    return SSPData(*children, imf=aux[0], source=aux[1], nebular=aux[2])
 
 
 jax.tree_util.register_pytree_node(SSPData, _sspdata_flatten, _sspdata_unflatten)
@@ -244,6 +261,20 @@ def load_ssp_data(filepath: str) -> SSPData:
         raise ImportError("h5py required for SSP loading: pip install h5py") from None
 
     import os
+    import warnings
+    from pathlib import Path
+
+    fp = Path(filepath)
+    if not fp.exists() and not os.environ.get("TENGRI_DISABLE_SSP_AUTODOWNLOAD"):
+        # Auto-fetch from the public catalog if the basename is known. This
+        # must run BEFORE the existence check below — #1015 placed the
+        # raise first, which silently made this branch unreachable.
+        from tengri._data_setup import _KNOWN_SSPS, KNOWN_SSP_FILENAMES, download_ssp
+
+        if fp.name in KNOWN_SSP_FILENAMES:
+            short = next(k for k, v in _KNOWN_SSPS.items() if v == fp.name)
+            print(f"[tengri] {fp} not found — fetching '{short}' from public catalog...")
+            download_ssp(short, dest=fp.parent if fp.parent != Path("") else "data")
 
     if not os.path.isfile(filepath):
         raise FileNotFoundError(
@@ -253,38 +284,6 @@ def load_ssp_data(filepath: str) -> SSPData:
             "(BC03, BPASS, ProGeny, ...). Already have grids elsewhere? "
             "Point TENGRI_DATA at that directory."
         )
-
-    # wNE (with-Nebular-Emission) grids carry no machine-readable marker —
-    # the filename is the only signal (#1014). A wNE grid that retains its
-    # ionizing continuum passes every Q_H sanity check downstream while
-    # silently double-counting nebular emission under the Cue / CloudyGrid
-    # backends, so flag it at the one place the filename is known.
-    if "wne" in os.path.basename(filepath).lower():
-        import warnings
-
-        warnings.warn(
-            f"'{os.path.basename(filepath)}' looks like a wNE "
-            "(with-Nebular-Emission) SSP: nebular continuum and lines are "
-            "already baked into the templates at fixed logU/logZ_gas. Pair "
-            "it with the default baked-in nebular backend only — adding "
-            "neb={'type': 'cue'} or a CLOUDY grid on top double-counts "
-            "nebular emission.",
-            UserWarning,
-            stacklevel=2,
-        )
-
-    import os
-    from pathlib import Path
-
-    fp = Path(filepath)
-    if not fp.exists() and not os.environ.get("TENGRI_DISABLE_SSP_AUTODOWNLOAD"):
-        # Auto-fetch from the public catalog if the basename is known.
-        from tengri._data_setup import _KNOWN_SSPS, KNOWN_SSP_FILENAMES, download_ssp
-
-        if fp.name in KNOWN_SSP_FILENAMES:
-            short = next(k for k, v in _KNOWN_SSPS.items() if v == fp.name)
-            print(f"[tengri] {fp} not found — fetching '{short}' from public catalog...")
-            download_ssp(short, dest=fp.parent if fp.parent != Path("") else "data")
 
     with h5py.File(filepath, "r") as f:
         ssp_lg_age_gyr = jnp.array(f["ssp_lg_age_gyr"][:])
@@ -296,6 +295,24 @@ def load_ssp_data(filepath: str) -> SSPData:
         # filename. Resolved before ``ssp_mass_remaining`` so the
         # surviving-mass synthesizer can pick the right DSPS calibration.
         imf = _detect_imf(f, fp.name)
+
+        # Nebular provenance (#1014): the ``nebular_included`` HDF5
+        # attribute wins, else the ``wNE`` filename convention. A wNE grid
+        # that retains its ionizing continuum passes every Q_H sanity check
+        # downstream while silently double-counting nebular emission under
+        # the Cue / CloudyGrid backends, so classify it here and surface it
+        # as ``ssp.nebular`` for the backends to act on.
+        nebular = _detect_nebular(f, fp.name)
+        if nebular == "included":
+            warnings.warn(
+                f"'{fp.name}' is a wNE (with-Nebular-Emission) SSP: nebular "
+                "continuum and lines are already baked into the templates "
+                "at fixed logU/logZ_gas. Pair it with the default baked-in "
+                "nebular backend only — adding neb={'type': 'cue'} or a "
+                "CLOUDY grid on top double-counts nebular emission.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         # Solar-luminosity unit contract (#969): ``ssp_flux`` is stored in
         # "Lsun/Hz per Msun", but WHICH Lsun depends on the code that wrote
@@ -333,6 +350,7 @@ def load_ssp_data(filepath: str) -> SSPData:
             ssp_alpha_fe=alpha_fe,
             imf=imf,
             source=fp.stem,
+            nebular=nebular,
         )
 
 
@@ -410,6 +428,28 @@ def _detect_imf(h5_file, filename: str) -> str:
         low = tok.lower()
         if low in _KNOWN_IMFS:
             return low
+    return "unknown"
+
+
+def _detect_nebular(h5_file, filename: str) -> str:
+    """Classify a grid's nebular provenance: ``"included"``/``"bare"``/``"unknown"`` (#1014).
+
+    Resolution order:
+
+    1. ``h5_file.attrs["nebular_included"]`` — written at generation time
+       or stamped onto existing files with ``tools/stamp_ssp_nebular_attrs.py``.
+       An explicit ``False`` classifies the grid as ``"bare"`` even when the
+       filename says wNE (the attribute is authoritative).
+    2. ``wNE`` filename convention → ``"included"``.
+    3. Fallback: ``"unknown"`` — absence of the marker cannot prove the grid
+       is bare, and no Q_H heuristic can either: a retained-LyC wNE grid
+       measures young-bin log Q_H identical to its bare parent.
+    """
+    attrs = h5_file.attrs if hasattr(h5_file, "attrs") else {}
+    if "nebular_included" in attrs:
+        return "included" if bool(attrs["nebular_included"]) else "bare"
+    if "wne" in filename.lower():
+        return "included"
     return "unknown"
 
 

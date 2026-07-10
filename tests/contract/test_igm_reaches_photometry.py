@@ -134,3 +134,63 @@ def test_igm_attenuates_spectrum_precomp_path(synthetic_ssp_wide):
     s_off = np.asarray(off.predict_spectrum(params))
     # blue end (4000 A obs -> rest ~1000 A, below Ly-alpha at z=3) is absorbed.
     assert s_on[:30].sum() < 0.9 * s_off[:30].sum(), "SpectrumPrecomp drops IGM"
+
+
+def _igm_parity_ratios(ssp, obs, *, redshift_spec, params=None, approx=None):
+    """Per-band WavePrecomp/exact flux ratio with IGM on and dust zeroed.
+
+    Dust-free so the only LUT-path approximation in play is the IGM
+    band factor — the dust Taylor projection (#731) stays out of the
+    comparison.
+    """
+    common = dict(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl", "*": FIXED},
+        dust={"type": "two_component", "*": FIXED, "tau_bc": 0.0, "tau_diff": 0.0},
+        neb={"type": "none"},
+        redshift=redshift_spec,
+        apply_igm=True,
+        igm={"type": "inoue"},
+    )
+    exact = SEDModel.build(**common)
+    lut = SEDModel.build(approx=approx or WavePrecomp(), **common)
+    params = params or {}
+    ph_exact = np.asarray(exact.predict_photometry(params))
+    ph_lut = np.asarray(lut.predict_photometry(params))
+    return ph_lut / ph_exact
+
+
+# Per-band |LUT/exact − 1| bounds at z=3 on the synthetic tophats. Band 1
+# (4800 Å) straddles the Lyman-α edge (4864 Å observed) — the #1026 case: a
+# point sample at λ_eff was 18% off; the filter-weighted mean ⟨T⟩ tracks the
+# exact path to the in-band SED-slope × T covariance. Band 0 (2940–4060 Å,
+# rest 735–1015 Å) straddles the *Lyman limit* — in-band T contrast ~1 against
+# the synthetic λ⁻² SED rising into the absorption, the worst case for any
+# separable band factor — so it keeps a percent-level covariance residual
+# (documented in ``predict_via_precomp``; ``approx=None`` is the precision
+# path for dropout bands). Bands 2–4 are unabsorbed and must stay exact.
+_PARITY_TOL = np.array([0.08, 0.02, 0.01, 0.01, 0.01])
+
+
+def test_waveprecomp_igm_is_band_averaged_fixed_z(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Regression #1026 (fixed-z LUT): IGM must be filter-averaged, not point-sampled."""
+    ratios = _igm_parity_ratios(synthetic_ssp_wide, synthetic_tophat_obs, redshift_spec=Fixed(3.0))
+    assert np.all(np.abs(ratios - 1.0) < _PARITY_TOL), (
+        f"WavePrecomp IGM band factor biased vs exact path: LUT/exact = {ratios}"
+    )
+
+
+def test_waveprecomp_igm_is_band_averaged_free_z(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Regression #1026 (free-z ztable): same contract through the z-interp path."""
+    from tengri import Uniform
+
+    ratios = _igm_parity_ratios(
+        synthetic_ssp_wide,
+        synthetic_tophat_obs,
+        redshift_spec=Uniform(2.0, 3.5),
+        params={"redshift": 3.0},
+    )
+    assert np.all(np.abs(ratios - 1.0) < _PARITY_TOL), (
+        f"free-z WavePrecomp IGM band factor biased vs exact path: LUT/exact = {ratios}"
+    )

@@ -79,7 +79,17 @@ def _build(ssp, dust, approx=None):
         ssp_data=ssp,
         observation=_obs(),
         approx=approx,
-        sfh=builders.sfh.tsnorm(defaults=FIXED),
+        # Pinned to the pre-#1007 prior-midpoint fallbacks the golden values
+        # were captured under — the registry's curated defaults would
+        # otherwise shift the SFH (and every golden) silently.
+        sfh=builders.sfh.tsnorm(
+            defaults=FIXED,
+            log_total_mass=9.75,
+            peak_lbt_gyr=6.25,
+            width_gyr=2.6,
+            skew=0.0,
+            trunc=5.5,
+        ),
         dust=dust,
         neb={"type": "none"},
         redshift=Fixed(0.05),

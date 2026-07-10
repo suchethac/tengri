@@ -102,3 +102,36 @@ def test_lnu_filter_integral_returns_lnu_units(fiducial):
     assert 0.1 * L_input_peak < L < 10.0 * L_input_peak, (
         f"L_nu_filter = {L:.4e} not within an order of L_input_peak = {L_input_peak:.4e}"
     )
+
+
+def test_lnu_filter_integral_batch_matches_singles_under_padding(fiducial):
+    """Zero-padded rows must integrate like their unpadded originals.
+
+    ``pad_filters`` zero-pads every filter table shorter than the longest
+    one, leaving a non-ascending wavelength row (…, 4130, 0, 0, …).
+    ``_filter_integral_union`` requires ascending nodes, so the batch
+    wrapper must rewrite the pad tail (``_ascending_padded_filter_wave``)
+    before integrating — the exact-path ``_compute_flux_density_padded``
+    already does. Without the rewrite ``jnp.interp`` sees unsorted nodes
+    and the shorter bands silently return 0 — zeroing every additive
+    ``*_phot_lnu_precomp`` family (radio, X-ray, dust IR) and the #1026
+    IGM band factor for real heterogeneous filter sets. Homogeneous
+    same-length sets (all synthetic-tophat fixtures) never pad, which is
+    how this survived: assert against genuinely ragged tables.
+    """
+    from tengri.observation.photometry import lnu_filter_integral_batch, pad_filters
+
+    wave_rest, L_nu, _, _ = fiducial
+    z = 0.5
+    filters = [
+        (jnp.linspace(3000.0, 4000.0, 30), jnp.sin(jnp.linspace(0.0, jnp.pi, 30))),
+        (jnp.linspace(6000.0, 9000.0, 80), jnp.sin(jnp.linspace(0.0, jnp.pi, 80))),
+        (jnp.linspace(11000.0, 13000.0, 55), jnp.sin(jnp.linspace(0.0, jnp.pi, 55))),
+    ]
+    singles = jnp.array([lnu_filter_integral(L_nu, wave_rest, fw, ft, z) for fw, ft in filters])
+    fw_pad, ft_pad, _ = pad_filters([f[0] for f in filters], [f[1] for f in filters])
+    batch = lnu_filter_integral_batch(L_nu, wave_rest, fw_pad, ft_pad, z)
+    assert jnp.all(singles > 0), "degenerate fixture: single-filter integrals must be > 0"
+    assert jnp.allclose(batch, singles, rtol=1e-12), (
+        f"padded batch diverges from unpadded singles: {batch} vs {singles}"
+    )

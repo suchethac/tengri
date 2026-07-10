@@ -947,21 +947,42 @@ class Observation:
         cosmology_rest = 1.0 / (4.0 * jnp.pi * TEN_PC_CM**2)
         phot_rest_fnu = total_lnu * cosmology_rest
 
-        # IGM / DLA attenuation. The LUT path carries no per-λ observed SED, so
-        # the exact full-curve transmission used by the wave-grid projection
-        # (observation.predict) is unavailable here. Instead sample the
-        # transmission the IGM component published on the rest grid at each
-        # filter's rest effective wavelength — a per-band (effective-wavelength)
-        # approximation. It is coarse across the *sharp* Lyman break for bands
-        # straddling it (use ``approx=None`` for unbiased rest-UV IGM at high z,
-        # mirroring the WavePrecomp dust-Taylor caveat), but recovers the bulk
-        # of the attenuation instead of silently dropping it entirely (#932).
+        # IGM / DLA attenuation. The IGM component publishes its full
+        # transmission curve on the dense rest grid even under WavePrecomp, so
+        # the per-band factor is the *filter-weighted mean* ⟨T⟩ through each
+        # true bandpass — the same union-grid quadrature the exact path uses
+        # (#1026). A point sample at the effective wavelength is blind to the
+        # sharp Lyman-α edge for bands straddling it (T(λ_eff) ≈ 1 while a
+        # third of the band sits in the forest — u band at z ≈ 1.9 read 4–7%
+        # high). ⟨T⟩ drops only the covariance of the in-band SED structure
+        # with T: −0.5% end-to-end for the same u band (the stellar Lyα
+        # absorption sits on the smeared T edge), reaching a few % only in
+        # Lyman-limit dropout bands (in-band T contrast ~1 × steep in-band
+        # SED) — use ``approx=None`` for precision work there.
+        # A Taylor-Ψ cross-term cannot recover it: the moment expansion
+        # assumes a smooth screen, and T_IGM steps within the band. The point
+        # sample remains as the fallback when no padded filter curves were
+        # published (#932 behavior).
         # Only the observed-frame flux is attenuated; ``phot_rest_fnu`` (z=0)
         # carries no IGM.
         igm_trans = state.derived.get("igm_transmission")
         eff_waves = state.derived.get("filter_eff_waves")
         if igm_trans is not None and eff_waves is not None:
-            igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
+            fw_pad = state.derived.get("phot_filter_waves_padded")
+            ft_pad = state.derived.get("phot_filter_trans_padded")
+            if fw_pad is not None and ft_pad is not None:
+                from tengri.observation.photometry import lnu_filter_integral_batch
+
+                igm_factor = lnu_filter_integral_batch(
+                    igm_trans,
+                    state.wave,
+                    fw_pad,
+                    ft_pad,
+                    z,
+                    convention=self.photometry.convention,
+                )
+            else:
+                igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
             phot_fnu = phot_fnu * igm_factor
 
         out = {"phot_fnu": phot_fnu, "phot_rest_fnu": phot_rest_fnu}
