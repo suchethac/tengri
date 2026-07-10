@@ -267,6 +267,32 @@ def _save_filter(filepath: Path, wave: np.ndarray, trans: np.ndarray) -> None:
     np.savetxt(str(filepath), np.column_stack([wave, trans]), header=header, fmt="%.6e")
 
 
+def _sanitize_filter_curve(wave: np.ndarray, trans: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Sort, merge duplicate wavelengths, and clip negative transmission.
+
+    Published curves are imperfect: of the shipped SVO set,
+    HST_ACS_WFC_F814W carries 177 duplicated wavelength rows and the
+    Herschel SPIRE / Spitzer MIPS curves dip slightly negative
+    (instrumental ringing in the tabulation). Duplicates break the
+    ascending-grid assumption of every ``np.interp``/``searchsorted``
+    consumer downstream; negative transmission is unphysical in a
+    throughput integral. Duplicates are merged by averaging their
+    transmission values.
+    """
+    wave = np.asarray(wave, dtype=np.float64)
+    trans = np.asarray(trans, dtype=np.float64)
+    order = np.argsort(wave, kind="stable")
+    wave, trans = wave[order], trans[order]
+    if wave.size and (np.diff(wave) <= 0).any():
+        unique_wave, inverse = np.unique(wave, return_inverse=True)
+        summed = np.zeros_like(unique_wave)
+        counts = np.zeros_like(unique_wave)
+        np.add.at(summed, inverse, trans)
+        np.add.at(counts, inverse, 1.0)
+        wave, trans = unique_wave, summed / counts
+    return wave, np.maximum(trans, 0.0)
+
+
 def _load_filter_file(filepath: Path) -> tuple[np.ndarray, np.ndarray]:
     """Read and return wavelength and transmission columns from a text file."""
     data = np.loadtxt(str(filepath))
@@ -275,7 +301,7 @@ def _load_filter_file(filepath: Path) -> tuple[np.ndarray, np.ndarray]:
             f"Filter file {filepath} must have at least 2 columns "
             f"(wavelength, transmission). Got shape {data.shape}."
         )
-    return data[:, 0], data[:, 1]
+    return _sanitize_filter_curve(data[:, 0], data[:, 1])
 
 
 def _fetch_from_svo(svo_id: str) -> tuple[np.ndarray, np.ndarray]:
@@ -385,7 +411,7 @@ def download_filter(
     if filepath.exists():
         return _load_filter_file(filepath)
 
-    wave, trans = _fetch_from_svo(svo_id)
+    wave, trans = _sanitize_filter_curve(*_fetch_from_svo(svo_id))
 
     order = np.argsort(wave)
     wave = wave[order]

@@ -1141,6 +1141,11 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
             result["cue_full_catalog"] = True
     elif neb_type == "cloudy":
         result["nebular"] = True
+        # Optional explicit grid; without it Parameters auto-resolves
+        # data/cloudy_grid_mist.h5 (matching the default MIST/FSPS SSP
+        # family) and raises with the available-grid listing otherwise.
+        if "grid" in neb_dict:
+            result["cloudy_grid_path"] = str(neb_dict["grid"])
     elif neb_type == "cb19":
         result["nebular"] = "cb19"
 
@@ -1445,7 +1450,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
         }
     ),
     "dust.emission": frozenset({"type", "*"}),
-    "neb": frozenset({"type", "*", "full_catalog"}),
+    "neb": frozenset({"type", "*", "full_catalog", "grid"}),
     "shock": frozenset({"type", "*", "norm", "abundance", "component"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*"}),

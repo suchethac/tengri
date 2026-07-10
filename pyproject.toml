@@ -57,6 +57,9 @@ tengri = "tengri.cli:main"
 [project.optional-dependencies]
 nuts = ["blackjax>=1.0"]
 optax = ["optax>=0.2"]
+# Grain-model attenuation laws (wd01_*, d03_*, hd23_*) wrap the
+# dust-extinction package rather than reimplementing the profiles.
+grain-dust = ["dust-extinction>=1.0"]
 # Hardware-accelerator extras. JAX is installed by default with CPU support;
 # these extras pull the matching jax/jaxlib build for the target backend.
 # Linux x86_64 with CUDA 12: pip install -e ".[gpu]"

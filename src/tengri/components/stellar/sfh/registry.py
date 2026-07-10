@@ -199,7 +199,21 @@ SFH_REGISTRY: dict[str, Any] = {}
 #: and ``predict`` then raises ``NotImplementedError``. Promote a name out of
 #: this set once it is added to ``_SUPPORTED_SFH`` and crossvalidated.
 UNVALIDATED_SFH_TYPES: frozenset[str] = frozenset(
-    {"bursty_continuity", "gaussian_burst", "prospector_beta", "psb_wild2020", "top_hat"}
+    {
+        "bursty_continuity",
+        "gaussian_burst",
+        "prospector_beta",
+        "psb_wild2020",
+        "top_hat",
+        # Registered but absent from the stellar component's runtime
+        # _SUPPORTED_SFH allowlist (components/stellar/component.py) —
+        # without an entry here they build fine and then die at the first
+        # predict with NotImplementedError. Keep the two gates in sync
+        # until they share one source of truth.
+        "constant_then_exponential",
+        "db",
+        "dbp",
+    }
 )
 
 # Field sub-model registry: PSD model name -> sqrt_power function
