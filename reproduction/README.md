@@ -34,6 +34,20 @@ the published copies under `docs/reproduction/` stay in sync with the
 sources here. Read it before adding a comparison or re-rendering an
 existing one.
 
+## Method
+
+Two companion guides cover what the contract deliberately leaves out —
+how to *use* these notebooks to find physics bugs, and how to bring a
+new reference engine in:
+
+- [Auditing physics parity](../docs/dev/reproduction-parity-audit.md) —
+  running both engines for real, decomposing a discrepancy to its
+  mechanism, the convention axes that masquerade as bugs, and what to do
+  once you have attributed one.
+- [Adding a comparison for a new code](../docs/dev/reproduction-new-comparison.md)
+  — finding an engine's real invocation surface (Python API, R, a binary
+  plus config file), matching templates, and verifying the unit contract.
+
 ## Running a notebook
 
 ```bash

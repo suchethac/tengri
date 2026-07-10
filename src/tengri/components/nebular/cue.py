@@ -992,6 +992,32 @@ class CueBackend:
 
         from tengri.components.nebular.ionizing_spectrum import precompute_ionizing_params_table
 
+        # Metadata check (#1014): a grid flagged nebular-included is refused
+        # outright, BEFORE the Q_H heuristic below — the retained-LyC wNE
+        # class keeps its ionizing continuum (measured young-bin log Q_H =
+        # 46.91, identical to the bare parent grid), so no physics heuristic
+        # can catch it. The flag comes from the ``nebular_included`` HDF5
+        # attribute or the wNE filename convention via ``load_ssp_data``.
+        if getattr(ssp_data, "nebular", "unknown") == "included":
+            msg = (
+                "CueBackend received an SSP flagged nebular-included (wNE): "
+                "nebular continuum and lines are already baked into the "
+                "templates, so adding Cue on top double-counts nebular "
+                "emission.\n"
+                "\n"
+                "Fix (one of):\n"
+                "  1. Use a bare-stellar SSP (e.g. fsps_prsc_miles_chabrier.h5;\n"
+                "     see tengri.data.download_ssp / list_remote_ssps).\n"
+                "  2. Keep this SSP and drop neb={'type': 'cue'} — the\n"
+                "     baked-in nebular backend already models the lines.\n"
+                "  3. Bypass for testing: set TENGRI_ALLOW_WNE_CUE=1\n"
+                "     (downgrades to a warning)."
+            )
+            if os.environ.get("TENGRI_ALLOW_WNE_CUE"):
+                warnings.warn(msg, CueWNESSPWarning, stacklevel=3)
+            else:
+                raise CueWNESSPError(msg)
+
         result = precompute_ionizing_params_table(
             np.array(ssp_data.ssp_wave),
             np.array(ssp_data.ssp_flux),

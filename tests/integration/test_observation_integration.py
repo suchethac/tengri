@@ -152,34 +152,13 @@ class TestObservationWithModel:
         assert isinstance(dist, Uniform)
         assert dist.bounds[1] == 0.5  # User's upper bound, not 0.1
 
-    def test_auto_precompute_spectroscopy(self, ssp, base_spec):
-        """Fixed z + spectroscopy config triggers auto-precomputation."""
-        wave_obs = jnp.linspace(10000, 50000, 100)
-        obs = Observation(
-            spectroscopy=Spectroscopy(wave_obs=wave_obs),
-        )
-        model = SEDModel(base_spec, ssp, observation=obs)
-        # _spec_precomp should be set
-        assert model._precomputed.spectroscopy is not None
-
-    def test_no_precompute_when_z_free(self, ssp):
-        """Free z → spectroscopy precomputation does NOT auto-trigger."""
-        spec = Parameters(
-            mean_sfh_type="dpl",
-            sfh_dpl_alpha=Uniform(0.5, 3.0),
-            sfh_dpl_beta=Uniform(0.3, 2.0),
-            sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
-            met_logzsol=Uniform(-1.5, 0.2),
-            dust_tau_bc=Uniform(0.0, 3.0),
-            redshift=Uniform(0.1, 1.0),  # Free redshift
-        )
-        wave_obs = jnp.linspace(10000, 50000, 100)
-        obs = Observation(
-            spectroscopy=Spectroscopy(wave_obs=wave_obs),
-        )
-        model = SEDModel(spec, ssp, observation=obs)
-        assert model._precomputed.spectroscopy is None
+    # Removed: test_auto_precompute_spectroscopy / test_no_precompute_when_z_free.
+    # They asserted on ``model._precomputed.spectroscopy`` — the PrecomputedData
+    # container retired in #620. Spectroscopy precompute is no longer auto-triggered
+    # by a fixed-z Observation; it is opt-in via ``approx=SpectrumPrecomp()``, which
+    # is covered by 31 tests (tests/contract/test_spectrum_lut.py,
+    # test_spectrum_precomp_includes_agn.py, test_composite_approx.py, ...). There is
+    # no auto-precompute behavior left to assert here.
 
     def test_lsf_settings_from_observation(self, ssp, base_spec):
         """LSF resolution/sigma_lib from Spectroscopy override spec attrs."""

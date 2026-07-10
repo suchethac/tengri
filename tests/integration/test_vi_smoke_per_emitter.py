@@ -42,6 +42,12 @@ pytestmark = pytest.mark.integration
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
 
+#: The value the forward used to substitute for a free ``sfh_dpl_age_gyr`` before
+#: the missing-parameter guard landed. Stating it keeps these fits unchanged (#1021).
+_DPL_AGE_DEFAULT = float(
+    Parameters(mean_sfh_type="dpl").get_distribution("sfh_dpl_age_gyr").default
+)
+
 # ── Test cases: (name, spec_kwargs, fiducial_params_dict, free_params, skip_reason) ───
 _VI_SMOKE_CASES = [
     # modified_blackbody: Modified blackbody dust SED
@@ -67,6 +73,7 @@ _VI_SMOKE_CASES = [
             "sfh_dpl_beta": 1.0,
             "sfh_dpl_tau_gyr": 3.0,
             "sfh_dpl_log_total_mass": 0.5,
+            "sfh_dpl_age_gyr": _DPL_AGE_DEFAULT,
             "met_logzsol": -0.5,
             "dust_tau_bc": 0.5,
             "dust_tau_diff": 0.3,
@@ -101,6 +108,7 @@ _VI_SMOKE_CASES = [
             "sfh_dpl_beta": 1.0,
             "sfh_dpl_tau_gyr": 3.0,
             "sfh_dpl_log_total_mass": 0.5,
+            "sfh_dpl_age_gyr": _DPL_AGE_DEFAULT,
             "met_logzsol": -0.5,
             "dust_tau_bc": 0.5,
             "dust_tau_diff": 0.3,

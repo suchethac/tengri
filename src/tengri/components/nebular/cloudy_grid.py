@@ -573,6 +573,27 @@ class CloudyGridBackend:
 
         This avoids recomputing the ionizing integral at every inference step.
         """
+        # Metadata check (#1014): a grid flagged nebular-included is refused
+        # outright, BEFORE the Q_H heuristic below — the retained-LyC wNE
+        # class keeps its ionizing continuum, so no physics heuristic can
+        # catch it. The flag comes from the ``nebular_included`` HDF5
+        # attribute or the wNE filename convention via ``load_ssp_data``.
+        if getattr(ssp_data, "nebular", "unknown") == "included":
+            msg = (
+                "CloudyGridBackend received an SSP flagged nebular-included "
+                "(wNE): nebular continuum and lines are already baked into "
+                "the templates, so adding a CLOUDY grid on top double-counts "
+                "nebular emission. Fix: use a bare-stellar SSP (e.g. "
+                "fsps_prsc_miles_chabrier.h5), or keep this SSP and drop the "
+                "neb={'type': 'cloudy'} group — the baked-in backend already "
+                "models the lines. To bypass for testing, set "
+                "TENGRI_ALLOW_WNE_CLOUDY_GRID=1 (downgrades to a warning)."
+            )
+            if os.environ.get("TENGRI_ALLOW_WNE_CLOUDY_GRID"):
+                warnings.warn(msg, CloudyGridWNESSPWarning, stacklevel=3)
+            else:
+                raise CloudyGridWNESSPError(msg)
+
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
 

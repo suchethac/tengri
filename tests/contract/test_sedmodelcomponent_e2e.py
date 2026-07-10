@@ -576,9 +576,12 @@ def test_catalog_z_range_end_to_end(real_ssp_only, ssp, obs):
     phot_hi = m_hi.predict_photometry({})
     for phot in (phot_lo, phot_mid, phot_hi):
         _assert_phot_ok(phot)
-    # All distinct — higher z is much dimmer in observed-frame F_nu
-    assert not bool(jnp.allclose(phot_lo, phot_mid, rtol=1e-3))
-    assert not bool(jnp.allclose(phot_mid, phot_hi, rtol=1e-3))
+    # All distinct — higher z is much dimmer in observed-frame F_nu.
+    # atol=0.0 is load-bearing: fluxes are ~1e-27, so jnp.allclose's default
+    # atol=1e-8 calls ANY two photometry vectors "close" and the assertion
+    # was vacuous from birth (#1013).
+    assert not bool(jnp.allclose(phot_lo, phot_mid, rtol=1e-3, atol=0.0))
+    assert not bool(jnp.allclose(phot_mid, phot_hi, rtol=1e-3, atol=0.0))
 
 
 # ─────────────────────────────────────────────────────────────────────

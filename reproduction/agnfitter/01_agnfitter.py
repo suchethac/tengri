@@ -492,8 +492,10 @@ print(
 #
 # * **THB21 — reproduced.** The 0.7 µm bump is an emission-line feature, so
 #   `qsogen` must run *with* its line and FeII blocks (continuum alone misses
-#   it entirely). With them on, tengri's Hα/2500 Å contrast (≈5.0) sits above
-#   THB21's (3.98) along the qsogen luminosity sequence — matching log_lbol
+#   it entirely). With them on, tengri's Hα/2500 Å contrast sits above the
+#   vendored THB21 template's (2.45 — the reference h5's 1024-point common
+#   grid undersamples the narrow Hα peak; tengri evaluates qsogen at native
+#   resolution) along the qsogen luminosity sequence — matching log_lbol
 #   aligns the two templates.
 # * **SN12 — reproduced** by the new `slone_netzer` port. It interpolates the
 #   108-template grid with node-exact bilinear interpolation, so the SN12 peak

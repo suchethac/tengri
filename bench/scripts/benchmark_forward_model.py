@@ -224,6 +224,10 @@ if __name__ == "__main__":
         ("+ AGN (simple disc+torus)", dict(agn_model="simple", agn_log_lbol=Fixed(10.0))),
         ("+ AGN (K&D 3-zone full)", dict(agn_model="kubota_done_full", agn_log_lbol=Fixed(10.0))),
         ("+ AGN (QSOgen)", dict(agn_model="qsogen", agn_log_lbol=Fixed(10.0))),
+        # SKIRTOR torus — the config where WavePrecomp currently delivers no
+        # speedup (~1.1x; #1022): the AGN SED is evaluated on the full
+        # wavelength grid per call even with every AGN parameter Fixed.
+        ("+ AGN (SKIRTOR torus)", dict(agn_model="skirtor", agn_log_lbol=Fixed(10.0))),
         # --- Multi-wavelength ---
         ("+ radio (SF + AGN)", dict(radio=True, radio_q_ir=Fixed(2.64))),
         ("+ X-ray (XRB + corona)", dict(xray=True)),

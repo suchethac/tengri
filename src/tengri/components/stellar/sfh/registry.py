@@ -272,17 +272,29 @@ _tsnorm_spec = SFHModelSpec(
     fn=tsnorm,
     params={
         "sfh_tsnorm_log_total_mass": ParamDef(
-            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+            "log10 total stellar mass formed [Msun]",
+            _always_true,
+            "",
+            Uniform(7.0, 12.5, default=10.0),
         ),
         "sfh_tsnorm_peak_lbt_gyr": ParamDef(
-            "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
+            "Peak lookback time (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.5, 12.0, default=5.0),
         ),
         "sfh_tsnorm_width_gyr": ParamDef(
-            "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
+            "Gaussian width (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.2, 5.0, default=1.0),
         ),
-        "sfh_tsnorm_skew": ParamDef("Skewness", _always_true, "", Uniform(-1.0, 1.0)),
+        "sfh_tsnorm_skew": ParamDef("Skewness", _always_true, "", Uniform(-1.0, 1.0, default=0.0)),
         "sfh_tsnorm_trunc": ParamDef(
-            "Truncation sharpness", _lo_positive, "must have lo > 0", Uniform(1.0, 10.0)
+            "Truncation sharpness",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(1.0, 10.0, default=2.0),
         ),
     },
     settings={},
@@ -307,15 +319,24 @@ _snorm_spec = SFHModelSpec(
     fn=snorm,
     params={
         "sfh_snorm_log_total_mass": ParamDef(
-            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+            "log10 total stellar mass formed [Msun]",
+            _always_true,
+            "",
+            Uniform(7.0, 12.5, default=10.0),
         ),
         "sfh_snorm_peak_lbt_gyr": ParamDef(
-            "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
+            "Peak lookback time (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.5, 12.0, default=5.0),
         ),
         "sfh_snorm_width_gyr": ParamDef(
-            "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
+            "Gaussian width (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.2, 5.0, default=1.0),
         ),
-        "sfh_snorm_skew": ParamDef("Skewness", _always_true, "", Uniform(-1.0, 1.0)),
+        "sfh_snorm_skew": ParamDef("Skewness", _always_true, "", Uniform(-1.0, 1.0, default=0.0)),
     },
     settings={},
     internal_param_map={
@@ -337,15 +358,26 @@ _snorm_burst_spec = SFHModelSpec(
     fn=snorm_burst,
     params={
         "sfh_snorm_burst_log_total_mass": ParamDef(
-            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+            "log10 total stellar mass formed [Msun]",
+            _always_true,
+            "",
+            Uniform(7.0, 12.5, default=10.0),
         ),
         "sfh_snorm_burst_peak_lbt_gyr": ParamDef(
-            "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
+            "Peak lookback time (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.5, 12.0, default=5.0),
         ),
         "sfh_snorm_burst_width_gyr": ParamDef(
-            "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
+            "Gaussian width (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.2, 5.0, default=1.0),
         ),
-        "sfh_snorm_burst_skew": ParamDef("Skewness", _always_true, "", Uniform(-1.0, 1.0)),
+        "sfh_snorm_burst_skew": ParamDef(
+            "Skewness", _always_true, "", Uniform(-1.0, 1.0, default=0.0)
+        ),
         "sfh_snorm_burst_burst_sfr": ParamDef(
             "Constant burst SFR amplitude (Msun/yr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
         ),
@@ -375,17 +407,31 @@ _tsnorm_burst_spec = SFHModelSpec(
     fn=snorm_trunc_burst,
     params={
         "sfh_tsnorm_burst_log_total_mass": ParamDef(
-            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+            "log10 total stellar mass formed [Msun]",
+            _always_true,
+            "",
+            Uniform(7.0, 12.5, default=10.0),
         ),
         "sfh_tsnorm_burst_peak_lbt_gyr": ParamDef(
-            "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
+            "Peak lookback time (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.5, 12.0, default=5.0),
         ),
         "sfh_tsnorm_burst_width_gyr": ParamDef(
-            "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
+            "Gaussian width (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.2, 5.0, default=1.0),
         ),
-        "sfh_tsnorm_burst_skew": ParamDef("Skewness", _always_true, "", Uniform(-1.0, 1.0)),
+        "sfh_tsnorm_burst_skew": ParamDef(
+            "Skewness", _always_true, "", Uniform(-1.0, 1.0, default=0.0)
+        ),
         "sfh_tsnorm_burst_trunc": ParamDef(
-            "Truncation sharpness", _lo_positive, "must have lo > 0", Uniform(1.0, 10.0)
+            "Truncation sharpness",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(1.0, 10.0, default=2.0),
         ),
         "sfh_tsnorm_burst_burst_sfr": ParamDef(
             "Constant burst SFR amplitude (Msun/yr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
@@ -417,13 +463,22 @@ _norm_spec = SFHModelSpec(
     fn=norm,
     params={
         "sfh_norm_log_total_mass": ParamDef(
-            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+            "log10 total stellar mass formed [Msun]",
+            _always_true,
+            "",
+            Uniform(7.0, 12.5, default=10.0),
         ),
         "sfh_norm_peak_lbt_gyr": ParamDef(
-            "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
+            "Peak lookback time (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.5, 12.0, default=5.0),
         ),
         "sfh_norm_width_gyr": ParamDef(
-            "Gaussian width (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.2, 5.0)
+            "Gaussian width (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.2, 5.0, default=1.0),
         ),
     },
     settings={},
@@ -442,16 +497,22 @@ _lnorm_spec = SFHModelSpec(
     fn=lnorm,
     params={
         "sfh_lnorm_log_total_mass": ParamDef(
-            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+            "log10 total stellar mass formed [Msun]",
+            _always_true,
+            "",
+            Uniform(7.0, 12.5, default=10.0),
         ),
         "sfh_lnorm_peak_gyr": ParamDef(
             "Peak in cosmic time since formation (Gyr)",
             _lo_positive,
             "must have lo > 0",
-            Uniform(0.5, 12.0),
+            Uniform(0.5, 12.0, default=5.0),
         ),
         "sfh_lnorm_width_gyr": ParamDef(
-            "Log-space width (dex)", _lo_positive, "must have lo > 0", Uniform(0.1, 2.0)
+            "Log-space width (dex)",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.1, 2.0, default=0.5),
         ),
         "sfh_lnorm_age_gyr": ParamDef(
             "Cosmic time for SF (Gyr) = lookback of formation; "
@@ -537,7 +598,7 @@ _register(
                 "log10 total stellar mass formed [Msun]",
                 _always_true,
                 "",
-                Uniform(7.0, 12.5),
+                Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_const_start_gyr": ParamDef(
                 "Lookback to SF onset (Gyr): when did SF start?",
@@ -572,10 +633,16 @@ _register(
         fn=exponential,
         params={
             "sfh_exp_log_total_mass": ParamDef(
-                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_exp_tau_gyr": ParamDef(
-                "e-folding timescale (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 10.0)
+                "e-folding timescale (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 10.0, default=2.0),
             ),
             "sfh_exp_start_gyr": ParamDef(
                 "Start lookback (Gyr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
@@ -599,10 +666,16 @@ _register(
         fn=delayed_exponential,
         params={
             "sfh_dexp_log_total_mass": ParamDef(
-                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_dexp_tau_gyr": ParamDef(
-                "Timescale (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 10.0)
+                "Timescale (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 10.0, default=2.0),
             ),
             "sfh_dexp_start_gyr": ParamDef(
                 "Start lookback (Gyr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
@@ -681,25 +754,25 @@ _register(
                 "log10 total stellar mass formed [Msun] (constant + decline phases)",
                 _always_true,
                 "",
-                Uniform(7.0, 12.5),
+                Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_cexp_tau_gyr": ParamDef(
                 "Post-quench e-folding timescale (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.1, 10.0),
+                Uniform(0.1, 10.0, default=2.0),
             ),
             "sfh_cexp_quench_gyr": ParamDef(
                 "Lookback time when quenching began (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 10.0),
+                Uniform(0.01, 10.0, default=1.0),
             ),
             "sfh_cexp_age_gyr": ParamDef(
                 "Galaxy age / lookback to formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0),
+                Uniform(0.5, 13.0, default=5.0),
             ),
         },
         settings={},
@@ -726,37 +799,37 @@ _register(
                 "log10 total stellar mass formed [Msun]",
                 _always_true,
                 "",
-                Uniform(7.0, 12.5),
+                Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_sfh2exp_tau_main_gyr": ParamDef(
                 "e-folding timescale of main population (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.1, 10.0),
+                Uniform(0.1, 10.0, default=2.0),
             ),
             "sfh_sfh2exp_tau_burst_gyr": ParamDef(
                 "e-folding timescale of the burst (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 1.0),
+                Uniform(0.01, 1.0, default=0.05),
             ),
             "sfh_sfh2exp_f_burst": ParamDef(
                 "Fraction of stellar mass formed in the burst",
                 lambda lo, hi: lo >= 0.0 and hi < 1.0,
                 "must have 0 <= f_burst < 1",
-                Uniform(0.0, 0.5),
+                Uniform(0.0, 0.5, default=0.0),
             ),
             "sfh_sfh2exp_age_gyr": ParamDef(
                 "Age of main population / lookback to formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0),
+                Uniform(0.5, 13.0, default=5.0),
             ),
             "sfh_sfh2exp_burst_age_gyr": ParamDef(
                 "Lookback time of burst onset (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 2.0),
+                Uniform(0.01, 2.0, default=0.02),
             ),
         },
         settings={},
@@ -784,31 +857,31 @@ _register(
                 "log10 total stellar mass formed [Msun]",
                 _always_true,
                 "",
-                Uniform(7.0, 12.5),
+                Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_delayed_bq_tau_main_gyr": ParamDef(
                 "e-folding timescale of main component (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.1, 10.0),
+                Uniform(0.1, 10.0, default=2.0),
             ),
             "sfh_delayed_bq_age_main_gyr": ParamDef(
                 "Galaxy age / lookback to formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0),
+                Uniform(0.5, 13.0, default=5.0),
             ),
             "sfh_delayed_bq_age_bq_gyr": ParamDef(
                 "Lookback time of burst/quench onset (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 5.0),
+                Uniform(0.01, 5.0, default=0.5),
             ),
             "sfh_delayed_bq_r_sfr": ParamDef(
                 "SFR ratio after/before burst/quench",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 10.0),
+                Uniform(0.01, 10.0, default=1.0),
             ),
         },
         settings={},
@@ -835,19 +908,19 @@ _register(
                 "log10 total stellar mass formed [Msun]",
                 _always_true,
                 "",
-                Uniform(7.0, 12.5),
+                Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_periodic_delta_bursts_gyr": ParamDef(
                 "Spacing between burst onsets (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 1.0),
+                Uniform(0.01, 1.0, default=0.1),
             ),
             "sfh_periodic_tau_bursts_gyr": ParamDef(
                 "Duration/e-folding timescale of each burst (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.001, 0.5),
+                Uniform(0.001, 0.5, default=0.02),
             ),
             "sfh_periodic_burst_type": ParamDef(
                 "Burst type: 0=exponential, 1=delayed, 2=rectangular",
@@ -859,7 +932,7 @@ _register(
                 "Galaxy age / lookback to formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0),
+                Uniform(0.5, 13.0, default=5.0),
             ),
         },
         settings={},
@@ -886,13 +959,13 @@ _register(
                 "log10 total stellar mass formed [Msun]",
                 _always_true,
                 "",
-                Uniform(7.0, 12.5),
+                Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_buat08_velocity_km_s": ParamDef(
                 "Rotational velocity (km/s), range [40, 360]",
                 lambda lo, hi: lo >= 40 and hi <= 360,
                 "must have 40 <= lo and hi <= 360",
-                Uniform(80.0, 360.0),
+                Uniform(80.0, 360.0, default=200.0),
             ),
         },
         settings={},
@@ -917,37 +990,43 @@ _register(
                 "log10 total stellar mass formed [Msun]",
                 _always_true,
                 "",
-                Uniform(7.0, 12.5),
+                Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_psb_age_gyr": ParamDef(
                 "Galaxy age / lookback to formation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0),
+                Uniform(0.5, 13.0, default=5.0),
             ),
             "sfh_psb_tau_gyr": ParamDef(
                 "Old-component e-folding timescale (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.1, 10.0),
+                Uniform(0.1, 10.0, default=2.0),
             ),
             "sfh_psb_burstage_gyr": ParamDef(
                 "Lookback time of burst onset (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 5.0),
+                Uniform(0.01, 5.0, default=0.5),
             ),
             "sfh_psb_alpha": ParamDef(
-                "DPL burst falling slope", _lo_positive, "must have lo > 0", Uniform(0.5, 5.0)
+                "DPL burst falling slope",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 5.0, default=2.0),
             ),
             "sfh_psb_beta": ParamDef(
-                "DPL burst rising slope", _lo_positive, "must have lo > 0", Uniform(0.5, 5.0)
+                "DPL burst rising slope",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 5.0, default=2.0),
             ),
             "sfh_psb_fburst": ParamDef(
                 "Burst mass fraction",
                 lambda lo, hi: lo >= 0 and hi <= 1,
                 "must be in [0, 1]",
-                Uniform(0.01, 0.99),
+                Uniform(0.01, 0.99, default=0.3),
             ),
         },
         settings={},
@@ -978,19 +1057,19 @@ _register(
                 "log10 total stellar mass formed in window [Msun]",
                 _always_true,
                 "",
-                Uniform(7.0, 12.5),
+                Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_top_hat_t_start_gyr": ParamDef(
                 "Older lookback boundary / SF onset (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.1, 13.0),
+                Uniform(0.1, 13.0, default=5.0),
             ),
             "sfh_top_hat_t_end_gyr": ParamDef(
                 "Younger lookback boundary / SF cessation (Gyr)",
                 _lo_nonneg,
                 "must have lo >= 0",
-                Uniform(0.0, 12.0),
+                Uniform(0.0, 12.0, default=4.0),
             ),
             "sfh_top_hat_smooth_width_gyr": ParamDef(
                 "Sigmoid transition width (Gyr)",
@@ -1021,19 +1100,19 @@ _register(
                 "log10 total stellar mass formed in burst [Msun]",
                 _always_true,
                 "",
-                Uniform(6.0, 11.0),
+                Uniform(6.0, 11.0, default=10.0),
             ),
             "sfh_gaussian_burst_t_peak_gyr": ParamDef(
                 "Burst peak age / lookback time (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 13.0),
+                Uniform(0.01, 13.0, default=0.5),
             ),
             "sfh_gaussian_burst_sigma_gyr": ParamDef(
                 "Gaussian width / standard deviation (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 5.0),
+                Uniform(0.01, 5.0, default=0.1),
             ),
         },
         settings={},
@@ -1100,14 +1179,14 @@ _register(
                 "log10 total stellar mass formed (Msun)",
                 _always_true,
                 "",
-                Uniform(8.0, 12.0),
+                Uniform(8.0, 12.0, default=10.0),
             ),
             **{
                 f"sfh_cont_ratio_{i}": ParamDef(
                     f"log10 SFR ratio bin {i}/{i + 1}",
                     _always_true,
                     "",
-                    StudentT(mu=0.0, sigma=0.3, df=2.0),
+                    StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
                 )
                 for i in range(6)  # 7 bins -> 6 ratios
             },
@@ -1139,20 +1218,20 @@ _register(
                 "log10 total stellar mass formed (Msun)",
                 _always_true,
                 "",
-                Uniform(8.0, 12.0),
+                Uniform(8.0, 12.0, default=10.0),
             ),
             "sfh_cflex_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex[0])",
                 _always_true,
                 "",
-                StudentT(mu=0.0, sigma=0.3, df=2.0),
+                StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
             ),
             **{
                 f"sfh_cflex_flex_{i}": ParamDef(
                     f"log10 flex bin SFR ratio {i} (controls bin width)",
                     _always_true,
                     "",
-                    StudentT(mu=0.0, sigma=0.3, df=2.0),
+                    StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
                 )
                 for i in range(_N_CFLEX)
             },
@@ -1160,7 +1239,7 @@ _register(
                 "log10(SFR_old / SFR_flex[N])",
                 _always_true,
                 "",
-                StudentT(mu=0.0, sigma=0.3, df=2.0),
+                StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
             ),
         },
         settings={
@@ -1192,7 +1271,7 @@ _register(
                 "log10 total stellar mass formed (Msun)",
                 _always_true,
                 "",
-                Uniform(8.0, 12.0),
+                Uniform(8.0, 12.0, default=10.0),
             ),
             **{
                 f"sfh_dir_z_{i}": ParamDef(
@@ -1201,7 +1280,7 @@ _register(
                     "must be in [0, 1]",
                     # Beta(1, 1) is exactly Uniform(0, 1); faithful Leja+2017
                     # symmetric Dirichlet(1,...,1) marginal on mass fractions.
-                    Uniform(0.0, 1.0),
+                    Uniform(0.0, 1.0, default=0.5),
                 )
                 for i in range(6)  # 7 bins -> 6 auxiliary variables
             },
@@ -1246,14 +1325,14 @@ _register(
                 "log10 total stellar mass formed (Msun)",
                 _always_true,
                 "",
-                Uniform(8.0, 12.0),
+                Uniform(8.0, 12.0, default=10.0),
             ),
             **{
                 f"sfh_burstcont_ratio_{i}": ParamDef(
                     f"log10 SFR ratio bin {i}/{i + 1} (Tacchella+22 piecewise scale)",
                     _always_true,
                     "",
-                    StudentT(mu=0.0, sigma=_BURSTY_DEFAULT_SIGMAS[i], df=2.0),
+                    StudentT(mu=0.0, sigma=_BURSTY_DEFAULT_SIGMAS[i], df=2.0, default=0.0),
                 )
                 for i in range(6)
             },
@@ -1295,32 +1374,32 @@ _register(
                 "log10 total stellar mass formed (Msun)",
                 _always_true,
                 "",
-                Uniform(8.0, 12.0),
+                Uniform(8.0, 12.0, default=10.0),
             ),
             "sfh_psb2022_tlast_gyr": ParamDef(
                 "Quenching-onset lookback time (Gyr); width of the youngest bin",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.01, 1.0),
+                Uniform(0.01, 1.0, default=0.1),
             ),
             "sfh_psb2022_tflex_gyr": ParamDef(
                 "Upper boundary of the flexible quenching zone (Gyr)",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 5.0),
+                Uniform(0.5, 5.0, default=2.0),
             ),
             "sfh_psb2022_ratio_young": ParamDef(
                 "log10(SFR_young / SFR_flex); large positive = recent burst",
                 _always_true,
                 "",
-                StudentT(mu=0.0, sigma=0.3, df=2.0),
+                StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
             ),
             **{
                 f"sfh_psb2022_ratio_old_{i}": ParamDef(
                     f"log10 SFR ratio old bin {i}/{i + 1}",
                     _always_true,
                     "",
-                    StudentT(mu=0.0, sigma=0.3, df=2.0),
+                    StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
                 )
                 for i in range(_N_PSB_OLD_RATIOS)
             },
@@ -1361,14 +1440,14 @@ _register(
                 "log10 total stellar mass formed (Msun)",
                 _always_true,
                 "",
-                Uniform(8.0, 12.0),
+                Uniform(8.0, 12.0, default=10.0),
             ),
             **{
                 f"sfh_pbeta_ratio_{i}": ParamDef(
                     f"log10 SFR ratio bin {i}/{i + 1}",
                     _always_true,
                     "",
-                    StudentT(mu=0.0, sigma=0.3, df=2.0),
+                    StudentT(mu=0.0, sigma=0.3, df=2.0, default=0.0),
                 )
                 for i in range(6)
             },
@@ -1398,20 +1477,20 @@ _register(
                 "log10 total stellar mass formed (Msun)",
                 _always_true,
                 "",
-                Uniform(8.0, 12.0),
+                Uniform(8.0, 12.0, default=10.0),
             ),
             "sfh_db_log_sfr_inst": ParamDef(
                 "log10 instantaneous SFR at observation (Msun/yr)",
                 _always_true,
                 "",
-                Uniform(-2.0, 3.0),
+                Uniform(-2.0, 3.0, default=0.0),
             ),
             **{
                 f"sfh_db_tx_frac_{i}": ParamDef(
                     f"Cosmic time fraction at {(i + 1) * 25}% mass",
                     lambda lo, hi: lo >= 0 and hi <= 1,
                     "must be in [0, 1]",
-                    Uniform(0.05, 0.95),
+                    Uniform(0.05, 0.95, default=0.5),
                 )
                 for i in range(3)  # default Nparam=3 → 3 quantile parameters
             },
@@ -1442,14 +1521,14 @@ _register(
                 "log10 total stellar mass formed (Msun)",
                 _always_true,
                 "",
-                Uniform(8.0, 12.0),
+                Uniform(8.0, 12.0, default=10.0),
             ),
             **{
                 f"sfh_dbp_tx_frac_{i}": ParamDef(
                     f"Cosmic time fraction at {(i + 1) * 25}% mass",
                     lambda lo, hi: lo >= 0 and hi <= 1,
                     "must be in [0, 1]",
-                    Uniform(0.05, 0.95),
+                    Uniform(0.05, 0.95, default=0.5),
                 )
                 for i in range(3)
             },
@@ -1480,13 +1559,13 @@ _register(
                 "log10 burst mass fraction",
                 lambda lo, hi: hi < 0,
                 "must have hi < 0 (fraction < 1)",
-                Uniform(-3.0, -0.1),
+                Uniform(-3.0, -0.1, default=-1.0),
             ),
             "sfh_burst_log_tpeak_myr": ParamDef(
-                "log10 burst peak time (Myr)", _always_true, "", Uniform(0.0, 3.0)
+                "log10 burst peak time (Myr)", _always_true, "", Uniform(0.0, 3.0, default=2.0)
             ),
             "sfh_burst_log_tmax_myr": ParamDef(
-                "log10 burst duration (Myr)", _always_true, "", Uniform(1.0, 4.0)
+                "log10 burst duration (Myr)", _always_true, "", Uniform(1.0, 4.0, default=2.5)
             ),
         },
         settings={},

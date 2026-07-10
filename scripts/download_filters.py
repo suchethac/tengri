@@ -268,12 +268,21 @@ _FILTER_REGISTRY: dict[str, str] = {
     # ------------------------------------------------------------------
     # Roman Space Telescope / WFI
     # ------------------------------------------------------------------
+    # Gaia DR3 (G / BP / RP)
+    "gaia_g": "GAIA/GAIA3.G",
+    "gaia_bp": "GAIA/GAIA3.Gbp",
+    "gaia_rp": "GAIA/GAIA3.Grp",
+    # Subaru HSC narrowbands (LAE/line-emitter surveys)
+    "hsc_nb387": "Subaru/HSC.NB387_filter",
+    "hsc_nb816": "Subaru/HSC.NB816_filter",
+    "hsc_nb921": "Subaru/HSC.NB921_filter",
     "roman_f062": "Roman/WFI.F062",
     "roman_f087": "Roman/WFI.F087",
     "roman_f106": "Roman/WFI.F106",
     "roman_f129": "Roman/WFI.F129",
     "roman_f158": "Roman/WFI.F158",
     "roman_f184": "Roman/WFI.F184",
+    "roman_f146": "Roman/WFI.F146",
     "roman_f213": "Roman/WFI.F213",
     # ------------------------------------------------------------------
     # Euclid

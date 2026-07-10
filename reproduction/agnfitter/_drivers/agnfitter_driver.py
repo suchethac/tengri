@@ -466,22 +466,29 @@ def cold_dust_template(
 
 @cache
 def _s17_tables():
-    """Load and cache the S17 (Schreiber+2018) dust and PAH FITS tables."""
-    require_available()
-    from astropy import units as u
-    from astropy.table import Table
+    """Load and cache the S17 (Schreiber+2018) dust and PAH tables.
 
-    dust = Table.read(_MODELS / "STARBURST/s17_lowvsg_dust.fits")
-    pah = Table.read(_MODELS / "STARBURST/s17_lowvsg_pah.fits")
-    # The FITS tables hold a single row whose LAM/SED columns are 2-D arrays
-    # (n_tdust, n_wave); mirror MODEL_AGNfitter's ``column[0]`` access.
-    dwl = np.asarray(dust["LAM"][0], dtype=np.float64)  # (n_tdust, n_wave) micron
-    pwl = np.asarray(pah["LAM"][0], dtype=np.float64)
-    d_nulnu = np.asarray(dust["SED"][0], dtype=np.float64)  # (n_tdust, n_wave) nuLnu
-    p_nulnu = np.asarray(pah["SED"][0], dtype=np.float64)
-    tdust = np.asarray(dust["TDUST"][0], dtype=np.float64)  # (n_tdust,) K
-    dnu = (dwl * u.micron).to(u.Hz, equivalencies=u.spectral()).value  # (n_tdust, n_wave)
-    pnu = (pwl * u.micron).to(u.Hz, equivalencies=u.spectral()).value
+    Reads the ``s17`` group vendored into the committed cold-dust h5 by
+    ``scripts/build_agnfitter_s17_reference.py`` — runtime never touches the
+    AGNfitter-rX clone (same contract as every other template here).
+    """
+    require_available()
+    import h5py
+
+    with h5py.File(_COLD_H5, "r") as h:
+        if "s17" not in h:
+            raise FileNotFoundError(
+                f"{_COLD_H5} has no 's17' group — regenerate it with "
+                "scripts/build_agnfitter_s17_reference.py."
+            )
+    d = _ref(_COLD_H5, "s17")
+    dwl = np.asarray(d["dust_lam_um"], dtype=np.float64)  # (n_tdust, n_wave) micron
+    pwl = np.asarray(d["pah_lam_um"], dtype=np.float64)
+    d_nulnu = np.asarray(d["dust_sed_nulnu"], dtype=np.float64)  # (n_tdust, n_wave) nuLnu
+    p_nulnu = np.asarray(d["pah_sed_nulnu"], dtype=np.float64)
+    tdust = np.asarray(d["tdust"], dtype=np.float64)  # (n_tdust,) K
+    dnu = _C_AA / (dwl * 1e4)  # micron -> Angstrom -> Hz
+    pnu = _C_AA / (pwl * 1e4)
     d_lnu = d_nulnu / dnu  # (n_tdust, n_wave)
     p_lnu = p_nulnu / pnu
     fpah = np.concatenate(
