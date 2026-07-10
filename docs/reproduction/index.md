@@ -37,11 +37,6 @@ The notebooks share a layout, plotting style, and a `## Summary` /
   stellar mass formed, Charlot & Fall attenuation, Dale 2014 IR, the
   `emissionLines` nebular model, the SKIRTOR AGN torus, a radio continuum,
   and the Inoue 2014 IGM.
-- **{doc}`synthesizer`** — Synthesizer (Lovell et al. 2025; Roper et al.
-  2026). A Unified AGN deep dive: disc, NLR, BLR, torus, and the
-  inclination geometry, with tengri reading the same Cloudy AGN grids
-  for the line regions, plus a precompute-vs-exact photometry parity
-  check and the block-scoped free-parameter surface a fit would use.
 ```{toctree}
 :maxdepth: 1
 
@@ -50,7 +45,6 @@ bagpipes
 prospector
 agnfitter
 prospect_r
-synthesizer
 ```
 
 Comparisons with BEAGLE, MAGPHYS, GRAHSP, and GalaPy are scoped on the

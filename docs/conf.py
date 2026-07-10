@@ -443,6 +443,11 @@ exclude_patterns = [
     "**.ipynb_checkpoints",
     "superpowers",
     "specs",
+    # Synthesizer reproduction notebook kept out of the published docs by
+    # request (removed from the reproduction toctree). Excluded so Sphinx
+    # does not warn about an orphaned document. Restore alongside the
+    # toctree entry.
+    "reproduction/synthesizer.ipynb",
     # Sphinx-gallery internal outputs that shouldn't be picked up as source
     "auto_examples/index.rst.new",
     "sg_execution_times.rst",
