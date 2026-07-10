@@ -16,6 +16,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.forward.sed_model import SEDModel
+from tengri.inference.backends.mcmc import _shared
 from tengri.inference.fitter import Fitter
 from tengri.inference.posterior import Posterior
 from tengri.parameters.parameters import Parameters
@@ -57,6 +58,9 @@ def fitter_and_mock(ssp_data_wne, sdss_filters):
         "sfh_dpl_beta": 1.0,
         "sfh_dpl_tau_gyr": 4.0,
         "sfh_dpl_log_total_mass": 0.9,
+        # free (it carries a prior) but never given a truth value — the forward
+        # used to substitute the spec default silently. Say it out loud (#1021).
+        "sfh_dpl_age_gyr": float(spec.get_distribution("sfh_dpl_age_gyr").default),
         "met_logzsol": -0.3,
         "dust_tau_bc": 1.0,
         "dust_tau_diff": 0.3,
@@ -66,6 +70,23 @@ def fitter_and_mock(ssp_data_wne, sdss_filters):
     mock = model.mock(true_params, snr=20.0, key=jax.random.PRNGKey(0))
     fitter = Fitter(model, mock.flux_obs, mock.noise)
     return fitter, true_params
+
+
+@pytest.fixture(autouse=True)
+def _cheap_elbo_draws(monkeypatch):
+    """Shrink Pathfinder's ELBO draws for this module (#1028).
+
+    Each ELBO draw is a full forward-model evaluation and BlackJAX vmaps
+    ``maxiter (30) x n_draws`` of them, so the shipped default of 25 costs ~10 GB
+    standalone and ~17 GB inside the full tier -- more than a 16 GB CI runner has.
+    These tests assert *plumbing* (it runs, it labels its diagnostics, its cache key
+    separates), none of which depends on how finely Pathfinder ranks the candidate
+    Gaussians along its path. 5 draws exercises the same code at ~4.7 GB.
+
+    The production default stays at 25 (Stan's ``num_elbo_draws``); it is asserted in
+    ``test_pathfinder_elbo_draws.py``, which does not patch it.
+    """
+    monkeypatch.setattr(_shared, "_PATHFINDER_ELBO_DRAWS", 5)
 
 
 @pytest.mark.skipif(not _has_blackjax(), reason="blackjax not installed")

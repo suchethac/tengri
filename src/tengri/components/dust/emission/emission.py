@@ -57,6 +57,7 @@ import functools
 from collections.abc import Callable
 from pathlib import Path
 
+import jax
 import jax.numpy as jnp
 
 # ── Template search paths (resolved once, reused for all models) ──
@@ -476,7 +477,13 @@ def _make_lazy_loader(
             if path is not None:
                 loader = globals()[loader_fn_name]
                 try:
-                    tabulated = loader(path)
+                    # First call typically happens INSIDE a jit trace (the
+                    # model's first predict). Without this guard the template
+                    # arrays are created as trace-staged constants, cached in
+                    # the module registry, and every LATER model touching the
+                    # slot dies with UnexpectedTracerError (or worse).
+                    with jax.ensure_compile_time_eval():
+                        tabulated = loader(path)
                 except (KeyError, ValueError) as exc:
                     # Schema mismatch — file exists but doesn't match the
                     # legacy (qpah, umin) layout this loader expects.  This
@@ -537,7 +544,12 @@ def _dl07_lazy_wrapper(*args, **kwargs):
         if path is not None:
             from tengri.components.dust.emission_templates import create_dl07_from_grid
 
-            tabulated = create_dl07_from_grid(path)
+            # Same trace-escape guard as _make_lazy_loader: the first call
+            # usually runs inside a jit trace, and this wrapper resolves
+            # THREE registry slots (draine_li2007 / dl07_tabulated / dl07
+            # aliases) shared by later models.
+            with jax.ensure_compile_time_eval():
+                tabulated = create_dl07_from_grid(path)
             DUST_EMISSION_MODELS["draine_li2007"] = tabulated
             DUST_EMISSION_MODELS["dl07_tabulated"] = tabulated
             return tabulated(*args, **kwargs)

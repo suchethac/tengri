@@ -223,6 +223,9 @@ def fitter_setup(ssp_data_wne, sdss_filters):
         "sfh_dpl_beta": 1.0,
         "sfh_dpl_tau_gyr": 5.0,
         "sfh_dpl_log_total_mass": 1.0,  # log10(10 Msun/yr) = 1
+        # free (it carries a prior) but never given a truth value — the forward
+        # used to substitute the spec default silently. Say it out loud (#1021).
+        "sfh_dpl_age_gyr": float(spec.get_distribution("sfh_dpl_age_gyr").default),
         "met_logzsol": -0.3,
         "dust_tau_bc": 0.3,
         "dust_tau_diff": 0.2,

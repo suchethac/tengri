@@ -184,6 +184,7 @@ class TestAlphaFeForwardModel:
             dust_tau_bc=Fixed(0.3),
             dust_tau_diff=Fixed(0.2),
             met_alpha_fe=Uniform(-0.2, 0.6),
+            sfh_dpl_age_gyr=Fixed(13.0),  # pin the otherwise-free formation time (#1021)
             redshift=Fixed(0.1),
             mean_sfh_type="dpl",
         )
@@ -213,6 +214,7 @@ class TestAlphaFeForwardModel:
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),
             dust_tau_diff=Fixed(0.2),
+            sfh_dpl_age_gyr=Fixed(13.0),  # pin the otherwise-free formation time (#1021)
             redshift=Fixed(0.1),
             mean_sfh_type="dpl",
         )

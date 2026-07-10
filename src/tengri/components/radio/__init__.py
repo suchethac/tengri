@@ -18,6 +18,11 @@ from tengri.components.radio.radio import (
     radio_total,
     radio_total_dpl,
 )
+
+# Imported for the registration side effect: RadioDPL ('radio_dpl') enters
+# the SEDModelComponent registry at class definition. Without this eager
+# import, grammar reachability depended on import order (#1013 sweep).
+from tengri.components.radio.radio_dpl_model import RadioDPL
 from tengri.components.radio.radio_model import (
     RadioPowerLawSEDComponent,
     RadioPowerLawSEDComponentConfig,
@@ -37,6 +42,7 @@ register_radio_model(
 
 __all__ = [
     "RADIO_MODELS",
+    "RadioDPL",
     "RadioPowerLawSEDComponent",
     "RadioPowerLawSEDComponentConfig",
     "RadioRegistryEntry",

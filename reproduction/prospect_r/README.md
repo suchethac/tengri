@@ -1,4 +1,4 @@
-# Reproducing ProSpect with tengri
+# Reproducing ProSpect's physics with tengri
 
 This folder places **ProSpect** (Robotham et al. 2020, MNRAS 495, 905) next to
 tengri component by component — same parameters, same units, same stellar

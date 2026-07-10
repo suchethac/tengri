@@ -892,11 +892,16 @@ class CueWNESSPError(ValueError):
     """
 
 
-# log10(Q_H) threshold below which an SSP is suspected to be wNE.
+# log10(Q_H) band outside which an SSP is suspected to be wNE.
 # Normal bare O/B stars at < 10 Myr give log10(Q_H) ~ 47–50 per Msun.
-# wNE SSPs: ionizing photons pre-absorbed → Q_H ≈ 0 → log10 stored as –99.
-# Threshold at 44 gives > 3 dex headroom below the physical floor.
+# wNE SSPs fail in BOTH directions: grids with the LyC pre-absorbed report
+# Q_H ≈ 0 (log10 stored as –99, caught by the lower bound), while grids
+# that keep the baked-in nebular continuum corrupt the ionizing power-law
+# fit UPWARD (observed: log10(Q_H) ≈ 62 for ssp_prsc_*_wNE_* files — the
+# nebular continuum in the fit window masquerades as ionizing flux).
+# The band gives > 2 dex headroom on each side of the physical range.
 _WNE_LOGQH_THRESHOLD: float = 44.0
+_WNE_LOGQH_UPPER: float = 52.0
 
 # Age cutoff (log10 yr) for young SSP bins used in the wNE check.
 _YOUNG_LOG_AGE_MAX: float = 7.0  # 10 Myr
@@ -1006,13 +1011,22 @@ class CueBackend:
         if young_mask.any():
             logqion_np = np.array(self._logqion_table)  # (n_met, n_age)
             max_logqion_young = float(logqion_np[:, young_mask].max())
-            if max_logqion_young < _WNE_LOGQH_THRESHOLD:
+            if not (_WNE_LOGQH_THRESHOLD <= max_logqion_young <= _WNE_LOGQH_UPPER):
+                direction = (
+                    "well below the ~47-50 floor for bare stellar populations "
+                    "— the ionizing photons were pre-absorbed by a baked-in "
+                    "nebular layer. Cue's ionizing-spectrum fit will "
+                    "under-predict line luminosities by 4-7 dex"
+                    if max_logqion_young < _WNE_LOGQH_THRESHOLD
+                    else "far above the physical ~47-50 range for bare stellar "
+                    "populations — baked-in nebular continuum in the fit "
+                    "window masquerades as ionizing flux, corrupting Cue's "
+                    "power-law fit"
+                )
                 msg = (
                     "CueBackend received a wNE (with-Nebular-Emission) SSP. "
                     f"Max log10(Q_H) for bins younger than 10 Myr is "
-                    f"{max_logqion_young:.1f}, well below the ~47-50 floor "
-                    "for bare stellar populations. Cue's ionizing-spectrum "
-                    "fit will under-predict line luminosities by 4-7 dex.\n"
+                    f"{max_logqion_young:.1f}, {direction}.\n"
                     "\n"
                     "Fix (one of):\n"
                     "  1. Use a bare-stellar SSP. The four recipes that\n"
@@ -1353,8 +1367,13 @@ class CueBackend:
             )
         )(ssp_log_ages_yr)
 
-        # Q_H per bin, masked to young bins with positive weights
+        # Q_H per bin, masked to young bins with positive weights.
+        # #1001 defense: a non-finite table row must never win the argmax
+        # below (NaN wins any comparison) nor poison the Q_H sum — zero it
+        # out with a finite dummy so neither forward nor gradient passes
+        # see a NaN.
         qh_per_bin = 10.0**logqion_all  # (n_age,)
+        qh_per_bin = jnp.where(jnp.isfinite(qh_per_bin), qh_per_bin, 0.0)
         weighted_qh = ssp_weights * qh_per_bin  # (n_age,)
         # Zero out old bins and non-positive weights
         weighted_qh = jnp.where(young_mask & (ssp_weights > 0), weighted_qh, 0.0)

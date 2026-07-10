@@ -60,8 +60,34 @@ def test_apply_writes_profile_to_state_derived(dummy_profile, state_with_grid) -
 
 
 def test_apply_strips_prefix_before_calling_predict(dummy_profile, state_with_grid) -> None:
+    """apply() must strip the parameter prefix before passing to predict()."""
+
+    # Create a recording component to capture the parameter dict predict() receives
+    class RecordingProfile(SpatialModelComponent):
+        name = "recording_profile"
+        parameter_prefix = "spatial_"
+
+        radius = Uniform(0.1, 10.0, description="radius", units="kpc")
+
+        reads: ClassVar[dict[str, str]] = {}
+        publishes: ClassVar[dict[str, str]] = {"spatial_profile_2d": ""}
+        received_params = None
+
+        def predict(self, p, profile_in, grid_kpc):
+            # Record the parameter dict keys (should be stripped)
+            RecordingProfile.received_params = p
+            x, y = grid_kpc
+            r = jnp.sqrt(x**2 + y**2)
+            profile = jnp.exp(-r / p["radius"])
+            return profile, {}
+
+    recorder = RecordingProfile()
     params = {"spatial_radius": jnp.float64(2.0)}
-    dummy_profile.apply(state_with_grid, params)
+    recorder.apply(state_with_grid, params)
+
+    # Assert the key was stripped: "radius" not "spatial_radius"
+    assert "radius" in RecordingProfile.received_params
+    assert "spatial_radius" not in RecordingProfile.received_params
 
 
 def test_apply_raises_when_grid_missing(dummy_profile) -> None:

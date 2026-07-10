@@ -691,7 +691,27 @@ def interpolate_ionizing_params(
     with fractional weights (fz, fa) computed from target position within
     the bracketing cell.
 
+    **Infinite grid edges** (#1001): SSP grids with an age-0 anchor bin
+    carry ``log10(age) = -inf`` as the first age entry, making the first
+    cell's span infinite. The naive fraction ``(x - (-inf)) / (edge -
+    (-inf)) = inf/inf`` is NaN and silently poisoned every downstream Cue
+    prediction whose SFH weighted the age-0 bin. Such degenerate cells now
+    snap to the nearest node: the fraction is 0 when the target sits on
+    the infinite edge itself and 1 otherwise (any finite target is
+    infinitely far, in log space, from an age-0 edge). Guarded with
+    finite-dummy ``jnp.where`` so no NaN enters forward or gradient passes.
+
     """
+
+    def _cell_fraction(target, grid, idx):
+        left = grid[idx]
+        span = grid[idx + 1] - left
+        finite = jnp.isfinite(left) & jnp.isfinite(span)
+        left_safe = jnp.where(finite, left, 0.0)
+        span_safe = jnp.where(finite, span, 1.0)
+        frac = (target - left_safe) / span_safe
+        return jnp.where(finite, frac, jnp.where(target == left, 0.0, 1.0))
+
     # Bilinear interpolation
     log_z_c = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
     log_age_c = jnp.clip(log_age_yr, ssp_log_age_yr[0], ssp_log_age_yr[-1])
@@ -699,8 +719,8 @@ def interpolate_ionizing_params(
     iz = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
     ia = jnp.clip(jnp.searchsorted(ssp_log_age_yr, log_age_c) - 1, 0, len(ssp_log_age_yr) - 2)
 
-    fz = (log_z_c - ssp_lgmet[iz]) / (ssp_lgmet[iz + 1] - ssp_lgmet[iz])
-    fa = (log_age_c - ssp_log_age_yr[ia]) / (ssp_log_age_yr[ia + 1] - ssp_log_age_yr[ia])
+    fz = _cell_fraction(log_z_c, ssp_lgmet, iz)
+    fa = _cell_fraction(log_age_c, ssp_log_age_yr, ia)
 
     # Bilinear for 7-vector
     t00 = ionspec_table[iz, ia]

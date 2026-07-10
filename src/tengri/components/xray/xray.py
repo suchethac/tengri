@@ -33,6 +33,12 @@ from tengri.utils.physics_constants import (
     KEV_TO_HZ as _KEV_TO_HZ,
 )
 
+# Yang+2020 reference inclination for the AGN corona. The α_ox(L_2500)
+# relations predict the L_2keV seen at 30°; ``xray_anisotropy`` satisfies
+# f(cos 30°) = 1, so a corona evaluated at this inclination emits exactly
+# the α_ox-predicted L_2keV (X-CIGALE yang20.py convention; #980).
+COS_INC_REF_30DEG = 0.8660254037844387  # cos(30°)
+
 # ── Morrison & McCammon (1983) photoelectric cross-section, Table 2 ──
 # σ(E) · E³ = c0 + c1·E + c2·E² with σ in 10⁻²⁴ cm² and E in keV.
 # Fit valid for 0.030 ≤ E ≤ 10 keV; above 10 keV the cross-section is
@@ -786,7 +792,8 @@ def xray_anisotropy(
     Parameters
     ----------
     l_x : array_like, shape (n_wave,)
-        Isotropic (face-on) X-ray luminosity spectrum. [erg/s/Hz]
+        Corona luminosity spectrum at the Yang+2020 30° reference
+        inclination — i.e. the α_ox-predicted spectrum. [erg/s/Hz]
     cos_inc : float
         Cosine of inclination angle (1 = face-on, 0 = edge-on).
         [dimensionless]
@@ -798,43 +805,41 @@ def xray_anisotropy(
     Returns
     -------
     ndarray, shape (n_wave,)
-        Anisotropy-corrected L_X. [erm/s/Hz]
+        Anisotropy-corrected L_X. [erg/s/Hz]
 
     Notes
     -----
     **JIT-compatible**: yes — pure JAX function.
 
     **Empirical correction** (Yang et al. 2022 [1]_): polynomial in
-    :math:`\mu \equiv \cos\theta`, normalized so the bolometric
-    corona luminosity at θ=0° (face-on, :math:`\mu = 1`) is recovered.
+    :math:`\mu \equiv \cos\theta`, anchored at the 30° reference
+    inclination where the α_ox(L_2500) relations are defined.
 
-    The anisotropic luminosity is computed as (yang20.py:231–235):
+    The anisotropic luminosity is computed as (X-CIGALE yang20.py:231–235):
 
     .. math::
 
         f(\mu) = \frac{a_1\,\mu + a_2\,\mu^2 + (1 - a_1 - a_2)}{1 - 0.13397\,a_1 - 0.25\,a_2},
         \qquad
-        L_X^{\rm obs} = f(\mu)\, L_X^{\rm iso}
+        L_X^{\rm obs} = f(\mu)\, L_X^{(30^\circ)}
 
-    The denominator is crucial: it normalizes the angular distribution so that
-    multiplying by the numerator and dividing by the denominator at θ=0° gives
-    unity, ensuring the face-on luminosity is unmodified. The default
-    :math:`a_1 = 0.5,\, a_2 = 0` corresponds to the "intermediate" obscuration
-    solution adopted in X-CIGALE (Yang et al. 2022).
-
-    At default (a1=0.5, a2=0), the denominator is 0.933, so the correction
-    factor is ~1.072 at face-on (7% enhancement relative to the polynomial alone,
-    to recover the face-on bolometric luminosity).
+    The denominator is the numerator evaluated at :math:`\mu = \cos 30^\circ`
+    (:math:`0.13397 = 1 - \cos 30^\circ`, :math:`0.25 = 1 - \cos^2 30^\circ`),
+    so :math:`f(\cos 30^\circ) = 1`: the input spectrum is interpreted as the
+    30° (α_ox-anchored) corona, matching CIGALE's ``*_30deg`` bookkeeping.
+    Face-on (:math:`\mu = 1`) is *brighter* than the anchor —
+    :math:`f(1) \approx 1.072` at the default :math:`a_1 = 0.5,\, a_2 = 0`
+    (the "intermediate" obscuration solution adopted in X-CIGALE). See #980
+    for the parity audit that pinned this convention against CIGALE 2025.1.
 
     References
     ----------
     .. [1] Yang, G. et al., 2022, ApJ, 927, 192.
-       Eq. 231–235; CIGALE yang20.py:231–235.
+       CIGALE implementation: yang20.py:231–235.
     """
     numerator = a1 * cos_inc + a2 * cos_inc**2 + (1.0 - a1 - a2)
-    # Normalization denominator (yang20.py:231–235): ensures face-on
-    # bolometric corona luminosity is recovered. Without this, anisotropy
-    # would suppress the face-on luminosity.
+    # Denominator = numerator at μ = cos 30° (yang20.py:231–235): anchors
+    # f(cos 30°) = 1 so the α_ox-derived L_2keV is the 30° value (#980).
     denominator = 1.0 - 0.13397 * a1 - 0.25 * a2
     factor = numerator / denominator
     return l_x * factor
@@ -843,7 +848,7 @@ def xray_anisotropy(
 def xray_agn_corona_from_disc(
     wavelength: jnp.ndarray,
     l_2500_erg_hz: float,
-    cos_inc: float = 1.0,
+    cos_inc: float = COS_INC_REF_30DEG,
     delta_alpha_ox: float = 0.0,
     gamma: float = 1.8,
     E_cut: float = 300.0,
@@ -868,7 +873,9 @@ def xray_agn_corona_from_disc(
     l_2500_erg_hz : float
         Monochromatic luminosity density at 2500 A [erg/s/Hz].
     cos_inc : float
-        Cosine of inclination (1 = face-on). Default 1.0.
+        Cosine of inclination (1 = face-on, 0 = edge-on). Default
+        ``COS_INC_REF_30DEG`` — the Yang+2020 anchor where the anisotropy
+        factor is exactly 1 (#980).
     delta_alpha_ox : float
         Additive offset to the Just+2007 alpha_ox. Default 0.0.
     gamma : float
@@ -953,7 +960,7 @@ def xray_agn_corona(
     gamma: float = 1.8,
     E_cut: float = 300.0,
     delta_alpha_ox: float = 0.0,
-    cos_inc: float = 1.0,
+    cos_inc: float = COS_INC_REF_30DEG,
     apply_anisotropy: bool = True,
     a1: float = 0.5,
     a2: float = 0.0,
@@ -981,8 +988,8 @@ def xray_agn_corona(
     delta_alpha_ox : float, optional
         Additive offset to the Just+2007 α_ox relation. Default: 0.0. [dex]
     cos_inc : float, optional
-        Cosine of inclination angle (1 = face-on, 0 = edge-on).
-        Default: 1.0. []
+        Cosine of inclination angle (1 = face-on, 0 = edge-on). Default:
+        ``COS_INC_REF_30DEG`` — the Yang+2020 anchor, factor exactly 1 (#980). []
     apply_anisotropy : bool, optional
         Whether to apply Yang+2022 viewing-angle correction. Default: True.
     a1 : float, optional
@@ -1168,7 +1175,7 @@ def xray_total(
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
     delta_alpha_ox: float = 0.0,
-    cos_inc: float = 1.0,
+    cos_inc: float = COS_INC_REF_30DEG,
     apply_anisotropy: bool = True,
     a1: float = 0.5,
     a2: float = 0.0,
@@ -1212,7 +1219,8 @@ def xray_total(
     delta_alpha_ox : float
         Additive offset to Just+2007 α_ox relation [dex]. Default: 0.0.
     cos_inc : float
-        Cosine of inclination angle. Default: 1.0 (face-on). []
+        Cosine of inclination angle (1 = face-on, 0 = edge-on). Default:
+        ``COS_INC_REF_30DEG`` — the Yang+2020 anchor, factor exactly 1 (#980). []
     apply_anisotropy : bool
         Whether to apply Yang+2022 viewing-angle correction. Default: True.
     a1 : float
@@ -1346,7 +1354,7 @@ def xray_agn_corona_lopez24(
     alpha_irx: float = 0.3,
     gamma: float = 1.8,
     E_cut: float = 300.0,
-    cos_inc: float = 1.0,
+    cos_inc: float = COS_INC_REF_30DEG,
     apply_anisotropy: bool = True,
     a1: float = 0.5,
     a2: float = 0.0,

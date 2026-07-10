@@ -57,13 +57,13 @@ def base_spec():
 
 
 def _make_model_and_predict(ssp, spec, eta_value):
-    """Build a SEDModel from spec/ssp and predict SED with given eta_balance."""
+    """Build a SEDModel from spec/ssp and predict (wavelength, SED) at eta_balance."""
     model = SEDModel(spec, ssp)
     key = jax.random.PRNGKey(0)
     params = spec.sample(key)
     params = {**params, "dust_eta_balance": eta_value}
-    sed = model.predict_rest_sed(params).sed
-    return sed
+    pred = model.predict_rest_sed(params)
+    return np.asarray(pred.wavelength), np.asarray(pred.sed)
 
 
 # ── Tests ─────────────────────────────────────────────────────────
@@ -74,18 +74,19 @@ class TestEnergyBalanceEta:
 
     def test_eta_1_preserves_energy_balance(self, synthetic_ssp, base_spec):
         """eta=1.0 should give L_IR = L_absorbed (strict energy conservation)."""
-        sed = _make_model_and_predict(synthetic_ssp, base_spec, 1.0)
+        _, sed = _make_model_and_predict(synthetic_ssp, base_spec, 1.0)
         chex.assert_tree_all_finite(sed)
         assert sed.shape[-1] > 0, "SED is empty"
 
     def test_eta_2_doubles_ir(self, synthetic_ssp, base_spec):
         """eta=2.0 should produce ~2x the IR emission compared to eta=1.0."""
-        sed_1 = _make_model_and_predict(synthetic_ssp, base_spec, 1.0)
-        sed_2 = _make_model_and_predict(synthetic_ssp, base_spec, 2.0)
+        # Same spec → same (extended) master grid for all three; unpack seds.
+        _, sed_1 = _make_model_and_predict(synthetic_ssp, base_spec, 1.0)
+        _, sed_2 = _make_model_and_predict(synthetic_ssp, base_spec, 2.0)
 
         # IR excess = sed(eta=2) - sed(eta=1) should be approximately equal to
         # sed(eta=1) - sed(eta=0), since IR scales linearly with eta.
-        sed_0 = _make_model_and_predict(synthetic_ssp, base_spec, 0.0)
+        _, sed_0 = _make_model_and_predict(synthetic_ssp, base_spec, 0.0)
 
         ir_from_eta1 = jnp.sum(sed_1 - sed_0)
         ir_from_eta2 = jnp.sum(sed_2 - sed_0)
@@ -124,15 +125,21 @@ class TestEnergyBalanceEta:
         model_no_em = SEDModel(spec_no_dust_em, synthetic_ssp)
         key = jax.random.PRNGKey(0)
         params_no_em = spec_no_dust_em.sample(key)
-        sed_no_em = model_no_em.predict_rest_sed(params_no_em).sed
+        pred_no_em = model_no_em.predict_rest_sed(params_no_em)
+        wave_no_em = np.asarray(pred_no_em.wavelength)
+        sed_no_em = np.asarray(pred_no_em.sed)
 
-        sed_eta0 = _make_model_and_predict(synthetic_ssp, base_spec, 0.0)
+        wave_eta0, sed_eta0 = _make_model_and_predict(synthetic_ssp, base_spec, 0.0)
 
         # With eta=0, the dust emission should be zero, so the SED should match
         # the no-emission model (both have attenuation but no IR re-emission).
+        # Compare on the no-emission grid: the emission model's master grid
+        # extends into the submm (analytic-emitter native grid, #1005), so the
+        # two SEDs live on different wavelength arrays.
+        sed_eta0_on_ref = np.interp(wave_no_em, wave_eta0, np.array(sed_eta0))
         np.testing.assert_allclose(
-            np.array(sed_eta0),
-            np.array(sed_no_em),
+            sed_eta0_on_ref,
+            sed_no_em,
             rtol=1e-5,
             err_msg="eta=0 should produce same SED as no dust emission",
         )

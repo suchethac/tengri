@@ -241,5 +241,20 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
+      # Persist the JAX/XLA compilation cache across slow-tier runs.
+      # `import tengri` auto-enables the on-disk cache
+      # (~/.cache/tengri_jax_cache), but ephemeral runners start cold, so
+      # every run re-paid the full VI/geoVI compile bill (the majority of
+      # tests/inference wall-clock). Entries are keyed internally by
+      # jaxlib version + XLA program hash, so a stale restore after a JAX
+      # upgrade is a harmless miss, never a wrong hit. The run-id key with
+      # prefix restore-keys implements an append-only cache: each run
+      # restores the newest snapshot and saves its own superset.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: tengri-jax-${{ matrix.suite }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            tengri-jax-${{ matrix.suite }}-${{ hashFiles('pyproject.toml') }}-
       - run: pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval
         timeout-minutes: ${{ matrix.timeout }}

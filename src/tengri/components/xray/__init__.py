@@ -6,7 +6,12 @@ from tengri.components.xray._models import (
     XRayRegistryEntry,
     register_xray_model,
 )
+from tengri.components.xray.agn_xray_model import (
+    AGNXRayCoronaSEDComponent,
+    AGNXRayCoronaSEDComponentConfig,
+)
 from tengri.components.xray.xray import (
+    COS_INC_REF_30DEG,
     alpha_ox_from_l2500,
     compton_scattering_transmission,
     pexrav_reflection,
@@ -56,7 +61,10 @@ register_xray_model(
 )(xray_total_lopez24)
 
 __all__ = [
+    "COS_INC_REF_30DEG",
     "XRAY_MODELS",
+    "AGNXRayCoronaSEDComponent",
+    "AGNXRayCoronaSEDComponentConfig",
     "XRayAirdSEDComponent",
     "XRayAirdSEDComponentConfig",
     "XRayRegistryEntry",

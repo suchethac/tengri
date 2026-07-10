@@ -64,6 +64,23 @@ class UnknownParameterError(ParameterError):
     """
 
 
+class MissingParameterError(ParameterError):
+    """A free parameter was given no value in a ``predict_*`` call.
+
+    Every non-``Fixed`` parameter needs a value at predict time. Without
+    this check the missing key surfaces deep inside a component as a bare
+    ``KeyError`` (e.g. ``'dust_tau_bc'``) with no hint about the cause —
+    commonly hit by ``model.mock({})`` / ``model.predict_photometry({})``
+    on a model whose default dust group carries free optical depths.
+
+    Parameters
+    ----------
+    message : str
+        Human-readable error description listing the missing names and how
+        to supply or fix them.
+    """
+
+
 class ParameterDefaultMissingError(ParameterError):
     """A parameter was marked FIXED without a physically-motivated default.
 

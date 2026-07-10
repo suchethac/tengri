@@ -44,6 +44,16 @@ import numpy as np
 import pytest
 
 from tengri.components.agn.grahsp import GRAHSPParams, evaluate_grahsp_agn
+from tengri.components.agn.grahsp.templates import DEFAULT_TEMPLATE_PATH
+
+# The GRAHSP template bundle is a build artifact regenerated from the upstream
+# GRAHSP source (`tools/build_grahsp_hdf5.py`), which CI does not check out — so
+# the whole atlas-regression file skips when the bundle is absent, matching the
+# data-gating pattern used across tests/integration (e.g. test_template_validation).
+pytestmark = pytest.mark.skipif(
+    not DEFAULT_TEMPLATE_PATH.exists(),
+    reason="GRAHSP template bundle not found; run tools/build_grahsp_hdf5.py",
+)
 
 # Paper Table 4 best-fits (logs reverted; comments give the table value).
 BROWN2019_TABLE4 = {

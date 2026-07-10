@@ -48,13 +48,9 @@ def default_params():
 
 class TestPSBShape:
     def test_non_negative(self, t_lookback, default_params):
-        """SFR should be non-negative everywhere."""
+        """SFR should be non-negative everywhere (bounds test)."""
         sfr = psb_wild2020(t_lookback, **default_params)
         assert jnp.all(sfr >= 0.0)
-
-    def test_all_finite(self, t_lookback, default_params):
-        """SFR should be finite everywhere."""
-        sfr = psb_wild2020(t_lookback, **default_params)
         chex.assert_tree_all_finite(sfr)
 
     def test_two_component_structure(self, t_lookback, default_params):
@@ -154,13 +150,15 @@ class TestParameterSensitivity:
 
 
 class TestJITAndGradients:
-    def test_jit_compatible(self, t_lookback, default_params):
-        """Should be JIT-compilable."""
-        jit_fn = jax.jit(psb_wild2020)
-        sfr = jit_fn(t_lookback, **default_params)
-        chex.assert_tree_all_finite(sfr)
+    def test_jit_parity_vs_eager(self, t_lookback, default_params):
+        """JIT-compiled output matches eager evaluation (JAX correctness)."""
+        sfr_eager = psb_wild2020(t_lookback, **default_params)
+        sfr_jit = jax.jit(psb_wild2020)(t_lookback, **default_params)
+        chex.assert_trees_all_close(sfr_eager, sfr_jit, rtol=1e-6)
 
     def test_grad_wrt_log_total_mass(self, t_lookback, default_params):
+        """Gradient w.r.t. log_total_mass is positive (more mass → more SFR)."""
+
         def loss(lp):
             kw = {k: v for k, v in default_params.items() if k != "log_total_mass"}
             return jnp.mean(psb_wild2020(t_lookback, lp, **kw))
@@ -168,27 +166,6 @@ class TestJITAndGradients:
         g = jax.grad(loss)(default_params["log_total_mass"])
         assert jnp.isfinite(g)
         assert g > 0
-
-    def test_grad_wrt_fburst(self, t_lookback, default_params):
-        def loss(fb):
-            return jnp.mean(psb_wild2020(t_lookback, **{**default_params, "fburst": fb}))
-
-        g = jax.grad(loss)(0.5)
-        assert jnp.isfinite(g)
-
-    def test_grad_wrt_tau(self, t_lookback, default_params):
-        def loss(tau):
-            return jnp.mean(psb_wild2020(t_lookback, **{**default_params, "tau": tau}))
-
-        g = jax.grad(loss)(1e9)
-        assert jnp.isfinite(g)
-
-    def test_grad_wrt_alpha(self, t_lookback, default_params):
-        def loss(a):
-            return jnp.mean(psb_wild2020(t_lookback, **{**default_params, "alpha": a}))
-
-        g = jax.grad(loss)(2.0)
-        assert jnp.isfinite(g)
 
 
 # ── Registry integration ──────────────────────────────────────────

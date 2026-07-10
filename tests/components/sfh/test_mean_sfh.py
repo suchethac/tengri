@@ -142,13 +142,6 @@ class TestDoublePowerlaw:
         sfr = double_powerlaw(t_late, alpha=2.0, beta=1.0, tau=tau, norm=10.0)
         assert jnp.all(jnp.diff(sfr) < 0)
 
-    def test_is_jittable(self):
-        """Double power law is JIT-compatible."""
-        fn = jax.jit(double_powerlaw)
-        t = jnp.logspace(6, 10, 100)
-        sfr = fn(t, 1.0, 1.0, 1e9, 10.0)
-        chex.assert_shape(sfr, (100,))
-
     def test_has_gradients(self):
         """FD check: gradients w.r.t. all 4 DPL parameters (alpha, beta, tau, norm)."""
         t = jnp.logspace(6, 10, 100)
@@ -227,26 +220,6 @@ class TestDpl:
         assert_allclose(ratio, ratio[0] * jnp.ones_like(ratio), rtol=1e-6)
         assert float(jnp.trapezoid(sfr_new, t)) == pytest.approx(1e10, rel=1e-6)
 
-    def test_jit_and_grad(self):
-        """JIT-compatible and differentiable."""
-        t = jnp.logspace(6, 10, 100)
-        fn = jax.jit(dpl)
-        sfr = fn(t, 1.0, 1.0, 1e9, _AGE_UNIV_YR, 1.0)
-        chex.assert_tree_all_finite(sfr)
-
-        def _loss_lp(lp: float) -> float:
-            return float(jnp.sum(dpl(t, 1.0, 1.0, 1e9, _AGE_UNIV_YR, lp)))
-
-        grad_jax = float(
-            jax.grad(lambda lp: jnp.sum(dpl(t, 1.0, 1.0, 1e9, _AGE_UNIV_YR, lp)))(1.0)
-        )
-        np.testing.assert_allclose(
-            grad_jax,
-            fd_grad(_loss_lp, 1.0),
-            rtol=1e-3,
-            err_msg="dpl: FD check ∂(∑SFR)/∂log_total_mass",
-        )
-
     def test_dpl_peak_time(self):
         """DPL peaks at cosmic time T=tau after formation (Carnall+2018 Eq. A3).
 
@@ -291,12 +264,6 @@ class TestDpl:
 class TestTsnorm:
     """Tests for truncated skew-normal SFH."""
 
-    def test_positive_output(self):
-        """SFR is non-negative."""
-        t = jnp.logspace(6, 10, 500)
-        sfr = tsnorm(t, log_total_mass=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=3.0)
-        assert jnp.all(sfr >= 0)
-
     def test_peak_near_peak_lbt(self):
         """SFR peaks near the specified lookback time."""
         t = jnp.logspace(6, 10, 5000)
@@ -333,33 +300,9 @@ class TestTsnorm:
         integral_trunc = float(jnp.trapezoid(shape_trunc, t))
         assert integral_trunc < integral_no_trunc
 
-    def test_jit_and_grad(self):
-        """JIT-compatible and differentiable."""
-        t = jnp.logspace(6, 10, 100)
-        fn = jax.jit(tsnorm)
-        sfr = fn(t, 1.0, 5e9, 2e9, 0.0, 3.0)
-        chex.assert_tree_all_finite(sfr)
-
-        def _loss_lp(lp: float) -> float:
-            return float(jnp.sum(tsnorm(t, lp, 5e9, 2e9, 0.0, 3.0)))
-
-        grad_jax = float(jax.grad(lambda lp: jnp.sum(tsnorm(t, lp, 5e9, 2e9, 0.0, 3.0)))(1.0))
-        np.testing.assert_allclose(
-            grad_jax,
-            fd_grad(_loss_lp, 1.0),
-            rtol=1e-3,
-            err_msg="tsnorm: FD check ∂(∑SFR)/∂log_total_mass",
-        )
-
 
 class TestSnorm:
     """Tests for skew-normal SFH."""
-
-    def test_nonnegative(self):
-        """SFR is non-negative."""
-        t = jnp.logspace(6, 10, 500)
-        sfr = snorm(t, log_total_mass=1.0, peak_lbt=5e9, width=2e9, skew=0.3)
-        assert jnp.all(sfr >= 0)
 
     def test_skew_changes_shape(self):
         """Non-zero skew changes the SFH shape (asymmetry)."""
@@ -388,12 +331,6 @@ class TestNorm:
 
 class TestLnorm:
     """Tests for log-normal SFH."""
-
-    def test_nonnegative(self):
-        """SFR is non-negative."""
-        t = jnp.logspace(6, 10, 500)
-        sfr = lnorm(t, log_total_mass=1.0, peak=3e9, width=0.5, age=_AGE_UNIV_YR)
-        assert jnp.all(sfr >= 0)
 
     def test_peak_in_log_space(self):
         """Peak sits at cosmic time `peak` after formation → lookback age-peak."""
@@ -440,12 +377,6 @@ class TestConstantSFH:
         assert float(sfr[0]) == 0.0  # before start
         assert float(sfr[-1]) == 0.0  # after end
         assert float(sfr[2]) > 0.0  # inside
-
-    def test_correct_shape(self):
-        """Output shape matches input."""
-        t = jnp.logspace(6, 10, 42)
-        sfr = constant(t, log_total_mass=10.0)
-        chex.assert_shape(sfr, (42,))
 
 
 class TestExponentialSFH:
@@ -587,38 +518,63 @@ _SNORM_KW = {
 }
 
 
+_ALL_MODEL_CASES = [
+    (tsnorm, _TSNORM_KW),
+    (snorm, _SNORM_KW),
+    (norm, {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 2e9}),
+    (lnorm, {"log_total_mass": 1.0, "peak": 3e9, "width": 0.5, "age": _AGE_UNIV_YR}),
+    (
+        dpl,
+        {
+            "alpha": 1.5,
+            "beta": 1.0,
+            "tau": 3e9,
+            "age": _AGE_UNIV_YR,
+            "log_total_mass": 1.0,
+        },
+    ),
+    (constant, {"log_total_mass": 10.0, "start": 0.0, "end": AGEMAX_YR}),
+    (exponential, {"log_total_mass": 1.0, "tau": 1e9, "start": 0.0}),
+    (delayed_exponential, {"log_total_mass": 1.0, "tau": 1e9, "start": 0.0}),
+]
+
+_ALL_MODEL_IDS = [fn.__name__ for fn, _ in _ALL_MODEL_CASES]
+
+
+class TestMassNormalizationContract:
+    """Every mass-normalized model integrates to 10^log_total_mass.
+
+    Conservation law: the stellar-normalization contract is
+    ∫ SFR(t) dt = 10^log_total_mass via the trapezoid rule on the passed
+    lookback grid (this is what sets the stellar mass scale downstream).
+    Also asserts SFR ≥ 0 everywhere — subsumes the old scattered per-model
+    positivity-only tests.
+    """
+
+    @pytest.mark.parametrize("fn,kwargs", _ALL_MODEL_CASES, ids=_ALL_MODEL_IDS)
+    def test_integral_equals_total_mass(self, fn, kwargs):
+        t = jnp.linspace(1e5, min(AGEMAX_YR, _AGE_UNIV_YR), 20000)
+        sfr = fn(t, **kwargs)
+        assert jnp.all(sfr >= 0.0), f"{fn.__name__}: negative SFR"
+        total = float(jnp.trapezoid(sfr, t))
+        expected = 10.0 ** kwargs["log_total_mass"]
+        np.testing.assert_allclose(
+            total,
+            expected,
+            rtol=1e-2,
+            err_msg=f"{fn.__name__}: ∫SFR dt != 10^log_total_mass",
+        )
+
+
 class TestAllModelsJitAndGrad:
     """Verify JIT and gradient support for all registry models."""
 
-    @pytest.mark.parametrize(
-        "fn,kwargs",
-        [
-            (tsnorm, _TSNORM_KW),
-            (snorm, _SNORM_KW),
-            (norm, {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 2e9}),
-            (lnorm, {"log_total_mass": 1.0, "peak": 3e9, "width": 0.5, "age": _AGE_UNIV_YR}),
-            (
-                dpl,
-                {
-                    "alpha": 1.5,
-                    "beta": 1.0,
-                    "tau": 3e9,
-                    "age": _AGE_UNIV_YR,
-                    "log_total_mass": 1.0,
-                },
-            ),
-            (constant, {"log_total_mass": 10.0, "start": 0.0, "end": AGEMAX_YR}),
-            (exponential, {"log_total_mass": 1.0, "tau": 1e9, "start": 0.0}),
-            (delayed_exponential, {"log_total_mass": 1.0, "tau": 1e9, "start": 0.0}),
-        ],
-    )
-    def test_jit(self, fn, kwargs):
-        """All models are JIT-compatible."""
+    @pytest.mark.parametrize("fn,kwargs", _ALL_MODEL_CASES, ids=_ALL_MODEL_IDS)
+    def test_jit_matches_eager(self, fn, kwargs):
+        """All models JIT-compile and match the eager result (rtol=1e-6)."""
         t = jnp.logspace(6, 10, 100)
         jit_fn = jax.jit(lambda t_: fn(t_, **kwargs))
-        sfr = jit_fn(t)
-        chex.assert_tree_all_finite(sfr)
-        chex.assert_shape(sfr, (100,))
+        chex.assert_trees_all_close(jit_fn(t), fn(t, **kwargs), rtol=1e-6)
 
     @pytest.mark.parametrize(
         "fn,kwargs,grad_key",

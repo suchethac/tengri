@@ -1,4 +1,4 @@
-# Reproduction notebook contract
+# Physics reproduction notebook contract
 
 Every comparison under `reproduction/` follows the rules below, so the
 series reads as one document and the published copies never drift from

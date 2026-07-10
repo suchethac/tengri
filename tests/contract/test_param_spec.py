@@ -163,11 +163,12 @@ class TestValidation:
         with pytest.raises(ValueError, match="lo >= 0"):
             Parameters(redshift=Uniform(-1.0, 6.0))
 
-    def test_validate_good_params(self):
+    def test_validate_good_params_does_not_raise(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
             sfh_tsnorm_log_total_mass=Uniform(-1, 2),
         )
+        # validate() raises on invalid params — no raise IS the assertion
         spec.validate({"sfh_tsnorm_log_total_mass": jnp.array(0.5)})
 
     def test_validate_out_of_bounds(self):

@@ -89,9 +89,12 @@ _DUST_EMISSION_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     "themis": (("themis_templates.h5", "wavelength_aa", 1.0),),
 }
 
-# Analytic dust-emission models — no template grid to declare. Listing them
-# explicitly so that an unrecognized name raises rather than silently
-# returning ``None``.
+# Analytic dust-emission models — no template file, but their emission still
+# needs FIR/submm support on the master grid: without it the SED truncates at
+# the SSP edge (160 µm for BC03) and submm photometry is silently zero while
+# energy balance re-normalizes on the truncated grid (#1005). Same failure
+# mode and fix as the Cue continuum grid below. 1 µm – 1 cm covers the PAH
+# complexes through the Rayleigh–Jeans tail.
 _ANALYTIC_DUST_EMISSION = frozenset(
     {
         "modified_blackbody",
@@ -101,6 +104,9 @@ _ANALYTIC_DUST_EMISSION = frozenset(
         "energy_balance_split",
     }
 )
+_ANALYTIC_DUST_WAVE_AA = np.geomspace(1.0e4, 1.0e8, 512)
+# Bookkeeping pseudo-model with no emission of its own — stays grid-less.
+_GRIDLESS_DUST_EMISSION = frozenset({"energy_balance_split"})
 
 # AGN torus templates --------------------------------------------------------
 _AGN_TORUS_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
@@ -209,12 +215,15 @@ def _first_present(candidates: Iterable[tuple[str, str, float]]) -> np.ndarray |
 def native_wave_dust_emission(name: str | None) -> np.ndarray | None:
     """Native wavelength grid [Å] for a dust-emission model.
 
-    Returns ``None`` for analytic models and for unknown names (so callers
-    treating "no native grid" as a fall-back to SSP coverage degrade
-    gracefully).
+    Template models return their file's grid; analytic emitters return the
+    synthetic 1 µm – 1 cm grid so the master union grid reaches the submm
+    (#1005). Unknown names return ``None`` (callers treating "no native
+    grid" as a fall-back to SSP coverage degrade gracefully).
     """
-    if name is None or name in _ANALYTIC_DUST_EMISSION:
+    if name is None or name in _GRIDLESS_DUST_EMISSION:
         return None
+    if name in _ANALYTIC_DUST_EMISSION:
+        return _ANALYTIC_DUST_WAVE_AA
     candidates = _DUST_EMISSION_TEMPLATES.get(name)
     if candidates is None:
         logger.debug("No native-grid declaration for dust emission %r", name)

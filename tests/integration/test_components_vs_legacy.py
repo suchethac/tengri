@@ -763,8 +763,17 @@ def _check_sfh_variant_equivalence(ssp, sfh_name: str, sfh_params: dict, rtol: f
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         model = SEDModel(spec, ssp)
-    legacy = model.predict_rest_sed(sfh_params)
-    state = model.predict_state(sfh_params)
+    # Some SFH variants carry a free parameter the caller does not pin -- e.g.
+    # ``lnorm`` has a free ``sfh_lnorm_age_gyr`` (formation time) that this dict
+    # omits. Fill any such with its spec default, which is exactly the value the
+    # forward substituted silently before the missing-parameter guard landed. A
+    # no-op for variants whose dict already covers every free parameter.
+    params = dict(sfh_params)
+    for name in spec.free_params:
+        if name not in params:
+            params[name] = float(spec.get_distribution(name).default)
+    legacy = model.predict_rest_sed(params)
+    state = model.predict_state(params)
     chex.assert_equal_shape([legacy.sed, state.sed_intrinsic])
     rel_diff = float(
         jnp.max(

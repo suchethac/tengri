@@ -57,20 +57,12 @@ def uniform_ssp():
 
 
 class TestComputeGreenFunctionMonochromatic:
-    def test_output_shape(self, synthetic_ssp):
-        ssp_flux, ssp_wave, _ = synthetic_ssp
-        wave_target = 5500.0
-        g = compute_green_function(ssp_flux, ssp_wave, wave_target=wave_target)
-        chex.assert_shape(g, (ssp_flux.shape[0],))
-
-    def test_output_finite(self, synthetic_ssp):
-        ssp_flux, ssp_wave, _ = synthetic_ssp
-        g = compute_green_function(ssp_flux, ssp_wave, wave_target=5000.0)
-        chex.assert_tree_all_finite(g)
-
     def test_values_positive_for_positive_flux(self, synthetic_ssp):
+        """Green function must be positive and finite for positive flux (positivity bound)."""
         ssp_flux, ssp_wave, _ = synthetic_ssp
         g = compute_green_function(ssp_flux, ssp_wave, wave_target=5000.0)
+        chex.assert_shape(g, (ssp_flux.shape[0],))
+        chex.assert_tree_all_finite(g)
         assert jnp.all(g > 0)
 
     def test_decreasing_with_age_for_decreasing_ssp(self, synthetic_ssp):
@@ -109,32 +101,16 @@ class TestComputeGreenFunctionMonochromatic:
 
 
 class TestComputeGreenFunctionFilter:
-    def test_output_shape_filter(self, synthetic_ssp):
-        ssp_flux, ssp_wave, _ = synthetic_ssp
-        filter_wave = jnp.linspace(4800.0, 5200.0, 30)
-        filter_trans = jnp.ones(30)
-        g = compute_green_function(
-            ssp_flux, ssp_wave, filter_wave=filter_wave, filter_trans=filter_trans
-        )
-        chex.assert_shape(g, (ssp_flux.shape[0],))
-
-    def test_filter_values_finite(self, synthetic_ssp):
-        ssp_flux, ssp_wave, _ = synthetic_ssp
-        filter_wave = jnp.linspace(4000.0, 6000.0, 50)
-        filter_trans = jnp.ones(50)
-        g = compute_green_function(
-            ssp_flux, ssp_wave, filter_wave=filter_wave, filter_trans=filter_trans
-        )
-        chex.assert_tree_all_finite(g)
-
     def test_flat_filter_uniform_ssp(self, uniform_ssp):
-        """Uniform SSP + flat filter → G(t) constant at all ages."""
+        """Uniform SSP + flat filter → G(t) constant at all ages (limit test)."""
         ssp_flux, ssp_wave, _ = uniform_ssp
         filter_wave = jnp.linspace(3000.0, 7000.0, 50)
         filter_trans = jnp.ones(50)
         g = compute_green_function(
             ssp_flux, ssp_wave, filter_wave=filter_wave, filter_trans=filter_trans
         )
+        chex.assert_shape(g, (ssp_flux.shape[0],))
+        chex.assert_tree_all_finite(g)
         assert jnp.allclose(g, g[0], rtol=1e-4)
 
     def test_filter_outside_ssp_grid_near_zero(self, uniform_ssp):
@@ -158,19 +134,12 @@ class TestComputeGreenFunctionFilter:
 
 
 class TestComputeWindowFunction:
-    def test_output_shape(self, synthetic_ssp):
-        ssp_flux, _ssp_wave, _ = synthetic_ssp
-        n_age = ssp_flux.shape[0]
-        g = jnp.ones(n_age)
-        sfr = jnp.ones(n_age)
-        w = compute_window_function(g, sfr)
-        chex.assert_shape(w, (n_age,))
-
     def test_definition_product(self):
-        """W(t) = G(t) * SFR(t) — exact product."""
+        """W(t) = G(t) * SFR(t) — exact product (regression_paper: definition)."""
         g = jnp.array([1.0, 2.0, 3.0, 4.0])
         sfr = jnp.array([0.5, 1.0, 0.0, 2.0])
         w = compute_window_function(g, sfr)
+        chex.assert_shape(w, (4,))
         expected = jnp.array([0.5, 2.0, 0.0, 8.0])
         assert jnp.allclose(w, expected, rtol=1e-6)
 
@@ -198,7 +167,8 @@ class TestComputeWindowFunction:
 
 
 class TestComputeWindowFunctionFourier:
-    def test_output_shapes(self, synthetic_ssp):
+    def test_power_non_negative(self, synthetic_ssp):
+        """Power spectrum must be non-negative (positivity bound)."""
         _, _, ages_yr = synthetic_ssp
         n_age = ages_yr.shape[0]
         window_fn = jnp.ones(n_age)
@@ -207,20 +177,9 @@ class TestComputeWindowFunctionFourier:
         expected_len = n_age // 2 + 1
         chex.assert_shape(power, (expected_len,))
         chex.assert_shape(omega, (expected_len,))
-
-    def test_power_non_negative(self, synthetic_ssp):
-        _, _, ages_yr = synthetic_ssp
-        n_age = ages_yr.shape[0]
-        window_fn = jnp.ones(n_age)
-        power, _ = compute_window_function_fourier(window_fn, ages_yr)
-        assert jnp.all(power >= 0.0)
-
-    def test_power_finite(self, synthetic_ssp):
-        _, _, ages_yr = synthetic_ssp
-        window_fn = jnp.ones(ages_yr.shape[0])
-        power, omega = compute_window_function_fourier(window_fn, ages_yr)
         chex.assert_tree_all_finite(power)
         chex.assert_tree_all_finite(omega)
+        assert jnp.all(power >= 0.0)
 
     def test_zero_window_gives_zero_power(self, synthetic_ssp):
         _, _, ages_yr = synthetic_ssp
@@ -253,24 +212,16 @@ class TestComputeWindowFunctionFourier:
 
 
 class TestComputeTimeSensitivityMatrix:
-    def test_output_shape(self, synthetic_ssp):
-        ssp_flux, ssp_wave, _ = synthetic_ssp
-        n_age = ssp_flux.shape[0]
-        wavelengths = jnp.array([3000.0, 5500.0, 8000.0])
-        s = compute_time_sensitivity_matrix(ssp_flux, ssp_wave, wavelengths)
-        chex.assert_shape(s, (3, n_age))
-
-    def test_finite_values(self, synthetic_ssp):
-        ssp_flux, ssp_wave, _ = synthetic_ssp
-        wavelengths = jnp.array([4000.0, 6000.0])
-        s = compute_time_sensitivity_matrix(ssp_flux, ssp_wave, wavelengths)
-        chex.assert_tree_all_finite(s)
-
     def test_rows_match_individual_green_functions(self, synthetic_ssp):
-        """Each row of the matrix must equal compute_green_function for that wavelength."""
+        """Each row of the matrix equals compute_green_function at that wavelength
+        (regression_paper).
+        """
         ssp_flux, ssp_wave, _ = synthetic_ssp
         wavelengths = jnp.array([3500.0, 5500.0, 7000.0])
         s = compute_time_sensitivity_matrix(ssp_flux, ssp_wave, wavelengths)
+        n_age = ssp_flux.shape[0]
+        chex.assert_shape(s, (3, n_age))
+        chex.assert_tree_all_finite(s)
         for i, wave in enumerate(wavelengths):
             g = compute_green_function(ssp_flux, ssp_wave, wave_target=float(wave))
             assert jnp.allclose(s[i], g, rtol=1e-6), f"Row {i} mismatch for λ={wave} Å"

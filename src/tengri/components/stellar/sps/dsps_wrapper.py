@@ -244,6 +244,36 @@ def load_ssp_data(filepath: str) -> SSPData:
         raise ImportError("h5py required for SSP loading: pip install h5py") from None
 
     import os
+
+    if not os.path.isfile(filepath):
+        raise FileNotFoundError(
+            f"SSP file not found: '{filepath}'. Pre-formatted grids are one "
+            "call away: tengri.download_ssp() fetches the default FSPS grid "
+            "to data/, and tengri.list_known_ssps() shows the alternatives "
+            "(BC03, BPASS, ProGeny, ...). Already have grids elsewhere? "
+            "Point TENGRI_DATA at that directory."
+        )
+
+    # wNE (with-Nebular-Emission) grids carry no machine-readable marker —
+    # the filename is the only signal (#1014). A wNE grid that retains its
+    # ionizing continuum passes every Q_H sanity check downstream while
+    # silently double-counting nebular emission under the Cue / CloudyGrid
+    # backends, so flag it at the one place the filename is known.
+    if "wne" in os.path.basename(filepath).lower():
+        import warnings
+
+        warnings.warn(
+            f"'{os.path.basename(filepath)}' looks like a wNE "
+            "(with-Nebular-Emission) SSP: nebular continuum and lines are "
+            "already baked into the templates at fixed logU/logZ_gas. Pair "
+            "it with the default baked-in nebular backend only — adding "
+            "neb={'type': 'cue'} or a CLOUDY grid on top double-counts "
+            "nebular emission.",
+            UserWarning,
+            stacklevel=2,
+        )
+
+    import os
     from pathlib import Path
 
     fp = Path(filepath)
@@ -445,7 +475,13 @@ def _synthesize_mass_remaining(
         )
 
     # surviving_mstar takes log10(age/yr): ssp_lg_age_gyr is log10(age/Gyr).
-    lg_age_yr = ssp_lg_age_gyr + 9.0
+    # Age-0 anchor templates (#1016): lg_age = -inf (bc03 stelib) makes the
+    # DSPS sigmoid chain emit NaN, and one NaN entry poisons every
+    # surviving-mass sum downstream (log_mstar = NaN) regardless of the
+    # anchor's weight. No star has died at age 0, so floor the age at
+    # 0.1 Myr where f_surv = 1 to DSPS's own fit accuracy; a no-op for
+    # grids whose youngest template is already >= 0.1 Myr.
+    lg_age_yr = jnp.maximum(ssp_lg_age_gyr + 9.0, 5.0)
     f_surv_age = surviving_mstar(lg_age_yr, **params)
     return jnp.broadcast_to(f_surv_age, (ssp_lgmet.shape[0], lg_age_yr.shape[0]))
 

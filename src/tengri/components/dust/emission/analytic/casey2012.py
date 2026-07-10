@@ -26,13 +26,15 @@ class Casey2012IRSEDComponent(EmissionPort):
 
     The implemented model uses the following convention::
 
-        S(ν) = N_pl * ν^α_mid * f(λ)         [mid-IR power law, f→1 at short λ]
-             + N_bb * ν^(3+β) / (exp(hν/kT) - 1) * (1 - f(λ))   [FIR MBB, 1-f→1 at long λ]
+        S_ν(λ) = (1 - exp(-(λ_0/λ)^β)) ν³ / (exp(hν/kT) - 1)   [graybody, λ_0 = 200 µm]
+               + S_gray(λ_c) (λ/λ_c)^α exp(-(λ/λ_c)²)           [mid-IR power law]
 
-    where the transition function f(λ) = 1 / (1 + (λ / λ_0)^2) smoothly joins them.
+    — Casey (2012) Eqs. 1-2, with the turnover λ_c(α, T) from Eqs. 11-12
+    and the power-law amplitude tied to the graybody at λ_c (#1004).
 
-    When ``optically_thin=True`` (static knob), the mid-IR power-law component
-    is zeroed, leaving only the modified blackbody.
+    When ``optically_thin=True`` (static knob), the graybody uses its
+    small-opacity limit (λ_0/λ)^β ν³/(exp(hν/kT) - 1); the mid-IR power
+    law is present in both variants.
 
     When ``redshift > 0``, the dust temperature is corrected for CMB heating
     (da Cunha et al. 2013) and the observed flux is reduced by the CMB contrast

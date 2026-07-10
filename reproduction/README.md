@@ -1,6 +1,6 @@
-# Reproduction studies
+# Physics reproduction studies
 
-Component-by-component reproductions of tengri against the reference
+Component-by-component physics reproductions: tengri against the reference
 SED-fitting codes the community already relies on. Each subfolder
 holds one comparison.
 
@@ -17,8 +17,7 @@ reproduction/
 Each comparison ships a notebook (`01_<code>.py`, jupytext percent
 format), thin code-specific driver modules under `_drivers/`, and the
 rendered figures. All six folders are complete; the Synthesizer
-notebook is under revision and temporarily withheld from the published
-docs. AGNFITTER-RX is the AGN-first member of the series — a
+notebook is kept out of the published docs for now. AGNFITTER-RX is the AGN-first member of the series — a
 radio-to-X-ray deep dive on the four accretion-disk and four torus
 libraries — and reads the external code's template libraries directly
 rather than running its fitter. The Synthesizer notebook focuses on the
@@ -34,6 +33,20 @@ helpers, figure naming, the full-SED capstone, rendering rules, and how
 the published copies under `docs/reproduction/` stay in sync with the
 sources here. Read it before adding a comparison or re-rendering an
 existing one.
+
+## Method
+
+Two companion guides cover what the contract deliberately leaves out —
+how to *use* these notebooks to find physics bugs, and how to bring a
+new reference engine in:
+
+- [Auditing physics parity](../docs/dev/reproduction-parity-audit.md) —
+  running both engines for real, decomposing a discrepancy to its
+  mechanism, the convention axes that masquerade as bugs, and what to do
+  once you have attributed one.
+- [Adding a comparison for a new code](../docs/dev/reproduction-new-comparison.md)
+  — finding an engine's real invocation surface (Python API, R, a binary
+  plus config file), matching templates, and verifying the unit contract.
 
 ## Running a notebook
 
