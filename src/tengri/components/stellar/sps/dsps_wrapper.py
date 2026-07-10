@@ -254,6 +254,25 @@ def load_ssp_data(filepath: str) -> SSPData:
             "Point TENGRI_DATA at that directory."
         )
 
+    # wNE (with-Nebular-Emission) grids carry no machine-readable marker —
+    # the filename is the only signal (#1014). A wNE grid that retains its
+    # ionizing continuum passes every Q_H sanity check downstream while
+    # silently double-counting nebular emission under the Cue / CloudyGrid
+    # backends, so flag it at the one place the filename is known.
+    if "wne" in os.path.basename(filepath).lower():
+        import warnings
+
+        warnings.warn(
+            f"'{os.path.basename(filepath)}' looks like a wNE "
+            "(with-Nebular-Emission) SSP: nebular continuum and lines are "
+            "already baked into the templates at fixed logU/logZ_gas. Pair "
+            "it with the default baked-in nebular backend only — adding "
+            "neb={'type': 'cue'} or a CLOUDY grid on top double-counts "
+            "nebular emission.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     import os
     from pathlib import Path
 

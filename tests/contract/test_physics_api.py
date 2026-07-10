@@ -357,6 +357,7 @@ class TestModelTree:
             "sfh_dpl_alpha": 1.2,
             "sfh_dpl_beta": 1.0,
             "sfh_dpl_tau_gyr": 4.0,
+            "sfh_dpl_age_gyr": 5.0,
             "sfh_dpl_log_total_mass": 0.9,
             "met_logzsol": -0.3,
             "dust_tau_bc": 1.0,

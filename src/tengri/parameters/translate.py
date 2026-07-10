@@ -598,10 +598,24 @@ def check_missing_free_params(params, spec, param_map=None):
     MissingParameterError
         If any free parameter of ``spec`` is absent from ``params`` under
         its public name, short-form alias, and internal name.
+
+    Notes
+    -----
+    Specs built by the flat ``Parameters(...)`` expert path auto-register
+    the full parameter universe of the AGN/Radio/X-ray/IGM component
+    families as non-Fixed distributions regardless of the selected
+    variant; their runners read those with per-variant defaults by
+    design. For such specs (no ``_group_provenance``), those families are
+    exempt from the missing check. Grammar-built specs
+    (``SEDModel.build``) register only what the user selected, so every
+    free parameter is deliberate and enforced.
     """
+    legacy_flat_spec = getattr(spec, "_group_provenance", None) is None
     missing = []
     for pub_name in spec.free_params:
         if pub_name in params:
+            continue
+        if legacy_flat_spec and pub_name.startswith(("agn_", "radio_", "xray_", "igm_")):
             continue
         if pub_name == "sfh_field_xi" and "psd_xi" in params:
             continue
