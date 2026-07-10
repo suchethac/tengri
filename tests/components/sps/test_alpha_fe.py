@@ -179,6 +179,9 @@ class TestAlphaFeForwardModel:
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
+            # #1021: pin the #514 dpl age anchor — silently defaulted before
+            # the #1015 missing-parameter guard made it a predict-time error.
+            sfh_dpl_age_gyr=Fixed(13.0),
             sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),
@@ -209,6 +212,7 @@ class TestAlphaFeForwardModel:
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
+            sfh_dpl_age_gyr=Fixed(13.0),  # must match model_with_alpha (bit-exact assert)
             sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),

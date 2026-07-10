@@ -109,7 +109,12 @@ def _refine_sfh_table_ages(ssp_ages_yr, factor: int = 16):
         Dense ascending age grid [yr], log-spaced over the SSP age span.
     """
     n = ssp_ages_yr.shape[0]
-    log_lo = jnp.log10(ssp_ages_yr[0])
+    # A leading age = 0 template (lg = -inf, e.g. BC03 stelib) would make
+    # log10(ages[0]) = -inf and collapse the whole grid to [0, ..., 0, agemax]
+    # (#1030) — span from the smallest POSITIVE template age instead. The
+    # [0, age_1] sliver is covered by _cic_parcels' lookback-0 extension.
+    lo_yr = jnp.min(jnp.where(ssp_ages_yr > 0.0, ssp_ages_yr, jnp.inf))
+    log_lo = jnp.log10(lo_yr)
     log_hi = jnp.log10(ssp_ages_yr[-1])
     return 10.0 ** jnp.linspace(log_lo, log_hi, (n - 1) * factor + 1)
 
