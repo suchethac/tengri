@@ -103,6 +103,18 @@ _FACILITY_FROM_PREFIX: dict[str, str] = {
 }
 
 
+def _unknown_filter_msg(name: str) -> str:
+    """Did-you-mean error message for an unrecognized filter name."""
+    import difflib
+
+    close = difflib.get_close_matches(name, sorted(FILTER_REGISTRY), n=3, cutoff=0.6)
+    hint = f" Did you mean {close}?" if close else ""
+    return (
+        f"Unknown filter '{name}'.{hint} tengri.list_filters() shows every "
+        "registered name; load_custom_filter() loads arbitrary curve files."
+    )
+
+
 def _infer_facility(name: str) -> str:
     """Infer facility from filter short name prefix."""
     for prefix, facility in _FACILITY_FROM_PREFIX.items():
@@ -223,7 +235,7 @@ def filter_info(name: str, *, cache_dir: str | None = None) -> dict:
 
     """
     if name not in FILTER_REGISTRY:
-        raise KeyError(f"Unknown filter '{name}'. Use list_available_filters() to see options.")
+        raise KeyError(_unknown_filter_msg(name))
     kwargs = {"cache_dir": cache_dir} if cache_dir is not None else {}
     fc = load_filter(name, **kwargs)
     wave_np = np.asarray(fc.wave)
@@ -255,6 +267,32 @@ def _save_filter(filepath: Path, wave: np.ndarray, trans: np.ndarray) -> None:
     np.savetxt(str(filepath), np.column_stack([wave, trans]), header=header, fmt="%.6e")
 
 
+def _sanitize_filter_curve(wave: np.ndarray, trans: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Sort, merge duplicate wavelengths, and clip negative transmission.
+
+    Published curves are imperfect: of the shipped SVO set,
+    HST_ACS_WFC_F814W carries 177 duplicated wavelength rows and the
+    Herschel SPIRE / Spitzer MIPS curves dip slightly negative
+    (instrumental ringing in the tabulation). Duplicates break the
+    ascending-grid assumption of every ``np.interp``/``searchsorted``
+    consumer downstream; negative transmission is unphysical in a
+    throughput integral. Duplicates are merged by averaging their
+    transmission values.
+    """
+    wave = np.asarray(wave, dtype=np.float64)
+    trans = np.asarray(trans, dtype=np.float64)
+    order = np.argsort(wave, kind="stable")
+    wave, trans = wave[order], trans[order]
+    if wave.size and (np.diff(wave) <= 0).any():
+        unique_wave, inverse = np.unique(wave, return_inverse=True)
+        summed = np.zeros_like(unique_wave)
+        counts = np.zeros_like(unique_wave)
+        np.add.at(summed, inverse, trans)
+        np.add.at(counts, inverse, 1.0)
+        wave, trans = unique_wave, summed / counts
+    return wave, np.maximum(trans, 0.0)
+
+
 def _load_filter_file(filepath: Path) -> tuple[np.ndarray, np.ndarray]:
     """Read and return wavelength and transmission columns from a text file."""
     data = np.loadtxt(str(filepath))
@@ -263,7 +301,7 @@ def _load_filter_file(filepath: Path) -> tuple[np.ndarray, np.ndarray]:
             f"Filter file {filepath} must have at least 2 columns "
             f"(wavelength, transmission). Got shape {data.shape}."
         )
-    return data[:, 0], data[:, 1]
+    return _sanitize_filter_curve(data[:, 0], data[:, 1])
 
 
 def _fetch_from_svo(svo_id: str) -> tuple[np.ndarray, np.ndarray]:
@@ -373,7 +411,7 @@ def download_filter(
     if filepath.exists():
         return _load_filter_file(filepath)
 
-    wave, trans = _fetch_from_svo(svo_id)
+    wave, trans = _sanitize_filter_curve(*_fetch_from_svo(svo_id))
 
     order = np.argsort(wave)
     wave = wave[order]
@@ -419,10 +457,7 @@ def load_filter(
 
     """
     if name not in FILTER_REGISTRY:
-        raise KeyError(
-            f"Unknown filter '{name}'. Use list_available_filters() to see "
-            f"valid names, or use load_custom_filter() for arbitrary files."
-        )
+        raise KeyError(_unknown_filter_msg(name))
 
     svo_id = FILTER_REGISTRY[name]
     wave, trans = download_filter(svo_id, cache_dir=cache_dir)

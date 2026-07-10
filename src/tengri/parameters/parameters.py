@@ -763,7 +763,10 @@ class Parameters:
         elif nebular:
             self.nebular_mode = "cloudy"
             if self.cloudy_grid_path is None:
-                self._raise_missing_grid_path()
+                default_grid = self._default_cloudy_grid()
+                if default_grid is None:
+                    self._raise_missing_grid_path()
+                self.cloudy_grid_path = default_grid
         elif nebular_ssp:
             self.nebular_mode = "ssp"
         else:
@@ -956,17 +959,37 @@ class Parameters:
         self.z_interp = kwargs.pop("z_interp", "linear")
 
     @staticmethod
+    def _default_cloudy_grid():
+        """Auto-resolve the default CLOUDY grid, mirroring the Cue-weights default.
+
+        Prefers ``data/cloudy_grid_mist.h5`` at the repo root — the grid
+        matching the default MIST/FSPS SSP family. Returns None when absent
+        (wheel installs, grid not generated) so the caller can raise the
+        listing error instead.
+        """
+        from pathlib import Path
+
+        candidate = Path(__file__).resolve().parents[3] / "data" / "cloudy_grid_mist.h5"
+        return str(candidate) if candidate.is_file() else None
+
+    @staticmethod
     def _raise_missing_grid_path():
         """Raise ValueError listing available CLOUDY grids."""
         from pathlib import Path
 
-        data_dir = Path(__file__).resolve().parents[1] / "data"
+        # Repo-level data/ — where convert_fsps_cloudy_grid.py writes grids.
+        # (An earlier revision listed the packaged src/tengri/data/ directory,
+        # which never contains CLOUDY grids, so the listing was always empty.)
+        data_dir = Path(__file__).resolve().parents[3] / "data"
         grids = sorted(data_dir.glob("cloudy_grid_*.h5"))
         grid_list = "\n".join(f"  {g.name}" for g in grids) if grids else "  (none found)"
         raise ValueError(
-            f"nebular=True requires cloudy_grid_path. "
+            f"The CLOUDY nebular backend needs a grid file. Pass one via "
+            f"neb={{'type': 'cloudy', 'grid': 'data/cloudy_grid_<iso>.h5'}} "
+            f"(or the flat kwarg cloudy_grid_path=...). "
             f"Available grids in {data_dir}/:\n{grid_list}\n"
-            f"Match the grid isochrone to your SSP for consistency."
+            f"Generate them with scripts/convert_fsps_cloudy_grid.py, and "
+            f"match the grid isochrone to your SSP for consistency."
         )
 
     @staticmethod

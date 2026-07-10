@@ -157,13 +157,11 @@ def _default_fixed_value(param_name: str, registry_default: Distribution) -> flo
     # ``UserWarning`` so it shows up by default; do not silence it without
     # adding the default at the declaration site.
     warnings.warn(
-        f"Parameter {param_name!r} was marked FIXED via the '*': FIXED "
-        f"wildcard but its registry default carries no explicit "
-        f"``default=``. Falling back to the prior midpoint "
-        f"({registry_default.unstandardize(0.0)!r}); the contract test "
-        f"``tests/contract/test_param_defaults.py`` should be failing in CI "
-        f"to flag this. Fix: set ``default=<physical_value>`` at the "
-        f"declaration site (e.g. ``Uniform(0, 5, default=2.0)``).",
+        f"{param_name!r} has no curated default, so '*': FIXED pins it at its "
+        f"prior midpoint ({float(registry_default.unstandardize(0.0)):.4g}) — "
+        f"an arbitrary rather than physically motivated value. Pass an "
+        f"explicit value for it in the group dict to silence this, or leave "
+        f"it FREE. (Curating registry defaults is tracked in #1007.)",
         UserWarning,
         stacklevel=3,
     )
@@ -913,6 +911,12 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         return
 
     valid = _valid_sfh_types()
+    if not isinstance(sfh_type, (str, list)):
+        raise TypeError(
+            f"sfh 'type' must be a string (or a list of strings for a "
+            f"composition), got {type(sfh_type).__name__}: {sfh_type!r}. "
+            f"Example: sfh={{'type': 'delayed', '*': FIXED}}."
+        )
     if isinstance(sfh_type, list):
         for type_name in sfh_type:
             if type_name not in valid:
@@ -1137,6 +1141,11 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
             result["cue_full_catalog"] = True
     elif neb_type == "cloudy":
         result["nebular"] = True
+        # Optional explicit grid; without it Parameters auto-resolves
+        # data/cloudy_grid_mist.h5 (matching the default MIST/FSPS SSP
+        # family) and raises with the available-grid listing otherwise.
+        if "grid" in neb_dict:
+            result["cloudy_grid_path"] = str(neb_dict["grid"])
     elif neb_type == "cb19":
         result["nebular"] = "cb19"
 
@@ -1441,7 +1450,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
         }
     ),
     "dust.emission": frozenset({"type", "*"}),
-    "neb": frozenset({"type", "*", "full_catalog"}),
+    "neb": frozenset({"type", "*", "full_catalog", "grid"}),
     "shock": frozenset({"type", "*", "norm", "abundance", "component"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*"}),
