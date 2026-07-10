@@ -18,6 +18,13 @@ from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform
 
 # ── Skip if SSP data not available ────────────────────────────────
+#: The value the forward used to substitute for a free ``sfh_dpl_age_gyr`` before
+#: the missing-parameter guard landed. Pinning it keeps these specs fully Fixed,
+#: so ``predict_*({})`` stays valid and the SEDs are unchanged (#1021).
+_DPL_AGE_DEFAULT = float(
+    Parameters(mean_sfh_type="dpl").get_distribution("sfh_dpl_age_gyr").default
+)
+
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 _SSP_EXISTS = _SSP_FILE.is_file()
@@ -514,6 +521,7 @@ class TestDustEmissionForwardModel:
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
             sfh_dpl_log_total_mass=Fixed(1.0),
+            sfh_dpl_age_gyr=Fixed(_DPL_AGE_DEFAULT),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
@@ -530,6 +538,7 @@ class TestDustEmissionForwardModel:
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
             sfh_dpl_log_total_mass=Fixed(1.0),
+            sfh_dpl_age_gyr=Fixed(_DPL_AGE_DEFAULT),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
@@ -552,6 +561,7 @@ class TestDustEmissionForwardModel:
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
             sfh_dpl_log_total_mass=Fixed(1.0),
+            sfh_dpl_age_gyr=Fixed(_DPL_AGE_DEFAULT),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),

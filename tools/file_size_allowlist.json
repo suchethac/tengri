@@ -45,5 +45,6 @@
   "src/tengri/utils/sed_quantities.py": 837,
   "src/tengri/components/agn/qsogen.py": 826,
   "src/tengri/facade.py": 822,
-  "src/tengri/observation/spectroscopy.py": 807
+  "src/tengri/observation/spectroscopy.py": 807,
+  "src/tengri/inference/backends/mcmc/_shared.py": 860
 }

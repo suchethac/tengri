@@ -50,6 +50,9 @@ def model_and_mock(ssp_data_wne, sdss_filters):
         "sfh_dpl_beta": 1.0,
         "sfh_dpl_tau_gyr": 4.0,
         "sfh_dpl_log_total_mass": 0.9,  # log10(8 Msun/yr)
+        # free (it carries a prior) but never given a truth value — the forward
+        # used to substitute the spec default silently. Say it out loud (#1021).
+        "sfh_dpl_age_gyr": float(spec.get_distribution("sfh_dpl_age_gyr").default),
         "met_logzsol": -0.3,
         "dust_tau_bc": 1.0,
         "dust_tau_diff": 0.3,
