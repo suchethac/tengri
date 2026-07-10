@@ -895,7 +895,7 @@ for _c, _name in _lines:
 # the line physics: at the matched q it is a modest Levesque-2010 vs
 # Cloudy-17 difference, not the 50x q-mismatch artifact of the default Z2q.
 if _L["Hα"][0] > 0 and _L["Hβ"][0] > 0:
-    print("§8 line ratios (q-matched, normalisation-free):")
+    print("§8 line ratios (q-matched, normalization-free):")
     print(
         f"    [O III]/Hβ: ProSpect {_L['[O III]'][0] / _L['Hβ'][0]:.2f}, "
         f"tengri {_L['[O III]'][1] / _L['Hβ'][1]:.2f}"
@@ -1167,7 +1167,7 @@ else:
     norm = p16 = p84 = float("nan")
 print(
     f"full-SED head-to-head tengri/ProSpect optical (1000–10000 Å): "
-    f"normalisation {norm:.2f}×, 16–84% spread {p16:.2f}–{p84:.2f}×"
+    f"normalization {norm:.2f}×, 16–84% spread {p16:.2f}–{p84:.2f}×"
 )
 _assert_comparable(L_ext, L_t_full, name="full-SED head-to-head")
 

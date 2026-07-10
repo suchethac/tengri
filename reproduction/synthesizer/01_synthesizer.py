@@ -917,6 +917,14 @@ save_fig("synthesizer_09b_disc_transmitted.png")
 # this downloadable *test* grid the `/lines/*` arrays are a scrambled placeholder —
 # not parallel to `/lines/id` (off by up to 22660 Å) and inconsistent with
 # `/spectra/nebular` — so the reprocessed `/spectra` path reproduces the physics.
+#
+# Reference-side caveat: the Synthesizer-side NLR spectrum depends on the
+# interpreter's hash seed — `UnifiedAGN.get_spectra` assembles its
+# emission-model tree in dict/set order, and the [O III]/Hβ peak ratio below
+# lands at 20.9 (`PYTHONHASHSEED=0`) or 15.6 (most other seeds) while tengri
+# stays at 12.8. Renders pin `PYTHONHASHSEED=0` (see `reproduction/CONTRACT.md`);
+# both orderings are [O III]-dominant, so the panel's conclusion does not
+# depend on the seed.
 
 # %%
 w_nlr_s, L_nlr_s = agn["nlr"]
