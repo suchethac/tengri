@@ -264,8 +264,11 @@ class TestThemisLoading:
     """Verify THEMIS template structure."""
 
     def test_keys(self, themis_data):
-        expected = {"wavelength_aa", "umin_grid", "qhac_grid", "single_u", "powerlaw"}
-        assert set(themis_data.keys()) == expected
+        # The core diffuse-ISM grid, plus the variable-alpha powerlaw axis added
+        # by scripts/build_themis_alpha_axis.py (``alpha_grid`` +
+        # ``powerlaw_alpha_ratio``, surfaced via the public ``has_alpha_grid``).
+        required = {"wavelength_aa", "umin_grid", "qhac_grid", "single_u", "powerlaw"}
+        assert required <= set(themis_data.keys())
 
     def test_wavelength_ascending(self, themis_data):
         wav = themis_data["wavelength_aa"]

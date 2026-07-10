@@ -350,6 +350,11 @@ class TestTabularSFHRouting:
             sfh_delayed_tau_gyr=2.0,
             sfh_delayed_age_gyr=8.0,
             met_logzsol=-0.3,
+            # Fix dust to the off-state so the model has no free parameters: the
+            # table-key rejection below must be what raises, not the missing-
+            # parameter guard fielding an unset dust_tau_bc/dust_tau_diff.
+            dust_tau_bc=0.0,
+            dust_tau_diff=0.0,
             redshift=0.1,
         )
         m = SEDModel(spec, ssp_data, filters=filters)
