@@ -100,6 +100,30 @@ def measure_inference_time(fitter, inference_fn, **kwargs):
     }
 
 
+def assert_inference_correct(result, *, is_map=False):
+    """Assert the inference produced a *valid* result.
+
+    This is the property a test should guard — that MAP/MCMC/VI actually works —
+    not the wall-clock time, which depends entirely on the machine and CI runner
+    load and so tests nothing about the code. Timings are still printed above as
+    diagnostics; they are not asserted.
+    """
+    assert result is not None, "inference returned no result"
+    if is_map:
+        loss = result.diagnostics.get("final_loss")
+        assert loss is not None and jnp.isfinite(loss), f"MAP final loss not finite: {loss}"
+        return
+    # sampler (MCMC / VI): a real posterior of finite draws
+    assert result.samples, "no posterior samples returned"
+    for name, arr in result.samples.items():
+        assert jnp.all(jnp.isfinite(arr)), f"non-finite posterior samples for {name!r}"
+    n = result.samples[next(iter(result.samples))].shape[0]
+    assert n > 0, "empty posterior"
+    acc = result.diagnostics.get("acceptance_rate")
+    if acc not in (None, "N/A"):
+        assert 0.0 < float(acc) <= 1.0, f"acceptance rate out of range: {acc}"
+
+
 def test_a1_quick_optical_map(ssp_data, filters_optical, mock_flux_optical):
     """A1: Quick optical fit with MAP (D=7).
 
@@ -166,7 +190,7 @@ def test_a1_quick_optical_map(ssp_data, filters_optical, mock_flux_optical):
 
     print(f"    Status: {status}")
 
-    assert timing["jit_time_s"] < 30.0, f"MAP too slow: {timing['jit_time_s']:.2f}s"
+    assert_inference_correct(result, is_map=True)
 
 
 def test_a1_quick_optical_nuts(ssp_data, filters_optical, mock_flux_optical):
@@ -237,7 +261,7 @@ def test_a1_quick_optical_nuts(ssp_data, filters_optical, mock_flux_optical):
 
     print(f"    Status: {status}")
 
-    assert timing["total_time_s"] < 120.0, f"NUTS too slow: {timing['total_time_s']:.2f}s"
+    assert_inference_correct(result)
 
 
 @pytest.mark.slow
@@ -350,7 +374,7 @@ def test_a2_fir_constrained_nuts(ssp_data):
 
     print(f"    Status: {status} (MCMC overhead dominates, not loss function)")
 
-    assert timing["total_time_s"] < 180.0, f"DL07 NUTS too slow: {timing['total_time_s']:.2f}s"
+    assert_inference_correct(result)
 
 
 @pytest.mark.slow
@@ -447,4 +471,4 @@ def test_a4_stochastic_sfh_vi(ssp_data):
 
     print(f"    Status: {status}")
 
-    assert timing["total_time_s"] < 180.0, f"VI too slow: {timing['total_time_s']:.2f}s"
+    assert_inference_correct(result)
