@@ -108,11 +108,12 @@ def test_apply_unsupported_sfh_model_raises():
         ssp_lg_age_gyr=jnp.array([0.0]),
         ssp_lgmet=jnp.array([-2.0]),
     )
-    # 'table' is registered as an SFH_REGISTRY entry (user-supplied
-    # table input) but isn't a parametric mode and has not been pinned
-    # by an equivalence test — the component refuses to dispatch.
+    # 'top_hat' is registered (UNVALIDATED_SFH_TYPES) but has not been
+    # pinned by an orchestrator-vs-legacy equivalence test — the component
+    # refuses to dispatch. ('table' was the probe here until #996 wired the
+    # runtime tabular SFH; it is now supported and no longer raises.)
     comp = StellarSEDComponent(
-        config=StellarSEDComponentConfig(sfh_model="table"),
+        config=StellarSEDComponentConfig(sfh_model="top_hat"),
         ssp_data=fake_ssp,
     )
     state = ForwardState(wave=fake_ssp.ssp_wave)
