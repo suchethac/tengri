@@ -107,7 +107,7 @@ Good titles:
 
 Copy from:
 
-- Sweep template: `examples/sfh/plot_dpl_alpha_sweep.py`
+- Sweep template: `examples/sfh/plot_dexp_tau_sweep.py`
 - Fit template: `examples/quickstart/plot_first_fit.py`
 
 Both have been manually rewritten to the bar this file defines.

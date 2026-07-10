@@ -317,6 +317,11 @@ def _inject_missing_image_directives(app, *_args, **_kwargs):
     For every ``plot_*.rst`` that lacks ``.. image::`` but DOES have a
     matching image on disk, inject a standard sphinx-gallery image
     block right after the section title underline.
+
+    Executed pages carry ``.. image-sg::`` (not ``.. image::``), so the
+    guard must accept either directive — matching only the plain form
+    double-injected a second figure into every executed page (the
+    2026-07 double-figure bug).
     """
     from pathlib import Path
 
@@ -326,7 +331,7 @@ def _inject_missing_image_directives(app, *_args, **_kwargs):
     fixed = 0
     for rst in auto.glob("*/plot_*.rst"):
         text = rst.read_text()
-        if ".. image::" in text:
+        if ".. image::" in text or ".. image-sg::" in text:
             continue
         stem = rst.stem
         img = f"images/sphx_glr_{stem}_001.png"
