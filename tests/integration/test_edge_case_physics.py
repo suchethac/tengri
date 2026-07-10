@@ -236,7 +236,7 @@ class TestHighBurstiness:
 class TestMetallicityExtremes:
     """SED at metallicity grid boundaries should be physical."""
 
-    def test_low_metallicity_bluer(self, ssp_data, filters):
+    def test_low_metallicity_bluer(self, real_ssp_only, ssp_data, filters):
         """Sub-solar metallicity should produce bluer SED than solar."""
         model_lo, params_lo = _make_model(ssp_data, filters, met_logzsol=-1.5)
         model_sol, params_sol = _make_model(ssp_data, filters, met_logzsol=0.0)
@@ -246,7 +246,7 @@ class TestMetallicityExtremes:
 
         assert uv_lo < uv_sol, f"Low-Z U-V={uv_lo:.2f} should be bluer than solar U-V={uv_sol:.2f}"
 
-    def test_high_metallicity_redder(self, ssp_data, filters):
+    def test_high_metallicity_redder(self, real_ssp_only, ssp_data, filters):
         """Super-solar metallicity should produce redder SED than solar."""
         model_sol, params_sol = _make_model(ssp_data, filters, met_logzsol=0.0)
         model_hi, params_hi = _make_model(ssp_data, filters, met_logzsol=0.2)

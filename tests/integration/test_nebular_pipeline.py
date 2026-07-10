@@ -47,14 +47,21 @@ def test_nebular_does_not_modify_sed_intrinsic():
 
 @pytest.mark.unit
 def test_nebular_publishes_sed_keys_for_baked_in():
-    """``sed_nebular`` and ``sed_shock`` are always published (zeros for BakedIn)."""
+    """A photoionized/BakedIn nebular publishes ``sed_nebular`` (zeros for BakedIn).
+
+    It deliberately does NOT publish ``sed_shock``: since #851 shock emission is a
+    separate composable :class:`ShockNebular` component that owns that key, and
+    declaring it on the photoionized backend too would trip the duplicate-publisher
+    guard. Consumers read it defensively as zeros via ``derived.get("sed_shock", …)``
+    (the positive path — a shock component actually publishing it — is covered in
+    tests/contract/test_shock_composition.py).
+    """
     wave = jnp.linspace(1000.0, 10000.0, 32)
     state = ForwardState(wave=wave)
     out = NebularSEDComponent().apply(state, {"redshift": 0.0})
     assert "sed_nebular" in out.derived
-    assert "sed_shock" in out.derived
     assert jnp.all(out.derived["sed_nebular"] == 0.0)
-    assert jnp.all(out.derived["sed_shock"] == 0.0)
+    assert "sed_shock" not in out.derived  # owned by ShockNebular (#851)
 
 
 @pytest.mark.unit
@@ -86,9 +93,11 @@ def test_nebular_in_orchestrator_chain():
         params,
     )
 
-    # All three components must have run successfully.
+    # All three components must have run successfully. ``sed_shock`` is NOT among
+    # the keys: it is owned by the composable ShockNebular component (#851), not the
+    # photoionized nebular in this chain; consumers default to zeros via ``.get``.
     assert "sed_nebular" in final.derived
-    assert "sed_shock" in final.derived
+    assert "sed_shock" not in final.derived
     assert "sed_radio" in final.derived
     assert final.sed_attenuated is not None
 

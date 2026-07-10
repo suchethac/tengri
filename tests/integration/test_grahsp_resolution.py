@@ -20,7 +20,16 @@ import pytest
 
 from tengri import Parameters
 from tengri.components.agn import resolve_agn_model
+from tengri.components.agn.grahsp.templates import DEFAULT_TEMPLATE_PATH
 from tengri.parameters.priors import Fixed, LogUniform, Uniform
+
+# Registration / param-spec tests below need no template data; the two that
+# actually evaluate the GRAHSP forward model do, and the bundle is a build
+# artifact CI cannot regenerate (needs upstream GRAHSP source). Gate only those.
+_needs_grahsp = pytest.mark.skipif(
+    not DEFAULT_TEMPLATE_PATH.exists(),
+    reason="GRAHSP template bundle not found; run tools/build_grahsp_hdf5.py",
+)
 
 
 def test_agn_models_contains_grahsp():
@@ -32,6 +41,7 @@ def test_agn_models_contains_grahsp():
     assert callable(fn)
 
 
+@_needs_grahsp
 def test_resolve_agn_model_returns_callable():
     fn = resolve_agn_model("grahsp")
     out = fn(jnp.logspace(2, 6, 200), agn_log_lbol=45.0, agn_frac=1.0)
@@ -80,6 +90,7 @@ def test_parameters_rejects_unknown_grahsp_param():
         )
 
 
+@_needs_grahsp
 def test_grahsp_params_flow_through_dispatch():
     """Forwarded GRAHSP kwargs must reach the registered grahsp() function.
 

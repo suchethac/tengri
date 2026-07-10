@@ -32,6 +32,7 @@ function identity as part of the compilation cache key.
 
 from __future__ import annotations
 
+import contextlib
 import functools
 
 import jax
@@ -74,6 +75,52 @@ def _get_ghmc_kernel():
     import blackjax.mcmc.ghmc
 
     return blackjax.mcmc.ghmc.build_kernel()
+
+
+#: ELBO draws used by Pathfinder to pick the best Gaussian along the L-BFGS path,
+#: when Pathfinder seeds the NUTS warmup. BlackJAX's ``pathfinder_adaptation`` calls
+#: ``vi.pathfinder.approximate(key, logdensity, position)`` with no ``num_samples``,
+#: so it silently takes the library default of 200. Each draw is a full forward-model
+#: evaluation, and 200 of them vmapped drove a 7-parameter photometry fit past 25 GB
+#: (OOM-killing the slow test tier). 25 matches Stan's ``num_elbo_draws``; path
+#: selection is a low-precision decision, so the draws buy accuracy nowhere.
+_PATHFINDER_ELBO_DRAWS = 25
+
+
+@contextlib.contextmanager
+def _bounded_pathfinder_elbo_draws(n_draws: int | None = None):
+    """Cap the ELBO draws BlackJAX's ``pathfinder_adaptation`` uses internally.
+
+    ``pathfinder_adaptation`` exposes no knob for them (its ``**extra_parameters``
+    are forwarded to the sampling algorithm, not to ``approximate``), so the only
+    seam is the module attribute it resolves at call time. Rebinding it for the
+    duration of the warmup is scoped, restored on any exit, and touches nothing
+    else -- ``approximate`` is invoked once, at trace time, from a single thread.
+
+    Rebind ``blackjax.vi.pathfinder`` (the **module**), which is what
+    ``pathfinder_adaptation`` resolves. ``blackjax.pathfinder`` is a separate
+    ``GeneratePathfinderAPI`` instance holding the same function object; patching that
+    one instead would be a silent no-op here.
+
+    ``n_draws=None`` reads :data:`_PATHFINDER_ELBO_DRAWS` **at call time**, not at import,
+    so a test may lower it by patching the module attribute.
+
+    Remove this when BlackJAX lets the caller pass ``num_samples`` through.
+    """
+    from blackjax import vi
+
+    draws = _PATHFINDER_ELBO_DRAWS if n_draws is None else n_draws
+    original = vi.pathfinder.approximate
+
+    @functools.wraps(original)
+    def _capped(rng_key, logdensity_fn, initial_position, num_samples=draws, **kwargs):
+        return original(rng_key, logdensity_fn, initial_position, num_samples, **kwargs)
+
+    vi.pathfinder.approximate = _capped
+    try:
+        yield
+    finally:
+        vi.pathfinder.approximate = original
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +201,13 @@ def _nuts_full_scan(
     def ld_1arg(pos):
         return logdensity_fn_2arg(pos, data_args)
 
+    # blackjax retains every warmup step's adaptation info by default, and warns
+    # that this "can result in excessive memory usage if the information is
+    # unused". We discard it below, so keep nothing (#1028).
+    from blackjax.adaptation.base import get_filter_adapt_info_fn
+
+    _drop_adapt_info = get_filter_adapt_info_fn()
+
     if use_pathfinder_warmup:
         from blackjax.adaptation.pathfinder_adaptation import pathfinder_adaptation
 
@@ -161,15 +215,19 @@ def _nuts_full_scan(
             blackjax.nuts,
             ld_1arg,
             target_acceptance_rate=target_accept_rate,
+            adaptation_info_fn=_drop_adapt_info,
         )
+        with _bounded_pathfinder_elbo_draws():
+            (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
     else:
         warmup = blackjax.window_adaptation(
             blackjax.nuts,
             ld_1arg,
             is_mass_matrix_diagonal=not use_dense,
             target_acceptance_rate=target_accept_rate,
+            adaptation_info_fn=_drop_adapt_info,
         )
-    (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+        (state, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
     step_size = parameters["step_size"]
     inv_mass_matrix = parameters["inverse_mass_matrix"]
 

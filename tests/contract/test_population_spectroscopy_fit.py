@@ -12,9 +12,12 @@ Regression for the two gaps that broke the canonical
   with the age grid (``sub got incompatible shapes for broadcasting: (12,), (3,)``).
 
 These run on the synthetic wide SSP (no ``data/ssp_*.h5`` needed) so they guard
-the canonical spectroscopy-population path on CI. The end-to-end native-VI fit
-acceptance lives in the slow tier
-(``tests/inference/test_population_spectroscopy_vi.py``).
+the canonical spectroscopy-population path on CI. The slow-tier end-to-end
+native-VI acceptance (``tests/inference/test_population_spectroscopy_vi.py``)
+was removed 2026-07-10: its assertions were shape/topology-only (no truth
+recovery at ``n_iterations=2``) at ~35 min of XLA compile per nightly run.
+A truth-recovery version would need converged fits and belongs in a
+deliberately-budgeted acceptance suite, not here.
 """
 
 from __future__ import annotations

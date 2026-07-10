@@ -143,6 +143,7 @@ def test_four_adapter_chain_runs_end_to_end():
         "xray_gamma_agn": 1.8,
         "xray_E_cut": 300.0,
         "xray_delta_alpha_ox": -1.4,
+        "xray_log_nh": 21.0,  # AGN corona photoelectric absorption (spec default)
         # igm
         "igm_z_mid": 7.0,
         "igm_dz": 0.5,
