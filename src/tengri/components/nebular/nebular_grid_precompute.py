@@ -63,14 +63,21 @@ _DEFAULT_RANGE = {
     "neb_logZ_gas": (-1.0, 0.5),
 }
 
-#: Per-axis resolution matched to the physics (#950 convergence study). The gas
-#: conditions (logU, logZ_gas) drive smooth per-Q_H line changes and converge at
-#: ~16 points (< 0.5 %). ``met_logzsol`` sets the ionizing-spectrum SHAPE, and the
-#: [OIII]-vs-metallicity emissivity **peaks at intermediate Z** — a sharp,
-#: non-monotone feature that needs ~2x the resolution (~32 points, < 0.1 %; 7-15 %
-#: at 16). So a scalar ``n_grid`` is auto-scaled by this factor ON THE MET AXIS,
-#: putting grid density where the physics is sharp. Recombination lines (Balmer)
-#: are shape-independent (∝ Q_H) and stay < 1 % at any resolution.
+#: Extra resolution on the ``met_logzsol`` axis relative to the smooth gas axes.
+#:
+#: .. warning::
+#:    **The met axis does NOT converge, and denser grids cannot fix it.** The exact
+#:    Cue forward is *discontinuous* in ``met_logzsol``: ``cue.py`` selects the
+#:    ionizing-spectrum shape from a single ``argmax``-chosen age bin, so as the
+#:    metallicity varies the dominant bin flips and the collisionally-excited lines
+#:    step (~33 % in [OIII], measured at met ~ -1.0955 on the FSPS/MILES grid).
+#:    No interpolant can cross a jump, so a systematic dense sweep shows [OIII]
+#:    worst-case error plateauing at ~10-23 % regardless of ``n_grid``.
+#:    Recombination lines (Balmer, ∝ Q_H) are shape-insensitive and DO converge.
+#:    The real fix is a Q_H-weighted ionizing-spectrum shape in the Cue backend
+#:    (continuous + differentiable); until then this factor only buys a modest
+#:    reduction away from the flips. **Validate with a dense sweep inside the grid
+#:    range — random draws under-sample the jump and give ~100x optimistic bounds.**
 _MET_AXIS_DENSITY_FACTOR = 2
 
 
@@ -169,13 +176,14 @@ def precompute_nebular_grid(
     wavelengths : array_like, shape (n_lines,)
         Rest-frame vacuum target line wavelengths [Angstrom].
     n_grid : int or dict, default 16
-        Grid points per free axis, matched to the physics. As a scalar it resolves
-        the smooth gas axes (``neb_logU`` / ``neb_logZ_gas``) at ``n_grid`` and
-        auto-densifies the sharp ``met_logzsol`` axis by
-        :data:`_MET_AXIS_DENSITY_FACTOR` (2x) — the [OIII]-vs-metallicity peak needs
-        ~32 points where the gas axes need ~16 (#950 convergence study). Pass a
-        dict ``{axis_name: n}`` to set each axis explicitly (unspecified axes
-        default to 16). At the default, strong DESI lines reconstruct to < 0.5 %.
+        Grid points per free axis. As a scalar it resolves the smooth gas axes
+        (``neb_logU`` / ``neb_logZ_gas``) at ``n_grid`` and gives the
+        ``met_logzsol`` axis :data:`_MET_AXIS_DENSITY_FACTOR` x that. Pass a dict
+        ``{axis_name: n}`` to set each axis explicitly (unspecified axes default to
+        16). The gas axes converge with resolution; the met axis does **not** —
+        see the :data:`_MET_AXIS_DENSITY_FACTOR` warning (the exact forward is
+        discontinuous in met). Validate any accuracy claim with a dense sweep
+        strictly inside the grid range, never with random draws.
     ranges : dict, optional
         Override ``{param: (lo, hi)}`` grid bounds. Defaults to each free param's
         prior support (else :data:`_DEFAULT_RANGE`).
@@ -205,20 +213,23 @@ def precompute_nebular_grid(
             return int(n_grid.get(name, 16))
         return int(n_grid * _MET_AXIS_DENSITY_FACTOR) if name == "met_logzsol" else int(n_grid)
 
-    # Loud guard: warn only if the met axis is STILL under-resolved after the
-    # physics-driven densification. The [OIII]-vs-stellar-metallicity emissivity
-    # peaks at intermediate Z — a sharp, non-monotone feature needing >=32 points
-    # (7-15 % forbidden-line error at <=16, < 0.1 % at >=32; #950 study). Under the
-    # default factor-2 scaling a scalar n_grid >= 16 already resolves it (= 32), so
-    # this fires only for a coarse explicit override. Balmer lines (recombination,
-    # proportional to Q_H) are shape-independent and stay < 1 % at any resolution.
-    if "met_logzsol" in axis_names and _axis_n("met_logzsol") < 32:
+    # Loud guard: a free met axis cannot be reconstructed reliably for the
+    # collisionally-excited lines, at ANY resolution, because the exact Cue forward
+    # is discontinuous in met (argmax age-bin selection of the ionizing-spectrum
+    # shape — see _MET_AXIS_DENSITY_FACTOR). Warn unconditionally; denser grids only
+    # shrink the error away from the jumps, never across them.
+    if "met_logzsol" in axis_names:
         warnings.warn(
-            f"nebular fast grid: the met_logzsol axis is resolved at only "
-            f"{_axis_n('met_logzsol')} points, but the [OIII]-vs-metallicity peak "
-            f"needs >= 32 (7-15 % forbidden-line error below that, non-monotone; #950 "
-            f"study). Raise n_grid (a scalar auto-densifies met 2x) or pass "
-            f"n_grid={{'met_logzsol': 32, ...}}. Balmer lines stay < 1 % regardless.",
+            f"nebular fast grid: met_logzsol is a FREE axis (resolved at "
+            f"{_axis_n('met_logzsol')} points). The exact Cue forward is "
+            f"DISCONTINUOUS in met — it picks the ionizing-spectrum shape from a "
+            f"single argmax-selected age bin, so [OIII] steps ~33 % when the "
+            f"dominant bin flips. No grid can interpolate across that: a dense "
+            f"systematic sweep shows [OIII] worst-case ~10-23 % at any n_grid "
+            f"(random-draw checks under-sample the jump and look ~100x better). "
+            f"Balmer lines (recombination, proportional to Q_H) are shape-insensitive "
+            f"and DO converge. Fix met_logzsol, restrict to Balmer, or use the exact "
+            f"path until the Cue ionizing-shape weighting is corrected.",
             stacklevel=2,
         )
 
