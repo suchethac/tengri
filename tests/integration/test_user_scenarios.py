@@ -562,7 +562,7 @@ class TestStandardGalaxyWorkflows:
         Expected: <15s JIT, ~20-40s inference
         """
         params = Parameters(
-            mean_sfh_type=["dense_basis", "field"],
+            mean_sfh_type=["dense_basis_pure", "field"],
             sfh_dbp_log_total_mass=Uniform(9.0, 12.0),
             sfh_dbp_tx_frac_0=Uniform(0.05, 0.95),
             sfh_dbp_tx_frac_1=Uniform(0.05, 0.95),
@@ -911,7 +911,7 @@ class TestInferenceStressTests:
         Check: Acceptance rate > 0.7, n_divergent < 5%
         """
         params = Parameters(
-            mean_sfh_type=["dense_basis", "field"],
+            mean_sfh_type=["dense_basis_pure", "field"],
             sfh_dbp_log_total_mass=Uniform(9.0, 12.0),
             sfh_dbp_tx_frac_0=Uniform(0.05, 0.95),
             sfh_dbp_tx_frac_1=Uniform(0.05, 0.95),

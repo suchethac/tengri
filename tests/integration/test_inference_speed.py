@@ -366,7 +366,7 @@ def test_a4_stochastic_sfh_vi(ssp_data):
 
     # SEDModel: dense_basis+field (4 DB + 2 PSD params)
     params = Parameters(
-        mean_sfh_type=["dense_basis", "field"],
+        mean_sfh_type=["dense_basis_pure", "field"],
         sfh_dbp_log_total_mass=Uniform(9.0, 11.5),
         sfh_dbp_tx_frac_0=Uniform(0.05, 0.95),
         sfh_dbp_tx_frac_1=Uniform(0.05, 0.95),
