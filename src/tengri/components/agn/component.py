@@ -38,6 +38,7 @@ import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.unified import resolve_agn_model
+from tengri.components.xray.xray import COS_INC_REF_30DEG as _XRAY_COS_INC_REF_30DEG
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -173,6 +174,12 @@ class AGNSEDComponent:
                 "L_4400_intrinsic",
                 "erg/s/Hz",
                 "AGN intrinsic disc L_nu at 4400 A (un-reddened); drives radio loudness",
+            ),
+            DerivedKey(
+                "agn_cos_inc",
+                "dimensionless",
+                "AGN cos(i) — the X-ray corona tilts its Yang+2022 anisotropy "
+                "to the same sightline (X-CIGALE yang20.py cosi; #980)",
             ),
         )
 
@@ -383,6 +390,21 @@ class AGNSEDComponent:
             sed_agn=L_agn,
             L_2500_intrinsic=L_2500_intrinsic,
             L_4400_intrinsic=L_4400_intrinsic,
+            # X-CIGALE tilts the corona with the AGN viewing angle
+            # (yang20.py: cosi = cos(agn.i) for SKIRTOR, sin(psy) for
+            # Fritz); publish cos(i) so the X-ray block shares this
+            # sightline at every inclination, not only the 30° anchor
+            # (#980). The shared ``agn_cos_inc`` knob wins; the
+            # AGNfitter-style SKIRTOR block carries degrees instead;
+            # models with neither publish the Yang+2020 anchor
+            # (anisotropy factor exactly 1).
+            agn_cos_inc=(
+                jnp.asarray(params["agn_cos_inc"])
+                if "agn_cos_inc" in params
+                else jnp.cos(jnp.deg2rad(jnp.asarray(params["agn_incl_skirtor"])))
+                if "agn_incl_skirtor" in params
+                else jnp.asarray(_XRAY_COS_INC_REF_30DEG)
+            ),
         )
         if (
             self._state is not None

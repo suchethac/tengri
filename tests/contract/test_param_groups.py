@@ -231,14 +231,6 @@ class TestTypeMapping:
         assert params.nebular_mode == "cue"
         assert "neb_logU" in params.all_params
 
-    def test_neb_cloudy(self):
-        """neb={'type': 'cloudy'} requires cloudy_grid_path (deferred test)."""
-        # Note: nebular=True requires cloudy_grid_path, which we don't provide
-        # in this test environment. The parse_groups passes the request to
-        # Parameters, which validates it. We skip this test as expected behavior.
-        # Real usage would be: neb={'type': 'cloudy'}, cloudy_grid_path='...'
-        pass
-
     def test_neb_ssp(self):
         """neb={'type': 'ssp'} should set nebular_ssp=True."""
         params = parse_groups(

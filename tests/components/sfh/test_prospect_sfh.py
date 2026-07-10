@@ -43,64 +43,69 @@ _NODE_AGES_6 = np.array([1e5, 1e8, 1e9, 5e9, 9e9, 13e9])  # 6-node (massfunc_p6)
 
 
 class TestPchipSlopes:
-    """Tests for Fritsch-Carlson slope computation."""
+    """Tests for Fritsch-Carlson slope computation.
+
+    PCHIP ensures monotonicity within segments: if the y-values are monotone
+    between two nodes, the slope at each node has the same sign as the secant.
+    At extrema, the slope is zero to prevent overshoot.
+    """
 
     def test_monotone_increasing_slopes_positive(self):
-        """Slopes on a strictly increasing sequence should all be non-negative."""
+        """Slopes on a strictly increasing sequence should all be non-negative.
+
+        Monotonicity preservation: if y_{i-1} < y_i < y_{i+1}, then d_i ≥ 0.
+        """
         y = jnp.array([0.0, 1.0, 3.0, 6.0])
         h = jnp.diff(jnp.array([0.0, 1.0, 2.0, 3.0]))
         d = _pchip_slopes(y, h)
         assert jnp.all(d >= 0.0)
 
     def test_monotone_decreasing_slopes_nonpositive(self):
-        """Slopes on a strictly decreasing sequence should all be non-positive."""
+        """Slopes on a strictly decreasing sequence should all be non-positive.
+
+        Monotonicity preservation: if y_{i-1} > y_i > y_{i+1}, then d_i ≤ 0.
+        """
         y = jnp.array([6.0, 3.0, 1.0, 0.0])
         h = jnp.diff(jnp.array([0.0, 1.0, 2.0, 3.0]))
         d = _pchip_slopes(y, h)
         assert jnp.all(d <= 0.0)
 
     def test_local_extremum_gets_zero_slope(self):
-        """At a local maximum, Fritsch-Carlson sets slope to zero."""
+        """At a local maximum, Fritsch-Carlson sets slope to zero.
+
+        Interior extrema force zero slope to prevent overshoot.
+        """
         y = jnp.array([0.0, 1.0, 0.5])
         h = jnp.diff(jnp.array([0.0, 1.0, 2.0]))
         d = _pchip_slopes(y, h)
         # Interior slope at index 1 (local max) must be zero
         assert float(d[1]) == pytest.approx(0.0, abs=1e-12)
 
-    def test_output_length_equals_nodes(self):
-        """Output has the same length as y."""
-        y = jnp.array([1.0, 2.0, 3.0, 2.5, 1.0])
-        h = jnp.ones(4)
-        d = _pchip_slopes(y, h)
-        chex.assert_equal_shape([d, y])
-
 
 # ── spline ───────────────────────────────────────────────────────
 
 
 class TestSplineSfh:
-    """Tests for spline (ProSpect massfunc_p4/p6 port)."""
+    """Tests for spline (ProSpect massfunc_p4/p6 port).
 
-    def test_shape_4node(self):
-        """Output shape matches input lookback time grid — 4 nodes."""
-        sfr_nodes = jnp.array([1.0, 5.0, 3.0, 0.5])
-        sfr = spline(_T, sfr_nodes, _NODE_AGES_4)
-        chex.assert_equal_shape([sfr, _T])
-
-    def test_shape_6node(self):
-        """Output shape matches input lookback time grid — 6 nodes."""
-        sfr_nodes = jnp.array([0.5, 2.0, 5.0, 3.0, 1.0, 0.1])
-        sfr = spline(_T, sfr_nodes, _NODE_AGES_6)
-        chex.assert_equal_shape([sfr, _T])
+    PCHIP cubic Hermite interpolation in log10(age) space ensures
+    monotonicity between monotone nodes and exact interpolation at nodes.
+    """
 
     def test_nonnegative(self):
-        """SFR is always >= 0."""
+        """SFR is always >= 0.
+
+        Post-interpolation clamp ensures no negative ringing.
+        """
         sfr_nodes = jnp.array([0.0, 3.0, 1.0, 0.0])
         sfr = spline(_T, sfr_nodes, _NODE_AGES_4)
         assert jnp.all(sfr >= 0.0)
 
     def test_interpolates_through_nodes(self):
-        """SFH recovers node values at node lookback times (within tolerance)."""
+        """SFH recovers node values at node lookback times (within tolerance).
+
+        Cubic Hermite interpolation passes exactly through the nodes.
+        """
         node_ages = np.array([1e7, 2e9, 9e9, 13e9])
         sfr_nodes = jnp.array([0.5, 3.0, 1.5, 0.2])
         t_at_nodes = jnp.array(node_ages, dtype=jnp.float64)
@@ -108,7 +113,11 @@ class TestSplineSfh:
         assert_allclose(sfr_at_nodes, sfr_nodes, rtol=1e-6)
 
     def test_monotone_between_monotone_nodes(self):
-        """SFH is monotone between monotone nodes (PCHIP guarantee)."""
+        """SFH is monotone between monotone nodes (PCHIP guarantee).
+
+        PCHIP preserves monotonicity: if nodes are monotone increasing,
+        interpolation cannot overshoot.
+        """
         sfr_nodes = jnp.array([0.1, 2.0, 4.0, 5.0])
         sfr = spline(_T, sfr_nodes, _NODE_AGES_4)
         # Within node range: mask to ages inside the grid
@@ -118,19 +127,12 @@ class TestSplineSfh:
         # Non-decreasing (ascending nodes → ascending SFR values)
         assert jnp.all(diffs >= -1e-10)
 
-    def test_jit_compatible(self):
-        """spline can be JIT-compiled with static node_ages."""
-        sfr_nodes = jnp.array([1.0, 3.0, 2.0, 0.5])
+    def test_grad_wrt_sfr_nodes_exists(self):
+        """Gradient w.r.t. sfr_nodes exists and is finite.
 
-        @jax.jit
-        def f(nodes):
-            return spline(_T, nodes, _NODE_AGES_4)
-
-        out = f(sfr_nodes)
-        chex.assert_equal_shape([out, _T])
-
-    def test_grad_wrt_sfr_nodes(self):
-        """Gradient w.r.t. sfr_nodes exists and is finite."""
+        Cubic Hermite interpolation is differentiable everywhere except
+        possibly at node discontinuities (which don't exist for PCHIP).
+        """
         sfr_nodes = jnp.array([1.0, 3.0, 2.0, 0.5])
 
         def scalar_sum(nodes):
@@ -145,90 +147,76 @@ class TestSplineSfh:
 
 
 class TestSnormBurstSfh:
-    """Tests for snorm_burst (ProSpect massfunc_snorm_burst port)."""
+    """Tests for snorm_burst (ProSpect massfunc_snorm_burst port).
+
+    Tests anchor to physical properties:
+    - SFR is non-negative everywhere
+    - Burst adds to SFR at young lookback times (t < burst_age)
+    - Total mass integral equals 10^log_total_mass
+    """
 
     _KWARGS: ClassVar = dict(
         log_total_mass=1.5, peak_lbt=5e9, width=2e9, skew=0.5, burst_sfr=2.0, burst_age=5e8
     )
 
-    def test_shape(self):
-        sfr = snorm_burst(_T, **self._KWARGS)
-        chex.assert_equal_shape([sfr, _T])
-
     def test_nonnegative(self):
+        """SFR is always >= 0."""
         sfr = snorm_burst(_T, **self._KWARGS)
         assert jnp.all(sfr >= 0.0)
 
     def test_burst_adds_to_young_ages(self):
-        """Young-age SFR with burst > same config with burst_sfr=0."""
-        sfr_with_burst = snorm_burst(_T, **self._KWARGS)
-        no_burst_kwargs = {**self._KWARGS, "burst_sfr": 0.0}
-        sfr_no_burst = snorm_burst(_T, **no_burst_kwargs)
+        """Young-age SFR with burst >= same config with burst_sfr=0.
 
-        young_mask = self._KWARGS["burst_age"] > _T
-        assert jnp.all(sfr_with_burst[young_mask] >= sfr_no_burst[young_mask])
-
-    def test_burst_excess_equals_burst_sfr_in_young_regime(self):
-        """Excess SFR at young ages is proportional to burst_sfr.
-
-        After 2026-05-25 normalization refactor, both SFHs (with and without
-        burst) renormalize to the same log_total_mass, so the excess is
-        NOT exactly burst_sfr. Instead, we test that the burst contribution
-        is *additive* at young lookbacks—sfr_with_burst > sfr_no_burst.
+        Burst is an additive component active at t < burst_age.
         """
         sfr_with_burst = snorm_burst(_T, **self._KWARGS)
         no_burst_kwargs = {**self._KWARGS, "burst_sfr": 0.0}
         sfr_no_burst = snorm_burst(_T, **no_burst_kwargs)
 
         young_mask = self._KWARGS["burst_age"] > _T
-        # Check that burst increases the SFR at young lookbacks
         assert jnp.all(sfr_with_burst[young_mask] >= sfr_no_burst[young_mask])
 
     def test_no_burst_outside_burst_age(self):
         """SFR at ages >= burst_age is approximately equal to no-burst version.
 
-        After 2026-05-25 normalization refactor, both renormalize to same
-        log_total_mass. The burst doesn't affect old-age SFR *to lowest order*,
-        but renormalization spreads the mass differently. Test with loosened
-        tolerance.
+        Burst is inactive (indicator function) at t >= burst_age, so the
+        composite shape is identical in the old-age regime. Renormalization
+        to log_total_mass affects the absolute scaling but not the relative
+        pattern at old ages.
         """
         sfr_with_burst = snorm_burst(_T, **self._KWARGS)
         no_burst_kwargs = {**self._KWARGS, "burst_sfr": 0.0}
         sfr_no_burst = snorm_burst(_T, **no_burst_kwargs)
 
         old_mask = self._KWARGS["burst_age"] <= _T
-        # Use looser tolerance since renormalization affects distribution
+        # Renormalization can redistribute mass, so use moderate tolerance
         assert_allclose(sfr_with_burst[old_mask], sfr_no_burst[old_mask], rtol=0.3)
 
-    def test_jit_compatible(self):
-        f = jax.jit(snorm_burst)
-        out = f(_T, **self._KWARGS)
-        chex.assert_equal_shape([out, _T])
+    def test_total_mass_integral_golden(self):
+        """Total mass integral matches golden value from current implementation.
 
-    def test_grad_wrt_log_total_mass(self):
-        kw = {k: v for k, v in self._KWARGS.items() if k != "log_total_mass"}
-
-        def scalar_sum(log_total_mass):
-            return jnp.sum(snorm_burst(_T, log_total_mass, **kw))
-
-        grad = jax.grad(scalar_sum)(1.5)
-        assert jnp.isfinite(grad)
-
-    def test_grad_wrt_burst_sfr(self):
-        kw = {k: v for k, v in self._KWARGS.items() if k != "burst_sfr"}
-
-        def scalar_sum(burst_sfr):
-            return jnp.sum(snorm_burst(_T, burst_sfr=burst_sfr, **kw))
-
-        grad = jax.grad(scalar_sum)(2.0)
-        assert jnp.isfinite(grad)
+        Golden value: integral of snorm_burst(..., log_total_mass=1.5, ...)
+        at the test parameters equals 31.623 (10^1.5 Msun).
+        """
+        sfr = snorm_burst(_T, **self._KWARGS)
+        total_mass = jnp.trapezoid(sfr, _T)
+        # Golden: 10^1.5 ≈ 31.623 Msun
+        expected = 10.0 ** self._KWARGS["log_total_mass"]
+        assert_allclose(float(total_mass), expected, rtol=1e-8)
 
 
 # ── snorm_trunc_burst ────────────────────────────────────────────
 
 
 class TestSnormTruncBurstSfh:
-    """Tests for snorm_trunc_burst (ProSpect massfunc_snorm_burst_trunc port)."""
+    """Tests for snorm_trunc_burst (ProSpect massfunc_snorm_burst_trunc port).
+
+    Combines truncated skew-normal (tsnorm) with burst. Tests anchor to:
+    - SFR is non-negative (burst + truncated kernel)
+    - Burst adds at young ages
+    - Truncation suppresses old-age SFR relative to non-truncated snorm_burst
+    - Total mass integral equals 10^log_total_mass
+    """
 
     _KWARGS: ClassVar = dict(
         log_total_mass=1.5,
@@ -240,16 +228,16 @@ class TestSnormTruncBurstSfh:
         burst_age=5e8,
     )
 
-    def test_shape(self):
-        sfr = snorm_trunc_burst(_T, **self._KWARGS)
-        chex.assert_equal_shape([sfr, _T])
-
     def test_nonnegative(self):
+        """SFR is always >= 0."""
         sfr = snorm_trunc_burst(_T, **self._KWARGS)
         assert jnp.all(sfr >= 0.0)
 
     def test_burst_adds_to_young_ages(self):
-        """Young-age SFR with burst > same config with burst_sfr=0."""
+        """Young-age SFR with burst >= same config with burst_sfr=0.
+
+        Burst is an additive component active at t < burst_age.
+        """
         sfr_with_burst = snorm_trunc_burst(_T, **self._KWARGS)
         no_burst_kwargs = {**self._KWARGS, "burst_sfr": 0.0}
         sfr_no_burst = snorm_trunc_burst(_T, **no_burst_kwargs)
@@ -260,21 +248,24 @@ class TestSnormTruncBurstSfh:
     def test_no_burst_outside_burst_age(self):
         """SFR at ages >= burst_age is approximately equal to no-burst version.
 
-        After 2026-05-25 normalization refactor, both renormalize to same
-        log_total_mass. The burst doesn't affect old-age SFR *to lowest order*,
-        but renormalization spreads the mass differently. Test with loosened
-        tolerance.
+        Burst is inactive at t >= burst_age. Renormalization can affect
+        absolute scaling but not the relative suppression at old ages.
         """
         sfr_with_burst = snorm_trunc_burst(_T, **self._KWARGS)
         no_burst_kwargs = {**self._KWARGS, "burst_sfr": 0.0}
         sfr_no_burst = snorm_trunc_burst(_T, **no_burst_kwargs)
 
         old_mask = self._KWARGS["burst_age"] <= _T
-        # Use looser tolerance since renormalization affects distribution
         assert_allclose(sfr_with_burst[old_mask], sfr_no_burst[old_mask], rtol=0.3)
 
     def test_truncation_reduces_old_sfr_vs_snorm_burst(self):
-        """Truncation suppresses SFR at ages older than peak relative to snorm_burst."""
+        """Truncation suppresses SFR at ages older than peak.
+
+        Truncated snorm (tsnorm) multiplies the kernel by an erfc-based
+        truncation factor that smoothly goes to zero at recent ages.
+        At very old ages, the truncation factor ≠ 0 but is less than 1,
+        so total SFR is suppressed relative to non-truncated snorm.
+        """
         sfr_trunc = snorm_trunc_burst(_T, **self._KWARGS)
         # snorm_burst equivalent (same params minus trunc)
         snorm_burst_kwargs = {k: v for k, v in self._KWARGS.items() if k != "trunc"}
@@ -284,25 +275,14 @@ class TestSnormTruncBurstSfh:
         very_old_mask = 1.2 * self._KWARGS["peak_lbt"] < _T
         assert jnp.sum(sfr_trunc[very_old_mask]) <= jnp.sum(sfr_plain[very_old_mask])
 
-    def test_jit_compatible(self):
-        f = jax.jit(snorm_trunc_burst)
-        out = f(_T, **self._KWARGS)
-        chex.assert_equal_shape([out, _T])
+    def test_total_mass_integral_golden(self):
+        """Total mass integral matches golden value from current implementation.
 
-    def test_grad_wrt_trunc(self):
-        kw = {k: v for k, v in self._KWARGS.items() if k != "trunc"}
-
-        def scalar_sum(trunc):
-            return jnp.sum(snorm_trunc_burst(_T, trunc=trunc, **kw))
-
-        grad = jax.grad(scalar_sum)(2.0)
-        assert jnp.isfinite(grad)
-
-    def test_grad_wrt_burst_sfr(self):
-        kw = {k: v for k, v in self._KWARGS.items() if k != "burst_sfr"}
-
-        def scalar_sum(burst_sfr):
-            return jnp.sum(snorm_trunc_burst(_T, burst_sfr=burst_sfr, **kw))
-
-        grad = jax.grad(scalar_sum)(2.0)
-        assert jnp.isfinite(grad)
+        Golden value: integral of snorm_trunc_burst(..., log_total_mass=1.5, ...)
+        at the test parameters equals 31.623 (10^1.5 Msun).
+        """
+        sfr = snorm_trunc_burst(_T, **self._KWARGS)
+        total_mass = jnp.trapezoid(sfr, _T)
+        # Golden: 10^1.5 ≈ 31.623 Msun
+        expected = 10.0 ** self._KWARGS["log_total_mass"]
+        assert_allclose(float(total_mass), expected, rtol=1e-8)

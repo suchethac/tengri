@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Reproducing BAGPIPES with tengri
+# # Reproducing BAGPIPES's physics with tengri
 #
 # BAGPIPES (Carnall et al. 2018) is the reference code for galaxy SED
 # fitting at JWST cosmic noon, post-starburst quiescent populations,
@@ -1324,9 +1324,13 @@ save_fig("bagpipes_07_panchromatic.png")
 # %% [markdown]
 # ## §12 IGM transmission — Inoue14
 #
-# Both codes use the Inoue et al. (2014) IGM transmission tables.
-# At the same redshift, with the same Lyman-series + DLA opacity
-# coefficients, the two agree to floating-point.
+# Both codes implement the Inoue et al. (2014) piecewise Lyman-series +
+# LAF/DLA opacity. The curves overlay; the printed max |Δ| lands on the
+# sharp Lyman-series edges, where the two codes' wavelength grids sample
+# the same step at slightly offset positions — a grid-sampling artifact,
+# not an opacity disagreement. Off the steps the transmissions track to a
+# few ×10⁻³ (the median), the level of the two independent
+# implementations' table interpolation.
 
 # %%
 Z_FIDUCIAL_IGM = 4.0

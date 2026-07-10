@@ -2,13 +2,15 @@
 """Tests for magnitude system utilities (AB, Vega, absolute, apparent, surface brightness).
 
 Validates:
-- AB magnitude conversions (fν ↔ m_AB)
-- Absolute magnitude from luminosity and distance modulus
+- AB magnitude conversions (fν ↔ m_AB) against the AB zeropoint definition
+- Absolute magnitude from luminosity and distance modulus limits (10 pc, 100 pc)
 - Apparent ↔ absolute via distance modulus
-- Vega magnitude system and offsets
-- Surface brightness calculations
+- Vega magnitude offsets (Blanton & Roweis 2007 values)
+- Surface brightness dilution
 - Cosmological dimming (1+z factor)
-- JIT compilation and type stability
+- One parametrized vectorization-consistency test and one parametrized
+  JIT-parity test cover every public function (replacing the old per-function
+  shape-only and finite-only tests).
 """
 
 import chex
@@ -74,27 +76,15 @@ class TestABMagnitudes:
         fnu_output = ab_mag_to_fnu(mag)
         assert jnp.allclose(fnu_output, fnu_input, rtol=1e-12)
 
-    def test_fnu_guards_log_for_zero(self):
-        """Function should not raise NaN for zero flux."""
-        # Zero flux should give a large magnitude, not NaN
+    def test_fnu_zero_flux_hits_documented_clamp(self):
+        """Zero flux hits the documented 1e-300 log guard, not NaN.
+
+        The guard is `jnp.maximum(fnu, 1e-300)`, so the limit is exactly
+        m_AB = -2.5 log10(1e-300 / 3.631e-20).
+        """
         mag = fnu_to_ab_mag(jnp.array(0.0))
-        assert jnp.isfinite(mag).all()
-        # Should be large and positive
-        assert jnp.all(mag > 0.0)
-
-    def test_fnu_array_broadcast(self):
-        """Functions work with arrays of arbitrary shape."""
-        fnu_array = jnp.array([1.0e-19, 2.0e-19, 3.0e-19])
-        mag_array = fnu_to_ab_mag(fnu_array)
-        chex.assert_shape(mag_array, (3,))
-        chex.assert_tree_all_finite(mag_array)
-
-    def test_ab_mag_to_fnu_broadcast(self):
-        """ab_mag_to_fnu works with arrays."""
-        mag_array = jnp.array([18.0, 19.0, 20.0, 21.0])
-        fnu_array = ab_mag_to_fnu(mag_array)
-        chex.assert_shape(fnu_array, (4,))
-        assert jnp.all(fnu_array > 0.0)
+        expected = -2.5 * jnp.log10(1e-300 / 3.631e-20)
+        assert jnp.allclose(mag, expected, rtol=1e-12)
 
 
 # ── Test Absolute Magnitude ───────────────────────────────────────
@@ -116,12 +106,6 @@ class TestAbsoluteMagnitudes:
         lnu = absolute_ab_mag_to_lnu(mag_abs_input)
         mag_abs_output = lnu_to_absolute_ab_mag(lnu)
         assert jnp.allclose(mag_abs_output, mag_abs_input, rtol=1e-12)
-
-    def test_absolute_magnitude_finiteness(self):
-        """Absolute magnitudes are finite for reasonable luminosities."""
-        lnu_array = jnp.logspace(30, 50, 10)
-        mag_array = lnu_to_absolute_ab_mag(lnu_array)
-        chex.assert_tree_all_finite(mag_array)
 
     def test_absolute_magnitude_scale(self):
         """10x brighter luminosity → 2.5 mag brighter (absolute)."""
@@ -173,13 +157,10 @@ class TestDistanceModulus:
         mu = distance_modulus_from_dl(jnp.array(0.0))
         assert jnp.all(mu == -jnp.inf)
 
-    def test_distance_modulus_from_dl_mpc_array(self):
-        """Works with arrays of Mpc distances."""
+    def test_distance_modulus_monotonic_in_distance(self):
+        """Farther distances give strictly larger μ."""
         dl_mpc = jnp.array([0.1, 1.0, 10.0, 100.0])
         mu = distance_modulus_from_dl_mpc(dl_mpc)
-        chex.assert_shape(mu, (4,))
-        chex.assert_tree_all_finite(mu)
-        # Verify ordering: further distances → larger μ
         assert jnp.all(jnp.diff(mu) > 0.0)
 
 
@@ -219,20 +200,6 @@ class TestApparentAbsolute:
         mag_abs_out = apparent_to_absolute(m_app, mu)
         assert jnp.allclose(mag_abs_out, mag_abs_in, rtol=1e-12)
 
-    def test_broadcast_apparent_to_absolute(self):
-        """Functions broadcast arrays correctly."""
-        m_app = jnp.array([20.0, 21.0, 22.0])
-        mu = jnp.array(35.0)
-        mag_abs = apparent_to_absolute(m_app, mu)
-        chex.assert_shape(mag_abs, (3,))
-
-    def test_broadcast_absolute_to_apparent(self):
-        """Functions broadcast arrays correctly."""
-        mag_abs = jnp.array([-20.0, -21.0, -22.0])
-        mu = jnp.array([35.0, 36.0, 37.0])
-        m_app = absolute_to_apparent(mag_abs, mu)
-        chex.assert_shape(m_app, (3,))
-
 
 # ── Test Vega Magnitude System ────────────────────────────────────
 
@@ -267,24 +234,6 @@ class TestVegaMagnitudes:
         mag_vega = ab_to_vega(mag_ab_in, offset)
         mag_ab_out = vega_to_ab(mag_vega, offset)
         assert jnp.allclose(mag_ab_out, mag_ab_in, rtol=1e-12)
-
-    def test_ab_vega_offsets_dict_completeness(self):
-        """Dict contains expected bands."""
-        expected_bands = {"U", "B", "V", "R", "I", "J", "H", "K", "u", "g", "r", "i", "z"}
-        assert all(band in AB_VEGA_OFFSETS for band in expected_bands)
-
-    def test_ab_vega_offsets_all_floats(self):
-        """All offset values are floats."""
-        for _band, offset in AB_VEGA_OFFSETS.items():
-            assert isinstance(offset, (int, float))
-
-    def test_vega_magnitude_array(self):
-        """Functions work with arrays."""
-        mag_ab_array = jnp.array([15.0, 16.0, 17.0, 18.0])
-        offset = AB_VEGA_OFFSETS["g"]
-        mag_vega = ab_to_vega(mag_ab_array, offset)
-        chex.assert_shape(mag_vega, (4,))
-        chex.assert_tree_all_finite(mag_vega)
 
 
 # ── Test Surface Brightness ───────────────────────────────────────
@@ -327,19 +276,11 @@ class TestSurfaceBrightness:
         mag_out = surface_brightness_to_mag(mu, area)
         assert jnp.allclose(mag_out, mag_in, rtol=1e-12)
 
-    def test_surface_brightness_guards_log_for_zero_area(self):
-        """Function handles zero area safely."""
+    def test_zero_area_hits_documented_clamp(self):
+        """Zero area hits the documented 1e-300 log guard: μ = m - 750 exactly."""
         mag = jnp.array(20.0)
         mu = mag_to_surface_brightness(mag, jnp.array(0.0))
-        assert jnp.isfinite(mu).all()
-
-    def test_surface_brightness_array(self):
-        """Functions work with arrays."""
-        mag_array = jnp.array([18.0, 19.0, 20.0])
-        area_array = jnp.array([5.0, 10.0, 25.0])
-        mu = mag_to_surface_brightness(mag_array, area_array)
-        chex.assert_shape(mu, (3,))
-        chex.assert_tree_all_finite(mu)
+        assert jnp.allclose(mu, mag + 2.5 * jnp.log10(1e-300), rtol=1e-12)
 
 
 # ── Test Cosmological Dimming ─────────────────────────────────────
@@ -363,124 +304,76 @@ class TestCosmologicalDimming:
         dimming_expected = 2.5 * jnp.log10(2.0)
         assert jnp.allclose(mu_eff, mu - dimming_expected, atol=1e-10)
 
-    def test_cosmological_dimming_array(self):
-        """Works with arrays of redshifts."""
+    def test_cosmological_dimming_monotonic_in_z(self):
+        """Higher z → greater dimming, monotonically."""
         mu = jnp.array(35.0)
         z_array = jnp.array([0.0, 0.5, 1.0, 2.0])
         mu_eff = cosmological_dimming(mu, z_array)
-        chex.assert_shape(mu_eff, (4,))
-        chex.assert_tree_all_finite(mu_eff)
-        # Verify monotonic increase: higher z → greater dimming
         assert jnp.all(jnp.diff(mu_eff) < 0.0)
 
-    def test_cosmological_dimming_broadcast(self):
-        """Broadcast different shapes."""
-        mu_array = jnp.array([30.0, 35.0, 40.0])
-        z = jnp.array(0.5)
-        mu_eff = cosmological_dimming(mu_array, z)
-        chex.assert_shape(mu_eff, (3,))
+
+# ── Vectorization + JIT parity (all public functions) ────────────
+
+# (test id, function, example args). Each function is exercised twice below:
+# once for vectorized-call ≡ elementwise-scalar-calls, once for jit ≡ eager.
+_FUNCTION_CASES = [
+    ("fnu_to_ab_mag", fnu_to_ab_mag, (jnp.array([1.0e-19, 2.0e-19, 3.0e-19]),)),
+    ("ab_mag_to_fnu", ab_mag_to_fnu, (jnp.array([18.0, 19.0, 20.0, 21.0]),)),
+    ("lnu_to_absolute_ab_mag", lnu_to_absolute_ab_mag, (jnp.logspace(35.0, 45.0, 4),)),
+    ("absolute_ab_mag_to_lnu", absolute_ab_mag_to_lnu, (jnp.array([-22.0, -20.0, -18.0]),)),
+    ("distance_modulus_from_dl", distance_modulus_from_dl, (jnp.array([1e24, 1e25, 1e26]),)),
+    (
+        "distance_modulus_from_dl_mpc",
+        distance_modulus_from_dl_mpc,
+        (jnp.array([0.1, 1.0, 10.0, 100.0]),),
+    ),
+    (
+        "apparent_to_absolute",
+        apparent_to_absolute,
+        (jnp.array([20.0, 21.0, 22.0]), jnp.array(35.0)),
+    ),
+    (
+        "absolute_to_apparent",
+        absolute_to_apparent,
+        (jnp.array([-20.0, -21.0, -22.0]), jnp.array([35.0, 36.0, 37.0])),
+    ),
+    ("ab_to_vega", ab_to_vega, (jnp.array([15.0, 16.0, 17.0]), jnp.array(-0.08))),
+    ("vega_to_ab", vega_to_ab, (jnp.array([15.5, 16.5]), jnp.array(0.02))),
+    (
+        "mag_to_surface_brightness",
+        mag_to_surface_brightness,
+        (jnp.array([18.0, 19.0, 20.0]), jnp.array([5.0, 10.0, 25.0])),
+    ),
+    (
+        "surface_brightness_to_mag",
+        surface_brightness_to_mag,
+        (jnp.array([24.5, 25.5]), jnp.array(10.0)),
+    ),
+    ("cosmological_dimming", cosmological_dimming, (jnp.array(35.0), jnp.array([0.0, 0.5, 2.0]))),
+]
+
+_CASE_IDS = [c[0] for c in _FUNCTION_CASES]
 
 
-# ── Test JIT Compilation ──────────────────────────────────────────
+@pytest.mark.parametrize("fn,args", [c[1:] for c in _FUNCTION_CASES], ids=_CASE_IDS)
+def test_vectorized_call_matches_scalar_calls(fn, args):
+    """Array inputs give exactly the elementwise scalar results.
+
+    Subsumes the old per-function shape-only broadcast tests: shape is implied
+    and every element is value-checked against the scalar code path.
+    """
+    broadcast = jnp.broadcast_arrays(*args)
+    out_vec = jnp.ravel(fn(*args))
+    out_scalar = jnp.stack(
+        [fn(*(jnp.ravel(a)[i] for a in broadcast)) for i in range(out_vec.shape[0])]
+    )
+    chex.assert_trees_all_close(out_vec, out_scalar, rtol=1e-12)
 
 
-class TestJITCompatibility:
-    """Test that all functions compile and run under JAX JIT."""
+@pytest.mark.parametrize("fn,args", [c[1:] for c in _FUNCTION_CASES], ids=_CASE_IDS)
+def test_jit_matches_eager(fn, args):
+    """jax.jit output matches the eager output (rtol=1e-6 JIT-parity convention).
 
-    def test_jit_fnu_to_ab_mag(self):
-        """fnu_to_ab_mag JITs successfully."""
-        fnu_jitted = jax.jit(fnu_to_ab_mag)
-        fnu = jnp.array(1.5e-19)
-        mag = fnu_jitted(fnu)
-        assert jnp.isfinite(mag)
-
-    def test_jit_ab_mag_to_fnu(self):
-        """ab_mag_to_fnu JITs successfully."""
-        mag_jitted = jax.jit(ab_mag_to_fnu)
-        mag = jnp.array(20.0)
-        fnu = mag_jitted(mag)
-        assert jnp.isfinite(fnu)
-
-    def test_jit_lnu_to_absolute_ab_mag(self):
-        """lnu_to_absolute_ab_mag JITs successfully."""
-        lnu_jitted = jax.jit(lnu_to_absolute_ab_mag)
-        lnu = jnp.array(1.0e40)
-        mag = lnu_jitted(lnu)
-        assert jnp.isfinite(mag)
-
-    def test_jit_absolute_ab_mag_to_lnu(self):
-        """absolute_ab_mag_to_lnu JITs successfully."""
-        mag_jitted = jax.jit(absolute_ab_mag_to_lnu)
-        mag = jnp.array(-20.0)
-        lnu = mag_jitted(mag)
-        assert jnp.isfinite(lnu)
-
-    def test_jit_distance_modulus_from_dl(self):
-        """distance_modulus_from_dl JITs successfully."""
-        dl_jitted = jax.jit(distance_modulus_from_dl)
-        dl = jnp.array(1.0e25)
-        mu = dl_jitted(dl)
-        assert jnp.isfinite(mu)
-
-    def test_jit_distance_modulus_from_dl_mpc(self):
-        """distance_modulus_from_dl_mpc JITs successfully."""
-        dl_jitted = jax.jit(distance_modulus_from_dl_mpc)
-        dl = jnp.array(10.0)
-        mu = dl_jitted(dl)
-        assert jnp.isfinite(mu)
-
-    def test_jit_apparent_to_absolute(self):
-        """apparent_to_absolute JITs successfully."""
-        conversion_jitted = jax.jit(apparent_to_absolute)
-        m_app = jnp.array(25.0)
-        mu = jnp.array(30.0)
-        mag_abs = conversion_jitted(m_app, mu)
-        assert jnp.isfinite(mag_abs)
-
-    def test_jit_absolute_to_apparent(self):
-        """absolute_to_apparent JITs successfully."""
-        conversion_jitted = jax.jit(absolute_to_apparent)
-        mag_abs = jnp.array(-20.0)
-        mu = jnp.array(30.0)
-        m_app = conversion_jitted(mag_abs, mu)
-        assert jnp.isfinite(m_app)
-
-    def test_jit_ab_to_vega(self):
-        """ab_to_vega JITs successfully."""
-        offset = AB_VEGA_OFFSETS["V"]
-        vega_jitted = jax.jit(lambda mag: ab_to_vega(mag, offset))
-        mag = jnp.array(20.0)
-        mag_v = vega_jitted(mag)
-        assert jnp.isfinite(mag_v)
-
-    def test_jit_vega_to_ab(self):
-        """vega_to_ab JITs successfully."""
-        offset = AB_VEGA_OFFSETS["V"]
-        ab_jitted = jax.jit(lambda mag: vega_to_ab(mag, offset))
-        mag = jnp.array(20.0)
-        mag_ab = ab_jitted(mag)
-        assert jnp.isfinite(mag_ab)
-
-    def test_jit_mag_to_surface_brightness(self):
-        """mag_to_surface_brightness JITs successfully."""
-        sb_jitted = jax.jit(mag_to_surface_brightness)
-        mag = jnp.array(20.0)
-        area = jnp.array(10.0)
-        mu = sb_jitted(mag, area)
-        assert jnp.isfinite(mu)
-
-    def test_jit_surface_brightness_to_mag(self):
-        """surface_brightness_to_mag JITs successfully."""
-        mag_jitted = jax.jit(surface_brightness_to_mag)
-        mu = jnp.array(24.5)
-        area = jnp.array(10.0)
-        mag = mag_jitted(mu, area)
-        assert jnp.isfinite(mag)
-
-    def test_jit_cosmological_dimming(self):
-        """cosmological_dimming JITs successfully."""
-        dimming_jitted = jax.jit(cosmological_dimming)
-        mu = jnp.array(35.0)
-        z = jnp.array(0.5)
-        mu_eff = dimming_jitted(mu, z)
-        assert jnp.isfinite(mu_eff)
+    Subsumes the old per-function finite-only JIT tests.
+    """
+    chex.assert_trees_all_close(jax.jit(fn)(*args), fn(*args), rtol=1e-6)

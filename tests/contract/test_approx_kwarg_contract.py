@@ -55,6 +55,7 @@ def fixed_z_spec():
         sfh_dpl_alpha=Fixed(2.0),
         sfh_dpl_beta=Fixed(1.0),
         sfh_dpl_tau_gyr=Fixed(5.0),
+        sfh_dpl_age_gyr=Fixed(5.0),
         sfh_dpl_log_total_mass=Fixed(1.0),
         met_logzsol=Fixed(-0.5),
         redshift=Fixed(0.1),
@@ -72,6 +73,7 @@ def free_z_spec():
         sfh_dpl_alpha=Fixed(2.0),
         sfh_dpl_beta=Fixed(1.0),
         sfh_dpl_tau_gyr=Fixed(5.0),
+        sfh_dpl_age_gyr=Fixed(5.0),
         sfh_dpl_log_total_mass=Fixed(1.0),
         met_logzsol=Fixed(-0.5),
         redshift=Uniform(0.5, 1.5),
@@ -317,6 +319,7 @@ def _build_catalog_galaxy(ssp, obs, *, dust_tau_bc_fixed):
         sfh_dpl_alpha=Fixed(2.0),
         sfh_dpl_beta=Fixed(1.0),
         sfh_dpl_tau_gyr=Fixed(5.0),
+        sfh_dpl_age_gyr=Fixed(5.0),
         sfh_dpl_log_total_mass=Fixed(1.0),
         met_logzsol=Fixed(-0.5),
         redshift=Fixed(0.1),  # SAME for both galaxies — chain matches

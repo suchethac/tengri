@@ -38,7 +38,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
-from tengri.components.xray.xray import xray_total, xray_total_lopez24
+from tengri.components.xray.xray import COS_INC_REF_30DEG, xray_total, xray_total_lopez24
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -168,6 +168,12 @@ class XRaySEDComponent:
                 "AGN 12 µm luminosity; drives the lopez24 alpha_IRX corona",
             ),
             DerivedKey(
+                "agn_cos_inc",
+                "dimensionless",
+                "AGN cos(i) (composable models); corona anisotropy tilt — "
+                "falls back to the Yang+2020 30-degree anchor (#980)",
+            ),
+            DerivedKey(
                 "age_weights",
                 "Msun",
                 "SSP mass weights (stellar) — mass-weighted age drives the LMXB scaling",
@@ -254,6 +260,15 @@ class XRaySEDComponent:
             L_2500,
             jnp.where(L_2500_skirtor > 0.0, L_2500_skirtor, L_2500_fallback),
         )
+        # The α_ox relations predict the corona seen at the Yang+2020 30°
+        # reference; ``xray_anisotropy`` then tilts it to the model's own AGN
+        # sightline, exactly as X-CIGALE reads cos i from its AGN module
+        # (yang20.py). Components only see their prefix-matched param slice,
+        # so the inclination arrives on the derived channel like L_2500.
+        # Without this the corona was stuck face-on — a flat ×1.072 — and
+        # ``agn_cos_inc`` was a silent no-op for the X-ray block (#980).
+        # No published AGN inclination → stay at the anchor (factor 1).
+        cos_inc = jnp.asarray(state.derived.get("agn_cos_inc", COS_INC_REF_30DEG))
         # Lopez+2024 (lopez24) ties the corona to the AGN 12 µm luminosity
         # instead of L_2500. Prefer the AGN-published ``L_12um`` [erg/s/Hz]; fall
         # back to a bolometric correction from L_agn_bol when the composable AGN
@@ -299,6 +314,7 @@ class XRaySEDComponent:
                 gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
                 E_cut=jnp.asarray(params["xray_E_cut"]),
                 delta_alpha_ox=jnp.asarray(params["xray_delta_alpha_ox"]),
+                cos_inc=cos_inc,
                 log_nh=jnp.asarray(params["xray_log_nh"]),
             )
 

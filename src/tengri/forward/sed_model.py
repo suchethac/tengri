@@ -83,6 +83,7 @@ from tengri.parameters.translate import (
     _EVOLVING_ALPHA_PARAM_MAP,
     LOG10_ZSUN,
     _build_param_map,
+    check_missing_free_params,
     check_unknown_params,
     get_internal_params,
 )
@@ -4932,6 +4933,10 @@ class SEDModel:
         # entry point has already validated the caller's dict.
         if fixed_values is None:
             check_unknown_params(params, self._param_map)
+            # ...and the converse: a free param with no value would survive
+            # the {**fixed_values, **params} merge below and surface deep in
+            # a component as a bare KeyError.
+            check_missing_free_params(params, self.spec, self._param_map)
 
         cached = getattr(self, "_cached_component_chain", None)
         if cached is None:
@@ -5079,6 +5084,9 @@ class SEDModel:
         # Validate param keys before entering JIT — silent drops of unknown
         # override keys produce plausible-looking but wrong physics (issue #314).
         check_unknown_params(params, self._param_map)
+        # ...and free params with no value, which would otherwise surface as
+        # a bare KeyError deep inside a component.
+        check_missing_free_params(params, self.spec, self._param_map)
         return self._get_or_build_predict_observables_jit()(
             params, self.spec.get_fixed_values(), self.ssp_data, self._template_data_for_jit()
         )

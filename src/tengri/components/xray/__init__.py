@@ -7,6 +7,7 @@ from tengri.components.xray._models import (
     register_xray_model,
 )
 from tengri.components.xray.xray import (
+    COS_INC_REF_30DEG,
     alpha_ox_from_l2500,
     compton_scattering_transmission,
     pexrav_reflection,
@@ -56,6 +57,7 @@ register_xray_model(
 )(xray_total_lopez24)
 
 __all__ = [
+    "COS_INC_REF_30DEG",
     "XRAY_MODELS",
     "XRayAirdSEDComponent",
     "XRayAirdSEDComponentConfig",

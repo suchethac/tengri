@@ -249,7 +249,14 @@ def test_full_chain_composability(ssp, full_chain_params, agn_model, dust_law, e
     # below physical relevance. A real JIT bug produces O(1) divergence, which
     # this still catches. The single-model strict path is covered at 1e-12 by
     # ``test_orchestrator_chain_jit_matches_eager``.
-    assert jnp.allclose(s_jit.sed_intrinsic, s_eager.sed_intrinsic, rtol=1e-6)
+    #
+    # The atol floor covers near-zero pixels: the EUV tail of the kubota_done
+    # disc sits ~9 dex below the SED scale, where any graph-shape change (a
+    # new constant leaf, a fusion re-order) moves rounding past a pure-rtol
+    # threshold while remaining ~1e-14 of the SED itself. Scale-tied atol
+    # keeps the check meaningful at physical pixels and blind to the floor.
+    _scale = jnp.max(jnp.abs(s_eager.sed_intrinsic))
+    assert jnp.allclose(s_jit.sed_intrinsic, s_eager.sed_intrinsic, rtol=1e-6, atol=1e-12 * _scale)
     # Cross-component publications all populated:
     for k in ("L_ir", "L_agn_bol", "sed_radio", "sed_xray", "igm_transmission"):
         assert k in s_eager.derived

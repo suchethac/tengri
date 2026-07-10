@@ -240,11 +240,16 @@ class TestDelvecchio2021:
             "Suppression should reduce L for faint sources"
         )
 
-    def test_jit_compatible(self):
+    def test_jit_parity_and_shape(self):
+        """JIT eager output match (parity) and output shape.
+
+        Physical: JIT compilation must not change numerical results.
+        """
+        L_eager = radio_sfr_delvecchio2021(_WAVE_RADIO, _L_IR, 10.0, 0.0, apply_suppression=False)
         jitted = jax.jit(radio_sfr_delvecchio2021, static_argnames=["apply_suppression"])
-        L = jitted(_WAVE_RADIO, _L_IR, 10.0, 0.0, apply_suppression=False)
-        chex.assert_equal_shape([L, _WAVE_RADIO])
-        chex.assert_tree_all_finite(L)
+        L_jit = jitted(_WAVE_RADIO, _L_IR, 10.0, 0.0, apply_suppression=False)
+        chex.assert_equal_shape([L_jit, _WAVE_RADIO])
+        chex.assert_trees_all_close(L_eager, L_jit, rtol=1e-6)
 
     def test_gradients_flow_through_log_mstar_and_redshift(self):
         """Gradients should be finite and nonzero w.r.t. log_mstar, redshift."""
@@ -357,11 +362,13 @@ class TestMcCheyne2022:
             f"150MHz/1.4GHz ratio {actual_ratio:.4f} != expected {expected_ratio:.4f}"
         )
 
-    def test_jit_compatible(self):
+    def test_jit_parity_and_shape(self):
+        """JIT eager output match (parity) and output shape."""
+        L_eager = radio_sfr_mccheyne2022(_WAVE_RADIO, _L_IR, 10.0, 0.0, apply_suppression=False)
         jitted = jax.jit(radio_sfr_mccheyne2022, static_argnames=["apply_suppression"])
-        L = jitted(_WAVE_RADIO, _L_IR, 10.0, 0.0, apply_suppression=False)
-        chex.assert_equal_shape([L, _WAVE_RADIO])
-        chex.assert_tree_all_finite(L)
+        L_jit = jitted(_WAVE_RADIO, _L_IR, 10.0, 0.0, apply_suppression=False)
+        chex.assert_equal_shape([L_jit, _WAVE_RADIO])
+        chex.assert_trees_all_close(L_eager, L_jit, rtol=1e-6)
 
     def test_gradients_flow(self):
         def _loss(log_mstar, redshift):
@@ -480,14 +487,13 @@ class TestRadioTotalDispatcher:
         L_agn = radio_agn_dpl(wave, 1e11, radio_loudness=1.0)
         assert jnp.allclose(L_via_total, L_sf + L_agn, rtol=1e-12)
 
-    def test_jit_all_modes(self):
-        """All sfr_mode options trace under jax.jit (static_argnames)."""
+    def test_jit_parity_all_modes(self):
+        """All sfr_mode options have JIT parity (eager == jitted within 1e-6 rtol).
+
+        Physical: JIT compilation should preserve numerical outputs across all modes.
+        """
         for mode in ("bell2003", "delvecchio2021", "mccheyne2022"):
-            jitted = jax.jit(
-                radio_total,
-                static_argnames=["sfr_mode", "apply_suppression"],
-            )
-            L = jitted(
+            L_eager = radio_total(
                 _WAVE_RADIO,
                 L_ir=_L_IR,
                 L_agn_bol=0.0,
@@ -496,8 +502,21 @@ class TestRadioTotalDispatcher:
                 redshift=0.0,
                 apply_suppression=False,
             )
-            assert L.shape == _WAVE_RADIO.shape, f"Shape mismatch for mode={mode}"
-            assert jnp.all(jnp.isfinite(L)), f"Non-finite values for mode={mode}"
+            jitted = jax.jit(
+                radio_total,
+                static_argnames=["sfr_mode", "apply_suppression"],
+            )
+            L_jit = jitted(
+                _WAVE_RADIO,
+                L_ir=_L_IR,
+                L_agn_bol=0.0,
+                sfr_mode=mode,
+                log_mstar=10.0,
+                redshift=0.0,
+                apply_suppression=False,
+            )
+            assert L_jit.shape == _WAVE_RADIO.shape, f"Shape mismatch for mode={mode}"
+            assert jnp.allclose(L_eager, L_jit, rtol=1e-6), f"JIT parity fail for mode={mode}"
 
     def test_only_radio_band_emits(self):
         """All three modes must return zero at optical/UV wavelengths."""
@@ -584,12 +603,16 @@ class TestFreeFree:
         L = radio_freefree(_WAVE_RADIO, _L_IR)
         assert jnp.all(L > 0.0)
 
-    def test_jit_compatible(self):
-        """radio_freefree traces cleanly under jax.jit."""
+    def test_jit_parity_and_shape(self):
+        """JIT eager output match (parity) and output shape.
+
+        Physical: JIT should not alter numerical results.
+        """
+        L_eager = radio_freefree(_WAVE_RADIO, _L_IR)
         jitted = jax.jit(radio_freefree)
-        L = jitted(_WAVE_RADIO, _L_IR)
-        chex.assert_equal_shape([L, _WAVE_RADIO])
-        chex.assert_tree_all_finite(L)
+        L_jit = jitted(_WAVE_RADIO, _L_IR)
+        chex.assert_equal_shape([L_jit, _WAVE_RADIO])
+        chex.assert_trees_all_close(L_eager, L_jit, rtol=1e-6)
 
     def test_gradients_flow_through_l_ir(self):
         """FD check: ∂(∑L_ff)/∂L_ir. Murphy+2011 linear calibration."""
@@ -660,14 +683,12 @@ class TestRadioComponents:
         f_thermal = ff / total
         assert 0.02 < f_thermal < 0.25, f"Thermal fraction {f_thermal:.3f} outside expected 2–25%"
 
-    def test_shape_matches_wavelength(self):
-        comps = compute_radio_components(_WAVE_RADIO, **_RC_KW)
-        for key in ("synchrotron", "freefree", "agn", "total"):
-            assert comps[key].shape == _WAVE_RADIO.shape, f"Shape mismatch for {key}"
-
-    def test_all_finite(self):
+    def test_shape_and_finiteness(self):
+        """All component shapes match wavelength grid, and all values are finite."""
         comps = compute_radio_components(_WAVE_RADIO, **_RC_KW, include_freefree=True)
-        for key, arr in comps.items():
+        for key in ("synchrotron", "freefree", "agn", "total"):
+            arr = comps[key]
+            assert arr.shape == _WAVE_RADIO.shape, f"Shape mismatch for {key}"
             assert jnp.all(jnp.isfinite(arr)), f"Non-finite values in {key}"
 
 

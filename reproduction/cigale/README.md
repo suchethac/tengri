@@ -1,4 +1,4 @@
-# Reproducing CIGALE with tengri
+# Reproducing CIGALE's physics with tengri
 
 This folder reproduces the physics modules of CIGALE
 (Boquien et al. 2019, A&A 622, A103) using tengri, component by

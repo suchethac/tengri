@@ -18,7 +18,6 @@ import pytest
 from numpy.testing import assert_allclose
 
 pytestmark = pytest.mark.contract
-pytestmark = pytest.mark.contract
 # Enable 64-bit precision for all tests
 jax.config.update("jax_enable_x64", True)
 

@@ -40,12 +40,6 @@ def broad_wave():
 class TestBrokenPowerlawContinuum:
     """_broken_powerlaw_continuum is a pure-JAX smooth two-segment power law."""
 
-    def test_finite_output(self, uv_optical_wave):
-        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
-
-        cont = _broken_powerlaw_continuum(uv_optical_wave, -0.349, 0.593, 3880.0)
-        chex.assert_tree_all_finite(cont)
-
     def test_normalized_at_5500_angstrom(self):
         """Continuum is normalized to ~1.0 at 5500 Å."""
         from tengri.components.agn.qsogen import _broken_powerlaw_continuum
@@ -54,35 +48,50 @@ class TestBrokenPowerlawContinuum:
         cont = _broken_powerlaw_continuum(wave_norm, -0.349, 0.593, 3880.0)
         np.testing.assert_allclose(float(cont[0]), 1.0, rtol=1e-4)
 
-    def test_non_negative(self, uv_optical_wave):
-        """Continuum is non-negative everywhere."""
+    def test_comprehensive_finite_non_negative_and_jit_parity(self, uv_optical_wave):
+        """Collapsed test: shape, non-negativity, finiteness, JIT parity, and frozen golden values.
+
+        Golden values frozen from the current implementation (test-audit PR, 2026-07).
+        Deliberate model changes must regenerate them.
+
+        Tests:
+        - Output shape matches wavelength grid
+        - All values are non-negative (physical bound)
+        - All values are finite (no NaN/Inf)
+        - JIT output matches eager evaluation (parity within 1e-6 rtol)
+        - Four pinned wavelengths reproduce known values
+        """
         from tengri.components.agn.qsogen import _broken_powerlaw_continuum
 
-        cont = _broken_powerlaw_continuum(uv_optical_wave, -0.349, 0.593, 3880.0)
-        assert jnp.all(cont >= 0.0)
+        # Eager evaluation
+        cont_eager = _broken_powerlaw_continuum(uv_optical_wave, -0.349, 0.593, 3880.0)
 
-    def test_jit_compatible(self, uv_optical_wave):
-        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
+        # Shape and finiteness
+        chex.assert_equal_shape([cont_eager, uv_optical_wave])
+        chex.assert_tree_all_finite(cont_eager)
+        assert jnp.all(cont_eager >= 0.0), "Continuum must be non-negative"
 
-        jitted = jax.jit(_broken_powerlaw_continuum, static_argnums=())
-        cont = jitted(uv_optical_wave, -0.349, 0.593, 3880.0)
-        chex.assert_tree_all_finite(cont)
+        # JIT parity
+        cont_jit = jax.jit(_broken_powerlaw_continuum)(uv_optical_wave, -0.349, 0.593, 3880.0)
+        chex.assert_trees_all_close(cont_eager, cont_jit, rtol=1e-6)
 
-    def test_slope_uv_side(self):
-        """Below the break (UV), slope is set by plslp1."""
-        from tengri.components.agn.qsogen import _broken_powerlaw_continuum
-
-        # Sample well below break at 3880 Å: 1000 Å and 1500 Å
-        wave_uv = jnp.array([1000.0, 1500.0, 2000.0])
-        cont = _broken_powerlaw_continuum(wave_uv, plslp1=-0.349, plslp2=0.593, plbrk=3880.0)
-        # In terms of f_lambda ~ lambda^alpha, the UV slope should produce
-        # a falling spectrum toward shorter wavelengths for typical QSO slopes
-        # Just verify it's finite and positive
-        chex.assert_tree_all_finite(cont)
-        assert jnp.all(cont > 0.0)
+        # Frozen golden values at indices [0, n//3, 2n//3, -1]
+        indices = [0, len(uv_optical_wave) // 3, 2 * len(uv_optical_wave) // 3, -1]
+        golden_values = [7.280769e-02, 1.192772e00, 8.867679e-01, 7.013722e-01]
+        for idx, golden in zip(indices, golden_values):
+            np.testing.assert_allclose(
+                float(cont_eager[idx]),
+                golden,
+                rtol=1e-6,
+                err_msg=f"Golden value mismatch at index {idx}",
+            )
 
     def test_steeper_slope_changes_shape(self):
-        """Different plslp1 values produce different UV spectral shapes."""
+        """Different plslp1 values produce different UV spectral shapes.
+
+        Physical: Steeper UV slope (more negative plslp1) increases the flux ratio
+        at short wavelengths relative to optical (ratio of flux at 1000 Å to 5500 Å).
+        """
         from tengri.components.agn.qsogen import _broken_powerlaw_continuum
 
         wave = jnp.array([1000.0, 5500.0])
@@ -92,26 +101,48 @@ class TestBrokenPowerlawContinuum:
         # The steeper slope should give a different ratio
         ratio_steep = float(cont_steep[0] / cont_steep[1])
         ratio_flat = float(cont_flat[0] / cont_flat[1])
-        assert abs(ratio_steep - ratio_flat) > 0.01
+        assert abs(ratio_steep - ratio_flat) > 0.01, (
+            f"Slope variation >1% change: {ratio_steep:.4f} vs {ratio_flat:.4f}"
+        )
 
 
 # ── Hot dust blackbody ────────────────────────────────────────────
 class TestHotDustBlackbody:
     """_hot_dust_blackbody adds a hot BB component anchored at 2 μm."""
 
-    def test_finite_output(self, broad_wave):
+    def test_comprehensive_finite_non_negative_and_jit_parity(self, broad_wave):
+        """Collapsed test: shape, non-negativity, finiteness, JIT parity, and frozen goldens.
+
+        Golden values frozen from the current implementation (test-audit PR, 2026-07).
+        Tests output shape, non-negativity, finiteness, JIT/eager parity, and frozen values
+        at pinned parameters.
+        """
         from tengri.components.agn.qsogen import _broken_powerlaw_continuum, _hot_dust_blackbody
 
         cont = _broken_powerlaw_continuum(broad_wave, -0.349, 0.593, 3880.0)
-        bb = _hot_dust_blackbody(broad_wave, cont, tbb=1240.0, bbnorm=3.96)
-        chex.assert_tree_all_finite(bb)
 
-    def test_non_negative(self, broad_wave):
-        from tengri.components.agn.qsogen import _broken_powerlaw_continuum, _hot_dust_blackbody
+        # Eager evaluation
+        bb_eager = _hot_dust_blackbody(broad_wave, cont, tbb=1240.0, bbnorm=3.96)
 
-        cont = _broken_powerlaw_continuum(broad_wave, -0.349, 0.593, 3880.0)
-        bb = _hot_dust_blackbody(broad_wave, cont, tbb=1240.0, bbnorm=3.96)
-        assert jnp.all(bb >= 0.0)
+        # Shape and finiteness
+        chex.assert_equal_shape([bb_eager, broad_wave])
+        chex.assert_tree_all_finite(bb_eager)
+        assert jnp.all(bb_eager >= 0.0), "Hot dust BB must be non-negative"
+
+        # JIT parity
+        bb_jit = jax.jit(_hot_dust_blackbody)(broad_wave, cont, tbb=1240.0, bbnorm=3.96)
+        chex.assert_trees_all_close(bb_eager, bb_jit, rtol=1e-6)
+
+        # Frozen golden values at indices [0, n//3, 2n//3, -1]
+        indices = [0, len(broad_wave) // 3, 2 * len(broad_wave) // 3, -1]
+        golden_values = [3.461324e-208, 2.178274e00, 1.878645e-03, 4.186837e-08]
+        for idx, golden in zip(indices, golden_values):
+            np.testing.assert_allclose(
+                float(bb_eager[idx]),
+                golden,
+                rtol=1e-6,
+                err_msg=f"Golden value mismatch at index {idx}",
+            )
 
     def test_zero_bbnorm_no_dust(self, broad_wave):
         """bbnorm=0 → _hot_dust_blackbody returns zero (component only, not total SED)."""
@@ -122,41 +153,57 @@ class TestHotDustBlackbody:
         np.testing.assert_allclose(np.array(bb_zero), 0.0, atol=1e-30)
 
     def test_positive_bbnorm_adds_ir(self, broad_wave):
-        """Positive bbnorm adds IR flux above the continuum at ~2 μm."""
+        """Positive bbnorm adds IR flux above the continuum at ~2 μm.
+
+        Physical: Hot dust emission peaks around the NIR (2 μm) and adds to
+        the AGN continuum in that region.
+        """
         from tengri.components.agn.qsogen import _broken_powerlaw_continuum, _hot_dust_blackbody
 
         cont = _broken_powerlaw_continuum(broad_wave, -0.349, 0.593, 3880.0)
         bb = _hot_dust_blackbody(broad_wave, cont, tbb=1240.0, bbnorm=3.96)
         # Near-IR band (15,000 – 25,000 Å = 1.5 – 2.5 μm)
         nir_mask = (broad_wave >= 15000.0) & (broad_wave <= 25000.0)
-        assert jnp.any(bb[nir_mask] > cont[nir_mask])
-
-    def test_jit_compatible(self, broad_wave):
-        from tengri.components.agn.qsogen import _broken_powerlaw_continuum, _hot_dust_blackbody
-
-        cont = _broken_powerlaw_continuum(broad_wave, -0.349, 0.593, 3880.0)
-        jitted = jax.jit(_hot_dust_blackbody)
-        bb = jitted(broad_wave, cont, tbb=1240.0, bbnorm=3.96)
-        chex.assert_tree_all_finite(bb)
+        assert jnp.any(bb[nir_mask] > cont[nir_mask]), (
+            "Hot dust should add flux in the near-IR relative to continuum"
+        )
 
 
 # ── Balmer continuum ──────────────────────────────────────────────
 class TestBalmerContinuum:
     """_balmer_continuum adds Balmer continuum emission shortward of 3646 Å."""
 
-    def test_finite_output(self, uv_optical_wave):
+    def test_comprehensive_finite_non_negative_and_jit_parity(self, uv_optical_wave):
+        """Collapsed test: shape, non-negativity, finiteness, JIT parity, and frozen goldens.
+
+        Golden values frozen from the current implementation (test-audit PR, 2026-07).
+        """
         from tengri.components.agn.qsogen import _balmer_continuum, _broken_powerlaw_continuum
 
         cont = _broken_powerlaw_continuum(uv_optical_wave, -0.349, 0.593, 3880.0)
-        bc = _balmer_continuum(uv_optical_wave, cont)
-        chex.assert_tree_all_finite(bc)
 
-    def test_non_negative(self, uv_optical_wave):
-        from tengri.components.agn.qsogen import _balmer_continuum, _broken_powerlaw_continuum
+        # Eager evaluation
+        bc_eager = _balmer_continuum(uv_optical_wave, cont, bcnorm=1.0)
 
-        cont = _broken_powerlaw_continuum(uv_optical_wave, -0.349, 0.593, 3880.0)
-        bc = _balmer_continuum(uv_optical_wave, cont)
-        assert jnp.all(bc >= 0.0)
+        # Shape and finiteness
+        chex.assert_equal_shape([bc_eager, uv_optical_wave])
+        chex.assert_tree_all_finite(bc_eager)
+        assert jnp.all(bc_eager >= 0.0), "Balmer continuum must be non-negative"
+
+        # JIT parity
+        bc_jit = jax.jit(_balmer_continuum)(uv_optical_wave, cont, bcnorm=1.0)
+        chex.assert_trees_all_close(bc_eager, bc_jit, rtol=1e-6)
+
+        # Frozen golden values at indices [0, n//3, 2n//3, -1]
+        indices = [0, len(uv_optical_wave) // 3, 2 * len(uv_optical_wave) // 3, -1]
+        golden_values = [3.097122e-16, 1.384550e00, 4.171700e-07, 1.498691e-11]
+        for idx, golden in zip(indices, golden_values):
+            np.testing.assert_allclose(
+                float(bc_eager[idx]),
+                golden,
+                rtol=1e-6,
+                err_msg=f"Golden value mismatch at index {idx}",
+            )
 
     def test_zero_bcnorm_returns_continuum(self, uv_optical_wave):
         """bcnorm=0 → _balmer_continuum returns zero (component only, not total SED)."""
@@ -237,17 +284,30 @@ class TestLbolToMi:
 class TestComputeQsogenSed:
     """Tests for the full QSOgen SED (requires template file)."""
 
-    def test_output_shape(self, broad_wave):
+    def test_shape_finite_non_negative_and_scaling(self, broad_wave):
+        """Shape, finiteness, non-negativity, and agn_frac scaling behavior.
+
+        Note: compute_qsogen_sed includes stochastic emission lines, so we test
+        physics (scaling, non-negativity) rather than frozen golden values.
+        """
         from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        sed = compute_qsogen_sed(broad_wave)
-        chex.assert_equal_shape([sed, broad_wave])
+        sed_default = compute_qsogen_sed(broad_wave)
 
-    def test_finite_output(self, broad_wave):
-        from tengri.components.agn.qsogen import compute_qsogen_sed
+        # Shape and finiteness
+        chex.assert_equal_shape([sed_default, broad_wave])
+        chex.assert_tree_all_finite(sed_default)
+        assert jnp.all(sed_default >= 0.0), "SED must be non-negative"
 
-        sed = compute_qsogen_sed(broad_wave)
-        chex.assert_tree_all_finite(sed)
+        # Test scaling: agn_frac should scale linearly
+        sed_half = compute_qsogen_sed(broad_wave, agn_frac=0.5)
+        sed_double = compute_qsogen_sed(broad_wave, agn_frac=2.0)
+        mask = sed_default > 0.0
+        if jnp.any(mask):
+            ratio_half = float(jnp.mean(sed_half[mask] / sed_default[mask]))
+            ratio_double = float(jnp.mean(sed_double[mask] / sed_default[mask]))
+            np.testing.assert_allclose(ratio_half, 0.5, rtol=0.05)
+            np.testing.assert_allclose(ratio_double, 2.0, rtol=0.05)
 
     def test_non_negative(self, broad_wave):
         from tengri.components.agn.qsogen import compute_qsogen_sed
@@ -385,18 +445,23 @@ class TestWavelengthToNu:
         nu = _wavelength_to_nu(wave)
         assert float(nu[0]) > float(nu[1]) > float(nu[2])
 
-    def test_output_shape(self, broad_wave):
+    def test_shape_finite_positive_and_monotonicity(self, broad_wave):
+        """Shape, finiteness, positivity, and monotonic inverse relation to wavelength.
+
+        Physical: Higher wavelength → lower frequency (ν = c/λ).
+        """
         from tengri.components.agn.qsogen import _wavelength_to_nu
 
         nu = _wavelength_to_nu(broad_wave)
+
+        # Shape and bounds
         chex.assert_equal_shape([nu, broad_wave])
-
-    def test_finite_and_positive(self, broad_wave):
-        from tengri.components.agn.qsogen import _wavelength_to_nu
-
-        nu = _wavelength_to_nu(broad_wave)
         chex.assert_tree_all_finite(nu)
-        assert jnp.all(nu > 0.0)
+        assert jnp.all(nu > 0.0), "Frequency must be positive"
+
+        # Monotonicity: higher wavelength → lower frequency
+        nu_diffs = jnp.diff(nu)
+        assert jnp.all(nu_diffs < 0.0), "Frequency must decrease monotonically with wavelength"
 
 
 # ── _apply_dust_reddening ─────────────────────────────────────────
@@ -430,12 +495,14 @@ class TestApplyDustReddening:
         reddened = _apply_dust_reddening(uv_optical_wave, cont, 0.5)
         assert jnp.all(reddened >= 0.0)
 
-    def test_output_shape(self, uv_optical_wave):
+    def test_shape_and_non_negative_output(self, uv_optical_wave):
+        """Output shape matches input, and reddened spectrum is non-negative."""
         from tengri.components.agn.qsogen import _apply_dust_reddening, _broken_powerlaw_continuum
 
         cont = _broken_powerlaw_continuum(uv_optical_wave, -0.349, 0.593, 3880.0)
         reddened = _apply_dust_reddening(uv_optical_wave, cont, 0.1)
         chex.assert_equal_shape([reddened, uv_optical_wave])
+        assert jnp.all(reddened >= 0.0), "Reddened spectrum must be non-negative"
 
 
 # ── qsogen registered wrapper ─────────────────────────────────────
@@ -457,11 +524,13 @@ class TestQsogenWrapper:
         sed = qsogen(broad_wave, agn_log_lbol=45.0, agn_ebv=0.1, agn_bbnorm=2.0)
         chex.assert_tree_all_finite(sed)
 
-    def test_output_shape(self, broad_wave):
+    def test_shape_and_finite_output(self, broad_wave):
+        """Output shape matches input wavelength grid, and values are finite."""
         from tengri.components.agn.qsogen import qsogen
 
         sed = qsogen(broad_wave)
         chex.assert_equal_shape([sed, broad_wave])
+        chex.assert_tree_all_finite(sed)
 
 
 class TestBrokenPowerlawEuvBranch:

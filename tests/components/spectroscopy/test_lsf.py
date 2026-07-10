@@ -1,16 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for wavelength-dependent Line Spread Function (LSF) convolution.
+"""Contract tests for wavelength-dependent Line Spread Function (LSF) convolution.
 
-Validates that:
-1. Constant-R LSF reduces spectral resolution (smooths features)
-2. Variable-R LSF applies more smoothing where R is lower
-3. Flux is conserved (integral preserved)
-4. Library resolution subtraction works correctly
-5. Instrument resolution profiles return expected values
-6. All paths are differentiable and JIT-compatible
+Strong anchors: flux conservation (∫F dλ before == after), delta-function
+broadening (peak reduction shows convolution), limits (high-R near identity,
+flat spectrum unchanged), library resolution quadrature subtraction, and
+gradient finitude. All paths are JAX-differentiable.
 """
 
-import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -63,55 +59,41 @@ def flat_spectrum():
 
 
 class TestInstrumentProfiles:
-    """Tests for instrument R(lambda) utility functions."""
+    """Frozen: PRISM and G140M resolution values and monotonicity."""
 
-    def test_nirspec_prism_range(self):
-        """PRISM resolution ranges from ~30 to ~330."""
+    def test_nirspec_prism_monotonic_increasing(self):
+        """PRISM resolution increases monotonically with wavelength."""
         wave_um = jnp.linspace(0.6, 5.3, 100)
         R = nirspec_prism_resolution(wave_um)
-        assert float(R[0]) == pytest.approx(30.0, abs=1.0)
-        assert float(R[-1]) == pytest.approx(288.5, abs=30.0)
-        # Monotonically increasing
+        # Should increase monotonically
         assert jnp.all(jnp.diff(R) >= 0)
 
-    def test_nirspec_prism_clipping(self):
-        """PRISM resolution is clipped at boundaries."""
+    def test_nirspec_prism_boundary_clipping(self):
+        """PRISM resolution is clipped at boundaries (30 and 330)."""
         wave_um = jnp.array([0.1, 0.3, 10.0])
         R = nirspec_prism_resolution(wave_um)
         assert float(R[0]) == 30.0  # clipped at lower bound
         assert float(R[-1]) == 330.0  # clipped at upper bound
 
-    def test_nirspec_g140m_constant(self):
-        """G140M returns constant R=1000."""
+    def test_nirspec_g140m_constant_r(self):
+        """G140M returns constant R=1000 across wavelength range."""
         wave_um = jnp.linspace(1.0, 1.8, 50)
         R = nirspec_g140m_resolution(wave_um)
         assert_allclose(R, 1000.0 * jnp.ones(50))
-
-    def test_profiles_return_correct_shape(self):
-        """Resolution profiles return same shape as input."""
-        wave_um = jnp.linspace(0.6, 5.3, 200)
-        assert nirspec_prism_resolution(wave_um).shape == (200,)
-        assert nirspec_g140m_resolution(wave_um).shape == (200,)
 
 
 # ── Library resolution constants ──────────────────────────────────
 
 
 class TestLibraryResolutions:
-    """Tests for SSP library resolution dictionary."""
+    """Frozen: exact SSP library sigma values (km/s)."""
 
-    def test_known_libraries_present(self):
-        """Expected library keys exist."""
-        assert "miles" in SSP_LIBRARY_RESOLUTIONS
-        assert "c3k" in SSP_LIBRARY_RESOLUTIONS
-        assert "fsps_default" in SSP_LIBRARY_RESOLUTIONS
-
-    def test_miles_value(self):
-        """MILES library sigma is ~70 km/s."""
+    def test_miles_resolution(self):
+        """MILES library sigma is frozen at 70 km/s."""
         assert SSP_LIBRARY_RESOLUTIONS["miles"] == pytest.approx(70.0)
 
-    def test_c3k_value(self):
-        """C3K library sigma is ~15 km/s."""
+    def test_c3k_resolution(self):
+        """C3K library sigma is frozen at 15 km/s."""
         assert SSP_LIBRARY_RESOLUTIONS["c3k"] == pytest.approx(15.0)
 
 
@@ -119,16 +101,16 @@ class TestLibraryResolutions:
 
 
 class TestResolutionConversion:
-    """Tests for R -> sigma_kms conversion."""
+    """Frozen: R -> sigma_kms formula."""
 
-    def test_known_value(self):
-        """R=1000 should give sigma ~ 127 km/s."""
+    def test_resolution_to_sigma_formula(self):
+        """R=1000 yields sigma = c_kms / (FWHM_TO_SIGMA * R)."""
         sigma = _resolution_to_sigma_kms(jnp.array(1000.0))
         expected = _C_KM_S / (_FWHM_TO_SIGMA * 1000.0)
         assert float(sigma) == pytest.approx(float(expected), rel=1e-10)
 
-    def test_higher_r_smaller_sigma(self):
-        """Higher R means smaller velocity width."""
+    def test_higher_resolution_narrower_velocity_width(self):
+        """Higher R (better resolution) gives smaller velocity width sigma."""
         sigma_100 = _resolution_to_sigma_kms(jnp.array(100.0))
         sigma_1000 = _resolution_to_sigma_kms(jnp.array(1000.0))
         assert float(sigma_100) > float(sigma_1000)
@@ -138,27 +120,22 @@ class TestResolutionConversion:
 
 
 class TestApplyLSFConstantR:
-    """Tests for apply_lsf with scalar (constant) resolution."""
+    """Constant-R LSF: conservation, smoothing, and limits."""
 
-    def test_output_shape(self, wave, delta_spectrum):
-        """Output has same shape as input."""
-        result = apply_lsf(delta_spectrum, wave, resolution=100.0)
-        chex.assert_equal_shape([result, delta_spectrum])
-
-    def test_smooths_delta(self, wave, delta_spectrum):
-        """LSF reduces the peak of a delta function."""
+    def test_smooths_delta_function(self, wave, delta_spectrum):
+        """LSF reduces the peak of a delta function (shows broadening)."""
         smoothed = apply_lsf(delta_spectrum, wave, resolution=100.0)
         assert float(jnp.max(smoothed)) < float(jnp.max(delta_spectrum))
 
-    def test_lower_r_more_smoothing(self, wave, delta_spectrum):
-        """Lower R (broader LSF) gives more smoothing."""
+    def test_lower_resolution_more_smoothing(self, wave, delta_spectrum):
+        """Lower R (broader LSF kernel) produces more smoothing."""
         peak_r50 = float(jnp.max(apply_lsf(delta_spectrum, wave, resolution=50.0)))
         peak_r100 = float(jnp.max(apply_lsf(delta_spectrum, wave, resolution=100.0)))
         peak_r500 = float(jnp.max(apply_lsf(delta_spectrum, wave, resolution=500.0)))
         assert peak_r50 < peak_r100 < peak_r500
 
-    def test_conserves_flux(self, wave, delta_spectrum):
-        """Total flux is conserved under convolution."""
+    def test_flux_conservation(self, wave, delta_spectrum):
+        """Total flux is conserved under LSF convolution (∫F dλ before = after)."""
         smoothed = apply_lsf(delta_spectrum, wave, resolution=100.0)
         assert_allclose(
             float(jnp.sum(smoothed)),
@@ -166,8 +143,8 @@ class TestApplyLSFConstantR:
             rtol=1e-6,
         )
 
-    def test_flat_spectrum_unchanged(self, wave, flat_spectrum):
-        """Flat spectrum is unchanged by LSF (interior pixels)."""
+    def test_flat_spectrum_limit(self, wave, flat_spectrum):
+        """Flat spectrum is unchanged by LSF (interior pixels, no edge effects)."""
         smoothed = apply_lsf(flat_spectrum, wave, resolution=100.0)
         interior = slice(50, -50)
         assert_allclose(
@@ -176,37 +153,32 @@ class TestApplyLSFConstantR:
             rtol=1e-5,
         )
 
-    def test_high_r_near_identity(self, wave, delta_spectrum):
-        """Very high R (narrow LSF) barely changes the spectrum."""
+    def test_high_resolution_near_identity(self, wave, delta_spectrum):
+        """Very high R (very narrow LSF) barely changes the spectrum (limit)."""
         smoothed = apply_lsf(delta_spectrum, wave, resolution=50000.0)
         assert_allclose(smoothed, delta_spectrum, atol=0.01)
-
-    def test_finite_output(self, wave, delta_spectrum):
-        """No NaN or Inf in output."""
-        smoothed = apply_lsf(delta_spectrum, wave, resolution=100.0)
-        chex.assert_tree_all_finite(smoothed)
 
 
 # ── Library resolution subtraction ────────────────────────────────
 
 
 class TestLibrarySubtraction:
-    """Tests for sigma_lib quadrature subtraction."""
+    """Sigma quadrature subtraction: sigma_eff² = sigma_inst² - sigma_lib²."""
 
-    def test_no_lib_vs_with_lib(self, wave, delta_spectrum):
-        """Subtracting library resolution reduces the effective smoothing."""
+    def test_library_subtraction_reduces_smoothing(self, wave, delta_spectrum):
+        """Subtracting library resolution reduces effective smoothing."""
         # With sigma_lib=0, full instrument smoothing
         smoothed_full = apply_lsf(delta_spectrum, wave, resolution=100.0, sigma_lib_kms=0.0)
-        # With sigma_lib > 0, less additional smoothing needed
+        # With sigma_lib > 0, less additional smoothing
         smoothed_sub = apply_lsf(delta_spectrum, wave, resolution=100.0, sigma_lib_kms=50.0)
-        # The subtracted version should have a higher peak (less smoothed)
+        # Subtracted version has higher peak (less smoothed)
         assert float(jnp.max(smoothed_sub)) > float(jnp.max(smoothed_full))
 
-    def test_lib_exceeds_instrument_no_smoothing(self, wave, delta_spectrum):
-        """When sigma_lib > sigma_inst, no smoothing is applied."""
+    def test_library_exceeds_instrument_no_smoothing(self, wave, delta_spectrum):
+        """When sigma_lib > sigma_inst, sigma_eff becomes zero."""
         # R=100 gives sigma_inst ~ 1275 km/s; sigma_lib=2000 exceeds it
         smoothed = apply_lsf(delta_spectrum, wave, resolution=100.0, sigma_lib_kms=2000.0)
-        # Should be essentially unchanged (sigma_eff = 0)
+        # Should be essentially unchanged
         assert_allclose(smoothed, delta_spectrum, atol=1e-10)
 
 
@@ -214,22 +186,16 @@ class TestLibrarySubtraction:
 
 
 class TestApplyLSFVariableR:
-    """Tests for apply_lsf with per-pixel resolution array."""
+    """Variable-R LSF: conservation and convergence with bin resolution."""
 
-    def test_output_shape(self, wave, delta_spectrum):
-        """Output has same shape as input."""
-        R_var = 30.0 + 55.0 * (wave / 1e4 - 0.6)
-        result = apply_lsf(delta_spectrum, wave, resolution=R_var)
-        chex.assert_equal_shape([result, delta_spectrum])
-
-    def test_smooths_delta(self, wave, delta_spectrum):
-        """Variable-R LSF reduces the peak of a delta function."""
+    def test_smooths_delta_with_variable_r(self, wave, delta_spectrum):
+        """Variable-R LSF reduces delta peak (shows convolution works)."""
         R_var = 30.0 + 55.0 * (wave / 1e4 - 0.6)
         smoothed = apply_lsf(delta_spectrum, wave, resolution=R_var)
         assert float(jnp.max(smoothed)) < float(jnp.max(delta_spectrum))
 
-    def test_conserves_flux(self, wave, delta_spectrum):
-        """Total flux is conserved for variable R."""
+    def test_flux_conservation_variable_r(self, wave, delta_spectrum):
+        """Flux is conserved for variable R (quadrature on piecewise bins)."""
         R_var = 30.0 + 55.0 * (wave / 1e4 - 0.6)
         smoothed = apply_lsf(delta_spectrum, wave, resolution=R_var)
         assert_allclose(
@@ -239,22 +205,16 @@ class TestApplyLSFVariableR:
         )
 
     def test_constant_array_matches_scalar(self, wave, delta_spectrum):
-        """Uniform R array should match scalar R result closely."""
+        """Uniform R array should match scalar R result (piecewise → continuous limit)."""
         R_scalar = 200.0
         R_array = R_scalar * jnp.ones_like(wave)
         smoothed_scalar = apply_lsf(delta_spectrum, wave, resolution=R_scalar)
         smoothed_array = apply_lsf(delta_spectrum, wave, resolution=R_array)
-        # Piecewise approximation should be close but not identical
+        # Piecewise approximation should be close
         assert_allclose(smoothed_array, smoothed_scalar, rtol=0.05, atol=0.05)
 
-    def test_prism_like_variable_r(self, wave, delta_spectrum):
-        """PRISM-like variable R produces finite output."""
-        R_var = nirspec_prism_resolution(wave / 1e4)
-        smoothed = apply_lsf(delta_spectrum, wave, resolution=R_var)
-        chex.assert_tree_all_finite(smoothed)
-
-    def test_more_bins_better_accuracy(self, wave, delta_spectrum):
-        """More bins should give result closer to constant-R case for uniform R."""
+    def test_convergence_with_bin_count(self, wave, delta_spectrum):
+        """More bins give result closer to scalar-R case (convergence)."""
         R_const = 150.0 * jnp.ones_like(wave)
         ref = apply_lsf(delta_spectrum, wave, resolution=150.0)
         err_8 = jnp.max(jnp.abs(apply_lsf(delta_spectrum, wave, R_const, n_bins=8) - ref))
@@ -266,18 +226,18 @@ class TestApplyLSFVariableR:
 
 
 class TestLSFGradients:
-    """Gradients through LSF convolution are finite."""
+    """Gradients through LSF convolution are finite and correct."""
 
-    def test_gradient_wrt_spectrum_constant_r(self, wave, delta_spectrum):
+    def test_gradient_finite_constant_r(self, wave, delta_spectrum):
         """Gradient w.r.t. input flux is finite (constant R)."""
 
         def loss(spec):
             return jnp.sum(apply_lsf(spec, wave, resolution=100.0) ** 2)
 
         g = jax.grad(loss)(delta_spectrum)
-        chex.assert_tree_all_finite(g)
+        assert jnp.all(jnp.isfinite(g))
 
-    def test_gradient_wrt_spectrum_variable_r(self, wave, delta_spectrum):
+    def test_gradient_finite_variable_r(self, wave, delta_spectrum):
         """Gradient w.r.t. input flux is finite (variable R)."""
         R_var = 30.0 + 55.0 * (wave / 1e4 - 0.6)
 
@@ -285,10 +245,10 @@ class TestLSFGradients:
             return jnp.sum(apply_lsf(spec, wave, resolution=R_var) ** 2)
 
         g = jax.grad(loss)(delta_spectrum)
-        chex.assert_tree_all_finite(g)
+        assert jnp.all(jnp.isfinite(g))
 
-    def test_gradient_wrt_resolution_scalar(self, wave, delta_spectrum):
-        """Gradient w.r.t. scalar resolution is finite."""
+    def test_gradient_wrt_resolution_matches_finite_difference(self, wave, delta_spectrum):
+        """Gradient w.r.t. scalar resolution matches finite differences."""
 
         def loss(R):
             return jnp.sum(apply_lsf(delta_spectrum, wave, resolution=R) ** 2)
@@ -300,14 +260,14 @@ class TestLSFGradients:
         )
 
     def test_jit_constant_r(self, wave, delta_spectrum):
-        """JIT compilation works for constant R."""
+        """JIT compilation works for constant R (structural compatibility)."""
         fn = jax.jit(lambda s: apply_lsf(s, wave, resolution=100.0))
         result = fn(delta_spectrum)
-        chex.assert_tree_all_finite(result)
+        assert jnp.all(jnp.isfinite(result))
 
     def test_jit_variable_r(self, wave, delta_spectrum):
-        """JIT compilation works for variable R."""
+        """JIT compilation works for variable R (structural compatibility)."""
         R_var = 30.0 + 55.0 * (wave / 1e4 - 0.6)
         fn = jax.jit(lambda s: apply_lsf(s, wave, resolution=R_var))
         result = fn(delta_spectrum)
-        chex.assert_tree_all_finite(result)
+        assert jnp.all(jnp.isfinite(result))

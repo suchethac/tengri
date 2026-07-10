@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Reproducing AGNFITTER-RX with tengri
+# # Reproducing AGNFITTER-RX's physics with tengri
 #
 # AGNFITTER-RX (Martínez-Ramírez et al. 2024, MNRAS 535, 2961) models the
 # radio-to-X-ray SEDs of active galaxies. Where CIGALE, BAGPIPES, and

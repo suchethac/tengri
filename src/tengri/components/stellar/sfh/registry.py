@@ -199,7 +199,21 @@ SFH_REGISTRY: dict[str, Any] = {}
 #: and ``predict`` then raises ``NotImplementedError``. Promote a name out of
 #: this set once it is added to ``_SUPPORTED_SFH`` and crossvalidated.
 UNVALIDATED_SFH_TYPES: frozenset[str] = frozenset(
-    {"bursty_continuity", "gaussian_burst", "prospector_beta", "psb_wild2020", "top_hat"}
+    {
+        "bursty_continuity",
+        "gaussian_burst",
+        "prospector_beta",
+        "psb_wild2020",
+        "top_hat",
+        # Registered but absent from the stellar component's runtime
+        # _SUPPORTED_SFH allowlist (components/stellar/component.py) —
+        # without an entry here they build fine and then die at the first
+        # predict with NotImplementedError. Keep the two gates in sync
+        # until they share one source of truth.
+        "constant_then_exponential",
+        "db",
+        "dbp",
+    }
 )
 
 # Field sub-model registry: PSD model name -> sqrt_power function
@@ -627,19 +641,22 @@ _register(
         fn=sfhdelayed,
         params={
             "sfh_delayed_log_total_mass": ParamDef(
-                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5, default=10.0),
             ),
             "sfh_delayed_tau_gyr": ParamDef(
                 "Timescale (Gyr) — cosmic-time location of SFR peak",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.1, 10.0),
+                Uniform(0.1, 10.0, default=2.0),
             ),
             "sfh_delayed_age_gyr": ParamDef(
                 "Galaxy age / lookback time of formation (Gyr); must be > τ",
                 _lo_positive,
                 "must have lo > 0",
-                Uniform(0.5, 13.0),
+                Uniform(0.5, 13.0, default=5.0),
             ),
         },
         settings={},

@@ -55,6 +55,7 @@ def _params(emit: bool):
         sfh_dpl_alpha=Fixed(2.0),
         sfh_dpl_beta=Fixed(1.0),
         sfh_dpl_tau_gyr=Fixed(1.0),
+        sfh_dpl_age_gyr=Fixed(5.0),
         sfh_dpl_log_total_mass=Fixed(10.0),
         met_logzsol=Fixed(0.0),
         redshift=Fixed(0.05),
@@ -244,10 +245,13 @@ def test_emission_adds_ir_to_rest_sed(synthetic_ssp_wide):
     emission when the port was mis-ordered.
     """
     ssp = synthetic_ssp_wide
-    se = np.asarray(_model(True, ssp).predict_rest_sed({}))
-    sn = np.asarray(_model(False, ssp).predict_rest_sed({}))
+    pe = _model(True, ssp).predict_rest_sed({})
+    pn = _model(False, ssp).predict_rest_sed({})
+    # The emission model's master grid extends into the submm (#1005) while
+    # the no-emission model stays on the SSP grid — compare on the latter.
+    we, wn = np.asarray(pe.wavelength), np.asarray(pn.wavelength)
+    se = np.interp(wn, we, np.asarray(pe.sed))
+    sn = np.asarray(pn.sed)
     assert not np.allclose(se, sn), "emission must change the rest-frame SED"
-    # The change must be in the IR, not the UV/optical.
-    # predict_rest_sed shape is (n_filter?, n_wave) or (n_wave,) — flatten and compare.
     diff = np.abs(se - sn)
     assert float(diff.max()) > 0.0

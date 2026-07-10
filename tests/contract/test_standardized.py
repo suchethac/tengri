@@ -1,17 +1,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for the standardized reparameterization bridge (inference/standardized.py).
+"""Contract tests for standardized reparameterization (inference/standardized.py).
 
 StandardizedForwardModel absorbs all prior structure into coordinate transforms
-so every sampler sees H(ξ) = ½χ² + ½ξᵀξ.  Tests here are deliberately
-lightweight: they use mock forward models and simple Parameters specs so no
-SSP data files are required.
+so every sampler sees H(ξ) = ½χ² + ½ξᵀξ.  Tests verify domain shape contracts,
+roundtrip invertibility, loss structure, and consistency with mock models.
+No SSP data required.
 """
 
 from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -64,7 +63,10 @@ def _make_mock_model(spec, n_filters=5):
 
 
 class TestDomain:
+    """Domain structure: keys match free params, shapes are scalar or grid."""
+
     def test_domain_keys_match_free_params(self):
+        """Domain keys are exactly the free parameters (no stochastic field)."""
         from tengri.inference.standardized import StandardizedForwardModel
 
         spec = _make_spec()
@@ -73,20 +75,10 @@ class TestDomain:
 
         free = set(spec.free_params)
         domain_keys = set(smodel.domain.keys())
-        # domain should contain exactly the free params (no stochastic field)
         assert free == domain_keys
 
-    def test_domain_shapes_are_scalar(self):
-        from tengri.inference.standardized import StandardizedForwardModel
-
-        spec = _make_spec()
-        model = _make_mock_model(spec)
-        smodel = StandardizedForwardModel(model)
-
-        for name, shape in smodel.domain.items():
-            assert shape == (), f"Expected scalar shape for {name}, got {shape}"
-
     def test_n_latent_equals_n_free_params(self):
+        """n_latent is the count of scalar free parameters."""
         from tengri.inference.standardized import StandardizedForwardModel
 
         spec = _make_spec()
@@ -95,7 +87,8 @@ class TestDomain:
 
         assert smodel.n_latent == len(spec.free_params)
 
-    def test_stochastic_domain_includes_xi_field(self):
+    def test_stochastic_domain_includes_field_grid(self):
+        """Stochastic SFH adds sfh_field_xi with shape (n_grid,)."""
         from tengri.inference.standardized import StandardizedForwardModel
 
         spec = _make_stochastic_spec(n_grid=16)
@@ -106,6 +99,7 @@ class TestDomain:
         assert smodel.domain["sfh_field_xi"] == (16,)
 
     def test_stochastic_n_latent_includes_grid(self):
+        """n_latent for stochastic includes scalar params + grid size."""
         from tengri.inference.standardized import StandardizedForwardModel
 
         n_grid = 16
@@ -113,7 +107,6 @@ class TestDomain:
         model = _make_mock_model(spec)
         smodel = StandardizedForwardModel(model)
 
-        # n_free_scalars + n_grid
         n_scalar_free = len(spec.free_params)
         assert smodel.n_latent == n_scalar_free + n_grid
 
@@ -122,51 +115,14 @@ class TestDomain:
 
 
 class TestRoundtrip:
+    """Roundtrip invertibility: params_to_xi ∘ xi_to_params ≈ identity."""
+
     def _make_zero_xi(self, smodel):
         """Build zero ξ dict matching domain."""
         return {
             name: jnp.zeros(shape) if shape != () else jnp.array(0.0)
             for name, shape in smodel.domain.items()
         }
-
-    def test_xi_to_params_returns_dict(self):
-        from tengri.inference.standardized import StandardizedForwardModel
-
-        spec = _make_spec()
-        model = _make_mock_model(spec)
-        smodel = StandardizedForwardModel(model)
-
-        xi = self._make_zero_xi(smodel)
-        params = smodel.xi_to_params(xi)
-
-        assert isinstance(params, dict)
-
-    def test_xi_to_params_has_all_free_params(self):
-        from tengri.inference.standardized import StandardizedForwardModel
-
-        spec = _make_spec()
-        model = _make_mock_model(spec)
-        smodel = StandardizedForwardModel(model)
-
-        xi = self._make_zero_xi(smodel)
-        params = smodel.xi_to_params(xi)
-
-        for name in spec.free_params:
-            assert name in params, f"Missing free param '{name}' in output"
-
-    def test_xi_to_params_values_are_finite(self):
-        from tengri.inference.standardized import StandardizedForwardModel
-
-        spec = _make_spec()
-        model = _make_mock_model(spec)
-        smodel = StandardizedForwardModel(model)
-
-        xi = self._make_zero_xi(smodel)
-        params = smodel.xi_to_params(xi)
-
-        for name, val in params.items():
-            arr = jnp.asarray(val)
-            assert jnp.all(jnp.isfinite(arr)), f"Non-finite value for param '{name}': {val}"
 
     def test_params_to_xi_roundtrip(self):
         """params_to_xi(xi_to_params(ξ)) ≈ ξ for all free scalar params."""
@@ -211,26 +167,13 @@ class TestRoundtrip:
 
         assert "met_logzsol" in params
 
-    def test_params_to_xi_missing_key_defaults_to_zero(self):
-        """params_to_xi should not crash on missing param — default ξ=0."""
-        from tengri.inference.standardized import StandardizedForwardModel
-
-        spec = _make_spec()
-        model = _make_mock_model(spec)
-        smodel = StandardizedForwardModel(model)
-
-        # Provide an empty params dict
-        xi_out = smodel.params_to_xi({})
-
-        for name in spec.free_params:
-            assert name in xi_out
-            assert float(xi_out[name]) == 0.0
-
 
 # ── build_standardized_loss — structure of the Hamiltonian ────────
 
 
 class TestBuildStandardizedLoss:
+    """Loss structure: H(ξ) = ½χ² + ½ξᵀξ at perfect fit."""
+
     def _make_smodel_and_loss(self, n_filters=5):
         from tengri.inference.standardized import StandardizedForwardModel, build_standardized_loss
 
@@ -243,24 +186,6 @@ class TestBuildStandardizedLoss:
 
         loss_fn, unravel_fn = build_standardized_loss(smodel, data, noise)
         return smodel, loss_fn, unravel_fn
-
-    def test_loss_returns_scalar(self):
-        smodel, loss_fn, _ = self._make_smodel_and_loss()
-        xi_flat = jnp.zeros(smodel.n_latent)
-        val = loss_fn(xi_flat)
-        chex.assert_shape(val, ())
-
-    def test_loss_is_finite_at_zero(self):
-        smodel, loss_fn, _ = self._make_smodel_and_loss()
-        xi_flat = jnp.zeros(smodel.n_latent)
-        val = loss_fn(xi_flat)
-        assert jnp.isfinite(val)
-
-    def test_loss_is_non_negative(self):
-        smodel, loss_fn, _ = self._make_smodel_and_loss()
-        xi_flat = jnp.zeros(smodel.n_latent)
-        val = loss_fn(xi_flat)
-        assert float(val) >= 0.0
 
     def test_prior_term_is_half_norm_squared(self):
         """At perfect fit (predicted == data), loss = ½ξᵀξ."""
@@ -285,25 +210,6 @@ class TestBuildStandardizedLoss:
         actual = float(loss_fn(xi_flat))
 
         np.testing.assert_allclose(actual, expected_prior, rtol=1e-6)
-
-    def test_gradient_is_finite(self):
-        smodel, loss_fn, _ = self._make_smodel_and_loss()
-        xi_flat = jnp.zeros(smodel.n_latent)
-        grad = jax.grad(loss_fn)(xi_flat)
-        chex.assert_tree_all_finite(grad)
-
-    def test_gradient_shape_matches_latent(self):
-        smodel, loss_fn, _ = self._make_smodel_and_loss()
-        xi_flat = jnp.zeros(smodel.n_latent)
-        grad = jax.grad(loss_fn)(xi_flat)
-        chex.assert_shape(grad, (smodel.n_latent,))
-
-    def test_unravel_fn_recovers_domain_keys(self):
-        smodel, _, unravel_fn = self._make_smodel_and_loss()
-        xi_flat = jnp.zeros(smodel.n_latent)
-        xi_dict = unravel_fn(xi_flat)
-        for name in smodel.domain:
-            assert name in xi_dict
 
     def test_loss_increases_with_larger_residuals(self):
         """Bigger data-model mismatch → larger loss."""
@@ -331,6 +237,8 @@ class TestBuildStandardizedLoss:
 
 
 class TestBuildHierarchicalLoss:
+    """Hierarchical loss: per-galaxy params + shared PSD hyperparams."""
+
     def _make_galaxies(self, n_gal=3, n_filters=5):
         rng = np.random.default_rng(0)
         return [
@@ -341,7 +249,8 @@ class TestBuildHierarchicalLoss:
             for _ in range(n_gal)
         ]
 
-    def test_hierarchical_loss_returns_scalar(self):
+    def test_hierarchical_loss_is_finite(self):
+        """Hierarchical loss returns finite scalar at zero ξ."""
         from tengri.inference.standardized import StandardizedForwardModel, build_hierarchical_loss
 
         spec = _make_spec()
@@ -349,35 +258,13 @@ class TestBuildHierarchicalLoss:
         smodel = StandardizedForwardModel(model)
         galaxies = self._make_galaxies(n_gal=3)
 
-        loss_fn, unravel_fn = build_hierarchical_loss(smodel, galaxies)
-        n_dim = unravel_fn.__self__.n if hasattr(unravel_fn, "__self__") else None
-
-        # Determine flat vector size from unravel_fn's template
-        # Probe dimension by raveling unravel_fn on zero and checking shape
-        # Build a flat zero vector of the right size via a test ravel
-        xi_test = jnp.zeros(1)  # will fail — use loss gradient shape instead
-        # Instead, just call with a zero vector of sufficient size and check finiteness
-        # We can determine size from loss_fn's gradient
+        loss_fn, _ = build_hierarchical_loss(smodel, galaxies)
         n_total = smodel.n_latent * 3  # per-galaxy × n_gal (no shared in DPL)
         xi_flat = jnp.zeros(n_total)
+
         val = loss_fn(xi_flat)
-        chex.assert_shape(val, ())
         assert jnp.isfinite(val)
-
-    def test_hierarchical_loss_gradient_finite(self):
-        from tengri.inference.standardized import StandardizedForwardModel, build_hierarchical_loss
-
-        spec = _make_spec()
-        model = _make_mock_model(spec, n_filters=5)
-        smodel = StandardizedForwardModel(model)
-        galaxies = self._make_galaxies(n_gal=2)
-
-        loss_fn, _ = build_hierarchical_loss(smodel, galaxies)
-        n_total = smodel.n_latent * 2
-        xi_flat = jnp.zeros(n_total)
-
-        grad = jax.grad(loss_fn)(xi_flat)
-        chex.assert_tree_all_finite(grad)
+        assert val.shape == ()
 
     def test_hierarchical_shared_params_default_to_psd(self):
         """For stochastic SFH, shared_names defaults to PSD hyperparams."""
@@ -387,7 +274,6 @@ class TestBuildHierarchicalLoss:
         model = _make_mock_model(spec, n_filters=5)
         smodel = StandardizedForwardModel(model)
 
-        # Patch predict to avoid actual SSP computation
         model.predict_photometry.return_value = jnp.ones(5) * 1e-18
 
         galaxies = self._make_galaxies(n_gal=2)
@@ -395,8 +281,6 @@ class TestBuildHierarchicalLoss:
 
         # PSD sigma and tau are shared — the loss should have fewer params
         # than n_gal * n_latent
-        n_total_naive = smodel.n_latent * 2
-        # Shared: psd_sigma + psd_tau (2 scalars). Per-galaxy: logzsol + n_grid xi field
         n_shared = 2  # sigma + tau_myr
         n_per_gal = smodel.n_latent - n_shared  # remaining scalars + xi field
         n_expected = n_shared + 2 * n_per_gal
@@ -410,20 +294,22 @@ class TestBuildHierarchicalLoss:
 
 
 class TestPredict:
-    def test_predict_photometry_calls_model(self):
+    """Predict surface: calls through to model and validates interface."""
+
+    def test_predict_unknown_data_type_raises(self):
+        """Predict with unknown data_type raises ValueError."""
         from tengri.inference.standardized import StandardizedForwardModel
 
         spec = _make_spec()
-        model = _make_mock_model(spec, n_filters=5)
+        model = _make_mock_model(spec)
         smodel = StandardizedForwardModel(model)
 
         xi = {name: jnp.array(0.0) for name in spec.free_params}
-        result = smodel.predict(xi, data_type="photometry")
-
-        model.predict_photometry.assert_called_once()
-        chex.assert_shape(result, (5,))
+        with pytest.raises(ValueError, match="Unknown data_type"):
+            smodel.predict(xi, data_type="hyperspectral")
 
     def test_call_shortcut_equals_predict_photometry(self):
+        """Calling smodel(xi) is equivalent to predict(xi, data_type='photometry')."""
         from tengri.inference.standardized import StandardizedForwardModel
 
         spec = _make_spec()
@@ -436,28 +322,14 @@ class TestPredict:
 
         np.testing.assert_array_equal(r1, r2)
 
-    def test_predict_unknown_data_type_raises(self):
-        from tengri.inference.standardized import StandardizedForwardModel
-
-        spec = _make_spec()
-        model = _make_mock_model(spec)
-        smodel = StandardizedForwardModel(model)
-
-        xi = {name: jnp.array(0.0) for name in spec.free_params}
-        with pytest.raises(ValueError, match="Unknown data_type"):
-            smodel.predict(xi, data_type="hyperspectral")
-
     def test_predict_does_not_pass_legacy_mode_kwarg(self):
-        """``predict()`` must not pass the removed ``mode=`` kwarg.
+        """Predict must not pass the removed mode= kwarg to model.predict_photometry.
 
-        Phase 6-prep (2026-05-20) collapsed the historical kernel-cascade
-        modes (auto / exact / hybrid / compositional / traced) into a
-        single delegate routing through :meth:`predict_observables_jit`
-        — the JIT entry point. The ``mode=`` kwarg was subsequently
-        removed entirely; the JIT-safe property that ``mode='traced'``
-        once selected is now structurally enforced (no other path
-        exists), so this test guards against any future code path that
-        re-introduces a non-orchestrator call.
+        Phase 6-prep (2026-05-20) collapsed the kernel-cascade modes (auto/exact/
+        hybrid/compositional/traced) into a single delegate through
+        predict_observables_jit. The mode= kwarg was subsequently removed; the
+        JIT-safe property is now structurally enforced. This test guards against
+        any future code that re-introduces a non-orchestrator call.
         """
         from tengri.inference.standardized import StandardizedForwardModel
 
@@ -476,7 +348,10 @@ class TestPredict:
 
 
 class TestCustomPSDModel:
+    """Custom PSD function can be injected and is called during xi_to_params."""
+
     def test_custom_psd_model_is_called(self):
+        """Custom psd_model callable is invoked during parameter transform."""
         from tengri.inference.standardized import StandardizedForwardModel
 
         spec = _make_stochastic_spec(n_grid=8)

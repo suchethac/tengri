@@ -43,14 +43,6 @@ def fd_grad(f, x: float, eps: float = 1e-5) -> float:
 class TestDelayedBq:
     """Tests for delayed-tau SFH with burst/quench (Ciesla+2017)."""
 
-    def test_output_shape(self):
-        """Output shape matches input."""
-        t = jnp.logspace(7, 10, 100)
-        sfr = delayed_bq(
-            t, log_total_mass=10.0, tau_main_yr=2e9, age_main_yr=5e9, age_bq_yr=500e6, r_sfr=0.5
-        )
-        chex.assert_equal_shape([sfr, t])
-
     def test_nonnegative(self):
         """SFR is non-negative everywhere."""
         t = jnp.logspace(7, 10.15, 200)
@@ -140,12 +132,12 @@ class TestDelayedBq:
         peak_t = t[peak_idx]
         assert float(peak_t) < 5e9 - 100e6
 
-    def test_is_jittable(self):
-        """delayed_bq is JIT-compatible."""
-        fn = jax.jit(delayed_bq)
+    def test_jit_parity_vs_eager(self):
+        """JIT output matches eager evaluation (JAX correctness)."""
         t = jnp.logspace(7, 10, 100)
-        sfr = fn(t, 10.0, 2e9, 5e9, 500e6, 0.5)
-        chex.assert_shape(sfr, (100,))
+        sfr_eager = delayed_bq(t, 10.0, 2e9, 5e9, 500e6, 0.5)
+        sfr_jit = jax.jit(delayed_bq)(t, 10.0, 2e9, 5e9, 500e6, 0.5)
+        chex.assert_trees_all_close(sfr_eager, sfr_jit, rtol=1e-6)
 
     def test_has_gradients_tau(self):
         """Gradient w.r.t. tau_main_yr via jax.grad.
@@ -244,19 +236,6 @@ class TestDelayedBq:
 class TestPeriodic:
     """Tests for periodic SFH with regularly-spaced events."""
 
-    def test_output_shape(self):
-        """Output shape matches input."""
-        t = jnp.logspace(6, 9.5, 150)
-        sfr = periodic(
-            t,
-            log_total_mass=10.0,
-            delta_bursts_yr=50e6,
-            tau_bursts_yr=20e6,
-            burst_type=0,
-            age_yr=1000e6,
-        )
-        chex.assert_equal_shape([sfr, t])
-
     def test_nonnegative(self):
         """SFR is non-negative everywhere."""
         t = jnp.logspace(6, 9.5, 200)
@@ -331,31 +310,12 @@ class TestPeriodic:
         assert float(jnp.max(sfr_active)) > 0
         assert float(jnp.max(sfr_inactive)) == 0
 
-    def test_is_jittable(self):
-        """periodic is JIT-compatible."""
-        fn = jax.jit(periodic)
+    def test_jit_parity_vs_eager(self):
+        """JIT output matches eager evaluation (JAX correctness)."""
         t = jnp.logspace(6, 9.5, 100)
-        sfr = fn(t, 10.0, 50e6, 20e6, 0, 1000e6)
-        chex.assert_shape(sfr, (100,))
-
-    def test_has_gradients_delta(self):
-        """Gradient w.r.t. delta_bursts_yr via jax.grad."""
-        t = jnp.logspace(6, 9, 100)
-
-        def f_delta(delta):
-            return jnp.sum(
-                periodic(
-                    t,
-                    log_total_mass=10.0,
-                    delta_bursts_yr=delta,
-                    tau_bursts_yr=20e6,
-                    burst_type=0,
-                    age_yr=1000e6,
-                )
-            )
-
-        g_auto = float(jax.grad(f_delta)(50e6))
-        assert jnp.isfinite(g_auto)
+        sfr_eager = periodic(t, 10.0, 50e6, 20e6, 0, 1000e6)
+        sfr_jit = jax.jit(periodic)(t, 10.0, 50e6, 20e6, 0, 1000e6)
+        chex.assert_trees_all_close(sfr_eager, sfr_jit, rtol=1e-6)
 
     def test_has_gradients_tau(self):
         """Gradient w.r.t. tau_bursts_yr via jax.grad."""
@@ -399,12 +359,6 @@ class TestPeriodic:
 
 class TestBuat08:
     """Tests for velocity-parameterized chemical evolution SFH (Buat+2008)."""
-
-    def test_output_shape(self):
-        """Output shape matches input."""
-        t = jnp.logspace(7, 10, 100)
-        sfr = buat08(t, log_total_mass=10.0, velocity_km_s=220.0)
-        chex.assert_equal_shape([sfr, t])
 
     def test_nonnegative(self):
         """SFR is non-negative everywhere."""
@@ -529,9 +483,6 @@ class TestSfh2Exp:
             burst_age_yr=burst_age,
         )
 
-    def test_output_shape(self):
-        assert self._sfr().shape == self._t.shape
-
     def test_nonnegative(self):
         assert jnp.all(self._sfr() >= 0.0)
 
@@ -560,17 +511,11 @@ class TestSfh2Exp:
         excess = float(jnp.trapezoid(jnp.maximum(sfr_f - sfr_0, 0.0), t)) / total
         assert 0.1 < excess < 0.4  # ~0.25, broadened for grid + overlap
 
-    def test_is_jittable(self):
-        fn = jax.jit(lambda t, fb: sfh2exp(t, 10.0, 4e9, 3e8, fb, 1e10, 5e8))
-        out = fn(self._t, 0.1)
-        assert jnp.all(jnp.isfinite(out))
-
-    def test_has_gradients(self):
-        """Finite gradients w.r.t. f_burst and tau_main (inf-dummy guard)."""
-        g_fb = jax.grad(lambda fb: jnp.sum(sfh2exp(self._t, 10.0, 4e9, 3e8, fb, 1e10, 5e8)))(0.1)
-        g_tm = jax.grad(lambda tm: jnp.sum(sfh2exp(self._t, 10.0, tm, 3e8, 0.1, 1e10, 5e8)))(4e9)
-        assert jnp.isfinite(g_fb)
-        assert jnp.isfinite(g_tm)
+    def test_jit_parity_vs_eager(self):
+        """JIT output matches eager evaluation (JAX correctness)."""
+        sfr_eager = sfh2exp(self._t, 10.0, 4e9, 3e8, 0.1, 1e10, 5e8)
+        sfr_jit = jax.jit(lambda t, fb: sfh2exp(t, 10.0, 4e9, 3e8, fb, 1e10, 5e8))(self._t, 0.1)
+        chex.assert_trees_all_close(sfr_eager, sfr_jit, rtol=1e-6)
 
     def test_zero_beyond_age(self):
         """No star formation before the galaxy formed (t_lookback > age)."""

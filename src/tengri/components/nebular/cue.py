@@ -892,11 +892,16 @@ class CueWNESSPError(ValueError):
     """
 
 
-# log10(Q_H) threshold below which an SSP is suspected to be wNE.
+# log10(Q_H) band outside which an SSP is suspected to be wNE.
 # Normal bare O/B stars at < 10 Myr give log10(Q_H) ~ 47–50 per Msun.
-# wNE SSPs: ionizing photons pre-absorbed → Q_H ≈ 0 → log10 stored as –99.
-# Threshold at 44 gives > 3 dex headroom below the physical floor.
+# wNE SSPs fail in BOTH directions: grids with the LyC pre-absorbed report
+# Q_H ≈ 0 (log10 stored as –99, caught by the lower bound), while grids
+# that keep the baked-in nebular continuum corrupt the ionizing power-law
+# fit UPWARD (observed: log10(Q_H) ≈ 62 for ssp_prsc_*_wNE_* files — the
+# nebular continuum in the fit window masquerades as ionizing flux).
+# The band gives > 2 dex headroom on each side of the physical range.
 _WNE_LOGQH_THRESHOLD: float = 44.0
+_WNE_LOGQH_UPPER: float = 52.0
 
 # Age cutoff (log10 yr) for young SSP bins used in the wNE check.
 _YOUNG_LOG_AGE_MAX: float = 7.0  # 10 Myr
@@ -975,6 +980,7 @@ class CueBackend:
         # ionspec_logLratio1..3 as free params in Parameters.
         self._ionspec_table = None
         self._logqion_table = None
+        self._seglum_table = None
         self._ssp_lgmet = None
         self._ssp_log_age_yr = None
         if ssp_data is not None:
@@ -994,6 +1000,7 @@ class CueBackend:
         )
         self._ionspec_table = jnp.array(result["ionspec_table"])
         self._logqion_table = jnp.array(result["logqion_table"])
+        self._seglum_table = jnp.array(result["seglum_table"])
         self._ssp_lgmet = jnp.array(ssp_data.ssp_lgmet)
         self._ssp_log_age_yr = jnp.array(ssp_data.ssp_lg_age_gyr) + 9.0
 
@@ -1006,13 +1013,22 @@ class CueBackend:
         if young_mask.any():
             logqion_np = np.array(self._logqion_table)  # (n_met, n_age)
             max_logqion_young = float(logqion_np[:, young_mask].max())
-            if max_logqion_young < _WNE_LOGQH_THRESHOLD:
+            if not (_WNE_LOGQH_THRESHOLD <= max_logqion_young <= _WNE_LOGQH_UPPER):
+                direction = (
+                    "well below the ~47-50 floor for bare stellar populations "
+                    "— the ionizing photons were pre-absorbed by a baked-in "
+                    "nebular layer. Cue's ionizing-spectrum fit will "
+                    "under-predict line luminosities by 4-7 dex"
+                    if max_logqion_young < _WNE_LOGQH_THRESHOLD
+                    else "far above the physical ~47-50 range for bare stellar "
+                    "populations — baked-in nebular continuum in the fit "
+                    "window masquerades as ionizing flux, corrupting Cue's "
+                    "power-law fit"
+                )
                 msg = (
                     "CueBackend received a wNE (with-Nebular-Emission) SSP. "
                     f"Max log10(Q_H) for bins younger than 10 Myr is "
-                    f"{max_logqion_young:.1f}, well below the ~47-50 floor "
-                    "for bare stellar populations. Cue's ionizing-spectrum "
-                    "fit will under-predict line luminosities by 4-7 dex.\n"
+                    f"{max_logqion_young:.1f}, {direction}.\n"
                     "\n"
                     "Fix (one of):\n"
                     "  1. Use a bare-stellar SSP. The four recipes that\n"
@@ -1338,7 +1354,10 @@ class CueBackend:
         # Vectorize interpolate_ionizing_params over all ages at once.
         # ionspec_table is (n_met, n_age, 7), logqion_table is (n_met, n_age).
         # We need logqion at each age bin for the given metallicity.
-        from tengri.components.nebular.ionizing_spectrum import interpolate_ionizing_params
+        from tengri.components.nebular.ionizing_spectrum import (
+            interpolate_ionizing_params,
+            interpolate_ionizing_seglum,
+        )
 
         # Vectorize over age axis: get (ionspec_7, logqion) for each age
         # ionspec_all: (n_age, 7), logqion_all: (n_age,)
@@ -1353,8 +1372,13 @@ class CueBackend:
             )
         )(ssp_log_ages_yr)
 
-        # Q_H per bin, masked to young bins with positive weights
+        # Q_H per bin, masked to young bins with positive weights.
+        # #1001 defense: a non-finite table row must never win the argmax
+        # below (NaN wins any comparison) nor poison the Q_H sum — zero it
+        # out with a finite dummy so neither forward nor gradient passes
+        # see a NaN.
         qh_per_bin = 10.0**logqion_all  # (n_age,)
+        qh_per_bin = jnp.where(jnp.isfinite(qh_per_bin), qh_per_bin, 0.0)
         weighted_qh = ssp_weights * qh_per_bin  # (n_age,)
         # Zero out old bins and non-positive weights
         weighted_qh = jnp.where(young_mask & (ssp_weights > 0), weighted_qh, 0.0)
@@ -1362,11 +1386,55 @@ class CueBackend:
         total_qh = jnp.sum(weighted_qh)
         total_logqion = jnp.where(total_qh > 0, jnp.log10(total_qh), -99.0)
 
-        # Dominant age bin: highest weighted Q_H contribution
-        best_age_idx = jnp.argmax(weighted_qh)
+        # ── Effective ionizing-spectrum shape (#1018) ─────────────────────────
+        # Cue is trained on the *time-averaged* ionizing spectrum of the whole
+        # population (see the module header), so the shape must combine every
+        # ionizing age bin — not the single argmax-dominant one. The old
+        # ``i7 = ionspec_all[jnp.argmax(weighted_qh)]`` made the forward
+        # DISCONTINUOUS in metallicity and SFH (the dominant bin flips → [OIII]
+        # steps ~33 %) and, because ``argmax`` has no gradient and ``ionspec_all``
+        # does not depend on ``ssp_weights``, it forced d(shape)/d(SFH) ≡ 0 —
+        # silently starving gradient-based inference.
+        #
+        # Combine the way the physics does. The 7 params describe a 4-segment
+        # broken power law: 4 slopes + 3 log-ratios of the INTEGRATED segment
+        # luminosities. Across populations:
+        #   * segment luminosities ADD linearly     → L_k = Σ_a w_a L_k,a
+        #   * the slope of a sum of power laws is the per-segment luminosity-
+        #     weighted mean          → α_k = Σ_a (w_a L_k,a / L_k) · α_k,a
+        #   * the log-ratios follow as diff(log10 L_k)
+        # Averaging the log-ratios directly (a geometric mean where an arithmetic
+        # one is required) biases [OIII] by ~12 % — worse than the argmax it would
+        # replace. This rule lands within ~1 % of re-fitting the true composite
+        # spectrum, and is smooth + differentiable.
+        log_seglum_all = jax.vmap(
+            lambda log_age_yr: interpolate_ionizing_seglum(
+                self._seglum_table,
+                self._ssp_lgmet,
+                self._ssp_log_age_yr,
+                log_z,
+                log_age_yr,
+            )
+        )(ssp_log_ages_yr)  # (n_age, 4)
 
-        # Ionizing spectrum shape from dominant bin
-        i7 = ionspec_all[best_age_idx]
+        # #1001 defense, mirroring qh_per_bin: a non-finite table row must never
+        # poison the luminosity sum nor the gradient.
+        seg_per_bin = 10.0**log_seglum_all
+        seg_per_bin = jnp.where(jnp.isfinite(seg_per_bin), seg_per_bin, 0.0)
+
+        w_mass = jnp.where(young_mask & (ssp_weights > 0), ssp_weights, 0.0)  # (n_age,)
+        seg_w = w_mass[:, None] * seg_per_bin  # (n_age, 4)
+        seg_tot = jnp.sum(seg_w, axis=0)  # (4,)
+        seg_safe = jnp.maximum(seg_tot, 1e-300)
+
+        alpha_eff = jnp.sum(seg_w * ionspec_all[:, :4], axis=0) / seg_safe  # (4,)
+        logLratio_eff = jnp.diff(jnp.log10(seg_safe))  # (3,)
+        i7_weighted = jnp.concatenate([alpha_eff, logLratio_eff])
+
+        # Fully degenerate case (no ionizing bins at all, e.g. a quiescent SFH):
+        # fall back to the dominant-bin shape rather than 1e-300 floor artefacts.
+        # ``total_qh == 0`` already forces the emission to zero downstream.
+        i7 = jnp.where(total_qh > 0, i7_weighted, ionspec_all[jnp.argmax(weighted_qh)])
 
         # Gas metallicity: convert absolute → Z/Zsun for Cue
         gas_logz = neb_logZ_gas if neb_logZ_gas is not None else log_z

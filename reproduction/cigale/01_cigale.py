@@ -14,24 +14,16 @@
 # ---
 
 # %% [markdown]
-# # Reproducing CIGALE with tengri
+# # Reproducing CIGALE's physics with tengri
 #
 # CIGALE (Boquien et al. 2019, A&A 622, A103) is the workhorse for
-# panchromatic SED fitting in extragalactic astronomy. This notebook
-# places its physics modules — `sed_modules.sfhdelayed`, `bc03`,
-# `nebular`, `dustatt_modified_starburst`, `dale2014`, `skirtor2016`,
-# `xray`, `radio`, `redshifting` — next to their tengri equivalents on
-# the same axes, in the same units, at the same parameter values.
-#
-# It serves two purposes:
-#
-# 1. **Validation.** Same parameters in, same SED out. If the codes
-#    disagree at this level the disagreement is in the physics, not in
-#    the data or the fit. Every figure is a hand-off: load CIGALE here,
-#    load tengri there, see the same lines.
-# 2. **Map.** For every physics block CIGALE ships, this is where the
-#    tengri equivalent lives — the registry entry, the public build
-#    kwarg, the canonical recipe.
+# panchromatic SED fitting. This notebook places its physics modules —
+# `sfhdelayed`, `bc03`, `nebular`, `dustatt_modified_starburst`,
+# `dale2014`, `skirtor2016`, `xray`, `radio`, `redshifting` — next to
+# their tengri equivalents on the same axes, in the same units, at the
+# same parameters. Same parameters in, same SED out: any disagreement
+# is physics, not data or fitting. Each section also names the tengri
+# build kwarg that carries the equivalent block.
 #
 # Both codes consume the same BC03 templates: CIGALE's bundled
 # Chabrier-IMF grid (Bruzual & Charlot 2003) was ported into the DSPS
@@ -763,26 +755,22 @@ plt.show()
 # Dale et al. (2014) template family (α = 2); tengri ports the same
 # templates and enforces energy balance,
 # $L_{\rm IR,\,emitted} \equiv L_{\rm absorbed}$, to floating-point —
-# the residual is annotated on the right panel.
+# the residual is annotated on the right panel. The energy anchors agree
+# to 2%: tengri's `L_absorbed` sits above CIGALE's `dust.luminosity` by
+# the FUV shape difference between the two codes' Leitherer-extended
+# Calzetti curves. That anchor offset, plus template regridding, is the
+# printed 10–100 µm median.
 #
-# The stellar + Calzetti continuum below 1 µm reproduces to ~1 %. The
-# master wavelength grid is the union of every attached component's
-# native grid, so the dust SED extends through the FIR peak (100 µm)
-# and down the Rayleigh-Jeans tail.
+# **Long wavelengths.** Past ~10 mm the panels diverge because tengri
+# ships the published Dale grid (1–225 mm) while CIGALE truncates at
+# ~10 mm; the tail sits ~3 orders below the FIR peak and both codes
+# renormalize to `L_absorbed`, so nothing physical rides on it.
 #
-# **Long-wavelength behavior.** Past ~10 mm the panels diverge because
-# tengri ships the published Dale grid (1–225 mm) while CIGALE truncates
-# at ~10 mm. Both renormalize to `L_absorbed` at runtime, so the FIR peak
-# matches by energy balance. The tengri tail sits ~3 orders below the peak
-# and is physically negligible.
-#
-# **Lyman-continuum handling.** tengri's `calzetti` and `leitherer02`
-# curves polynomial-extend through the FUV (A_λ/A_V ~ 150 below 300 Å),
-# while CIGALE's `dustatt_modified_starburst` zeros below 912 Å (H ionization
-# assumption). To match CIGALE, models here set **`dust={'lyman_cutoff': True}`**,
-# zeroing the attenuation curve below 912 Å. The `L_absorbed` integral for IR
-# already excludes λ < 912 Å regardless, so only the emergent FUV continuum
-# changes (matching CIGALE, see §7).
+# **Lyman continuum.** tengri's `calzetti` / `leitherer02` curves
+# polynomial-extend through the FUV; CIGALE zeros attenuation below
+# 912 Å. Models here set `dust={'lyman_cutoff': True}` to match. The
+# `L_absorbed` integral already excludes λ < 912 Å on both sides, so
+# only the emergent FUV continuum changes (see §7).
 
 # %%
 sed_c_ir = C.run_chain(
@@ -1638,145 +1626,174 @@ save_fig("cigale_09b_disc_skirtor.png")
 # ## §10 X-ray
 #
 # CIGALE's `xray` module follows Yang et al. (2020): an AGN corona power law
-# `L_ν ∝ E^(1−Γ)` (Γ ≈ 1.8) normalized off the disc UV through
-# `L_2keV = L_2500 · 10^(α_ox/0.3838)`, plus HMXB/LMXB terms and a
-# high-energy exponential cutoff at E_cut ≈ 300 keV. tengri ships the
-# matching `xray.yang20`.
+# `L_ν ∝ E^(1−Γ)` (Γ ≈ 1.8, E_cut ≈ 300 keV) normalized off the intrinsic
+# disc through `L_2keV = L_2500 · 10^(α_ox/0.3838)`, plus X-ray binaries and
+# hot gas. tengri ships the matching `xray.yang20`. Three conventions are
+# pinned so the panel isolates real differences:
 #
-# **Comparison at matched disc L_2500.** The two codes derive α_ox differently:
-# CIGALE fixes α_ox = −1.4, while tengri derives it from L_2500 via Just+2007
-# (clamped to 28 ≤ log₁₀ L_2500 ≤ 33). Both are matched at a realistic Seyfert
-# luminosity (log₁₀ L_2500 ≈ 29.5) where they naturally coincide.
+# - **α_ox.** CIGALE fixes α_ox = −1.4; tengri derives it from L_2500
+#   (Just et al. 2007, Eq. 3). The two coincide at log₁₀ L_2500 = 29.47,
+#   so both codes are solved live onto that luminosity — no hard-coded
+#   scale factors to go stale.
+# - **Inclination.** Both codes anchor the α_ox-derived corona at the
+#   Yang+2020 30° reference and tilt it with the same Yang et al. (2022)
+#   factor, read from the AGN block (#980). Here i = 30°; §10b sweeps it.
+# - **Absorption.** CIGALE's module carries no line-of-sight absorber, so
+#   tengri's N_H channel is pinned to zero. tengri keeps its constant 1%
+#   scattered floor (Ricci et al. 2017) — a flat +1% in the ratio panel.
 #
-# At matched L_2500 the two coronae agree to ~5% across the well-sampled
-# 0.5–30 keV band (see the ratio panel). The only visible departure is above
-# ~100 keV, where tengri's exponential cutoff is slightly softer than
-# CIGALE's — beyond the useful X-ray range, and driven by the E_cut
-# treatment rather than the normalization. (At the earlier 1 M☉-normalized
-# setup the panels disagreed by ~10⁶× because L_2500 sat ~10 dex below the
-# α_ox calibration and each code extrapolated differently; see #861/#862.)
+# The comparison is corona-to-corona: CIGALE's `xray.agn` component against
+# tengri's `sed_xray` (the 1 M☉ host makes tengri's XRB/hot-gas terms
+# negligible). CIGALE's `fracAGN` anchors the AGN on the dust luminosity,
+# so the attenuation + dust-emission modules in the chain are load-bearing:
+# without them the corona normalization collapses and the X-ray SED is
+# binaries only.
 
 # %%
-# Compare the X-ray coronae at MATCHED intrinsic disc L_2500, at a realistic
-# Seyfert luminosity inside the Just+2007 calibration window. CIGALE is scaled
-# via sfr_A (normalise=False); tengri's agn_log_lbol is pinned to reproduce
-# CIGALE's intrinsic disc L_2500. The two scale factors below were solved once
-# so both land at log10(L_2500) ~ 29.5, where tengri's luminosity-dependent
-# Just+2007 alpha_ox coincides with CIGALE's -1.4 (see #862).
-_SFR_A_XRAY = 2.63e8          # CIGALE sfhdelayed amplitude -> disc L_2500 ~ 1e29.5
-_AGN_LOG_LBOL_XRAY = 11.578   # tengri agn_log_lbol matched to the same L_2500
+_LOG_L2500_TARGET = (2.638 + 1.4) / 0.137  # Just+2007 == CIGALE's -1.4
 
-sed_x = C.run_chain(
-    [
-        (
-            "sfhdelayed",
-            dict(
-                tau_main=1000,
-                age_main=5000,
-                tau_burst=50,
-                age_burst=20,
-                f_burst=0.0,
-                sfr_A=_SFR_A_XRAY,
-                normalise=False,
-            ),
-        ),
-        ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
-        (
-            "skirtor2016",
-            dict(
-                t=7,
-                pl=1.0,
-                q=1.0,
-                oa=40,
-                R=20,
-                Mcl=0.97,
-                i=30,  # match tengri's inclination
-                disk_type=1,
-                delta=-0.36,
-                fracAGN=0.3,
-                law=0,
-                EBV=0.0,
-                temperature=100,
-                emissivity=1.6,
-            ),
-        ),
-        (
-            "yang20",
-            dict(
-                gam=1.8,
-                E_cut=300.0,
-                alpha_ox=-1.4,  # CIGALE's fixed value; equals Just+2007 at this L_2500
-                max_dev_alpha_ox=0.2,
-                angle_coef="0.5 & 0",
-                det_lmxb=0.0,
-                det_hmxb=0.0,
-            ),
-        ),
-    ]
-)
-w_x, L_x = C.to_lnu(sed_x)
-e_kev_c = 12.398 / w_x
-# CIGALE intrinsic disc L_2500 in erg/s/Hz, via the 2 keV unit-conversion point.
-_fac = L_x[np.argmin(np.abs(e_kev_c - 2.0))] / float(sed_x.info["xray.agn_Lnu_2keV_30deg"])
-_l2500_c = float(sed_x.info["agn.intrin_Lnu_2500A_30deg"]) * _fac
 
-m_x = SEDModel.build(
-    ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
-    sfh={
-        "type": "delayed",
-        "tau_gyr": Fixed(1.0),
-        "age_gyr": Fixed(5.0),
-        "log_total_mass": Fixed(0.0),
-        "*": FIXED,
-    },
-    dust={
-        "type": "two_component",
-        "tau_bc": Fixed(TAU_BC_FIDUCIAL),
-        "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
-        "*": FIXED,
-    },
-    agn={
-        "type": "composable",
-        "disc": {"type": "schartmann2005", "*": FIXED},
-        "torus": {"type": "skirtor", "*": FIXED},
-        "agn_log_lbol": Fixed(_AGN_LOG_LBOL_XRAY),
-        "agn_cos_inc": Fixed(float(np.cos(np.radians(40.0)))),
-        "agn_fracAGN": Fixed(0.3),
-        "*": FIXED,
-    },
-    xray={"type": "yang20", "*": FIXED},
-    redshift=Fixed(0.0),
+def _cigale_xray(sfr_a, incl):
+    return C.run_chain(
+        [
+            (
+                "sfhdelayed",
+                dict(
+                    tau_main=1000,
+                    age_main=5000,
+                    tau_burst=50,
+                    age_burst=20,
+                    f_burst=0.0,
+                    sfr_A=sfr_a,
+                    normalise=False,
+                ),
+            ),
+            ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+            ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+            ("dale2014", dict(alpha=2.0)),
+            (
+                "skirtor2016",
+                dict(
+                    t=7,
+                    pl=1.0,
+                    q=1.0,
+                    oa=40,
+                    R=20,
+                    Mcl=0.97,
+                    i=incl,
+                    disk_type=1,
+                    delta=-0.36,
+                    fracAGN=0.3,
+                    law=0,
+                    EBV=0.0,
+                    temperature=100,
+                    emissivity=1.6,
+                ),
+            ),
+            (
+                "yang20",
+                dict(
+                    gam=1.8,
+                    E_cut=300.0,
+                    alpha_ox=-1.4,
+                    max_dev_alpha_ox=0.2,
+                    angle_coef="0.5 & 0",
+                    det_lmxb=0.0,
+                    det_hmxb=0.0,
+                ),
+            ),
+        ]
+    )
+
+
+def _cigale_corona(sed):
+    """CIGALE's corona-only component in tengri units (erg/s/Hz, Å)."""
+    return U.wnm_to_erg_per_hz_per_aa(
+        np.asarray(sed.wavelength_grid), np.asarray(sed.luminosities["xray.agn"])
+    )
+
+
+def _cigale_l2500(sed):
+    """Intrinsic disc L_2500 [erg/s/Hz]; CIGALE stores W/Hz."""
+    return float(sed.info["agn.intrin_Lnu_2500A_30deg"]) * 1e7
+
+
+def _tengri_xray(log_lbol, cos_inc):
+    return SEDModel.build(
+        ssp_data=ssp,
+        stellar=STELLAR_FIDUCIAL,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(0.0),
+            "*": FIXED,
+        },
+        dust={
+            "type": "two_component",
+            "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+            "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+            "*": FIXED,
+        },
+        agn={
+            "type": "composable",
+            "disc": {"type": "schartmann2005", "*": FIXED},
+            "torus": {"type": "skirtor", "*": FIXED},
+            "agn_log_lbol": Fixed(log_lbol),
+            "agn_cos_inc": Fixed(cos_inc),
+            "*": FIXED,
+        },
+        xray={"type": "yang20", "log_nh": Fixed(0.0), "*": FIXED},
+        redshift=Fixed(0.0),
+    )
+
+
+_COS30 = float(np.cos(np.radians(30.0)))
+
+# Solve both codes onto log10 L_2500 = 29.47 from one trial run each —
+# the disc scales linearly with sfr_A (CIGALE, via fracAGN) and with
+# 10**agn_log_lbol (tengri, schartmann2005 has an L_bol-independent shape).
+_trial_c = _cigale_xray(1e8, 30)
+_SFR_A_XRAY = 1e8 * 10.0**_LOG_L2500_TARGET / _cigale_l2500(_trial_c)
+sed_x = _cigale_xray(_SFR_A_XRAY, 30)
+w_x, L_x = _cigale_corona(sed_x)
+_l2500_c = _cigale_l2500(sed_x)
+
+_trial_t = _tengri_xray(11.5, _COS30).predict_state({})
+_AGN_LOG_LBOL_XRAY = 11.5 + float(
+    np.log10(_l2500_c / float(np.asarray(_trial_t.derived["L_2500_intrinsic"])))
 )
-state_x = m_x.predict_state({})
-w_t = np.asarray(state_x.wave)
-sed_t = np.asarray(state_x.derived["sed_xray"])
-e_kev_t = 12.398 / w_t
+state_x = _tengri_xray(_AGN_LOG_LBOL_XRAY, _COS30).predict_state({})
 _l2500_t = float(np.asarray(state_x.derived["L_2500_intrinsic"]))
 print(
-    f"§10 matched disc L_2500: CIGALE log10={np.log10(_l2500_c):.2f}  "
-    f"tengri log10={np.log10(_l2500_t):.2f}"
+    f"§10 matched disc L_2500: CIGALE log10={np.log10(_l2500_c):.4f}  "
+    f"tengri log10={np.log10(_l2500_t):.4f}"
 )
 
-# Overplot both coronae on shared axes + a tengri/CIGALE ratio panel (§9c style).
+w_t = np.asarray(state_x.wave)
+sed_t = np.asarray(state_x.derived["sed_xray"])
+e_kev_c = 12.398 / w_x
+e_kev_t = 12.398 / w_t
+
 m_c = (e_kev_c >= 0.3) & (e_kev_c <= 300) & (L_x > 0)
 _order = np.argsort(e_kev_c[m_c])
 _e = e_kev_c[m_c][_order]
 _Lc = L_x[m_c][_order]
 _Lt = U.regrid(e_kev_t, sed_t, _e)
 _ratio = _Lt / np.maximum(_Lc, 1e-300)
+_assert_comparable(_Lc, _Lt, name="§10 corona")
 
 fig, (ax, ax_r) = plt.subplots(
     2, 1, figsize=(10, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
 )
-ax.plot(_e, _Lc, "C0-", linewidth=1.6, label="CIGALE  xray (Yang+2020)")
-ax.plot(_e, _Lt, "C1--", linewidth=1.4, label="tengri  xray.yang20")
+ax.plot(_e, _Lc, "C0-", linewidth=1.6, label="CIGALE  xray.agn corona (Yang+2020)")
+ax.plot(_e, _Lt, "C1--", linewidth=1.4, label="tengri  xray.yang20 corona")
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.set_title(
     r"X-ray corona at matched disc $L_{2500}$ "
-    r"($\log_{10} L_{2500} \approx 29.5$, Seyfert)"
+    r"($\log_{10} L_{2500} = 29.47$, $i = 30°$)"
 )
 ax.legend(fontsize=10)
 ax.grid(True, alpha=0.3)
@@ -1796,33 +1813,102 @@ print(
     f"median 0.5-10 keV = {float(np.median(_ratio[_soft])):.3f}x"
 )
 fig.tight_layout()
-save_fig("cigale_10_xray_nh_sweep.png")
+save_fig("cigale_10_xray_corona.png")
+
+
+# %% [markdown]
+# ### §10b Inclination sweep
+#
+# The Yang et al. (2022) corona anisotropy,
+# `f(μ) = (a₁μ + 1 − a₁) / (1 − 0.13397 a₁)` with a₁ = 0.5, equals 1 at the
+# 30° anchor where the α_ox relation is defined. CIGALE tilts its corona by
+# `f(cos i)` read from the AGN module; tengri publishes the same
+# `agn_cos_inc` to its X-ray block (#980). One wrinkle: at fixed `fracAGN`,
+# hiding the disc behind the torus (Type-2, i > 50° here) makes CIGALE
+# *raise* the intrinsic disc normalization, which would drag L_2500 off the
+# α_ox crossing — CIGALE keeps α_ox = −1.4 while tengri's Just+2007 tracks
+# the moving L_2500. The sweep re-solves CIGALE's amplitude at each angle
+# so the corona anchor stays at the crossing; what remains is the pure
+# f(cos i) tilt, applied identically by both codes — the ratio panel stays
+# at the §10a value at every inclination.
+
+# %%
+fig, (ax, ax_r) = plt.subplots(
+    2, 1, figsize=(10, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+print(" i     f(mu)   log10 L_2500,c   tengri/CIGALE @ 2 keV")
+for _i_deg, _col in zip((0, 30, 60, 80), ("C0", "C2", "C3", "C4")):
+    # hold the corona anchor at the alpha_ox crossing: fracAGN raises the
+    # intrinsic disc as the torus hides it, so rescale sfr_A per angle
+    _probe_i = _cigale_xray(_SFR_A_XRAY, _i_deg)
+    sed_i = _cigale_xray(
+        _SFR_A_XRAY * 10.0**_LOG_L2500_TARGET / _cigale_l2500(_probe_i), _i_deg
+    )
+    w_ci, L_ci = _cigale_corona(sed_i)
+    _l25_i = _cigale_l2500(sed_i)
+    _mu = float(np.cos(np.radians(_i_deg)))
+    st_i = _tengri_xray(
+        _AGN_LOG_LBOL_XRAY + float(np.log10(_l25_i / _l2500_c)), _mu
+    ).predict_state({})
+    w_ti = np.asarray(st_i.wave)
+    L_ti = np.asarray(st_i.derived["sed_xray"])
+    e_ci = 12.398 / w_ci
+    _mm = (e_ci >= 0.3) & (e_ci <= 300) & (L_ci > 0)
+    _oo = np.argsort(e_ci[_mm])
+    _ee = e_ci[_mm][_oo]
+    _LLc = L_ci[_mm][_oo]
+    _LLt = U.regrid(12.398 / w_ti, L_ti, _ee)
+    ax.plot(_ee, _LLc, color=_col, linewidth=1.5, label=f"i = {_i_deg}°")
+    ax.plot(_ee, _LLt, color=_col, linewidth=1.2, linestyle="--")
+    ax_r.plot(_ee, _LLt / np.maximum(_LLc, 1e-300), color=_col, linewidth=1.0)
+    _f_mu = (0.5 * _mu + 0.5) / (1.0 - 0.13397 * 0.5)
+    _r2 = float(_LLt[np.argmin(np.abs(_ee - 2.0))] / _LLc[np.argmin(np.abs(_ee - 2.0))])
+    print(f" {_i_deg:2d}    {_f_mu:.4f}   {np.log10(_l25_i):.4f}          {_r2:.4f}")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
+ax.set_title("Corona vs inclination — CIGALE solid, tengri dashed")
+ax.legend(fontsize=10, ncol=2)
+ax.grid(True, alpha=0.3)
+ax_r.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_r.axhline(1.0, color="0.5", linewidth=0.8)
+ax_r.set_xscale("log")
+ax_r.set_ylim(0.8, 1.25)
+ax_r.set_xlabel(r"$E$ [keV]")
+ax_r.set_ylabel("tengri / CIGALE", fontsize=9)
+ax_r.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("cigale_10b_xray_inclination.png")
 
 
 # %% [markdown]
 # ## §11 Radio
 #
-# CIGALE's `radio` module (pcigale 2025.1) is a **pure star-forming
-# synchrotron power law** tied to the IR-to-radio correlation (q_IR; CIGALE
-# default `qir_sf = 2.5`) plus an optional AGN power law via radio loudness. Its
-# only knobs are `qir_sf`, `alpha_sf`, `R_agn`, `alpha_agn` — there is **no
-# thermal free-free term** (verified against the source and the live spectrum:
-# CIGALE's SF slope is a constant α ≈ 0.8 across 0.1–100 GHz, with no high-ν
-# flattening). tengri's `radio.condon92` ships the fuller composite: Bell 2003
-# (q_IR synchrotron) **plus** the Murphy 2011 thermal free-free (Eq. 11) **plus**
-# Yang 2020 (AGN).
+# CIGALE's `radio` module is a pure star-forming synchrotron power law tied
+# to the IR-radio correlation (`qir_sf`, `alpha_sf`) — no thermal free-free
+# term. tengri's `radio.condon92` is the fuller composite: Bell 2003 (q_IR
+# synchrotron) plus Murphy 2011 free-free (Eq. 11) plus Yang 2020 (AGN).
+# The build pins `radio_q_ir = 2.5`, `radio_alpha_sf = 0.8`, and the same
+# attenuation law as §6, because the synchrotron amplitude is anchored on
+# the dust luminosity: both codes compute
+# `L_ref = L_dust / (3.75e12 · 10^q_IR)`, so any mismatch in `L_absorbed`
+# lands 1:1 in the radio.
 #
-# To match CIGALE's synchrotron, the tengri build pins `radio_q_ir = 2.5` and
-# `radio_alpha_sf = 0.8`. Comparing synchrotron-to-synchrotron, the
-# normalizations agree to **~12 %** — a residual q_IR anchor-convention
-# difference between Bell 2003 and CIGALE's `S21cm` normalization.
+# Every term of the ratio near 1.4 GHz is accounted for (the cell prints
+# them):
 #
-# **tengri is more complete (#863).** It adds Murphy+2011 thermal free-free
-# that CIGALE omits, so the spectrum flattens toward high frequency (α drops
-# from 0.8 to 0.57 by 100 GHz). The ratio panel climbs from ~1.12 at 0.1 GHz
-# to ~1.9 by 100 GHz — the rise is the free-free component CIGALE lacks.
-# tengri's free-free amplitude is Murphy 2011 Eq. 11 exact (L_ff(1.4 GHz)
-# matches to <1 %). Star-forming only, 100 MHz to 100 GHz.
+# - **Free-free, ×1.036 at 1.25 GHz.** Murphy+2011 thermal emission that
+#   CIGALE omits (#863). It grows with frequency — the ratio panel climbs
+#   to ~1.9 by 100 GHz as the synchrotron (α = 0.8) falls away from the
+#   flatter (α ≈ 0.1) free-free.
+# - **Anchor frequency, ×0.985.** Bell 2003 defines q_IR at 1.4 GHz;
+#   CIGALE normalizes at 21 cm = 1.4276 GHz. A pure convention offset of
+#   `(1.4276/1.4)^−0.8`.
+# - **Energy-balance anchor, ×1.020.** tengri's `L_absorbed` sits 2% above
+#   CIGALE's `dust.luminosity` for the matched attenuation setup — the §6
+#   FUV curve-shape residual, propagated through q_IR.
+#
+# Star-forming only, 100 MHz to 100 GHz.
 
 # %%
 sed_r = C.run_chain(
@@ -1860,12 +1946,18 @@ m_r = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "*": FIXED,
     },
+    # Same attenuation setup as §6 — the radio amplitude is anchored on
+    # L_absorbed through q_IR, so a mismatched dust config here would leak
+    # straight into the synchrotron normalization.
     dust={
         "type": "two_component",
+        "law_bc": "leitherer02",
+        "law_diff": "leitherer02",
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+        "lyman_cutoff": True,
         "*": FIXED,
-        "emission": {"type": "dale2014", "*": FIXED},
+        "emission": {"type": "dale2014", "alpha_mir": Fixed(2.0), "*": FIXED},
     },
     # q_IR pinned to CIGALE's qir_sf = 2.5 (tengri bucket default 2.64).
     radio={
@@ -1898,6 +1990,25 @@ fig, ax, ax_r, ratio = U.overlay_ratio_fig(
 _nu_r = 2.998e18 / w_r / 1e9
 _g14 = (_nu_r >= 1.0) & (_nu_r <= 1.5) & (L_r > 0)
 print(f"§11 radio tengri/CIGALE median (1.0–1.5 GHz): {float(np.median(ratio[_g14])):.3f}×")
+
+# Close the ratio with its three proven factors: free-free fraction,
+# 21 cm vs 1.4 GHz anchor, and the L_absorbed (energy-balance) residual.
+_f_lir = float(np.asarray(state_r.derived["L_ir"])) / (
+    float(sed_r.info["dust.luminosity"]) * 1e7
+)
+_f_anchor = float((1.4276e9 / 1.4e9) ** (-0.8))
+from tengri.radio import radio_freefree, radio_sfr_bell2003
+
+_w_probe = np.array([2.998e18 / 1.25e9])
+_L_ir_t = float(np.asarray(state_r.derived["L_ir"]))
+_L_syn = float(np.asarray(radio_sfr_bell2003(_w_probe, _L_ir_t, q_ir=2.5, alpha_sf=0.8))[0])
+_L_ff = float(np.asarray(radio_freefree(_w_probe, _L_ir_t, 1.0e4, 0.1))[0])
+_f_ff = 1.0 + _L_ff / _L_syn
+print(
+    f"§11 decomposition at 1.25 GHz: free-free ×{_f_ff:.3f} · "
+    f"anchor-frequency ×{_f_anchor:.3f} · L_IR anchor ×{_f_lir:.3f} "
+    f"= ×{_f_ff * _f_anchor * _f_lir:.3f}"
+)
 fig.tight_layout()
 save_fig("cigale_11_radio_synchrotron.png")
 

@@ -327,6 +327,10 @@ class TestModelFitIntegration:
             "sfh_dpl_alpha": 1.2,
             "sfh_dpl_beta": 1.0,
             "sfh_dpl_tau_gyr": 4.0,
+            # age is FREE in this spec — leaving it out used to silently pin
+            # the mock at an internal default; predict paths now require a
+            # value for every free parameter (MissingParameterError).
+            "sfh_dpl_age_gyr": 8.0,
             "sfh_dpl_log_total_mass": 0.9,
             "met_logzsol": -0.3,
             "dust_tau_bc": 1.0,

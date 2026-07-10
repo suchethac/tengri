@@ -1,4 +1,4 @@
-# Reproducing BAGPIPES with tengri
+# Reproducing BAGPIPES's physics with tengri
 
 This folder places BAGPIPES (Carnall et al. 2018, MNRAS 480, 4379) next
 to tengri component by component. Same parameters, same units, same
