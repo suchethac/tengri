@@ -43,8 +43,10 @@ import warnings
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.nebular.line_precompute import _four_pi_dl2
+from tengri.parameters.translate import LOG10_ZSUN
 from tengri.utils.grid_interp import interp_nd_pchip
 
 #: Parameters that may become grid axes when free. ``met_logzsol`` sets the
@@ -65,20 +67,17 @@ _DEFAULT_RANGE = {
 
 #: Extra resolution on the ``met_logzsol`` axis relative to the smooth gas axes.
 #:
-#: .. warning::
-#:    **The met axis does NOT converge, and denser grids cannot fix it.** The exact
-#:    Cue forward is *discontinuous* in ``met_logzsol``: ``cue.py`` selects the
-#:    ionizing-spectrum shape from a single ``argmax``-chosen age bin, so as the
-#:    metallicity varies the dominant bin flips and the collisionally-excited lines
-#:    step (~33 % in [OIII], measured at met ~ -1.0955 on the FSPS/MILES grid).
-#:    No interpolant can cross a jump, so a systematic dense sweep shows [OIII]
-#:    worst-case error plateauing at ~10-23 % regardless of ``n_grid``.
-#:    Recombination lines (Balmer, ∝ Q_H) are shape-insensitive and DO converge.
-#:    The real fix is a Q_H-weighted ionizing-spectrum shape in the Cue backend
-#:    (continuous + differentiable); until then this factor only buys a modest
-#:    reduction away from the flips. **Validate with a dense sweep inside the grid
-#:    range — random draws under-sample the jump and give ~100x optimistic bounds.**
+#: Applied **only** when the met axis cannot be snapped to the SSP metallicity
+#: nodes (``snap_met_to_ssp_nodes=False``, or a model exposing no SSP metallicity
+#: grid). A snapped axis puts knots on the kinks and interpolates linearly across
+#: them, which converges — blind densification of an unsnapped axis does not, so
+#: it needs the extra points more (#1020).
 _MET_AXIS_DENSITY_FACTOR = 2
+
+#: A uniform grid point within this fraction of a cell width of an SSP metallicity
+#: node is dropped in favor of the node (see :func:`_snap_axis_to_nodes`), so
+#: snapping never creates a near-degenerate interpolation cell.
+_SNAP_MERGE_FRAC = 0.25
 
 
 @dataclasses.dataclass(frozen=True)
@@ -108,6 +107,12 @@ class NebularGridTable:
         :meth:`Observation.predict_via_precomp` consumes) without the per-eval
         Cue forward + filter integration. ``None`` when the reference model had
         no ``WavePrecomp`` filters to integrate against (line-only grid).
+    axis_kinds : tuple of str
+        Interpolation kind per axis (``'pchip'`` / ``'linear'``), matching
+        ``axes``. The ``met_logzsol`` axis is ``'linear'`` when its knots are
+        snapped to the SSP metallicity nodes: the exact emissivity has C0 kinks
+        there, and a cubic's two-sided tangent straddles them (#1020). Empty
+        tuple means PCHIP everywhere (the pre-#1020 default).
     """
 
     axis_names: tuple
@@ -115,6 +120,73 @@ class NebularGridTable:
     log_line_per_qh: jnp.ndarray
     wavelengths: jnp.ndarray
     log_phot_per_qh: jnp.ndarray | None = None
+    axis_kinds: tuple = ()
+
+
+def _ssp_met_nodes(model):
+    """The SSP metallicity grid nodes, in user-facing ``met_logzsol`` units.
+
+    Returns ``None`` when the model exposes no SSP metallicity axis.
+    """
+    ssp = getattr(model, "ssp_data", None)
+    lgmet = getattr(ssp, "ssp_lgmet", None)
+    if lgmet is None:
+        return None
+    return np.asarray(lgmet, dtype=float) - LOG10_ZSUN  # absolute log10(Z) -> log10(Z/Zsun)
+
+
+def _snap_axis_to_nodes(lo, hi, n, nodes):
+    """Ascending grid on ``[lo, hi]``: the uniform axis **plus** every interior node.
+
+    ``met_logzsol`` reaches the forward through a linear interpolation over the SSP
+    metallicity axis, whose derivative jumps at each SSP node. The exact per-Q_H
+    emissivity is therefore piecewise-smooth with C0 kinks at *known* locations. A
+    PCHIP interpolant is node-exact, so a knot placed on a kink reproduces it exactly
+    instead of smearing it across a cell -- an O(h) error becomes O(h^2).
+
+    The nodes are **added to** a uniform axis of ``n`` points rather than replacing
+    it. Two measured facts force that choice (dense 401-point sweep, FSPS/MILES):
+
+    * Distributing a fixed budget across the node intervals -- by width, or by
+      greedily bisecting the widest cell -- leaves the near-solar cells unrefined and
+      the worst-case [OIII] error pinned at ~1.9 % regardless of ``n``. The residual
+      is **curvature-driven, not width-driven**: it sits in a cell *narrower* than the
+      widest one, because the SSP spectra vary fastest near solar.
+    * Adding the nodes on top of the uniform axis keeps the density everywhere at
+      least that of the uniform grid, so the snapped axis cannot be worse -- it is
+      strictly the uniform grid with the kinks resolved.
+
+    Uniform points landing within ``_SNAP_MERGE_FRAC`` of a cell width of a node are
+    dropped in favor of the node, so the axis never develops a degenerate cell.
+
+    Parameters
+    ----------
+    lo, hi : float
+        Axis bounds [log10(Z/Zsun)].
+    n : int
+        Uniform-axis point count. The returned axis has ``n`` to ``n + n_interior``
+        points depending on how many uniform points merge into nodes.
+    nodes : array_like, shape (n_ssp_met,)
+        SSP metallicity nodes [log10(Z/Zsun)]; those outside ``(lo, hi)`` are ignored.
+
+    Returns
+    -------
+    ndarray, shape (>= n,)
+        Strictly ascending grid including ``lo``, ``hi``, and every interior node.
+    """
+    n = int(n)
+    uniform = np.linspace(lo, hi, n)
+    nodes = np.unique(np.asarray(nodes, dtype=float))
+    tol = 1e-9 * max(hi - lo, 1.0)
+    interior = nodes[(nodes > lo + tol) & (nodes < hi - tol)]
+    if interior.size == 0:
+        return uniform
+
+    # drop uniform points that a node effectively replaces (no degenerate cells)
+    merge_within = _SNAP_MERGE_FRAC * (hi - lo) / max(n - 1, 1)
+    keep = np.min(np.abs(uniform[:, None] - interior[None, :]), axis=1) > merge_within
+    keep[0] = keep[-1] = True  # lo/hi are not nodes' to consume
+    return np.sort(np.concatenate([uniform[keep], interior]))
 
 
 def _axis_range(spec, name):
@@ -161,6 +233,7 @@ def precompute_nebular_grid(
     n_grid: int = 16,
     ranges: dict | None = None,
     ref_params: dict | None = None,
+    snap_met_to_ssp_nodes: bool = True,
 ) -> NebularGridTable:
     """Build the adaptive-axis per-Q_H line grid for ``model``.
 
@@ -179,19 +252,28 @@ def precompute_nebular_grid(
         Rest-frame vacuum target line wavelengths [Angstrom].
     n_grid : int or dict, default 16
         Grid points per free axis. As a scalar it resolves the smooth gas axes
-        (``neb_logU`` / ``neb_logZ_gas``) at ``n_grid`` and gives the
-        ``met_logzsol`` axis :data:`_MET_AXIS_DENSITY_FACTOR` x that. Pass a dict
+        (``neb_logU`` / ``neb_logZ_gas``) at ``n_grid``; the ``met_logzsol`` axis
+        also starts at ``n_grid`` and then gains the interior SSP metallicity nodes
+        (see ``snap_met_to_ssp_nodes``), so it ends up slightly larger. Pass a dict
         ``{axis_name: n}`` to set each axis explicitly (unspecified axes default to
-        16). The gas axes converge with resolution; the met axis does **not** —
-        see the :data:`_MET_AXIS_DENSITY_FACTOR` warning (the exact forward is
-        discontinuous in met). Validate any accuracy claim with a dense sweep
-        strictly inside the grid range, never with random draws.
+        16). Validate any accuracy claim with a dense sweep strictly inside the grid
+        range, never with random draws — a narrow feature hides from random draws,
+        and an error that ignores ``n_grid`` is an unresolved kink, not interpolation
+        error.
     ranges : dict, optional
         Override ``{param: (lo, hi)}`` grid bounds. Defaults to each free param's
         prior support (else :data:`_DEFAULT_RANGE`).
     ref_params : dict, optional
         Reference parameter dict (grid axes are overwritten per point). Defaults
         to a mid-range sample.
+    snap_met_to_ssp_nodes : bool, optional
+        Place knots on the SSP metallicity nodes and interpolate that axis
+        linearly (default True). ``met_logzsol`` reaches the forward through a
+        bilinear interpolation of the ionizing-spectrum tables, so the exact
+        per-Q_H emissivity has C0 kinks exactly at ``ssp_data.ssp_lgmet``. Knots
+        on the kinks + a C0 interpolant converge normally; a uniform axis, or a
+        cubic whose tangent straddles a kink, does not (#1020). Set False to
+        recover the pre-#1020 uniform + PCHIP axis.
 
     Returns
     -------
@@ -201,37 +283,52 @@ def precompute_nebular_grid(
     -----
     **Build cost**: ``n_grid ** n_free_axes`` forward evaluations, once at
     construction (not JIT'd — a build-time loop over concrete grid points).
+
+    **Accuracy** (dense 401-point sweep inside the bounds; FSPS/MILES, dpl SFH,
+    z = 0.15, met the only free axis; worst-case relative error, requires the
+    #1018 ionizing-shape fix):
+
+    ==========================  ========  ==========  ==========
+    met axis                    n points  [OIII]5007  Balmer
+    ==========================  ========  ==========  ==========
+    uniform + PCHIP (pre-#1020)       32      1.31 %      1.23 %
+    snapped + linear                  23      0.46 %      0.24 %
+    snapped + linear                  30      0.28 %      0.15 %
+    ==========================  ========  ==========  ==========
     """
     spec = model.spec
     free = set(spec.free_params)
     axis_names = tuple(p for p in _CANDIDATE_AXES if p in free)
     ranges = ranges or {}
 
-    # Per-axis resolution matched to the physics. A scalar ``n_grid`` resolves the
-    # smooth gas axes at ``n_grid`` and auto-densifies the sharp met axis by
-    # ``_MET_AXIS_DENSITY_FACTOR``; a dict ``{axis: n}`` sets each explicitly.
+    met_nodes = _ssp_met_nodes(model) if snap_met_to_ssp_nodes else None
+
+    # Per-axis resolution matched to the physics. A scalar ``n_grid`` resolves every
+    # axis at ``n_grid``; a dict ``{axis: n}`` sets each explicitly. An UNSNAPPED met
+    # axis is densified by ``_MET_AXIS_DENSITY_FACTOR`` because it must resolve the
+    # SSP-node kinks by brute force; a snapped one gets the nodes for free.
     def _axis_n(name):
         if isinstance(n_grid, dict):
             return int(n_grid.get(name, 16))
-        return int(n_grid * _MET_AXIS_DENSITY_FACTOR) if name == "met_logzsol" else int(n_grid)
+        if name == "met_logzsol" and met_nodes is None:
+            return int(n_grid * _MET_AXIS_DENSITY_FACTOR)
+        return int(n_grid)
 
-    # Loud guard: a free met axis cannot be reconstructed reliably for the
-    # collisionally-excited lines, at ANY resolution, because the exact Cue forward
-    # is discontinuous in met (argmax age-bin selection of the ionizing-spectrum
-    # shape — see _MET_AXIS_DENSITY_FACTOR). Warn unconditionally; denser grids only
-    # shrink the error away from the jumps, never across them.
-    if "met_logzsol" in axis_names:
+    # Guard: an UNSNAPPED free met axis cannot resolve the C0 kinks the ionizing-
+    # spectrum tables put at every SSP metallicity node, so the forbidden lines
+    # converge only as O(h) there. Snapping is the default; this fires when the
+    # caller disabled it or the model exposes no SSP metallicity grid (#1020).
+    if "met_logzsol" in axis_names and met_nodes is None:
         warnings.warn(
-            f"nebular fast grid: met_logzsol is a FREE axis (resolved at "
-            f"{_axis_n('met_logzsol')} points). The exact Cue forward is "
-            f"DISCONTINUOUS in met — it picks the ionizing-spectrum shape from a "
-            f"single argmax-selected age bin, so [OIII] steps ~33 % when the "
-            f"dominant bin flips. No grid can interpolate across that: a dense "
-            f"systematic sweep shows [OIII] worst-case ~10-23 % at any n_grid "
-            f"(random-draw checks under-sample the jump and look ~100x better). "
-            f"Balmer lines (recombination, proportional to Q_H) are shape-insensitive "
-            f"and DO converge. Fix met_logzsol, restrict to Balmer, or use the exact "
-            f"path until the Cue ionizing-shape weighting is corrected.",
+            f"nebular fast grid: met_logzsol is a FREE axis resolved on a UNIFORM "
+            f"grid of {_axis_n('met_logzsol')} points. The exact per-Q_H emissivity "
+            f"has C0 kinks at the SSP metallicity nodes (the ionizing-spectrum "
+            f"tables interpolate bilinearly in met), which a uniform axis straddles: "
+            f"the collisionally-excited lines then converge only as O(h) — a dense "
+            f"sweep shows [OIII] worst-case ~1.3 % at n=32 versus ~0.5 % for a "
+            f"node-snapped axis of 23 points. Balmer lines are shape-insensitive and "
+            f"are less affected. Prefer snap_met_to_ssp_nodes=True (the default), "
+            f"which needs a model carrying ssp_data.ssp_lgmet.",
             stacklevel=2,
         )
 
@@ -243,11 +340,19 @@ def precompute_nebular_grid(
     ref_z = ref_params.get("redshift", 0.0)
     ref_divisor = _four_pi_dl2(ref_z)  # observed flux -> luminosity
 
-    axes = []
+    axes, axis_kinds = [], []
     for name in axis_names:
         lo, hi = ranges.get(name, _axis_range(spec, name))
-        axes.append(jnp.linspace(lo, hi, _axis_n(name)))
+        if name == "met_logzsol" and met_nodes is not None:
+            # knots on the kinks -> the cubic's cross-kink tangent is the error
+            # floor, so this axis interpolates linearly (#1020)
+            axes.append(jnp.asarray(_snap_axis_to_nodes(lo, hi, _axis_n(name), met_nodes)))
+            axis_kinds.append("linear")
+        else:
+            axes.append(jnp.linspace(lo, hi, _axis_n(name)))
+            axis_kinds.append("pchip")
     axes = tuple(axes)
+    axis_kinds = tuple(axis_kinds)
 
     def _row(point_values):
         """(line_per_qh, phot_per_qh|None) at one grid point — the Cue forward."""
@@ -290,7 +395,13 @@ def precompute_nebular_grid(
         log_line_per_qh=log_line,
         wavelengths=wavelengths,
         log_phot_per_qh=log_phot,
+        axis_kinds=axis_kinds,
     )
+
+
+def _kinds(table):
+    """Per-axis interpolation kinds, tolerating tables pickled before #1020."""
+    return tuple(table.axis_kinds) or None
 
 
 def reconstruct_nebular_lines(nion, params, redshift, table) -> jnp.ndarray:
@@ -355,7 +466,7 @@ def reconstruct_nebular_line_lums(nion, params, table) -> jnp.ndarray:
         log_lpq = table.log_line_per_qh
     else:
         point = tuple(jnp.asarray(params[name]).reshape(()) for name in table.axis_names)
-        log_lpq = interp_nd_pchip(table.log_line_per_qh, table.axes, point)
+        log_lpq = interp_nd_pchip(table.log_line_per_qh, table.axes, point, _kinds(table))
     return jnp.asarray(nion) * (10.0**log_lpq)  # node-exact geometric interp
 
 
@@ -412,5 +523,5 @@ def reconstruct_nebular_phot(nion, params, table) -> jnp.ndarray:
         log_ppq = table.log_phot_per_qh
     else:
         point = tuple(jnp.asarray(params[name]).reshape(()) for name in table.axis_names)
-        log_ppq = interp_nd_pchip(table.log_phot_per_qh, table.axes, point)
+        log_ppq = interp_nd_pchip(table.log_phot_per_qh, table.axes, point, _kinds(table))
     return jnp.asarray(nion) * (10.0**log_ppq)  # rest-frame L_nu; consumer applies dust + z
