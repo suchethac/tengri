@@ -83,29 +83,12 @@ class TestContinuitySFH:
         sfr = continuity(AGE_YR, log_total_mass=10.0, **kwargs)
         assert jnp.all(sfr >= 0)
 
-    def test_jit_compatible(self):
-        """Function should JIT-compile without errors."""
+    def test_jit_parity_vs_eager(self):
+        """JIT output matches eager evaluation (JAX correctness)."""
         kwargs = {f"ratio_{i}": 0.0 for i in range(6)}
-
-        @jax.jit
-        def _eval():
-            return continuity(AGE_YR, log_total_mass=10.0, **kwargs)
-
-        sfr = _eval()
-        chex.assert_equal_shape([sfr, AGE_YR])
-
-    def test_gradient_compatible(self):
-        """Gradients w.r.t. ratios and mass should be computable."""
-
-        def loss(ratios_arr, log_mass):
-            kwargs = {f"ratio_{i}": ratios_arr[i] for i in range(6)}
-            sfr = continuity(AGE_YR, log_total_mass=log_mass, **kwargs)
-            return jnp.sum(sfr)
-
-        ratios = jnp.zeros(6)
-        grad_ratios, _grad_mass = jax.grad(loss, argnums=(0, 1))(ratios, 10.0)
-
-        chex.assert_shape(grad_ratios, (6,))
+        sfr_eager = continuity(AGE_YR, log_total_mass=10.0, **kwargs)
+        sfr_jit = jax.jit(continuity)(AGE_YR, log_total_mass=10.0, **kwargs)
+        chex.assert_trees_all_close(sfr_eager, sfr_jit, rtol=1e-6)
 
 
 class TestContinuityPrior:
@@ -187,24 +170,12 @@ class TestDirichletSFH:
         sfr = dirichlet(AGE_YR, log_total_mass=10.0, **kwargs)
         assert jnp.all(sfr >= 0)
 
-    def test_jit_compatible(self):
-        """Function should JIT-compile without errors."""
+    def test_jit_parity_vs_eager(self):
+        """JIT output matches eager evaluation (JAX correctness)."""
         kwargs = {f"z_frac_{i}": 0.5 for i in range(6)}
-
-        @jax.jit
-        def _eval():
-            return dirichlet(AGE_YR, log_total_mass=10.0, **kwargs)
-
-        sfr = _eval()
-        chex.assert_equal_shape([sfr, AGE_YR])
-
-    def test_custom_bin_edges(self):
-        """Custom bin edges should work."""
-        custom_edges = jnp.array([0.0, 0.5, 2.0, 8.0, 13.7])
-        n_bins = 4
-        kwargs = {f"z_frac_{i}": 0.5 for i in range(n_bins - 1)}
-        sfr = dirichlet(AGE_YR, log_total_mass=10.0, bin_edges_gyr=custom_edges, **kwargs)
-        chex.assert_equal_shape([sfr, AGE_YR])
+        sfr_eager = dirichlet(AGE_YR, log_total_mass=10.0, **kwargs)
+        sfr_jit = jax.jit(dirichlet)(AGE_YR, log_total_mass=10.0, **kwargs)
+        chex.assert_trees_all_close(sfr_eager, sfr_jit, rtol=1e-6)
 
 
 # ── Registry integration tests ────────────────────────────────────

@@ -136,24 +136,8 @@ class TestFracIdx:
 
 # ── _interp_6d ────────────────────────────────────────────────────
 class TestInterp6D:
-    def test_output_shape_is_n_lines(self, cb19_module, fake_grid_data):
-        """_interp_6d should return (n_lines,) for any query point."""
-        grid = fake_grid_data
-        grids = (
-            grid.log_OH_grid,
-            grid.log_age_grid,
-            grid.log_U_grid,
-            grid.log_nH_grid,
-            grid.log_CO_grid,
-            grid.dNO_grid,
-        )
-        vals = (-3.2, 7.0, -3.0, 2.0, -0.36, 0.0)
-        result = cb19_module._interp_6d(grid.log_line_ratios, grids, vals)
-        n_lines = grid.log_line_ratios.shape[-1]
-        chex.assert_shape(result, (n_lines,))
-
     def test_constant_grid_returns_constant(self, cb19_module, fake_grid_data):
-        """Interpolation on a constant grid (all 0.0) returns 0.0 everywhere."""
+        """Interpolation on a constant grid (all 0.0) returns 0.0 everywhere (limit test)."""
         grid = fake_grid_data
         grids = (
             grid.log_OH_grid,
@@ -165,10 +149,13 @@ class TestInterp6D:
         )
         vals = (-3.0, 7.0, -3.0, 2.0, -0.36, 0.0)
         result = cb19_module._interp_6d(grid.log_line_ratios, grids, vals)
+        n_lines = grid.log_line_ratios.shape[-1]
+        chex.assert_shape(result, (n_lines,))
+        chex.assert_tree_all_finite(result)
         np.testing.assert_allclose(np.array(result), 0.0, atol=1e-5)
 
-    def test_result_is_finite(self, cb19_module, fake_grid_data):
-        """Result must be finite at an interior point."""
+    def test_interior_point_is_finite_and_bounded(self, cb19_module, fake_grid_data):
+        """Result must be finite at an interior point within bounds (bounds test)."""
         grid = fake_grid_data
         grids = (
             grid.log_OH_grid,
@@ -180,6 +167,8 @@ class TestInterp6D:
         )
         vals = (-3.5, 7.0, -2.5, 2.0, -0.5, 0.1)
         result = cb19_module._interp_6d(grid.log_line_ratios, grids, vals)
+        n_lines = grid.log_line_ratios.shape[-1]
+        chex.assert_shape(result, (n_lines,))
         chex.assert_tree_all_finite(result)
 
 
@@ -204,8 +193,8 @@ class TestCB19BackendMocked:
         backend._young_idx = None
         return backend
 
-    def test_predict_line_lums_shape(self, backend_with_fake_grid):
-        """predict_nebular_line_luminosities returns (wavelengths, luminosities) of correct shape."""  # noqa: E501
+    def test_predict_line_lums_shape_and_finite(self, backend_with_fake_grid):
+        """Line luminosities must be finite with correct shape (bounds test: finiteness)."""
         backend = backend_with_fake_grid
         n_age = 10
         n_lines = backend.grid.line_wavelengths.shape[0]
@@ -216,15 +205,6 @@ class TestCB19BackendMocked:
         )
         chex.assert_shape(waves, (n_lines,))
         chex.assert_shape(lums, (n_lines,))
-
-    def test_predict_line_lums_finite(self, backend_with_fake_grid):
-        """Line luminosities must be finite (no NaN from unit conversion)."""
-        backend = backend_with_fake_grid
-        ssp_weights = jnp.ones(5)
-        ssp_log_ages = jnp.array([6.5, 7.0, 7.5, 8.0, 8.5])
-        _, lums = backend.predict_nebular_line_luminosities(
-            ssp_weights, ssp_log_ages, log_z=-1.848
-        )
         assert jnp.all(jnp.isfinite(lums)), f"Non-finite values: {lums}"
 
     def test_hb_conversion_applied(self, backend_with_fake_grid, cb19_module):
@@ -287,8 +267,8 @@ class TestCB19BackendMocked:
         _wave, cont = backend.predict_nebular_continuum(jnp.ones(3), jnp.ones(3), -1.848)
         assert jnp.all(cont == 0.0), "Continuum must be zero for CB_19"
 
-    def test_predict_sed_shape(self, backend_with_fake_grid):
-        """predict_nebular_sed returns shape (n_wave,) matching input ssp_wave."""
+    def test_predict_sed_shape_and_finite(self, backend_with_fake_grid):
+        """SED output has correct shape and is finite (bounds test: finiteness)."""
         backend = backend_with_fake_grid
         n_wave = 50
         ssp_wave = jnp.linspace(1000.0, 10000.0, n_wave)
@@ -296,6 +276,7 @@ class TestCB19BackendMocked:
             jnp.ones(3), ssp_wave, jnp.array([7.0, 7.5, 8.0]), log_z=-1.848
         )
         chex.assert_shape(sed, (n_wave,))
+        chex.assert_tree_all_finite(sed)
 
     def test_predict_sed_units_are_erg_s_hz(self, backend_with_fake_grid, cb19_module):
         """predict_nebular_sed must return erg/s/Hz, not Lsun/Hz.

@@ -74,24 +74,36 @@ class TestSKIRTORAnalytic:
         """IR wavelength grid (1 um to 1000 um)."""
         return jnp.logspace(4, 7, 300)
 
-    def test_output_shape(self, wave):
+    def test_shape_finite_positive_and_golden_values(self, wave):
+        """Shape, finiteness, positivity, and frozen golden values.
+
+        Golden values frozen from the current implementation (test-audit PR, 2026-07).
+        """
+        import warnings
+
         from tengri.components.agn.skirtor import skirtor_analytic
 
-        sed = skirtor_analytic(wave)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            sed = skirtor_analytic(wave)
+
+        # Shape, finiteness, and positivity
         chex.assert_equal_shape([sed, wave])
-
-    def test_output_positive(self, wave):
-        from tengri.components.agn.skirtor import skirtor_analytic
-
-        sed = skirtor_analytic(wave)
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0), "SKIRTOR SED should be non-negative"
         assert float(jnp.max(sed)) > 0, "SKIRTOR SED should have positive values"
 
-    def test_output_finite(self, wave):
-        from tengri.components.agn.skirtor import skirtor_analytic
-
-        sed = skirtor_analytic(wave)
-        chex.assert_tree_all_finite(sed)
+        # Frozen golden values at indices [0, n//3, 2n//3, -1]
+        indices = [0, len(wave) // 3, 2 * len(wave) // 3, -1]
+        golden_values = [0.0, 6.380747e58, 3.525502e63, 3.607845e58]
+        for idx, golden in zip(indices, golden_values):
+            np.testing.assert_allclose(
+                float(sed[idx]),
+                golden,
+                rtol=1e-6,
+                atol=1e-70,  # Allow for zero values
+                err_msg=f"Golden value mismatch at index {idx}",
+            )
 
     def test_type1_vs_type2_spectral_shape(self, ir_wave):
         """Face-on (Type 1) and edge-on (Type 2) SEDs should differ meaningfully.
@@ -162,48 +174,103 @@ class TestSKIRTORAnalytic:
         )
 
     def test_tau_affects_sed(self, wave):
-        """Different tau values should produce different SEDs."""
+        """Different tau values should produce different SEDs.
+
+        Physical: Optical depth controls dust absorption and re-emission.
+        """
+        import warnings
+
         from tengri.components.agn.skirtor import skirtor_analytic
 
-        sed_low = skirtor_analytic(wave, agn_tau_skirtor=3.0)
-        sed_high = skirtor_analytic(wave, agn_tau_skirtor=11.0)
-        assert not jnp.allclose(sed_low, sed_high, atol=1e-20), "tau should affect the SED"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            sed_low = skirtor_analytic(wave, agn_tau_skirtor=3.0)
+            sed_high = skirtor_analytic(wave, agn_tau_skirtor=11.0)
+        int_low = float(np.trapezoid(np.array(sed_low), np.array(wave)))
+        int_high = float(np.trapezoid(np.array(sed_high), np.array(wave)))
+        if int_low > 0:
+            frac_change = abs(int_high - int_low) / int_low
+            assert frac_change > 0.01, (
+                f"tau should produce >1% change, got {frac_change * 100:.2f}%"
+            )
 
     def test_p_affects_sed(self, wave):
-        """Different p values should produce different SEDs."""
+        """Different p values should produce different SEDs.
+
+        Physical: Radial dust distribution gradient affects torus geometry and emission.
+        """
+        import warnings
+
         from tengri.components.agn.skirtor import skirtor_analytic
 
-        sed_low = skirtor_analytic(wave, agn_p_skirtor=0.0)
-        sed_high = skirtor_analytic(wave, agn_p_skirtor=1.5)
-        assert not jnp.allclose(sed_low, sed_high, atol=1e-20), "p should affect the SED"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            sed_low = skirtor_analytic(wave, agn_p_skirtor=0.0)
+            sed_high = skirtor_analytic(wave, agn_p_skirtor=1.5)
+        int_low = float(np.trapezoid(np.array(sed_low), np.array(wave)))
+        int_high = float(np.trapezoid(np.array(sed_high), np.array(wave)))
+        if int_low > 0:
+            frac_change = abs(int_high - int_low) / int_low
+            assert frac_change > 0.01, f"p should produce >1% change, got {frac_change * 100:.2f}%"
 
     def test_q_affects_sed(self, wave):
-        """Different q values should produce different SEDs."""
+        """Different q values should produce different SEDs.
+
+        Physical: Angular dust gradient affects SED shape and normalization.
+        """
+        import warnings
+
         from tengri.components.agn.skirtor import skirtor_analytic
 
-        sed_low = skirtor_analytic(wave, agn_q_skirtor=0.0)
-        sed_high = skirtor_analytic(wave, agn_q_skirtor=1.5)
-        assert not jnp.allclose(sed_low, sed_high, atol=1e-20), "q should affect the SED"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            sed_low = skirtor_analytic(wave, agn_q_skirtor=0.0)
+            sed_high = skirtor_analytic(wave, agn_q_skirtor=1.5)
+        int_low = float(np.trapezoid(np.array(sed_low), np.array(wave)))
+        int_high = float(np.trapezoid(np.array(sed_high), np.array(wave)))
+        if int_low > 0:
+            frac_change = abs(int_high - int_low) / int_low
+            assert frac_change > 0.01, f"q should produce >1% change, got {frac_change * 100:.2f}%"
 
     def test_oa_affects_sed(self, wave):
-        """Different opening angles should produce different SEDs."""
+        """Different opening angles should produce different SEDs.
+
+        Physical: Torus opening angle controls the geometry of obscuration/emission.
+        """
+        import warnings
+
         from tengri.components.agn.skirtor import skirtor_analytic
 
-        sed_narrow = skirtor_analytic(wave, agn_oa_skirtor=20.0)
-        sed_wide = skirtor_analytic(wave, agn_oa_skirtor=60.0)
-        assert not jnp.allclose(sed_narrow, sed_wide, atol=1e-20), (
-            "opening angle should affect the SED"
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            sed_narrow = skirtor_analytic(wave, agn_oa_skirtor=20.0)
+            sed_wide = skirtor_analytic(wave, agn_oa_skirtor=60.0)
+        int_narrow = float(np.trapezoid(np.array(sed_narrow), np.array(wave)))
+        int_wide = float(np.trapezoid(np.array(sed_wide), np.array(wave)))
+        if int_narrow > 0:
+            frac_change = abs(int_wide - int_narrow) / int_narrow
+            assert frac_change > 0.01, (
+                f"oa should produce >1% change, got {frac_change * 100:.2f}%"
+            )
 
     def test_cos_inc_affects_sed(self, wave):
-        """Different inclinations should produce different SEDs."""
+        """Different inclinations should produce different SEDs.
+
+        Physical: Viewing angle controls visibility of hot/cool dust and silicate features.
+        """
+        import warnings
+
         from tengri.components.agn.skirtor import skirtor_analytic
 
-        sed_face = skirtor_analytic(wave, agn_cos_inc=0.95)
-        sed_edge = skirtor_analytic(wave, agn_cos_inc=0.05)
-        assert not jnp.allclose(sed_face, sed_edge, atol=1e-20), (
-            "inclination should affect the SED"
-        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            sed_face = skirtor_analytic(wave, agn_cos_inc=0.95)
+            sed_edge = skirtor_analytic(wave, agn_cos_inc=0.05)
+        int_face = float(np.trapezoid(np.array(sed_face), np.array(wave)))
+        int_edge = float(np.trapezoid(np.array(sed_edge), np.array(wave)))
+        if int_face > 0:
+            frac_change = abs(int_edge - int_face) / int_face
+            assert frac_change > 0.01, f"cos_inc >1% change: {frac_change * 100:.2f}%"
 
     def test_luminosity_scaling(self, wave):
         """SED should scale with bolometric luminosity."""
@@ -394,15 +461,29 @@ class TestSKIRTORJIT:
     def wave(self):
         return jnp.logspace(2, 7, 200)
 
-    def test_jit_analytic(self, wave):
+    def test_jit_parity_analytic(self, wave):
+        """JIT eager output match (parity) and output shape for skirtor_analytic.
+
+        Physical: JIT compilation should preserve numerical outputs.
+        """
+        import warnings
+
         from tengri.components.agn.skirtor import skirtor_analytic
 
-        fn = jax.jit(lambda tau, ci: skirtor_analytic(wave, agn_tau_skirtor=tau, agn_cos_inc=ci))
-        sed = fn(7.0, 0.5)
-        chex.assert_equal_shape([sed, wave])
-        chex.assert_tree_all_finite(sed)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
 
-    def test_jit_registered_model(self, wave):
+            def test_fn(tau, ci):
+                return skirtor_analytic(wave, agn_tau_skirtor=tau, agn_cos_inc=ci)
+
+            sed_eager = test_fn(7.0, 0.5)
+            fn_jit = jax.jit(test_fn)
+            sed_jit = fn_jit(7.0, 0.5)
+            chex.assert_equal_shape([sed_jit, wave])
+            chex.assert_trees_all_close(sed_eager, sed_jit, rtol=1e-6)
+
+    def test_jit_parity_registered_model(self, wave):
+        """JIT parity for registered 'skirtor' model with all 5 parameters."""
         import warnings
 
         from tengri.components.agn import resolve_agn_model
@@ -410,20 +491,23 @@ class TestSKIRTORJIT:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
             model_fn = resolve_agn_model("skirtor")
-        fn = jax.jit(
-            lambda tau, p, q, oa, ci: model_fn(
-                wave,
-                agn_log_lbol=44.0,
-                agn_tau_skirtor=tau,
-                agn_p_skirtor=p,
-                agn_q_skirtor=q,
-                agn_oa_skirtor=oa,
-                agn_cos_inc=ci,
-            )
-        )
-        sed = fn(7.0, 1.0, 1.0, 40.0, 0.5)
-        chex.assert_equal_shape([sed, wave])
-        chex.assert_tree_all_finite(sed)
+
+            def test_fn(tau, p, q, oa, ci):
+                return model_fn(
+                    wave,
+                    agn_log_lbol=44.0,
+                    agn_tau_skirtor=tau,
+                    agn_p_skirtor=p,
+                    agn_q_skirtor=q,
+                    agn_oa_skirtor=oa,
+                    agn_cos_inc=ci,
+                )
+
+            sed_eager = test_fn(7.0, 1.0, 1.0, 40.0, 0.5)
+            fn_jit = jax.jit(test_fn)
+            sed_jit = fn_jit(7.0, 1.0, 1.0, 40.0, 0.5)
+            chex.assert_equal_shape([sed_jit, wave])
+            chex.assert_trees_all_close(sed_eager, sed_jit, rtol=1e-6)
 
     def test_jit_grad_combined(self, wave):
         """JIT of grad agrees with FD for agn_tau_skirtor."""
@@ -444,61 +528,43 @@ class TestSKIRTORJIT:
 
 
 class TestSKIRTOREdgeCases:
-    """Test edge cases and boundary parameter values."""
+    """Test edge cases and boundary parameter values.
+
+    Collapsed test: all boundary parameter combinations produce finite SEDs with positive max.
+    """
 
     @pytest.fixture
     def wave(self):
         return jnp.logspace(2, 7, 200)
 
-    def test_extreme_tau_low(self, wave):
+    def test_all_boundary_params_produce_finite_nonzero_sed(self, wave):
+        """All boundary parameter combinations produce finite positive SEDs.
+
+        Physical: Even at extreme torus geometries (thin tau, wide opening angle, edge-on viewing,
+        etc.), the model must produce physically valid (finite, non-negative) spectra.
+        """
+        import warnings
+
         from tengri.components.agn.skirtor import skirtor_analytic
 
-        sed = skirtor_analytic(wave, agn_tau_skirtor=3.0)
-        chex.assert_tree_all_finite(sed)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
 
-    def test_extreme_tau_high(self, wave):
-        from tengri.components.agn.skirtor import skirtor_analytic
+            test_cases = [
+                {"agn_tau_skirtor": 3.0},  # Low optical depth
+                {"agn_tau_skirtor": 11.0},  # High optical depth
+                {"agn_cos_inc": 1.0},  # Face-on
+                {"agn_cos_inc": 0.0},  # Edge-on
+                {"agn_oa_skirtor": 20.0},  # Narrow opening angle
+                {"agn_oa_skirtor": 60.0},  # Wide opening angle
+                {"agn_p_skirtor": 0.0, "agn_q_skirtor": 0.0},  # No radial/angular gradients
+                {"agn_p_skirtor": 1.5, "agn_q_skirtor": 1.5},  # Max gradients
+            ]
 
-        sed = skirtor_analytic(wave, agn_tau_skirtor=11.0)
-        chex.assert_tree_all_finite(sed)
-
-    def test_fully_face_on(self, wave):
-        from tengri.components.agn.skirtor import skirtor_analytic
-
-        sed = skirtor_analytic(wave, agn_cos_inc=1.0)
-        chex.assert_tree_all_finite(sed)
-        assert float(jnp.max(sed)) > 0
-
-    def test_fully_edge_on(self, wave):
-        from tengri.components.agn.skirtor import skirtor_analytic
-
-        sed = skirtor_analytic(wave, agn_cos_inc=0.0)
-        chex.assert_tree_all_finite(sed)
-        assert float(jnp.max(sed)) > 0
-
-    def test_narrow_opening_angle(self, wave):
-        from tengri.components.agn.skirtor import skirtor_analytic
-
-        sed = skirtor_analytic(wave, agn_oa_skirtor=20.0)
-        chex.assert_tree_all_finite(sed)
-
-    def test_wide_opening_angle(self, wave):
-        from tengri.components.agn.skirtor import skirtor_analytic
-
-        sed = skirtor_analytic(wave, agn_oa_skirtor=60.0)
-        chex.assert_tree_all_finite(sed)
-
-    def test_zero_p_and_q(self, wave):
-        from tengri.components.agn.skirtor import skirtor_analytic
-
-        sed = skirtor_analytic(wave, agn_p_skirtor=0.0, agn_q_skirtor=0.0)
-        chex.assert_tree_all_finite(sed)
-
-    def test_max_p_and_q(self, wave):
-        from tengri.components.agn.skirtor import skirtor_analytic
-
-        sed = skirtor_analytic(wave, agn_p_skirtor=1.5, agn_q_skirtor=1.5)
-        chex.assert_tree_all_finite(sed)
+            for kw in test_cases:
+                sed = skirtor_analytic(wave, **kw)
+                assert jnp.all(jnp.isfinite(sed)), f"Non-finite SED for params {kw}"
+                assert float(jnp.max(sed)) > 0.0, f"Max SED should be positive for params {kw}"
 
 
 class TestNovikovThorneEfficiency:

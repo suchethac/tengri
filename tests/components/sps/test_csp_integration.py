@@ -195,42 +195,6 @@ class TestCspIntegrationAccuracy:
             )
 
 
-# ── Difference visualization (run with pytest -s to see output) ───
-
-
-def test_print_weight_differences(capsys):
-    """Print bin-by-bin weight differences between trapz and log_trapz.
-
-    Shows how the two methods differ: log_trapz redistributes weight
-    away from old-age bins (where Δt_linear >> Δt_log) and toward
-    young-age bins (where Δt_linear << Δt_log).
-    """
-    ages = make_log_spaced_ages(30)  # small grid for readability
-    sfr = sfr_constant(ages, 1.0)
-
-    dt_trapz = csp_age_dt(ages, "trapz")
-    dt_log = csp_age_dt(ages, "log_trapz")
-
-    with capsys.disabled():
-        print("\n\nCSP bin width comparison (trapz vs log_trapz):")
-        print(
-            f"{'Age (Gyr)':>12} {'dt_trapz (yr)':>16} {'dt_log (yr)':>16} {'ratio log/trapz':>16}"
-        )
-        print("-" * 64)
-        for i in range(len(ages)):
-            age_gyr = float(ages[i]) / 1e9
-            dt_t = float(dt_trapz[i])
-            dt_l = float(dt_log[i])
-            ratio = dt_l / dt_t if dt_t > 0 else float("nan")
-            print(f"{age_gyr:>12.4f} {dt_t:>16.4e} {dt_l:>16.4e} {ratio:>16.4f}")
-
-        print("\nSummary (constant SFR=1 Msun/yr):")
-        print(f"  trapz   total mass: {float(jnp.sum(sfr * dt_trapz)):.4e} Msun")
-        print(f"  log_trapz total mass: {float(jnp.sum(sfr * dt_log)):.4e} Msun")
-        t_range = float(ages[-1]) - float(ages[0])
-        print(f"  analytic (t_max-t_min): {t_range:.4e} Msun")
-
-
 # ── Benchmark: precomputed dt vs inline computation ───────────────
 
 

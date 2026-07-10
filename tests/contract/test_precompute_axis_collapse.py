@@ -195,22 +195,11 @@ class TestXrayPrecomputeAxisCollapse:
 
 
 class TestDiscPrecomputeAxisCollapse:
-    """Test axis collapse for disc models (1–2 axes)."""
+    """Test axis collapse for disc models (1–2 axes).
 
-    @pytest.mark.skip(reason="disc build_lookup signature mismatch; deferred to Wilkinson phase")
-    def test_disc_powerlaw_collapse(self, filter_set_radio):
-        """Test powerlaw_disc with 1 axis (agn_alpha_pl)."""
-        pass
-
-    @pytest.mark.skip(reason="disc build_lookup signature mismatch; deferred to Wilkinson phase")
-    def test_disc_ss_collapse_axis0(self, filter_set_radio):
-        """Test ss_disc with 2 axes, collapse axis 0 (agn_log_mbh)."""
-        pass
-
-    @pytest.mark.skip(reason="disc build_lookup signature mismatch; deferred to Wilkinson phase")
-    def test_disc_ss_collapse_axis1(self, filter_set_radio):
-        """Test ss_disc with 2 axes, collapse axis 1 (agn_log_lbol)."""
-        pass
+    NOTE: disc build_lookup signature requires runtime parameters (agn_torus_frac, etc.)
+    not present in precompute grid axes. Tests deferred to Wilkinson phase refactor.
+    """
 
 
 # ── QSOgen precompute tests (2 axes) ───────────────────────────────────────
@@ -220,21 +209,12 @@ class TestDiscPrecomputeAxisCollapse:
 
 
 class TestQsogenPrecomputeAxisCollapse:
-    """Test axis collapse for QSOgen (agn_plslp1, agn_ebv)."""
+    """Test axis collapse for QSOgen (agn_plslp1, agn_ebv).
 
-    @pytest.mark.skip(
-        reason="qsogen build_lookup() free_param_names kwarg mismatch; deferred to Wilkinson phase"
-    )
-    def test_qsogen_collapse_axis0(self, filter_set_radio):
-        """Collapse axis 0 (agn_plslp1)."""
-        pass
-
-    @pytest.mark.skip(
-        reason="qsogen build_lookup() free_param_names kwarg mismatch; deferred to Wilkinson phase"
-    )
-    def test_qsogen_collapse_axis1(self, filter_set_radio):
-        """Collapse axis 1 (agn_ebv)."""
-        pass
+    NOTE: QSOgen's build_lookup() requires free_param_names kwarg reflecting the
+    collapsed axis set. Standard template lookup doesn't handle this; deferred to
+    Wilkinson phase refactor.
+    """
 
 
 # ── Silva04 precompute tests (1 axis) ──────────────────────────────────────
@@ -297,7 +277,11 @@ class TestSilva04PrecomputeAxisCollapse:
 
 
 class TestCat3DPrecomputeAxisCollapse:
-    """Test axis collapse for Cat3D (3 axes)."""
+    """Test axis collapse for Cat3D (3 axes).
+
+    NOTE: Cat3D's build_lookup() requires agn_torus_frac kwarg. Runtime parameter
+    signatures mismatch precompute grid axes; deferred to Wilkinson phase refactor.
+    """
 
     _DATA = Path(__file__).parent.parent.parent.parent / "data"
 
@@ -307,13 +291,6 @@ class TestCat3DPrecomputeAxisCollapse:
         grid_file = self._DATA / "cat3d_wind_torus_grid.h5"
         if not grid_file.exists():
             pytest.skip(f"CAT3D grid file not found: {grid_file}")
-
-    @pytest.mark.skip(
-        reason="cat3d build_lookup(agn_torus_frac) kwarg mismatch; deferred to Wilkinson phase"
-    )
-    @pytest.mark.parametrize("fixed_axis_idx", [0, 1, 2])
-    def test_cat3d_collapse_axis(self, fixed_axis_idx, filter_set_radio):
-        pass
 
 
 # ── Dust analytic precompute tests ─────────────────────────────────────────

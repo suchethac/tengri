@@ -50,7 +50,11 @@ def test_import_feltre_nlr_backend() -> None:
 
 def test_feltre_backend_export_from_init() -> None:
     """FeltreNLRBackend should be exported from the nebular __init__."""
-    from tengri.components.nebular import FeltreNLRBackend  # noqa: F401
+    from tengri.components.nebular import FeltreNLRBackend as exported_backend
+    from tengri.components.nebular.agn_nebular import FeltreNLRBackend as canonical_backend
+
+    # Assert the exported symbol is the same class as the canonical one
+    assert exported_backend is canonical_backend
 
 
 def test_feltre_backend_filenotfound_when_missing(tmp_path: Path) -> None:
