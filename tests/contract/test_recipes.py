@@ -390,26 +390,8 @@ class TestRecipesBuildAndPredict:
         """Recipes whose SSP requirement is wNE or 'any' (per their docstrings)."""
         _build_and_predict(name, ssp_data_wne, synthetic_tophat_obs)
 
-    _CUE_NAN_REASON = (
-        "#1001: Cue backend returns an all-NaN SED when the recent SFR (and with it "
-        "the ionizing budget fed to the emulator) collapses — quiescent/old "
-        "SFH configurations. Silent-failure bug found by this test; fine with "
-        "neb='none' and for stochastic_sfh_jwst (ongoing SF at z=4)."
-    )
-
     @pytest.mark.parametrize(
-        "name",
-        [
-            pytest.param(
-                "star_forming_photometry",
-                marks=pytest.mark.xfail(reason=_CUE_NAN_REASON, strict=True),
-            ),
-            pytest.param(
-                "quiescent_z0",
-                marks=pytest.mark.xfail(reason=_CUE_NAN_REASON, strict=True),
-            ),
-            "stochastic_sfh_jwst",
-        ],
+        "name", ["star_forming_photometry", "quiescent_z0", "stochastic_sfh_jwst"]
     )
     def test_cue_recipes_build_and_predict(self, name, ssp_data_bc03, synthetic_tophat_obs):
         """Cue-backed recipes need a bare-stellar SSP (skips when bc03 grid absent).
