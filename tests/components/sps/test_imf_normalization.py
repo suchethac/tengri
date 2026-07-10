@@ -48,9 +48,14 @@ class TestEmissionLineAmplitudes:
         ssp = _make_ssp_if_available()
         if ssp is None:
             pytest.skip("SSP data not available")
+        # Constant SFH: total mass = SFR x duration. Pre-#369 the fixture
+        # set an SFR amplitude directly; the log_total_mass rename kept the
+        # bare log_sfr value, silently building a 10^log_sfr M_sun galaxy
+        # (9 dex low at SFR=1, #1013).
+        duration_yr = (1.0 - 1e-3) * 1e9
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_total_mass=Fixed(log_sfr),
+            sfh_const_log_total_mass=Fixed(log_sfr + float(np.log10(duration_yr))),
             sfh_const_start_gyr=Fixed(1.0),
             sfh_const_end_gyr=Fixed(1e-3),
             met_logzsol=Fixed(0.0),
