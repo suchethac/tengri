@@ -144,13 +144,13 @@ class TestOldVsYoungGalaxyPhysics:
 
         assert dn_old > dn_young, f"Dn4000: old={dn_old:.3f}, young={dn_young:.3f}"
 
-    def test_old_galaxy_dn4000_above_threshold(self, old_galaxy):
+    def test_old_galaxy_dn4000_above_threshold(self, real_ssp_only, old_galaxy):
         """Old (10 Gyr peak) galaxy should have Dn4000 > 1.3."""
         model, params = old_galaxy
         dn = float(model.predict_sed_quantities(params).dn4000)
         assert dn > 1.3, f"Old galaxy Dn4000 = {dn:.3f}, expected > 1.3"
 
-    def test_young_galaxy_bluer_uv_slope(self, old_galaxy, young_galaxy):
+    def test_young_galaxy_bluer_uv_slope(self, real_ssp_only, old_galaxy, young_galaxy):
         """Young galaxy should have bluer UV slope beta."""
         model_old, params_old = old_galaxy
         model_young, params_young = young_galaxy
@@ -269,7 +269,7 @@ class TestMetallicityEffectsOnSED:
     def high_z(self, ssp_data, filters):
         return _make_model(ssp_data, filters, met_logzsol=0.2)
 
-    def test_dn4000_increases_with_metallicity(self, low_z, solar_z, high_z):
+    def test_dn4000_increases_with_metallicity(self, real_ssp_only, low_z, solar_z, high_z):
         """Higher metallicity → higher Dn4000 (more metal absorption)."""
         model_lo, params_lo = low_z
         model_sol, params_sol = solar_z
@@ -283,7 +283,7 @@ class TestMetallicityEffectsOnSED:
             f"Dn4000 not increasing with Z: low={dn_lo:.3f}, solar={dn_sol:.3f}, high={dn_hi:.3f}"
         )
 
-    def test_higher_metallicity_redder_uv_color(self, low_z, high_z):
+    def test_higher_metallicity_redder_uv_color(self, real_ssp_only, low_z, high_z):
         """Higher metallicity → redder U-V color (more line blanketing)."""
         model_lo, params_lo = low_z
         model_hi, params_hi = high_z
@@ -320,7 +320,7 @@ class TestPassiveGalaxyProperties:
         ssfr = float(sfh_q.ssfr)
         assert ssfr < 1e-10, f"Passive galaxy sSFR = {ssfr:.3e}, expected < 1e-10"
 
-    def test_high_dn4000(self, passive_galaxy):
+    def test_high_dn4000(self, real_ssp_only, passive_galaxy):
         """Passive galaxy should have Dn4000 > 1.3."""
         model, params = passive_galaxy
         dn = float(model.predict_sed_quantities(params).dn4000)
@@ -339,7 +339,7 @@ class TestPassiveGalaxyProperties:
 class TestPhotometricColorOrdering:
     """SDSS magnitudes must follow physical color ordering."""
 
-    def test_old_population_red(self, ssp_data, filters):
+    def test_old_population_red(self, real_ssp_only, ssp_data, filters):
         """Old stellar population: u > g > r (fainter at blue, in mags)."""
         model, params = _make_model(
             ssp_data,

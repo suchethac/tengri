@@ -515,7 +515,13 @@ def _synthesize_mass_remaining(
         )
 
     # surviving_mstar takes log10(age/yr): ssp_lg_age_gyr is log10(age/Gyr).
-    lg_age_yr = ssp_lg_age_gyr + 9.0
+    # Age-0 anchor templates (#1016): lg_age = -inf (bc03 stelib) makes the
+    # DSPS sigmoid chain emit NaN, and one NaN entry poisons every
+    # surviving-mass sum downstream (log_mstar = NaN) regardless of the
+    # anchor's weight. No star has died at age 0, so floor the age at
+    # 0.1 Myr where f_surv = 1 to DSPS's own fit accuracy; a no-op for
+    # grids whose youngest template is already >= 0.1 Myr.
+    lg_age_yr = jnp.maximum(ssp_lg_age_gyr + 9.0, 5.0)
     f_surv_age = surviving_mstar(lg_age_yr, **params)
     return jnp.broadcast_to(f_surv_age, (ssp_lgmet.shape[0], lg_age_yr.shape[0]))
 

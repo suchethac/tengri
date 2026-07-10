@@ -107,9 +107,21 @@ def _refine_sfh_table_ages(ssp_ages_yr, factor: int = 16):
     -------
     ndarray, shape ((n_ssp - 1) * factor + 1,)
         Dense ascending age grid [yr], log-spaced over the SSP age span.
+
+    Notes
+    -----
+    **Age-0 anchor templates** (#1016): SSP grids with a leading age = 0
+    template (bc03 stelib) would give ``log_lo = log10(0) = -inf``,
+    collapsing the whole grid to ``[0, ..., 0, age_max]`` — the SFR
+    integrand then evaluates to zero everywhere with support and the CIC
+    total mass (and with it the entire stellar SED) silently vanishes.
+    The span floor of 1 yr keeps the grid finite and strictly ascending;
+    it is a no-op for every physical grid (youngest templates are
+    ~0.1 Myr), and the ``[0, age0]`` lookback sliver is integrated by
+    :func:`_cic_parcels`'s own lookback-0 extension, not by this grid.
     """
     n = ssp_ages_yr.shape[0]
-    log_lo = jnp.log10(ssp_ages_yr[0])
+    log_lo = jnp.log10(jnp.maximum(ssp_ages_yr[0], 1.0))
     log_hi = jnp.log10(ssp_ages_yr[-1])
     return 10.0 ** jnp.linspace(log_lo, log_hi, (n - 1) * factor + 1)
 
