@@ -106,6 +106,10 @@ def _load_ionspec_disk(key: tuple) -> dict | None:
             return {
                 "ionspec_table": data["ionspec_table"],
                 "logqion_table": logqion,
+                # Pre-#1018 caches lack ``seglum_table``; the KeyError below turns
+                # them into a miss so they are refit rather than silently feeding
+                # the old argmax-shaped forward.
+                "seglum_table": data["seglum_table"],
                 "n_met": int(data["n_met"]),
                 "n_age": int(data["n_age"]),
             }
@@ -122,6 +126,7 @@ def _store_ionspec_disk(key: tuple, result: dict) -> None:
             path,
             ionspec_table=result["ionspec_table"],
             logqion_table=result["logqion_table"],
+            seglum_table=result["seglum_table"],
             n_met=np.asarray(result["n_met"]),
             n_age=np.asarray(result["n_age"]),
         )
@@ -506,6 +511,12 @@ def fit_ionizing_spectrum(
         "ionspec_logLratio3": np.clip(logLratios[2], *_CLIP_RANGES["ionspec_logLratio3"]),
         "gas_logqion": log_qion,
         "powerlaw_params": coeff,
+        # Absolute integrated luminosity per segment, log10. The 3 ``logLratio``
+        # params are ``diff(log_seglum)`` and therefore discard this
+        # normalization -- but combining several stellar populations needs it,
+        # because segment luminosities ADD linearly across populations while
+        # their log-ratios do not (#1018).
+        "log_seglum": log_L,
     }
 
 
@@ -593,6 +604,9 @@ def precompute_ionizing_params_table(
     n_met, n_age, _ = ssp_flux.shape
     ionspec_table = np.zeros((n_met, n_age, 7))
     logqion_table = np.full((n_met, n_age), -99.0)
+    # Absolute per-segment integrated luminosities (log10). Same -99 "empty"
+    # convention as logqion_table: 10**-99 == 0 contributes nothing to a sum.
+    seglum_table = np.full((n_met, n_age, 4), -99.0)
 
     wave_np = np.asarray(ssp_wave)
 
@@ -626,6 +640,7 @@ def precompute_ionizing_params_table(
                     ionspec_table[im, ia, 5] = fit["ionspec_logLratio2"]
                     ionspec_table[im, ia, 6] = fit["ionspec_logLratio3"]
                     logqion_table[im, ia] = fit["gas_logqion"]
+                    seglum_table[im, ia, :] = fit["log_seglum"]
                 except (ValueError, IndexError, RuntimeError):
                     # ValueError: invalid input data (NaN, zero flux, wrong wavelength range)
                     # IndexError: wavelength array doesn't cover ionizing regime (<912 A)
@@ -635,12 +650,31 @@ def precompute_ionizing_params_table(
     result = {
         "ionspec_table": ionspec_table,
         "logqion_table": logqion_table,
+        "seglum_table": seglum_table,
         "n_met": n_met,
         "n_age": n_age,
     }
     _IONSPEC_TABLE_CACHE[key] = result
     _store_ionspec_disk(key, result)
     return result
+
+
+def _cell_fraction(target, grid, idx):
+    """Fractional position of ``target`` within grid cell ``idx``, -inf-safe (#1001).
+
+    SSP grids with an age-0 anchor carry ``log10(age) = -inf`` as the first entry,
+    making that cell's span infinite; the naive fraction is ``inf/inf`` -> NaN and
+    silently poisons every downstream Cue prediction. Degenerate cells snap to the
+    nearest node. Shared by :func:`interpolate_ionizing_params` and
+    :func:`interpolate_ionizing_seglum` so the guard cannot drift between them.
+    """
+    left = grid[idx]
+    span = grid[idx + 1] - left
+    finite = jnp.isfinite(left) & jnp.isfinite(span)
+    left_safe = jnp.where(finite, left, 0.0)
+    span_safe = jnp.where(finite, span, 1.0)
+    frac = (target - left_safe) / span_safe
+    return jnp.where(finite, frac, jnp.where(target == left, 0.0, 1.0))
 
 
 def interpolate_ionizing_params(
@@ -703,15 +737,6 @@ def interpolate_ionizing_params(
 
     """
 
-    def _cell_fraction(target, grid, idx):
-        left = grid[idx]
-        span = grid[idx + 1] - left
-        finite = jnp.isfinite(left) & jnp.isfinite(span)
-        left_safe = jnp.where(finite, left, 0.0)
-        span_safe = jnp.where(finite, span, 1.0)
-        frac = (target - left_safe) / span_safe
-        return jnp.where(finite, frac, jnp.where(target == left, 0.0, 1.0))
-
     # Bilinear interpolation
     log_z_c = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
     log_age_c = jnp.clip(log_age_yr, ssp_log_age_yr[0], ssp_log_age_yr[-1])
@@ -739,3 +764,57 @@ def interpolate_ionizing_params(
     logqion = (1 - fz) * (1 - fa) * q00 + (1 - fz) * fa * q01 + fz * (1 - fa) * q10 + fz * fa * q11
 
     return ionspec, logqion
+
+
+def interpolate_ionizing_seglum(
+    seglum_table: jnp.ndarray,
+    ssp_lgmet: jnp.ndarray,
+    ssp_log_age_yr: jnp.ndarray,
+    log_z: float,
+    log_age_yr: float,
+) -> jnp.ndarray:
+    r"""Bilinearly interpolate the per-segment ionizing luminosities at (Z, age).
+
+    The **absolute** normalization that ``ionspec_logLratio1..3`` discards. Needed
+    to combine several stellar populations into one effective ionizing spectrum:
+    segment luminosities add linearly across populations, whereas their log-ratios
+    do not (#1018).
+
+    Parameters
+    ----------
+    seglum_table : array, shape (n_met, n_age, 4)
+        ``log10`` integrated luminosity of each of the 4 ionization segments.
+        Empty/unfit bins carry ``-99`` so ``10**-99 == 0`` adds nothing to a sum.
+    ssp_lgmet : array, shape (n_met,)
+        SSP metallicity grid. [log10(Z)]
+    ssp_log_age_yr : array, shape (n_age,)
+        SSP age grid. [log10(yr)]
+    log_z, log_age_yr : float
+        Target metallicity and age.
+
+    Returns
+    -------
+    log_seglum : array, shape (4,)
+        ``log10`` integrated luminosity per segment at the target point.
+
+    Notes
+    -----
+    **JIT-compatible / differentiable**: yes. Uses the shared, ``-inf``-safe
+    :func:`_cell_fraction` (#1001) and the same clip + searchsorted bracketing as
+    :func:`interpolate_ionizing_params`, so the two always land on the same cell.
+    """
+    log_z_c = jnp.clip(log_z, ssp_lgmet[0], ssp_lgmet[-1])
+    log_age_c = jnp.clip(log_age_yr, ssp_log_age_yr[0], ssp_log_age_yr[-1])
+
+    iz = jnp.clip(jnp.searchsorted(ssp_lgmet, log_z_c) - 1, 0, len(ssp_lgmet) - 2)
+    ia = jnp.clip(jnp.searchsorted(ssp_log_age_yr, log_age_c) - 1, 0, len(ssp_log_age_yr) - 2)
+
+    fz = _cell_fraction(log_z_c, ssp_lgmet, iz)
+    fa = _cell_fraction(log_age_c, ssp_log_age_yr, ia)
+
+    s00 = seglum_table[iz, ia]
+    s01 = seglum_table[iz, ia + 1]
+    s10 = seglum_table[iz + 1, ia]
+    s11 = seglum_table[iz + 1, ia + 1]
+
+    return (1 - fz) * (1 - fa) * s00 + (1 - fz) * fa * s01 + fz * (1 - fa) * s10 + fz * fa * s11
