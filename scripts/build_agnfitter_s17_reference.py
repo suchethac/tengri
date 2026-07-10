@@ -56,6 +56,20 @@ def main() -> None:
         "tdust": np.asarray(dust["TDUST"][0], dtype=np.float64),
     }
 
+    dust_radio = Table.read(fetch("models/STARBURST/s17_lowvsg_dust+radio+sigma.fits"))
+
+    # S17_radio table has 'nu' in Hz (already frequency, not wavelength).
+    # Mirror MODEL_AGNfitter line 392-394: the 'nu' column is (n_tdust, n_wave),
+    # already in Hz and increasing. 'SED' is L_nu-like.
+    payload_radio = {
+        "dust_nu_hz": np.asarray(dust_radio["nu"][0], dtype=np.float64),
+        "dust_sed_lnu": np.asarray(dust_radio["SED"][0], dtype=np.float64),
+        "pah_lam_um": np.asarray(pah["LAM"][0], dtype=np.float64),
+        "pah_sed_nulnu": np.asarray(pah["SED"][0], dtype=np.float64),
+        "tdust": np.asarray(dust_radio["TDUST"][0], dtype=np.float64),
+        "lir_conv": np.asarray(dust_radio["LIR_conv"][0], dtype=np.float64),
+    }
+
     if not _OUT.is_file():
         raise SystemExit(
             f"{_OUT} is missing — run scripts/build_agnfitter_bbb_reference.py first "
@@ -70,7 +84,21 @@ def main() -> None:
         g.attrs["sed_unit"] = "nu*L_nu (relative)"
         for k, v in payload.items():
             g.create_dataset(k, data=v.astype(np.float32), compression="gzip")
-    print(f"Wrote s17 group to {_OUT} ({_OUT.stat().st_size / 1024:.0f} KB)")
+
+        if "s17_radio" in f:
+            del f["s17_radio"]
+        g_radio = f.create_group("s17_radio")
+        g_radio.attrs["source"] = (
+            "AGNfitter-rX models/STARBURST s17_lowvsg_dust+radio+sigma.fits + s17_lowvsg_pah.fits"
+        )
+        g_radio.attrs["nu_unit"] = "Hz"
+        g_radio.attrs["sed_unit"] = "L_nu (relative)"
+        # The source FITS is native float64; vendor at full precision
+        # (repo policy: never shrink vendored grids).
+        for k, v in payload_radio.items():
+            g_radio.create_dataset(k, data=v.astype(np.float64), compression="gzip")
+
+    print(f"Wrote s17 and s17_radio groups to {_OUT} ({_OUT.stat().st_size / 1024:.0f} KB)")
 
 
 if __name__ == "__main__":

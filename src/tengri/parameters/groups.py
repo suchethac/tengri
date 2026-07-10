@@ -431,6 +431,10 @@ _AGN_PARTITION = {
     "agn_log_ledd": "agn",
     "agn_a_spin": "agn",
     "agn_cos_inc": "agn",
+    # Disc dust obscuration (Prevot SMC; AGNfitter EBVbbb). Shared (not
+    # agn.disc): redden_disc applies it at the runner disc stage for every
+    # disc type, mirroring agn_log_lbol.
+    "agn_ebv_disc": "agn",
     # Torus
     "agn_T_torus": "agn.torus",
     "agn_T_hot": "agn.torus",
@@ -471,6 +475,7 @@ _AGN_PARTITION = {
     # Attenuation
     "agn_polar_ebv": "agn.atten",
     "agn_polar_oa": "agn.atten",
+    "agn_attenuation_ebv": "agn.atten",  # smc_prevot block E(B-V)
     # Radiation physics (shared disc normalization)
     "agn_f_hard": "agn",
     "agn_gamma_warm": "agn",

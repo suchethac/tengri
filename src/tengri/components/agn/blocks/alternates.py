@@ -31,7 +31,7 @@ from jax import Array
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.disc import powerlaw_disc
 from tengri.components.agn.torus import simple_torus, two_temperature_torus
-from tengri.components.dust.attenuation import prevot_smc
+from tengri.components.agn.reddening import redden_disc
 
 __all__: list[str] = []  # registrations only
 
@@ -182,7 +182,7 @@ def two_temperature_torus_block(
 @register_agn_block(
     "attenuation",
     "smc_prevot",
-    citation="Prevot et al. 1984, A&A, 137, 371",
+    citation="Prevot et al. 1984, A&A, 132, 389",
     status="production",
     short_doc="Prevot et al. 1984 SMC extinction curve",
 )
@@ -194,11 +194,27 @@ def smc_prevot_block(
 ) -> Array:
     r"""Prevot 1984 SMC attenuation curve as an attenuation-stage block.
 
-    Returns the multiplicative factor :math:`10^{-A_\lambda/2.5}` where
-    :math:`A_\lambda = E(B-V) \times k_\lambda` and :math:`k_\lambda` is
-    Prevot+ 1984's SMC k-curve (the same curve underlying GRAHSP's
-    :func:`grahsp_biatten_block`, but exposed here under the more
-    discoverable ``"smc_prevot"`` name and with a single ``ebv`` param).
+    Returns the multiplicative factor :math:`10^{-0.4\,A_\lambda}` with
+
+    .. math::
+
+        A_\lambda = k(\lambda)\, R_V\, E(B-V),
+        \qquad k(\lambda) = A(\lambda)/A(V),\ R_V = 2.72,
+
+    i.e. exactly the extinction :func:`tengri.components.agn.reddening.redden_disc`
+    applies for ``agn_ebv_disc`` (Prevot et al. 1984 [1]_; the prescription
+    AGNfitter's ``BBBred_Prevot`` uses for its ``EBVbbb``). Delegating to
+    ``redden_disc`` keeps the two disc-reddening paths identical at matched
+    :math:`E(B-V)` — the block previously dropped the :math:`R_V` factor and
+    under-attenuated by :math:`2.72\times` in magnitudes relative to
+    ``agn_ebv_disc``.
+
+    Note AGNfitter evaluates the raw Prevot fit at V
+    (:math:`k_{\rm raw}(0.55\,\mu m) \approx 2.468`) instead of pinning the
+    published :math:`R_V = 2.72`, so at matched :math:`E(B-V)` its
+    :math:`A_\lambda` is a uniform factor :math:`2.468/2.72 \approx 0.907`
+    of tengri's — identical spectral shape, a ~10% rescaling of the
+    effective :math:`E(B-V)`.
 
     Parameters
     ----------
@@ -206,10 +222,12 @@ def smc_prevot_block(
         Rest-frame wavelength [Å].
     agn_attenuation_ebv : float, optional
         :math:`E(B-V)` extinction [mag]. Default ``0.0`` (no attenuation).
+
+    References
+    ----------
+    .. [1] M. L. Prevot et al., "The typical interstellar extinction in the
+       Small Magellanic Cloud," A&A, 132, 389 (1984).
     """
     wave_aa = jnp.asarray(wavelength)
-    # tengri prevot_smc returns A_lambda/A_V; multiply by E(B-V) * R_V to get A_lambda.
-    # Convert to multiplicative factor 10^(-A_lambda / 2.5).
-    k_curve = prevot_smc(wave_aa)  # k = A_lambda / E(B-V)
-    A_lambda = k_curve * agn_attenuation_ebv
-    return 10.0 ** (-A_lambda / 2.5)
+    # Single source of truth: redden_disc on a unit SED IS the factor.
+    return redden_disc(wave_aa, jnp.ones_like(wave_aa), agn_attenuation_ebv)

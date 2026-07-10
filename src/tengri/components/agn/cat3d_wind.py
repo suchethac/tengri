@@ -149,7 +149,7 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
         agn_log_lbol: float = 44.0,
         agn_cos_inc: float = 0.86602540378443864,
         agn_a_cat3d: float = -2.0,
-        agn_fwd_cat3d: float = 0.45,
+        agn_fwd_cat3d: float = 1.0,
         agn_torus_frac: float = 0.5,
         **_kwargs,
     ) -> jnp.ndarray:
@@ -167,7 +167,7 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
             Radial power-law index of the clumpy-cloud distribution
             (Hönig & Kishimoto 2017 ``a``). Default −2.0.
         agn_fwd_cat3d : float, optional
-            Polar-wind mass fraction. Default 0.2.
+            Polar-wind mass fraction. Default 1.0.
         agn_torus_frac : float, optional
             Fraction of L_bol reprocessed by the torus. Default 0.5.
 
@@ -253,7 +253,7 @@ def cat3d_wind_sed(*args, **kwargs) -> jnp.ndarray:
     agn_a_cat3d : float, optional
         Radial power-law index. Default −2.0.
     agn_fwd_cat3d : float, optional
-        Wind fraction. Default 0.2.
+        Wind fraction. Default 1.0.
     agn_torus_frac : float, optional
         Torus reprocessing fraction. Default 0.5.
     **kwargs

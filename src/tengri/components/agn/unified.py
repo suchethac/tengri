@@ -1027,7 +1027,7 @@ def cat3d_wind_agn(
     agn_frac: float = 0.1,
     agn_cos_inc: float = 0.86602540378443864,
     agn_a_cat3d: float = -2.0,
-    agn_fwd_cat3d: float = 0.45,
+    agn_fwd_cat3d: float = 1.0,
     agn_torus_frac: float = 0.5,
     agn_ebv_disc: float = 0.0,
     **_kwargs,
@@ -1049,7 +1049,7 @@ def cat3d_wind_agn(
         Radial power-law index of the clumpy-cloud distribution. Default
         −2.0.
     agn_fwd_cat3d : float, optional
-        Polar-wind mass fraction. Default 0.2.
+        Polar-wind mass fraction. Default 1.0.
     agn_torus_frac : float, optional
         Fraction of L_bol reprocessed by the torus. Disc receives
         ``1 - agn_torus_frac``. Default 0.5.

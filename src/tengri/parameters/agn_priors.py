@@ -79,9 +79,10 @@ def agn_prior_energy_balance(
        σ = 0.1 constant and the ``flexible`` / ``restrictive`` branch
        structure follow ``prior_energy_balance`` in
        ``functions/PRIORS_AGNfitter.py``.
-    .. [2] Martínez-Ramírez / Zhuang et al. 2024, MNRAS 535, 2961 — the
+    .. [2] L. N. Martínez-Ramírez et al., "AGNFITTER-RX: Modeling the
+       radio-to-X-ray spectral energy distributions of AGNs," A&A, 688, A46
+       (2024). arXiv:2405.12111. DOI:10.1051/0004-6361/202449329 — the
        extended AGNfitter-rX branch in which this prior is retained.
-       arXiv:2405.12111.
     """
     # Ensure JAX arrays
     l_sb_emit = jnp.asarray(l_sb_emit)
