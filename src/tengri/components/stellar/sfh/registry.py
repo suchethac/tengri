@@ -1048,7 +1048,7 @@ def _table_sfh_placeholder(t_lookback, **kwargs):
     Returns
     -------
     ndarray, shape (n_age,)
-        Zero array (actual tabulated SFH handled separately).
+        Zero array (the runtime table is wired in StellarSEDComponent, #996).
 
     Notes
     -----

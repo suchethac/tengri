@@ -17,7 +17,7 @@
   "src/tengri/parameters/parameters.py": 1859,
   "src/tengri/components/agn/unified.py": 1851,
   "src/tengri/inference/backends/vi/native.py": 1717,
-  "src/tengri/components/stellar/component.py": 1854,
+  "src/tengri/components/stellar/component.py": 1930,
   "src/tengri/inference/jit_engine.py": 1644,
   "src/tengri/components/xray/xray.py": 1567,
   "src/tengri/components/nebular/agn_nebular.py": 1456,
