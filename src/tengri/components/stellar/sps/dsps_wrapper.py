@@ -316,7 +316,7 @@ def load_ssp_data(filepath: str) -> SSPData:
 
         # Solar-luminosity unit contract (#969): ``ssp_flux`` is stored in
         # "Lsun/Hz per Msun", but WHICH Lsun depends on the code that wrote
-        # the file — the ported ``fsps_*`` catalog grids carry FSPS's
+        # the file — the repackaged ``fsps_*`` catalog grids carry FSPS's
         # native numbers (Lsun = 3.839e33 erg/s, ``sps_vars.f90``), while
         # tengri converts to erg/s with the IAU 2015 value (3.828e33), a
         # flat 0.29 % absolute-flux offset. Rescale on load so the
@@ -355,7 +355,7 @@ def load_ssp_data(filepath: str) -> SSPData:
 
 
 #: FSPS's internal solar luminosity (``sps_vars.f90``, ``lsun = 3.839d33``)
-#: [erg/s]. The ported ``fsps_*`` catalog grids store flux in units of
+#: [erg/s]. The repackaged ``fsps_*`` catalog grids store flux in units of
 #: this Lsun — verified by the reproduction notebook's §1 bit-match of the
 #: raw HDF5 values against live ``python-fsps`` output (#969).
 _FSPS_LSUN_ERG_PER_S: float = 3.839e33

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for FastSpecFit-ported functionality in tengri.
+"""Tests validating tengri against FastSpecFit.
 
 Includes:
-  - build_line_mask (ported from FastSpecFit LineMasker)
+  - build_line_mask (implements the same masking as FastSpecFit LineMasker)
   - compute_line_fluxes, compute_equivalent_widths, compute_line_moments
     (differentiable equivalents of FastSpecFit populate_emtable())
   - LineList.is_strong and LineList.plot_group metadata
@@ -230,7 +230,7 @@ def test_compute_line_moments_zero_flux():
     np.testing.assert_allclose(float(sigma_int), 0.0, atol=1e-10)
 
 
-# ── LineList.is_strong / plot_group tests (adapted from FastSpecFit) ──────────
+# ── LineList.is_strong / plot_group tests (reference: FastSpecFit) ────────────
 
 # The 18 is_strong line names from FastSpecFit emlines.ecsv, mapped to
 # tengri's naming convention.
@@ -261,7 +261,7 @@ _FASTSPECFIT_STRONG_NAMES = frozenset(
 def test_linelist_isstrong_count():
     """Exactly 18 is_strong lines matching FastSpecFit emlines.ecsv.
 
-    Adapted from FastSpecFit test_linetable.py [1]_.
+    Reference values from FastSpecFit test_linetable.py [1]_.
     """
     from tengri.observation.line_list import LineList
 
@@ -275,7 +275,7 @@ def test_linelist_isstrong_count():
 def test_linelist_isstrong_names():
     """is_strong names exactly match FastSpecFit emlines.ecsv isstrong column.
 
-    Adapted from FastSpecFit test_linetable.py [1]_.
+    Reference values from FastSpecFit test_linetable.py [1]_.
     """
     from tengri.observation.line_list import LineList
 
@@ -291,7 +291,7 @@ def test_linelist_isstrong_names():
 def test_linelist_plot_group_halphanii():
     """Hα, NII_6548, NII_6584 share plot_group='halpha_nii_6548_48'.
 
-    Adapted from FastSpecFit test_linetable.py [1]_.
+    Reference values from FastSpecFit test_linetable.py [1]_.
     """
     from tengri.observation.line_list import LineList
 
@@ -319,7 +319,7 @@ def test_linelist_plot_group_oiii_doublet():
 def test_linelist_select_preserves_metadata():
     """select() carries is_strong and plot_group from parent catalog.
 
-    Adapted from FastSpecFit test_linetable.py [1]_.
+    Reference values from FastSpecFit test_linetable.py [1]_.
     """
     from tengri.observation.line_list import LineList
 
@@ -338,13 +338,13 @@ def test_linelist_select_preserves_metadata():
     assert name_to_group["OIII_5007"] == "oiii_doublet"
 
 
-# ── Statistical utility tests (adapted from FastSpecFit test_util.py) ─────────
+# ── Statistical utility tests (reference: FastSpecFit test_util.py) ───────────
 
 
 def test_sigma_clip_statistics():
     """For Gaussian samples, (Q75-Q25)/1.349 ≈ std within 5%.
 
-    Adapted from FastSpecFit test_util.py::test_stats [1]_.
+    Reference values from FastSpecFit test_util.py::test_stats [1]_.
     """
     rng = np.random.default_rng(42)
     samples = rng.standard_normal(10_000)
@@ -363,7 +363,7 @@ def test_sigma_clip_statistics():
 def test_robust_sigma_iqr():
     """IQR-based sigma is robust to outliers; mean-based sigma is not.
 
-    Adapted from FastSpecFit test_util.py::test_stats [1]_.
+    Reference values from FastSpecFit test_util.py::test_stats [1]_.
     """
     rng = np.random.default_rng(0)
     clean = rng.standard_normal(1000)

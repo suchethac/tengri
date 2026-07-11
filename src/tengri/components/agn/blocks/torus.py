@@ -60,7 +60,7 @@ def cat3d_wind_torus_block(
     *,
     agn_cos_inc: float = 0.86602540378443864,
     agn_a_cat3d: float = -2.0,
-    agn_fwd_cat3d: float = 0.2,
+    agn_fwd_cat3d: float = 1.0,
     agn_torus_frac: float = 0.5,
     **_params,
 ) -> Array:

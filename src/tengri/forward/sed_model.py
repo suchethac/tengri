@@ -2163,7 +2163,7 @@ class SEDModel:
             kw["agn_tv_skirtor"] = p.get("agn_tv_skirtor", 7.0)
             # CAT3D-Wind clumpy torus (Hönig & Kishimoto 2017)
             kw["agn_a_cat3d"] = p.get("agn_a_cat3d", -2.0)
-            kw["agn_fwd_cat3d"] = p.get("agn_fwd_cat3d", 0.2)
+            kw["agn_fwd_cat3d"] = p.get("agn_fwd_cat3d", 1.0)
             # Silva+04 obscured-torus column density
             kw["agn_log_nh_silva"] = p.get("agn_log_nh_silva", 23.0)
             # Fritz+2006 torus (CIGALE fritz2006) — forwarded so the 6D grid

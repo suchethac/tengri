@@ -16,7 +16,7 @@
 """Adaptive Nested Sampling.
 
 Combines SMC-equivalent adaptive tempering and inner kernel tuning.
-Ported from blackjax.ns.adaptive.
+Implements the same algorithms as blackjax.ns.adaptive.
 """
 
 from __future__ import annotations

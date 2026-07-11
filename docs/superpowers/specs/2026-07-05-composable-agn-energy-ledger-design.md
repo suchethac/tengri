@@ -336,12 +336,12 @@ the block registry.
 - Panchromatic energy ledger (stellar→dust→AGN→X-ray→radio one budget) — this
   design is AGN-internal; X-ray/radio consume via the existing contract.
 - New disc/torus/line *physics* (no new blocks) — this is composition/energy
-  bookkeeping only. New-physics ports remain their own issues (#898 ADAF,
+  bookkeeping only. New-physics implementations remain their own issues (#898 ADAF,
   #901 tbabs, etc.). **Exception — re-exposing *existing* physics** as a
   composable block is in scope as a Phase-4 retirement prerequisite: e.g.
   `nlr='feltre'` (Feltre+2016 CLOUDY, BEAGLE) wraps the already-shipped
   `compute_nlr_sed_feltre` so the monolithic `unified_nlr_blr` NLR slot has a
-  composable equal before retirement. No new physics is ported.
+  composable equal before retirement. No new physics is introduced.
 - Changing the Type-1/2 masking or attenuation stages (shipped 2026-06-04).
 
 ## References

@@ -122,6 +122,27 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Uniform(-2.0, 0.5, default=-1.0),
         "AGN Eddington ratio log10(L/L_Edd)",
     ),
+    # Disc dust obscuration (Prevot+1984 SMC, R_V = 2.72) — the AGNfitter
+    # ``EBVbbb`` analog, applied to the disc stage by
+    # ``reddening.redden_disc`` on both the composable and monolithic paths.
+    # Upstream AGNfitter samples EBVbbb over [0, 1] (MODEL_AGNfitter.BBB).
+    ParamDeclaration(
+        "agn_ebv_disc",
+        Uniform(0.0, 1.0, default=0.0),
+        "AGN disc color excess E(B-V) (Prevot SMC, R_V=2.72; AGNfitter EBVbbb)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+    ),
+    # E(B-V) of the attenuation-stage block (``agn.atten`` sub-block, e.g.
+    # ``smc_prevot``). Same Prevot curve and R_V as agn_ebv_disc but applied
+    # at the attenuation stage of the composable runner.
+    ParamDeclaration(
+        "agn_attenuation_ebv",
+        Uniform(0.0, 1.0, default=0.0),
+        "E(B-V) of the AGN attenuation-stage block (smc_prevot)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+    ),
     ParamDeclaration(
         "agn_log_mdot",
         # log10(Mdot / Mdot_Edd): RELAGN grid extent -1.5 to 0.3.
@@ -213,7 +234,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     # Hönig & Kishimoto (2017) CAT3D-Wind clumpy-disc-plus-polar-wind torus.
     # Defaults match the cat3d_wind_torus_block; grid extent a in [-3, -1.5],
-    # fwd in [0.15, 2.25] (see scripts/build_cat3d_wind_grid.py).
+    # fwd in [1.0, 2.25] from AGNfitter rows 210+ (see scripts/build_cat3d_wind_grid.py).
     ParamDeclaration(
         "agn_a_cat3d",
         Uniform(-3.0, -1.5, default=-2.0),
@@ -223,10 +244,10 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_fwd_cat3d",
-        Uniform(0.15, 2.25, default=0.2),
-        "CAT3D-Wind polar-wind mass fraction (grid 0.15 to 2.25)",
-        lambda lo, hi: lo >= 0,
-        "must be >= 0",
+        Uniform(1.0, 2.25, default=1.0),
+        "CAT3D-Wind polar-wind mass fraction (grid 1.0 to 2.25, AGNfitter rows-210+ set)",
+        lambda lo, hi: lo >= 1.0 and hi <= 2.25,
+        "must be within the CAT3D-Wind grid extent [1.0, 2.25]",
     ),
     # Silva, Maiolino & Granato (2004) smooth obscured-torus templates,
     # indexed by line-of-sight column density. Default matches silva04_torus_block.

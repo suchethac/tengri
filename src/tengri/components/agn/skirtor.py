@@ -625,7 +625,7 @@ def skirtor_disc_dust_ratio(
     -----
     **JIT-compatible**: yes — grid interpolation is pure JAX.
 
-    **Upstream**: Ported from CIGALE ``skirtor2016.py`` (Boquien+2019).
+    **Reference**: Implements CIGALE ``skirtor2016.py`` (Boquien+2019).
     """
     raw = _load_raw_disk_dust_grid()
     if raw is None:

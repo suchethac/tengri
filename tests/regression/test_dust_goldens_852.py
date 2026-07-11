@@ -177,7 +177,7 @@ def _astrodust_port_sed() -> np.ndarray:
 
 @pytest.mark.skipif(not _astrodust_available(), reason="astrodust template grid not available")
 def test_astrodust_is_not_a_silent_no_op():
-    """With the grid present the faithful port must load it and emit a nonzero
+    """With the grid present the native implementation must load it and emit a nonzero
     far-IR SED (guards against a silent-zeros regression like #852)."""
     comp = _REGISTRY["astrodust"]()
     assert comp.load(_WAVE) is not None, "astrodust grid present but load() returned None"

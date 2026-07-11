@@ -120,7 +120,7 @@ def convert_to_lnu_per_msun(wave_aa: np.ndarray, flux_lsun_aa_msun: np.ndarray) 
     return flux_lsun_aa_msun * (wave_aa**2) / C_ANGSTROM_PER_S
 
 
-def port_bc03_miles(out_path: str | Path) -> Path:
+def repackage_bc03_miles(out_path: str | Path) -> Path:
     """Port bagpipes' BC03+MILES grid to DSPS-shaped HDF5.
 
     The age grid in bagpipes starts at 0 yr — DSPS / tengri expects
@@ -165,7 +165,7 @@ def port_bc03_miles(out_path: str | Path) -> Path:
         # Cast to float32 at write time — matches the rest of the
         # tengri SSP archive on disk. The float64 work happened
         # upstream so Cue's Q_H integrator does not see overflow at
-        # port time (project memory: project_chex_complete).
+        # repackaging time (project memory: project_chex_complete).
         h.create_dataset("ssp_flux", data=flux_lsun_hz_msun.astype(np.float32))
         h.create_dataset("ssp_lg_age_gyr", data=lg_age_gyr.astype(np.float32))
         h.create_dataset("ssp_lgmet", data=lgmet.astype(np.float32))
@@ -174,7 +174,7 @@ def port_bc03_miles(out_path: str | Path) -> Path:
 
         h.attrs["flux_units"] = "Lsun/Hz/Msun"
         h.attrs["wave_units"] = "Angstrom"
-        h.attrs["source"] = "bagpipes bc03_miles_stellar_grids.fits (ported)"
+        h.attrs["source"] = "bagpipes bc03_miles_stellar_grids.fits (repackaged)"
         h.attrs["imf"] = "Kroupa 2001"
         h.attrs["ssp_library"] = "BC03 + MILES"
 
@@ -191,25 +191,25 @@ def port_bc03_miles(out_path: str | Path) -> Path:
 
 
 if __name__ == "__main__":
-    out = port_bc03_miles(Path(__file__).parent / "data" / "bc03_miles_from_bagpipes.h5")
-    # Round-trip sanity: native vs ported at Z_sun, 1 Gyr.
+    out = repackage_bc03_miles(Path(__file__).parent / "data" / "bc03_miles_from_bagpipes.h5")
+    # Round-trip sanity: native vs repackaged at Z_sun, 1 Gyr.
     raw = load_bagpipes_bc03_grid()
     with h5py.File(out, "r") as h:
         flux_native = raw["flux_lsun_aa_msun"][4, :, :]  # ZMET_1.000ZSOL
         age_yr = raw["age_yr"]
         idx_1gyr = int(np.argmin(np.abs(age_yr - 1.0e9)))
-        # Native units are Lsun/Å/Msun; ported is Lsun/Hz/Msun.
+        # Native units are Lsun/Å/Msun; the repackaged grid is Lsun/Hz/Msun.
         # Compare an *integrated* bolometric quantity instead of raw flux.
         wave = raw["wave_aa"]
         Lbol_native = float(np.trapezoid(flux_native[idx_1gyr], wave))
-        # Reverse-convert ported back to Lsun/Å/Msun to compare
+        # Reverse-convert the repackaged flux back to Lsun/Å/Msun to compare
         flux_ported_hz = h["ssp_flux"][4, idx_1gyr - 1, :].astype(np.float64)
         flux_ported_aa = flux_ported_hz * C_ANGSTROM_PER_S / (wave**2)
         Lbol_ported = float(np.trapezoid(flux_ported_aa, wave))
         rel_err = abs(Lbol_ported - Lbol_native) / Lbol_native
         print(
             f"\n  L_bol round-trip at Z_sun, ~1 Gyr: "
-            f"native={Lbol_native:.4e}, ported={Lbol_ported:.4e}, "
+            f"native={Lbol_native:.4e}, repackaged={Lbol_ported:.4e}, "
             f"rel_err={rel_err:.2e}"
         )
         assert rel_err < 1e-5, "Bolometric round-trip failed"

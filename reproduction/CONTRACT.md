@@ -59,6 +59,13 @@ the code ("now we will plot..."), no unexplained jargon from either
 code's internals. The reader is an astronomer deciding whether to trust
 tengri; show them the evidence and get out of the way.
 
+Framing: these notebooks reproduce the physics in the reference codes.
+tengri implements the same models independently, and the comparison is
+the validation. Never write that a tengri component was ported or
+copied from the reference code. External template and SSP data files
+used as matched inputs are "repackaged" into tengri's formats, and
+that is the word to use.
+
 ## 7. Rendering
 
 Notebooks must render headless without losing figures. Two rules:

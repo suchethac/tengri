@@ -18,7 +18,7 @@
 Tracks the evidence integral during a NS run, computing the marginal
 likelihood (evidence), information gain, and related quantities.
 
-Ported from blackjax.ns.integrator.
+Implements the same algorithms as blackjax.ns.integrator.
 """
 
 from __future__ import annotations

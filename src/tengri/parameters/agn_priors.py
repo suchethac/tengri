@@ -12,11 +12,10 @@ summation into the total log-prior via::
     log_prior_total = log_prior_params + agn_prior_energy_balance(...)
         + agn_prior_agn_fraction_floor(...) + agn_prior_midir_uv_tie(...)
 
-Ported from AGNfitter (Calistro Rivera et al. 2016, ApJ 833, 98,
-arXiv:1606.05648) and its extended branch AGNfitter-rX (Martínez-Ramírez /
-Zhuang et al. 2024, arXiv:2405.12111).  Constants and functional forms
-match the corresponding branches of ``functions/PRIORS_AGNfitter.py``
-in the upstream code.
+Implements the same AGN prior penalty functions as AGNfitter (Calistro
+Rivera et al. 2016, ApJ 833, 98, arXiv:1606.05648) and AGNfitter-rX
+(Martínez-Ramírez / Zhuang et al. 2024, arXiv:2405.12111); validated
+against the corresponding branches of ``functions/PRIORS_AGNfitter.py``.
 
 All functions are JAX-compatible and JIT/grad-safe.
 """
@@ -79,9 +78,10 @@ def agn_prior_energy_balance(
        σ = 0.1 constant and the ``flexible`` / ``restrictive`` branch
        structure follow ``prior_energy_balance`` in
        ``functions/PRIORS_AGNfitter.py``.
-    .. [2] Martínez-Ramírez / Zhuang et al. 2024, MNRAS 535, 2961 — the
+    .. [2] L. N. Martínez-Ramírez et al., "AGNFITTER-RX: Modeling the
+       radio-to-X-ray spectral energy distributions of AGNs," A&A, 688, A46
+       (2024). arXiv:2405.12111. DOI:10.1051/0004-6361/202449329 — the
        extended AGNfitter-rX branch in which this prior is retained.
-       arXiv:2405.12111.
     """
     # Ensure JAX arrays
     l_sb_emit = jnp.asarray(l_sb_emit)

@@ -33,7 +33,7 @@ import numpy as np
 
 from . import units as U
 
-# Clip the ported grid to a science SED range [Å]. The native grid extends to
+# Clip the repackaged grid to a science SED range [Å]. The native grid extends to
 # soft-X-ray (1e-4 Å) and radio (3e11 Å); neither is used by the stellar panels
 # and both stress the interpolators.
 _WAVE_MIN_AA = 10.0
@@ -49,7 +49,7 @@ def _grid_dir() -> str:
     return os.path.expanduser("~/Library/Application Support/Synthesizer/grids")
 
 
-def port_stellar_grid(out_path: str | Path, *, grid_name: str = _STELLAR_GRID) -> None:
+def repackage_stellar_grid(out_path: str | Path, *, grid_name: str = _STELLAR_GRID) -> None:
     """Port the Synthesizer stellar ``incident`` grid to a DSPS-shaped HDF5.
 
     Parameters
@@ -100,7 +100,7 @@ def port_stellar_grid(out_path: str | Path, *, grid_name: str = _STELLAR_GRID) -
         f.attrs["n_met"] = n_met
         f.attrs["n_age"] = n_age
         f.attrs["n_wave"] = n_wave
-        f.attrs["source"] = f"Synthesizer {grid_name} incident (ported)"
+        f.attrs["source"] = f"Synthesizer {grid_name} incident (repackaged)"
 
     print(f"✓ wrote {out_path}")
     print(f"  shape ({n_met}, {n_age}, {n_wave}) [met, age, wave]")

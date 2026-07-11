@@ -28,20 +28,17 @@
 # This notebook places that forward model next to tengri, component by
 # component, on the same axes and in the same units. Because ProSpect runs
 # in R, every left-hand panel is produced by calling ProSpect's own R
-# functions live through `rpy2` and reading the result back into Python;
-# the right-hand panel is tengri.
+# functions live through `rpy2` (thin wrappers in
+# `_drivers/prospect_driver.py`); the right-hand panel is tengri.
 #
-# **What sits on each side.** The left panel is ProSpect, driven through
-# the thin wrappers in `_drivers/prospect_driver.py`. The right panel is
-# tengri. The stellar comparison (§1) is the cleanest anchor: ProSpect's
-# `BC03lr` library and tengri's own BC03 (Padova 1994 + STELIB, Chabrier)
-# port descend from the same Bruzual & Charlot (2003) models, so any §1
-# residual is a difference of two independent ports of one library — a
-# percent-level effect from grid resolution, not different physics.
+# The stellar comparison (§1) is the cleanest anchor: ProSpect's
+# `BC03lr` library and tengri's BC03 grid (Padova 1994 + STELIB, Chabrier)
+# descend from the same Bruzual & Charlot (2003) models, so any §1
+# residual is grid resolution and interpolation, not different physics.
 #
 # **What to expect.** The closed-form blocks — the SFH shapes (§2), the
 # mass-mapped metallicity history (§2b), the attenuation curves, the IGM —
-# reproduce ProSpect to a fraction of a percent. Nebular emission (§8) is where
+# match ProSpect to a fraction of a percent. Nebular emission (§8) is where
 # the two codes use genuinely different inputs (different photoionization grids),
 # and that section quantifies the difference rather than smoothing it over.
 # ProSpect has no X-ray component, so that section is omitted; it does have
@@ -146,7 +143,7 @@ def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
 # %% [markdown]
 # ## Common stellar library
 #
-# tengri reads its own BC03 (Padova 1994 + STELIB, Chabrier IMF) port from
+# tengri reads its own BC03 grid (Padova 1994 + STELIB, Chabrier IMF) from
 # the public catalog; ProSpect reads its `BC03lr` library from the
 # `ProSpectData` R package. Both descend from Bruzual & Charlot (2003), so
 # the grids should agree up to the resolution at which each was sampled.
@@ -185,11 +182,11 @@ I_ZSUN = int(np.argmin(np.abs(np.asarray(ssp.ssp_lgmet) - np.log10(Z_SOLAR))))
 #
 # Both codes carry a Bruzual & Charlot (2003) library at a Chabrier IMF and
 # Padova 1994 isochrones. ProSpect's `BC03lr` is the low-resolution variant
-# (1221 wavelengths); tengri's port samples the same models on a finer
+# (1221 wavelengths); tengri's grid samples the same models on a finer
 # wavelength grid. The upper panel overlays single SSPs at solar metallicity
 # from 1 Myr to 10 Gyr — ProSpect solid, tengri black dashed — and the lower
 # panel shows the relative residual `|tengri − ProSpect| / ProSpect`. The two
-# are independent ports of one underlying library, so the residual is a
+# are independent distributions of one underlying library, so the residual is a
 # resolution and interpolation effect, a percent-level floor rather than a
 # physics difference. Residual spikes sit at spectral features and reflect
 # ProSpect's coarse wavelength grid (1221 λ vs 6900 λ); they vanish when
@@ -994,7 +991,7 @@ m_agn = SEDModel.build(
     # transfer computed them. tengri's `skirtor_stalevski` model does the same:
     # it reads the published RT total from the faithful full-coverage grid
     # (`scripts/build_skirtor_raw_grid.py`), no analytic-disc substitution, so it
-    # reproduces ProSpect to ~0.9× at the 2000 Å disc and 9.3 µm at the torus
+    # matches ProSpect to ~0.9× at the 2000 Å disc and 9.3 µm at the torus
     # peak. (The monolithic `agn={'type':'skirtor'}` pairs the torus with a
     # *power-law* disc → 0.28×; the composable `disc.skirtor` uses CIGALE's
     # analytic disc + `norm=1/∫dust` → ~0.86×, the right choice for reproducing
@@ -1024,7 +1021,7 @@ _lbol_p9 = float(np.trapezoid(L_p9[::-1], _nu_p9))
 _lbol_t9 = float(np.trapezoid(L_t9[::-1], _nu_t9))
 print(f"§9 AGN bolometric: ProSpect {_lbol_p9:.2e} erg/s, tengri {_lbol_t9:.2e} erg/s")
 
-# Disc continuum at a rest-UV anchor — where the two SKIRTOR ports diverge.
+# Disc continuum at a rest-UV anchor — where the two SKIRTOR reductions diverge.
 _uv9 = 2000.0
 _disc_p9 = float(np.interp(_uv9, w_p9, L_p9)) * U.C_ANGSTROM_PER_S / _uv9
 _disc_t9 = float(np.interp(_uv9, w_t9, L_t9)) * U.C_ANGSTROM_PER_S / _uv9
@@ -1216,7 +1213,7 @@ plt.show()
 # SED (§3, within ~1 % once absolute metallicity is matched), the Charlot & Fall
 # power-law attenuation (§4, identical curves), the Dale 2014 dust IR (§6, exact
 # energy balance and a matched far-IR bump), and the Inoue 2014 IGM (§12,
-# bit-faithful away from the Lyman-α step). The radio continuum (§11) and AGN
+# bit-identical away from the Lyman-α step). The radio continuum (§11) and AGN
 # torus (§9, SKIRTOR against SKIRTOR) line up in slope and peak.
 #
 # ProSpect's defining feature — the metallicity history tied to cumulative

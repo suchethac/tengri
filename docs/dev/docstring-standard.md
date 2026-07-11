@@ -99,8 +99,8 @@ def my_function(param: jnp.ndarray, tau_yr: float, *, flag: bool = True) -> jnp.
     the function underestimates the true power by :math:`\mathcal{O}(\Delta t / \tau)`.
     This approximation is valid for :math:`\tau \gtrsim 10 \,\Delta t`.
 
-    **Upstream**: Follows the Prospector ``transforms.py`` implementation
-    (Johnson et al. 2021 [2]_), adapted for JAX.
+    **Reference**: Implements the same model as Prospector ``transforms.py``
+    (Johnson et al. 2021 [2]_); validated against it.
 
     References
     ----------
@@ -174,8 +174,9 @@ def my_function(param: jnp.ndarray, tau_yr: float, *, flag: bool = True) -> jnp.
    - State where it breaks down: *"underestimates power by :math:`\mathcal{O}(\Delta t/\tau)` at small :math:`\tau`"*
 
 4. **Upstream code credit** (mandatory when applicable):
-   - If ported from, inspired by, or validated against another codebase, say so
-   - Examples: *"Ported from bagpipes (Carnall et al. 2018 [N]_)"*, *"Follows Prospector transforms.py (Johnson et al. 2021 [N]_), adapted for JAX"*
+   - If it implements the same model as, or is validated against, another codebase, say so
+   - Examples: *"Implements the same model as bagpipes (Carnall et al. 2018 [N]_); validated against it"*, *"Follows Prospector transforms.py (Johnson et al. 2021 [N]_)"*
+   - Never describe tengri code as ported/copied/adapted from another codebase: implementations are independent. External template/SSP **data** files are "repackaged", with attribution
    - Include the source in References
 
 ### References
@@ -278,14 +279,15 @@ can be factored into these two components. It breaks down for complex, clumpy
 geometries where the birth-cloud fraction is spatially variable.
 ```
 
-### Upstream credit note
+### Reference credit note
 
 ```
 Notes
 -----
-**Upstream**: Ported from the Prospector ``dust_attenuation`` module
-(Johnson et al. 2021 [2]_), with the birth-cloud attenuation parameterized
-by ``dust_tau_bc`` instead of ``dust2_bc`` for consistency with tengri naming.
+**Reference**: Implements the same model as the Prospector ``dust_attenuation``
+module (Johnson et al. 2021 [2]_); validated against it. The birth-cloud
+attenuation is parameterized by ``dust_tau_bc`` instead of ``dust2_bc`` for
+consistency with tengri naming.
 ```
 
 ### Physical units reminder

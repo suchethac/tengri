@@ -31,6 +31,8 @@ from tengri.components.agn.blocks import (
     resolve_agn_block,
     validate_block_recipe,
 )
+from tengri.components.agn.blocks.alternates import smc_prevot_block
+from tengri.components.agn.reddening import redden_disc
 from tests._data_skip import requires_grahsp
 
 # ──────────────────────────────────────────────────────────────────────
@@ -138,6 +140,54 @@ def test_validate_unknown_block_raises_not_warns():
             agn_torus_block="none",
             agn_attenuation_block="none",
         )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Regression: smc_prevot_block delegates to redden_disc (missing-R_V bug)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.regression_bug
+def test_smc_prevot_block_matches_redden_disc():
+    """smc_prevot_block must produce the same attenuation factor as redden_disc.
+
+    Regression: smc_prevot_block previously computed
+    A_lambda = k_norm(λ)·E(B−V) without the R_V=2.72 factor of the Prevot+1984
+    prescription (A_lambda = k·R_V·E(B−V) with k = A_λ/A_V), causing 2.72×
+    under-attenuation in magnitudes vs the canonical redden_disc function.
+    Now it delegates to redden_disc, so the two disc-reddening paths are
+    identical by construction.
+
+    References
+    ----------
+    .. [1] M. L. Prevot et al., "The typical interstellar extinction in the
+       Small Magellanic Cloud," A&A, 132, 389 (1984).
+    .. [2] AGNfitter BBBred_Prevot in MODEL_AGNfitter.py.
+    """
+    wave_aa = jnp.logspace(3.0, 5.0, 200)  # 1000 Å – 100 µm
+    agn_attenuation_ebv = 0.3
+
+    # Block interface: returns L_lambda [erg/s/Å] multiplicative factor
+    factor_block = smc_prevot_block(wave_aa, agn_attenuation_ebv=agn_attenuation_ebv)
+
+    # Reference: redden_disc applied to a unit disc SED
+    factor_redden = redden_disc(wave_aa, jnp.ones_like(wave_aa), agn_attenuation_ebv)
+
+    # They must be bitwise identical (both delegate to the same prevot_smc + R_V)
+    np.testing.assert_array_equal(np.asarray(factor_block), np.asarray(factor_redden))
+
+    # Verify the implied absorption at 1500 Å is reasonable
+    from tengri.components.dust.attenuation import prevot_smc
+
+    wave_test = jnp.array([1500.0])
+    factor_at_1500 = float(np.asarray(redden_disc(wave_test, jnp.ones(1), agn_attenuation_ebv))[0])
+    # A(1500 Å) = -2.5 * log10(factor)
+    a_1500 = -2.5 * np.log10(factor_at_1500)
+    # Expected: k_norm(1500) * R_V * E(B-V)
+    k_norm_1500 = float(np.asarray(prevot_smc(wave_test))[0])
+    expected_a_1500 = k_norm_1500 * 2.72 * agn_attenuation_ebv
+    # Within 2% due to numerical rounding
+    np.testing.assert_allclose(a_1500, expected_a_1500, rtol=0.02)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -365,3 +415,177 @@ def test_resolve_via_agn_models_registry():
     out_registry = fn_via_registry(wave_aa, agn_log_lbol=44.5, **p)
     out_direct = composable_agn_l_nu(wave_aa, agn_log_lbol=44.5, **p)
     np.testing.assert_allclose(np.asarray(out_registry), np.asarray(out_direct), rtol=1e-12)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Contract: AGN E(B-V) parameters are settable via SEDModel.build
+# ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.contract
+def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat_obs):
+    """agn_ebv_disc must be settable via SEDModel.build and change predict_state.
+
+    Regression: agn_ebv_disc (the AGNfitter ``EBVbbb`` analog, consumed by
+    the composable runner since #916) had no ParamDeclaration and no partition
+    entry, so the recommended SEDModel.build path could not redden the disc at
+    all. It now lowers like any other shared agn-group parameter.
+    """
+    from tengri import FIXED, Fixed, SEDModel
+
+    obs = synthetic_tophat_obs
+    ssp = synthetic_ssp_wide
+
+    # Build two models: one with agn_ebv_disc=0.0, one with 0.5
+    # Fix all parameters to make predict_state work
+    model_no_redd = SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(0.0),
+            "*": FIXED,
+        },
+        dust={"type": "two_component", "*": FIXED},
+        neb={"type": "none", "*": FIXED},
+        redshift=Fixed(0.0),
+        agn={
+            "type": "composable",
+            "disc": {"type": "qsogen", "*": FIXED},
+            "torus": {"type": "none"},
+            "nlr": {"type": "none"},
+            "blr": {"type": "none"},
+            "agn_log_lbol": Fixed(11.0),
+            "agn_ebv_disc": Fixed(0.0),
+            "*": FIXED,
+        },
+    )
+
+    model_reddened = SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(0.0),
+            "*": FIXED,
+        },
+        dust={"type": "two_component", "*": FIXED},
+        neb={"type": "none", "*": FIXED},
+        redshift=Fixed(0.0),
+        agn={
+            "type": "composable",
+            "disc": {"type": "qsogen", "*": FIXED},
+            "torus": {"type": "none"},
+            "nlr": {"type": "none"},
+            "blr": {"type": "none"},
+            "agn_log_lbol": Fixed(11.0),
+            "agn_ebv_disc": Fixed(0.5),
+            "*": FIXED,
+        },
+    )
+
+    # Predict SEDs and compare AGN components
+    # (All parameters are fixed, so empty dict suffices for predict)
+    state_no_redd = model_no_redd.predict_state({})
+    state_reddened = model_reddened.predict_state({})
+
+    sed_agn_no_redd = state_no_redd.derived["sed_agn"]
+    sed_agn_reddened = state_reddened.derived["sed_agn"]
+
+    # With reddening, the SED should be dimmer, especially at short wavelengths
+    # Maximum relative difference must be > 1e-6 to confirm the parameter had an effect
+    rel_diff = np.abs(sed_agn_reddened - sed_agn_no_redd) / np.maximum(
+        np.abs(sed_agn_no_redd), 1e-100
+    )
+    max_rel_diff = float(np.nanmax(rel_diff))
+    assert max_rel_diff > 1e-6, (
+        f"agn_ebv_disc parameter had no effect on SED: max relative change = {max_rel_diff:.2e}"
+    )
+
+
+@pytest.mark.contract
+def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat_obs):
+    """agn_attenuation_ebv (atten sub-block) must be settable and change predict_state.
+
+    Regression: agn_attenuation_ebv had no ParamDeclaration and no partition
+    entry, so ``atten={'type': 'smc_prevot'}`` built a block pinned at
+    E(B−V)=0 — a silent no-op. It now lowers via the agn.atten sub-block.
+    """
+    from tengri import FIXED, Fixed, SEDModel
+
+    obs = synthetic_tophat_obs
+    ssp = synthetic_ssp_wide
+
+    # Build two models: one with agn_attenuation_ebv=0.0, one with 0.5
+    # Use smc_prevot attenuation block; fix all parameters
+    model_no_atten = SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(0.0),
+            "*": FIXED,
+        },
+        dust={"type": "two_component", "*": FIXED},
+        neb={"type": "none", "*": FIXED},
+        redshift=Fixed(0.0),
+        agn={
+            "type": "composable",
+            "disc": {"type": "qsogen", "*": FIXED},
+            "torus": {"type": "none"},
+            "nlr": {"type": "none"},
+            "blr": {"type": "none"},
+            "atten": {"type": "smc_prevot", "agn_attenuation_ebv": Fixed(0.0), "*": FIXED},
+            "agn_log_lbol": Fixed(11.0),
+            "*": FIXED,
+        },
+    )
+
+    model_attenuated = SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(0.0),
+            "*": FIXED,
+        },
+        dust={"type": "two_component", "*": FIXED},
+        neb={"type": "none", "*": FIXED},
+        redshift=Fixed(0.0),
+        agn={
+            "type": "composable",
+            "disc": {"type": "qsogen", "*": FIXED},
+            "torus": {"type": "none"},
+            "nlr": {"type": "none"},
+            "blr": {"type": "none"},
+            "atten": {"type": "smc_prevot", "agn_attenuation_ebv": Fixed(0.5), "*": FIXED},
+            "agn_log_lbol": Fixed(11.0),
+            "*": FIXED,
+        },
+    )
+
+    # Predict SEDs and compare AGN components
+    # (All parameters are fixed, so empty dict suffices for predict)
+    state_no_atten = model_no_atten.predict_state({})
+    state_attenuated = model_attenuated.predict_state({})
+
+    sed_agn_no_atten = state_no_atten.derived["sed_agn"]
+    sed_agn_attenuated = state_attenuated.derived["sed_agn"]
+
+    # With attenuation, the SED should be dimmer
+    rel_diff = np.abs(sed_agn_attenuated - sed_agn_no_atten) / np.maximum(
+        np.abs(sed_agn_no_atten), 1e-100
+    )
+    max_rel_diff = float(np.nanmax(rel_diff))
+    assert max_rel_diff > 1e-6, (
+        f"agn_attenuation_ebv parameter had no effect on SED: "
+        f"max relative change = {max_rel_diff:.2e}"
+    )

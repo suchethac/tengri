@@ -788,7 +788,7 @@ plt.show()
 # $$\text{SFR}(t) = (1 - f_\mathrm{burst})\,\cdot\,\text{base}(t)
 #   + f_\mathrm{burst}\,\cdot\,\text{burst}(t)$$
 # where $\text{burst}(t) = S / t_\mathrm{burst}$ for $t < t_\mathrm{burst}$, $0$ otherwise,
-# and $S$ is set so the total stellar mass is preserved. Ported from the R package
+# and $S$ is set so the total stellar mass is preserved. Implements the same form as the R package
 # **ProSpect** (Robotham et al. 2020, MNRAS 495 905).
 
 # %%
@@ -1055,11 +1055,11 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ### 1.12 spline_sfh: PCHIP spline interpolation (ProSpect port)
+# ### 1.12 spline_sfh: PCHIP spline interpolation (ProSpect)
 #
 # User-specified SFR values at fixed lookback-time nodes; smoothly interpolated
 # via **PCHIP** (Piecewise Cubic Hermite Interpolating Polynomial) which preserves
-# monotonicity locally. Ported from ProSpect `massfunc_spline` (Robotham+2020).
+# monotonicity locally. Implements ProSpect's `massfunc_spline` form (Robotham+2020).
 
 # %%
 fig, ax = plt.subplots(figsize=(6.5, 3.5))
@@ -1301,7 +1301,7 @@ plt.show()
 # Extends `continuity_sfh` with two extra parameters (`tlast_gyr`, `tflex_gyr`)
 # that pin the quenching epoch. The youngest bin spans $[0, t_\mathrm{last}]$;
 # a flexible zone between $t_\mathrm{last}$ and $t_\mathrm{flex}$ tracks the
-# transition. Ported from Prospector (Johnson+2021).
+# transition. Implements the same transition as Prospector (Johnson+2021).
 
 # %%
 fig, axes = plt.subplots(1, 2, figsize=(10, 3.5))

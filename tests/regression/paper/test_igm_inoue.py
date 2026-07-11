@@ -6,7 +6,7 @@ canonical Inoue+2014 prescription as implemented in eazy-py (the upstream
 source of tengri's coefficient tables, and the implementation that bagpipes,
 prospector, and synthesizer all descend from).
 
-This module embeds a *self-contained* port of eazy-py's ``Inoue14`` class
+This module embeds a *self-contained* reference implementation of eazy-py's ``Inoue14`` class
 (``tLSLAF``/``tLSDLA``/``tLCLAF``/``tLCDLA``) so the parity check needs no
 external dependency. Two classes of regression are guarded:
 

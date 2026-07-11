@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Contract tests for SEDModelComponent-ported AGN backends.
+"""Contract tests for AGN backends on SEDModelComponent.
 
 Validates:
 - Registry registration (name uniqueness)
@@ -252,7 +252,7 @@ class TestCAT3DTorusContract:
             "log_lbol": 44.0,
             "cos_inc": 0.5,
             "a_cat3d": -2.0,
-            "fwd_cat3d": 0.45,
+            "fwd_cat3d": 1.75,
             "torus_frac": 0.5,
         }
 

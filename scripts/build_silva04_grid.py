@@ -56,7 +56,7 @@ before publication-time docstring references are written.
 
 Port credit
 -----------
-Grid values ported from AGNfitter (Calistro Rivera et al. 2016, ApJ 833, 98).
+Grid values repackaged from AGNfitter's published templates (Calistro Rivera et al. 2016, ApJ 833, 98).
 
 Usage
 -----

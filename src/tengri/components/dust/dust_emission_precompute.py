@@ -332,6 +332,14 @@ def _precompute_dl07_like_photometry(
     tmpl_wave = np.asarray(templates[wave_key])
     umin_grid = np.asarray(templates["umin_grid"])
     q_grid = np.asarray(templates[q_key])
+    # Mirror the exact THEMIS closure (create_themis_from_grid): the shipped
+    # THEMIS grid stores qhac in FSPS scaling (CIGALE x 100/2.2). Relabel an
+    # FSPS-scaled qhac axis to the user-facing CIGALE convention so this hybrid
+    # path interpolates in the same units as the exact path — otherwise the two
+    # disagree and the qhac default clips to the grid minimum here. Guarded on
+    # the axis max so CIGALE-unit and Astrodust qpah grids are untouched.
+    if q_key == "qhac_grid" and float(np.max(q_grid)) > 0.5:
+        q_grid = q_grid * (2.2 / 100.0)
 
     if powerlaw_weight is not None:
         # Bake W(U_min) per node: powerlaw[q, umin, :] *= W[umin].

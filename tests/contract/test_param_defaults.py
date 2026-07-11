@@ -44,7 +44,7 @@ def test_every_declared_param_has_in_bounds_default():
     """Every registered SEDModelComponent declaration carries a usable default.
 
     The bug surfaced in #477 (Cue ``gas_logn`` defaulting to the prior midpoint
-    rather than the CIGALE-faithful ``n_H=100`` value) was a symptom of an
+    rather than the CIGALE-matched ``n_H=100`` value) was a symptom of an
     implicit fallback in ``parse_groups``. Foundation #478 added ``default=``
     on ``Distribution``; this test pins the migration: every declaration must
     set it (or be ``Fixed``).

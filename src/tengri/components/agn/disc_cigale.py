@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""SKIRTOR disc spectrum models ported from CIGALE.
+"""SKIRTOR disc spectrum models.
 
 Three piecewise power-law disc spectrum models for AGN torus emission,
-ported from CIGALE's ``skirtor2016.py`` module (Boquien et al. 2019).
+implementing the same models as CIGALE's ``skirtor2016.py`` module
+(Boquien et al. 2019); validated against its output.
 
 All functions return dimensionless normalized disc spectra (integrated to
 unit area under a linear wavelength grid), ready for luminosity scaling
@@ -127,7 +128,8 @@ def skirtor_disk_spectrum(
     -----
     **JIT-compatible**: yes — uses ``jnp`` primitives.
 
-    **Upstream**: Ported from CIGALE ``skirtor2016.py`` (Boquien et al. 2019 [2]_).
+    **Reference**: Implements CIGALE ``skirtor2016.py`` (Boquien et al. 2019
+    [2]_); validated against its output.
 
     References
     ----------
@@ -170,7 +172,8 @@ def schartmann2005_disk_spectrum(
     -----
     **JIT-compatible**: yes — uses ``jnp`` primitives.
 
-    **Upstream**: Ported from CIGALE ``skirtor2016.py`` (Boquien et al. 2019 [2]_).
+    **Reference**: Implements CIGALE ``skirtor2016.py`` (Boquien et al. 2019
+    [2]_); validated against its output.
 
     References
     ----------
@@ -221,8 +224,9 @@ def adaf_disk_spectrum(
     multi-zone structure. The thin disc component is steeper and truncated
     at longer wavelengths.
 
-    **Upstream**: Ported from CIGALE ``skirtor2016.py`` ``adaf_disk()``
-    (Lopez et al. 2024 [1]_, Boquien et al. 2019 [2]_).
+    **Reference**: Implements CIGALE ``skirtor2016.py`` ``adaf_disk()``
+    (Lopez et al. 2024 [1]_, Boquien et al. 2019 [2]_); validated against
+    its output.
 
     References
     ----------

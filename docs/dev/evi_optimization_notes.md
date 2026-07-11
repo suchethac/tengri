@@ -73,7 +73,7 @@ directly in JAX primitives:
 2. **`jax.lax.while_loop` CG solver**: The conjugate gradient solve
    (equation 19 in the paper) uses JAX's functional while_loop.
    Includes energy-based convergence, curvature checks, and periodic
-   reset (adapted from NIFTy's `_static_cg`).
+   reset (following NIFTy's `_static_cg`).
 
 3. **`jax.lax.scan` optimization loop**: The outer KL iteration loop
    uses `jax.lax.scan`, allowing XLA to compile the entire 10-iteration

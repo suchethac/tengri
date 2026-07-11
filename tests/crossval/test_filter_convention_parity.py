@@ -3,7 +3,7 @@
 
 Pins tengri's two conventions to their reference codes:
 
-- ``BESSELL`` (default, photon-counting ``w = 1/lambda``) is bit-faithful to
+- ``BESSELL`` (default, photon-counting ``w = 1/lambda``) is bit-identical to
   **DSPS** (``dsps.photometry`` — ``_obs_flux_ssp`` / ``_flux_ab0_at_10pc`` /
   ``calc_obs_mag``), which is the FSPS / Fukugita+1996 / Hogg+2002 photon AB
   convention. DSPS is the reference of record (tengri's own SSP engine).

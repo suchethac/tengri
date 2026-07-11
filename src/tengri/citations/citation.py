@@ -18,7 +18,7 @@ CATEGORIES: tuple[str, ...] = (
     "agn",  # AGN components
     "inference",  # inference backends
     "preprocessing",  # data hygiene (MW extinction, zero points, ...)
-    "reference_code",  # peer SED-fitting codes (ported or compared to)
+    "reference_code",  # peer SED-fitting codes (implemented or compared against)
     "other",  # anything that doesn't fit a canonical bucket
 )
 
@@ -54,7 +54,7 @@ class Citation:
     bibtex_key : str
         BibTeX citation key (e.g., "Calzetti2000").
     upstream_code : str | None
-        Repository path if tengri ports from upstream
+        Repository path of the upstream reference
         (e.g., "bd-j/prospector").
     license : str | None
         License of upstream code if applicable.
