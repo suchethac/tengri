@@ -149,10 +149,33 @@ class TestPredictPhotometry:
         chex.assert_tree_all_finite(phot)
         assert jnp.all(phot > 0)
 
-    def test_physical_range(self, parametric_model, typical_params):
-        phot = parametric_model.predict_photometry(typical_params)
-        assert jnp.all(phot > 1e-35)
-        assert jnp.all(phot < 1e-20)
+    def test_flux_scales_linearly_with_total_mass(self, parametric_model, typical_params):
+        """Photometry is linear in the total mass formed.
+
+        Replaces an absolute flux-band assertion (``1e-35 < F_nu < 1e-20``).
+        That band was never physical: this file's SSP is the *synthetic* grid
+        (``synthetic: True``, no ``flux_units`` attribute), whose absolute
+        normalization is arbitrary — the real grids declare ``Lsun/Hz/Msun`` and
+        sit ~15 decades lower. The band only ever passed because the fixture's
+        toy ``log_total_mass`` prior (~1 Msun galaxies) happened to cancel that
+        arbitrary scale. Giving the fixture a galaxy-scale prior — correctly —
+        pushed the flux straight through the ceiling and left this test red on
+        main (#1031).
+
+        Linearity in ``10**log_total_mass`` is the invariant that actually
+        holds: it is independent of the SSP's normalization, so it asserts
+        something real on any grid, synthetic or not.
+        """
+        p1 = dict(typical_params)
+        p2 = {**p1, "sfh_tsnorm_log_total_mass": p1["sfh_tsnorm_log_total_mass"] + 1.0}
+
+        f1 = parametric_model.predict_photometry(p1)
+        f2 = parametric_model.predict_photometry(p2)
+
+        chex.assert_tree_all_finite(f1)
+        assert jnp.all(f1 > 0)
+        # +1 dex of mass -> exactly 10x the flux in every band.
+        chex.assert_trees_all_close(f2, 10.0 * f1, rtol=1e-6)
 
 
 class TestPredictSfh:

@@ -2757,10 +2757,20 @@ class SEDModel:
             spec_wave_shape = tuple(self.observation.spectroscopy.wave_obs.shape)
             sigma_lib_kms = float(self._sigma_lib_kms)
             lsf_resolution = self._lsf_resolution
+            # The calibration order changes the kernel STRUCTURE: it decides
+            # whether the Chebyshev polynomial is applied at all, and how many
+            # cal_c* parameters the graph reads. Omitting it lets two models
+            # differing only in calibration_order share one compiled kernel — the
+            # uncalibrated model then runs the calibrated model's graph and dies
+            # with KeyError('cal_c1'), having no such parameter to supply.
+            # Harmless only while the polynomial was never applied; load-bearing
+            # now that it is (#1031).
+            calibration_order = int(self.observation.spectroscopy.calibration_order)
         else:
             spec_wave_shape = ()
             sigma_lib_kms = 0.0
             lsf_resolution = None
+            calibration_order = 0
 
         # CSP integration method
         csp_integration = str(self._csp_integration)
@@ -2911,6 +2921,7 @@ class SEDModel:
             spec_wave_shape,
             sigma_lib_kms,
             lsf_resolution,
+            calibration_order,
             csp_integration,
             forward_dtype,
             met_interp,
