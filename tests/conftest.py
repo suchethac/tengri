@@ -283,6 +283,31 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.slow)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_component_registry():
+    """Undo global ``SEDModelComponent`` registrations a test makes.
+
+    ``SEDModelComponent.__init_subclass__`` records every subclass in a module-level
+    ``_REGISTRY``, so a test that declares a throwaway component (``test_mbb``,
+    ``test_minimal``, ...) leaks it into the registry for the rest of the session.
+    Any test that WALKS the registry — ``test_param_defaults`` enumerates it and
+    demands an in-bounds ``default=`` on every declaration — then passes or fails on
+    nothing but file order: alphabetically ``test_param_defaults`` ran first and saw
+    a clean registry, but under any other ordering it inherited the throwaways and
+    reported them as missing defaults.
+
+    Snapshot and restore so a registration cannot cross a test boundary. Registry
+    entries created at import time (module-level component classes, including every
+    real component) are already present when the first test starts, so they survive.
+    """
+    from tengri.components.sed_model_component import _REGISTRY
+
+    saved = dict(_REGISTRY)
+    yield
+    _REGISTRY.clear()
+    _REGISTRY.update(saved)
+
+
 def pytest_configure(config):
     """Create minimal synthetic CB19 grid fixture before test collection.
 

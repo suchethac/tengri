@@ -789,23 +789,33 @@ for ax, (af_name, af_kw, tengri_fn, tengri_label) in zip(axes.ravel(), disk_pair
         # ~104 Å undersampling), and AGNFITTER's weaker stored template.
         _ot = np.argsort(np.asarray(w_t))
         _t_on_af = np.interp(np.asarray(w_a), np.asarray(w_t)[_ot], np.asarray(t_norm)[_ot])
-        _lad = ("Hα/2500 Å\n"
+        _lad = ("tall lines = tengri resolving native\n"
+                "qsogen (a feature; AF grid downsamples)\n"
+                "Hα/2500 Å\n"
                 f"tengri native : {_val_at(w_t, t_norm, 6563):.2f}\n"
                 f" on AF grid   : {_val_at(w_a, _t_on_af, 6563):.2f}\n"
                 f"AGNFITTER     : {_val_at(w_a, a_norm, 6563):.2f}")
         ax.text(0.03, 0.97, _lad, **{**_ANNOT, "transform": ax.transAxes})
 
     if af_name == "KD18":
-        # Warm-Comptonization residual at AGNFITTER's own samples over
-        # 1200 Å–1 µm (the documented 3-zone proxy vs qsosed grid difference).
+        # Agreement is quantified in the DATA-CONSTRAINED disc window
+        # (1200 Å–1 µm). The shaded wings are model-dependent, not a fit
+        # residual: in the NIR tengri integrates the outer disc to the PHYSICAL
+        # self-gravity (Toomre) radius (~1300 R_g; qsosed-canonical, pinned by a
+        # passing test) that AGNFITTER-RX's stored template truncates, so tengri
+        # carries more near-IR; the far-UV reflects the warm-Comptonization
+        # proxy. Where it matters (the disc window) they agree to <0.07 dex.
+        ax.axvspan(1e4, 5e4, color="0.85", alpha=0.45, zorder=0)  # NIR: R_out
+        ax.axvspan(5e2, 1.2e3, color="0.85", alpha=0.45, zorder=0)  # far-UV: warm-Compton
         oa_, ot_ = np.argsort(w_a), np.argsort(w_t)
         w_a_s = np.asarray(w_a)[oa_]
         m = (w_a_s >= 1.2e3) & (w_a_s <= 1e4) & (a_norm[oa_] > 0)
         _t_on = np.interp(w_a_s[m], np.asarray(w_t)[ot_], t_norm[ot_])
         _lr = np.abs(np.log10(_t_on / a_norm[oa_][m]))
-        _res = ("warm-Compton proxy\n"
+        _res = ("disc window 1200 Å–1 µm\n"
                 f"median : {np.median(_lr):.3f} dex\n"
-                f"max    : {_lr.max():.2f} dex")
+                f"max    : {_lr.max():.2f} dex\n"
+                "shaded wings: model-dependent\n(tengri → physical self-gravity R_out)")
         ax.text(0.03, 0.97, _res, **{**_ANNOT, "transform": ax.transAxes})
 
     ax.set_xlim(5e2, 5e4)
@@ -898,8 +908,15 @@ else:
 # tengri's `agn_ebv_disc` applies the same curve to whatever disc is configured.
 # The attenuation ratio ``L(E(B−V)) / L(0)`` removes the underlying template
 # from both sides, so this panel compares the reddening laws themselves,
-# end-to-end. The visible dashed-above-solid offset is the 1.102×
-# normalization convention quantified in §4.
+# end-to-end. tengri's dashed curves sit **below** AGNFITTER-RX's solid ones at
+# matched E(B−V): tengri applies the physical R_V = 2.72 (Prevot 1984) while
+# AGNFITTER-RX's `function_prevot` silently ignores its declared R_V and applies
+# the bare fit (effective R_V = 2.468), so tengri attenuates 1.102× more (§4).
+# The convention is fully resolved — it is a pure normalization, not a shape
+# difference: the black dotted curve is tengri at E(B−V) = 0.3/1.102 = 0.272 and
+# it lands exactly on AGNFITTER-RX's 0.3 solid. So E(B−V)_tengri = E(B−V)_AF/1.102
+# reproduces AGNFITTER-RX bit-for-bit; the offset below is only because the same
+# nominal E(B−V) means 1.102× more extinction under the more physical R_V.
 
 # %%
 fig, ax = plt.subplots(figsize=(7.5, 4.8))
@@ -921,6 +938,20 @@ for ebv, c in [(0.1, "C2"), (0.3, "C1"), (0.5, "C3")]:
     a_te = -2.5 * np.log10(np.interp(1500.0, w_te, ratio_te))
     print(f"  E(B-V)={ebv:g}:  AGNFITTER = {a_af:.2f}   tengri = {a_te:.2f}   "
           f"(ratio {a_te / a_af:.3f}, convention 1.102)")
+# Convention-matched demonstration: tengri at E(B−V) = 0.3/1.102 = 0.272 lands
+# exactly on AGNFITTER-RX's 0.3 solid — identical LAW SHAPE, the offset is a
+# pure R_V normalization (2.72 vs 2.468), fully resolved by rescaling E(B−V).
+w_tm, L_tm = tengri_disc("qsogen", ebv_disc=0.3 / 1.102)
+ratio_tm = np.divide(L_tm, L_te0, out=np.ones_like(L_tm), where=L_te0 > 0)
+msk_tm = (w_tm > 8e2) & (w_tm < 1e4)
+ax.loglog(w_tm[msk_tm], ratio_tm[msk_tm], "k:", lw=1.8,
+          label="tengri E(B−V)=0.3/1.102 → on AF 0.3")
+ax.text(0.03, 0.60,
+        "convention resolved (§4):\n"
+        "E(B−V)_tengri = E(B−V)_AF / 1.102\n"
+        "R_V 2.72 (physical) vs 2.468 — same shape",
+        transform=ax.transAxes, va="top", ha="left", fontsize=7, family="monospace",
+        bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.85))
 ax.set_xlabel(r"$\lambda$ [Å]")
 ax.set_ylabel(r"$L(E(B{-}V))\ /\ L(0)$")
 ax.set_title("Disk reddening sweep (Prevot SMC) — both codes, template-free")
@@ -1154,31 +1185,32 @@ fig.tight_layout()
 save_fig("agnfitter_09c3_cat3d_fwd_sweep.png")
 
 # %% [markdown]
-# ## §9d Best combination — CAT3D-Wind + THB21
+# ## §9d Best combination — CAT3D-Wind + THB21, full radio-to-X-ray SED
 #
-# The paper's winning model for 67% of its sample: the CAT3D-Wind torus on
-# the THB21 disk. tengri's side is its *actual* ``SEDModel.build`` output —
-# `disc = qsogen` (with lines + FeII, the full THB21 analog) plus
-# `torus = cat3d_wind`, with the pipeline's **energy balance** setting the
-# torus height (the disc-absorbed light reprocessed into the IR — a covering
-# fraction f ~ 0.4, printed by the capstone below), not a hand-set fraction.
-# AGNFITTER-RX's THB21 disc is anchored at 2500 Å and its CAT3D torus
-# energy-balanced to tengri's torus IR peak. Carrying the disc's emission lines
-# is what reproduces the 0.7 µm bump on top of the torus hump.
-#
-# This panel is plotted in **L_ν**, where the cool torus sits well above the
-# disc; the same model in **νL_ν** (the capstone) shows the big blue bump
-# dominating with the mid-IR bump comparable — the y-quantity, not the physics,
-# sets which feature looks tallest.
+# The paper's winning model for 67% of its sample: the CAT3D-Wind torus on the
+# THB21 disk. tengri's side is its *actual* ``SEDModel.build`` output as ONE
+# model spanning radio to hard X-ray — `disc = qsogen` (with lines + FeII, the
+# full THB21 analog) plus `torus = cat3d_wind` at the pipeline's **energy
+# balance** (covering fraction f ~ 0.4), the α_ox X-ray corona, and the DPL
+# radio jet — plotted here in **νL_ν** and **decomposed** into its components
+# (disc+torus, α_ox corona, DPL jet) so the winning model's full composition is
+# visible. AGNFITTER-RX is placed on the same physical scales: THB21 disc
+# anchored at 2500 Å, CAT3D torus energy-balanced to tengri's torus IR peak,
+# X-ray via its own disc extension, the same jet. In νL_ν the big blue bump
+# leads with the mid-IR torus bump comparable; the EUV/soft-X-ray band is the
+# model-dependent bridge discussed at the capstone. Carrying the disc's emission
+# lines is what puts the 0.7 µm forest on top of the torus hump.
 
 # %%
 # Matched CAT3D-Wind node on both sides: incl 0 deg, a = -2, f_wd = 1.75.
 _CAT3D_NODE = dict(incl=0.0, a=-2.0, fwd=1.75)
 _CAT3D_NODE_TE = dict(cos_inc=1.0, a_cat3d=-2.0, fwd_cat3d=1.75)
 
-# tengri: disc + torus at their PHYSICAL energy balance, read off one build's
-# sed_agn (the pipeline reprocesses the disc-absorbed light into the torus).
-# No hand-set torus fraction -- the relative heights are the model's own.
+from tengri.xray import xray_agn_corona_from_disc as _xray_from_disc_9
+
+# tengri: the FULL winning model in ONE build — disc + torus (energy-balanced) +
+# the alpha_ox corona (xray='yang20') + the DPL radio jet — read straight off
+# the build's published components. No hand-set fractions.
 _m9 = SEDModel.build(
     ssp_data=ssp,
     sfh=SFH_FIDUCIAL,
@@ -1200,47 +1232,88 @@ _m9 = SEDModel.build(
         "agn_polar_ebv": Fixed(0.0),
         "*": FIXED,
     },
+    xray={"type": "yang20"},
+    radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
     redshift=Fixed(0.0),
 )
 _s9 = _m9.predict_state({})
 w9 = np.asarray(_s9.wave)
 _o9 = np.argsort(w9)
-agn9 = np.asarray(_s9.derived["sed_agn"])
-grid = np.geomspace(1e3, 1.5e6, 3000)
+agn9 = np.asarray(_s9.derived["sed_agn"])  # disc + torus [L_nu]
+radio9 = np.asarray(_s9.derived["sed_radio"])  # DPL jet [L_nu]
 _L2500_9 = float(np.interp(2500.0, w9[_o9], agn9[_o9]))
-te_total = U.regrid(w9, np.clip(agn9, 0, None), grid) / _L2500_9  # disc-anchored
-te_total = np.where(te_total > 0, te_total, np.nan)
-# tengri's torus IR peak in the same disc-anchored units -- the energy-balance
-# reference AGNFITTER-RX's torus is scaled to (not a hand-set 0.5).
+# alpha_ox corona: the SAME bare corona §10b validates to ~1% (anisotropy off),
+# masked to lambda < 100 A so it does not extrapolate into the disc's UV.
+_xray9_raw = np.asarray(
+    _xray_from_disc_9(jnp.asarray(w9), _L2500_9, delta_alpha_ox=0.0, apply_anisotropy=False)
+)
+xray9 = np.where(w9 < 100.0, _xray9_raw, 0.0)
+
+# Full-range nu*L_nu grid (radio -> hard X-ray).
+nu9 = np.geomspace(1e8, 1e20, 4000)
+lam9 = U.C_ANGSTROM_PER_S / nu9
+
+
+def _nulnu9(sed):
+    s = U.regrid(w9, np.clip(sed, 0, None), lam9)
+    return np.where(s > 0, nu9 * s, np.nan)
+
+
+# Taper off the qsogen disc's spurious hard-X-ray extrapolation (below its
+# ~91 Å template limit): the disc+torus emit no X-rays — the α_ox corona is the
+# X-ray source — so disc+torus (opt–EUV) hands off to corona (X-ray), 91 → 30 Å.
+_euv_taper9 = np.clip(
+    (np.log10(w9) - np.log10(30.0)) / (np.log10(91.0) - np.log10(30.0)), 0.0, 1.0
+)
+agn9_phys = agn9 * _euv_taper9
+te_agn9 = _nulnu9(agn9_phys)  # disc + torus (opt–EUV)
+te_xray9 = _nulnu9(xray9)  # α_ox corona (X-ray)
+te_radio9 = _nulnu9(radio9)  # DPL jet (radio)
+te_tot9 = _nulnu9(agn9_phys + xray9 + radio9)  # total
+# tengri's absolute torus IR L_nu peak — the energy-balance reference.
 _ir9 = (w9 > 3e4) & (w9 < 1e6)
 _te_ir_peak = float(np.max(agn9[_ir9])) / _L2500_9
 
-# AGNFITTER-RX: THB21 disc anchored at 2500 A, CAT3D torus energy-balanced to
-# tengri's torus IR peak.
+# AGNFITTER-RX: the same components on the SAME physical scales.
 w_disc, L_disc = A.disk_template("THB21")
+af_disc = U.regrid(w_disc, np.clip(L_disc, 0, None), lam9)
+af_disc = af_disc / np.interp(2500.0, lam9[::-1], af_disc[::-1]) * _L2500_9
+af_disc = af_disc * np.clip(  # X-ray from the extension only (same 91→30 Å rolloff)
+    (np.log10(lam9) - np.log10(30.0)) / (np.log10(91.0) - np.log10(30.0)), 0.0, 1.0
+)
 w_tor, L_tor = A.torus_template("CAT3D", **_CAT3D_NODE)
-disc_g = U.regrid(w_disc, np.clip(L_disc, 0, None), grid)
-disc_n = disc_g / np.interp(2500, grid, disc_g)
-tor_g = U.regrid(w_tor, np.clip(L_tor, 0, None), grid)
-tor_n = tor_g / np.max(tor_g) * _te_ir_peak if np.max(tor_g) > 0 else tor_g
-af_total = disc_n + tor_n
+af_tor = U.regrid(w_tor, np.clip(L_tor, 0, None), lam9)
+af_tor = (
+    af_tor / np.max(af_tor) * (_te_ir_peak * _L2500_9) if np.max(af_tor) > 0 else af_tor
+)
+_L_disc_phys = norm_at(w_disc, L_disc, 2500.0) * _L2500_9
+xw, xL = A.disk_xray_extension(w_disc, _L_disc_phys, scatter=0.0)
+af_xray = U.regrid(xw, np.clip(xL, 0, None), lam9)
+af_radio = U.regrid(w9, np.clip(radio9, 0, None), lam9)
+af_sed9 = af_disc + af_tor + af_xray + af_radio
+af_tot9 = np.where(af_sed9 > 0, nu9 * af_sed9, np.nan)
 
-fig, ax = plt.subplots(figsize=(8.5, 5))
-ax.loglog(grid, af_total, "C0-", lw=4.0, alpha=0.35, solid_capstyle="round",
-          label="AGNFITTER-RX  THB21 + CAT3D-Wind")
-ax.loglog(grid, te_total, "C1-", lw=1.4, label="tengri  qsogen + cat3d_wind")
-# tengri's packaged cat3d_wind grid spans to ~1.5e6 Å (the build's
-# common-wavelength intersection); cap the axis there so the comparison runs
-# only where both torus libraries have data, not into the bare disc tail.
-ax.set_xlim(9e2, 1.5e6)
-# Energy balance puts the (cool) torus well above the disc in L_ν — set the
-# range from the data rather than the old hand-set torus fraction's window.
-_ymax9 = float(np.nanmax([np.nanmax(te_total), np.nanmax(af_total)]))
-ax.set_ylim(_ymax9 * 3e-4, _ymax9 * 2)
-ax.set_xlabel(r"$\lambda$ [Å]")
-ax.set_ylabel(r"$L_\nu$ (disk norm. at 2500 Å)")
-ax.set_title("Best-combination AGN SED (paper's winning model)")
-ax.legend()
+fig, ax = plt.subplots(figsize=(9.5, 5))
+ax.loglog(nu9, af_tot9, "C0-", lw=4.0, alpha=0.35, solid_capstyle="round",
+          label="AGNFITTER-RX  THB21 + CAT3D + a_ox + DPL")
+ax.loglog(nu9, te_tot9, "C1-", lw=1.6, label="tengri  total (one build)")
+# tengri component decomposition (thin lines) — what makes up the winning model.
+ax.loglog(nu9, te_agn9, "C3-", lw=1.0, alpha=0.75, label="   disc + torus")
+ax.loglog(nu9, te_xray9, "C4-", lw=1.0, alpha=0.75, label="   α_ox corona")
+ax.loglog(nu9, te_radio9, "C2-", lw=1.0, alpha=0.75, label="   DPL jet")
+for nu_band, name in [(1.4e9, "radio"), (3e13, "IR"), (6e14, "opt"), (4.8e17, "2 keV")]:
+    ax.axvline(nu_band, color="0.85", ls=":", lw=1)
+    ax.text(nu_band, 0.98, f" {name}", transform=ax.get_xaxis_transform(),
+            rotation=90, va="top", ha="left", fontsize=7, color="0.5")
+# Same EUV / soft-X-ray model-dependent band as the capstone.
+ax.axvspan(3.3e15, 4.8e16, color="0.8", alpha=0.30, zorder=0)
+ax.set_xlim(1e8, 1e20)
+_fin9 = te_tot9[np.isfinite(te_tot9)]
+ax.set_ylim(_fin9.max() * 1e-9, _fin9.max() * 5)
+ax.set_xlabel(r"$\nu$ [Hz]")
+ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
+ax.set_title("Best-combination AGN SED (paper's winning model) — full range, decomposed")
+ax.legend(fontsize=8, ncol=2, loc="lower center")
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("agnfitter_09d_best_combo.png")
@@ -1694,8 +1767,20 @@ _xray_raw = np.asarray(
         jnp.asarray(w_te), L2500, delta_alpha_ox=0.0, apply_anisotropy=False
     )
 )
-_xray_te = np.where(w_te < 100.0, _xray_raw, 0.0)
-te_lnu = _agn_te + _xray_te + _radio_te  # physical L_nu [erg/s/Hz]
+_xray_raw_masked = np.where(w_te < 100.0, _xray_raw, 0.0)
+_xray_te = _xray_raw_masked
+# The qsogen disc template extrapolates a spurious power-law tail below its
+# ~91 Å limit across the hard X-ray (νL_ν ~ 7e43 at 2 keV, comparable to the
+# corona itself). The disc emits no X-rays — the α_ox corona is the physical
+# X-ray source — so taper sed_agn off across the EUV (91 → 30 Å) so disc+torus
+# (opt–EUV) hands off smoothly to the corona (X-ray) with no double count and no
+# hard cliff. Without this the total sits ~2× above AGNFITTER-RX at 2 keV even
+# though the *bare* corona matches to ~1 % (§10b).
+_euv_taper = np.clip(
+    (np.log10(w_te) - np.log10(30.0)) / (np.log10(91.0) - np.log10(30.0)), 0.0, 1.0
+)
+_agn_te_phys = _agn_te * _euv_taper
+te_lnu = _agn_te_phys + _xray_te + _radio_te  # physical L_nu [erg/s/Hz]
 te_sed = U.regrid(w_te, np.clip(te_lnu, 0, None), lam_grid)
 _irband = (w_te > 3e4) & (w_te < 1e6)
 te_tor_ir_peak = float(np.max(_agn_te[_irband])) if np.any(_irband) else L2500
@@ -1718,6 +1803,12 @@ _f_cov = abs(_l_ir_cap) / abs(_lagn)
 w_ad, L_ad = A.disk_template("THB21")
 af_disc = U.regrid(w_ad, np.clip(L_ad, 0, None), lam_grid)
 af_disc = af_disc / np.interp(2500.0, lam_grid[::-1], af_disc[::-1]) * L2500
+# Symmetric taper: THB21 also carries a (steeper) sub-Lyman tail; hand the X-ray
+# on both sides to each code's corona/extension only, with the same 91 → 30 Å
+# EUV rolloff so neither disc double-counts into the X-ray.
+af_disc = af_disc * np.clip(
+    (np.log10(lam_grid) - np.log10(30.0)) / (np.log10(91.0) - np.log10(30.0)), 0.0, 1.0
+)
 # Torus energy-balanced: scale CAT3D so its IR peak matches tengri's torus.
 w_at, L_at = A.torus_template("CAT3D", **_CAT3D_NODE)
 af_tor = U.regrid(w_at, np.clip(L_at, 0, None), lam_grid)
@@ -1757,6 +1848,17 @@ ax.text(
     transform=ax.transAxes, va="top", ha="left", fontsize=7, family="monospace",
     bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.85),
 )
+# Shade the EUV / soft-X-ray bridge (13.6 eV – 0.2 keV): here BOTH codes
+# extrapolate an UNOBSERVABLE region and the curves genuinely differ by model
+# choice, not by fit quality. tengri's qsogen disc carries a shallower EUV tail
+# (L_ν/L_2500: 0.09 @ 300 Å vs AGNFITTER-RX's THB21 0.04, which drops at the
+# Lyman break), and neither simple α_ox corona adds a warm-Compton soft excess
+# here (that lives in tengri's kubota_done disc, §9a). Disc/torus/radio and the
+# 2 keV anchor all overlay — the divergence is confined to this shaded band.
+ax.axvspan(3.3e15, 4.8e16, color="0.8", alpha=0.30, zorder=0)
+ax.text(1.26e16, 0.055, "EUV / soft-X\nmodel-dependent\n(unobservable)",
+        transform=ax.get_xaxis_transform(), fontsize=6.5, color="0.45",
+        ha="center", va="bottom")
 ax.set_xlim(1e8, 1e20)
 _te_fin = te_plot[np.isfinite(te_plot)]
 ax.set_ylim(_te_fin.max() * 1e-9, _te_fin.max() * 5)
