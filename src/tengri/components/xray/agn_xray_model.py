@@ -83,8 +83,10 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
     Notes
     -----
     **JIT-compatible**: yes.
-    **Optional inputs**: reads L_agn_bol with fallback to 0.0.
-    Component returns zero X-ray if no AGN luminosity.
+    **Optional inputs**: anchors the α_ox corona to L_2500 via the chain
+    ``L_2500_intrinsic`` (actual disc L_ν(2500 Å), any disc) → ``L_2500_30deg``
+    (SKIRTOR) → ``L_agn_bol`` with a Hopkins+2007 BC fallback. Returns zero
+    X-ray if no AGN luminosity is published.
 
     The corona is evaluated at the Yang+2020 30° reference inclination
     (anisotropy factor exactly 1): this component has no inclination input,
@@ -154,13 +156,24 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
             - sed_out: sed_in + X-ray continuum.
             - published: Dict with "L_xray_agn" (integrated X-ray luminosity).
         """
-        # Prefer L_2500_30deg from SKIRTOR (canonical Yang+22 driver after
-        # PR #329 changed the corona signature). Fall back to L_agn_bol via
-        # Hopkins+2007 BC_2500 for AGN components that don't publish L_2500.
+        # L_2500 anchor chain (matches the live ``xray/component.py``):
+        # 1. ``L_2500_intrinsic`` — the composable AGN runner's actual disc
+        #    L_ν(2500 Å), published for *every* disc type (qsogen, richards2006,
+        #    …), so the α_ox corona is anchored to the real disc luminosity.
+        # 2. ``L_2500_30deg`` — SKIRTOR's 30° reference value.
+        # 3. ``L_agn_bol`` → L_2500 via the Hopkins+2007 BC_2500 as a last
+        #    resort (only when no disc L_2500 is published).
+        # Reading only ``L_2500_30deg`` (SKIRTOR-only) made this ~1.6× too bright
+        # for non-SKIRTOR discs, since the BC fallback over-estimates L_2500.
+        L_2500_intrinsic = jnp.asarray(inputs.get("L_2500_intrinsic", 0.0))
         L_2500_30deg = jnp.asarray(inputs.get("L_2500_30deg", 0.0))
         L_agn_bol = jnp.asarray(inputs.get("L_agn_bol", 0.0))
         L_2500_fallback = L_agn_bol / (5.15 * 1.199e15)  # erg/s/Hz
-        L_2500 = jnp.where(L_2500_30deg > 0.0, L_2500_30deg, L_2500_fallback)
+        L_2500 = jnp.where(
+            L_2500_intrinsic > 0.0,
+            L_2500_intrinsic,
+            jnp.where(L_2500_30deg > 0.0, L_2500_30deg, L_2500_fallback),
+        )
 
         # alpha_ox is derived from L_2500 via Just+2007 inside the corona;
         # the component knob is the delta offset around that empirical prior
