@@ -111,10 +111,13 @@ print(
     f"{_unit_check['rel_err']:.2e}  (target < 1e-3)"
 )
 
-# AGNFITTER-RX template libraries are read from a checkout (never the fitter).
-if not A.available():
-    print(A._CLONE_HINT)
-print(f"AGNFITTER-RX libraries available: {A.available()}  ({A.AGNFITTER_HOME})")
+# AGNFITTER-RX's template libraries are repackaged as committed HDF5 under
+# data/, so this runs on a clean checkout with no AGNfitter clone;
+# require_available() says what to regenerate if a grid is missing.
+A.require_available()
+print(f"AGNFITTER-RX reference grids: {len(A.list_disks())} disks, "
+      f"{len(A.list_tori())} tori, {len(A.list_cold_dust())} cold-dust "
+      f"(committed under data/)")
 
 
 def norm_at(wave, L, lam_aa):

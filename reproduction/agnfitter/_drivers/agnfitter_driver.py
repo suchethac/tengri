@@ -7,36 +7,37 @@ tengri's plotting convention -- ascending wavelength [Angstrom], L_nu
 template access in ``functions/MODEL_AGNfitter.py`` so the notebook overlays the
 *same* SEDs the AGN fitter feeds its likelihood.
 
-AGNFITTER-RX is a clone-and-load research code, not a pip package. Point the
-driver at a checkout via the ``AGNFITTER_HOME`` environment variable (default
-``/tmp/AGNfitter-rX``):
+AGNFITTER-RX is a clone-and-load research code, not a pip package, so every
+reference template it ships is repackaged into committed HDF5 under ``data/``
+and the driver reads *only* those. Nothing here touches an AGNFITTER-RX
+checkout at runtime: the notebook runs on a clean clone of this repository and
+in CI.
 
-    git clone --depth 1 --branch AGNfitter-rX_v0.1 \\
-        https://github.com/GabrielaCR/AGNfitter /tmp/AGNfitter-rX
+Reference grids, all committed under ``data/`` (h5 group in parentheses):
 
-Template files (``$AGNFITTER_HOME/models/``):
+=========  ==================================================  =========================
+Component  Library (driver name)                               Committed h5 (group)
+=========  ==================================================  =========================
+disk       ``R06``  (Richards et al. 2006)                     ``..._bbb_...`` (r06)
+disk       ``SN12`` (Slone & Netzer 2012)                      ``..._bbb_...`` (sn12)
+disk       ``KD18`` (Kubota & Done 2018)                       ``..._bbb_...`` (kd18)
+disk       ``THB21`` (Temple, Hewett & Banerji 2021)           ``..._bbb_...`` (thb21)
+torus      ``S04``  (Silva et al. 2004)                        ``..._torus_...`` (s04)
+torus      ``NK08`` (Nenkova et al. 2008)                      ``..._torus_...`` (nk08)
+torus      ``SKIRTOR`` (Stalevski et al. 2016)                 ``..._torus_...`` (skirtor)
+torus      ``CAT3D`` (Honig & Kishimoto 2017)                  ``..._torus_...`` (cat3d)
+cold dust  ``DH02_CE01`` (Dale & Helou 02 + Chary & Elbaz 01)  ``..._cold_dust_...`` (dh02_ce01)
+cold dust  ``S17`` (Schreiber et al. 2018)                     ``..._cold_dust_...`` (s17)
+=========  ==================================================  =========================
 
-==========  ==================================================  ============================
-Component   Library (driver name)                                File
-==========  ==================================================  ============================
-disk        ``R06``  (Richards et al. 2006)                      ``BBB/R06.pickle``
-disk        ``SN12`` (Slone & Netzer 2012)                       ``BBB/SN12.pickle``
-disk        ``KD18`` (Kubota & Done 2018)                        ``BBB/KD18.pickle``
-disk        ``THB21`` (Temple, Hewett & Banerji 2021)            ``BBB/THB21.pickle``
-torus       ``S04``  (Silva et al. 2004)                         ``TORUS/S04.pickle``
-torus       ``NK08`` (Nenkova et al. 2008)                       ``TORUS/NK0_mean_1p.pickle``
-torus       ``SKIRTOR`` (Stalevski et al. 2016)                  ``TORUS/SKIRTOR_mean_3p.pickle``
-torus       ``CAT3D`` (Honig & Kishimoto 2017)                   ``TORUS/CAT3D_mean_3p.pickle``
-cold dust   ``DH02_CE01`` (Dale & Helou 2002 + Chary & Elbaz 01) ``STARBURST/DH02_CE01.pickle``
-cold dust   ``S17`` (Schreiber et al. 2018)                      ``STARBURST/s17_lowvsg_*.fits``
-==========  ==================================================  ============================
+(``...`` stands for the ``agnfitter_`` prefix and the ``_reference.h5`` suffix.)
 
-Security
---------
-The pickle libraries are untrusted external data. Loading uses a restricted
-``pickle.Unpickler`` allow-listing only numpy/pandas/basic-builtin primitives,
-plus a preflight opcode scan -- the same hardening as
-``scripts/build_cat3d_wind_grid.py``.
+Regenerating a grid is a *build-time* job for the scripts under ``scripts/``
+(``build_agnfitter_bbb_reference.py``, ``build_agnfitter_s17_reference.py``),
+which fetch the upstream files from the pinned ``AGNfitter-rX_v0.1`` tag and
+carry their own hardened pickle loaders. The contract that runtime never reads
+a checkout is pinned by
+``tests/contract/test_reproduction_driver_no_clone.py``.
 
 References
 ----------
@@ -47,11 +48,6 @@ References
 
 from __future__ import annotations
 
-import importlib
-import io
-import os
-import pickle
-import pickletools
 from functools import cache
 from pathlib import Path
 
@@ -70,10 +66,6 @@ _DISK_H5 = _DATA_DIR / "agnfitter_bbb_reference.h5"
 _TORUS_H5 = _DATA_DIR / "agnfitter_torus_reference.h5"
 _COLD_H5 = _DATA_DIR / "agnfitter_cold_dust_reference.h5"
 _C_AA = 2.99792458e18  # speed of light [Å/s]
-
-# Build-time regeneration source (optional; runtime never reads it).
-AGNFITTER_HOME = Path(os.environ.get("AGNFITTER_HOME", "/tmp/AGNfitter-rX"))
-_MODELS = AGNFITTER_HOME / "models"
 
 
 @cache
@@ -106,107 +98,6 @@ def require_available() -> None:
             "agnfitter_cold_dust_reference.h5). Regenerate with "
             "scripts/build_agnfitter_bbb_reference.py (needs an AGNfitter-rX clone)."
         )
-
-
-# ── Restricted unpickler (mirrors scripts/build_cat3d_wind_grid.py) ─────────
-_SAFE_CLASSES: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("numpy.core.multiarray", "_reconstruct"),
-        ("numpy.core.multiarray", "scalar"),
-        ("numpy._core.multiarray", "_reconstruct"),
-        ("numpy._core.multiarray", "scalar"),
-        ("numpy", "ndarray"),
-        ("numpy", "dtype"),
-        ("pandas.core.frame", "DataFrame"),
-        ("pandas.core.series", "Series"),
-        ("pandas.core.indexes.base", "Index"),
-        ("pandas.core.indexes.base", "_new_Index"),
-        ("pandas.core.indexes.numeric", "Int64Index"),
-        ("pandas.core.indexes.numeric", "Float64Index"),
-        ("pandas.core.indexes.range", "RangeIndex"),
-        ("pandas.core.internals.managers", "BlockManager"),
-        ("pandas.core.internals.managers", "SingleBlockManager"),
-        ("pandas._libs.internals", "_unpickle_block"),
-        ("pandas.core.internals.blocks", "new_block"),
-        ("builtins", "slice"),
-        ("_codecs", "encode"),
-        # functools.partial appears in newer-pandas DataFrame pickles (THB21)
-        # as the block-reconstruction callable; benign under the preflight gate.
-        ("functools", "partial"),
-    }
-)
-_PY2_MODULE_ALIASES: dict[str, str] = {"__builtin__": "builtins"}
-
-
-class _RestrictedUnpickler(pickle.Unpickler):
-    """Unpickler allow-listed to numpy / pandas / basic builtins."""
-
-    def find_class(self, module: str, name: str):
-        module = _PY2_MODULE_ALIASES.get(module, module)
-        if (module, name) not in _SAFE_CLASSES:
-            raise pickle.UnpicklingError(
-                f"Refusing to import {module}.{name}: not in the safe allow-list. "
-                "If this is a legitimate numpy/pandas primitive, add it to "
-                "_SAFE_CLASSES in agnfitter_driver.py."
-            )
-        if (module, name) == ("pandas.core.internals.blocks", "new_block"):
-            return _new_block_compat
-        return getattr(importlib.import_module(module), name)
-
-
-def _new_block_compat(values, placement, *args, **kwargs):
-    """Version-tolerant ``pandas.new_block``.
-
-    The THB21 disk pickle was written by an older pandas that passed a bare
-    ``slice`` as the block placement; current pandas requires a
-    ``BlockPlacement``. Coerce it so the legacy pickle still loads.
-    """
-    from pandas._libs.internals import BlockPlacement
-    from pandas.core.internals.blocks import new_block as _nb
-
-    if isinstance(placement, slice):
-        placement = BlockPlacement(placement)
-    return _nb(values, placement, *args, **kwargs)
-
-
-def _preflight_opcode_scan(pickle_path: Path) -> None:
-    """Abort if any GLOBAL reference falls outside the allow-list."""
-    seen: set[tuple[str, str]] = set()
-    with pickle_path.open("rb") as fh:
-        out = io.StringIO()
-        pickletools.dis(fh, annotate=0, out=out)
-    for line in out.getvalue().splitlines():
-        if "GLOBAL" not in line:
-            continue
-        try:
-            qual = line.split("'", 1)[1].rsplit("'", 1)[0]
-        except IndexError:
-            continue
-        parts = qual.rsplit(" ", 1)
-        if len(parts) != 2:
-            continue
-        mod, name = parts
-        mod = _PY2_MODULE_ALIASES.get(mod, mod)
-        seen.add((mod, name))
-    unexpected = seen - _SAFE_CLASSES
-    if unexpected:
-        raise RuntimeError(
-            f"Unexpected GLOBAL references in {pickle_path}: {sorted(unexpected)}. "
-            "Refusing to proceed. Vet each entry, then add legitimate "
-            "numpy/pandas primitives to _SAFE_CLASSES."
-        )
-
-
-@cache
-def _safe_load(rel_path: str):
-    """Load a model pickle under $AGNFITTER_HOME/models, cached by path."""
-    require_available()
-    path = _MODELS / rel_path
-    if not path.is_file():
-        raise FileNotFoundError(f"AGNFITTER-RX template not found: {path}")
-    _preflight_opcode_scan(path)
-    with path.open("rb") as fh:
-        return _RestrictedUnpickler(fh, encoding="latin1").load()
 
 
 def _renorm(component: str, fnu: np.ndarray) -> np.ndarray:
@@ -510,8 +401,8 @@ def cold_dust_axes(name: str) -> dict[str, np.ndarray]:
     """Grid axes for a cold-dust library."""
     name = name.upper()
     if name == "DH02_CE01":
-        d = _safe_load("STARBURST/DH02_CE01.pickle")
-        return {"log_irlum": np.asarray(d["irlum-values"], dtype=np.float64)}
+        d = _ref(_COLD_H5, "dh02_ce01")
+        return {"log_irlum": np.asarray(d["irlum"], dtype=np.float64)}
     if name == "S17":
         _, _, _, tdust_ax, fpah_ax = _s17_tables()
         return {"tdust": tdust_ax, "fpah": fpah_ax}
