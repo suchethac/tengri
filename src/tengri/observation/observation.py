@@ -642,7 +642,7 @@ class Observation:
         this entry point yet.
         """
         from tengri.cosmology import luminosity_distance
-        from tengri.observation.photometry import compute_flux_density_batch
+        from tengri.observation.photometry import compute_flux_density_batch, project_photometry
         from tengri.observation.spectrum import project_spectrum
 
         z = jnp.asarray(params.get("redshift", 0.0))
@@ -656,19 +656,25 @@ class Observation:
 
         # IGM attenuation is an observed-frame transmission the IGM component
         # publishes on the rest grid (``T`` evaluated at ``wave_obs =
-        # wave*(1+z)``). Both projections below redshift ``sed_rest``
-        # internally, so multiplying here — before projection — attenuates the
-        # observed SED for photometry *and* spectroscopy at once. Applying the
-        # full transmission curve (not a single per-band effective-wavelength
-        # factor) is what captures the sharp Lyman break across broad bands and
-        # spectral pixels at high redshift (#932). ``T`` shares the rest grid
-        # with ``sed_rest``; the key is absent (structural no-op) when IGM is
-        # disabled, so low-z / IGM-off models are bit-unchanged.
+        # wave*(1+z)``). Every projection below redshifts the rest SED
+        # internally, so attenuating here — once, before projection — is what
+        # captures the sharp Lyman break across broad bands and spectral pixels
+        # at high redshift (#932); a single per-band effective-wavelength factor
+        # would not. ``T`` shares the rest grid with ``sed_rest``, and the key is
+        # absent (structural no-op) when IGM is disabled, so low-z / IGM-off
+        # models are bit-unchanged.
+        #
+        # ``sed_atten`` feeds the spectroscopy and rest-frame-photometry blocks.
+        # The observed-photometry block does NOT use it: ``project_photometry``
+        # reads ``state.sed_intrinsic`` and applies the same transmission itself,
+        # so that arbitrary post-build filters (``Prediction.photometry
+        # (filters=...)``) go through the identical kernel instead of a copy that
+        # could silently omit the IGM factor. Handing it ``sed_atten`` would
+        # square the transmission.
         igm_trans = (
             state.derived.get("igm_transmission", None) if state.derived is not None else None
         )
-        if igm_trans is not None:
-            sed_rest = sed_rest * igm_trans
+        sed_atten = sed_rest if igm_trans is None else sed_rest * igm_trans
 
         out: dict[str, jnp.ndarray] = {}
 
@@ -679,24 +685,11 @@ class Observation:
             # :meth:`predict_via_precomp` (or its callers); this method does
             # NOT fall through to the LUT by default — exact-first is the
             # default semantics for ``observation.predict``.
-            #
-            # Use the batched (vmapped) projection over filters padded to
-            # ``FILTER_COUNT_BUCKETS`` so distinct Photometry instances with
-            # similar filter counts share an XLA compile. Padded rows have
-            # all-zero transmission and contribute zero by construction.
-            n_real = self.photometry.n_filters
-            phot = compute_flux_density_batch(
-                sed_rest,
-                wave_rest,
-                self.photometry._fw_padded,
-                self.photometry._ft_padded,
-                z,
-                dl_cm,
-                convention=self.photometry.convention,
-            )[:n_real]
-            out["phot_fnu"] = phot
+            out["phot_fnu"] = project_photometry(state, params, self.photometry, dl_cm=dl_cm)
 
         if self.can_do_spectroscopy:
+            sed_spec = sed_atten
+
             wo = wave_obs if wave_obs is not None else self.spectroscopy.wave_obs
             resolution = (
                 lsf_resolution if lsf_resolution is not None else self.spectroscopy.resolution
@@ -708,7 +701,7 @@ class Observation:
             )
             n_bins = lsf_n_bins if lsf_n_bins is not None else self.spectroscopy.lsf_n_bins
             flux = project_spectrum(
-                sed_rest,
+                sed_spec,
                 wave_rest,
                 wo,
                 z,
@@ -736,8 +729,14 @@ class Observation:
 
                 dl_rest = TEN_PC_CM  # 10 pc in cm
                 n_real = self.photometry.n_filters
+                # ``sed_atten``, not ``sed_rest``: this block consumed the
+                # IGM-attenuated SED before the projector extraction, and this
+                # method's contract is bit-identical output. Whether rest-frame
+                # absolute photometry *should* carry an observed-frame absorption
+                # is a separate physics question — not one to settle silently
+                # inside a refactor.
                 phot_rest = compute_flux_density_batch(
-                    sed_rest,
+                    sed_atten,
                     wave_rest,
                     self.photometry._fw_padded,
                     self.photometry._ft_padded,
