@@ -13,6 +13,25 @@ the right seam: data, noise, and likelihood-shape config all live on
 context properties. A backend (or future hierarchical likelihood model)
 that wants to build a likelihood without a full Fitter only needs an
 ``InferenceContext`` and the data arrays it already exposes.
+
+Spectroscopic Calibration Modes
+================================
+
+Tengri supports two mutually-exclusive strategies for handling wavelength-
+dependent spectroscopic flux calibration (a multiplicative Chebyshev polynomial):
+
+1. **Explicit**: ``calibration_order=N`` (N > 0), ``calibration_marginalize=False``
+   (default). Fit calibration coefficients ``cal_c1, ..., cal_cN`` as explicit
+   free parameters in the sampler/optimizer. Each coefficient has a weak Gaussian
+   prior. Use for: fitting and understanding calibration drift.
+
+2. **Analytic**: ``calibration_order=0``, ``calibration_marginalize=True``. Integrate
+   calibration coefficients out of the likelihood at each iteration, treating them as
+   nuisance parameters. Reduces dimension and computational cost. Use for: focusing
+   inference on astrophysics when calibration drift is a nuisance.
+
+Never enable both simultaneously; raises
+:class:`~tengri.config.exceptions.ConfigError`.
 """
 
 from __future__ import annotations
@@ -53,6 +72,7 @@ def build_base_likelihood(context: InferenceContext):
         expressed via the protocol (currently: Cloudy-prior e-line
         marginalization or e-line fitted amplitudes).
     """
+    from tengri.config.exceptions import ConfigError
     from tengri.inference.composite_likelihood import CompositeLikelihood
     from tengri.inference.likelihoods import (
         CalibrationELineMarginalizedLikelihood,
@@ -190,6 +210,29 @@ def build_base_likelihood(context: InferenceContext):
             "the standard Prospector-style configuration, or disable "
             "calibration_marginalize."
         )
+
+    # ── Mutual exclusivity: explicit calibration coefficients vs. analytic marginalization ──
+    # Two modes for spectroscopic calibration (see docstring below for guidance):
+    # 1. Explicit: calibration_order > 0 → fit cal_c1, cal_c2, ... as free parameters
+    # 2. Analytic:  calibration_marginalize=True → integrate coefficients out analytically
+    # Enabling both double-counts calibration; the sampler and likelihood would
+    # both explore the same degrees of freedom.
+    if context.calibration_marginalize:
+        spectroscopy = getattr(context.model.observation, "spectroscopy", None)
+        if spectroscopy is not None and spectroscopy.calibration_order > 0:
+            raise ConfigError(
+                "Cannot enable both explicit calibration fitting (calibration_order > 0) "
+                "and analytic calibration marginalization (calibration_marginalize=True). "
+                "This would double-count the calibration polynomial degrees of freedom.\n\n"
+                "Choose one:\n"
+                "  • To fit calibration coefficients as free parameters:\n"
+                "    Set calibration_marginalize=False (default) and keep "
+                "calibration_order > 0.\n"
+                "  • To marginalize calibration analytically:\n"
+                "    Set calibration_order=0 on your spectroscopy and "
+                "enable calibration_marginalize=True."
+            )
+
     if context.calibration_marginalize and context.eline_marginalize:
         wavelength = getattr(context.model, "wave_obs", None)
         if wavelength is None:
