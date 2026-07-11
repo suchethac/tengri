@@ -30,8 +30,8 @@ from jax import Array
 
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.disc import powerlaw_disc
-from tengri.components.agn.torus import simple_torus, two_temperature_torus
 from tengri.components.agn.reddening import redden_disc
+from tengri.components.agn.torus import simple_torus, two_temperature_torus
 
 __all__: list[str] = []  # registrations only
 
