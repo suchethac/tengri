@@ -260,6 +260,29 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
+#: Trees whose tests are sampler-driven end-to-end fits. They are auto-marked
+#: `slow` so the default run is the PR-gating fast tier; CI runs them as a
+#: separate schedule/label-gated job.
+_SLOW_TREES = ("inference", "integration")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Auto-mark every test under the heavy trees as ``slow``.
+
+    Marking by path rather than by decorator keeps the two trees exhaustively
+    covered: a new file dropped into tests/inference cannot silently rejoin the
+    fast tier because someone forgot the decorator.
+    """
+    tests_root = Path(__file__).parent
+    for item in items:
+        try:
+            tree = Path(item.path).relative_to(tests_root).parts[0]
+        except ValueError:
+            continue
+        if tree in _SLOW_TREES:
+            item.add_marker(pytest.mark.slow)
+
+
 def pytest_configure(config):
     """Create minimal synthetic CB19 grid fixture before test collection.
 
