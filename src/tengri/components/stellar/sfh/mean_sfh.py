@@ -1190,8 +1190,7 @@ def delayed_bq(
     ``age_main_yr - age_bq_yr`` [yr], and :math:`r_{\\rm sfr}` is the
     post-episode SFR ratio [dimensionless].
 
-    **Reference**: Implements CIGALE ``sfhdelayedbq.py`` (Boquien et al. 2019
-    [2]_); validated against its output.
+    **Reference**: Implements CIGALE ``sfhdelayedbq.py`` (Boquien et al. 2019 [2]_).
 
     References
     ----------
@@ -1268,8 +1267,7 @@ def periodic(
     apart, each following one of three shapes. The burst at event i starts at
     time i * delta_bursts_yr and ends (or decays) within tau_bursts_yr.
 
-    **Reference**: Implements CIGALE ``sfhperiodic.py`` (Boquien et al. 2019
-    [1]_); validated against its output.
+    **Reference**: Implements CIGALE ``sfhperiodic.py`` (Boquien et al. 2019 [1]_).
 
     References
     ----------
@@ -1387,8 +1385,7 @@ def sfh2exp(
     :math:`M_{\rm main}`, :math:`M_{\rm burst}` their integrals over
     ``t_lookback`` [yr], and :math:`f` is ``f_burst`` [dimensionless].
 
-    **Reference**: Implements CIGALE ``sfh2exp.py`` (Boquien et al. 2019
-    [1]_); validated against its output.
+    **Reference**: Implements CIGALE ``sfh2exp.py`` (Boquien et al. 2019 [1]_).
 
     References
     ----------
@@ -1484,8 +1481,7 @@ def buat08(
     where :math:`v` is the rotational velocity [km/s], and the offset -9 converts
     from galaxy-integrated SFR to local SFR normalization.
 
-    **Reference**: Implements CIGALE ``sfh_buat08.py`` (Boquien et al. 2019
-    [2]_); validated against its output.
+    **Reference**: Implements CIGALE ``sfh_buat08.py`` (Boquien et al. 2019 [2]_).
     Extended velocity coefficients (40–100 km/s) provided by S. Boissier
     (private communication, referenced in CIGALE source).
 
@@ -1669,8 +1665,7 @@ def spline(
     fit the scalar-kwarg registry architecture. Use this function directly with
     ``jax.jit`` or ``jax.grad``, marking ``node_ages_yr`` as static.
 
-    Implements the same calculation as ProSpect ``massfunc_p4`` / ``massfunc_p6``
-    (Robotham et al. 2020 [1]_); validated against its output.
+    Implements ProSpect ``massfunc_p4`` / ``massfunc_p6`` (Robotham et al. 2020 [1]_).
     The PCHIP algorithm follows Fritsch & Carlson (1980) [2]_ with endpoint slopes
     from Moler (2004) [3]_.
 
@@ -1761,8 +1756,7 @@ def snorm_burst(
     :math:`m_{\\rm burst}` is the burst amplitude [Msun/yr], and
     :math:`t_{\\rm burst}` is the burst lookback time [yr].
 
-    Implements the same calculation as ProSpect ``massfunc_snorm_burst``
-    (Robotham et al. 2020 [1]_); validated against its output.
+    Implements ProSpect ``massfunc_snorm_burst`` (Robotham et al. 2020 [1]_).
 
     References
     ----------
@@ -1849,8 +1843,7 @@ def snorm_trunc_burst(
     where :math:`\\mathrm{tsnorm}(t)` is the truncated skew-normal SFH
     (Bellstedt+2020 [2]_) and :math:`m_{\\rm burst}` is the burst amplitude.
 
-    Implements the same calculation as ProSpect ``massfunc_snorm_burst_trunc``
-    (Robotham et al. 2020 [1]_); validated against its output.
+    Implements ProSpect ``massfunc_snorm_burst_trunc`` (Robotham et al. 2020 [1]_).
 
     References
     ----------

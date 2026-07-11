@@ -20,8 +20,7 @@ physical consistency between UV and X-ray SED components during inference.
 for obscured and low-luminosity AGN where UV is unreliable.
 
 **Design basis**: the same models as CIGALE's X-ray modules (Yang+2020,
-Lopez+2024), implemented in JAX for differentiability and gradient-based
-inference.
+Lopez+2024), implemented in JAX for gradient-based inference.
 """
 
 import jax.numpy as jnp

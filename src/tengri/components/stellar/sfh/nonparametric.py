@@ -403,8 +403,7 @@ def make_agebins_from_zred(
     **Not JIT-compatible** — uses Python control flow and NumPy. Call once
     at model-construction time, then pass the edges as a static array.
 
-    Implements the same calculation as Prospector ``zred_to_agebins_pbeta``
-    (Johnson et al. 2021
+    Implements Prospector ``zred_to_agebins_pbeta`` (Johnson et al. 2021
     [1]_), with two changes: uses tengri's Planck 2018 cosmology instead of
     WMAP9, and returns edges in Gyr rather than log10(yr).
 

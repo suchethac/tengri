@@ -842,8 +842,7 @@ def igm_transmission_madau(
     IGM convention). The Madau+1995 model takes observed-frame wavelengths
     directly.
 
-    Implements the same model as Prospector ``add_igm`` in ``fake_fsps.py``
-    (Johnson+2021 [2]_); validated against its output.
+    Implements Prospector ``add_igm`` in ``fake_fsps.py`` (Johnson+2021 [2]_).
     The Inoue+2014 model (:func:`igm_transmission`) supersedes this for science
     use; Madau+1995 is provided for comparison and backward compatibility.
 

@@ -887,11 +887,10 @@ def build_native_vi_linear_engine(signal_response, data, noise, flatten, unflatt
 
     Notes
     -----
-    The CG solver implements NIFTy's ``_static_cg`` algorithm exactly, with
-    residual-norm as the primary convergence criterion and energy-based
-    ``absdelta`` as secondary. This matches ``jit_engine.py``'s ``cg_solve``
-    and is superior to the energy-only variant previously inlined in
-    ``hierarchical.py``.
+    The CG solver implements NIFTy's ``_static_cg`` exactly, with residual-norm
+    as the primary convergence criterion and energy-based ``absdelta`` as
+    secondary. This matches ``jit_engine.py``'s ``cg_solve`` and is superior
+    to the energy-only variant previously inlined in ``hierarchical.py``.
 
     **JIT-compatible**: the returned callables are pre-JIT'd.
     """
