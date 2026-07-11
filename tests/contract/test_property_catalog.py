@@ -580,11 +580,17 @@ class TestLuminosityWeightedSFHBitEquality:
         pred = lw_model.predict(params)
 
         props = lw_model.predict_properties(params, names=("luminosity_weighted_age_gyr",))
+        # Documented float-precision tolerance (not rtol=0): the catalog fn
+        # computes from the orchestrator's published per-age luminosity
+        # (state.derived["L_age"]) while Prediction.sfh recomputes from the full
+        # SED cube via compute_luminosity_weighted_age — two different routes to
+        # the same quantity, agreeing to ~1 ULP (CI synthetic data exposed a
+        # 3.6e-16 relative gap that real-data rounding happened to hide).
         chex.assert_trees_all_close(
             props["luminosity_weighted_age_gyr"],
             pred.sfh.luminosity_weighted_age_gyr,
-            rtol=0,
-            atol=0,
+            rtol=1e-12,
+            atol=1e-12,
         )
 
     def test_luminosity_weighted_metallicity(self, lw_model):
@@ -593,12 +599,13 @@ class TestLuminosityWeightedSFHBitEquality:
         pred = lw_model.predict(params)
 
         props = lw_model.predict_properties(params, names=("luminosity_weighted_metallicity",))
-        # Allow small floating-point tolerance due to interpolation rounding
+        # Documented float-precision tolerance (see luminosity_weighted_age_gyr):
+        # orchestrator-L_age route vs the lazy SED-cube helper agree to ~ULP.
         chex.assert_trees_all_close(
             props["luminosity_weighted_metallicity"],
             pred.sfh.luminosity_weighted_metallicity,
-            rtol=1e-15,
-            atol=1e-15,
+            rtol=1e-12,
+            atol=1e-12,
         )
 
 
