@@ -5845,6 +5845,25 @@ class SEDModel:
                         chain[idx] = replace(comp, _state=neb_state)
                         break
 
+                # The IGM component tabulates its filter-averaged transmission
+                # <T>_f against redshift here, where the filter convention and
+                # padded curves are in scope. Without it, predict_via_precomp
+                # band-averages the full-grid Inoue+2014 curve on every call —
+                # which pins the full-resolution grid and defeats the dead-code
+                # elimination that IS the WavePrecomp speedup (#932).
+                from tengri.components.igm.component import IGMSEDComponent
+
+                for idx, comp in enumerate(chain):
+                    if isinstance(comp, IGMSEDComponent):
+                        igm_state = comp.precompute_band_factors(
+                            wave_rest=self.wavelengths,
+                            photometry=self.observation.photometry,
+                            filters=filters,
+                            redshift_spec=redshift_spec,
+                        )
+                        chain[idx] = replace(comp, _state=igm_state)
+                        break
+
         # SpectrumPrecomp — pre-rebin the SSP grid to the spectrum
         # pixel centers. Only the stellar component needs a build-time LUT;
         # downstream SEDModelComponents (dust / AGN / IGM / nebular continuum)

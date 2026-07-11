@@ -976,9 +976,21 @@ class Observation:
         # published (#932 behavior).
         # Only the observed-frame flux is attenuated; ``phot_rest_fnu`` (z=0)
         # carries no IGM.
+        # Prefer the build-time band factors. <T>_f depends only on (z, filter,
+        # convention) — the transmission is averaged alone, unweighted by the SED —
+        # so the IGM component tabulates it against z at build time and publishes
+        # ``igm_phot_factor``. Consuming the full-grid ``igm_transmission`` here
+        # instead forced a 5994-point Inoue+2014 evaluation on EVERY call (12.1
+        # MFLOPs to produce n_filters numbers) and kept the full-resolution grid
+        # live, defeating the dead-code elimination that is the entire WavePrecomp
+        # speedup: 108 us -> 1764 us since #932. Bit-identical at the z-nodes; a
+        # fixed-z model has a single node and is exact.
+        igm_factor = state.derived.get("igm_phot_factor")
         igm_trans = state.derived.get("igm_transmission")
         eff_waves = state.derived.get("filter_eff_waves")
-        if igm_trans is not None and eff_waves is not None:
+        if igm_factor is None and igm_trans is not None and eff_waves is not None:
+            # Fallback: patchy reionization / DLA read free parameters, so <T>_f
+            # is not a function of redshift alone and cannot be tabulated.
             fw_pad = state.derived.get("phot_filter_waves_padded")
             ft_pad = state.derived.get("phot_filter_trans_padded")
             if fw_pad is not None and ft_pad is not None:
@@ -994,6 +1006,7 @@ class Observation:
                 )
             else:
                 igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
+        if igm_factor is not None:
             phot_fnu = phot_fnu * igm_factor
 
         out = {"phot_fnu": phot_fnu, "phot_rest_fnu": phot_rest_fnu}
