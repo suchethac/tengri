@@ -190,6 +190,4 @@ ax_bot.legend(frameon=False, fontsize=8, loc="upper left", ncol=2)
 ax_bot.grid(True, alpha=0.2, which="major")
 
 fig.tight_layout()
-plt.show()
-
-print("Saved: plot_balmer_break_redshift_evolution.png")
+plt.savefig("plot_balmer_break_redshift_evolution.png", dpi=150, bbox_inches="tight")
