@@ -51,6 +51,11 @@ data/dl14_raw/
 data/dl14_raw
 data/synthesizer_grids/
 data/synthesizer_grids
+# Generated CIGALE→DSPS reproduction artifact (bc03_from_cigale.h5, ~400 MB;
+# built on demand by reproduction/cigale/_drivers/cigale_ssp_to_dsps.py).
+# The path itself is ignored so a stray `data` symlink can't be committed
+# again (a self-referential symlink slipped in via #1035).
+reproduction/cigale/_drivers/data
 data/*.h5
 !data/skirtor_templates_v3.h5
 !data/nthcomp_templates.h5
