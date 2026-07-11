@@ -604,12 +604,20 @@ def prevot_smc(
     r"""Prevot et al. (1984) SMC extinction law for AGN obscuration.
 
     Analytic SMC extinction curve from the UV to near-infrared, used in
-    AGNfitter for AGN disc reddening. The published Prevot+1984 form
-    gives :math:`k_{\rm raw}(\lambda) = A(\lambda)/E(B-V)` with
-    :math:`R_V = 2.72`; this function returns the V-band-normalized
-    curve :math:`k(\lambda) = A(\lambda)/A(V) = k_{\rm raw}(\lambda)/k_{\rm raw}(V)`,
+    AGNfitter for AGN disc reddening. The analytic Prevot+1984 fit
+    :math:`k_{\rm raw}(\lambda) = 1.39\,\lambda_{\mu m}^{-1.2} - 0.38`
+    evaluates to :math:`k_{\rm raw}(0.55\,\mu m) \approx 2.468` at V; this
+    function returns the V-band-normalized *shape*
+    :math:`k(\lambda) = k_{\rm raw}(\lambda)/k_{\rm raw}(V)` (so ``k(V)=1``),
     matching the convention used by ``cardelli`` and the rest of the
-    ``components.dust.attenuation`` registry (k(V)=1).
+    ``components.dust.attenuation`` registry. The measured SMC ratio
+    :math:`R_V = 2.72` (Prevot+1984) is applied *separately* by
+    :func:`tengri.components.agn.reddening.redden_disc` as
+    :math:`A(\lambda) = k(\lambda)\,R_V\,E(B-V)`. AGNfitter's ``BBBred_Prevot``
+    instead applies the bare :math:`k_{\rm raw}` (its ``function_prevot``
+    declares ``RV=2.72`` but does not use the argument), so its effective
+    ratio is 2.468 and its ``EBVbbb`` maps onto tengri's as
+    :math:`E(B-V)_{\rm tengri} \approx E(B-V)_{\rm AGNfitter} / 1.102`.
 
     Parameters
     ----------
