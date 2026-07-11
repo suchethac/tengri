@@ -72,7 +72,7 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Six accretion-disc backbones at fixed bolometric luminosity log L_bol = 12.5 (in log L_sun), evaluated in isolation with the host suppressed and no torus/lines/dust. The differences between the curves are entirely how each model partitions the disc power across wavelength: pure blackbody vs warm Comptonization, relativistic vs Newtonian potential, empirical-fit vs first-principles continuum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="All thirteen accretion-disc backbones registered under agn.disc.type, at fixed bolometric luminosity log L_bol = 12.5 (in log L_sun), evaluated in isolation with the host suppressed and no torus/lines/dust. The differences between the curves are entirely how each model partitions the disc power across wavelength: pure blackbody vs warm Comptonization, relativistic vs Newtonian potential, radiatively efficient thin disc vs inefficient ADAF, empirical composite vs first-principles continuum.">
 
 .. only:: html
 
@@ -83,7 +83,7 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">AGN disc continuum: model comparison at fixed L_bol</div>
+      <div class="sphx-glr-thumbnail-title">AGN disc continuum: every registered model at fixed L_bol</div>
     </div>
 
 
@@ -208,7 +208,7 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Seven dusty-torus libraries reprocessing the same accretion-disc continuum at fixed log L_bol = 12.5 (in log L_sun) and standard inclination. The disc is held at multicolor (Kubota &amp; Done 2018) so the differences in the curves are entirely how each torus library geometrically distributes hot grains and re-emits the absorbed UV in the MIR.">
+    <div class="sphx-glr-thumbcontainer" tooltip="All ten dusty-torus libraries registered under agn.torus.type, reprocessing the same accretion-disc continuum at fixed log L_bol = 12.5 (in log L_sun) and standard inclination. The disc is held at multicolor (Kubota &amp; Done 2018) so the differences in the curves are entirely how each torus library geometrically distributes hot grains and re-emits the absorbed UV in the MIR — clumpy radiative transfer (SKIRTOR, CLUMPY, CAT3D-WIND) vs smooth-dust grids (Fritz, Silva) vs phenomenological graybodies.">
 
 .. only:: html
 

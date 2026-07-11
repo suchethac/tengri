@@ -650,7 +650,7 @@
    "name": "dict"
   }
  ],
- "plt.cm.viridis": [
+ "plt.cm.tab20": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -670,7 +670,7 @@
    "is_explicit": false,
    "module": "matplotlib.pyplot.cm",
    "module_short": "matplotlib.pyplot.cm",
-   "name": "viridis"
+   "name": "tab20"
   }
  ],
  "plt.savefig": [
