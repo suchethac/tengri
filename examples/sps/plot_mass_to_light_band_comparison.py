@@ -109,8 +109,8 @@ for (_, label), color, m_l in zip(BANDS, COLORS, ml):
     ax.loglog(ages, m_l, color=color, lw=1.8, marker="o", markersize=4.5, label=label)
 
 ax.set(
-    xlabel=r"Population age  [Gyr]",
-    ylabel=r"$M_\star\,/\,L$  [$M_\odot\,/\,L_\odot$]",
+    xlabel=r"Population age [Gyr]",
+    ylabel=r"$M_\star / L$ [$M_\odot / L_\odot$]",
     xlim=(0.08, 12),
     ylim=(0.006, 3.0),
 )

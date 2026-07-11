@@ -28,10 +28,9 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri import SEDModelComponent, Uniform
 from tengri.analysis.plotting import setup_style
-from tengri.components.dust.attenuation import calzetti as _calzetti_law, cardelli as _cardelli_law
-from tengri.components.sed_model_component import SEDModelComponent
-from tengri.parameters.priors import Uniform
+from tengri.dust import calzetti as _calzetti_law, cardelli as _cardelli_law
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

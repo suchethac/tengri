@@ -33,7 +33,7 @@ c_aa_per_s = 2.99792458e18
 nu = c_aa_per_s / wave_aa
 
 fig, ax = plt.subplots(figsize=(8.0, 5.5))
-cmap = plt.get_cmap("plasma")
+cmap = plt.get_cmap("viridis")
 idx_show = np.linspace(0, len(log_ltir) - 1, 6).astype(int)
 for k, il in enumerate(idx_show):
     L_nu = spectra[il, i_ssfr]

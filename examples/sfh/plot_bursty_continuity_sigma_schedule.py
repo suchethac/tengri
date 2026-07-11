@@ -31,7 +31,7 @@ import numpy as np
 import tengri
 from tengri import SFH_REGISTRY, Parameters, SEDModel
 from tengri.analysis.plotting import setup_style
-from tengri.components.stellar.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR
+from tengri.sfh import DEFAULT_BIN_EDGES_GYR
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

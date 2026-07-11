@@ -18,8 +18,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
+from tengri import FilterCurve
 from tengri.analysis.plotting import setup_style
-from tengri.observation.photometry import FilterCurve
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

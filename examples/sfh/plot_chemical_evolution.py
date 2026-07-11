@@ -24,8 +24,8 @@ import numpy as np
 
 import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.components.stellar.sfh.chemical_evolution import closed_box_metallicity
 from tengri.cosmology import age_at_z0
+from tengri.sfh import closed_box_metallicity
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

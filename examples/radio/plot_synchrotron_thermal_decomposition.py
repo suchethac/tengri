@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.analysis.plotting import setup_style
-from tengri.components.radio.radio import compute_radio_components
+from tengri.radio import compute_radio_components
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
