@@ -269,6 +269,12 @@ class DerivedState:
     # curve here instead keeps the whole model grid live and defeats the
     # dead-code elimination that IS the WavePrecomp speedup (#932).
     igm_phot_factor: jnp.ndarray | None = None
+    # Per-pixel IGM transmission, shape (n_pix,), dimensionless — the
+    # SpectrumPrecomp twin of ``igm_phot_factor``. A pixel's rest effective
+    # wavelength is wave_obs/(1+z) and the curve is T(wave_rest*(1+z), z), so
+    # sampling one at the other collapses to T at the FIXED observed instrument
+    # grid: a function of (z, pixel) alone, tabulated at build time.
+    igm_spec_factor: jnp.ndarray | None = None
     shock_log_lhalpha: jnp.ndarray | None = None
 
     # Spatial — 2D surface-brightness profile and the (x, y) kpc grid that

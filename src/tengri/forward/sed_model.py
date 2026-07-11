@@ -5938,6 +5938,34 @@ class SEDModel:
                     merged = spec_state
                 chain[0] = replace(stellar, _state=merged)
 
+                # The IGM component tabulates its per-pixel transmission against
+                # redshift, the twin of the photometry band factor. Without it,
+                # predict_spectrum_via_precomp samples the full-grid Inoue+2014
+                # curve every call and the spectrum LUT buys nothing at all.
+                # MERGE, don't overwrite: a joint phot+spec model already carries
+                # the band table from the WavePrecomp block above.
+                from tengri.components.igm.component import IGMSEDComponent
+
+                for idx, comp in enumerate(chain):
+                    if isinstance(comp, IGMSEDComponent):
+                        spec_igm = comp.precompute_spec_factors(
+                            wave_rest=self.wavelengths,
+                            spec_wave_obs=spec_wave_obs,
+                            redshift_spec=redshift_spec,
+                        )
+                        prev_igm = comp._state
+                        igm_state = (
+                            replace(
+                                prev_igm,
+                                spec_zgrid=spec_igm.spec_zgrid,
+                                spec_table=spec_igm.spec_table,
+                            )
+                            if prev_igm is not None
+                            else spec_igm
+                        )
+                        chain[idx] = replace(comp, _state=igm_state)
+                        break
+
         # Bake the fast-dust-emission routing flag onto the dust component so
         # ``apply`` can branch on it statically (structural, not a runtime arg).
         if self._approx.get("fast_dust_emission"):

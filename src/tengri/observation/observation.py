@@ -1125,10 +1125,20 @@ class Observation:
         # sample the transmission the IGM component published on the rest grid
         # at each pixel's rest effective wavelength. Only the observed-frame flux
         # is attenuated; spec_rest_fnu (z=0) carries no IGM (#932).
+        # Prefer the build-time per-pixel table. A pixel's rest effective wavelength
+        # is wave_obs/(1+z) and the curve is T(wave_rest*(1+z), z), so the sample
+        # collapses to T at the FIXED observed instrument grid — a function of
+        # (z, pixel) alone. Sampling the full-grid curve here instead forced a
+        # 5994-point Inoue+2014 evaluation on every call and left the LUT buying
+        # NOTHING (2120 us exact vs 2098 us LUT). Bit-identical at the z-nodes.
+        igm_factor = state.derived.get("igm_spec_factor")
         igm_trans = state.derived.get("igm_transmission")
         eff_waves = state.derived.get("spec_eff_waves")
-        if igm_trans is not None and eff_waves is not None:
+        if igm_factor is None and igm_trans is not None and eff_waves is not None:
+            # Fallback: patchy / DLA read free parameters, so the transmission is
+            # not a function of redshift alone and cannot be tabulated.
             igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
+        if igm_factor is not None:
             spec_fnu = spec_fnu * igm_factor
 
         # Flux calibration — the same Chebyshev polynomial the exact path applies

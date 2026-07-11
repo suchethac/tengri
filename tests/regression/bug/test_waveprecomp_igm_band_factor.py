@@ -114,9 +114,9 @@ def test_band_factor_is_bit_identical_to_the_runtime_band_average():
     # Independent reference: the full-grid curve, band-averaged the old way.
     fw, ft, _ = pad_filters(list(phot.filter_waves), list(phot.filter_trans))
     trans = igm_absorption(wave_rest * (1.0 + z), z, igm_model=igm.config.igm_model)
-    reference = lnu_filter_integral_batch(
-        trans, wave_rest, fw, ft, z, convention=phot.convention
-    )[: phot.n_filters]
+    reference = lnu_filter_integral_batch(trans, wave_rest, fw, ft, z, convention=phot.convention)[
+        : phot.n_filters
+    ]
 
     np.testing.assert_array_equal(np.asarray(tabulated), np.asarray(reference))
 
@@ -143,6 +143,87 @@ def test_the_igm_is_still_actually_applied():
     )
     # ...and the reddest band, far from the forest, must be essentially untouched.
     assert f_with[-1] / f_without[-1] > 0.99
+
+
+@pytest.mark.regression_bug
+def test_spectrum_lut_does_not_evaluate_the_igm_on_the_full_grid():
+    """The SpectrumPrecomp twin: the LUT bought literally nothing before this.
+
+    ``predict_spectrum_via_precomp`` sampled the full-grid Inoue+2014 curve at each
+    pixel on every call, so the spectrum LUT ran at 2098 us against 2120 us exact --
+    a 1.0x "speedup". A pixel's rest effective wavelength is wave_obs/(1+z) and the
+    curve is T(wave_rest*(1+z), z), so the sample collapses to T at the FIXED observed
+    instrument grid: tabulable against z at build time.
+
+    Pinned via FLOPs: with the table in place the IGM-on and IGM-off spectrum kernels
+    must compile the SAME work, because the transmission is no longer computed at all.
+    """
+    import numpy as np
+
+    from tengri import SpectrumPrecomp
+    from tengri.observation.spectroscopy import Spectroscopy
+
+    ssp = pytest.importorskip("tengri").load_ssp()
+    obs = Observation(
+        spectroscopy=Spectroscopy(wave_obs=jnp.asarray(np.linspace(4000.0, 9000.0, 2000)))
+    )
+
+    def build(**extra):
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            redshift=Fixed(3.0),
+            sfh={"type": "dpl", "*": FIXED},
+            approx=SpectrumPrecomp(),
+            **extra,
+        )
+
+    def flops(m):
+        c = jax.jit(m.predict_spectrum).lower(_params(m)).compile().cost_analysis()
+        return (c[0] if isinstance(c, list) else c)["flops"]
+
+    on, off = flops(build()), flops(build(igm={"type": "none"}))
+    # Applying the factor costs one multiply per pixel and nothing more; the
+    # regressed path cost 6.65M FLOPs extra (a 5994-point Inoue+2014 evaluation).
+    n_pix = 2000
+    assert on - off < 10 * n_pix, (
+        f"spectrum LUT with IGM compiles {on - off:,.0f} FLOPs more than without it "
+        f"(budget {10 * n_pix:,} = a few ops per pixel) — the full-grid transmission "
+        "is still being evaluated at runtime."
+    )
+
+
+@pytest.mark.regression_bug
+def test_the_igm_is_still_applied_to_the_lut_spectrum():
+    """...and the per-pixel factor must not have become a silent no-op either."""
+    import numpy as np
+
+    from tengri import SpectrumPrecomp
+    from tengri.observation.spectroscopy import Spectroscopy
+
+    ssp = pytest.importorskip("tengri").load_ssp()
+    obs = Observation(
+        spectroscopy=Spectroscopy(wave_obs=jnp.asarray(np.linspace(4000.0, 9000.0, 2000)))
+    )
+
+    def build(**extra):
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            redshift=Fixed(3.0),
+            sfh={"type": "dpl", "*": FIXED},
+            approx=SpectrumPrecomp(),
+            **extra,
+        )
+
+    m, m0 = build(), build(igm={"type": "none"})
+    p = _params(m)
+    s = np.asarray(m.predict_spectrum(p))
+    s0 = np.asarray(m0.predict_spectrum(p))
+
+    # Blue pixels sit in the forest at z=3; the red end is untouched.
+    assert s[0] / s0[0] < 0.9, "the bluest pixel is not being attenuated by the IGM"
+    assert s[-1] / s0[-1] > 0.999
 
 
 @pytest.mark.regression_bug

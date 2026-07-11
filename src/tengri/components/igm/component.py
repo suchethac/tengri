@@ -26,6 +26,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 
 from tengri.components.igm._params import PARAMS as _IGM_PARAMS
@@ -90,6 +91,8 @@ class IGMSEDComponentState(SEDComponentState):
     name: str = "igm"
     band_zgrid: Any | None = None
     band_table: Any | None = None
+    spec_zgrid: Any | None = None
+    spec_table: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -278,14 +281,106 @@ class IGMSEDComponent:
             band_table=jnp.stack(rows),
         )
 
+    def precompute_spec_factors(
+        self,
+        wave_rest: jnp.ndarray,
+        spec_wave_obs: jnp.ndarray,
+        redshift_spec: Mapping[str, Any] | None = None,
+    ) -> IGMSEDComponentState:
+        r"""Tabulate the per-pixel IGM transmission against redshift.
+
+        The SpectrumPrecomp twin of :meth:`precompute_band_factors`, and the same
+        bug: ``predict_spectrum_via_precomp`` sampled the full-grid Inoue+2014
+        curve at each pixel on every call, so the LUT bought nothing (2120 us
+        exact vs 2098 us LUT, 1.0x).
+
+        Pixel *i* is sampled at its rest effective wavelength
+        :math:`\lambda_{{\rm obs},i}/(1+z)` from a curve defined as
+        :math:`T(\lambda_{\rm rest}(1+z), z)` — the redshift cancels out of the
+        *wavelength*, leaving the transmission at the **fixed observed instrument
+        grid**. So the factor is a function of :math:`(z, i)` alone and moves to
+        build time.
+
+        Tabulates the *composed* operation (interp through the rest grid), not a
+        direct evaluation at the pixels, so the result is **bit-identical** to the
+        runtime — a direct evaluation would be marginally more accurate, but that
+        is still a behavior change, and this is meant to be a pure speedup.
+
+        Parameters
+        ----------
+        wave_rest : array_like, shape (n_wave,)
+            Rest-frame model wavelength grid [Angstrom].
+        spec_wave_obs : array_like, shape (n_pix,)
+            Observed-frame spectrum pixel centers [Angstrom].
+        redshift_spec : mapping or None
+            ``{'mode': 'fixed', 'value': z}`` or ``{'mode': 'free', ...}``.
+
+        Returns
+        -------
+        IGMSEDComponentState
+            Carrying ``spec_zgrid`` / ``spec_table``, shape (n_z, n_pix).
+
+        Notes
+        -----
+        **JIT-compatible**: build-time only. Patchy reionization and DLAs read
+        free parameters, so the factor is not a function of redshift alone —
+        those keep the exact full-grid path.
+        """
+        import numpy as np
+
+        if self.config.igm_patchy or self.config.use_dla:
+            return IGMSEDComponentState(name=self.name)
+        if wave_rest is None or spec_wave_obs is None:
+            return IGMSEDComponentState(name=self.name)
+
+        spec = dict(redshift_spec or {"mode": "fixed", "value": 0.0})
+        if spec.get("mode") == "free":
+            zgrid = np.linspace(
+                float(spec.get("z_min", 0.001)),
+                float(spec.get("z_max", 3.0)),
+                int(spec.get("n_z", 100)),
+            )
+        else:
+            zgrid = np.asarray([float(spec.get("value", 0.0))])
+
+        wave_rest = jnp.asarray(wave_rest)
+        wave_obs = jnp.asarray(spec_wave_obs)
+        rows = []
+        for z in zgrid:
+            trans = igm_absorption(
+                wave_rest * (1.0 + z),
+                z,
+                igm_patchy=False,
+                igm_model=self.config.igm_model,
+                use_dla=False,
+            )
+            # Exactly what predict_spectrum_via_precomp did at runtime: sample the
+            # rest-grid curve at each pixel's rest effective wavelength.
+            rows.append(jnp.interp(wave_obs / (1.0 + z), wave_rest, trans))
+
+        return IGMSEDComponentState(
+            name=self.name,
+            spec_zgrid=jnp.asarray(zgrid),
+            spec_table=jnp.stack(rows),
+        )
+
+    def _interp_table(self, z, zgrid, table):
+        """Interpolate a (n_z, n_col) table at ``z``; exact for a single node."""
+        if zgrid.shape[0] == 1:  # fixed-redshift model: no interpolation at all
+            return table[0]
+        return jax.vmap(lambda col: jnp.interp(z, zgrid, col), in_axes=1, out_axes=0)(table)
+
     def _band_factor(self, z: jnp.ndarray) -> jnp.ndarray | None:
-        """Interpolate the precomputed band factors at ``z``; ``None`` if absent."""
+        """Interpolate the precomputed per-filter band factors at ``z``."""
         if self._state is None or self._state.band_table is None:
             return None
-        zgrid, table = self._state.band_zgrid, self._state.band_table
-        if zgrid.shape[0] == 1:  # fixed-redshift model: exact, no interpolation
-            return table[0]
-        return jnp.stack([jnp.interp(z, zgrid, table[:, f]) for f in range(table.shape[1])])
+        return self._interp_table(z, self._state.band_zgrid, self._state.band_table)
+
+    def _spec_factor(self, z: jnp.ndarray) -> jnp.ndarray | None:
+        """Interpolate the precomputed per-pixel transmission at ``z``."""
+        if self._state is None or self._state.spec_table is None:
+            return None
+        return self._interp_table(z, self._state.spec_zgrid, self._state.spec_table)
 
     def apply(
         self,
@@ -345,9 +440,12 @@ class IGMSEDComponent:
         # code, which is what XLA must be able to eliminate for WavePrecomp to be
         # fast at all (#932 regressed this: 108 us -> 1764 us).
         band_factor = self._band_factor(z)
+        spec_factor = self._spec_factor(z)
         derived = state.derived.with_(igm_transmission=T)
         if band_factor is not None:
             derived = derived.with_(igm_phot_factor=band_factor)
+        if spec_factor is not None:
+            derived = derived.with_(igm_spec_factor=spec_factor)
 
         return state.with_(sed_observed=state.sed_observed * T, derived=derived)
 
