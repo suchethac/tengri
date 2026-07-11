@@ -1325,12 +1325,16 @@ save_fig("bagpipes_07_panchromatic.png")
 # ## §12 IGM transmission — Inoue14
 #
 # Both codes implement the Inoue et al. (2014) piecewise Lyman-series +
-# LAF/DLA opacity. The curves overlay; the printed max |Δ| lands on the
-# sharp Lyman-series edges, where the two codes' wavelength grids sample
-# the same step at slightly offset positions — a grid-sampling artifact,
-# not an opacity disagreement. Off the steps the transmissions track to a
-# few ×10⁻³ (the median), the level of the two independent
-# implementations' table interpolation.
+# Lyman-continuum opacity, split into a Lyα-forest (LAF) and a
+# damped-Lyα (DLA) component. The coefficients on both sides are the
+# published Table 2 of Inoue+2014, so the two curves overlay to the
+# interpolation floor — the printed *median* |Δ| sits at ~10⁻⁸. The only
+# visible departures are the single-pixel spikes at the sharp Lyman-series
+# edges, where each code samples the same step at a slightly offset grid
+# position (a resolution artifact, not an opacity disagreement). The DLA
+# term governs the smooth Lyman-continuum below 912 Å; getting its
+# regime-2 coefficients right is what keeps the two codes together there
+# rather than a few tenths apart.
 
 # %%
 Z_FIDUCIAL_IGM = 4.0
