@@ -10,13 +10,13 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.dust.emission._port_base import EmissionPort
+from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 
 __all__ = ["Schreiber2016AnalyticIRSEDComponent"]
 
 
-class Schreiber2016AnalyticIRSEDComponent(EmissionPort):
+class Schreiber2016AnalyticIRSEDComponent(EmissionComponent):
     r"""Schreiber et al. (2016) 2-parameter dust emission model (analytic).
 
     Wraps the pure closure :func:`~tengri.components.dust.emission.schreiber2016`,

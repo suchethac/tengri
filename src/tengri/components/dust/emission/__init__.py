@@ -3,18 +3,18 @@
 
 Transitional layout (ADR-0019): the
 historical ``emission.py`` module now lives at ``emission/emission.py`` so the
-``analytic/`` subpackage can host the SEDModelComponent ports. This ``__init__``
-preserves the full public + used surface of the old flat module, so every
-existing ``from tengri.components.dust.emission import X`` keeps working
-unchanged (the closures, registries, and template loaders).
+``analytic/`` subpackage can host the SEDModelComponents. This
+``__init__`` preserves the full public + used surface of the old flat module,
+so every existing ``from tengri.components.dust.emission import X`` keeps
+working unchanged (the closures, registries, and template loaders).
 """
 
 # Re-export the entire public surface of the implementation module so callers
 # that did `from tengri.components.dust.emission import <name>` are unaffected.
-# Import the analytic and template ports so their SEDModelComponent subclasses
-# register in _REGISTRY at ``import tengri`` time (registration is a
-# __init_subclass__ side effect; the port modules import their closures lazily,
-# so no import cycle).
+# Import the analytic and template components so their SEDModelComponent
+# subclasses register in _REGISTRY at ``import tengri`` time (registration is a
+# __init_subclass__ side effect; the component modules import their closures
+# lazily, so no import cycle).
 from tengri.components.dust.emission import (
     analytic as _analytic,
     templates as _templates,

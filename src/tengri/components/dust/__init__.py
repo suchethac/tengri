@@ -4,7 +4,7 @@
 Layout
 ------
 Naming rule: ``*_model.py`` / ``*_ir.py`` files are SEDModelComponent
-ports (things the model grammar can select); same-stem files without
+components (things the model grammar can select); same-stem files without
 the suffix are the underlying physics (curves, template loaders).
 
 Components (selected via the model grammar):
@@ -12,17 +12,17 @@ Components (selected via the model grammar):
 - ``component.py`` — ``DustAttenuationSEDComponent`` (attenuation only).
 - ``two_component.py`` — ``DustSEDComponent`` (attenuation + IR
   re-emission with energy balance).
-- ``wg00_model.py`` — WG00 radiative-transfer attenuation port
+- ``wg00_model.py`` — WG00 radiative-transfer attenuation component
   (physics in ``wg00.py``).
 - ``schreiber2016_ir.py``, ``draine2021_pah_ir.py`` — standalone IR
-  emission ports (Draine+2021 physics in ``draine2021_pah.py``).
+  emission components (Draine+2021 physics in ``draine2021_pah.py``).
 
 Physics libraries:
 
 - ``attenuation.py`` — k(λ) attenuation laws and the ``DUST_LAWS``
   registry; individual curve families live in ``laws/``.
 - ``emission/`` — IR re-emission package (analytic models + tabulated
-  template ports + shared ``_physics.py`` integrals) with
+  template components + shared ``_physics.py`` integrals) with
   energy-balance normalization.
 - ``astrodust_hd23.py``, ``emission_templates.py`` — template grid
   loaders (not components).
@@ -42,7 +42,7 @@ Internal plumbing:
 
 # Convenience re-exports for `from tengri.dust import ...`
 # Dust block in the SEDComponent pipeline — combines UV–optical attenuation
-# with IR re-emission via per-template emission ports (``type='astrodust'``,
+# with IR re-emission via per-template emission components (``type='astrodust'``,
 # ``'draine2021_pah'``, ``'modified_blackbody'``, ``'dale2014'``, …).
 from tengri.components.dust.attenuation import (
     DUST_LAWS,
@@ -73,7 +73,7 @@ from tengri.components.dust.attenuation import (
     wg00_shell,
 )
 
-# SEDModelComponent-style attenuation ports
+# SEDModelComponent-style attenuation components
 from tengri.components.dust.draine2021_pah_ir import (
     Draine2021PAHIRConfig as Draine2021PAHIRConfig,
     Draine2021PAHIRSEDComponent as Draine2021PAHIRSEDComponent,
@@ -184,7 +184,7 @@ _CURATED_DIR = (
     "draine_li2014",
     "modified_blackbody",
     "themis",
-    # SEDModelComponent-style attenuation ports
+    # SEDModelComponent-style attenuation components
     "WG00AttenuationSEDComponent",
     "WG00AttenuationSEDComponentConfig",
     # Standalone IR emission SEDComponent backends
@@ -229,9 +229,9 @@ def __dir__() -> list[str]:
 
 
 #: Names removed in #871 when the monolithic ``DustEmissionSEDComponent`` adapter
-#: was retired for per-template emission ports. No 1:1 successor (the adapter
+#: was retired for per-template emission components. No 1:1 successor (the adapter
 #: dispatched three templates), so the old names raise with a migration path
-#: rather than silently aliasing to one port.
+#: rather than silently aliasing to one component.
 _REMOVED_DUST_EMISSION_NAMES = frozenset(
     {"DustEmissionSEDComponent", "DustEmissionSEDComponentConfig", "DustEmissionSEDComponentState"}
 )
@@ -241,10 +241,10 @@ def __getattr__(name: str):
     if name in _REMOVED_DUST_EMISSION_NAMES:
         raise AttributeError(
             f"{name!r} was removed in tengri #871. Dust IR emission is now authored "
-            "as SEDModelComponent ports selected via the model grammar, e.g. "
+            "as SEDModelComponents selected via the model grammar, e.g. "
             "SEDModel.build(dust={'emission': {'type': 'astrodust'}}) with type in "
             "{'modified_blackbody', 'draine2021_pah', 'astrodust', 'dale2014', "
-            "'casey2012', 'schreiber2016', ...}. To import a port directly use e.g. "
+            "'casey2012', 'schreiber2016', ...}. To import a component directly use e.g. "
             "tengri.components.dust.emission.templates.astrodust.AstrodustIRSEDComponent."
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

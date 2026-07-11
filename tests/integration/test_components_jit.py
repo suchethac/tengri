@@ -194,7 +194,7 @@ def full_chain_params(base_params):
         "dust_slope": jnp.asarray(-0.7),
         "dust_T": jnp.asarray(35.0),
         "dust_beta_ir": jnp.asarray(1.6),
-        # dust emission port params (modified_blackbody + casey2012)
+        # dust emission component params (modified_blackbody + casey2012)
         "dust_epsilon_mbb": jnp.asarray(1.0),
         "dust_alpha_mir": jnp.asarray(2.0),
         # AGN
@@ -230,7 +230,7 @@ def test_full_chain_composability(ssp, full_chain_params, agn_model, dust_law, e
         NebularSEDComponent(config=NebularSEDComponentConfig(backend="baked_in")),
         AGNSEDComponent(config=AGNSEDComponentConfig(model=agn_model)),
         DustSEDComponent(config=DustSEDComponentConfig(law_bc=dust_law, law_diff=dust_law)),
-        # Emission is a separate registry port now; placed after the attenuator so
+        # Emission is a separate registry component now; placed after the attenuator so
         # it reads the published L_ir (energy balance).
         _REGISTRY[emission_model](),
         RadioSEDComponent(),

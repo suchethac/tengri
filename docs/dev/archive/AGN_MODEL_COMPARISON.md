@@ -333,7 +333,7 @@
 
 ---
 
-## AGNfitter master + rX — audit and port targets
+## AGNfitter master + rX — audit and implementation targets
 
 **Audit date:** 2026-04-22. Scope: `GabrielaCR/AGNfitter` master (Calistro
 Rivera et al. 2016) and branch `AGNfitter-rX_v0.1` (Zhuang / Martínez-Ramírez
@@ -395,7 +395,7 @@ by these conditioners at build time so the downstream `agn_torus_frac` /
 In `DICTIONARIES_AGNfitter.get_model.pick_nD`, every `par_type == 'grid'`
 parameter picks the closest grid value via `np.abs(grid - mcmc_value).argmin()`.
 This introduces discontinuities that are invisible to emcee but break HMC /
-NUTS. Tengri must interpolate (triweight / linear) in its ports — this is
+NUTS. Tengri must interpolate (triweight / linear) in its own implementations — this is
 the reason tengri's SKIRTOR grid is precomputed continuously in
 `skirtor_precompute.py`.
 
@@ -420,7 +420,7 @@ Directly compared term-by-term against tengri's
 
 **Status: verified parity.** The 0.384 vs 0.3838 constant is a literature
 rounding difference (< 0.05 % on the derived L_2keV); tengri's additional
-low-E extent and IRX / XRB modules are strict supersets. No port needed.
+low-E extent and IRX / XRB modules are strict supersets. Nothing to implement.
 
 ### Finding 6 — Informative priors as opt-in penalty terms
 
@@ -449,11 +449,11 @@ informative priors is low-cost and would aid users coming from AGNfitter.
 
 Tengri's `components/dust/` has Calzetti and Charlot&Fall already. **SMC
 Prevot for the AGN disc is a small gap** — worth adding a Prevot branch to
-`components/dust/` in a follow-up, not a full port.
+`components/dust/` in a follow-up, not a full implementation.
 
-### Port targets (concrete, for Phases 2–4)
+### Implementation targets (concrete, for Phases 2–4)
 
-| Phase | Component | Gap? | Port strategy |
+| Phase | Component | Gap? | Strategy |
 |---|---|---|---|
 | 2 | **Silva+04 smooth torus** (1 param: log N_H) | Yes — unique to AGNfitter | dict-of-lists pickle is the simplest to extract; grid-build script loads it once (with user-approved `pickle.load` in a quarantined venv) and writes `data/silva04_torus_grid.h5`. JAX component reuses `skirtor_precompute.py` pattern (linear/triweight interpolation over log N_H). |
 | 3 | **CAT3D-Wind** (3 params: incl, `a`, `fwd`) | Yes — unique vs tengri | Same pattern; pickle is a pandas DataFrame so build script needs pandas. |
@@ -489,7 +489,7 @@ same exponential aging). AGNfitter hand-tunes grids of (`alpha1`, `alpha2`,
 differentiably. **Status: verified parity; tengri is a continuous
 superset.** The single-PL (`nRADdata==1`) and blazar-cutoff (`SPL`)
 branches reduce to specializations of `radio_agn` / `radio_agn_dpl` with
-defaults pinned. No port needed.
+defaults pinned. Nothing to implement.
 
 **qsogen (Temple+21) vs `BBB/THB21.pickle`:**
 AGNfitter's THB21 path is just one pre-tabulated composite SED from the
@@ -501,7 +501,7 @@ Temple+21 parametric model — 7 continuous parameters (``plslp1``,
 ``plslp2``, ``plbrk``, ``tbb``, ``bbnorm``, ``emline``, ``ebv``) plus the
 Baldwin effect (`slope = 0.183`) and 4 emission-line templates
 (median / peaky / windy / narrow). **Status: tengri is a strict superset
-of AGNfitter's THB21.** No port needed; the Phase-4 audit envisaged in the
+of AGNfitter's THB21.** Nothing to implement; the Phase-4 audit envisaged in the
 original plan is closed in tengri's favor.
 
 **KD18 disc (`BBB/KD18.pickle` vs `components/agn/disc.py::kubota_done_disc`):**
@@ -528,7 +528,7 @@ equivalent at intermediate parameter values.** AGNfitter's 1/2/3-parameter
 flattened libraries are strict projections of the full grid. A future
 regression test could confirm that tengri's full-grid values, when
 averaged over the same axes AGNfitter averaged out, recover the
-`_mean_NP.pickle` values. Filed as a cross-val task, not a port.
+`_mean_NP.pickle` values. Filed as a cross-val task, not a component.
 
 **Gaps confirmed as real (all are Phase-2+ implementation targets):**
 
@@ -538,10 +538,10 @@ averaged over the same axes AGNfitter averaged out, recover the
   `tests/unit/components/agn/test_silva04.py` (8/8 pass).
 - **CAT3D-Wind torus** — no tengri analog. Phase 3 target.
 - **Nenkova+08 CLUMPY torus** (`NK0_mean_*P.pickle`) — no tengri analog
-  by design (non-differentiable template stack). Do not port unless the
+  by design (non-differentiable template stack). Do not implement unless the
   user explicitly revises the design philosophy.
 - **SN12 α-disc** — tengri's SS73 `standard` disc covers the same physics
-  analytically; do not port the tabulated library.
+  analytically; do not implement the tabulated library.
 
 ### Citation verification TODO
 

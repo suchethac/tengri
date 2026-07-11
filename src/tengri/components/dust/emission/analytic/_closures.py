@@ -4,7 +4,7 @@
 Pure JAX emission functions for the analytic models (modified blackbody,
 Casey 2012, Drude-profile PAH, Schreiber 2016, and the two-temperature
 energy-balance split). These are the physics kernels wrapped by the
-``EmissionPort`` subclasses in this package; the ``emission`` facade imports
+``EmissionComponent`` subclasses in this package; the ``emission`` facade imports
 them and registers the grammar-dispatchable ones in ``DUST_EMISSION_MODELS``.
 
 Leaf module: imports only ``jnp``, physical constants, and the shared

@@ -12,10 +12,10 @@ import numpy as np
 import pytest
 
 # ─────────────────────────────────────────────────────────────────────
-# Skip-tally hook: surface how many parity-sweep ports actually ran
+# Skip-tally hook: surface how many parity-sweep tests actually ran
 # vs. skipped due to missing data. Without this, the test report says
 # "X passed, Y skipped" without itemizing whether the skipped ones
-# were ports the session was supposed to verify.
+# were tests the session was supposed to verify.
 # ─────────────────────────────────────────────────────────────────────
 
 _SKIPPED_PARITY_TESTS: Counter[str] = Counter()

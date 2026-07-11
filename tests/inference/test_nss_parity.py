@@ -84,7 +84,7 @@ def _make_particles(key, names, w, n_live):
 
 
 class TestNSSParity:
-    """Verify bitwise-identical results between local port and handley fork."""
+    """Verify bitwise-identical results between local implementation and handley fork."""
 
     def test_identical_init(self):
         """init() produces identical states."""

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Meiksin (2006) IGM mean transmission.
 
-Ports the Meiksin (2006) IGM model from CIGALE
-(``pcigale.sed_modules.redshifting.igm_transmission``) to pure JAX so
+Implements the Meiksin (2006) IGM model as CIGALE evaluates it
+(``pcigale.sed_modules.redshifting.igm_transmission``) in pure JAX so
 it is JIT-compilable and differentiable. The CIGALE function is the
-authoritative reference; this is a line-for-line port with the
+authoritative reference; this implements it exactly, with the
 wavelength convention converted from nm (CIGALE) to Angstrom (tengri).
 
 Unlike Inoue+2014, Meiksin's diffuse Lyman-α-forest continuum
@@ -16,7 +16,7 @@ References
 ----------
 .. [1] Meiksin, A. 2006, MNRAS, 365, 807.
        https://doi.org/10.1111/j.1365-2966.2005.09663.x
-.. [2] Boquien, M., et al. 2019, A&A, 622, A103 (CIGALE port).
+.. [2] Boquien, M., et al. 2019, A&A, 622, A103 (CIGALE).
        https://doi.org/10.1051/0004-6361/201834156
 """
 

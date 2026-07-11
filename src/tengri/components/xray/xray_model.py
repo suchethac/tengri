@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""XRayAirdSEDComponent: X-ray emission (Aird+2017) as a SEDModelComponent.
+"""X-ray emission model (Aird et al. 2017 + Lusso & Risaliti 2016)
+SEDModelComponent.
 
-Ports the X-ray emission model (Aird et al. 2017 SFR-X-ray scaling +
-Lusso & Risaliti 2016 AGN X-ray) to the SEDModelComponent architecture.
-Provides differentiable X-ray SED prediction.
+Implements the X-ray emission model (SFR-X-ray scaling + AGN X-ray) on the
+SEDModelComponent contract. Provides differentiable X-ray SED prediction.
 
 Physical pipeline
 -----------------

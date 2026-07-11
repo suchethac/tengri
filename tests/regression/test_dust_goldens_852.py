@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Bit-exact goldens for the two dust-emission ports the Phase-1 pilot skipped.
+"""Bit-exact goldens for the two dust-emission components the Phase-1 pilot skipped.
 
 The Phase-1 golden capture (#738) skipped ``schreiber2018`` and
 ``draine2021_pah`` because their template HDF5 grids were absent from the test
@@ -11,14 +11,14 @@ gitignored grids) stays green while local / data-present runs exercise them.
 Two distinct oracles, because the two templates differ (#852):
 
 * ``schreiber2018`` — the ``DUST_EMISSION_MODELS["schreiber2018"]`` loader is a
-  real, independent implementation of the same grid, so the port is pinned
+  real, independent implementation of the same grid, so the component is pinned
   **bit-exact against the loader** (the strongest check; mirrors the analytic
-  ``schreiber2016`` closure-vs-port test).
+  ``schreiber2016`` closure-vs-component test).
 * ``draine2021_pah_ir`` — its ``DUST_EMISSION_MODELS`` entry is a *deprecated
   alias to ``pah_drude``* (a different, analytic model; #693), so there is no
-  independent loader oracle. The port is pinned against a **committed frozen
+  independent loader oracle. The component is pinned against a **committed frozen
   golden** plus a physical energy-balance check. This module also regression-
-  guards the silent-no-op bug #852 fixed: the port's auto-locate passed a
+  guards the silent-no-op bug #852 fixed: the component's auto-locate passed a
   ``data/``-prefixed path to ``_find_data_file`` (which prepends its own
   ``/data`` candidate dirs), so it never found the present grid and silently
   emitted zeros.
@@ -64,7 +64,7 @@ def _schreiber2018_available() -> bool:
 
 
 def _draine2021_available() -> bool:
-    """The port loads the PAHspec grid via auto-locate; data present iff load()
+    """The component loads the PAHspec grid via auto-locate; data present iff load()
     returns a template dict."""
     comp = _REGISTRY["draine2021_pah_ir"]()
     try:
@@ -80,10 +80,10 @@ def _draine2021_available() -> bool:
     not _schreiber2018_available(), reason="schreiber2018 template grid not available"
 )
 def test_schreiber2018_port_matches_loader_bit_exact():
-    """The schreiber2018 SEDModelComponent port reproduces the
+    """The schreiber2018 SEDModelComponent reproduces the
     ``DUST_EMISSION_MODELS`` loader exactly on the shipped grid. Both the loader
-    and the port now use the canonical ``dust_T`` / ``dust_f_pah`` names (#849),
-    stripping to ``T`` / ``f_pah`` on the port."""
+    and the component now use the canonical ``dust_T`` / ``dust_f_pah`` names (#849),
+    stripping to ``T`` / ``f_pah`` on the component."""
     preload_emission_model("schreiber2018")
     loader = DUST_EMISSION_MODELS["schreiber2018"]
     golden = np.asarray(loader(_WAVE, _L_IR, dust_T=30.0, dust_f_pah=0.05), dtype=np.float64)
@@ -107,14 +107,14 @@ def _draine_port_sed() -> np.ndarray:
     not _draine2021_available(), reason="draine2021 PAHspec template grid not available"
 )
 def test_draine2021_pah_is_not_a_silent_no_op():
-    """Regression for the #852 silent-no-op fix: with the grid present, the port
+    """Regression for the #852 silent-no-op fix: with the grid present, the component
     must load it and emit a nonzero far-IR SED (before the fix, the
-    ``data/``-prefixed auto-locate path missed and the port returned zeros)."""
+    ``data/``-prefixed auto-locate path missed and the component returned zeros)."""
     comp = _REGISTRY["draine2021_pah_ir"]()
     assert comp.load(_WAVE) is not None, "PAHspec grid present but load() returned None"
     sed = _draine_port_sed()
     assert np.all(np.isfinite(sed))
-    assert np.nansum(np.abs(sed)) > 0.0, "port emitted all zeros despite present grid"
+    assert np.nansum(np.abs(sed)) > 0.0, "component emitted all zeros despite present grid"
 
 
 @pytest.mark.skipif(
@@ -136,7 +136,7 @@ def test_draine2021_pah_energy_balance():
     not _draine2021_available(), reason="draine2021 PAHspec template grid not available"
 )
 def test_draine2021_pah_matches_frozen_golden():
-    """The port reproduces the committed frozen golden bit-exactly — a drift
+    """The component reproduces the committed frozen golden bit-exactly — a drift
     lock (no independent loader oracle exists; the DUST_EMISSION_MODELS entry is
     a deprecated pah_drude alias, #693)."""
     golden_npy = _GOLDEN_DIR / "draine2021_pah_ir.npy"
@@ -149,16 +149,16 @@ def test_draine2021_pah_matches_frozen_golden():
 
 # ── astrodust — frozen golden + energy balance (#871) ─────────────────
 #
-# The faithful Hensley & Draine 2023 astrodust port (native lgU interpolation of
+# The faithful Hensley & Draine 2023 astrodust component (native lgU interpolation of
 # the published emission grid) has no independent faithful loader oracle: the
 # ``DUST_EMISSION_MODELS["astrodust"]`` entry is the retired DL07-*costume*
 # (umin/gamma/qpah over an HD23→DL07-translated grid, with a no-op ``dust_qpah``;
-# #871). So — as with draine2021_pah_ir — the port is pinned against a committed
+# #871). So — as with draine2021_pah_ir — the component is pinned against a committed
 # frozen golden plus a physical energy-balance check.
 
 
 def _astrodust_available() -> bool:
-    """Data present iff the port's ``load()`` returns a template dict. The port
+    """Data present iff the component's ``load()`` returns a template dict. The component
     *raises* FileNotFoundError on a missing grid (no analytic fallback), so the
     try/except is required to skip cleanly."""
     comp = _REGISTRY["astrodust"]()
@@ -183,7 +183,7 @@ def test_astrodust_is_not_a_silent_no_op():
     assert comp.load(_WAVE) is not None, "astrodust grid present but load() returned None"
     sed = _astrodust_port_sed()
     assert np.all(np.isfinite(sed))
-    assert np.nansum(np.abs(sed)) > 0.0, "port emitted all zeros despite present grid"
+    assert np.nansum(np.abs(sed)) > 0.0, "component emitted all zeros despite present grid"
 
 
 @pytest.mark.skipif(not _astrodust_available(), reason="astrodust template grid not available")
@@ -201,7 +201,7 @@ def test_astrodust_energy_balance():
 
 @pytest.mark.skipif(not _astrodust_available(), reason="astrodust template grid not available")
 def test_astrodust_matches_frozen_golden():
-    """The faithful lgU port reproduces the committed frozen golden bit-exactly —
+    """The native lgU component reproduces the committed frozen golden bit-exactly —
     a drift lock (the DUST_EMISSION_MODELS entry is the retired DL07-costume,
     #871)."""
     golden_npy = _GOLDEN_DIR / "astrodust.npy"

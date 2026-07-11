@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for the Hensley & Draine 2023 Astrodust+PAH emission port.
+"""Tests for the Hensley & Draine 2023 Astrodust+PAH emission component.
 
 Exercises :class:`~tengri.components.dust.emission.templates.astrodust.AstrodustIRSEDComponent`
 (the faithful native ``lgU`` interpolation of the published grid; #871) against
@@ -100,7 +100,7 @@ def test_dust_mass_constants(fixture_path):
     assert tpl.M_PAH_over_M_H == pytest.approx(0.000659, rel=1e-3)
 
 
-# ── AstrodustIRSEDComponent port ──────────────────────────────────────
+# ── AstrodustIRSEDComponent ───────────────────────────────────────────
 
 
 def test_declared_parameter_is_lgU_only(component):

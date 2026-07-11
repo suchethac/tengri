@@ -731,7 +731,7 @@ For Part B, add `sfh_field_*` priors, `mean_sfh_type=["tsnorm", "field"]`, `n_gr
 
 The current quickstart track notebook can produce **up to ten** named figures (mock spectrum with
 annotations, spectral fit + residuals, SFH panels, corners, method comparisons). The integrated
-`00_quickstart.py` in Appendix A focuses on the **core validation plots**; when merging, port any
+`00_quickstart.py` in Appendix A focuses on the **core validation plots**; when merging, carry over any
 omitted panels if the docs site still needs them. All disk writes stay **commented** (`#
 plt.savefig(...)`).
 

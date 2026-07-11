@@ -8,7 +8,7 @@ pipeline rest-frame wavelength grid, and integrating
 :math:`\int L_\nu \, d\nu` for the energy-balance rescale.
 
 The :class:`tengri.components.dust.draine2021_pah_ir.Draine2021PAHIRSEDComponent`
-emission port consumes this module (dispatched via
+emission component consumes this module (dispatched via
 ``dust={'emission': {'type': 'draine2021_pah'}}``).
 
 Reference

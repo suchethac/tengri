@@ -10,13 +10,13 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.dust.emission._port_base import EmissionPort
+from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 
 __all__ = ["Casey2012IRSEDComponent"]
 
 
-class Casey2012IRSEDComponent(EmissionPort):
+class Casey2012IRSEDComponent(EmissionComponent):
     """Casey (2012) modified blackbody + mid-IR power law dust emission.
 
     Wraps the pure closure :func:`~tengri.components.dust.emission.casey2012`,

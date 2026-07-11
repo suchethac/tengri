@@ -10,13 +10,13 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.dust.emission._port_base import EmissionPort
+from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 
 __all__ = ["BosaIRSEDComponent"]
 
 
-class BosaIRSEDComponent(EmissionPort):
+class BosaIRSEDComponent(EmissionComponent):
     """Boquien & Salim (2021) BOSA dust IR emission template.
 
     Wraps the pure closure from the tabulated BOSA template library,

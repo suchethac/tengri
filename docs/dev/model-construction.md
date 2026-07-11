@@ -173,7 +173,7 @@ it, fills `inputs()`/`outputs()` from the dicts, and provides sensible default
 
 **Then** import the module in the domain `__init__.py` so the class body runs
 and registers at package import (a registered-but-unimported component is a
-silent no-op — this is exactly how the shock port went dead before #851).
+silent no-op — this is exactly how the shock component went dead before #851).
 
 ### Full references
 
@@ -183,9 +183,9 @@ silent no-op — this is exactly how the shock port went dead before #851).
   architectural context for the forward pipeline.
 - [ADR-0011](../adr/0011-sed-model-component-base.md) — the base-class design.
 - [`src/tengri/components/dust/wg00_model.py`](../../src/tengri/components/dust/wg00_model.py)
-  — canonical small closed-form port.
+  — canonical small closed-form component.
 - [`src/tengri/components/agn/skirtor_model.py`](../../src/tengri/components/agn/skirtor_model.py)
-  — canonical library port.
+  — canonical template-library component.
 
 ### The advanced fallback
 

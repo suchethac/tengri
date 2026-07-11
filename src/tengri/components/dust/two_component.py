@@ -191,7 +191,7 @@ class DustSEDComponent:
 
         Publishes:
         - L_ir: total absorbed UV/optical/NIR luminosity (erg/s), enabling
-          downstream dust emission ports to re-radiate.
+          downstream dust emission components to re-radiate.
         - L_absorbed: alias for L_ir (deprecated, use L_ir).
         - sed_dust_attenuated: stellar SED after two-component attenuation.
         - sed_nebular: re-published after dust reddening (same name as nebular,
@@ -241,7 +241,7 @@ class DustSEDComponent:
         entry as :class:`Fixed` to drop it from the prior.
 
         Emission-specific parameters (dust_T, dust_beta_ir, dust_alpha_dale,
-        dust_umin, etc.) are now owned by the dust emission port components
+        dust_umin, etc.) are now owned by the dust emission components
         (modified_blackbody, dale2014, etc.) and are no longer declared here.
         """
         return [
@@ -299,10 +299,10 @@ class DustSEDComponent:
         approx: dict[str, bool] | None = None,
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> DustSEDComponentState:
-        r"""Return an empty state (emission is now handled by separate ports).
+        r"""Return an empty state (emission is now handled by separate components).
 
         This component is attenuation-only; IR emission is now handled by
-        dedicated dust emission port components in the pipeline. This method
+        dedicated dust emission components in the pipeline. This method
         accepts arguments for Protocol uniformity but does not load any state.
 
         Parameters
@@ -603,7 +603,7 @@ class DustSEDComponent:
         eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
         L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
 
-        # ── 4. Combine stellar + nebular SEDs (emission handled by ports) ───
+        # ── 4. Combine stellar + nebular SEDs (emission handled by components) ─
         # Preserve any non-stellar contribution that may have been added
         # to ``sed_intrinsic`` by an upstream component (e.g. AGN,
         # Nebular). The stellar contribution at this point equals
@@ -612,11 +612,11 @@ class DustSEDComponent:
         # isolates the non-stellar portion. Stellar dust does not attenuate
         # AGN/nebular/radio/xray.
         #
-        # IR re-emission is now handled by separate dust emission port
-        # components in the pipeline (modified_blackbody, dale2014, etc.),
-        # not by this attenuation component. Those ports read L_ir from
-        # state.derived and produce sed_dust_ir, which is summed into the
-        # total SED via the orchestrator.
+        # IR re-emission is now handled by separate dust emission components
+        # in the pipeline (modified_blackbody, dale2014, etc.), not by this
+        # attenuation component. Those components read L_ir from state.derived
+        # and produce sed_dust_ir, which is summed into the total SED via the
+        # orchestrator.
         if state.sed_intrinsic is None:
             non_stellar_pre_dust = jnp.zeros_like(wave)
         else:
@@ -684,9 +684,9 @@ class DustSEDComponent:
             derived_overrides["dust_bc_log_attenuation_slope_precomp"] = -tau_bc * k_bc_slope
             derived_overrides["dust_diff_log_attenuation_slope_precomp"] = -tau_diff * k_diff_slope
 
-            # IR re-emission is now handled by separate dust emission ports.
+            # IR re-emission is now handled by separate dust emission components.
             # This component no longer computes or publishes photometric
-            # dust emission — the emission ports handle that via their own
+            # dust emission — the emission components handle that via their own
             # precompute paths.
 
             # Young-star indicator on the SSP age grid: smooth sigmoid
@@ -718,7 +718,7 @@ class DustSEDComponent:
             derived_overrides["dust_spec_bc_transmission_precomp"] = t_bc_pix
             derived_overrides["dust_spec_diff_transmission_precomp"] = t_diff_pix
 
-            # IR re-emission is now handled by separate dust emission ports.
+            # IR re-emission is now handled by separate dust emission components.
 
             # Young-star indicator y(a) on the SSP age grid (same sigmoid as
             # the filter branch) — published even when only the spectrum LUT

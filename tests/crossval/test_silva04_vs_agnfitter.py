@@ -13,7 +13,7 @@ AGNfitter reference; the test checks that the runtime component reproduces them.
 Tolerance note: the runtime uses the project-standard C²-smooth triweight kernel
 (``interp_nd_triweight``) over the single ``log N_H`` axis for gradient-safe HMC.
 At a grid node that kernel mixes in neighbors, giving a peak-normalized shape
-residual inherent to the kernel, not a port error.
+residual inherent to the kernel, not a implementation error.
 
 References
 ----------

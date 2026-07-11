@@ -478,10 +478,15 @@ def radio_agn(
     alpha_agn: float = 0.7,
     nu_ref: float = 1.4e9,
     l_bband: float = 0.0,
+    log_nu_cut: float = 13.0,
 ) -> jnp.ndarray:
-    """Radio emission from AGN jets/lobes.
+    r"""Radio emission from AGN jets/lobes (single power law with aging cutoff).
 
-    L_nu(radio) = R * L_5GHz_from_Lbol * (nu/5GHz)^{-alpha}
+    .. math::
+
+        L_\nu(\mathrm{radio}) = R\, L_{5\,\mathrm{GHz}}\,
+            \left(\frac{\nu}{5\,\mathrm{GHz}}\right)^{-\alpha}
+            \exp\!\left(-\frac{\nu}{\nu_{\mathrm{cut}}}\right)
 
     The radio-loudness parameter R = log10(L_5GHz / L_B) where L_B is
     the B-band luminosity. R > 1 = radio-loud, R < 1 = radio-quiet.
@@ -502,6 +507,9 @@ def radio_agn(
         AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
         When > 0, used directly instead of deriving from L_agn_bol bolometric
         correction. Default 0.0 (uses L_bol correction).
+    log_nu_cut : float
+        log10 of the synchrotron-aging cutoff frequency [Hz]. Default 13.0
+        (10 THz), matching AGNfitter-rX's SPL jet ``exp(-nu/1e13)``.
 
     Returns
     -------
@@ -511,6 +519,14 @@ def radio_agn(
     Notes
     -----
     **JIT-compatible**: yes — pure JAX function.
+
+    The high-frequency rolloff is governed by the physical synchrotron-aging
+    cutoff (``log_nu_cut``, default 10 THz), NOT by an arbitrary wavelength
+    floor: an AGN jet extends well into the sub-mm/IR (AGNfitter-rX carries it
+    to 10^15 Hz; 10^18.5 Hz for blazars). Only the star-formation radio
+    (:func:`radio_sfr_bell2003`) keeps the 1 mm floor, since it is tied to the
+    dust FIR and must not double-count there. Matches the AGNfitter-rX
+    ``AGN_RAD`` nRADdata==1 SPL convention.
     """
     nu = _C_AA / wavelength
 
@@ -526,11 +542,13 @@ def radio_agn(
     # L_5GHz from radio-loudness definition
     L_5GHz = L_B * 10.0**radio_loudness  # erg/s/Hz
 
-    # Power-law extrapolation from 5 GHz
+    # Power-law from 5 GHz with a synchrotron-aging exponential cutoff. The
+    # cutoff (not a hard wavelength floor) is what physically truncates the
+    # jet at high frequency, so the jet extends smoothly into the sub-mm
+    # instead of dropping to zero at 300 GHz (1 mm).
     nu_5GHz = 5.0e9
-    L_nu = L_5GHz * (nu / nu_5GHz) ** (-alpha_agn)
-
-    return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
+    nu_cut = 10.0**log_nu_cut
+    return L_5GHz * (nu / nu_5GHz) ** (-alpha_agn) * jnp.exp(-nu / nu_cut)
 
 
 def radio_agn_dpl(
@@ -621,7 +639,11 @@ def radio_agn_dpl(
     shape_ref_safe = jnp.where(shape_ref > 0.0, shape_ref, 1.0)
     L_nu = L_5GHz * shape / shape_ref_safe
 
-    return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
+    # No 1 mm hard floor for the AGN jet: the synchrotron-aging exponential
+    # cutoff (nu_cut in _dpl_shape) is the physical high-frequency truncation,
+    # so the jet extends smoothly into the sub-mm/IR instead of dropping to
+    # zero at 300 GHz. AGNfitter-rX carries this jet to 10^15 Hz.
+    return L_nu
 
 
 def radio_total(

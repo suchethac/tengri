@@ -28,8 +28,9 @@ Codes expose their forward model very differently:
   the code's own template libraries directly and state plainly that the
   comparison is against its templates, not its fitter (AGNFITTER-RX does this).
 
-Whatever the surface, drive the reference's own engine. Do not port its physics
-into the driver — a comparison of your port against tengri tests nothing.
+Whatever the surface, drive the reference's own engine. Do not reimplement its
+physics in the driver — comparing your own reimplementation against tengri tests
+nothing.
 
 ## 2. Match the templates, or document the mismatch
 

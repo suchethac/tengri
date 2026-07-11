@@ -10,13 +10,13 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.dust.emission._port_base import EmissionPort
+from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 
 __all__ = ["Schreiber2018IRSEDComponent"]
 
 
-class Schreiber2018IRSEDComponent(EmissionPort):
+class Schreiber2018IRSEDComponent(EmissionComponent):
     """Schreiber et al. (2018) dust IR emission template.
 
     Wraps the pure closure from the tabulated Schreiber et al. (2018) template
@@ -91,7 +91,7 @@ class Schreiber2018IRSEDComponent(EmissionPort):
         schreiber_fn = DUST_EMISSION_MODELS["schreiber2018"]
         # The loader's kwargs are ``dust_T`` / ``dust_f_pah`` — passing the old
         # ``dust_tdust`` / ``dust_fpah`` names sent them into ``**_kwargs`` where
-        # they were silently ignored (the port's temperature/PAH knobs had NO
+        # they were silently ignored (the component's temperature/PAH knobs had NO
         # effect). Fixed as part of the #849 name unification.
         sed = schreiber_fn(
             wave,

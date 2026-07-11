@@ -418,7 +418,7 @@ via trapezoidal quadrature (differentiable through JAX).
   contains the exact component definitions.
 - **CIGALE:** `pcigale/sed_modules/dale2014.py` and `casey2012.py` for
   comparison (different models but same energy-balance framework).
-- **PAHFIT Python:** https://github.com/PAHFIT/pahfit — the Python port
+- **PAHFIT Python:** https://github.com/PAHFIT/pahfit — the Python implementation
   uses `astropy.modeling` with the same Drude profiles.
 - **PAHFIT Classic IDL:** https://github.com/PAHFIT/pahfit_classic/blob/main/pahfit.pro
   — `pahfit_drude` function gives the exact profile:
@@ -593,7 +593,7 @@ a gas consumption model.
 
 ## 7. PAH Feature Decomposition (PAHFIT-style forward model)
 
-**Paper:** Smith et al. 2007, ApJ 656, 770; Python port: https://pahfit.readthedocs.io/  
+**Paper:** Smith et al. 2007, ApJ 656, 770; Python implementation: https://pahfit.readthedocs.io/  
 **Status:** Not as a standalone module. PAH profiles are needed for MAGPHYS emission (§4).
 
 ### Implementation
