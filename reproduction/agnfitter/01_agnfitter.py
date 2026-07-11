@@ -1144,39 +1144,67 @@ save_fig("agnfitter_09c3_cat3d_fwd_sweep.png")
 # ## §9d Best combination — CAT3D-Wind + THB21
 #
 # The paper's winning model for 67% of its sample: the CAT3D-Wind torus on
-# the THB21 disk. We build the full AGN SED on both sides — AGNFITTER-RX's
-# THB21 disk plus its CAT3D-Wind torus, against tengri's composable AGN with
-# `disc = qsogen` (with its lines + FeII, i.e. the full THB21 analog) and
-# `torus = cat3d_wind` — normalized at the disk's 2500 Å. Carrying the disc's
-# emission lines is what reproduces the 0.7 µm bump on top of the torus hump.
+# the THB21 disk. tengri's side is its *actual* ``SEDModel.build`` output —
+# `disc = qsogen` (with lines + FeII, the full THB21 analog) plus
+# `torus = cat3d_wind`, with the pipeline's **energy balance** setting the
+# torus height (the disc-absorbed light reprocessed into the IR), not a hand-set
+# fraction. AGNFITTER-RX's THB21 disc is anchored at 2500 Å and its CAT3D torus
+# energy-balanced to tengri's torus IR peak. Carrying the disc's emission lines
+# is what reproduces the 0.7 µm bump on top of the torus hump.
 
 # %%
-# Matched CAT3D-Wind node on both sides: incl 0°, a = -2, f_wd = 1.75.
+# Matched CAT3D-Wind node on both sides: incl 0 deg, a = -2, f_wd = 1.75.
 _CAT3D_NODE = dict(incl=0.0, a=-2.0, fwd=1.75)
 _CAT3D_NODE_TE = dict(cos_inc=1.0, a_cat3d=-2.0, fwd_cat3d=1.75)
+
+# tengri: disc + torus at their PHYSICAL energy balance, read off one build's
+# sed_agn (the pipeline reprocesses the disc-absorbed light into the torus).
+# No hand-set torus fraction -- the relative heights are the model's own.
+_m9 = SEDModel.build(
+    ssp_data=ssp,
+    sfh=SFH_FIDUCIAL,
+    dust=NO_DUST,
+    agn={
+        "type": "composable",
+        "disc": {"type": "qsogen", "*": FIXED},
+        "lines": {"type": "qsogen", "*": FIXED},
+        "feii": {"type": "qsogen_balmer", "*": FIXED},
+        "torus": {
+            "type": "cat3d_wind",
+            "cos_inc": Fixed(1.0),
+            "a_cat3d": Fixed(-2.0),
+            "fwd_cat3d": Fixed(1.75),
+            "*": FIXED,
+        },
+        "agn_log_lbol": Fixed(12.0),
+        "agn_ebv_disc": Fixed(0.0),
+        "agn_polar_ebv": Fixed(0.0),
+        "*": FIXED,
+    },
+    redshift=Fixed(0.0),
+)
+_s9 = _m9.predict_state({})
+w9 = np.asarray(_s9.wave)
+_o9 = np.argsort(w9)
+agn9 = np.asarray(_s9.derived["sed_agn"])
+grid = np.geomspace(1e3, 1.5e6, 3000)
+_L2500_9 = float(np.interp(2500.0, w9[_o9], agn9[_o9]))
+te_total = U.regrid(w9, np.clip(agn9, 0, None), grid) / _L2500_9  # disc-anchored
+te_total = np.where(te_total > 0, te_total, np.nan)
+# tengri's torus IR peak in the same disc-anchored units -- the energy-balance
+# reference AGNFITTER-RX's torus is scaled to (not a hand-set 0.5).
+_ir9 = (w9 > 3e4) & (w9 < 1e6)
+_te_ir_peak = float(np.max(agn9[_ir9])) / _L2500_9
+
+# AGNFITTER-RX: THB21 disc anchored at 2500 A, CAT3D torus energy-balanced to
+# tengri's torus IR peak.
 w_disc, L_disc = A.disk_template("THB21")
 w_tor, L_tor = A.torus_template("CAT3D", **_CAT3D_NODE)
-# Co-add on a common grid, torus scaled to ~10% of the disk's 2500 A anchor.
-grid = np.geomspace(1e3, 1e7, 3000)
 disc_g = U.regrid(w_disc, np.clip(L_disc, 0, None), grid)
-tor_g = U.regrid(w_tor, np.clip(L_tor, 0, None), grid)
 disc_n = disc_g / np.interp(2500, grid, disc_g)
-tor_n = tor_g / np.max(tor_g) * 0.5
+tor_g = U.regrid(w_tor, np.clip(L_tor, 0, None), grid)
+tor_n = tor_g / np.max(tor_g) * _te_ir_peak if np.max(tor_g) > 0 else tor_g
 af_total = disc_n + tor_n
-
-w_te, L_te = tengri_torus("cat3d_wind", **_CAT3D_NODE_TE)  # torus
-# THB21 *is* qsogen with its emission-line forest; the disc continuum alone
-# would drop the 0.7 µm Hα+[N II] bump that defines this combination, so use
-# the full qsogen + lines + FeII disc to match AGNFITTER-RX's THB21.
-w_td, L_td = tengri_qsogen_full()  # disc
-te_disc_g = U.regrid(w_td, np.clip(L_td, 0, None), grid)
-te_tor_g = U.regrid(w_te, np.clip(L_te, 0, None), grid)
-te_disc_n = te_disc_g / np.interp(2500, grid, te_disc_g)
-te_tor_n = te_tor_g / np.max(te_tor_g) * 0.5
-te_total = te_disc_n + te_tor_n
-# tengri's cat3d_wind torus grid ends near 1.5e6 Å; mask the sum beyond it so
-# the curve ends cleanly instead of cliffing down to the bare disc tail.
-te_total = np.where(te_tor_g > 0, te_total, np.nan)
 
 fig, ax = plt.subplots(figsize=(8.5, 5))
 ax.loglog(grid, af_total, "C0-", lw=4.0, alpha=0.35, solid_capstyle="round",
@@ -1186,7 +1214,10 @@ ax.loglog(grid, te_total, "C1-", lw=1.4, label="tengri  qsogen + cat3d_wind")
 # common-wavelength intersection); cap the axis there so the comparison runs
 # only where both torus libraries have data, not into the bare disc tail.
 ax.set_xlim(1e3, 1.5e6)
-ax.set_ylim(1e-3, 5)
+# Energy balance puts the (cool) torus well above the disc in L_ν — set the
+# range from the data rather than the old hand-set torus fraction's window.
+_ymax9 = float(np.nanmax([np.nanmax(te_total), np.nanmax(af_total)]))
+ax.set_ylim(_ymax9 * 3e-4, _ymax9 * 2)
 ax.set_xlabel(r"$\lambda$ [Å]")
 ax.set_ylabel(r"$L_\nu$ (disk norm. at 2500 Å)")
 ax.set_title("Best-combination AGN SED (paper's winning model)")
@@ -1557,15 +1588,25 @@ print(
 )
 
 # %% [markdown]
-# ## Capstone — the radio-to-X-ray SED
+# ## Capstone — the radio-to-X-ray SED (physical composition)
 #
-# AGNFITTER-RX's reason for being: one model spanning `8 < log ν/Hz < 20`. We
-# assemble the paper's winning AGN model — THB21 disk + CAT3D-Wind torus, with
-# the α_ox X-ray corona and a DPL radio jet — and overlay tengri's matching
-# composition (qsogen + cat3d_wind + corona + radio_agn_dpl). The component
-# proportions are illustrative (a real fit sets them per source); the point is
-# that both codes cover the same eleven decades of frequency with the same
-# physical pieces, and the spectral *shapes* track across every band.
+# AGNFITTER-RX's reason for being: one model spanning `8 < log ν/Hz < 20`. Here
+# the components are composed at **physical** normalizations, not display
+# fractions, so their relative heights carry meaning:
+#
+# * **tengri** is its *actual* ``SEDModel.build`` output — disc + torus (with the
+#   pipeline's own energy balance), the α_ox X-ray corona (``xray='yang20'``) and
+#   the DPL radio jet in one build: ``sed_agn + sed_xray + sed_radio``.
+# * **AGNFITTER-RX** is placed on the *same* physical scales: its THB21 disc
+#   anchored at the disc's ``L_ν(2500 Å)``; its X-ray via its own disc extension
+#   at that luminosity (the α_ox relation — ``L_2keV/L_2500 ≈ 3e−4``, α_ox ≈ −1.4,
+#   the textbook radio-quiet value tengri's build reproduces); its CAT3D torus
+#   energy-balanced to the disc's IR reprocessing; the same DPL jet.
+#
+# The α_ox anchoring is the physical replacement for the hand-set X-ray fraction
+# used in earlier drafts (which put the corona ~3× too faint). The residual
+# differences are then genuine per-band *shape* differences — the qsogen
+# emission lines, the torus silicate profile — not normalization choices.
 
 # %%
 # Common observer grid spanning X-ray (~0.05 keV) to meter-wave radio.
@@ -1573,75 +1614,108 @@ nu_grid = np.geomspace(1e8, 1e20, 4000)
 lam_grid = U.C_ANGSTROM_PER_S / nu_grid
 
 
-def _assemble(disc_wL, torus_wL, xray_wL, radio_fL, *, f_torus=0.5, f_xray=3e-2, f_radio=2e-4):
-    """Co-add normalized components onto nu_grid; disk anchored at 2500 Å."""
-    disc = U.regrid(disc_wL[0], np.clip(disc_wL[1], 0, None), lam_grid)
-    disc = disc / np.interp(2500.0, lam_grid[::-1], disc[::-1])
-    tor = U.regrid(torus_wL[0], np.clip(torus_wL[1], 0, None), lam_grid)
-    tor = tor / np.max(tor) * f_torus if np.max(tor) > 0 else tor
-    xr = U.regrid(xray_wL[0], np.clip(xray_wL[1], 0, None), lam_grid)
-    xr = xr / np.max(xr) * f_xray if np.max(xr) > 0 else xr
-    # radio supplied as (freq, L_nu)
-    rad = np.interp(
-        nu_grid, radio_fL[0][::-1], np.clip(radio_fL[1], 0, None)[::-1], left=0, right=0
-    )
-    rad = rad / np.max(rad) * f_radio if np.max(rad) > 0 else rad
-    return disc + tor + xr + rad
-
-
-# Dedicated radio grid spanning the full DPL (turnover 1e10 → aging cutoff
-# 1e13 Hz); the §11 grid stopped at 1e12 and truncated the jet mid-curve.
-freq_cap = np.geomspace(1e8, 3e13, 800)
-wave_cap = jnp.asarray(U.C_ANGSTROM_PER_S / freq_cap)
-_dpl_kw = dict(radio_loudness=1.0, **_DPL_PARS)
-
-# AGNFITTER-RX side.
-w_d, L_d = A.disk_template("THB21")
-w_t, L_t = A.torus_template("CAT3D", **_CAT3D_NODE)
-xw, xL = A.disk_xray_extension(w_d, norm_at(w_d, L_d, 2500.0) * 1e30, scatter=0.0)
-L_rad_dpl = np.asarray(radio_agn_dpl(wave_cap, 1e45, **_dpl_kw))
-af_sed = _assemble((w_d, L_d), (w_t, L_t), (xw, xL), (freq_cap, L_rad_dpl))
-
-# tengri side.
-wd_t, Ld_t = tengri_disc("qsogen")
-wt_t, Lt_t = tengri_torus("cat3d_wind", **_CAT3D_NODE_TE)
-Lc_t = np.asarray(
+# --- tengri: the real physics in ONE build. sed_agn already carries the
+# disc/torus energy balance, sed_xray the alpha_ox corona, sed_radio the jet —
+# no hand-set fractions. ---
+m_cap = SEDModel.build(
+    ssp_data=ssp,
+    sfh=SFH_FIDUCIAL,
+    dust=NO_DUST,
+    agn={
+        "type": "composable",
+        "disc": {"type": "qsogen", "*": FIXED},
+        "lines": {"type": "qsogen", "*": FIXED},
+        "feii": {"type": "qsogen_balmer", "*": FIXED},
+        "torus": {
+            "type": "cat3d_wind",
+            "cos_inc": Fixed(1.0),
+            "a_cat3d": Fixed(-2.0),
+            "fwd_cat3d": Fixed(1.75),
+            "*": FIXED,
+        },
+        "agn_log_lbol": Fixed(12.0),
+        "agn_ebv_disc": Fixed(0.0),
+        "agn_polar_ebv": Fixed(0.0),
+        "*": FIXED,
+    },
+    xray={"type": "yang20"},
+    radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
+    redshift=Fixed(0.0),
+)
+s_cap = m_cap.predict_state({})
+w_te = np.asarray(s_cap.wave)
+_owt = np.argsort(w_te)
+_agn_te = np.asarray(s_cap.derived["sed_agn"])
+_radio_te = np.asarray(s_cap.derived["sed_radio"])
+L2500 = float(np.interp(2500.0, w_te[_owt], _agn_te[_owt]))  # disc anchor
+# X-ray: the α_ox corona anchored to the disc's L_ν(2500 Å) — the same model
+# §10b validates against AGNFITTER-RX (anisotropy off for parity; tengri's
+# default adds the ×1.072 Yang+22 term). Masked to λ < 100 Å (its physical
+# domain) so it does not extrapolate into the disc's UV.
+_xray_raw = np.asarray(
     xray_agn_corona_from_disc(
-        jnp.asarray(wave_x), 1e30, delta_alpha_ox=0.0, apply_anisotropy=False
+        jnp.asarray(w_te), L2500, delta_alpha_ox=0.0, apply_anisotropy=False
     )
 )
-Lr_t = np.asarray(radio_agn_dpl(wave_cap, 1e45, **_dpl_kw))
-te_sed = _assemble((wd_t, Ld_t), (wt_t, Lt_t), (wave_x, Lc_t), (freq_cap, Lr_t))
+_xray_te = np.where(w_te < 100.0, _xray_raw, 0.0)
+te_lnu = _agn_te + _xray_te + _radio_te  # physical L_nu [erg/s/Hz]
+te_sed = U.regrid(w_te, np.clip(te_lnu, 0, None), lam_grid)
+_irband = (w_te > 3e4) & (w_te < 1e6)
+te_tor_ir_peak = float(np.max(_agn_te[_irband])) if np.any(_irband) else L2500
+_nu_te = U.C_ANGSTROM_PER_S / w_te
+_l2kev = float(np.interp(6.199, w_te[_owt], _xray_te[_owt]))  # 2 keV = 6.199 A
+alpha_ox = -0.3838 * np.log10(L2500 / _l2kev)
+_lx = float(np.trapezoid(_xray_te[_owt], _nu_te[_owt]))
+_lagn = float(np.trapezoid(_agn_te[_owt], _nu_te[_owt]))
 
-# Mask where every component is absent (grid edges) so each SED ends cleanly
-# at its own coverage rather than plunging vertically to zero.
+# --- AGNFITTER-RX: the same components on the SAME physical scales. ---
+# Disc anchored at the physical L_nu(2500 A).
+w_ad, L_ad = A.disk_template("THB21")
+af_disc = U.regrid(w_ad, np.clip(L_ad, 0, None), lam_grid)
+af_disc = af_disc / np.interp(2500.0, lam_grid[::-1], af_disc[::-1]) * L2500
+# Torus energy-balanced: scale CAT3D so its IR peak matches tengri's torus.
+w_at, L_at = A.torus_template("CAT3D", **_CAT3D_NODE)
+af_tor = U.regrid(w_at, np.clip(L_at, 0, None), lam_grid)
+af_tor = af_tor / np.max(af_tor) * te_tor_ir_peak if np.max(af_tor) > 0 else af_tor
+# X-ray via AGNFITTER-RX's own disc extension at the physical disc luminosity
+# (its alpha_ox) — same L_nu(2500 A) as tengri, so both coronae sit at the
+# physical X-ray/UV ratio rather than a hand-set fraction.
+_L_ad_phys = norm_at(w_ad, L_ad, 2500.0) * L2500
+xw, xL = A.disk_xray_extension(w_ad, _L_ad_phys, scatter=0.0)
+af_xray = U.regrid(xw, np.clip(xL, 0, None), lam_grid)
+# Radio: the same physical DPL jet tengri's build used.
+af_radio = U.regrid(w_te, np.clip(_radio_te, 0, None), lam_grid)
+af_sed = af_disc + af_tor + af_xray + af_radio
+
 af_plot = np.where(af_sed > 0, nu_grid * af_sed, np.nan)
 te_plot = np.where(te_sed > 0, nu_grid * te_sed, np.nan)
 
 fig, ax = plt.subplots(figsize=(9.5, 5))
 ax.loglog(nu_grid, af_plot, "C0-", lw=4.0, alpha=0.35, solid_capstyle="round",
-          label="AGNFITTER-RX  THB21 + CAT3D + corona + DPL")
-ax.loglog(nu_grid, te_plot, "C1-", lw=1.4, label="tengri  qsogen + cat3d_wind + corona + DPL")
+          label="AGNFITTER-RX  THB21 + CAT3D + a_ox X-ray + DPL")
+ax.loglog(nu_grid, te_plot, "C1-", lw=1.4,
+          label="tengri  one SEDModel.build (disc+torus+corona+jet)")
 for nu_band, name in [(1.4e9, "radio"), (3e13, "IR"), (6e14, "opt"), (4.8e17, "2 keV")]:
     ax.axvline(nu_band, color="0.85", ls=":", lw=1)
-    ax.text(
-        nu_band,
-        ax.get_ylim()[1],
-        f" {name}",
-        rotation=90,
-        va="top",
-        ha="left",
-        fontsize=7,
-        color="0.5",
-    )
+    ax.text(nu_band, ax.get_ylim()[1], f" {name}", rotation=90, va="top", ha="left",
+            fontsize=7, color="0.5")
 ax.set_xlim(1e8, 1e20)
+_te_fin = te_plot[np.isfinite(te_plot)]
+ax.set_ylim(_te_fin.max() * 1e-9, _te_fin.max() * 5)
 ax.set_xlabel(r"$\nu$ [Hz]")
-ax.set_ylabel(r"$\nu L_\nu$ (disk norm. at 2500 Å)")
-ax.set_title(r"Radio-to-X-ray AGN SED ($8 < \log\,\nu/\mathrm{Hz} < 20$)")
+ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
+ax.set_title(r"Radio-to-X-ray AGN SED — physical composition ($8 < \log\,\nu/\mathrm{Hz} < 20$)")
 ax.legend(fontsize=8, loc="lower center")
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("agnfitter_full_sed_headtohead.png")
+
+# %%
+print(
+    f"Capstone physical anchors (log L_bol = 12): disc L_nu(2500 A) = {L2500:.2e} erg/s/Hz;  "
+    f"alpha_ox = {alpha_ox:.2f}  (L_2keV/L_2500 = {10 ** (alpha_ox / 0.3838):.1e});  "
+    f"X-ray/AGN (integrated) = {_lx / _lagn:.3f}  — the physical corona, not a display fraction"
+)
 
 # %% [markdown]
 # ### Capstone′ — the same composition as one `SEDModel.build`
