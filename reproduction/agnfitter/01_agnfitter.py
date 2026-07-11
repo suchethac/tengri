@@ -499,6 +499,63 @@ print(
 )
 
 # %% [markdown]
+# ### §4b qsogen's *own* reddening law — a different curve and convention
+#
+# The §4 comparison is deliberately against AGNFITTER-RX's ``BBBred_Prevot``
+# (the ``EBVbbb`` analog). But the qsogen code that *builds* the THB21 disc
+# reddens with a different law entirely: an empirically-derived **quasar**
+# extinction curve (Temple, Hewett & Banerji 2021, from SDSS DR7 quasars at
+# 2 < z < 3 — *not* the SMC), stored as the color excess ``E(λ−V)/E(B−V)`` and
+# applied as ``A_λ = E(B−V)·[E(λ−V)/E(B−V) + R]`` with ``R = 3.1``. tengri now
+# ships this law as a composable attenuation block —
+# ``agn={'atten': {'type': 'qsogen'}}`` — so a qsogen disc can be reddened
+# exactly the way qsogen reddens it. The panel puts all three ``A_λ/E(B−V)``
+# curves on one axis: they differ in both *shape* (the empirical quasar curve is
+# not the analytic SMC fit — it is greyer in the UV) and *V-band normalization*
+# (AGNFITTER-RX 2.468, tengri-Prevot 2.72, qsogen 3.1). See §9d/§9a for the
+# qsogen disc itself; here we isolate its reddening curve.
+
+# %%
+from tengri.components.dust.qsogen_ext import qsogen_quasar_extinction
+
+_wl_ext = np.geomspace(1e3, 1e4, 400)
+_k_raw_ext = 1.39 * (_wl_ext / 1e4) ** (-1.2) - 0.38  # AGNFITTER-RX A_λ/E(B-V), R_eff 2.468
+_k_tengri_ext = _k_raw_ext / _K_RAW_V * _R_V_SMC  # tengri Prevot, R_V 2.72
+_k_qsogen_ext = np.asarray(qsogen_quasar_extinction(_wl_ext))  # qsogen: curve + R=3.1
+
+fig, ax = plt.subplots(figsize=(8.2, 5.0))
+ax.plot(_wl_ext, _k_raw_ext, "C0-", lw=1.6, label=r"AGNFITTER-RX  Prevot SMC ($R_V\approx2.468$)")
+ax.plot(_wl_ext, _k_tengri_ext, "C1--", lw=1.6, label=r"tengri  Prevot SMC ($R_V=2.72$)")
+ax.plot(_wl_ext, _k_qsogen_ext, "C3-", lw=2.2, alpha=0.8,
+        label=r"qsogen  empirical quasar curve ($R=3.1$)")
+ax.axvline(5500, color="0.8", ls=":", lw=1, label="V (5500 Å)")
+ax.set_xscale("log")
+ax.set_xlabel(r"$\lambda$ [Å]")
+ax.set_ylabel(r"$A_\lambda / E(B{-}V)$")
+ax.set_title("Three disc-reddening laws — AGNFITTER-RX vs tengri-Prevot vs qsogen's own")
+ax.legend(fontsize=8)
+ax.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("agnfitter_04b_qsogen_ext.png")
+
+
+# %%
+def _at_ext(a, lam):
+    return float(np.interp(lam, _wl_ext, a))
+
+
+print(
+    f"§4b  A_V/E(B-V) at V=5500 Å:  AGNFITTER-RX={_at_ext(_k_raw_ext, 5500):.3f}  "
+    f"tengri-Prevot={_at_ext(_k_tengri_ext, 5500):.3f}  qsogen={_at_ext(_k_qsogen_ext, 5500):.3f}"
+)
+print(
+    f"§4b  A(1500)/A(V) (UV steepness):  AGNFITTER-RX="
+    f"{_at_ext(_k_raw_ext, 1500) / _at_ext(_k_raw_ext, 5500):.2f}  "
+    f"qsogen={_at_ext(_k_qsogen_ext, 1500) / _at_ext(_k_qsogen_ext, 5500):.2f}  "
+    f"(qsogen's empirical curve is greyer in the UV)"
+)
+
+# %% [markdown]
 # ## §6 Cold dust infrared emission
 #
 # AGNFITTER-RX offers two cold-dust libraries: the legacy DH02_CE01 (Dale &
