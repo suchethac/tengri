@@ -1,22 +1,16 @@
 """
-AGN disc continuum: model comparison at fixed L_bol
-=====================================================
+AGN disc continuum: every registered model at fixed L_bol
+=========================================================
 
-Six accretion-disc backbones at fixed bolometric luminosity
-``log L_bol = 12.5`` (in log L_sun), evaluated in isolation with the
-host suppressed and no torus/lines/dust. The differences between the
-curves are entirely how each model partitions the disc power across
-wavelength: pure blackbody vs warm Comptonization, relativistic vs
-Newtonian potential, empirical-fit vs first-principles continuum.
+All thirteen accretion-disc backbones registered under ``agn.disc.type``,
+at fixed bolometric luminosity ``log L_bol = 12.5`` (in log L_sun),
+evaluated in isolation with the host suppressed and no torus/lines/dust.
+The differences between the curves are entirely how each model partitions
+the disc power across wavelength: pure blackbody vs warm Comptonization,
+relativistic vs Newtonian potential, radiatively efficient thin disc vs
+inefficient ADAF, empirical composite vs first-principles continuum.
 
-Models compared (the six production disc selectors under
-``agn.disc.type``):
-- ``multicolor``   — Shakura–Sunyaev α-disc (Kubota & Done 2018)
-- ``kubota_done``  — same family, full warm-Compton treatment
-- ``qsogen``       — Temple+2021 empirical type-1 SED
-- ``grahsp_sbpl``  — Lussier+2023 GRAHSP broken power-law
-- ``powerlaw``     — generic power-law disc
-- ``adaf``         — radiatively inefficient accretion flow (Mahadevan 1997)
+Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 """
 
 import os
@@ -36,14 +30,23 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 DISC_MODELS = [
+    ("multicolor", "multicolor thin disc (Shakura–Sunyaev)"),
+    ("kubota_done", "Kubota & Done 2018 (3-zone)"),
+    ("relagn", "RELAGN (relativistic Kerr)"),
     ("qsogen", "QSOGEN (Temple+2021)"),
-    ("multicolor", "multicolor disc (K&D 2018)"),
-    ("kubota_done", "Kubota & Done 2018 (full)"),
-    ("grahsp_sbpl", "GRAHSP broken power-law"),
-    ("powerlaw", "power-law disc"),
+    ("richards2006", "Richards+2006 SDSS composite"),
+    ("slone_netzer", "Slone & Netzer 2012"),
+    ("schartmann2005", "Schartmann 2005 (X-CIGALE)"),
+    ("schartmann2005_skirtor_atten", "Schartmann 2005 + SKIRTOR atten."),
+    ("skirtor", "SKIRTOR empirical (Stalevski+2016)"),
+    ("grahsp_sbpl", "GRAHSP bending power-law"),
+    ("powerlaw", "power-law + UV cutoff"),
     ("adaf", "ADAF (Mahadevan 1997)"),
+    ("adaf_lopez2024", "ADAF–thin blend (X-CIGALE)"),
 ]
-COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(DISC_MODELS)))
+# Qualitative palette — 13 unordered models need distinguishable hues, not a
+# sequential colormap.
+COLORS = plt.cm.tab20(np.linspace(0, 1, 20))[: len(DISC_MODELS)]
 
 C_AA_PER_S = 2.998e18
 SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
@@ -81,7 +84,7 @@ ax.axvspan(1, 100, color="0.93", alpha=0.6, lw=0)
 ax.text(30, 2e47, "X-ray", color="0.4", fontsize=8, va="top")
 ax.text(2000, 2e47, "UV/optical BBB", color="0.4", fontsize=8, va="top")
 ax.text(2e5, 2e47, "NIR cutoff", color="0.4", fontsize=8, va="top", ha="right")
-ax.legend(frameon=False, fontsize=8, loc="lower center")
+ax.legend(frameon=False, fontsize=7, loc="lower center", ncol=2)
 
 fig.tight_layout()
 plt.savefig("plot_agn_disc_compare.png", dpi=150, bbox_inches="tight")
