@@ -127,6 +127,15 @@ def test_default_stays_exact_on_a_waveprecomp_model(ssp, exact):
     assert not np.array_equal(default, lut)
     assert np.max(np.abs(lut / ref - 1.0)) > 1e-6
 
+    # fast=True is the same LUT the lean inference shortcut uses on this model:
+    # the fit and the exploration surface must agree about what "fast" means.
+    # Not rtol=0 — the two reach the same LUT by different accumulation orders
+    # (jitted kernel vs eager accessor), so they agree to ~1 ULP, not to the bit.
+    # Forcing bit-equality here would be pinning an XLA scheduling detail.
+    np.testing.assert_allclose(
+        lut, np.asarray(fast_model.predict_photometry(_params(fast_model))), rtol=1e-12
+    )
+
 
 def test_arbitrary_filters_equal_a_model_built_with_them(ssp, exact):
     """The one-kernel rule: a call-time filter equals the same filter at build time.

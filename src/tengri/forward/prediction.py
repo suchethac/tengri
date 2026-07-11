@@ -2207,10 +2207,19 @@ class Prediction:
         return self._cache["sed_total"]
 
     def photometry(self, filters=None, fast=False):
-        r"""Observed photometric flux densities.
+        r"""Observed-frame photometric flux densities.
 
-        Computes flux densities through filters in the AB system at the source.
-        Three modes supported: exact, fast (LUT), and runtime filters.
+        Integrates the model SED through each filter and applies the cosmological
+        dimming, returning :math:`F_\nu` in the observer frame. For the same
+        quantity as AB magnitudes, see :meth:`magnitudes`.
+
+        **Exact by default, fast by choice.** The default integrates the full SED
+        — including on a model built with ``approx=WavePrecomp(...)``, where the
+        lean :meth:`~tengri.SEDModel.predict_photometry` would instead read the
+        lookup table. That is deliberate: ``pred.photometry()`` must mean the same
+        thing on every model. The LUT is an approximation carrying real error (of
+        order a few percent at high redshift), so you reach it only by asking for
+        it, with ``fast=True``.
 
         Parameters
         ----------
@@ -2242,8 +2251,11 @@ class Prediction:
         **JIT-compatible**: no — Python method with caching. Use in postprocessing,
         not inside :func:`jax.jit`.
 
-        **Default (exact) path**: Integrates rest-frame SED through filters.
-        Slow but always available and produces bit-exact results.
+        **Default (exact) path**: integrates ``state.sed_intrinsic`` through each
+        filter via :func:`~tengri.observation.photometry.project_photometry` — the
+        same kernel the likelihood uses — on the ``ForwardState`` this Prediction
+        already cached, so it costs the filter integration and not a second
+        forward pass.
 
         **Fast path** (``fast=True``): Uses the precomputed photometric LUT
         (filter effective wavelengths × SSP grid). Requires
