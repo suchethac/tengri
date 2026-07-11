@@ -2190,3 +2190,120 @@ _tree_util.register_dataclass(
 )
 
 del _tree_util
+
+
+# ─────────────────────────────────────────────────────────────────────
+# SFH-group property registration (Phase 1A)
+# ─────────────────────────────────────────────────────────────────────
+#
+# StellarSEDComponent does NOT inherit from SEDModelComponent, so
+# __init_subclass__ auto-collection is unavailable. Properties are
+# registered manually at module initialization.
+
+_TINY = 1e-30  # Floor for safe division
+
+
+def _stellar_mass_fn(state, params):
+    """Total stellar mass currently alive [Msun]."""
+    log_mstar_formed = jnp.asarray(state.derived["log_mstar_formed"])
+    return jnp.power(10.0, log_mstar_formed)
+
+
+def _stellar_mass_surviving_fn(state, params):
+    """Total surviving stellar mass [Msun]."""
+    log_mstar = jnp.asarray(state.derived["log_mstar"])
+    return jnp.power(10.0, log_mstar)
+
+
+def _sfr_100myr_fn(state, params):
+    """Star formation rate averaged over past 100 Myr [Msun/yr]."""
+    return jnp.asarray(state.derived["sfr_100myr"])
+
+
+def _sfr_10myr_fn(state, params):
+    """Star formation rate averaged over past 10 Myr [Msun/yr]."""
+    return jnp.asarray(state.derived["sfr_10myr"])
+
+
+def _ssfr_fn(state, params):
+    """Specific star formation rate (SFR / stellar_mass) [1/Gyr]."""
+    log_mstar = jnp.asarray(state.derived["log_mstar"])
+    stellar_mass_surviving = jnp.power(10.0, log_mstar)
+    sfr_100myr = jnp.asarray(state.derived["sfr_100myr"])
+    # Use surviving mass in denominator to match legacy convention
+    return sfr_100myr / jnp.maximum(stellar_mass_surviving, _TINY)
+
+
+def _mass_weighted_age_gyr_fn(state, params):
+    """Mass-weighted mean age of stellar population [Gyr]."""
+    sfh_lbt = jnp.asarray(state.derived["sfh_grid_lbt_yr"])
+    sfr_history = jnp.asarray(state.derived["sfr_history"])
+    bin_widths = jnp.gradient(sfh_lbt)
+    bin_mass = jnp.maximum(sfr_history * bin_widths, 0.0)
+    bin_mass_total = jnp.maximum(jnp.sum(bin_mass), _TINY)
+    mw_age_yr = jnp.sum(sfh_lbt * bin_mass) / bin_mass_total
+    return mw_age_yr / 1e9
+
+
+def _mass_weighted_metallicity_fn(state, params):
+    """Mass-weighted mean metallicity (log10 Z/Zsun) [dex]."""
+    sfh_lbt = jnp.asarray(state.derived["sfh_grid_lbt_yr"])
+    sfr_history = jnp.asarray(state.derived["sfr_history"])
+    log_z_history = jnp.asarray(state.derived["log_metallicity_history"])
+    bin_widths = jnp.gradient(sfh_lbt)
+    bin_mass = jnp.maximum(sfr_history * bin_widths, 0.0)
+    bin_mass_total = jnp.maximum(jnp.sum(bin_mass), _TINY)
+    return jnp.sum(log_z_history * bin_mass) / bin_mass_total
+
+
+# Register properties in the global registry
+from tengri.forward.properties import Property, register_properties
+
+_SFH_PROPERTIES = {
+    "stellar_mass": Property(
+        units="Msun",
+        group="sfh",
+        doc="Total stellar mass currently alive",
+        fn=_stellar_mass_fn,
+    ),
+    "stellar_mass_surviving": Property(
+        units="Msun",
+        group="sfh",
+        doc="Total surviving stellar mass",
+        fn=_stellar_mass_surviving_fn,
+    ),
+    "sfr_100myr": Property(
+        units="Msun/yr",
+        group="sfh",
+        doc="Star formation rate averaged over past 100 Myr",
+        fn=_sfr_100myr_fn,
+    ),
+    "sfr_10myr": Property(
+        units="Msun/yr",
+        group="sfh",
+        doc="Star formation rate averaged over past 10 Myr",
+        fn=_sfr_10myr_fn,
+    ),
+    "ssfr": Property(
+        units="1/yr",
+        group="sfh",
+        doc="Specific star formation rate (SFR / stellar_mass)",
+        fn=_ssfr_fn,
+    ),
+    "mass_weighted_age_gyr": Property(
+        units="Gyr",
+        group="sfh",
+        doc="Mass-weighted mean age of stellar population",
+        fn=_mass_weighted_age_gyr_fn,
+    ),
+    "mass_weighted_metallicity": Property(
+        units="dex",
+        group="sfh",
+        doc="Mass-weighted mean metallicity (log10 Z/Zsun)",
+        fn=_mass_weighted_metallicity_fn,
+    ),
+}
+
+register_properties("stellar", _SFH_PROPERTIES)
+
+del Property, register_properties, _SFH_PROPERTIES

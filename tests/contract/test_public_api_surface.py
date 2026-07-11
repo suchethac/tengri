@@ -129,6 +129,9 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "examples",
         "explain",
         "help",
+        # property catalog introspection (API consolidation #1045/#1043)
+        "describe_property",
+        "list_properties",
         "list_agn_blocks",
         "list_agn_models",
         "list_all",
@@ -367,6 +370,10 @@ ALLOWED_PREDICT_METHODS = frozenset(
         "predict_state",
         "predict_observables",
         "predict_observables_jit",
+        # the single blessed JIT/vmap property surface (API consolidation
+        # #1045/#1043) — replaces the six predict_*_quantities NamedTuple
+        # methods, which Phase 5 deprecates then removes (net shrink).
+        "predict_properties",
         # likelihood-facing channels (inference callers)
         "predict_photometry",
         "predict_spectrum",
