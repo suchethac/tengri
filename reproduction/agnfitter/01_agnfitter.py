@@ -992,7 +992,7 @@ for ax, (af_name, title, tengri_fn, tengri_label, af_kw) in zip(axes.ravel(), to
     msk_t = (w_t > 5e3) & (w_t < 1e7)
     ax.loglog(w_t[msk_t], norm_peak(L_t)[msk_t], "C1-", lw=1.4, label=f"tengri  {tengri_label}")
     ax.axvline(1e5, color="0.7", ls=":", lw=1)  # 10 µm silicate
-    ax.set_xlim(5e3, 1e7)
+    ax.set_xlim(8e3, 3e6)
     ax.set_ylim(1e-3, 3)
     ax.set_title(title)
     ax.legend(fontsize=8, loc="lower center")
@@ -1034,7 +1034,7 @@ for (af_name, _title, tengri_fn, _tlabel, af_kw), _c in zip(torus_pairs, ["C0", 
     _m = (_ratio_grid > 1e4) & (_ratio_grid < 1e6) & np.isfinite(_ratio) & (a_on > 1e-3)
     if _m.any():
         print(f"  {_title:12s}: median (1-100 µm) = {float(np.nanmedian(_ratio[_m])):.3f}×")
-ax.set_xlim(5e3, 1e7)
+ax.set_xlim(8e3, 3e6)
 ax.set_ylim(0.3, 3.0)
 ax.set_xlabel(r"$\lambda$ [Å]")
 ax.set_ylabel("tengri / AGNFITTER (peak-norm.)")
@@ -1088,7 +1088,7 @@ ax.loglog(
     label="tengri  skirtor (full X-CIGALE grid, by design)",
 )
 ax.axvline(1e5, color="0.7", ls=":", lw=1)  # 10 µm silicate
-ax.set_xlim(5e3, 1e7)
+ax.set_xlim(8e3, 3e6)
 ax.set_ylim(1e-3, 3)
 ax.set_xlabel(r"$\lambda$ [Å]")
 ax.set_ylabel(r"$L_\nu$ (norm. at peak)")
@@ -1130,7 +1130,7 @@ for fwd, c in [(1.0, "C0"), (1.75, "C1"), (2.25, "C3")]:
     print(f"  f_wd = {fwd:4g}:  median |ratio-1| = {np.median(_res) * 100:.2f}%   "
           f"max = {_res.max() * 100:.2f}%")
 ax.axvspan(1.5e4, 5e4, color="0.92", zorder=0)  # the 1.5-5 µm near-IR excess band
-ax.set_xlim(5e3, 1e7)
+ax.set_xlim(8e3, 3e6)
 ax.set_ylim(1e-3, 3)
 ax.set_xlabel(r"$\lambda$ [Å]")
 ax.set_ylabel(r"$L_\nu$ (norm. at peak)")
@@ -1213,7 +1213,7 @@ ax.loglog(grid, te_total, "C1-", lw=1.4, label="tengri  qsogen + cat3d_wind")
 # tengri's packaged cat3d_wind grid spans to ~1.5e6 Å (the build's
 # common-wavelength intersection); cap the axis there so the comparison runs
 # only where both torus libraries have data, not into the bare disc tail.
-ax.set_xlim(1e3, 1.5e6)
+ax.set_xlim(9e2, 1.5e6)
 # Energy balance puts the (cool) torus well above the disc in L_ν — set the
 # range from the data rather than the old hand-set torus fraction's window.
 _ymax9 = float(np.nanmax([np.nanmax(te_total), np.nanmax(af_total)]))
@@ -1461,7 +1461,7 @@ axl.loglog(xw_af, xL_af, "C0-", lw=1.5, label="AGNFITTER-RX  disk X-ray extensio
 axl.loglog(wave_x, L_corona_bare, "C1--", lw=1.5,
            label="tengri  corona (anisotropy off)")
 axl.loglog(wave_x, L_xrb, "C2:", lw=1.4, label="tengri  xray_xrb (host floor, Mineo+14)")
-axl.set_xlim(1e-2, 1e2)
+axl.set_xlim(2e-2, 1.3e2)
 axl.set_ylim(L_corona_bare.max() * 1e-6, L_corona_bare.max() * 5)
 axl.set_xlabel(r"$\lambda$ [Å]")
 axl.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
@@ -1547,8 +1547,8 @@ _peak_te = float(np.max(np.where((wave_all > 1e4), L_te_total, 0.0)))
 ax.loglog(wave_all, L_te_total / _peak_te, "C1--", lw=1.5,
           label="tengri  schreiber2018 + radio_sfr_bell2003")
 ax.axvline(U.C_ANGSTROM_PER_S / 1.4e9, color="0.7", ls=":", lw=1, label="1.4 GHz")
-ax.set_xlim(1e4, 3e9)
-ax.set_ylim(1e-8, 3)
+ax.set_xlim(8e3, 3e9)
+ax.set_ylim(1e-6, 3)
 ax.set_xlabel(r"$\lambda$ [Å]")
 ax.set_ylabel(r"$L_\nu$ (norm. at FIR peak)")
 ax.set_title("Host dust + star-formation radio, joined at matched $L_{IR}$")
