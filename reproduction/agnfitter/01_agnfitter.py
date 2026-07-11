@@ -401,9 +401,11 @@ save_fig("agnfitter_03_stellar_sed.png")
 # uniform factor ``2.72/2.468 ≈ 1.102`` in A_λ at matched E(B−V): the
 # *shape* is identical, and the AGNFITTER-RX ``EBVbbb`` posterior maps onto
 # tengri's as ``E(B−V)_tengri ≈ E(B−V)_AGNFITTER / 1.102``. The right panel
-# demonstrates both statements end-to-end: tengri's reddening is exercised
-# through ``SEDModel.build`` (a qsogen disc with `agn_ebv_disc` set), not by
-# re-evaluating the formula.
+# leads with the payoff — tengri at the convention-matched ``E(B−V)/1.102``
+# lies exactly on AGNFITTER-RX's band (identical *law*), with the raw
+# same-``E(B−V)`` curve shown faint underneath to mark the +10.2%
+# reparametrization. tengri's reddening is exercised through ``SEDModel.build``
+# (a qsogen disc with `agn_ebv_disc` set), not by re-evaluating the formula.
 
 # %%
 _K_RAW_V = 1.39 * 0.55 ** (-1.2) - 0.38  # Prevot raw fit at V band ≈ 2.468
@@ -443,15 +445,19 @@ ratio_tengri_rescaled = np.divide(L_tr, L_t0, out=np.ones_like(L_tr), where=L_t0
 
 msk_t = (w_t0 > 8e2) & (w_t0 < 3e4)
 msk_a = (w_thb > 8e2) & (w_thb < 3e4)
-axr.semilogx(w_thb[msk_a], -2.5 * np.log10(ratio_af[msk_a]), "C0-", lw=1.6,
-             label="AGNFITTER-RX  BBBred_Prevot")
-axr.semilogx(w_t0[msk_t], -2.5 * np.log10(ratio_tengri[msk_t]), "C1--", lw=1.6,
-             label="tengri  agn_ebv_disc (SEDModel.build)")
-axr.semilogx(w_t0[msk_t], -2.5 * np.log10(ratio_tengri_rescaled[msk_t]), "C3:", lw=1.6,
-             label=r"tengri at $E(B{-}V)/1.102$ (rescaled)")
+# Lead with the payoff: AGNFITTER-RX as a thick band, and tengri at the
+# convention-matched E(B-V)/1.102 as a thin line on top — they lie exactly on
+# each other, so the *law* is identical. The raw same-E(B-V) tengri curve is
+# shown faint underneath purely to mark the +10.2% E(B-V) reparametrization.
+axr.semilogx(w_thb[msk_a], -2.5 * np.log10(ratio_af[msk_a]), "C0-", lw=3.5, alpha=0.35,
+             solid_capstyle="round", label="AGNFITTER-RX  BBBred_Prevot")
+axr.semilogx(w_t0[msk_t], -2.5 * np.log10(ratio_tengri_rescaled[msk_t]), "C1-", lw=1.4,
+             label=r"tengri  agn_ebv_disc at $E(B{-}V)/1.102$ (convention-matched)")
+axr.semilogx(w_t0[msk_t], -2.5 * np.log10(ratio_tengri[msk_t]), "C3:", lw=1.4,
+             label=r"tengri at same $E(B{-}V)$ (raw — $+10.2\%$ convention offset)")
 axr.set_xlabel(r"$\lambda$ [Å]")
 axr.set_ylabel(r"$A_\lambda$ [mag] at $E(B{-}V)=0.3$")
-axr.set_title("Disc attenuation, end-to-end")
+axr.set_title("Disc attenuation, end-to-end — identical law once convention-matched")
 axr.legend(fontsize=8)
 axr.grid(True, alpha=0.3)
 fig.tight_layout()
@@ -510,7 +516,11 @@ print(
 #   match to S17; shown here at α = 1.5 it peaks near S17 and carries its own
 #   (real, tabulated) PAH features.
 #
-# All curves are normalized at their FIR peak.
+# All curves are normalized at their FIR peak. The left panel below shows the
+# two node-exact matches (S17 and DH02_CE01, each pair sharing a color — the
+# thick band is AGNFITTER-RX, the thin line tengri); the right panel shows the
+# two differentiable alternatives, which trade node-fidelity for a closed-form,
+# gradient-friendly shape.
 
 # %%
 import jax.numpy as jnp
@@ -531,44 +541,58 @@ L_dh02 = np.asarray(dh02(jnp.asarray(wave_ir), 1.0, dust_log_lir=_DH_LIR))
 w_s17, L_s17 = A.cold_dust_template("S17", tdust=35.0, fpah=0.02)
 w_dh, L_dh = A.cold_dust_template("DH02_CE01", log_irlum=_DH_LIR)
 
-fig, ax = plt.subplots(figsize=(8.2, 5.0))
-ax.loglog(
-    w_s17, norm_peak(L_s17), "C0-", lw=2.2, alpha=0.5, label="AGNFITTER-RX  S17 (Schreiber+18)"
-)
-ax.loglog(wave_ir, norm_peak(L_s18), "C3-", lw=1.4, label="tengri  schreiber2018 (S17 tables)")
-ax.loglog(
-    w_dh, norm_peak(L_dh), "C2-", lw=2.2, alpha=0.5,
-    label=f"AGNFITTER-RX  DH02_CE01 (log L$_{{IR}}$={_DH_LIR:g})",
-)
-ax.loglog(wave_ir, norm_peak(L_dh02), "C2--", lw=1.4, label="tengri  dh02_ce01 (matched)")
-ax.loglog(wave_ir, norm_peak(L_s16), "C1:", lw=1.3, label="tengri  schreiber2016 (analytic)")
-ax.loglog(wave_ir, norm_peak(L_d14), "C4:", lw=1.5, label=r"tengri  dale2014 ($\alpha=1.5$)")
-ax.set_xlim(1e4, 1e8)
-ax.set_ylim(1e-3, 3)
-ax.set_xlabel(r"$\lambda$ [Å]")
-ax.set_ylabel(r"$L_\nu$ (norm. at peak)")
-ax.set_title("Cold-dust IR: tengri vs AGNFITTER-RX (S17 and DH02_CE01 both matched)")
-ax.legend(fontsize=8)
-ax.grid(True, alpha=0.3)
-fig.tight_layout()
-save_fig("agnfitter_06_cold_dust.png")
-
-# %%
-# Quantify both cold-dust matches at their nodes (shape, over 3–300 µm).
+# Shape residuals at the nodes (over 3–300 µm), computed up front so the
+# matched-pair panel can annotate them.
 _band = (w_s17 > 3e4) & (w_s17 < 3e6)
 _s17n = L_s17 / L_s17[_band].max()
 _s18n = np.asarray(schreiber18(jnp.asarray(w_s17), 1.0, dust_T=35.0, dust_f_pah=0.02))
 _s18n = _s18n / _s18n[_band].max()
 _resid = np.abs(_s18n[_band] - _s17n[_band])
-print(
-    f"§6  schreiber2018 vs AGNFITTER-RX S17 (T=35 K, f_PAH=0.02):  "
-    f"median |Δ|/peak = {np.median(_resid) * 100:.3f}%   max = {_resid.max() * 100:.2f}%"
-)
 _bd = (w_dh > 3e4) & (w_dh < 3e6)
 _dhn = L_dh / L_dh[_bd].max()
 _dh02n = np.asarray(dh02(jnp.asarray(w_dh), 1.0, dust_log_lir=_DH_LIR))
 _dh02n = _dh02n / _dh02n[_bd].max()
 _rd = np.abs(_dh02n[_bd] - _dhn[_bd])
+
+# Two panels so the matches read cleanly: LEFT = the two node-exact pairs
+# (each pair shares a hue — AGNFITTER-RX as a thick band, tengri as a thin line
+# on top); RIGHT = the two differentiable alternatives, which are *not* node
+# matched, against a faint S17 reference for context.
+fig, (axL, axR) = plt.subplots(1, 2, figsize=(13, 5.0), sharey=True)
+axL.loglog(w_s17, norm_peak(L_s17), "C0-", lw=4.0, alpha=0.35, solid_capstyle="round",
+           label="AGNFITTER-RX  S17 (Schreiber+18)")
+axL.loglog(wave_ir, norm_peak(L_s18), "C0-", lw=1.4, label="tengri  schreiber2018 (S17 tables)")
+axL.loglog(w_dh, norm_peak(L_dh), "C2-", lw=4.0, alpha=0.35, solid_capstyle="round",
+           label=f"AGNFITTER-RX  DH02_CE01 (log L$_{{IR}}$={_DH_LIR:g})")
+axL.loglog(wave_ir, norm_peak(L_dh02), "C2-", lw=1.4, label="tengri  dh02_ce01 (matched)")
+axL.set_title("Node-exact matches — tengri reproduces both AGNFITTER-RX libraries")
+axL.text(0.03, 0.97,
+         "shape residual (median |Δ|/peak)\n"
+         f"S17 pair       : {np.median(_resid) * 100:.3f}%\n"
+         f"DH02_CE01 pair : {np.median(_rd) * 100:.3f}%",
+         transform=axL.transAxes, va="top", ha="left", fontsize=7, family="monospace",
+         bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.85))
+axR.loglog(w_s17, norm_peak(L_s17), "0.6", lw=2.0, alpha=0.6, label="AGNFITTER-RX  S17 (ref)")
+axR.loglog(wave_ir, norm_peak(L_s16), "C1-", lw=1.5, label="tengri  schreiber2016 (analytic)")
+axR.loglog(wave_ir, norm_peak(L_d14), "C4-", lw=1.5, label=r"tengri  dale2014 ($\alpha=1.5$)")
+axR.set_title("Differentiable alternatives (not node-matched)")
+for ax in (axL, axR):
+    ax.set_xlim(1e4, 1e8)
+    ax.set_ylim(1e-3, 3)
+    ax.set_xlabel(r"$\lambda$ [Å]")
+    ax.legend(fontsize=8)
+    ax.grid(True, alpha=0.3)
+axL.set_ylabel(r"$L_\nu$ (norm. at peak)")
+fig.suptitle("Cold-dust IR — matched pairs (left) vs differentiable alternatives (right)", y=1.02)
+fig.tight_layout()
+save_fig("agnfitter_06_cold_dust.png")
+
+# %%
+# Print the two node-exact residuals for the record.
+print(
+    f"§6  schreiber2018 vs AGNFITTER-RX S17 (T=35 K, f_PAH=0.02):  "
+    f"median |Δ|/peak = {np.median(_resid) * 100:.3f}%   max = {_resid.max() * 100:.2f}%"
+)
 print(
     f"§6  dh02_ce01 vs AGNFITTER-RX DH02_CE01 (log L_IR={_DH_LIR:g}):  "
     f"median |Δ|/peak = {np.median(_rd) * 100:.3f}%   max = {_rd.max() * 100:.2f}%"
@@ -592,13 +616,24 @@ print(
 #
 # How well each tengri block matches, panel by panel:
 #
-# * **THB21 — reproduced.** The 0.7 µm bump is an emission-line feature, so
-#   `qsogen` must run *with* its line and FeII blocks (continuum alone misses
-#   it entirely). With them on, tengri's Hα/2500 Å contrast sits above the
-#   vendored THB21 template's (2.45 — the reference h5's 1024-point common
-#   grid undersamples the narrow Hα peak; tengri evaluates qsogen at native
-#   resolution) along the qsogen luminosity sequence — matching log_lbol
-#   aligns the two templates.
+# * **THB21 — reproduced, and faithful to the source.** The 0.7 µm bump is an
+#   emission-line feature, so `qsogen` must run *with* its line and FeII blocks
+#   (continuum alone misses it entirely). With them on, tengri's Hα/2500 Å
+#   contrast (~4.5) lands on the *published* Temple, Hewett & Banerji (2021)
+#   qsogen reference (4.68 — cross-checked below against the committed
+#   `qsogen_detailed_reference`), while AGNFITTER-RX's stored THB21 template
+#   reads only 2.45. That gap is not a tengri error; it is two compounding
+#   effects in the vendored template, both quantified in the ladder printed
+#   under the figure: (1) its 1024-point common grid samples Hα every ~104 Å —
+#   wider than the broad line itself (~66 Å FWHM) — so point-sampling tengri's
+#   own native qsogen onto that grid drops its Hα/2500 from 4.5 to ~2.8, most of
+#   the way to AGNFITTER-RX's value; and (2) the stored template is weaker still
+#   (2.45), a small residual from AGNFITTER-RX's particular luminosity/Baldwin
+#   realization. tengri evaluates qsogen at native
+#   resolution, so it recovers the full line. The near-IR hot-dust inflection
+#   that Temple+2021 fold into their *composite* template is, in both codes'
+#   decomposition, the torus's job (§9c) — which is why the disc panels here
+#   agree in the continuum and near-IR and diverge only at the lines.
 # * **SN12 — reproduced** by the `slone_netzer` block. It interpolates the
 #   108-template grid with node-exact bilinear interpolation, so the SN12 peak
 #   lands on AGNFITTER-RX's at every grid node (the peak shifts strongly with
@@ -622,10 +657,11 @@ print(
 #   directly (it never divides by ν). Left uncorrected the two would sit a
 #   factor of ν apart. The panel puts AGNFITTER-RX's R06 onto the same L_ν
 #   axis (divides by ν) so it shows the *same template* — the two curves then
-#   overlay to a median 0.0002 dex over 0.15–3 µm (printed below). THB21 is
-#   plotted on AGNFITTER-RX's own wavelength grid so its emission lines are
-#   compared at matched spectral resolution (tengri resolves qsogen's lines
-#   at native resolution; §9d shows that full-resolution version).
+#   overlay to a median 0.0002 dex over 0.15–3 µm (printed below).
+#
+# Throughout this panel AGNFITTER-RX is drawn as a thick, semi-transparent band
+# and tengri as a thin line on top, so the two stay distinguishable even where
+# they lie exactly on each other.
 
 # %%
 from tengri.utils.physics_constants import C_CGS, G_GRAV, L_SUN, M_PROTON, M_SUN, SIGMA_T
@@ -665,6 +701,17 @@ disk_pairs = [
     ),
     ("THB21", {}, tengri_qsogen_full, "qsogen + lines + FeII"),
 ]
+def _val_at(w, L, lam):
+    """Interpolated value of L at wavelength ``lam`` (sorts w first)."""
+    o = np.argsort(np.asarray(w))
+    return float(np.interp(lam, np.asarray(w)[o], np.asarray(L)[o]))
+
+
+_ANNOT = dict(
+    transform=None, va="top", ha="left", fontsize=7, family="monospace",
+    bbox=dict(boxstyle="round", fc="white", ec="0.6", alpha=0.85),
+)
+
 fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True)
 for ax, (af_name, af_kw, tengri_fn, tengri_label) in zip(axes.ravel(), disk_pairs):
     w_a, L_a = A.disk_template(af_name, **af_kw)
@@ -676,33 +723,45 @@ for ax, (af_name, af_kw, tengri_fn, tengri_label) in zip(axes.ravel(), disk_pair
         # rather than a factor-of-nu carriage difference — they then overlay
         # to ~1e-4 dex (the §9a residual cell prints the number).
         L_a = np.asarray(L_a) / (U.C_ANGSTROM_PER_S / np.asarray(w_a))
+    a_norm = norm_at(w_a, L_a, ANCHOR)
     msk_a = (w_a > 5e2) & (w_a < 5e4)
-    ax.loglog(
-        w_a[msk_a], norm_at(w_a, L_a, ANCHOR)[msk_a], "C0-", lw=1.5, label=f"AGNFITTER  {af_name}"
-    )
+    # AGNFITTER-RX as a thick, semi-transparent band; tengri as a thin line on
+    # top — the two stay legible even where they lie exactly on one another.
+    ax.loglog(w_a[msk_a], a_norm[msk_a], "C0-", lw=4.0, alpha=0.35,
+              solid_capstyle="round", label=f"AGNFITTER  {af_name}")
+    # tengri at NATIVE resolution — qsogen's lines are what a real fit uses,
+    # so the THB21 panel now shows the full line rather than a downsampled one.
     w_t, L_t = tengri_fn()
-    if af_name == "THB21":
-        # Compare the emission lines at MATCHED spectral resolution: tengri
-        # evaluates qsogen at native resolution, while the AGNFITTER THB21
-        # template is pre-binned to ~1024 points, so native-res line peaks
-        # would overshoot the binned template purely from sampling. Resample
-        # tengri onto AGNFITTER's own wavelength grid for an apples-to-apples
-        # line comparison (the native-resolution version is what a tengri fit
-        # actually uses; §9d shows it full-res).
-        _ot = np.argsort(np.asarray(w_t))
-        L_t = np.interp(
-            np.asarray(w_a), np.asarray(w_t)[_ot], np.asarray(L_t)[_ot], left=np.nan, right=np.nan
-        )
-        w_t = np.asarray(w_a)
+    t_norm = norm_at(w_t, L_t, ANCHOR)
     msk_t = (w_t > 5e2) & (w_t < 5e4)
-    ax.loglog(
-        w_t[msk_t],
-        norm_at(w_t, L_t, ANCHOR)[msk_t],
-        "C1--",
-        lw=1.5,
-        label=f"tengri  {tengri_label}",
-    )
+    ax.loglog(w_t[msk_t], t_norm[msk_t], "C1-", lw=1.4, label=f"tengri  {tengri_label}")
     ax.axvline(6563, color="0.7", ls=":", lw=1)
+
+    if af_name == "THB21":
+        # Ladder: tengri's native qsogen (faithful to Temple+2021), the same
+        # curve point-sampled onto AGNFITTER's 1024-pt grid (isolates the
+        # ~104 Å undersampling), and AGNFITTER's weaker stored template.
+        _ot = np.argsort(np.asarray(w_t))
+        _t_on_af = np.interp(np.asarray(w_a), np.asarray(w_t)[_ot], np.asarray(t_norm)[_ot])
+        _lad = ("Hα/2500 Å\n"
+                f"tengri native : {_val_at(w_t, t_norm, 6563):.2f}\n"
+                f" on AF grid   : {_val_at(w_a, _t_on_af, 6563):.2f}\n"
+                f"AGNFITTER     : {_val_at(w_a, a_norm, 6563):.2f}")
+        ax.text(0.03, 0.97, _lad, **{**_ANNOT, "transform": ax.transAxes})
+
+    if af_name == "KD18":
+        # Warm-Comptonization residual at AGNFITTER's own samples over
+        # 1200 Å–1 µm (the documented 3-zone proxy vs qsosed grid difference).
+        oa_, ot_ = np.argsort(w_a), np.argsort(w_t)
+        w_a_s = np.asarray(w_a)[oa_]
+        m = (w_a_s >= 1.2e3) & (w_a_s <= 1e4) & (a_norm[oa_] > 0)
+        _t_on = np.interp(w_a_s[m], np.asarray(w_t)[ot_], t_norm[ot_])
+        _lr = np.abs(np.log10(_t_on / a_norm[oa_][m]))
+        _res = ("warm-Compton proxy\n"
+                f"median : {np.median(_lr):.3f} dex\n"
+                f"max    : {_lr.max():.2f} dex")
+        ax.text(0.03, 0.97, _res, **{**_ANNOT, "transform": ax.transAxes})
+
     ax.set_xlim(5e2, 5e4)
     ax.set_ylim(0.05, 20)
     ax.set_title(af_name)
@@ -738,23 +797,52 @@ for af_name, af_kw, tengri_fn, _label in disk_pairs:
     print(f"  {af_name:6s} median = {np.median(logr):.3f} dex   max = {logr.max():.3f} dex")
 
 # %%
-# Quantify the line bump.
-w_t, L_t = A.disk_template("THB21")
+# Quantify the line bump AND the THB21 Hα ladder — the evidence that tengri's
+# qsogen is faithful to the *source* while AGNFITTER-RX's stored template is
+# the weaker-lined outlier. All ratios are L_nu(6563 Å)/L_nu(2500 Å).
+w_af, L_af = A.disk_template("THB21")
 w_r, L_r = A.disk_template("R06")
-bump_thb = float(
-    np.interp(
-        6563, *(lambda o: (np.asarray(w_t)[o], norm_at(w_t, L_t, ANCHOR)[o]))(np.argsort(w_t))
-    )
-)
-bump_r06 = float(
-    np.interp(
-        6563, *(lambda o: (np.asarray(w_r)[o], norm_at(w_r, L_r, ANCHOR)[o]))(np.argsort(w_r))
-    )
-)
+bump_thb = _val_at(w_af, norm_at(w_af, L_af, ANCHOR), 6563)
+bump_r06 = _val_at(w_r, norm_at(w_r, L_r, ANCHOR), 6563)
 print(
     f"§9a  L_nu(6563 Å)/L_nu(2500 Å):  THB21 = {bump_thb:.2f}   R06 = {bump_r06:.2f}  "
-    f"(ratio {bump_thb / bump_r06:.1f}x)"
+    f"(ratio {bump_thb / bump_r06:.1f}x — the emission-line bump)"
 )
+
+# tengri native, tengri point-sampled onto AGNFITTER's grid, AGNFITTER stored.
+w_tq, L_tq = tengri_qsogen_full()
+tq_norm = norm_at(w_tq, L_tq, ANCHOR)
+_otq = np.argsort(np.asarray(w_tq))
+tq_on_af = np.interp(np.asarray(w_af), np.asarray(w_tq)[_otq], np.asarray(tq_norm)[_otq])
+print(
+    f"§9a  Hα ladder:  tengri native = {_val_at(w_tq, tq_norm, 6563):.2f}   "
+    f"tengri on AGNFITTER grid = {_val_at(w_af, tq_on_af, 6563):.2f}   "
+    f"AGNFITTER stored = {bump_thb:.2f}"
+)
+
+# Independent cross-check against the published Temple, Hewett & Banerji (2021)
+# qsogen reference (committed): its full_flam -> L_nu Hα contrast should land
+# next to tengri's native value, confirming tengri (not AGNFITTER) reproduces
+# the source. Skipped gracefully if the reference npz is absent.
+_REF_CANDIDATES = [
+    _HERE / "_drivers" / "data" / "qsogen_detailed_reference.npz",
+    Path("data/qsogen_detailed_reference.npz"),
+    Path(tengri.__file__).resolve().parents[2] / "data" / "qsogen_detailed_reference.npz",
+]
+_ref_path = next((p for p in _REF_CANDIDATES if p.is_file()), None)
+if _ref_path is not None:
+    _ref = np.load(str(_ref_path), allow_pickle=True)
+    _wref = np.asarray(_ref["wave"]).astype(float)
+    _lnu_ref = np.asarray(_ref["full_flam"]).astype(float) * _wref**2  # F_lam -> L_nu
+    _ref_ha = _val_at(_wref, _lnu_ref, 6563) / _val_at(_wref, _lnu_ref, 2500)
+    print(
+        f"§9a  Temple+2021 qsogen source (published reference): Hα/2500 = "
+        f"{_ref_ha:.2f}  → tengri native "
+        f"({_val_at(w_tq, tq_norm, 6563):.2f}) matches the source; AGNFITTER's "
+        f"stored {bump_thb:.2f} is downsampled + weaker."
+    )
+else:
+    print("§9a  (Temple+2021 qsogen reference npz not found — source cross-check skipped.)")
 
 # %% [markdown]
 # ## §9b Accretion-disk reddening sweep
@@ -882,10 +970,13 @@ fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True)
 for ax, (af_name, title, tengri_fn, tengri_label, af_kw) in zip(axes.ravel(), torus_pairs):
     w_a, L_a = A.torus_template(af_name, **af_kw)
     msk_a = (w_a > 5e3) & (w_a < 1e7)
-    ax.loglog(w_a[msk_a], norm_peak(L_a)[msk_a], "C0-", lw=1.5, label=f"AGNFITTER  {af_name}")
+    # AGNFITTER-RX as a thick, semi-transparent band; tengri as a thin line on
+    # top — the two stay legible even where they lie exactly on one another.
+    ax.loglog(w_a[msk_a], norm_peak(L_a)[msk_a], "C0-", lw=4.0, alpha=0.35,
+              solid_capstyle="round", label=f"AGNFITTER  {af_name}")
     w_t, L_t = tengri_fn()
     msk_t = (w_t > 5e3) & (w_t < 1e7)
-    ax.loglog(w_t[msk_t], norm_peak(L_t)[msk_t], "C1-", lw=1.5, label=f"tengri  {tengri_label}")
+    ax.loglog(w_t[msk_t], norm_peak(L_t)[msk_t], "C1-", lw=1.4, label=f"tengri  {tengri_label}")
     ax.axvline(1e5, color="0.7", ls=":", lw=1)  # 10 µm silicate
     ax.set_xlim(5e3, 1e7)
     ax.set_ylim(1e-3, 3)
@@ -1078,8 +1169,9 @@ te_total = te_disc_n + te_tor_n
 te_total = np.where(te_tor_g > 0, te_total, np.nan)
 
 fig, ax = plt.subplots(figsize=(8.5, 5))
-ax.loglog(grid, af_total, "C0-", lw=1.6, label="AGNFITTER-RX  THB21 + CAT3D-Wind")
-ax.loglog(grid, te_total, "C1--", lw=1.6, label="tengri  qsogen + cat3d_wind")
+ax.loglog(grid, af_total, "C0-", lw=4.0, alpha=0.35, solid_capstyle="round",
+          label="AGNFITTER-RX  THB21 + CAT3D-Wind")
+ax.loglog(grid, te_total, "C1-", lw=1.4, label="tengri  qsogen + cat3d_wind")
 # tengri's packaged cat3d_wind grid spans to ~1.5e6 Å (the build's
 # common-wavelength intersection); cap the axis there so the comparison runs
 # only where both torus libraries have data, not into the bare disc tail.
@@ -1522,8 +1614,9 @@ af_plot = np.where(af_sed > 0, nu_grid * af_sed, np.nan)
 te_plot = np.where(te_sed > 0, nu_grid * te_sed, np.nan)
 
 fig, ax = plt.subplots(figsize=(9.5, 5))
-ax.loglog(nu_grid, af_plot, "C0-", lw=1.6, label="AGNFITTER-RX  THB21 + CAT3D + corona + DPL")
-ax.loglog(nu_grid, te_plot, "C1--", lw=1.6, label="tengri  qsogen + cat3d_wind + corona + DPL")
+ax.loglog(nu_grid, af_plot, "C0-", lw=4.0, alpha=0.35, solid_capstyle="round",
+          label="AGNFITTER-RX  THB21 + CAT3D + corona + DPL")
+ax.loglog(nu_grid, te_plot, "C1-", lw=1.4, label="tengri  qsogen + cat3d_wind + corona + DPL")
 for nu_band, name in [(1.4e9, "radio"), (3e13, "IR"), (6e14, "opt"), (4.8e17, "2 keV")]:
     ax.axvline(nu_band, color="0.85", ls=":", lw=1)
     ax.text(
