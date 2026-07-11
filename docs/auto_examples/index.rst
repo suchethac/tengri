@@ -560,23 +560,6 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="M_★/L_band rises with stellar age in every band; the rise is steepest in g, where massive young stars dominate, and shallowest in K_s, where red giants contribute at every age past the first ~100 Myr.">
-
-.. only:: html
-
-  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_mass_to_light_ratios_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/sps/plot_mass_to_light_ratios`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Stellar mass-to-light ratios vs SSP age, per band</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Different stellar population synthesis codes use different stellar spectral libraries, isochrone families, and binary treatments. The SED of a ~1 Gyr-old, solar-metallicity simple stellar population already shows visible differences in the UV (BPASS binaries add a hot continuum) and in the NIR (treatment of TP-AGB).">
 
 .. only:: html
@@ -1235,23 +1218,6 @@ such as the Halpha–SFR calibration.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Comprehensive 2D sweep of ionization parameter and metallicity (Cue)</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Zoomed rest-frame spectrum of an ionized-gas-dominated SF galaxy with the strongest optical / near-UV emission lines labeled. Wavelengths are vacuum; line positions follow NIST/Atomic Line List.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_emission_line_atlas_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_emission_line_atlas`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Optical emission-line atlas of a young star-forming galaxy</div>
     </div>
 
 
@@ -2275,7 +2241,7 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Four production line backbones layered on top of the same disc + torus at fixed log L_bol = 12.5. The line backbone controls which optical/UV emission features the model produces — narrow-line region forbidden lines, broad-line permitted lines, or pre-canned empirical line lists.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The renderable line backbones registered under the three composable line selectors — agn.nlr (narrow-line region), agn.blr (broad-line region), and agn.feii (iron pseudo-continuum) — each layered on the same disc + torus at fixed log L_bol = 12.5. The backbone controls which optical/UV features the model produces: narrow forbidden lines, broad permitted lines, or the blended Fe II forest.">
 
 .. only:: html
 
@@ -2610,23 +2576,6 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Polar dust E(B-V) reddens Type 1 & 2 AGN differently</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The Temple, Hewett &amp; Banerji (2021) QSOgen empirical template, used as the agn.disc.type=&quot;qsogen&quot; selector. We sweep log L_bol from 10.0 to 13.5 (in L_sun units) at fixed redshift to show that the template&#x27;s spectral shape is approximately self-similar across the quasar luminosity function — the only knob that moves features (the Baldwin-effect drop in C IV/Ly-alpha equivalent width) is the bolometric normalization.">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_qsogen_spectrum_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_qsogen_spectrum`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">QSOgen empirical quasar SED across four decades of bolometric luminosity</div>
     </div>
 
 
@@ -3490,23 +3439,6 @@ wedges), and photometric-redshift color degeneracies.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Cosmic dimming and K-correction with redshift</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Plot the ugriz filter transmission curves from the SDSS photometric system. Filters are loaded from the SVO Filter Profile Service via tengri&#x27;s filter registry.">
-
-.. only:: html
-
-  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_filter_curves_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/photometry/plot_filter_curves`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">SDSS Filter Transmission Curves</div>
     </div>
 
 

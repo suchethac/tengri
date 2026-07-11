@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:15.805** total execution time for 48 files **from auto_examples/agn**:
+**00:07.898** total execution time for 47 files **from auto_examples/agn**:
 
 .. container::
 
@@ -32,14 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_torus_compare.py` (``plot_agn_torus_compare.py``)
-     - 00:08.936
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_disc_compare.py` (``plot_agn_disc_compare.py``)
-     - 00:05.374
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_cat3d_wind_sweep.py` (``plot_cat3d_wind_sweep.py``)
-     - 00:01.496
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_lines_compare.py` (``plot_agn_lines_compare.py``)
+     - 00:07.898
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py` (``plot_agn_alpha_ox_lbol_2d.py``)
      - 00:00.000
@@ -48,6 +42,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_components_breakdown.py` (``plot_agn_components_breakdown.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_disc_compare.py` (``plot_agn_disc_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_feii_sweep.py` (``plot_agn_feii_sweep.py``)
@@ -62,13 +59,13 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_host_decomposition.py` (``plot_agn_host_decomposition.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_lines_compare.py` (``plot_agn_lines_compare.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_qsogen_ebv_sweep.py` (``plot_agn_qsogen_ebv_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_qsogen_emline_sweep.py` (``plot_agn_qsogen_emline_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_torus_compare.py` (``plot_agn_torus_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py` (``plot_alpha_ox_lusso_risaliti.py``)
@@ -78,6 +75,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_boroson_green_feii_template.py` (``plot_boroson_green_feii_template.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_cat3d_wind_sweep.py` (``plot_cat3d_wind_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_composable_block_toggles.py` (``plot_composable_block_toggles.py``)
@@ -120,9 +120,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_polar_dust_ebv_type12_sweep.py` (``plot_polar_dust_ebv_type12_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_qsogen_spectrum.py` (``plot_qsogen_spectrum.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_relagn_spin.py` (``plot_relagn_spin.py``)

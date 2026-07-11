@@ -88,23 +88,6 @@ wedges), and photometric-redshift color degeneracies.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Plot the ugriz filter transmission curves from the SDSS photometric system. Filters are loaded from the SVO Filter Profile Service via tengri&#x27;s filter registry.">
-
-.. only:: html
-
-  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_filter_curves_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/photometry/plot_filter_curves`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">SDSS Filter Transmission Curves</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The same star-forming galaxy SED is intercepted by three different filter sets — SDSS ugriz (optical), 2MASS JHKs (near-infrared), and HST ACS F435W/F606W/F814W (UV-optical). Each panel overlays the survey&#x27;s throughputs on the shared SED so the reader sees, at a glance, which spectral features (the 4000-Å break, H-alpha + [N II], the 1.6-um stellar bump) fall inside each band.">
 
 .. only:: html
@@ -355,7 +338,6 @@ wedges), and photometric-redshift color degeneracies.
    /auto_examples/photometry/plot_band_count_mass_recovery
    /auto_examples/photometry/plot_color_tracks_redshift
    /auto_examples/photometry/plot_cosmic_dimming_observed_flux
-   /auto_examples/photometry/plot_filter_curves
    /auto_examples/photometry/plot_filter_set_comparison
    /auto_examples/photometry/plot_filter_throughput_overlay
    /auto_examples/photometry/plot_galaxy_with_filters
