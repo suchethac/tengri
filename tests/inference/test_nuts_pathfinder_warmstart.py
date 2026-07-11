@@ -93,7 +93,7 @@ def _cheap_elbo_draws(monkeypatch):
 #: the XLA kernel compile, which is independent of the step count -- so shrinking
 #: these numbers buys nothing, and every *distinct* setting buys another compile.
 #: Four tests previously triggered five runs across three configurations; they
-#: assert plumbing (a Posterior comes back, the diagnostics are labelled, the two
+#: assert plumbing (a Posterior comes back, the diagnostics are labeled, the two
 #: warmup paths do not share a cache entry), none of which depends on the counts.
 _NUTS_KWARGS = dict(n_warmup=50, n_burnin=5, n_samples=20, verbose=False)
 
