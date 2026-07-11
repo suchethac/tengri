@@ -195,15 +195,26 @@ def test_radio_adds_long_wavelength_emission(wave_uv_to_radio, agn_lbol_physical
 
     # Radio mask boundary: λ > 1e7 Å (1 mm)
     radio_mask = wave_uv_to_radio > 1e7
-    ir_mask = wave_uv_to_radio <= 1e7
 
     # At radio wavelengths, the new SED should be brighter
     sed_diff_radio = sed_with_radio[radio_mask] - sed_no_radio[radio_mask]
     assert jnp.any(sed_diff_radio > 0.0), "Radio component should add positive flux at λ > 1 mm"
 
-    # At IR wavelengths, SED should be unchanged (radio is longward)
-    assert jnp.allclose(sed_with_radio[ir_mask], sed_no_radio[ir_mask], rtol=1e-14), (
-        "Radio component leaked into IR wavelengths."
+    # The jet must not touch the UV/optical, where the disc dominates.
+    #
+    # This used to assert the SED was unchanged everywhere shortward of 1 mm
+    # (rtol=1e-14). That premise died with #1071: the AGN jet no longer hard-cuts
+    # at 1 mm, so it legitimately contributes in the submm and far-IR — the
+    # aging cutoff (nu_cut = 10^13 Hz ~ 30 um) confines it, not a cliff. The old
+    # mask even included 1 mm itself, where this AGN-only SED carries no torus
+    # flux at all and the jet is *supposed* to dominate.
+    #
+    # What must still hold is that the jet is invisible where the disc lives.
+    # At 1000 A the jet is ~1e-134 of its 1.4 GHz value, so any residual here is
+    # float64 roundoff in the component sum (~1e-14), not physics.
+    optical_mask = wave_uv_to_radio <= 1e4  # UV/optical, λ ≤ 1 um
+    assert jnp.allclose(sed_with_radio[optical_mask], sed_no_radio[optical_mask], rtol=1e-10), (
+        "Radio component leaked into the UV/optical, where the disc dominates."
     )
 
 
