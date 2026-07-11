@@ -811,6 +811,312 @@ class NebularSEDComponent:
         )
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Lines group property registration (Phase 1B)
+# ─────────────────────────────────────────────────────────────────────
+
+_LINE_RATIO_FLOOR = 1e-300  # Floor for safe division in ratios
+
+
+def _line_luminosity_helper(state, params, line_key):
+    """Helper to extract a single line luminosity from the line catalog."""
+    from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
+
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+
+    if "line_waves" not in derived or "line_lums" not in derived:
+        return nan_scalar
+
+    line_waves = jnp.asarray(derived["line_waves"])
+    line_lums = jnp.asarray(derived["line_lums"])
+    return extract_line_luminosity(line_waves, line_lums, KEY_LINES[line_key])
+
+
+def _lya_fn(state, params):
+    """Lyman alpha line luminosity [erg/s]."""
+    return _line_luminosity_helper(state, params, "lya")
+
+
+def _civ_1549_fn(state, params):
+    """CIV 1549 line luminosity [erg/s]."""
+    return _line_luminosity_helper(state, params, "civ_1549")
+
+
+def _oii_fn(state, params):
+    """OII line luminosity [erg/s]."""
+    return _line_luminosity_helper(state, params, "oii")
+
+
+def _hbeta_fn(state, params):
+    """Hβ line luminosity [erg/s]."""
+    return _line_luminosity_helper(state, params, "hbeta")
+
+
+def _oiii_4959_fn(state, params):
+    """OIII 4959 line luminosity [erg/s]."""
+    return _line_luminosity_helper(state, params, "oiii_4959")
+
+
+def _oiii_5007_fn(state, params):
+    """OIII 5007 line luminosity [erg/s]."""
+    return _line_luminosity_helper(state, params, "oiii_5007")
+
+
+def _nii_6548_fn(state, params):
+    """NII 6548 line luminosity [erg/s]."""
+    return _line_luminosity_helper(state, params, "nii_6548")
+
+
+def _halpha_fn(state, params):
+    """Hα line luminosity [erg/s]."""
+    return _line_luminosity_helper(state, params, "halpha")
+
+
+def _nii_6584_fn(state, params):
+    """NII 6584 line luminosity [erg/s]."""
+    return _line_luminosity_helper(state, params, "nii_6584")
+
+
+def _sii_6717_fn(state, params):
+    """SII 6717 line luminosity [erg/s]."""
+    return _line_luminosity_helper(state, params, "sii_6717")
+
+
+def _sii_6731_fn(state, params):
+    """SII 6731 line luminosity [erg/s]."""
+    return _line_luminosity_helper(state, params, "sii_6731")
+
+
+def _bpt_nii_fn(state, params):
+    """BPT-NII diagnostic: log10([NII]6584 / Hα) [dex]."""
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+
+    if "line_waves" not in derived or "line_lums" not in derived:
+        return nan_scalar
+
+    from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
+
+    line_waves = jnp.asarray(derived["line_waves"])
+    line_lums = jnp.asarray(derived["line_lums"])
+    nii_6584 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["nii_6584"])
+    halpha = extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"])
+    return jnp.log10(
+        jnp.maximum(nii_6584, _LINE_RATIO_FLOOR) / jnp.maximum(halpha, _LINE_RATIO_FLOOR)
+    )
+
+
+def _bpt_sii_fn(state, params):
+    """BPT-SII diagnostic: log10(([SII]6717+6731) / Hα) [dex]."""
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+
+    if "line_waves" not in derived or "line_lums" not in derived:
+        return nan_scalar
+
+    from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
+
+    line_waves = jnp.asarray(derived["line_waves"])
+    line_lums = jnp.asarray(derived["line_lums"])
+    sii_6717 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["sii_6717"])
+    sii_6731 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["sii_6731"])
+    halpha = extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"])
+    sii_total = sii_6717 + sii_6731
+    return jnp.log10(
+        jnp.maximum(sii_total, _LINE_RATIO_FLOOR) / jnp.maximum(halpha, _LINE_RATIO_FLOOR)
+    )
+
+
+def _o3hb_fn(state, params):
+    """[OIII]5007/Hβ diagnostic: log10([OIII]5007 / Hβ) [dex]."""
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+
+    if "line_waves" not in derived or "line_lums" not in derived:
+        return nan_scalar
+
+    from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
+
+    line_waves = jnp.asarray(derived["line_waves"])
+    line_lums = jnp.asarray(derived["line_lums"])
+    oiii_5007 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_5007"])
+    hbeta = extract_line_luminosity(line_waves, line_lums, KEY_LINES["hbeta"])
+    return jnp.log10(
+        jnp.maximum(oiii_5007, _LINE_RATIO_FLOOR) / jnp.maximum(hbeta, _LINE_RATIO_FLOOR)
+    )
+
+
+def _r23_fn(state, params):
+    """R23 metallicity indicator: log10(([OII]+[OIII]4959+5007)/Hβ) [dex]."""
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+
+    if "line_waves" not in derived or "line_lums" not in derived:
+        return nan_scalar
+
+    from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
+
+    line_waves = jnp.asarray(derived["line_waves"])
+    line_lums = jnp.asarray(derived["line_lums"])
+    oii = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oii"])
+    oiii_4959 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_4959"])
+    oiii_5007 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_5007"])
+    hbeta = extract_line_luminosity(line_waves, line_lums, KEY_LINES["hbeta"])
+    numerator = oii + oiii_4959 + oiii_5007
+    return jnp.log10(
+        jnp.maximum(numerator, _LINE_RATIO_FLOOR) / jnp.maximum(hbeta, _LINE_RATIO_FLOOR)
+    )
+
+
+def _o32_fn(state, params):
+    """O32 ionization parameter: log10([OIII]5007 / [OII]) [dex]."""
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+
+    if "line_waves" not in derived or "line_lums" not in derived:
+        return nan_scalar
+
+    from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
+
+    line_waves = jnp.asarray(derived["line_waves"])
+    line_lums = jnp.asarray(derived["line_lums"])
+    oiii_5007 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_5007"])
+    oii = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oii"])
+    return jnp.log10(
+        jnp.maximum(oiii_5007, _LINE_RATIO_FLOOR) / jnp.maximum(oii, _LINE_RATIO_FLOOR)
+    )
+
+
+def _balmer_decrement_fn(state, params):
+    """Balmer decrement: Hα/Hβ [dimensionless]."""
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+
+    if "line_waves" not in derived or "line_lums" not in derived:
+        return nan_scalar
+
+    from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
+
+    line_waves = jnp.asarray(derived["line_waves"])
+    line_lums = jnp.asarray(derived["line_lums"])
+    halpha = extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"])
+    hbeta = extract_line_luminosity(line_waves, line_lums, KEY_LINES["hbeta"])
+    return halpha / jnp.maximum(hbeta, _LINE_RATIO_FLOOR)
+
+
+from tengri.forward.properties import Property, register_properties
+
+_LINES_PROPERTIES = {
+    "lya": Property(
+        units="erg/s",
+        group="lines",
+        doc="Lyman alpha line luminosity",
+        fn=_lya_fn,
+    ),
+    "civ_1549": Property(
+        units="erg/s",
+        group="lines",
+        doc="CIV 1549 line luminosity",
+        fn=_civ_1549_fn,
+    ),
+    "oii": Property(
+        units="erg/s",
+        group="lines",
+        doc="OII line luminosity",
+        fn=_oii_fn,
+    ),
+    "hbeta": Property(
+        units="erg/s",
+        group="lines",
+        doc="Hβ line luminosity",
+        fn=_hbeta_fn,
+    ),
+    "oiii_4959": Property(
+        units="erg/s",
+        group="lines",
+        doc="OIII 4959 line luminosity",
+        fn=_oiii_4959_fn,
+    ),
+    "oiii_5007": Property(
+        units="erg/s",
+        group="lines",
+        doc="OIII 5007 line luminosity",
+        fn=_oiii_5007_fn,
+    ),
+    "nii_6548": Property(
+        units="erg/s",
+        group="lines",
+        doc="NII 6548 line luminosity",
+        fn=_nii_6548_fn,
+    ),
+    "halpha": Property(
+        units="erg/s",
+        group="lines",
+        doc="Hα line luminosity",
+        fn=_halpha_fn,
+    ),
+    "nii_6584": Property(
+        units="erg/s",
+        group="lines",
+        doc="NII 6584 line luminosity",
+        fn=_nii_6584_fn,
+    ),
+    "sii_6717": Property(
+        units="erg/s",
+        group="lines",
+        doc="SII 6717 line luminosity",
+        fn=_sii_6717_fn,
+    ),
+    "sii_6731": Property(
+        units="erg/s",
+        group="lines",
+        doc="SII 6731 line luminosity",
+        fn=_sii_6731_fn,
+    ),
+    "bpt_nii": Property(
+        units="dex",
+        group="lines",
+        doc="BPT-NII diagnostic: log10([NII]6584 / Hα)",
+        fn=_bpt_nii_fn,
+    ),
+    "bpt_sii": Property(
+        units="dex",
+        group="lines",
+        doc="BPT-SII diagnostic: log10(([SII]6717+6731) / Hα)",
+        fn=_bpt_sii_fn,
+    ),
+    "o3hb": Property(
+        units="dex",
+        group="lines",
+        doc="[OIII]5007/Hβ diagnostic: log10([OIII]5007 / Hβ)",
+        fn=_o3hb_fn,
+    ),
+    "r23": Property(
+        units="dex",
+        group="lines",
+        doc="R23 metallicity indicator: log10(([OII]+[OIII]4959+5007)/Hβ)",
+        fn=_r23_fn,
+    ),
+    "o32": Property(
+        units="dex",
+        group="lines",
+        doc="O32 ionization parameter: log10([OIII]5007 / [OII])",
+        fn=_o32_fn,
+    ),
+    "balmer_decrement": Property(
+        units="",
+        group="lines",
+        doc="Balmer decrement: Hα/Hβ",
+        fn=_balmer_decrement_fn,
+    ),
+}
+
+register_properties("nebular", _LINES_PROPERTIES)
+
+del Property, register_properties, _LINES_PROPERTIES
+
+
 # Register in the unified component dispatch table so build_components resolves
 # the nebular component via _resolve_registry_component (single dispatch, #845)
 # instead of importing the class directly.
