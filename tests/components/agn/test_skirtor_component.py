@@ -7,11 +7,13 @@ Validates:
 - Free parameter discovery and units preservation
 - Parity vs existing skirtor_analytic for same parameters
 - Cross-component output (L_agn_torus) publishing
-- Graceful handling of missing template data
+- Missing template data: zero emission when no grid was requested, a loud
+  FileNotFoundError when a named grid cannot be loaded
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import chex
@@ -291,8 +293,15 @@ class TestSKIRTORMissingData:
         assert jnp.allclose(sed_out, sed_in), "Should return input SED unchanged"
         assert jnp.allclose(published["L_agn_torus"], 0.0), "Should publish zero luminosity"
 
-    def test_load_nonexistent_path(self):
-        """load() returns None for nonexistent grid path."""
+    def test_load_nonexistent_path_raises(self):
+        """load() raises for a grid_path that is set but cannot be loaded.
+
+        Degrading to ``None`` here would be graceful in the wrong direction: the
+        user named a grid file, so a typo would silently become a fit in which
+        the torus contributes zero and every ``agn_*_skirtor`` parameter is a
+        no-op. Only an *unset* grid_path means "no torus wanted" -- see
+        :func:`test_no_templates_no_crash` above, which still holds.
+        """
         comp = SKIRTORTorus(config=SKIRTORTorusConfig(grid_path="/nonexistent/path.h5"))
-        result = comp.load(wave=jnp.logspace(4, 7, 100))
-        assert result is None
+        with pytest.raises(FileNotFoundError, match=re.escape("/nonexistent/path.h5")):
+            comp.load(wave=jnp.logspace(4, 7, 100))

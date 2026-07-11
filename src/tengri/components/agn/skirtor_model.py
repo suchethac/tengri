@@ -292,8 +292,17 @@ class SKIRTORTorus(SEDModelComponent):
         -------
         callable or None
             Interpolation function from create_skirtor_components_from_grid
-            (returns SKIRTORComponents), or None if template file is not
-            available or grid_path is not set.
+            (returns SKIRTORComponents), or None if ``grid_path`` is not set --
+            i.e. no torus library was requested, so the component contributes
+            zero emission by design.
+
+        Raises
+        ------
+        FileNotFoundError
+            If ``grid_path`` is set but the grid cannot be loaded. A named grid
+            that fails to load is a user error, not a reason to fall back to
+            zero emission: every torus parameter would become a silent no-op and
+            the fit would report an AGN torus contributing exactly nothing.
         """
         from tengri.components.agn.skirtor import create_skirtor_components_from_grid
 
@@ -302,9 +311,14 @@ class SKIRTORTorus(SEDModelComponent):
 
         try:
             return create_skirtor_components_from_grid(self.config.grid_path)
-        except (FileNotFoundError, OSError, KeyError):
-            # Templates not available — predict will return zero emission
-            return None
+        except (FileNotFoundError, OSError, KeyError) as exc:
+            raise FileNotFoundError(
+                f"SKIRTOR torus grid could not be loaded from {self.config.grid_path!r} "
+                f"({type(exc).__name__}: {exc}). A grid was requested via grid_path, so "
+                "tengri will not silently fall back to zero AGN emission. Fix the path, "
+                "or leave grid_path unset to run without a torus. Templates are available "
+                "from https://sites.google.com/site/skirtorus/sed-library"
+            ) from exc
 
     def predict(
         self,
