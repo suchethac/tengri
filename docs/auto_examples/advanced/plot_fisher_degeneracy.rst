@@ -21,11 +21,6 @@
 Age-Dust-Metallicity Degeneracy: Fisher Analysis
 =================================================
 
-.. image:: images/sphx_glr_plot_fisher_degeneracy_001.png
-   :alt: plot fisher degeneracy
-   :class: sphx-glr-single-img
-
-
 The Cramér-Rao bound from the Fisher Information Matrix shows that SDSS
 5-band photometry alone cannot separately constrain age, dust, and
 metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of
@@ -44,27 +39,8 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_log_total_mass' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(9.75, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
-    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_peak_lbt_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(6.25, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
-    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_skew' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(0., dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
-    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_trunc' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(5.5, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
-    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_width_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(2.6, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -192,7 +168,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.426 seconds)
+   **Total running time of the script:** (0 minutes 3.595 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_fisher_degeneracy.py:

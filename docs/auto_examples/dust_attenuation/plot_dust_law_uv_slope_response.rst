@@ -21,11 +21,6 @@
 Attenuation law leaves a distinct UV-slope fingerprint
 =========================================================
 
-.. image:: images/sphx_glr_plot_dust_law_uv_slope_response_001.png
-   :alt: plot dust law uv slope response
-   :class: sphx-glr-single-img
-
-
 For a fixed star-forming galaxy with τ_V = 1 (a moderate
 attenuation), six common attenuation laws produce six visibly
 different reddened UV slopes β. The intrinsic SED has β ≈ −2.3;
@@ -48,19 +43,8 @@ law-dependent in the literature.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/examples/dust_attenuation/plot_dust_law_uv_slope_response.py:123: UserWarning: set_ticklabels() should only be used with a fixed number of ticks, i.e. after set_ticks() or using a FixedLocator.
-      ax.set_xticklabels([lbl for _, lbl, _ in LAWS], rotation=20, ha="right", fontsize=8.5)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

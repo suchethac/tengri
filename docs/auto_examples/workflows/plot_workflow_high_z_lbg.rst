@@ -21,11 +21,6 @@
 High-redshift Lyman-break galaxy: Lyman dropout signatures in JWST/HST
 ======================================================================
 
-.. image:: images/sphx_glr_plot_workflow_high_z_lbg_001.png
-   :alt: plot workflow high z lbg
-   :class: sphx-glr-single-img
-
-
 Fits a z=4 young, dust-free star-forming galaxy using JWST (F150W/F200W/F277W)
 and HST (F814W) broadband photometry. The characteristic Lyman-break signature
 (sharp UV dropout at observed ~4 micron) constrains age and metallicity even
@@ -36,6 +31,17 @@ Reference: Steidel et al. 1996, ApJ, 462, L17 (Lyman-break galaxies);
 Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-153
+
+
+
+.. image-sg:: /auto_examples/workflows/images/sphx_glr_plot_workflow_high_z_lbg_001.png
+   :alt: plot workflow high z lbg
+   :srcset: /auto_examples/workflows/images/sphx_glr_plot_workflow_high_z_lbg_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -178,6 +184,11 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
     ax_res.set_xticklabels(band_labels)
 
     plt.savefig("plot_workflow_high_z_lbg.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.465 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_high_z_lbg.py:

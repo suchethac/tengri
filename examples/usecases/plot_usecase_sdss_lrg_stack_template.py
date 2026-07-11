@@ -146,9 +146,6 @@ ax.set_xlim(3700, 9000)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.legend(frameon=False, fontsize=8, loc="upper right")
-ax.set_title(
-    "SDSS LRG Quiescent Template (z=0.3, R=2000)\nRed sequence ages 6–11 Gyr per Thomas+2005"
-)
 
 fig.tight_layout()
 plt.savefig("plot_usecase_sdss_lrg_stack_template.png", dpi=150, bbox_inches="tight")

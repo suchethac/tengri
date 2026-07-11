@@ -18,16 +18,11 @@
 .. _sphx_glr_auto_examples_xray_plot_xray_agn.py:
 
 
-AGN corona: bolometric luminosity sets normalisation, not shape
+AGN corona: bolometric luminosity sets normalization, not shape
 ================================================================
 
-.. image:: images/sphx_glr_plot_xray_agn_001.png
-   :alt: plot xray agn
-   :class: sphx-glr-single-img
-
-
 The AGN X-ray corona produces a cut-off power-law (photon index Gamma
-roughly 1.8, E_cut around 300 keV) normalised through the
+roughly 1.8, E_cut around 300 keV) normalized through the
 alpha_OX-L_2500 relation (Lusso & Risaliti 2016). At fixed Gamma and
 alpha_OX, increasing bolometric luminosity shifts the whole spectrum
 upward but leaves the spectral *shape* nearly intact — the
@@ -43,12 +38,11 @@ Companion: ``plot_xray_nh_sweep.py`` (varies obscuration at fixed
 L_bol); ``plot_alpha_ox_sweep.py`` (varies the UV-X-ray slope).
 
 References
-
 ----------
 - Lusso & Risaliti 2016, ApJ 819, 154 (alpha_OX-L_2500 relation).
 - Just et al. 2007, ApJ 665, 1004 (X-ray bolometric corrections).
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-110
+.. GENERATED FROM PYTHON SOURCE LINES 26-109
 
 
 

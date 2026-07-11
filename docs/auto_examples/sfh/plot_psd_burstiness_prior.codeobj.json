@@ -1086,7 +1086,7 @@
    "name": "list"
   }
  ],
- "plt.show": [
+ "plt.savefig": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -1099,7 +1099,7 @@
    "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
-   "name": "show"
+   "name": "savefig"
   }
  ],
  "plt.subplots": [

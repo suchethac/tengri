@@ -67,7 +67,7 @@ def madau_dickinson_2014(z):
 # Load SSP and prepare observation
 # ============================================================================
 
-SSP = tengri.load_ssp('fsps_prsc_miles_chabrier')
+SSP = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 # Simple observation: SDSS u-band (UV rest-frame proxy)
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u"]))
@@ -194,36 +194,3 @@ ax.grid(True, alpha=0.3, linestyle="--")
 
 fig.tight_layout()
 plt.savefig("plot_usecase_sfh_to_madau_dickinson.png", dpi=150, bbox_inches="tight")
-plt.close()
-
-# ============================================================================
-# Print summary statistics
-# ============================================================================
-
-print("\nCosmic SFRD Summary")
-print("=" * 70)
-print(f"{'Redshift':<12} {'SFRD_pop':<15} {'SFRD_MD14':<15} {'Ratio':<12}")
-print("-" * 70)
-for z_c, sfrd_p in zip(z_bin_centers, sfrd_pop):
-    sfrd_md = madau_dickinson_2014(z_c)
-    ratio = sfrd_p / sfrd_md if sfrd_md > 0 else np.nan
-    print(f"{z_c:<12.2f} {sfrd_p:<15.6f} {sfrd_md:<15.6f} {ratio:<12.3f}")
-print("-" * 70)
-
-# Peak location
-idx_peak_pop = np.argmax(sfrd_pop)
-idx_peak_md = np.argmax(psi_md14)
-print(
-    f"\nPeak SFRD (population):   z={z_bin_centers[idx_peak_pop]:.2f}, "
-    f"ψ={sfrd_pop[idx_peak_pop]:.4f} M☉/yr/Mpc³"
-)
-print(
-    f"Peak SFRD (MD14):         z={z_md14[idx_peak_md]:.2f}, "
-    f"ψ={psi_md14[idx_peak_md]:.4f} M☉/yr/Mpc³"
-)
-print("\nInterpretation:")
-print("  - SFRD rises from z~0 to peak at z~2")
-print("  - Declines toward z~3+ as the universe ages")
-print("  - Population-level SFRD should qualitatively match MD14")
-print("  - Deviations are expected due to simple main-sequence SFR scaling")
-print("    and small mock sample (use >1000 galaxies for convergence)")

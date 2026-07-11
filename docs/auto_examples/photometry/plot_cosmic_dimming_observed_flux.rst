@@ -43,11 +43,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 
 .. sphx-glr-precomputed-img:
 
-.. image:: images/sphx_glr_plot_cosmic_dimming_observed_flux_001.png
-   :alt: plot_cosmic_dimming_observed_flux
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 32-184
+.. GENERATED FROM PYTHON SOURCE LINES 32-182
 
 
 
@@ -211,14 +207,12 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
     ax_norm.axhline(y=1.0, color="gray", linestyle="--", alpha=0.5)
 
     fig.tight_layout()
-
-    # Save to script directory
-    plt.show()
+    plt.savefig("plot_cosmic_dimming_observed_flux.png", dpi=150, bbox_inches="tight")
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.901 seconds)
+   **Total running time of the script:** (0 minutes 7.095 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py:

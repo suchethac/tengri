@@ -21,11 +21,6 @@
 THEMIS: q_HAC sweep at fixed U_min
 ===================================
 
-.. image:: images/sphx_glr_plot_themis_qhac_sweep_001.png
-   :alt: plot themis qhac sweep
-   :class: sphx-glr-single-img
-
-
 Sweep hydrocarbon grain content across the THEMIS grid at fixed minimum
 radiation field strength. PAH-like mid-IR features strengthen with q_HAC
 while FIR continuum remains essentially unchanged.
@@ -91,9 +86,9 @@ while FIR continuum remains essentially unchanged.
         xscale="log",
         yscale="log",
         xlabel=r"$\lambda\ [\mu\mathrm{m}]$",
-        ylabel=r"$\nu L_\nu\ [\mathrm{arbitrary,\ normalised}]$",
+        ylabel=r"$\nu L_\nu\ [\mathrm{arbitrary,\ normalized}]$",
         xlim=(2.0, 1.0e3),
-        ylim=(1.0e-26, 1.0e-23),
+        ylim=(1.0e-5, 1.0e1),
     )
     ax.legend(loc="lower center", frameon=False, fontsize=8, ncol=3)
     fig.tight_layout()

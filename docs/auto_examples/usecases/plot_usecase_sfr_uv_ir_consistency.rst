@@ -21,11 +21,6 @@
 SFR calibrations: UV only vs UV+IR hybrid estimators vs dust optical depth
 ===========================================================================
 
-.. image:: images/sphx_glr_plot_usecase_sfr_uv_ir_consistency_001.png
-   :alt: plot usecase sfr uv ir consistency
-   :class: sphx-glr-single-img
-
-
 Star formation rate calibrations depend on which wavelengths we observe.
 At high dust optical depth, UV-only SFR estimators severely underestimate
 the true SFR because dusty starbursts radiate most energy in the infrared.
@@ -48,7 +43,7 @@ References
 - Kennicutt 1998, ARA&A, 36, 189 — SFR UV/IR/radio calibrations
 - Hao et al. 2011, ApJ, 741, 124 — hybrid UV+IR SFR recipe
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-251
+.. GENERATED FROM PYTHON SOURCE LINES 27-227
 
 
 
@@ -58,21 +53,8 @@ References
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    SFR recovery statistics:
-      tau_V range: 0.00 – 4.00
-      Hybrid SFR relative error: 70.2% – 95.2%
-      Mean error: 90.6%
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -276,35 +258,11 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
-    plt.show()
-
-    # ────────────────────────────────────────────────────────────────────────
-    # 6. Verify recovery accuracy
-    # ────────────────────────────────────────────────────────────────────────
-
-    # At low tau_V: SFR(UV) should match truth; at high tau_V it should fail
-    # At all tau_V: SFR(UV+IR) should recover truth within ~10%
-
-    rel_error_hybrid = np.abs(sfr_hybrid - true_sfr) / true_sfr * 100.0
-
-    print("SFR recovery statistics:")
-    print(f"  tau_V range: {tau_v_values.min():.2f} – {tau_v_values.max():.2f}")
-    err_min = rel_error_hybrid.min()
-    err_max = rel_error_hybrid.max()
-    print(f"  Hybrid SFR relative error: {err_min:.1f}% – {err_max:.1f}%")
-    print(f"  Mean error: {rel_error_hybrid.mean():.1f}%")
-
-    # Diagnostic: if hybrid SFR deviates by >100% at high tau_V, investigate dust emission model
-    if np.any(rel_error_hybrid > 100.0):
-        print(
-            "\n⚠ WARNING: hybrid SFR error >100% detected."
-            " Check dust emission model or IR integration bounds."
-        )
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.163 seconds)
+   **Total running time of the script:** (0 minutes 3.230 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py:

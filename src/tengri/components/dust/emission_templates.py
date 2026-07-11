@@ -1779,14 +1779,12 @@ def create_astrodust_from_grid(
         # Interpolate onto target wavelength grid
         sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
-        # CMB contrast correction at high redshift
-        from . import emission
-
-        T_eff_approx = 18.0 * dust_umin ** (1.0 / 6.0)
-        T_eff = emission.cmb_corrected_temperature(T_eff_approx, redshift, 2.0)
-        contrast = emission.cmb_contrast_factor(wavelength_aa, T_eff, redshift)
-
-        return L_absorbed * sed * contrast
+        # No CMB contrast factor here — see the note in ``create_themis_from_grid``.
+        # It is an *observational* suppression, so applying it to the emitted SED
+        # breaks the energy-balance invariant (int L_nu dnu == L_absorbed) that
+        # this component exists to satisfy. ``redshift`` is kept in the signature
+        # for call-site compatibility.
+        return L_absorbed * sed
 
     return astrodust_emission
 
@@ -2016,15 +2014,12 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
         # Interpolate onto target wavelength grid
         sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
-        # CMB contrast correction at high redshift
-        # Use representative cold dust temperature (25 K) since BOSA doesn't have U_min
-        from . import emission
-
-        T_eff_approx = 25.0
-        T_eff = emission.cmb_corrected_temperature(T_eff_approx, redshift, 2.0)
-        contrast = emission.cmb_contrast_factor(wavelength_aa, T_eff, redshift)
-
-        return L_absorbed * sed * contrast
+        # No CMB contrast factor here — see the note in ``create_themis_from_grid``.
+        # It is an *observational* suppression, so applying it to the emitted SED
+        # breaks the energy-balance invariant (int L_nu dnu == L_absorbed) that
+        # this component exists to satisfy. ``redshift`` is kept in the signature
+        # for call-site compatibility.
+        return L_absorbed * sed
 
     return bosa_emission
 
@@ -2386,14 +2381,22 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         # Interpolate onto target wavelength grid
         sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
-        # CMB contrast correction at high redshift
-        from . import emission
-
-        T_eff_approx = 18.0 * dust_umin ** (1.0 / 6.0)
-        T_eff = emission.cmb_corrected_temperature(T_eff_approx, redshift, 2.0)
-        contrast = emission.cmb_contrast_factor(wavelength_aa, T_eff, redshift)
-
-        return L_absorbed * sed * contrast
+        # The da Cunha et al. (2013) CMB contrast factor is deliberately NOT
+        # applied to the emitted SED.
+        #
+        # It is an *observational* suppression — the flux you measure above the
+        # CMB background — so multiplying the emitted spectrum by it breaks the
+        # invariant this component exists to satisfy: the dust must re-emit the
+        # starlight it absorbed, int L_nu dnu == L_absorbed. Applying it after the
+        # unit-integral renormalization silently destroyed up to 1.6% of the
+        # absorbed energy (worst for the aromatic-rich, mm-bright templates), and
+        # it never even received a real redshift — no component plumbs one through
+        # — so it only ever imposed the z=0 suppression. DL07/DL14 never applied
+        # it, and CIGALE conserves to 0.01%, so THEMIS/Astrodust/BOSA were the
+        # odd ones out. If a CMB contrast is wanted it belongs at the observation
+        # layer, applied uniformly, not inside the energy-balanced emitter.
+        # ``redshift`` is kept in the signature for call-site compatibility.
+        return L_absorbed * sed
 
     return themis_emission
 

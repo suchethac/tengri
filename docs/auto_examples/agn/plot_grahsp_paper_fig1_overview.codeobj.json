@@ -137,8 +137,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.agn.grahsp.model",
-   "module_short": "tengri.components.agn",
+   "module": "tengri.agn",
+   "module_short": "tengri.agn",
    "name": "GRAHSPParams"
   }
  ],
@@ -801,8 +801,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.agn.grahsp.model",
-   "module_short": "tengri.components.agn",
+   "module": "tengri.agn",
+   "module_short": "tengri.agn",
    "name": "evaluate_grahsp_agn"
   }
  ],
@@ -920,8 +920,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.agn.grahsp.templates",
-   "module_short": "tengri.components.agn.grahsp",
+   "module": "tengri.agn",
+   "module_short": "tengri.agn",
    "name": "load_grahsp_templates"
   }
  ],

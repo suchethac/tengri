@@ -5,7 +5,11 @@
 AGN Models
 ==========
 
-AGN disc and torus SED templates.
+Composable active-galactic-nucleus SEDs — accretion-disc continua
+(multicolor, KD18, relagn, qsogen), torus libraries (SKIRTOR, Nenkova,
+CAT3D, Silva), narrow-/broad-line and FeII emission, polar-dust and
+Type 1/2 attenuation, the X-ray corona via the alpha_ox relation, and
+parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 
 
@@ -17,7 +21,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The X-ray corona response of an AGN depends jointly on bolometric luminosity (which sets the X-ray normalisation through the Lusso &amp; Risaliti L_X-L_UV correlation) and on the UV-to-X-ray slope alpha_OX (which sets the relative balance of UV and X-ray emission). Four panels at log L_bol = 44, 45, 46, 47 erg/s overlay three alpha_OX values each, showing that the absolute X-ray luminosity scales with L_bol while the X-ray-to-UV ratio is set independently by alpha_OX.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The X-ray corona response of an AGN depends jointly on bolometric luminosity (which sets the X-ray normalization through the Lusso &amp; Risaliti L_X-L_UV correlation) and on the UV-to-X-ray slope alpha_OX (which sets the relative balance of UV and X-ray emission). Four panels at log L_bol = 44, 45, 46, 47 erg/s overlay three alpha_OX values each, showing that the absolute X-ray luminosity scales with L_bol while the X-ray-to-UV ratio is set independently by alpha_OX.">
 
 .. only:: html
 
@@ -119,7 +123,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Four AGN configurations of increasing physical complexity at the same bolometric luminosity (log L_bol = 12.5 in L_sun units) — bare multicolour disc, +SKIRTOR torus, +NLR narrow-line forest, and an empirical QSOgen template that bundles all of the above. The reader sees which spectral feature each block introduces (mid-IR torus bump, optical narrow lines, broad UV continuum) and which are essentially universal across the modelling choice.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Four AGN configurations of increasing physical complexity at the same bolometric luminosity (log L_bol = 12.5 in L_sun units) — bare multicolor disc, +SKIRTOR torus, +NLR narrow-line forest, and an empirical QSOgen template that bundles all of the above. The reader sees which spectral feature each block introduces (mid-IR torus bump, optical narrow lines, broad UV continuum) and which are essentially universal across the modeling choice.">
 
 .. only:: html
 
@@ -170,7 +174,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Dust-free quasar spectra are intrinsically blue in the UV and optical. Adding a polar-dust attenuation component reddens the accretion-disc continuum: increasing the polar-dust reddening agn_polar_ebv (E(B−V), [mag]) from 0 to 0.4 walks the SED from unobscured type-1 QSO colours to a moderately dust-reddened continuum, while the absorbed UV energy is re-radiated as a polar-dust infrared bump.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust-free quasar spectra are intrinsically blue in the UV and optical. Adding a polar-dust attenuation component reddens the accretion-disc continuum: increasing the polar-dust reddening agn_polar_ebv (E(B−V), [mag]) from 0 to 0.4 walks the SED from unobscured type-1 QSO colors to a moderately dust-reddened continuum, while the absorbed UV energy is re-radiated as a polar-dust infrared bump.">
 
 .. only:: html
 
@@ -181,13 +185,13 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">QSO continuum: polar-dust reddening tunes UV to optical colour</div>
+      <div class="sphx-glr-thumbnail-title">QSO continuum: polar-dust reddening tunes UV to optical color</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The QSOgen model includes a UV/optical emission-line forest and broad Balmer continuum on top of the underlying disc. The relative strength of these line features with respect to the continuum controls the slope and colour of the UV–optical SED.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The QSOgen model (Temple+2021) includes empirical UV/optical emission-line forest and broad Balmer continuum. The relative strength of these line features with respect to the continuum obeys the Baldwin effect: luminous quasars show weaker equivalent-width emission lines (the line flux grows sublinearly with continuum). This sweep shows the Baldwin effect in the QSOgen template across six decades of bolometric luminosity (log L_bol = 9 to 13 L_sun), revealing the Ly-alpha + C IV feature cluster around 1000–1600 Å and optical hydrogen Balmer lines (Hα, Hβ).">
 
 .. only:: html
 
@@ -198,7 +202,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">QSOgen lines: emission-line contributions vary with luminosity</div>
+      <div class="sphx-glr-thumbnail-title">QSOgen emission lines: Baldwin effect across AGN luminosity</div>
     </div>
 
 
@@ -238,7 +242,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Reproduces the UV-to-X-ray connection panel from Yang et al. 2020 (X-CIGALE Fig. 3): the X-ray corona is normalised through the Just+07 alpha_OX-L_2500 relation, anchored at the disc-derived L_2500. Offsets delta_alpha_OX from -0.3 to +0.3 dex pivot the X-ray power-law about the 2500 A anchor — the disc UV stays fixed (single curve at log lam &gt; 1), only the X-ray normalisation moves.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Reproduces the UV-to-X-ray connection panel from Yang et al. 2020 (X-CIGALE Fig. 3): the X-ray corona is normalized through the Just+07 alpha_OX-L_2500 relation, anchored at the disc-derived L_2500. Offsets delta_alpha_OX from -0.3 to +0.3 dex pivot the X-ray power-law about the 2500 A anchor — the disc UV stays fixed (single curve at log lam &gt; 1), only the X-ray normalization moves.">
 
 .. only:: html
 
@@ -289,7 +293,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The agn.disc, agn.lines, agn.feii, agn.torus, agn.atten sub-blocks of SEDModel.build are composable: turning one on at a time and overlaying the all-on reference (dashed grey) shows which features each sub-block contributes. Five panels at fixed log L_bol = 12.0, all built via the public nested-dict grammar:">
+    <div class="sphx-glr-thumbcontainer" tooltip="The agn.disc, agn.lines, agn.feii, agn.torus, agn.atten sub-blocks of SEDModel.build are composable: turning one on at a time and overlaying the all-on reference (dashed gray) shows which features each sub-block contributes. Five panels at fixed log L_bol = 12.0, all built via the public nested-dict grammar:">
 
 .. only:: html
 
@@ -323,7 +327,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The collaborator workflow for adding a new AGN model. We define a toy single-temperature blackbody torus, register it with register_agn_model, confirm it is discoverable through tengri.list_agn_models and tengri.describe, then evaluate it on the public SEDModel.build path and plot it next to the production SKIRTOR torus at the same bolometric luminosity. The toy curve is a greybody; the SKIRTOR curve carries the silicate 9.7 micron feature and the inclination-dependent geometry the toy elides.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A toy single-temperature blackbody torus implemented as a modern SEDModelComponent subclass, discoverable through SEDModel.build and composable with other AGN blocks. The SEDModelComponent pattern is the recommended path for any new SED physics — AGN, dust, or stellar.">
 
 .. only:: html
 
@@ -334,7 +338,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Registering a custom AGN torus model and using it through SEDModel.build</div>
+      <div class="sphx-glr-thumbnail-title">Custom AGN torus model via SEDModelComponent and direct integration</div>
     </div>
 
 
@@ -357,7 +361,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The GRAHSP big blue bump can be modelled two ways. The default is a smooth bending power-law (Ryde 1998 form) with free UV/optical slopes and a bend wavelength. The physical alternative is the Netzer accretion-disc grid (Netzer &amp; Trakhtenbrot 2014), tabulated over black-hole mass, spin and Eddington ratio — selected with disc_model=&quot;netzer&quot; plus disc_m / disc_a / disc_mdot.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The GRAHSP big blue bump can be modeled two ways. The default is a smooth bending power-law (Ryde 1998 form) with free UV/optical slopes and a bend wavelength. The physical alternative is the Netzer accretion-disc grid (Netzer &amp; Trakhtenbrot 2014), tabulated over black-hole mass, spin and Eddington ratio — selected with disc_model=&quot;netzer&quot; plus disc_m / disc_a / disc_mdot.">
 
 .. only:: html
 
@@ -374,7 +378,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The iron pseudo-continuum (the &quot;FeII forest&quot;) is a defining feature of type-1 AGN optical/UV spectra. GRAHSP offers two templates: the photoionisation model of Bruhweiler &amp; Verner (2008) (the upstream default) and the empirical Veron-Cetty, Joly &amp; Veron (2004) template. They differ most in the relative strength and shape of the UV (2200-3000 Å) and optical (4400-5400 Å) multiplet blends.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The iron pseudo-continuum (the &quot;FeII forest&quot;) is a defining feature of type-1 AGN optical/UV spectra. GRAHSP offers two templates: the photoionization model of Bruhweiler &amp; Verner (2008) (the upstream default) and the empirical Veron-Cetty, Joly &amp; Veron (2004) template. They differ most in the relative strength and shape of the UV (2200-3000 Å) and optical (4400-5400 Å) multiplet blends.">
 
 .. only:: html
 
@@ -391,7 +395,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Reproduction of Fig. 1 of Buchner et al. (2024, GRAHSP): how the individual model components sum to the total emission (black). The AGN side is the GRAHSP bending power-law disk/BBB (blue), iron + emission-line forest (red), and the dusty torus (yellow dashed), normalised so the disk has L_{5100\,\mathrm{\AA}}^{\rm AGN}=10^{44}\,\mathrm{erg\,s^{-1}} =10^{37}\,\mathrm{W} (blue square); the torus is anchored at 12 µm (yellow diamond). The host is a stellar population (purple) and its reprocessed dust emission (green).">
+    <div class="sphx-glr-thumbcontainer" tooltip="Reproduction of Fig. 1 of Buchner et al. (2024, GRAHSP): how the individual model components sum to the total emission (black). The AGN side is the GRAHSP bending power-law disk/BBB (blue), iron + emission-line forest (red), and the dusty torus (yellow dashed), normalized so the disk has L_{5100\,\mathrm{\AA}}^{\rm AGN}=10^{44}\,\mathrm{erg\,s^{-1}} =10^{37}\,\mathrm{W} (blue square); the torus is anchored at 12 µm (yellow diamond). The host is a stellar population (purple) and its reprocessed dust emission (green).">
 
 .. only:: html
 
@@ -408,7 +412,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Faithful reproduction of Fig. 3 of Buchner et al. (2024, GRAHSP), showing how the 15 AGN parameters configure the spectrum in L_\lambda (arbitrary units). The bending power-law BBB (blue) is normalised at 5100 Å with optical slope \beta, bending at \lambda_{\rm bend} (width W_{\rm bend}) to the UV slope \beta_{\rm UV}. Emission lines (light red) of width W_{\rm lines} and an FeII forest (dark red) are scaled by A_{\rm lines} / A_{\rm FeII}. The log-Gaussian torus (dark yellow) has cool/hot components at \lambda_{\rm cool}/\lambda_{\rm hot} (widths W_{\rm cool}/W_{\rm hot}), peak ratio f_{\rm hot}, 12 µm normalisation f_{\rm cov}, and silicate depth Si (here −1, absorption; dotted). Component colours map to the GRAHSP/pcigale modules activatepl (BBB), activategtorus (torus), and activatelines (lines + FeII).">
+    <div class="sphx-glr-thumbcontainer" tooltip="Faithful reproduction of Fig. 3 of Buchner et al. (2024, GRAHSP), showing how the 15 AGN parameters configure the spectrum in L_\lambda (arbitrary units). The bending power-law BBB (blue) is normalized at 5100 Å with optical slope \beta, bending at \lambda_{\rm bend} (width W_{\rm bend}) to the UV slope \beta_{\rm UV}. Emission lines (light red) of width W_{\rm lines} and an FeII forest (dark red) are scaled by A_{\rm lines} / A_{\rm FeII}. The log-Gaussian torus (dark yellow) has cool/hot components at \lambda_{\rm cool}/\lambda_{\rm hot} (widths W_{\rm cool}/W_{\rm hot}), peak ratio f_{\rm hot}, 12 µm normalization f_{\rm cov}, and silicate depth Si (here −1, absorption; dotted). Component colors map to the GRAHSP/pcigale modules activatepl (BBB), activategtorus (torus), and activatelines (lines + FeII).">
 
 .. only:: html
 
@@ -425,7 +429,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Faithful reproduction of Fig. 9 of Buchner et al. (2024, GRAHSP): the AGN spectrum from intrinsic (blue, top) to strongly attenuated (red, bottom) as the AGN-only colour excess agn_grahsp_ebv_agn is swept from 0.01 to 1. GRAHSP attenuates the AGN side with an SMC/Prevot (1984) law (paper §2.1.5), which rises steeply into the UV — so the UV/optical continuum is suppressed far more than the near-IR, and the heaviest attenuation eventually bites into the torus too. The intrinsic torus component is overplotted dashed black.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Faithful reproduction of Fig. 9 of Buchner et al. (2024, GRAHSP): the AGN spectrum from intrinsic (blue, top) to strongly attenuated (red, bottom) as the AGN-only color excess agn_grahsp_ebv_agn is swept from 0.01 to 1. GRAHSP attenuates the AGN side with an SMC/Prevot (1984) law (paper §2.1.5), which rises steeply into the UV — so the UV/optical continuum is suppressed far more than the near-IR, and the heaviest attenuation eventually bites into the torus too. The intrinsic torus component is overplotted dashed black.">
 
 .. only:: html
 
@@ -476,7 +480,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Nenkova et al. (2008) CLUMPY library is the AGN dusty-torus model used by FSPS and Prospector. tengri ships the same templates (vendored from FSPS as data/nenkova08_torus_grid.h5) and interpolates them with a pure-JAX triweight kernel, so the equatorial optical depth agn_tau is a fully differentiable, fitted parameter — it can be sampled by NUTS, optimised by MAP, or marginalised by VI, just like in Prospector.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Nenkova et al. (2008) CLUMPY library is the AGN dusty-torus model used by FSPS and Prospector. tengri ships the same templates (vendored from FSPS as data/nenkova08_torus_grid.h5) and interpolates them with a pure-JAX triweight kernel, so the equatorial optical depth agn_tau is a fully differentiable, fitted parameter — it can be sampled by NUTS, optimized by MAP, or marginalized by VI, just like in Prospector.">
 
 .. only:: html
 
@@ -493,7 +497,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Identical AGN configuration (multicolour disc + SKIRTOR torus at log L_bol = 12.5), one with the narrow-line region (FWHM ~ a few hundred km/s, characteristic Type-2 spectrum) and the other with the broad-line region (FWHM ~ thousands of km/s, Type-1). Side-by-side zooms on the UV (Ly-alpha, C IV) and the optical (Hbeta, [O III], Halpha) make the velocity-width contrast unmistakable while controlling for continuum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Identical AGN configuration (multicolor disc + SKIRTOR torus at log L_bol = 12.5), one with the narrow-line region (FWHM ~ a few hundred km/s, characteristic Type-2 spectrum) and the other with the broad-line region (FWHM ~ thousands of km/s, Type-1). Side-by-side zooms on the UV (Ly-alpha, C IV) and the optical (Hbeta, [O III], Halpha) make the velocity-width contrast unmistakable while controlling for continuum.">
 
 .. only:: html
 
@@ -510,24 +514,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Reproduces Figure 1 of Yang et al. 2020 (the X-CIGALE polar-dust introduction): SMC-law attenuation of the AGN disc by dust above the torus, plus an energy-conserving mid-IR greybody re-emission. Two panels at cos_inc = 0.95 (Type-1, face-on into the polar cone) and cos_inc = 0.10 (Type-2, edge-on view of the torus) for opening angle 40°. We sweep agn_polar_ebv from 0.00 to 0.30 — covering the empirical range Yang+2020 anchor against red quasars.">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_polar_dust_ebv_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_polar_dust_ebv_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Polar-dust E(B-V) sweep for Type 1 and Type 2 AGN sightlines (X-CIGALE)</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Polar dust disc attenuation applies only to Type 1 (face-on) sightlines — the equatorial torus already screens the disc for Type 2. The bi-conical polar dust absorbs disc photons regardless of viewing angle, however, and re-emits them isotropically as a FIR greybody (Casey 2012). So both Type 1 and Type 2 sweeps show the FIR re-emission bump growing with E(B-V); only the UV/optical attenuation is gated by sightline.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Polar dust disc attenuation applies only to Type 1 (face-on) sightlines — the equatorial torus already screens the disc for Type 2. The bi-conical polar dust absorbs disc photons regardless of viewing angle, however, and re-emits them isotropically as a FIR graybody (Casey 2012). So both Type 1 and Type 2 sweeps show the FIR re-emission bump growing with E(B-V); only the UV/optical attenuation is gated by sightline.">
 
 .. only:: html
 
@@ -544,7 +531,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Temple, Hewett &amp; Banerji (2021) QSOgen empirical template, used as the agn.disc.type=&quot;qsogen&quot; selector. We sweep log L_bol from 10.0 to 13.5 (in L_sun units) at fixed redshift to show that the template&#x27;s spectral shape is approximately self-similar across the quasar luminosity function — the only knob that moves features (the Baldwin-effect drop in C IV/Ly-alpha equivalent width) is the bolometric normalisation.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Temple, Hewett &amp; Banerji (2021) QSOgen empirical template, used as the agn.disc.type=&quot;qsogen&quot; selector. We sweep log L_bol from 10.0 to 13.5 (in L_sun units) at fixed redshift to show that the template&#x27;s spectral shape is approximately self-similar across the quasar luminosity function — the only knob that moves features (the Baldwin-effect drop in C IV/Ly-alpha equivalent width) is the bolometric normalization.">
 
 .. only:: html
 
@@ -578,24 +565,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compute and plot the broad-line region (BLR) size-luminosity relation (R_BLR ∝ L^0.5) using tengri AGN models. how AGN continuum luminosity connects to reverberation mapping measurements of the BLR extent.">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_reverberation_size_luminosity_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_reverberation_size_luminosity`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">AGN Reverberation Size-Luminosity Relation (Bentz+2013)</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Three accretion-disc backbones at the same bolometric anchor (log L_bol / L_sun = 12.5): the Richards et al. 2006 empirical mean Type-1 SDSS quasar template, the Temple, Hewett &amp; Banerji 2021 empirical QSOgen, and the Shakura-Sunyaev multicolour disc (the outer-disc component of Kubota &amp; Done 2018). Each is normalised to the same bolometric output so the differences are entirely in spectral shape — Richards+2006 is broader than QSOgen and carries the infrared bump from its host-galaxy-corrected composite, while the multicolour disc cuts off sharply on either side of the big blue bump.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Three accretion-disc backbones at the same bolometric anchor (log L_bol / L_sun = 12.5): the Richards et al. 2006 empirical mean Type-1 SDSS quasar template, the Temple, Hewett &amp; Banerji 2021 empirical QSOgen, and the Shakura-Sunyaev multicolor disc (the outer-disc component of Kubota &amp; Done 2018). Each is normalized to the same bolometric output so the differences are entirely in spectral shape — Richards+2006 is broader than QSOgen and carries the infrared bump from its host-galaxy-corrected composite, while the multicolor disc cuts off sharply on either side of the big blue bump.">
 
 .. only:: html
 
@@ -697,23 +667,6 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="agn={&quot;type&quot;: &quot;skirtor_stalevski&quot;} returns the SKIRTOR 2016 SED exactly as Stalevski&#x27;s radiative transfer computed it — accretion disc + clumpy torus + scattered light, read straight from the full-coverage grid with no analytic-disc substitution and no re-normalisation. This is the faithful template that codes reading SKIRTOR directly (e.g. ProSpect&#x27;s SKIRTOR_interp) reproduce.">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_stalevski_raw_template_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_skirtor_stalevski_raw_template`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Raw SKIRTOR (Stalevski 2016): the published radiative-transfer template</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The SKIRTOR clumpy torus model (Stalevski et al. 2016) emits thermal IR radiation that depends strongly on two parameters: viewing angle (inclination θ via cos_inc) and optical depth (``tau_97`` at 9.7 μm). Face-on systems show a smooth thermal continuum; edge-on systems develop deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.">
 
 .. only:: html
@@ -731,7 +684,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Reproduces the SKIRTOR vs Fritz comparison from Yang et al. 2020 (X-CIGALE Fig. 2). Both libraries re-emit the same disc-absorbed luminosity in the mid-IR; the mid-IR peak amplitude differs by ~0.5 dex because SKIRTOR&#x27;s clumpy 3-D Stalevski+2016 RT redistributes heating more efficiently into the bright NIR-MIR continuum than a smooth-density torus. tengri does not ship Fritz+2006 directly; we substitute Silva+04 (template-based smooth torus, the closest contemporary analogue) — the qualitative contrast (clumpy bright MIR vs smooth fainter MIR) is preserved.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Reproduces the SKIRTOR vs Fritz comparison from Yang et al. 2020 (X-CIGALE Fig. 2). Both libraries re-emit the same disc-absorbed luminosity in the mid-IR; the mid-IR peak amplitude differs by ~0.5 dex because SKIRTOR&#x27;s clumpy 3-D Stalevski+2016 RT redistributes heating more efficiently into the bright NIR-MIR continuum than a smooth-density torus. tengri does not ship Fritz+2006 directly; we substitute Silva+04 (template-based smooth torus, the closest contemporary analog) — the qualitative contrast (clumpy bright MIR vs smooth fainter MIR) is preserved.">
 
 .. only:: html
 
@@ -748,7 +701,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This is tengri&#x27;s full-grid SKIRTOR torus (Stalevski+2012, 2016), following the X-CIGALE skirtor2016 conventions: a 5-D clumpy two-phase library indexed by equatorial optical depth tau, radial and polar density gradients p / q, half-opening angle oa, and inclination cos i (plus an optional Casey-2012 polar-dust greybody). It is the science-grade counterpart to the parameter-averaged skirtor_agnfitter library — and, having the full grid, it responds strongly to its parameters.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This is tengri&#x27;s full-grid SKIRTOR torus (Stalevski+2012, 2016), following the X-CIGALE skirtor2016 conventions: a 5-D clumpy two-phase library indexed by equatorial optical depth tau, radial and polar density gradients p / q, half-opening angle oa, and inclination cos i (plus an optional Casey-2012 polar-dust graybody). It is the science-grade counterpart to the parameter-averaged skirtor_agnfitter library — and, having the full grid, it responds strongly to its parameters.">
 
 .. only:: html
 
@@ -794,6 +747,40 @@ AGN disc and torus SED templates.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">AGN SMBH growth track: dormant → merger → QSO → fading</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Different radiative-transfer and empirical torus libraries encode the Type-1↔Type-2 unified-model transition differently. SKIRTOR uses a 3D clumpy model with a smooth density distribution and produces symmetric silicate absorption/emission features. CAT3D-WIND employs a wind-like clumpy geometry. Nenkova et al. (CLUMPY) offers a simpler analytical approach. This grid shows how each library&#x27;s silicate 9.7 μm feature and overall IR reprocessing vary with inclination at fixed L_bol and (where applicable) opening angle, revealing library-specific anisotropies and feature depths.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_torus_library_inclination_grid_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_torus_library_inclination_grid`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AGN torus libraries across viewing angle: silicate feature and geometry</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The SKIRTOR clumpy torus geometry is controlled by the half-opening angle (``agn_oa_skirtor``), which determines how much of the accretion disc the dusty material covers. Smaller opening angles (more pole-on geometry, ~20–30°) produce a compact torus that exposes the hot inner disc; larger angles (more flared, ~50–60°) create a covering geometry that obscures the disc and reprocess more UV/optical photons into the mid-infrared.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_torus_opening_angle_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_torus_opening_angle_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR torus opening angle: geometry controls IR silicate and FIR bump</div>
     </div>
 
 
@@ -848,23 +835,6 @@ AGN disc and torus SED templates.
     </div>
 
 
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Accretion disc reverberation mapping reveals how the hot UV-emitting inner disc responds to ionizing source changes. Fausnaugh+2016 observed NGC 5548 using HST multi-band photometry (UV, optical) and found that UV variations lead optical by τ(λ) — the light-crossing time across the effective emission radius at wavelength λ.">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_variability_continuum_lag_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_variability_continuum_lag`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">AGN UV→optical continuum reverberation: light-crossing time lags</div>
-    </div>
-
-
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -904,25 +874,23 @@ AGN disc and torus SED templates.
    /auto_examples/agn/plot_kd18_disc_sweep
    /auto_examples/agn/plot_nenkova_tau_sweep
    /auto_examples/agn/plot_nlr_blr_lines
-   /auto_examples/agn/plot_polar_dust_ebv_sweep
    /auto_examples/agn/plot_polar_dust_ebv_type12_sweep
    /auto_examples/agn/plot_qsogen_spectrum
    /auto_examples/agn/plot_relagn_spin
-   /auto_examples/agn/plot_reverberation_size_luminosity
    /auto_examples/agn/plot_richards2006_template
    /auto_examples/agn/plot_seyfert_quasar_blazar_archetypes
    /auto_examples/agn/plot_silva04_nh_sweep
    /auto_examples/agn/plot_skirtor_agnfitter_sweep
    /auto_examples/agn/plot_skirtor_agnfitter_vs_cigale
    /auto_examples/agn/plot_skirtor_inclination_sweep
-   /auto_examples/agn/plot_skirtor_stalevski_raw_template
    /auto_examples/agn/plot_skirtor_variants
    /auto_examples/agn/plot_skirtor_vs_smooth_torus
    /auto_examples/agn/plot_skirtor_xcigale_sweep
    /auto_examples/agn/plot_slone_netzer_disc_sweep
    /auto_examples/agn/plot_smbh_growth_track
+   /auto_examples/agn/plot_torus_library_inclination_grid
+   /auto_examples/agn/plot_torus_opening_angle_sweep
    /auto_examples/agn/plot_torus_screen_disc
    /auto_examples/agn/plot_type1_type2_unified_model
    /auto_examples/agn/plot_ulirg_to_qso_transition
-   /auto_examples/agn/plot_variability_continuum_lag
 

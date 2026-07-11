@@ -21,11 +21,6 @@
 JWST NIRSpec PRISM vs G395M grating: Hα + [NII] resolution comparison
 ======================================================================
 
-.. image:: images/sphx_glr_plot_nirspec_prism_vs_grating_001.png
-   :alt: plot nirspec prism vs grating
-   :class: sphx-glr-single-img
-
-
 A z=5 JADES-like star-forming galaxy observed with JWST NIRSpec in two modes:
 PRISM (R~100, low-resolution) and G395M grating (R~1000, medium-resolution).
 The Hα line at rest 6564.61 Å appears as a single blob in PRISM but resolves
@@ -43,30 +38,18 @@ References
 .. [3] Cameron et al. (2023). The assembly of metals in galaxies at z~3-5.
        MNRAS (submitted).
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-219
+.. GENERATED FROM PYTHON SOURCE LINES 23-223
 
 
 
 .. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_nirspec_prism_vs_grating_001.png
-   :alt: PRISM (blended): $R \approx 100$ — H$\alpha$ + [N\,II] appear as single feature, G395M (resolved): $R \approx 1000$ — Three distinct peaks clearly separated
+   :alt: plot nirspec prism vs grating
    :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_nirspec_prism_vs_grating_001.png
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=5.00 (cosmic age 1.18 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    Saved: plot_nirspec_prism_vs_grating.png
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -198,9 +181,9 @@ References
     nii_6549_rest = 6548.05
     nii_6585_rest = 6583.46
 
-    ax_prism.axvline(ha_rest * rest_to_obs, ls=":", lw=1.5, color="grey", alpha=0.6)
-    ax_prism.axvline(nii_6549_rest * rest_to_obs, ls=":", lw=1.0, color="grey", alpha=0.4)
-    ax_prism.axvline(nii_6585_rest * rest_to_obs, ls=":", lw=1.0, color="grey", alpha=0.4)
+    ax_prism.axvline(ha_rest * rest_to_obs, ls=":", lw=1.5, color="gray", alpha=0.6)
+    ax_prism.axvline(nii_6549_rest * rest_to_obs, ls=":", lw=1.0, color="gray", alpha=0.4)
+    ax_prism.axvline(nii_6585_rest * rest_to_obs, ls=":", lw=1.0, color="gray", alpha=0.4)
 
     ax_prism.text(
         ha_rest * rest_to_obs,
@@ -208,20 +191,23 @@ References
         r"H$\alpha$",
         fontsize=9,
         ha="center",
-        color="grey",
+        color="gray",
         transform=ax_prism.get_xaxis_transform(),
     )
 
     ax_prism.set_ylabel("Normalized Flux", fontsize=11)
-    ax_prism.set_title(
-        r"PRISM (blended): $R \approx 100$ — H$\alpha$ + [N\,II] appear as single feature",
-        fontsize=11,
-        loc="left",
+    ax_prism.text(
+        0.05,
+        0.95,
+        r"PRISM ($R \approx 100$): blended",
+        transform=ax_prism.transAxes,
+        fontsize=10,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.3),
     )
     ax_prism.legend(frameon=False, loc="upper right", fontsize=10)
     ax_prism.set_ylim(0.7, 1.35)
 
-    # --- Panel 2: G395M (medium-resolution) ---
     ax_grating.plot(
         wave_obs_ha,
         sed_grating,
@@ -231,8 +217,7 @@ References
     )
     ax_grating.fill_between(wave_obs_ha, sed_grating, alpha=0.3, color="C1")
 
-    # Emission line markers and labels
-    colors_lines = ["C2", "grey", "C2"]
+    colors_lines = ["C2", "gray", "C2"]
     line_rest = [nii_6549_rest, ha_rest, nii_6585_rest]
     line_names = [r"[N\,II]", r"H$\alpha$", r"[N\,II]"]
 
@@ -251,10 +236,14 @@ References
 
     ax_grating.set_xlabel(r"Observed wavelength [$\AA$]", fontsize=11)
     ax_grating.set_ylabel("Normalized Flux", fontsize=11)
-    ax_grating.set_title(
-        r"G395M (resolved): $R \approx 1000$ — Three distinct peaks clearly separated",
-        fontsize=11,
-        loc="left",
+    ax_grating.text(
+        0.05,
+        0.95,
+        r"G395M ($R \approx 1000$): resolved",
+        transform=ax_grating.transAxes,
+        fontsize=10,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.3),
     )
     ax_grating.legend(frameon=False, loc="upper right", fontsize=10)
     ax_grating.set_ylim(0.7, 1.35)
@@ -264,8 +253,6 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_nirspec_prism_vs_grating.png", dpi=150, bbox_inches="tight")
-    print("Saved: plot_nirspec_prism_vs_grating.png")
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_nirspec_prism_vs_grating.py:

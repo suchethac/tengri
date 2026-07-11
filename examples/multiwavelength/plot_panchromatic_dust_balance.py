@@ -72,7 +72,7 @@ for tau_diff in tau_diffs:
     )
 
 ax.set_xlim(0.08, 1e3)
-ax.set_ylim(1e25, 1e34)
+ax.set_ylim(1e40, 1e44)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mu$m]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
 

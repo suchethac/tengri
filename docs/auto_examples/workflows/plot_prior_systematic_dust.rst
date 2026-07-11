@@ -21,11 +21,6 @@
 How priors push the dust posterior — flat vs narrow prior on τ_diff
 ===================================================================
 
-.. image:: images/sphx_glr_plot_prior_systematic_dust_001.png
-   :alt: plot prior systematic dust
-   :class: sphx-glr-single-img
-
-
 If the data is informative the MAP estimate sits at the
 likelihood maximum and the choice of prior barely matters. If the
 data is uninformative the MAP slides toward the prior mode.
@@ -139,7 +134,7 @@ References:
         ax.text(0.05, 0.93, rf"S/N = {snr:.0f}", transform=ax.transAxes, fontsize=10)
         ax.set(xlabel=r"$\tau_{\rm diff}$ (V-band)", ylim=(0, 1.1), xlim=(0, 1.5))
         if ax is axes[0]:
-            ax.set_ylabel(r"posterior density (peak-normalised)")
+            ax.set_ylabel(r"posterior density (peak-normalized)")
         ax.legend(frameon=False, fontsize=9, loc="upper right")
 
     fig.tight_layout()
@@ -148,7 +143,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.078 seconds)
+   **Total running time of the script:** (0 minutes 2.014 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_prior_systematic_dust.py:

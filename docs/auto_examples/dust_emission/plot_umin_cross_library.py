@@ -161,7 +161,6 @@ ax_sweep.set(
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
     ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]",
 )
-ax_sweep.set_title("FIR peak migration with $U_{\\min}$ — DL07 (solid) vs THEMIS (dashed)")
 ax_sweep.legend(frameon=False, fontsize=7, loc="lower left", ncol=2)
 fig_sweep.tight_layout()
 fig_sweep.savefig("plot_umin_cross_library_sweep.png", dpi=150, bbox_inches="tight")

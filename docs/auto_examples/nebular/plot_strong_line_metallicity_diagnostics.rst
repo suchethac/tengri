@@ -21,11 +21,6 @@
 Strong-line gas-phase metallicity diagnostics
 ==============================================
 
-.. image:: images/sphx_glr_plot_strong_line_metallicity_diagnostics_001.png
-   :alt: plot strong line metallicity diagnostics
-   :class: sphx-glr-single-img
-
-
 Five widely-used optical strong-line metallicity diagnostics
 evaluated across the Cue ``logZ_gas`` prior. Each one carries a
 different systematic — Pettini & Pagel 2004 O3N2 saturates at high
@@ -36,7 +31,7 @@ and [S II]/[O II] is a low-ion proxy.
 This is the diagnostic family every observer chooses between when
 converting line ratios to a 12 + log(O/H) on a sample. The plot spans
 12 + log(O/H) from ~7 to ~9, illustrating saturation at high metallicity
-(Kewley & Dopita 2002) and the famous double-valued R23 behaviour.
+(Kewley & Dopita 2002) and the famous double-valued R23 behavior.
 
 References:
 - Pagel et al. 1979, MNRAS, 189, 95 (R23 ratio)
@@ -160,7 +155,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.795 seconds)
+   **Total running time of the script:** (0 minutes 2.433 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_strong_line_metallicity_diagnostics.py:

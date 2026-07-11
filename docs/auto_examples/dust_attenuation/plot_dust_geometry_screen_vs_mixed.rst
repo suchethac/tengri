@@ -72,7 +72,7 @@ References
 
     import tengri
     from tengri.analysis.plotting import setup_style
-    from tengri.components.dust.attenuation import calzetti
+    from tengri.dust import calzetti
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

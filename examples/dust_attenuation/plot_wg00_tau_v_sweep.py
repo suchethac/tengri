@@ -83,11 +83,10 @@ for geom, label, color in GEOM:
 ax2.set(
     xlabel=r"V-band optical depth $\tau_V$",
     ylabel=r"$A(1500\,\mathrm{\AA})\,/\,A_V$  (UV steepness)",
-    title="Screen stays fixed; mixed/clumpy gray",
     xlim=(0, 10),
     ylim=(1.0, 2.7),
 )
 ax2.legend(frameon=False, fontsize=9)
 
 plt.tight_layout()
-plt.show()
+plt.savefig("plot_wg00_tau_v_sweep.png", dpi=150, bbox_inches="tight")

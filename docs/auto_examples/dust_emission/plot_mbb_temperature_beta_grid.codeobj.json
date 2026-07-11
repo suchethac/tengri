@@ -867,29 +867,6 @@
    "name": "ScalarMappable"
   }
  ],
- "plt.cm.plasma": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.colors",
-   "module_short": "matplotlib.colors",
-   "name": "ListedColormap"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "ListedColormap"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot.cm",
-   "module_short": "matplotlib.pyplot.cm",
-   "name": "plasma"
-  }
- ],
  "plt.cm.viridis": [
   {
    "is_class": false,

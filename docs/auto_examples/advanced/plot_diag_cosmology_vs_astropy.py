@@ -46,17 +46,6 @@ rel_err_dC = (d_C_tengri - d_C_apy) / np.abs(d_C_apy)
 rel_err_age = (age_tengri - age_apy) / np.abs(age_apy)
 rel_err_dV = (dV_tengri - dV_apy) / np.abs(dV_apy)
 
-# Check for large deviations
-max_err_dL = np.max(np.abs(rel_err_dL))
-max_err_dC = np.max(np.abs(rel_err_dC))
-max_err_age = np.max(np.abs(rel_err_age))
-max_err_dV = np.max(np.abs(rel_err_dV))
-
-print(f"Max relative error d_L: {max_err_dL:.2e} ({max_err_dL * 100:.3f}%)")
-print(f"Max relative error d_C: {max_err_dC:.2e} ({max_err_dC * 100:.3f}%)")
-print(f"Max relative error age: {max_err_age:.2e} ({max_err_age * 100:.3f}%)")
-print(f"Max relative error dV/dz/dΩ: {max_err_dV:.2e} ({max_err_dV * 100:.3f}%)")
-
 # Note: Residuals are driven by parameter differences (astropy's Planck18 differs
 # slightly from Planck 2018 published values), not numerical bugs.
 # Astropy: Om0≈0.310, H0≈67.7; Tengri (DSPS): Om0=0.315, H0=67.4

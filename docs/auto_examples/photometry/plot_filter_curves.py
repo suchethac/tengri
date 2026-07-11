@@ -3,43 +3,23 @@ SDSS Filter Transmission Curves
 ================================
 
 Plot the ugriz filter transmission curves from the SDSS photometric system.
-Filters are loaded from the SVO Filter Profile Service via tengri's filter
-registry.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_filter_curves_001.png
-   :alt: plot_filter_curves
-   :class: sphx-glr-single-img
-
+Filters are loaded from the SVO Filter Profile Service via tengri's filter registry.
 """
 
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
-from pathlib import Path
-
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import load_filter_set
+import tengri
 from tengri.analysis.plotting import setup_style
 
 setup_style()
 
-# Locate filter cache — works from project root or sphinx-gallery cwd
-_FILTER_DIRS = [
-    Path("data/filters"),
-    Path("../data/filters"),
-    Path("../../data/filters"),
-    Path("../../../data/filters"),
-]
-cache_dir = next((d for d in _FILTER_DIRS if d.exists()), "data/filters")
-
-# Load SDSS ugriz filters
 filter_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-_waves, _trans, curves = load_filter_set(filter_names, cache_dir=str(cache_dir))
+_waves, _trans, curves = tengri.load_filter_set(filter_names)
 
 # Band colors matching standard SDSS convention
 band_colors = {

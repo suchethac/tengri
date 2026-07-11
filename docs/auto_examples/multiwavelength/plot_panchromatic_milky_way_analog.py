@@ -9,7 +9,7 @@ activity. Dust attenuates UV/optical and re-emits in the infrared.
 Radio continuum from star-forming regions and X-rays from stellar binaries
 are included.
 
-Reading order: stellar continuum (grey) → dust-attenuated stellar
+Reading order: stellar continuum (gray) → dust-attenuated stellar
 (faded) → dust emission (warm FIR + cold submm) → radio (cm-wavelength)
 → X-ray (from accreting binaries).
 
@@ -71,7 +71,7 @@ HOST = dict(
 )
 
 # Dust: two-component model (diffuse + birth cloud) + Dale et al. IR emission
-# τ values typical for MW analogues (Calzetti 2000 calibration)
+# τ values typical for MW analogs (Calzetti 2000 calibration)
 DUST_ON = {
     "type": "two_component",
     "*": tengri.FIXED,

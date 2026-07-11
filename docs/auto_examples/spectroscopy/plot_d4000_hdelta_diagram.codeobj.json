@@ -72,6 +72,15 @@
    "name": "function"
   }
  ],
+ "_shape_name": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
  "age": [
   {
    "is_class": false,
@@ -1225,15 +1234,6 @@
    "module": "builtins",
    "module_short": "builtins",
    "name": "int"
-  }
- ],
- "shape_name": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "str"
   }
  ],
  "ssp": [

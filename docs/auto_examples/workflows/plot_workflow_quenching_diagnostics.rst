@@ -21,11 +21,6 @@
 Three diagnostics of quenching epoch in one figure
 ====================================================
 
-.. image:: images/sphx_glr_plot_workflow_quenching_diagnostics_001.png
-   :alt: plot workflow quenching diagnostics
-   :class: sphx-glr-single-img
-
-
 When did star formation in a galaxy stop? Optical-only color, the
 4000 Å break, and Hα equivalent width respond on different timescales:
 NUV − r reddens within ~100 Myr of quenching (loss of O/B stars),
@@ -52,19 +47,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.545 Gyr at peak sfh_tsnorm_peak_lbt_gyr=4 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.545 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -182,6 +166,11 @@ References:
     ax.set_xlabel(r"Lookback time since quenching $t_{\rm q}$  [Gyr]")
 
     plt.savefig("plot_workflow_quenching_diagnostics.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.005 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_quenching_diagnostics.py:

@@ -4,7 +4,7 @@ Load and fit photometry from CSV
 
 How do I load measured photometry from a table and fit it? This recipe
 generates mock photometry for 3 galaxies and fits each one independently
-with a MAP fit, demonstrating the workflow for catalogue-scale SED fitting.
+with a MAP fit, demonstrating the workflow for catalog-scale SED fitting.
 """
 
 import os

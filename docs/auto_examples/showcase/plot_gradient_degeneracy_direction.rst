@@ -21,11 +21,6 @@
 Fisher Information Ellipses from the Hessian
 =============================================
 
-.. image:: images/sphx_glr_plot_gradient_degeneracy_direction_001.png
-   :alt: plot gradient degeneracy direction
-   :class: sphx-glr-single-img
-
-
 The Fisher Information Matrix quantifies which linear combinations of
 parameters are constrained by data — and which are degenerate. Tengri's
 fully differentiable forward model makes it trivial to compute the Fisher
@@ -42,7 +37,7 @@ Hessian: F_ij ≈ (∂²χ² / ∂θ_i ∂θ_j) evaluated at the fiducial point.
 resulting ellipse's eccentricity and orientation tell us exactly which
 parameter combinations observations can break.
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-207
+.. GENERATED FROM PYTHON SOURCE LINES 21-200
 
 
 
@@ -52,22 +47,8 @@ parameter combinations observations can break.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Building model...
-    Computing fiducial model predictions (3 filters)...
-    Computing Fisher matrix via finite differences...
-    Done. Condition number: 1.9e+02
-      Eigenvalues (Fisher info): [2.2e+02, 4.0e+04]
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -76,7 +57,6 @@ parameter combinations observations can break.
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
-    import os
     import warnings
 
     import matplotlib.pyplot as plt
@@ -97,6 +77,7 @@ parameter combinations observations can break.
         "sfh_dpl_alpha": 1.5,
         "sfh_dpl_beta": 2.0,
         "sfh_dpl_tau_gyr": 1.0,
+        "sfh_dpl_age_gyr": 3.0,
         "sfh_dpl_log_total_mass": 0.5,
         "dust_tau_bc": 0.3,
         "dust_tau_diff": 0.1,
@@ -106,8 +87,6 @@ parameter combinations observations can break.
 
     # Single observation config to demonstrate the concept
     FILTERS = ["sdss_u", "sdss_r", "2mass_j"]
-
-    print("Building model...")
 
     # Build observation
     observation = tengri.Observation(photometry=tengri.Photometry.from_names(FILTERS))
@@ -128,7 +107,6 @@ parameter combinations observations can break.
     )
 
     # Generate synthetic observations at the fiducial point
-    print(f"Computing fiducial model predictions ({len(FILTERS)} filters)...")
     out = model.predict_photometry(FIDUCIAL_PARAMS)
     flux_fiducial = np.asarray(out)
     snr = 50.0  # S/N per filter
@@ -140,7 +118,6 @@ parameter combinations observations can break.
     flat_fiducial = np.array([FIDUCIAL_PARAMS[free_names[0]], FIDUCIAL_PARAMS[free_names[1]]])
 
     # Compute Fisher matrix via finite differences
-    print("Computing Fisher matrix via finite differences...")
     delta = 1e-5
     fisher = np.zeros((2, 2))
 
@@ -234,9 +211,6 @@ parameter combinations observations can break.
     # Fiducial point
     ax.plot(flat_fiducial[0], flat_fiducial[1], "ko", markersize=6, label="Fiducial")
 
-    print(f"Done. Condition number: {eigenvals[-1] / eigenvals[0]:.1e}")
-    print(f"  Eigenvalues (Fisher info): [{eigenvals[0]:.1e}, {eigenvals[1]:.1e}]")
-
     ax.set_xlim(-0.2, 1.5)
     ax.set_ylim(-0.15, 0.65)
     ax.set_xlabel(r"$\log_{10}(\dot{M}_\star / M_\odot\,\mathrm{yr}^{-1})$ (SFR)", fontsize=11)
@@ -256,7 +230,12 @@ parameter combinations observations can break.
     )
 
     fig.tight_layout()
-    plt.show()
+    plt.savefig("plot_gradient_degeneracy_direction.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.174 seconds)
 
 
 .. _sphx_glr_download_auto_examples_showcase_plot_gradient_degeneracy_direction.py:

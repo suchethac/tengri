@@ -103,7 +103,7 @@ def compute_log_sensitivities(params):
 
         # Convert params dict to a JAX-compatible form for autodiff
         # Create a function that accepts a single parameter value and returns flux
-        def flux_array_for_param(param_value):
+        def flux_array_for_param(param_value, param_key=param_key):
             """Predict photometric flux for a given parameter value (scalar JAX array)."""
             test_params = dict(baseline_params)
             # Ensure the parameter is stored as a JAX array
@@ -126,7 +126,7 @@ def compute_log_sensitivities(params):
         band_sensitivities = []
         for band_idx in range(len(band_names)):
 
-            def log_flux_band(log_param):
+            def log_flux_band(log_param, band_idx=band_idx):
                 """Log-flux of a single band as function of log parameter."""
                 param = jnp.exp(log_param)
                 fluxes = flux_array_for_param(param)
@@ -178,4 +178,4 @@ cbar = fig.colorbar(im, ax=ax, label=r"$\partial \log F / \partial \log \theta$ 
 ax.set_ylabel("Photometric Band", fontsize=10)
 
 fig.tight_layout()
-plt.show()
+plt.savefig("plot_jax_gradient_sensitivity.png", dpi=150, bbox_inches="tight")

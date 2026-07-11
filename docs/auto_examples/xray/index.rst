@@ -18,7 +18,7 @@ AGN Coronae
 - ``plot_xray_agn.py`` — AGN X-ray coronae: luminosity sequence and spectral hardness
 - ``plot_xray_gamma_sweep.py`` — Photon index γ controls power-law steepness
 - ``plot_E_cut_sweep.py`` — Exponential cutoff E_cut governs hard-tail rollover
-- ``plot_alpha_ox_sweep.py`` — UV-to-X-ray slope α_ox controls normalisation
+- ``plot_alpha_ox_sweep.py`` — UV-to-X-ray slope α_ox controls normalization
 
 
 
@@ -47,7 +47,7 @@ AGN Coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The CIGALE-faithful corona derives the X-ray normalisation from L_2500 via the empirical alpha_OX-L_2500 correlation. tengri ships three published parametrisations:">
+    <div class="sphx-glr-thumbcontainer" tooltip="The CIGALE-faithful corona derives the X-ray normalization from L_2500 via the empirical alpha_OX-L_2500 correlation. tengri ships three published parametrizations:">
 
 .. only:: html
 
@@ -75,7 +75,7 @@ AGN Coronae
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">AGN UV-to-X-ray power-law slope alpha_OX controls X-ray normalisation</div>
+      <div class="sphx-glr-thumbnail-title">AGN UV-to-X-ray power-law slope alpha_OX controls X-ray normalization</div>
     </div>
 
 
@@ -98,7 +98,7 @@ AGN Coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The AGN X-ray corona produces a cut-off power-law (photon index Gamma roughly 1.8, E_cut around 300 keV) normalised through the alpha_OX-L_2500 relation (Lusso &amp; Risaliti 2016). At fixed Gamma and alpha_OX, increasing bolometric luminosity shifts the whole spectrum upward but leaves the spectral shape nearly intact — the sub-linear alpha_OX relation only steepens the shape at the top of the quasar regime.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The AGN X-ray corona produces a cut-off power-law (photon index Gamma roughly 1.8, E_cut around 300 keV) normalized through the alpha_OX-L_2500 relation (Lusso &amp; Risaliti 2016). At fixed Gamma and alpha_OX, increasing bolometric luminosity shifts the whole spectrum upward but leaves the spectral shape nearly intact — the sub-linear alpha_OX relation only steepens the shape at the top of the quasar regime.">
 
 .. only:: html
 
@@ -109,7 +109,7 @@ AGN Coronae
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">AGN corona: bolometric luminosity sets normalisation, not shape</div>
+      <div class="sphx-glr-thumbnail-title">AGN corona: bolometric luminosity sets normalization, not shape</div>
     </div>
 
 
@@ -132,7 +132,7 @@ AGN Coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The X-CIGALE X-ray module (Yang et al. 2020) sums four physically distinct emitters: the AGN corona (a cut-off power law normalised through the α_OX–L_2500 relation), low- and high-mass X-ray binaries (LMXB ∝ M⋆, HMXB ∝ SFR; Lehmer et al. 2016 metallicity/age scalings), and a hot interstellar-gas term (∝ SFR). This reproduces Yang+2020 Figure 1 for a typical AGN host: L_2–10 keV = 10⁴³ erg s⁻¹, M⋆ = 10¹¹ M⊙, SFR = 10 M⊙ yr⁻¹, T = 1 Gyr, Z = 0.02.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The X-CIGALE X-ray module (Yang et al. 2020) sums four physically distinct emitters: the AGN corona (a cut-off power law normalized through the α_OX–L_2500 relation), low- and high-mass X-ray binaries (LMXB ∝ M⋆, HMXB ∝ SFR; Lehmer et al. 2016 metallicity/age scalings), and a hot interstellar-gas term (∝ SFR). This reproduces Yang+2020 Figure 1 for a typical AGN host: L_2–10 keV = 10⁴³ erg s⁻¹, M⋆ = 10¹¹ M⊙, SFR = 10 M⊙ yr⁻¹, T = 1 Gyr, Z = 0.02.">
 
 .. only:: html
 
@@ -149,7 +149,7 @@ AGN Coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="In the X-CIGALE AGN model (Yang et al. 2020) the X-ray corona is tied to the accretion-disc UV continuum through the α_OX–L_2500 relation. A galaxy-by-galaxy deviation Δα_OX lets the intrinsic X-ray-to-UV ratio float around that mean relation: a more positive Δα_OX lifts the X-ray power law relative to the (fixed) disc, a more negative one suppresses it. Because the disc anchors the normalisation, all curves pivot at the EUV/soft-X-ray join and overlap redward of it; only the observable hard-X-ray side fans out.">
+    <div class="sphx-glr-thumbcontainer" tooltip="In the X-CIGALE AGN model (Yang et al. 2020), the X-ray corona is tied to the accretion-disc UV continuum through the α_OX–L_2500 relation. A deviation delta_alpha_ox lets the intrinsic X-ray-to-UV ratio float around that empirical relation: positive values brighten the corona, negative values suppress it. Because the disc anchors the normalization, all SEDs pivot at the EUV/soft-X-ray join; only the hard-X-ray side fans out.">
 
 .. only:: html
 
@@ -160,7 +160,7 @@ AGN Coronae
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">AGN UV-to-X-ray SED: the Δα_OX deviation</div>
+      <div class="sphx-glr-thumbnail-title">AGN UV-to-X-ray SED: delta alpha_OX deviation shifts X-ray relative to disc</div>
     </div>
 
 

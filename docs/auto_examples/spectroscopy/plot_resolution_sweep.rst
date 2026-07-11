@@ -18,32 +18,16 @@
 .. _sphx_glr_auto_examples_spectroscopy_plot_resolution_sweep.py:
 
 
-Instrumental Resolution Sweep: Hα Line Blending
-=================================================
+Instrumental resolution controls Hα + [N II] line blending
+===========================================================
 
-.. image:: images/sphx_glr_plot_resolution_sweep_001.png
-   :alt: plot resolution sweep
-   :class: sphx-glr-single-img
+Spectral resolution R determines whether the Hα + [N II] emission-line
+complex appears as a single blended feature (low R) or resolves into three
+distinct lines (high R). Varying R from 100 to 10000 reveals the transition
+from kinematically degenerate at R~100 (SDSS/DESI-like) to fully resolved
+at R~5000 (JWST-like).
 
-
-Demonstrate how instrumental resolution affects spectral line profile visibility
-by observing the same intrinsic SED at resolutions R = 100 (SDSS lores), 500
-(DESI), 2000 (KMOS), 5000 (MUSE), and 25000 (HARPS). The Hα + [N II] complex
-(rest ~6550–6600 Å) transitions from fully blended at low R to completely
-resolved at high R, revealing the forbidden and Balmer lines separately.
-
-- Building an SED model with the public API using ``SEDModel.build()``
-- Observing spectra at different instrumental resolutions via
-  ``Spectroscopy(resolution=R)``
-- Predicting observed spectra with ``model.predict_spectrum()``
-- How forbidden and Balmer lines blend/separate with resolution
-
-Reference: Oxygen doublet [O III] λλ4959,5007 and forbidden nitrogen
-[N II] λλ6549,6585 are kinematically degenerate with Balmer lines at
-
-low instrumental resolution.
-
-.. GENERATED FROM PYTHON SOURCE LINES 22-149
+.. GENERATED FROM PYTHON SOURCE LINES 11-103
 
 
 
@@ -61,12 +45,13 @@ low instrumental resolution.
 
     import os
 
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
     import warnings
 
     import jax
     import jax.numpy as jnp
+    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -76,112 +61,76 @@ low instrumental resolution.
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
+    ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
-    ssp = tengri.load_ssp()
-
-    # --- Setup: intrinsic SED ---
-    # Rest-frame wavelength grid covering the Hα + [N II] complex
-    WAVE_REST = jnp.linspace(6400.0, 6700.0, 600)
     REDSHIFT = 0.05
 
-    # Build model with fixed, simple SFH and dust properties
+    spec = tengri.Spectroscopy(
+        wave_obs=jnp.linspace(6400.0 * (1 + REDSHIFT), 6700.0 * (1 + REDSHIFT), 800)
+    )
+    obs = tengri.Observation(spectroscopy=spec)
+
     model = tengri.SEDModel.build(
         ssp,
+        observation=obs,
         sfh={
-            "type": "tsnorm",
+            "type": "dpl",
             "*": tengri.FIXED,
+            "tau_gyr": 0.05,
             "log_total_mass": 10.0,
-            "peak_lbt_gyr": 1.5,
-            "width_gyr": 1.2,
-            "skew": -0.2,
-            "trunc": 2.0,
+            "alpha": 2.5,
+            "beta": 1.8,
         },
-        dust={
-            "type": "two_component",
-            "*": tengri.FIXED,
-            "tau_bc": 0.2,
-            "tau_diff": 0.1,
-            "slope": -0.7,
-        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.1, "tau_diff": 0.05},
+        neb={"type": "cue", "*": tengri.FIXED, "logU": -2.0},
         redshift=tengri.Fixed(REDSHIFT),
     )
 
-    # Sample parameters (all fixed, so just use defaults)
-    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    # --- Resolution sweep: observe at 5 different instrumental resolutions ---
-    # R = 100 (SDSS lores), 500 (DESI), 2000 (KMOS), 5000 (MUSE), 25000 (HARPS)
-    resolution_vals = [100, 500, 2000, 5000, 25000]
-    colors = plt.cm.viridis(np.linspace(0.0, 0.9, len(resolution_vals)))
+    resolution_vals = np.array([100.0, 300.0, 1000.0, 3000.0, 5000.0, 10000.0])
+    norm = mpl.colors.Normalize(vmin=resolution_vals.min(), vmax=resolution_vals.max())
+    cmap = plt.get_cmap("viridis")
 
-    fig, ax = plt.subplots(figsize=(10, 5.5))
+    fig, ax = plt.subplots(figsize=(7.5, 4.8))
 
-    for r, color in zip(resolution_vals, colors):
-        # Observed-frame wavelengths at this resolution
-        wave_obs = WAVE_REST * (1 + REDSHIFT)
+    wave_rest = np.linspace(6400.0, 6700.0, 600)
+    for R in resolution_vals:
+        spec_r = tengri.Spectroscopy(wave_obs=wave_rest * (1 + REDSHIFT), resolution=float(R))
+        obs_r = tengri.Observation(spectroscopy=spec_r)
 
-        # Create spectroscopy config with this resolution
-        spec = tengri.Spectroscopy(wave_obs=wave_obs, resolution=float(r))
-        obs = tengri.Observation(spectroscopy=spec)
-
-        # Build model with this observation setup
         model_r = tengri.SEDModel.build(
             ssp,
-            observation=obs,
+            observation=obs_r,
             sfh={
-                "type": "tsnorm",
+                "type": "dpl",
                 "*": tengri.FIXED,
+                "tau_gyr": 0.05,
                 "log_total_mass": 10.0,
-                "peak_lbt_gyr": 1.5,
-                "width_gyr": 1.2,
-                "skew": -0.2,
-                "trunc": 2.0,
+                "alpha": 2.5,
+                "beta": 1.8,
             },
-            dust={
-                "type": "two_component",
-                "*": tengri.FIXED,
-                "tau_bc": 0.2,
-                "tau_diff": 0.1,
-                "slope": -0.7,
-            },
+            dust={"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.1, "tau_diff": 0.05},
+            neb={"type": "cue", "*": tengri.FIXED, "logU": -2.0},
             redshift=tengri.Fixed(REDSHIFT),
         )
 
-        # Predict spectrum at this resolution
-        flux = model_r.predict_spectrum(params, wave_obs=wave_obs)
-        flux_array = np.asarray(flux)
+        flux = np.asarray(model_r.predict_spectrum(baseline, wave_obs=wave_rest * (1 + REDSHIFT)))
+        cont_mask = (wave_rest >= 6400.0) & (wave_rest <= 6450.0)
+        f_cont = np.median(flux[cont_mask])
+        ax.plot(wave_rest, flux / f_cont, color=cmap(norm(R)), lw=1.4, label=f"R = {R:.0f}")
 
-        # Normalize to continuum level for visual comparison
-        wave_rest_array = np.asarray(WAVE_REST)
-        cont_mask = (wave_rest_array >= 6400) & (wave_rest_array <= 6450)
-        f_cont = np.median(flux_array[cont_mask])
-        flux_norm = flux_array / f_cont
+    ax.axvline(6548.05, color="0.5", lw=0.5, ls=":", alpha=0.7)
+    ax.axvline(6562.80, color="0.5", lw=0.5, ls=":", alpha=0.7)
+    ax.axvline(6583.46, color="0.5", lw=0.5, ls=":", alpha=0.7)
 
-        ax.plot(
-            wave_rest_array,
-            flux_norm,
-            lw=2.0,
-            color=color,
-            label=f"$R$ = {r:,}",
-            alpha=0.85,
-        )
+    ax.set_xlim(6480.0, 6620.0)
+    ax.set_ylim(0.85, 1.18)
+    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+    ax.set_ylabel(r"Normalized $F_\lambda$")
 
-    # Annotations: mark key emission and forbidden lines (vacuum wavelengths)
-    ax.axvline(6549.85, ls="--", lw=0.7, color="0.5", alpha=0.6)
-    ax.axvline(6564.61, ls="--", lw=0.7, color="0.5", alpha=0.6)
-    ax.axvline(6585.27, ls="--", lw=0.7, color="0.5", alpha=0.6)
-
-    # Text labels
-    ax.text(6549.85, 0.88, r"[N II]$\lambda$6549", fontsize=8, ha="right", color="0.5", rotation=90)
-    ax.text(6564.61, 0.88, r"H$\alpha$", fontsize=8, ha="center", color="0.5", rotation=90)
-    ax.text(6585.27, 0.88, r"[N II]$\lambda$6585", fontsize=8, ha="left", color="0.5", rotation=90)
-
-    # Formatting
-    ax.set_xlabel(r"Rest-frame wavelength [$\mathrm{\AA}$]", fontsize=11)
-    ax.set_ylabel(r"Normalized $F_\lambda$", fontsize=11)
-    ax.set_xlim(6450, 6700)
-    ax.set_ylim(0.85, 1.15)
-    ax.legend(frameon=False, loc="upper right", fontsize=10, ncol=1)
+    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+    cbar.set_label(r"Resolution $R$ ($\lambda / \Delta\lambda$)")
 
     fig.tight_layout()
     plt.savefig("plot_resolution_sweep.png", dpi=150, bbox_inches="tight")

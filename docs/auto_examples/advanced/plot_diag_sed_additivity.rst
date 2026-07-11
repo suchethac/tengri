@@ -21,11 +21,6 @@
 SED additivity: stellar, dust attenuation, emission, and nebular components
 ===========================================================================
 
-.. image:: images/sphx_glr_plot_diag_sed_additivity_001.png
-   :alt: plot diag sed additivity
-   :class: sphx-glr-single-img
-
-
 Verifies the SED chain is additive by comparing the full ``predict_rest_sed``
 output against a manual sum of per-component SEDs. The forward model chains
 stellar continuum through dust attenuation, dust emission, and nebular

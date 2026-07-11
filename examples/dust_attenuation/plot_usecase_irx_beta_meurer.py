@@ -326,7 +326,6 @@ cbar.set_label(r"$\tau_{\rm diff}$ (diffuse dust optical depth)", fontsize=10)
 
 ax.set_xlabel(r"UV slope $\beta$ (1250–2600 Å)", fontsize=11)
 ax.set_ylabel(r"Infrared excess IRX $\equiv \log_{10}(L_{\rm IR}/L_{\rm UV})$", fontsize=11)
-ax.set_title("IRX–β diagram: dust attenuation and UV spectral shape", fontsize=12, pad=12)
 
 ax.grid(True, alpha=0.25, linestyle=":", linewidth=0.6)
 ax.legend(loc="upper left", frameon=False, fontsize=9.5)
@@ -335,12 +334,18 @@ ax.legend(loc="upper left", frameon=False, fontsize=9.5)
 ax.text(
     0.98,
     0.05,
-    "Tengri forward models: tsnorm SFH (50 Myr peak)\nCalzetti+2000 law, Cue nebular, Dale2014 IR emission",
+    "Tengri forward models: tsnorm SFH (50 Myr peak)\n"
+    "Calzetti+2000 law, Cue nebular, Dale2014 IR emission",
     transform=ax.transAxes,
     fontsize=8.5,
     ha="right",
     va="bottom",
-    bbox=dict(boxstyle="round,pad=0.5", facecolor="white", edgecolor="0.7", linewidth=0.5),
+    bbox=dict(
+        boxstyle="round,pad=0.5",
+        facecolor="white",
+        edgecolor="0.7",
+        linewidth=0.5,
+    ),
     color="0.4",
 )
 
@@ -368,11 +373,11 @@ print()
 idx_min_tau = np.argmin(tau_diff_used)
 idx_max_tau = np.argmax(tau_diff_used)
 print(
-    f"Measured (τ_diff=0):   β={beta_values[idx_min_tau]:+.2f}, IRX={irx_values[idx_min_tau]:+.2f} ✓"
+    f"Measured (τ_diff=0):   β={beta_values[idx_min_tau]:+.2f}, "
+    f"IRX={irx_values[idx_min_tau]:+.2f} ✓"
 )
 print(
-    f"Measured (τ_diff=4):   β={beta_values[idx_max_tau]:+.2f}, IRX={irx_values[idx_max_tau]:+.2f} ✓"
+    f"Measured (τ_diff=4):   β={beta_values[idx_max_tau]:+.2f}, "
+    f"IRX={irx_values[idx_max_tau]:+.2f} ✓"
 )
 print("=" * 70)
-
-plt.show()

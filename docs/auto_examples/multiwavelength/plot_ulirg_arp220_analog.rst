@@ -21,11 +21,6 @@
 Arp 220 analog: panchromatic SED of a heavily obscured ULIRG
 ==============================================================
 
-.. image:: images/sphx_glr_plot_ulirg_arp220_analog_001.png
-   :alt: plot ulirg arp220 analog
-   :class: sphx-glr-single-img
-
-
 An archetype obscured starburst built up from the tengri component
 toolkit: a 100 Myr ongoing burst with ``τ_diff = 2 mag`` of diffuse
 dust and a 1 mag birth-cloud opacity. The Dale+2014 IR template
@@ -37,7 +32,18 @@ all the UV/optical has been reprocessed.
 Anchor parameters chosen to land at ``L_IR ≈ 10^{12.3} L_sun``,
 similar to Arp 220's bolometric output.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-97
+.. GENERATED FROM PYTHON SOURCE LINES 16-99
+
+
+
+.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_ulirg_arp220_analog_001.png
+   :alt: plot ulirg arp220 analog
+   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_ulirg_arp220_analog_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -110,10 +116,12 @@ similar to Arp 220's bolometric output.
     nu_ir = C_AA_PER_S / wave[ir]
     order = np.argsort(nu_ir)
     L_ir = np.trapezoid(np.asarray(out.sed)[ir][order], nu_ir[order])
+    l_ir_exp = np.log10(L_ir / 3.84e33)
+    ir_label = rf"$L_{{IR}}^{{8-1000\mu m}} \approx 10^{{{l_ir_exp:.1f}}}\,L_\odot$"
     ax.text(
         0.97,
         0.05,
-        rf"$L_{{\rm IR}}^{{(8-1000\,\mu\mathrm{{m}})}} \approx 10^{{{np.log10(L_ir / 3.84e33):.1f}}}\,L_\odot$",
+        ir_label,
         transform=ax.transAxes,
         ha="right",
         fontsize=9,

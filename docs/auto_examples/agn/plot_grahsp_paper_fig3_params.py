@@ -5,7 +5,7 @@ GRAHSP Fig. 3 reproduction: AGN model parameter map
 Faithful reproduction of Fig. 3 of Buchner et al. (2024, GRAHSP),
 showing how the 15 AGN parameters configure the spectrum in
 :math:`L_\\lambda` (arbitrary units). The bending power-law BBB
-(blue) is normalised at 5100 Å with optical slope
+(blue) is normalized at 5100 Å with optical slope
 :math:`\\beta`, bending at :math:`\\lambda_{\\rm bend}` (width
 :math:`W_{\\rm bend}`) to the UV slope :math:`\\beta_{\\rm UV}`. Emission
 lines (light red) of width :math:`W_{\\rm lines}` and an
@@ -14,8 +14,8 @@ FeII forest (dark red) are scaled by
 (dark yellow) has cool/hot components at
 :math:`\\lambda_{\\rm cool}/\\lambda_{\\rm hot}` (widths
 :math:`W_{\\rm cool}/W_{\\rm hot}`), peak ratio :math:`f_{\\rm hot}`, 12 µm
-normalisation :math:`f_{\\rm cov}`, and silicate depth ``Si`` (here −1,
-absorption; dotted). Component colours map to the GRAHSP/pcigale modules
+normalization :math:`f_{\\rm cov}`, and silicate depth ``Si`` (here −1,
+absorption; dotted). Component colors map to the GRAHSP/pcigale modules
 ``activatepl`` (BBB), ``activategtorus`` (torus), and ``activatelines``
 (lines + FeII).
 """
@@ -30,9 +30,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.agn import GRAHSPParams, evaluate_grahsp_agn, load_grahsp_templates
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn.grahsp.model import GRAHSPParams, evaluate_grahsp_agn
-from tengri.components.agn.grahsp.templates import load_grahsp_templates
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -104,7 +103,7 @@ ax.legend(loc="upper right", frameon=True, fontsize=9)
 # ----- Parameter annotations (mirroring the paper layout) -----
 i5100 = int(np.argmin(np.abs(wave_um - 0.510)))
 l5100 = bbb[i5100]
-# L5100 normalisation: vertical drop + blue marker at 5100 A.
+# L5100 normalization: vertical drop + blue marker at 5100 A.
 ax.plot([0.510], [l5100], "o", color="#1f77d4", ms=9, zorder=6)
 ax.annotate(
     "",

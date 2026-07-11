@@ -65,13 +65,13 @@ for met_alpha_fe in met_alpha_fe_values:
     ax.loglog(wave, nu_l_nu, color=cmap(norm(met_alpha_fe)), lw=1.4)
 
 ax.set_xlim(3000, 1e4)
-ax.set_ylim(1e40, 1e43)
+# Tighten y-limits to optical/optical-IR region with small margin
+ax.set_ylim(1e40, 2e44)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-# Mark iron-dominated regions
-for wl, _label in [(4000, "4000 Å break"), (5200, r"Mg $b$"), (8662, r"Ca II triplet")]:
-    ax.axvline(wl, color="grey", ls=":", lw=0.6, alpha=0.3)
+for wl in [4000, 5200, 8662]:
+    ax.axvline(wl, color="gray", ls=":", lw=0.6, alpha=0.3)
 
 cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cbar.set_label(r"[$\alpha$/Fe]")

@@ -21,12 +21,7 @@
 GRAHSP accretion disc: Netzer templates vs the bending power-law
 =================================================================
 
-.. image:: images/sphx_glr_plot_grahsp_disc_vs_bbb_001.png
-   :alt: plot grahsp disc vs bbb
-   :class: sphx-glr-single-img
-
-
-The GRAHSP big blue bump can be modelled two ways. The default is a **smooth
+The GRAHSP big blue bump can be modeled two ways. The default is a **smooth
 bending power-law** (Ryde 1998 form) with free UV/optical slopes and a bend
 wavelength. The physical alternative is the **Netzer accretion-disc** grid
 (Netzer & Trakhtenbrot 2014), tabulated over black-hole mass, spin and
@@ -34,7 +29,7 @@ Eddington ratio — selected with ``disc_model="netzer"`` plus ``disc_m`` /
 ``disc_a`` / ``disc_mdot``.
 
 This example overlays the bending power-law against several Netzer disc grid
-points, all normalised at 5100 Å. The disc models curve over near the Lyman
+points, all normalized at 5100 Å. The disc models curve over near the Lyman
 limit (a true thin-disc turnover) where the power-law keeps rising.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-97
@@ -63,8 +58,8 @@ limit (a true thin-disc turnover) where the power-law keeps rising.
     import matplotlib.pyplot as plt
     import numpy as np
 
+    from tengri.agn import compute_grahsp_sed
     from tengri.analysis.plotting import setup_style
-    from tengri.components.agn.grahsp.model import compute_grahsp_sed
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -88,7 +83,7 @@ limit (a true thin-disc turnover) where the power-law keeps rising.
         )
 
 
-    # Normalise each continuum to its own value at 5100 Å (where the BBB's L5100
+    # Normalize each continuum to its own value at 5100 Å (where the BBB's L5100
     # pins the flux), so the curves cross at 1 there and the comparison shows the
     # difference in disc *shape* rather than absolute scale (~1e63 otherwise).
     i5100 = int(np.argmin(np.abs(wave_um - 0.510)))
@@ -128,7 +123,7 @@ limit (a true thin-disc turnover) where the power-law keeps rising.
     ax.text(0.0912, ax.get_ylim()[1] * 0.05, " Lyman limit", fontsize=8, color="0.4")
     ax.set_xscale("log")
     ax.set_xlabel(r"rest wavelength [$\mu$m]")
-    ax.set_ylabel(r"$\lambda L_\lambda$ [normalised at 5100 Å]")
+    ax.set_ylabel(r"$\lambda L_\lambda$ [normalized at 5100 Å]")
     ax.set_title("GRAHSP big blue bump: Netzer disc grid vs bending power-law")
     ax.legend(frameon=False, fontsize=8)
     fig.tight_layout()

@@ -21,11 +21,6 @@
 Nebular backends: Cue, CloudyGrid, SSP-embedded, and BakedIn
 ===========================================================
 
-.. image:: images/sphx_glr_plot_nebular_backends_001.png
-   :alt: plot nebular backends
-   :class: sphx-glr-single-img
-
-
 Compare four nebular emission backends on identical star-forming spectra:
 
 1. **Cue** — neural emulator (Li, Leja & Speagle 2023) over CLOUDY parameter space

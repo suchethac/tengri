@@ -114,7 +114,7 @@ ax.loglog(wave, sed4, "C3-.", lw=2.0, label="Recent burst")
 ax.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
 ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
 ax.set_xlim(1000, 1e6)
-ax.set_ylim(1e0, 1e7)
+ax.set_ylim(1e25, 1e32)
 ax.legend(fontsize=10, frameon=False, loc="lower left")
 ax.grid(True, alpha=0.2, which="both")
 

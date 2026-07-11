@@ -1,14 +1,13 @@
 """
-Inference method comparison: MAP as reference for SFH recovery
-==============================================================
+Recovering a truncated-skew-normal SFH from SDSS photometry via MAP
+===================================================================
 
-Demonstrates running MAP inference on SDSS photometry and comparing the
-MAP fit to the ground truth SFH. MAP provides a point estimate of the posterior
-without sampling overhead; for uncertainty quantification, posterior sampling
-methods (NUTS, VI) would be needed.
+Demonstrates the simplest inference workflow: building a flexible SFH model
+with free dust parameters, generating mock photometry at S/N = 20, then running
+MAP to recover the input star formation history and dust attenuation. The figure
+shows the recovered SFH (dashed) against the ground truth (solid).
 
-Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview);
-Nocedal & Wright 1999 (optimization methods).
+Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 """
 
 import os
@@ -33,13 +32,12 @@ ssp = tengri.load_ssp()
 bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
-# Build model with free SFH and dust parameters
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "log_total_mass": 10.0,
+        "log_total_mass": tengri.Uniform(9.0, 11.0),
         "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
         "width_gyr": tengri.Uniform(0.3, 5.0),
         "skew": tengri.Uniform(-1.0, 1.5),
@@ -55,12 +53,11 @@ model = tengri.SEDModel.build(
     redshift=tengri.Fixed(0.1),
 )
 
-# Generate mock photometry with known truth
 key = jax.random.PRNGKey(42)
 truth_params = {
     "sfh_tsnorm_peak_lbt_gyr": 2.5,
     "sfh_tsnorm_width_gyr": 1.5,
-    "sfh_tsnorm_log_total_mass": 0.9,
+    "sfh_tsnorm_log_total_mass": 10.0,
     "sfh_tsnorm_skew": 0.2,
     "sfh_tsnorm_trunc": 5.0,
     "met_logzsol": -0.1,
@@ -71,7 +68,6 @@ truth_params = {
 }
 mock = model.mock(truth_params, snr=20.0, key=key)
 
-# Fit with MAP
 forward = tengri.ForwardModel.build(sed=model, observation=obs)
 posterior_map = forward.fit(
     mock.flux_obs,
@@ -82,7 +78,6 @@ posterior_map = forward.fit(
     verbose=False,
 )
 
-# Compare SFH: truth vs MAP
 sfh_truth = model.predict_sfh(truth_params)
 sfh_map = model.predict_sfh(posterior_map.params)
 

@@ -21,11 +21,6 @@
 Recovering a star-forming galaxy from 5-band SDSS photometry
 ============================================================
 
-.. image:: images/sphx_glr_plot_first_fit_001.png
-   :alt: plot first fit
-   :class: sphx-glr-single-img
-
-
 The simplest end-to-end tengri workflow. We build a model with a
 truncated-skew-normal SFH and a two-component Calzetti dust attenuation,
 mock SDSS *ugriz* photometry at S/N = 20, then run a MAP fit to recover the
@@ -45,8 +40,19 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -172,7 +178,7 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 16.961 seconds)
+   **Total running time of the script:** (0 minutes 4.289 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_first_fit.py:

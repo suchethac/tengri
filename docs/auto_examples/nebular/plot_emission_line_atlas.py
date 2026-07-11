@@ -2,8 +2,8 @@
 Optical emission-line atlas of a young star-forming galaxy
 ============================================================
 
-Zoomed rest-frame spectrum of an ionised-gas-dominated SF galaxy with
-the strongest optical / near-UV emission lines labelled. Wavelengths
+Zoomed rest-frame spectrum of an ionized-gas-dominated SF galaxy with
+the strongest optical / near-UV emission lines labeled. Wavelengths
 are vacuum; line positions follow NIST/Atomic Line List.
 
 Useful as a quick reference for which line lands where when planning

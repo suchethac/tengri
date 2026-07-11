@@ -21,11 +21,6 @@
 Type 1 vs Type 2 AGN: Unified viewing-angle classification
 ===========================================================
 
-.. image:: images/sphx_glr_plot_type1_type2_unified_model_001.png
-   :alt: plot type1 type2 unified model
-   :class: sphx-glr-single-img
-
-
 Unified AGN models explain the Type 1/Type 2 dichotomy as a **purely geometric
 effect** — the same accretion disc + dusty torus system appears as:
 
@@ -280,7 +275,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.849 seconds)
+   **Total running time of the script:** (0 minutes 4.657 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_type1_type2_unified_model.py:

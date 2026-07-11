@@ -21,11 +21,6 @@
 Stellar mass-to-light ratios across bands: age sensitivity
 ===========================================================
 
-.. image:: images/sphx_glr_plot_mass_to_light_band_comparison_001.png
-   :alt: plot mass to light band comparison
-   :class: sphx-glr-single-img
-
-
 The ``M_★/L_band`` ratio depends on population age, but the sensitivity
 varies dramatically by band. At short wavelengths (u, V), ``M/L`` is
 very age-sensitive: young starbursts are bright, so M/L is small;
@@ -42,7 +37,6 @@ using integration of the recovered SFH and photometric predictions,
 reproducing Fig. 4 of Conroy 2013's review.
 
 References
-
 ----------
 .. [1] Bell, A. R., & de Jong, R. S. 2001, ApJ, 550, 212
    "An Estimate of the Reddening Map from Galaxies in the 2MASS All-Sky
@@ -50,7 +44,7 @@ References
 .. [2] Conroy, C. 2013, ARA&A, 51, 393
    "Modeling the Panchromatic Spectral Energy Distributions of Galaxies"
 
-.. GENERATED FROM PYTHON SOURCE LINES 29-122
+.. GENERATED FROM PYTHON SOURCE LINES 28-121
 
 
 
@@ -64,7 +58,9 @@ References
 
  .. code-block:: none
 
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.53 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behaviour.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/forward/sed_model.py:701: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.53 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
 
 
@@ -159,8 +155,8 @@ References
         ax.loglog(ages, m_l, color=color, lw=1.8, marker="o", markersize=4.5, label=label)
 
     ax.set(
-        xlabel=r"Population age  [Gyr]",
-        ylabel=r"$M_\star\,/\,L$  [$M_\odot\,/\,L_\odot$]",
+        xlabel=r"Population age [Gyr]",
+        ylabel=r"$M_\star / L$ [$M_\odot / L_\odot$]",
         xlim=(0.08, 12),
         ylim=(0.006, 3.0),
     )

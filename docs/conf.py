@@ -85,50 +85,12 @@ sphinx_gallery_conf = {
     "filename_pattern": (
         rf"(?:{_only_alt})\.py$" if _only_alt else rf"^(?!.*(?:{_skip_alt})).*plot_[^/]+\.py$"
     ),
-    # ignore_pattern HIDES files from the gallery entirely. Used for heavy
-    # NUTS/SVI scripts whose runtime + memory footprint OOMs the build (each
-    # NUTS warmup can peak at 20+ GB per CLAUDE.md gotcha). These scripts
-    # still run as standalone demos for advanced users.
-    "ignore_pattern": (
-        # Heavy NUTS/SVI scripts whose runtime + memory footprint OOMs the
-        # build (each NUTS warmup can peak at 20+ GB per CLAUDE.md gotcha).
-        # plot_hierarchical also hits an upstream stochastic-SFH JAX-tracing
-        # issue in model.mock() / predict_observables under field SFH — needs
-        # a library fix before re-enabling.
-        #
-        # Three further deferral classes added while back-filling the gallery:
-        #   * Heavy fit/VI/timing scripts — real_data_fit (MAP),
-        #     dust_attenuation_recovery (fit), stochastic_sfh_ift_recovery (VI),
-        #     jit_cache_speedup / waveprecomp_scaling / waveprecomp_speedup
-        #     (compile-time benchmarks). Slow and/or memory-heavy for the build.
-        #   * Population vmap scripts — galaxy_stack_1000 (1k) and
-        #     vmap_population_throughput (10k) peak past 30 GB and SIGKILL the
-        #     build; they run standalone with enough RAM.
-        #   * Examples that were blocked on an upstream library gap and are now
-        #     un-deferred once the gap was fixed:
-        #     - recipes_gallery (#683 — SFH high-z NaN — fixed; renders all five
-        #       recipes).
-        #     - cat3d_wind_sweep (the a_cat3d / fwd_cat3d grid axes were a no-op
-        #       in the forward pass; #677 wired them — both now move the SED).
-        #     - skirtor_agnfitter_vs_cigale (skirtor_agnfitter is now a
-        #       registered composable torus selector, #677).
-        r"plot_("
-        r"population_scaling|"
-        r"hierarchical|hierarchical_convergence|"
-        r"prior_posterior_compare|"
-        r"wrong_model_trap|"
-        r"posterior_corner_dpl|"
-        r"joint_photometry_line_fit|"
-        r"galaxy_stack_1000|"
-        r"vmap_population_throughput|"
-        r"stochastic_sfh_ift_recovery|"
-        r"waveprecomp_speedup|"
-        r"real_data_fit|"
-        r"dust_attenuation_recovery|"
-        r"jit_cache_speedup|"
-        r"waveprecomp_scaling"
-        r")\.py$"
-    ),
+    # No ignore_pattern: the gallery carries no heavy NUTS/VI/population
+    # scripts anymore (2026-07 overhaul removed them — every remaining fit
+    # example is MAP or native-VI and renders in seconds). If a future
+    # example is too heavy to build, delete or lighten it rather than
+    # hiding it here: hidden scripts bit-rot invisibly because CI never
+    # executes the gallery.
     "download_all_examples": False,
     # Locally we execute (default). On CI (e.g. GitHub Actions sets CI=true) we
     # use the pre-rendered docs/auto_examples/ that the developer committed so
@@ -317,16 +279,54 @@ def _inject_missing_image_directives(app, *_args, **_kwargs):
     For every ``plot_*.rst`` that lacks ``.. image::`` but DOES have a
     matching image on disk, inject a standard sphinx-gallery image
     block right after the section title underline.
+
+    Executed pages carry ``.. image-sg::`` (not ``.. image::``). Two
+    hazards, both handled here:
+
+    * A plain ``.. image::`` must never be injected into a page that
+      already has ``.. image-sg::`` — matching only the plain form
+      double-injected a figure into every executed page (the 2026-07
+      double-figure bug).
+    * On a full-execution build this one-shot hook can fire while
+      sphinx-gallery is still writing per-script ``.. image-sg::``
+      directives, so a page injected here may *later* also get an
+      ``image-sg``. So the pass is idempotent and self-healing: if a
+      page ends up with BOTH, the injected plain block is stripped.
     """
     from pathlib import Path
 
     auto = Path(app.srcdir) / "auto_examples"
     if not auto.exists():
         return
+    # Dedup pass: strip an injected plain ``.. image::`` block from any
+    # page that also carries the canonical ``.. image-sg::`` (race repair).
+    deduped = 0
+    for rst in auto.glob("*/plot_*.rst"):
+        text = rst.read_text()
+        if ".. image-sg::" not in text or "\n.. image:: images/sphx_glr_" not in text:
+            continue
+        lines = text.splitlines()
+        out, i, changed = [], 0, False
+        while i < len(lines):
+            if lines[i].startswith(".. image:: images/sphx_glr_"):
+                j = i + 1
+                while j < len(lines) and (lines[j].startswith("   ") or not lines[j].strip()):
+                    j += 1
+                i = j
+                changed = True
+                continue
+            out.append(lines[i])
+            i += 1
+        if changed:
+            rst.write_text("\n".join(out) + "\n")
+            deduped += 1
+    if deduped:
+        print(f"[conf.py] stripped double-injected .. image:: from {deduped} RSTs")
+
     fixed = 0
     for rst in auto.glob("*/plot_*.rst"):
         text = rst.read_text()
-        if ".. image::" in text:
+        if ".. image::" in text or ".. image-sg::" in text:
             continue
         stem = rst.stem
         img = f"images/sphx_glr_{stem}_001.png"

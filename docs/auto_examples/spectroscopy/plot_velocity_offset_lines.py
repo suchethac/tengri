@@ -15,6 +15,10 @@ distinguishing AGN BLR from NLR.
 
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
 import warnings
 
 import jax
@@ -22,9 +26,6 @@ import jax.numpy as jnp
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-
-# Ensure non-interactive backend (required for headless execution)
-mpl.use("Agg")
 
 import tengri
 from tengri.analysis.plotting import setup_style
@@ -88,10 +89,10 @@ ax.set(
     xlim=(6480, 6680),
     yscale="log",
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-    ylabel=r"$F_\lambda\,/\,F_{\rm cont}$ (normalised at 6600-6650 Å)",
+    ylabel=r"$F_\lambda\,/\,F_{\rm cont}$ (normalized at 6600-6650 Å)",
 )
 cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cb.set_label(r"$\sigma_v$  [km s$^{-1}$]")
 
 fig.tight_layout()
-plt.show()
+plt.savefig("plot_velocity_offset_lines.png", dpi=150, bbox_inches="tight")

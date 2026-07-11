@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:09.487** total execution time for 16 files **from auto_examples/multiwavelength**:
+**00:03.178** total execution time for 16 files **from auto_examples/multiwavelength**:
 
 .. container::
 
@@ -32,11 +32,14 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_milky_way_analog.py` (``plot_panchromatic_milky_way_analog.py``)
-     - 00:07.648
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_agn_fraction.py` (``plot_panchromatic_agn_fraction.py``)
+     - 00:02.121
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_m82_starburst_panchromatic.py` (``plot_m82_starburst_panchromatic.py``)
-     - 00:01.839
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_dust_balance.py` (``plot_panchromatic_dust_balance.py``)
+     - 00:00.533
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_galaxy.py` (``plot_panchromatic_galaxy.py``)
+     - 00:00.524
      - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_components_isolated.py` (``plot_components_isolated.py``)
      - 00:00.000
@@ -50,6 +53,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_lbg_observed_evolution.py` (``plot_lbg_observed_evolution.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_m82_starburst_panchromatic.py` (``plot_m82_starburst_panchromatic.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_metallicity_radial_gradient.py` (``plot_metallicity_radial_gradient.py``)
      - 00:00.000
      - 0.0
@@ -59,16 +65,10 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_agn.py` (``plot_panchromatic_agn.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_agn_fraction.py` (``plot_panchromatic_agn_fraction.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_dust_balance.py` (``plot_panchromatic_dust_balance.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_dusty_starburst.py` (``plot_panchromatic_dusty_starburst.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_galaxy.py` (``plot_panchromatic_galaxy.py``)
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_milky_way_analog.py` (``plot_panchromatic_milky_way_analog.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_redshift_sweep.py` (``plot_panchromatic_redshift_sweep.py``)

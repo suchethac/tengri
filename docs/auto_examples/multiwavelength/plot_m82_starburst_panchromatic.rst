@@ -21,11 +21,6 @@
 Panchromatic SED: M82 Starburst Analog
 ======================================
 
-.. image:: images/sphx_glr_plot_m82_starburst_panchromatic_001.png
-   :alt: plot m82 starburst panchromatic
-   :class: sphx-glr-single-img
-
-
 M82 (NGC 3034) is a nearby starburst galaxy with intense nuclear star
 formation (SFR ~ 10 Msun/yr), stellar mass M* ~ 1×10^10 Msun, and
 moderate-to-high dust opacity (τ_V ~ 2 in the starburst core). The
@@ -58,7 +53,7 @@ infrared re-emission.
    *Astrophys. J.* **784**, 83.
    https://doi.org/10.1088/0004-637X/784/1/83
 
-.. GENERATED FROM PYTHON SOURCE LINES 37-229
+.. GENERATED FROM PYTHON SOURCE LINES 37-231
 
 
 
@@ -239,10 +234,12 @@ infrared re-emission.
     order_ir = np.argsort(nu_ir)
     L_ir = np.trapezoid(sed[ir_mask][order_ir], nu_ir[order_ir])
 
+    l_ir_exp = np.log10(L_ir / L_SUN_CGS)
+    ir_label = rf"$L_{{IR}}^{{8-1000\mu m}} \approx 10^{{{l_ir_exp:.1f}}}\,L_\odot$"
     ax.text(
         0.97,
         0.06,
-        rf"$L_{{\rm IR}}^{{(8\text{{–}}1000\,\mu\mathrm{{m}})}} \approx 10^{{{np.log10(L_ir / L_SUN_CGS):.1f}}}\,L_\odot$",
+        ir_label,
         transform=ax.transAxes,
         ha="right",
         fontsize=9,

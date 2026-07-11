@@ -21,11 +21,6 @@
 JAX JIT Compilation: Eager vs Compiled Numerical Equivalence
 =============================================================
 
-.. image:: images/sphx_glr_plot_diag_jit_concrete_identity_001.png
-   :alt: plot diag jit concrete identity
-   :class: sphx-glr-single-img
-
-
 Verifies that JIT-compiled predictions are bit-identical to eager-mode evaluations.
 For ``predict_photometry`` and ``predict_emission_lines``, we sample random parameter
 sets and compare max relative difference between eager and JIT outputs. A value < 1e-10
@@ -35,28 +30,18 @@ floating-point behavior.
 Reference: JAX JIT compilation is semantically transparent and should not alter
 floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-181
+.. GENERATED FROM PYTHON SOURCE LINES 14-174
 
 
 
 .. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_diag_jit_concrete_identity_001.png
-   :alt: predict_photometry
+   :alt: plot diag jit concrete identity
    :srcset: /auto_examples/advanced/images/sphx_glr_plot_diag_jit_concrete_identity_001.png
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Photometry:      max=1.12e-12, median=1.58e-14
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -197,7 +182,6 @@ floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
     ax.axvline(np.log10(1e-10), color="red", linestyle="--", linewidth=1.5, label="1e-10 threshold")
     ax.set_xlabel(r"$\log_{10}(\max \Delta_{\rm rel})$")
     ax.set_ylabel("Count")
-    ax.set_title("predict_photometry")
     ax.legend(fontsize=8, frameon=False)
     ax.grid(axis="y", alpha=0.3)
 
@@ -216,22 +200,16 @@ floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
         )
         ax.set_xlabel(r"$\log_{10}(\max \Delta_{\rm rel})$")
         ax.set_ylabel("Count")
-        ax.set_title("predict_emission_lines")
         ax.legend(fontsize=8, frameon=False)
         ax.grid(axis="y", alpha=0.3)
 
     fig.tight_layout()
     plt.savefig("plot_diag_jit_concrete_identity.png", dpi=150, bbox_inches="tight")
 
-    # Print summary statistics
-    print(f"Photometry:      max={max(diffs_phot):.2e}, median={np.median(diffs_phot):.2e}")
-    if diffs_lines:
-        print(f"Emission lines:  max={max(diffs_lines):.2e}, median={np.median(diffs_lines):.2e}")
-
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.363 seconds)
+   **Total running time of the script:** (0 minutes 5.150 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_jit_concrete_identity.py:

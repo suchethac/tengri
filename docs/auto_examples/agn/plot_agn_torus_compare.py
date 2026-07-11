@@ -21,7 +21,7 @@ Torus libraries (the seven production selectors under
 
 ``fritz`` and ``skirtor`` are the two CIGALE production tori — smooth
 (Fritz+2006) versus clumpy (Stalevski+2016) — so contrasting them on
-this panel isolates the smooth-vs-clumpy silicate-feature behaviour
+this panel isolates the smooth-vs-clumpy silicate-feature behavior
 near 9.7 and 18 micron.
 """
 

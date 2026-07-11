@@ -21,11 +21,6 @@
 Chemical evolution: How SFH and outflows shape metal enrichment history
 =======================================================================
 
-.. image:: images/sphx_glr_plot_chemical_evolution_001.png
-   :alt: plot chemical evolution
-   :class: sphx-glr-single-img
-
-
 Six perspectives on chemical evolution: (1) closed-box model with varying SFR
 timescales; (2) cumulative metallicity from different exponential SFHs; (3)
 leaky-box model showing how outflow rates suppress Z; (4) age-metallicity
@@ -35,7 +30,7 @@ how Z(t) pathways alter optical/UV colors and absorption features. Together
 they show how star formation, galactic winds, and chemical enrichment control
 the Z(t) history and observable photometry.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-234
+.. GENERATED FROM PYTHON SOURCE LINES 14-232
 
 
 
@@ -75,8 +70,8 @@ the Z(t) history and observable photometry.
 
     import tengri
     from tengri.analysis.plotting import setup_style
-    from tengri.components.stellar.sfh.chemical_evolution import closed_box_metallicity
     from tengri.cosmology import age_at_z0
+    from tengri.sfh import closed_box_metallicity
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -279,8 +274,6 @@ the Z(t) history and observable photometry.
     ax_sed.grid(True, alpha=0.25, which="both", axis="both")
 
     fig_met.tight_layout()
-    fig_met.savefig("plot_chemical_evolution_scenarios.png", dpi=150, bbox_inches="tight")
-
     plt.savefig("plot_chemical_evolution.png", dpi=150, bbox_inches="tight")
 
 

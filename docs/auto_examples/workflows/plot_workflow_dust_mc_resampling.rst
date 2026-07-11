@@ -21,11 +21,6 @@
 Dust attenuation: uncertainty in SED from dust parameter estimation
 ==================================================================
 
-.. image:: images/sphx_glr_plot_workflow_dust_mc_resampling_001.png
-   :alt: plot workflow dust mc resampling
-   :class: sphx-glr-single-img
-
-
 Demonstrates dust attenuation effects and how fitting uncertainty propagates
 to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff)
 is fit with MAP, showing the best-fit SED plus mock perturbation envelopes
@@ -34,7 +29,18 @@ to illustrate the uncertainty range from photometric noise.
 Reference: Calzetti et al. 2000, ApJ, 533, 682 (attenuation law);
 Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-167
+.. GENERATED FROM PYTHON SOURCE LINES 13-160
+
+
+
+.. image-sg:: /auto_examples/workflows/images/sphx_glr_plot_workflow_dust_mc_resampling_001.png
+   :alt: plot workflow dust mc resampling
+   :srcset: /auto_examples/workflows/images/sphx_glr_plot_workflow_dust_mc_resampling_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -61,7 +67,6 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
     bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
-    # Model with free dust parameters
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
@@ -83,7 +88,6 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
         redshift=tengri.Fixed(0.1),
     )
 
-    # Generate mock data
     key = jax.random.PRNGKey(42)
     truth_params = {
         "sfh_tsnorm_log_total_mass": 0.8,
@@ -99,7 +103,6 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
     }
     mock = model.mock(truth_params, snr=20.0, key=key)
 
-    # Fit with MAP
     forward = tengri.ForwardModel.build(sed=model, observation=obs)
     posterior = forward.fit(
         mock.flux_obs,
@@ -110,32 +113,28 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
         verbose=False,
     )
 
-    # Generate uncertainty envelope via parameter perturbation
     n_resample = 100
     key_pert = jax.random.PRNGKey(999)
     posterior_photometry = []
 
     for _i in range(n_resample):
         key_pert, subkey = jax.random.split(key_pert)
-        perturbation = 0.15 * jax.random.normal(subkey, shape=(len(posterior.params),))
+        noise = 0.015 * jax.random.normal(subkey, shape=(len(posterior.params),))
         param_names = list(posterior.params.keys())
         perturbed = {
-            name: float(posterior.params[name]) + 0.1 * pert
-            for name, pert in zip(param_names, perturbation)
+            name: float(posterior.params[name]) + pert for name, pert in zip(param_names, noise)
         }
         phot_i = model.predict_photometry(perturbed)
         posterior_photometry.append(np.array(phot_i))
 
     posterior_photometry = np.array(posterior_photometry)
 
-    # Compute envelopes
     phot_map = np.asarray(model.predict_photometry(posterior.params))
     phot_p16 = np.percentile(posterior_photometry, 16, axis=0)
     phot_p84 = np.percentile(posterior_photometry, 84, axis=0)
     phot_p2_5 = np.percentile(posterior_photometry, 2.5, axis=0)
     phot_p97_5 = np.percentile(posterior_photometry, 97.5, axis=0)
 
-    # Plot
     fig, ax = plt.subplots(figsize=(9, 5))
 
     wave_eff = np.array([3551, 4686, 6166, 7480, 8932])
@@ -192,6 +191,11 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
 
     fig.tight_layout()
     plt.savefig("plot_workflow_dust_mc_resampling.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.025 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_dust_mc_resampling.py:

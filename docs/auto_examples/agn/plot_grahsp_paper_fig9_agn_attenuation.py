@@ -4,7 +4,7 @@ GRAHSP Fig. 9 reproduction: attenuation of the AGN model
 
 Faithful reproduction of Fig. 9 of Buchner et al. (2024, GRAHSP): the AGN
 spectrum from intrinsic (blue, top) to strongly attenuated (red, bottom) as
-the AGN-only colour excess ``agn_grahsp_ebv_agn`` is swept from 0.01 to 1.
+the AGN-only color excess ``agn_grahsp_ebv_agn`` is swept from 0.01 to 1.
 GRAHSP attenuates the AGN side with an SMC/Prevot (1984) law (paper §2.1.5),
 which rises steeply into the UV — so the UV/optical continuum is suppressed
 far more than the near-IR, and the heaviest attenuation eventually bites into
@@ -22,9 +22,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib import cm, colors
 
+from tengri.agn import GRAHSPParams, evaluate_grahsp_agn, load_grahsp_templates
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn.grahsp.model import GRAHSPParams, evaluate_grahsp_agn
-from tengri.components.agn.grahsp.templates import load_grahsp_templates
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -36,7 +35,7 @@ wave_um = np.asarray(wave_nm) / 1000.0
 L5100 = 1.0e45  # bright QSO, to land in the paper's luminosity range
 ebv_grid = np.logspace(np.log10(0.01), np.log10(1.0), 11)
 
-# Diverging blue->white->red colour map on log E(B-V), matching the paper.
+# Diverging blue->white->red color map on log E(B-V), matching the paper.
 norm = colors.LogNorm(vmin=0.01, vmax=1.0)
 cmap = cm.get_cmap("RdBu_r")
 
@@ -88,7 +87,7 @@ secax = ax.secondary_xaxis(
 )
 secax.set_xlabel("Frequency [Hz]")
 
-# Colour bar for E(B-V)-AGN.
+# Color bar for E(B-V)-AGN.
 sm = cm.ScalarMappable(norm=norm, cmap=cmap)
 cbar = fig.colorbar(sm, ax=ax, fraction=0.05, pad=0.02, location="right")
 cbar.set_label("E(B-V)-AGN")

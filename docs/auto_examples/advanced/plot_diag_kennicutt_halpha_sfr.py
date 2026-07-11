@@ -94,4 +94,6 @@ ax.set_xlabel(r"SFR$_{10\mathrm{Myr}}$ [M$_{\odot}$ yr$^{-1}$]")
 ax.set_ylabel(r"Implied coeff: SFR / $L_{\mathrm{H}\alpha}$ [M$_{\odot}$ yr$^{-1}$ erg$^{-1}$ s]")
 ax.legend(frameon=False, fontsize=9)
 ax.grid(True, alpha=0.3)
-plt.show()
+
+fig.tight_layout()
+plt.savefig("plot_diag_kennicutt_halpha_sfr.png", dpi=150, bbox_inches="tight")

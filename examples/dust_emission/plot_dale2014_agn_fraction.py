@@ -78,7 +78,6 @@ ax.set(
     ylim=(1e42, 1e45),
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
     ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
-    title="Dale 2014: AGN-heated dust adds MIR power (CIGALE additive mixing)",
 )
 ax.legend(frameon=False, fontsize=9, loc="upper right")
 

@@ -18,19 +18,14 @@
 .. _sphx_glr_auto_examples_photometry_plot_uvj_diagram.py:
 
 
-The UVJ colour–colour diagram
+The UVJ color–color diagram
 ==============================
-
-.. image:: images/sphx_glr_plot_uvj_diagram_001.png
-   :alt: plot uvj diagram
-   :class: sphx-glr-single-img
-
 
 The UVJ (U−V vs V−J) diagram is a classic method for separating
 star-forming from quiescent galaxies. We populate it with four
 model tracks: (1) constant star-forming galaxies with varying
 dust optical depth, (2) an old quiescent population, (3) a
-post-starburst galaxy, and (4) a dusty starburst. The grey box
+post-starburst galaxy, and (4) a dusty starburst. The gray box
 marks the "quiescent region" from Williams+2009, a visual guide
 for identifying passive galaxies.
 
@@ -193,7 +188,7 @@ workhorse diagnostic for photometric surveys.
         0.5,
         0.5,
         linewidth=1.0,
-        edgecolor="grey",
+        edgecolor="gray",
         facecolor="lightgrey",
         alpha=0.3,
         zorder=1,
@@ -227,11 +222,6 @@ workhorse diagnostic for photometric surveys.
 
     fig.tight_layout()
     plt.savefig("plot_uvj_diagram.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.978 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_uvj_diagram.py:
