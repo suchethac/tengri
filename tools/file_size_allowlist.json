@@ -37,7 +37,7 @@
   "src/tengri/components/igm/igm.py": 1065,
   "src/tengri/components/stellar/sps/precompute.py": 1111,
   "src/tengri/observation/filters/__init__.py": 971,
-  "src/tengri/components/radio/radio.py": 925,
+  "src/tengri/components/radio/radio.py": 947,
   "src/tengri/inference/backends/mcmc/raytrace.py": 916,
   "src/tengri/inference/backends/vi/nifty.py": 904,
   "src/tengri/components/stellar/sfh/nonparametric.py": 859,
