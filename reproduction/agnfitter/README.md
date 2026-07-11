@@ -39,15 +39,13 @@ with no AGNfitter clone. The clone is needed only to *regenerate* those
 references (`scripts/build_agnfitter_bbb_reference.py`,
 `scripts/build_agnfitter_s17_reference.py`, and the per-model grid builders):
 
-```bash
-git clone --depth 1 --branch AGNfitter-rX_v0.1 \
-    https://github.com/GabrielaCR/AGNfitter /tmp/AGNfitter-rX
-```
-
-Point the build scripts elsewhere with `export AGNFITTER_HOME=/path/to/...`.
-The upstream template pickles are loaded through a restricted unpickler
+The build scripts fetch what they need straight from the pinned
+`AGNfitter-rX_v0.1` tag (cached under `~/.cache/tengri_agnfitter`), so a
+regeneration needs no manual clone; pass `--input` to read a local checkout
+instead. They load the upstream pickles through a restricted unpickler
 (numpy/pandas primitives only, with a preflight opcode scan) — they are
-untrusted external data.
+untrusted external data. The driver itself reads only the committed h5:
+`tests/contract/test_reproduction_driver_no_clone.py` pins that.
 
 ## Running
 
