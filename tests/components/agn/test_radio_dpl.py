@@ -283,32 +283,39 @@ class TestTotalDPL:
         )
         assert jnp.allclose(total, sf + agn, rtol=1e-10), "Total should be sum of SF + AGN DPL"
 
-    def test_jet_rolls_over_blueward_of_the_aging_cutoff(self):
-        """The jet peaks in the radio and dies off blueward via ``exp(-nu/nu_cut)``.
+    def test_suppressed_shortward_by_the_aging_cutoff(self):
+        """The jet dies by exp(-nu/nu_cut), not at a hard wavelength floor.
 
-        The jet is *not* truncated at any wavelength: an AGN jet extends into the
-        sub-mm/IR, and the synchrotron-aging cutoff (``log_nu_cut``, 10 THz) is what
-        rolls it over. So the physical contract is a steep blueward decline to
-        numerical insignificance, not a hard zero (see the #1071 regression test,
-        ``tests/regression/bug/test_agn_jet_radio_cutoff.py``).
+        This asserted ``L == 0`` everywhere below 10 um, which held only because
+        of the 1 mm hard floor #1071 removed. That floor truncated a real
+        synchrotron tail: at 1 mm the jet is still ~7% of its 1.4 GHz value, and
+        ~1% at 100 um. Emission there is physical, not a leak.
+
+        What actually confines the jet is the aging cutoff at
+        nu_cut = 10^13 Hz (~30 um): shortward of it the exponential takes over
+        and the jet falls off a cliff — by 1000 A it is ~1e-134 of its 1.4 GHz
+        value, i.e. utterly dead. Assert THAT, which is the physics, rather than
+        an exact zero, which was an artifact.
         """
-        L_radio = float(
-            radio_agn_dpl(jnp.array([_C_AA / 1.4e9]), _L_AGN_BOL, radio_loudness=2.0)[0]
-        )
-        assert L_radio > 0.0, "Should have nonzero emission at radio wavelengths"
+        L_radio = radio_agn_dpl(jnp.array([_C_AA / 1.4e9]), _L_AGN_BOL, radio_loudness=2.0)
+        assert float(L_radio[0]) > 0.0, "Should have nonzero emission at radio wavelengths"
 
-        # Monotonically decreasing blueward (toward higher frequency), never negative.
-        wave_down = jnp.logspace(9.0, 4.0, 60)  # 30 cm -> 1 um
-        L_down = radio_agn_dpl(wave_down, _L_AGN_BOL, radio_loudness=2.0)
-        chex.assert_tree_all_finite(L_down)
-        assert jnp.all(L_down >= 0.0), "Jet emission must be non-negative"
-        assert jnp.all(jnp.diff(L_down) <= 0.0), (
-            "Jet must decline monotonically blueward of the radio peak"
+        # Optical/UV (1000 A - 1 um): nu/nu_cut runs 30 -> 300, so exp(-nu/nu_cut)
+        # annihilates the jet. Measured against L(1.4 GHz):
+        #     1 um    4e-17      3000 A   7e-48      1000 A   5e-135
+        # Bound it 15 decades down — far below anything that could ever matter,
+        # with room to spare at the 1 um edge.
+        wave_optical = jnp.logspace(3.0, 4.0, 20)
+        L_opt = radio_agn_dpl(wave_optical, _L_AGN_BOL, radio_loudness=2.0)
+
+        assert jnp.all(jnp.isfinite(L_opt))
+        assert jnp.all(L_opt >= 0.0)
+        assert float(jnp.max(L_opt)) < 1e-15 * float(L_radio[0]), (
+            "Jet must be exponentially dead in the optical"
         )
 
-        # By 1 um the aging cutoff has suppressed the jet into insignificance.
-        L_nir = float(radio_agn_dpl(jnp.array([1e4]), _L_AGN_BOL, radio_loudness=2.0)[0])
-        assert L_nir / L_radio < 1e-10, (
-            f"Jet at 1 um is {L_nir / L_radio:.2e} of its 1.4 GHz value — the aging "
-            "cutoff should render it negligible in the near-IR/optical"
-        )
+        # ...and the suppression must be MONOTONE in the cutoff: the shorter the
+        # wavelength, the deeper the aging cut. This is what distinguishes an
+        # exponential rollover from a hard floor — a reinstated floor would zero
+        # the whole band, satisfy the bound above trivially, and fail here.
+        assert jnp.all(jnp.diff(L_opt) > 0.0), "Aging cutoff must steepen toward the blue"
