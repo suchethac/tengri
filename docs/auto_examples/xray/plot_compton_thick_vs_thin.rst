@@ -21,11 +21,6 @@
 Photoelectric vs. Compton-thick regimes: the N_H = 1e24 cm−2 transition
 =========================================================================
 
-.. image:: images/sphx_glr_plot_compton_thick_vs_thin_001.png
-   :alt: plot compton thick vs thin
-   :class: sphx-glr-single-img
-
-
 X-ray absorption in AGN undergoes a qualitative shift at N_H ≈ 1e24 cm⁻²,
 where the cross-section for Compton scattering becomes comparable to
 photoelectric absorption. Below this threshold, soft photons (E < 10 keV)

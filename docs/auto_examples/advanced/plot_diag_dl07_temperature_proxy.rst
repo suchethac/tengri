@@ -21,11 +21,6 @@
 Draine & Li 2007: dust temperature from SED peak position
 ==========================================================
 
-.. image:: images/sphx_glr_plot_diag_dl07_temperature_proxy_001.png
-   :alt: plot diag dl07 temperature proxy
-   :class: sphx-glr-single-img
-
-
 Validates that the νF_ν peak position of Draine & Li (2007) dust emission
 templates follows Wien's displacement law, an effective dust temperature
 diagnostic. The DL07 templates encode different dust temperatures for different
@@ -33,7 +28,7 @@ U_min values; the Wien law applied to the νF_ν peak recovers this temperature.
 
 Reference: Draine & Li 2007, ApJ, 657, 810; Draine 2011 Handbook.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-108
+.. GENERATED FROM PYTHON SOURCE LINES 12-96
 
 
 
@@ -43,29 +38,8 @@ Reference: Draine & Li 2007, ApJ, 657, 810; Draine 2011 Handbook.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
 
 
-    Draine & Li 2007 Temperature Diagnostic
-    ======================================================================
-    U_min      λ [μm]       T_Wien     T_scaling  % Diff  
-    ----------------------------------------------------------------------
-    0.10       168.4        30.3       12.3       146.9   
-    0.50       138.8        36.8       16.0       129.2   
-    1.00       135.0        37.8       18.0       109.9   
-    5.00       100.9        50.5       23.5       114.7   
-    10.00      100.9        50.5       26.4       91.3    
-    25.00      100.9        50.5       30.8       64.2    
-    Mean agreement: 109.4%
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -153,18 +127,6 @@ Reference: Draine & Li 2007, ApJ, 657, 810; Draine 2011 Handbook.
 
     fig.tight_layout()
     plt.savefig("plot_diag_dl07_temperature_proxy.png", dpi=150, bbox_inches="tight")
-
-    # Report findings
-    pct_diff = 100.0 * np.abs(wien_temps - u_min_scaling_temps) / u_min_scaling_temps
-    print("\nDraine & Li 2007 Temperature Diagnostic")
-    print("=" * 70)
-    print(f"{'U_min':<10} {'λ [μm]':<12} {'T_Wien':<10} {'T_scaling':<10} {'% Diff':<8}")
-    print("-" * 70)
-    for um, lam, tw, ts, pct in zip(
-        U_min_values, peak_wavelengths, wien_temps, u_min_scaling_temps, pct_diff
-    ):
-        print(f"{um:<10.2f} {lam:<12.1f} {tw:<10.1f} {ts:<10.1f} {pct:<8.1f}")
-    print(f"Mean agreement: {np.mean(pct_diff):.1f}%")
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_dl07_temperature_proxy.py:

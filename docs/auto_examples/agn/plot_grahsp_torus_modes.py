@@ -11,9 +11,9 @@ via ``agn_grahsp_tor_temp`` and applies a short-wavelength Gaussian cutoff at
 
 This example overlays the two at fixed ``l5100`` and ``fcov``, then sweeps the
 MN12 temperature blend lo → avg → hi. (The two prescriptions carry different
-internal 12 µm normalisations — faithfully reproduced from upstream — so
+internal 12 µm normalizations — faithfully reproduced from upstream — so
 ``fcov`` has a different effective scale between them; here each curve is shown
-in its native normalisation.)
+in its native normalization.)
 """
 
 import os
@@ -26,8 +26,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.agn import compute_grahsp_sed
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn.grahsp.model import compute_grahsp_sed
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -53,8 +53,8 @@ def torus_only(**kw):
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.5, 4.4), sharex=True)
 
-# These torus templates carry an arbitrary "native" normalisation; only the
-# relative shapes are physical. Normalise both panels by the same reference
+# These torus templates carry an arbitrary "native" normalization; only the
+# relative shapes are physical. Normalize both panels by the same reference
 # (the default log-Gaussian peak) so the y-axis reads O(1) instead of ~1e66.
 gaussian = wave_um * torus_only(torus_model="gaussian")
 norm = gaussian.max()
@@ -69,7 +69,7 @@ ax1.plot(
 )
 ax1.set_title("Torus prescription")
 ax1.legend(frameon=False, fontsize=9)
-ax1.set_ylabel(r"$\lambda L_\lambda$ [normalised]")
+ax1.set_ylabel(r"$\lambda L_\lambda$ [normalized]")
 
 # Panel 2: MN12 temperature blend.
 temps = [(-1.0, "lo (25th pct)"), (0.0, "avg (mean)"), (1.0, "hi (75th pct)")]

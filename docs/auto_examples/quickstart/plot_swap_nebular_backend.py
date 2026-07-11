@@ -2,7 +2,7 @@
 Swapping the nebular backend on, then off, on a young starburst
 ===============================================================
 
-Hα and [O III]+Hβ are produced by gas reprocessing the ionising
+Hα and [O III]+Hβ are produced by gas reprocessing the ionizing
 continuum from O/B stars. Whether they appear in the predicted SED
 depends entirely on the nebular backend the model is built with.
 
@@ -13,6 +13,10 @@ The lines that vanish in the right column are the gas's signature.
 
 Reference: Li et al. 2024, ApJ submitted (Cue emulator).
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -28,7 +32,7 @@ warnings.filterwarnings("ignore")
 
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
-# A young starburst: peak ~30 Myr ago, still ionising
+# A young starburst: peak ~30 Myr ago, still ionizing
 sfh = {
     "type": "dpl",
     "*": tengri.FIXED,

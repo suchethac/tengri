@@ -21,11 +21,6 @@
 Continuity Prior vs PSD-Governed Prior: Stochastic Structure at Fixed Mean
 ===========================================================================
 
-.. image:: images/sphx_glr_plot_continuity_vs_bursty_psd_001.png
-   :alt: plot continuity vs bursty psd
-   :class: sphx-glr-single-img
-
-
 At fixed mean SFH and stellar mass, continuity (Leja+2019) and field (PSD-governed)
 priors yield strikingly different stochastic realizations: continuity produces smooth
 log-normal transitions; field produces controlled burstiness governed by σ_field.
@@ -33,7 +28,7 @@ log-normal transitions; field produces controlled burstiness governed by σ_fiel
 Twenty samples from each prior, overlaid translucently with median shown in bold.
 Visual width difference reveals each prior's implicit stochastic assumptions.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-89
+.. GENERATED FROM PYTHON SOURCE LINES 12-90
 
 
 
@@ -55,7 +50,8 @@ Visual width difference reveals each prior's implicit stochastic assumptions.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri import FREE, Fixed, SEDModel, load_ssp, setup_style
+    from tengri import FREE, Fixed, SEDModel, load_ssp
+    from tengri.analysis.plotting import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -124,7 +120,7 @@ Visual width difference reveals each prior's implicit stochastic assumptions.
 
     fig.legend(["Mean SFH"], loc="upper center", bbox_to_anchor=(0.5, 1.02), fontsize=10)
     fig.tight_layout()
-    plt.show()
+    plt.savefig("plot_continuity_vs_bursty_psd.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_continuity_vs_bursty_psd.py:

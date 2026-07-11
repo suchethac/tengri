@@ -54,7 +54,7 @@ ax.set(
     xlabel=r"$\lambda\ [\mu\mathrm{m}]$",
     ylabel=r"$\nu L_\nu\ [\mathrm{arbitrary,\ normalized}]$",
     xlim=(2.0, 1.0e3),
-    ylim=(1.0e-26, 1.0e-23),
+    ylim=(1.0e-5, 1.0e1),
 )
 ax.legend(loc="lower center", frameon=False, fontsize=8, ncol=3)
 fig.tight_layout()

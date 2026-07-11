@@ -24,8 +24,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.observation.photometry",
-   "module_short": "tengri.observation.photometry",
+   "module": "tengri",
+   "module_short": "tengri",
    "name": "FilterCurve"
   }
  ],

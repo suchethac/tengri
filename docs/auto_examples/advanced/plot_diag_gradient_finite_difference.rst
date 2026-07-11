@@ -21,18 +21,13 @@
 Autodiff gradients vs. finite-difference derivatives: diagnostic verification
 ==============================================================================
 
-.. image:: images/sphx_glr_plot_diag_gradient_finite_difference_001.png
-   :alt: plot diag gradient finite difference
-   :class: sphx-glr-single-img
-
-
 tengri is a differentiable JAX package. Every model gradient ∂L/∂θ computed via
 `jax.grad()` should numerically match a central finite-difference approximation.
 This diagnostic builds a star-forming model with several free parameters,
 defines a chi-squared loss, and compares autodiff vs FD gradients for each
 parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-122
+.. GENERATED FROM PYTHON SOURCE LINES 11-104
 
 
 
@@ -42,32 +37,8 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Autodiff vs Finite-Difference Gradient Diagnostic
-    ======================================================================
-    Parameter                 Autodiff        Finite-Diff     Rel. Error     
-    ----------------------------------------------------------------------
-    dust_tau_bc               -4.9630e-27     -4.9630e-27     3.2331e-22     OK
-    dust_tau_diff             -3.7649e-24     -3.7649e-24     2.0954e-18     OK
-    met_logzsol               -5.7350e-25     -5.7350e-25     5.5159e-18     OK
-    sfh_dpl_age_gyr           -1.4672e-24     -1.4672e-24     1.1504e-17     OK
-    sfh_dpl_alpha             -3.3165e-25     -3.3165e-25     3.7321e-18     OK
-    sfh_dpl_beta              7.8207e-26      7.8213e-26      6.1484e-18     OK
-    sfh_dpl_log_total_mass    9.9177e-24      9.9178e-24      4.0549e-17     OK
-    sfh_dpl_tau_gyr           1.9383e-24      1.9383e-24      1.2006e-17     OK
-    ----------------------------------------------------------------------
-    Worst: sfh_dpl_log_total_mass, rel_error = 4.0549e-17
-    All gradients match within 1e-3 tolerance.
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -165,28 +136,10 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
     fig.tight_layout()
     plt.savefig("plot_diag_gradient_finite_difference.png", dpi=150, bbox_inches="tight")
 
-    # Report
-    print("Autodiff vs Finite-Difference Gradient Diagnostic")
-    print("=" * 70)
-    print(f"{'Parameter':<25} {'Autodiff':<15} {'Finite-Diff':<15} {'Rel. Error':<15}")
-    print("-" * 70)
-    for param_name in free_param_names:
-        g_auto = float(grad_autodiff[param_name])
-        g_fd = grad_fd_dict[param_name]
-        rel_err = rel_errors[param_name]
-        status = "OK" if rel_err < 1e-3 else "⚠ FAIL"
-        print(f"{param_name:<25} {g_auto:<15.4e} {g_fd:<15.4e} {rel_err:<14.4e} {status}")
-    print("-" * 70)
-    print(f"Worst: {worst_param}, rel_error = {worst_error:.4e}")
-    if worst_error > 1e-3:
-        print("WARNING: Gradient error exceeds 1e-3 (possible non-differentiable op).")
-    else:
-        print("All gradients match within 1e-3 tolerance.")
-
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.073 seconds)
+   **Total running time of the script:** (0 minutes 3.129 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_gradient_finite_difference.py:

@@ -357,6 +357,15 @@
    "name": "Artist.tight_layout"
   }
  ],
+ "ir_label": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
  "ir_mask": [
   {
    "is_class": false,
@@ -380,6 +389,15 @@
    "module": "jax.random",
    "module_short": "jax.random",
    "name": "PRNGKey"
+  }
+ ],
+ "l_ir_exp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "float64"
   }
  ],
  "l_sun_cgs": [

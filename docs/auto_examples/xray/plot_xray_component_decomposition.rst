@@ -21,13 +21,8 @@
 X-ray SED decomposition: AGN, LMXB, HMXB, hot gas
 =================================================
 
-.. image:: images/sphx_glr_plot_xray_component_decomposition_001.png
-   :alt: plot xray component decomposition
-   :class: sphx-glr-single-img
-
-
 The X-CIGALE X-ray module (Yang et al. 2020) sums four physically distinct
-emitters: the AGN corona (a cut-off power law normalised through the
+emitters: the AGN corona (a cut-off power law normalized through the
 α_OX–L_2500 relation), low- and high-mass X-ray binaries (LMXB ∝ M⋆, HMXB ∝ SFR;
 Lehmer et al. 2016 metallicity/age scalings), and a hot interstellar-gas term
 (∝ SFR). This reproduces Yang+2020 Figure 1 for a typical AGN host:
@@ -36,12 +31,12 @@ L_2–10 keV = 10⁴³ erg s⁻¹, M⋆ = 10¹¹ M⊙, SFR = 10 M⊙ yr⁻¹, T 
 HMXB and LMXB are isolated from ``xray_xrb`` by driving the other population's
 log-luminosity offset to −∞ (the ``det_hmxb`` / ``det_lmxb`` knobs).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-104
+.. GENERATED FROM PYTHON SOURCE LINES 15-103
 
 
 
 .. image-sg:: /auto_examples/xray/images/sphx_glr_plot_xray_component_decomposition_001.png
-   :alt: X-ray SED components (Yang+2020 X-CIGALE; AGN-dominated)
+   :alt: plot xray component decomposition
    :srcset: /auto_examples/xray/images/sphx_glr_plot_xray_component_decomposition_001.png
    :class: sphx-glr-single-img
 
@@ -137,7 +132,6 @@ log-luminosity offset to −∞ (the ``det_hmxb`` / ``det_lmxb`` knobs).
     ax_top.set_xlabel(r"$\log E$ (keV)")
 
     ax.legend(frameon=True, fontsize=10, loc="lower right", title="component")
-    ax.set_title("X-ray SED components (Yang+2020 X-CIGALE; AGN-dominated)")
     fig.tight_layout()
     plt.savefig("plot_xray_component_decomposition.png", dpi=150, bbox_inches="tight")
 

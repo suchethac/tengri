@@ -19,7 +19,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Young, metal-rich and old, metal-poor stellar populations can produce similar colours — a fundamental degeneracy in stellar population inference. This example builds a 2D grid of single-burst SSP-like models varying age (log10(t/Gyr) = -2 to 1.1) and metallicity (log10(Z/Zsun) = -2 to 0.4), then plots three SDSS broadband colours (u − r, g − r, NUV − r) as pcolormesh grids to visualize the degeneracy.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Young, metal-rich and old, metal-poor stellar populations can produce similar colors — a fundamental degeneracy in stellar population inference. This example builds a 2D grid of single-burst SSP-like models varying age (log10(t/Gyr) = -2 to 1.1) and metallicity (log10(Z/Zsun) = -2 to 0.4), then plots three SDSS broadband colors (u − r, g − r, NUV − r) as pcolormesh grids to visualize the degeneracy.">
 
 .. only:: html
 
@@ -30,13 +30,13 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Age-metallicity colour degeneracy in SDSS colours</div>
+      <div class="sphx-glr-thumbnail-title">Age-metallicity color degeneracy in SDSS colors</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The stellar populations in massive elliptical galaxies are typically α-enhanced ([α/Fe] &gt; 0) due to rapid star formation timescales that terminate before iron-peak elements fully enrich the gas (Thomas et al. 2005). increasing [α/Fe] shifts absorption features — particularly the Mg b and Fe5270 indices — which serve as diagnostics of star-formation history timescale.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The stellar populations in massive elliptical galaxies are typically α-enhanced ([α/Fe] &gt; 0) due to rapid star formation timescales that terminate before iron-peak elements fully enrich the gas. Increasing [α/Fe] shifts absorption-feature strengths — particularly Mg b and Fe5270 — which serve as diagnostics of the galaxy&#x27;s star-formation history timescale. We sweep [α/Fe] from 0.0 to 0.6 at fixed age (5 Gyr) and solar metallicity, showing the full rest-frame SED and a zoom on the optical feature region.">
 
 .. only:: html
 
@@ -47,7 +47,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Alpha-element enhancement in quiescent stellar populations</div>
+      <div class="sphx-glr-thumbnail-title">Alpha-element enhancement shifts absorption features in old stellar populations</div>
     </div>
 
 
@@ -104,18 +104,35 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The hydrogen-ionising photon production rate Q_H of a simple stellar population drops by ~5 dex from 1 Myr to 100 Myr as O stars die. Different SSP libraries predict different Q_H(t) because they differ in upper-IMF treatment, stellar rotation, and (most dramatically) whether massive binaries are included — BPASS extends the Q_H-producing phase to ~30 Myr.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Initial Mass Function (IMF) parameterizes the fraction of massive versus low-mass stars born during star formation. Chabrier, Kroupa, and Salpeter IMFs differ most in the high-mass end: Salpeter has more massive stars, producing a higher M/L ratio (more mass per unit light) and harder UV continua. We vary IMF while fixing SFH, age, and metallicity, overlaying rest-frame νL_ν to reveal the IMF signature in the SED continuum shape and M/L.">
 
 .. only:: html
 
-  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_ionising_lum_thumb.png
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_imf_choice_sweep_thumb.png
     :alt:
 
-  :doc:`/auto_examples/sps/plot_ionising_lum`
+  :doc:`/auto_examples/sps/plot_imf_choice_sweep`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Ionising-photon production rate vs SSP age</div>
+      <div class="sphx-glr-thumbnail-title">Initial Mass Function choice and stellar mass-to-light ratio</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The hydrogen-ionizing photon production rate Q_H of a simple stellar population drops by ~5 dex from 1 Myr to 100 Myr as O stars die. Different SSP libraries predict different Q_H(t) because they differ in upper-IMF treatment, stellar rotation, and (most dramatically) whether massive binaries are included — BPASS extends the Q_H-producing phase to ~30 Myr.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_ionizing_lum_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_ionizing_lum`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Ionizing-photon production rate vs SSP age</div>
     </div>
 
 
@@ -223,7 +240,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Different Initial Mass Functions produce different M/L ratios at fixed age and metallicity. We rescale a Chabrier SSP by literature M/L values for Chabrier, Kroupa, and Salpeter at 1 Gyr, solar metallicity. The NIR (where massive stars dominate the mass budget) is most diagnostic of IMF choice.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Different Initial Mass Functions produce different continuum shapes at fixed age and metallicity. Salpeter (top-heavy) produces harder UV and near-IR continua. We compare the rest-frame νL_ν at 1 Gyr solar metallicity, peak-normalized at 5500 Å to reveal chromatic differences. The NIR is most diagnostic of IMF choice because massive stars dominate the red-giant branch.">
 
 .. only:: html
 
@@ -234,7 +251,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">IMF Comparison: Mass-to-Light Ratio</div>
+      <div class="sphx-glr-thumbnail-title">IMF choice revealed in SED continuum shape: Chabrier vs Kroupa vs Salpeter</div>
     </div>
 
 
@@ -304,7 +321,8 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
    /auto_examples/sps/plot_bolometric_correction_vs_age
    /auto_examples/sps/plot_component_buildup
    /auto_examples/sps/plot_fnu_vs_flambda_units
-   /auto_examples/sps/plot_ionising_lum
+   /auto_examples/sps/plot_imf_choice_sweep
+   /auto_examples/sps/plot_ionizing_lum
    /auto_examples/sps/plot_mass_to_light_band_comparison
    /auto_examples/sps/plot_mass_to_light_ratios
    /auto_examples/sps/plot_sps_library_compare

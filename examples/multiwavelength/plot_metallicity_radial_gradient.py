@@ -3,8 +3,9 @@ Radial metallicity gradients and integrated-light SED
 ======================================================
 
 Spiral galaxies exhibit radial metallicity gradients: metal-rich centers
-and metal-poor discs (e.g. NGC 891, Searle 1971). three common gradient scenarios—steep positive, flat, and inverted
-depletion—reshape the integrated SED when weighted by disc area.
+and metal-poor discs (e.g. NGC 891, Searle 1971). Three common gradient
+scenarios—steep positive, flat, and inverted depletion—reshape the integrated
+SED when weighted by disc area.
 
 Left panel: metallicity profile Z(R) for a radial grid from 0–15 kpc.
 Right panel: integrated nu*L_nu for each scenario, computed by summing

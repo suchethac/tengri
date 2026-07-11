@@ -11,7 +11,7 @@ the effective F_ν through a photometric filter manually and comparing against
     \\langle F_\\nu \\rangle_{\\rm filter} = \\int F_\\nu(\\nu) T(\\nu) d\\nu/\\nu \\; / \\;
     \\int T(\\nu) d\\nu/\\nu
 
-(photon-counting normalisation per SDSS/HSC/LSST). We integrate numerically
+(photon-counting normalization per SDSS/HSC/LSST). We integrate numerically
 from the rest-frame SED, apply redshift, and convolve with filter transmission
 curves, then compare residuals against ``predict_photometry()`` in mmag.
 
@@ -103,5 +103,5 @@ ax.set_ylabel(r"Residual [mmag] (manual − predict\_photometry)")
 ax.grid(True, alpha=0.3)
 ax.legend(loc="upper left", frameon=False, fontsize=8)
 
-plt.tight_layout()
-plt.show()
+fig.tight_layout()
+plt.savefig("plot_diag_filter_integral_manual.png", dpi=150, bbox_inches="tight")

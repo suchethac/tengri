@@ -21,11 +21,6 @@
 Rest-frame SED Redshift Invariance
 ==================================
 
-.. image:: images/sphx_glr_plot_diag_redshift_rest_invariance_001.png
-   :alt: plot diag redshift rest invariance
-   :class: sphx-glr-single-img
-
-
 The rest-frame SED depends only on intrinsic galaxy properties (SFH, dust,
 metallicity, nebular, AGN) and is independent of redshift. Redshift only
 enters via the observation (wavelength shift, distance dimming, IGM

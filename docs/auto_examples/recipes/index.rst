@@ -36,23 +36,6 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Optical broadband photometry constrains metallicity weakly, so the prior carries real information. We mock a star-forming galaxy at log Z/Zsun = -0.5 in five SDSS bands at S/N=20, then fit it twice under the same model — once with a uniform Z prior, once with a Gaussian prior centred on 0 with sigma=0.3. The posteriors shift by ~0.3 dex toward each prior&#x27;s preferred region, illustrating how informative external priors propagate through a tengri inference.">
-
-.. only:: html
-
-  .. image:: /auto_examples/recipes/images/thumb/sphx_glr_plot_recipe_compare_priors_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/recipes/plot_recipe_compare_priors`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Metallicity prior choice moves the photometric posterior by ~0.3 dex</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="How do I combine a custom photometric filter with standard filters? This recipe generates a synthetic Gaussian filter at 2 μm and pairs it with SDSS optical bands, then predicts the full SED and photometry.">
 
 .. only:: html
@@ -87,7 +70,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do I load measured photometry from a table and fit it? This recipe generates mock photometry for 3 galaxies and fits each one independently with a MAP fit, demonstrating the workflow for catalogue-scale SED fitting.">
+    <div class="sphx-glr-thumbcontainer" tooltip="How do I load measured photometry from a table and fit it? This recipe generates mock photometry for 3 galaxies and fits each one independently with a MAP fit, demonstrating the workflow for catalog-scale SED fitting.">
 
 .. only:: html
 
@@ -147,7 +130,6 @@ saving/loading a posterior to disk.
    :hidden:
 
    /auto_examples/recipes/plot_recipe_compare
-   /auto_examples/recipes/plot_recipe_compare_priors
    /auto_examples/recipes/plot_recipe_custom_filter
    /auto_examples/recipes/plot_recipe_introspection_tour
    /auto_examples/recipes/plot_recipe_load_real_csv

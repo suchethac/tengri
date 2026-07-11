@@ -21,11 +21,6 @@
 Galaxy SED with photometric filter coverage
 ==============================================
 
-.. image:: images/sphx_glr_plot_galaxy_with_filters_001.png
-   :alt: plot galaxy with filters
-   :class: sphx-glr-single-img
-
-
 What each photometric system measures depends on where its filters
 sit relative to the rest-frame spectral features. We overlay six
 common filter sets (GALEX *NUV*, SDSS *ugriz*, 2MASS *JHK*, WISE
@@ -144,6 +139,11 @@ up rest-frame ``5500 Å`` at moderate z, etc.
     ax_sed.set_xlim(1.0e3, 1.5e6)
 
     plt.savefig("plot_galaxy_with_filters.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.066 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_galaxy_with_filters.py:

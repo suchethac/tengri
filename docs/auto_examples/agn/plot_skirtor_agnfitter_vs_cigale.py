@@ -25,7 +25,7 @@ and speed in torus library selection.
 
 References
 ----------
-.. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+.. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
    torus around AGN — the influence of clumping," MNRAS 420, 2756 (2012).
    arXiv:1109.1286.
 .. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the

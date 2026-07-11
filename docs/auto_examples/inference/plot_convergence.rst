@@ -18,23 +18,28 @@
 .. _sphx_glr_auto_examples_inference_plot_convergence.py:
 
 
-MAP fit convergence: loss decay across iterations
-==================================================
+MAP fit recovery: star-formation history from mock photometry
+=============================================================
 
-.. image:: images/sphx_glr_plot_convergence_001.png
-   :alt: plot convergence
-   :class: sphx-glr-single-img
-
-
-The convergence diagnostic shows how the negative log posterior (loss) decays
-across optimizer iterations. We fit mock photometry using MAP (maximum a
-posteriori) optimization with Adam and display the loss curve, showing when
-the optimizer has effectively converged. The right panel overlays the
-recovered SFH against the truth.
+We fit mock SDSS photometry using MAP (maximum a posteriori) optimization
+with Adam and recover the input star-formation history. The figure overlays
+the MAP-recovered SFH against the ground truth, demonstrating convergence
+on the morphology despite the nonconvex likelihood landscape.
 
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-112
+.. GENERATED FROM PYTHON SOURCE LINES 12-85
+
+
+
+.. image-sg:: /auto_examples/inference/images/sphx_glr_plot_convergence_001.png
+   :alt: plot convergence
+   :srcset: /auto_examples/inference/images/sphx_glr_plot_convergence_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -95,48 +100,27 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
         verbose=False,
     )
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
+    fig, ax = plt.subplots(figsize=(7, 4.5))
 
-    # Left: placeholder showing the method; in practice, one would log the loss curve
-    # during optimization (this is a simplified demonstration).
-    axes[0].text(
-        0.5,
-        0.5,
-        "MAP optimization\n(300 iterations with Adam)",
-        ha="center",
-        va="center",
-        fontsize=11,
-        transform=axes[0].transAxes,
-        bbox=dict(boxstyle="round,pad=0.7", facecolor="#f0f0f0", edgecolor="gray"),
-    )
-    axes[0].set_xlim(0, 1)
-    axes[0].set_ylim(0, 1)
-    axes[0].axis("off")
-    ax_text = axes[0].text(
-        0.05,
-        0.95,
-        "MAP convergence",
-        transform=axes[0].transAxes,
-        fontsize=10,
-        va="top",
-        ha="left",
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="white", alpha=0.7),
-    )
-
-    # Right: SFH truth vs MAP
+    # SFH truth vs MAP
     sfh_true = model.predict_sfh(truth)
     sfh_fit = model.predict_sfh(posterior.params)
     t_gyr = np.array(sfh_true["t_gyr"])
     mask = t_gyr < 5.0
-    axes[1].plot(t_gyr[mask], np.array(sfh_true["sfr_mean"])[mask], "k-", lw=1.5, label="Truth")
-    axes[1].plot(t_gyr[mask], np.array(sfh_fit["sfr_mean"])[mask], "C3--", lw=1.2, label="MAP")
-    axes[1].set_xlabel("Lookback time [Gyr]")
-    axes[1].set_ylabel(r"SFR [M$_\odot$ yr$^{-1}$]")
-    axes[1].legend(frameon=False, fontsize=9)
-    axes[1].grid(True, alpha=0.3)
+    ax.plot(t_gyr[mask], np.array(sfh_true["sfr_mean"])[mask], "k-", lw=1.5, label="Truth")
+    ax.plot(t_gyr[mask], np.array(sfh_fit["sfr_mean"])[mask], "C3--", lw=1.2, label="MAP")
+    ax.set_xlabel("Lookback time [Gyr]")
+    ax.set_ylabel(r"SFR [M$_\odot$ yr$^{-1}$]")
+    ax.legend(frameon=False, fontsize=9)
+    ax.grid(True, alpha=0.3)
 
     fig.tight_layout()
     plt.savefig("plot_convergence.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 8.021 seconds)
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_convergence.py:

@@ -224,6 +224,7 @@ class _KernelsRemoved:
 
 KernelStrategy = _KernelsRemoved("KernelStrategy")
 NoCompatibleKernelError = _KernelsRemoved("NoCompatibleKernelError")
+from tengri.components.sed_model_component import SEDModelComponent
 from tengri.components.spatial import Exponential, FlatSlab, Sersic
 from tengri.forward.convenience import catalog_summary, fit_batch
 from tengri.forward.forward_model import ForwardModel
@@ -253,7 +254,7 @@ from tengri.observation.noise import (
     uses_student_t,
     variable_noise_hamiltonian,
 )
-from tengri.observation.photometry import FilterConvention, list_filter_conventions
+from tengri.observation.photometry import FilterConvention, FilterCurve, list_filter_conventions
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import (

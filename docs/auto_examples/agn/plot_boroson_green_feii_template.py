@@ -11,7 +11,7 @@ Fe II to broad H\\ :math:`\\beta`).
 The template is the PyQSOFit empirical Fe II compilation (Vestergaard & Wilkes
 2001 in the UV, Boroson & Green 1992 in the optical), so the line ratios within
 each iron complex follow the *measured* I Zw 1 spectrum rather than a smooth
-parametrisation. ``boroson_green`` exposes it as a standalone ``feii`` block —
+parametrization. ``boroson_green`` exposes it as a standalone ``feii`` block —
 the same template the analytic ``blr`` lines carry, usable on its own. Other Fe II
 options (``grahsp``, ``qsogen_balmer``) are swappable — see
 ``tengri.list_agn_models()``.

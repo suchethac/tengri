@@ -4,9 +4,9 @@ HSC vs DES filter i-band differences at high redshift
 
 The Subaru HSC and Blanco DECam i-bands have different red-edge cutoffs
 (HSC i-2 at ~850 nm, DECam i at ~870 nm). This 20 nm difference produces
-measurable colour offsets when a sharp spectral feature sweeps through
+measurable color offsets when a sharp spectral feature sweeps through
 the i-band — particularly the Lyman break at z~3.5–4.5. We show (r − i)
-colours for an LBG template across both filter sets to highlight the
+colors for an LBG template across both filter sets to highlight the
 divergence in the high-redshift regime.
 """
 

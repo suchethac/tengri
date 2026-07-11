@@ -593,10 +593,30 @@ def _pchip_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq) -> jnp.ndarray:
     return h00 * y[i] + h10 * h * slopes[i] + h01 * y[i + 1] + h11 * h * slopes[i + 1]
 
 
+def _linear_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq) -> jnp.ndarray:
+    """Evaluate the piecewise-linear interpolant at scalar ``xq`` over axis 0.
+
+    C0, not C1 — which is the point. Where the tabulated function has a genuine
+    kink and a knot sits on it, a cubic's two-sided slope estimate straddles the
+    corner and degrades to O(h); linear interpolation has no slope to get wrong.
+    """
+    n = x.shape[0]
+    xq_c = jnp.clip(xq, x[0], x[-1])
+    i = jnp.clip(jnp.searchsorted(x, xq_c) - 1, 0, n - 2)
+    h = x[i + 1] - x[i]
+    t = (xq_c - x[i]) / jnp.where(h > 0.0, h, 1.0)  # guard a degenerate cell
+    return (1.0 - t) * y[i] + t * y[i + 1]
+
+
+#: Per-axis evaluators selectable via ``interp_nd_pchip(..., kinds=...)``.
+_EVAL_AXIS0 = {"pchip": _pchip_eval_axis0, "linear": _linear_eval_axis0}
+
+
 def interp_nd_pchip(
     grid: jnp.ndarray,
     axes: tuple[jnp.ndarray, ...],
     point: tuple,
+    kinds: tuple[str, ...] | None = None,
 ) -> jnp.ndarray:
     """N-dimensional node-exact monotone-cubic (PCHIP) interpolation.
 
@@ -623,12 +643,26 @@ def interp_nd_pchip(
         ``axes[i]`` has shape ``(grid_dims[i],)``.
     point : tuple
         Query coordinates, one scalar per axis.
+    kinds : tuple of {'pchip', 'linear'}, optional
+        Interpolation kind per axis, in the same order as ``axes``. Defaults to
+        PCHIP on every axis. Select ``'linear'`` for an axis whose tabulated
+        function has C0 kinks at (some of) its knots: PCHIP's two-sided tangent
+        estimate straddles such a corner and the neighboring cells inherit an
+        O(1) slope error, so the local interpolation error decays only as O(h).
+        A linear interpolant with knots on the kinks converges normally. Applies
+        only where the kink locations are known and gridded — on a smooth axis,
+        or a kinked axis whose knots miss the kinks, PCHIP is the better choice.
 
     Returns
     -------
     jnp.ndarray, shape (*trailing,)
         Interpolated values. At an exact node the tabulated value is returned
         to floating-point precision.
+
+    Raises
+    ------
+    ValueError
+        If ``kinds`` has the wrong length or names an unknown kind.
 
     Notes
     -----
@@ -646,9 +680,17 @@ def interp_nd_pchip(
        Interpolation," SIAM J. Numer. Anal. 17, 238 (1980).
        DOI: 10.1137/0717021.
     """
+    if kinds is None:
+        kinds = ("pchip",) * len(axes)
+    elif len(kinds) != len(axes):
+        raise ValueError(f"kinds has {len(kinds)} entries but there are {len(axes)} axes")
+    unknown = set(kinds) - set(_EVAL_AXIS0)
+    if unknown:
+        raise ValueError(f"unknown interpolation kind(s) {sorted(unknown)}; expected pchip/linear")
+
     reduced = grid
-    for ax, p in zip(axes, point, strict=True):
-        reduced = _pchip_eval_axis0(ax, reduced, p)
+    for ax, p, kind in zip(axes, point, kinds, strict=True):
+        reduced = _EVAL_AXIS0[kind](ax, reduced, p)
     return reduced
 
 

@@ -28,11 +28,7 @@ of higher-velocity stellar populations.
 
 .. sphx-glr-precomputed-img:
 
-.. image:: images/sphx_glr_plot_velocity_dispersion_sweep_001.png
-   :alt: plot_velocity_dispersion_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 17-120
+.. GENERATED FROM PYTHON SOURCE LINES 17-101
 
 
 
@@ -54,100 +50,81 @@ of higher-velocity stellar populations.
 
     import warnings
 
+    import jax
     import jax.numpy as jnp
+    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
-    from scipy.ndimage import gaussian_filter1d
 
-    from tengri import Fixed, Observation, Parameters, SEDModel, Spectroscopy, load_ssp
+    import tengri
     from tengri.analysis.plotting import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
+    ssp = tengri.load_ssp()
 
-    ssp = load_ssp()
-
-    # --- Setup ---
     WAVE_OBS = jnp.linspace(4800.0, 5500.0, 300)
     REDSHIFT = 0.1
 
-    obs = Observation(
-        spectroscopy=Spectroscopy(wave_obs=WAVE_OBS),
+    obs = tengri.Observation(
+        spectroscopy=tengri.Spectroscopy(wave_obs=WAVE_OBS),
     )
 
-    spec = Parameters(
-        sfh_tsnorm_log_total_mass=Fixed(10.0),
-        sfh_tsnorm_peak_lbt_gyr=Fixed(2.5),
-        sfh_tsnorm_width_gyr=Fixed(1.8),
-        sfh_tsnorm_skew=Fixed(0.1),
-        sfh_tsnorm_trunc=Fixed(3.0),
-        met_logzsol=Fixed(0.0),
-        dust_tau_bc=Fixed(0.1),
-        dust_tau_diff=Fixed(0.05),
-        dust_slope=Fixed(-0.7),
-        redshift=Fixed(REDSHIFT),
-    )
-    model = SEDModel(spec, ssp, observation=obs)
-
-    # --- Predict rest-frame spectrum ---
-    pred = model.predict_rest_sed({})
-    wave_rest = np.asarray(pred.wavelength)
-    sed_rest = np.asarray(pred.sed)
-
-    # --- Interpolate to observed frame and zoom to Mg b region ---
-    wave_obs_rest = wave_rest / (1.0 + REDSHIFT)
-    zoom_mask = (wave_obs_rest >= 5000) & (wave_obs_rest <= 5300)
-    wave_zoom = wave_obs_rest[zoom_mask]
-    sed_zoom = sed_rest[zoom_mask]
-
-    # Normalize
-    sed_zoom = sed_zoom / np.max(sed_zoom)
-
-    # --- Velocity dispersion sweep ---
-    sigma_v_vals = [50, 100, 150, 250, 400]  # km/s
-    colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(sigma_v_vals)))
-
-    # Wavelength resolution element (approximate)
-    dlam_pix = np.mean(np.diff(wave_zoom))
-
-    fig, ax = plt.subplots(figsize=(9, 5))
-
-    for sigma_v, color in zip(sigma_v_vals, colors):
-        # Convert velocity dispersion to wavelength broadening (rest frame)
-        sigma_lam = (sigma_v / 3e5) * np.mean(wave_zoom)
-        sigma_pix = sigma_lam / dlam_pix
-
-        # Apply Gaussian broadening
-        sed_broadened = gaussian_filter1d(sed_zoom, sigma=sigma_pix)
-
-        ax.plot(
-            wave_zoom,
-            sed_broadened,
-            lw=2.0,
-            color=color,
-            label=f"$\\sigma_v$ = {sigma_v} km/s",
-            alpha=0.85,
-        )
-
-    # Mark Mg b center (vacuum)
-    mgb_center = 5172.68
-    ax.axvline(mgb_center, ls=":", lw=1.0, color="grey", alpha=0.5)
-    ax.text(
-        mgb_center,
-        0.95,
-        "Mg b",
-        fontsize=9,
-        ha="center",
-        color="grey",
-        transform=ax.get_xaxis_transform(),
+    model = tengri.SEDModel.build(
+        ssp,
+        observation=obs,
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "log_total_mass": 10.0,
+            "peak_lbt_gyr": 2.5,
+            "width_gyr": 1.8,
+            "skew": 0.1,
+            "trunc": 3.0,
+        },
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_bc": 0.1,
+            "tau_diff": 0.05,
+            "slope": -0.7,
+        },
+        redshift=tengri.Fixed(REDSHIFT),
     )
 
-    ax.set_xlabel(r"Rest Wavelength [$\AA$]")
-    ax.set_ylabel("Normalized Flux")
-    ax.set_xlim(5050, 5250)
-    ax.set_ylim(0.8, 1.02)
-    ax.legend(frameon=False, loc="lower left", fontsize=10)
+    baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
+
+    sigma_v_vals = np.array([50.0, 100.0, 150.0, 250.0, 400.0])
+    norm = mpl.colors.Normalize(vmin=sigma_v_vals.min(), vmax=sigma_v_vals.max())
+    cmap = plt.get_cmap("viridis")
+
+    fig, ax = plt.subplots(figsize=(7.0, 4.6))
+
+    wave_rest = np.linspace(5050.0, 5300.0, 600)
+    for sigma in sigma_v_vals:
+        params = {**baseline, "sigma_v_kms": jnp.float64(sigma)}
+        spec_out = model.predict_spectrum(params, wave_obs=wave_rest * (1 + REDSHIFT))
+        flux = np.asarray(spec_out)
+
+        cont_mask = (wave_rest >= 5200.0) & (wave_rest <= 5230.0)
+        f_cont = np.median(flux[cont_mask])
+        ax.plot(wave_rest, flux / f_cont, color=cmap(norm(sigma)), lw=1.2)
+
+    ax.axvline(5167.0, color="0.55", lw=0.4, ls=":")
+    ax.axvline(5173.0, color="0.55", lw=0.4, ls=":")
+    ax.axvline(5184.0, color="0.55", lw=0.4, ls=":")
+    ax.text(5175.0, 1.06, "Mg b triplet", fontsize=8, color="0.4", ha="center")
+
+    ax.set(
+        xlim=(5050, 5300),
+        ylim=(0.78, 1.10),
+        xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+        ylabel=r"$F_\lambda\,/\,F_{\rm cont}$ (normalized at 5200-5230 Å)",
+    )
+    cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+    cb.set_label(r"$\sigma_v$  [km s$^{-1}$]")
+
     fig.tight_layout()
     plt.savefig("plot_velocity_dispersion_sweep.png", dpi=150, bbox_inches="tight")
 

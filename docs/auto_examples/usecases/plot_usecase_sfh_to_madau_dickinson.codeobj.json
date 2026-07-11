@@ -642,24 +642,6 @@
    "name": "int64"
   }
  ],
- "idx_peak_md": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "int64"
-  }
- ],
- "idx_peak_pop": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "int64"
-  }
- ],
  "jax.random.PRNGKey": [
   {
    "is_class": false,
@@ -849,22 +831,6 @@
    "name": "abs"
   }
  ],
- "np.argmax": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "argmax"
-  }
- ],
  "np.argmin": [
   {
    "is_class": false,
@@ -943,22 +909,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "mean"
-  }
- ],
- "np.nan": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "float"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "nan"
   }
  ],
  "np.pi": [
@@ -1082,22 +1032,6 @@
    "name": "dict"
   }
  ],
- "plt.close": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "close"
-  }
- ],
  "plt.savefig": [
   {
    "is_class": false,
@@ -1137,15 +1071,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "ndarray"
-  }
- ],
- "ratio": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
   }
  ],
  "setup_style": [
@@ -1207,24 +1132,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "ndarray"
-  }
- ],
- "sfrd_md": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
- "sfrd_p": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
   }
  ],
  "sfrd_pop": [
@@ -1437,15 +1344,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "ndarray"
-  }
- ],
- "z_c": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
   }
  ],
  "z_grid": [

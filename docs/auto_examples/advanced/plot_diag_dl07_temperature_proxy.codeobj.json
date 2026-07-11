@@ -844,15 +844,6 @@
    "name": "float"
   }
  ],
- "lam": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
  "norm": [
   {
    "is_class": false,
@@ -867,22 +858,6 @@
    "module": "matplotlib",
    "module_short": "matplotlib",
    "name": "Normalize"
-  }
- ],
- "np.abs": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ufunc"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "abs"
   }
  ],
  "np.argmax": [
@@ -965,22 +940,6 @@
    "name": "logspace"
   }
  ],
- "np.mean": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "mean"
-  }
- ],
  "nu_f_nu": [
   {
    "is_class": false,
@@ -997,24 +956,6 @@
    "module": "builtins",
    "module_short": "builtins",
    "name": "builtin_function_or_method"
-  }
- ],
- "pct": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
- "pct_diff": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
   }
  ],
  "peak_lam": [
@@ -1202,24 +1143,6 @@
    "name": "draine_li2007"
   }
  ],
- "ts": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
- "tw": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
  "u_min": [
   {
    "is_class": false,
@@ -1245,15 +1168,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "ndarray"
-  }
- ],
- "um": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
   }
  ],
  "warnings.filterwarnings": [

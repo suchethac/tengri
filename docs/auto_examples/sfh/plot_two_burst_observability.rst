@@ -21,11 +21,6 @@
 The outshining problem: young bursts eclipse ancient populations
 ================================================================
 
-.. image:: images/sphx_glr_plot_two_burst_observability_001.png
-   :alt: plot two burst observability
-   :class: sphx-glr-single-img
-
-
 How observable is an underlying ancient burst (10 Gyr ago) beneath a young (300 Myr)
 starburst? *outshining* problem in broadband photometry
 (Trager+ 2000, Renzini 2006): the young burst's UV emission completely dominates over
@@ -53,8 +48,6 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
 
  .. code-block:: none
 
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.5 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=10 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
     Saved: plot_two_burst_observability.png
 
 
@@ -299,7 +292,7 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.202 seconds)
+   **Total running time of the script:** (0 minutes 3.553 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_two_burst_observability.py:

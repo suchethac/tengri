@@ -21,11 +21,6 @@
 PSD parameter space: amplitude σ and timescale τ control burstiness
 ===================================================================
 
-.. image:: images/sphx_glr_plot_psd_burstiness_001.png
-   :alt: plot psd burstiness
-   :class: sphx-glr-single-img
-
-
 A 3×3 grid showing five stochastic-SFH realizations for each combination of
 amplitude σ (vertical axis) and damping timescale τ (horizontal axis). Larger σ
 produces more dramatic bursts; longer τ sustains those bursts. Each panel shows
@@ -33,7 +28,7 @@ the mean smooth SFH (dashed) and colored realizations. Bottom panels show
 representative SEDs for σ alone (left) and τ alone (right), illustrating how
 each parameter independently shapes the UV continuum and optical colors.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-183
+.. GENERATED FROM PYTHON SOURCE LINES 12-182
 
 
 
@@ -229,13 +224,12 @@ each parameter independently shapes the UV continuum and optical colors.
     cbar_tau.set_label(r"PSD timescale $\tau$ [Myr]")
 
     fig_bottom.tight_layout()
-    fig_bottom.savefig("plot_psd_burstiness_sedsweeps.png", dpi=150, bbox_inches="tight")
     plt.savefig("plot_psd_burstiness.png", dpi=150, bbox_inches="tight")
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.064 seconds)
+   **Total running time of the script:** (0 minutes 2.772 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_psd_burstiness.py:

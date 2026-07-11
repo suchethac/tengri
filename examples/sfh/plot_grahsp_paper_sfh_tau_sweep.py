@@ -112,4 +112,4 @@ cbar = fig.colorbar(sm, ax=ax, fraction=0.05, pad=0.02)
 cbar.set_label(r"$\tau$ [Myr]")
 
 fig.tight_layout()
-plt.show()
+plt.savefig("plot_grahsp_paper_sfh_tau_sweep.png", dpi=150, bbox_inches="tight")

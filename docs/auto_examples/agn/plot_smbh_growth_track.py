@@ -117,7 +117,7 @@ ax_track.loglog(
 )
 
 # Plot growth track: connect stages with arrows
-for i, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(STAGES):
+for _i, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(STAGES):
     mbh = 10.0**log_mbh
     lbol = 10.0**log_lbol
     ax_track.plot(
@@ -160,7 +160,7 @@ ax_track.text(
     fontsize=10,
     color="0.5",
     rotation=0,
-    bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=2),
+    bbox=dict(facecolor="white", alpha=0.8, edgecolor="none", pad=2),
     zorder=10,
 )
 
@@ -182,7 +182,7 @@ C_AA_PER_S = 2.998e18
 # Top-left: Dormant + Merger
 for ax_idx, stages_pair in enumerate([(STAGES[0], STAGES[1]), (STAGES[2], STAGES[3])]):
     ax = ax_seds[ax_idx]
-    for stage_idx, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(stages_pair):
+    for _stage_idx, (label, log_mbh, log_lbol, color, _marker, _msize) in enumerate(stages_pair):
         params = {
             **baseline,
             "agn_log_mbh": jnp.float64(log_mbh),

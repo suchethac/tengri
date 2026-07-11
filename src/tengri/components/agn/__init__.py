@@ -76,6 +76,7 @@ from tengri.components.agn.grahsp import (
     compute_grahsp_sed,
     evaluate_grahsp_agn,
     grahsp,
+    load_grahsp_templates,
 )
 from tengri.components.agn.kd18_disc_model import KD18Disc
 from tengri.components.agn.nlr import (
@@ -156,6 +157,7 @@ __all__ = [
     "grahsp",
     "kubota_done_disc",
     "kubota_done_full_agn",
+    "load_grahsp_templates",
     "multicolor_disc",
     "nenkova_torus",
     "planck_lnu",

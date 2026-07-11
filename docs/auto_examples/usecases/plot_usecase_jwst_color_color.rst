@@ -21,11 +21,6 @@
 JWST NIRCam color-color diagnostics for high-z galaxy classification
 ====================================================================
 
-.. image:: images/sphx_glr_plot_usecase_jwst_color_color_001.png
-   :alt: plot usecase jwst color color
-   :class: sphx-glr-single-img
-
-
 Generates 150 mock galaxies spanning star-forming (z=1-7), passive (z=1-3),
 and dusty/AGN (z=2-4) populations. Computes JWST NIRCam F150W-F277W vs
 F277W-F444W colors and plots the diagnostic plane. Shows how JWST color-color
@@ -45,23 +40,8 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
-    /private/tmp/tengri-full/examples/usecases/plot_usecase_jwst_color_color.py:109: RuntimeWarning: invalid value encountered in scalar divide
-      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
-    /private/tmp/tengri-full/examples/usecases/plot_usecase_jwst_color_color.py:110: RuntimeWarning: invalid value encountered in scalar divide
-      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -233,7 +213,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 26.362 seconds)
+   **Total running time of the script:** (0 minutes 29.941 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_jwst_color_color.py:

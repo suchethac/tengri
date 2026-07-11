@@ -1,16 +1,16 @@
 """
-Age-metallicity colour degeneracy in SDSS colours
+Age-metallicity color degeneracy in SDSS colors
 ==================================================
 
 Young, metal-rich and old, metal-poor stellar populations can produce
-similar colours — a fundamental degeneracy in stellar population
+similar colors — a fundamental degeneracy in stellar population
 inference. This example builds a 2D grid of single-burst SSP-like models
 varying age (log10(t/Gyr) = -2 to 1.1) and metallicity (log10(Z/Zsun) = -2 to 0.4),
-then plots three SDSS broadband colours (u − r, g − r, NUV − r) as
+then plots three SDSS broadband colors (u − r, g − r, NUV − r) as
 pcolormesh grids to visualize the degeneracy.
 
 Each (age, Z) point uses a narrow Gaussian-like SFH (tsnorm)
-centred at the appropriate lookback time, fixed dust extinction,
+centered at the appropriate lookback time, fixed dust extinction,
 and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
 """
 
@@ -67,7 +67,7 @@ model = tengri.SEDModel.build(
 # Sample baseline parameters
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-# Pre-allocate grids for each colour
+# Pre-allocate grids for each color
 color_grids = {name: np.empty((len(AGES_GYR), len(MET_LOGZSOL))) for name, _, _ in COLORS_TO_PLOT}
 
 # Loop over age and metallicity
@@ -81,11 +81,13 @@ for i, age_gyr in enumerate(AGES_GYR):
             "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age_clamped),
             "met_logzsol": jnp.float64(met_logzsol),
         }
-        # Predict photometry and compute colours
+        # Predict photometry and compute colors
         flux = np.asarray(model.predict_photometry(p))
+        # Protect against log of zero by ensuring positive flux
+        flux = np.where(flux > 0, flux, 1e-30)
         for name, idx_1, idx_2 in COLORS_TO_PLOT:
-            mag_1 = -2.5 * np.log10(np.maximum(flux[idx_1], 1e-20))
-            mag_2 = -2.5 * np.log10(np.maximum(flux[idx_2], 1e-20))
+            mag_1 = -2.5 * np.log10(flux[idx_1])
+            mag_2 = -2.5 * np.log10(flux[idx_2])
             color_grids[name][i, j] = mag_1 - mag_2
 
 # Create 3-panel figure

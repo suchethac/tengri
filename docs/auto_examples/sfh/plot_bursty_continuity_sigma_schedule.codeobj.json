@@ -17,8 +17,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.stellar.sfh.nonparametric",
-   "module_short": "tengri.components.stellar.sfh.nonparametric",
+   "module": "tengri.sfh",
+   "module_short": "tengri.sfh",
    "name": "DEFAULT_BIN_EDGES_GYR"
   }
  ],
@@ -102,8 +102,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.stellar.sfh.registry",
-   "module_short": "tengri.components.stellar.sfh",
+   "module": "tengri",
+   "module_short": "tengri",
    "name": "SFH_REGISTRY"
   }
  ],

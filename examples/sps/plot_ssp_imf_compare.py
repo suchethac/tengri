@@ -1,11 +1,12 @@
 """
-IMF Comparison: Mass-to-Light Ratio
-====================================
+IMF choice revealed in SED continuum shape: Chabrier vs Kroupa vs Salpeter
+=========================================================================
 
-Different Initial Mass Functions produce different M/L ratios at fixed age
-and metallicity. We rescale a Chabrier SSP by literature M/L values for
-Chabrier, Kroupa, and Salpeter at 1 Gyr, solar metallicity. The NIR
-(where massive stars dominate the mass budget) is most diagnostic of IMF choice.
+Different Initial Mass Functions produce different continuum shapes at fixed
+age and metallicity. Salpeter (top-heavy) produces harder UV and near-IR
+continua. We compare the rest-frame νL_ν at 1 Gyr solar metallicity,
+peak-normalized at 5500 Å to reveal chromatic differences. The NIR is most
+diagnostic of IMF choice because massive stars dominate the red-giant branch.
 
 Reference: Conroy 2012, ApJ, 747, 69; Conroy, Gunn & White 2009.
 """

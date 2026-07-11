@@ -21,11 +21,6 @@
 Non-parametric SFH families compared
 ======================================
 
-.. image:: images/sphx_glr_plot_sfh_nonparametric_compare_001.png
-   :alt: plot sfh nonparametric compare
-   :class: sphx-glr-single-img
-
-
 The parametric SFH atlas (``plot_sfh_form_compare.py``) shows seven
 classical analytic SFH shapes. Beyond those, tengri ships three
 non-parametric families that bin the mass formed in successive lookback
@@ -34,8 +29,8 @@ want a flexible prior that doesn't impose a strong shape.
 
 Three forms overlaid at their default priors:
 - ``continuity``       — Leja+2019 fixed-bin continuity prior
-- ``dirichlet``        — Leja+2017 Dirichlet over normalised bin weights
-- ``dense_basis``      — Iyer+2019 GP-regularised cumulative SFH
+- ``dirichlet``        — Leja+2017 Dirichlet over normalized bin weights
+- ``dense_basis``      — Iyer+2019 GP-regularized cumulative SFH
 
 All three are drawn 24 times from their priors and shown as light
 trajectories; the parametric ``dpl`` is overlaid as a thick black

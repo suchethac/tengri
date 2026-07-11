@@ -21,11 +21,6 @@
 Cue nebular grid on BPT diagram
 ================================
 
-.. image:: images/sphx_glr_plot_bpt_cue_grid_001.png
-   :alt: plot bpt cue grid
-   :class: sphx-glr-single-img
-
-
 Show how the Cue neural emulator (Li+2025) maps the 2D parameter space
 (log U, log Z_gas) onto three classical BPT diagnostic diagrams. Lines of
 constant log U (varying metallicity) and constant log Z (varying ionization)
@@ -142,7 +137,7 @@ show the full grid's coverage and demarcation positions.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.809 seconds)
+   **Total running time of the script:** (0 minutes 4.737 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_cue_grid.py:

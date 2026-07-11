@@ -21,11 +21,6 @@
 N_H column density sweep: from unobscured to Compton-thick
 ==========================================================
 
-.. image:: images/sphx_glr_plot_xray_nh_sweep_001.png
-   :alt: plot xray nh sweep
-   :class: sphx-glr-single-img
-
-
 The line-of-sight column density ``N_H`` reshapes the AGN X-ray spectrum
 in two regimes: photoelectric absorption (``zphabs``) suppresses the soft
 band roughly as :math:`\exp(-\sigma(E)\,N_H)` with cross-section
@@ -42,7 +37,6 @@ This sweep reproduces the spectral evolution behind Matsumoto+2026
 Figure 11 (hardness-ratio model tracks) for log N_H from 20 to 25.
 
 References
-
 ----------
 - Ricci et al. 2017, Nature 549, 488 (zphabs × cabs × cut-off PL +
   scattered component spectral model).
@@ -50,7 +44,7 @@ References
   selected obscured AGN at z > 3).
 - Morrison & McCammon 1983, ApJ 270, 119 (photoelectric cross-sections).
 
-.. GENERATED FROM PYTHON SOURCE LINES 29-126
+.. GENERATED FROM PYTHON SOURCE LINES 28-125
 
 
 

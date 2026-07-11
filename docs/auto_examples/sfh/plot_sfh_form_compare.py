@@ -6,7 +6,7 @@ Each parametric SFH in tengri encodes a different prior on when a galaxy
 forms its stars. We overlay the SFR(t) shape of nine production-status
 forms at their default parameter values, all integrated to the same
 total stellar mass, so the differences are entirely in the *shape* —
-not the normalisation.
+not the normalization.
 
 Forms shown:
 - ``const``, ``exp``, ``dexp``, ``tau``           — single-parameter classics
@@ -14,7 +14,7 @@ Forms shown:
 - ``dpl``                                          — Carnall+2018 double power-law
 - ``delayed_bq``                                   — Ciesla+ delayed + late burst/quench
 
-Pick a form by matching the data you have: ``tau`` for a single colour,
+Pick a form by matching the data you have: ``tau`` for a single color,
 ``dpl`` for broadband UV-NIR, ``tsnorm`` for spectroscopy with the
 4000 Å break, ``delayed_bq`` for post-starburst signatures, the
 non-parametric forms (``continuity``, ``dirichlet``, ``dense_basis``)

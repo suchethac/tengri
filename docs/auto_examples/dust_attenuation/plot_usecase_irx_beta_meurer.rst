@@ -21,11 +21,6 @@
 IRX–β diagram: infra-red excess vs UV slope (Meurer+1999)
 ===========================================================
 
-.. image:: images/sphx_glr_plot_usecase_irx_beta_meurer_001.png
-   :alt: plot usecase irx beta meurer
-   :class: sphx-glr-single-img
-
-
 The **IRX–β relation** connects the UV continuum slope β (1250–2600 Å) with
 the infrared excess IRX = log₁₀(L_IR / L_UV). This diagram reveals dust
 reddening and star formation rate indicators in galaxies. Here we:
@@ -43,12 +38,12 @@ reddening and star formation rate indicators in galaxies. Here we:
 - Reddy et al. (2018) ApJ 869, 92. z~2 IRX–β scatter and implications for
   UV-to-IR conversions in high-z star-forming galaxies.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-379
+.. GENERATED FROM PYTHON SOURCE LINES 22-384
 
 
 
 .. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_usecase_irx_beta_meurer_001.png
-   :alt: IRX–β diagram: dust attenuation and UV spectral shape
+   :alt: plot usecase irx beta meurer
    :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_usecase_irx_beta_meurer_001.png
    :class: sphx-glr-single-img
 
@@ -60,31 +55,31 @@ reddening and star formation rate indicators in galaxies. Here we:
     Loaded SSP: 5994 wavelength points
 
     Building 25 models with τ_diff ∈ [0, 4]...
-      τ_diff=0.00: β=-2.36, IRX=-1.68
+      τ_diff=0.00: β=-2.37, IRX=-1.66
       τ_diff=0.17: β=-2.16, IRX=-0.18
       τ_diff=0.33: β=-1.95, IRX=+0.22
       τ_diff=0.50: β=-1.74, IRX=+0.51
       τ_diff=0.67: β=-1.53, IRX=+0.75
-      τ_diff=0.83: β=-1.32, IRX=+0.96
-      τ_diff=1.00: β=-1.11, IRX=+1.17
-      τ_diff=1.17: β=-0.90, IRX=+1.36
-      τ_diff=1.33: β=-0.69, IRX=+1.54
-      τ_diff=1.50: β=-0.48, IRX=+1.72
-      τ_diff=1.67: β=-0.27, IRX=+1.89
+      τ_diff=0.83: β=-1.33, IRX=+0.97
+      τ_diff=1.00: β=-1.12, IRX=+1.17
+      τ_diff=1.17: β=-0.91, IRX=+1.36
+      τ_diff=1.33: β=-0.70, IRX=+1.54
+      τ_diff=1.50: β=-0.49, IRX=+1.72
+      τ_diff=1.67: β=-0.28, IRX=+1.89
       τ_diff=1.83: β=-0.07, IRX=+2.06
       τ_diff=2.00: β=+0.14, IRX=+2.23
       τ_diff=2.17: β=+0.35, IRX=+2.39
-      τ_diff=2.33: β=+0.56, IRX=+2.55
-      τ_diff=2.50: β=+0.77, IRX=+2.71
-      τ_diff=2.67: β=+0.98, IRX=+2.87
-      τ_diff=2.83: β=+1.19, IRX=+3.03
-      τ_diff=3.00: β=+1.40, IRX=+3.18
-      τ_diff=3.17: β=+1.61, IRX=+3.33
-      τ_diff=3.33: β=+1.82, IRX=+3.49
+      τ_diff=2.33: β=+0.55, IRX=+2.56
+      τ_diff=2.50: β=+0.76, IRX=+2.72
+      τ_diff=2.67: β=+0.97, IRX=+2.87
+      τ_diff=2.83: β=+1.18, IRX=+3.03
+      τ_diff=3.00: β=+1.39, IRX=+3.18
+      τ_diff=3.17: β=+1.60, IRX=+3.34
+      τ_diff=3.33: β=+1.81, IRX=+3.49
       τ_diff=3.50: β=+2.02, IRX=+3.64
-      τ_diff=3.67: β=+2.23, IRX=+3.78
-      τ_diff=3.83: β=+2.44, IRX=+3.93
-      τ_diff=4.00: β=+2.65, IRX=+4.08
+      τ_diff=3.67: β=+2.23, IRX=+3.79
+      τ_diff=3.83: β=+2.44, IRX=+3.94
+      τ_diff=4.00: β=+2.64, IRX=+4.08
 
     Computed 25 models successfully.
 
@@ -93,8 +88,8 @@ reddening and star formation rate indicators in galaxies. Here we:
     ======================================================================
     VERIFICATION SUMMARY
     ======================================================================
-    β range:        -2.36 to +2.65
-    IRX range:      -1.68 to +4.08
+    β range:        -2.37 to +2.64
+    IRX range:      -1.66 to +4.08
     τ_diff range:   0.00 to 4.00
 
     Physical interpretation:
@@ -102,8 +97,8 @@ reddening and star formation rate indicators in galaxies. Here we:
       • τ_diff=4 (heavy dust): Very red (β≈+2.5), strong IR → IRX ≈ +4.1
       → Points lie above Meurer+1999 (expected for young starbursts)
 
-    Measured (τ_diff=0):   β=-2.36, IRX=-1.68 ✓
-    Measured (τ_diff=4):   β=+2.65, IRX=+4.08 ✓
+    Measured (τ_diff=0):   β=-2.37, IRX=-1.66 ✓
+    Measured (τ_diff=4):   β=+2.64, IRX=+4.08 ✓
     ======================================================================
 
 
@@ -422,7 +417,6 @@ reddening and star formation rate indicators in galaxies. Here we:
 
     ax.set_xlabel(r"UV slope $\beta$ (1250–2600 Å)", fontsize=11)
     ax.set_ylabel(r"Infrared excess IRX $\equiv \log_{10}(L_{\rm IR}/L_{\rm UV})$", fontsize=11)
-    ax.set_title("IRX–β diagram: dust attenuation and UV spectral shape", fontsize=12, pad=12)
 
     ax.grid(True, alpha=0.25, linestyle=":", linewidth=0.6)
     ax.legend(loc="upper left", frameon=False, fontsize=9.5)
@@ -431,12 +425,18 @@ reddening and star formation rate indicators in galaxies. Here we:
     ax.text(
         0.98,
         0.05,
-        "Tengri forward models: tsnorm SFH (50 Myr peak)\nCalzetti+2000 law, Cue nebular, Dale2014 IR emission",
+        "Tengri forward models: tsnorm SFH (50 Myr peak)\n"
+        "Calzetti+2000 law, Cue nebular, Dale2014 IR emission",
         transform=ax.transAxes,
         fontsize=8.5,
         ha="right",
         va="bottom",
-        bbox=dict(boxstyle="round,pad=0.5", facecolor="white", edgecolor="0.7", linewidth=0.5),
+        bbox=dict(
+            boxstyle="round,pad=0.5",
+            facecolor="white",
+            edgecolor="0.7",
+            linewidth=0.5,
+        ),
         color="0.4",
     )
 
@@ -464,19 +464,14 @@ reddening and star formation rate indicators in galaxies. Here we:
     idx_min_tau = np.argmin(tau_diff_used)
     idx_max_tau = np.argmax(tau_diff_used)
     print(
-        f"Measured (τ_diff=0):   β={beta_values[idx_min_tau]:+.2f}, IRX={irx_values[idx_min_tau]:+.2f} ✓"
+        f"Measured (τ_diff=0):   β={beta_values[idx_min_tau]:+.2f}, "
+        f"IRX={irx_values[idx_min_tau]:+.2f} ✓"
     )
     print(
-        f"Measured (τ_diff=4):   β={beta_values[idx_max_tau]:+.2f}, IRX={irx_values[idx_max_tau]:+.2f} ✓"
+        f"Measured (τ_diff=4):   β={beta_values[idx_max_tau]:+.2f}, "
+        f"IRX={irx_values[idx_max_tau]:+.2f} ✓"
     )
     print("=" * 70)
-
-    plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.539 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_usecase_irx_beta_meurer.py:

@@ -21,11 +21,6 @@
 Kennicutt+1998 SFR calibrations: baseline + stochastic variance
 ================================================================
 
-.. image:: images/sphx_glr_plot_usecase_kennicutt_sfr_calibrations_001.png
-   :alt: plot usecase kennicutt sfr calibrations
-   :class: sphx-glr-single-img
-
-
 Three of the most-used star-formation-rate indicators agree only for
 specific assumed SFHs. This example demonstrates the Kennicutt+1998
 baseline calibrations under constant-SFR assumption, then explores how
@@ -250,6 +245,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_usecase_kennicutt_sfr_calibrations.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.756 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_kennicutt_sfr_calibrations.py:

@@ -785,15 +785,6 @@
    "name": "dict"
   }
  ],
- "ks_stats.get": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  }
- ],
  "lo": [
   {
    "is_class": false,
@@ -1049,7 +1040,7 @@
    "name": "partial"
   }
  ],
- "plt.show": [
+ "plt.savefig": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -1062,7 +1053,7 @@
    "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
-   "name": "show"
+   "name": "savefig"
   }
  ],
  "plt.subplots": [
@@ -1329,24 +1320,6 @@
    "module": "warnings",
    "module_short": "warnings",
    "name": "filterwarnings"
-  }
- ],
- "worst_ks": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
- "worst_param": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "str"
   }
  ],
  "x_eval": [

@@ -21,11 +21,6 @@
 UV bump shape controlled by attenuation curve slope
 ====================================================
 
-.. image:: images/sphx_glr_plot_uv_bump_strength_sweep_001.png
-   :alt: plot uv bump strength sweep
-   :class: sphx-glr-single-img
-
-
 The 2175 Å UV bump sits atop a power-law continuum. Varying the slope
 parameter δ (delta) in the Kriek & Conroy attenuation law steepens or
 flattens the UV continuum, which changes the bump's prominence relative

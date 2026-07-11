@@ -69,7 +69,7 @@ from tengri.components.nebular._models import (
     register_nebular_model,
 )
 from tengri.components.nebular._protocol import NebularBackend, NebularContinuumUnavailableError
-from tengri.components.nebular._shared import NebularContinuumFallback
+from tengri.components.nebular._shared import NebularContinuumFallback, compute_qh
 from tengri.components.nebular.agn_nebular import (
     FeltreGridData,
     FeltreNLRBackend,
@@ -178,6 +178,7 @@ __all__ = [
     "SynthesizerGridData",
     "SynthesizerNLRBackend",
     "build_cloudy23_deck",
+    "compute_qh",
     "compute_shock_sed",
     "mix_dig_emission",
     "register_nebular_model",

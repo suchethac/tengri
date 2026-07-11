@@ -35,7 +35,6 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
-from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -127,15 +126,8 @@ def schechter_sample(
 # Load SSP and prepare observation
 # ============================================================================
 
-# Load bare-stellar SSP (required for Cue nebular backend)
-# Use explicit path to avoid loading wNE by default
-
-repo_root = next(
-    p
-    for p in [Path.cwd(), *Path.cwd().parents]
-    if (p / "data" / "fsps_prsc_miles_chabrier.h5").exists()
-)
-SSP = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5"))
+# Load SSP
+SSP = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 # r-band photometry (rest-frame for z~0)
 from tengri.units import fnu_to_ab_mag
@@ -320,31 +312,3 @@ ax.grid(True, alpha=0.3, linestyle="--", which="both")
 
 fig.tight_layout()
 plt.savefig("plot_usecase_stellar_mass_luminosity_function.png", dpi=150, bbox_inches="tight")
-plt.close()
-
-# ============================================================================
-# Summary statistics
-# ============================================================================
-
-print("\nLuminosity Function Summary")
-print("=" * 70)
-print(f"{'M_r (center)':<15} {'Counts':<12} {'Φ(M_r)':<15} {'Blanton+03':<15}")
-print("-" * 70)
-for m_c, c, phi_n, phi_b in zip(m_r_centers, counts, lf_norm, phi_blanton * survey_volume_mpc3):
-    if c > 0:
-        print(f"{m_c:<15.2f} {c:<12.0f} {phi_n:<15.4f} {phi_b:<15.4f}")
-print("-" * 70)
-
-# Peak of the luminosity function
-idx_peak = np.argmax(counts)
-M_r_peak = m_r_centers[idx_peak]
-phi_peak = lf_norm[idx_peak]
-
-print("\nPeak of LF (mock survey):")
-print(f"  M_r = {M_r_peak:.2f}")
-print(f"  Φ(M_r) = {phi_peak:.4e} Mpc^-3 mag^-1")
-print("\nInterpretation:")
-print(f"  - Schechter SMF (M*={10**10.78:.2e} M_sun, α=-1.45) maps to bright magnitudes")
-print("  - Peak M_r ~ -21 is characteristic of L* galaxies (SDSS characteristic)")
-print("  - Faint end (M_r > -18) is underdensity due to Schechter alpha=-1.45 slope")
-print("  - Comparison with Blanton+2003 validates M-L correlation and SED predictions")

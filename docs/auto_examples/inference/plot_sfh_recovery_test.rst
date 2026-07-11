@@ -21,11 +21,6 @@
 SFH recovery with MAP: double power-law against mock photometry
 ===============================================================
 
-.. image:: images/sphx_glr_plot_sfh_recovery_test_001.png
-   :alt: plot sfh recovery test
-   :class: sphx-glr-single-img
-
-
 Simulate a galaxy with a double-power-law (dpl) star formation history, mock
 SDSS photometry at S/N=20, and recover the SFH using MAP optimization. The
 figure compares the true and recovered SFH as a function of time, with the
@@ -35,7 +30,18 @@ degeneracies with dust and metallicity.
 
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-127
+.. GENERATED FROM PYTHON SOURCE LINES 14-118
+
+
+
+.. image-sg:: /auto_examples/inference/images/sphx_glr_plot_sfh_recovery_test_001.png
+   :alt: plot sfh recovery test
+   :srcset: /auto_examples/inference/images/sphx_glr_plot_sfh_recovery_test_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -142,16 +148,12 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     ax_res.set_ylabel(r"$(F_{\rm fit} - F_{\rm obs})/\sigma$")
     ax_res.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
 
-    # Print fit summary for validation
-    alpha_true = float(truth["sfh_dpl_alpha"])
-    alpha_fit = float(fit_params["sfh_dpl_alpha"])
-    beta_true = float(truth["sfh_dpl_beta"])
-    beta_fit = float(fit_params["sfh_dpl_beta"])
-    print(f"DPL parameters: alpha={alpha_true:.2f} (true) vs {alpha_fit:.2f} (fit)")
-    print(f"DPL parameters: beta={beta_true:.2f} (true) vs {beta_fit:.2f} (fit)")
-    print(f"Photometric residual sigma: {np.std(residual):.2f}")
-
     plt.savefig("plot_sfh_recovery_test.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 5.249 seconds)
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_sfh_recovery_test.py:

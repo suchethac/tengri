@@ -21,11 +21,6 @@
 SDSS *ugriz* sweep through a galaxy SED as z grows from 0.1 to 2
 ==================================================================
 
-.. image:: images/sphx_glr_plot_redshift_filter_grid_001.png
-   :alt: plot redshift filter grid
-   :class: sphx-glr-single-img
-
-
 Same rest-frame star-forming SED at four observed redshifts, with the
 SDSS *ugriz* throughputs plotted in their *observed* position so the
 reader sees which rest-frame features each band samples. The Balmer
@@ -132,6 +127,11 @@ Reference: Hogg et al. 2002, astro-ph/0210394 (k-correction primer).
 
     fig.tight_layout()
     plt.savefig("plot_redshift_filter_grid.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.301 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_redshift_filter_grid.py:

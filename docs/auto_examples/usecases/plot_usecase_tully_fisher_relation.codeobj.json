@@ -1571,6 +1571,24 @@
    "name": "filterwarnings"
   }
  ],
+ "x_margin": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "float64"
+  }
+ ],
+ "y_margin": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "float64"
+  }
+ ],
  "z_fit": [
   {
    "is_class": false,

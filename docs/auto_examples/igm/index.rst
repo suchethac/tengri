@@ -5,7 +5,10 @@
 IGM
 ===
 
-Intergalactic medium absorption and Lyman-forest effects on observed SEDs.
+Intergalactic-medium absorption on observed SEDs — Madau vs Inoue
+prescriptions, the Lyman-alpha forest and damped-Lyman-alpha systems, the
+redshift evolution of the transmission, and the Lyman-break/dropout
+signature that drives high-z photometric selection.
 
 
 
@@ -29,6 +32,23 @@ Intergalactic medium absorption and Lyman-forest effects on observed SEDs.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">DLA column density sculpts the Lyman alpha forest at z=3</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Damped Lyman-alpha (DLA) systems imprint deep absorption troughs across the UV-to-optical range, with the strength and profile shape depending sensitively on the absorber&#x27;s redshift. We hold column density at the classic DLA threshold log(N_H) = 20.3 cm⁻² and sweep the absorber redshift over z ∈ {1, 2, 3, 4, 5, 6}, showing how the damping wing pattern shifts to longer observed wavelengths and the Lyman-alpha forest structure evolves. This complements the fixed-z, variable-N_H absorption pattern by isolating the redshift dependence.">
+
+.. only:: html
+
+  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_dla_redshift_evolution_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/igm/plot_dla_redshift_evolution`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">DLA damping wing evolves with absorber redshift at fixed column density</div>
     </div>
 
 
@@ -102,23 +122,6 @@ Intergalactic medium absorption and Lyman-forest effects on observed SEDs.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A power-law QSO continuum (Vanden Berk et al. 2001 composite slope \alpha_{\nu} = -0.5) is built with tengri&#x27;s AGN multicolor disc and pure-stellar synthesis. The Inoue et al. 2014 intergalactic-medium transmission is then applied to the observed frame, suppressing the blue side below \lambda_{\rm obs} &lt; \lambda_{\rm Ly\alpha}(1+z).">
-
-.. only:: html
-
-  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_lyman_alpha_forest_QSO_template_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/igm/plot_lyman_alpha_forest_QSO_template`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">QSO continuum with Lyman-alpha forest absorption at z=3</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The Lyman-alpha (Lyα) emission line at rest-frame 1216 Å is one of the strongest hydrogen recombination features in star-forming galaxies. As the redshift increases from z = 2 to z = 7, the IGM becomes progressively opaque at wavelengths shortward of Lyα (the &quot;blue wing&quot;), due to cumulative Lyman-series absorption from neutral hydrogen in the intergalactic medium.">
 
 .. only:: html
@@ -131,23 +134,6 @@ Intergalactic medium absorption and Lyman-forest effects on observed SEDs.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Lyman-alpha profile and IGM blue-wing absorption across redshift</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="As redshift increases, the Lyman edge (rest-frame 912 Å) shifts to longer observed wavelengths. the Lyman dropout sweeps across the optical and near-infrared bands at z = 3, 4, 5, 6, 7, progressively absorbing shorter-wavelength photometry and dropping it out of optical surveys.">
-
-.. only:: html
-
-  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_lyman_dropout_redshift_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/igm/plot_lyman_dropout_redshift_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Lyman Dropout Redshift Sweep: IGM Absorption Evolution</div>
     </div>
 
 
@@ -179,12 +165,11 @@ Intergalactic medium absorption and Lyman-forest effects on observed SEDs.
    :hidden:
 
    /auto_examples/igm/plot_dla_absorption
+   /auto_examples/igm/plot_dla_redshift_evolution
    /auto_examples/igm/plot_igm_models_comparison
    /auto_examples/igm/plot_igm_redshift
    /auto_examples/igm/plot_igm_z_evolution
    /auto_examples/igm/plot_inoue_vs_madau_z5_z7
-   /auto_examples/igm/plot_lyman_alpha_forest_QSO_template
    /auto_examples/igm/plot_lyman_alpha_igm_attenuation
-   /auto_examples/igm/plot_lyman_dropout_redshift_sweep
    /auto_examples/igm/plot_sed_with_igm
 

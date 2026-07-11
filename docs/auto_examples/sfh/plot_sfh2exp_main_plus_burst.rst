@@ -21,15 +21,10 @@
 sfh2exp: double declining exponential (old population + recent burst)
 =====================================================================
 
-.. image:: images/sphx_glr_plot_sfh2exp_main_plus_burst_001.png
-   :alt: plot sfh2exp main plus burst
-   :class: sphx-glr-single-img
-
-
 CIGALE's ``sfh2exp`` star-formation history superposes an old, exponentially
 declining main population with a second, more recent exponential burst that
 contributes a fixed fraction ``f_burst`` of the total stellar mass formed. It
-is the classic parametrisation for post-starburst and rejuvenated systems.
+is the classic parametrization for post-starburst and rejuvenated systems.
 
 This sweeps the burst mass fraction at a fixed recent burst age, showing how the
 burst lifts the recent SFR (top panel) and blues the rest-frame UV continuum

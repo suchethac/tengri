@@ -21,17 +21,12 @@
 X-ray to radio SED of a luminous AGN
 ====================================
 
-.. image:: images/sphx_glr_plot_panchromatic_agn_001.png
-   :alt: plot panchromatic agn
-   :class: sphx-glr-single-img
-
-
 Panchromatic SED spanning hard X-rays through centimeter radio of a
 luminous quasar with radio-loud jets. Combines AGN disc continuum,
 X-ray corona, and radio components, showing how AGN dominate across
 0.1 keV through centimeter wavelengths.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-82
+.. GENERATED FROM PYTHON SOURCE LINES 10-91
 
 
 
@@ -96,24 +91,33 @@ X-ray corona, and radio components, showing how AGN dominate across
 
     fig, ax = plt.subplots(figsize=(11, 5.2))
 
-    # Plot components
+    # Convert to nu*L_nu and plot components
     components = [
-        (np.array(wave_uv) / 1e4, l_disc, "C1", "-", "QSOgen disc"),
-        (wave_um, l_xray_agn, "C3", "-", "AGN X-ray"),
-        (wave_um, l_xrb, "C4", "--", "Host XRBs"),
-        (wave_um, l_radio_agn, "C0", "-", "AGN radio jets"),
-        (wave_um, l_radio_sf, "C2", "--", "Host radio"),
+        (np.array(wave_uv), l_disc, "C1", "-", "QSOgen disc"),
+        (wave, l_xray_agn, "C3", "-", "AGN X-ray"),
+        (wave, l_xrb, "C4", "--", "Host XRBs"),
+        (wave, l_radio_agn, "C0", "-", "AGN radio jets"),
+        (wave, l_radio_sf, "C2", "--", "Host radio"),
     ]
 
-    for ww, ll, color, ls, label in components:
+    nu_all = 2.998e18 / wave
+    nu_uv = 2.998e18 / np.array(wave_uv)
+
+    for i, (ww, ll, color, ls, label) in enumerate(components):
         mask = ll > 0
         if not np.any(mask):
             continue
-        ax.loglog(ww[mask], ll[mask], color=color, ls=ls, lw=1.8, label=label)
+        if i == 0:  # UV disc component
+            nu_ll = nu_uv * ll
+            ww_plot = ww / 1e4
+        else:  # X-ray, radio components
+            nu_ll = nu_all * ll
+            ww_plot = ww / 1e4
+        ax.loglog(ww_plot[mask], nu_ll[mask], color=color, ls=ls, lw=1.8, label=label)
 
     ax.set_xlim(1e-4, 1e6)
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mu$m]")
-    ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
+    ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
     ax.legend(frameon=False, fontsize=9, ncol=2)
 
     fig.tight_layout()
@@ -122,7 +126,7 @@ X-ray corona, and radio components, showing how AGN dominate across
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.060 seconds)
+   **Total running time of the script:** (0 minutes 2.483 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_agn.py:

@@ -1,9 +1,9 @@
 """
-Photo-z degeneracy in color–colour space: low-z dusty vs high-z quiescent
+Photo-z degeneracy in color–color space: low-z dusty vs high-z quiescent
 ===========================================================================
 
 Two galaxies with very different star formation histories and dust can
-collide in colour–colour space, making photo-z ambiguous. Here, a young
+collide in color–color space, making photo-z ambiguous. Here, a young
 dusty star-forming galaxy at z≈0.5 and an old quiescent galaxy at z≈2
 follow nearly identical (u-g, g-r) tracks and intersect at a single point.
 This shows why intermediate-wavelength photometry is essential for robust

@@ -21,15 +21,10 @@
 Escape fraction reshapes the SED from the Lyman continuum to optical lines
 ==========================================================================
 
-.. image:: images/sphx_glr_plot_fesc_sweep_001.png
-   :alt: plot fesc sweep
-   :class: sphx-glr-single-img
-
-
-We sweep the ionising-photon escape fraction f_esc from 0 to 1.0 at
+We sweep the ionizing-photon escape fraction f_esc from 0 to 1.0 at
 fixed log U and metallicity, showing both the broadband SED response
 and a zoomed view of the critical Lyman-continuum (912 A) region.
-The Lyman edge deepens as ionising photons escape the ISM unabsorbed,
+The Lyman edge deepens as ionizing photons escape the ISM unabsorbed,
 suppressing optical line ratios simultaneously.
 
 The main plot shows the full SED (800–30000 Å rest), with an inset
@@ -51,19 +46,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/examples/nebular/plot_fesc_sweep.py:105: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
-      fig.tight_layout()
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -154,11 +138,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_fesc_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.289 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_fesc_sweep.py:

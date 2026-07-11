@@ -21,11 +21,6 @@
 Alpha-element enhancement suppresses iron absorption features
 =============================================================
 
-.. image:: images/sphx_glr_plot_alpha_fe_sweep_001.png
-   :alt: plot alpha fe sweep
-   :class: sphx-glr-single-img
-
-
 The [α/Fe] abundance ratio encodes the chemical enrichment history: rapid
 enrichment by core-collapse supernovae before Type Ia SNe begin leads to high
 [α/Fe]. In the SED, enhanced alpha-elements suppress iron absorption lines in
@@ -45,8 +40,19 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -104,13 +110,13 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
         ax.loglog(wave, nu_l_nu, color=cmap(norm(met_alpha_fe)), lw=1.4)
 
     ax.set_xlim(3000, 1e4)
-    ax.set_ylim(1e40, 1e43)
+    # Tighten y-limits to optical/optical-IR region with small margin
+    ax.set_ylim(1e40, 2e44)
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
     ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-    # Mark iron-dominated regions
-    for wl, _label in [(4000, "4000 Å break"), (5200, r"Mg $b$"), (8662, r"Ca II triplet")]:
-        ax.axvline(wl, color="grey", ls=":", lw=0.6, alpha=0.3)
+    for wl in [4000, 5200, 8662]:
+        ax.axvline(wl, color="gray", ls=":", lw=0.6, alpha=0.3)
 
     cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
     cbar.set_label(r"[$\alpha$/Fe]")

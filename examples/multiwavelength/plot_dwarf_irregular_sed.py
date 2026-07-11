@@ -122,4 +122,4 @@ ax.text(
 ax.legend(frameon=False, fontsize=8.5, loc="upper left")
 
 fig.tight_layout()
-plt.show()
+plt.savefig("plot_dwarf_irregular_sed.png", dpi=150, bbox_inches="tight")

@@ -101,21 +101,3 @@ ax.legend(frameon=False, fontsize=9)
 ax.grid(True, alpha=0.3, axis="y")
 fig.tight_layout()
 plt.savefig("plot_diag_gradient_finite_difference.png", dpi=150, bbox_inches="tight")
-
-# Report
-print("Autodiff vs Finite-Difference Gradient Diagnostic")
-print("=" * 70)
-print(f"{'Parameter':<25} {'Autodiff':<15} {'Finite-Diff':<15} {'Rel. Error':<15}")
-print("-" * 70)
-for param_name in free_param_names:
-    g_auto = float(grad_autodiff[param_name])
-    g_fd = grad_fd_dict[param_name]
-    rel_err = rel_errors[param_name]
-    status = "OK" if rel_err < 1e-3 else "⚠ FAIL"
-    print(f"{param_name:<25} {g_auto:<15.4e} {g_fd:<15.4e} {rel_err:<14.4e} {status}")
-print("-" * 70)
-print(f"Worst: {worst_param}, rel_error = {worst_error:.4e}")
-if worst_error > 1e-3:
-    print("WARNING: Gradient error exceeds 1e-3 (possible non-differentiable op).")
-else:
-    print("All gradients match within 1e-3 tolerance.")

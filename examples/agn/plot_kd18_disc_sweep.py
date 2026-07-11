@@ -58,6 +58,9 @@ fig, axes = plt.subplots(3, 3, figsize=(9.0, 8.0), sharex=True, sharey=True)
 norm_mbh = mpl.colors.Normalize(vmin=log_mbh_values.min(), vmax=log_mbh_values.max())
 cmap_mbh = plt.get_cmap("viridis")
 
+# Collect all nu*L_nu values to determine axis range
+all_nu_l_nu = []
+
 for i_mbh, log_mbh in enumerate(log_mbh_values):
     for i_ledd, log_ledd in enumerate(log_ledd_values):
         ax = axes[i_ledd, i_mbh]
@@ -85,6 +88,7 @@ for i_mbh, log_mbh in enumerate(log_mbh_values):
         wave = np.asarray(out.wavelength)
         c_aa_s = 2.998e18
         nu_l_nu = c_aa_s / wave * np.asarray(out.sed)
+        all_nu_l_nu.append(nu_l_nu)
 
         color = cmap_mbh(norm_mbh(log_mbh))
         ax.loglog(wave, nu_l_nu, color=color, lw=1.5)
@@ -109,8 +113,14 @@ for i_mbh, log_mbh in enumerate(log_mbh_values):
             ax.set_xlabel(r"$\lambda$ [$\mathrm{\AA}$]", fontsize=9)
 
         ax.set_xlim(10, 1e5)
-        ax.set_ylim(1e41, 1e49)
         ax.grid(True, which="major", alpha=0.2)
+
+# Set y-limits based on data range with small margin
+ymax = max([np.max(arr) for arr in all_nu_l_nu])
+ymin = min([np.min(arr) for arr in all_nu_l_nu])
+ylim_max = ymax * 2.0  # ~0.3 dex headroom
+ylim_min = ymin / 3.0  # ~0.5 dex margin below minimum
+axes[0, 0].set_ylim(ylim_min, ylim_max)
 
 fig.suptitle(
     "Kubota & Done 2018 disc: Accretion state grid",

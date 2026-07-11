@@ -213,7 +213,7 @@ pah_features = [
     (12.7, "12.7 μm"),
 ]
 
-for pah_um, label in pah_features:
+for pah_um, _label in pah_features:
     pah_aa = pah_um * 1e4
     ax.axvline(pah_aa, color="0.5", lw=0.6, ls=":", alpha=0.4)
 

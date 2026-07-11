@@ -57,24 +57,33 @@ l_radio_sf = np.array(tengri.radio.radio_star_forming(wave, L_ir=l_ir, alpha_sf=
 
 fig, ax = plt.subplots(figsize=(11, 5.2))
 
-# Plot components
+# Convert to nu*L_nu and plot components
 components = [
-    (np.array(wave_uv) / 1e4, l_disc, "C1", "-", "QSOgen disc"),
-    (wave_um, l_xray_agn, "C3", "-", "AGN X-ray"),
-    (wave_um, l_xrb, "C4", "--", "Host XRBs"),
-    (wave_um, l_radio_agn, "C0", "-", "AGN radio jets"),
-    (wave_um, l_radio_sf, "C2", "--", "Host radio"),
+    (np.array(wave_uv), l_disc, "C1", "-", "QSOgen disc"),
+    (wave, l_xray_agn, "C3", "-", "AGN X-ray"),
+    (wave, l_xrb, "C4", "--", "Host XRBs"),
+    (wave, l_radio_agn, "C0", "-", "AGN radio jets"),
+    (wave, l_radio_sf, "C2", "--", "Host radio"),
 ]
 
-for ww, ll, color, ls, label in components:
+nu_all = 2.998e18 / wave
+nu_uv = 2.998e18 / np.array(wave_uv)
+
+for i, (ww, ll, color, ls, label) in enumerate(components):
     mask = ll > 0
     if not np.any(mask):
         continue
-    ax.loglog(ww[mask], ll[mask], color=color, ls=ls, lw=1.8, label=label)
+    if i == 0:  # UV disc component
+        nu_ll = nu_uv * ll
+        ww_plot = ww / 1e4
+    else:  # X-ray, radio components
+        nu_ll = nu_all * ll
+        ww_plot = ww / 1e4
+    ax.loglog(ww_plot[mask], nu_ll[mask], color=color, ls=ls, lw=1.8, label=label)
 
 ax.set_xlim(1e-4, 1e6)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
+ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
 ax.legend(frameon=False, fontsize=9, ncol=2)
 
 fig.tight_layout()

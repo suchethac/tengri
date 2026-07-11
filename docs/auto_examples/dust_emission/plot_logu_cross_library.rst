@@ -21,12 +21,7 @@
 Two PAH libraries respond to log U with the same FIR-peak migration
 ====================================================================
 
-.. image:: images/sphx_glr_plot_logu_cross_library_001.png
-   :alt: plot logu cross library
-   :class: sphx-glr-single-img
-
-
-The mid-infrared ionisation-parameter sensitivity is library-specific, but
+The mid-infrared ionization-parameter sensitivity is library-specific, but
 the FIR-peak migration with rising log U is a universal prediction. We
 overlay the Hensley & Draine 2023 (Astrodust+PAH) and the Draine+2021
 PAHspec libraries at the same three log U values to surface where the two
@@ -125,11 +120,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_logu_cross_library.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.797 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_logu_cross_library.py:

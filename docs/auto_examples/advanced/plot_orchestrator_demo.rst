@@ -21,11 +21,6 @@
 Component Orchestrator End-to-End
 ==================================
 
-.. image:: images/sphx_glr_plot_orchestrator_demo_001.png
-   :alt: plot orchestrator demo
-   :class: sphx-glr-single-img
-
-
 TODO[examples-sweep]: This script uses low-level component orchestration
 (build_components, run_components) which is experimental Phase II-2.6 API
 intended for infrastructure use, not recommended for user-facing examples.
@@ -36,7 +31,7 @@ See plot_joint_fit.py and plot_radio_xray.py for the public-API path.
 The orchestrator layer may change; forward-compatible SED building goes
 through the SEDModel.build() nested-dict grammar and recipes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-131
+.. GENERATED FROM PYTHON SOURCE LINES 15-132
 
 
 
@@ -50,10 +45,10 @@ through the SEDModel.build() nested-dict grammar and recipes.
 
  .. code-block:: none
 
-    chain: stellar → nebular → dust → agn → radio → xray → igm
-    L_bol (stellar)        = 3.83e+43 erg/s
+    chain: stellar → nebular → dust → dust_emission → agn → radio → xray → igm
+    L_bol (stellar)        = 2.87e+43 erg/s
     log_mstar              = 0.812  (6.49 Msun)
-    L_ir (dust)            = 3.83e+34 erg/s
+    L_ir (dust)            = 3.92e+34 erg/s
     L_agn_bol              = 3.83e+44 erg/s
 
 
@@ -117,6 +112,7 @@ through the SEDModel.build() nested-dict grammar and recipes.
             "dust_slope": jnp.asarray(-0.7),
             "dust_T": jnp.asarray(35.0),
             "dust_beta_ir": jnp.asarray(1.6),
+            "dust_epsilon_mbb": jnp.asarray(1.0),
             "radio_q_ir": jnp.asarray(2.64),
             "radio_alpha_sf": jnp.asarray(0.8),
             "radio_loudness": jnp.asarray(0.0),
@@ -181,11 +177,6 @@ through the SEDModel.build() nested-dict grammar and recipes.
     except ImportError as e:
         print(f"Orchestrator API not available: {e}")
         print("Use SEDModel.build() instead (see examples/quickstart and examples/advanced).")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.566 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_orchestrator_demo.py:

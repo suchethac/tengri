@@ -21,17 +21,12 @@
 A morphological atlas: E, Sa, Sb, Sc, Im galaxy SEDs
 =====================================================
 
-.. image:: images/sphx_glr_plot_usecase_hubble_sequence_001.png
-   :alt: plot usecase hubble sequence
-   :class: sphx-glr-single-img
-
-
 The Coleman, Wu & Weedman 1980 spectral templates remain the textbook
 illustration of how the integrated SED morphs along the Hubble sequence
 — from quiescent ellipticals with deep 4000 Å breaks to gas-rich
 irregulars dominated by ongoing star formation and nebular emission.
 
-We synthesise the five canonical types within tengri using a single
+We synthesize the five canonical types within tengri using a single
 parametric SFH (truncated skew-normal) and tune three knobs per type:
 the SFH peak epoch, the SFH width, and the dust optical depth. The
 emerging atlas shows the same chromatic ordering as Coleman+1980:
@@ -119,7 +114,7 @@ References:
         wave = np.asarray(out.wavelength)
         nu = C_AA_PER_S / wave
         nu_l_nu = nu * np.asarray(out.sed)
-        # Normalise each spectrum to its 5500 Å value so the chromatic
+        # Normalize each spectrum to its 5500 Å value so the chromatic
         # ordering — not the absolute luminosity — reads cleanly.
         norm = nu_l_nu[np.argmin(np.abs(wave - 5500.0))]
         ax.loglog(wave, nu_l_nu / norm, color=color, lw=1.6, label=label)

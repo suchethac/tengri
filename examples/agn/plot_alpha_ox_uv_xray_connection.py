@@ -27,8 +27,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.agn import multicolor_disc
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn import multicolor_disc
 from tengri.xray import xray_agn_corona
 
 setup_style()

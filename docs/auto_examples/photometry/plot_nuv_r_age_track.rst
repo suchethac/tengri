@@ -18,18 +18,13 @@
 .. _sphx_glr_auto_examples_photometry_plot_nuv_r_age_track.py:
 
 
-NUV−r colour vs stellar age
+NUV−r color vs stellar age
 ============================
 
-.. image:: images/sphx_glr_plot_nuv_r_age_track_001.png
-   :alt: plot nuv r age track
-   :class: sphx-glr-single-img
-
-
-The NUV−r colour is a sensitive probe of stellar age in galaxies. We show
+The NUV−r color is a sensitive probe of stellar age in galaxies. We show
 how a single-burst star formation history (tsnorm, truncated-skew-normal)
 evolves across the GALEX green valley (NUV−r ≈ 4–5 mag) as the stellar
-population ages from 0.05 to 5.5 Gyr. The colour exhibits a sharp discontinuity
+population ages from 0.05 to 5.5 Gyr. The color exhibits a sharp discontinuity
 as the stellar population cools through the transition between young, UV-bright
 stars and older, redder populations.
 
@@ -41,9 +36,9 @@ SED as young, hot stars fade and the older stellar population emerges.
 
 - the NUV−r color jump across the green valley (age ~ 1–2 Gyr)
 - the smooth evolution at older ages as the UV colors fade
-- the physical origin of colour-colour diagnostic diagrams used in photometric surveys
+- the physical origin of color-color diagnostic diagrams used in photometric surveys
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-123
+.. GENERATED FROM PYTHON SOURCE LINES 22-122
 
 
 
@@ -141,12 +136,11 @@ SED as young, hot stars fade and the older stellar population emerges.
         log_age_plot = log_age[mask]
         nuv_r_plot = nuv_r[mask]
 
-    ax.plot(log_age_plot, nuv_r_plot, lw=2.5, color="#1f77b4",
-            label="Bare stellar SSP", zorder=3)
+    ax.plot(log_age_plot, nuv_r_plot, lw=2.5, color="#1f77b4", label="Bare stellar SSP", zorder=3)
 
     # Green valley band (Wyder+2007, Schiminovich+2007)
     gv_min, gv_max = 4.0, 5.0
-    ax.axhspan(gv_min, gv_max, alpha=0.15, color="grey", zorder=1, label="Green valley")
+    ax.axhspan(gv_min, gv_max, alpha=0.15, color="gray", zorder=1, label="Green valley")
 
     ax.set(
         xlabel=r"log$_{10}$(age / Gyr)",

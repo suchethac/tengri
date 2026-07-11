@@ -18,16 +18,11 @@
 .. _sphx_glr_auto_examples_photometry_plot_color_tracks_redshift.py:
 
 
-Photometric colour tracks vs redshift
+Photometric color tracks vs redshift
 ========================================
 
-.. image:: images/sphx_glr_plot_color_tracks_redshift_001.png
-   :alt: plot color tracks redshift
-   :class: sphx-glr-single-img
-
-
-How does a galaxy's location in colour–colour space evolve with
-redshift? We compute SDSS ``g − r`` and ``r − z`` colours for two
+How does a galaxy's location in color–color space evolve with
+redshift? We compute SDSS ``g − r`` and ``r − z`` colors for two
 galaxy populations — a young star-forming and an old quiescent —
 across ``z = 0`` to ``3``, with arrows marking the integer redshift
 stops. This is the reference picture for photometric redshift
@@ -39,7 +34,7 @@ Useful intuition this figure makes obvious:
   into the *r-z* baseline by ``z ≳ 1.2``
 - the star-forming and quiescent tracks separate most at low z,
   then converge at high z as the break leaves all visible bands
-- the visible-band colours alone cannot distinguish a dusty
+- the visible-band colors alone cannot distinguish a dusty
   z = 0.5 SF galaxy from an unobscured z = 3 LBG (the LBG dropout
   degeneracy demonstrated in workflows/plot_workflow_photoz_degeneracy)
 
@@ -145,6 +140,11 @@ Useful intuition this figure makes obvious:
 
     fig.tight_layout()
     plt.savefig("plot_color_tracks_redshift.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.168 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_color_tracks_redshift.py:

@@ -21,11 +21,6 @@
 Radio SED decomposition: synchrotron vs thermal free-free
 =========================================================
 
-.. image:: images/sphx_glr_plot_synchrotron_thermal_decomposition_001.png
-   :alt: plot synchrotron thermal decomposition
-   :class: sphx-glr-single-img
-
-
 Decompose a star-forming galaxy's radio SED into its physical components:
 synchrotron (steep, slope ~ -0.8) from supernova remnants and thermal
 free-free (flat, slope ~ -0.1) from HII regions. At radio frequencies,
@@ -42,7 +37,7 @@ Murphy, E. J., et al. 2011, ApJ, 737, 67
 Helou, G. & Bicay, D. A. 1993, ApJ, 415, 93
   (FIR-radio correlation and physical origins)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-138
+.. GENERATED FROM PYTHON SOURCE LINES 21-131
 
 
 
@@ -68,7 +63,7 @@ Helou, G. & Bicay, D. A. 1993, ApJ, 415, 93
     import numpy as np
 
     from tengri.analysis.plotting import setup_style
-    from tengri.components.radio.radio import compute_radio_components
+    from tengri.radio import compute_radio_components
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -116,10 +111,7 @@ Helou, G. & Bicay, D. A. 1993, ApJ, 415, 93
     # Plot
     fig, ax = plt.subplots(figsize=(7.2, 5.0))
 
-    # Synchrotron: steep power-law (slope ~ -0.8 below 10 GHz)
     ax.loglog(nu_ghz, nu_l_nu_synch, "C0-", lw=2.0, label="Synchrotron (SN remnants)", zorder=2)
-
-    # Free-free: shallow power-law (slope ~ -0.1, nearly flat)
     ax.loglog(
         nu_ghz,
         nu_l_nu_thermal,
@@ -128,12 +120,8 @@ Helou, G. & Bicay, D. A. 1993, ApJ, 415, 93
         label="Thermal free-free (HII regions)",
         zorder=2,
     )
-
-    # Total (sum)
     ax.loglog(nu_ghz, nu_l_nu_total, "k--", lw=2.4, label="Total", zorder=3)
 
-    # Crossover annotation: thermal flux grows faster than synchrotron at high nu
-    # Typical crossover for SFR~1 M_sun/yr is ~30 GHz
     crossover_nu = nu_ghz[np.argmin(np.abs(sed_synch - sed_thermal))]
     crossover_idx = np.argmin(np.abs(nu_ghz - crossover_nu))
     ax.axvline(crossover_nu, color="gray", lw=1.0, ls=":", alpha=0.6, zorder=1)

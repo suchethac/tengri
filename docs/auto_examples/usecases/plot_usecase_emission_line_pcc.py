@@ -11,7 +11,7 @@ continuum-subtracted boxcar integration — no toy formulas.
 Note: with the default ``neb='ssp'`` (baked-in) backend the
 discrete ``Prediction.lines.halpha`` / ``.hbeta`` / ``.bpt_*``
 accessors return NaN — the line content lives only inside the
-SSP grid spectrum, not as a separate catalogue. See issue #361
+SSP grid spectrum, not as a separate catalog. See issue #361
 for the per-backend status of the discrete-line API.
 
 Reference: Kewley et al. 2001, ApJ, 556, 121 (BPT diagnostics).
@@ -38,18 +38,18 @@ LINES = {
     "oiii_5007": 5008.3,
     "nii_6584": 6585.4,
 }
-# Half-width of the boxcar around each line centre [Angstrom].
+# Half-width of the boxcar around each line center [Angstrom].
 LINE_HALF_WIDTH = 8.0
 # Local continuum is averaged in two side bands offset from the line.
 CONT_OFFSET = 30.0
 CONT_HALF_WIDTH = 8.0
 
 
-def boxcar_line_flux(wave, sed, line_centre):
+def boxcar_line_flux(wave, sed, line_center):
     """Continuum-subtracted boxcar flux around a single line."""
-    line_mask = np.abs(wave - line_centre) < LINE_HALF_WIDTH
-    blue_mask = np.abs(wave - (line_centre - CONT_OFFSET)) < CONT_HALF_WIDTH
-    red_mask = np.abs(wave - (line_centre + CONT_OFFSET)) < CONT_HALF_WIDTH
+    line_mask = np.abs(wave - line_center) < LINE_HALF_WIDTH
+    blue_mask = np.abs(wave - (line_center - CONT_OFFSET)) < CONT_HALF_WIDTH
+    red_mask = np.abs(wave - (line_center + CONT_OFFSET)) < CONT_HALF_WIDTH
     cont = 0.5 * (sed[blue_mask].mean() + sed[red_mask].mean())
     return float(np.trapezoid(sed[line_mask] - cont, wave[line_mask]))
 

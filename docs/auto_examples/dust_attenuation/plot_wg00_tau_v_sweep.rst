@@ -21,11 +21,6 @@
 Witt & Gordon 2000: the attenuation *shape* greys with optical depth
 =====================================================================
 
-.. image:: images/sphx_glr_plot_wg00_tau_v_sweep_001.png
-   :alt: plot wg00 tau v sweep
-   :class: sphx-glr-single-img
-
-
 For a foreground dust *screen* the attenuation curve has a fixed shape — its
 amplitude scales with ``tau_V`` but the UV-to-optical *ratio* is constant, so a
 single ``k(lambda)`` law captures it. Witt & Gordon (2000) showed this breaks
@@ -36,12 +31,12 @@ therefore a function of ``tau_V`` — which is exactly why tengri ships WG00 as 
 radiative-transfer table (FSPS ``dust_type=3``), interpolated in ``tau_V``,
 rather than a fixed-shape law.
 
-The left panel overlays the V-normalised curves ``A(lambda) / A_V`` for the
+The left panel overlays the V-normalized curves ``A(lambda) / A_V`` for the
 homogeneous *cloudy* (mixed) geometry at five optical depths: the UV bump and
 slope visibly flatten as ``tau_V`` climbs. The right panel tracks the
 far-UV-to-V ratio ``A(1500 A) / A_V`` against ``tau_V`` for all three WG00
 geometries — the *shell* screen stays flat (fixed shape) while the *cloudy* and
-*dusty* geometries grey strongly. Everything goes through the public
+*dusty* geometries gray strongly. Everything goes through the public
 ``tengri.dust.wg00_attenuation`` accessor; no SSP file is required to inspect an
 attenuation curve.
 
@@ -51,12 +46,12 @@ Witt, A. N. & Gordon, K. D. 2000, ApJ, 528, 799
 ("Multiple Scattering in Clumpy Media. II. Galactic Environments").
 Tables as distributed by FSPS (Conroy & Gunn 2010, ``dust_type=3``).
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-94
+.. GENERATED FROM PYTHON SOURCE LINES 30-93
 
 
 
 .. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_wg00_tau_v_sweep_001.png
-   :alt: MW + cloudy (mixed): shape flattens with $\tau_V$, Screen stays fixed; mixed/clumpy grey
+   :alt: MW + cloudy (mixed): shape flattens with $\tau_V$
    :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_wg00_tau_v_sweep_001.png
    :class: sphx-glr-single-img
 
@@ -86,7 +81,7 @@ Tables as distributed by FSPS (Conroy & Gunn 2010, ``dust_type=3``).
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.4, 4.3))
 
-    # --- Left: V-normalised shape for the mixed (cloudy) geometry ---------------
+    # --- Left: V-normalized shape for the mixed (cloudy) geometry ---------------
     for tau, c in zip(TAUS, colors):
         a = np.asarray(wg00_attenuation(wave, tau, dust_curve="mw", geometry="cloudy"))
         a_v = float(wg00_attenuation(jnp.array([V]), tau, dust_curve="mw", geometry="cloudy")[0])
@@ -104,7 +99,7 @@ Tables as distributed by FSPS (Conroy & Gunn 2010, ``dust_type=3``).
     )
     ax1.legend(frameon=False, fontsize=9, title="optical depth")
 
-    # --- Right: far-UV/V greying vs tau_V for the three geometries --------------
+    # --- Right: far-UV/V graying vs tau_V for the three geometries --------------
     taus = np.linspace(0.25, 10.0, 40)
     GEOM = [
         ("shell", "Shell (foreground screen)", "#1f77b4"),
@@ -122,14 +117,13 @@ Tables as distributed by FSPS (Conroy & Gunn 2010, ``dust_type=3``).
     ax2.set(
         xlabel=r"V-band optical depth $\tau_V$",
         ylabel=r"$A(1500\,\mathrm{\AA})\,/\,A_V$  (UV steepness)",
-        title="Screen stays fixed; mixed/clumpy grey",
         xlim=(0, 10),
         ylim=(1.0, 2.7),
     )
     ax2.legend(frameon=False, fontsize=9)
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig("plot_wg00_tau_v_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_wg00_tau_v_sweep.py:

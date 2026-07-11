@@ -21,11 +21,6 @@
 Cosmological Distance Validation: tengri vs Astropy
 ====================================================
 
-.. image:: images/sphx_glr_plot_diag_cosmology_vs_astropy_001.png
-   :alt: plot diag cosmology vs astropy
-   :class: sphx-glr-single-img
-
-
 Compares tengri's Planck18 cosmology implementation (DSPS-backed, Ω_m = 0.315,
 h = 0.674) against astropy.cosmology.Planck18 (which uses slightly different
 parameter values) across z = [0.1, 0.5, 1.0, 2.0, 3.0, 5.0]. Validates
@@ -36,7 +31,7 @@ PLANCK18 parameters (Om0=0.315, h=0.674) match Planck 2018 published values.
 
 Reference: Planck Collaboration 2018, A&A 641, A6.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-105
+.. GENERATED FROM PYTHON SOURCE LINES 15-94
 
 
 
@@ -46,21 +41,8 @@ Reference: Planck Collaboration 2018, A&A 641, A6.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Max relative error d_L: 1.79e-03 (0.179%)
-    Max relative error d_C: 1.79e-03 (0.179%)
-    Max relative error age: 4.95e-03 (0.495%)
-    Max relative error dV/dz/dΩ: 6.61e-03 (0.661%)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -97,17 +79,6 @@ Reference: Planck Collaboration 2018, A&A 641, A6.
     rel_err_dC = (d_C_tengri - d_C_apy) / np.abs(d_C_apy)
     rel_err_age = (age_tengri - age_apy) / np.abs(age_apy)
     rel_err_dV = (dV_tengri - dV_apy) / np.abs(dV_apy)
-
-    # Check for large deviations
-    max_err_dL = np.max(np.abs(rel_err_dL))
-    max_err_dC = np.max(np.abs(rel_err_dC))
-    max_err_age = np.max(np.abs(rel_err_age))
-    max_err_dV = np.max(np.abs(rel_err_dV))
-
-    print(f"Max relative error d_L: {max_err_dL:.2e} ({max_err_dL * 100:.3f}%)")
-    print(f"Max relative error d_C: {max_err_dC:.2e} ({max_err_dC * 100:.3f}%)")
-    print(f"Max relative error age: {max_err_age:.2e} ({max_err_age * 100:.3f}%)")
-    print(f"Max relative error dV/dz/dΩ: {max_err_dV:.2e} ({max_err_dV * 100:.3f}%)")
 
     # Note: Residuals are driven by parameter differences (astropy's Planck18 differs
     # slightly from Planck 2018 published values), not numerical bugs.

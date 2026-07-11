@@ -21,15 +21,10 @@
 Polar dust E(B-V) reddens Type 1 & 2 AGN differently
 =====================================================
 
-.. image:: images/sphx_glr_plot_polar_dust_ebv_type12_sweep_001.png
-   :alt: plot polar dust ebv type12 sweep
-   :class: sphx-glr-single-img
-
-
 Polar dust *disc attenuation* applies only to Type 1 (face-on) sightlines —
 the equatorial torus already screens the disc for Type 2. The bi-conical
 polar dust *absorbs* disc photons regardless of viewing angle, however, and
-*re-emits* them isotropically as a FIR greybody (Casey 2012). So both Type 1
+*re-emits* them isotropically as a FIR graybody (Casey 2012). So both Type 1
 and Type 2 sweeps show the FIR re-emission bump growing with E(B-V); only
 the UV/optical attenuation is gated by sightline.
 
@@ -38,7 +33,7 @@ Yang et al. 2020, Section 2.2.2).
 
 References
 ----------
-.. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+.. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
    torus around AGN," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
 .. [2] W. Yang et al., "X-CIGALE: fitting AGN/galaxy SEDs from X-ray to radio,"
@@ -60,10 +55,6 @@ References
  .. code-block:: none
 
     Building shared AGN model (polar_ebv and cos_inc FREE)...
-    /Users/suchethacooray/.claude-squad/worktrees/cs/refresh-repro_18b44877a75456f8/src/tengri/components/agn/blocks/runner.py:453: RecipeWarning: Composable AGN: agn_attenuation_block='polar_dust' but agn_polar_ebv=0 (no extinction applied). Either set agn_polar_ebv > 0 or pick agn_attenuation_block='none'.
-      validate_block_recipe(
-    /Users/suchethacooray/.claude-squad/worktrees/cs/refresh-repro_18b44877a75456f8/examples/agn/plot_polar_dust_ebv_type12_sweep.py:127: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
-      fig.tight_layout()
     Saved: plot_polar_dust_ebv_type12_sweep.png
 
 
@@ -185,7 +176,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.368 seconds)
+   **Total running time of the script:** (0 minutes 3.944 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_polar_dust_ebv_type12_sweep.py:

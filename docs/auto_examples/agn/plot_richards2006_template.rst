@@ -21,24 +21,19 @@
 Richards+2006 empirical Type-1 quasar template alongside physical discs
 ========================================================================
 
-.. image:: images/sphx_glr_plot_richards2006_template_001.png
-   :alt: plot richards2006 template
-   :class: sphx-glr-single-img
-
-
 Three accretion-disc backbones at the same bolometric anchor
 (log L_bol / L_sun = 12.5): the Richards et al. 2006 empirical mean
 Type-1 SDSS quasar template, the Temple, Hewett & Banerji 2021
-empirical QSOgen, and the Shakura-Sunyaev multicolour disc (the
-outer-disc component of Kubota & Done 2018). Each is normalised to the
+empirical QSOgen, and the Shakura-Sunyaev multicolor disc (the
+outer-disc component of Kubota & Done 2018). Each is normalized to the
 same bolometric output so the differences are entirely in spectral
 *shape* — Richards+2006 is broader than QSOgen and carries the
 infrared bump from its host-galaxy-corrected composite, while the
-multicolour disc cuts off sharply on either side of the big blue bump.
+multicolor disc cuts off sharply on either side of the big blue bump.
 
 Reference: Richards et al. 2006, ApJS 166, 470 (composite SDSS Type-1
 template); Temple, Hewett & Banerji 2021, MNRAS 508, 737 (QSOgen);
-Kubota & Done 2018, MNRAS 480, 1247 (multicolour disc).
+Kubota & Done 2018, MNRAS 480, 1247 (multicolor disc).
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-77
 
@@ -66,8 +61,8 @@ Kubota & Done 2018, MNRAS 480, 1247 (multicolour disc).
     import matplotlib.pyplot as plt
     import numpy as np
 
+    from tengri.agn import multicolor_disc, qsogen, richards2006
     from tengri.analysis.plotting import setup_style
-    from tengri.components.agn import multicolor_disc, qsogen, richards2006
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -91,7 +86,7 @@ Kubota & Done 2018, MNRAS 480, 1247 (multicolour disc).
     MODELS = [
         ("Richards+2006 (empirical SDSS Type-1)", l_richards, "C0"),
         ("QSOgen (Temple+2021 empirical)", l_qsogen, "C3"),
-        ("multicolour disc (K&D 2018 physical)", l_multicolor, "C2"),
+        ("multicolor disc (K&D 2018 physical)", l_multicolor, "C2"),
     ]
 
     fig, ax = plt.subplots(figsize=(7.5, 4.6))

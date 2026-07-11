@@ -12,7 +12,7 @@ Calzetti+2000 expectation.
 Status: as of issue #313 fix, ``predict_emission_lines`` now folds in the
 diffuse dust attenuation. The tengri trace rises from the intrinsic ~2.85
 to ~4.3 at A_V ≈ 2 mag; the Calzetti+2000 curve climbs steeper, suggesting
-the birth-cloud component or the dust normalisation differs slightly from
+the birth-cloud component or the dust normalization differs slightly from
 the pure Calzetti law applied here as the reference.
 
 Reference: Calzetti et al. 2000, ApJ, 533, 682 (Balmer decrement and dust

@@ -3134,7 +3134,7 @@ class SEDModel:
         spectroscopy channel or on the ``predict_observables`` cache: it builds
         the observed-frame SED (rest SED + IGM/DLA/MW via :meth:`predict_obs_sed`)
         and resamples it onto ``wave_obs`` with the same kernel
-        (:func:`~tengri.observation.spectrum.compute_spectrum`) the configured
+        (:func:`~tengri.observation.spectrum.project_spectrum`) the configured
         spectroscopy path uses. The instrument LSF is applied only when the
         attached observation declares a spectroscopic resolution. Underpins the
         ``wave_obs`` argument of :meth:`predict_spectrum` (suchethac/tengri#707).
@@ -3158,25 +3158,33 @@ class SEDModel:
         """
         del wave_chunk_size  # see Parameters note
         from tengri.cosmology import luminosity_distance
-        from tengri.observation.spectrum import apply_lsf, compute_spectrum
+        from tengri.observation.spectrum import project_spectrum
 
         sed_obs = self.predict_obs_sed(params)
         z = self._get_redshift(params)
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         wave_rest = sed_obs.wavelength / (1.0 + z)
-        flux = compute_spectrum(sed_obs.sed, wave_rest, wave_obs, z, dl_cm)
 
         spectroscopy = (
             getattr(self.observation, "spectroscopy", None) if self.observation else None
         )
-        if spectroscopy is not None and getattr(spectroscopy, "resolution", None) is not None:
-            flux = apply_lsf(
-                flux,
-                wave_obs,
-                spectroscopy.resolution,
-                sigma_lib_kms=spectroscopy.sigma_lib_kms,
-                sigma_v_kms=params.get("sigma_v_kms", 0.0),
-            )
+        resolution = (
+            getattr(spectroscopy, "resolution", None) if spectroscopy is not None else None
+        )
+        sigma_lib_kms = (
+            getattr(spectroscopy, "sigma_lib_kms", 0.0) if spectroscopy is not None else 0.0
+        )
+
+        flux = project_spectrum(
+            sed_obs.sed,
+            wave_rest,
+            wave_obs,
+            z,
+            dl_cm,
+            resolution=resolution,
+            sigma_lib_kms=sigma_lib_kms,
+            sigma_v_kms=params.get("sigma_v_kms", 0.0),
+        )
         return flux
 
     def predict_magnitudes(self, params):
@@ -4615,8 +4623,8 @@ class SEDModel:
         Notes
         -----
         **JIT-compatible**: yes — :func:`run_components`, the rest→obs
-        projection in :func:`observe_spectrum_from_rest_sed`, and
-        :func:`apply_lsf` are all JIT-friendly. No calibration polynomial
+        projection in :func:`~tengri.observation.spectrum.project_spectrum`, and
+        LSF convolution are all JIT-compatible. No calibration polynomial
         is applied; callers that need calibration should compose it on
         top via the user-likelihood Protocol path.
         """

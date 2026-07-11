@@ -5,7 +5,11 @@
 Nebular Emission
 ================
 
-Nebular emission backends comparison.
+Gas-phase emission from H II regions and the diffuse ionized medium — the
+Cue and Cloudy-grid backends and how to swap between them, BPT and
+strong-line metallicity diagnostics, the ionization parameter, gas density
+and escape fraction, Lyman-alpha and line widths, and luminosity scalings
+such as the Halpha–SFR calibration.
 
 
 
@@ -136,7 +140,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Zoomed rest-frame spectrum of an ionised-gas-dominated SF galaxy with the strongest optical / near-UV emission lines labelled. Wavelengths are vacuum; line positions follow NIST/Atomic Line List.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Zoomed rest-frame spectrum of an ionized-gas-dominated SF galaxy with the strongest optical / near-UV emission lines labeled. Wavelengths are vacuum; line positions follow NIST/Atomic Line List.">
 
 .. only:: html
 
@@ -170,7 +174,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="We sweep the ionising-photon escape fraction f_esc from 0 to 1.0 at fixed log U and metallicity, showing both the broadband SED response and a zoomed view of the critical Lyman-continuum (912 A) region. The Lyman edge deepens as ionising photons escape the ISM unabsorbed, suppressing optical line ratios simultaneously.">
+    <div class="sphx-glr-thumbcontainer" tooltip="We sweep the ionizing-photon escape fraction f_esc from 0 to 1.0 at fixed log U and metallicity, showing both the broadband SED response and a zoomed view of the critical Lyman-continuum (912 A) region. The Lyman edge deepens as ionizing photons escape the ISM unabsorbed, suppressing optical line ratios simultaneously.">
 
 .. only:: html
 
@@ -204,7 +208,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Murphy+2011 SFR-Hα relation requires ionizing photons from stars younger than ~10 Myr. Constant-SFR models at ages 1–300 Myr show the calibration breaks at young (&lt;10 Myr; insufficient ionizing photons) and old (&gt;100 Myr; all stars too old to ionize) populations.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Murphy+2011 SFR-Hα relation requires ionizing photons from stars younger than ~10 Myr. Constant-SFR models at ages 1–300 Myr show the calibration breaks at young (&lt;10 Myr; insufficient ionizing photons) and old (&gt;100 Myr; all stars too old to ionize) populations. We sweep stellar metallicity to show the calibration validity range is weakly sensitive to Z: higher Z reduces ionizing photon production, compressing the valid age window slightly toward older ages.">
 
 .. only:: html
 
@@ -215,7 +219,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Hα SFR calibration breaks at young ages</div>
+      <div class="sphx-glr-thumbnail-title">Hα SFR calibration breaks at young ages, weakly dependent on metallicity</div>
     </div>
 
 
@@ -255,7 +259,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Lyman-alpha (Lyα) equivalent width (EW) traces stellar population age through the presence and strength of massive O stars. We construct a sequence of constant star-formation-rate (CSF) models with ages ranging from 1 Myr to 30 Myr at fixed metallicity (Z = Zsun; logZ = 0), compute the rest-frame Lyα emission line luminosity and the underlying continuum at 1216 Å, then derive EW(Lyα) = L(Lyα) / L_continuum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Lyman-alpha (Lyα) equivalent width (EW) traces stellar population age through the presence and strength of massive O stars. We construct a sequence of constant star-formation-rate (CSF) models with ages ranging from 1 Myr to 30 Myr across three gas metallicities (Z = 0.1, 0.5, 1.0 Zsun), compute the rest-frame Lyα emission line luminosity and the underlying continuum at 1216 Å, then derive EW(Lyα) = L(Lyα) / L_continuum.">
 
 .. only:: html
 
@@ -266,7 +270,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Lyman-alpha equivalent width peaks during O-star dominance</div>
+      <div class="sphx-glr-thumbnail-title">Lyman-alpha equivalent width peaks at young ages, varies with gas metallicity</div>
     </div>
 
 
@@ -289,7 +293,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Young massive stars produce harder ionising continua and drive the nebular emission toward higher [O III]/Hbeta. We sweep the SFH timescale tau_gyr from 0.1 to 2 Gyr on a single dual power-law model and plot the resulting line ratios against the Kewley+2001 / Kauffmann+2003 demarcation curves. The locus migrates from the star-forming wing into the composite region as the population ages — SFH timescale is the upstream knob behind the BPT ionisation sequence.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Young massive stars produce harder ionizing continua and drive the nebular emission toward higher [O III]/Hbeta. We sweep the SFH timescale tau_gyr from 0.1 to 2 Gyr on a single dual power-law model and plot the resulting line ratios against the Kewley+2001 / Kauffmann+2003 demarcation curves. The locus migrates from the star-forming wing into the composite region as the population ages — SFH timescale is the upstream knob behind the BPT ionization sequence.">
 
 .. only:: html
 
@@ -340,7 +344,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The optical [O III] 5007 / Hβ ratio is set primarily by the ionisation parameter log U: more energetic Lyman continuum photons per H atom ionise more O+ to O++, while Hβ recombination depends mostly on the ionising photon rate (``Q_H``) and is roughly insensitive to log U. The ratio therefore rises monotonically with log U at fixed gas metallicity.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The optical [O III] 5007 / Hβ ratio is set primarily by the ionization parameter log U: more energetic Lyman continuum photons per H atom ionize more O+ to O++, while Hβ recombination depends mostly on the ionizing photon rate (``Q_H``) and is roughly insensitive to log U. The ratio therefore rises monotonically with log U at fixed gas metallicity.">
 
 .. only:: html
 
@@ -351,7 +355,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">[O III]/Hβ vs ionisation parameter at fixed gas metallicity</div>
+      <div class="sphx-glr-thumbnail-title">[O III]/Hβ vs ionization parameter at fixed gas metallicity</div>
     </div>
 
 

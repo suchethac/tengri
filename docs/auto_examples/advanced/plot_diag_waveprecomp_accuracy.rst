@@ -21,11 +21,6 @@
 WavePrecomp photometric accuracy across redshift grids
 ======================================================
 
-.. image:: images/sphx_glr_plot_diag_waveprecomp_accuracy_001.png
-   :alt: plot diag waveprecomp accuracy
-   :class: sphx-glr-single-img
-
-
 The ``WavePrecomp`` approximation pre-integrates SSP × filter LUTs and
 interpolates photometry through a redshift table, trading exact calculations
 for speed. This diagnostic compares exact-wave-grid photometry against
@@ -138,12 +133,12 @@ Reference: ADR-0007 (precomputation architecture).
     ax_right.axhline(1e-4, color="C3", linestyle="--", lw=1.5, alpha=0.7)
 
     fig.tight_layout()
-    plt.show()
+    plt.savefig("plot_diag_waveprecomp_accuracy.png", dpi=150, bbox_inches="tight")
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.108 seconds)
+   **Total running time of the script:** (0 minutes 2.145 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_waveprecomp_accuracy.py:

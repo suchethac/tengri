@@ -28,36 +28,24 @@ fixed rest-frame filter. We compute K(z) for the SDSS r-band across
 four galaxy types — young star-forming, old star-forming, red-sequence
 elliptical, and post-starburst — from z = 0.01 to z = 2.0. This
 illustrates why stellar mass measurements require careful K-corrections
-at high redshift and why colour-matched template sets dominate
+at high redshift and why color-matched template sets dominate
 photometric redshift algorithms.
 
 Reference: Hogg (1999) on K-correction formalism; Blanton & Roweis (2007)
 on SDSS template K-corrections.
 
-.. sphx-glr-precomputed-img:
+.. GENERATED FROM PYTHON SOURCE LINES 18-177
 
-.. image:: images/sphx_glr_plot_k_correction_grid_001.png
-   :alt: plot_k_correction_grid
+
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_k_correction_grid_001.png
+   :alt: plot k correction grid
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_k_correction_grid_001.png
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-213
 
 
 
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.5 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=10 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -66,15 +54,9 @@ on SDSS template K-corrections.
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
-
-    from pathlib import Path
-
     import jax
-    import matplotlib
     import matplotlib.pyplot as plt
     import numpy as np
-
-    matplotlib.use("Agg")
 
     jax.config.update("jax_enable_x64", True)
 
@@ -83,28 +65,8 @@ on SDSS template K-corrections.
 
     setup_style()
 
-
-    def _find_filters():
-        """Find filter cache directory in standard locations."""
-        for p in [
-            Path("data/filters"),
-            Path("../data/filters"),
-            Path("../../data/filters"),
-            Path("../../../data/filters"),
-        ]:
-            if p.exists():
-                return str(p)
-        return "data/filters"
-
-
-    # Load SSP
     ssp = tengri.load_ssp()
-
-    # Locate filter cache
-    filter_dir = _find_filters()
-
-    # Observation: SDSS r-band only
-    obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"], cache_dir=filter_dir))
+    obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"]))
 
 
     def _build_galaxy(sfh_config, dust_config, label):
@@ -245,15 +207,12 @@ on SDSS template K-corrections.
 
     fig.tight_layout()
 
-    # Save to script directory
-    script_dir = Path(__file__).resolve().parent if "__file__" in dir() else Path(".")
-    plt.savefig(str(script_dir / "plot_k_correction_grid.png"), dpi=150, bbox_inches="tight")
-    plt.close()
+    plt.savefig("plot_k_correction_grid.png", dpi=150, bbox_inches="tight")
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 26.742 seconds)
+   **Total running time of the script:** (0 minutes 33.004 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_k_correction_grid.py:

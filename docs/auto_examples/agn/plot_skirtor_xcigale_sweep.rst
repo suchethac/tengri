@@ -21,16 +21,11 @@
 SKIRTOR torus (full X-CIGALE grid): optical depth and inclination
 =================================================================
 
-.. image:: images/sphx_glr_plot_skirtor_xcigale_sweep_001.png
-   :alt: plot skirtor xcigale sweep
-   :class: sphx-glr-single-img
-
-
 This is tengri's full-grid SKIRTOR torus (Stalevski+2012, 2016), following the
 X-CIGALE ``skirtor2016`` conventions: a 5-D clumpy two-phase library indexed by
 equatorial optical depth ``tau``, radial and polar density gradients ``p`` / ``q``,
 half-opening angle ``oa``, and inclination ``cos i`` (plus an optional Casey-2012
-polar-dust greybody). It is the science-grade counterpart to the
+polar-dust graybody). It is the science-grade counterpart to the
 parameter-*averaged* ``skirtor_agnfitter`` library — and, having the full grid,
 it responds strongly to its parameters.
 
@@ -49,7 +44,7 @@ subtracting the disc-only SED.
 
 References
 ----------
-.. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty torus
+.. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty torus
    around AGN," MNRAS 420, 2756 (2012). arXiv:1109.1286.
 .. [2] M. Stalevski et al., "The dust covering factor in active galactic
    nuclei," MNRAS 458, 2288 (2016). arXiv:1602.01954.
@@ -181,7 +176,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.168 seconds)
+   **Total running time of the script:** (0 minutes 5.132 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_xcigale_sweep.py:

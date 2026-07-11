@@ -21,20 +21,15 @@
 GRAHSP Fig. 9 reproduction: attenuation of the AGN model
 =========================================================
 
-.. image:: images/sphx_glr_plot_grahsp_paper_fig9_agn_attenuation_001.png
-   :alt: plot grahsp paper fig9 agn attenuation
-   :class: sphx-glr-single-img
-
-
 Faithful reproduction of Fig. 9 of Buchner et al. (2024, GRAHSP): the AGN
 spectrum from intrinsic (blue, top) to strongly attenuated (red, bottom) as
-the AGN-only colour excess ``agn_grahsp_ebv_agn`` is swept from 0.01 to 1.
+the AGN-only color excess ``agn_grahsp_ebv_agn`` is swept from 0.01 to 1.
 GRAHSP attenuates the AGN side with an SMC/Prevot (1984) law (paper §2.1.5),
 which rises steeply into the UV — so the UV/optical continuum is suppressed
 far more than the near-IR, and the heaviest attenuation eventually bites into
 the torus too. The intrinsic torus component is overplotted dashed black.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-100
+.. GENERATED FROM PYTHON SOURCE LINES 13-99
 
 
 
@@ -44,21 +39,8 @@ the torus too. The intrinsic torus component is overplotted dashed black.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/examples/agn/plot_grahsp_paper_fig9_agn_attenuation.py:41: MatplotlibDeprecationWarning: The get_cmap function was deprecated in Matplotlib 3.7 and will be removed in 3.11. Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap()`` or ``pyplot.get_cmap()`` instead.
-      cmap = cm.get_cmap("RdBu_r")
-    /Users/suchethacooray/Projects/tengri/examples/agn/plot_grahsp_paper_fig9_agn_attenuation.py:87: RuntimeWarning: divide by zero encountered in divide
-      "top", functions=(lambda x: 2.99792458e14 / x, lambda nu: 2.99792458e14 / nu)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -74,9 +56,8 @@ the torus too. The intrinsic torus component is overplotted dashed black.
     import numpy as np
     from matplotlib import cm, colors
 
+    from tengri.agn import GRAHSPParams, evaluate_grahsp_agn, load_grahsp_templates
     from tengri.analysis.plotting import setup_style
-    from tengri.components.agn.grahsp.model import GRAHSPParams, evaluate_grahsp_agn
-    from tengri.components.agn.grahsp.templates import load_grahsp_templates
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -88,7 +69,7 @@ the torus too. The intrinsic torus component is overplotted dashed black.
     L5100 = 1.0e45  # bright QSO, to land in the paper's luminosity range
     ebv_grid = np.logspace(np.log10(0.01), np.log10(1.0), 11)
 
-    # Diverging blue->white->red colour map on log E(B-V), matching the paper.
+    # Diverging blue->white->red color map on log E(B-V), matching the paper.
     norm = colors.LogNorm(vmin=0.01, vmax=1.0)
     cmap = cm.get_cmap("RdBu_r")
 
@@ -140,7 +121,7 @@ the torus too. The intrinsic torus component is overplotted dashed black.
     )
     secax.set_xlabel("Frequency [Hz]")
 
-    # Colour bar for E(B-V)-AGN.
+    # Color bar for E(B-V)-AGN.
     sm = cm.ScalarMappable(norm=norm, cmap=cmap)
     cbar = fig.colorbar(sm, ax=ax, fraction=0.05, pad=0.02, location="right")
     cbar.set_label("E(B-V)-AGN")

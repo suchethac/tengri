@@ -34,8 +34,10 @@ from tengri import (
     WavePrecomp,
     load_ssp_data,
 )
+from tengri.components.nebular.line_precompute import _four_pi_dl2
 from tengri.components.nebular.nebular_grid_precompute import (
     precompute_nebular_grid,
+    reconstruct_nebular_line_lums,
     reconstruct_nebular_lines,
     reconstruct_nebular_phot,
 )
@@ -113,19 +115,27 @@ def test_axes_adapt_to_free_ionization():
     # both gas params fixed, SFH free -> met-only axis
     t0 = precompute_nebular_grid(_model({"type": "cue", "*": FIXED}), _LW, n_grid=3)
     assert t0.axis_names == ("met_logzsol",), t0.axis_names
-    # met + logU + logZ_gas all free -> 3 axes; a scalar n_grid auto-densifies the
-    # sharp met axis 2x (physics: the [OIII]-vs-Z peak), gas axes stay at n_grid.
+    # met + logU + logZ_gas all free -> 3 axes. The gas axes sit at exactly n_grid;
+    # the met axis is n_grid uniform points PLUS the interior SSP metallicity nodes
+    # (#1020), so it is larger and its length depends on the SSP grid, not on a
+    # hard-coded factor.
     m3 = _model(
         {"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0), "logZ_gas": Uniform(-1.0, 0.4)}
     )
     t3 = precompute_nebular_grid(m3, _LW, n_grid=3)
     assert t3.axis_names == ("met_logzsol", "neb_logU", "neb_logZ_gas"), t3.axis_names
-    assert t3.log_line_per_qh.shape == (6, 3, 3, len(_LINES)), t3.log_line_per_qh.shape
-    # explicit per-axis dict overrides the auto-scaling
+    n_met = int(t3.axes[0].shape[0])
+    assert n_met > 3, f"met axis should gain the SSP nodes, got {n_met}"
+    assert t3.log_line_per_qh.shape == (n_met, 3, 3, len(_LINES)), t3.log_line_per_qh.shape
+    # explicit per-axis dict sets the UNIFORM part; the met axis still gains the nodes
     t3d = precompute_nebular_grid(
         m3, _LW, n_grid={"met_logzsol": 5, "neb_logU": 3, "neb_logZ_gas": 4}
     )
-    assert t3d.log_line_per_qh.shape == (5, 3, 4, len(_LINES)), t3d.log_line_per_qh.shape
+    assert t3d.log_line_per_qh.shape[1:] == (3, 4, len(_LINES)), t3d.log_line_per_qh.shape
+    assert int(t3d.axes[0].shape[0]) >= 5, t3d.axes[0].shape
+    # ... and turning snapping off restores the plain densified uniform axis
+    t3u = precompute_nebular_grid(m3, _LW, n_grid=3, snap_met_to_ssp_nodes=False)
+    assert t3u.log_line_per_qh.shape == (6, 3, 3, len(_LINES)), t3u.log_line_per_qh.shape
     # met fixed (sfh '*':FIXED fixes met), logU+logZ_gas free -> 2 axes
     m2 = _model(
         {"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0), "logZ_gas": Uniform(-1.0, 0.4)},
@@ -231,23 +241,57 @@ def test_phot_channel_absent_without_wave_precomp():
         reconstruct_nebular_phot(_nion(m, p), p, table)
 
 
-def test_met_axis_emits_unreliability_warning():
-    """Freeing met_logzsol (the ionizing-spectrum-shape axis) must warn loudly.
+def test_unsnapped_met_axis_warns_and_snapped_one_does_not():
+    """A uniform met axis straddles the SSP-node kinks — that must warn (#1020).
 
-    The #950 convergence study measured 10-33% forbidden-line error on the met
-    axis, non-convergent in n_grid — a silent-bias risk. The fast grid must warn
-    so the user fixes met or falls back to the exact Cue path.
+    The exact per-Q_H emissivity is C0 at every ``ssp_lgmet`` node (the ionizing-
+    spectrum tables interpolate bilinearly in met), so a uniform axis converges
+    only as O(h) on the collisionally-excited lines. Snapping is the default and
+    must be silent; opting out must not be.
     """
     import warnings as _w
 
     m = _model({"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FREE)
+
     with _w.catch_warnings(record=True) as rec:
         _w.simplefilter("always")
-        t = precompute_nebular_grid(m, _LW, n_grid=3)  # under-resolved met axis
+        t = precompute_nebular_grid(m, _LW, n_grid=3, snap_met_to_ssp_nodes=False)
     assert "met_logzsol" in t.axis_names, "fixture should free met"
-    assert any("met_logzsol" in str(x.message) and "n_grid" in str(x.message) for x in rec), (
-        "expected a loud met-axis under-resolution warning"
+    assert any("met_logzsol" in str(x.message) and "UNIFORM" in str(x.message) for x in rec), (
+        "expected a met-axis under-resolution warning on the unsnapped axis"
     )
+
+    with _w.catch_warnings(record=True) as rec:
+        _w.simplefilter("always")
+        precompute_nebular_grid(m, _LW, n_grid=3)  # snapped: the default
+    assert not [x for x in rec if "met_logzsol" in str(x.message)], (
+        "the snapped met axis resolves the kinks — it must not warn"
+    )
+
+
+def test_met_axis_snaps_to_ssp_nodes_and_interpolates_linearly():
+    """Knots land on every interior SSP metallicity node, and that axis is linear.
+
+    Regression for #1020. Node-exactness alone is not enough: PCHIP estimates the
+    tangent at a knot from BOTH sides, so at a C0 kink it is wrong by O(1) and the
+    neighboring cells decay only as O(h). The met axis must therefore be flagged
+    ``'linear'`` while the smooth gas axes stay ``'pchip'``.
+    """
+    from tengri.components.nebular.nebular_grid_precompute import _ssp_met_nodes
+
+    m = _model({"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FREE)
+    t = precompute_nebular_grid(m, _LW, n_grid=4)
+
+    assert t.axis_names[0] == "met_logzsol"
+    assert t.axis_kinds == ("linear", "pchip"), t.axis_kinds
+
+    axis = np.asarray(t.axes[0])
+    nodes = _ssp_met_nodes(m)
+    interior = nodes[(nodes > axis[0]) & (nodes < axis[-1])]
+    assert interior.size > 0, "fixture must span several SSP metallicity nodes"
+    for node in interior:
+        assert np.min(np.abs(axis - node)) < 1e-9, f"SSP node {node:.4f} is not a grid knot"
+    assert np.all(np.diff(axis) > 0), "axis must be strictly ascending"
 
 
 def test_gas_only_axes_do_not_warn():
@@ -263,3 +307,54 @@ def test_gas_only_axes_do_not_warn():
         t = precompute_nebular_grid(m, _LW, n_grid=3)
     assert t.axis_names == ("neb_logU", "neb_logZ_gas")
     assert not any("not reliably" in str(x.message).lower() for x in rec)
+
+
+@pytest.mark.slow
+def test_snapped_met_axis_beats_uniform_on_a_dense_sweep():
+    """Accuracy contract for #1020, measured the only way that works.
+
+    A **dense sweep strictly inside** the grid bounds. Random draws under-sample
+    narrow features (they once made a 10 % met-axis error look like 0.09 %), and
+    sweeping past a bound clamps and manufactures a fake resolution-independent
+    error. Worst-case relative error over the sweep is the quantity that matters.
+
+    The snapped + linear axis must beat the uniform + PCHIP axis on the shape-
+    sensitive [OIII] line **while using no more grid points** — the snapped axis
+    resolves the SSP-node kinks, so the cubic's cross-kink tangent error is gone.
+    """
+    m = _model({"type": "cue", "*": FIXED}, sfh_wild=FREE)
+    assert "met_logzsol" in m.spec.free_params
+    lo, hi = -1.8, 0.2
+    rng = {"met_logzsol": (lo, hi)}
+    base = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    o3 = _LINES.index("OIII_5007")
+
+    snapped = precompute_nebular_grid(
+        m, _LW, n_grid={"met_logzsol": 16}, ranges=rng, ref_params=base
+    )
+    with pytest.warns(UserWarning, match="UNIFORM"):
+        uniform = precompute_nebular_grid(
+            m,
+            _LW,
+            n_grid={"met_logzsol": int(snapped.axes[0].shape[0])},
+            ranges=rng,
+            ref_params=base,
+            snap_met_to_ssp_nodes=False,
+        )
+    assert uniform.axes[0].shape[0] >= snapped.axes[0].shape[0], "uniform must not be handicapped"
+
+    worst = {"snapped": 0.0, "uniform": 0.0}
+    for met in np.linspace(lo + 0.05, hi - 0.05, 121):  # strictly inside
+        p = {**base, "met_logzsol": jnp.asarray(float(met))}
+        exact = np.asarray(m.predict_line_fluxes(p, target_wavelengths=_LW, redden=False))[o3]
+        nion = _nion(m, p)
+        for tag, table in (("snapped", snapped), ("uniform", uniform)):
+            got = np.asarray(reconstruct_nebular_line_lums(nion, p, table))[o3]
+            got = got / _four_pi_dl2(float(p["redshift"]))  # luminosity -> observed flux
+            worst[tag] = max(worst[tag], abs(got - exact) / max(abs(exact), 1e-40))
+
+    assert worst["snapped"] < worst["uniform"], (
+        f"snapped met axis ({worst['snapped']:.2%}) must beat uniform "
+        f"({worst['uniform']:.2%}) at equal size"
+    )
+    assert worst["snapped"] < 0.01, f"[OIII] worst-case {worst['snapped']:.2%} exceeds 1 %"

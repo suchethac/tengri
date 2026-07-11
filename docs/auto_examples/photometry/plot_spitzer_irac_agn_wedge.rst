@@ -27,16 +27,10 @@ galaxies (z=0–2) are plotted as blue cloud; 10 AGN with varying bolometric
 luminosity cluster inside the wedge (red region) demonstrating the diagnostic
 power of mid-infrared colors for AGN identification.
 
-References: Lacy et al. (2007) ApJ 669, 54–64 [1]_; Donley et al. (2012)
-ApJ 748, 142 [2]_.
+References: Lacy et al. (2007) ApJ 669, 54–64; Donley et al. (2012)
+ApJ 748, 142.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_spitzer_irac_agn_wedge_001.png
-   :alt: plot_spitzer_irac_agn_wedge
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 21-235
+.. GENERATED FROM PYTHON SOURCE LINES 14-214
 
 
 
@@ -57,7 +51,6 @@ ApJ 748, 142 [2]_.
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
-    from pathlib import Path
 
     import jax
     import jax.random as jr
@@ -70,23 +63,10 @@ ApJ 748, 142 [2]_.
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-    # Load SSP and filter data
     ssp = tengri.load_ssp()
 
-    # Locate filter cache
-    _FILTER_DIRS = [
-        Path("data/filters"),
-        Path("../data/filters"),
-        Path("../../data/filters"),
-        Path("../../../data/filters"),
-    ]
-    cache_dir = next((d for d in _FILTER_DIRS if d.exists()), "data/filters")
-
-    # --- Load Spitzer IRAC filters (3.6, 4.5, 5.8, 8.0 μm) ---
     irac_bands = ["irac_36", "irac_45", "irac_58", "irac_80"]
-    obs_irac = tengri.Observation(
-        photometry=tengri.Photometry.from_names(irac_bands, cache_dir=str(cache_dir))
-    )
+    obs_irac = tengri.Observation(photometry=tengri.Photometry.from_names(irac_bands))
 
 
     # --- Helper: draw SF galaxy with randomized params from prior ---
@@ -125,7 +105,7 @@ ApJ 748, 142 [2]_.
 
 
     # --- Helper: composite (host + AGN) photometry at varying AGN fraction.
-    # IRAC colours are *shape* quantities, so varying the AGN bolometric
+    # IRAC colors are *shape* quantities, so varying the AGN bolometric
     # luminosity alone leaves them unchanged. What actually moves a galaxy
     # across the wedge is the relative AGN-to-host contribution in the
     # mid-IR — that is what we sweep here.
@@ -231,7 +211,7 @@ ApJ 748, 142 [2]_.
             zorder=3,
         )
 
-    # Composite host+AGN track, coloured by AGN fraction
+    # Composite host+AGN track, colored by AGN fraction
     scatter_agn = ax.scatter(
         agn_color_x,
         agn_color_y,
@@ -269,7 +249,7 @@ ApJ 748, 142 [2]_.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.802 seconds)
+   **Total running time of the script:** (0 minutes 12.706 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_spitzer_irac_agn_wedge.py:

@@ -21,11 +21,6 @@
 Lyman continuum escape fraction conservation in Cue nebular model
 ==================================================================
 
-.. image:: images/sphx_glr_plot_diag_fesc_lyc_conservation_001.png
-   :alt: plot diag fesc lyc conservation
-   :class: sphx-glr-single-img
-
-
 When ionizing photons escape (f_esc > 0), fewer LyC photons ionize the ISM
 within the galaxy, suppressing all nebular line emission proportionally:
 L(Hα) ∝ (1 − f_esc) × Q_H, where Q_H is the intrinsic ionizing photon rate.
@@ -48,7 +43,7 @@ Hα luminosity should follow the theoretical (1 − f_esc) scaling exactly.
 
  .. code-block:: none
 
-    Max deviation from y=x: 0.00%
+    Max deviation from y=x: 11.63%
 
 
 

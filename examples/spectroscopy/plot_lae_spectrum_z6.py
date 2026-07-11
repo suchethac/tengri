@@ -9,6 +9,10 @@ reveals the redshifted Lyα emission line at 8512 Å, the Lyman break at
 Demonstrates Lyα radiative transfer and reionization-era observability.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
 import warnings
 
 import jax
@@ -153,4 +157,3 @@ ax_lya.legend(frameon=False, fontsize=8, loc="upper right")
 ax_lya.grid(True, alpha=0.3, which="major", axis="y")
 
 plt.savefig("plot_lae_spectrum_z6.png", dpi=150, bbox_inches="tight")
-print("Saved: plot_lae_spectrum_z6.png")

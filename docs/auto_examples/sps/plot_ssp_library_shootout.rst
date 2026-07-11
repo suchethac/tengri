@@ -21,11 +21,6 @@
 SSP Library Shootout: Comparing Spectral Predictions at 5 Gyr, Z=0
 ==================================================================
 
-.. image:: images/sphx_glr_plot_ssp_library_shootout_001.png
-   :alt: plot ssp library shootout
-   :class: sphx-glr-single-img
-
-
 Stellar population synthesis templates differ across stellar evolution codes and
 isochrone libraries, producing measurable offsets in predicted spectra even at
 fixed age and metallicity. This gallery script loads four representative SSP
@@ -39,34 +34,18 @@ References:
   - Conroy et al. 2009 (FSPS): ApJ 699, 486
   - Vazdekis et al. 2010 (MILES): MNRAS 404, 1639
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-107
+.. GENERATED FROM PYTHON SOURCE LINES 18-98
 
 
 
 .. image-sg:: /auto_examples/sps/images/sphx_glr_plot_ssp_library_shootout_001.png
-   :alt: SSP Library Comparison: Age = 5.0 Gyr, Z = 0 (solar)
+   :alt: plot ssp library shootout
    :srcset: /auto_examples/sps/images/sphx_glr_plot_ssp_library_shootout_001.png
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    ✓ bc03_pdva_stelib_chabrier: age index 160 (5.00 Gyr), Z index 5 (-1.30 log10 Z)
-    ✓ fsps_prsc_miles_chabrier: age index 84 (5.01 Gyr), Z index 14 (-1.22 log10 Z)
-    ✓ fsps_mist_c3k_a_chabrier: age index 94 (5.01 Gyr), Z index 11 (-1.35 log10 Z)
-    ✓ bpss_stars_c3k_a_chabrier: age index 37 (5.01 Gyr), Z index 12 (-1.40 log10 Z)
-    ✓ pgny_mist_c3k_chabrier: age index 94 (5.01 Gyr), Z index 14 (-1.20 log10 Z)
-
-    ✓ Saved plot_ssp_library_shootout.png
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -138,15 +117,8 @@ References:
                 label=ssp_name.replace("_chabrier", "").replace("_", " "),
             )
 
-            print(
-                f"✓ {ssp_name}: age index {age_idx} ({age_gyr[age_idx]:.2f} Gyr), "
-                f"Z index {z_idx} ({log_z[z_idx]:.2f} log10 Z)"
-            )
-
-        except FileNotFoundError as e:
-            print(f"⊘ {ssp_name}: {e}")
-        except Exception as e:
-            print(f"✗ {ssp_name}: {type(e).__name__}: {e}")
+        except (FileNotFoundError, Exception):
+            pass
 
     ax.set_xlim(0.05, 5.0)
     ax.set_ylim(1e-3, 2.0)
@@ -154,11 +126,9 @@ References:
     ax.set_ylabel(r"$\nu L_\nu$ (peak-normalized)")
 
     ax.legend(fontsize=7.5, frameon=False, loc="lower right", ncol=1)
-    ax.set_title(f"SSP Library Comparison: Age = {target_age_gyr:.1f} Gyr, Z = 0 (solar)")
 
     fig.tight_layout()
     plt.savefig("plot_ssp_library_shootout.png", dpi=150, bbox_inches="tight")
-    print("\n✓ Saved plot_ssp_library_shootout.png")
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_ssp_library_shootout.py:

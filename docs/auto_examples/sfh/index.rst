@@ -5,7 +5,11 @@
 Star Formation Histories
 ========================
 
-Parametric and stochastic star formation history models.
+How the SFH is parameterized and what the data can recover — parametric
+forms (delayed-exponential, double power law, lognormal), non-parametric
+continuity and the PSD-governed stochastic/bursty priors, quenching
+pathways and double bursts, mass-formed vs mass-observed, and the
+"wrong-model trap" when the assumed form is too rigid.
 
 
 
@@ -63,23 +67,6 @@ Parametric and stochastic star formation history models.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Chemical evolution: How SFH and outflows shape metal enrichment history</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The continuity prior (Leja+2019) penalises sharp transitions in adjacent-bin log-SFR ratios with a Student-t distribution (mu=0, sigma=0.3, df=2). This visualisation shows 200 independent draws from the registry default prior, displayed as percentile bands (5th, 25th, 50th, 75th, 95th) versus lookback time.">
-
-.. only:: html
-
-  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_continuity_prior_visualisation_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/sfh/plot_continuity_prior_visualisation`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Non-Parametric Continuity Prior: 200 Sample Draws</div>
     </div>
 
 
@@ -170,40 +157,6 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Mass formed in the SFH (``∫SFR dt``) is not the mass observed today (``M_*``). Stellar winds and supernovae return a fraction R(t) of the formed mass to the ISM. For a Chabrier IMF the Conroy+2009 fit is">
-
-.. only:: html
-
-  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_mass_formed_vs_mass_observed_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/sfh/plot_mass_formed_vs_mass_observed`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Stellar mass formed vs surviving: the Chabrier return fraction with age</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare all parametric SFH models available in tengri. Each is evaluated on a lookback-time grid with representative parameters, showing the range of morphologies from smooth exponentials to sharp truncations. No SSP data required.">
-
-.. only:: html
-
-  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_parametric_sfh_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/sfh/plot_parametric_sfh`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Catalog of parametric star-formation-history models</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Tengri ships the non-parametric SFH priors that appear most often in Prospector papers, all with the published prior on the SFR ratios:">
 
 .. only:: html
@@ -216,23 +169,6 @@ Parametric and stochastic star formation history models.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Prospector prior families: continuity vs bursty vs Dirichlet vs PSB</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Three PSD models govern the frequency structure of stochastic SFHs: the default damped random walk (DRW), the Matern family (which includes DRW as a special case), and the extended regulator model. Plotted in frequency space at representative parameters. No SSP data required.">
-
-.. only:: html
-
-  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_psd_alternatives_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/sfh/plot_psd_alternatives`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Comparison of power-spectral-density models for stochastic SFHs</div>
     </div>
 
 
@@ -289,7 +225,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="CIGALE&#x27;s sfh2exp star-formation history superposes an old, exponentially declining main population with a second, more recent exponential burst that contributes a fixed fraction f_burst of the total stellar mass formed. It is the classic parametrisation for post-starburst and rejuvenated systems.">
+    <div class="sphx-glr-thumbcontainer" tooltip="CIGALE&#x27;s sfh2exp star-formation history superposes an old, exponentially declining main population with a second, more recent exponential burst that contributes a fixed fraction f_burst of the total stellar mass formed. It is the classic parametrization for post-starburst and rejuvenated systems.">
 
 .. only:: html
 
@@ -323,7 +259,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Each parametric SFH in tengri encodes a different prior on when a galaxy forms its stars. We overlay the SFR(t) shape of nine production-status forms at their default parameter values, all integrated to the same total stellar mass, so the differences are entirely in the shape — not the normalisation.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Each parametric SFH in tengri encodes a different prior on when a galaxy forms its stars. We overlay the SFR(t) shape of nine production-status forms at their default parameter values, all integrated to the same total stellar mass, so the differences are entirely in the shape — not the normalization.">
 
 .. only:: html
 
@@ -406,6 +342,23 @@ Parametric and stochastic star formation history models.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A common SED-fitting failure mode: pick a smooth parametric SFH (delayed exponential, tau-model, lognormal) for a galaxy whose true star-formation history has short-timescale bursts. The continuum-anchored bands (optical, NIR) absorb the mass and the fit looks plausible — but the UV bands, where young O/B stars dominate, carry the residual of the recent burst.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_wrong_model_trap_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_wrong_model_trap`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Fitting a stochastic SFH with a smooth parametric prior leaves a UV residual</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -419,16 +372,12 @@ Parametric and stochastic star formation history models.
    /auto_examples/sfh/plot_bursty_continuity_sigma_schedule
    /auto_examples/sfh/plot_bursty_recovery
    /auto_examples/sfh/plot_chemical_evolution
-   /auto_examples/sfh/plot_continuity_prior_visualisation
    /auto_examples/sfh/plot_continuity_vs_bursty_psd
    /auto_examples/sfh/plot_dexp_tau_sweep
    /auto_examples/sfh/plot_dpl_alpha_beta_grid
    /auto_examples/sfh/plot_grahsp_paper_sfh_tau_sweep
    /auto_examples/sfh/plot_lnorm_peak_sweep
-   /auto_examples/sfh/plot_mass_formed_vs_mass_observed
-   /auto_examples/sfh/plot_parametric_sfh
    /auto_examples/sfh/plot_prospector_priors_compare
-   /auto_examples/sfh/plot_psd_alternatives
    /auto_examples/sfh/plot_psd_burstiness
    /auto_examples/sfh/plot_psd_burstiness_prior
    /auto_examples/sfh/plot_quenching_pathway_compare
@@ -439,4 +388,5 @@ Parametric and stochastic star formation history models.
    /auto_examples/sfh/plot_sfh_quenching_compare
    /auto_examples/sfh/plot_stochastic_sfh
    /auto_examples/sfh/plot_two_burst_observability
+   /auto_examples/sfh/plot_wrong_model_trap
 

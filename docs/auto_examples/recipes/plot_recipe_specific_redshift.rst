@@ -21,11 +21,6 @@
 Redshift constraint: spectroscopy vs photometry alone
 ======================================================
 
-.. image:: images/sphx_glr_plot_recipe_specific_redshift_001.png
-   :alt: plot recipe specific redshift
-   :class: sphx-glr-single-img
-
-
 When redshift is known from spectroscopy, the SED fit is more precise than
 when inferring redshift from photometry alone. This recipe generates mock
 photometry at a known redshift, then fits it with redshift fixed (spectroscopic)
@@ -33,6 +28,17 @@ and redshift free (photometric only), showing how redshift degeneracies affect
 parameter recovery.
 
 .. GENERATED FROM PYTHON SOURCE LINES 11-128
+
+
+
+.. image-sg:: /auto_examples/recipes/images/sphx_glr_plot_recipe_specific_redshift_001.png
+   :alt: plot recipe specific redshift
+   :srcset: /auto_examples/recipes/images/sphx_glr_plot_recipe_specific_redshift_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -153,6 +159,11 @@ parameter recovery.
 
     fig.tight_layout()
     plt.savefig("plot_recipe_specific_redshift.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 6.524 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_specific_redshift.py:

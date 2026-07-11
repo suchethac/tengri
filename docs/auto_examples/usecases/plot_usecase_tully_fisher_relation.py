@@ -211,8 +211,11 @@ ax.plot(v_fit, m_r_fit, "C1--", lw=1.5, alpha=0.6, label=f"Mock fit (slope={z_fi
 # Formatting
 ax.set_xlabel(r"$\log V_{\mathrm{circ}}$ [km/s]", fontsize=12)
 ax.set_ylabel(r"$M_r$ [AB mag]", fontsize=12)
-ax.set_xlim(1.7, 2.5)
-ax.set_ylim(m_r_abs.max() + 1.5, m_r_abs.min() - 1.0)  # Invert y (magnitudes)
+# Tighten axes to data extent with small margins
+x_margin = (log_v_circs.max() - log_v_circs.min()) * 0.15
+y_margin = (m_r_abs.max() - m_r_abs.min()) * 0.15
+ax.set_xlim(log_v_circs.min() - x_margin, log_v_circs.max() + x_margin)
+ax.set_ylim(m_r_abs.max() + y_margin, m_r_abs.min() - y_margin)  # Invert y (magnitudes)
 ax.grid(True, alpha=0.3, linestyle=":")
 ax.legend(loc="lower right", frameon=False, fontsize=10)
 

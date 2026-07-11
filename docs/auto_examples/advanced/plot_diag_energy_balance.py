@@ -101,7 +101,7 @@ fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11, 4.5))
 ax_l.errorbar(
     tau_diffs, ratios, fmt="o", markersize=8, lw=2, color="C0", label="L_emit / L_absorb"
 )
-ax_l.axhline(1.0, ls="--", color="grey", lw=1, alpha=0.7, label="Expected")
+ax_l.axhline(1.0, ls="--", color="gray", lw=1, alpha=0.7, label="Expected")
 ax_l.set_xlabel(r"$\tau_{\rm diff}$"), ax_l.set_ylabel("Ratio")
 ax_l.legend(frameon=False, fontsize=9), ax_l.grid(True, alpha=0.3)
 x_pos = np.arange(len(tau_diffs))
@@ -113,9 +113,3 @@ ax_r.set_xticks(x_pos), ax_r.set_xticklabels([f"{t:.1f}" for t in tau_diffs])
 ax_r.legend(frameon=False, fontsize=9), ax_r.grid(True, alpha=0.3, axis="y")
 fig.tight_layout()
 plt.savefig("plot_diag_energy_balance.png", dpi=150, bbox_inches="tight")
-
-# Report findings
-print("Energy balance diagnostic results:")
-print(f"{'tau_diff':<10} {'Ratio':<10} {'L_abs (erg/s)':<20} {'L_emit (erg/s)':<20}")
-for tau, r, la, le in zip(tau_diffs, ratios, L_abs_list, L_emit_list):
-    print(f"{tau:<10.1f} {r:<10.3f} {la:<20.3e} {le:<20.3e}")

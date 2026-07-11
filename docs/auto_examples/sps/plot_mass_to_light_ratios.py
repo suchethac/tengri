@@ -7,7 +7,7 @@ steepest in g, where massive young stars dominate, and shallowest in
 ``K_s``, where red giants contribute at every age past the first
 ~100 Myr.
 
-A narrow burst centred at a sweep of lookback times approximates an
+A narrow burst centered at a sweep of lookback times approximates an
 SSP. ``M_★`` comes from integrating the recovered SFH; ``L_band``
 from inverting tengri's photometric prediction back to ``L_ν``
 (using a fixed ``d_L`` at ``z = 0.01``) and multiplying by the
@@ -63,7 +63,7 @@ model = tengri.SEDModel.build(
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
 # Past ~1 Gyr the narrow burst window starts to clip against the
-# universe age and the SFH normalisation goes noisy.
+# universe age and the SFH normalization goes noisy.
 ages = np.geomspace(0.03, 1.0, 16)
 ml = np.empty((len(BANDS), ages.size))
 

@@ -187,12 +187,11 @@ scatter = ax.scatter(
 # Colorbar
 cbar = plt.colorbar(scatter, ax=ax, label=r"Redshift $z$")
 
-# Axis labels and title
+# Axis labels
 ax.set_xlim(-0.5, 2.0)
 ax.set_ylim(-0.5, 2.5)
 ax.set_xlabel(r"$G - R$ [mag, obs-frame]")
 ax.set_ylabel(r"$U - G$ [mag, obs-frame]")
-ax.set_title("Lyman-break galaxy z~3 U-dropout selection")
 ax.legend(frameon=False, loc="upper left", fontsize=10)
 
 # Add region annotations
@@ -203,4 +202,3 @@ ax.text(1.7, 0.3, r"$z \sim 0{-}1$" + "\n(outside)", fontsize=9, ha="center", co
 
 fig.tight_layout()
 plt.savefig("plot_usecase_dropout_selection_z3.png", dpi=150, bbox_inches="tight")
-plt.show()

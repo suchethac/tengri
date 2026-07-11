@@ -21,11 +21,6 @@
 AB Magnitude Zero-point Consistency Check
 ==========================================
 
-.. image:: images/sphx_glr_plot_diag_ab_mag_zero_point_001.png
-   :alt: plot diag ab mag zero point
-   :class: sphx-glr-single-img
-
-
 Validates that AB magnitude zero-point definitions are consistent across filters.
 Compares photometry converted to magnitude via the formula m_AB = -2.5 log10(F_ν)
 - 48.6 against tengri's built-in magnitude conversion. The AB magnitude system

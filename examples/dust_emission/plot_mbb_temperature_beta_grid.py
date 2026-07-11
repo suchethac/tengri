@@ -81,7 +81,7 @@ for T in T_grid:
     model, p = _build(t_dust=float(T), beta=1.8)
     out = model.predict_rest_sed(p)
     w = np.asarray(out.wavelength)
-    ax_T.loglog(w, C_AA_PER_S / w * np.asarray(out.sed), color=plt.cm.plasma(norm_T(T)), lw=1.4)
+    ax_T.loglog(w, C_AA_PER_S / w * np.asarray(out.sed), color=plt.cm.viridis(norm_T(T)), lw=1.4)
 
 norm_b = mpl.colors.Normalize(vmin=beta_grid.min(), vmax=beta_grid.max())
 for beta in beta_grid:
@@ -97,7 +97,7 @@ for ax in (ax_T, ax_b):
 
 ax_b.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 
-cb_T = fig.colorbar(plt.cm.ScalarMappable(norm=norm_T, cmap="plasma"), ax=ax_T, pad=0.01)
+cb_T = fig.colorbar(plt.cm.ScalarMappable(norm=norm_T, cmap="viridis"), ax=ax_T, pad=0.01)
 cb_T.set_label(r"$T_{\rm dust}$  [K]   (β = 1.8 fixed)")
 cb_b = fig.colorbar(plt.cm.ScalarMappable(norm=norm_b, cmap="viridis"), ax=ax_b, pad=0.01)
 cb_b.set_label(r"emissivity index $\beta$   ($T_{\rm dust}$ = 30 K fixed)")

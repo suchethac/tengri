@@ -178,5 +178,4 @@ cbar_tau = fig_bottom.colorbar(
 cbar_tau.set_label(r"PSD timescale $\tau$ [Myr]")
 
 fig_bottom.tight_layout()
-fig_bottom.savefig("plot_psd_burstiness_sedsweeps.png", dpi=150, bbox_inches="tight")
 plt.savefig("plot_psd_burstiness.png", dpi=150, bbox_inches="tight")

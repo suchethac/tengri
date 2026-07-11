@@ -9,6 +9,10 @@ registry defaults. We build a model with mixed constraints, display the
 annotated summary as a figure caption, and show the predicted SED.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -100,4 +104,4 @@ ax_sed.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 ax_sed.grid(True, alpha=0.2, which="both")
 
 fig.tight_layout()
-plt.show()
+plt.savefig("plot_model_summary_walkthrough.png", dpi=150, bbox_inches="tight")
