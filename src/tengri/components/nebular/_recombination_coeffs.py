@@ -3,7 +3,7 @@
 
 This module defines the recombination coefficients used by CIGALE's nebular
 model to compute the effect of ionizing photon escape and dust absorption on
-nebular emission scaling. Ported faithfully from CIGALE's nebular module
+nebular emission scaling. Coefficients match CIGALE's nebular module
 (``pcigale/sed_modules/nebular.py``), which itself follows the Inoue (2011)
 nebular treatment with Ferland (1980) recombination coefficients.
 

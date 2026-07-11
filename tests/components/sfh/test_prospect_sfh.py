@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for ProSpect-ported SFH models.
+"""Tests for the ProSpect-family SFH models.
 
 Covers:
 - spline: monotone cubic PCHIP spline (massfunc_p4/p6 port)

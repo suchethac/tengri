@@ -679,7 +679,7 @@ def state_to_sed_quantities(state: Any):
         ``l_bol``, ``l_tir``, ``l_dust_absorbed`` populated;
         UV-slope / Dn4000 / Balmer-break / M_UV / luminosity-weighted
         quantities returned as ``NaN`` until the legacy
-        :func:`compute_uv_slope_beta` machinery is ported (see
+        :func:`compute_uv_slope_beta` machinery is migrated (see
         ``docs/dev/TODO.md``).
 
     Notes

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for SKIRTOR ported to SEDModelComponent.
+"""Tests for SKIRTOR on SEDModelComponent.
 
 Validates:
 - isinstance(SKIRTORTorus, SEDModelComponent)

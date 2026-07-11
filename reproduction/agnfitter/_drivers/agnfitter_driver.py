@@ -745,11 +745,11 @@ def cold_dust_radio_axes() -> dict[str, np.ndarray]:
     return {"tdust": tdust_ax, "fpah": fpah_ax, "lir_conv": lir_conv}
 
 
-# ── Reddening + X-ray extension (reimplementations of MODEL_AGNfitter helpers) ──
+# ── Reddening + X-ray extension (as in MODEL_AGNfitter helpers) ──────────────
 def apply_bbb_reddening(wave_aa: np.ndarray, L_nu: np.ndarray, ebv: float) -> np.ndarray:
     """Redden a disk SED with AGNFITTER-RX's Prevot SMC law (R_V = 2.72).
 
-    Reimplements ``MODEL_AGNfitter.BBBred_Prevot``: ``k(lambda) = 1.39 lambda_um^-1.2
+    Implements ``MODEL_AGNfitter.BBBred_Prevot``: ``k(lambda) = 1.39 lambda_um^-1.2
     - 0.38`` (Prevot et al. 1984 SMC), applied only blueward of the optical and
     redward of 200 eV (no reddening at X-ray energies).
 
@@ -777,7 +777,7 @@ def apply_bbb_reddening(wave_aa: np.ndarray, L_nu: np.ndarray, ebv: float) -> np
     return np.where(np.isfinite(L_nu_red), L_nu_red, L_nu)
 
 
-# ── alpha_ox X-ray extension (reimplements MODEL_AGNfitter.XRAYS) ────────────
+# ── alpha_ox X-ray extension (as in MODEL_AGNfitter.XRAYS) ───────────────────
 NU_2500: float = (3e8) / (2500 * 1e-10)  # Hz, frequency at 2500 Angstrom
 NU_2KEV: float = 4.83598e17  # Hz, frequency at 2 keV
 _H_KEV_PER_HZ: float = 4.135667731e-15 * 1e-3  # eV/Hz -> keV/Hz
@@ -813,7 +813,7 @@ def disk_xray_extension(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Extend a disk SED into X-rays via the alpha_OX-L_2500 correlation.
 
-    Reimplements ``MODEL_AGNfitter.XRAYS``: anchors a 2 keV flux from
+    Implements ``MODEL_AGNfitter.XRAYS``: anchors a 2 keV flux from
     :func:`alpha_ox`, then lays down a Gamma=1.8 power law with a 300 keV
     exponential cutoff over log nu in [16.685, 19.7].
 

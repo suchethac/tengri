@@ -13,22 +13,22 @@ Every new Python file under `src/tengri/` and `tests/` must include this header 
 # Copyright (c) 2026 Suchetha Cooray and the tengri developers.
 ```
 
-Place this header before any docstrings, imports, or other code. This single block is sufficient for files where all contributions are original work or ports with compatible licenses (see Ported Code Policy below).
+Place this header before any docstrings, imports, or other code. This single block is sufficient for files where all contributions are original work or reference implementations with compatible licenses (see Reference-implementation policy below).
 
-## Ported Code Policy
+## Reference-implementation policy
 
-When code is ported from another repository, add an additional attribution line immediately after the copyright line:
+When a module implements an algorithm defined in another repository, add an additional attribution line immediately after the copyright line:
 
 ```python
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2026 Suchetha Cooray and the tengri developers.
-# Ported from <upstream/repo>@<sha>, <LICENSE>, <YYYY-MM-DD>.
+# Implements the algorithm of prospector@a1b2c3d4 (<LICENSE> upstream), <YYYY-MM-DD>; independently written and validated against it.
 ```
 
-**Ported code requirements:**
+**Reference-implementation requirements:**
 - Upstream code must use a compatible license: MIT, BSD-2-Clause, BSD-3-Clause, or Apache-2.0.
 - GPL and other copyleft licenses cannot be merged into tengri (it would require the entire codebase to be GPL).
-- Include the upstream repository name (e.g., `prospector`), commit SHA (first 8 characters), license identifier, and the date of porting.
+- Include the upstream repository name (e.g., `prospector`), commit SHA (first 8 characters), license identifier, and the date of implementation.
 - Preserve or adapt upstream docstrings and citations where applicable.
 
 Example:
@@ -36,7 +36,7 @@ Example:
 ```python
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2026 Suchetha Cooray and the tengri developers.
-# Ported from prospector@a1b2c3d4, BSD-3-Clause, 2025-10-15.
+# Implements the algorithm of prospector@a1b2c3d4 (MIT upstream), 2025-10-15; independently written and validated against it.
 ```
 
 ## Grandfathering

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """CIGALE skirtor2016 piecewise-power-law disc-block regressions (#487).
 
-Three empirical disc spectra ported from CIGALE
+Three empirical disc spectra as implemented in CIGALE
 (``pcigale.sed_modules.skirtor2016``) and registered as composable-AGN
 disc blocks:
 

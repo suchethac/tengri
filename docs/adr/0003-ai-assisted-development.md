@@ -16,9 +16,9 @@ Acknowledge AI assistance openly. Compensate with stricter verification discipli
 
 1. **Primary sources.** Every physics module must cite a primary paper and include a regression test validating against it (see docs/dev/verification-protocol.md).
 
-2. **Ported-over-invented.** When an upstream reference implementation exists (Prospector, DSPS, bagpipes, Cue, NIFTy), tengri's version should be a port with a verifiable comment block, not a reinvention. Header example:
+2. **Reference-anchored over invented.** When an upstream reference implementation exists (Prospector, DSPS, bagpipes, Cue, NIFTy), tengri's version independently implements the same published algorithm, names the reference symbol in a verifiable comment block, and is validated against the reference — not a reinvention and not a copy. Header example:
    ```python
-   # Ported from bagpipes (Carnall et al. 2019 [1]_) — modified for JAX differentiability
+   # Implements the same model as bagpipes (Carnall et al. 2019 [1]_); validated against it. JAX-differentiable.
    ```
 
 3. **PR transparency.** Every PR includes an AI-use disclosure checkbox in the PR template (see .github/pull_request_template.md).

@@ -204,7 +204,7 @@ class Bibliography:
         "igm": "Intergalactic medium",
         "preprocessing": "Preprocessing",
         "inference": "Inference",
-        "reference_code": "Peer codes (for comparison / porting credit)",
+        "reference_code": "Peer codes (comparison / implementation credit)",
         "other": "Other",
     }
 

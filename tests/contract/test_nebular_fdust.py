@@ -2,7 +2,7 @@
 """Contract tests for Lyman-continuum dust-absorption fraction (neb_fdust).
 
 Tests the lyc_dust_escape_factor function and its integration with the
-Cue nebular backend to verify faithful CIGALE implementation.
+Cue nebular backend to verify the CIGALE-matched implementation.
 
 References
 ----------

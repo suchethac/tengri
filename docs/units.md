@@ -124,8 +124,8 @@ the fit and tag the outputs after.
 - **Emission lines** are vacuum throughout. `H_alpha = 6564.61 Å`,
   not 6562.8 Å (which is air).
 - **All SED components return `erg/s/Hz`** (standardized
-  2026-04-08). If you're porting an external component, normalize to
-  this unit before returning.
+  2026-04-08). If you're implementing a component from another code,
+  normalize to this unit before returning.
 - **Per-band photometry units.** `predict_photometry` returns one F_ν
   value per filter band, in cgs — the bandpass-averaged F_ν. The exact
   weighting is the *filter-convolution convention*; see the dedicated
@@ -176,7 +176,7 @@ with: optical/NIR broadband → `bessell`; CIGALE-reduced products →
 
 > **History / correctness note.** Through 2026-05, tengri weighted `F_ν`
 > by `λ` (not `1/λ`) — an f_λ→f_ν units transplant that matched neither
-> convention and biased colors. It is fixed; `bessell` is now bit-faithful
+> convention and biased colors. It is fixed; `bessell` is now bit-identical
 > to DSPS (pinned by `tests/crossval/test_filter_convention_parity.py`).
 
 ### Choosing and introspecting

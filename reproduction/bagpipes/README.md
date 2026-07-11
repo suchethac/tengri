@@ -14,7 +14,7 @@ SSP grid; one figure per physics block.
   - `bagpipes_driver.py` — thin wrappers around
     `bagpipes.model_galaxy(...)` to extract stellar / attenuated /
     nebular SEDs, SFH curves, and IGM transmission in tengri's units.
-  - `bagpipes_ssp_to_dsps.py` — one-off port of bagpipes' bundled
+  - `bagpipes_ssp_to_dsps.py` — one-off repackaging of bagpipes' bundled
     `bc03_miles_stellar_grids.fits` (BC03 templates in the MILES
     extended-wavelength library, Kroupa IMF) into the DSPS HDF5
     layout tengri's `load_ssp_data` reads. Includes the

@@ -6,8 +6,8 @@ returning the compiled-function dict used by all geoVI/MGVI/EVI inference
 paths.  Extracted here to keep fitter.py under the 800-line project limit
 and to make the JIT-compilation logic independently readable.
 
-The geoVI path is an exact JAX port of NIFTy's CG, Newton-CG, sample
-drawing, and nonlinear curving algorithms.  Mathematical equivalence with
+The geoVI path implements the same CG, Newton-CG, sample drawing, and
+nonlinear curving algorithms as NIFTy. Mathematical equivalence with
 ``jft.optimize_kl`` is verified by the cross-validation tests.
 """
 
@@ -833,7 +833,7 @@ def build_jit_engine(fitter, pos_dict):
     def cg_solve(mat_fn, b, x0, maxiter=30, miniter=6, absdelta=0.0, resnorm=0.0):
         """CG solve: mat_fn(x) = b.
 
-        Exact port of NIFTy ``_static_cg`` (conjugate_gradient.py:217-388)
+        Implements NIFTy's ``_static_cg`` algorithm exactly (conjugate_gradient.py:217-388)
         for flat arrays.  Residual-norm (L2) is the primary convergence
         criterion; energy-based absdelta is secondary.  Negative curvature
         on the first CG iteration triggers a steepest-descent fallback.
@@ -1007,7 +1007,7 @@ def build_jit_engine(fitter, pos_dict):
     ):
         """Newton-CG with successive-halving line search.
 
-        Exact port of NIFTy ``_static_newton_cg`` (optimize.py:285-449)
+        Implements NIFTy's ``_static_newton_cg`` algorithm exactly (optimize.py:285-449)
         for flat arrays.  Includes adaptive CG tolerance, steepest-descent
         reset after 5 line-search halvings, and custom gradient norm.
         """
@@ -1172,7 +1172,7 @@ def build_jit_engine(fitter, pos_dict):
     def curve_residual(m, r_linear, metric_key, sign, data_args):
         """Nonlinearly update a linear residual to a geoVI curved residual.
 
-        Exact port of NIFTy ``nonlinearly_update_residual``
+        Implements NIFTy's ``nonlinearly_update_residual`` algorithm exactly
         (evi.py:136-217) using ``_newton_cg_flat`` for the inner
         Newton-CG optimization.
 

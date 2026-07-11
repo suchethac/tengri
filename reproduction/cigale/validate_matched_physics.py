@@ -4,8 +4,8 @@ Companion to ``validate_moneyshot.py`` (which compares tengri-native vs
 CIGALE-native *configurations*, where offsets are input-driven). This script
 removes every input difference — same BC03 SSP, same metallicity, same
 delayed-tau SFH, same Calzetti screen, same Dale-2014 templates+alpha — and
-checks the stellar+dust SED **pixel by pixel**. At matched inputs the ported
-models must agree; a surviving residual is a physics/mapping problem.
+checks the stellar+dust SED **pixel by pixel**. At matched inputs the two
+implementations must agree; a surviving residual is a physics/mapping problem.
 
 Run:
 

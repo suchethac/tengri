@@ -42,7 +42,7 @@ both sides.
 If no shipped grid matches, say so loudly in the notebook and README rather
 than quietly comparing different stellar physics.
 
-Verify the unit contract rather than assuming it: ported grids may store flux in
+Verify the unit contract rather than assuming it: repackaged grids may store flux in
 the source code's native solar luminosity. Bit-match the raw array values
 against the reference's own output for one SSP before trusting any absolute
 comparison — a silent 0.3 % scale error hides easily behind percent-level

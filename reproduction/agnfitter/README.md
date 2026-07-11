@@ -23,12 +23,12 @@ nuclei across `8 < log ν/Hz < 20`.
 | Radio | SPL / DPL (Eqs. 9–10), Bell-2003 SF | `radio_agn`, `radio_agn_dpl`, `radio_sfr_bell2003` |
 
 tengri's `slone_netzer`, `silva04`, `cat3d_wind`, `skirtor_agnfitter`, and
-`schreiber2018` blocks reimplement the physics of these libraries
-independently and are validated against the vendored AGNFITTER-RX references
-(`data/agnfitter_*_reference.h5`), both in `tests/crossval/` and visually in
-the notebook. Every tengri model in the notebook is built through the public
-`SEDModel.build` grammar, so the comparisons double as end-to-end wiring
-checks of the composable AGN API.
+`schreiber2018` blocks evaluate the template libraries published with
+AGNFITTER-RX (repackaged by the `scripts/build_*_grid.py` builders) and are
+validated against the vendored references (`data/agnfitter_*_reference.h5`),
+both in `tests/crossval/` and visually in the notebook. Every tengri model in
+the notebook is built through the public `SEDModel.build` grammar, so the
+comparisons double as end-to-end wiring checks of the composable AGN API.
 
 ## Prerequisites
 

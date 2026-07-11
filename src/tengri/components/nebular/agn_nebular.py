@@ -924,7 +924,7 @@ class SynthesizerNLRBackend:
         \times f_{cov}`` (units verified against Synthesizer's UnifiedAGN ``nlr``
         component to ~2 %). Requires a grid carrying ``/spectra/nebular``; raises
         otherwise. Reproduces ``UnifiedAGN`` faithfully where re-broadening the
-        scrambled ``/lines`` table cannot (issue #694). Ported to match
+        scrambled ``/lines`` table cannot (issue #694). Implemented to match
         Synthesizer (Lovell et al. 2025; Roper et al. 2026).
         """
         from tengri.utils.grid_interp import interp_nd_triweight

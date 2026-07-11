@@ -79,7 +79,8 @@ def compute_line_fluxes(
 
         F_i = A_i \sqrt{2\pi}\,\sigma_{{\rm ang},i}
 
-    Ported from FastSpecFit ``populate_emtable()`` [1]_.
+    Implements the same calculation as FastSpecFit ``populate_emtable()`` [1]_;
+    validated against its output.
 
     References
     ----------
@@ -142,7 +143,8 @@ def compute_equivalent_widths(
     Pixels with non-positive continuum return ``EW = 0`` (guarded with
     ``jnp.where``).
 
-    Ported from FastSpecFit ``populate_emtable()`` [1]_.
+    Implements the same calculation as FastSpecFit ``populate_emtable()`` [1]_;
+    validated against its output.
 
     References
     ----------

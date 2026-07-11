@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression: tengri ``noll09`` reproduces the ``dust_attenuation`` N09 law.
 
-tengri's ``noll09`` attenuation curve is a port of the N09 model from the
+tengri's ``noll09`` attenuation curve implements the N09 model from the
 ``dust_attenuation`` package (Noll et al. 2009): a Calzetti+Leitherer base,
 a 2175 Å Drude bump of amplitude ``E_b``, and a power-law slope ``delta``,
 combined as ``(base + bump) * (lambda / 5500 A)**delta`` and normalized by a

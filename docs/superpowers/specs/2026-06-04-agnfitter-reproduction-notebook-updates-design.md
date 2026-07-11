@@ -12,7 +12,7 @@ torus surface:
 
 1. **`skirtor_agnfitter` is now a registered, correctly-normalized torus
    block** (`register_agn_block("torus", "skirtor_agnfitter")`,
-   `torus_blocks.py:292`). It is the bit-faithful port of AGNfitter-rX's
+   `torus_blocks.py:292`). It is the node-exact implementation of AGNfitter-rX's
    parameter-collapsed `SKIRTOR_mean_3p.pickle`, distinct from the
    full-grid X-CIGALE `skirtor` block. Its exact runtime path now applies
    the `L_SUN × ∫dν` normalization it previously skipped (was emitting
@@ -37,11 +37,11 @@ by name (verified by grep). They go through builder block strings
 The notebook's §9c ("Torus library face-off") currently carries a deferred
 caveat (lines 634–652):
 
-> *"tengri instead keeps the full Stalevski grid … A future direct port of
+> *"tengri instead keeps the full Stalevski grid … A future exact implementation of
 > `SKIRTOR_mean_3p` (as was done for `silva04` and `cat3d_wind`) would give
-> a bit-faithful AGNFITTER-RX-style SKIRTOR panel."*
+> a node-exact AGNFITTER-RX-style SKIRTOR panel."*
 
-That future port now exists (`skirtor_agnfitter`). The notebook should stop
+That future implementation now exists (`skirtor_agnfitter`). The notebook should stop
 describing it as future work and demonstrate it.
 
 Separately, the §9c silva04 panel compares AGNfitter at `log_nh=23.0`
@@ -56,14 +56,14 @@ to the same column density and become a genuine matched-parameter check.
   AGNfitter's `SKIRTOR_mean_3p`, mapped to the same 3 retained axes
   (inclination → `incl_skirtor`, optical depth → `tv_skirtor`; opening
   angle handled per the block's signature). This panel is the
-  **bit-faithful** comparison and should agree to node-exact tolerance.
+  **node-exact** comparison and should agree to node-exact tolerance.
 - **Keep** the existing `skirtor` (full X-CIGALE grid) panel — it is the
   *intentional-difference* comparison (40 µm vs 25 µm peak). The two panels
   side by side tell the real story: tengri can reproduce *either* reduction
   of the Stalevski models, and the choice is the user's.
 - Rewrite the §9c markdown: replace the "future port would give…"
   paragraph with "tengri ships both — `skirtor` (full X-CIGALE grid) and
-  `skirtor_agnfitter` (the bit-faithful `SKIRTOR_mean_3p` average)", and
+  `skirtor_agnfitter` (the node-exact `SKIRTOR_mean_3p` average)", and
   re-measure the silva04 / cat3d_wind agreement numbers (the "≲1.6×" claim)
   against the new PCHIP curves before quoting them.
 
@@ -119,7 +119,7 @@ still uses triweight and is byte-for-byte unchanged.
 - Stale SSP-gated test cleanup — tracked in #685.
 
 ## 6. Verification checklist
-- [ ] §9c bit-faithful `skirtor_agnfitter` panel agrees to node-exact
+- [ ] §9c node-exact `skirtor_agnfitter` panel agrees to node-exact
       tolerance against `SKIRTOR_mean_3p`.
 - [ ] silva04 panel uses matched `log_nh` on both sides.
 - [ ] All cat3d_wind figures re-rendered; every quoted ratio/peak number

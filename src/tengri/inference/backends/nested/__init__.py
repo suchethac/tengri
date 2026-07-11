@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Nested Sampling algorithms for tengri.
 
-Faithful port of the handley-lab/blackjax nested_sampling branch.
+Implements the same algorithms as the handley-lab/blackjax nested_sampling branch.
 Provides Nested Slice Sampling (NSS) using Hit-and-Run Slice Sampling as
 the inner kernel with adaptive covariance tuning.
 

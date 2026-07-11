@@ -41,9 +41,9 @@
 #   addresses the 1.5–5 µm near-IR excess that pure equatorial tori cannot.
 #
 # tengri's `cat3d_wind`, `silva04`, `skirtor_agnfitter`, `slone_netzer`,
-# and `schreiber2018` blocks reimplement the physics of AGNFITTER-RX's
-# template libraries, so those panels are direct checks of the
-# reimplementations against their source.
+# and `schreiber2018` blocks evaluate the same template libraries
+# AGNFITTER-RX publishes, so those panels are direct checks of tengri's
+# implementations against their source.
 #
 # Two ground rules keep the comparison honest. First, every claim of
 # agreement prints the number that backs it — a peak-normalized residual,
@@ -484,8 +484,8 @@ print(
 #
 # tengri exposes three cold-dust models that bracket this choice:
 #
-# * **`schreiber2018`** — a faithful, tabulated reimplementation of AGNFITTER-RX's S17
-#   library (the same Schreiber+2018 dust + PAH templates, mixed natively as
+# * **`schreiber2018`** — AGNFITTER-RX's S17 library evaluated from the same tabulated
+#   Schreiber+2018 dust + PAH templates, mixed natively as
 #   `(1 − f_PAH)·dust + f_PAH·PAH`). At matched (T_dust, f_PAH) it reproduces
 #   AGNFITTER-RX's S17 shape to a median of ~0.05% and a maximum of ~1.3% of
 #   the FIR peak, with the dust peak landing at 86.5 µm vs S17's 87.0 µm
@@ -494,7 +494,7 @@ print(
 #   a few Drude PAH profiles). Its FIR peak (92 µm) is close, but its PAH
 #   forest at 3–13 µm comes out much weaker than the tabulated S17 at matched
 #   (T_dust, f_PAH). It is fast and differentiable but not PAH-faithful — the
-#   gap that motivated the tabulated `schreiber2018` reimplementation.
+#   gap that motivated the tabulated `schreiber2018` block.
 # * **`dale2014`** — tengri's tabulated Dale+2014 library, the modern relative
 #   of AGNFITTER-RX's Dale & Helou 2002 (the "DH" in DH02_CE01). It is
 #   parameterized by the radiation-field hardness α rather than a dust
@@ -525,7 +525,7 @@ fig, ax = plt.subplots(figsize=(8.2, 5.0))
 ax.loglog(
     w_s17, norm_peak(L_s17), "C0-", lw=2.2, alpha=0.5, label="AGNFITTER-RX  S17 (Schreiber+18)"
 )
-ax.loglog(wave_ir, norm_peak(L_s18), "C3-", lw=1.4, label="tengri  schreiber2018 (S17 reimpl.)")
+ax.loglog(wave_ir, norm_peak(L_s18), "C3-", lw=1.4, label="tengri  schreiber2018 (S17 tables)")
 ax.loglog(wave_ir, norm_peak(L_s16), "C1--", lw=1.3, label="tengri  schreiber2016 (analytic)")
 ax.loglog(wave_ir, norm_peak(L_d14), "C4:", lw=1.5, label=r"tengri  dale2014 ($\alpha=1.5$)")
 ax.loglog(w_dh, norm_peak(L_dh), "C2-.", lw=1.2, label="AGNFITTER-RX  DH02_CE01")
@@ -575,7 +575,7 @@ print(
 #   grid undersamples the narrow Hα peak; tengri evaluates qsogen at native
 #   resolution) along the qsogen luminosity sequence — matching log_lbol
 #   aligns the two templates.
-# * **SN12 — reproduced** by the `slone_netzer` reimplementation. It interpolates the
+# * **SN12 — reproduced** by the `slone_netzer` block. It interpolates the
 #   108-template grid with node-exact bilinear interpolation, so the SN12 peak
 #   lands on AGNFITTER-RX's at every grid node (the peak shifts strongly with
 #   accretion rate, so the original smooth-kernel interpolation smeared it by
@@ -775,8 +775,8 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # ## §9c Torus library face-off
 #
 # The four AGNFITTER-RX torus libraries against tengri's, all normalized at
-# their mid-IR peak. tengri's `silva04` and `cat3d_wind` blocks reimplement
-# the physics of these same AGNFITTER-RX libraries and are pinned here to
+# their mid-IR peak. tengri's `silva04` and `cat3d_wind` blocks evaluate the
+# same template libraries AGNFITTER-RX publishes and are pinned here to
 # matched grid nodes — S04 at log N_H = 23, CAT3D-Wind at (incl 0°, a = −2,
 # f_wd = 1.75); all three CAT3D axes are live through `SEDModel.build` over
 # AGNFITTER-RX's genuine rows-210+ domain (a ∈ [−3, −1.5], f_wd ∈ [1.0, 2.25]).
@@ -795,10 +795,10 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # one model.
 #
 # tengri ships **both**: `skirtor` (full X-CIGALE grid, shown here) and
-# `skirtor_agnfitter` (a node-exact reimplementation validated against the
-# `SKIRTOR_mean_3p` library, exactly as for `silva04` and `cat3d_wind`). The next panel
+# `skirtor_agnfitter` (node-exact on the published `SKIRTOR_mean_3p`
+# templates, exactly as for `silva04` and `cat3d_wind`). The next panel
 # (§9c′) overlays the two reductions against the AGNFITTER-RX reference, so you
-# can see the faithful reimplementation land on the averaged library while the
+# can see the node-exact version land on the averaged library while the
 # full-grid block sits at longer wavelengths.
 #
 # Two residual pathologies the paper emphasizes also live in this plot: the
@@ -810,12 +810,12 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 torus_pairs = [
     # Pin both sides to the same column density (log N_H = 23). tengri's
     # `log_nh_silva` is now a live builder parameter, so this is a genuine
-    # matched-parameter reimplementation check, not a default-vs-default coincidence.
+    # matched-parameter template check, not a default-vs-default coincidence.
     (
         "S04",
         "S04",
         lambda: tengri_torus("silva04", log_nh_silva=23.0),
-        "silva04 (reimpl., log N_H = 23)",
+        "silva04 (log N_H = 23)",
         dict(log_nh=23.0),
     ),
     ("NK08", "NK08", lambda: tengri_torus("nenkova"), "nenkova", dict(incl=0.0)),
@@ -836,9 +836,9 @@ torus_pairs = [
         # cloud power-law index a = -2, wind fraction fwd = 1.75. tengri's
         # cat3d_wind spans AGNfitter's genuine rows-210+ sub-library
         # (a in [-3, -1.5], fwd in [1.0, 2.25]) with node-exact PCHIP, so a
-        # matched node is a genuine reimplementation check.
+        # matched node is a genuine template check.
         lambda: tengri_torus("cat3d_wind", cos_inc=1.0, a_cat3d=-2.0, fwd_cat3d=1.75),
-        "cat3d_wind (reimpl., incl 0°, a −2, f_wd 1.75)",
+        "cat3d_wind (incl 0°, a −2, f_wd 1.75)",
         dict(incl=0.0, a=-2.0, fwd=1.75),
     ),
 ]
@@ -909,7 +909,7 @@ plt.show()
 # The panel above contrasts AGNFITTER-RX's averaged `SKIRTOR_mean_3p` with
 # tengri's *full-grid* `skirtor` (the X-CIGALE reduction) — different by
 # design. tengri now also ships `skirtor_agnfitter`, a direct node-exact
-# reimplementation validated against the very same `SKIRTOR_mean_3p` library, so we can show both
+# node-exact on the very same `SKIRTOR_mean_3p` templates, so we can show both
 # reductions of the Stalevski (2016) models against the AGNFITTER-RX
 # reference at one matched geometry (opening angle 40°, inclination 30°,
 # τ₉.₇ = 7):
@@ -939,7 +939,7 @@ ax.loglog(
     norm_peak(L_af)[msk_af],
     "C1--",
     lw=1.6,
-    label="tengri  skirtor_agnfitter (faithful reimpl.)",
+    label="tengri  skirtor_agnfitter (node-exact)",
 )
 w_xc, L_xc = tengri_torus("skirtor", cos_inc=0.8660254, oa_skirtor=40.0, tau_skirtor=7.0)
 msk_xc = (w_xc > 5e3) & (w_xc < 1e7)
@@ -955,7 +955,7 @@ ax.set_xlim(5e3, 1e7)
 ax.set_ylim(1e-3, 3)
 ax.set_xlabel(r"$\lambda$ [Å]")
 ax.set_ylabel(r"$L_\nu$ (norm. at peak)")
-ax.set_title("SKIRTOR: averaged-library reimpl. vs full grid (oa 40°, incl 30°, τ 7)")
+ax.set_title("SKIRTOR: averaged templates vs full grid (oa 40°, incl 30°, τ 7)")
 ax.legend(fontsize=8, loc="lower center")
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
@@ -1145,7 +1145,7 @@ plt.show()
 # α = −0.75, exponential cutoff at 10¹³ Hz) or a double power law (DPL,
 # Eq. 9–10: a self-absorption turnover ν_t and a synchrotron-aging cutoff
 # ν_cut). tengri ships both — `radio_agn` (SPL) and `radio_agn_dpl`, the
-# latter reimplementing AGNFITTER-RX Eq. 9–10. The driver carries the
+# latter implementing AGNFITTER-RX Eq. 9–10 exactly. The driver carries the
 # upstream formulas verbatim (`A.agn_radio_spl` / `A.agn_radio_dpl`), so
 # both panels overlay tengri against AGNFITTER-RX itself at matched
 # parameters, not against a hand-written power law. DPL parameters sit
@@ -1577,13 +1577,13 @@ print(
 # %% [markdown]
 # ## Summary
 #
-# At matched parameters, tengri reproduces AGNFITTER-RX's AGN model
+# At matched parameters, tengri matches AGNFITTER-RX's AGN model
 # component by component, with every claim quantified in-notebook and every
 # tengri model composed through the public `SEDModel.build` grammar: all
 # four accretion-disk libraries (R06, SN12, KD18, THB21), the Prevot disc
 # reddening, the four torus libraries (S04, NK08, SKIRTOR, CAT3D-Wind —
-# three with node-exact reimplementations validated against these very
-# templates, including all three CAT3D-Wind axes), the Schreiber cold-dust
+# three of them node-exact on these very published templates, including
+# all three CAT3D-Wind axes), the Schreiber cold-dust
 # family with its S17_radio extension, the α_ox–L₂₅₀₀ X-ray corona, and the
 # SPL/DPL radio jets joined to the Bell-2003 star-formation radio. The
 # notebook reproduces the paper's two central results directly: THB21's

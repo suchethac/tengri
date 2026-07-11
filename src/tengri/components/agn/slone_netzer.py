@@ -6,8 +6,9 @@ templates, interpolated over ``(log M_BH, log Mdot/Mdot_Edd)`` from a
 precomputed HDF5 grid built from AGNfitter-rX's ``SN12.pickle`` by
 ``scripts/build_slone_netzer_grid.py``.
 
-Ported from AGNfitter-rX (Martinez-Ramirez et al. 2024 [2]_), whose
-``MODEL_AGNfitter.BBB`` consumes the same template library. This is the
+Uses the same template library as AGNfitter-rX (Martinez-Ramirez et al. 2024
+[2]_); validated against its output. AGNfitter-rX's ``MODEL_AGNfitter.BBB``
+uses this same library. This is the
 fourth of AGNfitter-rX's four accretion-disk libraries (alongside Richards+2006
 ``richards2006``, Kubota & Done 2018 ``multicolor``/``kubota_done``, and
 Temple+2021 ``qsogen``).

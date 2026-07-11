@@ -124,7 +124,7 @@ Total scope ~500 LOC of integration code; no new physics.
 
 ## Why this hasn't been wired
 
-The metallicity primitives were ported from upstream sources
+The metallicity primitives implement the same conventions as the upstream sources
 (Salaris+05, Leung+24 PSB, Tojeiro+09 continuity bins) when the
 SFH registry was being built; they sit alongside their SFH siblings
 even though no production caller computes a CSP integral against

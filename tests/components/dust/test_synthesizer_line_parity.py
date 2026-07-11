@@ -161,7 +161,7 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
         / "synthesizer_test_grid.h5"
     )
     if not ssp_path.exists():
-        pytest.skip("ported Synthesizer SSP grid not present")
+        pytest.skip("repackaged Synthesizer SSP grid not present")
     ssp = load_ssp_data(str(ssp_path))
     model = SEDModel.build(
         ssp_data=ssp,
@@ -228,7 +228,7 @@ def test_synth_lines_photometry_under_jit_and_precompute(
         / "synthesizer_test_grid.h5"
     )
     if not ssp_path.exists():
-        pytest.skip("ported Synthesizer SSP grid not present")
+        pytest.skip("repackaged Synthesizer SSP grid not present")
     ssp = load_ssp_data(str(ssp_path))
 
     def _tophat(center, frac=0.16, n=40):

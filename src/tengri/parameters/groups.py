@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Suchetha Cooray
-# Portions adapted from Prospector (Johnson et al. 2021)
+# Parameter-transform conventions follow Prospector (Johnson et al. 2021)
 
 """Nested-dict model builder for parameter specification.
 

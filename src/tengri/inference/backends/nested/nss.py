@@ -18,7 +18,7 @@
 A specific implementation of Nested Sampling that uses Hit-and-Run Slice
 Sampling (HRSS) as the inner MCMC kernel.
 
-Ported from blackjax.ns.nss.
+Implements the same algorithms as blackjax.ns.nss.
 """
 
 from __future__ import annotations

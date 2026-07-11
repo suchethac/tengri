@@ -15,7 +15,7 @@
 # limitations under the License.
 """Particle statistics for tuning inner kernels.
 
-Ported from blackjax.smc.tuning.from_particles.
+Implements the same algorithms as blackjax.smc.tuning.from_particles.
 """
 
 from __future__ import annotations

@@ -14,7 +14,7 @@ import jax.numpy as jnp
 
 from tengri.inference._sample_utils import _mean_params
 
-# NIFTy-faithful CG convergence constants (6 * machine epsilon / tiny).
+# CG convergence constants matching NIFTy (6 * machine epsilon / tiny).
 _EPS_F64 = 6.0 * jnp.finfo(jnp.float64).eps
 _TINY_F64 = 6.0 * jnp.finfo(jnp.float64).tiny
 
@@ -33,7 +33,7 @@ def _cg_solve(
 ):
     """Conjugate-gradient solver (NIFTy ``_static_cg`` port).
 
-    Exact port of NIFTy ``_static_cg``
+    Implements NIFTy's ``_static_cg`` algorithm exactly
     (``nifty8.re.conjugate_gradient._static_cg``, Gordian Edenhofer,
     Philipp Frank, GPL-2.0+).  Deviations from upstream: (1) flat-array
     API (no pytree / Vector wrapper); (2) ``mat_fn`` is a plain callable
@@ -174,7 +174,7 @@ def _newton_cg_flat(
 ):
     """Newton-CG with successive-halving line search (NIFTy ``_static_newton_cg`` port).
 
-    Exact port of NIFTy ``_static_newton_cg``
+    Implements NIFTy's ``_static_newton_cg`` algorithm exactly
     (``nifty8.re.optimize._static_newton_cg``, Gordian Edenhofer,
     Philipp Frank, GPL-2.0+).  Deviations from upstream: (1) flat-array
     API (no pytree); (2) combined ``fun_and_grad`` rather than separate
@@ -887,7 +887,7 @@ def build_native_vi_linear_engine(signal_response, data, noise, flatten, unflatt
 
     Notes
     -----
-    The CG solver is a faithful port of NIFTy ``_static_cg`` with residual-norm
+    The CG solver implements NIFTy's ``_static_cg`` exactly, with residual-norm
     as the primary convergence criterion and energy-based ``absdelta`` as
     secondary. This matches ``jit_engine.py``'s ``cg_solve`` and is superior
     to the energy-only variant previously inlined in ``hierarchical.py``.
@@ -1004,8 +1004,8 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
 
     1. Drawing a CG-inverted linear residual (same as MGVI).
     2. Curving each residual via Newton-CG (``curve_residual``) to follow the
-       nonlinear coordinate geometry — exact port of NIFTy's
-       ``nonlinearly_update_residual``.
+       nonlinear coordinate geometry — NIFTy's ``nonlinearly_update_residual``
+       algorithm, step for step.
     3. Mirroring: both ``+r`` and ``-r`` are curved, giving ``2*n_samp``
        effective samples with zero first-order bias.
 
@@ -1035,8 +1035,8 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
 
     Notes
     -----
-    ``curve_residual`` is a faithful port of NIFTy
-    ``nonlinearly_update_residual`` (evi.py:136-217). The inner Newton-CG runs
+    ``curve_residual`` implements NIFTy's ``nonlinearly_update_residual``
+    algorithm exactly (evi.py:136-217). The inner Newton-CG runs
     with ``maxiter=3`` matching NIFTy's default for sample curving.
 
     **JIT-compatible**: all returned callables are pre-JIT'd.
@@ -1131,7 +1131,7 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
     def curve_residual(m, r_linear, metric_key, sign):
         """Nonlinearly curve a linear residual (geoVI).
 
-        Port of NIFTy ``nonlinearly_update_residual`` (evi.py:136-217).
+        Implements NIFTy ``nonlinearly_update_residual`` (evi.py:136-217).
         Finds x* minimizing phi(x) = 0.5||m_s - g(x)||^2 via Newton-CG,
         then returns x* - m as the curved residual.
         """

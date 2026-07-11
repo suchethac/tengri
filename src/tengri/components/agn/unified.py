@@ -1002,7 +1002,7 @@ def silva04_agn(
     **JIT-compatible**: yes — both the power-law disc and the Silva+04
     grid interpolation are pure JAX.
 
-    Grid templates ported from AGNfitter (Calistro Rivera et al. 2016);
+    Grid templates published with AGNfitter (Calistro Rivera et al. 2016);
     see :mod:`tengri.components.agn.silva04` and
     ``scripts/build_silva04_grid.py``.
     """
@@ -1063,7 +1063,7 @@ def cat3d_wind_agn(
     -----
     **JIT-compatible**: yes.
 
-    Grid templates ported from AGNfitter-rX (Martínez-Ramírez
+    Grid templates published with AGNfitter-rX (Martínez-Ramírez
     et al. 2024, A&A 688, A46, arXiv:2405.12111) — Hönig & Kishimoto 2017
     CAT3D-Wind three-parameter projection. See
     :mod:`tengri.components.agn.cat3d_wind` and
@@ -1369,7 +1369,7 @@ def unified_nlr_blr(
     in Synthesizer (Lovell et al. 2025 [1]_, Roper et al. 2026 [2]_):
     an accretion disc, dusty torus, narrow line region (NLR), and broad line
     region (BLR), combined with inclination-dependent geometric masking.
-    Polar dust reddening (SMC law) is additionally adapted from CIGALE's
+    Polar dust reddening (SMC law) additionally follows CIGALE's
     ``skirtor2016`` module [3]_.
 
     .. rubric:: Correspondence with Synthesizer's UnifiedAGN
@@ -1420,7 +1420,7 @@ def unified_nlr_blr(
 
     5. **Polar dust reddening (SMC law)**: ``agn_polar_ebv`` applies SMC
        extinction to the disc and BLR for Type 1 sightlines (mask > 0).
-       Absent from Synthesizer's basic ``UnifiedAGNIntrinsic``; adapted from
+       Absent from Synthesizer's basic ``UnifiedAGNIntrinsic``; follows
        CIGALE ``skirtor2016`` (Yang et al. 2020 [3]_).
 
     .. rubric:: Geometry summary
@@ -1500,7 +1500,7 @@ def unified_nlr_blr(
         NLR line FWHM [km/s]. Default 500.
     agn_polar_ebv : float
         Polar dust E(B-V) applied to disc + BLR for Type 1 views (SMC law).
-        Adapted from CIGALE skirtor2016 [3]_. Not in Synthesizer's basic
+        Follows CIGALE skirtor2016 [3]_. Not in Synthesizer's basic
         UnifiedAGN. Default 0.0 (no reddening).
     nlr_fn : callable or None
         NLR emission backend. Signature::

@@ -12,11 +12,10 @@ summation into the total log-prior via::
     log_prior_total = log_prior_params + agn_prior_energy_balance(...)
         + agn_prior_agn_fraction_floor(...) + agn_prior_midir_uv_tie(...)
 
-Ported from AGNfitter (Calistro Rivera et al. 2016, ApJ 833, 98,
-arXiv:1606.05648) and its extended branch AGNfitter-rX (Martínez-Ramírez /
-Zhuang et al. 2024, arXiv:2405.12111).  Constants and functional forms
-match the corresponding branches of ``functions/PRIORS_AGNfitter.py``
-in the upstream code.
+Implements the same AGN prior penalty functions as AGNfitter (Calistro
+Rivera et al. 2016, ApJ 833, 98, arXiv:1606.05648) and AGNfitter-rX
+(Martínez-Ramírez / Zhuang et al. 2024, arXiv:2405.12111); validated
+against the corresponding branches of ``functions/PRIORS_AGNfitter.py``.
 
 All functions are JAX-compatible and JIT/grad-safe.
 """

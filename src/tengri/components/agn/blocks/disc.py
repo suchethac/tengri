@@ -306,7 +306,7 @@ def cigale_schartmann_skirtor_attenuated_disc_block(
 ) -> Array:
     r"""CIGALE ``skirtor2016 disk_type=1`` disc with SKIRTOR self-attenuation.
 
-    Bit-faithful tengri equivalent of the disc-replacement step in
+    Bit-identical to the disc-replacement step in
     CIGALE ``skirtor2016.py:336`` (Boquien+2019):
 
     .. math::

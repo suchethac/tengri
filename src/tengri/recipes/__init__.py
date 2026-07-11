@@ -572,7 +572,7 @@ def dust_demo() -> dict:
 
 
 def unified_agn() -> dict:
-    """Faithful Synthesizer UnifiedAGN reproduction (disc + NLR/BLR grids).
+    """Synthesizer UnifiedAGN reproduction (disc + NLR/BLR grids).
 
     Reproduces the Synthesizer UnifiedAGN model: a Kubota & Done disc,
     SKIRTOR simple torus, and narrow + broad line region photoionization grids

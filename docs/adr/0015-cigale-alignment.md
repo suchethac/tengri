@@ -36,7 +36,7 @@ Four production AGN models previously used toy modified-blackbody tori:
 | `adaf_agn` | `simple_torus` | `silva04_analytic` | ADAF operates at low Eddington rates (< 0.01); dusty torus is thin and sparse but RT solution still applies. Silva+04 smoother than SKIRTOR's clumpy geometry at low luminosity. |
 | `relagn_agn` | `two_temperature_torus` | `silva04_analytic` | RELAGN relativistic disc already high-fidelity; pair with smooth RT torus for consistency. |
 
-**Justification:** Silva+04 is a semi-empirical smooth-dust radiative-transfer solution (Calistro Rivera et al. 2016 AGNfitter), available tabulated in AGNfitter's pickle and ported to JAX. It offers:
+**Justification:** Silva+04 is a semi-empirical smooth-dust radiative-transfer solution (Calistro Rivera et al. 2016 AGNfitter), available as AGNfitter's published tabulated templates, which tengri evaluates in JAX. It offers:
 - JIT-compatible C²-continuous triweight interpolation over N_H.
 - Gradient-safe for inference (VI, HMC).
 - Physical grounding in RT equations (smooth geometry assumption).

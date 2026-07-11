@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Silva, Maiolino & Granato (2004) smooth AGN torus — differentiable JAX port.
+"""Silva, Maiolino & Granato (2004) smooth AGN torus.
 
 One-parameter semi-empirical torus library keyed on hydrogen column density
 (``log10(N_H / cm^-2)``).  The grid (5 bins in Silva+04) is interpolated with
@@ -8,7 +8,7 @@ a C²-continuous triweight kernel so gradients flow cleanly through
 
 Grid provenance
 ---------------
-Templates are ported from AGNfitter (Calistro Rivera et al. 2016) — see
+Template data published with AGNfitter (Calistro Rivera et al. 2016) — see
 ``scripts/build_silva04_grid.py``.  The AGN-fitter pickle stores per-bin
 ``log10(nu)`` and ``F_nu`` arrays; the build script converts to
 ascending-wavelength [Å] and common-grid, then emits ``silva04_torus_grid.h5``.

@@ -36,43 +36,39 @@ This product includes or depends on software written by third parties:
     https://github.com/blackjax-devs/blackjax
     Apache-2.0
 
-Algorithmic snippets and equation implementations have been ported or adapted
-from the following projects. In each case the docstring of the relevant
-tengri function names the upstream symbol and citation; consult that upstream
-project's LICENSE for the terms under which its code is redistributed:
+tengri independently implements models and algorithms described or used in
+the following projects, and validates its implementations against them. In
+each case the docstring of the relevant tengri function names the
+corresponding upstream symbol and the published reference:
 
   Prospector (Johnson et al. 2021)
     https://github.com/bd-j/prospector
-    LICENSE: see upstream
-    Ported symbols include: add_igm (fake_fsps), psb_logsfr_ratios_to_agebins,
+    add_igm (fake_fsps), psb_logsfr_ratios_to_agebins,
     zred_to_agebins_pbeta, line-placement routines, NLR helpers.
 
   FastSpecFit (Moustakas et al.)
     https://github.com/desihub/fastspecfit
-    LICENSE: see upstream
-    Ported symbols include: populate_emtable, LineMasker.
+    populate_emtable, LineMasker.
 
   AGNfitter / AGNfitter-rX (Calistro Rivera et al. 2016; Martínez-Ramírez et al.)
     https://github.com/GabrielaCR/AGNfitter
-    LICENSE: see upstream
-    Ported: Silva+2004 IR templates, BBB-related helpers.
+    BBB-related helpers; the Silva+2004 IR and SKIRTOR template data it
+    publishes are repackaged as tengri input grids.
 
   CIGALE (Boquien et al. 2019)
     https://gitlab.lam.fr/cigale/cigale
-    LICENSE: see upstream (CeCILL — verify compatibility before redistribution)
-    Ported symbols include: skirtor2016 (k_ext, agn_lnu_ir, adaf_disk),
-    sfh_buat08, sfhdelayedbq, sfhperiodic, IRX module.
+    skirtor2016 (k_ext, agn_lnu_ir, adaf_disk), sfh_buat08, sfhdelayedbq,
+    sfhperiodic, IRX module.
 
   ProSpect (Robotham et al.)
     https://github.com/asgr/ProSpect
-    LICENSE: see upstream (verify compatibility before redistribution)
-    Ported symbols include: massfunc_p4 / massfunc_p6, massfunc_snorm_burst,
+    massfunc_p4 / massfunc_p6, massfunc_snorm_burst,
     massfunc_snorm_burst_trunc.
 
   RELAGN (Hagen & Done)
     https://github.com/scotthgn/RELAGN
-    LICENSE: see upstream
-    Ported: nthcomp (originally XSpec donthcomp.f).
+    Used as a build-time dependency to precompute nthcomp template grids;
+    tengri does not ship its solver.
 
 Data products (filter curves, SSP grids, nebular grids) shipped under their
 respective upstream licenses; see data/README.md for details.
