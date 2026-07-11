@@ -50,7 +50,7 @@ def parametric_spec():
     """Parametric tsnorm spec (no GP field)."""
     return Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(9.0, 12.0),  # galaxy-scale log10(M*/Msun)
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -68,7 +68,7 @@ def stochastic_spec():
     """Stochastic tsnorm + field spec."""
     return Parameters(
         mean_sfh_type=["tsnorm", "field"],
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(9.0, 12.0),  # galaxy-scale log10(M*/Msun)
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -92,7 +92,7 @@ def dpl_spec():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(9.0, 12.0),  # galaxy-scale log10(M*/Msun)
         met_logzsol=Uniform(-1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=Uniform(0.0, 2.0),
@@ -547,9 +547,15 @@ class TestDustEmissionForwardModel:
         )
         model_no = SEDModel(spec_no, ssp, filters=filters, precompute=False)
 
-        sed_em = model.predict_rest_sed(params_em).sed
-        sed_no = model_no.predict_rest_sed({}).sed
-        max_diff = float(jnp.max(sed_em - sed_no))
+        # The two models use different rest-frame wave grids: modified_blackbody
+        # adds denser FIR sampling to resolve the thermal dust bump, so the emission
+        # grid has more points than the bare-stellar one (they span the same range).
+        # Compare on a common grid by interpolating the no-emission SED onto the
+        # emission grid, rather than subtracting mismatched-length arrays.
+        r_em = model.predict_rest_sed(params_em)
+        r_no = model_no.predict_rest_sed({})
+        sed_no_on_em = jnp.interp(r_em.wavelength, r_no.wavelength, r_no.sed)
+        max_diff = float(jnp.max(r_em.sed - sed_no_on_em))
         assert max_diff > 0, "Dust emission should add positive flux somewhere"
 
     def test_dust_emission_gradient(self, ssp):

@@ -722,6 +722,15 @@ class SEDModel:
         # ── Instrument (velocity dispersion, LSF) ─────────────────
         self._init_instrument(spec, observation)
 
+        # ── Observation calibration coefficients ──────────────────
+        # ``cal_c1..cN`` are dynamic — their count is the spectroscopy
+        # ``calibration_order`` — so, unlike the static noise params, they cannot
+        # be declared in a ``components/*/_params.py`` that ``_build_param_map``
+        # auto-derives. They are consumed as-is by the calibration polynomial, so
+        # register plain identity mappings here (#1031: previously the auto-merged
+        # ``cal_c*`` were free in the spec with no map entry → ParameterMapError).
+        param_map_deltas.append(self._calibration_param_map(observation))
+
         # ── Cosmology (luminosity distance) ───────────────────────
         self._init_cosmology(spec)
 
@@ -1709,6 +1718,20 @@ class SEDModel:
         self._shock_component = getattr(spec, "shock_component", "combined")
 
         return delta
+
+    @staticmethod
+    def _calibration_param_map(observation):
+        """Identity param-map entries for spectroscopic calibration coefficients.
+
+        Returns ``{cal_cN: (cal_cN, 1.0, 0.0)}`` for each coefficient the
+        spectroscopy config declares (``calibration_order`` of them); empty when
+        there is no spectroscopy or no calibration. The polynomial consumes the
+        coefficients directly, so the mapping is a pure identity.
+        """
+        if observation is None or not observation.can_do_spectroscopy:
+            return {}
+        cal_params = observation.spectroscopy.get_calibration_params()
+        return {name: (name, 1.0, 0.0) for name in cal_params}
 
     def _init_instrument(self, spec, observation):
         """Configure velocity dispersion and LSF settings."""
