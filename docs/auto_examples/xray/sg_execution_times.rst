@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:20.465** total execution time for 13 files **from auto_examples/xray**:
+**00:01.686** total execution time for 13 files **from auto_examples/xray**:
 
 .. container::
 
@@ -32,42 +32,42 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_vs_agn_lbol.py` (``plot_xray_vs_agn_lbol.py``)
-     - 00:05.769
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_delta_alpha_ox_sed.py` (``plot_xray_delta_alpha_ox_sed.py``)
-     - 00:03.606
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_alpha_ox_nh.py` (``plot_xray_alpha_ox_nh.py``)
-     - 00:02.216
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_pexrav_compton_hump.py` (``plot_xray_pexrav_compton_hump.py``)
-     - 00:01.476
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_xray_plot_xray_agn.py` (``plot_xray_agn.py``)
-     - 00:01.286
+     - 00:01.006
      - 0.0
    * - :ref:`sphx_glr_auto_examples_xray_plot_xray_nh_sweep.py` (``plot_xray_nh_sweep.py``)
-     - 00:01.070
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_xray_plot_alpha_ox_relations.py` (``plot_alpha_ox_relations.py``)
-     - 00:00.943
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_component_decomposition.py` (``plot_xray_component_decomposition.py``)
-     - 00:00.903
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_sf.py` (``plot_xray_sf.py``)
-     - 00:00.807
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_xray_plot_alpha_ox_sweep.py` (``plot_alpha_ox_sweep.py``)
-     - 00:00.664
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_xray_plot_compton_thick_vs_thin.py` (``plot_compton_thick_vs_thin.py``)
-     - 00:00.624
+     - 00:00.681
      - 0.0
    * - :ref:`sphx_glr_auto_examples_xray_plot_E_cut_sweep.py` (``plot_E_cut_sweep.py``)
-     - 00:00.575
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_xray_plot_alpha_ox_relations.py` (``plot_alpha_ox_relations.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_xray_plot_alpha_ox_sweep.py` (``plot_alpha_ox_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_xray_plot_compton_thick_vs_thin.py` (``plot_compton_thick_vs_thin.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_alpha_ox_nh.py` (``plot_xray_alpha_ox_nh.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_component_decomposition.py` (``plot_xray_component_decomposition.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_delta_alpha_ox_sed.py` (``plot_xray_delta_alpha_ox_sed.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_xray_plot_xray_gamma_sweep.py` (``plot_xray_gamma_sweep.py``)
-     - 00:00.526
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_pexrav_compton_hump.py` (``plot_xray_pexrav_compton_hump.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_sf.py` (``plot_xray_sf.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_vs_agn_lbol.py` (``plot_xray_vs_agn_lbol.py``)
+     - 00:00.000
      - 0.0

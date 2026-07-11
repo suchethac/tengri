@@ -37,7 +37,6 @@ This sweep reproduces the spectral evolution behind Matsumoto+2026
 Figure 11 (hardness-ratio model tracks) for log N_H from 20 to 25.
 
 References
-
 ----------
 - Ricci et al. 2017, Nature 549, 488 (zphabs × cabs × cut-off PL +
   scattered component spectral model).
@@ -45,7 +44,7 @@ References
   selected obscured AGN at z > 3).
 - Morrison & McCammon 1983, ApJ 270, 119 (photoelectric cross-sections).
 
-.. GENERATED FROM PYTHON SOURCE LINES 29-126
+.. GENERATED FROM PYTHON SOURCE LINES 28-125
 
 
 

@@ -18,7 +18,6 @@ using integration of the recovered SFH and photometric predictions,
 reproducing Fig. 4 of Conroy 2013's review.
 
 References
-
 ----------
 .. [1] Bell, A. R., & de Jong, R. S. 2001, ApJ, 550, 212
    "An Estimate of the Reddening Map from Galaxies in the 2MASS All-Sky

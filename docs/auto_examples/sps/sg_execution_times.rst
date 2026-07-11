@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.629** total execution time for 17 files **from auto_examples/sps**:
+**00:01.097** total execution time for 17 files **from auto_examples/sps**:
 
 .. container::
 
@@ -32,8 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_band_comparison.py` (``plot_mass_to_light_band_comparison.py``)
+     - 00:01.097
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_age_metallicity_color_grid.py` (``plot_age_metallicity_color_grid.py``)
-     - 00:01.629
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_alpha_enhanced_population.py` (``plot_alpha_enhanced_population.py``)
      - 00:00.000
@@ -51,9 +54,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_ionizing_lum.py` (``plot_ionizing_lum.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_band_comparison.py` (``plot_mass_to_light_band_comparison.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_ratios.py` (``plot_mass_to_light_ratios.py``)

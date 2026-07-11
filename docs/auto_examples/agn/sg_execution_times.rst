@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:02.869** total execution time for 48 files **from auto_examples/agn**:
+**00:05.678** total execution time for 48 files **from auto_examples/agn**:
 
 .. container::
 
@@ -32,8 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_agn_plot_smbh_growth_track.py` (``plot_smbh_growth_track.py``)
-     - 00:02.869
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_host_decomposition.py` (``plot_agn_host_decomposition.py``)
+     - 00:05.678
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py` (``plot_agn_alpha_ox_lbol_2d.py``)
      - 00:00.000
@@ -54,9 +54,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_hierarchy.py` (``plot_agn_hierarchy.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_host_decomposition.py` (``plot_agn_host_decomposition.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_lines_compare.py` (``plot_agn_lines_compare.py``)
@@ -159,6 +156,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_slone_netzer_disc_sweep.py` (``plot_slone_netzer_disc_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_smbh_growth_track.py` (``plot_smbh_growth_track.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_torus_library_inclination_grid.py` (``plot_torus_library_inclination_grid.py``)
