@@ -15,7 +15,7 @@ the shipped data): NLR ``analytic``/``feltre``, BLR ``grahsp``/
 ``qsogen``, Fe II ``boroson_green``/``qsogen_balmer``. The
 ``synthesizer`` NLR/BLR grids need an external data bundle not shipped
 with the gallery, and the ``cue`` NLR backbone is omitted here (its
-line normalisation is under review, see the tracked issue).
+line normalization is under review, see the tracked issue).
 """
 
 import os

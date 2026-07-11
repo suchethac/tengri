@@ -50,7 +50,7 @@ def parametric_spec():
     """Parametric tsnorm spec (no GP field)."""
     return Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(9.0, 12.0),  # galaxy-scale log10(M*/Msun)
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -68,7 +68,7 @@ def stochastic_spec():
     """Stochastic tsnorm + field spec."""
     return Parameters(
         mean_sfh_type=["tsnorm", "field"],
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(9.0, 12.0),  # galaxy-scale log10(M*/Msun)
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -92,7 +92,7 @@ def dpl_spec():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(9.0, 12.0),  # galaxy-scale log10(M*/Msun)
         met_logzsol=Uniform(-1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=Uniform(0.0, 2.0),
@@ -547,10 +547,33 @@ class TestDustEmissionForwardModel:
         )
         model_no = SEDModel(spec_no, ssp, filters=filters, precompute=False)
 
-        sed_em = model.predict_rest_sed(params_em).sed
-        sed_no = model_no.predict_rest_sed({}).sed
-        max_diff = float(jnp.max(sed_em - sed_no))
-        assert max_diff > 0, "Dust emission should add positive flux somewhere"
+        em = model.predict_rest_sed(params_em)
+        no = model_no.predict_rest_sed({})
+
+        # The two models do NOT share a wavelength grid. An analytic dust-emission
+        # model extends the rest grid into the far-IR so submm photometry is
+        # integrable (#1005), so ``model`` carries several hundred extra points
+        # beyond the SSP's red edge. Subtracting the raw arrays raised "sub got
+        # incompatible shapes" (#1031) — the comparison has to happen on a common
+        # grid. Project the no-emission SED onto the emission grid; beyond its red
+        # edge there is no stellar flux to compare against, so the excess there is
+        # the dust emission itself.
+        no_on_em = jnp.interp(em.wavelength, no.wavelength, no.sed, left=0.0, right=0.0)
+        excess = em.sed - no_on_em
+        assert float(jnp.max(excess)) > 0, "Dust emission should add positive flux somewhere"
+
+        # ...and the added energy must be thermal grain re-emission in the IR, not
+        # extra optical light. A shape-blind ``max(excess) > 0`` would have passed
+        # even if the excess had landed in the optical.
+        ir = em.wavelength > 1.0e5  # > 10 um
+        optical = (em.wavelength > 4000.0) & (em.wavelength < 7000.0)
+        assert float(jnp.max(excess[ir])) > float(jnp.max(jnp.abs(excess[optical])))
+
+        # End-to-end: the mid-IR band actually brightens. wise_w3 (12 um) sits on
+        # the warm-dust bump; sdss_r does not.
+        f_em = model.predict_photometry(params_em)
+        f_no = model_no.predict_photometry({})
+        assert float(f_em[1]) > float(f_no[1]), "wise_w3 must brighten with dust emission"
 
     def test_dust_emission_gradient(self, ssp):
         from tengri.parameters.priors import Fixed

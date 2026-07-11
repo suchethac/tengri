@@ -259,23 +259,6 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="agn={&quot;feii&quot;: {&quot;type&quot;: &quot;boroson_green&quot;}} adds the empirical Boroson &amp; Green (1992) Fe II pseudo-continuum to a composable AGN — the broad iron-line blanket that fills the 2200–3000 Å and 4400–4700 Å windows of type-1 quasars. Its amplitude is set by agn_fe2_strength (the standard R_{\rm Fe} ratio of Fe II to broad H\ \beta).">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_boroson_green_feii_template_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_boroson_green_feii_template`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Boroson & Green (1992) Fe II template: the optical/UV iron blanket</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The CAT3D-Wind torus (Hönig &amp; Kishimoto 2017) splits the circumnuclear dust into a mid-plane clumpy disc plus a polar outflow (&quot;wind&quot;). Its infrared reprocessing is controlled by three observables: the wind mass fraction fwd, the radial cloud-distribution index a, and the viewing angle cos i.">
 
 .. only:: html
@@ -407,23 +390,6 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">GRAHSP Fig. 1 reproduction: panchromatic AGN + host overview</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Faithful reproduction of Fig. 3 of Buchner et al. (2024, GRAHSP), showing how the 15 AGN parameters configure the spectrum in L_\lambda (arbitrary units). The bending power-law BBB (blue) is normalized at 5100 Å with optical slope \beta, bending at \lambda_{\rm bend} (width W_{\rm bend}) to the UV slope \beta_{\rm UV}. Emission lines (light red) of width W_{\rm lines} and an FeII forest (dark red) are scaled by A_{\rm lines} / A_{\rm FeII}. The log-Gaussian torus (dark yellow) has cool/hot components at \lambda_{\rm cool}/\lambda_{\rm hot} (widths W_{\rm cool}/W_{\rm hot}), peak ratio f_{\rm hot}, 12 µm normalization f_{\rm cov}, and silicate depth Si (here −1, absorption; dotted). Component colors map to the GRAHSP/pcigale modules activatepl (BBB), activategtorus (torus), and activatelines (lines + FeII).">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_grahsp_paper_fig3_params_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_grahsp_paper_fig3_params`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">GRAHSP Fig. 3 reproduction: AGN model parameter map</div>
     </div>
 
 
@@ -599,23 +565,6 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The SKIRTOR_mean_3p torus is the Stalevski+2016 clumpy two-phase torus library averaged over its clumpiness parameters, as packaged by AGNfitter-rX. Three observables remain: the half-opening angle oa, the equatorial optical depth tau_V, and the inclination incl.">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_agnfitter_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_skirtor_agnfitter_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">SKIRTOR_mean_3p torus: optical depth and inclination</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="SKIRTOR (Stalevski et al. 2016) is a clumpy radiative transfer torus model with a three-dimensional parameter space (half-opening angle, inclination, optical depth). Two different implementations exist in tengri:">
 
 .. only:: html
@@ -645,23 +594,6 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">SKIRTOR AGN torus: inclination-dependent obscuration and silicate features</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The SKIRTOR clumpy torus model (Stalevski et al. 2016) emits thermal IR radiation that depends strongly on two parameters: viewing angle (inclination θ via cos_inc) and optical depth (``tau_97`` at 9.7 μm). Face-on systems show a smooth thermal continuum; edge-on systems develop deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_variants_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_skirtor_variants`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">SKIRTOR torus: viewing angle and optical depth effects</div>
     </div>
 
 
@@ -842,7 +774,6 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
    /auto_examples/agn/plot_agn_torus_compare
    /auto_examples/agn/plot_alpha_ox_lusso_risaliti
    /auto_examples/agn/plot_alpha_ox_uv_xray_connection
-   /auto_examples/agn/plot_boroson_green_feii_template
    /auto_examples/agn/plot_cat3d_wind_sweep
    /auto_examples/agn/plot_composable_block_toggles
    /auto_examples/agn/plot_composable_recipes
@@ -851,7 +782,6 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
    /auto_examples/agn/plot_grahsp_disc_vs_bbb
    /auto_examples/agn/plot_grahsp_feii_templates
    /auto_examples/agn/plot_grahsp_paper_fig1_overview
-   /auto_examples/agn/plot_grahsp_paper_fig3_params
    /auto_examples/agn/plot_grahsp_paper_fig9_agn_attenuation
    /auto_examples/agn/plot_grahsp_torus_modes
    /auto_examples/agn/plot_kd18_disc_sweep
@@ -862,10 +792,8 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
    /auto_examples/agn/plot_richards2006_template
    /auto_examples/agn/plot_seyfert_quasar_blazar_archetypes
    /auto_examples/agn/plot_silva04_nh_sweep
-   /auto_examples/agn/plot_skirtor_agnfitter_sweep
    /auto_examples/agn/plot_skirtor_agnfitter_vs_cigale
    /auto_examples/agn/plot_skirtor_inclination_sweep
-   /auto_examples/agn/plot_skirtor_variants
    /auto_examples/agn/plot_skirtor_vs_smooth_torus
    /auto_examples/agn/plot_skirtor_xcigale_sweep
    /auto_examples/agn/plot_slone_netzer_disc_sweep

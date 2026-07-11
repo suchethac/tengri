@@ -128,7 +128,7 @@ def plot_calibration(
 
     The calibration polynomial :math:`C(\\lambda)` rescales the observed
     spectrum to absorb instrumental flux-calibration drifts. When the
-    posterior includes Chebyshev coefficients (``cal_c0``, ``cal_c1``, ...),
+    posterior includes Chebyshev coefficients (``cal_c1``, ``cal_c2``, ...),
     we evaluate the polynomial for every draw and plot the median + the
     16/84 percentile band.
 
@@ -164,7 +164,7 @@ def plot_calibration(
     )
     if not coeff_names:
         raise KeyError(
-            "No Chebyshev calibration coefficients (cal_c0, cal_c1, ...) "
+            "No Chebyshev calibration coefficients (cal_c1, cal_c2, ...) "
             "found in posterior.samples. plot_calibration requires a fit "
             "with calibration enabled."
         )
@@ -179,10 +179,15 @@ def plot_calibration(
             ) from err
 
     coeffs = np.stack([np.asarray(posterior.samples[n]) for n in coeff_names], axis=1)
+    # Prepend the fixed constant term (c_0 = 1) to the free coefficients.
+    # The Chebyshev polynomial is C(λ) = c_0*T_0(x) + c_1*T_1(x) + c_2*T_2(x) + ...
+    # where c_0 = 1 is fixed (degenerate with overall normalization).
+    # numpy.polynomial.chebyshev.chebval expects coefficients in this order.
+    coeffs_with_const = np.concatenate([np.ones((coeffs.shape[0], 1)), coeffs], axis=1)
     # Chebyshev domain mapped to [-1, +1] over the observed wavelength range.
     lam_min, lam_max = wave_aa.min(), wave_aa.max()
     x = 2.0 * (wave_aa - lam_min) / (lam_max - lam_min) - 1.0
-    poly_draws = np.polynomial.chebyshev.chebval(x, coeffs.T)  # (n_draws, n_wave)
+    poly_draws = np.polynomial.chebyshev.chebval(x, coeffs_with_const.T)  # (n_draws, n_wave)
 
     lo, hi = np.percentile(poly_draws, ci_levels, axis=0)
     if color is None:

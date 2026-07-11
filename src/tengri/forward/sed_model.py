@@ -722,6 +722,15 @@ class SEDModel:
         # ── Instrument (velocity dispersion, LSF) ─────────────────
         self._init_instrument(spec, observation)
 
+        # ── Observation calibration coefficients ──────────────────
+        # ``cal_c1..cN`` are dynamic — their count is the spectroscopy
+        # ``calibration_order`` — so, unlike the static noise params, they cannot
+        # be declared in a ``components/*/_params.py`` that ``_build_param_map``
+        # auto-derives. They are consumed as-is by the calibration polynomial, so
+        # register plain identity mappings here (#1031: previously the auto-merged
+        # ``cal_c*`` were free in the spec with no map entry → ParameterMapError).
+        param_map_deltas.append(self._calibration_param_map(observation))
+
         # ── Cosmology (luminosity distance) ───────────────────────
         self._init_cosmology(spec)
 
@@ -1709,6 +1718,20 @@ class SEDModel:
         self._shock_component = getattr(spec, "shock_component", "combined")
 
         return delta
+
+    @staticmethod
+    def _calibration_param_map(observation):
+        """Identity param-map entries for spectroscopic calibration coefficients.
+
+        Returns ``{cal_cN: (cal_cN, 1.0, 0.0)}`` for each coefficient the
+        spectroscopy config declares (``calibration_order`` of them); empty when
+        there is no spectroscopy or no calibration. The polynomial consumes the
+        coefficients directly, so the mapping is a pure identity.
+        """
+        if observation is None or not observation.can_do_spectroscopy:
+            return {}
+        cal_params = observation.spectroscopy.get_calibration_params()
+        return {name: (name, 1.0, 0.0) for name in cal_params}
 
     def _init_instrument(self, spec, observation):
         """Configure velocity dispersion and LSF settings."""
@@ -2734,10 +2757,18 @@ class SEDModel:
             spec_wave_shape = tuple(self.observation.spectroscopy.wave_obs.shape)
             sigma_lib_kms = float(self._sigma_lib_kms)
             lsf_resolution = self._lsf_resolution
+            # The calibration order is structural: the compiled kernel closes over
+            # an ``Observation`` whose projector reads ``cal_c1..cN`` out of the
+            # param dict. Two models differing ONLY in ``calibration_order`` must
+            # not share a cache slot — the second would inherit the first's
+            # coefficient lookup and either apply a calibration it was never given
+            # or raise ``KeyError: 'cal_c1'`` on a dict that rightly has no such key.
+            calibration_order = int(self.observation.spectroscopy.calibration_order)
         else:
             spec_wave_shape = ()
             sigma_lib_kms = 0.0
             lsf_resolution = None
+            calibration_order = 0
 
         # CSP integration method
         csp_integration = str(self._csp_integration)
@@ -2888,6 +2919,7 @@ class SEDModel:
             spec_wave_shape,
             sigma_lib_kms,
             lsf_resolution,
+            calibration_order,
             csp_integration,
             forward_dtype,
             met_interp,
@@ -3174,6 +3206,8 @@ class SEDModel:
         sigma_lib_kms = (
             getattr(spectroscopy, "sigma_lib_kms", 0.0) if spectroscopy is not None else 0.0
         )
+        cal_coeffs = spectroscopy.calibration_coeffs(params) if spectroscopy is not None else None
+        cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
 
         flux = project_spectrum(
             sed_obs.sed,
@@ -3184,6 +3218,8 @@ class SEDModel:
             resolution=resolution,
             sigma_lib_kms=sigma_lib_kms,
             sigma_v_kms=params.get("sigma_v_kms", 0.0),
+            cal_coeffs=cal_coeffs,
+            cal_wave_range=cal_wave_range,
         )
         return flux
 

@@ -312,6 +312,51 @@ class Spectroscopy:
             return {}
         return {f"cal_c{i + 1}": Gaussian(0.0, 0.1) for i in range(self.calibration_order)}
 
+    def calibration_coeffs(self, params) -> jnp.ndarray | None:
+        """Extract calibration coefficients from parameter dict.
+
+        Returns
+        -------
+        ndarray, shape (calibration_order,), or None
+            Chebyshev polynomial coefficients ``[c_1, c_2, ..., c_N]``,
+            extracted from ``params["cal_c1"]``, ..., ``params["cal_cN"]``.
+            Returns ``None`` when ``calibration_order == 0``.
+
+        Notes
+        -----
+        Keys are constructed with the same f-string shape as
+        :meth:`get_calibration_params` to prevent drift.
+
+        """
+        if self.calibration_order == 0:
+            return None
+        return jnp.asarray([params[f"cal_c{i + 1}"] for i in range(self.calibration_order)])
+
+    @property
+    def calibration_wave_range(self):
+        """Wavelength range anchoring the calibration polynomial to [-1, 1].
+
+        Returns
+        -------
+        tuple of scalar
+            ``(wave_min, wave_max)`` [Angstrom] of the configured ``wave_obs``.
+
+        Notes
+        -----
+        **JIT-compatible**: yes. The bounds are returned as JAX scalars, never
+        Python floats: ``Spectroscopy`` is a pytree, so ``wave_obs`` is a tracer
+        inside ``predict_observables_jit`` and ``float()`` on it would raise
+        ``ConcretizationTypeError``. They are only ever consumed arithmetically
+        (by :func:`~tengri.observation.calibration.calibration_polynomial`), so
+        tracers are fine.
+
+        The polynomial is normalized to the *configured instrument* grid, not to
+        whatever grid a caller passes, so a given ``cal_cN`` keeps the same
+        meaning when the model is evaluated on a custom ``wave_obs``.
+
+        """
+        return (self.wave_obs.min(), self.wave_obs.max())
+
     # ── Instrument factories ──────────────────────────────────────
 
     @staticmethod
