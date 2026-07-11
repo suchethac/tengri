@@ -46,7 +46,11 @@ htmlcov/
 data/cloudy_raw/*.cont
 data/cloudy_raw/*.lines
 data/dl07_raw/
+data/dl07_raw
 data/dl14_raw/
+data/dl14_raw
+data/synthesizer_grids/
+data/synthesizer_grids
 data/*.h5
 !data/skirtor_templates_v3.h5
 !data/nthcomp_templates.h5
