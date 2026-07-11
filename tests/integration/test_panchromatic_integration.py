@@ -96,10 +96,14 @@ class TestFullPanchromaticSED:
         """Dusty star-forming galaxy: DPL SFH + dust + MBB emission + AGN."""
         spec = Parameters(
             mean_sfh_type="dpl",
+            # Free by default in the flat form (it carries a registry prior), but never
+            # varied here. Pin it at the registry default -- the value the forward model
+            # silently substituted before #1015 made the omission a loud error (#1021).
+            sfh_dpl_age_gyr=Fixed(13.81),
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_total_mass=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(10.5),  # 3.2e10 Msun; was Fixed(1.0) = a 10 Msun 'galaxy'
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
@@ -146,52 +150,48 @@ class TestFullPanchromaticSED:
                 f"Band {i}: flux={f:.2e} outside physical range [1e-35, 1e-20]"
             )
 
-    def test_dust_emission_adds_ir(self, dusty_sfg_model, dusty_params):
-        """WISE W3 (12μm) and W4 (22μm) must be enhanced by dust emission."""
-        phot_with = dusty_sfg_model.predict_photometry(dusty_params)
+    def test_dust_emission_adds_ir(self, ssp, wide_filters):
+        """WISE W4 (22 um) must be enhanced by dust emission.
 
-        # Build same model without dust emission for comparison
-        spec_no_de = Parameters(
-            mean_sfh_type="dpl",
-            sfh_dpl_alpha=Fixed(2.0),
-            sfh_dpl_beta=Fixed(1.5),
-            sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_total_mass=Fixed(1.0),
-            met_logzsol=Fixed(-0.3),
-            dust_tau_bc=Fixed(1.0),
-            dust_tau_diff=Fixed(0.5),
-            dust_slope=Fixed(-0.7),
-            agn_model="multicolor_agn",
-            agn_log_lbol=Fixed(10.5),
-            agn_torus_frac=Fixed(0.5),
-            redshift=0.1,
-        )
-        model_no_de = SEDModel(
-            spec_no_de,
-            dusty_sfg_model.ssp_data,
-            filters=load_filter_set(
-                [
-                    "galex_fuv",
-                    "galex_nuv",
-                    "sdss_u",
-                    "sdss_g",
-                    "sdss_r",
-                    "sdss_i",
-                    "sdss_z",
-                    "2mass_j",
-                    "2mass_h",
-                    "2mass_ks",
-                    "wise_w1",
-                    "wise_w2",
-                    "wise_w3",
-                    "wise_w4",
-                ]
-            ),
-            precompute=False,
-        )
-        phot_no = model_no_de.predict_photometry({})
+        Both models here are AGN-FREE, deliberately. The class fixture carries a
+        multicolor AGN at ``agn_log_lbol=10.5`` whose torus dominates the mid-IR, and
+        against it the modified blackbody is invisible: measured W4 ratio 1.002 with
+        the AGN versus 1.287 without. Comparing with/without dust emission in a band
+        the AGN owns measures the AGN, not the dust.
 
-        # W4 (index 13) should show significant dust emission enhancement
+        W3 (12 um) is not asserted either. A 35 K modified blackbody peaks near 80 um
+        and contributes essentially nothing at 12 um rest -- the ratio there is 1.000
+        even with no AGN at all. The old docstring claimed both bands must brighten;
+        only W4 ever could.
+        """
+
+        def _spec(dust_emission: str | None):
+            kw = dict(
+                mean_sfh_type="dpl",
+                sfh_dpl_age_gyr=Fixed(13.81),  # see #1021 note above
+                sfh_dpl_alpha=Fixed(2.0),
+                sfh_dpl_beta=Fixed(1.5),
+                sfh_dpl_tau_gyr=Fixed(5.0),
+                sfh_dpl_log_total_mass=Fixed(10.5),
+                met_logzsol=Fixed(-0.3),
+                dust_tau_bc=Fixed(1.0),
+                dust_tau_diff=Fixed(0.5),
+                dust_slope=Fixed(-0.7),
+                redshift=0.1,
+            )
+            if dust_emission is not None:
+                kw["dust_emission"] = dust_emission
+            return Parameters(**kw)
+
+        model_de = SEDModel(
+            _spec("modified_blackbody"), ssp, filters=wide_filters, precompute=False
+        )
+        model_no = SEDModel(_spec(None), ssp, filters=wide_filters, precompute=False)
+
+        phot_with = model_de.predict_photometry({"dust_T": 35.0, "dust_beta_ir": 1.6})
+        phot_no = model_no.predict_photometry({})
+
+        # W4 is index 13 in wide_filters
         w4_ratio = float(phot_with[13] / phot_no[13])
         assert w4_ratio > 1.1, f"W4 dust emission ratio {w4_ratio:.2f}, expected > 1.1"
 
@@ -199,10 +199,14 @@ class TestFullPanchromaticSED:
         """AGN component must boost FUV and MIR relative to stellar-only."""
         spec_stellar = Parameters(
             mean_sfh_type="dpl",
+            # Free by default in the flat form (it carries a registry prior), but never
+            # varied here. Pin it at the registry default -- the value the forward model
+            # silently substituted before #1015 made the omission a loud error (#1021).
+            sfh_dpl_age_gyr=Fixed(13.81),
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_total_mass=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(10.5),  # 3.2e10 Msun; was Fixed(1.0) = a 10 Msun 'galaxy'
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),
             dust_tau_diff=Fixed(0.2),
@@ -213,10 +217,14 @@ class TestFullPanchromaticSED:
 
         spec_agn = Parameters(
             mean_sfh_type="dpl",
+            # Free by default in the flat form (it carries a registry prior), but never
+            # varied here. Pin it at the registry default -- the value the forward model
+            # silently substituted before #1015 made the omission a loud error (#1021).
+            sfh_dpl_age_gyr=Fixed(13.81),
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_total_mass=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(10.5),  # 3.2e10 Msun; was Fixed(1.0) = a 10 Msun 'galaxy'
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),
             dust_tau_diff=Fixed(0.2),
@@ -621,7 +629,13 @@ class TestDerivedQuantityRanges:
         """
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_total_mass=Fixed(0.3),  # SFR ~ 2 Msun/yr
+            # log_total_mass is log10(TOTAL MASS FORMED / Msun), NOT an SFR. The old
+            # Fixed(0.3) declared a 2 Msun galaxy (10**0.3) while the tests below
+            # asserted M* ~ 2.6e10 -- so test_stellar_mass read back exactly 2.00e+00
+            # and test_sfr read 0.00. For SFR 2 Msun/yr over 13 Gyr:
+            # M_formed = 2 * 13e9 = 2.6e10 -> log10 = 10.41. (The same slip was already
+            # fixed for the radio/X-ray fixture below, which carries the same note.)
+            sfh_const_log_total_mass=Fixed(10.41),
             sfh_const_start_gyr=Fixed(13.0),  # SF began 13 Gyr ago
             sfh_const_end_gyr=Fixed(0.0),  # SF ongoing (0 = now)
             met_logzsol=Fixed(0.0),
@@ -731,10 +745,14 @@ class TestGradientFlowComplete:
         """Gradient of r-band flux w.r.t. dust temperature must be finite."""
         spec = Parameters(
             mean_sfh_type="dpl",
+            # Free by default in the flat form (it carries a registry prior), but never
+            # varied here. Pin it at the registry default -- the value the forward model
+            # silently substituted before #1015 made the omission a loud error (#1021).
+            sfh_dpl_age_gyr=Fixed(13.81),
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_total_mass=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(10.5),  # 3.2e10 Msun; was Fixed(1.0) = a 10 Msun 'galaxy'
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
@@ -802,10 +820,14 @@ class TestExactVsPrecomputed:
 
         spec = Parameters(
             mean_sfh_type="dpl",
+            # Free by default in the flat form (it carries a registry prior), but never
+            # varied here. Pin it at the registry default -- the value the forward model
+            # silently substituted before #1015 made the omission a loud error (#1021).
+            sfh_dpl_age_gyr=Fixed(13.81),
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_total_mass=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(10.5),  # 3.2e10 Msun; was Fixed(1.0) = a 10 Msun 'galaxy'
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.5),
             dust_tau_diff=Fixed(0.3),
