@@ -283,13 +283,32 @@ class TestTotalDPL:
         )
         assert jnp.allclose(total, sf + agn, rtol=1e-10), "Total should be sum of SF + AGN DPL"
 
-    def test_only_radio_wavelengths(self):
-        """Emission should be zero outside radio band."""
-        # Optical/IR wavelengths (1000 A to 10 um = 1e5 A)
-        wave_optical = jnp.logspace(3.0, 5.0, 50)
-        L = radio_agn_dpl(wave_optical, _L_AGN_BOL, radio_loudness=2.0)
-        assert jnp.all(L == 0.0), "Should have zero emission at optical/IR wavelengths"
-        # Radio wavelengths should have nonzero emission
-        wave_radio = jnp.array([_C_AA / 1.4e9])  # 1.4 GHz
-        L_radio = radio_agn_dpl(wave_radio, _L_AGN_BOL, radio_loudness=2.0)
-        assert float(L_radio[0]) > 0.0, "Should have nonzero emission at radio wavelengths"
+    def test_jet_rolls_over_blueward_of_the_aging_cutoff(self):
+        """The jet peaks in the radio and dies off blueward via ``exp(-nu/nu_cut)``.
+
+        The jet is *not* truncated at any wavelength: an AGN jet extends into the
+        sub-mm/IR, and the synchrotron-aging cutoff (``log_nu_cut``, 10 THz) is what
+        rolls it over. So the physical contract is a steep blueward decline to
+        numerical insignificance, not a hard zero (see the #1071 regression test,
+        ``tests/regression/bug/test_agn_jet_radio_cutoff.py``).
+        """
+        L_radio = float(
+            radio_agn_dpl(jnp.array([_C_AA / 1.4e9]), _L_AGN_BOL, radio_loudness=2.0)[0]
+        )
+        assert L_radio > 0.0, "Should have nonzero emission at radio wavelengths"
+
+        # Monotonically decreasing blueward (toward higher frequency), never negative.
+        wave_down = jnp.logspace(9.0, 4.0, 60)  # 30 cm -> 1 um
+        L_down = radio_agn_dpl(wave_down, _L_AGN_BOL, radio_loudness=2.0)
+        chex.assert_tree_all_finite(L_down)
+        assert jnp.all(L_down >= 0.0), "Jet emission must be non-negative"
+        assert jnp.all(jnp.diff(L_down) <= 0.0), (
+            "Jet must decline monotonically blueward of the radio peak"
+        )
+
+        # By 1 um the aging cutoff has suppressed the jet into insignificance.
+        L_nir = float(radio_agn_dpl(jnp.array([1e4]), _L_AGN_BOL, radio_loudness=2.0)[0])
+        assert L_nir / L_radio < 1e-10, (
+            f"Jet at 1 um is {L_nir / L_radio:.2e} of its 1.4 GHz value — the aging "
+            "cutoff should render it negligible in the near-IR/optical"
+        )

@@ -193,17 +193,22 @@ def test_radio_adds_long_wavelength_emission(wave_uv_to_radio, agn_lbol_physical
         radio_alpha_agn=0.7,
     )
 
-    # Radio mask boundary: λ > 1e7 Å (1 mm)
+    # At radio wavelengths (λ > 1 mm) the SED must be brighter.
     radio_mask = wave_uv_to_radio > 1e7
-    ir_mask = wave_uv_to_radio <= 1e7
-
-    # At radio wavelengths, the new SED should be brighter
     sed_diff_radio = sed_with_radio[radio_mask] - sed_no_radio[radio_mask]
     assert jnp.any(sed_diff_radio > 0.0), "Radio component should add positive flux at λ > 1 mm"
 
-    # At IR wavelengths, SED should be unchanged (radio is longward)
-    assert jnp.allclose(sed_with_radio[ir_mask], sed_no_radio[ir_mask], rtol=1e-14), (
-        "Radio component leaked into IR wavelengths."
+    # Blueward, the jet is governed by its synchrotron-aging cutoff (10 THz, ~30 um),
+    # NOT by a hard wavelength floor (#1071). It therefore contributes a little in the
+    # sub-mm and essentially nothing in the near/mid-IR, where the torus dust dominates
+    # by many orders of magnitude. Assert that: negligible shortward of 10 um.
+    nir_mask = wave_uv_to_radio <= 1e5  # λ ≤ 10 um
+    frac_change = jnp.abs(sed_with_radio[nir_mask] - sed_no_radio[nir_mask]) / jnp.maximum(
+        sed_no_radio[nir_mask], 1e-300
+    )
+    assert float(jnp.max(frac_change)) < 1e-3, (
+        f"AGN jet contributes {float(jnp.max(frac_change)):.2e} of the SED shortward of "
+        "10 um — the aging cutoff should make it negligible against the torus there"
     )
 
 
