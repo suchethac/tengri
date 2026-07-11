@@ -1702,6 +1702,95 @@ class IonizingProperties(_CachedBase):
         return compute_ionizing_efficiency(q_h, l_uv)
 
 
+# ── Property catalog accessor ────────────────────────────────────
+
+
+class PropertyCatalog:
+    """View of computed properties with dict-like and attribute access.
+
+    A PropertyCatalog is a dict-like accessor bound to a Prediction that
+    lazily evaluates each property from the cached ForwardState. It
+    implements ``__getitem__``, ``__contains__``, iteration, and
+    ``to_dict(names=...)`` for batch export.
+
+    Parameters
+    ----------
+    prediction : Prediction
+        Parent Prediction object (which caches the ForwardState and params).
+
+    Attributes
+    ----------
+    _prediction : Prediction
+        Reference to parent Prediction instance.
+    """
+
+    def __init__(self, prediction):
+        """Initialize the catalog bound to a Prediction."""
+        object.__setattr__(self, "_prediction", prediction)
+
+    def __getitem__(self, name: str):
+        """Access a property by name (dict-like syntax).
+
+        Parameters
+        ----------
+        name : str
+            Property name (e.g., ``"stellar_mass"``).
+
+        Returns
+        -------
+        scalar
+            Computed property value.
+
+        Raises
+        ------
+        KeyError
+            If the property is unknown or not available in this model.
+        """
+        pred = object.__getattribute__(self, "_prediction")
+        catalog = pred._model._property_catalog
+        if name not in catalog:
+            available = sorted(catalog.keys())
+            raise KeyError(f"Unknown property {name!r}. Available: {available}")
+        entry = catalog[name]
+        state = pred._ensure_state()
+        return entry.fn(state, pred._params)
+
+    def __contains__(self, name: str) -> bool:
+        """Check if a property is available."""
+        pred = object.__getattribute__(self, "_prediction")
+        return name in pred._model._property_catalog
+
+    def __iter__(self):
+        """Iterate over property names."""
+        pred = object.__getattribute__(self, "_prediction")
+        return iter(sorted(pred._model._property_catalog.keys()))
+
+    def keys(self):
+        """Return property names."""
+        return list(self)
+
+    def to_dict(self, names=None) -> dict:
+        """Export properties as a dict.
+
+        Parameters
+        ----------
+        names : tuple[str] or list[str], optional
+            Property names to export. If None, exports all available.
+
+        Returns
+        -------
+        dict[str, scalar]
+            Mapping of name → computed value.
+        """
+        if names is None:
+            names = list(self)
+        return {name: self[name] for name in names}
+
+    def __setattr__(self, name, value):
+        """Prevent attribute assignment."""
+        raise AttributeError("PropertyCatalog is read-only")
+
+
 # ── Main Prediction class ─────────────────────────────────────────
 
 
@@ -1780,7 +1869,18 @@ class Prediction:
     >>> sfh_batch = jax.vmap(model.predict_sfh_quantities)(params_batch)
     """
 
-    __slots__ = ("_cache", "_model", "_params", "ionizing", "lines", "radio", "sed", "sfh", "xray")
+    __slots__ = (
+        "_cache",
+        "_model",
+        "_params",
+        "ionizing",
+        "lines",
+        "properties",
+        "radio",
+        "sed",
+        "sfh",
+        "xray",
+    )
 
     def __init__(self, model, params):
         self._model = model
@@ -1792,6 +1892,96 @@ class Prediction:
         self.radio = RadioProperties(self)
         self.xray = XRayProperties(self)
         self.ionizing = IonizingProperties(self)
+        self.properties = PropertyCatalog(self)
+
+    def __getattr__(self, name: str):
+        """Attribute-access sugar for derived properties.
+
+        Supports ``pred.stellar_mass`` as a shorthand for
+        ``pred.properties["stellar_mass"]``. Falls back to AttributeError
+        if the name is not in the property catalog.
+
+        Parameters
+        ----------
+        name : str
+            Property name.
+
+        Returns
+        -------
+        scalar
+            Computed property value from the property catalog.
+
+        Raises
+        ------
+        AttributeError
+            If the name is not a known property, with a message listing
+            available properties.
+
+        Notes
+        -----
+        This method is only called when standard attribute lookup fails,
+        so it cannot shadow normal attributes like ``_model``, ``_params``,
+        or the ``sfh``/``sed``/``lines`` groups (which are set in __init__).
+        """
+        # Avoid infinite recursion by checking if we're still initializing
+        if name.startswith("_"):
+            raise AttributeError(f"No attribute '{name}'")
+        try:
+            properties = object.__getattribute__(self, "properties")
+            if name in properties:
+                return properties[name]
+        except AttributeError:
+            pass
+        # Not a property — raise AttributeError
+        props = object.__getattribute__(self, "properties")
+        available = sorted(props.keys()) if props else []
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'. "
+            f"Available properties: {available}"
+        )
+
+    def __dir__(self) -> list[str]:
+        """Include property names in tab completion and dir().
+
+        Returns
+        -------
+        list[str]
+            All normal attributes plus property catalog names for autocomplete.
+        """
+        base = [
+            "_cache",
+            "_model",
+            "_params",
+            "ionizing",
+            "lines",
+            "properties",
+            "radio",
+            "sed",
+            "sfh",
+            "xray",
+        ]
+        properties = object.__getattribute__(self, "properties")
+        if properties:
+            base.extend(sorted(properties.keys()))
+        return base
+
+    def __jax_array__(self):
+        """Guard against accidental JIT/vmap tracing of Prediction objects.
+
+        Raises
+        ------
+        TypeError
+            Always — with a message directing users to use
+            ``model.predict_properties(...)``, which is JIT-compatible.
+        """
+        raise TypeError(
+            "Prediction objects are not JIT/vmap-compatible due to Python-level "
+            "caching. For batch computations, use the JIT-compatible methods "
+            "instead: model.predict_properties(params, names=...) for properties, "
+            "model.predict_sfh_quantities(params) for SFH, "
+            "model.predict_sed_quantities(params) for SED, etc. "
+            "These return JAX pytrees suitable for jax.vmap and jax.jit."
+        )
 
     def _ensure_sfh(self):
         """Populate SFH cache (SFR history, age weights, internal params).
@@ -1830,6 +2020,19 @@ class Prediction:
                 "_state": state,
             }
         )
+
+    def _ensure_state(self):
+        """Ensure the ForwardState is cached and return it.
+
+        Returns
+        -------
+        ForwardState
+            The cached orchestrator state, computed on first call to
+            _ensure_sfh and reused by all downstream consumers.
+        """
+        if "_state" not in self._cache:
+            self._ensure_sfh()
+        return self._cache["_state"]
 
     def _ensure_sed(self):
         """Populate SED cache from the orchestrator's ForwardState.

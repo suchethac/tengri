@@ -115,6 +115,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("torus", "nenkova"): frozenset(
         {"agn_fracAGN", "agn_tau", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
     ),
+    ("torus", "nenkova_agnfitter"): frozenset({"agn_cos_inc", "agn_theta_torus"}),
     ("torus", "qsogen"): frozenset(),
     ("torus", "silva04"): frozenset({"agn_cos_inc", "agn_theta_torus"}),
     ("torus", "simple"): frozenset(

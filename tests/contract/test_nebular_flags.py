@@ -25,9 +25,28 @@ class TestNebularFlagConflicts:
         spec = Parameters(nebular_ssp=True)
         assert spec.nebular_mode == "ssp"
 
-    def test_nebular_cloudy_requires_grid_path(self):
+    def test_nebular_cloudy_requires_grid_path(self, monkeypatch):
+        """With no grid discoverable, ``nebular=True`` must fail loudly.
+
+        ``nebular=True`` auto-discovers a default CLOUDY grid when one is on
+        disk (#1015). This test used to assert the error unconditionally, so
+        its outcome depended on whether ``data/cloudy_grid_mist.h5`` happened
+        to exist: it passed on a bare CI runner and failed on any machine with
+        the real grids. Pin the contract instead — when discovery finds
+        nothing, the error names the knob the user has to set.
+        """
+        monkeypatch.setattr(Parameters, "_default_cloudy_grid", lambda self: None)
         with pytest.raises(ValueError, match="cloudy_grid_path"):
             Parameters(nebular=True)
+
+    def test_nebular_cloudy_uses_discovered_default(self, monkeypatch):
+        """When a grid IS discoverable, ``nebular=True`` adopts it (#1015)."""
+        monkeypatch.setattr(
+            Parameters, "_default_cloudy_grid", lambda self: "/discovered/cloudy_grid.h5"
+        )
+        spec = Parameters(nebular=True)
+        assert spec.nebular_mode == "cloudy"
+        assert spec.cloudy_grid_path == "/discovered/cloudy_grid.h5"
 
     def test_nebular_cloudy_with_path(self):
         spec = Parameters(

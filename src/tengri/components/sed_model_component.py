@@ -353,6 +353,22 @@ class SEDModelComponent:
         if "citations" in vars(cls):
             delattr(cls, "citations")
 
+        # Properties: read class attribute (dict of Property objects).
+        # Subclasses declare ``properties = {"name": Property(...), ...}``
+        # to publish derived quantities. ONLY process for concrete classes.
+        if is_concrete:
+            properties_dict = vars(cls).get("properties")
+            if isinstance(properties_dict, dict):
+                # Lazy import to avoid cycles at module load time
+                from tengri.forward.properties import register_properties
+
+                component_name = vars(cls)["name"]
+                register_properties(component_name, properties_dict)
+                # Delete the class attribute so direct access doesn't shadow methods.
+                # ``properties`` came from ``vars(cls)``, so it is on this class and
+                # ``delattr`` cannot raise.
+                delattr(cls, "properties")
+
         # Register by name — ONLY concrete classes that define their OWN ``name``.
         # Abstract authoring bases (e.g. EmissionPort) inherit the default name and
         # must NOT register: they are scaffolds, not dispatchable components.

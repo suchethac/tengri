@@ -347,6 +347,77 @@ class XRaySEDComponent:
         )
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Xray group property registration (Phase 1B)
+# ─────────────────────────────────────────────────────────────────────
+
+_TINY = 1e-30  # Floor for safe division
+
+
+def _l_x_xrb_fn(state, params):
+    """X-ray luminosity from X-ray binaries [erg/s]."""
+    from tengri.utils.sed_quantities import compute_l_x_xrb
+
+    derived = state.derived
+    sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 0.0)))
+    log_mstar = jnp.asarray(derived.get("log_mstar", 0.0))
+    mstar = jnp.power(10.0, log_mstar)
+    return compute_l_x_xrb(sfr, mstar)
+
+
+def _l_x_agn_fn(state, params):
+    """X-ray luminosity from AGN [erg/s]."""
+    from tengri.utils.sed_quantities import compute_l_x_agn
+
+    derived = state.derived
+    L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
+    # Preserve 0 for inactive AGN, not NaN (matches legacy behavior)
+    return jnp.where(L_agn_bol > 0.0, compute_l_x_agn(jnp.maximum(L_agn_bol, _TINY)), 0.0)
+
+
+def _l_x_total_fn(state, params):
+    """Total X-ray luminosity (XRB + AGN) [erg/s]."""
+    from tengri.utils.sed_quantities import compute_l_x_agn, compute_l_x_xrb
+
+    derived = state.derived
+    sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 0.0)))
+    log_mstar = jnp.asarray(derived.get("log_mstar", 0.0))
+    mstar = jnp.power(10.0, log_mstar)
+    l_x_xrb = compute_l_x_xrb(sfr, mstar)
+
+    L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
+    l_x_agn = jnp.where(L_agn_bol > 0.0, compute_l_x_agn(jnp.maximum(L_agn_bol, _TINY)), 0.0)
+    return l_x_xrb + l_x_agn
+
+
+from tengri.forward.properties import Property, register_properties
+
+_XRAY_PROPERTIES = {
+    "l_x_xrb": Property(
+        units="erg/s",
+        group="xray",
+        doc="X-ray luminosity from X-ray binaries",
+        fn=_l_x_xrb_fn,
+    ),
+    "l_x_agn": Property(
+        units="erg/s",
+        group="xray",
+        doc="X-ray luminosity from AGN",
+        fn=_l_x_agn_fn,
+    ),
+    "l_x_total": Property(
+        units="erg/s",
+        group="xray",
+        doc="Total X-ray luminosity (XRB + AGN)",
+        fn=_l_x_total_fn,
+    ),
+}
+
+register_properties("xray", _XRAY_PROPERTIES)
+
+del Property, register_properties, _XRAY_PROPERTIES
+
+
 # Register in the unified component dispatch table so build_components resolves
 # the X-ray component via _resolve_registry_component (single dispatch, #845)
 # instead of importing the class directly.
