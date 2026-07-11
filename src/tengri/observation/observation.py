@@ -1118,6 +1118,26 @@ class Observation:
             igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
             spec_fnu = spec_fnu * igm_factor
 
+        # Flux calibration — the same Chebyshev polynomial the exact path applies
+        # inside ``project_spectrum`` (#1046). The LUT path must apply it itself:
+        # it never calls ``project_spectrum``, so without this a model built with
+        # ``approx=SpectrumPrecomp()`` silently DROPPED its calibration while the
+        # exact model applied it — cal_c* gradients were exactly zero under the
+        # LUT. Same failure as the LUT dropping AGN + nebular (#737/#740): the
+        # speed knob quietly changing the physics.
+        #
+        # Observed frame only. The calibration models the *instrument's* flux
+        # error, which has no meaning for the rest-frame (z=0, 10 pc) spectrum,
+        # so ``spec_rest_fnu`` is deliberately left uncalibrated.
+        cal_coeffs = self.spectroscopy.calibration_coeffs(params)
+        if cal_coeffs is not None:
+            from tengri.observation.calibration import apply_calibration
+
+            wmin, wmax = self.spectroscopy.calibration_wave_range
+            spec_fnu = apply_calibration(
+                spec_fnu, self.spectroscopy.wave_obs, cal_coeffs, wmin, wmax
+            )
+
         out = {"spec_fnu": spec_fnu, "spec_rest_fnu": spec_rest_fnu}
 
         if observables_type is not None:
