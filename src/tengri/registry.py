@@ -1711,6 +1711,91 @@ def list_all() -> dict[str, _RegistryTable]:
     }
 
 
+def list_properties(*, group: str | None = None) -> _RegistryTable:
+    """List all globally-registered derived properties.
+
+    Properties are computed on-demand from the orchestrator :class:`ForwardState`
+    and are available on any :class:`Prediction` object. They are grouped
+    (e.g., ``"sfh"``, ``"sed"``) to organize related quantities.
+
+    Parameters
+    ----------
+    group : str, optional
+        Filter by property group (e.g., ``"sfh"`` for star-formation-history
+        properties). If None, lists all properties across all groups.
+
+    Returns
+    -------
+    _RegistryTable
+        Table with columns: name, group, units, component, description.
+        Each row is one registered property.
+
+    Notes
+    -----
+    Returned table prints as column-aligned text in a REPL or notebook.
+    Use ``describe_property(name)`` to get full metadata for one property.
+
+    Examples
+    --------
+    **List all properties:**
+
+    >>> tengri.list_properties()
+    stellar_mass      Msun   sfh    stellar  Total formed stellar mass
+    ...
+
+    **List SFH-group properties only:**
+
+    >>> tengri.list_properties(group="sfh")
+
+    **Convert to dict for programmatic use:**
+
+    >>> props = tengri.list_properties()
+    >>> # props is a list[dict]; each dict has keys: name, group, units, ...
+    >>> sfh_mass = [p for p in props if p["name"] == "stellar_mass"]
+    """
+    from tengri.forward.properties import PROPERTY_REGISTRY
+
+    out = []
+    for _name, entries in PROPERTY_REGISTRY.items():
+        for entry in entries:
+            row = {
+                "name": entry.name,
+                "units": entry.units,
+                "group": entry.group,
+                "component": entry.component_name,
+                "description": entry.doc,
+            }
+            if group is None or entry.group == group:
+                out.append(row)
+    return _RegistryTable(sorted(out, key=lambda r: r["name"]))
+
+
+def describe_property(name: str) -> _DescribeRecord:
+    """Return full metadata for one derived property.
+
+    Parameters
+    ----------
+    name : str
+        Property name (e.g., ``"stellar_mass"``).
+
+    Returns
+    -------
+    _DescribeRecord
+        Labeled record with name, units, group, component, and description.
+
+    Raises
+    ------
+    KeyError
+        If the property name is not registered. Call :func:`list_properties`
+        to see all available names.
+
+    Examples
+    --------
+    >>> tengri.describe_property("stellar_mass")
+    """
+    return _describe_from_list(name, list_properties, "property", "list_properties")
+
+
 # ──────────────────────────────────────────────────────────────────
 # The two functions a new user calls first
 # ──────────────────────────────────────────────────────────────────

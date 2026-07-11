@@ -406,6 +406,109 @@ class RadioSEDComponent:
         )
 
 
+# ─────────────────────────────────────────────────────────────────────
+# Radio group property registration (Phase 1B)
+# ─────────────────────────────────────────────────────────────────────
+
+_TINY = 1e-30  # Floor for safe division
+
+
+# 21 cm HI line in Angstrom (= 1.4204 GHz). Kept bit-identical to the literal
+# in state_to_radio_quantities (component_factory.py) so the property values
+# match the orchestrator NamedTuple exactly. NOTE: this is the 21 cm line
+# frequency (1.4204 GHz), not a literal 1.400 GHz — see #1045 follow-up.
+_WAVE_21CM_AA = 21.106e8
+
+
+def _l_1p4ghz_fn(state, params):
+    """1.4 GHz radio flux [erg/s/Hz]."""
+    derived = state.derived
+    if "sed_radio" not in derived:
+        return jnp.asarray(jnp.nan)
+
+    L_radio = jnp.asarray(derived["sed_radio"])
+    wave = state.wave
+    return jnp.interp(_WAVE_21CM_AA, wave, L_radio)
+
+
+def _l_thermal_fn(state, params):
+    """Radio thermal (free-free) luminosity [erg/s/Hz]."""
+    from tengri.utils.sed_quantities import compute_l_radio_thermal
+
+    derived = state.derived
+    nion = jnp.asarray(derived.get("nion", 0.0))
+    return compute_l_radio_thermal(nion)
+
+
+def _l_nonthermal_fn(state, params):
+    """Radio non-thermal synchrotron luminosity [erg/s/Hz]."""
+    from tengri.utils.sed_quantities import compute_l_radio_thermal
+
+    derived = state.derived
+    if "sed_radio" not in derived:
+        return jnp.asarray(jnp.nan)
+
+    L_radio = jnp.asarray(derived["sed_radio"])
+    wave = state.wave
+    l_1p4ghz = jnp.interp(_WAVE_21CM_AA, wave, L_radio)
+
+    nion = jnp.asarray(derived.get("nion", 0.0))
+    l_thermal = compute_l_radio_thermal(nion)
+    return l_1p4ghz - l_thermal
+
+
+def _q_ir_fn(state, params):
+    """Radio-infrared correlation parameter [dimensionless]."""
+    from tengri.utils.physics_constants import L_SUN
+    from tengri.utils.sed_quantities import compute_q_ir
+
+    derived = state.derived
+    if "sed_radio" not in derived:
+        return jnp.asarray(jnp.nan)
+
+    L_radio = jnp.asarray(derived["sed_radio"])
+    wave = state.wave
+    l_1p4ghz = jnp.interp(_WAVE_21CM_AA, wave, L_radio)
+
+    l_ir = jnp.asarray(derived.get("L_ir", 0.0))
+    l_tir_lsun = l_ir / L_SUN
+    return compute_q_ir(l_tir_lsun, l_1p4ghz)
+
+
+from tengri.forward.properties import Property, register_properties
+
+_RADIO_PROPERTIES = {
+    "l_1p4ghz": Property(
+        units="erg/s/Hz",
+        group="radio",
+        doc="1.4 GHz radio flux",
+        fn=_l_1p4ghz_fn,
+    ),
+    "l_thermal": Property(
+        units="erg/s/Hz",
+        group="radio",
+        doc="Radio thermal (free-free) luminosity",
+        fn=_l_thermal_fn,
+    ),
+    "l_nonthermal": Property(
+        units="erg/s/Hz",
+        group="radio",
+        doc="Radio non-thermal synchrotron luminosity",
+        fn=_l_nonthermal_fn,
+    ),
+    "q_ir": Property(
+        units="",
+        group="radio",
+        doc="Radio-infrared correlation parameter",
+        fn=_q_ir_fn,
+    ),
+}
+
+register_properties("radio", _RADIO_PROPERTIES)
+
+del Property, register_properties, _RADIO_PROPERTIES
+
+
 # Register in the unified component dispatch table so build_components resolves
 # the radio component via _resolve_registry_component (single dispatch, #845)
 # instead of importing the class directly.

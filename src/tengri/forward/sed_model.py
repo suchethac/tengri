@@ -4091,6 +4091,161 @@ class SEDModel:
             "ssfr": pred.sfh.ssfr,
         }
 
+    @property
+    def available_properties(self) -> tuple[str, ...]:
+        """Names of all properties available for this model.
+
+        Returns
+        -------
+        tuple[str, ...]
+            Sorted tuple of property names that can be queried via
+            :meth:`predict_properties` or accessed as attributes on
+            a :class:`Prediction` object.
+
+        Raises
+        ------
+        ValueError
+            If two active components declare the same property name.
+            Each property can be owned by at most one active component.
+
+        Notes
+        -----
+        This property triggers assembly of the property catalog on first
+        access and caches the result in ``_property_catalog`` for subsequent
+        calls. The collision check runs at this point.
+
+        Examples
+        --------
+        >>> model = SEDModel.build(...)
+        >>> model.available_properties
+        ('stellar_mass', 'stellar_mass_surviving', 'sfr_10myr', ...)
+        """
+        # Lazy assemble the property catalog
+        if not hasattr(self, "_property_catalog"):
+            from tengri.forward.properties import assemble_available_properties
+
+            # Get the active components in the built chain
+            chain = getattr(self, "_cached_component_chain", None)
+            if chain is None:
+                chain = self._build_component_chain()
+            active_names = {c.name for c in chain}
+            self._property_catalog = assemble_available_properties(active_names)
+        return tuple(sorted(self._property_catalog.keys()))
+
+    def predict_properties(self, params, names=None):
+        """Compute derived properties from the forward state.
+
+        Properties are computed from the same orchestrator :class:`ForwardState`
+        that powers all other predictions, so their values are consistent with
+        photometry, spectrum, and SED quantities. This method routes through
+        :meth:`predict_state`, enabling JIT/vmap/grad by treating property
+        names as static arguments.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values using public parameter names.
+        names : tuple[str] or list[str], optional
+            Property names to compute. If None, computes all available
+            properties. Each name must be in :attr:`available_properties`,
+            else :exc:`KeyError` is raised.
+
+        Returns
+        -------
+        dict[str, scalar]
+            Mapping of property name to JAX scalar value [various units].
+            Returned as a plain dict with JAX array values.
+
+        Raises
+        ------
+        KeyError
+            If any name in ``names`` is not in :attr:`available_properties`.
+            The error message lists the available names.
+
+        Notes
+        -----
+        **JIT/vmap/grad-compatible**: :func:`jax.jit` and :func:`jax.vmap`
+        handle this method correctly provided ``names`` is treated as a
+        static argument (the function parameter itself is not JIT-traced).
+        Wrap the call like::
+
+            @jax.jit
+            def compute_stellar_mass(p):
+                return model.predict_properties(p, names=("stellar_mass",))["stellar_mass"]
+
+        The returned dict has JAX-array values, so downstream operations on
+        the scalars are fully differentiable.
+
+        **Single-galaxy interactive use**: for exploration, use
+        :meth:`predict` and access the ``Prediction.properties`` catalog
+        with attribute syntax (e.g., ``pred.stellar_mass``) to share cached
+        state across multiple property accesses.
+
+        **Legacy compatibility**: :meth:`predict_sfh_quantities` and
+        :meth:`predict_sed_quantities` remain unchanged and use independent
+        computation paths; agreement is documented per test.
+
+        Examples
+        --------
+        **Compute one property:**
+
+        >>> model = SEDModel.build(...)
+        >>> params = {...}
+        >>> props = model.predict_properties(params, names=("stellar_mass",))
+        >>> print(props["stellar_mass"])
+
+        **Compute all properties:**
+
+        >>> all_props = model.predict_properties(params)
+        >>> print(f"Stellar mass: {all_props['stellar_mass']} Msun")
+        >>> print(f"SSFR: {all_props['ssfr']} yr^-1")
+
+        **Under jax.jit with vmap:**
+
+        >>> vmap_props = jax.vmap(lambda p: model.predict_properties(p, names=("stellar_mass",)))(
+        ...     params_batch
+        ... )
+        >>> print(vmap_props["stellar_mass"].shape)  # (N,)
+
+        See Also
+        --------
+        available_properties : List of properties available in this model.
+        predict : Lazy Prediction object with attribute-access syntax.
+        predict_sfh_quantities : Legacy SFH quantity interface.
+        """
+        # Resolve the catalog
+        if not hasattr(self, "_property_catalog"):
+            from tengri.forward.properties import assemble_available_properties
+
+            chain = getattr(self, "_cached_component_chain", None)
+            if chain is None:
+                chain = self._build_component_chain()
+            active_names = {c.name for c in chain}
+            self._property_catalog = assemble_available_properties(active_names)
+
+        # Resolve names to compute (default = all)
+        if names is None:
+            names_to_compute = tuple(sorted(self._property_catalog.keys()))
+        else:
+            names_to_compute = tuple(names)  # Ensure tuple for consistency
+
+        # Validate all names are known
+        unknown = set(names_to_compute) - set(self._property_catalog.keys())
+        if unknown:
+            available = sorted(self._property_catalog.keys())
+            raise KeyError(f"Unknown properties: {sorted(unknown)}. Available: {available}")
+
+        # Compute the state once
+        state = self.predict_state(params)
+
+        # Evaluate each property
+        result = {}
+        for name in names_to_compute:
+            entry = self._property_catalog[name]
+            result[name] = entry.fn(state, params)
+
+        return result
+
     def predict_sfh_quantities(self, params):
         """Compute SFH-derived quantities in JIT-compatible form.
 
