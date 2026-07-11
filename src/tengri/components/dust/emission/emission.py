@@ -16,16 +16,17 @@ Available Emission Models
 - **draine_li2014**: Draine & Li (2014 update) 4-parameter model (tabulated)
 - **astrodust**: Hensley & Draine (2023) Astrodust+PAH model (tabulated)
 - **bosa**: Boquien & Salim (2021) (L_TIR, sSFR)-parameterized model (tabulated)
+- **schreiber2018**: Schreiber et al. (2018) cold-dust template library (tabulated)
+- **dh02_ce01**: Dale & Helou (2002) + Chary & Elbaz (2001) cold-dust model (tabulated)
 - **themis**: Jones et al. (2017) THEMIS/DustEM model (tabulated)
 
 Template Auto-Loading
 ---------------------
 The ``"draine_li2007"``, ``"dale2014"``, ``"draine_li2014"``,
-``"astrodust"``, ``"bosa"``, and ``"themis"`` models auto-load tabulated
-templates from the ``data/`` directory on first use.  If templates are not
-found, they fall back to analytic approximations with a warning.  The
-analytic fallbacks are crude (single-Gaussian PAH, hand-tuned temperatures)
-and should NOT be used for science.
+``"astrodust"``, ``"bosa"``, ``"schreiber2018"``, ``"dh02_ce01"``,
+and ``"themis"`` models auto-load tabulated templates from the ``data/``
+directory on first use.  If templates are not found, they raise
+``FileNotFoundError`` (no analytic fallback available).
 
 Energy Balance
 --------------
@@ -40,6 +41,8 @@ This is computed from the attenuation step and passed to each model as
 References
 ----------
 - Casey 2012, MNRAS, 425, 3094
+- Chary, R. & Elbaz, D. 2001, ApJ, 556, 562 (CE01)
+- Dale, D. A. & Helou, G. 2002, ApJ, 576, 159 (DH02)
 - Dale et al. 2014, ApJ, 784, 83
 - Draine & Li 2007, ApJ, 657, 810
 - Draine & Li 2014 update (CIGALE implementation, Boquien+2019)
@@ -48,6 +51,7 @@ References
 - Hildebrand 1983, QJRAS, 24, 267
 - Hensley & Draine 2023, ApJ, 948, 55 (Astrodust+PAH)
 - Boquien & Salim 2021, A&A, 653, A149 (BOSA templates)
+- Schreiber, C. et al. 2018, A&A, 609, A30 (S17)
 - Jones et al. 2017, A&A, 602, A46 (THEMIS dust model)
 
 """
@@ -580,6 +584,7 @@ from tengri.components.dust.emission_templates import (
     create_astrodust_from_grid as create_astrodust_from_grid,
     create_bosa_from_grid as create_bosa_from_grid,
     create_dale2014_from_grid as create_dale2014_from_grid,
+    create_dh02_ce01_from_grid as create_dh02_ce01_from_grid,
     create_dl07_from_grid as create_dl07_from_grid,
     create_dl14_from_grid as create_dl14_from_grid,
     create_schreiber2018_from_grid as create_schreiber2018_from_grid,
@@ -679,6 +684,12 @@ DUST_EMISSION_MODELS["themis"] = _make_lazy_loader(
     "themis",
     "themis_templates.h5",
     "create_themis_from_grid",
+)
+
+DUST_EMISSION_MODELS["dh02_ce01"] = _make_lazy_loader(
+    "dh02_ce01",
+    "dh02_ce01_grid.h5",
+    "create_dh02_ce01_from_grid",
 )
 
 # ── Friendly aliases ─────────────────────────────────────────────
