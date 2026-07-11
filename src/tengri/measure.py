@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 r"""Model-free measurement operators — indices, line fluxes, synthetic photometry.
 
 The measurement counterpart to the forward model. Where ``model.predict_*``

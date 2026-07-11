@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for :mod:`tengri.measure` — the model-free measurement façade (#1047).
 
 ``tengri.measure`` is a thin façade over the verified measurement engines
