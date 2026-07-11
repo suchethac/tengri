@@ -42,11 +42,15 @@ def spec():
     """Parameters with DPL + field SFH model."""
     return Parameters(
         mean_sfh_type=["dpl", "field"],
+        # Free by default in the flat form (it carries a registry prior), but never
+        # varied here. Pin it at the registry default -- the value the forward model
+        # silently substituted before #1015 made the omission a loud error (#1021).
+        sfh_dpl_age_gyr=Fixed(13.81),
         n_grid=256,
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 2.0),
+        sfh_dpl_log_total_mass=Uniform(9.0, 12.0),  # galaxy scale; was 0.1-100 Msun
         sfh_field_psd_sigma=Uniform(0.01, 3.0),
         sfh_field_psd_tau_myr=Uniform(10.0, 500.0),
         met_logzsol=Uniform(-2.0, 0.2),
@@ -71,7 +75,7 @@ def fiducial_params(spec):
         "sfh_dpl_alpha": 1.0,
         "sfh_dpl_beta": 1.5,
         "sfh_dpl_tau_gyr": 3.0,
-        "sfh_dpl_log_total_mass": np.log10(5.0),
+        "sfh_dpl_log_total_mass": np.log10(5.0e10),
         "sfh_field_psd_sigma": 1.0,
         "sfh_field_psd_tau_myr": 50.0,
         "met_logzsol": -0.2,
@@ -91,7 +95,7 @@ def smooth_params(spec):
         "sfh_dpl_alpha": 1.0,
         "sfh_dpl_beta": 1.5,
         "sfh_dpl_tau_gyr": 3.0,
-        "sfh_dpl_log_total_mass": np.log10(5.0),
+        "sfh_dpl_log_total_mass": np.log10(5.0e10),
         "sfh_field_psd_sigma": 0.01,
         "sfh_field_psd_tau_myr": 50.0,
         "met_logzsol": -0.2,
@@ -204,7 +208,7 @@ class TestDerivedQuantities:
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_total_mass": np.log10(5.0),
+            "sfh_dpl_log_total_mass": np.log10(5.0e10),
             "sfh_field_psd_sigma": 1.0,
             "sfh_field_psd_tau_myr": 50.0,
             "met_logzsol": -0.2,
@@ -245,7 +249,7 @@ class TestDerivedQuantities:
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_total_mass": np.log10(5.0),
+            "sfh_dpl_log_total_mass": np.log10(5.0e10),
             "sfh_field_psd_sigma": 2.0,
             "sfh_field_psd_tau_myr": 50.0,
             "met_logzsol": -0.2,
@@ -274,7 +278,7 @@ class TestDerivedQuantities:
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_total_mass": np.log10(5.0),
+            "sfh_dpl_log_total_mass": np.log10(5.0e10),
             "sfh_field_psd_sigma": 0.3,
             "sfh_field_psd_tau_myr": 50.0,
             "met_logzsol": -0.2,
@@ -292,17 +296,38 @@ class TestDerivedQuantities:
         assert 0.5 < ratio < 2.0, f"Smooth GP: mass ratio = {ratio:.2f}, expected close to 1"
 
     def test_ensemble_mean_mass_converges(self, model, spec):
-        """Over many GP realizations, <M*> should approach zero-xi M*.
+        """Over many GP realizations, <M*> converges to the MEAN-SFH M*.
 
-        The lognormal correction ensures E[SFR] = mean_SFR.
+        The field multiplies the mean SFH by ``exp(gp_x - K(0)/2)``, and the
+        ``K(0)/2`` term makes that factor mean-preserving: E[SFR] = mean_SFR. Since
+        surviving mass is linear in SFR, E[M*] = M*(mean SFH).
+
+        Two things this test used to get wrong, both of which made it read a healthy
+        model as broken:
+
+        1. **The baseline was the median, not the mean.** It normalized by the
+           ``xi = 0`` realization — but at ``xi = 0`` the modulation is
+           ``exp(-K(0)/2)``, not 1. For a mean-preserving log-normal, ``xi = 0`` is
+           the MEDIAN SFH and sits a factor ``exp(-K(0)/2)`` BELOW the mean. Dividing
+           the ensemble mean by it therefore returns ``exp(+K(0)/2)`` no matter how
+           correct the code is — 1.27 at 0.3 dex, 390 at 1.5 dex. The right baseline
+           is the mean SFH, i.e. the same model with the field switched off
+           (``psd_sigma -> 0``; exactly 0 makes the DRW covariance singular).
+
+        2. **The estimator could not converge.** The modulation is log-normal with
+           ``sigma_ln = psd_sigma * ln10``, so an n-draw estimate of its mean has
+           relative standard error ``sqrt((exp(sigma_ln**2) - 1) / n)``. At the old
+           1.5 dex that is ~55 with 50 draws — the sample mean was noise. At 0.3 dex
+           with 200 draws it is ~0.06, so the +/-25% band below is a genuine
+           constraint: a missing K(0)/2 would inflate the ratio to 1.27 and fail it.
         """
         n_grid = spec.n_grid
         base = {
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_total_mass": np.log10(5.0),
-            "sfh_field_psd_sigma": 1.5,
+            "sfh_dpl_log_total_mass": np.log10(5.0e10),
+            "sfh_field_psd_sigma": 0.3,
             "sfh_field_psd_tau_myr": 50.0,
             "met_logzsol": -0.2,
             "dust_tau_bc": 0.5,
@@ -311,12 +336,18 @@ class TestDerivedQuantities:
             "redshift": 0.1,
         }
 
-        # Get baseline mass with zero xi
-        params_zero = {**base, "sfh_field_xi": jnp.zeros(n_grid)}
-        mstar_base = float(model.predict_sfh_quantities(params_zero).stellar_mass)
+        # Baseline = the MEAN SFH: field effectively off, so the modulation is 1 and
+        # not exp(-K(0)/2). Not exactly zero: a zero-variance DRW covariance is
+        # singular and its Cholesky returns NaN.
+        params_mean_sfh = {
+            **base,
+            "sfh_field_psd_sigma": 1e-3,
+            "sfh_field_xi": jnp.zeros(n_grid),
+        }
+        mstar_base = float(model.predict_sfh_quantities(params_mean_sfh).stellar_mass)
 
         # Compute mass for many GP realizations
-        n_draws = 50
+        n_draws = 200
         masses = []
         for i in range(n_draws):
             xi = jax.random.normal(jax.random.PRNGKey(i), shape=(n_grid,))
@@ -327,8 +358,10 @@ class TestDerivedQuantities:
         ensemble_mean = sum(masses) / len(masses)
         ratio = ensemble_mean / mstar_base
 
-        # Ensemble average should be within ~3x of the zero-xi mass
-        assert 0.3 < ratio < 3.0, f"Ensemble <M*>/M*_base = {ratio:.2f}, expected ~1"
+        # +/-25%: ~4x the 0.06 RSE of a 200-draw estimate at 0.3 dex, but well inside
+        # the 1.27x inflation a missing K(0)/2 would produce. The old 0.3-3.0 band was
+        # not a constraint at all -- at 1.5 dex the estimator's own RSE was ~55.
+        assert 0.75 < ratio < 1.25, f"Ensemble <M*>/M*(mean SFH) = {ratio:.2f}, expected ~1"
 
 
 # ── 3. Gradient Flow ──────────────────────────────────────────────
