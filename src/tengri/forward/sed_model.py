@@ -2943,7 +2943,7 @@ class SEDModel:
         the JIT-safe orchestrator with SSP threading.
 
         **Raw forward-pass output.** For interactive use with cached
-        derived quantities, see ``model.predict(params).photometry``.
+        derived quantities, see ``model.predict(params).photometry()``.
         For batched photometry over posterior chains, use
         :meth:`predict_photometry_batch`.
 
@@ -5936,7 +5936,7 @@ class SEDModel:
 
         **Use this method for** posterior chains / mock catalogs (batched
         forward pass). **For interactive single-galaxy use**, access
-        ``model.predict(params).photometry``.
+        ``model.predict(params).photometry()``.
 
         Parameters
         ----------

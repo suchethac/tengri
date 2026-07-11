@@ -89,7 +89,7 @@ def test_forward_predict_under_jit_with_dust_ir(emission_label):
     forward = ForwardModel.build(sed=model, observation=obs)
     p = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
 
-    fn = jax.jit(lambda pp: forward.predict(pp).photometry)
+    fn = jax.jit(lambda pp: forward.predict(pp).photometry())
     out = fn(p)
     jax.block_until_ready(out)
 
