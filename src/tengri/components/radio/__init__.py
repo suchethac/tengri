@@ -17,6 +17,8 @@ from tengri.components.radio.radio import (
     radio_star_forming,
     radio_total,
     radio_total_dpl,
+    radio_total_dpl_terms,
+    radio_total_terms,
 )
 
 # Imported for the registration side effect: RadioDPL ('radio_dpl') enters
@@ -56,5 +58,7 @@ __all__ = [
     "radio_star_forming",
     "radio_total",
     "radio_total_dpl",
+    "radio_total_dpl_terms",
+    "radio_total_terms",
     "register_radio_model",
 ]

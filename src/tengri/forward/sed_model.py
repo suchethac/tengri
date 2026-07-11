@@ -57,6 +57,7 @@ import contextlib
 import dataclasses
 import types
 import warnings
+from collections.abc import Mapping
 from typing import ClassVar
 
 import jax
@@ -101,6 +102,51 @@ from tengri.utils.grid import (
 #: whose template *shape* depends on luminosity (BOSA: L_TIR–sSFR) fails to scale
 #: between the two and is refused a constant band response.
 _L_IR_PROBE = 1.0e44
+
+
+def _chain_consumes(chain, key: str) -> bool:
+    """Does any component in ``chain`` declare ``key`` as a (possibly optional) input?
+
+    Reads the declared cross-component contract (ADR-0009), which components expose
+    either as ``inputs``/``optional_inputs`` methods returning ``DerivedKey`` tuples
+    (bare-Protocol components) or as ``inputs`` dicts (``SEDModelComponent``). Both
+    shapes are accepted so a caller never has to know which kind it is holding.
+
+    Parameters
+    ----------
+    chain : sequence
+        The component chain.
+    key : str
+        Derived-state key, e.g. ``"L_ir"``.
+
+    Returns
+    -------
+    bool
+        True if some component reads ``key``.
+    """
+    for comp in chain:
+        for attr in ("inputs", "optional_inputs"):
+            declared = getattr(comp, attr, None)
+            if declared is None:
+                continue
+            try:
+                items = declared() if callable(declared) else declared
+            except Exception:
+                continue
+            if not items:
+                continue
+            names = items if isinstance(items, Mapping) else [getattr(i, "name", i) for i in items]
+            if key in names:
+                return True
+    return False
+
+
+#: Relative tolerance for the rank-1 check in
+#: :meth:`SEDModel._additive_term_band_response`. Two probe draws must reproduce
+#: each term's spectral shape to this precision for the term to earn a constant
+#: band response. Loose enough not to trip on fp re-association across a ~6000-node
+#: grid, ~7 orders tighter than any shape error worth exploiting.
+_RANK1_RTOL = 1e-9
 
 # Re-export supporting types for backwards compatibility
 __all__ = [
@@ -848,6 +894,19 @@ class SEDModel:
                     stacklevel=2,
                 )
                 self._dust_band_response_cache = None
+
+            for _emitter in ("xray", "radio"):
+                try:
+                    self._additive_term_band_response(self._cached_component_chain, _emitter)
+                except Exception as e:
+                    warnings.warn(
+                        f"WavePrecomp {_emitter} term band-response precompute failed "
+                        f"({e!r}); falling back to the exact per-call filter integral "
+                        "(correct, but without the precomputed-response speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    setattr(self, f"_{_emitter}_term_response_cache", None)
 
         # Build-time accuracy guard (#617): the photometry LUT bakes the
         # SSP×filter integral at zero dust and re-applies attenuation as a
@@ -5497,6 +5556,14 @@ class SEDModel:
         if band_response is not None:
             result.setdefault("dust_ir", {})["emission_band_response"] = band_response
 
+        # The other additive emitters (X-ray, radio) are sums of rank-1 terms, so
+        # they get a response *per term* rather than the single L_ir * R that dust's
+        # one-term SED admits. Same exactness, same build-time integral.
+        for emitter in ("xray", "radio"):
+            term_response = self._additive_term_band_response(cached, emitter)
+            if term_response is not None:
+                result.setdefault(emitter, {})["term_band_response"] = term_response
+
         return result if result else None
 
     #: dust_* params that change the *emission* template only (not the
@@ -5566,8 +5633,16 @@ class SEDModel:
         has_dust_emission = (
             dust is not None and getattr(dust.config, "emission_model", None) is not None
         ) or self._dust_emission_model is not None
+        # Dust emission is not the only consumer of L_ir. Radio reads it too — the
+        # FIR-radio correlation sets the SF synchrotron amplitude — so a radio model
+        # with no dust *emission* block still needs the LUT, and without it the
+        # full-grid energy-balance integral (and the stellar cube behind it) stays
+        # alive: 33.3M FLOPs against 368k with it. Ask the declared cross-component
+        # contract (ADR-0009) who consumes L_ir rather than hardcoding a list, so a
+        # future L_ir consumer inherits the LUT instead of silently forfeiting it.
+        needs_l_ir = has_dust_emission or _chain_consumes(chain, "L_ir")
         if (
-            has_dust_emission
+            needs_l_ir
             and dust is not None
             and self._approx.get("wave_precomp")
             and not bool(getattr(self.spec, "alpha_fe_evolving", False))
@@ -5683,6 +5758,156 @@ class SEDModel:
             response = lnu_filter_integral_batch(lo, wave, fw_pad, ft_pad, z)
 
         self._dust_band_response_cache = response
+        return response
+
+    def _additive_term_band_response(self, chain, name):
+        r"""Build-time per-filter response of each rank-1 term of an additive emitter.
+
+        Generalizes :meth:`_dust_emission_band_response` from one term to many. An
+        additive emitter is a *sum of rank-1 terms* — each a scalar amplitude times a
+        spectral shape that depends only on the emitter's own (fixed) shape parameters:
+
+        .. math::
+
+            L_\nu(\lambda) = \sum_k A_k(\text{inputs}) \, S_k(\lambda; \text{shape})
+
+        The filter integral is linear, so each term's band flux factorizes and
+
+        .. math::
+
+            \int \Big[\sum_k A_k S_k(\lambda)\Big] R_f(\lambda)\, d\lambda
+                = \sum_k A_k \underbrace{\int S_k(\lambda) R_f(\lambda)\, d\lambda}_{R_{kf}}
+
+        with :math:`R_{kf}` a build-time constant. This is **exact**, not an
+        approximation: the true filter transmission is still integrated on the full
+        wavelength grid with the identical quadrature the dense path uses
+        (:func:`~tengri.observation.photometry.lnu_filter_integral_batch`), just once
+        instead of on every call. Contrast ``fast_emission``, which samples the emitter
+        at one effective wavelength, and the stellar WavePrecomp Taylor projection (#617).
+
+        Dust IR happens to be the :math:`k=1` case (``sed = L_ir * S_unit``). X-ray is
+        :math:`k=4` (HMXB, LMXB, hot gas, corona) and radio :math:`k=3` (SF synchrotron,
+        free-free, AGN jet). Their *summed* SEDs are **not** rank-1 — HMXB and LMXB carry
+        different photon indices, so the HMXB/LMXB mix shifts with SFR and stellar mass —
+        which is why the terms must be integrated separately rather than as a total.
+
+        At runtime the amplitudes come back from a single-wavelength evaluation,
+        :math:`A_k = \text{term}_k(\lambda^{\rm ref}_k) / S_k(\lambda^{\rm ref}_k)`. That
+        needs no knowledge of *which* input carries the amplitude, nor that it enters
+        linearly — :math:`\alpha_{\rm ox}` is famously nonlinear in :math:`L_{2500}`, and
+        it does not matter, because it is still a scalar.
+
+        Parameters
+        ----------
+        chain : sequence
+            The cached component chain.
+        name : str
+            Component name to look for (``"xray"``, ``"radio"``).
+
+        Returns
+        -------
+        dict or None
+            ``{"R": (n_terms, n_filters), "lam_ref": (n_terms,), "S_ref": (n_terms,)}``
+            [erg/s/Hz per unit amplitude, Å, erg/s/Hz], or ``None`` when the fast path
+            is refused — in which case the caller keeps the exact per-call dense filter
+            integral. Term order is the emitter's ``emission_terms`` dict order.
+
+        Notes
+        -----
+        **Gate.** The response is a constant only while every one of the emitter's own
+        parameters and ``redshift`` are fixed: a free *shape* parameter (a photon index,
+        a spectral index, a turnover frequency) would move :math:`S_k` under the LUT, and
+        a free redshift would move :math:`R_f`. Gating on *all* the emitter's parameters
+        rather than on a known set of shape parameters fails **safe** — an unrecognized
+        free parameter simply disables the optimization. Denylisting known shape knobs
+        would fail *dangerous* the day a new one is added and forgotten (#1107 shipped
+        exactly that hole with ``dust_log_ssfr``).
+
+        **Rank-1 probe.** Being a sum of rank-1 terms is a *property*, not a promise, so
+        it is verified rather than declared: each term is built twice from deliberately
+        distant input draws (``EMITTER_PROBE_INPUTS``) and must come back proportional.
+        A term whose *shape* — not just amplitude — responds to a runtime input fails,
+        and the whole emitter drops to the dense path. This is the BOSA lesson from
+        #1107: an emitter whose template shape tracked its luminosity sailed through a
+        band response built at ``L_ir = 1`` and returned fluxes 13 % wrong, silently.
+
+        **Zero terms.** A term that is identically zero under both probes is zero for a
+        *structural* reason — a Python-level switch (``include_freefree=False``) or a
+        fixed zero parameter (``radio_loudness = 0``, the default) — never because a
+        probe happened to zero it: every probe input is nonzero by construction. Under
+        the all-parameters-fixed gate it is therefore zero at runtime too, so
+        :math:`R_k = 0` is correct rather than a silent drop.
+
+        **JIT.** Runs at build time on concrete values; the returned arrays are threaded
+        into the JIT as ``template_data``.
+        """
+        cache_attr = f"_{name}_term_response_cache"
+        cached = getattr(self, cache_attr, "unset")
+        if cached != "unset":
+            return cached
+
+        response = None
+        comp = next((c for c in chain if getattr(c, "name", "") == name), None)
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        st = getattr(stellar, "_state", None)
+        fw_pad = getattr(st, "phot_fw_padded", None)
+        ft_pad = getattr(st, "phot_ft_padded", None)
+
+        free = set(self.spec.free_params)
+        prefix = f"{name}_"
+        gate_ok = not any(p.startswith(prefix) for p in free) and "redshift" not in free
+
+        if (
+            comp is not None
+            and gate_ok
+            and self._approx.get("wave_precomp")
+            and fw_pad is not None
+            and ft_pad is not None
+            and hasattr(comp, "emission_terms")
+            and hasattr(comp, "EMITTER_PROBE_INPUTS")
+        ):
+            from tengri.observation.photometry import lnu_filter_integral_batch
+
+            fixed = {k: jnp.asarray(v) for k, v in self.spec.get_fixed_values().items()}
+            wave = self._rest_wavelength
+            z = jnp.asarray(fixed.get("redshift", 0.0))
+
+            probe_a, probe_b = comp.EMITTER_PROBE_INPUTS
+            terms_a = comp.emission_terms(fixed, wave, **probe_a)
+            terms_b = comp.emission_terms(fixed, wave, **probe_b)
+
+            rows, lam_ref, s_ref = [], [], []
+            for key, s_a in terms_a.items():
+                s_b = terms_b[key]
+                peak = int(jnp.argmax(jnp.abs(s_a)))
+                s_at_ref = s_a[peak]
+
+                if not bool(jnp.abs(s_at_ref) > 0.0):
+                    # Structurally off under the all-fixed gate (see Notes). A zero
+                    # response contributes nothing; S_ref = 1 keeps A = term/1 = 0
+                    # finite instead of 0/0.
+                    rows.append(jnp.zeros(fw_pad.shape[0], dtype=wave.dtype))
+                    lam_ref.append(wave[peak])
+                    s_ref.append(jnp.asarray(1.0, dtype=wave.dtype))
+                    continue
+
+                # RANK-1 CHECK: the second draw must be proportional to the first.
+                scale = s_b[peak] / s_at_ref
+                if not bool(jnp.allclose(s_b, scale * s_a, rtol=_RANK1_RTOL, atol=0.0)):
+                    setattr(self, cache_attr, None)
+                    return None
+
+                rows.append(lnu_filter_integral_batch(s_a, wave, fw_pad, ft_pad, z))
+                lam_ref.append(wave[peak])
+                s_ref.append(s_at_ref)
+
+            response = {
+                "R": jnp.stack(rows),
+                "lam_ref": jnp.stack(lam_ref),
+                "S_ref": jnp.stack(s_ref),
+            }
+
+        setattr(self, cache_attr, response)
         return response
 
     def _build_component_chain(self):
