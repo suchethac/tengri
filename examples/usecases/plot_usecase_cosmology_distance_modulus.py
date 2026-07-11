@@ -120,19 +120,4 @@ ax2.text(
 )
 
 fig.tight_layout()
-plt.show()
-
-# Print summary
-print("Hubble Tension: Distance Modulus Shifts")
-print("=" * 60)
-print(f"{'Redshift':<12} {'μ_Planck':<12} {'μ_Riess':<12} {'Δμ (mmag)':<12}")
-print("-" * 60)
-for z, mu_p, mu_r, dm in zip(z_grid[::3], mu_planck[::3], mu_riess[::3], delta_m[::3]):
-    print(f"{z:<12.3f} {mu_p:<12.3f} {mu_r:<12.3f} {dm * 1000:<12.2f}")
-print("-" * 60)
-print(f"|Δμ| at z=3.0: {abs(delta_m[-1]) * 1e3:.2f} mmag")
-print(
-    "\nInterpretation: Under Riess H0=73 km/s/Mpc vs. Planck H0=67.4,"
-    "\nthe distance modulus is SMALLER (galaxy appears BRIGHTER) by ~0.14 mag at z=3."
-    "\nThis difference accumulates with redshift and is a key signature of the Hubble tension."
-)
+plt.savefig("plot_usecase_cosmology_distance_modulus.png", dpi=150, bbox_inches="tight")
