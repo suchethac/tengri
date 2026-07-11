@@ -149,7 +149,6 @@ ax.set_xlim(0.1, 1000.0)
 ax.set_ylim(1e-3, 1e2)
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"$\lambda F_\lambda$ [arb.]")
-ax.legend(loc="lower center", frameon=True, fontsize=10)
 
 secax = ax.secondary_xaxis(
     "top", functions=(lambda x: C_NM_HZ / 1e3 / x, lambda nu: C_NM_HZ / 1e3 / nu)
@@ -163,4 +162,4 @@ cbar.set_ticks([0.01, 0.3, 10.0])
 cbar.set_ticklabels(["0.01", "0.3", "10"])
 
 fig.tight_layout()
-plt.show()
+plt.savefig("plot_grahsp_paper_fig7_galaxy_attenuation.png", dpi=150, bbox_inches="tight")
