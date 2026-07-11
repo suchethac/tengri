@@ -93,15 +93,3 @@ ax_r.grid(True, alpha=0.2, which="both")
 
 fig.tight_layout()
 plt.savefig("plot_diag_dl07_temperature_proxy.png", dpi=150, bbox_inches="tight")
-
-# Report findings
-pct_diff = 100.0 * np.abs(wien_temps - u_min_scaling_temps) / u_min_scaling_temps
-print("\nDraine & Li 2007 Temperature Diagnostic")
-print("=" * 70)
-print(f"{'U_min':<10} {'λ [μm]':<12} {'T_Wien':<10} {'T_scaling':<10} {'% Diff':<8}")
-print("-" * 70)
-for um, lam, tw, ts, pct in zip(
-    U_min_values, peak_wavelengths, wien_temps, u_min_scaling_temps, pct_diff
-):
-    print(f"{um:<10.2f} {lam:<12.1f} {tw:<10.1f} {ts:<10.1f} {pct:<8.1f}")
-print(f"Mean agreement: {np.mean(pct_diff):.1f}%")
