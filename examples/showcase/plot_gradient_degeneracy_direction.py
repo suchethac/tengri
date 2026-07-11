@@ -23,7 +23,6 @@ import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
-import os
 import warnings
 
 import matplotlib.pyplot as plt
@@ -54,8 +53,6 @@ FIDUCIAL_PARAMS = {
 # Single observation config to demonstrate the concept
 FILTERS = ["sdss_u", "sdss_r", "2mass_j"]
 
-print("Building model...")
-
 # Build observation
 observation = tengri.Observation(photometry=tengri.Photometry.from_names(FILTERS))
 
@@ -75,7 +72,6 @@ model = tengri.SEDModel.build(
 )
 
 # Generate synthetic observations at the fiducial point
-print(f"Computing fiducial model predictions ({len(FILTERS)} filters)...")
 out = model.predict_photometry(FIDUCIAL_PARAMS)
 flux_fiducial = np.asarray(out)
 snr = 50.0  # S/N per filter
@@ -87,7 +83,6 @@ free_names = ["sfh_dpl_log_total_mass", "dust_tau_bc"]
 flat_fiducial = np.array([FIDUCIAL_PARAMS[free_names[0]], FIDUCIAL_PARAMS[free_names[1]]])
 
 # Compute Fisher matrix via finite differences
-print("Computing Fisher matrix via finite differences...")
 delta = 1e-5
 fisher = np.zeros((2, 2))
 
@@ -181,9 +176,6 @@ ax.arrow(
 # Fiducial point
 ax.plot(flat_fiducial[0], flat_fiducial[1], "ko", markersize=6, label="Fiducial")
 
-print(f"Done. Condition number: {eigenvals[-1] / eigenvals[0]:.1e}")
-print(f"  Eigenvalues (Fisher info): [{eigenvals[0]:.1e}, {eigenvals[1]:.1e}]")
-
 ax.set_xlim(-0.2, 1.5)
 ax.set_ylim(-0.15, 0.65)
 ax.set_xlabel(r"$\log_{10}(\dot{M}_\star / M_\odot\,\mathrm{yr}^{-1})$ (SFR)", fontsize=11)
@@ -203,4 +195,4 @@ ax.text(
 )
 
 fig.tight_layout()
-plt.show()
+plt.savefig("plot_gradient_degeneracy_direction.png", dpi=150, bbox_inches="tight")

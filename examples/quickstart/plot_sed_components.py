@@ -77,7 +77,7 @@ ax.fill_between(
 
 ax.set(
     xlabel=r"Wavelength [$\mu$m]",
-    ylabel=r"$L_\nu$ [erg/s/Hz]",
+    ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]",
     xscale="log",
     yscale="log",
     xlim=(0.09, 3.0),

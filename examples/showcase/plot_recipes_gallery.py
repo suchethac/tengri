@@ -21,7 +21,6 @@ import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
-import os
 import warnings
 
 import jax
@@ -56,8 +55,7 @@ for name, recipe_fn, color in RECIPES:
     try:
         # Build model from recipe
         model = tengri.SEDModel.build(ssp_data=BARE, **recipe_fn())
-    except Exception as exc:
-        print(f"skip {name}: {type(exc).__name__}: {exc}")
+    except Exception:
         continue
 
     # Sample at prior medians for canonical SED shape
@@ -79,4 +77,4 @@ ax.set(
 ax.legend(frameon=False, fontsize=8.5, loc="lower right")
 
 fig.tight_layout()
-plt.show()
+plt.savefig("plot_recipes_gallery.png", dpi=150, bbox_inches="tight")

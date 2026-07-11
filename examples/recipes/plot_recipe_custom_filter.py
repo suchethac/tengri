@@ -83,7 +83,7 @@ wave_rest = np.asarray(sed_result.wavelength)
 sed_rest = np.asarray(sed_result.sed)
 ax_sed.loglog(wave_rest, sed_rest, color="C0", lw=1.4, label="Model SED (rest-frame)")
 ax_sed.plot(phot_wave, phot_flux, "o", color="C3", ms=7, label="Photometry", zorder=10)
-ax_sed.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+ax_sed.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
 ax_sed.legend(frameon=False, fontsize=8, loc="lower right")
 ax_sed.set_xlim(1e3, 1e5)
 
