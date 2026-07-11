@@ -29,7 +29,7 @@ This architectural debt grew:
 
 ## Decision
 
-1. **`SEDModelComponent` (`components/sed_model_component.py`) is the SINGLE auto-param, one-file authoring unit.** Free params are class-attribute `Distribution`s auto-discovered into `_priors`. The class auto-registers into `_REGISTRY[name]=cls`. Cross-component coupling is declared via `inputs`/`optional_inputs`/`outputs` dicts (already validated by ADR-0009). This is the pattern for all new models and for porting existing models.
+1. **`SEDModelComponent` (`components/sed_model_component.py`) is the SINGLE auto-param, one-file authoring unit.** Free params are class-attribute `Distribution`s auto-discovered into `_priors`. The class auto-registers into `_REGISTRY[name]=cls`. Cross-component coupling is declared via `inputs`/`optional_inputs`/`outputs` dicts (already validated by ADR-0009). This is the pattern for all new models and for migrating existing ones.
 
 2. **`_REGISTRY` is the SINGLE dispatch table.** `build_components()` resolves grammar `type` against it at **construction time only** (JIT-safe per ADR-0010; the registry is never traced). All domain-specific registries (DUST_LAWS, DUST_EMISSION_MODELS, RADIO_MODELS, XRAY_MODELS) are retired as each domain migrates. Until retirement, legacy registries remain in place (read-only) for deprecated backward-compatibility aliases.
 
@@ -54,27 +54,27 @@ This architectural debt grew:
 
 ### Negative
 
-- **Phased rollout required.** The migration touches ~8 domains and cannot be done in one PR. Each domain requires: (a) porting models to `SEDModelComponent`, (b) wiring the builder to use `_REGISTRY` dispatch, (c) retiring the legacy registry, (d) adding regression tests to verify bit-exactness.
+- **Phased rollout required.** The migration touches ~8 domains and cannot be done in one PR. Each domain requires: (a) migrating models to `SEDModelComponent`, (b) wiring the builder to use `_REGISTRY` dispatch, (c) retiring the legacy registry, (d) adding regression tests to verify bit-exactness.
 - **Temporary redundancy.** During the migration, both `SEDModelComponent` and legacy registry entries exist. A CI guard ensures dispatch only runs through `_REGISTRY` (no dual paths), but code is present until the phase completes.
-- **ScreenComponent deprecation.** Existing screens (ADR-0013) must be ported or explicitly deprecated. Mitigation: porting a screen is identical to porting any model — write `predict()` as `sed_in * transmission()` and declare `outputs = {}`.
+- **ScreenComponent deprecation.** Existing screens (ADR-0013) must be migrated or explicitly deprecated. Mitigation: migrating a screen is identical to migrating any model — write `predict()` as `sed_in * transmission()` and declare `outputs = {}`.
 
 ### Migration Phases (Independent, Sequential)
 
-1. **Pilot: Dust emission** — Port Dale2014 and other IR-emission models to `SEDModelComponent`; verify bit-exactness via regression suite; wire builder to dispatch via `_REGISTRY`.
-2. **Dust attenuation** — Port dust laws and screens; retire `DUST_LAWS` registry as components.
+1. **Pilot: Dust emission** — Migrate Dale2014 and other IR-emission models to `SEDModelComponent`; verify bit-exactness via regression suite; wire builder to dispatch via `_REGISTRY`.
+2. **Dust attenuation** — Migrate dust laws and screens; retire `DUST_LAWS` registry as components.
 3. **Screens (AGN torus, X-ray absorption, MW foreground)** — Fold into `SEDModelComponent`; retire `ScreenComponent` base class.
-4. **Nebular, X-ray, Radio** — Port each domain; retire domain-specific registries in sequence.
+4. **Nebular, X-ray, Radio** — Migrate each domain; retire domain-specific registries in sequence.
 5. **AGN** — Verify composable AGN blocks use `_REGISTRY` dispatch; document the pattern.
 6. **Spine god-objects** — Stellar (orchestrator) and IGM (frame-change) use bare `SEDComponent` Protocol by design (their `apply()` signature and state handling are irreducible). They remain off `_REGISTRY` and are explicitly documented as Protocol-based.
 7. **Docs and CI** — Finalize NAMING_CONTRACT and adding-a-physics-block guide; enable ratchet guards that enforce single dispatch and burn down legacy registries.
 
 Each phase ships independently green with a CI invariant that flips green and stays green. Per-domain legacy registries are retired as each domain migrates.
 
-**Phase-1 Definition of Done (amended 2026-07).** Phase 1 (dust-emission pilot) is "done" when: (a) every emission grammar type (and alias) dispatches through a `_REGISTRY` port — `check_registry_completeness` green; (b) the legacy dispatch *function* `resolve_emission_model` is deleted so single dispatch is machine-enforced — `check_single_dispatch` green with proven teeth; and (c) `DUST_EMISSION_MODELS` survives only as an internal HDF5 *loader cache*, not a dispatch table. The god-file **split** of the emission modules (`emission.py`, `emission_templates.py`, `dust_emission_precompute.py` → the `analytic/`, `templates/`, `precompute` layout, each ≤ 800 lines) is a **tracked follow-up (#843)**, not a Phase-1 gate: it is low-risk mechanical relocation, and the file-size ratchet already enforces shrink-only so no emission file can grow. This explicitly relaxes the original plan's DoD (which required the split inline); the switchover + dispatch retire — the risky part — are the Phase-1 bar.
+**Phase-1 Definition of Done (amended 2026-07).** Phase 1 (dust-emission pilot) is "done" when: (a) every emission grammar type (and alias) dispatches through a `_REGISTRY` component — `check_registry_completeness` green; (b) the legacy dispatch *function* `resolve_emission_model` is deleted so single dispatch is machine-enforced — `check_single_dispatch` green with proven teeth; and (c) `DUST_EMISSION_MODELS` survives only as an internal HDF5 *loader cache*, not a dispatch table. The god-file **split** of the emission modules (`emission.py`, `emission_templates.py`, `dust_emission_precompute.py` → the `analytic/`, `templates/`, `precompute` layout, each ≤ 800 lines) is a **tracked follow-up (#843)**, not a Phase-1 gate: it is low-risk mechanical relocation, and the file-size ratchet already enforces shrink-only so no emission file can grow. This explicitly relaxes the original plan's DoD (which required the split inline); the switchover + dispatch retire — the risky part — are the Phase-1 bar.
 
 ## Add-a-Model Recipe (Locked for the Migration)
 
-**To add a new model or port an existing one:**
+**To add a new model or migrate an existing one:**
 
 1. **Locate the domain folder** (e.g., `src/tengri/components/dust/`, `src/tengri/components/radio/`).
 
@@ -159,7 +159,7 @@ green, and the canonical narrative is
 | Phase | Scope | Status |
 |-------|-------|--------|
 | 0 | Rails: `_resolve_registry_component` seam + 3 CI ratchet guards (`check_file_size`, `check_single_dispatch`, `check_registry_completeness`) driven by `migration_manifest.json` | ✅ #876 |
-| 1 | Dust emission: 13 ports on `_REGISTRY`; `DUST_EMISSION_MODELS` demoted to loader-cache; god-file split | ✅ #876/#880/#881 |
+| 1 | Dust emission: 13 components on `_REGISTRY`; `DUST_EMISSION_MODELS` demoted to loader-cache; god-file split | ✅ #876/#880/#881 |
 | 2 | Dust attenuation: 3 attenuators on `_REGISTRY`; `attenuation.py` split | ✅ #882/#884 |
 | 3 | Nebular / radio / x-ray on `_REGISTRY`; **shock** dual-path reconciled onto the canonical composable `ShockNebular` (silent no-op fixed) | ✅ #886/#851 |
 | 4 | AGN: top-level dispatch through the `_REGISTRY` seam + manifest guard (#846/#907); composite grammar via ADR-0018 | ✅ (internal `AGN_MODELS`/`AGN_BLOCKS` table collapse deferred — see below) |

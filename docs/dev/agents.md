@@ -49,7 +49,7 @@ Parameters (latent xi + physical params)
 
 > **Read this before touching `forward/` or adding any physics block.**
 
-The forward model is mid-migration from the monolithic `SEDModel` class onto the `SEDComponent` Protocol scaffold in `src/tengri/core/component.py`. Phase II-1 has shipped: the Protocol, `PipelineState`, and two reference adapters (`components/radio/component.py`, `components/igm/component.py`). The current effort (Phase II-2) ports the remaining 6 physics blocks one PR at a time.
+The forward model is mid-migration from the monolithic `SEDModel` class onto the `SEDComponent` Protocol scaffold in `src/tengri/core/component.py`. Phase II-1 has shipped: the Protocol, `PipelineState`, and two reference adapters (`components/radio/component.py`, `components/igm/component.py`). The current effort (Phase II-2) migrates the remaining 6 physics blocks one PR at a time.
 
 **Source of truth:** `docs/dev/20260404-refactor.md`. Read this before producing any plan that touches the forward path.
 
@@ -201,7 +201,7 @@ Never write citations from memory — verify exact titles and identifiers agains
 
 ### Upstream code credit
 
-If you port or adapt code from another package, say so in Notes:
+If your code implements a model defined in another package, say so in Notes:
 
 ```
 **Upstream**: Follows the Prospector ``transforms.py`` implementation

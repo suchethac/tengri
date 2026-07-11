@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Unit tests for the Nenkova+2008 CLUMPY torus port.
+"""Unit tests for the Nenkova+2008 CLUMPY torus component.
 
 This torus is Prospector's only AGN SED component (FSPS CLUMPY templates,
 Johnson et al. 2021). The grid is vendored into ``data/nenkova08_torus_grid.h5``

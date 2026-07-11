@@ -26,7 +26,7 @@
    "name": "dict"
   }
  ],
- "LINES_MODELS": [
+ "LINE_BACKBONES": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -451,6 +451,15 @@
    "name": "PRNGKey"
   }
  ],
+ "kind": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
  "label": [
   {
    "is_class": false,
@@ -467,15 +476,6 @@
    "module": "builtins",
    "module_short": "builtins",
    "name": "int"
-  }
- ],
- "line_kind": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "str"
   }
  ],
  "model": [
@@ -677,7 +677,7 @@
    "name": "dict"
   }
  ],
- "plt.cm.viridis": [
+ "plt.cm.tab10": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -697,7 +697,7 @@
    "is_explicit": false,
    "module": "matplotlib.pyplot.cm",
    "module_short": "matplotlib.pyplot.cm",
-   "name": "viridis"
+   "name": "tab10"
   }
  ],
  "plt.savefig": [
@@ -730,6 +730,15 @@
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
    "name": "subplots"
+  }
+ ],
+ "region": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
   }
  ],
  "setup_style": [

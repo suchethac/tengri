@@ -404,7 +404,7 @@ def kriek_conroy(
     is renormalized to :math:`k(5500\,\text{\AA}) = 1`. The
     ``dust_bump_strength`` multiplier scales :math:`E_b`.
 
-    **Upstream**: ports the FSPS ``dust_type=4`` branch (Conroy, Gunn &
+    **Upstream**: follows the FSPS ``dust_type=4`` branch (Conroy, Gunn &
     White 2009); the slope–bump coupling is Kriek & Conroy (2013) Eqn 3.
 
     References

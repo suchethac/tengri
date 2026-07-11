@@ -88,7 +88,7 @@ class TestSelfSimilar:
         constants, which the paper states explicitly "differ from Narayan & Yi
         (1995b)" — Eq. 1's footnote carries a factor 1/3 for a 3-D tangled field,
         so the NY95b B-normalization (~6.55e8 with a c3^1/4) does NOT apply here.
-        We port Mahadevan 1997 Eq. 5, not NY95b.
+        We implement Mahadevan 1997 Eq. 5, not NY95b.
         """
         from tengri.components.agn.adaf import _adaf_ne_b_rmin
 

@@ -155,23 +155,6 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="M_★/L_band rises with stellar age in every band; the rise is steepest in g, where massive young stars dominate, and shallowest in K_s, where red giants contribute at every age past the first ~100 Myr.">
-
-.. only:: html
-
-  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_mass_to_light_ratios_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/sps/plot_mass_to_light_ratios`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Stellar mass-to-light ratios vs SSP age, per band</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Different stellar population synthesis codes use different stellar spectral libraries, isochrone families, and binary treatments. The SED of a ~1 Gyr-old, solar-metallicity simple stellar population already shows visible differences in the UV (BPASS binaries add a hot continuum) and in the NIR (treatment of TP-AGB).">
 
 .. only:: html
@@ -324,7 +307,6 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
    /auto_examples/sps/plot_imf_choice_sweep
    /auto_examples/sps/plot_ionizing_lum
    /auto_examples/sps/plot_mass_to_light_band_comparison
-   /auto_examples/sps/plot_mass_to_light_ratios
    /auto_examples/sps/plot_sps_library_compare
    /auto_examples/sps/plot_ssp_age_sweep
    /auto_examples/sps/plot_ssp_color_compare

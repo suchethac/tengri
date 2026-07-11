@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for SEDModel.build resolver consulting _REGISTRY for SEDModelComponent ports."""
+"""Tests for SEDModel.build resolver consulting _REGISTRY for SEDModelComponent
+components."""
 
 import pytest
 
@@ -12,7 +13,7 @@ pytestmark = pytest.mark.contract
 class TestBuildResolverDustAttenuation:
     """Dust attenuation laws are config sub-selectors of the canonical engine.
 
-    Direction B (#738): the thin single-law "ports" (calzetti/smc/mw/salim18)
+    Direction B (#738): the thin single-law components (calzetti/smc/mw/salim18)
     were deleted — they were silent no-ops. ``calzetti``/``smc``/… are dust
     *laws* selected via ``law_bc``/``law_diff`` on the ``two_component`` /
     ``single`` / ``wg00`` engine, NOT standalone ``_REGISTRY`` component types.
@@ -49,8 +50,8 @@ class TestBuildResolverDustAttenuation:
 class TestBuildResolverDustEmission:
     """Dust IR emission models are engine sub-selectors of the two-component
     engine (resolved via ``_REGISTRY``), not standalone ``_REGISTRY``
-    ports. The ``*_ir`` SEDModelComponent classes are unused parity mirrors — the
-    grammar surface is the engine name (#738).
+    components. The ``*_ir`` SEDModelComponent classes are unused parity
+    mirrors — the grammar surface is the engine name (#738).
     """
 
     @pytest.mark.parametrize(
@@ -69,16 +70,19 @@ class TestBuildResolverDustEmission:
             pytest.skip(f"{emission!r} template not on disk: {exc}")
         assert model is not None
 
-    @pytest.mark.parametrize("port", ["dl07_ir", "schreiber2016_ir", "draine2021_pah_ir"])
-    def test_ir_port_names_rejected_as_emission_types(self, ssp_data_bc03, port):
-        """``*_ir`` SEDModelComponent port names are not valid emission grammar —
-        not the deleted duplicates (``dl07_ir``) nor the surviving unique ports
-        (``schreiber2016_ir``/``draine2021_pah_ir``, still in ``_REGISTRY``). They
-        used to be silently accepted then fail at predict (the removed #738 footgun)."""
+    @pytest.mark.parametrize(
+        "component_name", ["dl07_ir", "schreiber2016_ir", "draine2021_pah_ir"]
+    )
+    def test_ir_component_names_rejected_as_emission_types(self, ssp_data_bc03, component_name):
+        """``*_ir`` SEDModelComponent names are not valid emission grammar —
+        not the deleted duplicates (``dl07_ir``) nor the surviving unique
+        components (``schreiber2016_ir``/``draine2021_pah_ir``, still in
+        ``_REGISTRY``). They used to be silently accepted then fail at predict
+        (the removed #738 footgun)."""
         with pytest.raises(ValueError, match="Unknown dust emission type"):
             SEDModel.build(
                 ssp_data=ssp_data_bc03,
-                dust={"emission": {"type": port}},
+                dust={"emission": {"type": component_name}},
                 redshift=Fixed(0.1),
             )
 
@@ -88,7 +92,7 @@ def _assert_nebular_backend(model, expected_backend: str) -> None:
 
     Direction B (#738): nebular grammar keys land on the tested
     ``NebularSEDComponent`` engine with ``config.backend`` set — NOT a
-    per-backend ``SEDModelComponent`` port (those duplicates were deleted).
+    per-backend ``SEDModelComponent`` component (those duplicates were deleted).
     """
     from tengri.components.nebular.component import NebularSEDComponent
 
@@ -188,7 +192,7 @@ class TestBuildResolverAGNTorus:
 class TestBuildResolverAGNDisc:
     """Test that SEDModel.build resolves AGN disc composable-block types.
 
-    Unlike dust/nebular ports (whose ``_REGISTRY`` names *are* the grammar
+    Unlike dust/nebular components (whose ``_REGISTRY`` names *are* the grammar
     keys), AGN disc physics is reached through the composable disc-block
     grammar (ADR-0018) — ``agn={'disc': {'type': 'kubota_done'}}`` — not via the
     bare ``SEDModelComponent`` names (``kd18_disc`` / ``powerlaw_disc``), which

@@ -119,7 +119,7 @@ multiple state layers — stays on the bare Protocol. This is by design:
 
 ## Posterior impact (lead with science, not engineering)
 
-**Physics correctness is unchanged.** A model ported from the bare Protocol to
+**Physics correctness is unchanged.** A model migrated from the bare Protocol to
 `SEDModelComponent` that uses the same physics will produce bit-identical
 predictions. The base class is a plumbing optimization, not a physics approximation.
 

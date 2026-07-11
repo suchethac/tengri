@@ -156,8 +156,8 @@ def test_single_component_grid_emission_reradiates():
 
     Pre-migration, ``single_component`` + a grid IR template (dale2014) raised —
     the fused-kernel single-screen path never wired grid IR. The unified
-    SEDModelComponent dispatch (ADR-0019) wires every emission port uniformly:
-    the attenuator publishes ``L_ir`` and the port re-radiates it regardless of
+    SEDModelComponent dispatch (ADR-0019) wires every emission component uniformly:
+    the attenuator publishes ``L_ir`` and the component re-radiates it regardless of
     single- vs two-component screen. So the grid template now re-radiates the
     absorbed energy instead of failing loud.
     """
@@ -183,5 +183,5 @@ def test_single_component_grid_emission_reradiates():
     )
     assert ratio > 50, (
         f"single_component + grid dale2014 far-IR ratio = {ratio:.1f}, expected >> 1: "
-        "the unified port dispatch must re-radiate grid IR on the single-screen path (#565)."
+        "the unified component dispatch must re-radiate grid IR on the single-screen path (#565)."
     )

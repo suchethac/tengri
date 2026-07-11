@@ -69,7 +69,7 @@ Close every residual with a number. Classify each as:
 
 - **tengri bug** — fix it, with a regression test against an independent reference.
 - **convention** — document it; consider a parity toggle.
-- **reference-side or port artifact** — document it and move on.
+- **reference-side or implementation artifact** — document it and move on.
 
 Refuting a hypothesis is a result. Measuring that a suspected cause changes
 nothing is worth recording, so the next person does not re-chase it.

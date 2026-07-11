@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Bit-exact regression tests for analytic dust emission SEDModelComponent ports.
+"""Bit-exact regression tests for analytic dust emission SEDModelComponents.
 
 Tests that the SEDModelComponent wrappers produce identical output to the
 original pure closures (zero tolerance) and that CMB parity is preserved
@@ -16,7 +16,7 @@ import tengri  # noqa: F401
 
 @pytest.mark.regression_bug
 class TestDustEmissionAnalyticPorts:
-    """Bit-exact regression suite for dust emission model ports."""
+    """Bit-exact regression suite for dust emission model components."""
 
     @pytest.fixture
     def wave_grid(self):

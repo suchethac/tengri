@@ -37,7 +37,7 @@ import jax.numpy as jnp
 from tengri.components.igm import igm_transmission
 from tengri.components.igm.igm import _A_DLA, _A_LAF, _LAMBDA_LYMAN
 
-# ── Canonical eazy-py Inoue14 reference (verbatim port) ──────────────
+# ── Canonical eazy-py Inoue14 reference implementation ───────────────
 # Coefficients reused from tengri's tables (which come from eazy's
 # LAF/DLAcoeff.txt). The reference Lyman-series wavelengths use the eazy
 # value lam[0] = 1215.67; the Lyman limit is 911.8 Å.
@@ -133,7 +133,7 @@ def _ref_tLCDLA(zS, lobs):
 
 
 def eazy_inoue_transmission(zS, lobs):
-    """Reference Inoue+2014 transmission (eazy-py port)."""
+    """Reference Inoue+2014 transmission (matches eazy-py)."""
     lobs = np.asarray(lobs, dtype=float)
     tau = (
         _ref_tLSLAF(zS, lobs)

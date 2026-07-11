@@ -219,7 +219,7 @@ from tengri.components.dust.emission.analytic._closures import (
 
 # Register the grammar-dispatchable analytic closures (defined in
 # analytic/_closures.py; #843). energy_balance_split is intentionally NOT
-# registered here — it dispatches via its _REGISTRY port only (single
+# registered here — it dispatches via its _REGISTRY component only (single
 # dispatch, #850).
 DUST_EMISSION_MODELS["modified_blackbody"] = modified_blackbody
 DUST_EMISSION_MODELS["casey2012"] = casey2012
@@ -497,7 +497,7 @@ def _make_lazy_loader(
                     raise RuntimeError(
                         f"Template file '{path}' has an incompatible schema "
                         f"for the legacy {name!r} registry path: {exc!r}. "
-                        f"Use the modern emission-port dispatch "
+                        f"Use the modern emission-component dispatch "
                         f"(dust={{'emission': {{'type': {name!r}}}}}) or the "
                         f"model-specific loader "
                         f"(load_astrodust_hd23_or_raise / load_bosa_*) "
@@ -605,7 +605,7 @@ from tengri.components.dust.emission_templates import (
 )
 
 # NOTE: ``energy_balance_split`` is NOT registered in ``DUST_EMISSION_MODELS``.
-# Its canonical dispatch is the ``EnergyBalanceSplitIRSEDComponent`` port in
+# Its canonical dispatch is the ``EnergyBalanceSplitIRSEDComponent`` component in
 # ``_REGISTRY`` (analytic/energy_balance_split.py), which calls the pure
 # :func:`energy_balance_split` closure directly with ``eta_balance=1.0``.
 # A second registration here would create a divergent dispatch path

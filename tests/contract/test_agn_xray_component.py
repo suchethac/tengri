@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Contract tests for AGN X-ray corona SEDModelComponent port.
+"""Contract tests for AGN X-ray corona SEDModelComponent.
 
 Verify that AGNXRayCoronaSEDComponent satisfies the SEDComponent protocol
 and registry expectations.

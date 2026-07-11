@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Dust IR emission under JIT: ports self-load, JIT and non-JIT paths agree.
+"""Dust IR emission under JIT: components self-load, JIT and non-JIT paths agree.
 
 Since #871 the dust IR emission templates (PAHspec, Astrodust, Dale, …) are
-self-loading ``SEDModelComponent`` ports — they load their HDF5 grids in
-``EmissionPort.load``/``predict`` rather than being threaded through
+self-loading ``SEDModelComponent`` components — they load their HDF5 grids in
+``EmissionComponent.load``/``predict`` rather than being threaded through
 ``SEDModel._template_data_for_jit()`` (the Phase 4-D-B adapter threading was
 removed with ``DustEmissionSEDComponent``). The contract these tests pin:
 
 * ``_template_data_for_jit()`` threads **no** dust-IR template arrays for the
-  emission ports (they self-load); only the build-time energy-balance LUT /
+  emission components (they self-load); only the build-time energy-balance LUT /
   band response (MBB WavePrecomp) and nebular/AGN templates are threaded.
 * JIT and non-JIT paths agree to floating-point precision.
 """
@@ -104,8 +104,8 @@ def test_mbb_dust_returns_no_dust_ir_template_data(ssp_wneref, obs):
 def test_pahspec_dust_does_not_thread_template_data(ssp_wneref, obs):
     """PAHspec emission self-loads; no dust-IR template threading (#871).
 
-    The Draine+2021 PAHspec model is a self-loading ``SEDModelComponent`` port:
-    its HDF5 grid loads in ``EmissionPort.load``/``predict``, so
+    The Draine+2021 PAHspec model is a self-loading ``SEDModelComponent``
+    component: its HDF5 grid loads in ``EmissionComponent.load``/``predict``, so
     ``_template_data_for_jit()`` threads no ``pahspec_*`` template arrays (the
     Phase 4-D-B adapter threading was removed with ``DustEmissionSEDComponent``).
     """
@@ -118,7 +118,7 @@ def test_pahspec_dust_does_not_thread_template_data(ssp_wneref, obs):
     td = model._template_data_for_jit()
     dust_ir = (td or {}).get("dust_ir", {}) or {}
     assert not any(k.startswith("pahspec_") for k in dust_ir), (
-        f"PAHspec port must self-load, not thread template arrays; got {list(dust_ir)}"
+        f"PAHspec component must self-load, not thread template arrays; got {list(dust_ir)}"
     )
 
 
@@ -126,7 +126,7 @@ def test_astrodust_dust_does_not_thread_template_data(ssp_wneref, obs):
     """Astrodust emission self-loads; no dust-IR template threading (#871).
 
     See the PAHspec sibling: the native HD23 astrodust implementation loads its grid in
-    ``EmissionPort.load``/``predict``, so ``_template_data_for_jit()`` threads no
+    ``EmissionComponent.load``/``predict``, so ``_template_data_for_jit()`` threads no
     ``astrodust_*`` template arrays.
     """
 
@@ -138,7 +138,7 @@ def test_astrodust_dust_does_not_thread_template_data(ssp_wneref, obs):
     td = model._template_data_for_jit()
     dust_ir = (td or {}).get("dust_ir", {}) or {}
     assert not any(k.startswith("astrodust_") for k in dust_ir), (
-        f"Astrodust port must self-load, not thread template arrays; got {list(dust_ir)}"
+        f"Astrodust component must self-load, not thread template arrays; got {list(dust_ir)}"
     )
 
 
@@ -160,11 +160,11 @@ def test_jit_and_non_jit_paths_agree_with_mbb_dust(ssp_wneref, obs):
     )
 
 
-def test_astrodust_port_re_radiates_far_ir(ssp_wneref, obs):
+def test_astrodust_component_re_radiates_far_ir(ssp_wneref, obs):
     """The native astrodust implementation actually re-emits (#871).
 
-    JIT/non-JIT agreement alone would pass even if the self-loading port were a
-    silent no-op (both zero). This pins the physics end-to-end: with dust
+    JIT/non-JIT agreement alone would pass even if the self-loading component
+    were a silent no-op (both zero). This pins the physics end-to-end: with dust
     attenuation on (L_ir > 0), the astrodust model must add far-IR flux the
     no-emission model lacks — the guard against the silent-no-op class.
     """
@@ -179,7 +179,7 @@ def test_astrodust_port_re_radiates_far_ir(ssp_wneref, obs):
     fir = (wo > 1.0e5) & (wo < 1.0e7)  # ~10 μm – 1 mm (observed)
     assert np.all(np.isfinite(lnu))
     assert np.nansum(lnu[fir]) > 10.0 * np.nansum(lnu0[fir]), (
-        "astrodust port added no far-IR re-emission (silent no-op)"
+        "astrodust component added no far-IR re-emission (silent no-op)"
     )
 
 

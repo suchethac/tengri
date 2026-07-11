@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Port Synthesizer's stellar ``incident`` grid to DSPS-shaped HDF5.
+r"""Repackage Synthesizer's stellar ``incident`` grid as DSPS-shaped HDF5.
 
 Synthesizer stores SSP spectra in HDF5 grids as ``spectra['incident']`` with
 shape ``(n_age, n_met, n_wave)`` in :math:`L_\nu` [erg/s/Hz] per :math:`M_\odot`
@@ -50,7 +50,7 @@ def _grid_dir() -> str:
 
 
 def repackage_stellar_grid(out_path: str | Path, *, grid_name: str = _STELLAR_GRID) -> None:
-    """Port the Synthesizer stellar ``incident`` grid to a DSPS-shaped HDF5.
+    """Repackage the Synthesizer stellar ``incident`` grid as DSPS-shaped HDF5.
 
     Parameters
     ----------

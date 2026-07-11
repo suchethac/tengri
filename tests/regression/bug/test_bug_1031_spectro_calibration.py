@@ -80,7 +80,7 @@ class TestCalibrationIsApplied:
         assert float(ratio[-1]) == pytest.approx(1.2, rel=1e-6)
 
     def test_second_order_is_curved_not_linear(self, synthetic_ssp_wide, wave_obs):
-        """T2(x) = 2x^2 - 1: symmetric edges, opposite-signed centre."""
+        """T2(x) = 2x^2 - 1: symmetric edges, opposite-signed center."""
         model = _build(synthetic_ssp_wide, wave_obs, order=2)
 
         flat = model.predict_spectrum({"cal_c1": 0.0, "cal_c2": 0.0})
@@ -105,7 +105,7 @@ class TestCalibrationIsApplied:
 
 
 class TestCalibrationIsStructural:
-    """Bug 3: calibration_order must colour the JIT cache."""
+    """Bug 3: calibration_order must color the JIT cache."""
 
     def test_compile_signature_separates_orders(self, synthetic_ssp_wide, wave_obs):
         m0 = _build(synthetic_ssp_wide, wave_obs, order=0)

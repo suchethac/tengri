@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Unit tests for the CAT3D-Wind torus port.
+"""Unit tests for the CAT3D-Wind torus component.
 
 Grid templates come from AGNfitter-rX (Zhuang et al. 2024) — a
 three-parameter projection of Hönig & Kishimoto 2017.  See

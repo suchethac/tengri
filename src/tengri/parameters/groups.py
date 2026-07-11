@@ -273,21 +273,21 @@ def _valid_dust_emission_types() -> frozenset[str]:
     """Return accepted ``dust.emission.type`` values, derived from the registry.
 
     Reads the ``_REGISTRY`` (populated by SEDModelComponent.__init_subclass__
-    at import time) and returns names of all ports whose ``outputs`` include
-    ``"sed_dust_ir"``. This automatically picks up all dust emission ports
+    at import time) and returns names of all components whose ``outputs`` include
+    ``"sed_dust_ir"``. This automatically picks up all dust emission components
     (modified_blackbody, dale2014, draine_li2007, etc.) without manual
     maintenance. Union with the alias map keys (e.g., draine2021_pah →
     draine2021_pah_ir) so grammar type names resolve correctly.
 
     Includes ``energy_balance_split`` (a registered two-temperature + AGN-IR
-    port publishing ``sed_dust_ir``, Kokorev+2021 — a real model, not a helper).
-    Also includes ``_LAZY_DUST_EMISSION_TYPES`` (ADR-0005 / ADR-0008).
+    component publishing ``sed_dust_ir``, Kokorev+2021 — a real model, not a
+    helper). Also includes ``_LAZY_DUST_EMISSION_TYPES`` (ADR-0005 / ADR-0008).
     """
     from tengri.components.sed_model_component import _REGISTRY
     from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES
 
     # Registry names whose outputs include "sed_dust_ir" (getattr skips non-emission entries, #844)
-    dust_ir_ports = frozenset(
+    dust_ir_components = frozenset(
         name
         for name, cls in _REGISTRY.items()
         if "sed_dust_ir" in {o.name for o in getattr(cls, "_outputs_tuple", ())}
@@ -296,7 +296,7 @@ def _valid_dust_emission_types() -> frozenset[str]:
     # Add alias keys (grammar names that map to registry names)
     alias_keys = frozenset(_EMISSION_TYPE_ALIASES.keys())
 
-    return dust_ir_ports | alias_keys | _LAZY_DUST_EMISSION_TYPES
+    return dust_ir_components | alias_keys | _LAZY_DUST_EMISSION_TYPES
 
 
 def _valid_nebular_types() -> frozenset[str]:
@@ -995,7 +995,7 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
 
     # Lyman-limit clip is wired only through the two-component screen. Flag any
     # other type rather than silently dropping the request (single-component,
-    # WG00, and SEDModelComponent ports do not route through it yet).
+    # WG00, and SEDModelComponents do not route through it yet).
     if dust_dict.get("lyman_cutoff") and dust_type != "two_component":
         raise ValueError(
             f"dust 'lyman_cutoff' is only supported for type='two_component' "

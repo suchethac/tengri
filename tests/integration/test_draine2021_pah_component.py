@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""SEDModelComponent tests for the Draine+2021 PAHspec emission port.
+"""SEDModelComponent tests for the Draine+2021 PAHspec emission component.
 
 The PAHspec model is authored as
 :class:`~tengri.components.dust.draine2021_pah_ir.Draine2021PAHIRSEDComponent`
 (dispatched via ``dust={'emission': {'type': 'draine2021_pah'}}``). This file
-exercises the port contract — declared_parameters, load, predict, JIT
+exercises the component contract — declared_parameters, load, predict, JIT
 compatibility, gradient propagation through ``dust_lgU``, energy balance with
 ``L_ir`` — plus the ``starlight="auto"`` nearest-neighbor selection.
 

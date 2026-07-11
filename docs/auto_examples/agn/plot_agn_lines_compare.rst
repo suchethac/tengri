@@ -21,20 +21,22 @@
 AGN emission-line backbones compared
 ======================================
 
-Four production line backbones layered on top of the same disc +
-torus at fixed ``log L_bol = 12.5``. The line backbone controls
-which optical/UV emission features the model produces — narrow-line
-region forbidden lines, broad-line permitted lines, or pre-canned
-empirical line lists.
+The renderable line backbones registered under the three composable
+line selectors — ``agn.nlr`` (narrow-line region), ``agn.blr``
+(broad-line region), and ``agn.feii`` (iron pseudo-continuum) — each
+layered on the same disc + torus at fixed ``log L_bol = 12.5``. The
+backbone controls which optical/UV features the model produces:
+narrow forbidden lines, broad permitted lines, or the blended Fe II
+forest.
 
-Line backbones compared (three production selectors under
-``agn.lines.type``; the GRAHSP catalog needs an extra data bundle
-not shipped with the gallery):
-- ``nlr``     — Narrow-line region (Feltre+2016 photoionization grid)
-- ``blr``     — Broad-line region (Cracco+2016 photoionization grid)
-- ``qsogen``  — Temple+2021 empirical type-1 lines
+Backbones shown (one per registered implementation that renders from
+the shipped data): NLR ``analytic``/``feltre``, BLR ``grahsp``/
+``qsogen``, Fe II ``boroson_green``/``qsogen_balmer``. The
+``synthesizer`` NLR/BLR grids need an external data bundle not shipped
+with the gallery, and the ``cue`` NLR backbone is omitted here (its
+line normalization is under review, see the tracked issue).
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-94
+.. GENERATED FROM PYTHON SOURCE LINES 20-100
 
 
 
@@ -44,8 +46,19 @@ not shipped with the gallery):
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -66,12 +79,16 @@ not shipped with the gallery):
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-    LINES_MODELS = [
-        ("nlr", "NLR (Feltre+2016)"),
-        ("blr", "BLR (Cracco+2016)"),
-        ("qsogen", "QSOGEN empirical"),
+    # (region selector, backbone type, label)
+    LINE_BACKBONES = [
+        ("nlr", "analytic", "NLR analytic"),
+        ("nlr", "feltre", "NLR (Feltre+2016)"),
+        ("blr", "qsogen", "BLR (QSOGEN, Temple+2021)"),
+        ("blr", "grahsp", "BLR (GRAHSP)"),
+        ("feii", "boroson_green", "Fe II (Boroson & Green 1992)"),
+        ("feii", "qsogen_balmer", "Fe II + Balmer (QSOGEN)"),
     ]
-    COLORS = plt.cm.viridis(np.linspace(0.05, 0.9, len(LINES_MODELS)))
+    COLORS = plt.cm.tab10(np.linspace(0, 1, 10))[: len(LINE_BACKBONES)]
 
     C_AA_PER_S = 2.998e18
     SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
@@ -80,7 +97,7 @@ not shipped with the gallery):
     ssp = tengri.load_ssp()
     fig, ax = plt.subplots(figsize=(7.4, 4.6))
 
-    for (line_kind, label), color in zip(LINES_MODELS, COLORS):
+    for (region, kind, label), color in zip(LINE_BACKBONES, COLORS):
         model = tengri.SEDModel.build(
             ssp,
             sfh=SFH,
@@ -88,7 +105,7 @@ not shipped with the gallery):
             agn={
                 "disc": {"type": "multicolor", "*": tengri.FIXED},
                 "torus": {"type": "skirtor", "*": tengri.FIXED},
-                "lines": {"type": line_kind, "*": tengri.FIXED},
+                region: {"type": kind, "*": tengri.FIXED},
                 "*": tengri.FIXED,
                 "log_lbol": 12.5,
                 "frac": 1.0,
@@ -129,7 +146,7 @@ not shipped with the gallery):
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.470 seconds)
+   **Total running time of the script:** (0 minutes 7.898 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_lines_compare.py:

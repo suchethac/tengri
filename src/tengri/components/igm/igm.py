@@ -75,7 +75,7 @@ _LAMBDA_LYMAN = jnp.array(
     ]
 )
 
-# Lyman limit wavelength (Inoue et al. 2014 uses 911.8 Å; eazy-py port).
+# Lyman limit wavelength (Inoue et al. 2014 uses 911.8 Å; matches eazy-py).
 _LAMBDA_LIMIT = 911.8  # Angstrom
 
 # ── LAF coefficients: A_j^LAF for 3 regimes (Inoue+2014 Eq. 21) ───

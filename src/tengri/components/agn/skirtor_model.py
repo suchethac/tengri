@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""SKIRTOR torus SEDModelComponent adapter.
+"""SKIRTOR clumpy torus (Stalevski et al. 2012, 2016) SEDModelComponent.
 
-Ports the SKIRTOR clumpy torus (Stalevski et al. 2012, 2016) to the
-SEDModelComponent framework, enabling use of radiative-transfer templates
-in the model-building API.
+Implements the SKIRTOR clumpy torus model on the SEDModelComponent contract,
+enabling use of radiative-transfer templates in the model-building API.
 
 This is an opt-in adapter — the existing AGNSEDComponent continues to
 support SKIRTOR through the unified AGN registry.

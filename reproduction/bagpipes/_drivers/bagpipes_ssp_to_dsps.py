@@ -1,4 +1,4 @@
-"""Port bagpipes' BC03+MILES stellar grid to DSPS-shaped HDF5.
+"""Repackage bagpipes' BC03+MILES stellar grid as DSPS-shaped HDF5.
 
 Bagpipes ships ``bc03_miles_stellar_grids.fits`` (BC03 stellar templates
 stitched into the MILES extended-wavelength library, Kroupa 2001 IMF).
@@ -121,7 +121,7 @@ def convert_to_lnu_per_msun(wave_aa: np.ndarray, flux_lsun_aa_msun: np.ndarray) 
 
 
 def repackage_bc03_miles(out_path: str | Path) -> Path:
-    """Port bagpipes' BC03+MILES grid to DSPS-shaped HDF5.
+    """Repackage bagpipes' BC03+MILES grid as DSPS-shaped HDF5.
 
     The age grid in bagpipes starts at 0 yr — DSPS / tengri expects
     :math:`\\log_{10}` ages, so the zero entry must be dropped before
