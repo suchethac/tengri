@@ -147,7 +147,6 @@ ax_phot.scatter(
 )
 ax_phot.set_ylabel(r"$f_\nu$ [arbitrary]")
 ax_phot.legend(fontsize=10, frameon=False, loc="upper right")
-ax_phot.set_title("Posterior Predictive Check: Mock Photometry")
 ax_phot.grid(True, alpha=0.2)
 
 # Panel 2: Residuals in units of noise
@@ -170,11 +169,3 @@ ax_res.grid(True, alpha=0.2, axis="y")
 
 fig.tight_layout()
 plt.savefig("plot_posterior_predictive_check.png", dpi=150, bbox_inches="tight")
-
-# --- Summary statistics ---
-max_residual = np.max(np.abs(residuals_median))
-within_2sigma = np.sum(np.abs(residuals_median) < 2.0) / len(residuals_median)
-print("Posterior predictive check diagnostics:")
-print(f"  Max |residual| (σ units): {max_residual:.2f}")
-print(f"  Fraction within ±2σ: {within_2sigma:.1%}")
-print(f"  → Well-fit model: {within_2sigma > 0.95}")
