@@ -95,6 +95,13 @@ from tengri.utils.grid import (
     make_log_age_grid,
 )
 
+#: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
+#: :meth:`SEDModel._dust_emission_band_response`. A physically plausible L_IR
+#: (~1e44 erg/s ≈ 2.6e10 Lsun, a LIRG), paired with the L=1 unit probe. An emitter
+#: whose template *shape* depends on luminosity (BOSA: L_TIR–sSFR) fails to scale
+#: between the two and is refused a constant band response.
+_L_IR_PROBE = 1.0e44
+
 # Re-export supporting types for backwards compatibility
 __all__ = [
     "MockData",
@@ -810,15 +817,17 @@ class SEDModel:
         # a user ``jax.jit(predict_photometry)`` trace, leaking tracers and
         # baking the LUT in as a constant (XLA constant-folds → ~100× slower).
         if self._approx.get("wave_precomp"):
+            # The two precomputes are independent and fail independently. A single
+            # try around both meant a band-response failure disabled the *energy
+            # balance* LUT too — and reported itself under the energy-balance
+            # warning, blaming the wrong subsystem.
             try:
                 chain = self._build_component_chain()
                 self._cached_component_chain = chain
                 self._energy_balance_lut(chain)
-                self._dust_emission_band_response(chain)
             except Exception as e:
-                # Any build-time failure leaves the LUT disabled — the exact
-                # full-wave energy-balance path is the correct fallback, but
-                # it forfeits the speedup the astronomer opted into, so say so.
+                # The exact full-wave energy-balance path is the correct fallback,
+                # but it forfeits the speedup the astronomer opted into, so say so.
                 warnings.warn(
                     f"WavePrecomp energy-balance LUT precompute failed ({e!r}); "
                     "falling back to the exact energy-balance path (correct, "
@@ -827,6 +836,17 @@ class SEDModel:
                     stacklevel=2,
                 )
                 self._energy_balance_lut_cache = None
+
+            try:
+                self._dust_emission_band_response(self._cached_component_chain)
+            except Exception as e:
+                warnings.warn(
+                    f"WavePrecomp dust-emission band-response precompute failed "
+                    f"({e!r}); falling back to the exact per-call filter integral "
+                    "(correct, but without the precomputed-response speedup).",
+                    UserWarning,
+                    stacklevel=2,
+                )
                 self._dust_band_response_cache = None
 
         # Build-time accuracy guard (#617): the photometry LUT bakes the
@@ -5604,46 +5624,63 @@ class SEDModel:
         if cached != "unset":
             return cached
 
-        from tengri.components.dust.two_component import DustSEDComponent
-
         response = None
-        dust = next(
-            (
-                c
-                for c in chain
-                if isinstance(c, DustSEDComponent)
-                and getattr(c.config, "emission_model", None) == "modified_blackbody"
-            ),
+        emitter = next(
+            (c for c in chain if getattr(c, "name", "") == "dust_emission"),
             None,
         )
-        free = set(self.spec.free_params)
-        shape_params = ("dust_T", "dust_beta_ir", "dust_epsilon_mbb", "redshift")
         stellar = next((c for c in chain if c.name == "stellar"), None)
         st = getattr(stellar, "_state", None)
         fw_pad = getattr(st, "phot_fw_padded", None)
         ft_pad = getattr(st, "phot_ft_padded", None)
+
+        # ALLOWLIST, not a denylist. R is a build-time constant only if the emission
+        # *shape* is fixed. Gating on "no free param from a known shape-param set"
+        # fails DANGEROUS when a param is missing from that set (dust_log_ssfr was);
+        # gating on "no free dust_* param outside the known attenuation knobs" fails
+        # SAFE — an unrecognized free parameter simply disables the optimization.
+        free = set(self.spec.free_params)
+        free_dust = {p for p in free if p.startswith("dust_")}
+        shape_free = bool(free_dust - self._EB_ATTEN_FREE_OK) or ("redshift" in free)
+
         if (
-            dust is not None
+            emitter is not None
             and self._approx.get("wave_precomp")
-            and not (free & set(shape_params))
+            and not shape_free
             and fw_pad is not None
             and ft_pad is not None
+            and hasattr(emitter, "predict")
+            and hasattr(emitter, "slice_params")
         ):
-            from tengri.components.dust.emission import modified_blackbody
             from tengri.observation.photometry import lnu_filter_integral_batch
 
-            fixed = self.spec.get_fixed_values()
+            fixed = dict(self.spec.get_fixed_values())
             wave = self._rest_wavelength
             z = jnp.asarray(fixed.get("redshift", 0.0))
-            unit_sed_ir = modified_blackbody(
-                wave,
-                L_absorbed=1.0,
-                dust_T=jnp.asarray(fixed.get("dust_T", 35.0)),
-                dust_beta_ir=jnp.asarray(fixed.get("dust_beta_ir", 1.6)),
-                redshift=z,
-                dust_epsilon_mbb=jnp.asarray(fixed.get("dust_epsilon_mbb", 1.0)),
-            )
-            response = lnu_filter_integral_batch(unit_sed_ir, wave, fw_pad, ft_pad, z)
+            # Slice with the component's OWN rule — the same one apply() uses. A
+            # precompute that slices differently silently builds R from default
+            # template parameters and returns confidently wrong IR photometry.
+            p = emitter.slice_params({k: jnp.asarray(v) for k, v in fixed.items()})
+
+            # HOMOGENEITY CHECK. The band response is exact only because an additive
+            # emitter is linear (degree-1 homogeneous) in its luminosity:
+            #
+            #     sed(L) = L * S_unit(lambda)   =>   int sed(L) R_f = L * int S_unit R_f
+            #
+            # Not every IR model obeys this. BOSA parameterizes its template by
+            # (L_TIR, sSFR), so its *shape* is a function of L_ir — probing it at
+            # L_ir = 1 erg/s samples a template ~44 dex from anything physical and
+            # builds a response that is wrong by ~13% in W4. Luminosity-dependent
+            # shapes (L-T relations) are common in IR SED models, so verify the
+            # property rather than maintaining a list of which models have it:
+            # probe at two luminosities and require the SED to scale.
+            lo, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=1.0)
+            hi, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=_L_IR_PROBE)
+            if not bool(jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)):
+                self._dust_band_response_cache = None
+                return None
+
+            response = lnu_filter_integral_batch(lo, wave, fw_pad, ft_pad, z)
 
         self._dust_band_response_cache = response
         return response
@@ -5845,6 +5882,25 @@ class SEDModel:
                         chain[idx] = replace(comp, _state=neb_state)
                         break
 
+                # The IGM component tabulates its filter-averaged transmission
+                # <T>_f against redshift here, where the filter convention and
+                # padded curves are in scope. Without it, predict_via_precomp
+                # band-averages the full-grid Inoue+2014 curve on every call —
+                # which pins the full-resolution grid and defeats the dead-code
+                # elimination that IS the WavePrecomp speedup (#932).
+                from tengri.components.igm.component import IGMSEDComponent
+
+                for idx, comp in enumerate(chain):
+                    if isinstance(comp, IGMSEDComponent):
+                        igm_state = comp.precompute_band_factors(
+                            wave_rest=self.wavelengths,
+                            photometry=self.observation.photometry,
+                            filters=filters,
+                            redshift_spec=redshift_spec,
+                        )
+                        chain[idx] = replace(comp, _state=igm_state)
+                        break
+
         # SpectrumPrecomp — pre-rebin the SSP grid to the spectrum
         # pixel centers. Only the stellar component needs a build-time LUT;
         # downstream SEDModelComponents (dust / AGN / IGM / nebular continuum)
@@ -5918,6 +5974,34 @@ class SEDModel:
                 else:
                     merged = spec_state
                 chain[0] = replace(stellar, _state=merged)
+
+                # The IGM component tabulates its per-pixel transmission against
+                # redshift, the twin of the photometry band factor. Without it,
+                # predict_spectrum_via_precomp samples the full-grid Inoue+2014
+                # curve every call and the spectrum LUT buys nothing at all.
+                # MERGE, don't overwrite: a joint phot+spec model already carries
+                # the band table from the WavePrecomp block above.
+                from tengri.components.igm.component import IGMSEDComponent
+
+                for idx, comp in enumerate(chain):
+                    if isinstance(comp, IGMSEDComponent):
+                        spec_igm = comp.precompute_spec_factors(
+                            wave_rest=self.wavelengths,
+                            spec_wave_obs=spec_wave_obs,
+                            redshift_spec=redshift_spec,
+                        )
+                        prev_igm = comp._state
+                        igm_state = (
+                            replace(
+                                prev_igm,
+                                spec_zgrid=spec_igm.spec_zgrid,
+                                spec_table=spec_igm.spec_table,
+                            )
+                            if prev_igm is not None
+                            else spec_igm
+                        )
+                        chain[idx] = replace(comp, _state=igm_state)
+                        break
 
         # Bake the fast-dust-emission routing flag onto the dust component so
         # ``apply`` can branch on it statically (structural, not a runtime arg).
