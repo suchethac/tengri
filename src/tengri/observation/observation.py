@@ -550,6 +550,48 @@ class Observation:
             )
         return flux
 
+    def _apply_spec_calibration(self, flux, wave_obs, params):
+        """Multiply a model spectrum by the Chebyshev flux-calibration polynomial.
+
+        Parameters
+        ----------
+        flux : array_like, shape (n_pixels,)
+            Model spectrum on the observed grid [erg/s/cm^2/Hz].
+        wave_obs : array_like, shape (n_pixels,)
+            Observed-frame wavelength grid [Angstrom].
+        params : dict
+            Parameter dict; reads ``cal_c1 .. cal_cN``.
+
+        Returns
+        -------
+        ndarray, shape (n_pixels,)
+            Calibrated spectrum [erg/s/cm^2/Hz].
+
+        Notes
+        -----
+        JIT-compatible: yes (``calibration_order`` is static; the coefficients
+        are traced). Structural no-op when ``calibration_order == 0``, and an
+        exact no-op when every coefficient is zero, since
+        :math:`C(\\lambda) = 1 + \\sum_n a_n T_n(x)` — so wiring this in leaves
+        every uncalibrated model bit-identical.
+
+        The polynomial forward-models the instrument's flux-calibration error
+        onto the *model* spectrum (the Bagpipes/Prospector convention), rather
+        than dividing it out of the data. The constant term is pinned to 1, so
+        the overall normalization stays owned by the SFH mass parameter instead
+        of being degenerate with it.
+        """
+        if self.spectroscopy is None or self.spectroscopy.calibration_order == 0:
+            return flux
+
+        from tengri.observation.calibration import apply_calibration
+
+        order = self.spectroscopy.calibration_order
+        coeffs = jnp.stack(
+            [jnp.asarray(params[f"cal_c{i + 1}"], dtype=flux.dtype) for i in range(order)]
+        )
+        return apply_calibration(flux, wave_obs, coeffs, wave_obs[0], wave_obs[-1])
+
     # ── Unified projection (ObservationModel Protocol) ────────────
 
     def predict(
@@ -708,6 +750,7 @@ class Observation:
                     n_bins=n_bins,
                     sigma_v_kms=sigma_v_kms,
                 )
+            flux = self._apply_spec_calibration(flux, wo, params)
             out["spec_fnu"] = flux
 
         # If observables_type is provided, populate and return the NamedTuple.
@@ -1106,6 +1149,13 @@ class Observation:
         if igm_trans is not None and eff_waves is not None:
             igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
             spec_fnu = spec_fnu * igm_factor
+
+        # Flux calibration, same as the exact path. Applied to the observed
+        # spectrum only: it models the instrument's calibration error, which
+        # has no meaning for the rest-frame (z=0, 10 pc) spectrum. Omitting it
+        # here would silently drop calibration under SpectrumPrecomp while the
+        # exact path applied it (the LUT-drops-a-component class of #737/#740).
+        spec_fnu = self._apply_spec_calibration(spec_fnu, self.spectroscopy.wave_obs, params)
 
         out = {"spec_fnu": spec_fnu, "spec_rest_fnu": spec_rest_fnu}
 

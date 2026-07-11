@@ -719,8 +719,8 @@ class SEDModel:
         # ── Multiwavelength (radio, X-ray, shock) ─────────────────
         param_map_deltas.append(self._init_multiwavelength(spec, ssp_data))
 
-        # ── Instrument (velocity dispersion, LSF) ─────────────────
-        self._init_instrument(spec, observation)
+        # ── Instrument (velocity dispersion, LSF, spectro-calibration) ──
+        param_map_deltas.append(self._init_instrument(spec, observation))
 
         # ── Cosmology (luminosity distance) ───────────────────────
         self._init_cosmology(spec)
@@ -1711,7 +1711,25 @@ class SEDModel:
         return delta
 
     def _init_instrument(self, spec, observation):
-        """Configure velocity dispersion and LSF settings."""
+        """Configure velocity dispersion, LSF, and spectro-calibration settings.
+
+        Returns
+        -------
+        dict[str, tuple[str, float, float]]
+            Parameter-map delta registering the Chebyshev calibration
+            coefficients ``cal_c1 .. cal_cN`` as identity mappings. Empty
+            when the observation declares no spectro-calibration.
+
+        Notes
+        -----
+        ``Spectroscopy(calibration_order=N)`` auto-merges ``cal_c1..cal_cN``
+        into the spec as free parameters (``Observation.get_all_params``).
+        Their count is set by the observation, not by any component, so they
+        cannot live in the static ``_NON_SFH_PARAM_MAP`` table the way
+        ``sigma_v_kms`` and ``noise_*`` do — they are registered here instead.
+        Without this delta, ``_validate_and_freeze_param_map`` raised
+        ``ParameterMapError`` for every calibrated spectrum (#1031).
+        """
         self._has_sigma_v = spec.has_param("sigma_v") if hasattr(spec, "has_param") else False
         if not self._has_sigma_v:
             try:
@@ -1729,6 +1747,11 @@ class SEDModel:
             self._sigma_lib_kms = getattr(spec, "sigma_lib_kms", 0.0)
             self._lsf_resolution = getattr(spec, "lsf_resolution", None)
             self._lsf_n_bins = getattr(spec, "lsf_n_bins", 16)
+
+        if observation is not None and observation.can_do_spectroscopy:
+            order = observation.spectroscopy.calibration_order
+            return {f"cal_c{i + 1}": (f"cal_c{i + 1}", 1.0, 0.0) for i in range(order)}
+        return {}
 
     def _init_cosmology(self, spec):
         """Precompute luminosity distance if redshift is fixed."""
@@ -2734,10 +2757,20 @@ class SEDModel:
             spec_wave_shape = tuple(self.observation.spectroscopy.wave_obs.shape)
             sigma_lib_kms = float(self._sigma_lib_kms)
             lsf_resolution = self._lsf_resolution
+            # The calibration order changes the kernel STRUCTURE: it decides
+            # whether the Chebyshev polynomial is applied at all and how many
+            # cal_c* parameters the graph reads. Omitting it let two models
+            # differing only in calibration_order share one compiled kernel —
+            # the uncalibrated model would then run the calibrated model's
+            # graph and raise KeyError('cal_c1') (or, worse, silently apply a
+            # neighbour's calibration). Harmless only while the polynomial was
+            # never applied (#1031); load-bearing now that it is.
+            calibration_order = int(self.observation.spectroscopy.calibration_order)
         else:
             spec_wave_shape = ()
             sigma_lib_kms = 0.0
             lsf_resolution = None
+            calibration_order = 0
 
         # CSP integration method
         csp_integration = str(self._csp_integration)
@@ -2888,6 +2921,7 @@ class SEDModel:
             spec_wave_shape,
             sigma_lib_kms,
             lsf_resolution,
+            calibration_order,
             csp_integration,
             forward_dtype,
             met_interp,
