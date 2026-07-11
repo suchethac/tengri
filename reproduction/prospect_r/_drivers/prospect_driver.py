@@ -120,7 +120,7 @@ def ssp_spectrum(
 
     Indexes the ProSpect ``speclib`` directly at the grid metallicity and age
     nearest the requested values — no interpolation, so the comparison against
-    tengri's own BC03 port is library against library.
+    tengri's own BC03 grid is library against library.
 
     Parameters
     ----------

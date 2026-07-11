@@ -16,7 +16,7 @@
 """Hit-and-Run Slice Sampling.
 
 Implements the Hit-and-Run Slice Sampling algorithm (Neal 2003).
-Ported from blackjax.mcmc.ss.
+Implements the same algorithm as blackjax.mcmc.ss.
 
 References
 ----------

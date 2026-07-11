@@ -321,7 +321,7 @@ plt.show()
 #
 # The quick tour in Part 2 uses `radio_star_forming`. Here we unpack **FIRRC**
 # calibrations (Bell+2003, Delvecchio+2021, McCheyne+2022), **free-free**,
-# **AGN** double power-law radio, and **`radio_components`** — adapted from the
+# **AGN** double power-law radio, and **`radio_components`** — following the
 # radio model gallery.
 
 # %%

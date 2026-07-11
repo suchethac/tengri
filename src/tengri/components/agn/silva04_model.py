@@ -107,7 +107,7 @@ class Silva04Torus(SEDModelComponent):
     The predict method gracefully returns zero emission if templates
     are unavailable.
 
-    **References**: Ported from AGNfitter (Calistro Rivera et al. 2016)
+    **References**: Uses template data from AGNfitter (Calistro Rivera et al. 2016)
     via scripts/build_silva04_grid.py. Original templates from
     Silva, Maiolino & Granato (2004).
 

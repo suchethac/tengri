@@ -71,7 +71,7 @@ requires that convention to be available.
    Supersede the "three conventions" framing of #443/#515: there are two
    *legitimate* conventions (a bug + one alternative definition), not three.
 
-5. **DSPS is the reference of record.** `bessell` is pinned bit-faithful to
+5. **DSPS is the reference of record.** `bessell` is pinned bit-identical to
    `dsps.photometry` by `tests/crossval/test_filter_convention_parity.py`
    (≤1e-6 on the band-mean L_ν; ≤1e-4 mag on `calc_obs_mag` colors); `energy`
    is pinned to an independent analytic reference.

@@ -7,7 +7,7 @@ the inference side:
 - :class:`BackendStatus` makes the difference between *missing optional
   dep*, *incompatible with the given spec*, and *ready to run* legible —
   the kernel-strategy module's "build failures surface explicitly" rule
-  ported one-to-one.
+  carried over one-to-one.
 - :func:`resolve_status` is the canonical predicate used by
   :func:`tengri.registry.list_inference_methods` to populate its
   ``status`` column.

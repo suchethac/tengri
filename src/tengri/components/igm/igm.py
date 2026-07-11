@@ -240,12 +240,12 @@ def _tau_lc_laf(
 ) -> jnp.ndarray:
     """Lyman-continuum Lyman-alpha forest optical depth (Inoue et al. 2014, Eqs. 25–27).
 
-    Ported from eazy-py (Brammer et al.). The piecewise structure is on
-    observed wavelength regimes ``wave_obs ≷ lamL*(1+z1,2)`` and three source-redshift
-    regimes (z_S < 1.2, 1.2 ≤ z_S < 4.7, z_S ≥ 4.7). The active mask
-    ``wave_obs < lamL*(1+z_source)`` naturally extends opacity below the
-    rest-frame Lyman limit (912 Å), where the previous implementation
-    incorrectly returned τ = 0 (closes #494).
+    Implements the same piecewise structure as eazy-py (Brammer et al.),
+    with observed wavelength regimes ``wave_obs ≷ lamL*(1+z1,2)`` and three
+    source-redshift regimes (z_S < 1.2, 1.2 ≤ z_S < 4.7, z_S ≥ 4.7). The
+    active mask ``wave_obs < lamL*(1+z_source)`` naturally extends opacity
+    below the rest-frame Lyman limit (912 Å), where the previous
+    implementation incorrectly returned τ = 0 (closes #494).
     """
     lam_L = _LAMBDA_LIMIT
     z1 = 1.2
@@ -303,9 +303,9 @@ def _tau_lc_dla(
 ) -> jnp.ndarray:
     """Lyman-continuum damped Lyman-alpha optical depth (Inoue et al. 2014, Eqs. 28–29).
 
-    Ported from eazy-py (Brammer et al.). At z_S ≥ 2 the formula splits at the
-    observed wavelength ``lamL*(1+z1_DLA)``; below 912 Å rest the opacity is
-    non-zero (closes #494).
+    Implements the same approach as eazy-py (Brammer et al.). At z_S ≥ 2 the
+    formula splits at the observed wavelength ``lamL*(1+z1_DLA)``; below 912
+    Å rest the opacity is non-zero (closes #494).
     """
     lam_L = _LAMBDA_LIMIT
     z1 = 2.0
@@ -836,7 +836,8 @@ def igm_transmission_madau(
     IGM convention). The Madau+1995 model takes observed-frame wavelengths
     directly.
 
-    Ported from Prospector ``add_igm`` in ``fake_fsps.py`` (Johnson+2021 [2]_).
+    Implements the same model as Prospector ``add_igm`` in ``fake_fsps.py``
+    (Johnson+2021 [2]_); validated against its output.
     The Inoue+2014 model (:func:`igm_transmission`) supersedes this for science
     use; Madau+1995 is provided for comparison and backward compatibility.
 

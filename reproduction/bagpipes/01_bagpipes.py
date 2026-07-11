@@ -26,7 +26,7 @@
 # parameter values.
 #
 # Both codes consume the same numerical templates: BAGPIPES'
-# bundled BC03+MILES Kroupa SSP grid is ported into the DSPS HDF5
+# bundled BC03+MILES Kroupa SSP grid is repackaged into the DSPS HDF5
 # layout `tengri.load_ssp_data` reads (`_drivers/bagpipes_ssp_to_dsps.py`).
 # Any §1 residual below floating-point precision is interpolation
 # alone.
@@ -40,7 +40,7 @@
 #
 # **What to expect.** Stellar templates, star-formation histories, dust
 # attenuation, the Draine & Li (2007) dust IR, and the Inoue+2014 IGM
-# reproduce BAGPIPES to floating-point or to a few percent at matched
+# match BAGPIPES to floating-point or to a few percent at matched
 # parameters. (The dust IR shape agreement relies on the DL07 PDR
 # luminosity weighting — without it the warm component is
 # ~14× under-weighted and the IR comes out spuriously cold.) The nebular
@@ -158,7 +158,7 @@ print(
 # directly with no SFH module, against the same templates re-shaped
 # into tengri's HDF5 (dashed). The curves sit on top of each other; the
 # lower panel shows the relative residual `|tengri − BAGPIPES| /
-# BAGPIPES`, ~1e-7 from float32 round-trip through the HDF5 port — both
+# BAGPIPES`, ~1e-7 from float32 round-trip through the HDF5 repackaging — both
 # codes consume identical numerics.
 
 # %%
@@ -330,7 +330,7 @@ save_fig("bagpipes_02_sfh_delayed.png")
 # takes an explicit `age_gyr` anchor and converts internally,
 # :math:`T = \\mathrm{age} - t_\\mathrm{lookback}` — the same way
 # `sfhdelayed` does. Feeding it the BAGPIPES age of the universe at the
-# source redshift reproduces the BAGPIPES curve directly, with
+# source redshift matches the BAGPIPES curve directly, with
 # no axis flip and no coordinate-system conversion. The two
 # panels below overlay the *same* shape.
 
@@ -430,7 +430,7 @@ print(
 # an explicit `age_gyr` anchor and evaluates the shape in cosmic time
 # since formation, `T = age − lookback`, so `peak_gyr` is the cosmic-age
 # peak `tmax` — the same direction as BAGPIPES. Feeding the BAGPIPES age
-# of the universe reproduces the BAGPIPES curve directly.
+# of the universe matches the BAGPIPES curve directly.
 #
 # **Caveat — shape fidelity.** tengri's `lnorm` is a log10-space Gaussian,
 # not the exact Carnall+2018 1/T ln-space lognormal (which carries a 1/T
@@ -1468,7 +1468,7 @@ print(
 # **What the residual panel shows.** With the §7 dust as a single screen
 # matching BAGPIPES (`τ_bc = 0`, full `A_V` on the diffuse component — see
 # §7) and proper reddening of the nebular continuum through that screen,
-# tengri reproduces the BAGPIPES SDSS magnitudes to **≤ 0.02 mag
+# tengri matches the BAGPIPES SDSS magnitudes to **≤ 0.02 mag
 # in r/i/z** but stays **−0.11 mag (u)** and **−0.15 mag (g)** brighter. The
 # two bluest bands carry the strongest nebular emission lines — u spans
 # [O II] 3727 and g spans Hβ 4862 + [O III] 4959/5007 — and that is exactly
@@ -1796,7 +1796,7 @@ plt.show()
 # in this notebook (stellar building blocks → SED assembly → cosmology
 # → observational → meta):
 #
-# - **§1 SSPs.** BC03+MILES Kroupa templates port through the DSPS
+# - **§1 SSPs.** BC03+MILES Kroupa templates carry through the DSPS
 #   HDF5 layout at float32 round-trip precision (~1e-7). Both codes
 #   consume the same numeric SSP arrays.
 # - **§2 parametric SFHs.** Delayed-τ, double power-law (§2a) and
@@ -1831,7 +1831,7 @@ plt.show()
 #   CGM damping wing (§12b, tengri-only) produces the full Totani+06
 #   damping-wing shape at z = 7.
 # - **§13 SDSS photometry.** With the §7 single-screen dust, tengri
-#   reproduces the BAGPIPES ugriz magnitudes to ≤ 0.02 mag in r/i/z but stays
+#   matches the BAGPIPES ugriz magnitudes to ≤ 0.02 mag in r/i/z but stays
 #   −0.11 mag (u) and −0.15 mag (g) brighter — the two bands carrying the
 #   strongest nebular lines ([O II] 3727 in u; Hβ + [O III] 4959/5007 in g).
 #   §13b attributes this to the §9 Cue-vs-Cloudy nebular line-strength

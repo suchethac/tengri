@@ -101,7 +101,7 @@ Deprecated aliases (never use in new code): `Model`, `ParamSpec`, `SpectroscopyC
 - `.. math::` directive MANDATORY for any function implementing a physical formula. Define every variable with units after the equation.
 - Approximations MUST be flagged: *"Approximation of Eq. X in Author+Year — valid for A < B."* Undocumented approximations are a correctness failure.
 - Citations MANDATORY when any formula or algorithm comes from a paper. Use `.. [N]` in References with exact title, journal, arXiv ID, and DOI. Never write citations from memory — verify against authoritative sources.
-- Upstream code MUST be credited in Notes: *"Ported from Prospector (Johnson et al. 2021 [N]_)"*.
+- Reference codes MUST be credited in Notes: *"Implements the same model as Prospector (Johnson et al. 2021 [N]_); validated against it."* Never describe tengri code as ported/copied/adapted from another codebase: implementations are independent. External template/SSP **data** files are "repackaged", with attribution.
 - JIT/grad/vmap compatibility MUST be stated in Notes for all `components/` and `forward/` functions.
 - VERIFY equations against the original paper before writing — do not rely on memory or other code.
 
@@ -179,7 +179,7 @@ model = SEDModel.build(
   `shock={'type':'none'}` disables. Like radio, `'*':FREE` is a no-op for the
   Fixed-default shock bucket — use explicit priors (`shock={'frac':
   Uniform(0,1)}`). Canonical component: `ShockNebular` (`_REGISTRY['shock']`);
-  the older `mappings` port is a superseded no-op.
+  the older `mappings` implementation is a superseded no-op.
 - AGN cross-block normalisation policy: `agn={'type': 'composable', ...,
   'norm': 'cigale_joint' | 'independent'}` (#556). `'cigale_joint'` (default)
   ties disc/torus/polar to CIGALE's single `agn_power` reference (energy-
@@ -258,8 +258,8 @@ The contract:
 - [`docs/dev/sed-model-components.md`](docs/dev/sed-model-components.md) — full how-to + three worked examples (closed-form, library, NN emulator)
 - [`docs/dev/archive/forward-model-architecture.md`](docs/dev/archive/forward-model-architecture.md) — architectural context
 - [`docs/adr/0011-sed-model-component-base.md`](docs/adr/0011-sed-model-component-base.md) — the design decision
-- [`src/tengri/components/dust/wg00_model.py`](src/tengri/components/dust/wg00_model.py) — canonical small port (closed-form attenuation)
-- [`src/tengri/components/agn/skirtor_model.py`](src/tengri/components/agn/skirtor_model.py) — canonical library port
+- [`src/tengri/components/dust/wg00_model.py`](src/tengri/components/dust/wg00_model.py) — canonical small component (closed-form attenuation)
+- [`src/tengri/components/agn/skirtor_model.py`](src/tengri/components/agn/skirtor_model.py) — canonical template-library component
 
 **Advanced fallback — the bare `SEDComponent` Protocol:**
 

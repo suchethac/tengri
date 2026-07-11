@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Citation records and attribution helpers for tengri components.
 
-Provides a central registry of papers and upstream code that tengri depends on
-or ports from. Call ``tengri.cite("calzetti")`` for a single entry or
+Provides a central registry of papers and reference codes that tengri depends
+on, implements, or compares against. Call ``tengri.cite("calzetti")`` for a single entry or
 ``tengri.cite_all()`` for every registered source.
 
 See Also

@@ -700,7 +700,7 @@ def compute_nlr_sed_synthesizer_spectra(
     **JIT-compatible**: yes (backend init is eager). ``L_nu = nebular_per_lbol *
     L_bol * f_cov``, verified against Synthesizer's UnifiedAGN ``nlr`` component
     (~2 % on amplitude, shape correlation 0.97 on the test grid; exact-node
-    smoothing is the C²-interpolation caveat). Ported to match Synthesizer
+    smoothing is the C²-interpolation caveat). Implemented to match Synthesizer
     (Lovell et al. 2025; Roper et al. 2026).
     """
     if grid_path is None:

@@ -741,7 +741,7 @@ which stays as the fallback for models with rich state (stellar, IGM).
 (stellar, radio, dust, nebular, AGN, IGM, X-ray) are unchanged. New
 models default to `SEDModelComponent`.
 
-Ported in 2026-05:
+Implemented in 2026-05:
 * `Calzetti`, `SMC`, `MilkyWay`, `Salim18` (dust attenuation)
 * `ModifiedBlackbodySED`, `DL07IRSEDComponent`, `DL14IRSEDComponent`,
   `Dale2014IRSEDComponent`, `AstrodustIRSEDComponent`, `Draine2021PAHIRSEDComponent`

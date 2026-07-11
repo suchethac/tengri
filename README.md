@@ -7,11 +7,11 @@
 
 Tengri is a panchromatic galaxy SED inference library, written in
 JAX. The same forward model covers stellar populations, dust,
-nebular emission, AGN, IGM, radio, and X-ray. Inference is modular too: the `Fitter`
-interface borrows optimizers from `optax`, samplers from `BlackJAX`,
-and variational inference from `NIFTy.re`, so a new backend lands as
-a registration rather than a port. Gradients are available
-everywhere, and they are exact.
+nebular emission, AGN, IGM, radio, and X-ray. Inference is modular
+too: the `Fitter` interface borrows optimizers from `optax`, samplers
+from `BlackJAX`, and variational inference from `NIFTy.re`, so new
+fitting methods plug in without touching the physics. Gradients are
+available everywhere, and they are exact.
 
 Tengri is pre-1.0 and developed as a community effort. The API is
 still moving in places, and the repository will move to the
@@ -29,40 +29,34 @@ development and issue tracking will live going forward.
 
 ## Why tengri
 
-Modern galaxy SED inference needs some combination of speed,
-differentiability, and modularity at once, and most existing codes
-give you one or two of those at a time. Tengri is an attempt at all
-three.
+Modern galaxy SED inference needs speed, differentiability, and
+modularity at once; most codes give you one or two. Tengri is an
+attempt at all three.
 
 JIT compilation gets the full physical model down to tens of
-microseconds per call on a single CPU core, which is enough for
+microseconds per call on a single CPU core, fast enough for
 catalog-scale inference without putting a neural emulator in the
 loop. Exact gradients make HMC, variational inference, and Laplace
-approximation work in the $D \gtrsim 100$ parameter spaces where
-bursty correlated-field SFHs and hierarchical population fits live.
-And the codebase is organized so that physics lives in components and
-instruments live in observation, which means a new SFH family, dust
-law, or AGN template lands as one file without any edits to the
-sampling engine.
+approximation work in the 100+ parameter spaces where bursty
+star formation histories and hierarchical population fits live. And
+the physics and the instrument models are separate, swappable pieces,
+so a new SFH family, dust law, or AGN template is one new file, with
+no changes to the sampling machinery.
 
 The full philosophy and an architecture flow chart are on the
 [Overview](https://suchethacooray.com/tengri/overview.html) page.
 
 ## How this was built
 
-The majority of tengri was developed in roughly two months in close
-collaboration between a human author and AI agents, across the
-physics modules, the inference layer, and the test suite. Human and
-AI agents working together is a deliberate part of the design
-philosophy going forward. We are now in the trust-building phase,
-verifying every component against established codes and keeping the
-development trail open (including [`AGENTS.md`](AGENTS.md) in the
-repo) so the trust is earned empirically rather than asserted. The
-per-component status table lives at
-[docs/dev/verification-protocol.md](docs/dev/verification-protocol.md);
-modules marked PENDING there have not been independently
-cross-checked and should not be used for publication-grade science
-yet.
+Most of tengri was built in about six months by a human author
+working closely with AI agents. That is a deliberate part of the
+design philosophy, and the development trail is kept open (see
+[`AGENTS.md`](AGENTS.md)). Trust has to be earned the usual way:
+every piece gets checked against established codes, and the status
+of each one is tracked at
+[docs/dev/verification-protocol.md](docs/dev/verification-protocol.md).
+Modules marked PENDING there have not been cross-checked yet, so
+don't use them for publication-grade science.
 
 ## Installation
 
@@ -228,13 +222,12 @@ returns BibTeX for every SSP, model, and code used in a fit.
 - [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md): component verification status
 - [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTORS.md](CONTRIBUTORS.md)
 
-Contributors at every level, from anywhere in the world, are
-welcome. If a science case you care about isn't supported yet (a
-new emission mechanism, a non-standard observation mode, a sampler
-from a paper you read last week), that's exactly the conversation we
-want to have. The longer-term ambition is for tengri to be a
-unifying platform for the kinds of inference that high-dimensional,
-modular, differentiable forward models make possible.
+Contributors at every level are welcome. If a science case you care
+about isn't supported yet (a new emission mechanism, an unusual
+observation mode, a sampler from a paper you read last week), that's
+exactly the conversation we want to have. The longer-term goal is for
+tengri to be a shared platform for the kinds of inference that
+high-dimensional, differentiable forward models make possible.
 
 For anything that doesn't fit in an issue (collaborations, the
 `tengri-project` org move, joining the project), write to
@@ -243,16 +236,16 @@ For anything that doesn't fit in an issue (collaborations, the
 
 ## Physics reproduction
 
-Cross-validation against the established panchromatic SED codes is
-cataloged in
+tengri reproduces the physics in the established panchromatic SED
+codes: the same models, implemented in one framework, so you can
+check every assumption and compare models side by side. The
+comparisons live in
 [docs/reproduction/](https://suchethacooray.com/tengri/reproduction/index.html).
-Five comparisons are live — [CIGALE](https://cigale.lam.fr/), BAGPIPES,
-Prospector/FSPS, AGNFITTER-RX, and ProSpect; a sixth (Synthesizer) is
-complete and currently unpublished. Each is a notebook that puts the
-external code's output and tengri's on the same axes, component by
-component, and closes with a full-SED head-to-head with residuals.
-Next in line — each with a scoped issue on the tracker — are BEAGLE,
-MAGPHYS, GRAHSP, and GalaPy.
+Five are online now ([CIGALE](https://cigale.lam.fr/), BAGPIPES,
+Prospector/FSPS, AGNFITTER-RX, ProSpect), each putting the two codes
+on the same axes, component by component, ending with a full-SED
+head-to-head. A sixth (Synthesizer) is being revised, and BEAGLE,
+MAGPHYS, GRAHSP, and GalaPy are next.
 
 ## Citation
 
@@ -273,4 +266,4 @@ print(tengri.cite_all(result))
 
 ## License
 
-BSD-3-Clause. See [LICENSE](LICENSE) and [NOTICE](NOTICE) (which lists every upstream the source code ports from or depends on).
+BSD-3-Clause. See [LICENSE](LICENSE) and [NOTICE](NOTICE) (which lists every project whose models tengri implements or depends on).

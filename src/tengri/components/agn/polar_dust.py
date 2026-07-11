@@ -100,8 +100,8 @@ def calzetti2000_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     **Gradient-safe**: yes — fully differentiable.
 
-    **Upstream**: Ported from CIGALE ``skirtor2016.py`` ``k_ext()``
-    (Boquien et al. 2019 [2]_).
+    **Reference**: Implements CIGALE ``skirtor2016.py`` ``k_ext()``
+    (Boquien et al. 2019 [2]_); validated against its output.
 
     References
     ----------
@@ -174,8 +174,8 @@ def gaskell2004_extinction_curve(wavelength: jnp.ndarray) -> jnp.ndarray:
 
     **Gradient-safe**: yes — fully differentiable.
 
-    **Upstream**: Ported from CIGALE ``skirtor2016.py`` ``k_ext()``
-    (Boquien et al. 2019 [2]_).
+    **Reference**: Implements CIGALE ``skirtor2016.py`` ``k_ext()``
+    (Boquien et al. 2019 [2]_); validated against its output.
 
     References
     ----------
@@ -423,8 +423,8 @@ def anisotropic_polar_luminosity(
     This accounts for both the varying disc brightness with inclination and
     the wavelength-dependent extinction through the polar dust.
 
-    **Upstream**: Ported from CIGALE ``skirtor2016.py`` ``agn_lnu_ir``
-    function (Boquien et al. 2019 [2]_).
+    **Reference**: Implements CIGALE ``skirtor2016.py`` ``agn_lnu_ir``
+    function (Boquien et al. 2019 [2]_); validated against its output.
 
     References
     ----------

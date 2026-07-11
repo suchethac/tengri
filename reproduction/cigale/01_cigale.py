@@ -26,7 +26,7 @@
 # build kwarg that carries the equivalent block.
 #
 # Both codes consume the same BC03 templates: CIGALE's bundled
-# Chabrier-IMF grid (Bruzual & Charlot 2003) was ported into the DSPS
+# Chabrier-IMF grid (Bruzual & Charlot 2003) was repackaged into the DSPS
 # HDF5 layout by `_drivers/cigale_ssp_to_dsps.py`. Any §1 residual
 # below floating-point precision is interpolation only.
 #
@@ -39,13 +39,12 @@
 # dust-attenuation curves, AGN disc + SKIRTOR torus, dust IR through
 # the FIR + Rayleigh-Jeans tail to ~mm, X-ray corona + binaries, IGM
 # transmission, and the radio synchrotron + free-free composite all
-# reproduce CIGALE to floating-point or to a fraction of a percent at
+# match CIGALE to floating-point or to a fraction of a percent at
 # matched parameters. One block differs by design: the nebular emitter
 # uses Cue (a neural emulator trained on Cloudy 17, Li et al. 2025)
 # rather than CIGALE's bundled Cloudy 13.x grids. With all gas inputs
-# matched, Cue's integrated Hα carries a Cloudy-version offset vs
-# CIGALE's CLOUDY — downstream of the gas knobs, traceable to Cloudy
-# version and the bare-stellar vs wNE-SSP convolution path. Each
+# matched, the remaining Hα offset traces to the Cloudy version and to
+# how each code convolves nebular emission with its stellar grid. Each
 # discrepancy is called out at the relevant section.
 
 # %% [markdown]
@@ -60,7 +59,7 @@ import warnings
 
 # Override the ``dale2014`` emission model to use CIGALE-sourced templates
 # for this reproduction notebook. The shipped ``data/dale2014_templates.h5``
-# is the Wyoming-source bit-faithful Dale et al. 2014 release; the comparison
+# is the unmodified Wyoming-source Dale et al. 2014 release; the comparison
 # panel uses ``data/dale2014_templates_cigale.h5`` so it matches CIGALE's
 # actual ``dale2014`` SED template directly. Both files come from
 # ``scripts/regenerate_dale2014_from_{cigale,official}.py``.
@@ -126,7 +125,7 @@ print(
 # A `tau_bc + tau_diff` split (the earlier mapping) put both terms on the
 # continuum and over-attenuated the young-star-dominated FUV by ~2x (and, by
 # energy balance, inflated the dust IR / radio ~12-20%). See
-# `validate_matched_physics.py`, which reproduces CIGALE to ~2-3% FUV->FIR
+# `validate_matched_physics.py`, which matches CIGALE to ~2-3% FUV->FIR
 # with the single screen.
 _E_BV_LINES = 0.3
 _R_V_CALZETTI = 4.05
@@ -248,7 +247,7 @@ for block, (cig, tng) in registries.items():
 # against the same templates re-shaped into tengri's HDF5 (dashed). The
 # curves sit on top of each other; the lower panel shows the relative
 # residual |tengri − CIGALE| / CIGALE, ~1e-7 from float32 round-trip
-# through the HDF5 port — both codes consume identical numerics.
+# through the HDF5 repackaging — both codes consume identical numerics.
 
 # %%
 import pickle as _pickle
@@ -640,7 +639,7 @@ plt.show()
 #
 # Fiducial galaxy with and without attenuation. CIGALE uses
 # `modified_starburst` at E(B−V)_lines = 0.3; tengri uses the
-# two-component Calzetti law at τ_BC and τ_diff translated from the
+# two-component Calzetti law at τ_BC and τ_diff derived from the
 # same E(B−V)_lines via `cigale_ebv_lines_to_tau`.
 
 # %%
@@ -752,7 +751,7 @@ plt.show()
 # ## §6 Dust IR re-emission and energy balance
 #
 # Absorbed stellar UV/optical reappears in the IR. CIGALE uses the
-# Dale et al. (2014) template family (α = 2); tengri ports the same
+# Dale et al. (2014) template family (α = 2); tengri evaluates the same
 # templates and enforces energy balance,
 # $L_{\rm IR,\,emitted} \equiv L_{\rm absorbed}$, to floating-point —
 # the residual is annotated on the right panel. The energy anchors agree
@@ -872,7 +871,7 @@ plt.show()
 # at which the absorbed *fraction* matches CIGALE to **0.2 %**.
 #
 # **Left — Dale 2014 AGN fraction (`dale2014.fracAGN`).** With the screen
-# corrected, the stellar-heated curve reproduces CIGALE to **~1.5 %** (the
+# corrected, the stellar-heated curve matches CIGALE to **~1.5 %** (the
 # residual is the BC03->DSPS conversion: tengri's intrinsic stellar $L_{\rm
 # bol}$ is 1.4 % low, *not* the dust or the attenuation). `fracAGN` adds an
 # AGN-heated source as a separate power budget ($L_{\rm AGN}=L_{\rm
@@ -1208,9 +1207,9 @@ save_fig("cigale_08_nebular_cue_vs_cloudy.png")
 # independent). A single-bin peak ratio measures line width, not luminosity —
 # CIGALE broadens its lines (lines_width=300 km/s) while Cue applies its own.
 #
-# CIGALE's native BC03 grid (ported faithfully into `bc03_from_cigale.h5`) is
+# CIGALE's native BC03 grid (repackaged unchanged into `bc03_from_cigale.h5`) is
 # non-uniform and only ~20 Å in the optical — that is CIGALE's own spectral
-# resolution, not a port artifact, and it cannot resolve an emission line (a
+# resolution, not a repackaging artifact, and it cannot resolve an emission line (a
 # ±12 Å window holds a single grid point). So the integrated measure is taken on
 # the dense FSPS MIST+MILES bare-stellar SSP that Cue was validated on (the same
 # SSP swap the ProSpect notebook §8 makes, and for the same reason). The CIGALE
@@ -1276,8 +1275,7 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # a notch around 5000 Å (the multicolor-disc signature) and visibly
 # diverges from CIGALE in the disc UV continuum even though the torus
 # IR still matches. The reproduction notebook uses `disc.schartmann2005`
-# for the CIGALE-bit-faithful comparison; production fits choose the
-# physics they need.
+# to match CIGALE exactly; production fits choose the physics they need.
 #
 # The torus IR uses the same templates and reproduces at all
 # inclinations: face-on i = 30° peaks at ~6–9 µm on both sides;
@@ -1305,7 +1303,7 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # template and SSP-conversion precision floor.
 #
 # **The policy is switchable.** `agn={'type':'composable', …,
-# 'norm':'cigale_joint'}` (default) is the CIGALE-faithful path above;
+# 'norm':'cigale_joint'}` (default) is the CIGALE-matched path above;
 # `'norm':'independent'` restores the legacy two-reference scaling
 # (~0.80 / 0.79 / 1.06 / 1.15) for users who want the disc decoupled
 # from the absorbed-energy budget. The choice is surfaced in
@@ -2023,8 +2021,8 @@ save_fig("cigale_11_radio_synchrotron.png")
 # matching `igm.meiksin06`; this panel uses it directly so both sides
 # apply the same Meiksin prescription. The transmission curves overlay
 # at z = 3, 5, 7 to **max |ΔT| ~ 1e-7** (float precision, median
-# ΔT = 0) — tengri's port is bit-faithful to CIGALE's Meiksin
-# transmission, not just visually close.
+# ΔT = 0): tengri matches CIGALE's Meiksin transmission bit for bit,
+# not just visually.
 
 # %%
 # Both transmission curves come straight from each code's own IGM
@@ -2084,7 +2082,7 @@ save_fig("cigale_12_igm_transmission.png")
 # template cutoff (§6) — not the dust energy budget.
 #
 # Extending the comparison past the FIR into the X-ray and radio wings both
-# now reproduce CIGALE — and getting there caught a real tengri bug:
+# now match CIGALE, and getting there caught a real tengri bug:
 #
 # - **Radio.** The Condon-1992 SF synchrotron matches CIGALE's `radio` module
 #   to ~5 % across the band (1.4 GHz ≈ 1.05×, 150 MHz ≈ 1.02×) once

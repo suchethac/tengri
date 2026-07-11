@@ -346,7 +346,7 @@ only (no `pickle.load` on untrusted data).
 The entire `models/{TORUS,BBB}/*.pickle` set exists unchanged on both
 master and rX. The branch split lives entirely in `functions/MODEL_AGNfitter.py`
 (which pickles are exposed) and `PRIORS_AGNfitter.py` (which informative
-priors are enabled). The torus / disc SED libraries ported to tengri are
+priors are enabled). The torus / disc SED template libraries tengri evaluates (published with the upstream codes) are
 therefore indistinguishable between the two branches.
 
 ### Finding 2 — Grid shapes and parameter axes (from `MODEL_AGNfitter.py`)
@@ -461,7 +461,7 @@ Prevot for the AGN disc is a small gap** — worth adding a Prevot branch to
 | (optional) | SMC Prevot reddening for disc | Small | Add a Prevot branch in `components/dust/` alongside Calzetti / CF00. |
 | (optional) | Informative priors (energy balance, AGN fraction, mid-IR–UV tie) | Soft | Add as optional penalty hooks in `parameters/priors.py`. |
 
-### Not porting (parity or by design)
+### Not implementing (parity or by design)
 
 - X-ray α_ox–L_2500, Γ, alphaScat — **already implemented** in tengri's
   `components/xray/xray.py`.
@@ -530,9 +530,9 @@ regression test could confirm that tengri's full-grid values, when
 averaged over the same axes AGNfitter averaged out, recover the
 `_mean_NP.pickle` values. Filed as a cross-val task, not a port.
 
-**Gaps confirmed as real (all are Phase-2+ port targets):**
+**Gaps confirmed as real (all are Phase-2+ implementation targets):**
 
-- **Silva+04 smooth torus** — no tengri analog. **Ported in Phase 2**
+- **Silva+04 smooth torus** — no tengri analog. **Implemented in Phase 2**
   (`components/agn/silva04.py` + `data/silva04_torus_grid.h5` via
   `scripts/build_silva04_grid.py`). Verified via
   `tests/unit/components/agn/test_silva04.py` (8/8 pass).

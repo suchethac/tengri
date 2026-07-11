@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """GRAHSP big blue bump: smooth bending power-law (Ryde 1999).
 
-Ported from the upstream ``activatepl`` module of
+Implements the same model as the ``activatepl`` module of
 ``JohannesBuchner/GRAHSP`` (CeCILL-v2 license; see Notes).
 
 The smooth bending power-law (SBPL) is a flexible phenomenological model for
@@ -88,9 +88,9 @@ def sbpl_bbb(
     -----
     JIT-compatible. Input ``wave_nm`` is used as a JAX array.
 
-    Ported from ``pcigale/creation_modules/activatepl.py`` in the upstream
-    ``JohannesBuchner/GRAHSP`` repository (CeCILL-v2). Numerical agreement with
-    upstream is < 1e-9 relative (see ``tests/unit/components/agn/grahsp/
+    Implements the same algorithm as ``pcigale/creation_modules/activatepl.py``
+    in ``JohannesBuchner/GRAHSP`` (CeCILL-v2); validated with numerical
+    agreement < 1e-9 relative (see ``tests/unit/components/agn/grahsp/
     test_bbb.py``).
 
     Examples

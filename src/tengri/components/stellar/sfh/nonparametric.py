@@ -403,7 +403,8 @@ def make_agebins_from_zred(
     **Not JIT-compatible** — uses Python control flow and NumPy. Call once
     at model-construction time, then pass the edges as a static array.
 
-    Ported from Prospector ``zred_to_agebins_pbeta`` (Johnson et al. 2021
+    Implements the same calculation as Prospector ``zred_to_agebins_pbeta``
+    (Johnson et al. 2021
     [1]_), with two changes: uses tengri's Planck 2018 cosmology instead of
     WMAP9, and returns edges in Gyr rather than log10(yr).
 
@@ -499,7 +500,7 @@ def psb_continuity(
     **JIT-compatible**: yes — uses ``jnp`` primitives; ``tlast_gyr`` and
     ``tflex_gyr`` must be concrete scalars (not traced inside JIT).
 
-    Ported from Prospector ``psb_logsfr_ratios_to_agebins`` and
+    Implements the same calculation as Prospector ``psb_logsfr_ratios_to_agebins`` and
     ``logsfr_ratios_to_masses_psb`` (Johnson et al. 2021 [1]_), reimplemented
     as a pure JAX step-function SFH compatible with DSPS.
 
@@ -642,7 +643,7 @@ def continuity_flex(
         {\\rm SFR}_{\\rm young} = s_{\\rm young}\\,M_{\\rm bin}/\\Delta t_0, \\quad
         {\\rm SFR}_{\\rm old} = s_{\\rm old}\\,M_{\\rm bin}/\\Delta t_N.
 
-    Upstream credit: ported from ``synthesizer.parametric.sf_hist.ContinuityFlex``
+    Implements the same approach as ``synthesizer.parametric.sf_hist.ContinuityFlex``
     (Wilkins et al. 2025 [3]_).
 
     References

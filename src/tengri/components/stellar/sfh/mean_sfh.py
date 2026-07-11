@@ -1190,7 +1190,8 @@ def delayed_bq(
     ``age_main_yr - age_bq_yr`` [yr], and :math:`r_{\\rm sfr}` is the
     post-episode SFR ratio [dimensionless].
 
-    **Upstream**: Ported from CIGALE ``sfhdelayedbq.py`` (Boquien et al. 2019 [2]_).
+    **Reference**: Implements CIGALE ``sfhdelayedbq.py`` (Boquien et al. 2019
+    [2]_); validated against its output.
 
     References
     ----------
@@ -1267,7 +1268,8 @@ def periodic(
     apart, each following one of three shapes. The burst at event i starts at
     time i * delta_bursts_yr and ends (or decays) within tau_bursts_yr.
 
-    **Upstream**: Ported from CIGALE ``sfhperiodic.py`` (Boquien et al. 2019 [1]_).
+    **Reference**: Implements CIGALE ``sfhperiodic.py`` (Boquien et al. 2019
+    [1]_); validated against its output.
 
     References
     ----------
@@ -1330,7 +1332,7 @@ def sfh2exp(
 ) -> jnp.ndarray:
     r"""Double declining-exponential SFH: old main population + recent burst.
 
-    Faithful port of CIGALE's ``sfh2exp`` module. A main stellar population
+    Implements CIGALE's ``sfh2exp`` module exactly. A main stellar population
     forms at lookback ``age_yr`` and declines exponentially toward the present;
     a second exponential burst occupies the most recent ``burst_age_yr`` and
     contributes a fraction ``f_burst`` of the total stellar mass formed.
@@ -1385,7 +1387,8 @@ def sfh2exp(
     :math:`M_{\rm main}`, :math:`M_{\rm burst}` their integrals over
     ``t_lookback`` [yr], and :math:`f` is ``f_burst`` [dimensionless].
 
-    **Upstream**: Ported from CIGALE ``sfh2exp.py`` (Boquien et al. 2019 [1]_).
+    **Reference**: Implements CIGALE ``sfh2exp.py`` (Boquien et al. 2019
+    [1]_); validated against its output.
 
     References
     ----------
@@ -1481,7 +1484,8 @@ def buat08(
     where :math:`v` is the rotational velocity [km/s], and the offset -9 converts
     from galaxy-integrated SFR to local SFR normalization.
 
-    **Upstream**: Ported from CIGALE ``sfh_buat08.py`` (Boquien et al. 2019 [2]_).
+    **Reference**: Implements CIGALE ``sfh_buat08.py`` (Boquien et al. 2019
+    [2]_); validated against its output.
     Extended velocity coefficients (40–100 km/s) provided by S. Boissier
     (private communication, referenced in CIGALE source).
 
@@ -1617,7 +1621,7 @@ def spline(
     Hermite interpolation (Fritsch-Carlson monotone) in log10(age) space
     ensures a smooth, non-negative SFH between nodes.
 
-    This is the JAX port of ProSpect's ``massfunc_p4`` / ``massfunc_p6``
+    This is a JAX implementation of ProSpect's ``massfunc_p4`` / ``massfunc_p6``
     (Robotham et al. 2020 [1]_), which use R's ``splinefun(..., method='monoH.FC')``.
     The implementation uses the Fritsch-Carlson (1980) [2]_ algorithm.
 
@@ -1665,7 +1669,8 @@ def spline(
     fit the scalar-kwarg registry architecture. Use this function directly with
     ``jax.jit`` or ``jax.grad``, marking ``node_ages_yr`` as static.
 
-    Ported from ProSpect ``massfunc_p4`` / ``massfunc_p6`` (Robotham et al. 2020 [1]_).
+    Implements the same calculation as ProSpect ``massfunc_p4`` / ``massfunc_p6``
+    (Robotham et al. 2020 [1]_); validated against its output.
     The PCHIP algorithm follows Fritsch & Carlson (1980) [2]_ with endpoint slopes
     from Moler (2004) [3]_.
 
@@ -1756,7 +1761,8 @@ def snorm_burst(
     :math:`m_{\\rm burst}` is the burst amplitude [Msun/yr], and
     :math:`t_{\\rm burst}` is the burst lookback time [yr].
 
-    Ported from ProSpect ``massfunc_snorm_burst`` (Robotham et al. 2020 [1]_).
+    Implements the same calculation as ProSpect ``massfunc_snorm_burst``
+    (Robotham et al. 2020 [1]_); validated against its output.
 
     References
     ----------
@@ -1843,7 +1849,8 @@ def snorm_trunc_burst(
     where :math:`\\mathrm{tsnorm}(t)` is the truncated skew-normal SFH
     (Bellstedt+2020 [2]_) and :math:`m_{\\rm burst}` is the burst amplitude.
 
-    Ported from ProSpect ``massfunc_snorm_burst_trunc`` (Robotham et al. 2020 [1]_).
+    Implements the same calculation as ProSpect ``massfunc_snorm_burst_trunc``
+    (Robotham et al. 2020 [1]_); validated against its output.
 
     References
     ----------

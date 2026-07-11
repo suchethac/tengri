@@ -173,7 +173,7 @@ class TestDale2014FracAGN:
 
 
 class TestSchreiber2016Tabulated:
-    """Tabulated Schreiber+2016 templates (tdust, fpah), CIGALE-faithful."""
+    """Tabulated Schreiber+2016 templates (tdust, fpah), matching CIGALE."""
 
     def _component(self):
         from tengri.components.dust.emission_templates import load_schreiber2016_templates

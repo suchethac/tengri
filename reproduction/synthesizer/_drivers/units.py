@@ -26,9 +26,9 @@ import numpy as np
 # Speed of light in Å/s for the L_λ ↔ L_ν Jacobian.
 C_ANGSTROM_PER_S: float = 2.998e18
 # IAU 2015 nominal solar luminosity [erg/s]. Synthesizer's stellar grids are
-# already absolute (erg/s/Hz per M⊙ formed), so this is only used by the SSP
-# port to express ``ssp_flux`` in L⊙/Hz/M⊙ — and it must match the constant the
-# port multiplies back by, so the §1 head-to-head stays a numerical statement.
+# already absolute (erg/s/Hz per M⊙ formed), so this is only used when the SSP
+# grid is repackaged to express ``ssp_flux`` in L⊙/Hz/M⊙ — and it must match the
+# constant multiplied back on load, so §1 stays a numerical statement.
 L_SUN_ERG_PER_S: float = 3.828e33
 
 

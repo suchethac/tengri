@@ -19,8 +19,9 @@ physical consistency between UV and X-ray SED components during inference.
 α_IRX parameter (12μm-to-X-ray ratio) instead of α_ox, which is more robust
 for obscured and low-luminosity AGN where UV is unreliable.
 
-**Design basis**: Adapted from CIGALE modules (Yang+2020, Lopez+2024) with
-full JAX reimplementation for differentiability and gradient-based inference.
+**Design basis**: the same models as CIGALE's X-ray modules (Yang+2020,
+Lopez+2024), implemented in JAX for differentiability and gradient-based
+inference.
 """
 
 import jax.numpy as jnp
@@ -1425,8 +1426,8 @@ def xray_agn_corona_lopez24(
     which can be absorbed by orders of magnitude). This makes α_IRX
     especially suitable for LLAGN and obscured Seyferts.
 
-    **Upstream**: Ported from CIGALE IRX-CIGALE module
-    (Lopez et al. 2024 [1]_).
+    **Reference**: Implements CIGALE IRX-CIGALE module (Lopez et al. 2024
+    [1]_); validated against its output.
 
     References
     ----------

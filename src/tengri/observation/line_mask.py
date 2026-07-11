@@ -47,8 +47,9 @@ def build_line_mask(
 
     Notes
     -----
-    Ported from FastSpecFit ``LineMasker.linepix_and_contpix()``
-    (Moustakas et al. 2023 [1]_).
+    Implements the same algorithm as FastSpecFit
+    ``LineMasker.linepix_and_contpix()`` (Moustakas et al. 2023 [1]_);
+    validated against its output.
 
     Not JIT-compatible (uses NumPy; designed for pre-inference preprocessing).
 

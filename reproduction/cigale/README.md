@@ -11,7 +11,7 @@ component.
   - `units.py` — CIGALE (W/nm on nm) ↔ tengri (erg/s/Hz on Å).
   - `cigale_driver.py` — instantiate `pcigale.sed_modules` and read
     out SEDs, attenuation curves, SFH curves.
-  - `cigale_ssp_to_dsps.py` — one-off port of CIGALE's BC03 Chabrier
+  - `cigale_ssp_to_dsps.py` — one-off repackaging of CIGALE's BC03 Chabrier
     templates into the DSPS HDF5 layout tengri reads.
   - `consistency_audit.py` — wavelength-resolved CIGALE vs tengri
     ratio statistics for every section, runnable on its own.
