@@ -1,0 +1,49 @@
+
+:orphan:
+
+.. _sphx_glr_auto_examples_metallicity_sg_execution_times:
+
+
+Computation times
+=================
+**00:05.703** total execution time for 5 files **from auto_examples/metallicity**:
+
+.. container::
+
+  .. raw:: html
+
+    <style scoped>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    </style>
+    <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script type="text/javascript" class="init">
+    $(document).ready( function () {
+        $('table.sg-datatable').DataTable({order: [[1, 'desc']]});
+    } );
+    </script>
+
+  .. list-table::
+   :header-rows: 1
+   :class: table table-striped sg-datatable
+
+   * - Example
+     - Time
+     - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_metallicity_plot_zh_evolution_compare.py` (``plot_zh_evolution_compare.py``)
+     - 00:01.737
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_metallicity_plot_metallicity_age_grid.py` (``plot_metallicity_age_grid.py``)
+     - 00:01.500
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_metallicity_plot_logzsol_panchromatic.py` (``plot_logzsol_panchromatic.py``)
+     - 00:01.432
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_metallicity_plot_alpha_fe_sweep.py` (``plot_alpha_fe_sweep.py``)
+     - 00:00.560
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_metallicity_plot_logzsol_sweep.py` (``plot_logzsol_sweep.py``)
+     - 00:00.474
+     - 0.0

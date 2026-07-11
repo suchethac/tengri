@@ -1,0 +1,60 @@
+"""
+Synchrotron spectral index: steeper α_sf dims the high-frequency tail
+=====================================================================
+
+The synchrotron spectral index α_sf controls how steeply the radio spectrum
+falls with frequency. Star-forming galaxies typically have α_sf ≈ 0.7–0.8.
+Flat spectra (α ≈ 0) signal strong free-free contribution; steep spectra
+(α > 1) indicate cosmic-ray electron aging. We vary α_sf ∈ [0.3, 1.2] at
+fixed L_IR = 10^11 L_sun and show normalized spectra (reference 1.4 GHz).
+
+Reference: Condon 1992, ApJ 388, 113.
+"""
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax.numpy as jnp
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+from tengri.radio import radio_star_forming
+
+wave = jnp.logspace(7, 11, 600)  # 1 mm – 10 m in Angstrom
+L_ir = 1e11  # L_sun
+
+alpha_values = np.array([0.3, 0.5, 0.7, 0.8, 1.0, 1.2])
+norm = mpl.colors.Normalize(vmin=alpha_values.min(), vmax=alpha_values.max())
+cmap = plt.get_cmap("viridis")
+
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+
+nu_ref_aa = 3e18 / 1.4e9  # 1.4 GHz in Angstrom
+for alpha in alpha_values:
+    L_nu = radio_star_forming(wave, L_ir=L_ir, q_ir=2.64, alpha_sf=alpha)
+    L_nu_ref = radio_star_forming(jnp.array([nu_ref_aa]), L_ir=L_ir, q_ir=2.64, alpha_sf=0.8)
+    L_nu_norm = np.array(L_nu) / float(L_nu_ref[0])
+    nu_ghz = (3e18 / np.array(wave)) / 1e9
+    ax.loglog(nu_ghz, L_nu_norm, color=cmap(norm(alpha)), lw=1.4)
+
+ax.axvline(1.4, color="0.4", lw=1.0, ls="--")
+ax.set_xlabel(r"Frequency $\nu$ [GHz]")
+ax.set_ylabel(r"$L_\nu$ / $L_\nu$(1.4 GHz)")
+ax.invert_xaxis()
+ax.set_xlim(200, 0.1)
+ax.set_ylim(0.01, 200)
+
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"$\alpha_{\rm sf}$")
+
+fig.tight_layout()
+plt.savefig("plot_alpha_sf_sweep.png", dpi=150, bbox_inches="tight")

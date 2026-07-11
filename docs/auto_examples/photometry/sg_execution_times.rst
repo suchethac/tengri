@@ -1,0 +1,91 @@
+
+:orphan:
+
+.. _sphx_glr_auto_examples_photometry_sg_execution_times:
+
+
+Computation times
+=================
+**02:52.007** total execution time for 19 files **from auto_examples/photometry**:
+
+.. container::
+
+  .. raw:: html
+
+    <style scoped>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+    </style>
+    <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script type="text/javascript" class="init">
+    $(document).ready( function () {
+        $('table.sg-datatable').DataTable({order: [[1, 'desc']]});
+    } );
+    </script>
+
+  .. list-table::
+   :header-rows: 1
+   :class: table table-striped sg-datatable
+
+   * - Example
+     - Time
+     - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_band_count_mass_recovery.py` (``plot_band_count_mass_recovery.py``)
+     - 01:09.086
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_k_correction_grid.py` (``plot_k_correction_grid.py``)
+     - 00:33.004
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_snr_sweep.py` (``plot_snr_sweep.py``)
+     - 00:15.205
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_spitzer_irac_agn_wedge.py` (``plot_spitzer_irac_agn_wedge.py``)
+     - 00:12.706
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py` (``plot_cosmic_dimming_observed_flux.py``)
+     - 00:07.095
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_photometric_fit.py` (``plot_photometric_fit.py``)
+     - 00:05.771
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_throughput_overlay.py` (``plot_filter_throughput_overlay.py``)
+     - 00:05.222
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_hsc_vs_des_color_high_z.py` (``plot_hsc_vs_des_color_high_z.py``)
+     - 00:05.157
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_set_comparison.py` (``plot_filter_set_comparison.py``)
+     - 00:02.655
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_photoz_color_degeneracy_grid.py` (``plot_photoz_color_degeneracy_grid.py``)
+     - 00:02.586
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_redshift_filter_grid.py` (``plot_redshift_filter_grid.py``)
+     - 00:02.301
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_color_tracks_redshift.py` (``plot_color_tracks_redshift.py``)
+     - 00:02.168
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_galaxy_with_filters.py` (``plot_galaxy_with_filters.py``)
+     - 00:02.066
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_wise_agn_color_color.py` (``plot_wise_agn_color_color.py``)
+     - 00:01.923
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_nuv_r_age_track.py` (``plot_nuv_r_age_track.py``)
+     - 00:01.454
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_uvj_diagram.py` (``plot_uvj_diagram.py``)
+     - 00:01.188
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_balmer_break_redshift_evolution.py` (``plot_balmer_break_redshift_evolution.py``)
+     - 00:01.047
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_red_sequence_blue_cloud.py` (``plot_red_sequence_blue_cloud.py``)
+     - 00:01.005
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_curves.py` (``plot_filter_curves.py``)
+     - 00:00.368
+     - 0.0

@@ -1,0 +1,201 @@
+"""
+Comparison of IGM absorption models at high redshift
+======================================================
+
+Four IGM transmission variants available in tengri are compared at z=7,
+applied to a young star-forming SED. This diagnostic isolates the differences
+between models around the Lyman-alpha forest:
+
+- **No IGM** (intrinsic SED, reference)
+- **Madau (1995)** — foundational model with 17 Lyman lines + continuum
+- **Inoue+2014** — modern prescription with 39 Lyman lines, LAF, and DLA
+- **Inoue+2014 + CGM damping wing (Asada+2025)** — Inoue extended with
+  neutral-hydrogen damping wing in the circumgalactic medium at z > 5
+
+The key diagnostic at z=7 is the **Lyman-alpha forest** (blue-wing
+absorption shortward of Lyα at 1216 Å), where the blueward Inoue and
+Asada models are nearly identical in the rest-frame region shown.
+The CGM damping wing (Asada extension) primarily affects wavelengths
+redward of observed-frame Lyα (at 1216Å × 8 ≈ 9728 Å), which appears
+beyond the rest-frame window displayed here.
+
+For z > 6 galaxies observed in the Lyman break region (1000–1500 Å
+rest-frame), the Lyman forest dominates the observed transmission.
+
+References:
+  .. [1] Madau, P. 1995, ApJ, 441, 18 — foundational IGM absorption model
+  .. [2] Inoue, A. K., Shimizu, I., Iwata, I., & Tanaka, M. 2014, MNRAS,
+         442, 1805 — modern IGM prescription (Lyman-series + continuum)
+  .. [3] Asada, R., Ouchi, M., & collaborators 2025 — CGM damping wing
+         absorption at z > 5 (experimental extension to Inoue+2014)
+"""
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri import igm_transmission, igm_transmission_madau
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+# ── Configuration ──────────────────────────────────────────────────
+
+# High redshift for strong IGM effect
+Z_SOURCE = 7.0
+
+# Rest-frame wavelength range around Lyman-alpha (1216 Å)
+# Note: At z=7, observed frame Lyα is at 1216*(1+7) = 9728 Å
+# We show the rest-frame region where the IGM forest blocks flux blueward of Lyα
+WAVE_REST_MIN = 1100.0
+WAVE_REST_MAX = 1300.0
+N_WAVE = 512
+
+# Star-forming galaxy SED (young, minimal dust)
+SFH = {
+    "type": "dpl",
+    "*": tengri.FIXED,
+    "tau_gyr": 0.1,
+    "log_total_mass": 10.0,
+    "alpha": 2.5,
+    "beta": 1.5,
+}
+
+DUST = {
+    "type": "two_component",
+    "*": tengri.FIXED,
+    "tau_diff": 0.02,
+    "tau_bc": 0.02,
+}
+
+# Physical constants
+LYMAN_ALPHA_REST = 1216.0  # Angstrom
+
+# ── Build model and sample parameters ──────────────────────────────
+
+ssp = tengri.load_ssp()
+model = tengri.SEDModel.build(
+    ssp,
+    sfh=SFH,
+    dust=DUST,
+    redshift=tengri.Fixed(Z_SOURCE),
+)
+
+params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+
+# ── Compute intrinsic SED ──────────────────────────────────────────
+
+# Rest-frame wavelength grid (diagnostic region around Lyα)
+wave_rest = np.linspace(WAVE_REST_MIN, WAVE_REST_MAX, N_WAVE)
+
+# Intrinsic (no IGM) SED
+out_intrinsic = model.predict_rest_sed(params)
+wave_rest_out = np.asarray(out_intrinsic.wavelength)
+sed_intrinsic_full = np.asarray(out_intrinsic.sed)
+
+# Interpolate to diagnostic wavelength grid
+sed_intrinsic = np.interp(wave_rest, wave_rest_out, sed_intrinsic_full, left=0, right=0)
+
+# ── Observed-frame wavelengths and IGM transmission ───────────────
+
+# Transform rest-frame wavelengths to observed frame
+wave_obs = wave_rest * (1.0 + Z_SOURCE)
+
+# (1) Intrinsic (no IGM)
+transmission_intrinsic = np.ones_like(wave_obs)
+
+# (2) Madau (1995) model
+transmission_madau = np.asarray(igm_transmission_madau(wave_obs, z=Z_SOURCE))
+
+# (3) Inoue+2014 (default) model
+transmission_inoue = np.asarray(igm_transmission(wave_obs, z_source=Z_SOURCE, add_cgm=False))
+
+# (4) Inoue+2014 with CGM damping wing (Asada+2025 extension)
+transmission_asada = np.asarray(
+    igm_transmission(wave_obs, z_source=Z_SOURCE, add_cgm=True, cgm_log_nhi=21.0)
+)
+
+# ── Apply IGM attenuation and normalize ─────────────────────────────
+
+# Apply transmission to intrinsic SED (scaling in observed frame)
+sed_intrinsic_norm = sed_intrinsic / np.max(sed_intrinsic)
+sed_madau = sed_intrinsic_norm * transmission_madau
+sed_inoue = sed_intrinsic_norm * transmission_inoue
+sed_asada = sed_intrinsic_norm * transmission_asada
+
+# ── Plotting ───────────────────────────────────────────────────────
+
+fig, ax = plt.subplots(figsize=(9.0, 6.0))
+
+# Plot each model
+ax.plot(
+    wave_rest,
+    sed_intrinsic_norm,
+    label="Intrinsic (no IGM)",
+    color="black",
+    lw=2.5,
+    zorder=5,
+)
+ax.plot(
+    wave_rest,
+    sed_madau,
+    label="Madau (1995)",
+    color="C0",
+    lw=2.0,
+    alpha=0.8,
+    zorder=4,
+)
+ax.plot(
+    wave_rest,
+    sed_inoue,
+    label="Inoue+2014",
+    color="C1",
+    lw=2.0,
+    alpha=0.8,
+    zorder=3,
+)
+ax.plot(
+    wave_rest,
+    sed_asada,
+    label="Inoue+2014 + CGM damping wing",
+    color="C2",
+    lw=2.0,
+    alpha=0.8,
+    zorder=2,
+)
+
+# Highlight Lyman-alpha rest-frame position
+ax.axvline(LYMAN_ALPHA_REST, color="red", ls="--", lw=1.5, alpha=0.5, zorder=1)
+ax.text(
+    LYMAN_ALPHA_REST + 3,
+    0.85,
+    r"Ly$\alpha$ (rest)",
+    rotation=0,
+    fontsize=9,
+    color="red",
+    alpha=0.6,
+)
+
+# Shade the blue wing (heavily attenuated)
+ax.axvspan(WAVE_REST_MIN, LYMAN_ALPHA_REST, alpha=0.06, color="blue", zorder=0)
+
+# Formatting
+ax.set(
+    xlim=(WAVE_REST_MIN, WAVE_REST_MAX),
+    ylim=(0, 1.1),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"Normalized transmission-attenuated SED",
+)
+ax.legend(frameon=False, fontsize=10, loc="upper right")
+ax.grid(True, alpha=0.3, which="major")
+
+fig.tight_layout()
+plt.savefig("plot_igm_models_comparison.png", dpi=150, bbox_inches="tight")

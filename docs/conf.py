@@ -280,16 +280,49 @@ def _inject_missing_image_directives(app, *_args, **_kwargs):
     matching image on disk, inject a standard sphinx-gallery image
     block right after the section title underline.
 
-    Executed pages carry ``.. image-sg::`` (not ``.. image::``), so the
-    guard must accept either directive — matching only the plain form
-    double-injected a second figure into every executed page (the
-    2026-07 double-figure bug).
+    Executed pages carry ``.. image-sg::`` (not ``.. image::``). Two
+    hazards, both handled here:
+
+    * A plain ``.. image::`` must never be injected into a page that
+      already has ``.. image-sg::`` — matching only the plain form
+      double-injected a figure into every executed page (the 2026-07
+      double-figure bug).
+    * On a full-execution build this one-shot hook can fire while
+      sphinx-gallery is still writing per-script ``.. image-sg::``
+      directives, so a page injected here may *later* also get an
+      ``image-sg``. So the pass is idempotent and self-healing: if a
+      page ends up with BOTH, the injected plain block is stripped.
     """
     from pathlib import Path
 
     auto = Path(app.srcdir) / "auto_examples"
     if not auto.exists():
         return
+    # Dedup pass: strip an injected plain ``.. image::`` block from any
+    # page that also carries the canonical ``.. image-sg::`` (race repair).
+    deduped = 0
+    for rst in auto.glob("*/plot_*.rst"):
+        text = rst.read_text()
+        if ".. image-sg::" not in text or "\n.. image:: images/sphx_glr_" not in text:
+            continue
+        lines = text.splitlines()
+        out, i, changed = [], 0, False
+        while i < len(lines):
+            if lines[i].startswith(".. image:: images/sphx_glr_"):
+                j = i + 1
+                while j < len(lines) and (lines[j].startswith("   ") or not lines[j].strip()):
+                    j += 1
+                i = j
+                changed = True
+                continue
+            out.append(lines[i])
+            i += 1
+        if changed:
+            rst.write_text("\n".join(out) + "\n")
+            deduped += 1
+    if deduped:
+        print(f"[conf.py] stripped double-injected .. image:: from {deduped} RSTs")
+
     fixed = 0
     for rst in auto.glob("*/plot_*.rst"):
         text = rst.read_text()

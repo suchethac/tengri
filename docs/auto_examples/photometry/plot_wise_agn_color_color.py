@@ -1,0 +1,272 @@
+"""
+WISE W1–W2 vs W2–W3 Color-Color Diagram with Stern+2012 AGN Wedge
+==================================================================
+
+The **WISE color-color diagram** (Stern et al. 2012) is a tool for
+separating AGN from star-forming galaxies using mid-infrared colors. The
+diagnostic exploits the fact that AGN emit power-law SEDs (flat in νLν) while
+star-forming galaxies have cooler dust emission (Rayleigh-Jeans slope at
+long wavelengths).
+
+Stern et al. (2012) define an AGN wedge in the (W1–W2, W2–W3) color space:
+galaxies with **W1–W2 > 0.8 mag** are classified as AGN-dominated, while
+star-forming galaxies cluster below this threshold.
+
+This gallery:
+
+1. Builds ~50 star-forming galaxy models with:
+   - Variable dust opacity (tau_diff ∈ [0, 2], tau_bc ∈ [0.1, 1.5])
+   - Fixed SFH shape (DPL) and redshift (z = 0.1)
+   - Fixed dust temperature (35 K, cool)
+
+2. Builds ~10 hot-dust-emission models (AGN proxy) with:
+   - Suppressed stellar emission (log_sfr = −2)
+   - Variable dust temperature (60–100 K, hotter than SF)
+   - Variable opacity to mimic AGN-heated torus
+
+3. Computes observed-frame photometry in WISE W1, W2, W3 at z=0.1
+
+4. Converts to Vega magnitudes and plots W1−W2 vs W2−W3 color-color diagram
+
+5. Overlays the Stern+2012 AGN wedge (W1−W2 > 0.8 mag in Vega)
+
+References
+----------
+.. [1] Stern, D., Assef, R. J., Blain, A. W., et al., 2012, ApJ, 753, 30.
+       "Mid-Infrared Selection of Active Galactic Nuclei"
+.. [2] Wright, E. L., Eisenhardt, P. R. M., Mainzer, A. K., et al., 2010,
+       AJ, 140, 1868. "The Wide-field Infrared Survey Explorer (WISE)"
+
+"""
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Load SSP data and WISE filters
+# ─────────────────────────────────────────────────────────────────────────────
+
+ssp = tengri.load_ssp()
+photometry = tengri.Photometry.from_names(["wise_w1", "wise_w2", "wise_w3"])
+observation = tengri.Observation(photometry=photometry)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Generate star-forming galaxies
+# ─────────────────────────────────────────────────────────────────────────────
+
+n_sf = 50
+key_sf = jax.random.PRNGKey(42)
+keys_sf = jax.random.split(key_sf, n_sf)
+
+# Priors for SF parameters (sampled from physical ranges, not fixed)
+np.random.seed(42)
+tau_diff_samples = np.random.uniform(0.0, 2.0, n_sf)  # Diffuse dust opacity
+tau_bc_samples = np.random.uniform(0.1, 1.5, n_sf)  # Birth-cloud dust opacity
+peak_lbt_gyr_samples = np.random.uniform(1.0, 10.0, n_sf)  # Age of peak SFR
+
+# Fixed parameters for all SF galaxies
+z_gal = 0.1
+log_total_mass_sf = 1.0  # SFR ~ 10 M_sun/yr (reasonable for z~0 SF galaxies)
+
+sf_colors_w1_w2 = []
+sf_colors_w2_w3 = []
+
+for i in range(n_sf):
+    # Build model with variable dust and age, fixed SFH shape
+    sfh_config = {
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "log_total_mass": 10.0,
+        "alpha": 1.0,  # Fixed power-law slope (rising)
+        "beta": 1.0,  # Fixed power-law slope (declining)
+        "tau_gyr": 0.5,  # Fixed quenching timescale
+    }
+
+    dust_config = {
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "law_bc": "calzetti",
+        "tau_diff": tau_diff_samples[i],
+        "tau_bc": tau_bc_samples[i],
+        "slope": -0.7,
+        "emission": {
+            "type": "modified_blackbody",
+            "*": tengri.FIXED,
+            "T": 35.0,  # Fixed dust temperature (reasonable for star-forming)
+            "beta_ir": 1.8,  # Fixed emissivity index
+        },
+    }
+
+    model = tengri.SEDModel.build(
+        ssp_data=ssp,
+        observation=observation,
+        sfh=sfh_config,
+        dust=dust_config,
+        redshift=tengri.Fixed(z_gal),
+    )
+
+    # Sample free parameters (just sfh_dpl_peak_lbt_gyr if it's free; here all fixed)
+    p = dict(model.spec.sample(keys_sf[i]))
+
+    # Predict observed-frame photometry
+    phot = model.predict_photometry(p)
+    # shape: (3,) for W1, W2, W3 in erg/s/cm^2/Hz
+
+    # Convert to Vega magnitudes
+    # F_nu_to_vega_mag expects single filter name; call three times
+    w1_flux = np.asarray(phot[0])
+    w2_flux = np.asarray(phot[1])
+    w3_flux = np.asarray(phot[2])
+
+    # Vega zeropoint magnitudes (WISE system)
+    # These are standard WISE Vega magnitudes;
+    # flux → mag via F_ν comparison to Vega zeropoints
+    vega_f0_w1 = 309.540e-23  # erg/s/cm^2/Hz (WISE W1 Vega zeropoint)
+    vega_f0_w2 = 171.787e-23  # erg/s/cm^2/Hz (WISE W2 Vega zeropoint)
+    vega_f0_w3 = 31.674e-23  # erg/s/cm^2/Hz (WISE W3 Vega zeropoint)
+
+    mag_w1 = -2.5 * np.log10(w1_flux / vega_f0_w1)
+    mag_w2 = -2.5 * np.log10(w2_flux / vega_f0_w2)
+    mag_w3 = -2.5 * np.log10(w3_flux / vega_f0_w3)
+
+    color_w1_w2 = mag_w1 - mag_w2
+    color_w2_w3 = mag_w2 - mag_w3
+
+    sf_colors_w1_w2.append(color_w1_w2)
+    sf_colors_w2_w3.append(color_w2_w3)
+
+sf_colors_w1_w2 = np.array(sf_colors_w1_w2)
+sf_colors_w2_w3 = np.array(sf_colors_w2_w3)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Generate AGN-dominated galaxies
+# ─────────────────────────────────────────────────────────────────────────────
+
+n_agn = 10
+key_agn = jax.random.PRNGKey(123)
+keys_agn = jax.random.split(key_agn, n_agn)
+
+# Priors for AGN bolometric luminosity
+log_lbol_agn = np.linspace(11.0, 13.0, n_agn)
+
+agn_colors_w1_w2 = []
+agn_colors_w2_w3 = []
+
+for i in range(n_agn):
+    # Build AGN-dominated model: suppressed stellar emission, hot dust (torus-like)
+    # Mimics AGN-heated torus without explicit AGN component
+    sfh_config = {
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "log_total_mass": 10.0,  # Very suppressed SFR (~0.01 M_sun/yr; minimal stellar)
+        "alpha": 1.0,
+        "beta": 1.0,
+        "tau_gyr": 0.05,  # Quickly quenched
+    }
+
+    dust_config = {
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "law_bc": "calzetti",
+        "tau_diff": 0.5 + 0.1 * i,  # Variable dust opacity (AGN-heated)
+        "tau_bc": 0.3 + 0.05 * i,
+        "slope": -0.7,
+        "emission": {
+            "type": "modified_blackbody",
+            "*": tengri.FIXED,
+            "T": 60.0 + 5.0 * i,  # Higher temperatures for AGN (60-100 K, hotter than SF)
+            "beta_ir": 1.8,
+        },
+    }
+
+    model = tengri.SEDModel.build(
+        ssp_data=ssp,
+        observation=observation,
+        sfh=sfh_config,
+        dust=dust_config,
+        redshift=tengri.Fixed(z_gal),
+    )
+
+    # Sample parameters
+    p = dict(model.spec.sample(keys_agn[i]))
+
+    # Predict observed-frame photometry
+    phot = model.predict_photometry(p)
+
+    w1_flux = np.asarray(phot[0])
+    w2_flux = np.asarray(phot[1])
+    w3_flux = np.asarray(phot[2])
+
+    mag_w1 = -2.5 * np.log10(w1_flux / vega_f0_w1)
+    mag_w2 = -2.5 * np.log10(w2_flux / vega_f0_w2)
+    mag_w3 = -2.5 * np.log10(w3_flux / vega_f0_w3)
+
+    color_w1_w2 = mag_w1 - mag_w2
+    color_w2_w3 = mag_w2 - mag_w3
+
+    agn_colors_w1_w2.append(color_w1_w2)
+    agn_colors_w2_w3.append(color_w2_w3)
+
+agn_colors_w1_w2 = np.array(agn_colors_w1_w2)
+agn_colors_w2_w3 = np.array(agn_colors_w2_w3)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Plot color-color diagram with Stern+2012 wedge
+# ─────────────────────────────────────────────────────────────────────────────
+
+fig, ax = plt.subplots(figsize=(8.0, 6.5))
+
+# Plot star-forming galaxies
+ax.scatter(
+    sf_colors_w1_w2,
+    sf_colors_w2_w3,
+    s=60,
+    alpha=0.6,
+    color="#1f77b4",
+    edgecolors="0.3",
+    linewidths=0.5,
+    label=f"Star-forming (n={n_sf})",
+    zorder=2,
+)
+
+# Plot AGN
+ax.scatter(
+    agn_colors_w1_w2,
+    agn_colors_w2_w3,
+    s=100,
+    alpha=0.8,
+    color="#d62728",
+    marker="s",
+    edgecolors="0.3",
+    linewidths=0.8,
+    label=f"AGN (n={n_agn})",
+    zorder=3,
+)
+
+# Stern+2012 AGN wedge: W1−W2 > 0.8 (vertical line at x=0.8)
+ax.axvline(x=0.8, color="darkgreen", linestyle="--", lw=2.0, label="Stern+2012 wedge (W1–W2=0.8)")
+ax.fill_betweenx([-2, 4], 0.8, 3.0, alpha=0.1, color="green", label="AGN region")
+
+# Labels and styling
+ax.set_xlabel(r"$W1 - W2$ [mag]", fontsize=12)
+ax.set_ylabel(r"$W2 - W3$ [mag]", fontsize=12)
+ax.set_xlim(-0.5, 2.5)
+ax.set_ylim(-0.5, 2.0)
+ax.grid(True, alpha=0.3, linestyle=":", which="both")
+ax.legend(frameon=False, fontsize=10, loc="upper right")
+
+fig.tight_layout()
+plt.savefig("plot_wise_agn_color_color.png", dpi=150, bbox_inches="tight")

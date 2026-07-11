@@ -1,0 +1,110 @@
+"""
+Age-metallicity degeneracy in the stellar continuum
+===================================================
+
+Metal-rich young populations and metal-poor old populations can produce similar
+optical colors — a fundamental degeneracy in galaxy fitting. This 3×4 grid
+shows normalized rest-frame continua at nine points in the age–metallicity plane,
+with each row fixed at one lookback-formation age and each column fixed at one
+metallicity. Dust is zeroed to expose the clean stellar continuum shape.
+
+Physics: older stars redden due to turnoff mass loss; higher metallicity
+increases line blanketing, also reddening. At UV wavelengths the degeneracy
+breaks (young stars are bluer).
+"""
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+ssp = tengri.load_ssp()
+logz_grid = [-1.0, -0.3, 0.0, 0.3]
+age_gyr_grid = [0.1, 1.0, 5.0]
+age_colors = plt.cm.plasma(np.linspace(0.15, 0.85, len(age_gyr_grid)))
+
+fig, axes = plt.subplots(len(age_gyr_grid), len(logz_grid), figsize=(11, 9))
+
+for i, age_gyr in enumerate(age_gyr_grid):
+    for j, logz in enumerate(logz_grid):
+        ax = axes[i, j]
+        model = tengri.SEDModel.build(
+            ssp,
+            sfh={
+                "type": "dpl",
+                "*": tengri.FIXED,
+                "alpha": 2.0,
+                "beta": 2.5,
+                "tau_gyr": age_gyr,
+                "log_total_mass": 10.0,
+            },
+            dust={
+                "type": "two_component",
+                "*": tengri.FIXED,
+                "tau_bc": 0.0,
+                "tau_diff": 0.0,
+            },
+            redshift=tengri.Fixed(0.0),
+        )
+        params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+        params["met_logzsol"] = jnp.float64(logz)
+
+        pred = model.predict_rest_sed(params)
+        wave = np.asarray(pred.wavelength)
+        sed = np.asarray(pred.sed)
+
+        # Normalize at 5500 Å
+        i_norm = int(np.argmin(np.abs(wave - 5500.0)))
+        sed_norm = sed / sed[i_norm] if sed[i_norm] > 0 else sed
+
+        wave_um = wave / 1e4
+        mask = (wave_um > 0.3) & (wave_um < 2.0) & (sed_norm > 0)
+        ax.loglog(wave_um[mask], sed_norm[mask], color=age_colors[i], lw=2.0)
+        ax.set(xlim=(0.3, 2.0), ylim=(0.1, 10.0))
+        ax.tick_params(labelsize=7)
+
+        if j == 0:
+            ax.text(
+                0.02,
+                0.98,
+                f"Age = {age_gyr:.1f} Gyr",
+                transform=ax.transAxes,
+                fontsize=8,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+            )
+        if i == 0:
+            ax.text(
+                0.98,
+                0.98,
+                rf"$\log Z_\star/Z_\odot$ = {logz:.1f}",
+                transform=ax.transAxes,
+                fontsize=8,
+                verticalalignment="top",
+                horizontalalignment="right",
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+            )
+        if i == len(age_gyr_grid) - 1:
+            ax.set_xlabel(r"$\lambda$ [$\mu$m]", fontsize=8)
+        else:
+            ax.set_xticklabels([])
+
+        if j == 0:
+            ax.set_ylabel(r"$\lambda F_\lambda$ (norm)", fontsize=8)
+        else:
+            ax.set_yticklabels([])
+
+fig.tight_layout()
+plt.savefig("plot_metallicity_age_grid.png", dpi=150, bbox_inches="tight")
