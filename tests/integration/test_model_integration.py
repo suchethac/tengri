@@ -50,7 +50,7 @@ def parametric_spec():
     """Parametric tsnorm spec (no GP field)."""
     return Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -68,7 +68,7 @@ def stochastic_spec():
     """Stochastic tsnorm + field spec."""
     return Parameters(
         mean_sfh_type=["tsnorm", "field"],
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -92,7 +92,7 @@ def dpl_spec():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
         met_logzsol=Uniform(-1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=Uniform(0.0, 2.0),
@@ -149,10 +149,32 @@ class TestPredictPhotometry:
         chex.assert_tree_all_finite(phot)
         assert jnp.all(phot > 0)
 
-    def test_physical_range(self, parametric_model, typical_params):
-        phot = parametric_model.predict_photometry(typical_params)
-        assert jnp.all(phot > 1e-35)
-        assert jnp.all(phot < 1e-20)
+    def test_flux_scales_linearly_with_total_mass(self, parametric_model, typical_params):
+        """Photometry is linear in the total mass formed.
+
+        Replaces an absolute flux-band assertion (``1e-35 < F_nu < 1e-20``).
+        That band was not physical: this file's SSP is the *synthetic* grid
+        (``synthetic: True``, no ``flux_units`` attribute), whose absolute
+        normalization is arbitrary — the real grids declare ``Lsun/Hz/Msun``
+        and sit ~15 decades lower. The band only ever passed because the
+        fixture's toy ``log_total_mass`` prior (~1 Msun) happened to cancel
+        that arbitrary scale; giving the fixture a galaxy-scale mass exposed
+        it (#1031).
+
+        Linearity in ``10**log_total_mass`` is the invariant that actually
+        holds — it is independent of the SSP's normalization, so it is a real
+        assertion on any grid, synthetic or not.
+        """
+        p1 = dict(typical_params)
+        p2 = {**p1, "sfh_tsnorm_log_total_mass": p1["sfh_tsnorm_log_total_mass"] + 1.0}
+
+        f1 = parametric_model.predict_photometry(p1)
+        f2 = parametric_model.predict_photometry(p2)
+
+        chex.assert_tree_all_finite(f1)
+        assert jnp.all(f1 > 0)
+        # +1 dex of mass -> exactly 10x the flux in every band.
+        chex.assert_trees_all_close(f2, 10.0 * f1, rtol=1e-6)
 
 
 class TestPredictSfh:
@@ -206,8 +228,16 @@ class TestStochastic:
         # Force non-zero psd_sigma
         params = {**params, "sfh_field_psd_sigma": 1.5}
         sfh = stochastic_model.predict_sfh(params)
-        # With non-zero sigma and random xi, full != mean
-        assert not jnp.allclose(sfh["sfr_mean"], sfh["sfr_full"])
+        # With non-zero sigma and random xi, full != mean.
+        #
+        # rtol-only (atol=0.0): SFR spans many decades, and jnp.allclose's
+        # DEFAULT atol=1e-8 is an absolute floor that silently makes this
+        # assertion vacuous once the SFR scale drops below it. That is exactly
+        # what happened while the fixture carried a toy log_total_mass prior
+        # (total mass ~1 Msun -> SFR ~1e-10): mean and full differed by 5e-10 --
+        # real, but invisible to the default atol, so a working stochastic
+        # field read as broken (#1031).
+        assert not jnp.allclose(sfh["sfr_mean"], sfh["sfr_full"], atol=0.0, rtol=1e-5)
 
 
 # ── DPL SEDModel ─────────────────────────────────────────────────────
@@ -547,10 +577,33 @@ class TestDustEmissionForwardModel:
         )
         model_no = SEDModel(spec_no, ssp, filters=filters, precompute=False)
 
-        sed_em = model.predict_rest_sed(params_em).sed
-        sed_no = model_no.predict_rest_sed({}).sed
-        max_diff = float(jnp.max(sed_em - sed_no))
-        assert max_diff > 0, "Dust emission should add positive flux somewhere"
+        em = model.predict_rest_sed(params_em)
+        no = model_no.predict_rest_sed({})
+
+        # The two models do NOT share a wavelength grid. An analytic dust-
+        # emission model extends the rest grid into the far-IR so submm
+        # photometry is integrable (#1005), so ``model`` carries several
+        # hundred extra points beyond the SSP's red edge. Subtracting the raw
+        # arrays raised "sub got incompatible shapes" (#1031) — the comparison
+        # has to happen on a common grid. Project the no-emission SED onto the
+        # emission grid; beyond its red edge there is no stellar flux to
+        # compare against, so the excess there is the dust emission itself.
+        no_on_em = jnp.interp(em.wavelength, no.wavelength, no.sed, left=0.0, right=0.0)
+        excess = em.sed - no_on_em
+        assert float(jnp.max(excess)) > 0, "Dust emission should add positive flux somewhere"
+
+        # ...and the added energy must be thermal grain re-emission in the IR,
+        # not extra optical light. The old shape-blind ``max(diff) > 0`` would
+        # have passed even if the excess had landed in the optical.
+        ir = em.wavelength > 1.0e5  # > 10 um
+        optical = (em.wavelength > 4000.0) & (em.wavelength < 7000.0)
+        assert float(jnp.max(excess[ir])) > float(jnp.max(jnp.abs(excess[optical])))
+
+        # End-to-end: the mid-IR band actually brightens. wise_w3 (12 um) sits
+        # on the warm-dust bump; sdss_r does not.
+        f_em = model.predict_photometry(params_em)
+        f_no = model_no.predict_photometry({})
+        assert float(f_em[1]) > float(f_no[1]), "wise_w3 must brighten with dust emission"
 
     def test_dust_emission_gradient(self, ssp):
         from tengri.parameters.priors import Fixed
