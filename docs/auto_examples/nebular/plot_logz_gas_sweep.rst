@@ -29,7 +29,7 @@ and [O III]/Hbeta the textbook diagnostics.
 
 Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-72
+.. GENERATED FROM PYTHON SOURCE LINES 13-87
 
 
 
@@ -86,6 +86,9 @@ Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
     cmap = plt.get_cmap("YlGn")
 
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
+
+    # Collect data to compute data-driven ylim
+    all_curve_data = []
     for logz in logz_values:
         params = {**baseline, "neb_logZ_gas": jnp.float64(logz)}
         out = model.predict_rest_sed(params)
@@ -93,6 +96,18 @@ Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
         nu = 2.998e18 / wave
         nu_l_nu = nu * np.asarray(out.sed)
         ax.semilogy(wave, nu_l_nu, color=cmap(norm(logz)), lw=1.4)
+
+        # Track values in the plotted window for ylim
+        mask = (wave >= 4000) & (wave <= 7500)
+        all_curve_data.append(nu_l_nu[mask])
+
+    # Set ylim to focus on the continuum and lines
+    all_vals = np.concatenate(all_curve_data)
+    y_median = np.median(all_vals)
+    y_max = np.max(all_vals)
+    y_min_auto = y_median / 30.0
+    y_max_auto = y_max * 2.0
+    ax.set_ylim(y_min_auto, y_max_auto)
 
     ax.set_xlim(4000, 7500)
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
@@ -103,6 +118,11 @@ Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
 
     fig.tight_layout()
     plt.savefig("plot_logz_gas_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.634 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_logz_gas_sweep.py:

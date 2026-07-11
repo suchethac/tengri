@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:15.543** total execution time for 302 files **from all galleries**:
+**00:03.287** total execution time for 302 files **from all galleries**:
 
 .. container::
 
@@ -32,17 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_agn_plot_torus_library_inclination_grid.py` (``../examples/agn/plot_torus_library_inclination_grid.py``)
-     - 00:11.008
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py` (``../examples/agn/plot_alpha_ox_lusso_risaliti.py``)
-     - 00:02.532
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_line_sigma_sweep.py` (``../examples/nebular/plot_line_sigma_sweep.py``)
-     - 00:02.003
+   * - :ref:`sphx_glr_auto_examples_agn_plot_smbh_growth_track.py` (``../examples/agn/plot_smbh_growth_track.py``)
+     - 00:02.869
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_custom_attenuation_component.py` (``../examples/advanced/plot_custom_attenuation_component.py``)
-     - 00:00.000
+     - 00:00.417
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_ab_mag_zero_point.py` (``../examples/advanced/plot_diag_ab_mag_zero_point.py``)
      - 00:00.000
@@ -155,6 +149,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_torus_compare.py` (``../examples/agn/plot_agn_torus_compare.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py` (``../examples/agn/plot_alpha_ox_lusso_risaliti.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_uv_xray_connection.py` (``../examples/agn/plot_alpha_ox_uv_xray_connection.py``)
      - 00:00.000
      - 0.0
@@ -242,7 +239,7 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_slone_netzer_disc_sweep.py` (``../examples/agn/plot_slone_netzer_disc_sweep.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_smbh_growth_track.py` (``../examples/agn/plot_smbh_growth_track.py``)
+   * - :ref:`sphx_glr_auto_examples_agn_plot_torus_library_inclination_grid.py` (``../examples/agn/plot_torus_library_inclination_grid.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_torus_opening_angle_sweep.py` (``../examples/agn/plot_torus_opening_angle_sweep.py``)
@@ -504,6 +501,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_halpha_sfr_calibration_age.py` (``../examples/nebular/plot_halpha_sfr_calibration_age.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_line_sigma_sweep.py` (``../examples/nebular/plot_line_sigma_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_logz_gas_sweep.py` (``../examples/nebular/plot_logz_gas_sweep.py``)

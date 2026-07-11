@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:13.540** total execution time for 48 files **from auto_examples/agn**:
+**00:02.869** total execution time for 48 files **from auto_examples/agn**:
 
 .. container::
 
@@ -32,11 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_agn_plot_torus_library_inclination_grid.py` (``plot_torus_library_inclination_grid.py``)
-     - 00:11.008
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py` (``plot_alpha_ox_lusso_risaliti.py``)
-     - 00:02.532
+   * - :ref:`sphx_glr_auto_examples_agn_plot_smbh_growth_track.py` (``plot_smbh_growth_track.py``)
+     - 00:02.869
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py` (``plot_agn_alpha_ox_lbol_2d.py``)
      - 00:00.000
@@ -72,6 +69,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_torus_compare.py` (``plot_agn_torus_compare.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py` (``plot_alpha_ox_lusso_risaliti.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_uv_xray_connection.py` (``plot_alpha_ox_uv_xray_connection.py``)
@@ -161,7 +161,7 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_slone_netzer_disc_sweep.py` (``plot_slone_netzer_disc_sweep.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_smbh_growth_track.py` (``plot_smbh_growth_track.py``)
+   * - :ref:`sphx_glr_auto_examples_agn_plot_torus_library_inclination_grid.py` (``plot_torus_library_inclination_grid.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_torus_opening_angle_sweep.py` (``plot_torus_opening_angle_sweep.py``)

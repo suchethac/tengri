@@ -32,7 +32,7 @@ Each (age, Z) point uses a narrow Gaussian-like SFH (tsnorm)
 centered at the appropriate lookback time, fixed dust extinction,
 and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-116
+.. GENERATED FROM PYTHON SOURCE LINES 16-118
 
 
 
@@ -42,8 +42,21 @@ and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/forward/sed_model.py:701: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -117,9 +130,11 @@ and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
             }
             # Predict photometry and compute colors
             flux = np.asarray(model.predict_photometry(p))
+            # Protect against log of zero by ensuring positive flux
+            flux = np.where(flux > 0, flux, 1e-30)
             for name, idx_1, idx_2 in COLORS_TO_PLOT:
-                mag_1 = -2.5 * np.log10(np.maximum(flux[idx_1], 1e-20))
-                mag_2 = -2.5 * np.log10(np.maximum(flux[idx_2], 1e-20))
+                mag_1 = -2.5 * np.log10(flux[idx_1])
+                mag_2 = -2.5 * np.log10(flux[idx_2])
                 color_grids[name][i, j] = mag_1 - mag_2
 
     # Create 3-panel figure

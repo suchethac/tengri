@@ -42,7 +42,7 @@ References:
   - McGaugh 2000, ApJ, 541, L33 (baryonic TF relation)
   - Verheijen 2001, ApJ, 563, 694 (optical TF calibration)
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-233
+.. GENERATED FROM PYTHON SOURCE LINES 26-236
 
 
 
@@ -52,8 +52,21 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/examples/usecases/plot_usecase_tully_fisher_relation.py:206: RankWarning: Polyfit may be poorly conditioned
+      z_fit = np.polyfit(log_v_circs, m_r_abs, 1)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/examples/usecases/plot_usecase_tully_fisher_relation.py:217: UserWarning: Attempting to set identical low and high xlims makes transformation singular; automatically expanding.
+      ax.set_xlim(log_v_circs.min() - x_margin, log_v_circs.max() + x_margin)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -245,8 +258,11 @@ References:
     # Formatting
     ax.set_xlabel(r"$\log V_{\mathrm{circ}}$ [km/s]", fontsize=12)
     ax.set_ylabel(r"$M_r$ [AB mag]", fontsize=12)
-    ax.set_xlim(1.7, 2.5)
-    ax.set_ylim(m_r_abs.max() + 1.5, m_r_abs.min() - 1.0)  # Invert y (magnitudes)
+    # Tighten axes to data extent with small margins
+    x_margin = (log_v_circs.max() - log_v_circs.min()) * 0.15
+    y_margin = (m_r_abs.max() - m_r_abs.min()) * 0.15
+    ax.set_xlim(log_v_circs.min() - x_margin, log_v_circs.max() + x_margin)
+    ax.set_ylim(m_r_abs.max() + y_margin, m_r_abs.min() - y_margin)  # Invert y (magnitudes)
     ax.grid(True, alpha=0.3, linestyle=":")
     ax.legend(loc="lower right", frameon=False, fontsize=10)
 

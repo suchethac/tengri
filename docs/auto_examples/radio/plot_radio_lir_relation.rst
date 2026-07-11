@@ -29,7 +29,7 @@ starbursts emit stronger radio across all frequencies. We sweep L_IR over
 
 Reference: Bell 2003, ApJ 586, 794.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-59
+.. GENERATED FROM PYTHON SOURCE LINES 13-64
 
 
 
@@ -39,8 +39,19 @@ Reference: Bell 2003, ApJ 586, 794.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/examples/radio/plot_radio_lir_relation.py:57: UserWarning: Attempt to set non-positive ylim on a log-scaled axis will be ignored.
+      ax.set_ylim(ymin / 3.0, ymax * 3.0)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -74,8 +85,10 @@ Reference: Bell 2003, ApJ 586, 794.
 
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
 
+    all_lnu = []
     for L_ir, log_lir in zip(L_ir_values, log_L_ir):
         L_nu = radio_star_forming(wave, L_ir=L_ir, q_ir=q_ir, alpha_sf=0.8)
+        all_lnu.append(L_nu)
         nu_ghz = (3e18 / np.array(wave)) / 1e9
         ax.loglog(nu_ghz, np.array(L_nu), color=cmap(norm(log_lir)), lw=1.4)
 
@@ -83,7 +96,10 @@ Reference: Bell 2003, ApJ 586, 794.
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
     ax.invert_xaxis()
     ax.set_xlim(200, 0.1)
-    ax.set_ylim(1e-5, 1e7)
+    # Tighten y-limits based on data range
+    ymax = max([np.max(arr) for arr in all_lnu])
+    ymin = min([np.min(arr) for arr in all_lnu])
+    ax.set_ylim(ymin / 3.0, ymax * 3.0)
 
     cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
     cbar.set_label(r"log$_{10}$ L$_{\rm IR}$ [L$_\odot$]")

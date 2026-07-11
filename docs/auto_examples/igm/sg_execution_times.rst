@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:06.306** total execution time for 8 files **from auto_examples/igm**:
+**00:00.631** total execution time for 8 files **from auto_examples/igm**:
 
 .. container::
 
@@ -32,27 +32,27 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_igm_plot_inoue_vs_madau_z5_z7.py` (``plot_inoue_vs_madau_z5_z7.py``)
-     - 00:01.401
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_redshift.py` (``plot_igm_redshift.py``)
-     - 00:01.321
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_models_comparison.py` (``plot_igm_models_comparison.py``)
-     - 00:01.003
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_igm_plot_lyman_alpha_igm_attenuation.py` (``plot_lyman_alpha_igm_attenuation.py``)
-     - 00:00.677
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_igm_plot_sed_with_igm.py` (``plot_sed_with_igm.py``)
-     - 00:00.601
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_dla_absorption.py` (``plot_dla_absorption.py``)
-     - 00:00.468
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_z_evolution.py` (``plot_igm_z_evolution.py``)
-     - 00:00.425
+     - 00:00.361
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_dla_redshift_evolution.py` (``plot_dla_redshift_evolution.py``)
-     - 00:00.411
+     - 00:00.270
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_models_comparison.py` (``plot_igm_models_comparison.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_redshift.py` (``plot_igm_redshift.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_z_evolution.py` (``plot_igm_z_evolution.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_inoue_vs_madau_z5_z7.py` (``plot_inoue_vs_madau_z5_z7.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_lyman_alpha_igm_attenuation.py` (``plot_lyman_alpha_igm_attenuation.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_sed_with_igm.py` (``plot_sed_with_igm.py``)
+     - 00:00.000
      - 0.0

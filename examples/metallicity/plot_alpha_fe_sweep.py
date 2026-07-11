@@ -65,7 +65,8 @@ for met_alpha_fe in met_alpha_fe_values:
     ax.loglog(wave, nu_l_nu, color=cmap(norm(met_alpha_fe)), lw=1.4)
 
 ax.set_xlim(3000, 1e4)
-ax.set_ylim(1e40, 1e43)
+# Tighten y-limits to optical/optical-IR region with small margin
+ax.set_ylim(1e40, 2e44)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 

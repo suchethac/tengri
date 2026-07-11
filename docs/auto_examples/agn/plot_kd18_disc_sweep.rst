@@ -39,7 +39,7 @@ References
    X-ray excess in low-luminosity AGN," MNRAS 480, 1247 (2018).
    arXiv:1804.02334. https://doi.org/10.1093/mnras/sty1890
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-122
+.. GENERATED FROM PYTHON SOURCE LINES 23-132
 
 
 
@@ -49,8 +49,21 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/parameters/groups.py:743: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -92,6 +105,9 @@ References
     norm_mbh = mpl.colors.Normalize(vmin=log_mbh_values.min(), vmax=log_mbh_values.max())
     cmap_mbh = plt.get_cmap("viridis")
 
+    # Collect all nu*L_nu values to determine axis range
+    all_nu_l_nu = []
+
     for i_mbh, log_mbh in enumerate(log_mbh_values):
         for i_ledd, log_ledd in enumerate(log_ledd_values):
             ax = axes[i_ledd, i_mbh]
@@ -119,6 +135,7 @@ References
             wave = np.asarray(out.wavelength)
             c_aa_s = 2.998e18
             nu_l_nu = c_aa_s / wave * np.asarray(out.sed)
+            all_nu_l_nu.append(nu_l_nu)
 
             color = cmap_mbh(norm_mbh(log_mbh))
             ax.loglog(wave, nu_l_nu, color=color, lw=1.5)
@@ -143,8 +160,14 @@ References
                 ax.set_xlabel(r"$\lambda$ [$\mathrm{\AA}$]", fontsize=9)
 
             ax.set_xlim(10, 1e5)
-            ax.set_ylim(1e41, 1e49)
             ax.grid(True, which="major", alpha=0.2)
+
+    # Set y-limits based on data range with small margin
+    ymax = max([np.max(arr) for arr in all_nu_l_nu])
+    ymin = min([np.min(arr) for arr in all_nu_l_nu])
+    ylim_max = ymax * 2.0  # ~0.3 dex headroom
+    ylim_min = ymin / 3.0  # ~0.5 dex margin below minimum
+    axes[0, 0].set_ylim(ylim_min, ylim_max)
 
     fig.suptitle(
         "Kubota & Done 2018 disc: Accretion state grid",
@@ -157,7 +180,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.390 seconds)
+   **Total running time of the script:** (0 minutes 2.518 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_kd18_disc_sweep.py:

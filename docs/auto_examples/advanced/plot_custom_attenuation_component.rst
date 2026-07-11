@@ -102,8 +102,8 @@ decision.
         eb = Uniform(0.0, 5.0, description="2175 A bump amplitude", units="dimensionless")
         gamma = Uniform(100.0, 600.0, description="bump FWHM", units="Angstrom")
 
-        inputs: dict[str, str] = {}
-        outputs: dict[str, str] = {"L_absorbed": "erg/s"}
+        inputs = {}  # noqa: RUF012
+        outputs = {"L_absorbed": "erg/s"}  # noqa: RUF012
 
         def predict(self, p, sed_in, wave):
             k_calz = _calzetti_law(wave)

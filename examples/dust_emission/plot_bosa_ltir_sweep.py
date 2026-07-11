@@ -35,22 +35,28 @@ nu = c_aa_per_s / wave_aa
 fig, ax = plt.subplots(figsize=(8.0, 5.5))
 cmap = plt.get_cmap("viridis")
 idx_show = np.linspace(0, len(log_ltir) - 1, 6).astype(int)
+all_nu_l_nu = []
 for k, il in enumerate(idx_show):
     L_nu = spectra[il, i_ssfr]
+    nu_l_nu = nu * L_nu
+    all_nu_l_nu.append(nu_l_nu)
     ax.plot(
         wave_um,
-        nu * L_nu,
+        nu_l_nu,
         color=cmap(k / max(1, len(idx_show) - 1)),
         lw=1.3,
         label=rf"$\log_{{10}} L_{{\rm TIR}} = {log_ltir[il]:.1f}$",
     )
+# Tighten y-limits based on data range
+ymax = max([np.max(arr) for arr in all_nu_l_nu])
+ymin = min([np.min(arr) for arr in all_nu_l_nu])
 ax.set(
     xscale="log",
     yscale="log",
     xlabel=r"$\lambda\ [\mu\mathrm{m}]$",
     ylabel=r"$\nu L_\nu\ [\mathrm{normalized}\ \int L_\nu d\nu = 1]$",
     xlim=(50.0, 200.0),
-    ylim=(1.0e-3, 2.0e0),
+    ylim=(ymin / 3.0, ymax * 3.0),
 )
 ax.legend(loc="lower left", frameon=False, fontsize=8, ncol=1)
 fig.tight_layout()

@@ -38,8 +38,19 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -71,7 +82,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "log_total_mass": 10.0,
+            "log_total_mass": tengri.Uniform(9.0, 11.0),
             "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
             "width_gyr": tengri.Uniform(0.3, 5.0),
             "skew": tengri.Uniform(-1.0, 1.5),
@@ -91,7 +102,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     truth_params = {
         "sfh_tsnorm_peak_lbt_gyr": 2.5,
         "sfh_tsnorm_width_gyr": 1.5,
-        "sfh_tsnorm_log_total_mass": 0.9,
+        "sfh_tsnorm_log_total_mass": 10.0,
         "sfh_tsnorm_skew": 0.2,
         "sfh_tsnorm_trunc": 5.0,
         "met_logzsol": -0.1,
@@ -147,7 +158,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.251 seconds)
+   **Total running time of the script:** (0 minutes 3.472 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_method_comparison.py:

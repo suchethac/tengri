@@ -48,7 +48,10 @@ for z_dla in z_dla_values:
     transmission = jnp.exp(-tau_dla)
     ax.plot(np.array(wavelength_obs), np.array(transmission), color=cmap(norm(z_dla)), lw=1.4)
 
-ax.set_xlim(500, 8000)
+# Zoom to show the Lyman-alpha damping-wing evolution across redshift
+# At z=1, Lya is at 2432 Å; at z=6, Lya is at 8512 Å
+# Zoom to focus on the damping trough march, with ±300 Å padding on each end
+ax.set_xlim(2100, 8850)
 ax.set_xscale("log")
 ax.set_ylim(-0.02, 1.05)
 ax.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]")

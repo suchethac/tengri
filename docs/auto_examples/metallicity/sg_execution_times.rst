@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:05.703** total execution time for 5 files **from auto_examples/metallicity**:
+**00:00.515** total execution time for 5 files **from auto_examples/metallicity**:
 
 .. container::
 
@@ -32,18 +32,18 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_metallicity_plot_zh_evolution_compare.py` (``plot_zh_evolution_compare.py``)
-     - 00:01.737
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_metallicity_plot_metallicity_age_grid.py` (``plot_metallicity_age_grid.py``)
-     - 00:01.500
+   * - :ref:`sphx_glr_auto_examples_metallicity_plot_alpha_fe_sweep.py` (``plot_alpha_fe_sweep.py``)
+     - 00:00.515
      - 0.0
    * - :ref:`sphx_glr_auto_examples_metallicity_plot_logzsol_panchromatic.py` (``plot_logzsol_panchromatic.py``)
-     - 00:01.432
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_metallicity_plot_alpha_fe_sweep.py` (``plot_alpha_fe_sweep.py``)
-     - 00:00.560
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_metallicity_plot_logzsol_sweep.py` (``plot_logzsol_sweep.py``)
-     - 00:00.474
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_metallicity_plot_metallicity_age_grid.py` (``plot_metallicity_age_grid.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_metallicity_plot_zh_evolution_compare.py` (``plot_zh_evolution_compare.py``)
+     - 00:00.000
      - 0.0

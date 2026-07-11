@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**01:41.085** total execution time for 24 files **from auto_examples/usecases**:
+**00:06.578** total execution time for 24 files **from auto_examples/usecases**:
 
 .. container::
 
@@ -32,75 +32,75 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_jwst_color_color.py` (``plot_usecase_jwst_color_color.py``)
-     - 00:29.941
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_2d.py` (``plot_usecase_age_dust_2d.py``)
-     - 00:10.474
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_redshift_degeneracy.py` (``plot_usecase_age_dust_redshift_degeneracy.py``)
-     - 00:08.099
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uv_to_ir_bolometric_balance.py` (``plot_usecase_uv_to_ir_bolometric_balance.py``)
-     - 00:07.474
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sdss_lrg_stack_template.py` (``plot_usecase_sdss_lrg_stack_template.py``)
-     - 00:05.607
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_stellar_mass_luminosity_function.py` (``plot_usecase_stellar_mass_luminosity_function.py``)
-     - 00:04.533
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uv_slope_beta.py` (``plot_usecase_uv_slope_beta.py``)
-     - 00:04.358
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_dropout_selection_z3.py` (``plot_usecase_dropout_selection_z3.py``)
-     - 00:03.659
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sfh_to_madau_dickinson.py` (``plot_usecase_sfh_to_madau_dickinson.py``)
-     - 00:03.419
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uvj_diagram.py` (``plot_usecase_uvj_diagram.py``)
-     - 00:03.373
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_balmer_decrement_av.py` (``plot_usecase_balmer_decrement_av.py``)
-     - 00:03.273
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py` (``plot_usecase_sfr_uv_ir_consistency.py``)
-     - 00:03.230
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_kennicutt_sfr_calibrations.py` (``plot_usecase_kennicutt_sfr_calibrations.py``)
-     - 00:02.756
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_mass_completeness.py` (``plot_usecase_mass_completeness.py``)
-     - 00:01.994
+     - 00:05.608
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_tully_fisher_relation.py` (``plot_usecase_tully_fisher_relation.py``)
-     - 00:01.274
+     - 00:00.969
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_d4000_age.py` (``plot_usecase_d4000_age.py``)
-     - 00:01.209
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_2d.py` (``plot_usecase_age_dust_2d.py``)
+     - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_d4000_vs_ssfr.py` (``plot_usecase_d4000_vs_ssfr.py``)
-     - 00:01.108
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_redshift_degeneracy.py` (``plot_usecase_age_dust_redshift_degeneracy.py``)
+     - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_main_sequence_cosmic_evolution.py` (``plot_usecase_main_sequence_cosmic_evolution.py``)
-     - 00:00.946
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_balmer_decrement_av.py` (``plot_usecase_balmer_decrement_av.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_cosmology_distance_modulus.py` (``plot_usecase_cosmology_distance_modulus.py``)
-     - 00:00.833
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_lensed_galaxy_magnification.py` (``plot_usecase_lensed_galaxy_magnification.py``)
-     - 00:00.827
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_fundamental_metallicity_relation.py` (``plot_usecase_fundamental_metallicity_relation.py``)
-     - 00:00.763
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_cosmology_ladder.py` (``plot_usecase_cosmology_ladder.py``)
-     - 00:00.737
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_d4000_age.py` (``plot_usecase_d4000_age.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_d4000_vs_ssfr.py` (``plot_usecase_d4000_vs_ssfr.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_dropout_selection_z3.py` (``plot_usecase_dropout_selection_z3.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_emission_line_pcc.py` (``plot_usecase_emission_line_pcc.py``)
-     - 00:00.654
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_fundamental_metallicity_relation.py` (``plot_usecase_fundamental_metallicity_relation.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_hubble_sequence.py` (``plot_usecase_hubble_sequence.py``)
-     - 00:00.543
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_jwst_color_color.py` (``plot_usecase_jwst_color_color.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_kennicutt_sfr_calibrations.py` (``plot_usecase_kennicutt_sfr_calibrations.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_lensed_galaxy_magnification.py` (``plot_usecase_lensed_galaxy_magnification.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_main_sequence_cosmic_evolution.py` (``plot_usecase_main_sequence_cosmic_evolution.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_mass_completeness.py` (``plot_usecase_mass_completeness.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sdss_lrg_stack_template.py` (``plot_usecase_sdss_lrg_stack_template.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sfh_to_madau_dickinson.py` (``plot_usecase_sfh_to_madau_dickinson.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py` (``plot_usecase_sfr_uv_ir_consistency.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_stellar_mass_luminosity_function.py` (``plot_usecase_stellar_mass_luminosity_function.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uv_slope_beta.py` (``plot_usecase_uv_slope_beta.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uvj_diagram.py` (``plot_usecase_uvj_diagram.py``)
+     - 00:00.000
      - 0.0

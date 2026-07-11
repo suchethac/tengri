@@ -36,8 +36,25 @@ young stars atop an old population. The SED reveals the full assembly history.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 6% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 42% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -148,7 +165,7 @@ young stars atop an old population. The SED reveals the full assembly history.
     ax.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
     ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
     ax.set_xlim(1000, 1e6)
-    ax.set_ylim(1e0, 1e7)
+    ax.set_ylim(1e25, 1e32)
     ax.legend(fontsize=10, frameon=False, loc="lower left")
     ax.grid(True, alpha=0.2, which="both")
 

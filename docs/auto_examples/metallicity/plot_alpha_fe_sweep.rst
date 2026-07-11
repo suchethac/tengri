@@ -30,7 +30,7 @@ passively evolving galaxy where iron features dominate the continuum absorption.
 
 Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-80
+.. GENERATED FROM PYTHON SOURCE LINES 14-81
 
 
 
@@ -40,8 +40,19 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -99,7 +110,8 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
         ax.loglog(wave, nu_l_nu, color=cmap(norm(met_alpha_fe)), lw=1.4)
 
     ax.set_xlim(3000, 1e4)
-    ax.set_ylim(1e40, 1e43)
+    # Tighten y-limits to optical/optical-IR region with small margin
+    ax.set_ylim(1e40, 2e44)
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
     ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 

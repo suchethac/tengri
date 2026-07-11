@@ -29,7 +29,7 @@ deepen the Lyman forest and suppress flux in the UV-to-optical SED.
 
 Reference: Wolfe et al. 2005, ARA&A, 43, 861 (DLA review and cross-sections).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-61
+.. GENERATED FROM PYTHON SOURCE LINES 13-63
 
 
 
@@ -81,7 +81,9 @@ Reference: Wolfe et al. 2005, ARA&A, 43, 861 (DLA review and cross-sections).
     lya_obs = 1216.0 * (1 + z_dla)
     ax.axvline(lya_obs, color="0.5", lw=0.8, ls="--", alpha=0.4)
 
-    ax.set_xlim(500, 5000)
+    # Zoom to the damping wing region around Lyman-alpha trough
+    # ±300 Å provides good visibility of the wing structure and column-density dependence
+    ax.set_xlim(lya_obs - 300, lya_obs + 300)
     ax.set_xscale("log")
     ax.set_ylim(-0.02, 1.05)
     ax.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]")

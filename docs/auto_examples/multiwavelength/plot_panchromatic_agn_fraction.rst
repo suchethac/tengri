@@ -26,7 +26,7 @@ luminosity fraction from pure starburst to pure AGN, showing the
 transition in SED morphology as the accretion disc continuum
 increasingly dominates stellar and dust emission.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-96
+.. GENERATED FROM PYTHON SOURCE LINES 10-100
 
 
 
@@ -36,8 +36,19 @@ increasingly dominates stellar and dust emission.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -49,7 +60,6 @@ increasingly dominates stellar and dust emission.
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -59,6 +69,7 @@ increasingly dominates stellar and dust emission.
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
+    # Build composite model: stellar + AGN with sweepable AGN luminosity
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
         ssp,
@@ -77,39 +88,43 @@ increasingly dominates stellar and dust emission.
             "tau_diff": 0.2,
             "emission": {"type": "dale2014", "*": tengri.FIXED},
         },
+        agn={
+            "type": "composable",
+            "disc": {"type": "qsogen", "*": tengri.FIXED},
+        },
         redshift=tengri.Fixed(0.05),
     )
 
+    # Base parameters
     baseline = dict(model.spec.sample(jax.random.PRNGKey(42)))
-    out_star = model.predict_rest_sed(baseline)
-    wave = np.asarray(out_star.wavelength)
-    sed_stellar = np.asarray(out_star.sed)
-    wave_um = wave / 1e4
 
-    # AGN continuum at fixed L_bol
-    log_lbol_agn = 11.0
-    sed_agn = np.array(
-        tengri.components.agn.compute_qsogen_sed(jnp.asarray(wave), agn_log_lbol=log_lbol_agn)
-    )
+    # AGN luminosity values to sweep (negative means no AGN contribution, positive means AGN-dominated)
+    # Sweep log_lbol from -2 (negligible AGN) to 11 (strong AGN)
+    agn_log_lbols = np.array([0.0, 9.0, 10.0, 10.5, 11.0, 11.5])
+    # Normalize to fraction for colorbar (0 = no AGN, 1 = strong AGN)
+    agn_fracs = (agn_log_lbols - agn_log_lbols.min()) / (agn_log_lbols.max() - agn_log_lbols.min())
 
-    # Normalize AGN to match stellar luminosity scale
-    agn_peak = np.nanmax(sed_agn[sed_agn > 0])
-    stellar_peak = np.nanmax(sed_stellar[sed_stellar > 0])
-    sed_agn_norm = sed_agn * (stellar_peak / agn_peak)
-
-    # AGN fractions to sweep
-    agn_fracs = np.array([0.0, 0.1, 0.3, 0.5, 0.8, 1.0])
     cmap = plt.get_cmap("viridis")
-    norm = plt.Normalize(vmin=agn_fracs.min(), vmax=agn_fracs.max())
+    norm = plt.Normalize(vmin=0, vmax=1)
 
     fig, ax = plt.subplots(figsize=(10, 5.2))
 
-    for agn_frac in agn_fracs:
-        sed_composite = (1.0 - agn_frac) * sed_stellar + agn_frac * sed_agn_norm
-        nu = 2.998e18 / wave
-        nu_l_nu = nu * sed_composite
+    for agn_log_lbol, agn_frac in zip(agn_log_lbols, agn_fracs):
+        # Update the AGN log luminosity parameter
+        params = dict(baseline)
+        params["agn_log_lbol"] = agn_log_lbol
 
-        mask = sed_composite > 0
+        # Predict composite SED
+        out = model.predict_rest_sed(params)
+        wave = np.asarray(out.wavelength)
+        sed = np.asarray(out.sed)
+        wave_um = wave / 1e4
+
+        # Compute nu * L_nu for plotting
+        nu = 2.998e18 / wave
+        nu_l_nu = nu * sed
+
+        mask = sed > 0
         ax.loglog(
             wave_um[mask],
             nu_l_nu[mask],
@@ -118,7 +133,7 @@ increasingly dominates stellar and dust emission.
         )
 
     ax.set_xlim(0.08, 1e2)
-    ax.set_ylim(1e24, 1e36)
+    ax.set_ylim(1e40, 1e45)
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mu$m]")
     ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
 
@@ -127,6 +142,11 @@ increasingly dominates stellar and dust emission.
 
     fig.tight_layout()
     plt.savefig("plot_panchromatic_agn_fraction.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.121 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_agn_fraction.py:
