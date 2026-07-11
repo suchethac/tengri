@@ -534,20 +534,20 @@ class Observation:
         if self.spectroscopy is None:
             raise ValueError("No spectroscopy configured in this Observation.")
 
-        from tengri.observation.spectrum import apply_lsf, compute_spectrum
+        from tengri.observation.spectrum import project_spectrum
 
         wave_rest = sed_result.wavelength / (1.0 + z)
         wave_obs = self.spectroscopy.wave_obs
-        flux = compute_spectrum(sed_result.sed, wave_rest, wave_obs, z, dl_cm)
-
-        if self.spectroscopy.resolution is not None:
-            flux = apply_lsf(
-                flux,
-                wave_obs,
-                self.spectroscopy.resolution,
-                sigma_lib_kms=self.spectroscopy.sigma_lib_kms,
-                sigma_v_kms=sigma_v_kms,
-            )
+        flux = project_spectrum(
+            sed_result.sed,
+            wave_rest,
+            wave_obs,
+            z,
+            dl_cm,
+            resolution=self.spectroscopy.resolution,
+            sigma_lib_kms=self.spectroscopy.sigma_lib_kms,
+            sigma_v_kms=sigma_v_kms,
+        )
         return flux
 
     # ── Unified projection (ObservationModel Protocol) ────────────
@@ -634,7 +634,7 @@ class Observation:
         """
         from tengri.cosmology import luminosity_distance
         from tengri.observation.photometry import compute_flux_density_batch
-        from tengri.observation.spectrum import apply_lsf, compute_spectrum
+        from tengri.observation.spectrum import project_spectrum
 
         z = jnp.asarray(params.get("redshift", 0.0))
         if dl_cm is None:
@@ -689,25 +689,26 @@ class Observation:
 
         if self.can_do_spectroscopy:
             wo = wave_obs if wave_obs is not None else self.spectroscopy.wave_obs
-            flux = compute_spectrum(sed_rest, wave_rest, wo, z, dl_cm)
             resolution = (
                 lsf_resolution if lsf_resolution is not None else self.spectroscopy.resolution
             )
-            if resolution is not None:
-                sigma_lib = (
-                    lsf_sigma_lib_kms
-                    if lsf_sigma_lib_kms is not None
-                    else self.spectroscopy.sigma_lib_kms
-                )
-                n_bins = lsf_n_bins if lsf_n_bins is not None else self.spectroscopy.lsf_n_bins
-                flux = apply_lsf(
-                    flux,
-                    wo,
-                    resolution,
-                    sigma_lib_kms=sigma_lib,
-                    n_bins=n_bins,
-                    sigma_v_kms=sigma_v_kms,
-                )
+            sigma_lib = (
+                lsf_sigma_lib_kms
+                if lsf_sigma_lib_kms is not None
+                else self.spectroscopy.sigma_lib_kms
+            )
+            n_bins = lsf_n_bins if lsf_n_bins is not None else self.spectroscopy.lsf_n_bins
+            flux = project_spectrum(
+                sed_rest,
+                wave_rest,
+                wo,
+                z,
+                dl_cm,
+                resolution=resolution,
+                sigma_lib_kms=sigma_lib,
+                n_bins=n_bins,
+                sigma_v_kms=sigma_v_kms,
+            )
             out["spec_fnu"] = flux
 
         # If observables_type is provided, populate and return the NamedTuple.
