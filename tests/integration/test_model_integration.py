@@ -547,16 +547,33 @@ class TestDustEmissionForwardModel:
         )
         model_no = SEDModel(spec_no, ssp, filters=filters, precompute=False)
 
-        # The two models use different rest-frame wave grids: modified_blackbody
-        # adds denser FIR sampling to resolve the thermal dust bump, so the emission
-        # grid has more points than the bare-stellar one (they span the same range).
-        # Compare on a common grid by interpolating the no-emission SED onto the
-        # emission grid, rather than subtracting mismatched-length arrays.
-        r_em = model.predict_rest_sed(params_em)
-        r_no = model_no.predict_rest_sed({})
-        sed_no_on_em = jnp.interp(r_em.wavelength, r_no.wavelength, r_no.sed)
-        max_diff = float(jnp.max(r_em.sed - sed_no_on_em))
-        assert max_diff > 0, "Dust emission should add positive flux somewhere"
+        em = model.predict_rest_sed(params_em)
+        no = model_no.predict_rest_sed({})
+
+        # The two models do NOT share a wavelength grid. An analytic dust-emission
+        # model extends the rest grid into the far-IR so submm photometry is
+        # integrable (#1005), so ``model`` carries several hundred extra points
+        # beyond the SSP's red edge. Subtracting the raw arrays raised "sub got
+        # incompatible shapes" (#1031) — the comparison has to happen on a common
+        # grid. Project the no-emission SED onto the emission grid; beyond its red
+        # edge there is no stellar flux to compare against, so the excess there is
+        # the dust emission itself.
+        no_on_em = jnp.interp(em.wavelength, no.wavelength, no.sed, left=0.0, right=0.0)
+        excess = em.sed - no_on_em
+        assert float(jnp.max(excess)) > 0, "Dust emission should add positive flux somewhere"
+
+        # ...and the added energy must be thermal grain re-emission in the IR, not
+        # extra optical light. A shape-blind ``max(excess) > 0`` would have passed
+        # even if the excess had landed in the optical.
+        ir = em.wavelength > 1.0e5  # > 10 um
+        optical = (em.wavelength > 4000.0) & (em.wavelength < 7000.0)
+        assert float(jnp.max(excess[ir])) > float(jnp.max(jnp.abs(excess[optical])))
+
+        # End-to-end: the mid-IR band actually brightens. wise_w3 (12 um) sits on
+        # the warm-dust bump; sdss_r does not.
+        f_em = model.predict_photometry(params_em)
+        f_no = model_no.predict_photometry({})
+        assert float(f_em[1]) > float(f_no[1]), "wise_w3 must brighten with dust emission"
 
     def test_dust_emission_gradient(self, ssp):
         from tengri.parameters.priors import Fixed
