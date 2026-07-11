@@ -5604,45 +5604,42 @@ class SEDModel:
         if cached != "unset":
             return cached
 
-        from tengri.components.dust.two_component import DustSEDComponent
-
         response = None
-        dust = next(
-            (
-                c
-                for c in chain
-                if isinstance(c, DustSEDComponent)
-                and getattr(c.config, "emission_model", None) == "modified_blackbody"
-            ),
+        emitter = next(
+            (c for c in chain if getattr(c, "name", "") == "dust_emission"),
             None,
         )
-        free = set(self.spec.free_params)
-        shape_params = ("dust_T", "dust_beta_ir", "dust_epsilon_mbb", "redshift")
         stellar = next((c for c in chain if c.name == "stellar"), None)
         st = getattr(stellar, "_state", None)
         fw_pad = getattr(st, "phot_fw_padded", None)
         ft_pad = getattr(st, "phot_ft_padded", None)
+
+        # The emission *shape* must be fixed for R to be a build-time constant.
+        # (The filter integral is linear in the template, so R could equally be
+        # tabulated at the template nodes and contracted with the interpolation
+        # weights — exact even for a free shape knob. Not done yet; see #TODO.)
+        free = set(self.spec.free_params)
+        shape_free = (free & self._EB_EMISSION_PARAMS) or ("redshift" in free)
+
         if (
-            dust is not None
+            emitter is not None
             and self._approx.get("wave_precomp")
-            and not (free & set(shape_params))
+            and not shape_free
             and fw_pad is not None
             and ft_pad is not None
+            and hasattr(emitter, "predict")
+            and hasattr(emitter, "slice_params")
         ):
-            from tengri.components.dust.emission import modified_blackbody
             from tengri.observation.photometry import lnu_filter_integral_batch
 
-            fixed = self.spec.get_fixed_values()
+            fixed = dict(self.spec.get_fixed_values())
             wave = self._rest_wavelength
             z = jnp.asarray(fixed.get("redshift", 0.0))
-            unit_sed_ir = modified_blackbody(
-                wave,
-                L_absorbed=1.0,
-                dust_T=jnp.asarray(fixed.get("dust_T", 35.0)),
-                dust_beta_ir=jnp.asarray(fixed.get("dust_beta_ir", 1.6)),
-                redshift=z,
-                dust_epsilon_mbb=jnp.asarray(fixed.get("dust_epsilon_mbb", 1.0)),
-            )
+            # Slice with the component's OWN rule — the same one apply() uses. A
+            # precompute that slices differently silently builds R from default
+            # template parameters and returns confidently wrong IR photometry.
+            p = emitter.slice_params({k: jnp.asarray(v) for k, v in fixed.items()})
+            unit_sed_ir, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=1.0)
             response = lnu_filter_integral_batch(unit_sed_ir, wave, fw_pad, ft_pad, z)
 
         self._dust_band_response_cache = response
