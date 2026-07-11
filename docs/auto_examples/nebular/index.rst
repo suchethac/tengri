@@ -89,23 +89,6 @@ such as the Halpha–SFR calibration.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Cue has six tuning knobs that control HII-region ionization and the diffuse ionized gas. This six-panel tour sweeps each knob individually and reports the L_Hα response relative to the baseline, in dex. A flat line means the parameter has no effect on Hα at fixed other knobs.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_cue_flex_tour_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_cue_flex_tour`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Cue knob flexibility: six dimensions of HII region control</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Cue (Li, Leja &amp; Speagle 2023) maps a four-dimensional HII region control space — ionization parameter log U, gas-phase metallicity log Z_gas, ionizing-spectrum shape, and dust-to-metal ratio — onto an emission-line spectrum. A two-dimensional sweep over the two knobs most users will turn (``log U`` and log Z_gas) is shown for four diagnostic line ratios.">
 
 .. only:: html
@@ -118,23 +101,6 @@ such as the Halpha–SFR calibration.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Comprehensive 2D sweep of ionization parameter and metallicity (Cue)</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Diffuse ionized gas (DIG) has lower ionization parameter than HII regions, shifting galaxies toward the LINER region on the BPT diagram. We vary the DIG fraction from pure HII (0) to mixed gas (0.8).">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_dig_frac_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_dig_frac_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Diffuse ionized gas suppresses strong optical lines</div>
     </div>
 
 
@@ -424,9 +390,7 @@ such as the Halpha–SFR calibration.
    /auto_examples/nebular/plot_bpt_cue_grid
    /auto_examples/nebular/plot_bpt_diagram_population
    /auto_examples/nebular/plot_cue_fesc_logu_atlas
-   /auto_examples/nebular/plot_cue_flex_tour
    /auto_examples/nebular/plot_cue_parameter_atlas
-   /auto_examples/nebular/plot_dig_frac_sweep
    /auto_examples/nebular/plot_emission_line_atlas
    /auto_examples/nebular/plot_fesc_lya_sweep
    /auto_examples/nebular/plot_fesc_sweep
