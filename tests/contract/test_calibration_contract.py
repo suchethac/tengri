@@ -4,7 +4,7 @@
 Three seams around the spectroscopic Chebyshev calibration, each of which failed
 silently at some point:
 
-1. **Kernel-cache colour-leak.** ``SEDModel.compile_signature()`` did not carry
+1. **Kernel-cache color-leak.** ``SEDModel.compile_signature()`` did not carry
    ``calibration_order``, so two models differing only in that order shared a
    compiled kernel. The compiled closure captures an ``Observation`` whose
    projector reads ``cal_c1..cN`` out of the param dict, so the second model
@@ -18,7 +18,7 @@ silently at some point:
    looking for a ``cal_c0`` the model never produces.
 
 3. **Double-counted calibration.** Fitting ``cal_c1..cN`` explicitly *and*
-   marginalising the polynomial analytically applies it twice.
+   marginalizing the polynomial analytically applies it twice.
 """
 
 from __future__ import annotations

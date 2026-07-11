@@ -452,7 +452,7 @@ def project_spectrum(
         calibration is applied. Empty array ``[]`` gives unity calibration
         (no-op).
     cal_wave_range : tuple[float, float], optional
-        ``(wave_min, wave_max)`` wavelength range for normalising the
+        ``(wave_min, wave_max)`` wavelength range for normalizing the
         Chebyshev polynomial to [-1, 1]. Used only when ``cal_coeffs`` is not
         ``None``. If omitted, defaults to ``(wave_obs.min(), wave_obs.max())``.
 
@@ -493,12 +493,12 @@ def project_spectrum(
     dimensionless multiplicative correction to the observed spectrum.
 
     The constant term is **fixed** at :math:`c_0 = 1`: a free constant is
-    degenerate with the model's overall normalisation (stellar mass), so the
+    degenerate with the model's overall normalization (stellar mass), so the
     coefficients describe only the *wavelength-dependent* part of the calibration
     error. This is a deliberate difference from Prospector [1]_, whose
     ``PolyOptCal`` instead solves for every coefficient including the constant by
     least squares against the data; tengri samples ``cal_c1..cal_cN`` under
-    explicit priors, or marginalises them analytically (see
+    explicit priors, or marginalizes them analytically (see
     :func:`~tengri.observation.calibration.marginalize_calibration`). The
     multiplicative Chebyshev form and its application *after* instrumental
     smoothing follow Prospector.

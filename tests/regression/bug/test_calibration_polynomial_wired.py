@@ -147,5 +147,5 @@ def test_spectroscopic_likelihood_gradient_wrt_cal_c1_is_nonzero(ssp):
     assert np.isfinite(grad)
     assert abs(grad) > 1.0, f"likelihood is still flat in cal_c1 (grad={grad!r})"
 
-    # And the chi-squared is genuinely minimised near the truth, not merely noisy.
+    # And the chi-squared is genuinely minimized near the truth, not merely noisy.
     assert float(chi2(0.15)) < float(chi2(0.0))

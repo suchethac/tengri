@@ -350,7 +350,7 @@ class Spectroscopy:
         (by :func:`~tengri.observation.calibration.calibration_polynomial`), so
         tracers are fine.
 
-        The polynomial is normalised to the *configured instrument* grid, not to
+        The polynomial is normalized to the *configured instrument* grid, not to
         whatever grid a caller passes, so a given ``cal_cN`` keeps the same
         meaning when the model is evaluated on a custom ``wave_obs``.
 
