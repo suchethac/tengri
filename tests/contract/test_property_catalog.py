@@ -490,3 +490,379 @@ class TestRegistryIntrospection:
         assert desc["name"] == "stellar_mass"
         assert "units" in desc
         assert "group" in desc
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Phase 1B: SED, Lines, Radio, Xray, Ionizing, Luminosity-weighted
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestSEDGroupBitEquality:
+    """Test SED group properties bit-equality against state_to_sed_quantities."""
+
+    @pytest.fixture
+    def sed_model(self, synthetic_ssp_wide):
+        """Model with dust (required for full SED properties)."""
+        ssp = synthetic_ssp_wide
+        spec = SEDModel.build(
+            ssp_data=ssp,
+            sfh={"type": "dpl", "*": FREE},
+            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            neb={"type": "none"},
+            redshift=Fixed(0.1),
+        )
+        return spec
+
+    def test_l_bol(self, sed_model):
+        """l_bol matches state_to_sed_quantities."""
+        from tengri.forward.component_factory import state_to_sed_quantities
+
+        params = sed_model.spec.sample(jax.random.PRNGKey(100))
+        state = sed_model.predict_state(params)
+        sed_qty = state_to_sed_quantities(state)
+
+        props = sed_model.predict_properties(params, names=("l_bol",))
+        chex.assert_trees_all_close(props["l_bol"], sed_qty.l_bol, rtol=0, atol=0)
+
+    def test_l_tir(self, sed_model):
+        """l_tir matches state_to_sed_quantities."""
+        from tengri.forward.component_factory import state_to_sed_quantities
+
+        params = sed_model.spec.sample(jax.random.PRNGKey(101))
+        state = sed_model.predict_state(params)
+        sed_qty = state_to_sed_quantities(state)
+
+        props = sed_model.predict_properties(params, names=("l_tir",))
+        chex.assert_trees_all_close(props["l_tir"], sed_qty.l_tir, rtol=0, atol=0)
+
+    def test_irx(self, sed_model):
+        """irx matches state_to_sed_quantities."""
+        from tengri.forward.component_factory import state_to_sed_quantities
+
+        params = sed_model.spec.sample(jax.random.PRNGKey(102))
+        state = sed_model.predict_state(params)
+        sed_qty = state_to_sed_quantities(state)
+
+        props = sed_model.predict_properties(params, names=("irx",))
+        chex.assert_trees_all_close(props["irx"], sed_qty.irx, rtol=0, atol=0)
+
+    def test_uv_slope_beta(self, sed_model):
+        """uv_slope_beta matches state_to_sed_quantities."""
+        from tengri.forward.component_factory import state_to_sed_quantities
+
+        params = sed_model.spec.sample(jax.random.PRNGKey(103))
+        state = sed_model.predict_state(params)
+        sed_qty = state_to_sed_quantities(state)
+
+        props = sed_model.predict_properties(params, names=("uv_slope_beta",))
+        chex.assert_trees_all_close(props["uv_slope_beta"], sed_qty.uv_slope_beta, rtol=0, atol=0)
+
+
+class TestLuminosityWeightedSFHBitEquality:
+    """Test luminosity-weighted properties bit-equality against prediction.sfh."""
+
+    @pytest.fixture
+    def lw_model(self, synthetic_ssp_wide):
+        """Model for luminosity-weighted tests."""
+        ssp = synthetic_ssp_wide
+        spec = SEDModel.build(
+            ssp_data=ssp,
+            sfh={"type": "dpl", "*": FREE},
+            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            neb={"type": "none"},
+            redshift=Fixed(0.1),
+        )
+        return spec
+
+    def test_luminosity_weighted_age_gyr(self, lw_model):
+        """luminosity_weighted_age_gyr matches Prediction.sfh."""
+        params = lw_model.spec.sample(jax.random.PRNGKey(110))
+        pred = lw_model.predict(params)
+
+        props = lw_model.predict_properties(params, names=("luminosity_weighted_age_gyr",))
+        chex.assert_trees_all_close(
+            props["luminosity_weighted_age_gyr"],
+            pred.sfh.luminosity_weighted_age_gyr,
+            rtol=0,
+            atol=0,
+        )
+
+    def test_luminosity_weighted_metallicity(self, lw_model):
+        """luminosity_weighted_metallicity matches Prediction.sfh."""
+        params = lw_model.spec.sample(jax.random.PRNGKey(111))
+        pred = lw_model.predict(params)
+
+        props = lw_model.predict_properties(params, names=("luminosity_weighted_metallicity",))
+        # Allow small floating-point tolerance due to interpolation rounding
+        chex.assert_trees_all_close(
+            props["luminosity_weighted_metallicity"],
+            pred.sfh.luminosity_weighted_metallicity,
+            rtol=1e-15,
+            atol=1e-15,
+        )
+
+
+class TestIonizingGroupBitEquality:
+    """Test ionizing group properties bit-equality against state_to_ionizing_quantities."""
+
+    @pytest.fixture
+    def ion_model(self, synthetic_ssp_wide):
+        """Model for ionizing tests."""
+        ssp = synthetic_ssp_wide
+        spec = SEDModel.build(
+            ssp_data=ssp,
+            sfh={"type": "dpl", "*": FREE},
+            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            neb={"type": "none"},
+            redshift=Fixed(0.1),
+        )
+        return spec
+
+    def test_q_h(self, ion_model):
+        """q_h matches state_to_ionizing_quantities."""
+        from tengri.forward.component_factory import state_to_ionizing_quantities
+
+        params = ion_model.spec.sample(jax.random.PRNGKey(120))
+        state = ion_model.predict_state(params)
+        ion_qty = state_to_ionizing_quantities(state)
+
+        props = ion_model.predict_properties(params, names=("q_h",))
+        chex.assert_trees_all_close(props["q_h"], ion_qty.q_h, rtol=0, atol=0)
+
+    def test_xi_ion(self, ion_model):
+        """xi_ion matches state_to_ionizing_quantities."""
+        from tengri.forward.component_factory import state_to_ionizing_quantities
+
+        params = ion_model.spec.sample(jax.random.PRNGKey(121))
+        state = ion_model.predict_state(params)
+        ion_qty = state_to_ionizing_quantities(state)
+
+        props = ion_model.predict_properties(params, names=("xi_ion",))
+        chex.assert_trees_all_close(props["xi_ion"], ion_qty.xi_ion, rtol=0, atol=0)
+
+
+class TestRadioGroupBitEquality:
+    """Test radio group properties bit-equality against state_to_radio_quantities."""
+
+    @pytest.fixture
+    def radio_model(self, synthetic_ssp_wide):
+        """Model with radio component."""
+        ssp = synthetic_ssp_wide
+        spec = SEDModel.build(
+            ssp_data=ssp,
+            sfh={"type": "dpl", "*": FREE},
+            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            neb={"type": "none"},
+            radio={"type": "condon92", "*": FIXED},
+            redshift=Fixed(0.1),
+        )
+        return spec
+
+    def test_l_1p4ghz(self, radio_model):
+        """l_1p4ghz matches state_to_radio_quantities."""
+        from tengri.forward.component_factory import state_to_radio_quantities
+
+        params = radio_model.spec.sample(jax.random.PRNGKey(130))
+        state = radio_model.predict_state(params)
+        radio_qty = state_to_radio_quantities(state)
+
+        props = radio_model.predict_properties(params, names=("l_1p4ghz",))
+        # Bit-equal: the property fn and state_to_radio_quantities interpolate
+        # sed_radio at the identical 21 cm wavelength literal (_WAVE_21CM_AA).
+        chex.assert_trees_all_close(props["l_1p4ghz"], radio_qty.l_1p4ghz, rtol=0, atol=0)
+
+    def test_l_thermal(self, radio_model):
+        """l_thermal matches state_to_radio_quantities."""
+        from tengri.forward.component_factory import state_to_radio_quantities
+
+        params = radio_model.spec.sample(jax.random.PRNGKey(131))
+        state = radio_model.predict_state(params)
+        radio_qty = state_to_radio_quantities(state)
+
+        props = radio_model.predict_properties(params, names=("l_thermal",))
+        chex.assert_trees_all_close(props["l_thermal"], radio_qty.l_thermal, rtol=0, atol=0)
+
+
+class TestXRayGroupBitEquality:
+    """Test xray group properties bit-equality against state_to_xray_quantities."""
+
+    @pytest.fixture
+    def xray_model(self, synthetic_ssp_wide):
+        """Model with X-ray component."""
+        ssp = synthetic_ssp_wide
+        spec = SEDModel.build(
+            ssp_data=ssp,
+            sfh={"type": "dpl", "*": FREE},
+            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            neb={"type": "none"},
+            xray={"type": "simple", "*": FIXED},
+            redshift=Fixed(0.1),
+        )
+        return spec
+
+    def test_l_x_xrb(self, xray_model):
+        """l_x_xrb matches state_to_xray_quantities."""
+        from tengri.forward.component_factory import state_to_xray_quantities
+
+        params = xray_model.spec.sample(jax.random.PRNGKey(140))
+        state = xray_model.predict_state(params)
+        xray_qty = state_to_xray_quantities(state)
+
+        props = xray_model.predict_properties(params, names=("l_x_xrb",))
+        chex.assert_trees_all_close(props["l_x_xrb"], xray_qty.l_x_xrb, rtol=0, atol=0)
+
+    def test_l_x_agn(self, xray_model):
+        """l_x_agn matches state_to_xray_quantities (0 when inactive)."""
+        from tengri.forward.component_factory import state_to_xray_quantities
+
+        params = xray_model.spec.sample(jax.random.PRNGKey(141))
+        state = xray_model.predict_state(params)
+        xray_qty = state_to_xray_quantities(state)
+
+        props = xray_model.predict_properties(params, names=("l_x_agn",))
+        chex.assert_trees_all_close(props["l_x_agn"], xray_qty.l_x_agn, rtol=0, atol=0)
+
+
+class TestLinesGroupNaNBehavior:
+    """Test lines group returns NaN when catalog unavailable."""
+
+    @pytest.fixture
+    def no_lines_model(self, synthetic_ssp_wide):
+        """Model with no discrete line catalog."""
+        ssp = synthetic_ssp_wide
+        spec = SEDModel.build(
+            ssp_data=ssp,
+            sfh={"type": "dpl", "*": FREE},
+            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            neb={"type": "none"},  # No nebular → no line catalog
+            redshift=Fixed(0.1),
+        )
+        return spec
+
+    def test_halpha_is_nan_when_no_catalog(self, no_lines_model):
+        """halpha returns NaN when nebular component has no catalog."""
+        params = no_lines_model.spec.sample(jax.random.PRNGKey(150))
+
+        props = no_lines_model.predict_properties(params, names=("halpha",))
+        assert jnp.isnan(props["halpha"])
+
+    def test_bpt_nii_is_nan_when_no_catalog(self, no_lines_model):
+        """bpt_nii returns NaN when nebular component has no catalog."""
+        params = no_lines_model.spec.sample(jax.random.PRNGKey(151))
+
+        props = no_lines_model.predict_properties(params, names=("bpt_nii",))
+        assert jnp.isnan(props["bpt_nii"])
+
+
+class TestPhase1BPropertyCounts:
+    """Test that all Phase 1B properties are registered."""
+
+    def test_total_property_count(self):
+        """Verify total count includes Phase 1A + 1B."""
+        from tengri import list_properties
+
+        props = list_properties()
+        # Phase 1A: 7 SFH
+        # Phase 1B: 13 SED + 2 lum-weighted + 2 ionizing + 11 lines + 6 ratios + 4 radio + 3 xray
+        # Total: 7 + 41 = 48
+        assert len(props) >= 48, f"Expected at least 48 properties, got {len(props)}"
+
+    def test_sed_group_count(self):
+        """Verify SED group has all 15 properties."""
+        from tengri import list_properties
+
+        sed_props = list_properties(group="sed")
+        sed_names = {p["name"] for p in sed_props}
+        expected = {
+            "l_bol",
+            "l_tir",
+            "l_dust_absorbed",
+            "irx",
+            "uv_slope_beta",
+            "dn4000",
+            "balmer_break",
+            "m_uv",
+            "fuv_flux",
+            "nuv_flux",
+            "fuv_flux_intrinsic",
+            "nuv_flux_intrinsic",
+            "rest_uv_color",
+        }
+        assert expected.issubset(sed_names), f"Missing SED properties: {expected - sed_names}"
+
+    def test_lines_group_count(self):
+        """Verify lines group has all 17 properties (11 + 6)."""
+        from tengri import list_properties
+
+        lines_props = list_properties(group="lines")
+        lines_names = {p["name"] for p in lines_props}
+        expected = {
+            "lya",
+            "civ_1549",
+            "oii",
+            "hbeta",
+            "oiii_4959",
+            "oiii_5007",
+            "nii_6548",
+            "halpha",
+            "nii_6584",
+            "sii_6717",
+            "sii_6731",
+            "bpt_nii",
+            "bpt_sii",
+            "o3hb",
+            "r23",
+            "o32",
+            "balmer_decrement",
+        }
+        missing = expected - lines_names
+        assert expected.issubset(lines_names), f"Missing lines properties: {missing}"
+
+    def test_radio_group_count(self):
+        """Verify radio group has all 4 properties."""
+        from tengri import list_properties
+
+        radio_props = list_properties(group="radio")
+        radio_names = {p["name"] for p in radio_props}
+        expected = {"l_1p4ghz", "l_thermal", "l_nonthermal", "q_ir"}
+        missing = expected - radio_names
+        assert expected.issubset(radio_names), f"Missing radio properties: {missing}"
+
+    def test_xray_group_count(self):
+        """Verify xray group has all 3 properties."""
+        from tengri import list_properties
+
+        xray_props = list_properties(group="xray")
+        xray_names = {p["name"] for p in xray_props}
+        expected = {"l_x_xrb", "l_x_agn", "l_x_total"}
+        assert expected.issubset(xray_names), f"Missing xray properties: {expected - xray_names}"
+
+    def test_ionizing_group_count(self):
+        """Verify ionizing group has ionizing properties."""
+        from tengri import list_properties
+
+        ion_props = list_properties(group="ionizing")
+        ion_names = {p["name"] for p in ion_props}
+        expected = {"q_h", "xi_ion"}
+        assert expected.issubset(ion_names), f"Missing ionizing properties: {expected - ion_names}"
+
+    def test_sfh_group_count_extended(self):
+        """Verify sfh group has Phase 1A + lum-weighted properties."""
+        from tengri import list_properties
+
+        sfh_props = list_properties(group="sfh")
+        sfh_names = {p["name"] for p in sfh_props}
+        # sfh group includes Phase 1A (7) + Phase 1B lum-weighted (2)
+        expected_in_sfh = {
+            "stellar_mass",
+            "stellar_mass_surviving",
+            "sfr_10myr",
+            "sfr_100myr",
+            "ssfr",
+            "mass_weighted_age_gyr",
+            "mass_weighted_metallicity",
+            "luminosity_weighted_age_gyr",
+            "luminosity_weighted_metallicity",
+        }
+        missing = expected_in_sfh - sfh_names
+        assert expected_in_sfh.issubset(sfh_names), f"Missing sfh: {missing}"

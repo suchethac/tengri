@@ -2193,7 +2193,7 @@ del _tree_util
 
 
 # ─────────────────────────────────────────────────────────────────────
-# SFH-group property registration (Phase 1A)
+# Property registration (Phase 1A + Phase 1B)
 # ─────────────────────────────────────────────────────────────────────
 #
 # StellarSEDComponent does NOT inherit from SEDModelComponent, so
@@ -2201,6 +2201,8 @@ del _tree_util
 # registered manually at module initialization.
 
 _TINY = 1e-30  # Floor for safe division
+
+# ─ Phase 1A: SFH group ─
 
 
 def _stellar_mass_fn(state, params):
@@ -2256,6 +2258,209 @@ def _mass_weighted_metallicity_fn(state, params):
     return jnp.sum(log_z_history * bin_mass) / bin_mass_total
 
 
+# ─ Phase 1B: SED group ─
+
+
+def _l_bol_fn(state, params):
+    """Bolometric luminosity [Lsun]."""
+    from tengri.utils.physics_constants import C_AA, L_SUN
+
+    sed = state.sed_intrinsic
+    wave = state.wave
+    nu = C_AA / wave
+    l_bol_erg = jnp.abs(jnp.trapezoid(sed, nu))
+    return l_bol_erg / L_SUN
+
+
+def _l_tir_fn(state, params):
+    """Infrared luminosity (8–1000 µm) [Lsun]."""
+    from tengri.utils.sed_quantities import compute_l_tir
+
+    sed = state.sed_intrinsic
+    wave = state.wave
+    return compute_l_tir(sed, wave)
+
+
+def _l_dust_absorbed_fn(state, params):
+    """Dust-absorbed luminosity [Lsun]."""
+    from tengri.utils.physics_constants import L_SUN
+
+    l_absorbed = jnp.asarray(state.derived.get("L_absorbed", 0.0))
+    return l_absorbed / L_SUN
+
+
+def _irx_fn(state, params):
+    """IRX (infrared excess) diagnostic [dimensionless]."""
+    from tengri.utils.sed_quantities import compute_fuv_flux, compute_irx, compute_l_tir
+
+    sed = state.sed_intrinsic
+    wave = state.wave
+    l_tir = compute_l_tir(sed, wave)
+    fuv = compute_fuv_flux(sed, wave)
+    return compute_irx(l_tir, fuv * 2.998e15 / 1500.0)
+
+
+def _uv_slope_beta_fn(state, params):
+    """UV slope (β in L_ν ∝ ν^β) [dimensionless]."""
+    from tengri.utils.sed_quantities import compute_uv_slope_beta
+
+    sed = state.sed_intrinsic
+    wave = state.wave
+    return compute_uv_slope_beta(sed, wave)
+
+
+def _dn4000_fn(state, params):
+    """D n4000 break diagnostic [dimensionless]."""
+    from tengri.utils.sed_quantities import compute_dn4000
+
+    sed = state.sed_intrinsic
+    wave = state.wave
+    return compute_dn4000(sed, wave)
+
+
+def _balmer_break_fn(state, params):
+    """Balmer break diagnostic [dimensionless]."""
+    from tengri.utils.sed_quantities import compute_balmer_break
+
+    sed = state.sed_intrinsic
+    wave = state.wave
+    return compute_balmer_break(sed, wave)
+
+
+def _m_uv_fn(state, params):
+    """UV absolute magnitude (1600 Å) [AB mag]."""
+    from tengri.utils.sed_quantities import compute_m_uv
+
+    sed = state.sed_intrinsic
+    wave = state.wave
+    return compute_m_uv(sed, wave)
+
+
+def _fuv_flux_fn(state, params):
+    """FUV flux (1000–1700 Å) [erg/s/Hz]."""
+    from tengri.utils.sed_quantities import compute_fuv_flux
+
+    sed = state.sed_intrinsic
+    wave = state.wave
+    return compute_fuv_flux(sed, wave)
+
+
+def _nuv_flux_fn(state, params):
+    """NUV flux (1700–3000 Å) [erg/s/Hz]."""
+    from tengri.utils.sed_quantities import compute_nuv_flux
+
+    sed = state.sed_intrinsic
+    wave = state.wave
+    return compute_nuv_flux(sed, wave)
+
+
+def _fuv_flux_intrinsic_fn(state, params):
+    """Intrinsic FUV flux before dust attenuation [erg/s/Hz]."""
+    from tengri.utils.sed_quantities import compute_fuv_flux
+
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+    if "lnu_age" in derived:
+        sed_stellar_intrinsic = jnp.sum(jnp.asarray(derived["lnu_age"]), axis=0)
+        wave = state.wave
+        return compute_fuv_flux(sed_stellar_intrinsic, wave)
+    else:
+        return nan_scalar
+
+
+def _nuv_flux_intrinsic_fn(state, params):
+    """Intrinsic NUV flux before dust attenuation [erg/s/Hz]."""
+    from tengri.utils.sed_quantities import compute_nuv_flux
+
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+    if "lnu_age" in derived:
+        sed_stellar_intrinsic = jnp.sum(jnp.asarray(derived["lnu_age"]), axis=0)
+        wave = state.wave
+        return compute_nuv_flux(sed_stellar_intrinsic, wave)
+    else:
+        return nan_scalar
+
+
+def _rest_uv_color_fn(state, params):
+    """Rest-frame UV color (FUV–NUV) [AB mag]."""
+    from tengri.utils.sed_quantities import compute_rest_uv_color
+
+    sed = state.sed_intrinsic
+    wave = state.wave
+    return compute_rest_uv_color(sed, wave)
+
+
+# ─ Phase 1B: Luminosity-weighted SFH properties ─
+
+
+def _luminosity_weighted_age_gyr_fn(state, params):
+    """Luminosity-weighted mean age [Gyr]."""
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+
+    if "L_age" in derived and "ssp_ages_yr" in derived:
+        L_age = jnp.asarray(derived["L_age"])
+        ssp_ages_yr = jnp.asarray(derived["ssp_ages_yr"])
+        L_total = jnp.maximum(jnp.sum(L_age), _TINY)
+        lw_age_yr = jnp.sum(ssp_ages_yr * L_age) / L_total
+        return lw_age_yr / 1e9
+    else:
+        return nan_scalar
+
+
+def _luminosity_weighted_metallicity_fn(state, params):
+    """Luminosity-weighted mean metallicity [dex, log10(Z/Zsun)]."""
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+
+    if "L_age" in derived and "ssp_ages_yr" in derived:
+        L_age = jnp.asarray(derived["L_age"])
+        ssp_ages_yr = jnp.asarray(derived["ssp_ages_yr"])
+        L_total = jnp.maximum(jnp.sum(L_age), _TINY)
+
+        if "log_metallicity_history" in derived and "sfh_grid_lbt_yr" in derived:
+            lz_per_ssp = jnp.interp(
+                ssp_ages_yr,
+                jnp.asarray(derived["sfh_grid_lbt_yr"]),
+                jnp.asarray(derived["log_metallicity_history"]),
+            )
+            return jnp.sum(lz_per_ssp * L_age) / L_total
+        else:
+            return nan_scalar
+    else:
+        return nan_scalar
+
+
+# ─ Phase 1B: Ionizing group ─
+
+
+def _q_h_fn(state, params):
+    """Ionizing photon production rate [photons/s]."""
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+    return jnp.asarray(derived.get("nion", nan_scalar))
+
+
+def _xi_ion_fn(state, params):
+    """Ionizing photon efficiency [Hz/erg]."""
+    from tengri.utils.physics_constants import C_AA
+    from tengri.utils.sed_quantities import compute_fuv_flux
+
+    derived = state.derived
+    nan_scalar = jnp.asarray(jnp.nan)
+    q_h = jnp.asarray(derived.get("nion", nan_scalar))
+
+    sed = state.sed_intrinsic
+    if sed is None:
+        return nan_scalar
+    else:
+        fuv = compute_fuv_flux(sed, state.wave)
+        nu_uv = C_AA / 1500.0
+        nu_l_uv = fuv * nu_uv
+        return q_h / jnp.maximum(nu_l_uv, _TINY)
+
+
 # Register properties in the global registry
 from tengri.forward.properties import Property, register_properties
 
@@ -2302,8 +2507,124 @@ _SFH_PROPERTIES = {
         doc="Mass-weighted mean metallicity (log10 Z/Zsun)",
         fn=_mass_weighted_metallicity_fn,
     ),
+    "luminosity_weighted_age_gyr": Property(
+        units="Gyr",
+        group="sfh",
+        doc="Luminosity-weighted mean age of stellar population",
+        fn=_luminosity_weighted_age_gyr_fn,
+    ),
+    "luminosity_weighted_metallicity": Property(
+        units="dex",
+        group="sfh",
+        doc="Luminosity-weighted mean metallicity (log10 Z/Zsun)",
+        fn=_luminosity_weighted_metallicity_fn,
+    ),
+}
+
+_SED_PROPERTIES = {
+    "l_bol": Property(
+        units="Lsun",
+        group="sed",
+        doc="Bolometric luminosity",
+        fn=_l_bol_fn,
+    ),
+    "l_tir": Property(
+        units="Lsun",
+        group="sed",
+        doc="Infrared luminosity (8–1000 µm)",
+        fn=_l_tir_fn,
+    ),
+    "l_dust_absorbed": Property(
+        units="Lsun",
+        group="sed",
+        doc="Dust-absorbed luminosity",
+        fn=_l_dust_absorbed_fn,
+    ),
+    "irx": Property(
+        units="",
+        group="sed",
+        doc="Infrared excess (IRX) diagnostic",
+        fn=_irx_fn,
+    ),
+    "uv_slope_beta": Property(
+        units="",
+        group="sed",
+        doc="UV slope (β in L_ν ∝ ν^β)",
+        fn=_uv_slope_beta_fn,
+    ),
+    "dn4000": Property(
+        units="",
+        group="sed",
+        doc="D n4000 break diagnostic",
+        fn=_dn4000_fn,
+    ),
+    "balmer_break": Property(
+        units="",
+        group="sed",
+        doc="Balmer break diagnostic",
+        fn=_balmer_break_fn,
+    ),
+    "m_uv": Property(
+        units="AB mag",
+        group="sed",
+        doc="UV absolute magnitude (1600 Å)",
+        fn=_m_uv_fn,
+    ),
+    "fuv_flux": Property(
+        units="erg/s/Hz",
+        group="sed",
+        doc="FUV flux (1000–1700 Å)",
+        fn=_fuv_flux_fn,
+    ),
+    "nuv_flux": Property(
+        units="erg/s/Hz",
+        group="sed",
+        doc="NUV flux (1700–3000 Å)",
+        fn=_nuv_flux_fn,
+    ),
+    "fuv_flux_intrinsic": Property(
+        units="erg/s/Hz",
+        group="sed",
+        doc="Intrinsic FUV flux before dust attenuation",
+        fn=_fuv_flux_intrinsic_fn,
+    ),
+    "nuv_flux_intrinsic": Property(
+        units="erg/s/Hz",
+        group="sed",
+        doc="Intrinsic NUV flux before dust attenuation",
+        fn=_nuv_flux_intrinsic_fn,
+    ),
+    "rest_uv_color": Property(
+        units="AB mag",
+        group="sed",
+        doc="Rest-frame UV color (FUV–NUV)",
+        fn=_rest_uv_color_fn,
+    ),
+}
+
+_IONIZING_PROPERTIES = {
+    "q_h": Property(
+        units="photons/s",
+        group="ionizing",
+        doc="Ionizing photon production rate",
+        fn=_q_h_fn,
+    ),
+    "xi_ion": Property(
+        units="Hz/erg",
+        group="ionizing",
+        doc="Ionizing photon efficiency",
+        fn=_xi_ion_fn,
+    ),
 }
 
 register_properties("stellar", _SFH_PROPERTIES)
+register_properties("stellar", _SED_PROPERTIES)
+register_properties("stellar", _IONIZING_PROPERTIES)
 
-del Property, register_properties, _SFH_PROPERTIES
+del (
+    Property,
+    register_properties,
+    _SFH_PROPERTIES,
+    _SED_PROPERTIES,
+    _IONIZING_PROPERTIES,
+)
