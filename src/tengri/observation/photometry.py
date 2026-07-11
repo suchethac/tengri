@@ -250,10 +250,18 @@ def lnu_filter_integral_batch(
     **JIT/grad-safe.** Pure ``jnp`` primitives; ``convention`` static. Zero-pad
     entries contribute ~0 because ``trans=0`` there and real filters taper to 0
     at their edges (same assumption as :func:`_compute_flux_density_padded`).
+
+    Each padded row is first rewritten to ascend
+    (:func:`_ascending_padded_filter_wave`): the union-grid quadrature
+    interpolates on the filter nodes, and ``jnp.interp`` on a raw zero-pad
+    tail (…, 4130, 0, 0) is unsorted-input garbage that silently zeroed
+    every shorter-table band for heterogeneous filter sets — same-length
+    sets never pad, which is why homogeneous fixtures missed it.
     """
 
     def _one(fw, ft):
-        return lnu_filter_integral(sed_rest, wave_rest, fw, ft, redshift, convention)
+        fw_safe = _ascending_padded_filter_wave(fw)
+        return lnu_filter_integral(sed_rest, wave_rest, fw_safe, ft, redshift, convention)
 
     return jax.vmap(_one)(fw_padded, ft_padded)
 

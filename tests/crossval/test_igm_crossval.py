@@ -2,19 +2,20 @@
 """Cross-validate IGM transmission against bagpipes (Inoue+2014).
 
 Both tengri and bagpipes implement the same Inoue et al. (2014)
-prescription using the same coefficient tables (from eazy-py). The
-implementations differ in:
+prescription using the same coefficient tables (Table 2). The
+implementations differ only in:
 
 - tengri: pure JAX, analytical piecewise power laws, takes observed-frame wavs
 - bagpipes: numpy, same piecewise power laws, takes rest-frame wavs
 
-Known difference: tengri applies absorption for wave_obs < lam_j*(1+z)
-without the lower bound wave_obs > lam_j. This means tengri may
-over-absorb at wavelengths below line rest wavelengths. This produces
-~5-10% differences at z>2 and non-zero absorption at z=0.
-
-We use sanity-check tolerances (~10%) to verify both implementations
-are broadly consistent, while documenting the known differences.
+With the coefficient tables matched to the paper the two agree to <1e-3
+away from the sharp Lyman-series edges, where each code samples the same
+step at slightly offset grid positions (a resolution artifact, not a
+physics disagreement). The below-Ly-alpha coverage here is deliberate:
+an earlier version asserted agreement only *above* Ly-alpha and thereby
+missed a DLA-coefficient transcription bug that over-absorbed the z >= 2
+Lyman continuum (fixed; see
+tests/components/igm/test_inoue14_dla_coefficients.py).
 """
 
 import jax
@@ -68,6 +69,27 @@ class TestIGMTransmissionCrossval:
             trans_bagpipes[above_lya],
             atol=1e-4,
             err_msg=f"IGM transmission mismatch above Ly-alpha at z={z_source}",
+        )
+
+    @pytest.mark.parametrize("z_source", [3.0, 4.0, 5.0])
+    def test_lyman_series_continuum_matches_bagpipes(self, z_source):
+        """Below Ly-alpha the DLA + LAF terms must match bagpipes too.
+
+        This is the region the DLA coefficients govern. A systematic
+        coefficient error shifts the whole curve, so we assert a small
+        *median* |Δ| (robust to the isolated grid-sampling spikes at the
+        sharp Lyman-series edges). The pre-fix DLA transcription produced a
+        median |Δ| ~0.02-0.09 here; the correct coefficients give <1e-3.
+        """
+        rest_wavs = np.linspace(820.0, 1210.0, 2000)
+        wave_obs = rest_wavs * (1.0 + z_source)
+        trans_tengri = np.asarray(igm_transmission(jnp.array(wave_obs), z_source))
+        trans_bagpipes = bagpipes_igm.get_Inoue14_trans(rest_wavs, z_source)
+
+        median_abs = float(np.median(np.abs(trans_tengri - trans_bagpipes)))
+        assert median_abs < 2e-3, (
+            f"Below-Ly-alpha IGM disagrees with bagpipes at z={z_source}: "
+            f"median |Δ| = {median_abs:.3e} (DLA/LAF coefficient regression?)"
         )
 
     def test_full_transmission_above_lya(self, rest_wavelengths):
