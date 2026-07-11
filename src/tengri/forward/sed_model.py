@@ -2757,10 +2757,18 @@ class SEDModel:
             spec_wave_shape = tuple(self.observation.spectroscopy.wave_obs.shape)
             sigma_lib_kms = float(self._sigma_lib_kms)
             lsf_resolution = self._lsf_resolution
+            # The calibration order is structural: the compiled kernel closes over
+            # an ``Observation`` whose projector reads ``cal_c1..cN`` out of the
+            # param dict. Two models differing ONLY in ``calibration_order`` must
+            # not share a cache slot — the second would inherit the first's
+            # coefficient lookup and either apply a calibration it was never given
+            # or raise ``KeyError: 'cal_c1'`` on a dict that rightly has no such key.
+            calibration_order = int(self.observation.spectroscopy.calibration_order)
         else:
             spec_wave_shape = ()
             sigma_lib_kms = 0.0
             lsf_resolution = None
+            calibration_order = 0
 
         # CSP integration method
         csp_integration = str(self._csp_integration)
@@ -2911,6 +2919,7 @@ class SEDModel:
             spec_wave_shape,
             sigma_lib_kms,
             lsf_resolution,
+            calibration_order,
             csp_integration,
             forward_dtype,
             met_interp,
