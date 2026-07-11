@@ -60,6 +60,15 @@ def test_every_declared_param_has_in_bounds_default():
 
     offenders: list[str] = []
     for comp_name, cls in sorted(_REGISTRY.items()):
+        # Skip test doubles. ``SEDModelComponent.__init_subclass__`` registers EVERY
+        # subclass, so the throwaway components declared inside test modules (e.g.
+        # tests/contract/test_sed_model_component_contract.py) land in the global
+        # registry the moment their module is imported. Whether this test then sees
+        # them depends on which xdist worker imported what — so the contract was
+        # order-dependent, and went red for seven params belonging to fixtures rather
+        # than to any shipped physics. The contract is about SHIPPED components.
+        if not cls.__module__.startswith("tengri."):
+            continue
         comp = cls()
         for decl in comp.declared_parameters():
             prior = decl.prior
