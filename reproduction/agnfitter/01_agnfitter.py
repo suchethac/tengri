@@ -1604,9 +1604,22 @@ print(
 #   energy-balanced to the disc's IR reprocessing; the same DPL jet.
 #
 # The α_ox anchoring is the physical replacement for the hand-set X-ray fraction
-# used in earlier drafts (which put the corona ~3× too faint). The residual
-# differences are then genuine per-band *shape* differences — the qsogen
-# emission lines, the torus silicate profile — not normalization choices.
+# used in earlier drafts. The residual differences are then genuine — the qsogen
+# emission lines, the torus silicate profile, and, in the far UV → X-ray, the
+# **soft/EUV bridge**: both codes anchor 2 keV with the *same* Just+2007 α_ox
+# relation (so they agree there and across the hard X-ray), but the EUV
+# (13.6–200 eV) is a deliberate *hole* in both — AGNFITTER-RX's ``XRAYS`` builds
+# its power law only above 200 eV ("with a hole between BB template and X-Rays"),
+# and tengri's simple corona is a bare Γ = 1.8 power law with **no soft X-ray
+# excess** (warm Comptonization). The complete soft-excess physics lives in
+# tengri's ``kubota_done`` disc (the KD18 3-zone model of §9a), not in the simple
+# α_ox corona used here for AGNFITTER-RX parity.
+#
+# Everything on tengri's curve is a *single* ``SEDModel.build`` — host stars and
+# dust, the qsogen disc with its lines and FeII, the CAT3D-Wind torus, the α_ox
+# corona and the DPL jet — and every AGNFITTER-RX-parity knob used in this
+# notebook (``agn_ebv_disc``, the torus axes, the DPL turnover/cutoff) is a
+# regular parameter of that one model, free to fit.
 
 # %%
 # Common observer grid spanning X-ray (~0.05 keV) to meter-wave radio.
@@ -1715,74 +1728,6 @@ print(
     f"Capstone physical anchors (log L_bol = 12): disc L_nu(2500 A) = {L2500:.2e} erg/s/Hz;  "
     f"alpha_ox = {alpha_ox:.2f}  (L_2keV/L_2500 = {10 ** (alpha_ox / 0.3838):.1e});  "
     f"X-ray/AGN (integrated) = {_lx / _lagn:.3f}  — the physical corona, not a display fraction"
-)
-
-# %% [markdown]
-# ### Capstone′ — the same composition as one `SEDModel.build`
-#
-# The panel above assembles the components by hand so the two codes can be
-# normalized identically. In practice you would not do that: the entire
-# AGNFITTER-RX-style model — host stars and dust, THB21-analog disc with its
-# lines and FeII, CAT3D-Wind torus, α_ox corona, DPL jet — composes as *one*
-# tengri model through the public grammar, and that is the object you fit. This
-# cell builds it and plots the pipeline's own total SED across the same eleven
-# decades; every AGNFITTER-RX-parity knob used in this notebook (`agn_ebv_disc`,
-# the torus axes, the DPL turnover/cutoff) is a regular parameter of this one
-# model and could be declared free.
-
-# %%
-m_full = SEDModel.build(
-    ssp_data=ssp,
-    sfh=SFH_FIDUCIAL,
-    dust={
-        "type": "two_component",
-        "tau_bc": Fixed(0.3),
-        "tau_diff": Fixed(0.1),
-        "emission": {"type": "schreiber2018", "*": FIXED},
-        "*": FIXED,
-    },
-    agn={
-        "type": "composable",
-        "disc": {"type": "qsogen", "*": FIXED},
-        "lines": {"type": "qsogen", "*": FIXED},
-        "feii": {"type": "qsogen_balmer", "*": FIXED},
-        "torus": {
-            "type": "cat3d_wind",
-            "cos_inc": Fixed(1.0),
-            "a_cat3d": Fixed(-2.0),
-            "fwd_cat3d": Fixed(1.75),
-            "*": FIXED,
-        },
-        "agn_log_lbol": Fixed(12.0),
-        "agn_ebv_disc": Fixed(0.0),
-        "agn_polar_ebv": Fixed(0.0),
-        "*": FIXED,
-    },
-    xray={"type": "yang20"},
-    radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
-    redshift=Fixed(0.0),
-)
-s_full = m_full.predict_state({})
-w_full = np.asarray(s_full.wave)
-# The pipeline's total rest-frame SED after every component has applied.
-L_full = np.asarray(s_full.sed_intrinsic)
-nu_full = U.C_ANGSTROM_PER_S / w_full
-anchor_full = float(np.interp(2500.0, w_full, L_full))
-nuL = np.where(L_full > 0, nu_full * L_full / (anchor_full * (U.C_ANGSTROM_PER_S / 2500.0)), np.nan)
-
-fig, ax = plt.subplots(figsize=(9.5, 4.6))
-ax.loglog(nu_full, nuL, "C1-", lw=1.4, label="tengri — one SEDModel.build, all components")
-ax.set_xlim(1e8, 1e20)
-ax.set_xlabel(r"$\nu$ [Hz]")
-ax.set_ylabel(r"$\nu L_\nu$ (norm. at 2500 Å)")
-ax.set_title("Full composed model: host + AGN + corona + jet in a single build")
-ax.legend(fontsize=8, loc="lower center")
-ax.grid(True, alpha=0.3)
-fig.tight_layout()
-save_fig("agnfitter_capstone_composed.png")
-print(
-    f"capstone′  composed model wavelength coverage: {w_full.min():.2e} – {w_full.max():.2e} Å "
-    f"({np.log10(nu_full.max() / nu_full.min()):.1f} decades of frequency)"
 )
 
 # %% [markdown]
