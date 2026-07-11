@@ -57,6 +57,7 @@ from tengri.components.stellar.sfh.metallicity_history import (
     two_step_metallicity,
 )
 from tengri.components.stellar.sfh.nonparametric import (
+    DEFAULT_BIN_EDGES_GYR,
     bursty_continuity_prior_logp,
     continuity,
     continuity_flex,
@@ -84,6 +85,7 @@ from tengri.components.stellar.sfh.registry import (
 __all__ = [
     "AGEMAX_YR",
     "DEFAULT_AGE_GRID_YR",
+    "DEFAULT_BIN_EDGES_GYR",
     "FIELD_MODEL_REGISTRY",
     "MET_REGISTRY",
     "SFH_REGISTRY",

@@ -75,12 +75,5 @@ ax_res.axhline(-1, color="gray", linestyle=":", alpha=0.3)
 ax_res.set(xlabel=r"$\lambda$ [$\mu$m]", ylabel=r"Residual [\%]")
 ax_res.grid(True, which="both", alpha=0.2)
 
-plt.show()
-
-# Report
-max_residual = np.max(np.abs(residual_pct))
-print(f"k(V=5500 Å) tengri:   {k_v_tengri:.6f}")
-print(f"k(V=5500 Å) published: {k_v_published:.6f}")
-print(f"Max residual: {max_residual:.4f}%")
-if max_residual > 1.0:
-    print("WARNING: Residual exceeds 1% — possible library bug.")
+fig.tight_layout()
+plt.savefig("plot_diag_calzetti_kv_norm.png", dpi=150, bbox_inches="tight")

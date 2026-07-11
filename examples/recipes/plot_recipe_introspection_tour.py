@@ -63,8 +63,7 @@ ax_menu.text(
 for name, recipe_fn, color in RECIPE_CONFIGS:
     try:
         model = tengri.SEDModel.build(ssp_data=ssp, **recipe_fn())
-    except Exception as exc:
-        print(f"skip {name}: {type(exc).__name__}: {exc}")
+    except Exception:
         continue
 
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))

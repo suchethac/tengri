@@ -21,11 +21,6 @@
 SDSS Luminous Red Galaxy Stacked Template Spectrum
 ==================================================
 
-.. image:: images/sphx_glr_plot_usecase_sdss_lrg_stack_template_001.png
-   :alt: plot usecase sdss lrg stack template
-   :class: sphx-glr-single-img
-
-
 Build a population of N=200 quiescent galaxies replicating the SDSS
 Luminous Red Galaxy (LRG) sample selection (Eisenstein et al. 2001, SDSS-I):
 old, massive systems at z~0.3 with log M* ≈ 11 and ages sampling the
@@ -45,12 +40,12 @@ References:
 - Eisenstein et al. 2001, AJ, 122, 2267 (SDSS LRG selection)
 - Thomas et al. 2005, ApJ, 621, 673 (red-sequence ages)
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-155
+.. GENERATED FROM PYTHON SOURCE LINES 24-152
 
 
 
 .. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_sdss_lrg_stack_template_001.png
-   :alt: SDSS LRG Quiescent Template (z=0.3, R=2000) Red sequence ages 6–11 Gyr per Thomas+2005
+   :alt: plot usecase sdss lrg stack template
    :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_sdss_lrg_stack_template_001.png
    :class: sphx-glr-single-img
 
@@ -59,8 +54,6 @@ References:
 
  .. code-block:: none
 
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
     Predicting 200 quiescent spectra (ages 6.0–11.0 Gyr)...
       Batch shape: (200, 2400)
 
@@ -198,9 +191,6 @@ References:
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
     ax.legend(frameon=False, fontsize=8, loc="upper right")
-    ax.set_title(
-        "SDSS LRG Quiescent Template (z=0.3, R=2000)\nRed sequence ages 6–11 Gyr per Thomas+2005"
-    )
 
     fig.tight_layout()
     plt.savefig("plot_usecase_sdss_lrg_stack_template.png", dpi=150, bbox_inches="tight")
@@ -208,7 +198,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.842 seconds)
+   **Total running time of the script:** (0 minutes 5.607 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sdss_lrg_stack_template.py:

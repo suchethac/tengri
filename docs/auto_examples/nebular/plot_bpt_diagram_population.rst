@@ -21,11 +21,6 @@
 BPT diagram: star-forming galaxies, AGN, and shocks
 ====================================================
 
-.. image:: images/sphx_glr_plot_bpt_diagram_population_001.png
-   :alt: plot bpt diagram population
-   :class: sphx-glr-single-img
-
-
 The Baldwin-Phillips-Terlevich (BPT) diagram ([OIII]/Hβ vs [NII]/Hα)
 separates ionization mechanisms by tracing distinct loci.
 
@@ -46,7 +41,7 @@ References:
     Kauffmann et al. 2003, MNRAS, 346, 1055 (SF/composite line)
     Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks)
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-262
+.. GENERATED FROM PYTHON SOURCE LINES 25-269
 
 
 
@@ -116,8 +111,12 @@ References:
                     "log_total_mass": 10.0,
                 },
                 dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
-                neb={"type": "cue", "*": tengri.FIXED,
-                     "logU": tengri.Fixed(logu), "logZ_gas": tengri.Fixed(logz)},
+                neb={
+                    "type": "cue",
+                    "*": tengri.FIXED,
+                    "logU": tengri.Fixed(logu),
+                    "logZ_gas": tengri.Fixed(logz),
+                },
                 redshift=tengri.Fixed(0.05),
             )
 
@@ -167,9 +166,12 @@ References:
                 "log_total_mass": 10.0,
             },
             dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.2},
-            neb={"type": "cue", "*": tengri.FIXED,
-                 "logU": tengri.Fixed(config["logu"]),
-                 "logZ_gas": tengri.Fixed(config["logz"])},
+            neb={
+                "type": "cue",
+                "*": tengri.FIXED,
+                "logU": tengri.Fixed(config["logu"]),
+                "logZ_gas": tengri.Fixed(config["logz"]),
+            },
             redshift=tengri.Fixed(0.05),
         )
 
@@ -297,12 +299,12 @@ References:
     ax.grid(True, alpha=0.2, linestyle=":")
 
     fig.tight_layout()
-    plt.show()
+    plt.savefig("plot_bpt_diagram_population.png", dpi=150, bbox_inches="tight")
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.026 seconds)
+   **Total running time of the script:** (0 minutes 7.270 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_diagram_population.py:

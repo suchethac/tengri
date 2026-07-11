@@ -21,15 +21,10 @@
 Diagnostic: Calzetti 2000 attenuation law vs. published formula
 ===============================================================
 
-.. image:: images/sphx_glr_plot_diag_calzetti_kv_norm_001.png
-   :alt: plot diag calzetti kv norm
-   :class: sphx-glr-single-img
-
-
 Verify tengri's Calzetti implementation against Eq. 1 in Calzetti et al. 2000
 (ApJ 533, 682). The canonical k(V=5500 Å) = 4.05 must be reproduced exactly.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-87
+.. GENERATED FROM PYTHON SOURCE LINES 8-80
 
 
 
@@ -39,20 +34,8 @@ Verify tengri's Calzetti implementation against Eq. 1 in Calzetti et al. 2000
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    k(V=5500 Å) tengri:   0.996414
-    k(V=5500 Å) published: 0.996414
-    Max residual: 0.0000%
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -126,15 +109,8 @@ Verify tengri's Calzetti implementation against Eq. 1 in Calzetti et al. 2000
     ax_res.set(xlabel=r"$\lambda$ [$\mu$m]", ylabel=r"Residual [\%]")
     ax_res.grid(True, which="both", alpha=0.2)
 
-    plt.show()
-
-    # Report
-    max_residual = np.max(np.abs(residual_pct))
-    print(f"k(V=5500 Å) tengri:   {k_v_tengri:.6f}")
-    print(f"k(V=5500 Å) published: {k_v_published:.6f}")
-    print(f"Max residual: {max_residual:.4f}%")
-    if max_residual > 1.0:
-        print("WARNING: Residual exceeds 1% — possible library bug.")
+    fig.tight_layout()
+    plt.savefig("plot_diag_calzetti_kv_norm.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_calzetti_kv_norm.py:

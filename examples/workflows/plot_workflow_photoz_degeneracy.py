@@ -69,17 +69,14 @@ def _make(z_value: float, tau_diff: float, peak_lbt: float, log_total_mass: floa
     return model, p
 
 
-# Two galaxies tuned to land at comparable g/r/i/z flux levels.
 m_low, p_low = _make(z_value=0.3, tau_diff=1.4, peak_lbt=3.0, log_total_mass=10.0)
 m_hi, p_hi = _make(z_value=3.5, tau_diff=0.05, peak_lbt=0.2, log_total_mass=10.0)
 
 flux_low = np.array(m_low.predict_photometry(p_low))
 flux_hi = np.array(m_hi.predict_photometry(p_hi))
-# Rescale the high-z so the r-band flux matches.
 flux_hi = flux_hi * (flux_low[2] / flux_hi[2])
 
 
-# Pull full rest-SEDs and shift to observed frame for the top panel.
 def _rest_to_obs(model, params, z, scale):
     out = model.predict_rest_sed(params)
     wave_obs = np.asarray(out.wavelength) * (1.0 + z)

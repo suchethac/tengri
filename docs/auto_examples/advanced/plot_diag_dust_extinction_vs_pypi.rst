@@ -21,11 +21,6 @@
 Dust attenuation law validation: tengri vs dust_extinction PyPI package
 ======================================================================
 
-.. image:: images/sphx_glr_plot_diag_dust_extinction_vs_pypi_001.png
-   :alt: plot diag dust extinction vs pypi
-   :class: sphx-glr-single-img
-
-
 Diagnostic figure comparing tengri's Calzetti and Cardelli/CCM89 attenuation
 laws against the reference implementations in the ``dust_extinction`` package
 (Barbary et al., widely used by astropy workflows). Residuals reveal systematic
@@ -144,7 +139,7 @@ Reference: Calzetti et al. 2000, ApJ 533 682; Cardelli et al. 1989, ApJ 345 245.
     ax_res.set_xlabel(r"Wavelength [$\mathrm{\AA}$]")
     fig.tight_layout()
 
-    plt.show()
+    plt.savefig("plot_diag_dust_extinction_vs_pypi.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_dust_extinction_vs_pypi.py:

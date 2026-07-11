@@ -21,13 +21,8 @@
 GRAHSP FeII forest: Bruhweiler+Verner 2008 vs Veron-Cetty 2004
 ===============================================================
 
-.. image:: images/sphx_glr_plot_grahsp_feii_templates_001.png
-   :alt: plot grahsp feii templates
-   :class: sphx-glr-single-img
-
-
 The iron pseudo-continuum (the "FeII forest") is a defining feature of type-1
-AGN optical/UV spectra. GRAHSP offers two templates: the photoionisation
+AGN optical/UV spectra. GRAHSP offers two templates: the photoionization
 model of **Bruhweiler & Verner (2008)** (the upstream default) and the
 empirical **Veron-Cetty, Joly & Veron (2004)** template. They differ most in
 the relative strength and shape of the UV (2200-3000 Å) and optical
@@ -37,7 +32,7 @@ To make the comparison clear we plot the FeII forest **in isolation** (the
 ``feii`` component returned by :func:`evaluate_grahsp_agn`, not buried under
 the accretion-disc continuum), both scaled to the same ``agn_grahsp_a_feii``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-68
+.. GENERATED FROM PYTHON SOURCE LINES 16-67
 
 
 
@@ -63,9 +58,8 @@ the accretion-disc continuum), both scaled to the same ``agn_grahsp_a_feii``.
     import matplotlib.pyplot as plt
     import numpy as np
 
+    from tengri.agn import GRAHSPParams, evaluate_grahsp_agn, load_grahsp_templates
     from tengri.analysis.plotting import setup_style
-    from tengri.components.agn.grahsp.model import GRAHSPParams, evaluate_grahsp_agn
-    from tengri.components.agn.grahsp.templates import load_grahsp_templates
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -86,7 +80,7 @@ the accretion-disc continuum), both scaled to the same ``agn_grahsp_a_feii``.
 
     bv08 = wave_um * feii_isolated("bruhweiler2008")
     vc04 = wave_um * feii_isolated("veroncetty2004")
-    # Templates carry an arbitrary normalisation; scale both by their common peak
+    # Templates carry an arbitrary normalization; scale both by their common peak
     # so the y-axis reads O(1) rather than ~1e40.
     norm = max(bv08.max(), vc04.max())
 
@@ -99,7 +93,7 @@ the accretion-disc continuum), both scaled to the same ``agn_grahsp_a_feii``.
         ax.text((lo + hi) / 2, ax.get_ylim()[1] * 0.93, lab, ha="center", fontsize=8, color="0.4")
 
     ax.set_xlabel(r"rest wavelength [$\mu$m]")
-    ax.set_ylabel(r"$\lambda L_{\lambda,\,\rm FeII}$ [normalised]")
+    ax.set_ylabel(r"$\lambda L_{\lambda,\,\rm FeII}$ [normalized]")
     ax.set_title(r"GRAHSP FeII forest templates, isolated ($A_{\rm FeII}=10$)")
     ax.legend(frameon=False, fontsize=9)
     fig.tight_layout()

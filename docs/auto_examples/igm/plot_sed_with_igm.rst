@@ -21,11 +21,6 @@
 Full galaxy SED with IGM absorption applied at multiple redshifts
 ==================================================================
 
-.. image:: images/sphx_glr_plot_sed_with_igm_001.png
-   :alt: plot sed with igm
-   :class: sphx-glr-single-img
-
-
 A young Lyman-break galaxy SED is built once at rest frame, then
 redshifted to a sequence of observed-frame epochs (``z = 1, 3, 5, 7``)
 with the Inoue et al. 2014 IGM transmission stamped on top. The
@@ -53,25 +48,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 99% of its stellar mass before the Big Bang at z=1.00 (cosmic age 5.87 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=3.00 (cosmic age 2.15 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=5.00 (cosmic age 1.18 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=7.00 (cosmic age 0.76 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

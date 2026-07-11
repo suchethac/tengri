@@ -21,11 +21,6 @@
 SKIRTOR AGN torus: inclination-dependent obscuration and silicate features
 ===========================================================================
 
-.. image:: images/sphx_glr_plot_skirtor_inclination_sweep_001.png
-   :alt: plot skirtor inclination sweep
-   :class: sphx-glr-single-img
-
-
 Demonstrate how the SKIRTOR clumpy radiative-transfer torus (Stalevski+ 2012, 2016)
 reprocesses the hot accretion disc and dust as a function of viewing angle.
 
@@ -47,7 +42,7 @@ emission to absorption across the inclination range.
 **References:**
 
 .. [1] Stalevski, M., Fritz, J., Baes, M., et al. (2012).
-   3D radiative transfer modelling of the dusty torus around AGN.
+   3D radiative transfer modeling of the dusty torus around AGN.
    MNRAS, 420, 2756. arXiv:1109.1286.
 
 .. [2] Stalevski, M., Ricci, C., Ueda, Y., et al. (2016).
@@ -110,7 +105,7 @@ emission to absorption across the inclination range.
     # Minimal SED model: just the AGN disc + torus
     # Negligible host SFH: total mass ~1e-10 Msun, completely subdominant
     # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
-    # ``const`` SFH parametrises by total mass over [start_gyr, end_gyr]
+    # ``const`` SFH parametrizes by total mass over [start_gyr, end_gyr]
     # instead.
     SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
@@ -286,7 +281,7 @@ emission to absorption across the inclination range.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.645 seconds)
+   **Total running time of the script:** (0 minutes 5.763 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_inclination_sweep.py:

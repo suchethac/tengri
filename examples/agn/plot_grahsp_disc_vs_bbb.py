@@ -24,8 +24,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.agn import compute_grahsp_sed
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn.grahsp.model import compute_grahsp_sed
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

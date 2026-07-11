@@ -21,11 +21,6 @@
 Lyman-alpha profile and IGM blue-wing absorption across redshift
 ==================================================================
 
-.. image:: images/sphx_glr_plot_lyman_alpha_igm_attenuation_001.png
-   :alt: plot lyman alpha igm attenuation
-   :class: sphx-glr-single-img
-
-
 The Lyman-alpha (Lyα) emission line at rest-frame 1216 Å is one of the strongest
 hydrogen recombination features in star-forming galaxies. As the redshift increases
 from z = 2 to z = 7, the IGM becomes progressively opaque at wavelengths
@@ -54,7 +49,7 @@ References:
 - Inoue, A. T., Iwata, I., Deharveng, J. M., et al. 2014, MNRAS, 442, 1805
   (modern IGM prescription used here)
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-171
+.. GENERATED FROM PYTHON SOURCE LINES 33-170
 
 
 
@@ -64,28 +59,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=2.00 (cosmic age 3.29 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=4.00 (cosmic age 1.54 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=5.00 (cosmic age 1.18 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=6.00 (cosmic age 0.93 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=7.00 (cosmic age 0.76 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    Saved: plot_lyman_alpha_igm_attenuation.png
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -226,7 +201,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_lyman_alpha_igm_attenuation.png", dpi=150, bbox_inches="tight")
-    print("Saved: plot_lyman_alpha_igm_attenuation.png")
 
 
 .. _sphx_glr_download_auto_examples_igm_plot_lyman_alpha_igm_attenuation.py:

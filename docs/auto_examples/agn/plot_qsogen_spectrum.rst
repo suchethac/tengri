@@ -21,18 +21,13 @@
 QSOgen empirical quasar SED across four decades of bolometric luminosity
 =========================================================================
 
-.. image:: images/sphx_glr_plot_qsogen_spectrum_001.png
-   :alt: plot qsogen spectrum
-   :class: sphx-glr-single-img
-
-
 The Temple, Hewett & Banerji (2021) QSOgen empirical template, used as
 the ``agn.disc.type="qsogen"`` selector. We sweep log L_bol from 10.0
 to 13.5 (in L_sun units) at fixed redshift to show that the template's
 spectral *shape* is approximately self-similar across the quasar
 luminosity function — the only knob that moves features (the
 Baldwin-effect drop in C IV/Ly-alpha equivalent width) is the
-bolometric normalisation.
+bolometric normalization.
 
 Reference: Temple, Hewett & Banerji 2021, MNRAS, 508, 737.
 

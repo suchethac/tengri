@@ -21,11 +21,6 @@
 UV attenuation and infrared re-emission balance dust energy
 ===========================================================
 
-.. image:: images/sphx_glr_plot_panchromatic_dust_balance_001.png
-   :alt: plot panchromatic dust balance
-   :class: sphx-glr-single-img
-
-
 Dust absorbs UV and optical photons and re-emits at infrared wavelengths.
 Sweeping diffuse ISM optical depth τ_diff shows how UV absorption
 transfers energy into the infrared, demonstrating energy conservation
@@ -41,8 +36,19 @@ between the attenuation and emission components.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -111,7 +117,7 @@ between the attenuation and emission components.
         )
 
     ax.set_xlim(0.08, 1e3)
-    ax.set_ylim(1e25, 1e34)
+    ax.set_ylim(1e40, 1e44)
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mu$m]")
     ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
 

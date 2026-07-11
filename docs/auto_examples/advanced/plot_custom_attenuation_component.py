@@ -13,7 +13,7 @@ To show the workflow end-to-end without dragging in the full
 explicit 2175 Å UV bump (Noll+2009 Eq. 4), invoke ``predict`` directly
 on a flat input spectrum, and plot the resulting attenuation curve
 alongside the bare Calzetti and the Cardelli+1989 MW shape. The bump
-is parametrised by amplitude :math:`E_b` and FWHM :math:`\gamma`;
+is parametrized by amplitude :math:`E_b` and FWHM :math:`\gamma`;
 setting :math:`E_b=0` recovers Calzetti exactly.
 
 See ``docs/dev/sed-model-components.md`` for the full integration path
@@ -28,10 +28,9 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri import SEDModelComponent, Uniform
 from tengri.analysis.plotting import setup_style
-from tengri.components.dust.attenuation import calzetti as _calzetti_law, cardelli as _cardelli_law
-from tengri.components.sed_model_component import SEDModelComponent
-from tengri.parameters.priors import Uniform
+from tengri.dust import calzetti as _calzetti_law, cardelli as _cardelli_law
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -58,8 +57,8 @@ class CalzettiPlusBump(SEDModelComponent):
     eb = Uniform(0.0, 5.0, description="2175 A bump amplitude", units="dimensionless")
     gamma = Uniform(100.0, 600.0, description="bump FWHM", units="Angstrom")
 
-    inputs: dict[str, str] = {}
-    outputs: dict[str, str] = {"L_absorbed": "erg/s"}
+    inputs = {}  # noqa: RUF012
+    outputs = {"L_absorbed": "erg/s"}  # noqa: RUF012
 
     def predict(self, p, sed_in, wave):
         k_calz = _calzetti_law(wave)

@@ -21,11 +21,6 @@
 SKIRTOR torus: viewing angle and optical depth effects
 ========================================================
 
-.. image:: images/sphx_glr_plot_skirtor_variants_001.png
-   :alt: plot skirtor variants
-   :class: sphx-glr-single-img
-
-
 The SKIRTOR clumpy torus model (Stalevski et al. 2016) emits thermal IR
 radiation that depends strongly on two parameters: viewing angle
 (inclination θ via ``cos_inc``) and optical depth (``tau_97`` at 9.7 μm).
@@ -140,7 +135,7 @@ deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.155 seconds)
+   **Total running time of the script:** (0 minutes 6.022 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_variants.py:

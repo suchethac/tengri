@@ -21,11 +21,6 @@
 Cosmological distance ladder and the K-correction for a flat SED
 ================================================================
 
-.. image:: images/sphx_glr_plot_usecase_cosmology_ladder_001.png
-   :alt: plot usecase cosmology ladder
-   :class: sphx-glr-single-img
-
-
 ``tengri.cosmology`` exposes the standard FRW distances — comoving,
 luminosity, angular-diameter — and lookback time as pure-JAX functions
 over a Planck-18 default. They are differentiable, JIT-able, and

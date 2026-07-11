@@ -21,14 +21,9 @@
 The 4000 Å break as a stellar age proxy
 =========================================
 
-.. image:: images/sphx_glr_plot_usecase_d4000_age_001.png
-   :alt: plot usecase d4000 age
-   :class: sphx-glr-single-img
-
-
 The 4000 Å break ``D_n(4000)`` — Bruzual 1983, Balogh+1999 — measures
 the discontinuity around 4000 Å produced by the line-blanketing of
-ionised metals in the atmospheres of old stars. It rises monotonically
+ionized metals in the atmospheres of old stars. It rises monotonically
 with the mass-weighted age of the stellar population and is one of
 the most widely used age indicators in SDSS-style optical-only data
 (Kauffmann+2003).
@@ -53,19 +48,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.53 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

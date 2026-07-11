@@ -9,34 +9,20 @@ fixed rest-frame filter. We compute K(z) for the SDSS r-band across
 four galaxy types — young star-forming, old star-forming, red-sequence
 elliptical, and post-starburst — from z = 0.01 to z = 2.0. This
 illustrates why stellar mass measurements require careful K-corrections
-at high redshift and why colour-matched template sets dominate
+at high redshift and why color-matched template sets dominate
 photometric redshift algorithms.
 
 Reference: Hogg (1999) on K-correction formalism; Blanton & Roweis (2007)
 on SDSS template K-corrections.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_k_correction_grid_001.png
-   :alt: plot_k_correction_grid
-   :class: sphx-glr-single-img
-
 """
 
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
-# sphinx_gallery_thumbnail_number = 1
-
-from pathlib import Path
-
 import jax
-import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-
-matplotlib.use("Agg")
 
 jax.config.update("jax_enable_x64", True)
 
@@ -45,28 +31,8 @@ from tengri.analysis.plotting import setup_style
 
 setup_style()
 
-
-def _find_filters():
-    """Find filter cache directory in standard locations."""
-    for p in [
-        Path("data/filters"),
-        Path("../data/filters"),
-        Path("../../data/filters"),
-        Path("../../../data/filters"),
-    ]:
-        if p.exists():
-            return str(p)
-    return "data/filters"
-
-
-# Load SSP
 ssp = tengri.load_ssp()
-
-# Locate filter cache
-filter_dir = _find_filters()
-
-# Observation: SDSS r-band only
-obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"], cache_dir=filter_dir))
+obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"]))
 
 
 def _build_galaxy(sfh_config, dust_config, label):
@@ -207,7 +173,4 @@ ax.grid(True, alpha=0.3, which="both")
 
 fig.tight_layout()
 
-# Save to script directory
-script_dir = Path(__file__).resolve().parent if "__file__" in dir() else Path(".")
-plt.savefig(str(script_dir / "plot_k_correction_grid.png"), dpi=150, bbox_inches="tight")
-plt.close()
+plt.savefig("plot_k_correction_grid.png", dpi=150, bbox_inches="tight")

@@ -57,11 +57,10 @@ ax.set(
     xscale="log",
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mu$m]",
     ylabel=r"$k(\lambda)\;/\;k(5500\,\mathrm{\AA})$",
-    title="Dust attenuation curves: Reddy+2015 vs local references",
     xlim=(0.13, 2.6),
     ylim=(0, 6),
 )
 ax.legend(frameon=False, fontsize=9)
 
 plt.tight_layout()
-plt.show()
+plt.savefig("plot_reddy15_highz_curve.png", dpi=150, bbox_inches="tight")

@@ -21,12 +21,7 @@
 Swapping the nebular backend on, then off, on a young starburst
 ===============================================================
 
-.. image:: images/sphx_glr_plot_swap_nebular_backend_001.png
-   :alt: plot swap nebular backend
-   :class: sphx-glr-single-img
-
-
-Hα and [O III]+Hβ are produced by gas reprocessing the ionising
+Hα and [O III]+Hβ are produced by gas reprocessing the ionizing
 continuum from O/B stars. Whether they appear in the predicted SED
 depends entirely on the nebular backend the model is built with.
 
@@ -37,7 +32,7 @@ The lines that vanish in the right column are the gas's signature.
 
 Reference: Li et al. 2024, ApJ submitted (Cue emulator).
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-96
+.. GENERATED FROM PYTHON SOURCE LINES 16-100
 
 
 
@@ -53,6 +48,10 @@ Reference: Li et al. 2024, ApJ submitted (Cue emulator).
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
@@ -67,7 +66,7 @@ Reference: Li et al. 2024, ApJ submitted (Cue emulator).
 
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
-    # A young starburst: peak ~30 Myr ago, still ionising
+    # A young starburst: peak ~30 Myr ago, still ionizing
     sfh = {
         "type": "dpl",
         "*": tengri.FIXED,
@@ -132,11 +131,6 @@ Reference: Li et al. 2024, ApJ submitted (Cue emulator).
 
     fig.tight_layout()
     plt.savefig("plot_swap_nebular_backend.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.337 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_swap_nebular_backend.py:

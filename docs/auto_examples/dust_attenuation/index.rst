@@ -19,23 +19,6 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Dust attenuation laws encode how interstellar dust preferentially absorbs short-wavelength (UV) starlight relative to optical/IR. The wavelength dependence is empirically calibrated to extinction measurements in the Milky Way (Cardelli+1989), Large/Small Magellanic Clouds (Pei 1992), and starburst galaxies (Calzetti+2000, Kriek+Conroy 2013).">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_attenuation_law_compare_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_attenuation_law_compare`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Dust attenuation laws: family comparison across UV to near-IR</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall 2000 two-component dust model splits attenuation into a birth-cloud component (``τ_bc``) that only the youngest stellar ages see, and a diffuse-ISM component (``τ_diff``) that attenuates all stellar light. The two are degenerate for an old population but separate cleanly for a young one.">
 
 .. only:: html
@@ -53,7 +36,24 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Cardelli+1989 Milky Way attenuation curve is a family parameterised by R_V = A_V / E(B-V). Smaller R_V (≲ 3) gives a steeper UV rise and stronger 2175 Å bump (denser lines of sight, small grains dominate); larger R_V (≳ 4.5) flattens the UV slope (processed grains, larger sizes).">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Kriek &amp; Conroy attenuation law has two degrees of freedom: bump strength and UV slope (δ). Varying both reveals how steeper UV slopes suppress the apparent prominence of the 2175 Å bump relative to the surrounding continuum. We show a 2×2 grid: rows sweep bump strength (0–2 at fixed δ), columns sweep δ slope (−1, +0.5 at fixed bump), revealing the synergy — a steep negative slope (blue wing) enhances bump visibility, while shallow positive slopes (flattened UV) bury the bump in the continuum.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_bump_delta_joint_grid_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_bump_delta_joint_grid`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">2175 Å bump × UV slope interaction in Kriek & Conroy attenuation</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Cardelli+1989 Milky Way attenuation curve is a family parameterized by R_V = A_V / E(B-V). Smaller R_V (≲ 3) gives a steeper UV rise and stronger 2175 Å bump (denser lines of sight, small grains dominate); larger R_V (≳ 4.5) flattens the UV slope (processed grains, larger sizes).">
 
 .. only:: html
 
@@ -65,23 +65,6 @@ depths, two-component geometry, and law comparisons.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Cardelli MW attenuation: sweeping R_V</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The six headline dust attenuation laws plotted over the full UV-through-NIR range (0.1–3 μm), extending beyond the 2175 Å bump region to show how curves flatten in the infrared. Red-shifted galaxies observe longer wavelengths at rest frame, so the IR slope controls K-correction factors and SED fitting degeneracies.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_dust_curves_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_dust_curves`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Dust attenuation laws from UV through near-infrared</div>
     </div>
 
 
@@ -104,7 +87,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Three dust geometries—foreground screen (power-law), mixed slab (Calzetti), and clumpy two-phase (SMC)—proxy different physical arrangements via their attenuation laws. At fixed τ_V = 1, geometry controls the spectral shape: screens are reddest, clumpy geometries are greyest. Transmission curves show how each law transforms a stellar continuum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Three dust geometries—foreground screen (power-law), mixed slab (Calzetti), and clumpy two-phase (SMC)—proxy different physical arrangements via their attenuation laws. At fixed τ_V = 1, geometry controls the spectral shape: screens are reddest, clumpy geometries are grayest. Transmission curves show how each law transforms a stellar continuum.">
 
 .. only:: html
 
@@ -172,7 +155,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Four named attenuation laws applied to the same intrinsic SED at the same V-band optical depth (τ_V = 1.0), illustrating how dust geometry and grain-size composition vary across the local universe.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Public dust attenuation laws applied to the same intrinsic SED at the same V-band optical depth (τ_V = 1.0), illustrating how dust geometry and grain-size composition vary across the local universe.">
 
 .. only:: html
 
@@ -189,7 +172,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Reproduction of Fig. 7 of Buchner et al. (2024, GRAHSP): a star-forming galaxy SED from intrinsic (dark blue) to strongly attenuated (dark red) as the diffuse colour excess E(B-V) is swept from 0.01 to 10. Energy balance routes the attenuated UV/optical light into the far-IR dust bump (Dale 2014), so the curves pivot about the FIR peak while the UV is progressively suppressed.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Reproduction of Fig. 7 of Buchner et al. (2024, GRAHSP): a star-forming galaxy SED from intrinsic (dark blue) to strongly attenuated (dark red) as the diffuse color excess E(B-V) is swept from 0.01 to 10. Energy balance routes the attenuated UV/optical light into the far-IR dust bump (Dale 2014), so the curves pivot about the FIR peak while the UV is progressively suppressed.">
 
 .. only:: html
 
@@ -223,7 +206,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="At fixed UV slope β_UV (the observable astronomers measure), many (R_V, A_V) pairs produce identical colours — this is a classical dust modelling pitfall. Shows β_UV as contours on the (R_V, A_V) grid for Cardelli MW attenuation. Standard reference points (SMC, LMC, Milky Way diffuse, Calzetti starburst) sit on different iso-β_UV contours, illustrating why dust-law assumptions strongly bias inferred properties.">
+    <div class="sphx-glr-thumbcontainer" tooltip="At fixed UV slope β_UV (the observable astronomers measure), many (R_V, A_V) pairs produce identical colors — this is a classical dust modeling pitfall. Shows β_UV as contours on the (R_V, A_V) grid for Cardelli MW attenuation. Standard reference points (SMC, LMC, Milky Way diffuse, Calzetti starburst) sit on different iso-β_UV contours, illustrating why dust-law assumptions strongly bias inferred properties.">
 
 .. only:: html
 
@@ -359,7 +342,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The WG00 radiative-transfer grid (FSPS dust_type=3) spans three large-scale star-dust geometries — shell (a foreground screen), cloudy (a homogeneous star-dust mix), and dusty (a clumpy two-phase medium) — crossed with two grain populations (Milky-Way and SMC). At a fixed tau_V these choices set the shape of the transmission exp(-A(lambda)): the foreground screen is the reddest (steepest UV), while the mixed and clumpy geometries are progressively greyer because short-wavelength photons escape through low-opacity sightlines.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The WG00 radiative-transfer grid (FSPS dust_type=3) spans three large-scale star-dust geometries — shell (a foreground screen), cloudy (a homogeneous star-dust mix), and dusty (a clumpy two-phase medium) — crossed with two grain populations (Milky-Way and SMC). At a fixed tau_V these choices set the shape of the transmission exp(-A(lambda)): the foreground screen is the reddest (steepest UV), while the mixed and clumpy geometries are progressively grayer because short-wavelength photons escape through low-opacity sightlines.">
 
 .. only:: html
 
@@ -401,10 +384,9 @@ depths, two-component geometry, and law comparisons.
 .. toctree::
    :hidden:
 
-   /auto_examples/dust_attenuation/plot_attenuation_law_compare
    /auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse
+   /auto_examples/dust_attenuation/plot_bump_delta_joint_grid
    /auto_examples/dust_attenuation/plot_cardelli_rv_sweep
-   /auto_examples/dust_attenuation/plot_dust_curves
    /auto_examples/dust_attenuation/plot_dust_geometry_screen_vs_mixed
    /auto_examples/dust_attenuation/plot_dust_geometry_sweep
    /auto_examples/dust_attenuation/plot_dust_law_application

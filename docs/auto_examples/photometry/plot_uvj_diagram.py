@@ -1,12 +1,12 @@
 """
-The UVJ colour–colour diagram
+The UVJ color–color diagram
 ==============================
 
 The UVJ (U−V vs V−J) diagram is a classic method for separating
 star-forming from quiescent galaxies. We populate it with four
 model tracks: (1) constant star-forming galaxies with varying
 dust optical depth, (2) an old quiescent population, (3) a
-post-starburst galaxy, and (4) a dusty starburst. The grey box
+post-starburst galaxy, and (4) a dusty starburst. The gray box
 marks the "quiescent region" from Williams+2009, a visual guide
 for identifying passive galaxies.
 
@@ -154,7 +154,7 @@ quiescent_box = mpatches.Rectangle(
     0.5,
     0.5,
     linewidth=1.0,
-    edgecolor="grey",
+    edgecolor="gray",
     facecolor="lightgrey",
     alpha=0.3,
     zorder=1,

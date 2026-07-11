@@ -2,7 +2,7 @@
 Cardelli MW attenuation: sweeping R_V
 
 The Cardelli+1989 Milky Way attenuation curve is a family
-parameterised by ``R_V = A_V / E(B-V)``. Smaller R_V (≲ 3) gives a
+parameterized by ``R_V = A_V / E(B-V)``. Smaller R_V (≲ 3) gives a
 steeper UV rise and stronger 2175 Å bump (denser lines of sight,
 small grains dominate); larger R_V (≳ 4.5) flattens the UV slope
 (processed grains, larger sizes).

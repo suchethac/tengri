@@ -19,7 +19,6 @@ Companion: ``plot_xray_nh_sweep.py`` (varies obscuration at fixed
 L_bol); ``plot_alpha_ox_sweep.py`` (varies the UV-X-ray slope).
 
 References
-
 ----------
 - Lusso & Risaliti 2016, ApJ 819, 154 (alpha_OX-L_2500 relation).
 - Just et al. 2007, ApJ 665, 1004 (X-ray bolometric corrections).

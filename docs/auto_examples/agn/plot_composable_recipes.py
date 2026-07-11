@@ -8,7 +8,7 @@ families. Same SEDModel.build call, three different physics tuples:
 
 1. **all-GRAHSP** — Buchner+2024 end-to-end (SBPL disc, GRAHSP lines,
    FeII forest, log-Gaussian torus, bi-attenuation).
-2. **multicolour + SKIRTOR + NLR** — Kubota-Done disc with Stalevski
+2. **multicolor + SKIRTOR + NLR** — Kubota-Done disc with Stalevski
    clumpy torus and Gaussian NLR forest.
 3. **QSOgen monolithic** — Temple+2021 empirical template as a single
    ``disc`` selector, no other blocks.
@@ -55,7 +55,7 @@ RECIPES = [
         },
     ),
     (
-        "multicolour disc + SKIRTOR torus + NLR",
+        "multicolor disc + SKIRTOR torus + NLR",
         "tab:green",
         {
             "disc": {"type": "multicolor", "*": tengri.FIXED},

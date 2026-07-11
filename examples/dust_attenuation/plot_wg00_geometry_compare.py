@@ -62,11 +62,10 @@ ax.set(
     xscale="log",
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mu$m]",
     ylabel=r"Transmission $\exp[-A(\lambda;\,\tau_V)]$",
-    title=r"WG00 geometry $\times$ grain type at $\tau_V = 3$",
     xlim=(0.1, 3.0),
     ylim=(0, 1.0),
 )
 ax.legend(frameon=False, fontsize=8, ncol=1, loc="lower right")
 
 plt.tight_layout()
-plt.show()
+plt.savefig("plot_wg00_geometry_compare.png", dpi=150, bbox_inches="tight")

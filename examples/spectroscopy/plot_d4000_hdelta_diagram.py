@@ -136,7 +136,7 @@ sfh_shape_idx = np.empty(n_pop, dtype=int)
 metallicity_idx = np.empty(n_pop, dtype=int)
 
 idx = 0
-for shape_i, (shape_name, sfh_dict) in enumerate(sfh_shapes):
+for shape_i, (_shape_name, sfh_dict) in enumerate(sfh_shapes):
     for age in ages_gyr:
         for met_i, z_sun in enumerate(metallicities):
             # Build model with this configuration

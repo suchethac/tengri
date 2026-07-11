@@ -199,14 +199,3 @@ ax.grid(True, alpha=0.3, which="major")
 
 fig.tight_layout()
 plt.savefig("plot_igm_models_comparison.png", dpi=150, bbox_inches="tight")
-print("Saved: plot_igm_models_comparison.png")
-
-# Diagnostic output
-idx_1200 = np.argmin(np.abs(wave_rest - 1200))
-idx_1250 = np.argmin(np.abs(wave_rest - 1250))
-print(f"\nModel comparison at z={Z_SOURCE}:")
-print(f"  Intrinsic SED: peak at {wave_rest[np.argmax(sed_intrinsic_norm)]:.1f} Å")
-print(f"  Madau (1995) at 1200 Å: {transmission_madau[idx_1200]:5.2f}")
-print(f"  Inoue+2014 at 1200 Å: {transmission_inoue[idx_1200]:5.2f}")
-print(f"  Asada (CGM) at 1200 Å: {transmission_asada[idx_1200]:5.2f}")
-print(f"  Asada (CGM) at 1250 Å: {transmission_asada[idx_1250]:5.2f}")

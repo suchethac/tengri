@@ -82,10 +82,12 @@ ir = (wave > 8e4) & (wave < 1e7)
 nu_ir = C_AA_PER_S / wave[ir]
 order = np.argsort(nu_ir)
 L_ir = np.trapezoid(np.asarray(out.sed)[ir][order], nu_ir[order])
+l_ir_exp = np.log10(L_ir / 3.84e33)
+ir_label = rf"$L_{{IR}}^{{8-1000\mu m}} \approx 10^{{{l_ir_exp:.1f}}}\,L_\odot$"
 ax.text(
     0.97,
     0.05,
-    rf"$L_{{\rm IR}}^{{(8-1000\,\mu\mathrm{{m}})}} \approx 10^{{{np.log10(L_ir / 3.84e33):.1f}}}\,L_\odot$",
+    ir_label,
     transform=ax.transAxes,
     ha="right",
     fontsize=9,

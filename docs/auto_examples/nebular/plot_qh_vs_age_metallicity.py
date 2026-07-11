@@ -38,7 +38,7 @@ import numpy as np
 
 import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.components.nebular._shared import compute_qh
+from tengri.nebular import compute_qh
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -108,8 +108,3 @@ ax.legend(loc="lower left", fontsize=9)
 
 fig.tight_layout()
 plt.savefig("plot_qh_vs_age_metallicity.png", dpi=150, bbox_inches="tight")
-plt.close()
-
-print("Saved plot_qh_vs_age_metallicity.png")
-print(f"SSP age range: {ssp_ages.min():.4f} to {ssp_ages.max():.1f} Gyr")
-print(f"SSP metallicity range: {ssp_z_values.min():.2f} to {ssp_z_values.max():.2f} dex")

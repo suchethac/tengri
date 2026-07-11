@@ -21,11 +21,6 @@
 Birth cloud dust suppresses young-stellar UV and nebular emission
 ==================================================================
 
-.. image:: images/sphx_glr_plot_tau_bc_sweep_001.png
-   :alt: plot tau bc sweep
-   :class: sphx-glr-single-img
-
-
 Birth-cloud dust optical depth ``τ_bc`` attenuates only the youngest stellar
 light (age < ~10 Myr), controlling nebular emission from embedded HII regions.
 τ_bc effects are clearest on young star-forming populations; we use a 500 Myr
@@ -43,19 +38,8 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718 (two-component dust model).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 51% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

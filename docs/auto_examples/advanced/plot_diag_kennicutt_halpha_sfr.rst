@@ -21,11 +21,6 @@
 Hα-to-SFR calibration against Kennicutt (1998)
 ===============================================
 
-.. image:: images/sphx_glr_plot_diag_kennicutt_halpha_sfr_001.png
-   :alt: plot diag kennicutt halpha sfr
-   :class: sphx-glr-single-img
-
-
 Diagnostic: the Hα luminosity traces the ionizing photon rate from young stars,
 which correlates with the instantaneous SFR. Kennicutt (1998, ApJ 498 541, Eq. 2)
 calibrated this relationship for Salpeter IMF; for Chabrier IMF (used by tengri),
@@ -36,7 +31,7 @@ varies the SFR value across a grid, and compares the implied Hα→SFR coefficie
 to the canonical Kennicutt+Chabrier value. A few-percent agreement validates that
 tengri's Cue nebular emulator correctly maps ionizing photon rates to Hα luminosity.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-98
+.. GENERATED FROM PYTHON SOURCE LINES 15-100
 
 
 
@@ -133,12 +128,14 @@ tengri's Cue nebular emulator correctly maps ionizing photon rates to Hα lumino
     ax.set_ylabel(r"Implied coeff: SFR / $L_{\mathrm{H}\alpha}$ [M$_{\odot}$ yr$^{-1}$ erg$^{-1}$ s]")
     ax.legend(frameon=False, fontsize=9)
     ax.grid(True, alpha=0.3)
-    plt.show()
+
+    fig.tight_layout()
+    plt.savefig("plot_diag_kennicutt_halpha_sfr.png", dpi=150, bbox_inches="tight")
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.650 seconds)
+   **Total running time of the script:** (0 minutes 2.822 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_kennicutt_halpha_sfr.py:

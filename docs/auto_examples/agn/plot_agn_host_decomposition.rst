@@ -21,11 +21,6 @@
 AGN host-galaxy decomposition: disentangling Seyfert contributions
 ===================================================================
 
-.. image:: images/sphx_glr_plot_agn_host_decomposition_001.png
-   :alt: plot agn host decomposition
-   :class: sphx-glr-single-img
-
-
 A Seyfert galaxy SED is decomposed photometrically by varying the AGN
 contribution fraction ``agn_frac`` from 0 (pure host) to 1.0 (pure AGN)
 to 0.5 (composite). how to isolate the AGN contribution
@@ -42,12 +37,11 @@ For real data, this three-trace pattern can be extended to a suite of
 The analytic scaling is ``L_total = (1 - frac) * L_host + frac * L_AGN``.
 
 References
-
 ----------
 .. [1] Ciesla et al. 2015, A&A, 576, A10 — Host-AGN decomposition via SED fitting
 .. [2] Stalevski et al. 2017, MNRAS, 470, 3876 — IR torus models in composite SEDs
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-114
+.. GENERATED FROM PYTHON SOURCE LINES 25-113
 
 
 
@@ -57,8 +51,19 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -154,7 +159,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.862 seconds)
+   **Total running time of the script:** (0 minutes 5.678 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_host_decomposition.py:

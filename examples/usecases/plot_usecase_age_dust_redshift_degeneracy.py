@@ -45,17 +45,8 @@ observation = Observation(photometry=sdss_filters)
 # Reference magnitude (r-band) to which all three models will be tuned
 m_r_target = 20.0
 
-print("=" * 70)
-print("AGE-DUST-REDSHIFT DEGENERACY: Photo-z pitfall")
-print("=" * 70)
-print()
-
 # Scenario A: Young + dusty + low-z
 # Use a declining exponential SFH peaking early (young light-weighted age)
-print("Building Scenario A: young + dusty + low-z...")
-print("  SFH: exponential decline (τ = 0.3 Gyr)")
-print("  Dust: τ_V = 2.0 (heavily obscured)")
-print("  Redshift: z = 0.5")
 
 model_a = SEDModel.build(
     ssp,
@@ -85,10 +76,6 @@ baseline_a["dust_tau_diff"] = 0.8
 
 # Scenario B: Old + clean + mid-z
 # Use a very declining SFH with long timescale (old light-weighted age)
-print("\nBuilding Scenario B: old + clean + mid-z...")
-print("  SFH: exponential decline (τ = 8.0 Gyr)")
-print("  Dust: τ_V = 0.1 (mostly dust-free)")
-print("  Redshift: z = 1.0")
 
 model_b = SEDModel.build(
     ssp,
@@ -118,10 +105,6 @@ baseline_b["dust_tau_diff"] = 0.05
 
 # Scenario C: Post-starburst + dust + high-z
 # Use log-normal peak with intermediate age at peak
-print("\nBuilding Scenario C: post-starburst + dust + high-z...")
-print("  SFH: log-normal (peak at 1 Gyr lookback, width 0.5 Gyr)")
-print("  Dust: τ_V = 0.7 (moderate obscuration)")
-print("  Redshift: z = 1.5")
 
 model_c = SEDModel.build(
     ssp,
@@ -177,30 +160,25 @@ def _bisect_log_total_mass(model, sfh_param_name, baseline, m_r_target, lo=-1.0,
 
 
 # Tune each scenario to match target r-band magnitude
-print("\nTuning stellar masses to match r-band magnitude...")
 log_total_mass_a = _bisect_log_total_mass(
     model_a, "sfh_dexp_log_total_mass", baseline_a, m_r_target
 )
 baseline_a["sfh_dexp_log_total_mass"] = log_total_mass_a
 params_a = baseline_a
-print(f"  Scenario A: log_total_mass={log_total_mass_a:.2f}")
 
 log_total_mass_b = _bisect_log_total_mass(
     model_b, "sfh_dexp_log_total_mass", baseline_b, m_r_target
 )
 baseline_b["sfh_dexp_log_total_mass"] = log_total_mass_b
 params_b = baseline_b
-print(f"  Scenario B: log_total_mass={log_total_mass_b:.2f}")
 
 log_total_mass_c = _bisect_log_total_mass(
     model_c, "sfh_lnorm_log_total_mass", baseline_c, m_r_target
 )
 baseline_c["sfh_lnorm_log_total_mass"] = log_total_mass_c
 params_c = baseline_c
-print(f"  Scenario C: log_total_mass={log_total_mass_c:.2f}")
 
 # Predict photometry for all three scenarios
-print("\nComputing photometry predictions...")
 photo_a = model_a.predict_photometry(params_a)
 photo_b = model_b.predict_photometry(params_b)
 photo_c = model_c.predict_photometry(params_c)
@@ -213,29 +191,7 @@ mag_a = -2.5 * np.log10(flux_a) - 48.6
 mag_b = -2.5 * np.log10(flux_b) - 48.6
 mag_c = -2.5 * np.log10(flux_c) - 48.6
 
-# Verify convergence: photometric points should cluster
-mag_std = np.std([mag_a, mag_b, mag_c], axis=0)
-print("\nPhotometric convergence check (σ in magnitudes across 3 scenarios):")
-filter_names = ["u", "g", "r", "i", "z"]
-for i, fname in enumerate(filter_names):
-    print(
-        f"  SDSS {fname:1s}: σ = {mag_std[i]:.3f} mag  "
-        f"(A={mag_a[i]:.2f}, B={mag_b[i]:.2f}, C={mag_c[i]:.2f})"
-    )
-
-# Flag convergence failure
-convergence_pass = np.all(mag_std < 0.5)
-if not convergence_pass:
-    print("\n[WARNING] Photometric convergence FAILED! σ > 0.5 mag on some bands.")
-    print(
-        "This indicates the SFR tuning did not fully converge. "
-        "The degeneracy may be weaker than expected for this redshift/age/dust combo."
-    )
-else:
-    print("\n[PASS] Photometric convergence: σ < 0.5 mag on all SDSS bands.")
-
 # Predict rest-frame SEDs for display
-print("Computing rest-frame SEDs...")
 sed_a = model_a.predict_rest_sed(params_a)
 sed_b = model_b.predict_rest_sed(params_b)
 sed_c = model_c.predict_rest_sed(params_c)
@@ -253,6 +209,7 @@ fig, axes = plt.subplots(2, 1, figsize=(10, 8))
 
 # TOP PANEL: Observed photometry (should cluster within degeneracy)
 ax_phot = axes[0]
+filter_names = ["u", "g", "r", "i", "z"]
 band_positions = np.arange(len(filter_names))
 ax_phot.scatter(
     band_positions - 0.12,
@@ -343,40 +300,6 @@ ax_sed.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]", fontsize=11)
 ax_sed.legend(loc="upper right", frameon=False, fontsize=10)
 ax_sed.grid(True, alpha=0.3, linestyle=":", which="both")
 ax_sed.set_xlim(wave_rest_min, wave_rest_max)
-ax_sed.set_title(
-    "Rest-frame SED: clear physical differences despite photometric overlap",
-    fontsize=12,
-    weight="bold",
-)
 
 plt.tight_layout()
 plt.savefig("plot_usecase_age_dust_redshift_degeneracy.png", dpi=150, bbox_inches="tight")
-print("\nFigure saved: plot_usecase_age_dust_redshift_degeneracy.png")
-
-# Verify by reading the PNG
-try:
-    from PIL import Image
-
-    img = Image.open("plot_usecase_age_dust_redshift_degeneracy.png")
-    print(f"PNG verified: {img.size} pixels, {img.mode}")
-except Exception as e:
-    print(f"Could not verify PNG: {e}")
-
-plt.show()
-
-print("\n" + "=" * 70)
-print("[SUMMARY]")
-print("=" * 70)
-print("The age-dust-redshift degeneracy is fundamental in optical photometry.")
-print("Three vastly different physical scenarios produce similar SDSS ugriz colors.")
-print()
-print("Breaking the degeneracy requires:")
-print("  * Spectroscopy (age-sensitive indices: Balmer lines, 4000 A break)")
-print("  * FIR / submm (dust temperature + IR luminosity)")
-print("  * X-ray / UV (AGN, nebular emission, ionization parameter)")
-print("  * Radio (recent star formation, AGN core)")
-print()
-print("Key references:")
-print("  * Papovich et al. 2001 (AJ 122, 1) — seminal HST/HDF discussion")
-print("  * Poggianti & Barbaro 1997 (A&A 325, 1025) — spectral synthesis context")
-print("=" * 70)

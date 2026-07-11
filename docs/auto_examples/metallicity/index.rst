@@ -5,7 +5,10 @@
 Metallicity
 ===========
 
-Stellar metallicity Z and α-element enhancement effects on the SED.
+Stellar metallicity and abundance effects on the SED — the panchromatic
+response to log(Z/Zsun), alpha-element enhancement, the joint age–metallicity
+behavior that broadband data struggle to separate, and chemical-evolution
+tracks.
 
 
 
@@ -62,13 +65,13 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Stellar metallicity drives UV-optical SED colour</div>
+      <div class="sphx-glr-thumbnail-title">Stellar metallicity drives UV-optical SED color</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Metal-rich young populations and metal-poor old populations can produce similar optical colours — a fundamental degeneracy in galaxy fitting. This 3×4 grid shows normalised rest-frame continua at nine points in the age–metallicity plane, with each row fixed at one lookback-formation age and each column fixed at one metallicity. Dust is zeroed to expose the clean stellar continuum shape.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Metal-rich young populations and metal-poor old populations can produce similar optical colors — a fundamental degeneracy in galaxy fitting. This 3×4 grid shows normalized rest-frame continua at nine points in the age–metallicity plane, with each row fixed at one lookback-formation age and each column fixed at one metallicity. Dust is zeroed to expose the clean stellar continuum shape.">
 
 .. only:: html
 
@@ -85,7 +88,7 @@ Stellar metallicity Z and α-element enhancement effects on the SED.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Metallicity evolution Z(t) depends on the balance between metal production (in supernovae) and metal removal (via outflows). This four-panel figure shows how different star formation timescales and outflow efficiencies η alter the enrichment history relative to a closed box (zero outflow). Top-left: closed-box enrichment timescale dependence. Top-right: impact of variable outflow rates. Bottom-left: closed vs leaky enrichment under constant SFR. Bottom-right: age-metallicity relation analogue — how different assembly epochs lead to different final metal content.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Metallicity evolution Z(t) depends on the balance between metal production (in supernovae) and metal removal (via outflows). This four-panel figure shows how different star formation timescales and outflow efficiencies η alter the enrichment history relative to a closed box (zero outflow). Top-left: closed-box enrichment timescale dependence. Top-right: impact of variable outflow rates. Bottom-left: closed vs leaky enrichment under constant SFR. Bottom-right: age-metallicity relation analog — how different assembly epochs lead to different final metal content.">
 
 .. only:: html
 

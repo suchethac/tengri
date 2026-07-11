@@ -163,5 +163,4 @@ cbar_beta = fig_bottom.colorbar(
 cbar_beta.set_label(r"DPL falling slope $\beta$")
 
 fig_bottom.tight_layout()
-fig_bottom.savefig("plot_dpl_alpha_beta_grid_sedsweeps.png", dpi=150, bbox_inches="tight")
 plt.savefig("plot_dpl_alpha_beta_grid.png", dpi=150, bbox_inches="tight")

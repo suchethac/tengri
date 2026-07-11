@@ -21,11 +21,6 @@
 Panchromatic SED of a low-metallicity dwarf irregular galaxy
 =============================================================
 
-.. image:: images/sphx_glr_plot_dwarf_irregular_sed_001.png
-   :alt: plot dwarf irregular sed
-   :class: sphx-glr-single-img
-
-
 A low-mass, low-metallicity dwarf irregular (M*~10^8 Msun, Z~0.1 Zsun)
 with high specific star formation rate. The SED highlights: strong UV
 continuum from young stars, dominant optical emission lines (Hα 6563 Å,
@@ -161,12 +156,7 @@ starburst signature visible from UV through optical.
     ax.legend(frameon=False, fontsize=8.5, loc="upper left")
 
     fig.tight_layout()
-    plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.261 seconds)
+    plt.savefig("plot_dwarf_irregular_sed.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_dwarf_irregular_sed.py:

@@ -21,11 +21,6 @@
 The age-dust-redshift degeneracy in photometry
 ==============================================
 
-.. image:: images/sphx_glr_plot_usecase_age_dust_redshift_degeneracy_001.png
-   :alt: plot usecase age dust redshift degeneracy
-   :class: sphx-glr-single-img
-
-
 Optical photometry alone cannot uniquely break the degeneracy between stellar
 age, dust attenuation, and redshift — a fundamental limitation in photo-z and
 SED fitting. Three physically distinct galaxy populations can produce nearly
@@ -47,87 +42,18 @@ References:
 - Papovich et al. 2001, AJ, 122, 1
 - Poggianti & Barbaro 1997, A&A, 325, 1025
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-383
+.. GENERATED FROM PYTHON SOURCE LINES 26-306
 
 
 
 .. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_age_dust_redshift_degeneracy_001.png
-   :alt: Observed-frame SDSS photometry: three scenarios overlap within degeneracy, Rest-frame SED: clear physical differences despite photometric overlap
+   :alt: Observed-frame SDSS photometry: three scenarios overlap within degeneracy
    :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_age_dust_redshift_degeneracy_001.png
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    ======================================================================
-    AGE-DUST-REDSHIFT DEGENERACY: Photo-z pitfall
-    ======================================================================
-
-    Building Scenario A: young + dusty + low-z...
-      SFH: exponential decline (τ = 0.3 Gyr)
-      Dust: τ_V = 2.0 (heavily obscured)
-      Redshift: z = 0.5
-
-    Building Scenario B: old + clean + mid-z...
-      SFH: exponential decline (τ = 8.0 Gyr)
-      Dust: τ_V = 0.1 (mostly dust-free)
-      Redshift: z = 1.0
-
-    Building Scenario C: post-starburst + dust + high-z...
-      SFH: log-normal (peak at 1 Gyr lookback, width 0.5 Gyr)
-      Dust: τ_V = 0.7 (moderate obscuration)
-      Redshift: z = 1.5
-
-    Tuning stellar masses to match r-band magnitude...
-      Scenario A: log_total_mass=3.00
-      Scenario B: log_total_mass=3.00
-      Scenario C: log_total_mass=3.00
-
-    Computing photometry predictions...
-
-    Photometric convergence check (σ in magnitudes across 3 scenarios):
-      SDSS u: σ = 2.404 mag  (A=41.48, B=46.65, C=46.50)
-      SDSS g: σ = 2.532 mag  (A=40.76, B=46.06, C=46.21)
-      SDSS r: σ = 2.847 mag  (A=39.45, B=44.77, C=46.01)
-      SDSS i: σ = 2.790 mag  (A=39.05, B=43.81, C=45.67)
-      SDSS z: σ = 2.644 mag  (A=38.83, B=42.92, C=45.23)
-
-    [WARNING] Photometric convergence FAILED! σ > 0.5 mag on some bands.
-    This indicates the SFR tuning did not fully converge. The degeneracy may be weaker than expected for this redshift/age/dust combo.
-    Computing rest-frame SEDs...
-    /private/tmp/tengri-regen/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 63% of its stellar mass before the Big Bang at z=1.00 (cosmic age 5.87 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /private/tmp/tengri-regen/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 89% of its stellar mass before the Big Bang at z=1.50 (cosmic age 4.28 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-
-    Figure saved: plot_usecase_age_dust_redshift_degeneracy.png
-    PNG verified: (1456, 1156) pixels, RGBA
-
-    ======================================================================
-    [SUMMARY]
-    ======================================================================
-    The age-dust-redshift degeneracy is fundamental in optical photometry.
-    Three vastly different physical scenarios produce similar SDSS ugriz colors.
-
-    Breaking the degeneracy requires:
-      * Spectroscopy (age-sensitive indices: Balmer lines, 4000 A break)
-      * FIR / submm (dust temperature + IR luminosity)
-      * X-ray / UV (AGN, nebular emission, ionization parameter)
-      * Radio (recent star formation, AGN core)
-
-    Key references:
-      * Papovich et al. 2001 (AJ 122, 1) — seminal HST/HDF discussion
-      * Poggianti & Barbaro 1997 (A&A 325, 1025) — spectral synthesis context
-    ======================================================================
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -153,17 +79,8 @@ References:
     # Reference magnitude (r-band) to which all three models will be tuned
     m_r_target = 20.0
 
-    print("=" * 70)
-    print("AGE-DUST-REDSHIFT DEGENERACY: Photo-z pitfall")
-    print("=" * 70)
-    print()
-
     # Scenario A: Young + dusty + low-z
     # Use a declining exponential SFH peaking early (young light-weighted age)
-    print("Building Scenario A: young + dusty + low-z...")
-    print("  SFH: exponential decline (τ = 0.3 Gyr)")
-    print("  Dust: τ_V = 2.0 (heavily obscured)")
-    print("  Redshift: z = 0.5")
 
     model_a = SEDModel.build(
         ssp,
@@ -193,10 +110,6 @@ References:
 
     # Scenario B: Old + clean + mid-z
     # Use a very declining SFH with long timescale (old light-weighted age)
-    print("\nBuilding Scenario B: old + clean + mid-z...")
-    print("  SFH: exponential decline (τ = 8.0 Gyr)")
-    print("  Dust: τ_V = 0.1 (mostly dust-free)")
-    print("  Redshift: z = 1.0")
 
     model_b = SEDModel.build(
         ssp,
@@ -226,10 +139,6 @@ References:
 
     # Scenario C: Post-starburst + dust + high-z
     # Use log-normal peak with intermediate age at peak
-    print("\nBuilding Scenario C: post-starburst + dust + high-z...")
-    print("  SFH: log-normal (peak at 1 Gyr lookback, width 0.5 Gyr)")
-    print("  Dust: τ_V = 0.7 (moderate obscuration)")
-    print("  Redshift: z = 1.5")
 
     model_c = SEDModel.build(
         ssp,
@@ -285,30 +194,25 @@ References:
 
 
     # Tune each scenario to match target r-band magnitude
-    print("\nTuning stellar masses to match r-band magnitude...")
     log_total_mass_a = _bisect_log_total_mass(
         model_a, "sfh_dexp_log_total_mass", baseline_a, m_r_target
     )
     baseline_a["sfh_dexp_log_total_mass"] = log_total_mass_a
     params_a = baseline_a
-    print(f"  Scenario A: log_total_mass={log_total_mass_a:.2f}")
 
     log_total_mass_b = _bisect_log_total_mass(
         model_b, "sfh_dexp_log_total_mass", baseline_b, m_r_target
     )
     baseline_b["sfh_dexp_log_total_mass"] = log_total_mass_b
     params_b = baseline_b
-    print(f"  Scenario B: log_total_mass={log_total_mass_b:.2f}")
 
     log_total_mass_c = _bisect_log_total_mass(
         model_c, "sfh_lnorm_log_total_mass", baseline_c, m_r_target
     )
     baseline_c["sfh_lnorm_log_total_mass"] = log_total_mass_c
     params_c = baseline_c
-    print(f"  Scenario C: log_total_mass={log_total_mass_c:.2f}")
 
     # Predict photometry for all three scenarios
-    print("\nComputing photometry predictions...")
     photo_a = model_a.predict_photometry(params_a)
     photo_b = model_b.predict_photometry(params_b)
     photo_c = model_c.predict_photometry(params_c)
@@ -321,29 +225,7 @@ References:
     mag_b = -2.5 * np.log10(flux_b) - 48.6
     mag_c = -2.5 * np.log10(flux_c) - 48.6
 
-    # Verify convergence: photometric points should cluster
-    mag_std = np.std([mag_a, mag_b, mag_c], axis=0)
-    print("\nPhotometric convergence check (σ in magnitudes across 3 scenarios):")
-    filter_names = ["u", "g", "r", "i", "z"]
-    for i, fname in enumerate(filter_names):
-        print(
-            f"  SDSS {fname:1s}: σ = {mag_std[i]:.3f} mag  "
-            f"(A={mag_a[i]:.2f}, B={mag_b[i]:.2f}, C={mag_c[i]:.2f})"
-        )
-
-    # Flag convergence failure
-    convergence_pass = np.all(mag_std < 0.5)
-    if not convergence_pass:
-        print("\n[WARNING] Photometric convergence FAILED! σ > 0.5 mag on some bands.")
-        print(
-            "This indicates the SFR tuning did not fully converge. "
-            "The degeneracy may be weaker than expected for this redshift/age/dust combo."
-        )
-    else:
-        print("\n[PASS] Photometric convergence: σ < 0.5 mag on all SDSS bands.")
-
     # Predict rest-frame SEDs for display
-    print("Computing rest-frame SEDs...")
     sed_a = model_a.predict_rest_sed(params_a)
     sed_b = model_b.predict_rest_sed(params_b)
     sed_c = model_c.predict_rest_sed(params_c)
@@ -361,6 +243,7 @@ References:
 
     # TOP PANEL: Observed photometry (should cluster within degeneracy)
     ax_phot = axes[0]
+    filter_names = ["u", "g", "r", "i", "z"]
     band_positions = np.arange(len(filter_names))
     ax_phot.scatter(
         band_positions - 0.12,
@@ -451,48 +334,14 @@ References:
     ax_sed.legend(loc="upper right", frameon=False, fontsize=10)
     ax_sed.grid(True, alpha=0.3, linestyle=":", which="both")
     ax_sed.set_xlim(wave_rest_min, wave_rest_max)
-    ax_sed.set_title(
-        "Rest-frame SED: clear physical differences despite photometric overlap",
-        fontsize=12,
-        weight="bold",
-    )
 
     plt.tight_layout()
     plt.savefig("plot_usecase_age_dust_redshift_degeneracy.png", dpi=150, bbox_inches="tight")
-    print("\nFigure saved: plot_usecase_age_dust_redshift_degeneracy.png")
-
-    # Verify by reading the PNG
-    try:
-        from PIL import Image
-
-        img = Image.open("plot_usecase_age_dust_redshift_degeneracy.png")
-        print(f"PNG verified: {img.size} pixels, {img.mode}")
-    except Exception as e:
-        print(f"Could not verify PNG: {e}")
-
-    plt.show()
-
-    print("\n" + "=" * 70)
-    print("[SUMMARY]")
-    print("=" * 70)
-    print("The age-dust-redshift degeneracy is fundamental in optical photometry.")
-    print("Three vastly different physical scenarios produce similar SDSS ugriz colors.")
-    print()
-    print("Breaking the degeneracy requires:")
-    print("  * Spectroscopy (age-sensitive indices: Balmer lines, 4000 A break)")
-    print("  * FIR / submm (dust temperature + IR luminosity)")
-    print("  * X-ray / UV (AGN, nebular emission, ionization parameter)")
-    print("  * Radio (recent star formation, AGN core)")
-    print()
-    print("Key references:")
-    print("  * Papovich et al. 2001 (AJ 122, 1) — seminal HST/HDF discussion")
-    print("  * Poggianti & Barbaro 1997 (A&A 325, 1025) — spectral synthesis context")
-    print("=" * 70)
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.926 seconds)
+   **Total running time of the script:** (0 minutes 8.099 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_age_dust_redshift_degeneracy.py:

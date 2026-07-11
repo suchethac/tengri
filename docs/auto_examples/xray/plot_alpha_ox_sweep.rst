@@ -18,13 +18,8 @@
 .. _sphx_glr_auto_examples_xray_plot_alpha_ox_sweep.py:
 
 
-AGN UV-to-X-ray power-law slope alpha_OX controls X-ray normalisation
+AGN UV-to-X-ray power-law slope alpha_OX controls X-ray normalization
 ======================================================================
-
-.. image:: images/sphx_glr_plot_alpha_ox_sweep_001.png
-   :alt: plot alpha ox sweep
-   :class: sphx-glr-single-img
-
 
 The UV-to-X-ray spectral slope alpha_OX (defined as log F_X minus
 log F_UV divided by log nu_X minus log nu_UV) separates X-ray-loud

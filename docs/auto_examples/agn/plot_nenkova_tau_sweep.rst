@@ -21,17 +21,12 @@
 CLUMPY torus (Nenkova+2008): optical depth as a fitted parameter
 ================================================================
 
-.. image:: images/sphx_glr_plot_nenkova_tau_sweep_001.png
-   :alt: plot nenkova tau sweep
-   :class: sphx-glr-single-img
-
-
 The Nenkova et al. (2008) CLUMPY library is the AGN dusty-torus model used
 by FSPS and Prospector. tengri ships the same templates (vendored from FSPS
 as ``data/nenkova08_torus_grid.h5``) and interpolates them with a pure-JAX
 triweight kernel, so the **equatorial optical depth ``agn_tau`` is a fully
-differentiable, fitted parameter** — it can be sampled by NUTS, optimised by
-MAP, or marginalised by VI, just like in Prospector.
+differentiable, fitted parameter** — it can be sampled by NUTS, optimized by
+MAP, or marginalized by VI, just like in Prospector.
 
 Here we sweep ``agn_tau`` over the grid extent (5–150) at fixed bolometric
 luminosity. Higher optical depths reprocess more of the accretion-disc

@@ -83,15 +83,8 @@ for ssp_name, color in zip(ssp_names, colors):
             label=ssp_name.replace("_chabrier", "").replace("_", " "),
         )
 
-        print(
-            f"✓ {ssp_name}: age index {age_idx} ({age_gyr[age_idx]:.2f} Gyr), "
-            f"Z index {z_idx} ({log_z[z_idx]:.2f} log10 Z)"
-        )
-
-    except FileNotFoundError as e:
-        print(f"⊘ {ssp_name}: {e}")
-    except Exception as e:
-        print(f"✗ {ssp_name}: {type(e).__name__}: {e}")
+    except (FileNotFoundError, Exception):
+        pass
 
 ax.set_xlim(0.05, 5.0)
 ax.set_ylim(1e-3, 2.0)
@@ -99,8 +92,6 @@ ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mu$m]")
 ax.set_ylabel(r"$\nu L_\nu$ (peak-normalized)")
 
 ax.legend(fontsize=7.5, frameon=False, loc="lower right", ncol=1)
-ax.set_title(f"SSP Library Comparison: Age = {target_age_gyr:.1f} Gyr, Z = 0 (solar)")
 
 fig.tight_layout()
 plt.savefig("plot_ssp_library_shootout.png", dpi=150, bbox_inches="tight")
-print("\n✓ Saved plot_ssp_library_shootout.png")

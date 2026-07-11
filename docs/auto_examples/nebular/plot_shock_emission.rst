@@ -21,11 +21,6 @@
 MAPPINGS V shocks: velocity, density, and magnetic field effects
 ==================================================================
 
-.. image:: images/sphx_glr_plot_shock_emission_001.png
-   :alt: plot shock emission
-   :class: sphx-glr-single-img
-
-
 Shock emission (MAPPINGS V models) can mimic AGN on the BPT diagram.
 We show how shock velocity, gas density, and magnetic field strength
 affect line ratios and diagnostic positions. Four-panel layout shows
@@ -177,11 +172,6 @@ magnetic field strength.
 
     fig.tight_layout()
     plt.savefig("plot_shock_emission.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.089 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_shock_emission.py:

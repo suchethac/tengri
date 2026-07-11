@@ -86,101 +86,52 @@ fig, axes = plt.subplots(1, 3, figsize=(12.5, 3.6))
 
 # Panel 1: F_λ vs λ
 ax = axes[0]
-ax.loglog(lambda_rest, f_lambda, "C0-", lw=1.5, label="Same SED")
+ax.loglog(lambda_rest, f_lambda, "C0-", lw=1.5)
 peak_idx_flambda = np.argmax(f_lambda)
 ax.plot(
     lambda_rest[peak_idx_flambda],
     f_lambda[peak_idx_flambda],
     "o",
     color="C0",
-    markersize=6,
-    markeredgewidth=0.5,
-    markeredgecolor="white",
+    markersize=5,
+    markeredgewidth=0,
 )
-ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [Å]", fontsize=10)
-ax.set_ylabel(r"$F_\lambda$ [erg/s/cm²/Å]", fontsize=10)
-ax.set_title(r"$F_\lambda$ vs $\lambda$", fontsize=10, fontweight="bold")
-ax.grid(True, alpha=0.3, which="both")
-ax.text(
-    0.05,
-    0.95,
-    f"Peak: {lambda_rest[peak_idx_flambda]:.0f} Å",
-    transform=ax.transAxes,
-    fontsize=8,
-    verticalalignment="top",
-    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
-)
+ax.set_xlabel(r"Wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$F_\lambda$ [erg s$^{-1}$ cm$^{-2}$ $\mathrm{\AA}^{-1}$]")
+ax.grid(True, alpha=0.25, which="both")
 
 # Panel 2: F_ν vs ν
 ax = axes[1]
 nu_rest = C_AA_PER_S / lambda_rest
-ax.loglog(nu_rest, f_nu, "C1-", lw=1.5, label="Same SED")
+ax.loglog(nu_rest, f_nu, "C1-", lw=1.5)
 peak_idx_fnu = np.argmax(f_nu)
 ax.plot(
     nu_rest[peak_idx_fnu],
     f_nu[peak_idx_fnu],
     "o",
     color="C1",
-    markersize=6,
-    markeredgewidth=0.5,
-    markeredgecolor="white",
+    markersize=5,
+    markeredgewidth=0,
 )
-ax.set_xlabel(r"Rest-frame frequency $\nu$ [Hz]", fontsize=10)
-ax.set_ylabel(r"$F_\nu$ [erg/s/cm²/Hz]", fontsize=10)
-ax.set_title(r"$F_\nu$ vs $\nu$", fontsize=10, fontweight="bold")
-ax.grid(True, alpha=0.3, which="both")
-ax.text(
-    0.05,
-    0.95,
-    f"Peak: {nu_rest[peak_idx_fnu]:.2e} Hz",
-    transform=ax.transAxes,
-    fontsize=8,
-    verticalalignment="top",
-    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
-)
+ax.set_xlabel(r"Frequency $\nu$ [Hz]")
+ax.set_ylabel(r"$F_\nu$ [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
+ax.grid(True, alpha=0.25, which="both")
 
 # Panel 3: νF_ν vs λ (luminosity-weighted in rest-frame wavelength space)
 ax = axes[2]
-ax.loglog(lambda_rest, nu_f_nu, "C2-", lw=1.5, label="Same SED")
+ax.loglog(lambda_rest, nu_f_nu, "C2-", lw=1.5)
 peak_idx_nufnu = np.argmax(nu_f_nu)
 ax.plot(
     lambda_rest[peak_idx_nufnu],
     nu_f_nu[peak_idx_nufnu],
     "o",
     color="C2",
-    markersize=6,
-    markeredgewidth=0.5,
-    markeredgecolor="white",
+    markersize=5,
+    markeredgewidth=0,
 )
-ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [Å]", fontsize=10)
-ax.set_ylabel(r"$\nu F_\nu$ [erg/s/cm²]", fontsize=10)
-ax.set_title(r"$\nu F_\nu$ vs $\lambda$ (luminosity-weighted)", fontsize=10, fontweight="bold")
-ax.grid(True, alpha=0.3, which="both")
-ax.text(
-    0.05,
-    0.95,
-    f"Peak: {lambda_rest[peak_idx_nufnu]:.0f} Å",
-    transform=ax.transAxes,
-    fontsize=8,
-    verticalalignment="top",
-    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
-)
-
-# Overall title and layout
-fig.suptitle(
-    r"Same SED, Three Conventions: Peak Position Depends on Unit Choice",
-    fontsize=11,
-    fontweight="bold",
-    y=1.02,
-)
-fig.text(
-    0.5,
-    -0.08,
-    "Galaxy: truncated skew-normal SFH, peak at 2 Gyr lookback, solar metallicity, z=0.05",
-    ha="center",
-    fontsize=8,
-    style="italic",
-)
+ax.set_xlabel(r"Wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu F_\nu$ [erg s$^{-1}$ cm$^{-2}$]")
+ax.grid(True, alpha=0.25, which="both")
 
 fig.tight_layout()
 plt.savefig("plot_fnu_vs_flambda_units.png", dpi=150, bbox_inches="tight")

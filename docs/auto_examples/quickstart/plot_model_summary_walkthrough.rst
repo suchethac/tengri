@@ -21,18 +21,13 @@
 Understanding model structure through parameter provenance tags
 ==============================================================
 
-.. image:: images/sphx_glr_plot_model_summary_walkthrough_001.png
-   :alt: plot model summary walkthrough
-   :class: sphx-glr-single-img
-
-
 The ``model.spec.summary()`` method displays each parameter's source
 through provenance tags: ``[user]`` for explicit overrides, ``[* FREE]``
 and ``[* FIXED]`` for wildcard expansions, and ``[default]`` for
 registry defaults. We build a model with mixed constraints, display the
 annotated summary as a figure caption, and show the predicted SED.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-104
+.. GENERATED FROM PYTHON SOURCE LINES 11-108
 
 
 
@@ -47,6 +42,10 @@ annotated summary as a figure caption, and show the predicted SED.
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -139,12 +138,12 @@ annotated summary as a figure caption, and show the predicted SED.
     ax_sed.grid(True, alpha=0.2, which="both")
 
     fig.tight_layout()
-    plt.show()
+    plt.savefig("plot_model_summary_walkthrough.png", dpi=150, bbox_inches="tight")
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.360 seconds)
+   **Total running time of the script:** (0 minutes 2.917 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_model_summary_walkthrough.py:

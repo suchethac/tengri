@@ -98,6 +98,5 @@ ax_top = ax.secondary_xaxis(
 ax_top.set_xlabel(r"$\log E$ (keV)")
 
 ax.legend(frameon=True, fontsize=10, loc="lower right", title="component")
-ax.set_title("X-ray SED components (Yang+2020 X-CIGALE; AGN-dominated)")
 fig.tight_layout()
 plt.savefig("plot_xray_component_decomposition.png", dpi=150, bbox_inches="tight")

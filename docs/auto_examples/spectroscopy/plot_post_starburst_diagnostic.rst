@@ -21,11 +21,6 @@
 Post-Starburst K+A Diagnostic: Hδ_A vs Time Since Quench
 =========================================================
 
-.. image:: images/sphx_glr_plot_post_starburst_diagnostic_001.png
-   :alt: plot post starburst diagnostic
-   :class: sphx-glr-single-img
-
-
 A classic post-starburst (PSB) / K+A galaxy signature: strong Balmer
 absorption lines (high Hδ_A) with no emission, visible only in a narrow
 window after a recent burst of star formation has been abruptly quenched.
@@ -61,19 +56,8 @@ References
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.2 Gyr is narrower than the SSP grid spacing 0.243 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1.8 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.243 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

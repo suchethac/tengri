@@ -34,17 +34,24 @@ X-ray-weak.
 Reference: Lusso & Risaliti 2016, ApJ, 819, 154
 (α_OX–L_UV relation); Tananbaum 1979, ApJ, 234, L9 (definition of α_OX).
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-133
+.. GENERATED FROM PYTHON SOURCE LINES 18-132
 
 
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_alpha_ox_lusso_risaliti_001.png
+   :alt: AGN Disc: UV-to-X-ray Spectral Slope vs. Luminosity
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_alpha_ox_lusso_risaliti_001.png
+   :class: sphx-glr-single-img
 
 
 .. rst-class:: sphx-glr-script-out
 
  .. code-block:: none
 
-    α_OX values: min=-0.449, max=-0.246
-    Log L_2500: min=28.08, max=31.44
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    α_OX values: min=-0.453, max=0.180
+    Log L_2500: min=28.08, max=30.71
 
 
 
@@ -166,10 +173,14 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154
 
     fig.tight_layout()
     plt.savefig("plot_alpha_ox_lusso_risaliti.png", dpi=150, bbox_inches="tight")
-    plt.close()
 
     print(f"α_OX values: min={alpha_ox_values.min():.3f}, max={alpha_ox_values.max():.3f}")
     print(f"Log L_2500: min={log_l_2500_values.min():.2f}, max={log_l_2500_values.max():.2f}")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.532 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py:

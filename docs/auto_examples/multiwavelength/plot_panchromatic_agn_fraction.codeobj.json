@@ -17,31 +17,40 @@
    "name": "ndarray"
   }
  ],
- "agn_fracs.max": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  }
- ],
- "agn_fracs.min": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  }
- ],
- "agn_peak": [
+ "agn_log_lbol": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
    "name": "float64"
+  }
+ ],
+ "agn_log_lbols": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "agn_log_lbols.max": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  }
+ ],
+ "agn_log_lbols.min": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
   }
  ],
  "ax": [
@@ -534,31 +543,6 @@
    "name": "PRNGKey"
   }
  ],
- "jnp.asarray": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jax.numpy",
-   "module_short": "jax.numpy",
-   "name": "asarray"
-  }
- ],
- "log_lbol_agn": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "float"
-  }
- ],
  "mask": [
   {
    "is_class": false,
@@ -685,22 +669,6 @@
    "name": "asarray"
   }
  ],
- "np.nanmax": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "nanmax"
-  }
- ],
  "nu": [
   {
    "is_class": false,
@@ -735,7 +703,7 @@
    "name": "environ"
   }
  ],
- "out_star": [
+ "out": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -758,7 +726,7 @@
    "name": "SEDResult"
   }
  ],
- "out_star.sed": [
+ "out.sed": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -774,7 +742,7 @@
    "name": "ArrayImpl"
   }
  ],
- "out_star.wavelength": [
+ "out.wavelength": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -788,6 +756,15 @@
    "module": "jaxlib",
    "module_short": "jaxlib",
    "name": "ArrayImpl"
+  }
+ ],
+ "params": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
   }
  ],
  "plt.Normalize": [
@@ -898,34 +875,7 @@
    "name": "subplots"
   }
  ],
- "sed_agn": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "sed_agn_norm": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "sed_composite": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "sed_stellar": [
+ "sed": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -985,15 +935,6 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "SSPData"
-  }
- ],
- "stellar_peak": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
   }
  ],
  "tengri.FIXED": [
@@ -1105,22 +1046,6 @@
    "module": "tengri.SEDModel",
    "module_short": "tengri.SEDModel",
    "name": "build"
-  }
- ],
- "tengri.components.agn.compute_qsogen_sed": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.agn",
-   "module_short": "tengri.components.agn",
-   "name": "compute_qsogen_sed"
   }
  ],
  "tengri.load_ssp": [

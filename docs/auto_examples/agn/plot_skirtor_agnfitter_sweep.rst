@@ -21,11 +21,6 @@
 SKIRTOR_mean_3p torus: optical depth and inclination
 ====================================================
 
-.. image:: images/sphx_glr_plot_skirtor_agnfitter_sweep_001.png
-   :alt: plot skirtor agnfitter sweep
-   :class: sphx-glr-single-img
-
-
 The SKIRTOR_mean_3p torus is the Stalevski+2016 clumpy two-phase torus library
 averaged over its clumpiness parameters, as packaged by AGNfitter-rX. Three
 observables remain: the half-opening angle ``oa``, the equatorial optical depth
@@ -180,7 +175,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.923 seconds)
+   **Total running time of the script:** (0 minutes 3.027 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_agnfitter_sweep.py:

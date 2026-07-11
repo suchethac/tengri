@@ -103,5 +103,5 @@ ax.set_ylabel(r"Residual [mmag] (manual − predict\_photometry)")
 ax.grid(True, alpha=0.3)
 ax.legend(loc="upper left", frameon=False, fontsize=8)
 
-plt.tight_layout()
-plt.show()
+fig.tight_layout()
+plt.savefig("plot_diag_filter_integral_manual.png", dpi=150, bbox_inches="tight")

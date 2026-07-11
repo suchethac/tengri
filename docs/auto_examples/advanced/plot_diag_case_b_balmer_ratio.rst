@@ -21,11 +21,6 @@
 Case B Hα/Hβ ratio across ionization and metallicity
 =====================================================
 
-.. image:: images/sphx_glr_plot_diag_case_b_balmer_ratio_001.png
-   :alt: plot diag case b balmer ratio
-   :class: sphx-glr-single-img
-
-
 In the dust-free limit with Case B recombination (T_e=10,000 K, n_e=100 cm^-3),
 the intrinsic Hα/Hβ ratio is 2.86, nearly independent of ionization parameter
 and metallicity below ~0.5 Zsun (Storey & Hummer 1995, MNRAS 272, 41). This
@@ -143,7 +138,7 @@ of logU ∈ [−4, −2] and logZ_gas ∈ [−2, 0.5].
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.065 seconds)
+   **Total running time of the script:** (0 minutes 5.837 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_case_b_balmer_ratio.py:

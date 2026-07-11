@@ -16,7 +16,8 @@ import jax.random as jr
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import FREE, Fixed, SEDModel, load_ssp, setup_style
+from tengri import FREE, Fixed, SEDModel, load_ssp
+from tengri.analysis.plotting import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -85,4 +86,4 @@ for ax, sfr_samples, color, label in [
 
 fig.legend(["Mean SFH"], loc="upper center", bbox_to_anchor=(0.5, 1.02), fontsize=10)
 fig.tight_layout()
-plt.show()
+plt.savefig("plot_continuity_vs_bursty_psd.png", dpi=150, bbox_inches="tight")

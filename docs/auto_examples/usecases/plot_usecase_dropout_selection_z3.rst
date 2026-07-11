@@ -21,11 +21,6 @@
 z~3 Lyman-break galaxy U-dropout selection: color-color diagnosis
 ===================================================================
 
-.. image:: images/sphx_glr_plot_usecase_dropout_selection_z3_001.png
-   :alt: plot usecase dropout selection z3
-   :class: sphx-glr-single-img
-
-
 Demonstrates the U-dropout (Lyman-break) selection technique for identifying
 galaxies at redshift z~3 based on rest-frame ultraviolet color-color selection.
 Generates 200 mock galaxies spanning z = 0.1–4.0 with both star-forming and
@@ -41,12 +36,12 @@ True z~3 galaxies cluster inside the box; lower-redshift galaxies fall outside,
 demonstrating the technique's redshift selectivity. References: Steidel+1996,
 Madau+1996 dropout technique.
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-207
+.. GENERATED FROM PYTHON SOURCE LINES 20-205
 
 
 
 .. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_dropout_selection_z3_001.png
-   :alt: Lyman-break galaxy z~3 U-dropout selection
+   :alt: plot usecase dropout selection z3
    :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_dropout_selection_z3_001.png
    :class: sphx-glr-single-img
 
@@ -226,12 +221,11 @@ Madau+1996 dropout technique.
     # Colorbar
     cbar = plt.colorbar(scatter, ax=ax, label=r"Redshift $z$")
 
-    # Axis labels and title
+    # Axis labels
     ax.set_xlim(-0.5, 2.0)
     ax.set_ylim(-0.5, 2.5)
     ax.set_xlabel(r"$G - R$ [mag, obs-frame]")
     ax.set_ylabel(r"$U - G$ [mag, obs-frame]")
-    ax.set_title("Lyman-break galaxy z~3 U-dropout selection")
     ax.legend(frameon=False, loc="upper left", fontsize=10)
 
     # Add region annotations
@@ -242,12 +236,11 @@ Madau+1996 dropout technique.
 
     fig.tight_layout()
     plt.savefig("plot_usecase_dropout_selection_z3.png", dpi=150, bbox_inches="tight")
-    plt.show()
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.375 seconds)
+   **Total running time of the script:** (0 minutes 3.659 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_dropout_selection_z3.py:

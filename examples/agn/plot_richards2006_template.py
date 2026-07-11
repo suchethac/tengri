@@ -27,8 +27,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.agn import multicolor_disc, qsogen, richards2006
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn import multicolor_disc, qsogen, richards2006
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

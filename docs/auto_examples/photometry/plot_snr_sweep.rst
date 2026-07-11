@@ -21,11 +21,6 @@
 Posterior width tracks 1/SNR for fixed-truth SDSS photometry
 =============================================================
 
-.. image:: images/sphx_glr_plot_snr_sweep_001.png
-   :alt: plot snr sweep
-   :class: sphx-glr-single-img
-
-
 Same star-forming galaxy, same SDSS *ugriz* set, three signal-to-noise
 levels (5, 20, 100). For each S/N we mock the photometry, run a MAP
 fit, and overlay the recovered SED on the truth. The figure surfaces the
@@ -37,6 +32,17 @@ mag in the *u* band.
 Reference: Conroy 2013, ARA&A, 51, 393.
 
 .. GENERATED FROM PYTHON SOURCE LINES 15-95
+
+
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_snr_sweep_001.png
+   :alt: plot snr sweep
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_snr_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -120,6 +126,11 @@ Reference: Conroy 2013, ARA&A, 51, 393.
     ax.legend(frameon=False, fontsize=8, loc="lower right")
     fig.tight_layout()
     plt.savefig("plot_snr_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 15.205 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_snr_sweep.py:

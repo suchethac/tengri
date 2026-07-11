@@ -179,6 +179,4 @@ ax_norm.grid(True, alpha=0.3, which="both")
 ax_norm.axhline(y=1.0, color="gray", linestyle="--", alpha=0.5)
 
 fig.tight_layout()
-
-# Save to script directory
-plt.show()
+plt.savefig("plot_cosmic_dimming_observed_flux.png", dpi=150, bbox_inches="tight")

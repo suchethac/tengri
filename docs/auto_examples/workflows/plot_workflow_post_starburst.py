@@ -31,7 +31,6 @@ ssp = tengri.load_ssp()
 bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
-# --- Truth: post-starburst (E+A) --- burst 500 Myr ago, then quench
 key = jax.random.PRNGKey(42)
 truth_params = {
     "sfh_tsnorm_log_total_mass": 1.5,
@@ -55,7 +54,6 @@ model_truth = tengri.SEDModel.build(
 )
 mock = model_truth.mock(truth_params, snr=20.0, key=key)
 
-# --- Fit 1: correct model (tsnorm) ---
 model_correct = tengri.SEDModel.build(
     ssp,
     observation=obs,
@@ -87,7 +85,6 @@ post_correct = forward_correct.fit(
     verbose=False,
 )
 
-# --- Fit 2: wrong model (DPL, smooth) ---
 model_wrong = tengri.SEDModel.build(
     ssp,
     observation=obs,
@@ -118,7 +115,6 @@ post_wrong = forward_wrong.fit(
     verbose=False,
 )
 
-# --- Plot: SFH comparison ---
 sfh_true = model_truth.predict_sfh(truth_params)
 sfh_correct = model_correct.predict_sfh(post_correct.params)
 sfh_wrong = model_wrong.predict_sfh(post_wrong.params)
@@ -158,8 +154,8 @@ ax.plot(
     label="DPL fit (wrong model)",
 )
 
-ax.axvline(0.5, color="grey", ls=":", lw=1, alpha=0.5)
-ax.text(0.5, ax.get_ylim()[1] * 0.9, "Quench epoch", fontsize=9, color="grey")
+ax.axvline(0.5, color="gray", ls=":", lw=1, alpha=0.5)
+ax.text(0.5, ax.get_ylim()[1] * 0.9, "Quench epoch", fontsize=9, color="gray")
 
 ax.set_xlabel("Lookback time [Gyr]")
 ax.set_ylabel(r"SFR [M$_\odot$ yr$^{-1}$]")

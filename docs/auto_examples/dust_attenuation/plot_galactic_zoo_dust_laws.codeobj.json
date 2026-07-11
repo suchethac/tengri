@@ -1,13 +1,4 @@
 {
- "COLORS": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "list"
-  }
- ],
  "C_AA_PER_S": [
   {
    "is_class": false,
@@ -290,62 +281,20 @@
    "name": "Artist.set"
   }
  ],
- "ax.text": [
+ "cmap": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "matplotlib.axes._axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.text"
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "ListedColormap"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib",
    "module_short": "matplotlib",
-   "name": "Axes.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._base",
-   "module_short": "matplotlib.axes._base",
-   "name": "_AxesBase.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "_AxesBase.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "_AxesBase.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.artist",
-   "module_short": "matplotlib.artist",
-   "name": "Artist.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Artist.text"
+   "name": "ListedColormap"
   }
  ],
  "color": [
@@ -354,7 +303,16 @@
    "is_explicit": false,
    "module": "builtins",
    "module_short": "builtins",
-   "name": "str"
+   "name": "tuple"
+  }
+ ],
+ "colors": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
   }
  ],
  "fig": [
@@ -442,6 +400,15 @@
    "name": "str"
   }
  ],
+ "label.split": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  }
+ ],
  "law": [
   {
    "is_class": false,
@@ -449,6 +416,22 @@
    "module": "builtins",
    "module_short": "builtins",
    "name": "str"
+  }
+ ],
+ "laws_table": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.registry",
+   "module_short": "tengri.registry",
+   "name": "_RegistryTable"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "_RegistryTable"
   }
  ],
  "model": [
@@ -520,6 +503,15 @@
    "name": "Parameters.sample"
   }
  ],
+ "n_laws": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
  "np.asarray": [
   {
    "is_class": false,
@@ -579,6 +571,22 @@
    "name": "dict"
   }
  ],
+ "plt.get_cmap": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "get_cmap"
+  }
+ ],
  "plt.savefig": [
   {
    "is_class": false,
@@ -593,22 +601,6 @@
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
    "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
   }
  ],
  "plt.subplots": [
@@ -876,6 +868,22 @@
    "module": "tengri.SEDModel",
    "module_short": "tengri.SEDModel",
    "name": "build"
+  }
+ ],
+ "tengri.list_dust_laws": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "list_dust_laws"
   }
  ],
  "tengri.load_ssp": [

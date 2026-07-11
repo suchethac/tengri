@@ -21,11 +21,6 @@
 The photo-z degeneracy: dusty z≈0.3 vs unobscured z≈3.5
 ========================================================
 
-.. image:: images/sphx_glr_plot_workflow_photoz_degeneracy_001.png
-   :alt: plot workflow photoz degeneracy
-   :class: sphx-glr-single-img
-
-
 Two galaxies with very different physical properties — a dusty
 star-forming galaxy at z=0.3 and an unobscured Lyman-break galaxy
 at z=3.5 — can produce nearly identical *ugrizY* broadband fluxes.
@@ -41,7 +36,7 @@ References:
 - Steidel et al. 1996, AJ, 112, 352 (LBG dropout selection)
 - Massarotti, Iovino & Buzzoni 2001, A&A, 368, 74 (photo-z degeneracies)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-170
+.. GENERATED FROM PYTHON SOURCE LINES 20-167
 
 
 
@@ -51,19 +46,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 22% of its stellar mass before the Big Bang at z=3.50 (cosmic age 1.81 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -119,17 +103,14 @@ References:
         return model, p
 
 
-    # Two galaxies tuned to land at comparable g/r/i/z flux levels.
     m_low, p_low = _make(z_value=0.3, tau_diff=1.4, peak_lbt=3.0, log_total_mass=10.0)
     m_hi, p_hi = _make(z_value=3.5, tau_diff=0.05, peak_lbt=0.2, log_total_mass=10.0)
 
     flux_low = np.array(m_low.predict_photometry(p_low))
     flux_hi = np.array(m_hi.predict_photometry(p_hi))
-    # Rescale the high-z so the r-band flux matches.
     flux_hi = flux_hi * (flux_low[2] / flux_hi[2])
 
 
-    # Pull full rest-SEDs and shift to observed frame for the top panel.
     def _rest_to_obs(model, params, z, scale):
         out = model.predict_rest_sed(params)
         wave_obs = np.asarray(out.wavelength) * (1.0 + z)

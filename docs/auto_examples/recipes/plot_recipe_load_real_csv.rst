@@ -21,16 +21,22 @@
 Load and fit photometry from CSV
 ================================
 
-.. image:: images/sphx_glr_plot_recipe_load_real_csv_001.png
+How do I load measured photometry from a table and fit it? This recipe
+generates mock photometry for 3 galaxies and fits each one independently
+with a MAP fit, demonstrating the workflow for catalog-scale SED fitting.
+
+.. GENERATED FROM PYTHON SOURCE LINES 9-102
+
+
+
+.. image-sg:: /auto_examples/recipes/images/sphx_glr_plot_recipe_load_real_csv_001.png
    :alt: plot recipe load real csv
+   :srcset: /auto_examples/recipes/images/sphx_glr_plot_recipe_load_real_csv_001.png
    :class: sphx-glr-single-img
 
 
-How do I load measured photometry from a table and fit it? This recipe
-generates mock photometry for 3 galaxies and fits each one independently
-with a MAP fit, demonstrating the workflow for catalogue-scale SED fitting.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-102
+
 
 .. code-block:: Python
 
@@ -127,6 +133,11 @@ with a MAP fit, demonstrating the workflow for catalogue-scale SED fitting.
 
     fig.tight_layout()
     plt.savefig("plot_recipe_load_real_csv.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 8.597 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_load_real_csv.py:

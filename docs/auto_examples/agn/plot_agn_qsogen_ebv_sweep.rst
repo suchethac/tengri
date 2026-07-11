@@ -18,18 +18,13 @@
 .. _sphx_glr_auto_examples_agn_plot_agn_qsogen_ebv_sweep.py:
 
 
-QSO continuum: polar-dust reddening tunes UV to optical colour
+QSO continuum: polar-dust reddening tunes UV to optical color
 ==============================================================
-
-.. image:: images/sphx_glr_plot_agn_qsogen_ebv_sweep_001.png
-   :alt: plot agn qsogen ebv sweep
-   :class: sphx-glr-single-img
-
 
 Dust-free quasar spectra are intrinsically blue in the UV and optical.
 Adding a polar-dust attenuation component reddens the accretion-disc
 continuum: increasing the polar-dust reddening ``agn_polar_ebv`` (E(B−V),
-[mag]) from 0 to 0.4 walks the SED from unobscured type-1 QSO colours to
+[mag]) from 0 to 0.4 walks the SED from unobscured type-1 QSO colors to
 a moderately dust-reddened continuum, while the absorbed UV energy is
 re-radiated as a polar-dust infrared bump.
 
@@ -132,7 +127,7 @@ fitted, so no inference is run.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.965 seconds)
+   **Total running time of the script:** (0 minutes 2.644 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_qsogen_ebv_sweep.py:

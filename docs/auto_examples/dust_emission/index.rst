@@ -20,40 +20,6 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Per-H grain volume distribution versus grain radius for the Hensley &amp; Draine 2023 fiducial size distribution (MW high-latitude R_V=3.1 sightline).">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_astrodust_hd23_01_size_distribution_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_emission/plot_astrodust_hd23_01_size_distribution`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Astrodust+PAH size distribution</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Emission per H per ionization parameter U across the Hensley &amp; Draine 2023 grid. Dividing by U reveals its effect: PAH-to-FIR ratio plateaus in FIR (U-independent) but rises steeply with U in MIR.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_astrodust_hd23_02_emission_vs_lgU_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_emission/plot_astrodust_hd23_02_emission_vs_lgU`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Astrodust+PAH emission vs log U</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Per-component breakdown (Astrodust continuum, PAHs, spinning dust) at the Hensley &amp; Draine 2023 fiducial ionization parameter \log_{10} U = 0.2.">
 
 .. only:: html
@@ -71,92 +37,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare dust emission templates at fixed infrared luminosity. Shows how spectral shape changes across modified-blackbody, Draine+2021 PAHspec, and Hensley &amp; Draine 2023 Astrodust while bolometric output remains conserved.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_astrodust_hd23_04_sedmodel_dust_emission_swap_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_emission/plot_astrodust_hd23_04_sedmodel_dust_emission_swap`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">DustEmissionSEDComponent — swap MBB / PAHspec / Astrodust</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Ionization fraction and alignment efficiency versus grain size for the Hensley &amp; Draine 2023 fiducial size distribution.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_astrodust_hd23_05_ionization_alignment_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_emission/plot_astrodust_hd23_05_ionization_alignment`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Astrodust+PAH ionization fraction and alignment</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Extinction opacity, polarized extinction, and single-scattering albedo for the Hensley &amp; Draine 2023 fiducial size distribution.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_astrodust_hd23_06_extinction_and_scattering_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_emission/plot_astrodust_hd23_06_extinction_and_scattering`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Astrodust+PAH extinction, scattering, and albedo</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Spinning dust microwave emission across 10–100 GHz, decomposed by grain (Astrodust/PAH) and phase (CNM/WNM), for the Hensley &amp; Draine 2023 fiducial.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_astrodust_hd23_07_spinning_dust_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_emission/plot_astrodust_hd23_07_spinning_dust`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Astrodust+PAH spinning-dust microwave emission</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Polarized emission and polarization fraction from Astrodust grains at the Hensley &amp; Draine 2023 fiducial ionization parameter.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_astrodust_hd23_08_polarized_emission_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_emission/plot_astrodust_hd23_08_polarized_emission`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Astrodust+PAH polarized emission and polarization fraction</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The BOSA infrared template library is parametrised jointly by total infrared luminosity log L_TIR and specific star formation rate log sSFR. Neither axis alone tells the full story: at fixed sSFR the FIR peak migrates with L_TIR (dust temperature), while at fixed L_TIR the PAH mid-IR forest brightens with sSFR. Three side-by-side panels at fixed sSFR overlay three L_TIR values each, making the 2-D dependence legible in a single figure rather than two skinny 1-D loops.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The BOSA infrared template library is parametrized jointly by total infrared luminosity log L_TIR and specific star formation rate log sSFR. Neither axis alone tells the full story: at fixed sSFR the FIR peak migrates with L_TIR (dust temperature), while at fixed L_TIR the PAH mid-IR forest brightens with sSFR. Three side-by-side panels at fixed sSFR overlay three L_TIR values each, making the 2-D dependence legible in a single figure rather than two skinny 1-D loops.">
 
 .. only:: html
 
@@ -173,7 +54,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep infrared luminosity across the BOSA grid at fixed specific star formation rate. Increasing L_TIR heats dust, shifting FIR peak blueward and enhancing PAH relative to continuum. Library is normalised by ∫Lν dν=1; shape variation with L_TIR is intentionally small.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep infrared luminosity across the BOSA grid at fixed specific star formation rate. Increasing L_TIR heats dust, shifting FIR peak blueward and enhancing PAH relative to continuum. Library is normalized by ∫Lν dν=1; shape variation with L_TIR is intentionally small.">
 
 .. only:: html
 
@@ -258,7 +139,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The mid-infrared ionisation-parameter sensitivity is library-specific, but the FIR-peak migration with rising log U is a universal prediction. We overlay the Hensley &amp; Draine 2023 (Astrodust+PAH) and the Draine+2021 PAHspec libraries at the same three log U values to surface where the two agree (FIR peak position) and where they differ (MIR PAH-feature strength and the Astrodust silicate plateau near 18 microns).">
+    <div class="sphx-glr-thumbcontainer" tooltip="The mid-infrared ionization-parameter sensitivity is library-specific, but the FIR-peak migration with rising log U is a universal prediction. We overlay the Hensley &amp; Draine 2023 (Astrodust+PAH) and the Draine+2021 PAHspec libraries at the same three log U values to surface where the two agree (FIR peak position) and where they differ (MIR PAH-feature strength and the Astrodust silicate plateau near 18 microns).">
 
 .. only:: html
 
@@ -436,14 +317,7 @@ Astrodust (HD23) template grids.
 .. toctree::
    :hidden:
 
-   /auto_examples/dust_emission/plot_astrodust_hd23_01_size_distribution
-   /auto_examples/dust_emission/plot_astrodust_hd23_02_emission_vs_lgU
    /auto_examples/dust_emission/plot_astrodust_hd23_03_components_at_fiducial_U
-   /auto_examples/dust_emission/plot_astrodust_hd23_04_sedmodel_dust_emission_swap
-   /auto_examples/dust_emission/plot_astrodust_hd23_05_ionization_alignment
-   /auto_examples/dust_emission/plot_astrodust_hd23_06_extinction_and_scattering
-   /auto_examples/dust_emission/plot_astrodust_hd23_07_spinning_dust
-   /auto_examples/dust_emission/plot_astrodust_hd23_08_polarized_emission
    /auto_examples/dust_emission/plot_bosa_grid
    /auto_examples/dust_emission/plot_bosa_ltir_sweep
    /auto_examples/dust_emission/plot_dale2014_agn_fraction

@@ -21,17 +21,12 @@
 delta_alpha_OX pivots the X-ray spectrum about the disc UV anchor
 ==================================================================
 
-.. image:: images/sphx_glr_plot_alpha_ox_uv_xray_connection_001.png
-   :alt: plot alpha ox uv xray connection
-   :class: sphx-glr-single-img
-
-
 Reproduces the UV-to-X-ray connection panel from Yang et al. 2020
-(X-CIGALE Fig. 3): the X-ray corona is normalised through the Just+07
+(X-CIGALE Fig. 3): the X-ray corona is normalized through the Just+07
 alpha_OX-L_2500 relation, anchored at the disc-derived L_2500. Offsets
 ``delta_alpha_OX`` from -0.3 to +0.3 dex pivot the X-ray power-law
 about the 2500 A anchor — the disc UV stays fixed (single curve at
-log lam > 1), only the X-ray normalisation moves.
+log lam > 1), only the X-ray normalization moves.
 
 The "observable X-ray" annotation marks the practical lower-energy
 limit (around 0.5 keV / 25 A) below which interstellar absorption
@@ -66,8 +61,8 @@ Just et al. 2007, ApJ 665, 1004.
     import matplotlib.pyplot as plt
     import numpy as np
 
+    from tengri.agn import multicolor_disc
     from tengri.analysis.plotting import setup_style
-    from tengri.components.agn import multicolor_disc
     from tengri.xray import xray_agn_corona
 
     setup_style()

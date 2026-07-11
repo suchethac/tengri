@@ -23,8 +23,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.analysis.plotting import setup_style
-from tengri.components.stellar.sfh import closed_box_metallicity
-from tengri.utils.cosmology import age_at_z0
+from tengri.cosmology import age_at_z0
+from tengri.sfh import closed_box_metallicity
 
 setup_style()
 

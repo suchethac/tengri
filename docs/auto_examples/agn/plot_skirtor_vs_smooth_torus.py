@@ -9,12 +9,12 @@ luminosity in the mid-IR; the mid-IR peak amplitude differs by
 heating more efficiently into the bright NIR-MIR continuum than a
 smooth-density torus. tengri does not ship Fritz+2006 directly; we
 substitute Silva+04 (template-based smooth torus, the closest
-contemporary analogue) — the qualitative contrast (clumpy bright
+contemporary analog) — the qualitative contrast (clumpy bright
 MIR vs smooth fainter MIR) is preserved.
 
-Both runs use the same Kubota-Done multicolour disc at log L_bol =
+Both runs use the same Kubota-Done multicolor disc at log L_bol =
 12.5 (in L_sun units), Type-1 viewing (cos_inc = 0.95), and are
-peak-normalised so the SED *shape* difference is what stands out.
+peak-normalized so the SED *shape* difference is what stands out.
 
 Reference: Yang et al. 2020, MNRAS 491, 740 (X-CIGALE) Fig. 2;
 Stalevski et al. 2016, MNRAS 458, 2288 (SKIRTOR);
@@ -40,7 +40,7 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 C_AA_PER_S = 2.998e18
 # Negligible host SFH: total mass ~1e-10 Msun, completely subdominant
 # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
-# ``const`` SFH parametrises by total mass over [start_gyr, end_gyr].
+# ``const`` SFH parametrizes by total mass over [start_gyr, end_gyr].
 SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
 DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 ssp = tengri.load_ssp()
@@ -82,7 +82,7 @@ l_silv_norm = l_silv / l_silv[ref]
 
 fig, ax = plt.subplots(figsize=(7.5, 4.6))
 ax.plot(log_lam_nm, np.log10(l_skir_norm), color="C0", lw=1.8, label="SKIRTOR")
-ax.plot(log_lam_nm, np.log10(l_silv_norm), color="C1", lw=1.8, label="Silva+04 (Fritz analogue)")
+ax.plot(log_lam_nm, np.log10(l_silv_norm), color="C1", lw=1.8, label="Silva+04 (Fritz analog)")
 ax.set(
     xlim=(1.0, 6.0),
     ylim=(-3.0, 2.5),

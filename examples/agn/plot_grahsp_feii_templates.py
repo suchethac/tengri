@@ -24,9 +24,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from tengri.agn import GRAHSPParams, evaluate_grahsp_agn, load_grahsp_templates
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn.grahsp.model import GRAHSPParams, evaluate_grahsp_agn
-from tengri.components.agn.grahsp.templates import load_grahsp_templates
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

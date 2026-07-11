@@ -35,7 +35,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed directly from the model&#x27;s rest-frame SED via continuum-subtracted boxcar integration around each line centre, swept across a stellar metallicity grid. The Kewley+2001 and Kauffmann+2003 demarcation lines are overlaid for context.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed directly from the model&#x27;s rest-frame SED via continuum-subtracted boxcar integration around each line center, swept across a stellar metallicity grid. The Kewley+2001 and Kauffmann+2003 demarcation lines are overlaid for context.">
 
 .. only:: html
 
@@ -86,7 +86,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates running MAP inference on SDSS photometry and comparing the MAP fit to the ground truth SFH. MAP provides a point estimate of the posterior without sampling overhead; for uncertainty quantification, posterior sampling methods (NUTS, VI) would be needed.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates the simplest inference workflow: building a flexible SFH model with free dust parameters, generating mock photometry at S/N = 20, then running MAP to recover the input star formation history and dust attenuation. The figure shows the recovered SFH (dashed) against the ground truth (solid).">
 
 .. only:: html
 
@@ -97,7 +97,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Inference method comparison: MAP as reference for SFH recovery</div>
+      <div class="sphx-glr-thumbnail-title">Recovering a truncated-skew-normal SFH from SDSS photometry via MAP</div>
     </div>
 
 

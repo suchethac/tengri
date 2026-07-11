@@ -21,11 +21,6 @@
 Automatic differentiation: parameter sensitivities via jax.grad
 ===============================================================
 
-.. image:: images/sphx_glr_plot_jax_gradient_sensitivity_001.png
-   :alt: plot jax gradient sensitivity
-   :class: sphx-glr-single-img
-
-
 Every photometric band's flux is a differentiable function of model parameters.
 This example computes sensitivities ∂(log F) / ∂(log θ) — the logarithmic
 elasticity of each photometric band to changes in four key stellar population
@@ -142,7 +137,7 @@ References:
 
             # Convert params dict to a JAX-compatible form for autodiff
             # Create a function that accepts a single parameter value and returns flux
-            def flux_array_for_param(param_value):
+            def flux_array_for_param(param_value, param_key=param_key):
                 """Predict photometric flux for a given parameter value (scalar JAX array)."""
                 test_params = dict(baseline_params)
                 # Ensure the parameter is stored as a JAX array
@@ -165,7 +160,7 @@ References:
             band_sensitivities = []
             for band_idx in range(len(band_names)):
 
-                def log_flux_band(log_param):
+                def log_flux_band(log_param, band_idx=band_idx):
                     """Log-flux of a single band as function of log parameter."""
                     param = jnp.exp(log_param)
                     fluxes = flux_array_for_param(param)
@@ -217,7 +212,7 @@ References:
     ax.set_ylabel("Photometric Band", fontsize=10)
 
     fig.tight_layout()
-    plt.show()
+    plt.savefig("plot_jax_gradient_sensitivity.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_showcase_plot_jax_gradient_sensitivity.py:

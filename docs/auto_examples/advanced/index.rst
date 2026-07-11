@@ -97,7 +97,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Chabrier 2003 IMF — analytic normalisation and SSP mean stellar mass</div>
+      <div class="sphx-glr-thumbnail-title">Chabrier 2003 IMF — analytic normalization and SSP mean stellar mass</div>
     </div>
 
 

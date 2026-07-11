@@ -29,7 +29,7 @@ Demonstrates redshift-induced line migration and relative strength in
 the high-z star-forming regime, useful for planning JWST observations
 at z ≳ 6.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-145
+.. GENERATED FROM PYTHON SOURCE LINES 13-144
 
 
 
@@ -39,20 +39,8 @@ at z ≳ 6.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=7.00 (cosmic age 0.76 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    Saved: plot_jwst_nirspec_high_z_spectrum.png
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -187,7 +175,6 @@ at z ≳ 6.
     ax.set_ylabel(r"$F_\lambda$ [arbitrary]")
 
     plt.savefig("plot_jwst_nirspec_high_z_spectrum.png", dpi=150, bbox_inches="tight")
-    print("Saved: plot_jwst_nirspec_high_z_spectrum.png")
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_jwst_nirspec_high_z_spectrum.py:

@@ -124,10 +124,3 @@ ax.legend(loc="upper left", frameon=False, fontsize=9)
 
 plt.tight_layout()
 plt.savefig("plot_diag_mass_conservation_sfh.png", dpi=150, bbox_inches="tight")
-
-# Print summary
-print("\nMass conservation diagnostic:")
-print(f"N combos: {len(m_manual)}")
-print(f"Mean relative error: {mean_error:.2%}")
-print(f"Max relative error: {max_error:.2%}")
-print(f"Status: {'PASS' if max_error < 0.05 else 'FAIL (> 5%)'}")

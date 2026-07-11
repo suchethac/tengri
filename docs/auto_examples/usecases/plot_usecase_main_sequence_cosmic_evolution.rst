@@ -21,11 +21,6 @@
 Star-forming main sequence: z = 0 → 2 cosmic evolution + recovery
 ==================================================================
 
-.. image:: images/sphx_glr_plot_usecase_main_sequence_cosmic_evolution_001.png
-   :alt: plot usecase main sequence cosmic evolution
-   :class: sphx-glr-single-img
-
-
 The star-forming main sequence (MS) defines a tight relation between stellar
 mass (M*) and star formation rate (SFR) for actively forming galaxies. This
 example demonstrates how the MS **shifts upward by ~0.7 dex** from z=0 to z=2,

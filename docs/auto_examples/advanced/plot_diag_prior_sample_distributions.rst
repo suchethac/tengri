@@ -21,11 +21,6 @@
 Diagnosing prior sampling distributions with empirical histograms
 ==================================================================
 
-.. image:: images/sphx_glr_plot_diag_prior_sample_distributions_001.png
-   :alt: plot diag prior sample distributions
-   :class: sphx-glr-single-img
-
-
 When constructing a model with priors like ``Uniform(0, 2)``, the sampling
 method ``model.spec.sample(key)`` should actually draw from that declared
 distribution. This example verifies the sampling implementation empirically:
@@ -35,7 +30,7 @@ and compare each empirical histogram against its theoretical PDF.
 For each parameter, we compute the Kolmogorov-Smirnov (KS) statistic to flag
 any significant deviation (KS > 0.05 suggests a bug in the sampler).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-115
+.. GENERATED FROM PYTHON SOURCE LINES 14-107
 
 
 
@@ -45,18 +40,8 @@ any significant deviation (KS > 0.05 suggests a bug in the sampler).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    All correct. Worst KS: sfh_dpl_alpha = 0.0087
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -152,20 +137,12 @@ any significant deviation (KS > 0.05 suggests a bug in the sampler).
         axes[idx].set_visible(False)
 
     fig.tight_layout()
-    plt.show()
-
-    if ks_stats:
-        worst_param = max(ks_stats, key=ks_stats.get)
-        worst_ks = ks_stats[worst_param]
-        if worst_ks > 0.05:
-            print(f"WARNING: {worst_param} has KS = {worst_ks:.4f} (> 0.05)")
-        else:
-            print(f"All correct. Worst KS: {worst_param} = {worst_ks:.4f}")
+    plt.savefig("plot_diag_prior_sample_distributions.png", dpi=150, bbox_inches="tight")
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 22.026 seconds)
+   **Total running time of the script:** (0 minutes 29.673 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_prior_sample_distributions.py:

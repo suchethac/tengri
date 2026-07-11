@@ -21,11 +21,6 @@
 AGN archetypes: Seyfert, quasar, and LIRG/Sy across bolometric luminosity
 ==========================================================================
 
-.. image:: images/sphx_glr_plot_seyfert_quasar_blazar_archetypes_001.png
-   :alt: plot seyfert quasar blazar archetypes
-   :class: sphx-glr-single-img
-
-
 Three distinct AGN types overlaid to show how AGN morphology and obscuration
 evolve with luminosity:
 
@@ -116,7 +111,7 @@ classification depends on viewing angle, accretion rate, and dust geometry.
             "*": tengri.FIXED,
         }
         agn_dict.update(agn_blocks)
-        # ``sfh.type=const`` is parametrised by total stellar mass over the default
+        # ``sfh.type=const`` is parametrized by total stellar mass over the default
         # 13.8 Gyr window; convert SFR → mass via M = SFR × Δt (+10.14 dex). The
         # ``sfr_log=-10`` "negligible host" cases stay essentially zero; the
         # ``sfr_log=2`` starburst case becomes a realistic ~10^12 M☉ ULIRG host.
@@ -280,7 +275,7 @@ classification depends on viewing angle, accretion rate, and dust geometry.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.016 seconds)
+   **Total running time of the script:** (0 minutes 2.399 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_seyfert_quasar_blazar_archetypes.py:

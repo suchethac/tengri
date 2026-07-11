@@ -21,11 +21,6 @@
 Photo-z degeneracy: chi² landscape over redshift and stellar mass
 ==================================================================
 
-.. image:: images/sphx_glr_plot_photoz_chi2_grid_001.png
-   :alt: plot photoz chi2 grid
-   :class: sphx-glr-single-img
-
-
 Galaxy photometry is degenerate in redshift and stellar mass — the same
 galaxy can look identical at different redshifts if the mass is adjusted.
 We mock a star-forming galaxy at z=2.5 with known stellar mass, observe it
@@ -184,7 +179,7 @@ dust attenuation. Redshift and stellar mass are the free parameters on the grid.
 For each (z, M*) pair, build a model, predict photometry, and compute
 χ² = sum((F_obs - F_pred)² / σ²).
 
-.. GENERATED FROM PYTHON SOURCE LINES 129-175
+.. GENERATED FROM PYTHON SOURCE LINES 129-169
 
 .. code-block:: Python
 
@@ -192,10 +187,6 @@ For each (z, M*) pair, build a model, predict photometry, and compute
     z_grid = np.linspace(0.5, 5.0, 65)
     log_mstar_grid = np.linspace(9.0, 11.5, 65)
     chi2_grid = np.zeros((z_grid.size, log_mstar_grid.size))
-
-    print(
-        f"Computing χ² grid ({z_grid.size} × {log_mstar_grid.size} = {z_grid.size * log_mstar_grid.size} models)..."
-    )
 
     for i, z in enumerate(z_grid):
         for j, log_mstar in enumerate(log_mstar_grid):
@@ -232,23 +223,14 @@ For each (z, M*) pair, build a model, predict photometry, and compute
             chi2 = np.sum(((flux_obs - flux_pred) / noise_obs) ** 2)
             chi2_grid[i, j] = chi2
 
-    print("Done.")
 
 
 
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Computing χ² grid (65 × 65 = 4225 models)...
-    Done.
 
 
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 176-229
+.. GENERATED FROM PYTHON SOURCE LINES 170-223
 
 .. code-block:: Python
 
@@ -320,7 +302,7 @@ For each (z, M*) pair, build a model, predict photometry, and compute
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (7 minutes 41.655 seconds)
+   **Total running time of the script:** (7 minutes 45.093 seconds)
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_photoz_chi2_grid.py:

@@ -33,7 +33,6 @@ import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
-import os
 import warnings
 
 import jax.numpy as jnp
@@ -182,4 +181,4 @@ fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.98), ncol
 
 fig.tight_layout(rect=[0, 0, 1, 0.96])
 
-plt.show()
+plt.savefig("plot_psd_burstiness_prior.png", dpi=150, bbox_inches="tight")

@@ -21,11 +21,6 @@
 GRAHSP SFH figure reproduction: delayed-tau galaxy SED sweep
 =============================================================
 
-.. image:: images/sphx_glr_plot_grahsp_paper_sfh_tau_sweep_001.png
-   :alt: plot grahsp paper sfh tau sweep
-   :class: sphx-glr-single-img
-
-
 Reproduction of the star-formation-history overview figure of Buchner et al.
 (2024, GRAHSP): galaxy SEDs for a delayed-:math:`\tau` SFH
 (:math:`\mathrm{SFR}\propto t\,e^{-t/\tau}`, CIGALE ``sfh_delayed``) whose
@@ -44,21 +39,8 @@ shows the corresponding star-formation histories.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/examples/sfh/plot_grahsp_paper_sfh_tau_sweep.py:44: MatplotlibDeprecationWarning: The get_cmap function was deprecated in Matplotlib 3.7 and will be removed in 3.11. Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap()`` or ``pyplot.get_cmap()`` instead.
-      cmap = cm.get_cmap("cividis_r")
-    /Users/suchethacooray/Projects/tengri/examples/sfh/plot_grahsp_paper_sfh_tau_sweep.py:106: RuntimeWarning: divide by zero encountered in divide
-      "top", functions=(lambda x: C_NM_HZ / 1e3 / x, lambda nu: C_NM_HZ / 1e3 / nu)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -135,7 +117,7 @@ shows the corresponding star-formation histories.
         t_gyr = np.asarray(sfh["t_gyr"])  # lookback time: 0 = present, AGE_GYR = formation
         sfr = np.asarray(sfh["sfr_full"])
         # Convert to time-since-formation (present at right, as in the paper) and
-        # normalise to the peak ("a.u.") so each tau's shape is visible.
+        # normalize to the peak ("a.u.") so each tau's shape is visible.
         t_since = (AGE_GYR - t_gyr) * 1e3  # Myr
         keep = (t_since >= 0) & (t_gyr <= AGE_GYR)
         axin.plot(t_since[keep], sfr[keep] / sfr.max(), color=cmap(norm(tau_myr)), lw=1.3)
@@ -164,12 +146,7 @@ shows the corresponding star-formation histories.
     cbar.set_label(r"$\tau$ [Myr]")
 
     fig.tight_layout()
-    plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.226 seconds)
+    plt.savefig("plot_grahsp_paper_sfh_tau_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_grahsp_paper_sfh_tau_sweep.py:

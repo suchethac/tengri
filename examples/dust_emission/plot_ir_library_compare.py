@@ -127,7 +127,6 @@ ax_fixed.set(
     ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]",
 )
 ax_fixed.legend(frameon=False, fontsize=8, ncol=2, loc="lower center")
-ax_fixed.set_title("Fixed absorbed luminosity (L_abs = 1e10 L_sun)", fontsize=10)
 
 for lam_um, name in [(8, "PAH"), (24, "MIPS 24"), (100, "FIR peak"), (850, "submm")]:
     ax_fixed.axvline(lam_um, color="0.85", lw=0.5, alpha=0.7)
@@ -182,7 +181,6 @@ ax_lir.set(
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
     ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]",
 )
-ax_lir.set_title("L_IR-normalized SEDModel comparison (tau_diff=1, tau_bc=1.5)", fontsize=10)
 
 for um, name in [(8, "8 μm"), (24, "MIPS 24"), (70, "FIR 70"), (160, "FIR 160")]:
     lam = um * 1.0e4

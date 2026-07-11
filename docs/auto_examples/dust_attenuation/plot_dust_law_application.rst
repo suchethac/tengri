@@ -21,11 +21,6 @@
 The same galaxy reddened by every attenuation law in the registry
 ==================================================================
 
-.. image:: images/sphx_glr_plot_dust_law_application_001.png
-   :alt: plot dust law application
-   :class: sphx-glr-single-img
-
-
 Each of the bundled dust-attenuation laws applied to the *same*
 intrinsic SED at the *same* V-band optical depth — so the differences
 between the curves are entirely in the wavelength dependence of the
