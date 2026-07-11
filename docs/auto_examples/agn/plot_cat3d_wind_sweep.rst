@@ -27,7 +27,7 @@ reprocessing is controlled by three observables: the wind mass fraction
 ``fwd``, the radial cloud-distribution index ``a``, and the viewing angle
 ``cos i``.
 
-This example sweeps the **wind fraction** (``fwd``, 0.15 -> 2.25) at two viewing
+This example sweeps the **wind fraction** (``fwd``, 1.0 -> 2.25) at two viewing
 angles. A larger polar-wind component fills in the near/mid-IR and shifts the
 balance of warm vs cool dust emission; the effect depends on whether the system
 is viewed close to face-on (left) or edge-on (right), since the wind is
@@ -53,8 +53,19 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -83,8 +94,8 @@ References
     SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
-    # CAT3D-Wind grid: fwd in [0.15, 2.25]. Two viewing angles (near face-on / edge-on).
-    FWD_VALUES = np.linspace(0.15, 2.25, 7)
+    # CAT3D-Wind grid: fwd in [1.0, 2.25]. Two viewing angles (near face-on / edge-on).
+    FWD_VALUES = np.linspace(1.0, 2.25, 7)
     COS_INC = {"face-on (cos i = 0.85)": 0.85, "edge-on (cos i = 0.2)": 0.2}
 
     BASE_AGN = {
@@ -142,11 +153,6 @@ References
         weight="bold",
     )
     plt.savefig("plot_cat3d_wind_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.090 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_cat3d_wind_sweep.py:
