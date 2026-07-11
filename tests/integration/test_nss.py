@@ -41,35 +41,43 @@ def smooth_fitter():
     return Fitter(model, mock.flux_obs, mock.noise)
 
 
+@pytest.fixture(scope="module")
+def nss_result(smooth_fitter):
+    """Run the nested sampler ONCE and share the posterior across the suite.
+
+    Every test below interrogates a different facet of the same NSS run, on a
+    fixed key, so the run is deterministic and re-running it per test recomputed
+    a bit-identical result. Caching the *result* rather than the fitter turns
+    seven ~85 s samplings into one; the assertions are unchanged.
+    """
+    return smooth_fitter.run("nss", n_live=100, num_delete=10, key=jax.random.PRNGKey(0))
+
+
 class TestNSSSmooth:
     """NSS on smooth (parametric) SFH models."""
 
-    def test_nss_produces_evidence(self, smooth_fitter):
+    def test_nss_produces_evidence(self, nss_result):
         """NSS returns finite log-evidence."""
-        result = smooth_fitter.run("nss", n_live=100, num_delete=10, key=jax.random.PRNGKey(0))
-        assert result.log_evidence is not None
-        assert np.isfinite(result.log_evidence)
+        assert nss_result.log_evidence is not None
+        assert np.isfinite(nss_result.log_evidence)
 
-    def test_nss_produces_samples(self, smooth_fitter):
+    def test_nss_produces_samples(self, smooth_fitter, nss_result):
         """NSS returns posterior samples for all free params."""
-        result = smooth_fitter.run("nss", n_live=100, num_delete=10, key=jax.random.PRNGKey(0))
-        assert result.samples is not None
+        assert nss_result.samples is not None
         for name in smooth_fitter._free_names:
-            assert name in result.samples
-            assert result.samples[name].shape[0] > 0
+            assert name in nss_result.samples
+            assert nss_result.samples[name].shape[0] > 0
 
-    def test_nss_samples_in_bounds(self, smooth_fitter):
+    def test_nss_samples_in_bounds(self, smooth_fitter, nss_result):
         """All NSS samples are within prior bounds."""
-        result = smooth_fitter.run("nss", n_live=100, num_delete=10, key=jax.random.PRNGKey(0))
         for name in smooth_fitter._free_names:
             lo, hi = smooth_fitter._bounds[name]
-            vals = np.array(result.samples[name])
+            vals = np.array(nss_result.samples[name])
             assert np.all(vals >= lo - 1e-6), f"{name}: min={vals.min()}, lo={lo}"
             assert np.all(vals <= hi + 1e-6), f"{name}: max={vals.max()}, hi={hi}"
 
-    def test_nss_diagnostics_complete(self, smooth_fitter):
+    def test_nss_diagnostics_complete(self, nss_result):
         """NSS diagnostics contain expected keys."""
-        result = smooth_fitter.run("nss", n_live=100, num_delete=10, key=jax.random.PRNGKey(0))
         expected_keys = {
             "n_live",
             "num_delete",
@@ -79,21 +87,18 @@ class TestNSSSmooth:
             "log_evidence",
             "ess",
         }
-        assert expected_keys.issubset(result.diagnostics.keys())
+        assert expected_keys.issubset(nss_result.diagnostics.keys())
 
-    def test_nss_ess_positive(self, smooth_fitter):
+    def test_nss_ess_positive(self, nss_result):
         """NSS effective sample size is positive."""
-        result = smooth_fitter.run("nss", n_live=100, num_delete=10, key=jax.random.PRNGKey(0))
-        assert result.diagnostics["ess"] > 0
+        assert nss_result.diagnostics["ess"] > 0
 
-    def test_nss_method_name(self, smooth_fitter):
+    def test_nss_method_name(self, nss_result):
         """NSS result has correct method string."""
-        result = smooth_fitter.run("nss", n_live=100, num_delete=10, key=jax.random.PRNGKey(0))
-        assert "NSS" in result.method
+        assert "NSS" in nss_result.method
 
-    def test_nss_summary_table(self, smooth_fitter):
+    def test_nss_summary_table(self, nss_result):
         """summary_table works and includes evidence."""
-        result = smooth_fitter.run("nss", n_live=100, num_delete=10, key=jax.random.PRNGKey(0))
-        table = result.summary_table()
+        table = nss_result.summary_table()
         assert isinstance(table, str)
         assert "log Z" in table

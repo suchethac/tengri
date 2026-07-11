@@ -183,8 +183,17 @@ docstring-code-format = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --tb=short -m 'not crossval'"
+# The default run is the PR-gating fast tier, in parallel. The heavy trees
+# (tests/inference, tests/integration) are auto-marked `slow` in conftest and
+# deselected here, matching the CI split where they run as a separate,
+# schedule/label-gated job. To run them: `-m 'not crossval'` (all) or `-m slow`.
+#
+# `--dist=loadfile` (not the default `load`): the SSP grids are session-scoped
+# fixtures, so keeping a whole file on one worker pays that load once per
+# worker instead of once per scattered test.
+addopts = "--tb=short -m 'not crossval and not slow' -n auto --dist=loadfile"
 markers = [
+    "slow: heavy end-to-end tests (inference/integration trees); excluded from the default run",
     "crossval: cross-validation tests against community SED codes (bagpipes, etc.)",
     "conservation: energy/mass/photon balance across a transformation",
     "bounds: non-negativity, monotonicity, unit-interval, credible-interval ordering",
