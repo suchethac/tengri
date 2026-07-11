@@ -31,7 +31,7 @@ power-law index per Δβ = 1.
 Useful when interpreting FIR fits as the ``(T, β)`` degeneracy
 projected onto a single sub-mm photometric point.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-106
+.. GENERATED FROM PYTHON SOURCE LINES 15-110
 
 
 
@@ -41,8 +41,19 @@ projected onto a single sub-mm photometric point.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -127,7 +138,11 @@ projected onto a single sub-mm photometric point.
         )
 
     for ax in (ax_T, ax_b):
-        ax.set(xlim=(1e5, 1e7), ylim=(1e40, 1e44), ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
+        # Frame the FIR dust peak (~4.5e44, at 40-120 um across the T grid) with
+        # headroom. Start at 40 um: redward of that the modified blackbody
+        # dominates cleanly; blueward the stellar mid-IR tail (~1e42) pokes
+        # through the cool-dust Wien side and muddies the panel.
+        ax.set(xlim=(4e5, 1e7), ylim=(1e40, 1e45), ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
 
     ax_b.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 

@@ -93,7 +93,11 @@ for beta in beta_grid:
     )
 
 for ax in (ax_T, ax_b):
-    ax.set(xlim=(1e5, 1e7), ylim=(1e40, 1e44), ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
+    # Frame the FIR dust peak (~4.5e44, at 40-120 um across the T grid) with
+    # headroom. Start at 40 um: redward of that the modified blackbody
+    # dominates cleanly; blueward the stellar mid-IR tail (~1e42) pokes
+    # through the cool-dust Wien side and muddies the panel.
+    ax.set(xlim=(4e5, 1e7), ylim=(1e40, 1e45), ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
 
 ax_b.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 
