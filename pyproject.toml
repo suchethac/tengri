@@ -124,6 +124,7 @@ where = ["src"]
 tengri = ["defaults.toml", "observation/data/filters_registry.json"]
 "tengri.citations" = ["references.bib"]
 "tengri.data.agn_bbb" = ["*.dat", "PROVENANCE.md"]
+"tengri.data.agn_ext" = ["*.dat", "PROVENANCE.md"]
 "tengri.data.agn_fe2" = ["*.txt", "PROVENANCE.md"]
 
 [tool.ruff]

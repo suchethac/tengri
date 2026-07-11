@@ -32,6 +32,7 @@ from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.disc import powerlaw_disc
 from tengri.components.agn.reddening import redden_disc
 from tengri.components.agn.torus import simple_torus, two_temperature_torus
+from tengri.components.dust.qsogen_ext import qsogen_quasar_extinction
 
 __all__: list[str] = []  # registrations only
 
@@ -231,3 +232,65 @@ def smc_prevot_block(
     wave_aa = jnp.asarray(wavelength)
     # Single source of truth: redden_disc on a unit SED IS the factor.
     return redden_disc(wave_aa, jnp.ones_like(wave_aa), agn_attenuation_ebv)
+
+
+@register_agn_block(
+    "attenuation",
+    "qsogen",
+    citation="Temple, Hewett & Banerji 2021, MNRAS, 508, 737",
+    status="production",
+    short_doc="Temple+2021 empirical quasar extinction curve",
+)
+def qsogen_quasar_ext_block(
+    wavelength: Array,
+    *,
+    agn_attenuation_ebv: float = 0.0,
+    **_params,
+) -> Array:
+    r"""Temple+2021 empirical *quasar* extinction as an attenuation-stage block.
+
+    This is qsogen's own reddening law (Temple, Hewett & Banerji 2021 [1]_,
+    the ``pl_ext_comp_03`` curve), the one qsogen applies to the quasar
+    continuum. Returns the multiplicative factor :math:`10^{-0.4\,A_\lambda}`
+    with
+
+    .. math::
+
+        A_\lambda = E(B-V)\,\bigl[\,E(\lambda-V)/E(B-V) + R\,\bigr],
+        \qquad R = 3.1,
+
+    where the tabulated curve is the *color excess* :math:`E(\lambda-V)/E(B-V)`
+    (zero at V) and ``R`` is qsogen's default total-to-selective ratio. This is
+    a different law **and** a different convention from ``smc_prevot`` (the SMC
+    Prevot fit AGNfitter uses, stored directly as :math:`A_\lambda/E(B-V)`).
+
+    Because it runs at the attenuation stage — after the disc, lines and FeII
+    are summed — it reddens the whole quasar spectrum at once, matching qsogen's
+    "redden the quasar flux, excluding the host". For a qsogen build with no
+    separate torus this is exactly qsogen's reddening; if a torus block is
+    present it is reddened too (qsogen bundles the near-IR into the quasar
+    model rather than a separate torus). No extinction is applied outside the
+    curve's 500–60000 Å domain.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Å].
+    agn_attenuation_ebv : float, optional
+        Quasar color excess :math:`E(B-V)` [mag]. Default ``0.0`` (no
+        attenuation — a no-op, :math:`10^0 = 1`).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Multiplicative extinction factor :math:`10^{-0.4\,A_\lambda}`.
+
+    References
+    ----------
+    .. [1] M. J. Temple, P. C. Hewett & M. Banerji, "Modelling the
+       emission-line and continuum properties of quasars," MNRAS, 508, 737
+       (2021). arXiv:2109.04472. https://doi.org/10.1093/mnras/stab2586
+    """
+    wave_aa = jnp.asarray(wavelength)
+    a_over_ebv = qsogen_quasar_extinction(wave_aa)
+    return jnp.power(10.0, -0.4 * a_over_ebv * agn_attenuation_ebv)
