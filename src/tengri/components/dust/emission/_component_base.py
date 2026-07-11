@@ -117,7 +117,7 @@ class EmissionComponent(SEDModelComponent):
         filter_eff_waves = state.derived.get("filter_eff_waves")
 
         if spec_eff_waves is not None or filter_eff_waves is not None:
-            # LUT path: do NOT update sed_intrinsic, only publish precomp keys
+            # LUT path: publish the precomp families the LUT projectors consume...
             published: dict[str, Any] = {}
 
             if filter_eff_waves is not None:
@@ -132,8 +132,21 @@ class EmissionComponent(SEDModelComponent):
                     self._apply_spectrum_precomp(p_sliced, state, spec_eff_waves, **input_kwargs)
                 )
 
-            new_derived = self._merge_published(state.derived, published)
-            return state.with_(derived=new_derived)
+            # ...and STILL add to sed_intrinsic. This used to return without touching it,
+            # which left the panchromatic model SED of every WavePrecomp model with NO
+            # dust IR at all: ``Prediction.photometry()`` (exact by default, #1097) read
+            # 5.8x low in W3 and 6x low in W4 — bit-identical to a model built with no
+            # dust emission — while the likelihood, which reads the LUT families, was
+            # correct. So fits were fine and every best-fit overlay, residual plot, and
+            # mid-IR diagnostic drawn from one was silently missing the IR bump.
+            #
+            # It costs nothing: the fast path is fast because ``predict_via_precomp``
+            # never READS ``sed_intrinsic``, so XLA prunes the full-grid chain outright.
+            # Writing an array nobody reads is still dead code. Radio and X-ray have
+            # always added unconditionally and still compile to ~143 us.
+            sed_out, published_full = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
+            new_derived = self._merge_published(state.derived, {**published_full, **published})
+            return state.with_(sed_intrinsic=sed_out, derived=new_derived)
         else:
             # Exact full-wave path
             sed_out, published = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
