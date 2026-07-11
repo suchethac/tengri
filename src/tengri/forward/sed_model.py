@@ -3197,6 +3197,8 @@ class SEDModel:
         sigma_lib_kms = (
             getattr(spectroscopy, "sigma_lib_kms", 0.0) if spectroscopy is not None else 0.0
         )
+        cal_coeffs = spectroscopy.calibration_coeffs(params) if spectroscopy is not None else None
+        cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
 
         flux = project_spectrum(
             sed_obs.sed,
@@ -3207,6 +3209,8 @@ class SEDModel:
             resolution=resolution,
             sigma_lib_kms=sigma_lib_kms,
             sigma_v_kms=params.get("sigma_v_kms", 0.0),
+            cal_coeffs=cal_coeffs,
+            cal_wave_range=cal_wave_range,
         )
         return flux
 
