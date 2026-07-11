@@ -94,7 +94,7 @@ def place_line_profiles(
         normalized by the local frequency spacing Δν. Fast but aliases on a
         coarse grid.
 
-    **Upstream**: line-placement approach adapted from Prospector
+    **Reference**: line-placement approach follows Prospector
     (Johnson et al. 2021 [1]_); triweight kernel after Hearin et al. (2021).
 
     """

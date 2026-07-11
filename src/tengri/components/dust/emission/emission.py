@@ -630,7 +630,7 @@ DUST_EMISSION_MODELS["dale2014_cigale"] = _make_lazy_loader(
 
 # Schreiber et al. (2018) "S17" cold-dust library — the tabulated, real-PAH
 # counterpart of the analytic ``schreiber2016`` model. Same
-# (dust_T, dust_f_pah) interface; ported from AGNfitter-rX
+# (dust_T, dust_f_pah) interface; grid data published with AGNfitter-rX
 # (scripts/build_schreiber2018_grid.py).
 DUST_EMISSION_MODELS["schreiber2018"] = _make_lazy_loader(
     "schreiber2018",

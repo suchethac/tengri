@@ -3,6 +3,7 @@
 **Status:** Open. To be revisited before the first tagged release / Zenodo DOI.
 **Owner:** Project lead.
 **Filed:** 2026-05-22.
+**Status (2026-07-10):** The wording "ported from" was replaced repo-wide — every implementation is now described as an independent implementation of the published model, validated against the reference code. Docstrings no longer claim code-level porting.
 
 ## Why this exists
 

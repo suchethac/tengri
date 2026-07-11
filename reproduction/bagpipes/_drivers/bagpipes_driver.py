@@ -28,7 +28,7 @@ from . import units as U
 def _model_galaxy_class():
     """Lazy import so ``import reproduction.bagpipes._drivers.*`` doesn't
     pay the (~3-second) bagpipes startup cost when only ``units`` or the
-    SSP port is needed."""
+    SSP repackaging is needed."""
     from bagpipes.models.model_galaxy import model_galaxy
 
     return model_galaxy

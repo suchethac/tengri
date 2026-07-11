@@ -81,8 +81,8 @@ def smc_attenuation_curve(
 
     Notes
     -----
-    JIT/grad/vmap-compatible. Verbatim port of
-    ``BiAttenuationLaw.get_attenuation`` (numerical agreement < 1e-12).
+    JIT/grad/vmap-compatible. Implements GRAHSP's
+    ``BiAttenuationLaw.get_attenuation`` exactly (numerical agreement < 1e-12).
     """
     wave = jnp.asarray(wave_nm)
     index = jnp.where(wave < lam_break_nm, opt_index, nir_index)

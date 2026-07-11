@@ -15,7 +15,7 @@
 # limitations under the License.
 """Build Nested Sampling algorithms from MCMC kernels.
 
-Ported from blackjax.ns.from_mcmc.
+Implements the same algorithms as blackjax.ns.from_mcmc.
 """
 
 from __future__ import annotations

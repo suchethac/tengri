@@ -27,10 +27,10 @@ DSPS HDF5 — so the §1 residual is interpolation alone. For the AGN line regio
     (stellar grids, parametric SFH, attenuation/dust/IGM laws, and the
     `UnifiedAGN` black-hole emission tree), returning everything in tengri's
     convention. Heavy grids are cached at module level.
-  - `synthesizer_ssp_to_dsps.py` — one-off port of Synthesizer's stellar
+  - `synthesizer_ssp_to_dsps.py` — one-off repackaging of Synthesizer's stellar
     `incident` grid into a DSPS-shaped HDF5 (run automatically by the notebook's
     "Common stellar grid" cell if the file is absent).
-  - `data/` — the ported grid lands here and is **git-ignored**.
+  - `data/` — the repackaged grid lands here and is **git-ignored**.
 - **`_figs/`** — generated figures.
 
 ## Prerequisites

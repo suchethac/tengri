@@ -19,7 +19,7 @@
 # Prospector (Johnson, Leja, Conroy & Speagle 2021) is the most widely
 # used Bayesian SED-fitting framework in extragalactic astronomy. Its
 # forward model is FSPS (Conroy, Gunn & White 2009), called through
-# `python-fsps`, with dust-attenuation curves taken from `sedpy`. This
+# `python-fsps`, with dust-attenuation curves from `sedpy`. This
 # notebook places that forward model — single stellar populations, the
 # delayed-τ star formation history *and the non-parametric SFH families
 # Prospector is known for* (continuity, continuity-flex, Dirichlet, and
@@ -176,13 +176,13 @@ print(
 # against the same templates re-shaped into tengri's HDF5 (black dashed).
 # The lower panel shows the relative residual
 # `|tengri − FSPS| / FSPS`. Both sides read identical numerics, so the
-# residual floor is the float32 round-trip through the grid port — the
+# residual floor is the float32 round-trip through the repackaged grid — the
 # gray line marks 1e-6.
 
 # %%
 _target_ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
 i_zsun = int(np.argmin(np.abs(ssp.ssp_lgmet - LOG10_ZSUN)))
-# Use grid-native ages so FSPS and the ported grid land on the same age
+# Use grid-native ages so FSPS and the repackaged grid land on the same age
 # samples (no age interpolation on either side).
 _age_idx = [
     int(np.argmin(np.abs(ssp.ssp_lg_age_gyr - np.log10(a / 1e9)))) for a in _target_ages_yr
@@ -194,7 +194,7 @@ for ia in _age_idx:
     w_p, L_p = P.ssp_spectrum(logzsol=0.0, age_gyr=age_gyr)
     fps_ssp.append((w_p, L_p))
     # tengri-side conversion uses tengri's own (IAU) L⊙: the loader rescales
-    # the ported grid's FSPS-native Lsun units to IAU on load (#969), so
+    # the repackaged grid's FSPS-native Lsun units to IAU on load (#969), so
     # converting with the driver's FSPS constant would double-count 0.29 %.
     tng_ssp.append(
         (ssp.ssp_wave, np.asarray(tengri.units.lsun_to_erg_per_s(ssp.ssp_flux[i_zsun, ia, :])))
@@ -723,7 +723,7 @@ save_fig("prospector_02e_sfh_ift_field.png")
 # dense code-independent convolution of the same SSP arrays. Two historical
 # offsets were fixed to get here — the DSPS age-weight handoff lost the
 # oldest 3.8 % of the mass (+1.2 % optical bias with a blue tilt; replaced
-# by the cloud-in-cell age-weight kernel, #964), and the ported grid's
+# by the cloud-in-cell age-weight kernel, #964), and the repackaged grid's
 # FSPS-native L⊙ units were converted with the IAU constant (a flat
 # 0.29 %; now rescaled at SSP load, #969).
 
@@ -805,7 +805,7 @@ print(
 # `conroy`. (Those are two different KC13 implementations: FSPS ties the
 # 2175 Å bump amplitude to the slope via KC13 Eqn 3 and divides the
 # Drude by R_V, while `sedpy` scales a Cardelli-relative bump by a fixed
-# `f_bump = 0.6`.) tengri's `kriek_conroy` reproduces the FSPS
+# `f_bump = 0.6`.) tengri's `kriek_conroy` matches the FSPS
 # construction, so the bump excess above the local Calzetti baseline
 # matches; both are printed below.
 

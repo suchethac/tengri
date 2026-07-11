@@ -29,4 +29,4 @@ We adopt BSD-3-Clause license for tengri.
 - Requires NOTICE file for upstream attribution (already in place)
 - Precludes direct porting of GPL code from upstream references (Prospector, DSPS may have GPL components)
 
-**Mitigation:** Ported code must be rewritten or explicitly licensed separately. See ported-over-invented policy in ADR 0003.
+**Mitigation:** Implementations that reference upstream code are written independently (clean-room from the published paper/algorithm) and validated against the upstream outputs. See reference-anchored policy in ADR 0003.

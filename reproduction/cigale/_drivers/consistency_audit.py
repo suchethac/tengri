@@ -30,7 +30,7 @@ from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
 # Use the CIGALE-sourced Dale2014 templates for the audit (CIGALE-faithful
 # comparison). The shipped ``dale2014_templates.h5`` is the Wyoming-source
-# bit-faithful Dale et al. 2014 release pinned by the contract tests; the
+# unmodified Dale et al. 2014 release pinned by the contract tests; the
 # audit script overrides to the CIGALE-bundled version so the reproduction
 # panel matches CIGALE's actual SED template. Both files come from
 # ``scripts/regenerate_dale2014_from_{cigale,official}.py``.

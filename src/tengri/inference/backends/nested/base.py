@@ -15,7 +15,7 @@
 # limitations under the License.
 """Core types and base kernel for Nested Sampling.
 
-Ported from blackjax.ns.base.
+Implements the same algorithms as blackjax.ns.base.
 """
 
 from __future__ import annotations

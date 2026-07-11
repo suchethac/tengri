@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression for #969 — SSP solar-luminosity unit contract on load.
 
-The ported ``fsps_*`` catalog grids store flux in FSPS's native solar
+The repackaged ``fsps_*`` catalog grids store flux in FSPS's native solar
 luminosity (3.839e33 erg/s, ``sps_vars.f90``) while tengri converts
 "Lsun/Hz" to erg/s with the IAU 2015 value (3.828e33) — a flat 0.29 %
 absolute-flux offset on every prediction from those grids. The loader now

@@ -15,7 +15,7 @@ tengri bug — and in the latter case file an issue rather than patching here.
 The script prints a band-by-band ratio report and writes
 ``_figs/validate_moneyshot_cigale.png``.
 
-Finding: the FIR / radio / X-ray models are the *same ports* and agree to
+Finding: the FIR / radio / X-ray models share the same templates and agree to
 ~1.5% at identical inputs (01_cigale.py §6 dale2014, §10 yang20, §11 radio).
 The money-shot band offsets are entirely INPUT differences, not model bugs:
 FIR follows ``L_ir`` (tengri's two-component Calzetti + FSPS UV absorbs ~1.5×
@@ -238,7 +238,7 @@ def main():
         flag = "OK" if 0.5 <= r <= 2.0 else (">2× HIGH" if r > 2 else "<0.5× LOW")
         print(f"  {name:<24} {r:>13.2f}×   {flag}")
 
-    # Why the IR/radio/X-ray bands differ: the *models* are the same ports and
+    # Why the IR/radio/X-ray bands differ: the *models* share the same templates and
     # agree to ~1.5% at identical inputs (see 01_cigale.py §6 dale2014, §10
     # yang20, §11 radio). The money-shot offsets are INPUT differences, not
     # model bugs — quantified here on the optical-matched scale.

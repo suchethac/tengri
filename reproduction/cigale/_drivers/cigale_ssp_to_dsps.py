@@ -107,7 +107,7 @@ def convert_flux_cigale_to_dsps(spec_cigale_w_nm: np.ndarray, wl_angstrom: np.nd
     return spec_dsps
 
 
-def port_bc03_chabrier(out_path: str | Path) -> None:
+def repackage_bc03_chabrier(out_path: str | Path) -> None:
     """
     Port CIGALE BC03 Chabrier SSPs to DSPS-shaped HDF5.
 
@@ -188,7 +188,7 @@ def port_bc03_chabrier(out_path: str | Path) -> None:
         f.attrs['n_met'] = n_met
         f.attrs['n_age'] = n_age
         f.attrs['n_wave'] = n_wave
-        f.attrs['source'] = 'CIGALE BC03 Chabrier (ported)'
+        f.attrs['source'] = 'CIGALE BC03 Chabrier (repackaged)'
 
     print(f"✓ Wrote {out_path}")
     print(f"  Shape: ({n_met}, {n_age}, {n_wave}) [met, age, wave]")

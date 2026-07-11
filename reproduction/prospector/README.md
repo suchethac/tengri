@@ -44,7 +44,7 @@ MILES spectral library** (the `python-fsps` default); `sp.libraries`
 reports the combination your build uses. tengri downloads the matching
 grid automatically (next section) — if your FSPS uses a different
 isochrone or library, swap the catalog name in the "Common SSP grid"
-cell so the two sides stay bit-faithful.
+cell so the two sides use identical inputs.
 
 ## The SSP grid (downloaded, not shipped)
 
@@ -54,7 +54,7 @@ The notebook calls
 tengri.download_ssp("fsps_mist_miles_chabrier", dest="_drivers/data")
 ```
 
-which fetches the pre-ported, DSPS-shaped HDF5 from the public
+which fetches the ready-made DSPS-shaped HDF5 from the public
 catalog (`tengri.list_known_ssps()` lists the ~20 available
 isochrone × library × IMF combinations). The grid is **bare-stellar**
 (no baked-in nebular emission), which is what the Cue nebular emulator

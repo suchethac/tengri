@@ -21,12 +21,13 @@ nuclei across `8 < log ν/Hz < 20`.
 | X-ray corona | α_ox–L₂₅₀₀ (Just+2007 / Lusso&Risaliti) | `xray_agn_corona_from_disc` |
 | Radio | SPL / DPL (Azadi+2023), Bell-2003 SF | `radio_agn`, `radio_agn_dpl`, `radio_sfr_bell2003` |
 
-The `slone_netzer` disc block was added to tengri as part of this work,
-porting AGNFITTER-RX's SN12 α-disc grid (`scripts/build_slone_netzer_grid.py`).
-tengri's `cat3d_wind` and `silva04` torus blocks were themselves ported from
-AGNFITTER-RX (`scripts/build_cat3d_wind_grid.py`,
-`scripts/build_silva04_grid.py`), so §9c doubles as a visual check of those
-ports.
+The `slone_netzer` disc block was added to tengri as part of this work;
+its SN12 α-disc template grid is repackaged from AGNFITTER-RX's published
+library (`scripts/build_slone_netzer_grid.py`). The `cat3d_wind` and
+`silva04` torus blocks likewise evaluate the template libraries published
+with AGNFITTER-RX (`scripts/build_cat3d_wind_grid.py`,
+`scripts/build_silva04_grid.py`), so §9c doubles as a direct check against
+the originals.
 
 ## Prerequisites: the AGNFITTER-RX template libraries
 

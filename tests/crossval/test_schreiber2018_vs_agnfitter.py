@@ -2,7 +2,7 @@
 """Cross-validate tengri's ``schreiber2018`` cold-dust model against AGNfitter-rX.
 
 The Schreiber et al. (2018) "S17" cold-dust library (dust continuum + PAH) was
-ported from AGNfitter-rX's ``STARBURST/s17_lowvsg_{dust,pah}.fits`` into
+repackaged from AGNfitter-rX's ``STARBURST/s17_lowvsg_{dust,pah}.fits`` into
 tengri's HDF5 grid by ``scripts/build_schreiber2018_grid.py``. AGNfitter-rX
 forms the cold-dust SED as the native mixture
 ``(1 - f_PAH)·dust + f_PAH·PAH`` (``MODEL_AGNfitter.STARBURST`` S17 branch).

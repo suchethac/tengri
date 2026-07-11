@@ -1,8 +1,9 @@
 # Physics reproduction studies
 
-Component-by-component physics reproductions: tengri against the reference
-SED-fitting codes the community already relies on. Each subfolder
-holds one comparison.
+Component-by-component physics reproductions: tengri implements the
+same models as the reference SED-fitting codes the community relies
+on, so every assumption can be checked and different models compared
+in one framework. Each subfolder holds one comparison.
 
 ```
 reproduction/

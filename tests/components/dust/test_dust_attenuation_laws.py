@@ -155,7 +155,7 @@ class TestKriekConroyMatchesFSPS:
 
     @staticmethod
     def _fsps_dust_type4(wl: np.ndarray, delta: float) -> np.ndarray:
-        """Faithful port of FSPS ``attn_curve.f90`` ``dust_type=4`` (tauv=1)."""
+        """Matches FSPS ``attn_curve.f90`` ``dust_type=4`` (tauv=1)."""
         x = 1e4 / wl  # 1/micron
         below = wl <= 6300.0
         cal = np.where(

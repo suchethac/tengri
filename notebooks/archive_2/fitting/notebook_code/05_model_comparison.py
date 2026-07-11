@@ -487,6 +487,6 @@ for pname in spec_A.free_params:
 # - For higher precision on log Z, increase `n_live` (evidence error ∝ 1/√n_live).
 # - NSS uses covariance-adaptive directions (empirical cov of live points),
 #   so it handles correlations automatically.
-# - The implementation is a faithful port of the Yallup, Kroupa & Handley (2026)
+# - Exact implementation of the Yallup, Kroupa & Handley (2026)
 #   algorithm from the handley-lab/blackjax fork, running entirely locally
 #   with no extra dependencies.

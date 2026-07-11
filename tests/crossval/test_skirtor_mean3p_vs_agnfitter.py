@@ -12,7 +12,7 @@ reference; the test checks that the runtime component reproduces them.
 Key parity result (#614 / #592 B1): the AGNfitter-averaged torus peaks at ~25 µm,
 *not* the ~40 µm of tengri's full-grid X-CIGALE ``skirtor`` — the two are
 intentionally different reductions of the same model, and this committed block
-gives the AGNfitter-faithful one.
+gives the AGNfitter-matched one.
 
 Interpolation note: the runtime uses node-exact monotone-cubic (PCHIP)
 interpolation (``interp_nd_pchip``, shared with the cat3d / slone_netzer ports),

@@ -15,7 +15,7 @@
 # limitations under the License.
 """Utility functions for Nested Sampling post-processing.
 
-Ported from blackjax.ns.utils.
+Implements the same algorithms as blackjax.ns.utils.
 """
 
 from __future__ import annotations

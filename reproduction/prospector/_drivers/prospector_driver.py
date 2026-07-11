@@ -34,7 +34,7 @@ from . import units as U
 
 # FSPS IMF flag: 1 = Chabrier (2003). The downloadable tengri grids are
 # ``*_chabrier``; the FSPS default is 2 (Kroupa), so we pin Chabrier
-# explicitly to keep the §1 SSP head-to-head bit-faithful.
+# explicitly to keep the §1 SSP head-to-head bit-identical.
 _IMF_CHABRIER = 1
 
 # Module-level cache for the expensive StellarPopulation.

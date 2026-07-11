@@ -214,8 +214,8 @@ def compute_nlr_sed_richardson2014(
     consistent with typical Seyfert 2 AGN narrow-line ratios. Line profiles
     are Gaussian with fixed FWHM (narrow lines, ~500 km/s).
 
-    Ported from Prospector (Johnson et al. 2021 [2]_), which implements
-    the same table for AGN NLR modeling.
+    Implements the same AGN NLR line table as Prospector (Johnson et al. 2021
+    [2]_); validated against its output.
 
     References
     ----------

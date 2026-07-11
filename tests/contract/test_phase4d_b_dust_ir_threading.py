@@ -125,7 +125,7 @@ def test_pahspec_dust_does_not_thread_template_data(ssp_wneref, obs):
 def test_astrodust_dust_does_not_thread_template_data(ssp_wneref, obs):
     """Astrodust emission self-loads; no dust-IR template threading (#871).
 
-    See the PAHspec sibling: the faithful HD23 astrodust port loads its grid in
+    See the PAHspec sibling: the native HD23 astrodust implementation loads its grid in
     ``EmissionPort.load``/``predict``, so ``_template_data_for_jit()`` threads no
     ``astrodust_*`` template arrays.
     """
@@ -161,7 +161,7 @@ def test_jit_and_non_jit_paths_agree_with_mbb_dust(ssp_wneref, obs):
 
 
 def test_astrodust_port_re_radiates_far_ir(ssp_wneref, obs):
-    """The faithful astrodust port actually re-emits (#871).
+    """The native astrodust implementation actually re-emits (#871).
 
     JIT/non-JIT agreement alone would pass even if the self-loading port were a
     silent no-op (both zero). This pins the physics end-to-end: with dust

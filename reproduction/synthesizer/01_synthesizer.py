@@ -66,7 +66,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from reproduction.synthesizer._drivers import (
     synthesizer_driver as S,
-    synthesizer_ssp_to_dsps as PORT,
+    synthesizer_ssp_to_dsps as REPACK,
     units as U,
 )
 
@@ -145,10 +145,10 @@ def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
 # %%
 _grid_h5 = _HERE / "_drivers" / "data" / "synthesizer_test_grid.h5"
 if not _grid_h5.exists():
-    PORT.port_stellar_grid(_grid_h5)
+    REPACK.repackage_stellar_grid(_grid_h5)
 ssp = load_ssp_data(str(_grid_h5))
 print(
-    f"Synthesizer test_grid (ported): {ssp.ssp_wave.shape[0]} wavelengths, "
+    f"Synthesizer test_grid (repackaged): {ssp.ssp_wave.shape[0]} wavelengths, "
     f"{ssp.ssp_lgmet.shape[0]} metallicities, {ssp.ssp_lg_age_gyr.shape[0]} age bins; "
     f"λ up to {ssp.ssp_wave.max():.1e} Å."
 )
@@ -324,7 +324,7 @@ U.panel(
 )
 ax_l.plot(w_s3, L_s3, "C0-", linewidth=1.5)
 ax_r.plot(s_stellar.wave, s_stellar.sed_intrinsic, "C1-", linewidth=1.5)
-# Floor the y-range to the stellar continuum: the ported grid is clipped at 1e8 Å,
+# Floor the y-range to the stellar continuum: the repackaged grid is clipped at 1e8 Å,
 # so the SED drops to ~0 at the long-λ edge — without a floor the log axis would
 # stretch across ~50 empty decades down to that cliff.
 _s3pk = max(float(np.nanmax(L_s3)), float(np.nanmax(np.asarray(s_stellar.sed_intrinsic))))

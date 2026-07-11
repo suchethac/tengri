@@ -63,7 +63,7 @@ def test_log_lbol_unit_convention_is_l_sun(wave_uv_to_fir, physical_log_lbol):
 
     Locks in the L_sun convention against accidental change to log10(L_bol/erg-per-s).
     Synthesizer parity: synthesizer accepts L_bol in erg/s; tengri uses L_sun.
-    Anyone porting between the two must add the LOG10(L_SUN_ERG) ≈ 33.58 offset.
+    Anyone converting between the two must add the LOG10(L_SUN_ERG) ≈ 33.58 offset.
 
     Pitfall: P-2 — Eddington unit mismatch. If the convention were silently
     changed, fit posteriors would shift by a factor 3.83e33 in L_bol and break

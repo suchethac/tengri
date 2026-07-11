@@ -59,7 +59,7 @@ agn_torus_block, agn_attenuation_block : str, optional
         Cross-block normalization policy (single-sourced from
         :data:`AGN_NORM_POLICIES`). ``"cigale_joint"`` (current default)
         ties the disc, torus, and polar dust to a *single* ``agn_power``
-        reference via the fixed SKIRTOR template ratios — bit-faithful to
+        reference via the fixed SKIRTOR template ratios — bit-identical to
         X-CIGALE's energy balance (Stalevski+2016). ``"conserving"`` debits
         the disc by the reprocessed fraction so ``disc(1-f) + torus(f)``
         conserves ``L_bol`` for *every* torus (reproduces the monolithic
