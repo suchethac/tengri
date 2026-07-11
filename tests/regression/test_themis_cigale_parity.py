@@ -130,6 +130,48 @@ def test_themis_mir_pah_shape_matches_cigale(reference: dict, alpha: float) -> N
 
 
 @pytest.mark.parametrize("alpha", [1.0, 2.0, 3.0])
+def test_themis_absolute_normalization_matches_cigale(reference: dict, alpha: float) -> None:
+    """Absolute scale, not just shape: fed CIGALE's L_dust, tengri emits the same total.
+
+    The shape tests above normalize both sides to unit bolometric, so they are
+    blind to the *normalization* — a template emitting twice the absorbed energy
+    would sail through them. This pins the absolute scale.
+
+    Regression: the CMB contrast factor was applied to the emitted SED after the
+    unit-integral renormalization, so tengri re-emitted only 98.4% of the
+    absorbed energy at alpha=1 while CIGALE conserves to 0.01%.
+    """
+    from tengri.components.dust.emission import themis as themis_emission
+
+    wave = np.asarray(reference["wave_aa"], dtype=np.float64)
+    ref = np.asarray(reference[f"alpha_{alpha:.1f}"], dtype=np.float64)
+    qhac = float(reference["qhac"])
+    umin = float(reference["umin"])
+    gamma = float(reference["gamma"])
+
+    # CIGALE's own emitted bolometric == the energy its dust absorbed.
+    nu = _C_AA_S / wave
+    order = np.argsort(nu)
+    l_dust = float(np.trapezoid(ref[order], nu[order]))
+
+    # Feed tengri the same absorbed luminosity; it must re-emit the same total.
+    tng = np.asarray(
+        themis_emission(
+            wave, l_dust, dust_umin=umin, dust_gamma_dl=gamma, dust_qhac=qhac, dust_alpha=alpha
+        ),
+        dtype=np.float64,
+    )
+    emitted = float(np.trapezoid(tng[order], nu[order]))
+
+    ratio = emitted / l_dust
+    assert abs(ratio - 1.0) < 0.01, (
+        f"THEMIS absolute normalization at alpha={alpha}: tengri emits {ratio:.4f} of "
+        f"the absorbed energy that CIGALE re-emits (expected 1.0 +/- 1%). Something "
+        f"scales the SED after the energy-balance renormalization."
+    )
+
+
+@pytest.mark.parametrize("alpha", [1.0, 2.0, 3.0])
 def test_themis_fir_peak_matches_cigale(reference: dict, alpha: float) -> None:
     """The FIR peak lands at the same wavelength as CIGALE.
 
