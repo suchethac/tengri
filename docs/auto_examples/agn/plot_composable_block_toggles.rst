@@ -21,14 +21,9 @@
 Cumulative buildup of the GRAHSP AGN recipe, one sub-block at a time
 =====================================================================
 
-.. image:: images/sphx_glr_plot_composable_block_toggles_001.png
-   :alt: plot composable block toggles
-   :class: sphx-glr-single-img
-
-
 The ``agn.disc``, ``agn.lines``, ``agn.feii``, ``agn.torus``,
 ``agn.atten`` sub-blocks of ``SEDModel.build`` are composable: turning
-one on at a time and overlaying the all-on reference (dashed grey)
+one on at a time and overlaying the all-on reference (dashed gray)
 shows which features each sub-block contributes. Five panels at fixed
 log L_bol = 12.0, all built via the public nested-dict grammar:
 
@@ -148,7 +143,7 @@ Reference: Buchner et al. 2024 (GRAHSP recipe).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.303 seconds)
+   **Total running time of the script:** (0 minutes 2.370 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_composable_block_toggles.py:

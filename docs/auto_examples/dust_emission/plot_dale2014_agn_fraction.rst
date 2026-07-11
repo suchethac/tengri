@@ -21,11 +21,6 @@
 Dale 2014 dust IR: AGN fraction (CIGALE-faithful additive mixing)
 =================================================================
 
-.. image:: images/sphx_glr_plot_dale2014_agn_fraction_001.png
-   :alt: plot dale2014 agn fraction
-   :class: sphx-glr-single-img
-
-
 The Dale et al. (2014) IR template family can be combined with a pure-AGN
 ("quasar") template to represent dust heated by an obscured AGN in addition to
 the star-forming ISM. tengri reproduces CIGALE's convention, where the AGN is a
@@ -45,12 +40,12 @@ regenerated from CIGALE's database and which also ships the quasar template
 (``scripts/regenerate_dale2014_from_cigale.py``). The default ``dale2014`` is
 the Wyoming-source star-forming-only release.
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-87
+.. GENERATED FROM PYTHON SOURCE LINES 24-86
 
 
 
 .. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_dale2014_agn_fraction_001.png
-   :alt: Dale 2014: AGN-heated dust adds MIR power (CIGALE additive mixing)
+   :alt: plot dale2014 agn fraction
    :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_dale2014_agn_fraction_001.png
    :class: sphx-glr-single-img
 
@@ -117,7 +112,6 @@ the Wyoming-source star-forming-only release.
         ylim=(1e42, 1e45),
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
         ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
-        title="Dale 2014: AGN-heated dust adds MIR power (CIGALE additive mixing)",
     )
     ax.legend(frameon=False, fontsize=9, loc="upper right")
 

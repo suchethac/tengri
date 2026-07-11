@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:14.668** total execution time for 24 files **from auto_examples/dust_emission**:
+**00:00.844** total execution time for 17 files **from auto_examples/dust_emission**:
 
 .. container::
 
@@ -32,46 +32,22 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_04_sedmodel_dust_emission_swap.py` (``plot_astrodust_hd23_04_sedmodel_dust_emission_swap.py``)
-     - 00:03.070
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_ltir_sweep.py` (``plot_bosa_ltir_sweep.py``)
+     - 00:00.433
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_logu_cross_library.py` (``plot_logu_cross_library.py``)
-     - 00:02.797
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_starlight_sweep.py` (``plot_pahspec_starlight_sweep.py``)
-     - 00:01.825
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_02_emission_vs_lgU.py` (``plot_astrodust_hd23_02_emission_vs_lgU.py``)
-     - 00:01.102
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_01_size_distribution.py` (``plot_astrodust_hd23_01_size_distribution.py``)
-     - 00:00.935
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_06_extinction_and_scattering.py` (``plot_astrodust_hd23_06_extinction_and_scattering.py``)
-     - 00:00.910
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_08_polarized_emission.py` (``plot_astrodust_hd23_08_polarized_emission.py``)
-     - 00:00.895
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_qhac_sweep.py` (``plot_themis_qhac_sweep.py``)
+     - 00:00.411
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_03_components_at_fiducial_U.py` (``plot_astrodust_hd23_03_components_at_fiducial_U.py``)
-     - 00:00.887
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_05_ionization_alignment.py` (``plot_astrodust_hd23_05_ionization_alignment.py``)
-     - 00:00.682
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_ltir_sweep.py` (``plot_bosa_ltir_sweep.py``)
-     - 00:00.646
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_T_sweep.py` (``plot_dust_T_sweep.py``)
-     - 00:00.597
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_07_spinning_dust.py` (``plot_astrodust_hd23_07_spinning_dust.py``)
-     - 00:00.322
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_grid.py` (``plot_bosa_grid.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dale2014_agn_fraction.py` (``plot_dale2014_agn_fraction.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_T_sweep.py` (``plot_dust_T_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py` (``plot_dust_qpah_umin_grid.py``)
@@ -80,10 +56,16 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_ir_library_compare.py` (``plot_ir_library_compare.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_logu_cross_library.py` (``plot_logu_cross_library.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py` (``plot_mbb_temperature_beta_grid.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pah_warm_cold_split.py` (``plot_pah_warm_cold_split.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_starlight_sweep.py` (``plot_pahspec_starlight_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_qpah_sweep.py` (``plot_qpah_sweep.py``)
@@ -93,9 +75,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_alpha_sweep.py` (``plot_themis_alpha_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_qhac_sweep.py` (``plot_themis_qhac_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_umin_cross_library.py` (``plot_umin_cross_library.py``)

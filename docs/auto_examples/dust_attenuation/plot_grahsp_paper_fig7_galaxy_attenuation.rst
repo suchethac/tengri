@@ -21,14 +21,9 @@
 GRAHSP Fig. 7 reproduction: attenuation of the galaxy model
 ============================================================
 
-.. image:: images/sphx_glr_plot_grahsp_paper_fig7_galaxy_attenuation_001.png
-   :alt: plot grahsp paper fig7 galaxy attenuation
-   :class: sphx-glr-single-img
-
-
 Reproduction of Fig. 7 of Buchner et al. (2024, GRAHSP): a star-forming
 galaxy SED from intrinsic (dark blue) to strongly attenuated (dark red) as the
-diffuse colour excess E(B-V) is swept from 0.01 to 10. Energy balance routes
+diffuse color excess E(B-V) is swept from 0.01 to 10. Energy balance routes
 the attenuated UV/optical light into the far-IR dust bump (Dale 2014), so the
 curves pivot about the FIR peak while the UV is progressively suppressed.
 
@@ -36,7 +31,7 @@ The extremely attenuated, low-metallicity starbursting galaxy **Haro 11**
 (photometry from NED, mirroring Lyu et al. 2016) is overplotted as a dashed
 red curve for reference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-167
+.. GENERATED FROM PYTHON SOURCE LINES 15-166
 
 
 
@@ -46,21 +41,8 @@ red curve for reference.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation.py:57: MatplotlibDeprecationWarning: The get_cmap function was deprecated in Matplotlib 3.7 and will be removed in 3.11. Use ``matplotlib.colormaps[name]`` or ``matplotlib.colormaps.get_cmap()`` or ``pyplot.get_cmap()`` instead.
-      cmap = cm.get_cmap("RdBu_r")
-    /Users/suchethacooray/Projects/tengri/examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation.py:155: RuntimeWarning: divide by zero encountered in divide
-      "top", functions=(lambda x: C_NM_HZ / 1e3 / x, lambda nu: C_NM_HZ / 1e3 / nu)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -133,7 +115,7 @@ red curve for reference.
             "type": "two_component",
             "law_bc": "calzetti",
             "*": FIXED,
-            "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilises the FIR peak)
+            "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilizes the FIR peak)
             "tau_diff": 0.3,  # baseline; overridden per E(B-V) below
             "emission": {"type": "dale2014", "*": FIXED},
         },
@@ -149,7 +131,7 @@ red curve for reference.
         lnu = np.asarray(rest[1] if np.ndim(rest) == 2 else rest)
         lflam = nu_Lnu(lnu)
         if norm_ref is None:
-            # Normalise so the FIR dust peak sits near ~5 (paper scaling).
+            # Normalize so the FIR dust peak sits near ~5 (paper scaling).
             fir = (wave_um > 30) & (wave_um < 300)
             norm_ref = lflam[fir].max() / 5.0
         ax.plot(wave_um, lflam / norm_ref, color=cmap(norm(ebv)), lw=1.4, zorder=3)
@@ -201,7 +183,6 @@ red curve for reference.
     ax.set_ylim(1e-3, 1e2)
     ax.set_xlabel(r"Wavelength [$\mu$m]")
     ax.set_ylabel(r"$\lambda F_\lambda$ [arb.]")
-    ax.legend(loc="lower center", frameon=True, fontsize=10)
 
     secax = ax.secondary_xaxis(
         "top", functions=(lambda x: C_NM_HZ / 1e3 / x, lambda nu: C_NM_HZ / 1e3 / nu)
@@ -215,7 +196,7 @@ red curve for reference.
     cbar.set_ticklabels(["0.01", "0.3", "10"])
 
     fig.tight_layout()
-    plt.show()
+    plt.savefig("plot_grahsp_paper_fig7_galaxy_attenuation.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_grahsp_paper_fig7_galaxy_attenuation.py:

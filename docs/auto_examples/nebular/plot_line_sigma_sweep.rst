@@ -36,9 +36,14 @@ a ``Spectroscopy`` observation sets ``eline_mode='fitted'/'marginalized'`` —
 is the emission-line template width used when *fitting* line amplitudes, not a
 forward-broadening knob.)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-91
+.. GENERATED FROM PYTHON SOURCE LINES 20-90
 
 
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_line_sigma_sweep_001.png
+   :alt: Velocity dispersion broadens the emission lines
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_line_sigma_sweep_001.png
+   :class: sphx-glr-single-img
 
 
 
@@ -116,7 +121,11 @@ forward-broadening knob.)
 
     fig.tight_layout()
     plt.savefig("plot_line_sigma_sweep.png", dpi=150, bbox_inches="tight")
-    plt.close(fig)
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.003 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_line_sigma_sweep.py:

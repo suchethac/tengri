@@ -131,10 +131,6 @@ z_grid = np.linspace(0.5, 5.0, 65)
 log_mstar_grid = np.linspace(9.0, 11.5, 65)
 chi2_grid = np.zeros((z_grid.size, log_mstar_grid.size))
 
-print(
-    f"Computing χ² grid ({z_grid.size} × {log_mstar_grid.size} = {z_grid.size * log_mstar_grid.size} models)..."
-)
-
 for i, z in enumerate(z_grid):
     for j, log_mstar in enumerate(log_mstar_grid):
         # Build model at this redshift.
@@ -169,8 +165,6 @@ for i, z in enumerate(z_grid):
         # Compute χ².
         chi2 = np.sum(((flux_obs - flux_pred) / noise_obs) ** 2)
         chi2_grid[i, j] = chi2
-
-print("Done.")
 
 # %% Plot χ² surface with contours.
 

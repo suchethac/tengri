@@ -43,9 +43,14 @@ for cosmic volume, galaxy-level SFR integrates to the observed SFRD history.
 Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
 (arXiv:1403.0007; "Cosmic Star Formation History")
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-230
+.. GENERATED FROM PYTHON SOURCE LINES 28-197
 
 
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_sfh_to_madau_dickinson_001.png
+   :alt: plot usecase sfh to madau dickinson
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_sfh_to_madau_dickinson_001.png
+   :class: sphx-glr-single-img
 
 
 .. rst-class:: sphx-glr-script-out
@@ -53,32 +58,6 @@ Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
  .. code-block:: none
 
     Simulating 10 × 5 = 50 galaxies
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:771: UserWarning: WavePrecomp applies dust as a first-order Taylor projection across each filter (#617); at z~3.00 these rest-UV band(s) are biased versus the exact path: sdss_u (rest~892 Å). The bias grows steeply toward the far-UV (>10x for the bluest bands at moderate/high z) and with optical depth. For unbiased blue-band photometry use approx=None, or validate against it; SpectrumPrecomp is unaffected. See docs/known_limitations.md.
-      self._warn_if_wave_precomp_dust_blue_bias()
-
-    Cosmic SFRD Summary
-    ======================================================================
-    Redshift     SFRD_pop        SFRD_MD14       Ratio       
-    ----------------------------------------------------------------------
-    0.20         0.000000        0.024366        0.000       
-    0.55         0.000000        0.047552        0.000       
-    0.95         0.000000        0.082132        0.000       
-    1.35         0.000000        0.115177        0.000       
-    1.75         0.000000        0.132147        0.000       
-    2.15         0.000000        0.128353        0.000       
-    2.55         0.000000        0.111829        0.000       
-    3.15         0.000000        0.082874        0.000       
-    ----------------------------------------------------------------------
-
-    Peak SFRD (population):   z=0.20, ψ=0.0000 M☉/yr/Mpc³
-    Peak SFRD (MD14):         z=1.87, ψ=0.1330 M☉/yr/Mpc³
-
-    Interpretation:
-      - SFRD rises from z~0 to peak at z~2
-      - Declines toward z~3+ as the universe ages
-      - Population-level SFRD should qualitatively match MD14
-      - Deviations are expected due to simple main-sequence SFR scaling
-        and small mock sample (use >1000 galaxies for convergence)
 
 
 
@@ -131,7 +110,7 @@ Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
     # Load SSP and prepare observation
     # ============================================================================
 
-    SSP = tengri.load_ssp('fsps_prsc_miles_chabrier')
+    SSP = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
     # Simple observation: SDSS u-band (UV rest-frame proxy)
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u"]))
@@ -258,39 +237,11 @@ Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
 
     fig.tight_layout()
     plt.savefig("plot_usecase_sfh_to_madau_dickinson.png", dpi=150, bbox_inches="tight")
-    plt.close()
 
-    # ============================================================================
-    # Print summary statistics
-    # ============================================================================
 
-    print("\nCosmic SFRD Summary")
-    print("=" * 70)
-    print(f"{'Redshift':<12} {'SFRD_pop':<15} {'SFRD_MD14':<15} {'Ratio':<12}")
-    print("-" * 70)
-    for z_c, sfrd_p in zip(z_bin_centers, sfrd_pop):
-        sfrd_md = madau_dickinson_2014(z_c)
-        ratio = sfrd_p / sfrd_md if sfrd_md > 0 else np.nan
-        print(f"{z_c:<12.2f} {sfrd_p:<15.6f} {sfrd_md:<15.6f} {ratio:<12.3f}")
-    print("-" * 70)
+.. rst-class:: sphx-glr-timing
 
-    # Peak location
-    idx_peak_pop = np.argmax(sfrd_pop)
-    idx_peak_md = np.argmax(psi_md14)
-    print(
-        f"\nPeak SFRD (population):   z={z_bin_centers[idx_peak_pop]:.2f}, "
-        f"ψ={sfrd_pop[idx_peak_pop]:.4f} M☉/yr/Mpc³"
-    )
-    print(
-        f"Peak SFRD (MD14):         z={z_md14[idx_peak_md]:.2f}, "
-        f"ψ={psi_md14[idx_peak_md]:.4f} M☉/yr/Mpc³"
-    )
-    print("\nInterpretation:")
-    print("  - SFRD rises from z~0 to peak at z~2")
-    print("  - Declines toward z~3+ as the universe ages")
-    print("  - Population-level SFRD should qualitatively match MD14")
-    print("  - Deviations are expected due to simple main-sequence SFR scaling")
-    print("    and small mock sample (use >1000 galaxies for convergence)")
+   **Total running time of the script:** (0 minutes 3.419 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfh_to_madau_dickinson.py:

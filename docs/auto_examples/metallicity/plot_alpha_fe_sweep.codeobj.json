@@ -1,13 +1,4 @@
 {
- "_label": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "str"
-  }
- ],
  "ax": [
   {
    "is_class": false,

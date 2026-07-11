@@ -767,7 +767,7 @@
    "name": "median"
   }
  ],
- "plt.show": [
+ "plt.savefig": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -780,7 +780,7 @@
    "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
-   "name": "show"
+   "name": "savefig"
   }
  ],
  "plt.subplots": [
@@ -819,8 +819,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
+   "module": "tengri.analysis.plotting",
+   "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
   }
  ],

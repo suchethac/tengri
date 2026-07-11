@@ -118,7 +118,7 @@ ax.loglog(
     wave[mask], nu_l_nu[mask], color="0.15", lw=1.4, label="Full SED (attenuated + dust + radio)"
 )
 
-# Overplot intrinsic stellar for reference (fainter grey)
+# Overplot intrinsic stellar for reference (fainter gray)
 mask_int = np.asarray(out_intrinsic.sed) > 0
 ax.loglog(
     wave_int[mask_int],
@@ -158,10 +158,12 @@ order_ir = np.argsort(nu_ir)
 L_ir = np.trapezoid(np.asarray(out.sed)[ir_mask][order_ir], nu_ir[order_ir])
 l_sun_cgs = 3.839e33
 
+l_ir_exp = np.log10(L_ir / l_sun_cgs)
+ir_label = rf"$L_{{IR}}^{{8-1000\mu m}} \approx 10^{{{l_ir_exp:.1f}}}\,L_\odot$"
 ax.text(
     0.97,
     0.05,
-    rf"$L_{{\rm IR}}^{{(8\text{{–}}1000\,\mu\mathrm{{m}})}} \approx 10^{{{np.log10(L_ir / l_sun_cgs):.1f}}}\,L_\odot$",
+    ir_label,
     transform=ax.transAxes,
     ha="right",
     fontsize=9,

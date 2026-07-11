@@ -98,6 +98,13 @@ Good titles:
   `ax.legend(frameon=False, fontsize=8)` only when a colorbar would be wrong.
 - ❌ Hard-coded axis limits without a physical reason. If you set `xlim`, the
   comment must say why (e.g. `# zoom on Lyman break`).
+- ❌ Axis ranges that hide the physics. The feature the docstring promises must
+  sit fully inside the panel with continuum context on both sides — a Lyman-break
+  page shows the blueward suppression *and* the red continuum; a silicate-feature
+  zoom shows the full 9.7 μm trough plus wings. y-ranges frame the curves: νL_ν
+  panels typically span ~4–6 dex around the data — wide enough that nothing
+  clips, tight enough that a sweep's curves visibly separate. When in doubt,
+  derive limits from the data with margins instead of hard-coding.
 - ❌ Running a real fit (NUTS, geoVI) for the first time inside an example
   script that loads with the gallery. Pre-cache or use MAP with ≤300 steps.
 - ❌ Inline comments narrating obvious steps (`# build the model`). Comments
@@ -107,7 +114,7 @@ Good titles:
 
 Copy from:
 
-- Sweep template: `examples/sfh/plot_dpl_alpha_sweep.py`
+- Sweep template: `examples/sfh/plot_dexp_tau_sweep.py`
 - Fit template: `examples/quickstart/plot_first_fit.py`
 
 Both have been manually rewritten to the bar this file defines.

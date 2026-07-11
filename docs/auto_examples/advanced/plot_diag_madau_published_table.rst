@@ -21,16 +21,11 @@
 Validating IGM transmission against Madau 1995 published table
 ===============================================================
 
-.. image:: images/sphx_glr_plot_diag_madau_published_table_001.png
-   :alt: plot diag madau published table
-   :class: sphx-glr-single-img
-
-
 Diagnostic: Lyman-series line optical depth τ_LS vs observed wavelength in the
 Lyman-alpha forest, comparing tengri's Madau+1995 model to manual calculation
 from published coefficients (Madau 1995 Table 1, Eq. 15).
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-134
+.. GENERATED FROM PYTHON SOURCE LINES 9-121
 
 
 
@@ -40,22 +35,8 @@ from published coefficients (Madau 1995 Table 1, Eq. 15).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Madau 1995 diagnostic: z_source=4.0
-    λ_obs range: 4700–5800 Å
-    Max absolute τ_LS error: 1.11e-16
-    Max relative error: 0.00%
-    ✓ PASS: Residuals within ±10% band.
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -171,19 +152,6 @@ from published coefficients (Madau 1995 Table 1, Eq. 15).
 
     plt.tight_layout()
     plt.savefig("plot_diag_madau_published_table.png", dpi=150, bbox_inches="tight")
-
-    # ── Verification report ────────────────────────────────────────────────────
-    max_abs_error = np.max(np.abs(residual_line))
-    max_rel_error = np.max(np.abs(rel_error_line)) * 100
-
-    print(f"Madau 1995 diagnostic: z_source={z_source}")
-    print(f"λ_obs range: {wave_forest.min():.0f}–{wave_forest.max():.0f} Å")
-    print(f"Max absolute τ_LS error: {max_abs_error:.2e}")
-    print(f"Max relative error: {max_rel_error:.2f}%")
-    if max_rel_error > 10.0:
-        print("WARNING: Residuals exceed ±10% threshold.")
-    else:
-        print("✓ PASS: Residuals within ±10% band.")
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_madau_published_table.py:

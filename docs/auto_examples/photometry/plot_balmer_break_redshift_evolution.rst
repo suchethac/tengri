@@ -21,11 +21,6 @@
 Balmer break (4000 Å) position in observed-frame filters vs redshift
 ====================================================================
 
-.. image:: images/sphx_glr_plot_balmer_break_redshift_evolution_001.png
-   :alt: plot balmer break redshift evolution
-   :class: sphx-glr-single-img
-
-
 The 4000 Å break is a sharp discontinuity in the stellar continuum at the
 boundary between the Balmer and Paschen series, caused by hydrogen Lyman
 absorption blanketing in the overlying atmosphere. In the rest frame it
@@ -54,7 +49,7 @@ Reference: For dust absorption modeling and SED fundamentals, see Calzetti
 et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
 1000) SSP synthesis code.
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-196
+.. GENERATED FROM PYTHON SOURCE LINES 33-194
 
 
 
@@ -64,22 +59,8 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 39% of its stellar mass before the Big Bang at z=3.00 (cosmic age 2.15 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 83% of its stellar mass before the Big Bang at z=4.00 (cosmic age 1.54 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    Saved: plot_balmer_break_redshift_evolution.png
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -243,9 +224,7 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
     ax_bot.grid(True, alpha=0.2, which="major")
 
     fig.tight_layout()
-    plt.show()
-
-    print("Saved: plot_balmer_break_redshift_evolution.png")
+    plt.savefig("plot_balmer_break_redshift_evolution.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_balmer_break_redshift_evolution.py:

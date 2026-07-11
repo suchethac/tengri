@@ -690,20 +690,20 @@
    "name": "log10"
   }
  ],
- "np.maximum": [
+ "np.where": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "ufunc"
+   "name": "_ArrayFunctionDispatcher"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "maximum"
+   "name": "where"
   }
  ],
  "obs": [

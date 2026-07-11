@@ -13,7 +13,7 @@ angles. A larger polar-wind component fills in the near/mid-IR and shifts the
 balance of warm vs cool dust emission; the effect depends on whether the system
 is viewed close to face-on (left) or edge-on (right), since the wind is
 polar-directed. The torus contribution is isolated by subtracting the disc-only
-SED (the torus normalises to the disc luminosity).
+SED (the torus normalizes to the disc luminosity).
 
 References
 ----------
@@ -72,6 +72,7 @@ def _build_sed(torus: dict | None) -> tuple[np.ndarray, np.ndarray]:
 
 
 WAVE, DISC_ONLY = _build_sed(None)
+
 
 def torus_sed(cos_inc: float, fwd: float) -> tuple[np.ndarray, np.ndarray]:
     """Return (wavelength [AA], nu*L_nu [erg/s]) for the CAT3D-Wind torus alone."""

@@ -21,11 +21,6 @@
 Black-hole spin hardens the UV slope through ISCO migration
 ============================================================
 
-.. image:: images/sphx_glr_plot_relagn_spin_001.png
-   :alt: plot relagn spin
-   :class: sphx-glr-single-img
-
-
 In a relativistic accretion-disc model the inner boundary sits at the
 innermost stable circular orbit (ISCO). Higher spin shrinks the ISCO,
 raises the inner-disc temperature, and shifts disc power blueward — the

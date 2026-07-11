@@ -21,11 +21,6 @@
 Radio SED response to AGN bolometric luminosity
 ================================================
 
-.. image:: images/sphx_glr_plot_radio_vs_agn_lbol_001.png
-   :alt: plot radio vs agn lbol
-   :class: sphx-glr-single-img
-
-
 At fixed host (constant SFR = 3 M_sun/yr, Condon-92 synchrotron +
 free-free) we sweep the composable AGN's bolometric luminosity
 ``agn_log_lbol`` from 9 to 13 (in log L_sun). The host alone produces
@@ -145,7 +140,7 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.226 seconds)
+   **Total running time of the script:** (0 minutes 6.267 seconds)
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_vs_agn_lbol.py:

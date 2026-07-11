@@ -21,11 +21,6 @@
 Dual-epoch star formation: old and recent bursts leave distinct SED signatures
 ==============================================================================
 
-.. image:: images/sphx_glr_plot_sfh_double_burst_001.png
-   :alt: plot sfh double burst
-   :class: sphx-glr-single-img
-
-
 A galaxy with two separated bursts—one at 10 Gyr (old) and one at 0.3 Gyr (recent)—
 produces a SED that blends young hot and old cool stellar populations. Left panel
 shows the optical-to-NIR region in linear scale; right panel shows the full
@@ -41,19 +36,8 @@ panchromatic SED in log-log, revealing the emission from both young and old star
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.5 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=10 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

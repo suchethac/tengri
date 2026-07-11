@@ -99,4 +99,4 @@ ax_right.grid(True, alpha=0.3, which="both", axis="y")
 ax_right.axhline(1e-4, color="C3", linestyle="--", lw=1.5, alpha=0.7)
 
 fig.tight_layout()
-plt.show()
+plt.savefig("plot_diag_waveprecomp_accuracy.png", dpi=150, bbox_inches="tight")

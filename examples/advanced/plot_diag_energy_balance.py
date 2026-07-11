@@ -113,9 +113,3 @@ ax_r.set_xticks(x_pos), ax_r.set_xticklabels([f"{t:.1f}" for t in tau_diffs])
 ax_r.legend(frameon=False, fontsize=9), ax_r.grid(True, alpha=0.3, axis="y")
 fig.tight_layout()
 plt.savefig("plot_diag_energy_balance.png", dpi=150, bbox_inches="tight")
-
-# Report findings
-print("Energy balance diagnostic results:")
-print(f"{'tau_diff':<10} {'Ratio':<10} {'L_abs (erg/s)':<20} {'L_emit (erg/s)':<20}")
-for tau, r, la, le in zip(tau_diffs, ratios, L_abs_list, L_emit_list):
-    print(f"{tau:<10.1f} {r:<10.3f} {la:<20.3e} {le:<20.3e}")

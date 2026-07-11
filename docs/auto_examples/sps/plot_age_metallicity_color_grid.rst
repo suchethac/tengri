@@ -18,26 +18,21 @@
 .. _sphx_glr_auto_examples_sps_plot_age_metallicity_color_grid.py:
 
 
-Age-metallicity colour degeneracy in SDSS colours
+Age-metallicity color degeneracy in SDSS colors
 ==================================================
 
-.. image:: images/sphx_glr_plot_age_metallicity_color_grid_001.png
-   :alt: plot age metallicity color grid
-   :class: sphx-glr-single-img
-
-
 Young, metal-rich and old, metal-poor stellar populations can produce
-similar colours — a fundamental degeneracy in stellar population
+similar colors — a fundamental degeneracy in stellar population
 inference. This example builds a 2D grid of single-burst SSP-like models
 varying age (log10(t/Gyr) = -2 to 1.1) and metallicity (log10(Z/Zsun) = -2 to 0.4),
-then plots three SDSS broadband colours (u − r, g − r, NUV − r) as
+then plots three SDSS broadband colors (u − r, g − r, NUV − r) as
 pcolormesh grids to visualize the degeneracy.
 
 Each (age, Z) point uses a narrow Gaussian-like SFH (tsnorm)
-centred at the appropriate lookback time, fixed dust extinction,
+centered at the appropriate lookback time, fixed dust extinction,
 and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-116
+.. GENERATED FROM PYTHON SOURCE LINES 16-118
 
 
 
@@ -51,7 +46,9 @@ and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
 
  .. code-block:: none
 
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behaviour.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/forward/sed_model.py:701: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
 
 
@@ -117,7 +114,7 @@ and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
     # Sample baseline parameters
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    # Pre-allocate grids for each colour
+    # Pre-allocate grids for each color
     color_grids = {name: np.empty((len(AGES_GYR), len(MET_LOGZSOL))) for name, _, _ in COLORS_TO_PLOT}
 
     # Loop over age and metallicity
@@ -131,11 +128,13 @@ and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
                 "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age_clamped),
                 "met_logzsol": jnp.float64(met_logzsol),
             }
-            # Predict photometry and compute colours
+            # Predict photometry and compute colors
             flux = np.asarray(model.predict_photometry(p))
+            # Protect against log of zero by ensuring positive flux
+            flux = np.where(flux > 0, flux, 1e-30)
             for name, idx_1, idx_2 in COLORS_TO_PLOT:
-                mag_1 = -2.5 * np.log10(np.maximum(flux[idx_1], 1e-20))
-                mag_2 = -2.5 * np.log10(np.maximum(flux[idx_2], 1e-20))
+                mag_1 = -2.5 * np.log10(flux[idx_1])
+                mag_2 = -2.5 * np.log10(flux[idx_2])
                 color_grids[name][i, j] = mag_1 - mag_2
 
     # Create 3-panel figure

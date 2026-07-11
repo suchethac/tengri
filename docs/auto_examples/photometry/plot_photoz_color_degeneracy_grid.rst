@@ -18,16 +18,11 @@
 .. _sphx_glr_auto_examples_photometry_plot_photoz_color_degeneracy_grid.py:
 
 
-Photo-z degeneracy in color–colour space: low-z dusty vs high-z quiescent
+Photo-z degeneracy in color–color space: low-z dusty vs high-z quiescent
 ===========================================================================
 
-.. image:: images/sphx_glr_plot_photoz_color_degeneracy_grid_001.png
-   :alt: plot photoz color degeneracy grid
-   :class: sphx-glr-single-img
-
-
 Two galaxies with very different star formation histories and dust can
-collide in colour–colour space, making photo-z ambiguous. Here, a young
+collide in color–color space, making photo-z ambiguous. Here, a young
 dusty star-forming galaxy at z≈0.5 and an old quiescent galaxy at z≈2
 follow nearly identical (u-g, g-r) tracks and intersect at a single point.
 This shows why intermediate-wavelength photometry is essential for robust
@@ -145,6 +140,11 @@ photo-z classification.
 
     fig.tight_layout()
     plt.savefig("plot_photoz_color_degeneracy_grid.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.586 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_photoz_color_degeneracy_grid.py:

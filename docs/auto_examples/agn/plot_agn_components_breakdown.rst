@@ -21,11 +21,6 @@
 AGN composite SED: per-block decomposition
 ============================================
 
-.. image:: images/sphx_glr_plot_agn_components_breakdown_001.png
-   :alt: plot agn components breakdown
-   :class: sphx-glr-single-img
-
-
 A single ``log L_bol = 12.5`` composable AGN built up component by
 component — disc alone, +torus, +narrow lines, +broad lines — so the
 reader can see what each block contributes to the total spectrum.
@@ -34,7 +29,7 @@ add up to the full SED.
 
 This is the diagnostic figure for "where does the AGN signal in my
 data come from?" — broad-line decompositions need ``blr``, NLR
-fitters need ``nlr``, NIR/MIR colour fitters need ``torus`` (and
+fitters need ``nlr``, NIR/MIR color fitters need ``torus`` (and
 disc choice barely matters longward of 1 μm), etc.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-159
@@ -199,7 +194,7 @@ disc choice barely matters longward of 1 μm), etc.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.920 seconds)
+   **Total running time of the script:** (0 minutes 7.759 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_components_breakdown.py:

@@ -21,11 +21,6 @@
 D_n(4000) – specific SFR: the Kauffmann+2003 sequence
 =======================================================
 
-.. image:: images/sphx_glr_plot_usecase_d4000_vs_ssfr_001.png
-   :alt: plot usecase d4000 vs ssfr
-   :class: sphx-glr-single-img
-
-
 The Kauffmann+2003 separation of star-forming and quiescent SDSS
 galaxies plotted as a sample track: stellar-burst age varied from
 30 Myr to 11 Gyr (single-burst SSP), with each model giving a
@@ -47,19 +42,8 @@ horizontal divider.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.51 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

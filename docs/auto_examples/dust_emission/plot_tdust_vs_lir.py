@@ -58,7 +58,7 @@ T_peak = np.array(T_peak)
 L_IR = np.array(L_IR)
 
 fig, (ax_corr, ax_sed) = plt.subplots(1, 2, figsize=(11.5, 4.3))
-cmap = plt.get_cmap("plasma")
+cmap = plt.get_cmap("viridis")
 norm = plt.Normalize(np.log10(umin_vals.min()), np.log10(umin_vals.max()))
 
 ax_corr.scatter(

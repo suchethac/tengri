@@ -21,11 +21,6 @@
 Metallicity shapes panchromatic SED with dust emission
 ======================================================
 
-.. image:: images/sphx_glr_plot_logzsol_panchromatic_001.png
-   :alt: plot logzsol panchromatic
-   :class: sphx-glr-single-img
-
-
 Stellar metallicity affects the stellar continuum shape and overall energy
 balance. Dust emission responds to absorbed stellar photons: metal-poor hot
 stars emit bluer light with less IR-absorbed energy, while metal-rich cooler
@@ -35,7 +30,7 @@ attenuation and thermal emission from warm dust.
 
 Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-82
+.. GENERATED FROM PYTHON SOURCE LINES 14-81
 
 
 
@@ -45,19 +40,8 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 43% of its stellar mass before the Big Bang at z=0.20 (cosmic age 11.30 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -120,9 +104,8 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
     ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-    # Mark key wavelengths: Lyman limit, H-alpha, 10 μm, 100 μm
-    for wl, _label in [(912, "Lyman limit"), (6563, r"H$\alpha$"), (1e4, "10 μm"), (1e5, "100 μm")]:
-        ax.axvline(wl, color="grey", ls=":", lw=0.6, alpha=0.3)
+    for wl in [912, 6563, 1e4, 1e5]:
+        ax.axvline(wl, color="gray", ls=":", lw=0.6, alpha=0.3)
 
     cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
     cbar.set_label(r"Stellar metallicity $\log Z_\star/Z_\odot$")

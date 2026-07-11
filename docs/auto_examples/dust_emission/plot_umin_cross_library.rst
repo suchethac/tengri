@@ -21,11 +21,6 @@
 Minimum radiation field U_min: DL07 vs THEMIS FIR peak and sweep
 ================================================================
 
-.. image:: images/sphx_glr_plot_umin_cross_library_001.png
-   :alt: plot umin cross library
-   :class: sphx-glr-single-img
-
-
 The starlight intensity floor U_min sets the temperature of the diffuse-ISM
 component in template-based dust libraries. Two perspectives:
 
@@ -44,7 +39,7 @@ References:
     Draine, B.T. & Li, A. 2007, ApJ, 657, 810.
     Jones, A.P. et al. 2013/2017 — THEMIS model series.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-170
+.. GENERATED FROM PYTHON SOURCE LINES 23-169
 
 
 
@@ -61,7 +56,7 @@ References:
     *
 
       .. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_umin_cross_library_002.png
-         :alt: FIR peak migration with $U_{\min}$ — DL07 (solid) vs THEMIS (dashed)
+         :alt: plot umin cross library
          :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_umin_cross_library_002.png
          :class: sphx-glr-multi-img
 
@@ -212,7 +207,6 @@ References:
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
         ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]",
     )
-    ax_sweep.set_title("FIR peak migration with $U_{\\min}$ — DL07 (solid) vs THEMIS (dashed)")
     ax_sweep.legend(frameon=False, fontsize=7, loc="lower left", ncol=2)
     fig_sweep.tight_layout()
     fig_sweep.savefig("plot_umin_cross_library_sweep.png", dpi=150, bbox_inches="tight")

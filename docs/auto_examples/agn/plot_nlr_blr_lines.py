@@ -2,7 +2,7 @@
 Narrow vs broad line region: a velocity-width contrast in two windows
 ======================================================================
 
-Identical AGN configuration (multicolour disc + SKIRTOR torus at log
+Identical AGN configuration (multicolor disc + SKIRTOR torus at log
 L_bol = 12.5), one with the narrow-line region (FWHM ~ a few hundred
 km/s, characteristic Type-2 spectrum) and the other with the broad-line
 region (FWHM ~ thousands of km/s, Type-1). Side-by-side zooms on the

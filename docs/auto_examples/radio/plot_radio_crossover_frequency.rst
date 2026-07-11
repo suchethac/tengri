@@ -21,11 +21,6 @@
 Synchrotron / free-free balance vs synchrotron slope α_sf
 =========================================================
 
-.. image:: images/sphx_glr_plot_radio_crossover_frequency_001.png
-   :alt: plot radio crossover frequency
-   :class: sphx-glr-single-img
-
-
 A star-forming galaxy's GHz continuum is set by two components:
 non-thermal synchrotron from supernova remnants (steep, L_ν ∝
 ν^{-α_sf}) and thermal free-free from H II regions (flat, L_ν ∝
@@ -43,7 +38,7 @@ References:
 - Condon 1992 ARA&A 30 575.
 - Murphy et al. 2011 ApJ 737 67 (free-free calibration).
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-98
+.. GENERATED FROM PYTHON SOURCE LINES 22-94
 
 
 
@@ -59,6 +54,10 @@ References:
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
     import warnings
 
     import jax.numpy as jnp
@@ -70,7 +69,7 @@ References:
     from tengri.radio import compute_radio_components
 
     setup_style()
-    warnings.filterwarnings("ignore")
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     C_AA_S = 2.998e18
     L_SUN = 3.828e33
@@ -114,14 +113,6 @@ References:
         ylabel=r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]",
     )
     ax.legend(frameon=False, fontsize=8, loc="upper right")
-    ax.text(
-        0.03,
-        0.05,
-        "dashed = synchrotron   dotted = free-free   solid = total",
-        transform=ax.transAxes,
-        fontsize=8,
-        color="0.4",
-    )
 
     ax2.axhline(0.5, color="0.7", ls="--", lw=0.7)
     ax2.set(

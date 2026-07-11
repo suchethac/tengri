@@ -21,11 +21,6 @@
 AGN unification: the torus screens the disc with inclination
 =============================================================
 
-.. image:: images/sphx_glr_plot_torus_screen_disc_001.png
-   :alt: plot torus screen disc
-   :class: sphx-glr-single-img
-
-
 The composable AGN runner sums disc + broad/narrow lines + FeII + torus,
 but a real dusty torus also *obscures the central engine* along edge-on
 sightlines while its own infrared emission is not re-extinguished by that
@@ -142,7 +137,7 @@ for HMC/VI), so a default face-on model is left unchanged.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.142 seconds)
+   **Total running time of the script:** (0 minutes 2.903 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_torus_screen_disc.py:

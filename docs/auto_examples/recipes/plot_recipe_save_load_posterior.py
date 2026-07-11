@@ -58,13 +58,9 @@ posterior = forward.fit(
 # Save to temporary file and reload
 with tempfile.TemporaryDirectory() as tmpdir:
     save_path = str(Path(tmpdir) / "posterior.h5")
-    print(f"Saving posterior to {Path(save_path).name}")
     posterior.save(save_path)
 
-    print(f"Loading posterior from {Path(save_path).name}")
     posterior_loaded = Posterior.load(save_path, model=model)
-    print(f"Method: {posterior_loaded.method}")
-    print(f"Parameters: {len(posterior_loaded.params)}")
 
     # Plot scatter of parameters from loaded posterior
     fig, ax = plt.subplots(figsize=(7.0, 4.2))

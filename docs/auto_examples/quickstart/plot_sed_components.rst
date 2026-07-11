@@ -21,11 +21,6 @@
 Dust attenuation across the SED: intrinsic, attenuated, and absorbed
 ===================================================================
 
-.. image:: images/sphx_glr_plot_sed_components_001.png
-   :alt: plot sed components
-   :class: sphx-glr-single-img
-
-
 Build a model with both stellar and dust components. Predict the full SED
 with attenuation, then predict without dust absorption to isolate the
 absorbed UV-optical flux. The filled region shows how much light dust
@@ -41,8 +36,19 @@ removes from the intrinsic stellar continuum.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -116,7 +122,7 @@ removes from the intrinsic stellar continuum.
 
     ax.set(
         xlabel=r"Wavelength [$\mu$m]",
-        ylabel=r"$L_\nu$ [erg/s/Hz]",
+        ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]",
         xscale="log",
         yscale="log",
         xlim=(0.09, 3.0),

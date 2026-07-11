@@ -5,7 +5,11 @@
 Spectroscopy
 ============
 
-Spectroscopic fitting and spectral features.
+What a spectrum adds over photometry — absorption-line indices and the
+D4000/Hdelta plane, stellar age and metallicity from spectral features,
+velocity dispersion and line broadening, instrumental resolution and
+prism-vs-grating trade-offs, and worked spectra from JWST/NIRSpec out to
+z≈6 Lyman-alpha emitters.
 
 
 
@@ -119,7 +123,7 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrate how instrumental resolution affects spectral line profile visibility by observing the same intrinsic SED at resolutions R = 100 (SDSS lores), 500 (DESI), 2000 (KMOS), 5000 (MUSE), and 25000 (HARPS). The Hα + [N II] complex (rest ~6550–6600 Å) transitions from fully blended at low R to completely resolved at high R, revealing the forbidden and Balmer lines separately.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Spectral resolution R determines whether the Hα + [N II] emission-line complex appears as a single blended feature (low R) or resolves into three distinct lines (high R). Varying R from 100 to 10000 reveals the transition from kinematically degenerate at R~100 (SDSS/DESI-like) to fully resolved at R~5000 (JWST-like).">
 
 .. only:: html
 
@@ -130,13 +134,13 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Instrumental Resolution Sweep: Hα Line Blending</div>
+      <div class="sphx-glr-thumbnail-title">Instrumental resolution controls Hα + [N II] line blending</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Mg b 5170 Å region of an old stellar population observed at spectral resolution R = 3000, convolved with increasing stellar velocity dispersion σ_v from 50 to 400 km/s. The classic kinematic diagnostic — line core depth tracks σ_v, asymmetric wings appear with rotational broadening (not modelled here, sigma only).">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Mg b 5170 Å region of an old stellar population observed at spectral resolution R = 3000, convolved with increasing stellar velocity dispersion σ_v from 50 to 400 km/s. The classic kinematic diagnostic — line core depth tracks σ_v, asymmetric wings appear with rotational broadening (not modeled here, sigma only).">
 
 .. only:: html
 

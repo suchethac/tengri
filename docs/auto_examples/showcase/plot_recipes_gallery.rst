@@ -21,11 +21,6 @@
 recipes for common science cases
 =========================================
 
-.. image:: images/sphx_glr_plot_recipes_gallery_001.png
-   :alt: plot recipes gallery
-   :class: sphx-glr-single-img
-
-
 Each recipe is a nested-dict configuration — drop-in templates for common galaxy
 fitting scenarios. This gallery overlays the rest-frame SED of all five shipped
 recipes, highlighting how model complexity scales from minimal mock-recovery to
@@ -40,7 +35,7 @@ panchromatic AGN:
 All models are sampled at default prior medians to display the characteristic
 SED shape of each recipe.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-83
+.. GENERATED FROM PYTHON SOURCE LINES 19-81
 
 
 
@@ -50,21 +45,8 @@ SED shape of each recipe.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/orchestrator.py:691: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /Users/suchethacooray/Projects/tengri/src/tengri/forward/orchestrator.py:691: SFHBeforeBigBangWarning: Star formation history forms 39% of its stellar mass before the Big Bang at z=10.43 (cosmic age 0.45 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -73,7 +55,6 @@ SED shape of each recipe.
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
-    import os
     import warnings
 
     import jax
@@ -108,8 +89,7 @@ SED shape of each recipe.
         try:
             # Build model from recipe
             model = tengri.SEDModel.build(ssp_data=BARE, **recipe_fn())
-        except Exception as exc:
-            print(f"skip {name}: {type(exc).__name__}: {exc}")
+        except Exception:
             continue
 
         # Sample at prior medians for canonical SED shape
@@ -131,12 +111,12 @@ SED shape of each recipe.
     ax.legend(frameon=False, fontsize=8.5, loc="lower right")
 
     fig.tight_layout()
-    plt.show()
+    plt.savefig("plot_recipes_gallery.png", dpi=150, bbox_inches="tight")
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.260 seconds)
+   **Total running time of the script:** (0 minutes 20.935 seconds)
 
 
 .. _sphx_glr_download_auto_examples_showcase_plot_recipes_gallery.py:

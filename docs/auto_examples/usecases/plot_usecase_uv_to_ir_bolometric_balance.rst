@@ -21,11 +21,6 @@
 Dust energy balance: L_IR = L_UV_absorbed across opacity variations
 ===================================================================
 
-.. image:: images/sphx_glr_plot_usecase_uv_to_ir_bolometric_balance_001.png
-   :alt: plot usecase uv to ir bolometric balance
-   :class: sphx-glr-single-img
-
-
 A cornerstone of dust modeling is energy conservation: the UV light
 absorbed by dust must be re-radiated in the infrared. This example
 constructs 15 tengri SEDModels with optical depth τ_V ∈ {0, 0.1, ..., 4}
@@ -46,7 +41,7 @@ Non-conservation flags calibration issues in the dust emission routing.
 
 Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-263
+.. GENERATED FROM PYTHON SOURCE LINES 25-270
 
 
 
@@ -60,79 +55,29 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 
  .. code-block:: none
 
-
-      0%|          | 0.00/67.0M [00:00<?, ?B/s]
-      2%|▏         | 1.64M/67.0M [00:00<00:05, 11.7MB/s]
-      9%|▉         | 5.88M/67.0M [00:00<00:02, 26.8MB/s]
-     13%|█▎        | 8.77M/67.0M [00:00<00:02, 26.3MB/s]
-     17%|█▋        | 11.5M/67.0M [00:00<00:02, 26.5MB/s]
-     21%|██▏       | 14.2M/67.0M [00:00<00:02, 24.3MB/s]
-     25%|██▍       | 16.7M/67.0M [00:00<00:02, 23.7MB/s]
-     29%|██▊       | 19.2M/67.0M [00:00<00:02, 20.7MB/s]
-     32%|███▏      | 21.3M/67.0M [00:00<00:02, 20.2MB/s]
-     35%|███▍      | 23.4M/67.0M [00:01<00:02, 17.2MB/s]
-     38%|███▊      | 25.2M/67.0M [00:01<00:02, 17.4MB/s]
-     40%|████      | 27.0M/67.0M [00:01<00:02, 16.4MB/s]
-     43%|████▎     | 28.7M/67.0M [00:01<00:02, 15.7MB/s]
-     45%|████▌     | 30.3M/67.0M [00:01<00:02, 14.7MB/s]
-     48%|████▊     | 31.9M/67.0M [00:01<00:02, 14.4MB/s]
-     50%|█████     | 33.7M/67.0M [00:01<00:02, 14.7MB/s]
-     53%|█████▎    | 35.3M/67.0M [00:01<00:02, 14.9MB/s]
-     55%|█████▌    | 36.9M/67.0M [00:02<00:01, 15.1MB/s]
-     57%|█████▋    | 38.5M/67.0M [00:02<00:01, 15.2MB/s]
-     60%|█████▉    | 40.0M/67.0M [00:02<00:01, 15.2MB/s]
-     62%|██████▏   | 41.7M/67.0M [00:02<00:01, 15.7MB/s]
-     65%|██████▍   | 43.3M/67.0M [00:02<00:01, 15.5MB/s]
-     67%|██████▋   | 45.1M/67.0M [00:02<00:01, 16.0MB/s]
-     70%|██████▉   | 46.7M/67.0M [00:02<00:01, 15.5MB/s]
-     72%|███████▏  | 48.4M/67.0M [00:02<00:01, 16.0MB/s]
-     75%|███████▍  | 50.0M/67.0M [00:02<00:01, 15.9MB/s]
-     77%|███████▋  | 51.6M/67.0M [00:02<00:00, 15.9MB/s]
-     80%|███████▉  | 53.2M/67.0M [00:03<00:00, 15.3MB/s]
-     82%|████████▏ | 54.8M/67.0M [00:03<00:00, 15.5MB/s]
-     84%|████████▍ | 56.5M/67.0M [00:03<00:00, 15.5MB/s]
-     87%|████████▋ | 58.1M/67.0M [00:03<00:00, 14.5MB/s]
-     89%|████████▉ | 59.6M/67.0M [00:03<00:00, 14.7MB/s]
-     91%|█████████ | 61.1M/67.0M [00:03<00:00, 13.3MB/s]
-     93%|█████████▎| 62.4M/67.0M [00:03<00:00, 13.1MB/s]
-     95%|█████████▌| 63.8M/67.0M [00:03<00:00, 12.6MB/s]
-     97%|█████████▋| 65.0M/67.0M [00:04<00:00, 12.0MB/s]
-     99%|█████████▉| 66.4M/67.0M [00:04<00:00, 11.8MB/s]
-    100%|██████████| 67.0M/67.0M [00:04<00:00, 16.1MB/s]
-    Downloaded SSP to data/fsps_prsc_miles_chabrier.h5
-    /Users/suchethacooray/.claude-squad/worktrees/cs/refresh-repro_18b44877a75456f8/src/tengri/parameters/groups.py:568: UserWarning: Parameter 'sfh_tsnorm_log_total_mass' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(9.75, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
-    /Users/suchethacooray/.claude-squad/worktrees/cs/refresh-repro_18b44877a75456f8/src/tengri/parameters/groups.py:568: UserWarning: Parameter 'sfh_tsnorm_skew' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(0., dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
-    /Users/suchethacooray/.claude-squad/worktrees/cs/refresh-repro_18b44877a75456f8/src/tengri/parameters/groups.py:568: UserWarning: Parameter 'sfh_tsnorm_trunc' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(5.5, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
-    /Users/suchethacooray/.claude-squad/worktrees/cs/refresh-repro_18b44877a75456f8/src/tengri/parameters/groups.py:568: UserWarning: Parameter 'sfh_tsnorm_width_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(2.6, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
-    τ_V =  0.00: L_UV_absorbed = -2.2468e+31 erg/s, L_IR = 1.4183e+37 erg/s, ratio = -631259.826
-    τ_V =  0.10: L_UV_absorbed = -2.0013e+31 erg/s, L_IR = 1.5502e+37 erg/s, ratio = -774598.259
-    τ_V =  0.30: L_UV_absorbed = -1.6252e+31 erg/s, L_IR = 1.7479e+37 erg/s, ratio = -1075478.063
-    τ_V =  0.50: L_UV_absorbed = -1.3584e+31 erg/s, L_IR = 1.8853e+37 erg/s, ratio = -1387889.521
-    τ_V =  1.00: L_UV_absorbed = -9.6447e+30 erg/s, L_IR = 2.0875e+37 erg/s, ratio = -2164380.782
-    τ_V =  1.50: L_UV_absorbed = -7.6535e+30 erg/s, L_IR = 2.1941e+37 erg/s, ratio = -2866736.690
-    τ_V =  2.00: L_UV_absorbed = -6.5134e+30 erg/s, L_IR = 2.2602e+37 erg/s, ratio = -3470034.725
-    τ_V =  2.50: L_UV_absorbed = -5.7831e+30 erg/s, L_IR = 2.3064e+37 erg/s, ratio = -3988159.006
-    τ_V =  3.00: L_UV_absorbed = -5.2697e+30 erg/s, L_IR = 2.3415e+37 erg/s, ratio = -4443321.728
-    τ_V =  3.50: L_UV_absorbed = -4.8820e+30 erg/s, L_IR = 2.3697e+37 erg/s, ratio = -4854062.784
-    τ_V =  4.00: L_UV_absorbed = -4.5732e+30 erg/s, L_IR = 2.3934e+37 erg/s, ratio = -5233426.887
-    τ_V =  0.15: L_UV_absorbed = -1.8944e+31 erg/s, L_IR = 1.6069e+37 erg/s, ratio = -848242.672
-    τ_V =  0.75: L_UV_absorbed = -1.1254e+31 erg/s, L_IR = 2.0045e+37 erg/s, ratio = -1781226.441
-    τ_V =  2.25: L_UV_absorbed = -6.1125e+30 erg/s, L_IR = 2.2851e+37 erg/s, ratio = -3738334.884
-    τ_V =  3.75: L_UV_absorbed = -4.7197e+30 erg/s, L_IR = 2.3820e+37 erg/s, ratio = -5047039.011
-    /Users/suchethacooray/.claude-squad/worktrees/cs/refresh-repro_18b44877a75456f8/examples/usecases/plot_usecase_uv_to_ir_bolometric_balance.py:219: RuntimeWarning: invalid value encountered in log10
-      np.log10(min(luv_absorbed_grid.min(), lir_grid.min())),
+    τ_V =  0.00: L_UV_absorbed = 1.7764e+36 erg/s, L_IR = 2.0580e+36 erg/s, ratio = 1.159
+    τ_V =  0.10: L_UV_absorbed = 2.0018e+36 erg/s, L_IR = 2.3013e+36 erg/s, ratio = 1.150
+    τ_V =  0.30: L_UV_absorbed = 2.3204e+36 erg/s, L_IR = 2.6555e+36 erg/s, ratio = 1.144
+    τ_V =  0.50: L_UV_absorbed = 2.5231e+36 erg/s, L_IR = 2.8921e+36 erg/s, ratio = 1.146
+    τ_V =  1.00: L_UV_absorbed = 2.7789e+36 erg/s, L_IR = 3.2201e+36 erg/s, ratio = 1.159
+    τ_V =  1.50: L_UV_absorbed = 2.8849e+36 erg/s, L_IR = 3.3809e+36 erg/s, ratio = 1.172
+    τ_V =  2.00: L_UV_absorbed = 2.9382e+36 erg/s, L_IR = 3.4761e+36 erg/s, ratio = 1.183
+    τ_V =  2.50: L_UV_absorbed = 2.9700e+36 erg/s, L_IR = 3.5407e+36 erg/s, ratio = 1.192
+    τ_V =  3.00: L_UV_absorbed = 2.9915e+36 erg/s, L_IR = 3.5888e+36 erg/s, ratio = 1.200
+    τ_V =  3.50: L_UV_absorbed = 3.0075e+36 erg/s, L_IR = 3.6268e+36 erg/s, ratio = 1.206
+    τ_V =  4.00: L_UV_absorbed = 3.0200e+36 erg/s, L_IR = 3.6583e+36 erg/s, ratio = 1.211
+    τ_V =  0.15: L_UV_absorbed = 2.0959e+36 erg/s, L_IR = 2.4043e+36 erg/s, ratio = 1.147
+    τ_V =  0.75: L_UV_absorbed = 2.6814e+36 erg/s, L_IR = 3.0888e+36 erg/s, ratio = 1.152
+    τ_V =  2.25: L_UV_absorbed = 2.9559e+36 erg/s, L_IR = 3.5111e+36 erg/s, ratio = 1.188
+    τ_V =  3.75: L_UV_absorbed = 3.0141e+36 erg/s, L_IR = 3.6432e+36 erg/s, ratio = 1.209
 
     ======================================================================
     ENERGY BALANCE SUMMARY
     ======================================================================
-    Mean L_IR / L_UV_absorbed ratio: -2820279.4188 ± 1625932.4036
-    Max deviation from y=x: 523342788.72%
+    Mean L_IR / L_UV_absorbed ratio: 1.1745 ± 0.0242
+    Max deviation from y=x: 21.13%
     Models within ±10%: 0 / 15
-    Models within ±20%: 0 / 15
+    Models within ±20%: 12 / 15
 
     ⚠ WARNING: Energy non-conservation detected (>10% deviation).
     File an issue with the above table and commit hash.
@@ -240,6 +185,7 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
             observation=obs,
             redshift=Fixed(z),
             sfh={"type": "tsnorm", "*": FIXED, "peak_lbt_gyr": 0.3},
+            dust={"type": "single_component", "law_bc": "calzetti", "*": FIXED, "tau_v": 0.0},
             neb={"type": "cue", "*": FIXED},
         )
 
@@ -250,8 +196,12 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
         sed_intrinsic_np = np.array(result_intrinsic.sed)
 
         # Integrate UV: 912–3000 Å
+        # Convert L_nu to luminosity: ∫ L_nu dν = ∫ L_nu * (c/λ²) dλ
+        # where c = 3e10 cm/s and λ is in Angstroms
         mask_uv = (wave_rest >= wave_uv_min) & (wave_rest <= wave_uv_max)
-        luv_intrinsic = float(np.trapz(sed_intrinsic_np[mask_uv], wave_rest[mask_uv]))
+        c_cgs = 2.99792458e10  # cm/s
+        integrand_uv_intrinsic = sed_intrinsic_np[mask_uv] * c_cgs / (wave_rest[mask_uv] ** 2)
+        luv_intrinsic = float(np.trapz(integrand_uv_intrinsic, wave_rest[mask_uv]))
 
         # ========================================================================
         # Build the dust model with current tau_v
@@ -277,7 +227,8 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
         sed_attenuated_np = np.array(result_attenuated.sed)
 
         # Integrate UV from attenuated SED
-        luv_attenuated = float(np.trapz(sed_attenuated_np[mask_uv], wave_rest[mask_uv]))
+        integrand_uv_attenuated = sed_attenuated_np[mask_uv] * c_cgs / (wave_rest[mask_uv] ** 2)
+        luv_attenuated = float(np.trapz(integrand_uv_attenuated, wave_rest[mask_uv]))
 
         # Absorbed UV = intrinsic − attenuated
         luv_absorbed = luv_intrinsic - luv_attenuated
@@ -305,7 +256,8 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
         sed_ir_dust = np.maximum(sed_ir_dust, 0.0)
 
         # Integrate IR: 8–1000 μm
-        lir = float(np.trapz(sed_ir_dust, wave_rest[mask_ir]))
+        integrand_ir = sed_ir_dust * c_cgs / (wave_rest[mask_ir] ** 2)
+        lir = float(np.trapz(integrand_ir, wave_rest[mask_ir]))
 
         lir_grid.append(lir)
         luv_absorbed_grid.append(luv_absorbed)
@@ -388,7 +340,7 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 15.828 seconds)
+   **Total running time of the script:** (0 minutes 5.608 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_to_ir_bolometric_balance.py:

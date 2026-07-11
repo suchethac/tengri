@@ -5,7 +5,10 @@
 Photometry
 ==========
 
-Filter curves and photometric fitting.
+Working with broadband filters and observed-frame fluxes — filter curves
+and bandpass sets, color–redshift tracks, k-corrections and cosmological
+dimming, diagnostic color–color planes (UVJ, NUV–r, the WISE/IRAC AGN
+wedges), and photometric-redshift color degeneracies.
 
 
 
@@ -34,7 +37,24 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does a galaxy&#x27;s location in colour–colour space evolve with redshift? We compute SDSS g − r and r − z colours for two galaxy populations — a young star-forming and an old quiescent — across z = 0 to 3, with arrows marking the integer redshift stops. This is the reference picture for photometric redshift classifiers and for stellar-template grids.">
+    <div class="sphx-glr-thumbcontainer" tooltip="How many photometric bands are needed to recover stellar mass accurately? We mock a single galaxy with fixed parameters at different signal-to-noise levels using progressively larger filter sets, then MAP-fit to measure the recovered mass uncertainty. The figure shows that stellar mass constraints improve dramatically with filter count: a 2-band measurement is degenerate (wide posterior), while a 10-band panchromatic set (optical + NIR + mid-IR) tightens the mass estimate by an order of magnitude or more.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_band_count_mass_recovery_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_band_count_mass_recovery`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Stellar mass recovery with increasing photometric band count</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="How does a galaxy&#x27;s location in color–color space evolve with redshift? We compute SDSS g − r and r − z colors for two galaxy populations — a young star-forming and an old quiescent — across z = 0 to 3, with arrows marking the integer redshift stops. This is the reference picture for photometric redshift classifiers and for stellar-template grids.">
 
 .. only:: html
 
@@ -45,7 +65,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Photometric colour tracks vs redshift</div>
+      <div class="sphx-glr-thumbnail-title">Photometric color tracks vs redshift</div>
     </div>
 
 
@@ -136,7 +156,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Subaru HSC and Blanco DECam i-bands have different red-edge cutoffs (HSC i-2 at ~850 nm, DECam i at ~870 nm). This 20 nm difference produces measurable colour offsets when a sharp spectral feature sweeps through the i-band — particularly the Lyman break at z~3.5–4.5. We show (r − i) colours for an LBG template across both filter sets to highlight the divergence in the high-redshift regime.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Subaru HSC and Blanco DECam i-bands have different red-edge cutoffs (HSC i-2 at ~850 nm, DECam i at ~870 nm). This 20 nm difference produces measurable color offsets when a sharp spectral feature sweeps through the i-band — particularly the Lyman break at z~3.5–4.5. We show (r − i) colors for an LBG template across both filter sets to highlight the divergence in the high-redshift regime.">
 
 .. only:: html
 
@@ -153,7 +173,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do K-corrections vary with redshift for different galaxy populations? K-corrections quantify the shift in filter response as galaxies move to higher redshifts: K(z) = −2.5 log₁₀[(1+z) × F_ν(z) / F_ν(0)] for a fixed rest-frame filter. We compute K(z) for the SDSS r-band across four galaxy types — young star-forming, old star-forming, red-sequence elliptical, and post-starburst — from z = 0.01 to z = 2.0. This illustrates why stellar mass measurements require careful K-corrections at high redshift and why colour-matched template sets dominate photometric redshift algorithms.">
+    <div class="sphx-glr-thumbcontainer" tooltip="How do K-corrections vary with redshift for different galaxy populations? K-corrections quantify the shift in filter response as galaxies move to higher redshifts: K(z) = −2.5 log₁₀[(1+z) × F_ν(z) / F_ν(0)] for a fixed rest-frame filter. We compute K(z) for the SDSS r-band across four galaxy types — young star-forming, old star-forming, red-sequence elliptical, and post-starburst — from z = 0.01 to z = 2.0. This illustrates why stellar mass measurements require careful K-corrections at high redshift and why color-matched template sets dominate photometric redshift algorithms.">
 
 .. only:: html
 
@@ -170,7 +190,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The NUV−r colour is a sensitive probe of stellar age in galaxies. We show how a single-burst star formation history (tsnorm, truncated-skew-normal) evolves across the GALEX green valley (NUV−r ≈ 4–5 mag) as the stellar population ages from 0.05 to 5.5 Gyr. The colour exhibits a sharp discontinuity as the stellar population cools through the transition between young, UV-bright stars and older, redder populations.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The NUV−r color is a sensitive probe of stellar age in galaxies. We show how a single-burst star formation history (tsnorm, truncated-skew-normal) evolves across the GALEX green valley (NUV−r ≈ 4–5 mag) as the stellar population ages from 0.05 to 5.5 Gyr. The color exhibits a sharp discontinuity as the stellar population cools through the transition between young, UV-bright stars and older, redder populations.">
 
 .. only:: html
 
@@ -181,7 +201,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">NUV−r colour vs stellar age</div>
+      <div class="sphx-glr-thumbnail-title">NUV−r color vs stellar age</div>
     </div>
 
 
@@ -204,7 +224,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Two galaxies with very different star formation histories and dust can collide in colour–colour space, making photo-z ambiguous. Here, a young dusty star-forming galaxy at z≈0.5 and an old quiescent galaxy at z≈2 follow nearly identical (u-g, g-r) tracks and intersect at a single point. This shows why intermediate-wavelength photometry is essential for robust photo-z classification.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Two galaxies with very different star formation histories and dust can collide in color–color space, making photo-z ambiguous. Here, a young dusty star-forming galaxy at z≈0.5 and an old quiescent galaxy at z≈2 follow nearly identical (u-g, g-r) tracks and intersect at a single point. This shows why intermediate-wavelength photometry is essential for robust photo-z classification.">
 
 .. only:: html
 
@@ -215,13 +235,13 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Photo-z degeneracy in color–colour space: low-z dusty vs high-z quiescent</div>
+      <div class="sphx-glr-thumbnail-title">Photo-z degeneracy in color–color space: low-z dusty vs high-z quiescent</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Galaxy colour–magnitude diagram showing the distinct red and blue populations. We model two populations — 25 quiescent old galaxies (peak SFH ~8 Gyr) and 25 star-forming galaxies (continuous SFR) — varying stellar mass via log_total_mass. Each sample is placed at z = 0.05, computing u − r colour and rest-frame M_r magnitude. The colour bimodality and green valley are key signatures of galaxy assembly across cosmic time (Strateva et al. 2001 SDSS, Baldry et al. 2004).">
+    <div class="sphx-glr-thumbcontainer" tooltip="Galaxy color–magnitude diagram showing the distinct red and blue populations. We model two populations — 25 quiescent old galaxies (peak SFH ~8 Gyr) and 25 star-forming galaxies (continuous SFR) — varying stellar mass via log_total_mass. Each sample is placed at z = 0.05, computing u − r color and rest-frame M_r magnitude. The color bimodality and green valley are key signatures of galaxy assembly across cosmic time (Strateva et al. 2001 SDSS, Baldry et al. 2004).">
 
 .. only:: html
 
@@ -289,7 +309,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The UVJ (U−V vs V−J) diagram is a classic method for separating star-forming from quiescent galaxies. We populate it with four model tracks: (1) constant star-forming galaxies with varying dust optical depth, (2) an old quiescent population, (3) a post-starburst galaxy, and (4) a dusty starburst. The grey box marks the &quot;quiescent region&quot; from Williams+2009, a visual guide for identifying passive galaxies.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The UVJ (U−V vs V−J) diagram is a classic method for separating star-forming from quiescent galaxies. We populate it with four model tracks: (1) constant star-forming galaxies with varying dust optical depth, (2) an old quiescent population, (3) a post-starburst galaxy, and (4) a dusty starburst. The gray box marks the &quot;quiescent region&quot; from Williams+2009, a visual guide for identifying passive galaxies.">
 
 .. only:: html
 
@@ -300,7 +320,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">The UVJ colour–colour diagram</div>
+      <div class="sphx-glr-thumbnail-title">The UVJ color–color diagram</div>
     </div>
 
 
@@ -332,6 +352,7 @@ Filter curves and photometric fitting.
    :hidden:
 
    /auto_examples/photometry/plot_balmer_break_redshift_evolution
+   /auto_examples/photometry/plot_band_count_mass_recovery
    /auto_examples/photometry/plot_color_tracks_redshift
    /auto_examples/photometry/plot_cosmic_dimming_observed_flux
    /auto_examples/photometry/plot_filter_curves

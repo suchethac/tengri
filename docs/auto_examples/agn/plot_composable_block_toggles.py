@@ -4,7 +4,7 @@ Cumulative buildup of the GRAHSP AGN recipe, one sub-block at a time
 
 The ``agn.disc``, ``agn.lines``, ``agn.feii``, ``agn.torus``,
 ``agn.atten`` sub-blocks of ``SEDModel.build`` are composable: turning
-one on at a time and overlaying the all-on reference (dashed grey)
+one on at a time and overlaying the all-on reference (dashed gray)
 shows which features each sub-block contributes. Five panels at fixed
 log L_bol = 12.0, all built via the public nested-dict grammar:
 

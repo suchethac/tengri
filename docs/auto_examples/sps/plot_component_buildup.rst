@@ -21,11 +21,6 @@
 Building the panchromatic SED component by component
 =====================================================
 
-.. image:: images/sphx_glr_plot_component_buildup_001.png
-   :alt: plot component buildup
-   :class: sphx-glr-single-img
-
-
 Tengri assembles a galaxy SED out of named blocks that can each be toggled
 on or off at build time. We construct six models that successively add one
 more block, then overlay the rest-frame :math:`\nu L_\nu` after each
@@ -38,7 +33,7 @@ addition. Every block has a visible signature somewhere in the SED:
    optical flux.
 4. **+ Dust IR emission** — Dale 2014 templates re-radiate the absorbed
    flux in the far-infrared, restoring the energy balance.
-5. **+ AGN** — Kubota & Done multicolour disc adds a UV bump and a soft
+5. **+ AGN** — Kubota & Done multicolor disc adds a UV bump and a soft
    X-ray excess.
 6. **+ IGM** — Inoue 2014 absorption sculpts the rest-frame continuum
    shortward of Lyα and the Lyman break.
@@ -170,10 +165,10 @@ which blocks a particular dataset can constrain.
         L_nu = np.asarray(sed.sed)
         # rest-frame nu L_nu in erg/s
         nu_L_nu = (2.998e18 / wave) * L_nu
-        colour = cmap(i / (len(STAGES) - 1))
+        color = cmap(i / (len(STAGES) - 1))
         alpha = 0.45 if i < len(STAGES) - 1 else 1.0
         lw = 0.9 if i < len(STAGES) - 1 else 1.6
-        ax.plot(wave, nu_L_nu, color=colour, lw=lw, alpha=alpha, label=label)
+        ax.plot(wave, nu_L_nu, color=color, lw=lw, alpha=alpha, label=label)
 
     ax.set_xscale("log")
     ax.set_yscale("log")
@@ -189,7 +184,7 @@ which blocks a particular dataset can constrain.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.338 seconds)
+   **Total running time of the script:** (0 minutes 2.075 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_component_buildup.py:

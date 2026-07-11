@@ -38,14 +38,14 @@
    "is_class": true,
    "is_explicit": false,
    "module": "tengri.components.sed_model_component",
-   "module_short": "tengri.components",
+   "module_short": "tengri",
    "name": "SEDModelComponent"
   },
   {
    "is_class": true,
    "is_explicit": false,
    "module": "tengri.components",
-   "module_short": "tengri.components",
+   "module_short": "tengri",
    "name": "SEDModelComponent"
   },
   {
@@ -70,14 +70,14 @@
    "is_class": true,
    "is_explicit": false,
    "module": "tengri.components.sed_model_component",
-   "module_short": "tengri.components",
+   "module_short": "tengri",
    "name": "SEDModelComponent"
   },
   {
    "is_class": true,
    "is_explicit": false,
    "module": "tengri.components",
-   "module_short": "tengri.components",
+   "module_short": "tengri",
    "name": "SEDModelComponent"
   },
   {
@@ -90,8 +90,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.sed_model_component",
-   "module_short": "tengri.components",
+   "module": "tengri",
+   "module_short": "tengri",
    "name": "SEDModelComponent"
   },
   {
@@ -157,7 +157,7 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.parameters.priors",
+   "module": "tengri",
    "module_short": "tengri",
    "name": "Uniform"
   }
@@ -173,8 +173,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.dust.attenuation",
-   "module_short": "tengri.components.dust",
+   "module": "tengri.dust",
+   "module_short": "tengri.dust",
    "name": "calzetti"
   }
  ],
@@ -189,8 +189,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.dust.attenuation",
-   "module_short": "tengri.components.dust",
+   "module": "tengri.dust",
+   "module_short": "tengri.dust",
    "name": "cardelli"
   }
  ],
@@ -816,14 +816,14 @@
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.components.sed_model_component",
-   "module_short": "tengri.components",
+   "module_short": "tengri",
    "name": "SEDModelComponent.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.components",
-   "module_short": "tengri.components",
+   "module_short": "tengri",
    "name": "SEDModelComponent.predict"
   },
   {

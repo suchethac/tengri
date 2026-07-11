@@ -3,7 +3,7 @@ X-ray SED decomposition: AGN, LMXB, HMXB, hot gas
 =================================================
 
 The X-CIGALE X-ray module (Yang et al. 2020) sums four physically distinct
-emitters: the AGN corona (a cut-off power law normalised through the
+emitters: the AGN corona (a cut-off power law normalized through the
 α_OX–L_2500 relation), low- and high-mass X-ray binaries (LMXB ∝ M⋆, HMXB ∝ SFR;
 Lehmer et al. 2016 metallicity/age scalings), and a hot interstellar-gas term
 (∝ SFR). This reproduces Yang+2020 Figure 1 for a typical AGN host:
@@ -98,6 +98,5 @@ ax_top = ax.secondary_xaxis(
 ax_top.set_xlabel(r"$\log E$ (keV)")
 
 ax.legend(frameon=True, fontsize=10, loc="lower right", title="component")
-ax.set_title("X-ray SED components (Yang+2020 X-CIGALE; AGN-dominated)")
 fig.tight_layout()
 plt.savefig("plot_xray_component_decomposition.png", dpi=150, bbox_inches="tight")

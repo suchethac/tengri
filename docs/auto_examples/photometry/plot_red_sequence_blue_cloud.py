@@ -2,11 +2,11 @@
 Red Sequence vs Blue Cloud Bimodality
 ======================================
 
-Galaxy colour–magnitude diagram showing the distinct red and blue populations.
+Galaxy color–magnitude diagram showing the distinct red and blue populations.
 We model two populations — 25 quiescent old galaxies (peak SFH ~8 Gyr) and 25
 star-forming galaxies (continuous SFR) — varying stellar mass via
 ``log_total_mass``. Each sample is placed at ``z = 0.05``, computing
-``u − r`` colour and rest-frame ``M_r`` magnitude. The colour bimodality and
+``u − r`` color and rest-frame ``M_r`` magnitude. The color bimodality and
 green valley are key signatures of galaxy assembly across cosmic time (Strateva
 et al. 2001 SDSS, Baldry et al. 2004).
 
@@ -44,7 +44,7 @@ def _flux(model, params):
 # Single redshift for all galaxies (low-z SDSS representative)
 z_fixed = 0.05
 
-# Load u, r filters for colour-magnitude diagram
+# Load u, r filters for color-magnitude diagram
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u", "sdss_r"]))
 
 # Baseline SSP
@@ -125,7 +125,7 @@ for pop_label, peak, width, tau_diff, tau_bc, color, n_samples in POPULATIONS:
         # m_r: magnitude in r band (reference)
         m_u = -2.5 * np.log10(flux[0])
         m_r = -2.5 * np.log10(flux[1])
-        # Colour: u - r
+        # Color: u - r
         u_r = m_u - m_r
 
         # Absolute magnitude (rest-frame, no K-correction applied)
@@ -148,7 +148,7 @@ for pop_label, peak, width, tau_diff, tau_bc, color, n_samples in POPULATIONS:
         rasterized=True,
     )
 
-# Shade green valley (intermediate colours where few galaxies exist)
+# Shade green valley (intermediate colors where few galaxies exist)
 ax.axvspan(1.5, 2.1, alpha=0.08, color="gray", zorder=0, label="Green valley")
 
 ax.set(

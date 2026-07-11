@@ -21,11 +21,6 @@
 Hardness ratio across the alpha_OX vs log N_H plane
 ====================================================
 
-.. image:: images/sphx_glr_plot_xray_alpha_ox_nh_001.png
-   :alt: plot xray alpha ox nh
-   :class: sphx-glr-single-img
-
-
 The CIGALE-faithful obscured-AGN spectral model combines two knobs
 that classification surveys often confound: ``delta_alpha_ox``
 (offset from the empirical alpha_OX-L_2500 relation, controlling the
@@ -133,6 +128,11 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_xray_alpha_ox_nh.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.216 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_alpha_ox_nh.py:

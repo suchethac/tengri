@@ -21,11 +21,6 @@
 THEMIS dust IR: radiation-field slope (alpha)
 =============================================
 
-.. image:: images/sphx_glr_plot_themis_alpha_sweep_001.png
-   :alt: plot themis alpha sweep
-   :class: sphx-glr-single-img
-
-
 The Jones et al. (2017) THEMIS dust model distributes grains over a range of
 starlight intensities :math:`U` with a power law :math:`dU/dM \propto U^{-\alpha}`.
 The slope ``alpha`` controls how much warm, intensely-illuminated dust
@@ -39,12 +34,12 @@ added by re-shaping them with CIGALE's DustEM alpha grid, anchored so that
 (``scripts/build_themis_alpha_axis.py``). This sweeps alpha at fixed grain
 composition and radiation-field minimum.
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-78
+.. GENERATED FROM PYTHON SOURCE LINES 18-77
 
 
 
 .. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_themis_alpha_sweep_001.png
-   :alt: THEMIS: radiation-field slope $\alpha$ ($\alpha=2$ = FSPS anchor)
+   :alt: plot themis alpha sweep
    :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_themis_alpha_sweep_001.png
    :class: sphx-glr-single-img
 
@@ -108,17 +103,11 @@ composition and radiation-field minimum.
         ylim=(1e42, 1e45),
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
         ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
-        title=r"THEMIS: radiation-field slope $\alpha$ ($\alpha=2$ = FSPS anchor)",
     )
     ax.legend(frameon=False, fontsize=9, loc="upper right", title=r"$dU/dM\propto U^{-\alpha}$")
 
     fig.tight_layout()
     plt.savefig("plot_themis_alpha_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.291 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_themis_alpha_sweep.py:

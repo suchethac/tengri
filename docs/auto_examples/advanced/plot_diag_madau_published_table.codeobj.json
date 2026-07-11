@@ -808,7 +808,7 @@
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.igm",
-   "module_short": "tengri.igm",
+   "module_short": "tengri",
    "name": "igm_transmission_madau"
   }
  ],
@@ -844,24 +844,6 @@
    "module": "builtins",
    "module_short": "builtins",
    "name": "builtin_function_or_method"
-  }
- ],
- "max_abs_error": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
- "max_rel_error": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
   }
  ],
  "np.abs": [
@@ -926,22 +908,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "log"
-  }
- ],
- "np.max": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "max"
   }
  ],
  "np.maximum": [
@@ -1108,24 +1074,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "ndarray"
-  }
- ],
- "wave_forest.max": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  }
- ],
- "wave_forest.min": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
   }
  ],
  "z_source": [

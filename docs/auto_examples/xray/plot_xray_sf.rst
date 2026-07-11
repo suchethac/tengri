@@ -21,11 +21,6 @@
 X-ray binary luminosity scales with SFR (HMXB) and stellar mass (LMXB)
 ========================================================================
 
-.. image:: images/sphx_glr_plot_xray_sf_001.png
-   :alt: plot xray sf
-   :class: sphx-glr-single-img
-
-
 X-ray binaries (XRBs) are the dominant X-ray sources in star-forming
 galaxies once an AGN is excluded. High-mass XRBs trace the recent
 star-formation rate (Mineo+2012), while low-mass XRBs trace the

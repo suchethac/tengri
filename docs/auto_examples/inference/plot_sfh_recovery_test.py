@@ -114,13 +114,4 @@ ax_res.set_ylim(-3.5, 3.5)
 ax_res.set_ylabel(r"$(F_{\rm fit} - F_{\rm obs})/\sigma$")
 ax_res.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
 
-# Print fit summary for validation
-alpha_true = float(truth["sfh_dpl_alpha"])
-alpha_fit = float(fit_params["sfh_dpl_alpha"])
-beta_true = float(truth["sfh_dpl_beta"])
-beta_fit = float(fit_params["sfh_dpl_beta"])
-print(f"DPL parameters: alpha={alpha_true:.2f} (true) vs {alpha_fit:.2f} (fit)")
-print(f"DPL parameters: beta={beta_true:.2f} (true) vs {beta_fit:.2f} (fit)")
-print(f"Photometric residual sigma: {np.std(residual):.2f}")
-
 plt.savefig("plot_sfh_recovery_test.png", dpi=150, bbox_inches="tight")

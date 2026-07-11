@@ -972,24 +972,6 @@
    "name": "logspace"
   }
  ],
- "la": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
- "le": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
  "mask_fir": [
   {
    "is_class": false,
@@ -1268,15 +1250,6 @@
    "name": "subplots"
   }
  ],
- "r": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
  "ratio": [
   {
    "is_class": false,
@@ -1373,15 +1346,6 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "SSPData"
-  }
- ],
- "tau": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
   }
  ],
  "tau_diff": [

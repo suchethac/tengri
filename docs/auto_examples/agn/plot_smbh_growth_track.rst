@@ -21,11 +21,6 @@
 AGN SMBH growth track: dormant → merger → QSO → fading
 =======================================================
 
-.. image:: images/sphx_glr_plot_smbh_growth_track_001.png
-   :alt: plot smbh growth track
-   :class: sphx-glr-single-img
-
-
 The growth of a supermassive black hole (SMBH) traces a path through
 the (M_BH, L_bol) plane. Starting as a dormant low-mass hole, accretion
 during mergers builds both mass and luminosity. Peak luminosity occurs
@@ -52,8 +47,19 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -156,7 +162,7 @@ References:
     )
 
     # Plot growth track: connect stages with arrows
-    for i, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(STAGES):
+    for _i, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(STAGES):
         mbh = 10.0**log_mbh
         lbol = 10.0**log_lbol
         ax_track.plot(
@@ -199,7 +205,7 @@ References:
         fontsize=10,
         color="0.5",
         rotation=0,
-        bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=2),
+        bbox=dict(facecolor="white", alpha=0.8, edgecolor="none", pad=2),
         zorder=10,
     )
 
@@ -221,7 +227,7 @@ References:
     # Top-left: Dormant + Merger
     for ax_idx, stages_pair in enumerate([(STAGES[0], STAGES[1]), (STAGES[2], STAGES[3])]):
         ax = ax_seds[ax_idx]
-        for stage_idx, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(stages_pair):
+        for _stage_idx, (label, log_mbh, log_lbol, color, _marker, _msize) in enumerate(stages_pair):
             params = {
                 **baseline,
                 "agn_log_mbh": jnp.float64(log_mbh),
@@ -242,6 +248,11 @@ References:
         ax.grid(True, alpha=0.2, which="both")
 
     plt.savefig("plot_smbh_growth_track.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.869 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_smbh_growth_track.py:

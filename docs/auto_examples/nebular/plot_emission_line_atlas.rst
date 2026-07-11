@@ -21,13 +21,8 @@
 Optical emission-line atlas of a young star-forming galaxy
 ============================================================
 
-.. image:: images/sphx_glr_plot_emission_line_atlas_001.png
-   :alt: plot emission line atlas
-   :class: sphx-glr-single-img
-
-
-Zoomed rest-frame spectrum of an ionised-gas-dominated SF galaxy with
-the strongest optical / near-UV emission lines labelled. Wavelengths
+Zoomed rest-frame spectrum of an ionized-gas-dominated SF galaxy with
+the strongest optical / near-UV emission lines labeled. Wavelengths
 are vacuum; line positions follow NIST/Atomic Line List.
 
 Useful as a quick reference for which line lands where when planning
@@ -141,11 +136,6 @@ runs in rest-frame-only mode (which is all the atlas needs anyway).
     ax_opt.set(xlabel=r"Rest-frame wavelength [$\mathrm{\AA}$]", ylabel=r"$F_\lambda$ [arbitrary]")
 
     plt.savefig("plot_emission_line_atlas.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.433 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_emission_line_atlas.py:

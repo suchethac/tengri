@@ -21,18 +21,13 @@
 Three AGN recipes built by swapping selectors, not call sites
 ==============================================================
 
-.. image:: images/sphx_glr_plot_composable_recipes_001.png
-   :alt: plot composable recipes
-   :class: sphx-glr-single-img
-
-
 The composable AGN grammar (``agn.disc``, ``agn.torus``, ``agn.lines``,
 ``agn.feii``, ``agn.atten``) lets the user mix sub-blocks across model
 families. Same SEDModel.build call, three different physics tuples:
 
 1. **all-GRAHSP** — Buchner+2024 end-to-end (SBPL disc, GRAHSP lines,
    FeII forest, log-Gaussian torus, bi-attenuation).
-2. **multicolour + SKIRTOR + NLR** — Kubota-Done disc with Stalevski
+2. **multicolor + SKIRTOR + NLR** — Kubota-Done disc with Stalevski
    clumpy torus and Gaussian NLR forest.
 3. **QSOgen monolithic** — Temple+2021 empirical template as a single
    ``disc`` selector, no other blocks.
@@ -94,7 +89,7 @@ Stalevski et al. 2016 (SKIRTOR); Temple, Hewett & Banerji 2021.
             },
         ),
         (
-            "multicolour disc + SKIRTOR torus + NLR",
+            "multicolor disc + SKIRTOR torus + NLR",
             "tab:green",
             {
                 "disc": {"type": "multicolor", "*": tengri.FIXED},

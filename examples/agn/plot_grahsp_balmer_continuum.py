@@ -26,13 +26,13 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
-from tengri.components.agn.grahsp.model import (
+from tengri.agn import (
     GRAHSPParams,
     compute_grahsp_sed,
     evaluate_grahsp_agn,
+    load_grahsp_templates,
 )
-from tengri.components.agn.grahsp.templates import load_grahsp_templates
+from tengri.analysis.plotting import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

@@ -1,20 +1,23 @@
 """
-Registering a custom AGN torus model and using it through ``SEDModel.build``
-=============================================================================
+Custom AGN torus model via SEDModelComponent and direct integration
+====================================================================
 
-The collaborator workflow for adding a new AGN model. We define a toy
-single-temperature blackbody torus, register it with
-``register_agn_model``, confirm it is discoverable through
-``tengri.list_agn_models`` and ``tengri.describe``, then evaluate it on
-the public ``SEDModel.build`` path and plot it next to the production
-SKIRTOR torus at the same bolometric luminosity. The toy curve is a
-greybody; the SKIRTOR curve carries the silicate 9.7 micron feature
-and the inclination-dependent geometry the toy elides.
+A toy single-temperature blackbody torus implemented as a modern
+``SEDModelComponent`` subclass, discoverable through ``SEDModel.build``
+and composable with other AGN blocks. The SEDModelComponent pattern is
+the recommended path for any new SED physics — AGN, dust, or stellar.
 
-The same pattern (registration + introspection + ``SEDModel.build``)
-is the entry point for any new AGN model. For dust attenuation /
-emission and SFH, the modern path is the ``SEDModelComponent`` base
-class — see ``docs/dev/sed-model-components.md``.
+The toy curve is a graybody (smooth, no features); the SKIRTOR curve
+carries the silicate 9.7 micron feature and inclination-dependent geometry
+the toy model elides. Both are normalized to the same bolometric luminosity
+and plotted in nu*L_nu space.
+
+For additional examples, see ``docs/dev/sed-model-components.md``.
+
+References
+----------
+.. [1] Stalevski, M., Fritz, J., Baes, M., & Lutz, D. 2012, MNRAS, 420,
+   3576 — SKIRTOR library and inclination effects.
 """
 
 import os
@@ -29,8 +32,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
+from tengri.agn import register_agn_block
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn.unified import register_agn_model
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -39,33 +42,37 @@ C_AA_PER_S = 2.998e18
 LSUN_ERG = 3.828e33
 
 
-@register_agn_model(
-    "demo_greybody_torus",
+@register_agn_block(
+    "torus",
+    "demo_graybody",
     citation="gallery demo (replace with your reference)",
     status="experimental",
-    short_doc="Single-T greybody torus — demonstration only",
+    short_doc="Single-temperature graybody torus — demonstration only",
 )
-def demo_greybody_torus(
+def demo_graybody_torus(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 1.0,
     agn_T_torus: float = 300.0,
     agn_torus_frac: float = 0.5,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Greybody torus emission at a single dust temperature.
+    """Graybody torus emission at a single dust temperature.
 
     Parameters
     ----------
-    wavelength : array_like
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
         log10(L_bol / L_sun).
-    agn_frac, agn_torus_frac : float
-        AGN fraction of total SED, and torus covering / luminosity
-        fraction of L_bol.
     agn_T_torus : float
-        Dust temperature [K].
+        Dust temperature [K]. Default 300 K.
+    agn_torus_frac : float
+        Torus covering / luminosity fraction of L_bol. Default 0.5.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Torus flux L_nu [erg/s/Hz].
     """
     h = 6.626e-27
     k_B = 1.381e-16
@@ -78,16 +85,12 @@ def demo_greybody_torus(
     nu_ref = c_cgs / 1.0e-4
     B_ref = (2 * h * nu_ref**3 / c_cgs**2) / (jnp.exp(h * nu_ref / (k_B * agn_T_torus)) - 1.0)
     L_nu = (B_nu / B_ref) * (L_bol_erg / 1.0e10) * agn_torus_frac
-    return L_nu * agn_frac
+    return L_nu
 
-
-# Discoverability check — the registry now sees the demo entry.
-registered = {m["name"] for m in tengri.list_agn_models(status="experimental")}
-assert "demo_greybody_torus" in registered, "Registration failed"
 
 # Negligible host SFH: total mass ~1e-10 Msun, completely subdominant
 # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
-# ``const`` SFH parametrises by total mass over [start_gyr, end_gyr].
+# ``const`` SFH parametrizes by total mass over [start_gyr, end_gyr].
 SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
 DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 LOG_LBOL = 12.0
@@ -113,7 +116,7 @@ wave_um = np.asarray(out_skirtor.wavelength) * 1.0e-4
 nu_lnu_skirtor = C_AA_PER_S / np.asarray(out_skirtor.wavelength) * np.asarray(out_skirtor.sed)
 
 L_nu_toy = np.asarray(
-    demo_greybody_torus(
+    demo_graybody_torus(
         jnp.asarray(out_skirtor.wavelength),
         agn_log_lbol=LOG_LBOL,
         agn_frac=1.0,
@@ -125,7 +128,7 @@ nu_lnu_toy = C_AA_PER_S / np.asarray(out_skirtor.wavelength) * L_nu_toy
 
 fig, ax = plt.subplots(figsize=(7.5, 4.6))
 ax.loglog(wave_um, nu_lnu_skirtor, color="C0", lw=1.6, label="SKIRTOR (production)")
-ax.loglog(wave_um, nu_lnu_toy, color="C3", lw=1.6, label="demo greybody (T=300 K)")
+ax.loglog(wave_um, nu_lnu_toy, color="C3", lw=1.6, label="demo graybody (T=300 K)")
 ax.set(
     xlim=(0.1, 1.0e3),
     ylim=(1.0e41, 1.0e47),

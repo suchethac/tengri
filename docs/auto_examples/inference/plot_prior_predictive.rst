@@ -21,11 +21,6 @@
 Prior predictive check: what does the model predict before it sees data?
 ========================================================================
 
-.. image:: images/sphx_glr_plot_prior_predictive_001.png
-   :alt: plot prior predictive
-   :class: sphx-glr-single-img
-
-
 Before fitting, sample 200 draws from the prior and push each through the
 forward model. The envelope of predicted photometry is the prior predictive
 distribution — what the model can produce under our chosen priors, without
@@ -156,7 +151,7 @@ This is best practice for Bayesian workflow — see Gelman et al. 2020
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.261 seconds)
+   **Total running time of the script:** (0 minutes 4.311 seconds)
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_prior_predictive.py:

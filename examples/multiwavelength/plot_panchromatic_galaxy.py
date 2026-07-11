@@ -87,7 +87,10 @@ for x_um, _lbl in [(0.1, "UV"), (0.5, "Optical"), (10.0, "IR"), (300.0, "FIR"), 
     ax.axvline(x_um, color="0.8", lw=0.6, ls=":", alpha=0.5)
 
 ax.set_xlim(0.08, 3e4)
-ax.set_ylim(1e25, 1e34)
+# Tighten y-limits based on data range (stellar/dust dominates; radio is faint context)
+ymax = max(np.max(nu_l_nu_sed[mask_sed]), np.max(nu_l_nu_radio[mask_radio]))
+ymin = min(np.min(nu_l_nu_sed[mask_sed]), np.min(nu_l_nu_radio[mask_radio]))
+ax.set_ylim(ymin / 2.0, ymax * 2.0)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mu$m]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
 ax.legend(frameon=False, fontsize=9)

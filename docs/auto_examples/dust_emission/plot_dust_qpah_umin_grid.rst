@@ -21,11 +21,6 @@
 The q_PAH and U_min knobs move PAH amplitude and FIR peak independently
 ========================================================================
 
-.. image:: images/sphx_glr_plot_dust_qpah_umin_grid_001.png
-   :alt: plot dust qpah umin grid
-   :class: sphx-glr-single-img
-
-
 A 2-D grid on the Draine & Li 2007 template library: rows step through
 PAH mass fraction q_PAH (controls mid-IR PAH-feature strength),
 columns through the minimum radiation field U_min (sets the diffuse
@@ -114,7 +109,7 @@ Reference: Draine & Li 2007, ApJ, 657, 810.
             ax.tick_params(labelsize=11)
             if i == 0 and j == 0:
                 for wl_um, _wl_label in [(3, "PAH"), (25, "mid-IR"), (100, "far-IR")]:
-                    ax.axvline(wl_um, color="grey", ls=":", lw=0.5, alpha=0.4)
+                    ax.axvline(wl_um, color="gray", ls=":", lw=0.5, alpha=0.4)
 
     fig.tight_layout()
     plt.savefig("plot_dust_qpah_umin_grid.png", dpi=150, bbox_inches="tight")

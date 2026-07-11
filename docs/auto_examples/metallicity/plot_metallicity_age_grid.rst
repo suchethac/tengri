@@ -21,14 +21,9 @@
 Age-metallicity degeneracy in the stellar continuum
 ===================================================
 
-.. image:: images/sphx_glr_plot_metallicity_age_grid_001.png
-   :alt: plot metallicity age grid
-   :class: sphx-glr-single-img
-
-
 Metal-rich young populations and metal-poor old populations can produce similar
-optical colours — a fundamental degeneracy in galaxy fitting. This 3×4 grid
-shows normalised rest-frame continua at nine points in the age–metallicity plane,
+optical colors — a fundamental degeneracy in galaxy fitting. This 3×4 grid
+shows normalized rest-frame continua at nine points in the age–metallicity plane,
 with each row fixed at one lookback-formation age and each column fixed at one
 metallicity. Dust is zeroed to expose the clean stellar continuum shape.
 
@@ -147,11 +142,6 @@ breaks (young stars are bluer).
 
     fig.tight_layout()
     plt.savefig("plot_metallicity_age_grid.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.218 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_metallicity_age_grid.py:

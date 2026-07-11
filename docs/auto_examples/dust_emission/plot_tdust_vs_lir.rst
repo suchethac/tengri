@@ -21,11 +21,6 @@
 Radiation field strength sets both dust peak temperature and L_IR
 =================================================================
 
-.. image:: images/sphx_glr_plot_tdust_vs_lir_001.png
-   :alt: plot tdust vs lir
-   :class: sphx-glr-single-img
-
-
 For Draine & Li (2007) dust at fixed mass, raising the diffuse
 radiation field intensity ``U_min`` does two things at once: it
 shifts the SED peak blueward (warmer dust) and proportionally
@@ -97,7 +92,7 @@ Reference: Draine & Li 2007, ApJ 657, 810 (Eq. 23, U distribution).
     L_IR = np.array(L_IR)
 
     fig, (ax_corr, ax_sed) = plt.subplots(1, 2, figsize=(11.5, 4.3))
-    cmap = plt.get_cmap("plasma")
+    cmap = plt.get_cmap("viridis")
     norm = plt.Normalize(np.log10(umin_vals.min()), np.log10(umin_vals.max()))
 
     ax_corr.scatter(

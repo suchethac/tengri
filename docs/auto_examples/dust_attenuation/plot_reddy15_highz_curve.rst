@@ -21,11 +21,6 @@
 Reddy+2015 high-redshift attenuation curve
 ===========================================
 
-.. image:: images/sphx_glr_plot_reddy15_highz_curve_001.png
-   :alt: plot reddy15 highz curve
-   :class: sphx-glr-single-img
-
-
 Reddy et al. (2015) derived a dust attenuation curve from Balmer decrements
 of ``z ~ 1.4–2.6`` star-forming galaxies in the MOSDEF survey. It is shallower
 in the UV than the SMC curve but has a lower total-to-selective ratio
@@ -34,7 +29,7 @@ combination relevant when fitting rest-UV/optical SEDs of high-z galaxies.
 FSPS exposes this curve; tengri provides it as the ``reddy15`` dust law.
 
 This figure overlays ``reddy15`` against three reference curves on a common
-``k(λ)`` normalisation (``k(5500 Å) = 1``), using the public
+``k(λ)`` normalization (``k(5500 Å) = 1``), using the public
 ``tengri.dust.resolve_dust_law`` accessor — no stellar population or SSP file
 is required to inspect an attenuation curve.
 
@@ -46,12 +41,12 @@ Calzetti, D. et al. 2000, ApJ, 533, 682.
 Gordon, K. D. et al. 2003, ApJ, 594, 279 (SMC).
 Cardelli, J. A. et al. 1989, ApJ, 345, 245 (MW).
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-68
+.. GENERATED FROM PYTHON SOURCE LINES 25-67
 
 
 
 .. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_reddy15_highz_curve_001.png
-   :alt: Dust attenuation curves: Reddy+2015 vs local references
+   :alt: plot reddy15 highz curve
    :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_reddy15_highz_curve_001.png
    :class: sphx-glr-single-img
 
@@ -96,14 +91,13 @@ Cardelli, J. A. et al. 1989, ApJ, 345, 245 (MW).
         xscale="log",
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mu$m]",
         ylabel=r"$k(\lambda)\;/\;k(5500\,\mathrm{\AA})$",
-        title="Dust attenuation curves: Reddy+2015 vs local references",
         xlim=(0.13, 2.6),
         ylim=(0, 6),
     )
     ax.legend(frameon=False, fontsize=9)
 
     plt.tight_layout()
-    plt.show()
+    plt.savefig("plot_reddy15_highz_curve.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_reddy15_highz_curve.py:

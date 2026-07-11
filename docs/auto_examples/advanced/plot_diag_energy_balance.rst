@@ -21,18 +21,13 @@
 Energy balance: dust absorption vs. emission
 ==============================================
 
-.. image:: images/sphx_glr_plot_diag_energy_balance_001.png
-   :alt: plot diag energy balance
-   :class: sphx-glr-single-img
-
-
 Tests dust attenuation–emission consistency via energy conservation. Sweeps
 diffuse optical depth τ_diff while measuring agreement between independent
 attenuation and emission modules. Ratio = L_emitted / L_absorbed should equal 1.
 
 Reference: Draine & Li 2007, ApJ, 657, 810.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-122
+.. GENERATED FROM PYTHON SOURCE LINES 11-116
 
 
 
@@ -42,24 +37,8 @@ Reference: Draine & Li 2007, ApJ, 657, 810.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Energy balance diagnostic results:
-    tau_diff   Ratio      L_abs (erg/s)        L_emit (erg/s)      
-    0.1        0.305      9.305e+41            2.837e+41           
-    0.3        0.196      2.136e+42            4.179e+41           
-    0.5        0.169      3.121e+42            5.277e+41           
-    1.0        0.148      4.951e+42            7.315e+41           
-    2.0        0.137      7.134e+42            9.747e+41           
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -156,7 +135,7 @@ Reference: Draine & Li 2007, ApJ, 657, 810.
     ax_l.errorbar(
         tau_diffs, ratios, fmt="o", markersize=8, lw=2, color="C0", label="L_emit / L_absorb"
     )
-    ax_l.axhline(1.0, ls="--", color="grey", lw=1, alpha=0.7, label="Expected")
+    ax_l.axhline(1.0, ls="--", color="gray", lw=1, alpha=0.7, label="Expected")
     ax_l.set_xlabel(r"$\tau_{\rm diff}$"), ax_l.set_ylabel("Ratio")
     ax_l.legend(frameon=False, fontsize=9), ax_l.grid(True, alpha=0.3)
     x_pos = np.arange(len(tau_diffs))
@@ -169,11 +148,10 @@ Reference: Draine & Li 2007, ApJ, 657, 810.
     fig.tight_layout()
     plt.savefig("plot_diag_energy_balance.png", dpi=150, bbox_inches="tight")
 
-    # Report findings
-    print("Energy balance diagnostic results:")
-    print(f"{'tau_diff':<10} {'Ratio':<10} {'L_abs (erg/s)':<20} {'L_emit (erg/s)':<20}")
-    for tau, r, la, le in zip(tau_diffs, ratios, L_abs_list, L_emit_list):
-        print(f"{tau:<10.1f} {r:<10.3f} {la:<20.3e} {le:<20.3e}")
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.112 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_energy_balance.py:

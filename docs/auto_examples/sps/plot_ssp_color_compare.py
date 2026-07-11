@@ -103,7 +103,7 @@ for i, (label, color) in enumerate(zip(data, colors_cmap)):
 
 ax.set_xticks(x)
 ax.set_xticklabels([name for name, _, _ in COLORS_TO_PLOT])
-ax.set_ylabel(r"AB colour  [mag]")
+ax.set_ylabel(r"AB color  [mag]")
 ax.axhline(0.0, color="0.55", lw=0.6)
 ax.legend(frameon=False, fontsize=8, loc="upper left", ncol=2)
 ax.text(

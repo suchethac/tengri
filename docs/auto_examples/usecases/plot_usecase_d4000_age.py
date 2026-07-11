@@ -4,7 +4,7 @@ The 4000 Å break as a stellar age proxy
 
 The 4000 Å break ``D_n(4000)`` — Bruzual 1983, Balogh+1999 — measures
 the discontinuity around 4000 Å produced by the line-blanketing of
-ionised metals in the atmospheres of old stars. It rises monotonically
+ionized metals in the atmospheres of old stars. It rises monotonically
 with the mass-weighted age of the stellar population and is one of
 the most widely used age indicators in SDSS-style optical-only data
 (Kauffmann+2003).

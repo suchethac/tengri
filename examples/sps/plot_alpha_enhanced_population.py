@@ -1,24 +1,16 @@
 """
-Alpha-element enhancement in quiescent stellar populations
-===========================================================
+Alpha-element enhancement shifts absorption features in old stellar populations
+================================================================================
 
 The stellar populations in massive elliptical galaxies are typically
 α-enhanced ([α/Fe] > 0) due to rapid star formation timescales that
-terminate before iron-peak elements fully enrich the gas (Thomas et al. 2005).
-increasing [α/Fe] shifts absorption features —
-particularly the Mg b and Fe5270 indices — which serve as diagnostics of
-star-formation history timescale.
+terminate before iron-peak elements fully enrich the gas. Increasing [α/Fe]
+shifts absorption-feature strengths — particularly Mg b and Fe5270 — which
+serve as diagnostics of the galaxy's star-formation history timescale. We
+sweep [α/Fe] from 0.0 to 0.6 at fixed age (5 Gyr) and solar metallicity,
+showing the full rest-frame SED and a zoom on the optical feature region.
 
-We build four tengri models at fixed age (5 Gyr), metallicity Z = 0 dex
-(solar), and redshift z = 0.05, sweeping [α/Fe] ∈ {0.0, 0.2, 0.4, 0.6}.
-The top panel shows the full rest-frame SED in νL_ν; the bottom zooms
-into the 5050–5350 Å region to reveal the Mg b (≈5175 Å) and Fe5270
-(≈5270 Å) line ratio changes.
-
-**References:**
-    - Thomas et al. 2005 (MNRAS 357, 1113) — age–metallicity–[α/Fe] diagnostics
-    - Conroy & van Dokkum 2012 (ApJ 747, 69) — stellar population models
-
+References: Thomas et al. 2005 (MNRAS 357, 1113); Conroy & van Dokkum 2012 (ApJ 747, 69).
 """
 
 import os
@@ -103,14 +95,10 @@ for alpha_fe, color in zip(ALPHA_FE_SWEEP, colors):
     wave_rest, sed_nulnu = seds[alpha_fe]
     ax1.loglog(wave_rest, sed_nulnu, label=f"[α/Fe] = {alpha_fe:.1f}", color=color, linewidth=2)
 
-ax1.set_ylabel(r"$\nu L_\nu$ (erg s$^{-1}$ Hz$^{-1}$)", fontsize=11)
-ax1.set_xlabel(r"Rest wavelength ($\AA$)", fontsize=11)
-ax1.legend(loc="upper right", fontsize=10)
-ax1.grid(True, which="both", alpha=0.3)
-ax1.set_title(
-    f"Age = {AGE_GYR} Gyr, Z = {MET_LOGZSOL} dex (solar), z = {REDSHIFT}",
-    fontsize=12,
-)
+ax1.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]", fontsize=10)
+ax1.set_xlabel(r"Rest-frame wavelength [$\mathrm{\AA}$]", fontsize=10)
+ax1.legend(loc="upper right", fontsize=9, frameon=False)
+ax1.grid(True, which="both", alpha=0.25)
 
 # Panel 2: Zoom into Mg b / Fe5270 region (5050–5350 Å)
 ax2 = axes[1]
@@ -140,24 +128,13 @@ ax2.text(5175, 0.965, "Mg b", fontsize=9, ha="center", color="gray")
 ax2.axvline(5270, color="gray", linestyle="--", alpha=0.6, linewidth=1)
 ax2.text(5270, 0.965, "Fe5270", fontsize=9, ha="center", color="gray")
 
-ax2.set_xlabel(r"Rest wavelength ($\AA$)", fontsize=11)
-ax2.set_ylabel(r"Normalized $\nu L_\nu$", fontsize=11)
+ax2.set_xlabel(r"Rest-frame wavelength [$\mathrm{\AA}$]", fontsize=10)
+ax2.set_ylabel(r"$\nu L_\nu$ (normalized)", fontsize=10)
 ax2.set_xlim(zoom_min, zoom_max)
-ax2.grid(True, alpha=0.3)
-ax2.legend(loc="lower right", fontsize=10)
-ax2.set_title("Mg b / Fe5270 diagnostic region (zoomed)", fontsize=12)
+ax2.grid(True, alpha=0.25)
+ax2.legend(loc="lower right", fontsize=9, frameon=False)
 
-plt.tight_layout()
+fig.tight_layout()
 plt.savefig("plot_alpha_enhanced_population.png", dpi=150, bbox_inches="tight")
-plt.show()
-
-# Diagnostic: verify Mg b / Fe5270 ratio increases with [α/Fe]
-print("\n=== Alpha-element enhancement diagnostics ===")
-print(f"Age: {AGE_GYR} Gyr | Metallicity: Z = {MET_LOGZSOL} dex | Redshift: {REDSHIFT}")
-print(
-    "\nAll four models use the same SSP age & metallicity, varying only [α/Fe].\n"
-    "Mg b and Fe5270 are absorption features; higher Mg/Fe ratio indicates faster\n"
-    "star-formation timescale (less iron-peak enrichment from supernovae Ia).\n"
-)
 for alpha_fe in ALPHA_FE_SWEEP:
     print(f"  [α/Fe] = {alpha_fe:.1f} dex (typical for elliptical: 0.0–0.6)")

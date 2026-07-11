@@ -21,11 +21,6 @@
 UVJ diagram: rest-frame colors separate star-forming from quiescent
 ==================================================================
 
-.. image:: images/sphx_glr_plot_usecase_uvj_diagram_001.png
-   :alt: plot usecase uvj diagram
-   :class: sphx-glr-single-img
-
-
 Generates a mock star-forming and quiescent galaxy population and plots
 each on the rest-frame UVJ color-color plane (U-V vs V-J). The Williams+2009
 quiescent wedge (z < 1) marks the boundary between dusty star-forming and
@@ -44,19 +39,8 @@ Wuyts et al. 2007, ApJ, 655, 51.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -211,7 +195,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.208 seconds)
+   **Total running time of the script:** (0 minutes 3.373 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uvj_diagram.py:

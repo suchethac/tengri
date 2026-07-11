@@ -163,15 +163,18 @@ ax_prism.text(
 )
 
 ax_prism.set_ylabel("Normalized Flux", fontsize=11)
-ax_prism.set_title(
-    r"PRISM (blended): $R \approx 100$ — H$\alpha$ + [N\,II] appear as single feature",
-    fontsize=11,
-    loc="left",
+ax_prism.text(
+    0.05,
+    0.95,
+    r"PRISM ($R \approx 100$): blended",
+    transform=ax_prism.transAxes,
+    fontsize=10,
+    verticalalignment="top",
+    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.3),
 )
 ax_prism.legend(frameon=False, loc="upper right", fontsize=10)
 ax_prism.set_ylim(0.7, 1.35)
 
-# --- Panel 2: G395M (medium-resolution) ---
 ax_grating.plot(
     wave_obs_ha,
     sed_grating,
@@ -181,7 +184,6 @@ ax_grating.plot(
 )
 ax_grating.fill_between(wave_obs_ha, sed_grating, alpha=0.3, color="C1")
 
-# Emission line markers and labels
 colors_lines = ["C2", "gray", "C2"]
 line_rest = [nii_6549_rest, ha_rest, nii_6585_rest]
 line_names = [r"[N\,II]", r"H$\alpha$", r"[N\,II]"]
@@ -201,10 +203,14 @@ for lam_rest, name, color in zip(line_rest, line_names, colors_lines):
 
 ax_grating.set_xlabel(r"Observed wavelength [$\AA$]", fontsize=11)
 ax_grating.set_ylabel("Normalized Flux", fontsize=11)
-ax_grating.set_title(
-    r"G395M (resolved): $R \approx 1000$ — Three distinct peaks clearly separated",
-    fontsize=11,
-    loc="left",
+ax_grating.text(
+    0.05,
+    0.95,
+    r"G395M ($R \approx 1000$): resolved",
+    transform=ax_grating.transAxes,
+    fontsize=10,
+    verticalalignment="top",
+    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.3),
 )
 ax_grating.legend(frameon=False, loc="upper right", fontsize=10)
 ax_grating.set_ylim(0.7, 1.35)
@@ -214,5 +220,3 @@ ax_grating.set_xlim(wave_obs_ha.min(), wave_obs_ha.max())
 
 fig.tight_layout()
 plt.savefig("plot_nirspec_prism_vs_grating.png", dpi=150, bbox_inches="tight")
-print("Saved: plot_nirspec_prism_vs_grating.png")
-plt.show()

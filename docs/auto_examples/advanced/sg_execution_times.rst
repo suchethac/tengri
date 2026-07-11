@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:13.267** total execution time for 26 files **from auto_examples/advanced**:
+**00:00.417** total execution time for 26 files **from auto_examples/advanced**:
 
 .. container::
 
@@ -32,23 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_orchestrator_demo.py` (``plot_orchestrator_demo.py``)
-     - 00:04.566
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``plot_fisher_degeneracy.py``)
-     - 00:04.426
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_mass_conservation_sfh.py` (``plot_diag_mass_conservation_sfh.py``)
-     - 00:01.738
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_gradient_sensitivity.py` (``plot_gradient_sensitivity.py``)
-     - 00:01.582
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_radio_xray.py` (``plot_radio_xray.py``)
-     - 00:00.955
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_custom_attenuation_component.py` (``plot_custom_attenuation_component.py``)
-     - 00:00.000
+     - 00:00.417
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_ab_mag_zero_point.py` (``plot_diag_ab_mag_zero_point.py``)
      - 00:00.000
@@ -92,6 +77,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_madau_published_table.py` (``plot_diag_madau_published_table.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_mass_conservation_sfh.py` (``plot_diag_mass_conservation_sfh.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_prior_sample_distributions.py` (``plot_diag_prior_sample_distributions.py``)
      - 00:00.000
      - 0.0
@@ -107,6 +95,18 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_waveprecomp_accuracy.py` (``plot_diag_waveprecomp_accuracy.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``plot_fisher_degeneracy.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_gradient_sensitivity.py` (``plot_gradient_sensitivity.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_joint_fit.py` (``plot_joint_fit.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_orchestrator_demo.py` (``plot_orchestrator_demo.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_radio_xray.py` (``plot_radio_xray.py``)
      - 00:00.000
      - 0.0

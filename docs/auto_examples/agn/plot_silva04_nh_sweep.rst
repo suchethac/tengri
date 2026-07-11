@@ -21,11 +21,6 @@
 Silva+04 torus: Obscuration and the 9.7 micron silicate feature
 ===============================================================
 
-.. image:: images/sphx_glr_plot_silva04_nh_sweep_001.png
-   :alt: plot silva04 nh sweep
-   :class: sphx-glr-single-img
-
-
 The Silva, Maiolino & Granato (2004) AGN torus templates are empirical
 reprocessed-dust SEDs binned by line-of-sight hydrogen column density
 ``agn_log_nh_silva``. As the column rises from unobscured (Type-1-like,
@@ -38,7 +33,7 @@ reprocessed-dust SEDs binned by line-of-sight hydrogen column density
 
 The left panel shows the full reprocessed SED; the right panel zooms on the
 mid-IR so the silicate feature's evolution with column density is visible.
-Column density is encoded by colour.
+Column density is encoded by color.
 
 References
 ----------
@@ -93,7 +88,7 @@ References
     # Silva+04 grid: log N_H in [22, 25]. Sweep the full obscuration range.
     LOG_NH_VALUES = np.linspace(22.0, 25.0, 7)
 
-    # A torus block normalises to the disc luminosity, so a disc must be present;
+    # A torus block normalizes to the disc luminosity, so a disc must be present;
     # the torus contribution is then isolated by subtracting the disc-only SED.
     BASE_AGN = {
         "disc": {"type": "multicolor", "*": tengri.FIXED},

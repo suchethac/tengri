@@ -4,13 +4,13 @@ Building up an AGN SED: disc, then torus, then lines
 
 Four AGN configurations of increasing physical complexity at the same
 bolometric luminosity (log L_bol = 12.5 in L_sun units) — bare
-multicolour disc, +SKIRTOR torus, +NLR narrow-line forest, and an
+multicolor disc, +SKIRTOR torus, +NLR narrow-line forest, and an
 empirical QSOgen template that bundles all of the above. The reader
 sees which spectral feature each block introduces (mid-IR torus bump,
 optical narrow lines, broad UV continuum) and which are essentially
-universal across the modelling choice.
+universal across the modeling choice.
 
-Reference: Kubota & Done 2018, MNRAS, 480, 1247 (multicolour disc);
+Reference: Kubota & Done 2018, MNRAS, 480, 1247 (multicolor disc);
 Stalevski et al. 2016, MNRAS, 458, 2288 (SKIRTOR);
 Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
 """
@@ -40,7 +40,7 @@ ssp = tengri.load_ssp()
 
 TIERS = [
     (
-        "bare multicolour disc",
+        "bare multicolor disc",
         {"disc": {"type": "multicolor", "*": tengri.FIXED}},
     ),
     (

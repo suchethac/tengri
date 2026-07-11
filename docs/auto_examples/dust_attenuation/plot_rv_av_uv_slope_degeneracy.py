@@ -3,8 +3,8 @@ Rv and Av degeneracy in UV slope: the Calzetti trap
 =====================================================
 
 At fixed UV slope β_UV (the observable astronomers measure), many
-(R_V, A_V) pairs produce identical colours — this is a classical dust
-modelling pitfall. Shows β_UV as contours on the (R_V, A_V) grid
+(R_V, A_V) pairs produce identical colors — this is a classical dust
+modeling pitfall. Shows β_UV as contours on the (R_V, A_V) grid
 for Cardelli MW attenuation. Standard reference points (SMC, LMC,
 Milky Way diffuse, Calzetti starburst) sit on different iso-β_UV contours,
 illustrating why dust-law assumptions strongly bias inferred properties.

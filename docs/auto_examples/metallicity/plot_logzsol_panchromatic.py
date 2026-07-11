@@ -70,9 +70,8 @@ ax.set_ylim(1e40, 1e44)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-# Mark key wavelengths: Lyman limit, H-alpha, 10 μm, 100 μm
-for wl, _label in [(912, "Lyman limit"), (6563, r"H$\alpha$"), (1e4, "10 μm"), (1e5, "100 μm")]:
-    ax.axvline(wl, color="grey", ls=":", lw=0.6, alpha=0.3)
+for wl in [912, 6563, 1e4, 1e5]:
+    ax.axvline(wl, color="gray", ls=":", lw=0.6, alpha=0.3)
 
 cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cbar.set_label(r"Stellar metallicity $\log Z_\star/Z_\odot$")

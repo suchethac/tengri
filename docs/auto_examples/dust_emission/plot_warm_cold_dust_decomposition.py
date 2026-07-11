@@ -213,7 +213,6 @@ ax.set(
     ylim=(1e41, 5e44),
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mu\mathrm{m}$]",
     ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
-    title=r"Dust Temperature Decomposition: Varying $U_{\min}$ (q$_{\mathrm{PAH}}$ = 2.5%)",
 )
 
 ax.legend(frameon=False, fontsize=10, loc="upper right", title="Draine & Li (2007)")
@@ -228,4 +227,3 @@ ax.grid(True, which="minor", alpha=0.08, linestyle=":", linewidth=0.3)
 
 fig.tight_layout()
 plt.savefig("plot_warm_cold_dust_decomposition.png", dpi=150, bbox_inches="tight")
-plt.show()

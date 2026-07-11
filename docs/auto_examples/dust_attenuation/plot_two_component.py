@@ -44,7 +44,7 @@ configs = [
 for tau_bc, tau_diff, label in configs:
     trans = tengri.two_component_dust(wave, ages, tau_bc, tau_diff, **LAW_KW)
     ax_age.plot(np.array(log_ages), np.array(trans[:, i_v]), lw=1.4, label=label)
-ax_age.axvline(7.0, ls=":", color="grey", lw=0.8, alpha=0.6)
+ax_age.axvline(7.0, ls=":", color="gray", lw=0.8, alpha=0.6)
 ax_age.set_xlabel(r"log$_{10}$(stellar age / yr)")
 ax_age.set_ylabel("Transmission at V-band")
 ax_age.legend(fontsize=9, frameon=False)
