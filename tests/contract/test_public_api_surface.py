@@ -187,6 +187,11 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
 # distinguish "removed" from "demoted".
 DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
     {
+        # User-facing extension surfaces — importable but not advertised in
+        # __all__ (custom filters / custom physics-block base class). Examples
+        # use ``from tengri import FilterCurve`` / ``SEDModelComponent``.
+        "FilterCurve",
+        "SEDModelComponent",
         # Branding
         "LOGO",
         "LOGO_BANNER",
