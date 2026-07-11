@@ -907,13 +907,20 @@ class TestInferenceStressTests:
     """Category D: Inference method stress tests."""
 
     @pytest.mark.slow
-    def test_d1_nuts_at_d20_boundary(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
-        """D1. NUTS at D=20 boundary.
+    def test_d1_high_dimensional_viable(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
+        """D1. High-dimensional (D~20) inference viability.
 
-        SEDModel: dense_basis+field + DL07 (Fixed umin) + nebular (D~18-20)
-        Inference: mcmc_nuts with default settings
-        Expected: Borderline viable; may need tighter priors or MAP init
-        Check: Acceptance rate > 0.7, n_divergent < 5%
+        SEDModel: dense_basis_pure + field + DL07 (Fixed umin) + nebular (D~18-20).
+        Probes that the forward model, its gradient, and the optimizer all work at
+        the D=20 boundary — the correctness question behind "can you fit a complex
+        model?".
+
+        Uses MAP, deliberately. NUTS at D=20 on this model is a multi-minute
+        *benchmark* — the tree-building kernel compile alone runs for minutes
+        regardless of step count — which belongs in bench/, not a correctness test
+        that must stay fast and deterministic. MAP exercises the same
+        high-dimensional forward+gradient path in seconds and lets us assert that
+        the fit actually succeeds.
         """
         params = Parameters(
             mean_sfh_type=["dense_basis_pure", "field"],
@@ -939,30 +946,30 @@ class TestInferenceStressTests:
         )
 
         result = run_scenario(
-            name="D1_nuts_d20_boundary",
+            name="D1_high_d_viability",
             params=params,
             ssp_data=mist_ssp,
             observation=mock_obs_z1,
             data=mock_data_z1["flux"],
             noise=mock_data_z1["flux_unc"],
-            method="mcmc_nuts",
+            method="map",
             rng_key=rng_key,
-            n_warmup=20,  # Minimal for UX testing only
-            n_burnin=0,  # Skip burn-in for speed
-            n_samples=20,
         )
 
-        print(
-            f"\n{result['name']}: D={result['D']}, "
-            f"JIT={result['jit_sec']:.1f}s, "
-            f"status={result['status']}"
-        )
+        jit_str = f"{result['jit_sec']:.1f}s" if result["jit_sec"] is not None else "N/A"
+        print(f"\n{result['name']}: D={result['D']}, JIT={jit_str}, status={result['status']}")
         if not result["success"]:
             print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
-        # NUTS at D=20 is borderline — success is not guaranteed
-        if result["success"]:
-            print("  ✓ NUTS viable at D=20 (borderline case)")
+        # Correctness: high-dimensional MAP must complete. Unlike NUTS, MAP is a
+        # deterministic optimizer and should robustly succeed at D~20 — a failure
+        # here means the forward/gradient broke at high dimension, which is exactly
+        # what this scenario exists to catch.
+        assert result["success"], (
+            f"{result['name']} (D={result['D']}) MAP failed: "
+            f"{result['error_type']}: {result['error_msg']}"
+        )
+        assert result["D"] >= 10, f"expected a high-dimensional model, got D={result['D']}"
 
     @pytest.mark.slow
     def test_d3_geovi_sample_count(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
