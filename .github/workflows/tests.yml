@@ -11,23 +11,43 @@ on:
     - cron: "0 4 * * *"
   workflow_dispatch:
 
-# Cancel older runs of this workflow on the same ref when a new push lands.
-# Saves compute when commits land back-to-back.
+# Supersede stale runs — but NEVER on `main`.
 #
-# `labeled` PR events get a UNIQUE group (run_id) so they never cancel the real
-# push / opened / synchronize run — a label add must not abort an in-flight
-# suite. (Their jobs also skip via the per-job `if:` below, so the unique-group
-# run is a near-instant no-op.)
+# **`push` runs get a UNIQUE group (run_id), so every commit on `main` is tested
+# to completion.** They used to share one group and cancel each other, which
+# meant that during any busy merge window `main` was effectively never tested:
+# each merge aborted its predecessor's suite, and the last one standing was the
+# only commit anyone ever saw a verdict for. On 2026-07-10 that let FIVE red
+# commits land on `main` invisibly (#1021, #1051, #1071, #1076, and the
+# cancelled run of the very PR that fixed the last two). Each was discovered
+# days later or when it broke somebody else's unrelated PR — the most expensive
+# possible way to find out.
 #
-# Every other event keys the group on `github.event_name`, so a newer event of
-# the SAME kind supersedes the older one (two quick pushes → the second cancels
-# the first; PR synchronize cancels the prior PR run) while DIFFERENT event kinds
-# coexist. The latter matters on `main`, where `push` and `schedule` both resolve
-# to `github.ref == refs/heads/main`: keying only on the ref made a nightly
-# `schedule` run and a `push` run share one group and cancel each other mid-suite
-# (a spurious `cancelled` red on main). Separate event keys keep them independent.
+# Note the failure mode this does NOT use: keeping one shared group and setting
+# `cancel-in-progress: false` would serialise main's runs into a queue instead.
+# At ~12 merges/day against a ~21 min suite, the backlog just relocates the
+# delay — you would still learn about red long after the fact. A unique group
+# per push means N merges run N suites concurrently, each reporting on its own
+# commit. That costs runner minutes; a `main` whose green means nothing costs
+# more.
+#
+# `labeled` PR events also get a unique group, so a label add never aborts the
+# real opened/synchronize run. (Their jobs also skip via the per-job `if:`
+# below, so the unique-group run is a near-instant no-op.)
+#
+# Everything else (PR opened/synchronize/reopened, schedule, workflow_dispatch)
+# keys on `github.event_name`, so a newer event of the SAME kind supersedes the
+# older one — a PR synchronize cancels the prior PR run, which is where the real
+# compute saving lives, since PR runs get superseded constantly. Keying on the
+# event name also keeps a nightly `schedule` run and a `push` run from sharing a
+# group on `main` (both resolve to the same `github.ref`) and cancelling each
+# other mid-suite.
 concurrency:
-  group: tests-${{ github.ref }}-${{ (github.event_name == 'pull_request' && github.event.action == 'labeled') && github.run_id || github.event_name }}
+  group: >-
+    tests-${{ github.ref }}-${{
+      (github.event_name == 'push'
+        || (github.event_name == 'pull_request' && github.event.action == 'labeled'))
+      && github.run_id || github.event_name }}
   cancel-in-progress: true
 
 # Supply a version for the `dsps` build. The published dsps sdists use
