@@ -228,6 +228,4 @@ ax_sed.legend(frameon=False, fontsize=9, loc="upper right")
 ax_sed.grid(True, alpha=0.25, which="both", axis="both")
 
 fig_met.tight_layout()
-fig_met.savefig("plot_chemical_evolution_scenarios.png", dpi=150, bbox_inches="tight")
-
 plt.savefig("plot_chemical_evolution.png", dpi=150, bbox_inches="tight")
