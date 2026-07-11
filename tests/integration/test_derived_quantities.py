@@ -305,7 +305,7 @@ class TestDerivedQuantities:
         Two things this test used to get wrong, both of which made it read a healthy
         model as broken:
 
-        1. **The baseline was the median, not the mean.** It normalised by the
+        1. **The baseline was the median, not the mean.** It normalized by the
            ``xi = 0`` realization — but at ``xi = 0`` the modulation is
            ``exp(-K(0)/2)``, not 1. For a mean-preserving log-normal, ``xi = 0`` is
            the MEDIAN SFH and sits a factor ``exp(-K(0)/2)`` BELOW the mean. Dividing
