@@ -4,8 +4,7 @@
   "src/tengri/forward/sed_model.py": 6769,
   "src/tengri/inference/fitter.py": 3176,
   "src/tengri/components/dust/attenuation.py": 1874,
-  "src/tengri/parameters/groups.py": 2609,
-  "src/tengri/components/dust/emission_templates.py": 2437,
+  "src/tengri/parameters/groups.py": 2617,
   "src/tengri/inference/posterior.py": 2349,
   "src/tengri/components/agn/disc.py": 2138,
   "src/tengri/forward/prediction.py": 2370,
@@ -49,5 +48,6 @@
   "src/tengri/facade.py": 822,
   "src/tengri/observation/spectroscopy.py": 807,
   "src/tengri/inference/backends/mcmc/_shared.py": 860,
+  "src/tengri/components/dust/emission_templates.py": 2612,
   "src/tengri/components/sed_model_component.py": 816
 }

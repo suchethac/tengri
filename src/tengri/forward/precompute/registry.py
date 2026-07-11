@@ -51,6 +51,7 @@ _REGISTRY: dict[str, str] = {
     "skirtor": "tengri.components.agn.skirtor_precompute",
     "skirtor_agnfitter": "tengri.components.agn.skirtor_agnfitter_precompute",
     "silva04": "tengri.components.agn.silva04_precompute",
+    "nenkova_agnfitter": "tengri.components.agn.nenkova_agnfitter_precompute",
     "cat3d_wind": "tengri.components.agn.cat3d_precompute",
     # AGN K&D 3-zone disc (custom dataclass, but still Protocol-shaped)
     "kd_disc": "tengri.components.agn.kd_precompute",
