@@ -261,6 +261,20 @@ class DerivedState:
     sed_radio: jnp.ndarray | None = None
     sed_xray: jnp.ndarray | None = None
     igm_transmission: jnp.ndarray | None = None
+    # Filter-averaged IGM transmission <T>_f, shape (n_filters,), dimensionless.
+    # The WavePrecomp twin of ``igm_transmission``: the LUT projector needs one
+    # number per band, and <T>_f depends only on (z, filter, convention) — the
+    # transmission is averaged alone, never weighted by the SED — so the IGM
+    # component tabulates it against z at build time. Consuming the full-grid
+    # curve here instead keeps the whole model grid live and defeats the
+    # dead-code elimination that IS the WavePrecomp speedup (#932).
+    igm_phot_factor: jnp.ndarray | None = None
+    # Per-pixel IGM transmission, shape (n_pix,), dimensionless — the
+    # SpectrumPrecomp twin of ``igm_phot_factor``. A pixel's rest effective
+    # wavelength is wave_obs/(1+z) and the curve is T(wave_rest*(1+z), z), so
+    # sampling one at the other collapses to T at the FIXED observed instrument
+    # grid: a function of (z, pixel) alone, tabulated at build time.
+    igm_spec_factor: jnp.ndarray | None = None
     shock_log_lhalpha: jnp.ndarray | None = None
 
     # Spatial — 2D surface-brightness profile and the (x, y) kpc grid that

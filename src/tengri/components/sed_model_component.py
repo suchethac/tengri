@@ -512,6 +512,43 @@ class SEDModelComponent:
 
         return SEDComponentState(name=self.name)
 
+    def slice_params(self, params):
+        """Strip :attr:`parameter_prefix` to the form :meth:`predict` expects.
+
+        The single definition of the runtime slicing rule. Build-time precomputes
+        (e.g. the additive-emitter band response) MUST call this rather than
+        re-deriving it: a precompute that slices differently from ``apply`` builds
+        its table from the *wrong* parameter values and returns confidently wrong
+        fluxes with no error — the failure mode this codebase keeps rediscovering.
+
+        Parameters
+        ----------
+        params : mapping[str, ndarray]
+            Full parameter dict, prefixed names (``dust_alpha_dale``, …).
+
+        Returns
+        -------
+        dict
+            Prefix-stripped params (``alpha_dale``), plus bare-name allowlist
+            entries (``redshift``) passed through unstripped.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — pure dict manipulation, no tracing.
+        """
+        prefix_len = len(self.parameter_prefix)
+        p_sliced = {
+            k[prefix_len:]: v for k, v in params.items() if k.startswith(self.parameter_prefix)
+        }
+        # Bare-name allowlist params (e.g. redshift) have no domain prefix; the
+        # orchestrator threads them to every component
+        # (protocols.component.BARE_NAME_ALLOWLIST). Expose them to predict()/LUT
+        # paths unstripped, honoring the documented contract.
+        for _bare in BARE_NAME_ALLOWLIST:
+            if _bare in params:
+                p_sliced[_bare] = params[_bare]
+        return p_sliced
+
     def apply(
         self,
         state: ForwardState,
@@ -553,18 +590,7 @@ class SEDModelComponent:
         ForwardState
             New state with sed_intrinsic and derived keys updated.
         """
-        # Slice parameters: strip prefix
-        prefix_len = len(self.parameter_prefix)
-        p_sliced = {
-            k[prefix_len:]: v for k, v in params.items() if k.startswith(self.parameter_prefix)
-        }
-
-        # Bare-name allowlist params (e.g. redshift) have no domain prefix; the
-        # orchestrator threads them to every component (protocols.component.BARE_NAME_ALLOWLIST).
-        # Expose them to predict()/LUT paths unstripped, honoring the documented contract.
-        for _bare in BARE_NAME_ALLOWLIST:
-            if _bare in params:
-                p_sliced[_bare] = params[_bare]
+        p_sliced = self.slice_params(params)
 
         # Look up required inputs from derived
         input_kwargs = {}
