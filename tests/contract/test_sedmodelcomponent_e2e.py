@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""End-to-end smoke tests for `SEDModelComponent` ports.
+"""End-to-end smoke tests for `SEDModelComponent` components.
 
 For each domain (dust attenuation, dust IR emission, AGN, nebular, radio,
 X-ray), build a minimal `SEDModel` with a `SEDModelComponent`-based
@@ -12,9 +12,9 @@ backend and verify:
 
 These are NOT inference-level parity tests — they exercise the wiring
 end-to-end (resolver → component chain → forward pass → observation
-projection) for every new port at once. If a port's `name` is missing
-from the resolver, or its `predict()` signature drifts from the base
-class contract, or its `inputs/outputs` declaration is malformed, the
+projection) for every new component at once. If a component's `name` is
+missing from the resolver, or its `predict()` signature drifts from the
+base class contract, or its `inputs/outputs` declaration is malformed, the
 build or predict call here will catch it.
 """
 
@@ -75,16 +75,16 @@ def _assert_phot_ok(phot):
 
 
 # Module-level skip tally — populated by pytest's reporting hook in
-# ``tests/conftest.py`` via the ``_skipped_e2e_ports`` list. If anyone
-# wonders "how many ports actually ran in CI?", the terminal_summary
+# ``tests/conftest.py`` via the ``_skipped_e2e_components`` list. If anyone
+# wonders "how many components actually ran in CI?", the terminal_summary
 # hook at the end of the session prints the count.
-_skipped_e2e_ports: list[str] = []
+_skipped_e2e_components: list[str] = []
 
 
-def _skip_with_tally(reason: str, port_name: str = "") -> None:
-    """Skip a port test AND record the skip for the end-of-session tally."""
-    if port_name:
-        _skipped_e2e_ports.append(port_name)
+def _skip_with_tally(reason: str, component_name: str = "") -> None:
+    """Skip a component test AND record the skip for the end-of-session tally."""
+    if component_name:
+        _skipped_e2e_components.append(component_name)
     pytest.skip(reason)
 
 
@@ -98,7 +98,7 @@ def test_dust_attenuation_e2e(ssp, obs, law):
     """Each attenuation law builds and predicts finite photometry.
 
     Direction B (#738): laws are config sub-selectors of the canonical
-    two-component engine (``law_bc``), not standalone ``type`` ports.
+    two-component engine (``law_bc``), not standalone ``type`` components.
     """
     model = _silent_build(
         ssp_data=ssp,
@@ -172,8 +172,9 @@ def _fixed_dust() -> dict:
 # AGN is built through the composable block grammar (the canonical AGN surface,
 # ADR-0018) — NOT direct ``agn={'type': <SEDModelComponent>}`` resolution. The
 # monolithic disc+torus names (skirtor / silva04 / cat3d_wind) still resolve;
-# the bare disc ports map onto their composable disc blocks (kd18 → kubota_done,
-# powerlaw_disc → powerlaw). Each case maps an id to its canonical agn spec.
+# the bare disc components map onto their composable disc blocks (kd18 →
+# kubota_done, powerlaw_disc → powerlaw). Each case maps an id to its canonical
+# agn spec.
 _AGN_E2E_CASES = {
     "skirtor": {"type": "skirtor", "*": FIXED},
     "silva04": {"type": "silva04", "*": FIXED},
@@ -185,7 +186,8 @@ _AGN_E2E_CASES = {
 
 @pytest.mark.parametrize("agn_id", list(_AGN_E2E_CASES))
 def test_agn_e2e(ssp, obs, agn_id):
-    """Each AGN port (disc + torus) builds + predicts via its canonical grammar."""
+    """Each AGN component (disc + torus) builds + predicts via its canonical
+    grammar."""
     try:
         model = _silent_build(
             ssp_data=ssp,
@@ -207,9 +209,9 @@ def test_agn_e2e(ssp, obs, agn_id):
 
 # Nebular dispatches to the canonical ``NebularSEDComponent`` engine + a backend
 # instance (Direction B, #738): ``neb={'type': X}`` builds NebularSEDComponent
-# with ``config.backend`` set, NOT a per-backend SEDModelComponent port (those
-# duplicates were deleted). A FIXED dust screen keeps ``predict_photometry({})``
-# free-param-less.
+# with ``config.backend`` set, NOT a per-backend SEDModelComponent
+# (those duplicates were deleted). A FIXED dust screen keeps
+# ``predict_photometry({})`` free-param-less.
 _NEB_BACKEND = {
     "cue": "cue",
     "cloudy": "cloudy_grid",
@@ -283,7 +285,7 @@ def test_radio_e2e(ssp, obs, radio_agn):
 
 @pytest.mark.parametrize("xray_type", ["xray_aird", "agn_xray_corona"])
 def test_xray_e2e(ssp, obs, xray_type):
-    """Each X-ray port builds + predicts."""
+    """Each X-ray component builds + predicts."""
     if xray_type not in _REGISTRY:
         pytest.skip(f"{xray_type!r} not registered")
     try:
@@ -396,14 +398,15 @@ def test_radio_powerlaw_actually_reads_L_ir_when_published():
 
 
 def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
-    """The dust LAW is a sub-selector of the canonical engine, not a phantom type.
+    """The dust LAW is a sub-selector of the canonical engine, not a phantom
+    type.
 
     Regression guard for the removed ``#664`` silent no-op. ``build()`` used to
     accept ``dust={'type': 'calzetti'}`` and SILENTLY drop the law (defaulting to
     ``power_law``) by routing through a ``_REGISTRY`` pass-through to thin
-    single-law "ports". Those toy ports were deleted; the canonical dust surface
-    is ``dust={'type': 'two_component', 'law_bc': ...}`` and the law must actually
-    reach the engine.
+    single-law "components". Those toy components were deleted; the canonical
+    dust surface is ``dust={'type': 'two_component', 'law_bc': ...}`` and the law
+    must actually reach the engine.
     """
     # (a) the phantom type is gone — fail loud rather than silently no-op.
     # A registered law name used as a 'type' raises the law-vs-type redirect
@@ -473,16 +476,17 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
 # ─────────────────────────────────────────────────────────────────────
 
 
-# Hard-coded snapshot of port names as of this PR. New ports add to this
-# set in their own PR; removals must update this list explicitly.
+# Hard-coded snapshot of component names as of this PR. New components add to
+# this set in their own PR; removals must update this list explicitly.
 _EXPECTED_REGISTRY_NAMES = frozenset(
     {
         # Dust attenuation laws are config sub-selectors of the canonical
-        # two-component / single / wg00 engine — NOT standalone _REGISTRY ports.
-        # The thin single-law port duplicates (calzetti/smc/mw/salim18/charlot_fall)
-        # were deleted (Direction B, #738); the live WG00 component stays.
-        # Dust IR emission — only the two UNIQUE-physics ports remain; the 5
-        # exact-engine-duplicate *_ir ports were deleted (#738, Phase 2b). The
+        # two-component / single / wg00 engine — NOT standalone _REGISTRY
+        # components. The thin single-law component duplicates
+        # (calzetti/smc/mw/salim18/charlot_fall) were deleted (Direction B, #738);
+        # the live WG00 component stays.
+        # Dust IR emission — only the two UNIQUE-physics components remain; the 5
+        # exact-engine-duplicate *_ir components were deleted (#738, Phase 2b). The
         # engine models (modified_blackbody/dl07/dl14/dale2014/astrodust) are the
         # canonical emission surface.
         "draine2021_pah_ir",
@@ -494,15 +498,16 @@ _EXPECTED_REGISTRY_NAMES = frozenset(
         "silva04",
         "cat3d_wind",
         # ``agn_nlr`` (nlr_model.AGNNebular) was deleted in #897 — a grammar-
-        # unreachable orphan port with drifted param names (agn_nlr_cov_frac vs
-        # the canonical agn_nlr_cf) and bit-identical physics to the reachable
-        # blocks/nlr_analytic. The analytic NLR ships via AGN_BLOCKS, not a port.
+        # unreachable orphan component with drifted param names (agn_nlr_cov_frac
+        # vs the canonical agn_nlr_cf) and bit-identical physics to the reachable
+        # blocks/nlr_analytic. The analytic NLR ships via AGN_BLOCKS, not a
+        # component.
         # Nebular — cue/cloudy/cb19 dispatch to the canonical NebularSEDComponent
-        # engine + backend; the port duplicates (cue_emulator/cloudy_grid/cb19)
-        # were deleted (#738, Phase 3b). The ``mappings`` port was deleted in the
-        # 2026-07 dead-code purge — a grammar-unreachable no-op superseded by the
-        # canonical ``shock`` port (#851); its load() passed a ``grid_path`` kwarg
-        # ShockBackend does not even accept.
+        # engine + backend; the component duplicates (cue_emulator/cloudy_grid/cb19)
+        # were deleted (#738, Phase 3b). The ``mappings`` component was deleted in
+        # the 2026-07 dead-code purge — a grammar-unreachable no-op superseded by
+        # the canonical ``shock`` component (#851); its load() passed a
+        # ``grid_path`` kwarg ShockBackend does not even accept.
         "shock",
         # Radio
         "radio_powerlaw",
@@ -514,19 +519,20 @@ _EXPECTED_REGISTRY_NAMES = frozenset(
 )
 
 
-def test_registered_port_names_against_baseline():
-    """Hard-coded baseline of port names. New ports add to ``_EXPECTED_REGISTRY_NAMES``
-    explicitly. Removals or renames fail this test, forcing a conversation
-    in the PR that drops them rather than silent breakage in downstream code.
+def test_registered_component_names_against_baseline():
+    """Hard-coded baseline of component names. New components add to
+    ``_EXPECTED_REGISTRY_NAMES`` explicitly. Removals or renames fail this test,
+    forcing a conversation in the PR that drops them rather than silent breakage
+    in downstream code.
 
-    Adds (registry has names not in the expected set) are permitted —
-    a new port lands cleanly without touching this file.
-    Removes (expected has names not in the registry) fail.
+    Adds (registry has names not in the expected set) are permitted — a new
+    component lands cleanly without touching this file. Removes (expected has
+    names not in the registry) fail.
     """
     actual = set(_REGISTRY.keys())
     missing = _EXPECTED_REGISTRY_NAMES - actual
     assert not missing, (
-        f"port name(s) missing from _REGISTRY: {sorted(missing)}. "
+        f"component name(s) missing from _REGISTRY: {sorted(missing)}. "
         f"If intentional, update _EXPECTED_REGISTRY_NAMES in this file."
     )
 

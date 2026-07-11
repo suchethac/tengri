@@ -10,12 +10,12 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.dust.emission._port_base import EmissionPort
+from tengri.components.dust.emission._component_base import EmissionComponent
 
 __all__ = ["PAHDrudeIRSEDComponent"]
 
 
-class PAHDrudeIRSEDComponent(EmissionPort):
+class PAHDrudeIRSEDComponent(EmissionComponent):
     """Smith et al. (2007) PAH Drude profiles — mid-IR PAH building block.
 
     Wraps the pure closure :func:`~tengri.components.dust.emission.pah_drude`,

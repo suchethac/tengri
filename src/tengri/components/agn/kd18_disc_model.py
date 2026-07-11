@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Kubota & Done (2018) accretion disc SEDModelComponent adapter.
+"""Three-zone accretion disc model (Kubota & Done 2018) SEDModelComponent.
 
-Ports the three-zone accretion disc model (Kubota & Done 2018) to the
-SEDModelComponent framework, enabling use in the model-building API.
+Implements the Kubota & Done (2018) accretion disc model on the
+SEDModelComponent contract, enabling use in the model-building API.
 
 This is an opt-in adapter — the existing AGNSEDComponent continues to
 support K&D18 through the unified AGN registry.

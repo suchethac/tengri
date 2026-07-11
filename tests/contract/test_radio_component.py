@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Contract tests for radio SEDModelComponent port.
+"""Contract tests for radio SEDModelComponent.
 
 Verify that RadioPowerLawSEDComponent satisfies the SEDComponent protocol
 and registry expectations.

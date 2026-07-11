@@ -163,10 +163,10 @@ class TestDale2014FracAGN:
         )
 
     # NOTE: the former ``test_closure_and_component_are_identical`` compared the
-    # ``dale2014`` engine closure against the ``dale2014_ir`` port. The port was an
-    # exact duplicate of the closure (#717 shared one loader + mixing) and was
-    # deleted in #738 (Phase 2b); the engine closure is now the single source, so
-    # there is no second implementation to compare against.
+    # ``dale2014`` engine closure against the ``dale2014_ir`` component. The
+    # component was an exact duplicate of the closure (#717 shared one loader +
+    # mixing) and was deleted in #738 (Phase 2b); the engine closure is now the
+    # single source, so there is no second implementation to compare against.
 
 
 # ── Schreiber2016: tabulated continuum + PAH ──────────────────────
@@ -229,11 +229,11 @@ class TestSchreiber2016Tabulated:
 
 
 class TestSchreiber2018NotNoOp:
-    """Regression for the #849 silent-drop fix: the schreiber2018 port passed
-    the old ``dust_tdust`` / ``dust_fpah`` kwarg names to a loader whose
+    """Regression for the #849 silent-drop fix: the schreiber2018 component
+    passed the old ``dust_tdust`` / ``dust_fpah`` kwarg names to a loader whose
     signature is ``dust_T`` / ``dust_f_pah``, so both knobs landed in
     ``**_kwargs`` and were silently ignored. After the canonical rename the
-    port passes ``dust_T=`` / ``dust_f_pah=`` and the knobs move the SED."""
+    component passes ``dust_T=`` / ``dust_f_pah=`` and the knobs move the SED."""
 
     def _component(self):
         from tengri.components.dust.emission_templates import _find_data_file
@@ -274,9 +274,9 @@ class TestSchreiber2018NotNoOp:
 class TestModifiedBlackbodyEpsilon:
     """CIGALE mbb epsilon_mbb: fraction of L_dust carried by the MBB.
 
-    Direction B (#738): the ``modified_blackbody_ir`` port was an exact duplicate
-    of the engine ``modified_blackbody`` model (the port literally called it) — so
-    the parity is asserted on the canonical engine model directly.
+    Direction B (#738): the ``modified_blackbody_ir`` component was an exact
+    duplicate of the engine ``modified_blackbody`` model (the component literally
+    called it) — so the parity is asserted on the canonical engine model directly.
     """
 
     def _sed(self, epsilon):

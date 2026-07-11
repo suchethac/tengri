@@ -1,5 +1,5 @@
 """
-Port CIGALE BC03 Chabrier SSP templates to DSPS-shaped HDF5 for reproduction notebook.
+Repackage CIGALE BC03 Chabrier SSP templates as DSPS-shaped HDF5 for the notebook.
 
 CIGALE stores BC03 SSPs in pickle format (W/nm/Msun); this script loads all 6 metallicities,
 converts units and shapes to match DSPS convention (Lsun/Hz/Msun, ages in Gyr), and writes
@@ -109,7 +109,7 @@ def convert_flux_cigale_to_dsps(spec_cigale_w_nm: np.ndarray, wl_angstrom: np.nd
 
 def repackage_bc03_chabrier(out_path: str | Path) -> None:
     """
-    Port CIGALE BC03 Chabrier SSPs to DSPS-shaped HDF5.
+    Repackage CIGALE BC03 Chabrier SSPs as DSPS-shaped HDF5.
 
     Loads all 6 metallicities, converts units and shapes, and writes to HDF5
     matching the layout expected by tengri.load_ssp().

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Radio AGN double-power-law model — SEDModelComponent port.
+"""Radio AGN double-power-law model — SEDModelComponent implementation.
 
 AGNfitter-rx broken double power-law with phenomenological
 ``exp(-ν/ν_cut)`` aging cutoff (Martinez-Ramirez+2024 Eq. 9-10).

@@ -31,7 +31,7 @@ def _cg_solve(
     atol=0.0,
     norm_ord=None,
 ):
-    """Conjugate-gradient solver (NIFTy ``_static_cg`` port).
+    """Conjugate-gradient solver (implements NIFTy ``_static_cg``).
 
     Implements NIFTy's ``_static_cg`` algorithm exactly
     (``nifty8.re.conjugate_gradient._static_cg``, Gordian Edenhofer,
@@ -172,7 +172,7 @@ def _newton_cg_flat(
     xtol=1e-5,
     custom_gradnorm=None,
 ):
-    """Newton-CG with successive-halving line search (NIFTy ``_static_newton_cg`` port).
+    """Newton-CG with successive-halving line search (implements NIFTy ``_static_newton_cg``).
 
     Implements NIFTy's ``_static_newton_cg`` algorithm exactly
     (``nifty8.re.optimize._static_newton_cg``, Gordian Edenhofer,

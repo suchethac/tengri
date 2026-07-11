@@ -2,9 +2,9 @@
 """Tests for the ProSpect-family SFH models.
 
 Covers:
-- spline: monotone cubic PCHIP spline (massfunc_p4/p6 port)
-- snorm_burst: skew-normal + burst (massfunc_snorm_burst port)
-- snorm_trunc_burst: truncated snorm + burst (massfunc_snorm_burst_trunc port)
+- spline: monotone cubic PCHIP spline (ProSpect massfunc_p4/p6)
+- snorm_burst: skew-normal + burst (ProSpect massfunc_snorm_burst)
+- snorm_trunc_burst: truncated snorm + burst (ProSpect massfunc_snorm_burst_trunc)
 
 Each function is tested for:
 - Correct output shape and non-negative SFR
@@ -86,7 +86,7 @@ class TestPchipSlopes:
 
 
 class TestSplineSfh:
-    """Tests for spline (ProSpect massfunc_p4/p6 port).
+    """Tests for spline (ProSpect massfunc_p4/p6).
 
     PCHIP cubic Hermite interpolation in log10(age) space ensures
     monotonicity between monotone nodes and exact interpolation at nodes.
@@ -147,7 +147,7 @@ class TestSplineSfh:
 
 
 class TestSnormBurstSfh:
-    """Tests for snorm_burst (ProSpect massfunc_snorm_burst port).
+    """Tests for snorm_burst (ProSpect massfunc_snorm_burst).
 
     Tests anchor to physical properties:
     - SFR is non-negative everywhere
@@ -209,7 +209,7 @@ class TestSnormBurstSfh:
 
 
 class TestSnormTruncBurstSfh:
-    """Tests for snorm_trunc_burst (ProSpect massfunc_snorm_burst_trunc port).
+    """Tests for snorm_trunc_burst (ProSpect massfunc_snorm_burst_trunc).
 
     Combines truncated skew-normal (tsnorm) with burst. Tests anchor to:
     - SFR is non-negative (burst + truncated kernel)

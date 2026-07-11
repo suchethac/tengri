@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""RadioPowerLawSEDComponent: Radio synchrotron emission as a SEDModelComponent.
+"""Radio power-law model (single-power-law AGN + star-formation synchrotron)
+SEDModelComponent.
 
-Ports the radio power-law model (single-power-law AGN + star-formation
-synchrotron) to the SEDModelComponent architecture. Provides differentiable
-radio SED prediction.
+Implements the radio power-law model on the SEDModelComponent contract.
+Provides differentiable radio SED prediction.
 
 Physical pipeline
 -----------------

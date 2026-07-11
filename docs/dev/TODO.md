@@ -24,7 +24,7 @@ will read them (see `forward/_kernels/hybrid.py` line ~2252 for an example).
 
 ## forward/component_factory.py
 
-- **Port legacy `compute_uv_slope_beta` etc.** into the new
+- **Migrate legacy `compute_uv_slope_beta` etc.** into the new
   `compute_sed_quantities` path. Currently UV-slope, Dn4000, Balmer-break,
   M_UV, and luminosity-weighted quantities are returned as `NaN`. The
   legacy machinery lives in older `sed_model.py` paths.

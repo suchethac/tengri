@@ -6,7 +6,7 @@ See full implementation plan at `~/.claude/plans/cuddly-purring-sketch.md`.
 
 **Reimplemented in pure JAX (with credit to original codes/papers):**
 - Emission tree (incident/transmitted/nebular/escaped): following Synthesizer UnifiedAGN (Lovell+2025, Appendix F.3.1)
-- K&D 3-zone disc + self-consistent corona: reimplemented in JAX following qsosed (Quera-Bofarull) and RELAGN (Hagen & Done 2023). Original packages use numpy/scipy; our JAX port enables JIT compilation and autodiff.
+- K&D 3-zone disc + self-consistent corona: reimplemented in JAX following qsosed (Quera-Bofarull) and RELAGN (Hagen & Done 2023). Original packages use numpy/scipy; our JAX implementation enables JIT compilation and autodiff.
 - alpha_ox, X-ray anisotropy, polar dust, delta_AGN: reimplemented in JAX from X-CIGALE (Yang+2020, 2022)
 - CAT3D-Wind torus, DPL radio: template interpolation reimplemented in JAX from AGNfitter-rx (Martinez-Ramirez+2024)
 - Feltre NLR grids: grid loading + JAX interpolation from BEAGLE-AGN (Vidal-Garcia+2024)

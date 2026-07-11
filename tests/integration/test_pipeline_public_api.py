@@ -33,7 +33,7 @@ def test_namespace_exports_all_five_adapters():
 
     Dust IR *emission* is no longer part of this top-level adapter cohort — it
     is authored as :class:`~tengri.components.sed_model_component.SEDModelComponent`
-    emission ports selected via the model grammar (#871)."""
+    emission components selected via the model grammar (#871)."""
     for cls_name in (
         "RadioSEDComponent",
         "IGMSEDComponent",
@@ -105,8 +105,8 @@ def test_full_five_adapter_chain_via_public_api():
 
     # Every published derived key from the chain should be present. Dust IR
     # *emission* is no longer part of this adapter cohort (it is an
-    # SEDModelComponent port; #871), so ``sed_dust_ir`` is not expected here —
-    # the attenuator still publishes ``L_ir`` for a downstream emission port.
+    # SEDModelComponent; #871), so ``sed_dust_ir`` is not expected here —
+    # the attenuator still publishes ``L_ir`` for a downstream emission component.
     for key in (
         "L_ir",
         "dust_attenuation_factor",

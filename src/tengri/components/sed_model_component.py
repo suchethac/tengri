@@ -326,16 +326,16 @@ class SEDModelComponent:
 
         # Delete the dicts so method resolution finds the base methods.
         # BUT: only delete if this is a concrete class (has a 'name' attribute
-        # defined in its own vars()). For abstract base classes like EmissionPort,
+        # defined in its own vars()). For abstract base classes like EmissionComponent,
         # keep the dicts so subclasses can inherit and process them.
         is_concrete = "name" in vars(cls)
         if is_concrete:
             # The declared inputs/outputs/optional_inputs dicts must not shadow the
             # same-named accessor methods once the tuples are collected. Two cases:
             #  (a) the dict is on THIS concrete class -> delete it so the base method resolves;
-            #  (b) the dict is inherited from an intermediate ABSTRACT base (e.g. EmissionPort,
-            #      which shares the emission I/O contract) -> that dict shadows the method for
-            #      this subclass, so rebind the base accessor method onto the concrete class.
+            #  (b) the dict is inherited from an intermediate ABSTRACT base (e.g.
+            #      EmissionComponent, sharing the emission I/O contract) -> that dict shadows the
+            #      method for this subclass, so rebind the base accessor onto the concrete class.
             for _attr in ("inputs", "outputs", "optional_inputs"):
                 if isinstance(vars(cls).get(_attr), dict):
                     delattr(cls, _attr)
@@ -354,7 +354,7 @@ class SEDModelComponent:
             delattr(cls, "citations")
 
         # Register by name — ONLY concrete classes that define their OWN ``name``.
-        # Abstract authoring bases (e.g. EmissionPort) inherit the default name and
+        # Abstract authoring bases (e.g. EmissionComponent) inherit the default name and
         # must NOT register: they are scaffolds, not dispatchable components.
         if "name" in vars(cls):
             component_name = vars(cls)["name"]
@@ -449,7 +449,7 @@ class SEDModelComponent:
         return self._optional_inputs_tuple
 
     def citations(self) -> tuple[str, ...]:
-        """Bib keys for papers this component implements, solves for, or ports.
+        """Bib keys for papers this component implements or solves for.
 
         Returns
         -------

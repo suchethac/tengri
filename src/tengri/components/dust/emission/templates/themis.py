@@ -10,13 +10,13 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.dust.emission._port_base import EmissionPort
+from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 
 __all__ = ["ThemisIRSEDComponent"]
 
 
-class ThemisIRSEDComponent(EmissionPort):
+class ThemisIRSEDComponent(EmissionComponent):
     """Jones et al. (2017) THEMIS/DustEM dust IR emission template.
 
     Wraps the pure closure from the tabulated THEMIS/DustEM template library.

@@ -169,8 +169,8 @@ _KNOWN_STATIC_ARRAY_FIELDS: frozenset[str] = frozenset(
         "GRAHSPSEDComponentState.line_broad",
         "GRAHSPSEDComponentState.line_narrow_sy2",
         "GRAHSPSEDComponentState.line_narrow_liner",
-        # GRAHSP parity port: Veron-Cetty FeII, MN12 template torus, Netzer disc
-        # template grids — static precompute-time tensors (same status as above).
+        # GRAHSP parity component: Veron-Cetty FeII, MN12 template torus, Netzer
+        # disc template grids — static precompute-time tensors (same status as above).
         "GRAHSPSEDComponentState.feii_vc04_wave_nm",
         "GRAHSPSEDComponentState.feii_vc04_lumin",
         "GRAHSPSEDComponentState.torus_mn12_wave_nm",

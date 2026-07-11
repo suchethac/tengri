@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Analytic dust emission SEDModelComponent ports.
+"""Analytic dust emission SEDModelComponents.
 
 Auto-registers the analytic dust emission templates as SEDModelComponent
 subclasses when imported.

@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""SKIRTOR_mean_3p AGN torus SEDModelComponent adapter.
+"""SKIRTOR_mean_3p three-parameter clumpy torus (Stalevski et al. 2016)
+SEDModelComponent.
 
-Ports the SKIRTOR_mean_3p three-parameter clumpy torus library (Stalevski
-et al. 2016) as averaged by AGNfitter-rX to the SEDModelComponent framework,
-enabling use of AGNfitter-faithful torus templates in the model-building API.
+Implements the SKIRTOR_mean_3p torus library as averaged by AGNfitter-rX
+on the SEDModelComponent contract, enabling use of AGNfitter-faithful torus
+templates in the model-building API.
 
 This is an opt-in adapter distinct from the default ``skirtor`` component,
 which uses the full-grid SKIRTOR implementation (X-CIGALE faithful).

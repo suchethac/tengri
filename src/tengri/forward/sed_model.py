@@ -1946,10 +1946,10 @@ class SEDModel:
                 pass
 
         # Astrodust+PAH emission grid (dust/emission/templates/astrodust.py).
-        # The faithful HD23 port self-loads its grid in load()/predict(); warm
-        # the process cache OUTSIDE any trace so an in-trace lazy load hits
+        # The faithful HD23 implementation self-loads its grid in load()/predict();
+        # warm the process cache OUTSIDE any trace so an in-trace lazy load hits
         # concrete arrays rather than leaking a tracer (UnexpectedTracerError).
-        # The grammar builds the port with the default template path (None).
+        # The grammar builds the component with the default template path (None).
         if getattr(self, "_dust_emission_model", None) == "astrodust":
             try:
                 from tengri.components.dust.emission.templates.astrodust import (
@@ -5211,8 +5211,8 @@ class SEDModel:
         **Nebular templates**: duck-typed on backend ``.grid``
         / ``.weights`` attributes (Cue, CloudyGrid, etc.).
 
-        **Dust IR**: emission ports (Astrodust, PAHspec, Dale, …) self-load
-        their HDF5 grids in ``EmissionPort.load``/``predict``; only the
+        **Dust IR**: emission components (Astrodust, PAHspec, Dale, …) self-load
+        their HDF5 grids in ``EmissionComponent.load``/``predict``; only the
         build-time energy-balance LUT and per-filter band response are threaded
         here (added below).
 
@@ -5253,8 +5253,8 @@ class SEDModel:
                     break
             break
 
-        # Dust IR emission ports (Astrodust, PAHspec, Dale, …) self-load their
-        # HDF5 grids in ``EmissionPort.load``/``predict`` — no adapter-state
+        # Dust IR emission components (Astrodust, PAHspec, Dale, …) self-load their
+        # HDF5 grids in ``EmissionComponent.load``/``predict`` — no adapter-state
         # threading is needed here. The build-time energy-balance LUT and
         # per-filter band response below are the only dust-IR data threaded.
 
@@ -5345,9 +5345,9 @@ class SEDModel:
             and p not in self._EB_EMISSION_PARAMS
         }
         # Detect dust emission: either old path (DustSEDComponent.emission_model)
-        # or new path (separate dust emission port in the pipeline).
+        # or new path (separate dust emission component in the pipeline).
         # After the switchover, dust_emission_model is set from the spec even
-        # when using separate ports, so we check that or the old emission_model path.
+        # when using separate components, so we check that or the old emission_model path.
         has_dust_emission = (
             dust is not None and getattr(dust.config, "emission_model", None) is not None
         ) or self._dust_emission_model is not None

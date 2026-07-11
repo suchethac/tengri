@@ -7,10 +7,10 @@ structural tests (assert-a-name-is-registered) passed even while dust emission
 contributed nothing at all (it was ordered before the attenuator, so L_ir=0).
 
 Coverage (each targets a specific failure mode we actually hit):
-- ordering: the emission port must run AFTER the dust attenuator (else L_ir=0).
+- ordering: the emission component must run AFTER the dust attenuator (else L_ir=0).
 - exact photometry: the far-IR band lights up with emission; optical is unchanged.
 - WavePrecomp photometry: the far-IR band lights up AND matches the exact path.
-- energy conservation: the port re-radiates ~L_ir into the IR.
+- energy conservation: the component re-radiates ~L_ir into the IR.
 - redshift/CMB: emission depends on redshift (the BARE_NAME_ALLOWLIST threading).
 - spectrum path: emission adds IR flux to the rest-frame spectrum.
 
@@ -81,7 +81,7 @@ def _model(emit, ssp, obs=None, approx=None):
 
 
 def test_registry_resolution_and_aliases():
-    """The seam resolves every emission type (and alias) to a registered port."""
+    """The seam resolves every emission type (and alias) to a registered component."""
     from tengri.forward.component_factory import (
         _EMISSION_TYPE_ALIASES,
         _resolve_registry_component,
@@ -97,7 +97,7 @@ def test_registry_resolution_and_aliases():
 
 
 def test_no_double_declaration_of_emission_params():
-    """Emission params are owned by the port, not DustSEDComponent (no collision)."""
+    """Emission params are owned by the component, not DustSEDComponent (no collision)."""
     from tengri.forward.component_factory import build_components
     from tengri.forward.orchestrator import merge_declared_parameters
 
@@ -119,12 +119,12 @@ def test_no_double_declaration_of_emission_params():
     assert any(name == "dust_T" for name in params), "emission owns dust_T"
 
 
-def test_emission_port_base_not_registered():
-    """The abstract EmissionPort base must NOT leak into the dispatch registry."""
+def test_emission_component_base_not_registered():
+    """The abstract EmissionComponent base must NOT leak into the dispatch registry."""
     from tengri.components.sed_model_component import _REGISTRY
 
     assert "component" not in _REGISTRY
-    assert not any(type(v).__name__ == "EmissionPort" for v in _REGISTRY.values())
+    assert not any(type(v).__name__ == "EmissionComponent" for v in _REGISTRY.values())
     for name in ("modified_blackbody", "casey2012", "pah_drude", "dale2014", "themis"):
         assert name in _REGISTRY
 
@@ -133,16 +133,16 @@ def test_emission_port_base_not_registered():
 
 
 def test_emission_ordered_after_attenuator(synthetic_ssp_wide):
-    """The emission port must run AFTER the dust attenuator that publishes L_ir.
+    """The emission component must run AFTER the dust attenuator that publishes L_ir.
 
-    This is the exact bug we hit: the port was ordered before DustSEDComponent,
+    This is the exact bug we hit: the component was ordered before DustSEDComponent,
     so it read L_ir=0 and emitted nothing. Assert the ordering directly.
     """
     m = _model(True, synthetic_ssp_wide)
     chain = [type(c).__name__ for c in m._build_component_chain()]
     assert "DustSEDComponent" in chain and "ModifiedBlackbodyIRSEDComponent" in chain
     assert chain.index("ModifiedBlackbodyIRSEDComponent") > chain.index("DustSEDComponent"), (
-        f"emission port must come after the attenuator; got {chain}"
+        f"emission component must come after the attenuator; got {chain}"
     )
 
 
@@ -220,7 +220,7 @@ def test_port_conserves_energy(synthetic_ssp_wide):
 
 
 def test_emission_depends_on_redshift_cmb(synthetic_ssp_wide):
-    """The MBB port's emission changes with redshift (da Cunha CMB correction).
+    """The MBB component's emission changes with redshift (da Cunha CMB correction).
 
     Guards the BARE_NAME_ALLOWLIST redshift threading: if redshift never reaches
     predict, z=0 and z=6 would be identical.
@@ -242,7 +242,7 @@ def test_emission_adds_ir_to_rest_sed(synthetic_ssp_wide):
     """The rest-frame SED differs (only in the IR) with vs without emission.
 
     Catches the total no-op: predict_rest_sed was byte-identical with/without
-    emission when the port was mis-ordered.
+    emission when the component was mis-ordered.
     """
     ssp = synthetic_ssp_wide
     pe = _model(True, ssp).predict_rest_sed({})

@@ -9,7 +9,7 @@ modeling or inference. It is the surface consumed by :class:`tengri.Galaxy`
 
 For new code prefer the nested-dict grammar recipes in :mod:`tengri.recipes`
 (``SEDModel.build(**recipes.high_z())``) — the ``high_z`` and ``photoz``
-recipes are grammar ports of the presets here.
+recipes are grammar implementations of the presets here.
 
 .. note::
     Relocated from the former top-level ``tengri/presets.py`` module (2026-07),

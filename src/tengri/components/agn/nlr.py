@@ -26,7 +26,7 @@ NLR module map (#897) — these are **distinct**, not duplicates
 * ``nlr_cloudy.py`` — grid-backed (Feltre / Synthesizer CLOUDY) NLR **adapters**.
   A *different* physics source (photoionization grids, not analytic line
   ratios), consumed by ``blocks/nlr_synthesizer*.py``. Not a duplicate.
-* (removed) ``nlr_model.py`` — a one-file ``SEDModelComponent`` port that
+* (removed) ``nlr_model.py`` — a one-file ``SEDModelComponent`` that
   wrapped this kernel but was a grammar-unreachable orphan with drifted param
   names (``agn_nlr_cov_frac`` vs the canonical ``agn_nlr_cf``); deleted in #897
   since ``blocks/nlr_analytic`` already delivers this physics bit-identically.

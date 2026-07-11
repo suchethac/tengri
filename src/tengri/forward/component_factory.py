@@ -110,10 +110,10 @@ def _resolve_registry_component(
         Grammar type name, resolved via ``_EMISSION_TYPE_ALIASES`` to a
         registry key.
     config : SEDComponentConfig, optional
-        Pre-constructed config object (not typically used for ports).
+        Pre-constructed config object (not typically used for components).
     **config_kwargs
         Construction-time keyword arguments forwarded to the component's
-        ``__init__``. For analytic/grid ports, typically empty; some may
+        ``__init__``. For analytic/grid components, typically empty; some may
         accept data-path or backend overrides.
 
     Returns
@@ -130,13 +130,13 @@ def _resolve_registry_component(
     Notes
     -----
     This seam is construction-time only, never traced through JAX. Template
-    HDF5 loading (for grid ports) happens on first ``apply()`` invocation.
+    HDF5 loading (for grid components) happens on first ``apply()`` invocation.
     """
     # Resolve grammar type → registry key via alias map
     registry_key = _EMISSION_TYPE_ALIASES.get(type_str, type_str)
 
     if registry_key not in _REGISTRY:
-        # Collect available ports and format a helpful error
+        # Collect available components and format a helpful error
         available = sorted(_REGISTRY.keys())
         raise ValueError(
             f"{domain} component {registry_key!r} (resolved from grammar type "
@@ -150,7 +150,7 @@ def _resolve_registry_component(
     else:
         component = component_cls(**config_kwargs)
 
-    # Dust emission ports (modified_blackbody, dale2014, etc.) publish to a
+    # Dust emission components (modified_blackbody, dale2014, etc.) publish to a
     # unified "dust_emission" key so they map to the canonical DerivedState
     # field. Override the instance name so _apply_precomp publishes to
     # "dust_emission_phot_lnu_precomp" instead of template-specific keys.
@@ -424,12 +424,12 @@ def build_components(
 
         # Energy-balanced IR re-emission. The two-component attenuator re-emits
         # inside its own apply(); the single-screen path publishes L_ir (absorbed
-        # UV/optical/NIR luminosity) and relies on a downstream emission port to
-        # re-radiate it — without one, L_ir is computed but never re-emitted,
-        # silently dropping the dust IR (#565). The emission port reads L_ir as
-        # an optional input and produces sed_dust_ir; the topological sort places
+        # UV/optical/NIR luminosity) and relies on a downstream emission component
+        # to re-radiate it — without one, L_ir is computed but never re-emitted,
+        # silently dropping the dust IR (#565). The emission component reads L_ir
+        # as an optional input and produces sed_dust_ir; the topological sort places
         # it after attenuation. Route through the same single dispatch seam. WG00
-        # keeps its historical behavior of appending no separate emission port.
+        # keeps its historical behavior of appending no separate emission component.
         if atten_type != "wg00" and dust_emission_model is not None:
             components.append(_resolve_registry_component("dust_emission", dust_emission_model))
 
@@ -455,7 +455,7 @@ def build_components(
     if use_shock:
         from tengri.components.nebular.shock_model import ShockNebularConfig
 
-        # ShockNebular is a SEDModelComponent port (config lives as a class
+        # ShockNebular is a SEDModelComponent (config lives as a class
         # attribute, not a constructor arg), so resolve the class through the
         # seam and set the per-model config as an instance attribute — the same
         # post-construction configuration pattern the seam uses for ``name``.

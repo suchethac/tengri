@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""AGNXRayCorona: AGN X-ray corona as a SEDModelComponent.
+"""AGN X-ray corona model (Lusso & Risaliti 2016 alpha_ox relation)
+SEDModelComponent.
 
-Ports the AGN X-ray corona model (Lusso & Risaliti 2016 alpha_ox relation)
-to the SEDModelComponent architecture. Provides differentiable AGN X-ray SED
-prediction driven by AGN bolometric luminosity.
+Implements the AGN X-ray corona model on the SEDModelComponent contract.
+Provides differentiable AGN X-ray SED prediction driven by AGN bolometric
+luminosity.
 
 Physical pipeline
 -----------------

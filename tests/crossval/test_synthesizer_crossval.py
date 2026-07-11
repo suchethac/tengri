@@ -3,7 +3,7 @@
 
 Synthesizer is an independent SED forward-modeling toolkit with pure
 numpy/Python implementations of many models tengri implements in JAX.
-Numerical agreement here validates tengri's JAX ports.
+Numerical agreement here validates tengri's JAX implementations.
 
 Run with:
     pytest -m crossval tests/crossval/test_synthesizer_crossval.py -v

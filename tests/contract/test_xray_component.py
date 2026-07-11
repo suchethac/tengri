@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Contract tests for X-ray SEDModelComponent port.
+"""Contract tests for X-ray SEDModelComponent.
 
 Verify that XRayAirdSEDComponent satisfies the SEDComponent protocol
 and registry expectations.

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""EmissionPort: Abstract base class for dust IR emission models.
+"""EmissionComponent: Abstract base class for dust IR emission models.
 
 Centralizes the WavePrecomp photometry-LUT projection logic for all dust
 emission templates (analytic and grid-based), recovering the pre-slim
@@ -9,8 +9,8 @@ DustSEDComponent.apply() orchestration for the three dispatch branches:
 2. Spectrum LUT (SpectrumPrecomp): project onto spectrum pixels
 3. Exact full-wave: compute the full SED
 
-Concrete ports (ModifiedBlackbodyIRSEDComponent, DaleCaseyIRSEDComponent, ...)
-inherit from EmissionPort and focus ONLY on their predict() physics,
+Concrete components (ModifiedBlackbodyIRSEDComponent, DaleCaseyIRSEDComponent,
+...) inherit from EmissionComponent and focus ONLY on their predict() physics,
 with no need to override apply().
 """
 
@@ -24,10 +24,10 @@ import jax.numpy as jnp
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.protocols.component import BARE_NAME_ALLOWLIST, ForwardState
 
-__all__ = ["EmissionPort"]
+__all__ = ["EmissionComponent"]
 
 
-class EmissionPort(SEDModelComponent):
+class EmissionComponent(SEDModelComponent):
     """Abstract base for all dust IR emission models.
 
     Subclasses declare free parameters and define predict() physics.
@@ -36,19 +36,19 @@ class EmissionPort(SEDModelComponent):
     Notes
     -----
     **Registry**: Concrete subclasses (e.g., modified_blackbody, dale2014)
-    register in _REGISTRY under their ``name``. EmissionPort itself does NOT
+    register in _REGISTRY under their ``name``. EmissionComponent itself does NOT
     register — it is abstract (name not in vars(cls) at class-definition time).
 
     **JIT-compatible**: yes — all orchestration is pure JAX.
     """
 
-    # Shared class attributes for all emission ports
+    # Shared class attributes for all emission components
     parameter_prefix: str = "dust_"
 
-    # Cross-component contract: all ports consume L_ir and produce the dust IR SED.
+    # Cross-component contract: all components consume L_ir and produce dust IR SED.
     # SEDModelComponent.__init_subclass__ collects these dicts into the DerivedKey
     # tuples and rebinds the shadowed accessor methods onto concrete subclasses.
-    # EmissionPort itself is abstract (defines no own ``name``) so it does not register.
+    # EmissionComponent itself is abstract (defines no own ``name``) so it does not register.
     optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s"}
     outputs: ClassVar[dict[str, str]] = {"sed_dust_ir": "erg/s/Hz"}
 
@@ -76,7 +76,7 @@ class EmissionPort(SEDModelComponent):
         params : mapping
             Full parameter dict (sliced by prefix inside).
         ssp_data : object, optional
-            SSP data (ignored for emission ports).
+            SSP data (ignored for emission components).
         template_data : mapping, optional
             Cached templates and LUTs (e.g., dust_ir["energy_balance_lut"],
             dust_ir["emission_band_response"]).

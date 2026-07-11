@@ -3,7 +3,7 @@
 
 Proves — at the level of the BUILT COMPONENT CHAIN, not just symbol absence —
 that every grammar emission type (and alias) is handled by a registered
-``EmissionPort`` from ``_REGISTRY``, never by a legacy closure. A symbol rename
+``EmissionComponent`` from ``_REGISTRY``, never by a legacy closure. A symbol rename
 cannot fake this: it asserts the actual class that will run in the pipeline.
 
 Runs DATA-FREE (no HDF5/SSP): ``build_components`` is structural, so this
@@ -40,10 +40,10 @@ _GRAMMAR_TYPES = [
 ]
 
 
-# The dust-IR re-emission output name(s) a registered emission port publishes.
-# EmissionPort ports publish ``sed_dust_ir``; the pre-EmissionPort port
+# The dust-IR re-emission output name(s) a registered emission component publishes.
+# EmissionComponent components publish ``sed_dust_ir``; the pre-EmissionComponent
 # ``draine2021_pah_ir`` publishes ``L_ir_emission`` (a pre-existing naming
-# inconsistency, tracked separately — both are valid registry emission ports).
+# inconsistency, tracked separately — both are valid registry emission components).
 _IR_OUTPUTS = {"sed_dust_ir", "L_ir_emission"}
 
 
@@ -51,7 +51,7 @@ class _MockSSP:
     ssp_wave = None
 
 
-def _emission_ports(dust_emission_model: str):
+def _emission_components(dust_emission_model: str):
     from tengri.components.sed_model_component import _REGISTRY
     from tengri.forward.component_factory import build_components
 
@@ -75,12 +75,13 @@ def _emission_ports(dust_emission_model: str):
 
 
 @pytest.mark.parametrize("emission_type", _GRAMMAR_TYPES)
-def test_every_emission_type_dispatches_to_registry_port(emission_type):
-    """Each grammar type builds exactly one registered _REGISTRY emission port."""
-    ports = _emission_ports(emission_type)
-    assert len(ports) == 1, (
+def test_every_emission_type_dispatches_to_registry_component(emission_type):
+    """Each grammar type builds exactly one registered _REGISTRY emission
+    component."""
+    components = _emission_components(emission_type)
+    assert len(components) == 1, (
         f"emission type {emission_type!r} must build exactly one registered "
-        f"_REGISTRY emission port; got {[type(p).__name__ for p in ports]}"
+        f"_REGISTRY emission component; got {[type(c).__name__ for c in components]}"
     )
 
 
@@ -94,22 +95,22 @@ def test_no_legacy_dispatch_symbol_importable():
 
 
 def test_energy_balance_split_not_in_load_only_dict():
-    """#850: ``energy_balance_split`` has a single dispatch path (the port).
+    """#850: ``energy_balance_split`` has a single dispatch path (the component).
 
     It must NOT also live in ``DUST_EMISSION_MODELS`` (the load-only loader
     cache). A duplicate entry there resurrects a divergent second path
     (``apply_dust_emission("energy_balance_split")`` -> raw closure with the
-    default ``eta_balance``), which the port's ``eta_balance=1.0`` convention
+    default ``eta_balance``), which the component's ``eta_balance=1.0`` convention
     would silently disagree with. Its canonical dispatch is the
-    ``EnergyBalanceSplitIRSEDComponent`` port in ``_REGISTRY``.
+    ``EnergyBalanceSplitIRSEDComponent`` component in ``_REGISTRY``.
     """
     from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
     from tengri.components.sed_model_component import _REGISTRY
 
     assert "energy_balance_split" not in DUST_EMISSION_MODELS, (
         "energy_balance_split must NOT be registered in DUST_EMISSION_MODELS — "
-        "its only dispatch is the _REGISTRY port (single-dispatch, #850)"
+        "its only dispatch is the _REGISTRY component (single-dispatch, #850)"
     )
     assert "energy_balance_split" in _REGISTRY, (
-        "energy_balance_split must remain dispatchable via its _REGISTRY port"
+        "energy_balance_split must remain dispatchable via its _REGISTRY component"
     )

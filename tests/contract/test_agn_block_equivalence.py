@@ -3,7 +3,7 @@
 
 Each AGN model's physics lives in ONE place (e.g. ``agn/silva04.py::silva04_sed``).
 Both the composable **block** adapter (``blocks/torus_blocks.py``, used by the
-runner) and the one-file ``SEDModelComponent`` **port** (``silva04_model.py``)
+runner) and the one-file ``SEDModelComponent`` (``silva04_model.py``)
 wrap that same primitive — there is no second copy of the physics.
 
 These tests pin that the live block adapters are *faithful* wrappers of the
@@ -82,16 +82,17 @@ def test_torus_block_is_faithful_wrapper_of_single_source_primitive(name, primit
     )
 
 
-# (block module, one-file port module, shared physics module) — the block
-# adapter and the port both import from the SAME ``components.agn.<model>``
-# physics module (the block pulls the ``*_sed`` primitive; the port pulls its
-# grid loader from the same module), so there is one source of truth per model.
+# (block module, one-file component module, shared physics module) — the block
+# adapter and the component both import from the SAME ``components.agn.<model>``
+# physics module (the block pulls the ``*_sed`` primitive; the component pulls
+# its grid loader from the same module), so there is one source of truth per
+# model.
 _SHARED_MODULE = [
     ("blocks.torus", "silva04_model", "components.agn.silva04"),
     ("blocks.torus", "cat3d_torus_model", "components.agn.cat3d_wind"),
     ("blocks.torus", "skirtor_model", "components.agn.skirtor"),
     ("blocks.disc", "kd18_disc_model", "components.agn.disc"),
-    # NLR had a one-file port too (``nlr_model.AGNNebular``), but it was a
+    # NLR had a one-file component too (``nlr_model.AGNNebular``), but it was a
     # grammar-unreachable orphan with drifted param names (``agn_nlr_cov_frac``
     # vs the canonical ``agn_nlr_cf``) — the exact silent-divergence footgun
     # this migration removes — so it was deleted (#897). The canonical NLR
@@ -101,21 +102,24 @@ _SHARED_MODULE = [
 ]
 
 
-@pytest.mark.parametrize("block_mod,port_mod,physics_module", _SHARED_MODULE)
-def test_block_and_port_share_one_physics_module(block_mod, port_mod, physics_module):
-    """Structural guard: each model's block and one-file port both import from
-    the SAME physics module — there is no second copy to drift out of sync."""
+@pytest.mark.parametrize("block_mod,component_mod,physics_module", _SHARED_MODULE)
+def test_block_and_component_share_one_physics_module(block_mod, component_mod, physics_module):
+    """Structural guard: each model's block and one-file component both import
+    from the SAME physics module — there is no second copy to drift out of
+    sync."""
     import inspect
 
     block_src = inspect.getsource(importlib.import_module(f"tengri.components.agn.{block_mod}"))
-    port_src = inspect.getsource(importlib.import_module(f"tengri.components.agn.{port_mod}"))
+    component_src = inspect.getsource(
+        importlib.import_module(f"tengri.components.agn.{component_mod}")
+    )
     assert physics_module in block_src, f"{block_mod} no longer imports {physics_module}"
-    assert physics_module in port_src, f"{port_mod} no longer imports {physics_module}"
+    assert physics_module in component_src, f"{component_mod} no longer imports {physics_module}"
 
 
 def test_nlr_analytic_wraps_single_source_kernel():
-    """After #897 removed the redundant NLR one-file port, the canonical NLR
-    block ``blocks.nlr_analytic`` must still wrap the single-source physics
+    """After #897 removed the redundant NLR one-file component, the canonical
+    NLR block ``blocks.nlr_analytic`` must still wrap the single-source physics
     kernel ``compute_nlr_sed`` from ``components.agn.nlr`` — so there is one
     source of truth for the analytic NLR spectrum and no second copy to drift.
     """

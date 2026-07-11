@@ -249,7 +249,7 @@ class DustAttenuationSEDComponent:
         attenuated = state.sed_intrinsic * attenuation
 
         # Energy balance — integrate the absorbed luminosity in frequency
-        # space and publish for downstream consumers (dust emission ports
+        # space and publish for downstream consumers (dust emission components
         # re-emit it; RadioSEDComponent uses it to set the SF radio
         # amplitude via the FIR-radio correlation). LyC photons ionize H
         # rather than heat dust, so the canonical integral masks λ < 912 Å

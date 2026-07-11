@@ -10,13 +10,13 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.dust.emission._port_base import EmissionPort
+from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
 
 __all__ = ["DraineLi2007IRSEDComponent", "DraineLi2014IRSEDComponent"]
 
 
-class DraineLi2007IRSEDComponent(EmissionPort):
+class DraineLi2007IRSEDComponent(EmissionComponent):
     """Draine & Li (2007) dust IR emission template.
 
     Wraps the pure closure from the tabulated Draine & Li (2007) template
@@ -103,7 +103,7 @@ class DraineLi2007IRSEDComponent(EmissionPort):
         return sed_in + sed, {"sed_dust_ir": sed}
 
 
-class DraineLi2014IRSEDComponent(EmissionPort):
+class DraineLi2014IRSEDComponent(EmissionComponent):
     """Draine & Li (2014) dust IR emission template (2014 update).
 
     Wraps the pure closure from the tabulated Draine & Li (2014) template

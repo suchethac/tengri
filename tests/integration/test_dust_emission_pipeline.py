@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for the modified_blackbody emission port and the dust energy-balance loop.
+"""Tests for the modified_blackbody emission component and the dust energy-balance loop.
 
 Two layers:
 
 1. **Standalone IR emission** — given an L_ir scalar already on
-   ``state.derived``, the port reproduces
+   ``state.derived``, the component reproduces
    :func:`modified_blackbody` exactly.
 2. **Closed loop** — DustAttenuation + DustEmission together approximately
    conserve energy across the attenuation/re-emission round-trip. The
