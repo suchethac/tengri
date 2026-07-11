@@ -250,7 +250,14 @@ jobs:
       # upgrade is a harmless miss, never a wrong hit. The run-id key with
       # prefix restore-keys implements an append-only cache: each run
       # restores the newest snapshot and saves its own superset.
-      - uses: actions/cache@v4
+      #
+      # restore + save(if: always()), NOT the combined `actions/cache`: the
+      # combined action's implicit post-save is SKIPPED when the job fails,
+      # and this tier is red (#1031). A cache meant to speed up a failing
+      # suite can never warm if warming requires the suite to pass — the
+      # same trap that made the `test` job's cache a no-op (see its comment).
+      - uses: actions/cache/restore@v4
+        id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
           key: tengri-jax-${{ matrix.suite }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
@@ -258,3 +265,8 @@ jobs:
             tengri-jax-${{ matrix.suite }}-${{ hashFiles('pyproject.toml') }}-
       - run: pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval
         timeout-minutes: ${{ matrix.timeout }}
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: ${{ steps.jax_cache.outputs.cache-primary-key }}
