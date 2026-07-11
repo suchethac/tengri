@@ -19,8 +19,7 @@ AGNfitter's ``BBBred_Prevot``, which stores an analytic SMC fit already in the
 
 References
 ----------
-.. [1] M. J. Temple, P. C. Hewett & M. Banerji, "Modelling the emission-line
-   and continuum properties of quasars," MNRAS, 508, 737 (2021).
+.. [1] M. J. Temple, P. C. Hewett & M. Banerji, MNRAS, 508, 737 (2021).
    arXiv:2109.04472. https://doi.org/10.1093/mnras/stab2586
 """
 

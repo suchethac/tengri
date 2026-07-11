@@ -287,9 +287,8 @@ def qsogen_quasar_ext_block(
 
     References
     ----------
-    .. [1] M. J. Temple, P. C. Hewett & M. Banerji, "Modelling the
-       emission-line and continuum properties of quasars," MNRAS, 508, 737
-       (2021). arXiv:2109.04472. https://doi.org/10.1093/mnras/stab2586
+    .. [1] M. J. Temple, P. C. Hewett & M. Banerji, MNRAS, 508, 737 (2021).
+       arXiv:2109.04472. https://doi.org/10.1093/mnras/stab2586
     """
     wave_aa = jnp.asarray(wavelength)
     a_over_ebv = qsogen_quasar_extinction(wave_aa)

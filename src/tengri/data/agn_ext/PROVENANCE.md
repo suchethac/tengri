@@ -3,8 +3,7 @@
 ## qsogen_quasar_ext.dat
 
 **Original paper**: Temple, M. J., Hewett, P. C., & Banerji, M. 2021, MNRAS,
-508, 737 ("Modelling the emission-line and continuum properties of quasars").
-DOI: [10.1093/mnras/stab2586](https://doi.org/10.1093/mnras/stab2586).
+508, 737. DOI: [10.1093/mnras/stab2586](https://doi.org/10.1093/mnras/stab2586).
 arXiv: [2109.04472](https://arxiv.org/abs/2109.04472).
 
 **What it is**: the empirically-derived *quasar* dust extinction curve used by
