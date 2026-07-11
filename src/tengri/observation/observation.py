@@ -507,6 +507,7 @@ class Observation:
         z: float,
         dl_cm: float,
         sigma_v_kms: float = 0.0,
+        cal_coeffs: jnp.ndarray | None = None,
     ) -> jnp.ndarray:
         """Project an observed-frame SED onto spectroscopic pixel grid.
 
@@ -518,16 +519,22 @@ class Observation:
             Redshift.
         dl_cm : float
             Luminosity distance [cm].
+        sigma_v_kms : float, optional
+            Intrinsic velocity dispersion [km/s]. Default 0.0.
+        cal_coeffs : ndarray, shape (order,), or None, optional
+            Calibration polynomial coefficients to apply after LSF.
+            If ``None`` (default), no calibration is applied.
 
         Returns
         -------
         jnp.ndarray, shape (n_pixels,)
-            Spectroscopic flux at each pixel [erg/s/Hz].
+            Spectroscopic flux at each pixel [erg/s/cm^2/Hz].
 
         Notes
         -----
         Requires spectroscopy to be configured. Applies LSF convolution
-        if a resolution profile is specified. Returns data ready for
+        if a resolution profile is specified. Applies flux-calibration
+        polynomial if ``cal_coeffs`` is provided. Returns data ready for
         likelihood evaluation against observed spectra.
 
         """
@@ -547,6 +554,8 @@ class Observation:
             resolution=self.spectroscopy.resolution,
             sigma_lib_kms=self.spectroscopy.sigma_lib_kms,
             sigma_v_kms=sigma_v_kms,
+            cal_coeffs=cal_coeffs,
+            cal_wave_range=self.spectroscopy.calibration_wave_range,
         )
         return flux
 
@@ -708,6 +717,8 @@ class Observation:
                 sigma_lib_kms=sigma_lib,
                 n_bins=n_bins,
                 sigma_v_kms=sigma_v_kms,
+                cal_coeffs=self.spectroscopy.calibration_coeffs(params),
+                cal_wave_range=self.spectroscopy.calibration_wave_range,
             )
             out["spec_fnu"] = flux
 

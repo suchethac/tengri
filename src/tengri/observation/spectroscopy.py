@@ -312,6 +312,45 @@ class Spectroscopy:
             return {}
         return {f"cal_c{i + 1}": Gaussian(0.0, 0.1) for i in range(self.calibration_order)}
 
+    def calibration_coeffs(self, params) -> jnp.ndarray | None:
+        """Extract calibration coefficients from parameter dict.
+
+        Returns
+        -------
+        ndarray, shape (calibration_order,), or None
+            Chebyshev polynomial coefficients ``[c_1, c_2, ..., c_N]``,
+            extracted from ``params["cal_c1"]``, ..., ``params["cal_cN"]``.
+            Returns ``None`` when ``calibration_order == 0``.
+
+        Notes
+        -----
+        Keys are constructed with the same f-string shape as
+        :meth:`get_calibration_params` to prevent drift.
+
+        """
+        if self.calibration_order == 0:
+            return None
+        return jnp.asarray([params[f"cal_c{i + 1}"] for i in range(self.calibration_order)])
+
+    @property
+    def calibration_wave_range(self) -> tuple[float, float]:
+        """Wavelength range for calibration polynomial normalization.
+
+        Returns
+        -------
+        tuple[float, float]
+            ``(wave_min, wave_max)`` of the configured ``self.wave_obs``,
+            anchoring the Chebyshev polynomial normalisation to [-1, 1].
+
+        Notes
+        -----
+        The calibration polynomial is normalised to the observed-frame
+        wavelength range so that a given coefficient value has a consistent
+        meaning regardless of the grid passed to the forward model.
+
+        """
+        return (float(self.wave_obs.min()), float(self.wave_obs.max()))
+
     # ── Instrument factories ──────────────────────────────────────
 
     @staticmethod

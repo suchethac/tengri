@@ -405,15 +405,19 @@ def project_spectrum(
     sigma_lib_kms: float = 0.0,
     n_bins: int = 16,
     sigma_v_kms: float = 0.0,
+    cal_coeffs: jnp.ndarray | None = None,
+    cal_wave_range: tuple[float, float] | None = None,
 ) -> jnp.ndarray:
     r"""Project a panchromatic model SED onto an observed-frame spectrum grid.
 
     Consolidates the spectrum projection pipeline: compute observed-frame fluxes
     at pixel wavelengths via interpolation, then optionally apply wavelength-dependent
-    Line Spread Function (LSF) convolution accounting for instrument resolution.
+    Line Spread Function (LSF) convolution accounting for instrument resolution, then
+    optionally apply multiplicative flux-calibration polynomial.
 
-    **Flux calibration and absorption (IGM/DLA/Milky Way) are composed by callers,
-    not here.** This function implements the pixel-level spectral forward model only.
+    **Absorption (IGM/DLA/Milky Way) is composed by callers, not here.**
+    Flux calibration is now applied here; IGM/DLA/MW absorption is still
+    composed by callers.
 
     Parameters
     ----------
@@ -442,36 +446,56 @@ def project_spectrum(
     sigma_v_kms : float, optional
         Intrinsic galaxy velocity dispersion [km/s] added in quadrature to LSF.
         Default 0.0 (no extra broadening).
+    cal_coeffs : array, shape (order,), or None, optional
+        Chebyshev calibration polynomial coefficients ``[a_1, ..., a_N]``,
+        where ``N`` is the calibration order. If ``None`` (default), no
+        calibration is applied. Empty array ``[]`` gives unity calibration
+        (no-op).
+    cal_wave_range : tuple[float, float], optional
+        ``(wave_min, wave_max)`` wavelength range for normalising the
+        Chebyshev polynomial to [-1, 1]. Used only when ``cal_coeffs`` is not
+        ``None``. If omitted, defaults to ``(wave_obs.min(), wave_obs.max())``.
 
     Returns
     -------
     ndarray, shape (n_pix,)
         Observed spectral flux density [erg/s/cm²/Hz] at each pixel, optionally
-        broadened by the instrument LSF.
+        broadened by the instrument LSF and scaled by the calibration polynomial.
 
     Notes
     -----
-    **JIT-compatible**: yes when `resolution`'s None-ness is fixed at trace time.
-    The resolution None check is a Python-level structural branch; the body is
-    fully JAX-compatible whether resolution is computed from a scalar or array.
+    **JIT-compatible**: yes when `resolution`'s None-ness and
+    `cal_coeffs`'s None-ness are fixed at trace time. Both None checks are
+    Python-level structural branches.
 
     **What this does**: Projects the panchromatic model-grid SED onto an
     instrument wavelength grid — the result is a *spectrum* (observed-frame F_nu
     on `wave_obs`), distinct from the model-grid SED itself.
 
     **Composition pattern**: Called by observers/projectors that (1) may apply
-    IGM/DLA attenuation BEFORE calling this function, (2) may apply flux
-    calibration AFTER this function, and (3) may apply Milky Way reddening
-    BEFORE or AFTER. This function does none of those — it is a pure
-    resampling + resolution-broadening kernel.
+    IGM/DLA attenuation BEFORE calling this function, (2) flux calibration is
+    applied here (when ``cal_coeffs`` is provided), and (3) may apply Milky Way
+    reddening BEFORE calling this function. Calibration order (after LSF) is
+    non-negotiable: the polynomial models wavelength-dependent instrumental
+    flux-calibration error on the observed, already-smoothed spectrum.
+
+    **Calibration convention**: The polynomial is ``C(lambda) = 1 + sum c_k *
+    T_k(x)`` where ``T_k`` are Chebyshev polynomials and ``x`` normalises
+    ``[wave_min, wave_max]`` to ``[-1, 1]``. The constant term is fixed to 1
+    (overall normalisation is handled elsewhere); provided coefficients represent
+    *deviations* from flat calibration.
+    See :func:`~tengri.observation.calibration.calibration_polynomial`.
 
     See Also
     --------
     compute_spectrum : Compute observed spectrum (no LSF).
     apply_lsf : Apply LSF convolution separately.
     velocity_broaden : Broaden by velocity dispersion only.
+    apply_calibration : Apply calibration polynomial to a spectrum.
 
     """
+    from tengri.observation.calibration import apply_calibration
+
     flux = compute_spectrum(sed_rest, wave_rest, wave_obs, redshift, dl_cm)
     if resolution is not None:
         flux = apply_lsf(
@@ -482,6 +506,11 @@ def project_spectrum(
             n_bins=n_bins,
             sigma_v_kms=sigma_v_kms,
         )
+    if cal_coeffs is not None:
+        wmin, wmax = (
+            cal_wave_range if cal_wave_range is not None else (wave_obs.min(), wave_obs.max())
+        )
+        flux = apply_calibration(flux, wave_obs, cal_coeffs, wmin, wmax)
     return flux
 
 
@@ -594,59 +623,6 @@ def velocity_broaden(
     broadened = jnp.fft.irfft(flux_ft * kernel_ft, n=n)
 
     return broadened
-
-
-@jax.jit
-def chebyshev_calibration(
-    wave_obs: jnp.ndarray, coeffs: jnp.ndarray, wave_min: float, wave_max: float
-) -> jnp.ndarray:
-    """Multiplicative Chebyshev calibration polynomial.
-
-    C(lambda) = sum_k c_k * T_k(x)
-
-    where x maps the wavelength range to [-1, 1], and T_k are Chebyshev
-    polynomials of the first kind. The constant term c_0 is fixed to 1.
-
-    Parameters
-    ----------
-    wave_obs : array, shape (n_pix,)
-        Observed wavelengths [Angstrom].
-    coeffs : array, shape (K,)
-        Chebyshev coefficients c_1, ..., c_K (c_0 = 1 implicit).
-    wave_min, wave_max : float
-        Wavelength range for normalization to [-1, 1].
-
-    Returns
-    -------
-    ndarray, shape (n_pix,)
-        Multiplicative calibration factor (dimensionless).
-
-    Notes
-    -----
-    JIT-compatible: yes. Gradient-safe: yes.
-    Warning: uses Python loop over coefficients; may not JIT-compile
-    with variable K if K is traced.
-
-    """
-    x = (2.0 * wave_obs - wave_min - wave_max) / (wave_max - wave_min)
-
-    # Start with c_0 = 1 (T_0 = 1)
-    result = jnp.ones_like(x)
-
-    # Add higher-order terms: T_1(x) = x, T_2(x) = 2x^2 - 1, etc.
-    t_prev = jnp.ones_like(x)  # T_0
-    t_curr = x  # T_1
-
-    for k in range(len(coeffs)):
-        if k == 0:
-            result = result + coeffs[0] * t_curr  # c_1 * T_1
-        else:
-            t_next = 2.0 * x * t_curr - t_prev
-            t_prev = t_curr
-            t_curr = t_next
-            result = result + coeffs[k] * t_curr  # c_{k+1} * T_{k+1}
-
-    return result
 
 
 # ── Speed of light in Angstrom/s (for frequency conversions) ──────
