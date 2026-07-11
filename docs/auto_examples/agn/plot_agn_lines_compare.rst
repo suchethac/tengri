@@ -34,7 +34,7 @@ the shipped data): NLR ``analytic``/``feltre``, BLR ``grahsp``/
 ``qsogen``, Fe II ``boroson_green``/``qsogen_balmer``. The
 ``synthesizer`` NLR/BLR grids need an external data bundle not shipped
 with the gallery, and the ``cue`` NLR backbone is omitted here (its
-line normalisation is under review, see the tracked issue).
+line normalization is under review, see the tracked issue).
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-100
 
@@ -146,7 +146,7 @@ line normalisation is under review, see the tracked issue).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.898 seconds)
+   **Total running time of the script:** (0 minutes 8.831 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_lines_compare.py:

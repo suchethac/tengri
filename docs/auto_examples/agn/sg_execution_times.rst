@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:07.898** total execution time for 47 files **from auto_examples/agn**:
+**00:08.831** total execution time for 43 files **from auto_examples/agn**:
 
 .. container::
 
@@ -33,7 +33,7 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_lines_compare.py` (``plot_agn_lines_compare.py``)
-     - 00:07.898
+     - 00:08.831
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py` (``plot_agn_alpha_ox_lbol_2d.py``)
      - 00:00.000
@@ -74,9 +74,6 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_uv_xray_connection.py` (``plot_alpha_ox_uv_xray_connection.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_boroson_green_feii_template.py` (``plot_boroson_green_feii_template.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_cat3d_wind_sweep.py` (``plot_cat3d_wind_sweep.py``)
      - 00:00.000
      - 0.0
@@ -99,9 +96,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_grahsp_paper_fig1_overview.py` (``plot_grahsp_paper_fig1_overview.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_grahsp_paper_fig3_params.py` (``plot_grahsp_paper_fig3_params.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_grahsp_paper_fig9_agn_attenuation.py` (``plot_grahsp_paper_fig9_agn_attenuation.py``)
@@ -134,16 +128,10 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_silva04_nh_sweep.py` (``plot_silva04_nh_sweep.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_agnfitter_sweep.py` (``plot_skirtor_agnfitter_sweep.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_agnfitter_vs_cigale.py` (``plot_skirtor_agnfitter_vs_cigale.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_inclination_sweep.py` (``plot_skirtor_inclination_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_variants.py` (``plot_skirtor_variants.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_vs_smooth_torus.py` (``plot_skirtor_vs_smooth_torus.py``)
