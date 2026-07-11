@@ -1186,11 +1186,14 @@ plt.show()
 # parameters, not against a hand-written power law. DPL parameters sit
 # inside AGNFITTER-RX's own sampling grid (α₂ ∈ [−1, 0)).
 #
-# One deliberate difference: above ~300 GHz tengri's radio blocks return
-# exactly zero (the far-IR belongs to the dust components), while
-# AGNFITTER-RX lets the exponential cutoff decay smoothly through the THz
-# range. The comparison band below stops at 300 GHz; the difference beyond
-# it is visible in the top panel.
+# Both tengri AGN-jet blocks extend into the sub-mm/IR governed by their
+# synchrotron-aging cutoff (10 THz), exactly as AGNFITTER-RX's jet does — the
+# `radio_agn` SPL now carries the same `exp(-nu/1e13)` term, so its parity
+# with AGNFITTER-RX's SPL is 1e-4 across the band (it was ~3% before the jet
+# stopped hard-cutting at 300 GHz). Only the star-formation radio keeps the
+# 1 mm floor, since it is tied to the dust FIR and must not double-count
+# there. The ratio band below runs to 300 GHz for legibility; both jets
+# continue smoothly past it.
 
 # %%
 import jax.numpy as jnp
@@ -1649,8 +1652,10 @@ print(
 #   component; AGNFITTER-RX has no host X-ray component and instead applies
 #   α_ox (Lusso & Risaliti 2016, σ = 0.4) and 6 µm↔2–10 keV (Stern 2015,
 #   σ = 0.5) priors during fitting (§10b).
-# * **Radio > 300 GHz** — tengri's radio blocks end where the dust begins;
-#   AGNFITTER-RX lets the exponential cutoff decay through the THz (§11).
+# * **Radio jets** — both tengri jets (`radio_agn` SPL, `radio_agn_dpl` DPL)
+#   extend into the sub-mm/IR under their synchrotron-aging cutoff, matching
+#   AGNFITTER-RX (the SPL parity is 1e-4 across 0.1–300 GHz); only the
+#   star-formation radio keeps the 1 mm dust-FIR floor (§11).
 # * **SF radio normalization** — upstream's S17_radio template carries an
 #   effective q_IR ≈ 2.92 against its own 8–1000 µm integral (Bell's 2.64
 #   applied to the smaller tabulated LIR_conv); tengri applies q_IR = 2.64
