@@ -23,6 +23,7 @@ recursive-include src/tengri *.py *.toml *.json *.bib
 # What gets pruned (everything below):
 prune data
 prune analysis
+prune bench
 prune docs
 prune examples
 prune explore
@@ -30,6 +31,7 @@ prune figures
 prune models
 prune notebooks
 prune profiling
+prune reproduction
 prune scripts
 prune tools
 prune vendor
