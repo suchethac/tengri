@@ -61,6 +61,8 @@ data/*.h5
 !data/skirtor_mean3p_torus_grid.h5
 !data/cat3d_wind_torus_grid.h5
 !data/silva04_torus_grid.h5
+!data/nenkova_agnfitter_torus_grid.h5
+!data/dh02_ce01_grid.h5
 # Fritz+2006 torus grid (#347/#804). Regenerate with:
 #   python scripts/download_fritz2006_templates.py && python scripts/build_fritz2006_grid.py
 !data/fritz2006_torus_grid.h5

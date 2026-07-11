@@ -1422,6 +1422,178 @@ def _normalize_dl07_like_grid(raw: dict, q_key: str = "qpah_grid") -> dict:
     return result
 
 
+# DH02_CE01 (Dale & Helou 2002 + Chary & Elbaz 2001) cold-dust model
+
+
+def create_dh02_ce01_from_grid(grid_path: str) -> Callable:
+    r"""Create a DH02_CE01 cold-dust emission model from tabulated templates.
+
+    Evaluates the DH02_CE01 template library published with AGNfitter-rX
+    (Dale & Helou 2002 + Chary & Elbaz 2001). The single-axis grid is
+    parameterized by infrared luminosity :math:`L_{\rm IR}`. Templates
+    are linearly interpolated in :math:`\log_{10}(L_{\rm IR} / L_\odot)`,
+    and the output SED is normalized via energy balance to match the
+    absorbed UV/optical luminosity.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``dh02_ce01_grid.h5`` (built by
+        ``scripts/build_dh02_ce01_grid.py``).
+
+    Returns
+    -------
+    Callable
+        Model function with signature
+        ``(wavelength_aa, L_absorbed, dust_log_lir=10.0, **kw) -> L_nu``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations inside the returned function are
+    ``jnp`` primitives.
+
+    References
+    ----------
+    .. [1] Dale, D. A. & Helou, G. 2002, ApJ, 576, 159.
+           (https://doi.org/10.1086/341632)
+    .. [2] Chary, R. & Elbaz, D. 2001, ApJ, 556, 562.
+           (https://doi.org/10.1086/321609)
+    .. [3] Martínez-Ramírez, L. N. et al., 2024, A&A, 688, A46.
+           (https://doi.org/10.1051/0004-6361/202449329) — AGNfitter-rX packaging.
+    """
+    templates = load_dh02_ce01_lnu_grid(grid_path)
+
+    irlum_axis = templates["irlum_axis"]
+    wavelength_grid = templates["wavelength"]
+    template_grid = templates["templates"]
+
+    def dh02_ce01_tabulated(
+        wavelength_aa: jnp.ndarray,
+        L_absorbed: float,
+        dust_log_lir: float = 10.0,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """DH02_CE01 dust emission from tabulated templates (Dale & Helou 2002).
+
+        Parameters
+        ----------
+        wavelength_aa : array_like, shape (n_wave,)
+            Rest-frame wavelength grid [Å].
+        L_absorbed : float
+            Total absorbed luminosity [Lsun].
+        dust_log_lir : float
+            Log₁₀ of the infrared luminosity [log₁₀(L_IR/L_sun)].
+            Clipped to the grid range [8.3, 14.3]. Default: 10.0.
+        **_kwargs
+            Extra keyword arguments (ignored).
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Dust emission L_ν [Lsun/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+        **Gradient-safe**: yes — differentiable everywhere via linear interpolation.
+        """
+        # Clip input to grid bounds
+        lir_c = jnp.clip(dust_log_lir, irlum_axis[0], irlum_axis[-1])
+
+        # Linear interpolation index and fraction
+        i = jnp.clip(
+            jnp.searchsorted(irlum_axis, lir_c) - 1,
+            0,
+            irlum_axis.shape[0] - 2,
+        )
+        f = (lir_c - irlum_axis[i]) / (irlum_axis[i + 1] - irlum_axis[i])
+
+        # Linearly interpolate template in log(L_IR) space
+        template_interp = (1.0 - f) * template_grid[i] + f * template_grid[i + 1]
+
+        # Resample to output wavelength grid
+        sed = jnp.interp(wavelength_aa, wavelength_grid, template_interp, left=0.0, right=0.0)
+
+        # Normalize via frequency integral (energy balance)
+        wave_cm = wavelength_aa * _AA_TO_CM
+        nu = _C_CGS / wave_cm
+        integral = -jnp.trapezoid(sed, nu)
+        norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+
+        return norm * sed
+
+    return dh02_ce01_tabulated
+
+
+def load_dh02_ce01_lnu_grid(grid_path: str) -> dict:
+    r"""Load DH02_CE01 template grid from HDF5 into normalized L_nu jnp arrays.
+
+    The templates are pre-normalized so that each integrates to 1 over
+    frequency (:math:`\int L_\nu\,d\nu = 1`).
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``dh02_ce01_grid.h5``.
+
+    Returns
+    -------
+    dict
+        Keys: ``wavelength`` (n_wave,) [Å], ``irlum_axis`` (n_irlum,)
+        [log₁₀(L_IR/L_sun)], ``templates`` (n_irlum, n_wave) [L_nu normalized].
+        All arrays are jnp.
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    Call at factory time (before JIT compilation).
+    """
+    import h5py as _h5py
+    import numpy as _np_dh02
+
+    with _h5py.File(grid_path, "r") as f:
+        grp = f["dh02_ce01"]
+        wavelength = _np_dh02.asarray(grp["wavelength"][:], dtype=_np_dh02.float64)
+        irlum_axis = _np_dh02.asarray(grp["irlum_axis"][:], dtype=_np_dh02.float64)
+        templates = _np_dh02.asarray(grp["template"][:], dtype=_np_dh02.float64)
+
+    return {
+        "wavelength": jnp.array(wavelength, dtype=jnp.float64),
+        "irlum_axis": jnp.array(irlum_axis, dtype=jnp.float64),
+        "templates": jnp.array(templates, dtype=jnp.float64),
+    }
+
+
+def register_dh02_ce01_tabulated(grid_path: str, name: str = "dh02_ce01") -> None:
+    r"""Load and register the tabulated DH02_CE01 model in the emission registry.
+
+    After calling this, the model is available via
+    ``DUST_EMISSION_MODELS["dh02_ce01"]`` and can be used as the
+    ``dust_emission_model`` in ``SEDModel()``.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``dh02_ce01_grid.h5``.
+    name : str
+        Registry name. Default: "dh02_ce01".
+
+    Returns
+    -------
+    None
+        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
+
+    Notes
+    -----
+    **JIT-compatible**: no — registration happens at factory time before JIT.
+    """
+    from . import emission
+
+    model_fn = create_dh02_ce01_from_grid(grid_path)
+    emission.DUST_EMISSION_MODELS[name] = model_fn
+
+
 # Normalize BOSA grid helper
 def _normalize_bosa_grid(raw: dict) -> dict:
     r"""Convert a raw BOSA grid dict to the processed format.

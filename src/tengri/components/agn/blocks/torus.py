@@ -20,6 +20,7 @@ from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.cat3d_wind import cat3d_wind_sed
 from tengri.components.agn.disc_cigale import schartmann2005_disk_spectrum
 from tengri.components.agn.fritz import fritz_sed
+from tengri.components.agn.nenkova_agnfitter import nenkova_agnfitter_sed
 from tengri.components.agn.polar_dust import (
     anisotropic_polar_luminosity,
     polar_dust_emission,
@@ -34,6 +35,7 @@ from tengri.utils.physics_constants import L_SUN
 __all__ = [
     "cat3d_wind_torus_block",
     "fritz_torus_block",
+    "nenkova_agnfitter_torus_block",
     "nenkova_torus_block",
     "silva04_torus_block",
     "skirtor_agnfitter_torus_block",
@@ -208,6 +210,46 @@ def nenkova_torus_block(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
         agn_tau=agn_tau,
+        agn_torus_frac=agn_torus_frac,
+    )
+    return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_agn_block(
+    "torus",
+    "nenkova_agnfitter",
+    citation="Nenkova et al. 2008, ApJ, 685, 160; Martínez-Ramírez et al. 2024, A&A, 688, A46",
+    status="production",
+    short_doc="Nenkova et al. 2008 CLUMPY torus (AGNfitter-rX NK0_mean_1p templates)",
+)
+def nenkova_agnfitter_torus_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_cos_inc: float = 0.5,
+    agn_torus_frac: float = 0.5,
+    **_params,
+) -> Array:
+    r"""Nenkova+ 2008 CLUMPY torus (AGNfitter-rX) block.
+
+    Inclination-averaged CLUMPY radiative-transfer torus templates from the
+    AGNfitter-rX ``NK0_mean_1p`` library, interpolated node-exactly in
+    ``cos(incl)`` via monotone-cubic splines. This is distinct from the
+    optical-depth-parametrized ``nenkova`` block; the two adopt different
+    CLUMPY parameter sets and give different predictions in the near-IR.
+
+    References
+    ----------
+    .. [1] Nenkova, M. et al. 2008, ApJ, 685, 160.
+    .. [2] Martínez-Ramírez, L. N. et al. 2024, A&A, 688, A46.
+    """
+    del l5100_disc
+    wave_aa = jnp.asarray(wavelength)
+    L_nu = nenkova_agnfitter_sed(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_cos_inc=agn_cos_inc,
         agn_torus_frac=agn_torus_frac,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
