@@ -2296,40 +2296,54 @@ class Prediction:
                 "A LUT built for one filter set cannot cover filters it was never built for."
             )
 
-        # Mode 1: Fast path (WavePrecomp LUT)
+        # Mode 1: Fast path (WavePrecomp LUT).
+        #
+        # Route through the lean jitted shortcut, NOT through
+        # ``predict_via_precomp`` on ``self._ensure_state()``. The whole saving of
+        # WavePrecomp is that XLA dead-code-eliminates the full-resolution SED
+        # einsum when only the LUT is consumed — and ``_ensure_state`` materializes
+        # that state eagerly, so the einsum runs and the saving is already spent.
+        # Going through the state made ``fast=True`` *slower* than the exact
+        # default (measured 0.7-0.8x) while also returning an approximation: the
+        # worst of both. ``predict_photometry`` is the same LUT to ~1 ULP and keeps
+        # the elision, so it is both faster and the number the fit itself sees.
         if fast:
             if not self._model._approx.get("wave_precomp"):
                 raise ValueError(
                     "fast=True requires the model to be built with approx=WavePrecomp(...). "
                     "Rebuild the model with approx=WavePrecomp() and try again."
                 )
-            state = self._ensure_state()
-            result = self._model.observation.predict_via_precomp(state, self._params)
-            return result["phot_fnu"]
+            return self._model.predict_photometry(self._params)
 
         # Mode 2: Runtime filters
         if filters is not None:
-            # Convert filter names/objects to a hashable cache key
+            # The convention (Bessell photon-counting vs energy, ADR-0017) is part
+            # of the filter integral, not of the filter. ``Photometry.from_names``
+            # defaults to Bessell, so resolving runtime filters without passing the
+            # model's own convention silently answers a different question than
+            # ``photometry()`` does — same filters, two numbers (~0.5% apart on an
+            # energy-convention model). It is part of the cache key for the same
+            # reason.
+            from tengri.observation.photometry_config import Photometry
+            from tengri.utils.filter_convention import FilterConvention
+
+            build_time = self._model.observation.photometry
+            convention = (
+                build_time.convention if build_time is not None else FilterConvention.BESSELL
+            )
+
             filter_names = tuple(f if isinstance(f, str) else f.name for f in filters)
-            # Check cache first
-            if filter_names in self._photometry_cache:
-                phot_obj = self._photometry_cache[filter_names]
+            cache_key = (filter_names, convention)
+            if cache_key in self._photometry_cache:
+                phot_obj = self._photometry_cache[cache_key]
             else:
-                # Build runtime Photometry from names
-                from tengri.observation.photometry_config import Photometry
-
-                phot_obj = Photometry.from_names(list(filter_names))
-                self._photometry_cache[filter_names] = phot_obj
-
-                # One-time warning
-
+                phot_obj = Photometry.from_names(list(filter_names), convention=convention)
+                self._photometry_cache[cache_key] = phot_obj
                 _warn_runtime_photometry_once()
 
-            # Project via exact path
             from tengri.observation.photometry import project_photometry
 
-            state = self._ensure_state()
-            return project_photometry(state, self._params, phot_obj)
+            return project_photometry(self._ensure_state(), self._params, phot_obj)
 
         # Mode 3: Default — the EXACT path, on the build-time filters.
         #
@@ -2412,7 +2426,7 @@ class Prediction:
         fnu = self.photometry(filters=filters, fast=fast)
         return fnu_to_ab_mag(fnu)
 
-    def spectrum(self, wave_obs=None):
+    def spectrum(self, wave_obs=None, fast=False):
         r"""Instrument-grid, LSF-convolved spectrum.
 
         Computes the observed-frame spectrum at the instrument wavelength grid,
@@ -2421,18 +2435,23 @@ class Prediction:
         Parameters
         ----------
         wave_obs : ndarray, optional
-            Custom observed-frame wavelength grid [Ångstrom]. If None, uses
+            Custom observed-frame wavelength grid [Angstrom]. If None, uses
             the grid configured in the spectroscopy setup at model build time.
+        fast : bool, optional
+            If True, use the build-time ``SpectrumPrecomp`` LUT. Only valid when
+            the model was built with ``approx=SpectrumPrecomp(...)``.
+            Default False — the exact projector.
 
         Returns
         -------
         ndarray, shape (n_wave_obs,)
-            Observed-frame flux density [erg/s/cm²/Hz].
+            Observed-frame flux density [erg/s/cm^2/Hz].
 
         Raises
         ------
         ValueError
-            If no spectroscopy is configured on the model.
+            If no spectroscopy is configured on the model, or if ``fast=True``
+            on a model not built with ``approx=SpectrumPrecomp(...)``.
 
         Notes
         -----
@@ -2460,7 +2479,29 @@ class Prediction:
                 "No spectroscopy is configured on the model. "
                 "Build the model with observation=Observation(spectroscopy=...) and try again."
             )
-        return self._model.predict_spectrum(self._params, wave_obs=wave_obs)
+
+        # Same rule as :meth:`photometry`, for the same reason. ``predict_spectrum``
+        # honors the SpectrumPrecomp LUT, so defaulting to it would make
+        # ``pred.spectrum()`` mean "exact" on one model and "approximate" on another
+        # — measured 5-7% apart on a SpectrumPrecomp model, the same order as the
+        # photometry LUT error, and not a rounding difference.
+        if fast:
+            if not self._model._approx.get("spectrum_precomp"):
+                raise ValueError(
+                    "fast=True requires the model to be built with "
+                    "approx=SpectrumPrecomp(...). Rebuild the model with "
+                    "approx=SpectrumPrecomp() and try again."
+                )
+            return self._model.predict_spectrum(self._params, wave_obs=wave_obs)
+
+        # Exact: project the cached ForwardState through the shared spectrum
+        # projector. ``Observation.predict`` is the canonical exact path — it calls
+        # ``project_spectrum`` (#1052) and applies the flux calibration (#1086) —
+        # and it never falls through to the LUT.
+        out = self._model.observation.predict(
+            self._ensure_state(), self._params, wave_obs=wave_obs
+        )
+        return out["spec_fnu"]
 
     @property
     def rest_sed(self):

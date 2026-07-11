@@ -35,7 +35,7 @@ import numpy as np
 import pytest
 
 import tengri
-from tengri import FIXED, Fixed, Observation, SEDModel, WavePrecomp
+from tengri import FIXED, Fixed, Observation, SEDModel, Spectroscopy, WavePrecomp
 from tengri.observation.photometry_config import Photometry
 from tengri.utils.magnitudes import fnu_to_ab_mag
 
@@ -283,7 +283,11 @@ def test_spectrum_uses_the_instrument_grid(ssp):
     params = _params(model)
     spec = np.asarray(model.predict(params).spectrum())
     assert spec.shape == (200,)
-    np.testing.assert_allclose(spec, np.asarray(model.predict_spectrum(params)), rtol=0.0)
+    # Both are the exact projector on a model with no approximation, but one runs
+    # eagerly off the cached ForwardState and the other inside the jitted kernel,
+    # so they agree to ~1 ULP rather than to the bit. rtol=0 here would be pinning
+    # an XLA accumulation order, not a physical claim.
+    np.testing.assert_allclose(spec, np.asarray(model.predict_spectrum(params)), rtol=1e-12)
 
 
 def test_missing_blocks_raise_naming_the_block(ssp):
@@ -301,3 +305,103 @@ def test_missing_blocks_raise_naming_the_block(ssp):
     )
     with pytest.raises(ValueError, match="photometry"):
         spec_only.predict(_params(spec_only)).photometry()
+
+
+# ── Review follow-ups (#1097): three silent defects and a performance inversion ──
+
+
+@pytest.mark.parametrize("convention", ["bessell", "energy"])
+def test_arbitrary_filters_honor_the_models_filter_convention(ssp, convention):
+    """Runtime filters must integrate under the model's own convention (ADR-0017).
+
+    ``Photometry.from_names`` defaults to Bessell. Resolving call-time filters
+    without passing the model's convention answers a different question than
+    ``photometry()`` does — the same filters, two numbers, ~0.5-0.8% apart on an
+    energy-convention model. Silent, and invisible to any test that only ever
+    builds the default convention.
+    """
+    photometry = Photometry.from_names(_FILTERS, convention=convention)
+    model = SEDModel.build(
+        ssp_data=ssp,
+        observation=Observation(photometry=photometry),
+        sfh=_SFH,
+        dust=_DUST,
+        redshift=Fixed(_Z),
+    )
+    params = _params(model)
+    pred = model.predict(params)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        runtime = np.asarray(pred.photometry(filters=_FILTERS))
+
+    np.testing.assert_allclose(runtime, np.asarray(pred.photometry()), rtol=0.0)
+
+
+def test_spectrum_default_stays_exact_on_a_spectrumprecomp_model(ssp):
+    """The spectrum twin of the photometry exact-by-default rule.
+
+    ``predict_spectrum`` honors the SpectrumPrecomp LUT, so defaulting
+    ``pred.spectrum()`` to it made the method mean "exact" on one model and
+    "approximate" on another — measured ~5% apart, the same order as the
+    photometry LUT error. This test is the counterpart that did not exist, which
+    is why the defect survived.
+    """
+    from tengri.forward.sed_model import SpectrumPrecomp
+
+    wave_obs = jnp.linspace(4000.0, 9000.0, 300)
+
+    def build(**kw):
+        return _model(
+            ssp,
+            filters=None,
+            spectroscopy=Spectroscopy(wave_obs=wave_obs, resolution=1000.0),
+            **kw,
+        )
+
+    exact_model = build()
+    lut_model = build(approx=SpectrumPrecomp())
+
+    reference = np.asarray(exact_model.predict(_params(exact_model)).spectrum())
+    pred = lut_model.predict(_params(lut_model))
+
+    default = np.asarray(pred.spectrum())
+    lut = np.asarray(pred.spectrum(fast=True))
+
+    np.testing.assert_allclose(default, reference, rtol=1e-10)
+    # ...and the LUT is genuinely a different spectrum, so the assertion has teeth.
+    assert np.max(np.abs(lut / reference - 1.0)) > 1e-3
+
+
+def test_spectrum_fast_without_spectrum_precomp_raises(ssp):
+    model = _model(
+        ssp,
+        filters=None,
+        spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4000.0, 9000.0, 100), resolution=1000.0),
+    )
+    with pytest.raises(ValueError, match="SpectrumPrecomp"):
+        model.predict(_params(model)).spectrum(fast=True)
+
+
+def test_fast_photometry_does_not_materialize_the_forward_state(ssp):
+    """``fast=True`` must not be slower than exact — pinned structurally.
+
+    WavePrecomp's saving is that XLA dead-code-eliminates the full-resolution SED
+    einsum when only the LUT is consumed. Reaching the LUT via
+    ``_ensure_state()`` materializes that state eagerly, spending the saving and
+    then doing the LUT lookup on top: measured *0.8x* — slower than the exact
+    default, while also returning an approximation.
+
+    Asserting on wall-clock would be flaky, so pin the cause: a fresh Prediction
+    asked only for fast photometry must never have built a ForwardState.
+    """
+    model = _model(ssp, approx=WavePrecomp())
+    pred = model.predict(_params(model))
+
+    assert "_state" not in pred._cache
+    pred.photometry(fast=True)
+    assert "_state" not in pred._cache, "fast=True built the ForwardState — the LUT saving is gone"
+
+    # The exact path, by contrast, legitimately needs it.
+    pred.photometry()
+    assert "_state" in pred._cache

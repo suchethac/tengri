@@ -4815,9 +4815,13 @@ class SEDModel:
         -----
         **JIT-compatible**: yes — :func:`run_components`, the rest→obs
         projection in :func:`~tengri.observation.spectrum.project_spectrum`, and
-        LSF convolution are all JIT-compatible. No calibration polynomial
-        is applied; callers that need calibration should compose it on
-        top via the user-likelihood Protocol path.
+        LSF convolution are all JIT-compatible.
+
+        **The flux calibration IS applied here** (since #1086). This routes through
+        :meth:`Observation.predict`, which passes ``cal_c1..cN`` into
+        :func:`~tengri.observation.spectrum.project_spectrum`. This note previously
+        said the opposite — that callers should compose the calibration on top —
+        which would now apply the polynomial twice.
         """
         # (legacy dead ``self._precomputed.spectroscopy`` tier removed — #620)
         if wave_obs is None and hasattr(self, "_wave_obs"):
