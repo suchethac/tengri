@@ -389,21 +389,39 @@ save_fig("agnfitter_03_stellar_sed.png")
 # %% [markdown]
 # ## §4 Disk reddening law (Prevot SMC)
 #
-# AGNFITTER-RX reddens the accretion disk (not the host) with the Prevot et
-# al. (1984) SMC law, applying ``A_λ = k_raw(λ) · E(B−V)`` with
-# ``k_raw(λ) = 1.39 λ_µm^−1.2 − 0.38`` directly, and no reddening blueward
-# of 200 eV (``MODEL_AGNfitter.BBBred_Prevot``). tengri's disc obscuration
-# (`agn_ebv_disc`, the `EBVbbb` analog) uses the same Prevot curve but pins
-# the published SMC total-to-selective ratio: ``A_λ = k(λ) · R_V · E(B−V)``
-# with ``k(λ) = k_raw(λ)/k_raw(V)`` and ``R_V = 2.72``. Because the raw fit
-# evaluates to ``k_raw(0.55 µm) ≈ 2.468`` — the fit is calibrated in the UV,
-# where it was measured, not at V — the two prescriptions differ by the
-# uniform factor ``2.72/2.468 ≈ 1.102`` in A_λ at matched E(B−V): the
-# *shape* is identical, and the AGNFITTER-RX ``EBVbbb`` posterior maps onto
-# tengri's as ``E(B−V)_tengri ≈ E(B−V)_AGNFITTER / 1.102``. The right panel
-# leads with the payoff — tengri at the convention-matched ``E(B−V)/1.102``
-# lies exactly on AGNFITTER-RX's band (identical *law*), with the raw
-# same-``E(B−V)`` curve shown faint underneath to mark the +10.2%
+# AGNFITTER-RX reddens the accretion disk (not the host) with an analytic
+# Prevot et al. (1984) SMC fit, ``k_raw(λ) = 1.39 λ_µm^−1.2 − 0.38``, applied
+# as ``A_λ = k_raw(λ) · E(B−V)`` with no reddening blueward of 200 eV
+# (``MODEL_AGNfitter.BBBred_Prevot``). That routine *declares* ``RV = 2.72`` —
+# the value Prevot+1984 measured for the SMC — and passes it to its inner
+# ``function_prevot(x, RV)``, but the function ignores the argument and returns
+# the bare ``k_raw``. So AGNFITTER-RX's *effective* total-to-selective ratio is
+# ``k_raw(0.55 µm) ≈ 2.468`` (the fit's value at V), not the 2.72 it declares —
+# this is the origin of the 10% below, and it is a code-level detail, not a
+# calibration choice.
+#
+# tengri's disc obscuration (`agn_ebv_disc`, the `EBVbbb` analog) applies the
+# ``RV`` AGNFITTER-RX intended: it normalizes the same fit's shape to
+# ``k(λ) = k_raw(λ)/k_raw(V)`` (so ``k(V) = 1``) and pins ``R_V = 2.72``, giving
+# ``A_λ = k(λ) · R_V · E(B−V) = k_raw · (2.72/2.468) · E(B−V)``. The two differ
+# by the uniform factor ``2.72/2.468 ≈ 1.102`` in A_λ at matched E(B−V): the
+# *shape* is identical, so the AGNFITTER-RX ``EBVbbb`` posterior maps onto
+# tengri's as ``E(B−V)_tengri ≈ E(B−V)_AGNFITTER / 1.102``. tengri's amplitude
+# is the more physical one — it matches both Prevot+1984's measured SMC R_V and
+# AGNFITTER-RX's own declared value.
+#
+# A note on provenance: this analytic fit is AGNFITTER-RX's *own* SMC
+# approximation for reddening the finished BBB template. The qsogen code that
+# builds the THB21 disc (Temple+2021, ``qsosed.py``) reddens with a different,
+# *tabulated* curve (``pl_ext_comp_03.sph``, stored as E(λ−V)/E(B−V) and applied
+# as ``A_λ = E(B−V)·[E(λ−V)/E(B−V) + R]``, R settable, default 3.1) whose UV
+# slope differs from the analytic fit. §4 therefore compares tengri to
+# AGNFITTER-RX's ``BBBred_Prevot`` — the ``EBVbbb`` free parameter both codes
+# expose — not to qsogen's internal reddening.
+#
+# The right panel leads with the payoff — tengri at the convention-matched
+# ``E(B−V)/1.102`` lies exactly on AGNFITTER-RX's band (identical *law*), with
+# the raw same-``E(B−V)`` curve shown faint underneath to mark the +10.2%
 # reparametrization. tengri's reddening is exercised through ``SEDModel.build``
 # (a qsogen disc with `agn_ebv_disc` set), not by re-evaluating the formula.
 
