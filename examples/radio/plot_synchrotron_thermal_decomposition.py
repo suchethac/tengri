@@ -77,10 +77,7 @@ thermal_frac_at_1p4ghz = (
 # Plot
 fig, ax = plt.subplots(figsize=(7.2, 5.0))
 
-# Synchrotron: steep power-law (slope ~ -0.8 below 10 GHz)
 ax.loglog(nu_ghz, nu_l_nu_synch, "C0-", lw=2.0, label="Synchrotron (SN remnants)", zorder=2)
-
-# Free-free: shallow power-law (slope ~ -0.1, nearly flat)
 ax.loglog(
     nu_ghz,
     nu_l_nu_thermal,
@@ -89,12 +86,8 @@ ax.loglog(
     label="Thermal free-free (HII regions)",
     zorder=2,
 )
-
-# Total (sum)
 ax.loglog(nu_ghz, nu_l_nu_total, "k--", lw=2.4, label="Total", zorder=3)
 
-# Crossover annotation: thermal flux grows faster than synchrotron at high nu
-# Typical crossover for SFR~1 M_sun/yr is ~30 GHz
 crossover_nu = nu_ghz[np.argmin(np.abs(sed_synch - sed_thermal))]
 crossover_idx = np.argmin(np.abs(nu_ghz - crossover_nu))
 ax.axvline(crossover_nu, color="gray", lw=1.0, ls=":", alpha=0.6, zorder=1)

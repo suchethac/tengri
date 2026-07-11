@@ -69,8 +69,7 @@ ax.set_ylim(1e40, 1e43)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-# Mark iron-dominated regions
-for wl, _label in [(4000, "4000 Å break"), (5200, r"Mg $b$"), (8662, r"Ca II triplet")]:
+for wl in [4000, 5200, 8662]:
     ax.axvline(wl, color="gray", ls=":", lw=0.6, alpha=0.3)
 
 cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
