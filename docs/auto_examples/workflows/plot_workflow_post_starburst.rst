@@ -21,11 +21,6 @@
 Model misspecification: post-starburst galaxies reveal wrong SFH
 ==============================================================
 
-.. image:: images/sphx_glr_plot_workflow_post_starburst_001.png
-   :alt: plot workflow post starburst
-   :class: sphx-glr-single-img
-
-
 A post-starburst galaxy shows a recent burst followed by quenching.
 When fit with smooth tau-model (incorrect), the fit biases the recovered
 SFH. This workflow compares two models on the same mock data to show how
@@ -34,7 +29,18 @@ model flexibility directly impacts star formation history inference.
 Reference: Cid Fernandes et al. 2005, MNRAS, 358, 363 (post-starburst
 classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-171
+.. GENERATED FROM PYTHON SOURCE LINES 13-167
+
+
+
+.. image-sg:: /auto_examples/workflows/images/sphx_glr_plot_workflow_post_starburst_001.png
+   :alt: plot workflow post starburst
+   :srcset: /auto_examples/workflows/images/sphx_glr_plot_workflow_post_starburst_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -59,7 +65,6 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
     bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
-    # --- Truth: post-starburst (E+A) --- burst 500 Myr ago, then quench
     key = jax.random.PRNGKey(42)
     truth_params = {
         "sfh_tsnorm_log_total_mass": 1.5,
@@ -83,7 +88,6 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
     )
     mock = model_truth.mock(truth_params, snr=20.0, key=key)
 
-    # --- Fit 1: correct model (tsnorm) ---
     model_correct = tengri.SEDModel.build(
         ssp,
         observation=obs,
@@ -115,7 +119,6 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
         verbose=False,
     )
 
-    # --- Fit 2: wrong model (DPL, smooth) ---
     model_wrong = tengri.SEDModel.build(
         ssp,
         observation=obs,
@@ -146,7 +149,6 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
         verbose=False,
     )
 
-    # --- Plot: SFH comparison ---
     sfh_true = model_truth.predict_sfh(truth_params)
     sfh_correct = model_correct.predict_sfh(post_correct.params)
     sfh_wrong = model_wrong.predict_sfh(post_wrong.params)
@@ -186,8 +188,8 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
         label="DPL fit (wrong model)",
     )
 
-    ax.axvline(0.5, color="grey", ls=":", lw=1, alpha=0.5)
-    ax.text(0.5, ax.get_ylim()[1] * 0.9, "Quench epoch", fontsize=9, color="grey")
+    ax.axvline(0.5, color="gray", ls=":", lw=1, alpha=0.5)
+    ax.text(0.5, ax.get_ylim()[1] * 0.9, "Quench epoch", fontsize=9, color="gray")
 
     ax.set_xlabel("Lookback time [Gyr]")
     ax.set_ylabel(r"SFR [M$_\odot$ yr$^{-1}$]")
@@ -196,6 +198,11 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
     fig.tight_layout()
     plt.savefig("plot_workflow_post_starburst.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 5.275 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_post_starburst.py:

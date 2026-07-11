@@ -21,11 +21,6 @@
 Boroson & Green (1992) Fe II template: the optical/UV iron blanket
 ==================================================================
 
-.. image:: images/sphx_glr_plot_boroson_green_feii_template_001.png
-   :alt: plot boroson green feii template
-   :class: sphx-glr-single-img
-
-
 ``agn={"feii": {"type": "boroson_green"}}`` adds the empirical **Boroson & Green
 (1992)** Fe II pseudo-continuum to a composable AGN — the broad iron-line blanket
 that fills the 2200–3000 Å and 4400–4700 Å windows of type-1 quasars. Its
@@ -35,7 +30,7 @@ Fe II to broad H\ :math:`\beta`).
 The template is the PyQSOFit empirical Fe II compilation (Vestergaard & Wilkes
 2001 in the UV, Boroson & Green 1992 in the optical), so the line ratios within
 each iron complex follow the *measured* I Zw 1 spectrum rather than a smooth
-parametrisation. ``boroson_green`` exposes it as a standalone ``feii`` block —
+parametrization. ``boroson_green`` exposes it as a standalone ``feii`` block —
 the same template the analytic ``blr`` lines carry, usable on its own. Other Fe II
 options (``grahsp``, ``qsogen_balmer``) are swappable — see
 ``tengri.list_agn_models()``.
@@ -187,7 +182,7 @@ accretion-disc continuum, where it fills in the windows between the broad lines.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.428 seconds)
+   **Total running time of the script:** (0 minutes 4.890 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_boroson_green_feii_template.py:

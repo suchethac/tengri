@@ -21,11 +21,6 @@
 Mid-IR PAH features in star-forming, AGN, and composite galaxies
 =================================================================
 
-.. image:: images/sphx_glr_plot_mid_ir_pah_features_001.png
-   :alt: plot mid ir pah features
-   :class: sphx-glr-single-img
-
-
 The 5–30 μm rest-frame spectrum showcases distinct infrared tracers:
 dust polycyclic aromatic hydrocarbon (PAH) emission peaks at 6.2, 7.7, 8.6,
 11.3, and 12.7 μm in star-forming galaxies, while silicate absorption
@@ -252,7 +247,7 @@ References:
         (12.7, "12.7 μm"),
     ]
 
-    for pah_um, label in pah_features:
+    for pah_um, _label in pah_features:
         pah_aa = pah_um * 1e4
         ax.axvline(pah_aa, color="0.5", lw=0.6, ls=":", alpha=0.4)
 
@@ -312,7 +307,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.236 seconds)
+   **Total running time of the script:** (0 minutes 4.439 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_mid_ir_pah_features.py:

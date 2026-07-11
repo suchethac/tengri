@@ -21,11 +21,6 @@
 AGN dusty torus: library comparison at fixed L_bol
 =====================================================
 
-.. image:: images/sphx_glr_plot_agn_torus_compare_001.png
-   :alt: plot agn torus compare
-   :class: sphx-glr-single-img
-
-
 Seven dusty-torus libraries reprocessing the same accretion-disc
 continuum at fixed ``log L_bol = 12.5`` (in log L_sun) and standard
 inclination. The disc is held at ``multicolor`` (Kubota & Done 2018)
@@ -45,7 +40,7 @@ Torus libraries (the seven production selectors under
 
 ``fritz`` and ``skirtor`` are the two CIGALE production tori — smooth
 (Fritz+2006) versus clumpy (Stalevski+2016) — so contrasting them on
-this panel isolates the smooth-vs-clumpy silicate-feature behaviour
+this panel isolates the smooth-vs-clumpy silicate-feature behavior
 near 9.7 and 18 micron.
 
 .. GENERATED FROM PYTHON SOURCE LINES 27-95
@@ -135,7 +130,7 @@ near 9.7 and 18 micron.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.100 seconds)
+   **Total running time of the script:** (0 minutes 7.411 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_torus_compare.py:

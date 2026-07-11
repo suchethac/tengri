@@ -21,11 +21,6 @@
 Compton hump in obscured AGN: pexrav reflection across log N_H
 ==============================================================
 
-.. image:: images/sphx_glr_plot_xray_pexrav_compton_hump_001.png
-   :alt: plot xray pexrav compton hump
-   :class: sphx-glr-single-img
-
-
 In Compton-thick AGN (log N_H ≳ 24 cm⁻²), the line-of-sight obscurer
 extinguishes the primary AGN corona below ~ 10 keV. What's left is the
 *reflected* component — the fraction of corona photons that hit the

@@ -14,6 +14,10 @@ The lines that vanish in the right column are the gas's signature.
 Reference: Li et al. 2024, ApJ submitted (Cue emulator).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

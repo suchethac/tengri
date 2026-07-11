@@ -21,11 +21,6 @@
 AGN parameters are free-able now — and every one moves the SED
 ==============================================================
 
-.. image:: images/sphx_glr_plot_agn_free_param_sensitivity_001.png
-   :alt: plot agn free param sensitivity
-   :class: sphx-glr-single-img
-
-
 Until recently the ``agn_*`` parameters were declared with *fixed* defaults and
 no prior range, so the build grammar's ``FREE`` controls
 (``agn={'*': FREE}``, ``recipes.agn_panchromatic()``) silently resolved every
@@ -39,13 +34,13 @@ parameters the active disc / torus / lines blocks actually consume, not the
 full declared superset — so you never get unconstrained no-op nuisance
 dimensions for parameters belonging to inactive blocks.
 
-This example builds one composable AGN (multicolour disc + Nenkova clumpy torus
+This example builds one composable AGN (multicolor disc + Nenkova clumpy torus
 + NLR lines), prints the now-non-empty free-parameter set, and sweeps three of
 those parameters across their priors. Each panel shows the parameter visibly
 reshaping the SED — the visual form of the "no silent no-ops" contract checked
 by ``tests/contract/test_agn_block_consumes.py``.
 
-References: Nenkova et al. 2008 (CLUMPY torus); Kubota & Done 2018 (multicolour
+References: Nenkova et al. 2008 (CLUMPY torus); Kubota & Done 2018 (multicolor
 disc); Feltre et al. 2016 (NLR grid).
 
 .. GENERATED FROM PYTHON SOURCE LINES 27-60
@@ -116,7 +111,7 @@ consume. Before the registry fix this set was empty.
 
  .. code-block:: none
 
-    AGN parameters freed by agn={'*': FREE} (block-scoped): ['agn_a_spin', 'agn_cos_inc', 'agn_fracAGN', 'agn_log_ledd', 'agn_log_mbh', 'agn_nlr_cf', 'agn_nlr_line_efficiency', 'agn_tau', 'agn_theta_torus', 'agn_torus_frac']
+    AGN parameters freed by agn={'*': FREE} (block-scoped): ['agn_a_spin', 'agn_cos_inc', 'agn_fracAGN', 'agn_log_mbh', 'agn_nlr_cf', 'agn_nlr_line_efficiency', 'agn_tau', 'agn_theta_torus', 'agn_torus_frac']
 
 
 
@@ -178,11 +173,6 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
 
 
 
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.695 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_free_param_sensitivity.py:

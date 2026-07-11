@@ -8,7 +8,7 @@ from 9 to 13 (in log L_sun). The host XRB component is a flat
 power-law below ~10 keV; the AGN corona contributes a much harder
 power-law that dominates above ``log L_bol ≳ 11``.
 
-The colour gradient shows where the AGN corona overtakes the XRB
+The color gradient shows where the AGN corona overtakes the XRB
 emission band by band — the central diagnostic for AGN selection in
 deep X-ray surveys (Lehmer+2010, 2016).
 """

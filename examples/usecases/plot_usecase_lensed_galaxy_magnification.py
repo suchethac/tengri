@@ -182,11 +182,6 @@ for i, mu in enumerate(magnifications):
 
 ax.set_xlabel(r"Magnification $\mu$", fontsize=12, weight="bold")
 ax.set_ylabel(r"AB Magnitude (obs-frame)", fontsize=12, weight="bold")
-ax.set_title(
-    r"Strong-lensed z=7 LAE: JWST NIRCam detection thresholds",
-    fontsize=13,
-    weight="bold",
-)
 ax.set_xscale("log")
 ax.set_xlim(0.7, 150)
 ax.set_ylim(20, 31)
@@ -214,28 +209,3 @@ ax.text(
 
 fig.tight_layout()
 plt.savefig("plot_usecase_lensed_galaxy_magnification.png", dpi=150, bbox_inches="tight")
-plt.show()
-
-# ── Summary ────────────────────────────────────────────────────────────────
-
-print("\n" + "=" * 70)
-print("STRONG-LENSING MAGNIFICATION SUMMARY (z=7 LAE)")
-print("=" * 70)
-print("\nIntrinsic (unlensed) magnitudes:")
-print("-" * 70)
-for j, band in enumerate(bands):
-    print(f"  {band.upper():20s}: {mag_intrinsic[j]:6.2f} AB ({flux_intrinsic[j]:.3e} erg/s/Hz)")
-
-print(f"\nJWST NIRCam 5σ detection limit: {mag_5sigma_limit:.1f} AB")
-print("(Rieke+2023, NIRCam module performance)")
-
-print("\nMagnified magnitudes and detectability:")
-print("-" * 70)
-for i, mu in enumerate(magnifications):
-    print(f"\nμ = {mu:6.1f}:")
-    for j, band in enumerate(bands):
-        mag = mag_lensed[i, j]
-        detectable = "✓ DETECT" if mag < mag_5sigma_limit else "✗ faint"
-        print(f"  {band.upper():20s}: {mag:6.2f} AB  [{detectable}]")
-
-print("\n" + "=" * 70)

@@ -21,11 +21,6 @@
 UV slope β degeneracy: dust optical depth and stellar age
 ==========================================================
 
-.. image:: images/sphx_glr_plot_usecase_uv_slope_beta_001.png
-   :alt: plot usecase uv slope beta
-   :class: sphx-glr-single-img
-
-
 The infrared excess (IRX = L_IR / L_FUV) versus UV-continuum slope β
 diagram is the standard tool for inferring attenuation in star-forming
 galaxies. However, β is degenerate between dust and stellar age: young
@@ -57,19 +52,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.0612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=0.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.0612 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -295,7 +279,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.922 seconds)
+   **Total running time of the script:** (0 minutes 4.358 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_slope_beta.py:

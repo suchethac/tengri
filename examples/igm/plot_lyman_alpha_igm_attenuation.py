@@ -167,4 +167,3 @@ ax.grid(True, alpha=0.3, which="major")
 
 fig.tight_layout()
 plt.savefig("plot_lyman_alpha_igm_attenuation.png", dpi=150, bbox_inches="tight")
-print("Saved: plot_lyman_alpha_igm_attenuation.png")

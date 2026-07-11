@@ -3,7 +3,7 @@ X-ray corona shape across the alpha_OX vs log L_bol plane
 ==========================================================
 
 The X-ray corona response of an AGN depends jointly on bolometric
-luminosity (which sets the X-ray normalisation through the
+luminosity (which sets the X-ray normalization through the
 Lusso & Risaliti L_X-L_UV correlation) and on the UV-to-X-ray slope
 alpha_OX (which sets the relative balance of UV and X-ray emission).
 Four panels at log L_bol = 44, 45, 46, 47 erg/s overlay three

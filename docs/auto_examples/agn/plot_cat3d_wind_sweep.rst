@@ -21,11 +21,6 @@
 CAT3D-Wind clumpy torus: wind fraction and viewing angle
 ========================================================
 
-.. image:: images/sphx_glr_plot_cat3d_wind_sweep_001.png
-   :alt: plot cat3d wind sweep
-   :class: sphx-glr-single-img
-
-
 The CAT3D-Wind torus (Hönig & Kishimoto 2017) splits the circumnuclear dust
 into a mid-plane clumpy disc plus a polar outflow ("wind"). Its infrared
 reprocessing is controlled by three observables: the wind mass fraction
@@ -37,7 +32,7 @@ angles. A larger polar-wind component fills in the near/mid-IR and shifts the
 balance of warm vs cool dust emission; the effect depends on whether the system
 is viewed close to face-on (left) or edge-on (right), since the wind is
 polar-directed. The torus contribution is isolated by subtracting the disc-only
-SED (the torus normalises to the disc luminosity).
+SED (the torus normalizes to the disc luminosity).
 
 References
 ----------
@@ -48,7 +43,7 @@ References
    spectral energy distributions of AGNs," A&A 688, A46 (2024).
    arXiv:2405.12111. https://doi.org/10.1051/0004-6361/202449329
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-110
+.. GENERATED FROM PYTHON SOURCE LINES 27-111
 
 
 
@@ -112,6 +107,7 @@ References
 
     WAVE, DISC_ONLY = _build_sed(None)
 
+
     def torus_sed(cos_inc: float, fwd: float) -> tuple[np.ndarray, np.ndarray]:
         """Return (wavelength [AA], nu*L_nu [erg/s]) for the CAT3D-Wind torus alone."""
         wave, total = _build_sed(
@@ -150,7 +146,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.678 seconds)
+   **Total running time of the script:** (0 minutes 2.090 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_cat3d_wind_sweep.py:

@@ -479,7 +479,7 @@
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.igm",
-   "module_short": "tengri.igm",
+   "module_short": "tengri",
    "name": "igm_transmission_madau"
   }
  ],

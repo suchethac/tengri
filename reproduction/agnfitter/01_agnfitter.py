@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Reproducing AGNFITTER-RX's physics with tengri
 #
-# AGNFITTER-RX (Martínez-Ramírez et al. 2024, MNRAS 535, 2961) models the
+# AGNFITTER-RX (Martínez-Ramírez et al. 2024, A&A 688, A46) models the
 # radio-to-X-ray SEDs of active galaxies. Where CIGALE, BAGPIPES, and
 # Prospector are galaxy-centric, AGNFITTER-RX is built to *characterize the
 # AGN itself* — its four physical components (accretion disk, hot dusty
@@ -40,15 +40,25 @@
 #   wins (maximum likelihood in 25/36 sources) because its polar-wind dust
 #   addresses the 1.5–5 µm near-IR excess that pure equatorial tori cannot.
 #
-# tengri's `cat3d_wind` and `silva04` torus blocks evaluate the same
-# template libraries AGNFITTER-RX publishes, so §9c doubles as a visual
-# check of tengri's implementations against their source.
+# tengri's `cat3d_wind`, `silva04`, `skirtor_agnfitter`, `slone_netzer`,
+# and `schreiber2018` blocks evaluate the same template libraries
+# AGNFITTER-RX publishes, so those panels are direct checks of tengri's
+# implementations against their source.
+#
+# Two ground rules keep the comparison honest. First, every claim of
+# agreement prints the number that backs it — a peak-normalized residual,
+# an implied attenuation in magnitudes, a slope — next to its panel.
+# Second, wherever a tengri model is exercised, it is built through the
+# public `SEDModel.build` grammar (disc/torus/atten sub-blocks, radio and
+# X-ray groups), so the notebook doubles as an end-to-end test that every
+# AGNFITTER-RX-parity parameter is actually wired through the public API.
 #
 # The host sections (§1–§8) are kept compact — AGNFITTER-RX's host (BC03 +
 # Chabrier stellar, Schreiber/Dale cold dust) is standard and covered in
 # depth by the sibling notebooks. Where tengri and AGNFITTER-RX genuinely
 # differ, the difference is stated plainly and quantitatively. IGM is out
-# of scope (AGNFITTER-RX applies no IGM attenuation).
+# of scope (AGNFITTER-RX applies no IGM attenuation; it instead masks
+# photometry blueward of rest-frame Lyman-alpha in its likelihood).
 
 # %% [markdown]
 # ## Setup
@@ -171,25 +181,41 @@ NO_DUST = {"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0)
 # anchor (2500 Å for disks, the IR peak for tori) so the comparison is of
 # spectral shape at matched parameters, independent of the per-code
 # luminosity bookkeeping.
+#
+# One default matters here: tengri's CIGALE-faithful AGN applies a polar-dust
+# screen at E(B−V) = 0.03 by default (`agn_polar_ebv`, X-CIGALE's default).
+# AGNFITTER-RX's disc templates carry no such screen — its only disc
+# obscuration is the free `EBVbbb` — so every helper pins
+# `agn_polar_ebv = 0`. Left at the default, the screen suppresses the
+# rest-UV by ~0.05 dex and would masquerade as a disc-shape residual in
+# every panel below.
 
 
 # %%
-def tengri_disc(disc_type, *, log_lbol=11.0, **disc_params):
-    """Isolated tengri accretion-disc SED. Returns (wave_aa, L_nu)."""
+def tengri_disc(disc_type, *, log_lbol=11.0, ebv_disc=None, **disc_params):
+    """Isolated tengri accretion-disc SED. Returns (wave_aa, L_nu).
+
+    ``ebv_disc`` sets the shared disc obscuration ``agn_ebv_disc`` (the
+    AGNFITTER-RX ``EBVbbb`` analog) at the top level of the agn group.
+    """
     disc = {"type": disc_type, "*": FIXED}
     disc.update({k: Fixed(v) for k, v in disc_params.items()})
+    agn = {
+        "type": "composable",
+        "disc": disc,
+        "torus": {"type": "none"},
+        "lines": {"type": "none"},
+        "agn_log_lbol": Fixed(log_lbol),
+        "agn_polar_ebv": Fixed(0.0),  # AGNFITTER-RX templates carry no polar screen
+        "*": FIXED,
+    }
+    if ebv_disc is not None:
+        agn["agn_ebv_disc"] = Fixed(ebv_disc)
     m = SEDModel.build(
         ssp_data=ssp,
         sfh=SFH_FIDUCIAL,
         dust=NO_DUST,
-        agn={
-            "type": "composable",
-            "disc": disc,
-            "torus": {"type": "none"},
-            "lines": {"type": "none"},
-            "agn_log_lbol": Fixed(log_lbol),
-            "*": FIXED,
-        },
+        agn=agn,
         redshift=Fixed(0.0),
     )
     s = m.predict_state({})
@@ -202,7 +228,12 @@ def tengri_disc_model(model_type, *, log_lbol=11.0):
         ssp_data=ssp,
         sfh=SFH_FIDUCIAL,
         dust=NO_DUST,
-        agn={"type": model_type, "agn_log_lbol": Fixed(log_lbol), "*": FIXED},
+        agn={
+            "type": model_type,
+            "agn_log_lbol": Fixed(log_lbol),
+            "agn_polar_ebv": Fixed(0.0),  # AGNFITTER-RX templates carry no polar screen
+            "*": FIXED,
+        },
         redshift=Fixed(0.0),
     )
     s = m.predict_state({})
@@ -225,6 +256,7 @@ def tengri_qsogen_full(*, log_lbol=11.0):
             "lines": {"type": "qsogen", "*": FIXED},
             "feii": {"type": "qsogen_balmer", "*": FIXED},
             "agn_log_lbol": Fixed(log_lbol),
+            "agn_polar_ebv": Fixed(0.0),  # AGNFITTER-RX templates carry no polar screen
             "*": FIXED,
         },
         redshift=Fixed(0.0),
@@ -247,6 +279,7 @@ def tengri_torus(torus_type, *, log_lbol=11.0, **torus_params):
             "torus": torus,
             "lines": {"type": "none"},
             "agn_log_lbol": Fixed(log_lbol),
+            "agn_polar_ebv": Fixed(0.0),  # AGNFITTER-RX templates carry no polar screen
             "*": FIXED,
         },
         redshift=Fixed(0.0),
@@ -354,44 +387,89 @@ save_fig("agnfitter_03_stellar_sed.png")
 # ## §4 Disk reddening law (Prevot SMC)
 #
 # AGNFITTER-RX reddens the accretion disk (not the host) with the Prevot et
-# al. (1984) SMC law, ``k(λ) = 1.39 λ_µm^−1.2 − 0.38`` at R_V = 2.72,
-# applied only redward of 200 eV. tengri's `agn.atten = "smc_prevot"` block
-# is the matching attenuation. We compare the two reddening *curves* and the
-# effect on a THB21 disk at E(B−V)_BBB = 0.3.
+# al. (1984) SMC law, applying ``A_λ = k_raw(λ) · E(B−V)`` with
+# ``k_raw(λ) = 1.39 λ_µm^−1.2 − 0.38`` directly, and no reddening blueward
+# of 200 eV (``MODEL_AGNfitter.BBBred_Prevot``). tengri's disc obscuration
+# (`agn_ebv_disc`, the `EBVbbb` analog) uses the same Prevot curve but pins
+# the published SMC total-to-selective ratio: ``A_λ = k(λ) · R_V · E(B−V)``
+# with ``k(λ) = k_raw(λ)/k_raw(V)`` and ``R_V = 2.72``. Because the raw fit
+# evaluates to ``k_raw(0.55 µm) ≈ 2.468`` — the fit is calibrated in the UV,
+# where it was measured, not at V — the two prescriptions differ by the
+# uniform factor ``2.72/2.468 ≈ 1.102`` in A_λ at matched E(B−V): the
+# *shape* is identical, and the AGNFITTER-RX ``EBVbbb`` posterior maps onto
+# tengri's as ``E(B−V)_tengri ≈ E(B−V)_AGNFITTER / 1.102``. The right panel
+# demonstrates both statements end-to-end: tengri's reddening is exercised
+# through ``SEDModel.build`` (a qsogen disc with `agn_ebv_disc` set), not by
+# re-evaluating the formula.
 
 # %%
+_K_RAW_V = 1.39 * 0.55 ** (-1.2) - 0.38  # Prevot raw fit at V band ≈ 2.468
+_R_V_SMC = 2.72
+
 w_thb, L_thb = A.disk_template("THB21")
-L_thb_red = A.apply_bbb_reddening(w_thb, L_thb, 0.3)
 lam_um = np.geomspace(0.1, 3.0, 400)
-k_prevot = 1.39 * lam_um ** (-1.2) - 0.38
+k_raw = 1.39 * lam_um ** (-1.2) - 0.38
 
 fig, (axl, axr) = plt.subplots(1, 2, figsize=(12, 4.5))
-axl.plot(lam_um, k_prevot, "C0-", lw=1.6)
+axl.plot(lam_um, k_raw, "C0-", lw=1.6, label="AGNFITTER-RX  $k_{raw}(\\lambda)$")
+axl.plot(
+    lam_um,
+    k_raw / _K_RAW_V * _R_V_SMC,
+    "C1--",
+    lw=1.6,
+    label=r"tengri  $k(\lambda)\,R_V$  ($=1.102\,k_{raw}$)",
+)
 axl.set_xscale("log")
 axl.set_xlabel(r"$\lambda$ [µm]")
-axl.set_ylabel(r"$k(\lambda)\ =\ A_\lambda / E(B{-}V)$")
-axl.set_title("Prevot SMC reddening law ($R_V$ = 2.72)")
+axl.set_ylabel(r"$A_\lambda / E(B{-}V)$")
+axl.set_title("Prevot SMC law — two normalization conventions")
+axl.legend(fontsize=8)
 axl.grid(True, alpha=0.3)
-msk = (w_thb > 8e2) & (w_thb < 1e4)
-# Anchor the unreddened disk at 5000 A, then apply the true reddening ratio
-# so the reddened curve shows its genuine suppression (not re-normalized).
-L_unred_n = norm_at(w_thb, L_thb, 5000)
-ratio = np.divide(L_thb_red, L_thb, out=np.ones_like(L_thb_red), where=L_thb > 0)
-axr.loglog(w_thb[msk], L_unred_n[msk], "C0-", lw=1.4, label="THB21, unreddened")
-axr.loglog(
-    w_thb[msk],
-    (L_unred_n * ratio)[msk],
-    "C3-",
-    lw=1.4,
-    label="THB21, E(B−V)$_{BBB}$ = 0.3",
-)
+
+# e2e attenuation ratios at E(B-V) = 0.3: tengri through SEDModel.build
+# (ratio of two public-API predictions) vs AGNFITTER-RX's BBBred_Prevot.
+_EBV_DEMO = 0.3
+w_t0, L_t0 = tengri_disc("qsogen", ebv_disc=0.0)
+w_t3, L_t3 = tengri_disc("qsogen", ebv_disc=_EBV_DEMO)
+ratio_tengri = np.divide(L_t3, L_t0, out=np.ones_like(L_t3), where=L_t0 > 0)
+L_thb_red = A.apply_bbb_reddening(w_thb, L_thb, _EBV_DEMO)
+ratio_af = np.divide(L_thb_red, L_thb, out=np.ones_like(L_thb_red), where=L_thb > 0)
+# tengri at the convention-rescaled E(B-V) — should land on the AGNFITTER curve.
+w_tr, L_tr = tengri_disc("qsogen", ebv_disc=_EBV_DEMO * _K_RAW_V / _R_V_SMC)
+ratio_tengri_rescaled = np.divide(L_tr, L_t0, out=np.ones_like(L_tr), where=L_t0 > 0)
+
+msk_t = (w_t0 > 8e2) & (w_t0 < 3e4)
+msk_a = (w_thb > 8e2) & (w_thb < 3e4)
+axr.semilogx(w_thb[msk_a], -2.5 * np.log10(ratio_af[msk_a]), "C0-", lw=1.6,
+             label="AGNFITTER-RX  BBBred_Prevot")
+axr.semilogx(w_t0[msk_t], -2.5 * np.log10(ratio_tengri[msk_t]), "C1--", lw=1.6,
+             label="tengri  agn_ebv_disc (SEDModel.build)")
+axr.semilogx(w_t0[msk_t], -2.5 * np.log10(ratio_tengri_rescaled[msk_t]), "C3:", lw=1.6,
+             label=r"tengri at $E(B{-}V)/1.102$ (rescaled)")
 axr.set_xlabel(r"$\lambda$ [Å]")
-axr.set_ylabel(r"$L_\nu$ (norm. at 5000 Å, unreddened)")
-axr.set_title("AGNFITTER-RX disk reddening")
-axr.legend()
+axr.set_ylabel(r"$A_\lambda$ [mag] at $E(B{-}V)=0.3$")
+axr.set_title("Disc attenuation, end-to-end")
+axr.legend(fontsize=8)
 axr.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("agnfitter_04_dust_attenuation.png")
+
+# %%
+# Quantify: interpolate both A_lambda curves onto a common grid over the
+# disc window and report matched-E(B-V) and rescaled residuals.
+_grid4 = np.geomspace(1.2e3, 1e4, 200)
+_a_af = np.interp(_grid4, w_thb, -2.5 * np.log10(ratio_af))
+_a_t = np.interp(_grid4, w_t0, -2.5 * np.log10(ratio_tengri))
+_a_tr = np.interp(_grid4, w_t0, -2.5 * np.log10(ratio_tengri_rescaled))
+print(
+    f"§4  matched E(B-V)={_EBV_DEMO}: max|A_tengri − A_AGNFITTER| = "
+    f"{np.max(np.abs(_a_t - _a_af)):.3f} mag  (ratio A_t/A_af median = "
+    f"{np.median(_a_t / _a_af):.4f}, expected {_R_V_SMC / _K_RAW_V:.4f})"
+)
+print(
+    f"§4  rescaled E(B-V)={_EBV_DEMO}/1.102: max|A_tengri − A_AGNFITTER| = "
+    f"{np.max(np.abs(_a_tr - _a_af)):.4f} mag (pure-convention check)"
+)
 
 # %% [markdown]
 # ## §6 Cold dust infrared emission
@@ -406,8 +484,8 @@ save_fig("agnfitter_04_dust_attenuation.png")
 #
 # tengri exposes three cold-dust models that bracket this choice:
 #
-# * **`schreiber2018`** — AGNFITTER-RX's S17 library evaluated from the same
-#   tabulated Schreiber+2018 dust + PAH templates, mixed natively as
+# * **`schreiber2018`** — AGNFITTER-RX's S17 library evaluated from the same tabulated
+#   Schreiber+2018 dust + PAH templates, mixed natively as
 #   `(1 − f_PAH)·dust + f_PAH·PAH`). At matched (T_dust, f_PAH) it reproduces
 #   AGNFITTER-RX's S17 shape to a median of ~0.05% and a maximum of ~1.3% of
 #   the FIR peak, with the dust peak landing at 86.5 µm vs S17's 87.0 µm
@@ -416,13 +494,13 @@ save_fig("agnfitter_04_dust_attenuation.png")
 #   a few Drude PAH profiles). Its FIR peak (92 µm) is close, but its PAH
 #   forest at 3–13 µm comes out much weaker than the tabulated S17 at matched
 #   (T_dust, f_PAH). It is fast and differentiable but not PAH-faithful — the
-#   gap that motivated the `schreiber2018` block.
+#   gap that motivated the tabulated `schreiber2018` block.
 # * **`dale2014`** — tengri's tabulated Dale+2014 library, the modern relative
 #   of AGNFITTER-RX's Dale & Helou 2002 (the "DH" in DH02_CE01). It is
 #   parameterized by the radiation-field hardness α rather than a dust
 #   temperature, so it is not a node-for-node match to S17; shown here at
 #   α = 1.5 it peaks near S17 and carries its own (real, tabulated) PAH
-#   features. tengri does not implement DH02_CE01 — `dale2014` is the closest
+#   features. tengri has no direct DH02_CE01 counterpart — `dale2014` is the closest
 #   counterpart.
 #
 # All curves are normalized at their FIR peak.
@@ -485,7 +563,7 @@ print(
 # SN12 (Slone & Netzer 2012) was, until this work, the one disk library
 # tengri lacked — every "Netzer" reference in tengri pointed to the unrelated
 # Laor & Netzer (1989) self-gravity radius. tengri's new `slone_netzer` disc
-# block reads the SN12 α-disc grid directly from AGNFITTER-RX's published `SN12.pickle`
+# block ports the SN12 α-disc grid directly from AGNFITTER-RX's `SN12.pickle`
 # (the M_BH = 8.6, log Ṁ/Ṁ_edd ≈ −2.0 grid point is shown on both sides).
 #
 # How well each tengri block matches, panel by panel:
@@ -497,18 +575,23 @@ print(
 #   grid undersamples the narrow Hα peak; tengri evaluates qsogen at native
 #   resolution) along the qsogen luminosity sequence — matching log_lbol
 #   aligns the two templates.
-# * **SN12 — reproduced** by the new `slone_netzer` block. It interpolates the
+# * **SN12 — reproduced** by the `slone_netzer` block. It interpolates the
 #   108-template grid with node-exact bilinear interpolation, so the SN12 peak
 #   lands on AGNFITTER-RX's at every grid node (the peak shifts strongly with
 #   accretion rate, so the original smooth-kernel interpolation smeared it by
 #   30–50% — now fixed).
-# * **KD18 — reproduced.** tengri's full Kubota & Done 3-zone block
-#   (`kubota_done`: a Novikov-Thorne outer disc + warm Comptonization + a hot
-#   corona) tracks AGNFITTER-RX's KD18 to ~1.3× across the UV–near-IR, peaking
-#   at ~3000 Å vs ~3700 Å. That smooth, featureless offset is the spread
-#   expected between two independent realizations of the same model —
-#   AGNFITTER-RX's is a precomputed template grid, tengri's integrates the
-#   three zones from scratch.
+# * **KD18 — reproduced** (with a parameterization note). tengri's full
+#   Kubota & Done 3-zone block (`kubota_done`: a Novikov-Thorne outer disc +
+#   warm Comptonization + a hot corona) is *luminosity-first*: the Eddington
+#   ratio is derived from `agn_log_lbol` and `agn_log_mbh` (λ_Edd =
+#   L_bol/L_Edd), so `agn_log_ledd` is deprecated and ignored for this disc.
+#   To land on an AGNFITTER-RX grid node (logM_BH, logλ_Edd) we therefore set
+#   L_bol = λ_Edd · L_Edd(M_BH), computed below from the same physical
+#   constants tengri uses. At the matched node the two realizations track
+#   across the UV–near-IR; the smooth residual (quantified below) is the
+#   spread expected between a precomputed qsosed template grid
+#   (AGNFITTER-RX) and tengri's from-scratch three-zone integration, whose
+#   warm-Comptonization proxy is a documented approximation.
 # * **R06 — the same template, in two conventions.** Both sides use the
 #   identical Richards+2006 composite. The catch is purely how it is carried:
 #   tengri stores it as the physically-correct L_ν (divides the published
@@ -522,7 +605,23 @@ print(
 #   identical.
 
 # %%
+from tengri.utils.physics_constants import C_CGS, G_GRAV, L_SUN, M_PROTON, M_SUN, SIGMA_T
+
 ANCHOR = 2500.0
+
+
+def kd18_log_lbol(log_mbh, log_edd):
+    """L_bol [log10 L_sun] that pins kubota_done's derived λ_Edd to a grid node.
+
+    kubota_done derives λ_Edd = L_bol / L_Edd(M_BH), so matching an
+    AGNFITTER-RX (logM_BH, logλ_Edd) node means requesting
+    L_bol = λ_Edd · L_Edd, with L_Edd = 4π G M m_p c / σ_T — the same
+    constants tengri's disc uses internally.
+    """
+    l_edd = 4.0 * np.pi * G_GRAV * (10.0**log_mbh * M_SUN) * M_PROTON * C_CGS / SIGMA_T
+    return log_edd + np.log10(l_edd / L_SUN)
+
+
 # Each entry: (AGNFITTER name, AGNFITTER kwargs, tengri loader, tengri label).
 # SN12/KD18 are gridded; pick a matched (M_BH, Eddington) point on both sides.
 disk_pairs = [
@@ -536,8 +635,10 @@ disk_pairs = [
     (
         "KD18",
         dict(log_mbh=8.0, log_edd=-1.0),
-        lambda: tengri_disc("kubota_done", agn_log_mbh=8.0, agn_log_ledd=-1.0),
-        "kubota_done (3-zone)",
+        lambda: tengri_disc(
+            "kubota_done", log_lbol=kd18_log_lbol(8.0, -1.0), agn_log_mbh=8.0
+        ),
+        "kubota_done (3-zone, matched L_bol)",
     ),
     ("THB21", {}, tengri_qsogen_full, "qsogen + lines + FeII"),
 ]
@@ -584,6 +685,32 @@ fig.suptitle("Accretion-disk libraries — the 0.7 µm (dotted) Hα+[N II] bump 
 fig.tight_layout()
 save_fig("agnfitter_09a_disc_library.png")
 
+# %%
+# Quantify each panel: |log10(tengri/AGNFITTER)| over the disc window
+# (2500 Å-anchored shapes, 1200 Å – 1 µm), evaluated AT the AGNFITTER
+# reference's own wavelength samples — interpolating the sparser reference
+# onto a dense grid would manufacture residual at every line feature. For
+# R06 the residual is also reported after putting tengri's L_nu back into
+# AGNFITTER's nu·L_nu carriage — that number isolates the pure convention
+# offset.
+print("§9a  disc-library shape residuals (anchor 2500 Å, 1200 Å–1 µm):")
+for af_name, af_kw, tengri_fn, _label in disk_pairs:
+    w_a, L_a = A.disk_template(af_name, **af_kw)
+    w_t, L_t = tengri_fn()
+    oa_, ot_ = np.argsort(w_a), np.argsort(w_t)
+    w_a_s, a_s = np.asarray(w_a)[oa_], norm_at(w_a, L_a, ANCHOR)[oa_]
+    m = (w_a_s >= 1.2e3) & (w_a_s <= 1e4) & (a_s > 0)
+    t_on = np.interp(w_a_s[m], np.asarray(w_t)[ot_], norm_at(w_t, L_t, ANCHOR)[ot_])
+    logr = np.abs(np.log10(t_on / a_s[m]))
+    line = f"  {af_name:6s} median = {np.median(logr):.3f} dex   max = {logr.max():.3f} dex"
+    if af_name == "R06":
+        nu_t = U.C_ANGSTROM_PER_S / np.asarray(w_t)
+        t_conv = np.interp(w_a_s[m], np.asarray(w_t)[ot_], norm_at(w_t, L_t * nu_t, ANCHOR)[ot_])
+        logc = np.abs(np.log10(t_conv / a_s[m]))
+        line += f"   (nu-L_nu convention applied: median = {np.median(logc):.4f} dex)"
+    print(line)
+
+# %%
 # Quantify the line bump.
 w_t, L_t = A.disk_template("THB21")
 w_r, L_r = A.disk_template("R06")
@@ -607,26 +734,39 @@ print(
 #
 # The disk color excess E(B−V)_BBB sweeps the UV continuum via the Prevot
 # SMC law on both sides. AGNFITTER-RX applies it to the THB21 template;
-# tengri's `agn.atten = "smc_prevot"` reproduces the same reddening on its
-# disc.
+# tengri's `agn_ebv_disc` (identically, its `agn.atten = "smc_prevot"`
+# block) applies the same curve to whatever disc is configured. Plotting
+# the attenuation ratio ``L(E(B−V)) / L(0)`` removes the underlying
+# template from both sides, so this panel compares the reddening laws
+# themselves, end-to-end: solid curves are AGNFITTER-RX's
+# ``BBBred_Prevot``, dashed curves are two `SEDModel.build` predictions
+# divided by each other. The visible dashed-above-solid offset is the
+# uniform 1.102× normalization convention quantified in §4.
 
 # %%
 fig, ax = plt.subplots(figsize=(7.5, 4.8))
 w_thb, L_thb = A.disk_template("THB21")
+_, L_te0 = tengri_disc("qsogen", ebv_disc=0.0)
 msk = (w_thb > 8e2) & (w_thb < 1e4)
-for ebv, c in [(0.0, "C0"), (0.1, "C2"), (0.3, "C1"), (0.5, "C3")]:
+print("§9b  A(1500 Å) per E(B-V) [mag]:")
+for ebv, c in [(0.1, "C2"), (0.3, "C1"), (0.5, "C3")]:
     L_red = A.apply_bbb_reddening(w_thb, L_thb, ebv)
-    ax.loglog(
-        w_thb[msk],
-        norm_at(w_thb, L_thb, 5000)[msk] * (L_red / L_thb)[msk],
-        c,
-        lw=1.4,
-        label=f"E(B−V)$_{{BBB}}$ = {ebv:g}",
-    )
+    ratio_af = np.divide(L_red, L_thb, out=np.ones_like(L_red), where=L_thb > 0)
+    ax.loglog(w_thb[msk], ratio_af[msk], c, ls="-", lw=1.4,
+              label=f"AGNFITTER  E(B−V) = {ebv:g}")
+    w_te, L_te = tengri_disc("qsogen", ebv_disc=ebv)
+    ratio_te = np.divide(L_te, L_te0, out=np.ones_like(L_te), where=L_te0 > 0)
+    msk_te = (w_te > 8e2) & (w_te < 1e4)
+    ax.loglog(w_te[msk_te], ratio_te[msk_te], c, ls="--", lw=1.4,
+              label=f"tengri  E(B−V) = {ebv:g}")
+    a_af = -2.5 * np.log10(np.interp(1500.0, w_thb, ratio_af))
+    a_te = -2.5 * np.log10(np.interp(1500.0, w_te, ratio_te))
+    print(f"  E(B-V)={ebv:g}:  AGNFITTER = {a_af:.2f}   tengri = {a_te:.2f}   "
+          f"(ratio {a_te / a_af:.3f}, convention 1.102)")
 ax.set_xlabel(r"$\lambda$ [Å]")
-ax.set_ylabel(r"$L_\nu$ (norm. at 5000 Å, unreddened)")
-ax.set_title("Disk reddening sweep (Prevot SMC, THB21)")
-ax.legend()
+ax.set_ylabel(r"$L(E(B{-}V))\ /\ L(0)$")
+ax.set_title("Disk reddening sweep (Prevot SMC) — both codes, template-free")
+ax.legend(fontsize=8, ncol=2)
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("agnfitter_09b_bbb_reddening.png")
@@ -635,13 +775,18 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # ## §9c Torus library face-off
 #
 # The four AGNFITTER-RX torus libraries against tengri's, all normalized at
-# their mid-IR peak. tengri's `silva04` and `cat3d_wind` blocks are built
-# directly from these same AGNFITTER-RX libraries, so those two panels are a
-# direct cross-check — and they agree: peak-aligned, to ≲1.6×.
+# their mid-IR peak. tengri's `silva04` and `cat3d_wind` blocks evaluate the
+# same template libraries AGNFITTER-RX publishes and are pinned here to
+# matched grid nodes — S04 at log N_H = 23, CAT3D-Wind at (incl 0°, a = −2,
+# f_wd = 1.75); all three CAT3D axes are live through `SEDModel.build` over
+# AGNFITTER-RX's genuine rows-210+ domain (a ∈ [−3, −1.5], f_wd ∈ [1.0, 2.25]).
 # `nenkova` is the FSPS Nenkova+2008 CLUMPY radiative-transfer grid (the same
 # library Prospector uses), interpolated in optical depth. It differs from
-# AGNFITTER-RX's NK08 by ~2–4× in the near-IR because the two adopt different
-# Nenkova parameter sets (Y, N₀, q, σ) — the same model family, different grid.
+# AGNFITTER-RX's NK08 by ~2–4× in the near-IR because the two average
+# different corners of the CLUMPY parameter space (Y, N₀, q, σ) — the same
+# model family, two different reductions, so that panel is a family-level
+# comparison rather than a node-matched check. An inclination-averaged
+# `NK0_mean_1p` counterpart is the one torus entry tengri does not yet offer.
 #
 # For `skirtor`, the IR peak lands slightly redward of AGNFITTER-RX: `skirtor`
 # keeps the full Stalevski (2016) grid (τ, p, q, opening angle, inclination,
@@ -687,13 +832,14 @@ torus_pairs = [
     (
         "CAT3D",
         "CAT3D-Wind",
-        # Match AGNFITTER-RX's incl=0 sightline (cos_inc=1) so the panel compares
-        # the same CAT3D-Wind geometry, not two inclinations. At the default
-        # cos_inc (i=30°) the shape runs 0.86×; on the matched sightline it is
-        # ~1.02×.
-        lambda: tengri_torus("cat3d_wind", cos_inc=1.0),
-        "cat3d_wind (incl 0°)",
-        dict(incl=0.0),
+        # Pin ALL THREE library axes on both sides: incl = 0° (cos_inc = 1),
+        # cloud power-law index a = -2, wind fraction fwd = 1.75. tengri's
+        # cat3d_wind spans AGNfitter's genuine rows-210+ sub-library
+        # (a in [-3, -1.5], fwd in [1.0, 2.25]) with node-exact PCHIP, so a
+        # matched node is a genuine template check.
+        lambda: tengri_torus("cat3d_wind", cos_inc=1.0, a_cat3d=-2.0, fwd_cat3d=1.75),
+        "cat3d_wind (incl 0°, a −2, f_wd 1.75)",
+        dict(incl=0.0, a=-2.0, fwd=1.75),
     ),
 ]
 fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True)
@@ -723,7 +869,7 @@ save_fig("agnfitter_09c_torus_library.png")
 #
 # The tengri / AGNFITTER-RX peak-normalized shape ratio for each torus library,
 # with the 1–100 µm median printed below. S04 and CAT3D-Wind (matched sightline)
-# match AGNFITTER-RX; SKIRTOR and NK08 use different library reductions.
+# reproduce AGNFITTER-RX; SKIRTOR and NK08 use different library reductions.
 
 # %%
 fig, ax = plt.subplots(figsize=(9, 4.6))
@@ -762,8 +908,8 @@ plt.show()
 #
 # The panel above contrasts AGNFITTER-RX's averaged `SKIRTOR_mean_3p` with
 # tengri's *full-grid* `skirtor` (the X-CIGALE reduction) — different by
-# design. tengri now also ships `skirtor_agnfitter`, node-exact on the
-# very same `SKIRTOR_mean_3p` templates, so we can show both
+# design. tengri now also ships `skirtor_agnfitter`, a direct node-exact
+# node-exact on the very same `SKIRTOR_mean_3p` templates, so we can show both
 # reductions of the Stalevski (2016) models against the AGNFITTER-RX
 # reference at one matched geometry (opening angle 40°, inclination 30°,
 # τ₉.₇ = 7):
@@ -816,6 +962,48 @@ fig.tight_layout()
 save_fig("agnfitter_09c2_skirtor_port.png")
 
 # %% [markdown]
+# ### §9c‴ CAT3D-Wind wind-fraction sweep
+#
+# The polar wind is what CAT3D-Wind is *for* — the paper adopts it because
+# the wind fills the 1.5–5 µm near-IR excess that equatorial tori miss. This
+# panel sweeps the wind mass fraction f_wd across AGNFITTER-RX's library
+# domain (1.0 → 2.25) on both sides at fixed (incl 0°, a = −2): tengri's
+# `cat3d_wind` (solid, through `SEDModel.build`) over the AGNFITTER-RX
+# library nodes (dashed). The interpolation is node-exact monotone-cubic,
+# so at library nodes the curves coincide; the printed residuals quantify
+# that. Raising f_wd lifts exactly the near-IR shoulder.
+
+# %%
+fig, ax = plt.subplots(figsize=(8, 5))
+print("§9c‴  cat3d_wind wind-fraction sweep, node residuals (peak-norm, 1–100 µm):")
+_fwd_grid = np.geomspace(1e4, 1e6, 300)
+for fwd, c in [(1.0, "C0"), (1.75, "C1"), (2.25, "C3")]:
+    w_a, L_a = A.torus_template("CAT3D", incl=0.0, a=-2.0, fwd=fwd)
+    w_t, L_t = tengri_torus("cat3d_wind", cos_inc=1.0, a_cat3d=-2.0, fwd_cat3d=fwd)
+    msk_a = (w_a > 5e3) & (w_a < 1e7)
+    msk_t = (w_t > 5e3) & (w_t < 1e7)
+    ax.loglog(w_a[msk_a], norm_peak(L_a)[msk_a], c, ls="--", lw=1.2)
+    ax.loglog(
+        w_t[msk_t], norm_peak(L_t)[msk_t], c, ls="-", lw=1.5, label=f"$f_{{wd}}$ = {fwd:g}"
+    )
+    a_on = np.interp(np.log10(_fwd_grid), np.log10(w_a), norm_peak(L_a))
+    t_on = np.interp(np.log10(_fwd_grid), np.log10(w_t), norm_peak(L_t))
+    ok = a_on > 1e-3
+    _res = np.abs(t_on[ok] / a_on[ok] - 1.0)
+    print(f"  f_wd = {fwd:4g}:  median |ratio-1| = {np.median(_res) * 100:.2f}%   "
+          f"max = {_res.max() * 100:.2f}%")
+ax.axvspan(1.5e4, 5e4, color="0.92", zorder=0)  # the 1.5-5 µm near-IR excess band
+ax.set_xlim(5e3, 1e7)
+ax.set_ylim(1e-3, 3)
+ax.set_xlabel(r"$\lambda$ [Å]")
+ax.set_ylabel(r"$L_\nu$ (norm. at peak)")
+ax.set_title("CAT3D-Wind $f_{wd}$ sweep — tengri (solid) on AGNFITTER-RX nodes (dashed)")
+ax.legend(fontsize=9, title="shaded: 1.5–5 µm excess band")
+ax.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("agnfitter_09c3_cat3d_fwd_sweep.png")
+
+# %% [markdown]
 # ## §9d Best combination — CAT3D-Wind + THB21
 #
 # The paper's winning model for 67% of its sample: the CAT3D-Wind torus on
@@ -826,8 +1014,11 @@ save_fig("agnfitter_09c2_skirtor_port.png")
 # emission lines is what reproduces the 0.7 µm bump on top of the torus hump.
 
 # %%
+# Matched CAT3D-Wind node on both sides: incl 0°, a = -2, f_wd = 1.75.
+_CAT3D_NODE = dict(incl=0.0, a=-2.0, fwd=1.75)
+_CAT3D_NODE_TE = dict(cos_inc=1.0, a_cat3d=-2.0, fwd_cat3d=1.75)
 w_disc, L_disc = A.disk_template("THB21")
-w_tor, L_tor = A.torus_template("CAT3D", incl=0.0)
+w_tor, L_tor = A.torus_template("CAT3D", **_CAT3D_NODE)
 # Co-add on a common grid, torus scaled to ~10% of the disk's 2500 A anchor.
 grid = np.geomspace(1e3, 1e7, 3000)
 disc_g = U.regrid(w_disc, np.clip(L_disc, 0, None), grid)
@@ -836,7 +1027,7 @@ disc_n = disc_g / np.interp(2500, grid, disc_g)
 tor_n = tor_g / np.max(tor_g) * 0.5
 af_total = disc_n + tor_n
 
-w_te, L_te = tengri_torus("cat3d_wind")  # torus
+w_te, L_te = tengri_torus("cat3d_wind", **_CAT3D_NODE_TE)  # torus
 # THB21 *is* qsogen with its emission-line forest; the disc continuum alone
 # would drop the 0.7 µm Hα+[N II] bump that defines this combination, so use
 # the full qsogen + lines + FeII disc to match AGNFITTER-RX's THB21.
@@ -951,11 +1142,20 @@ plt.show()
 # ## §11 Radio
 #
 # AGNFITTER-RX models AGN core/jet radio with a simple power law (SPL,
-# α = −0.75) or a double power law (DPL, Eq. 9–10: a low-frequency turnover
-# ν_t and a synchrotron-aging cutoff ν_cut). tengri already ships both —
-# `radio_agn` (SPL) and `radio_agn_dpl`, the latter implementing
-# AGNFITTER-RX Eq. 9–10 exactly. Star-formation radio follows the Bell (2003) IR–
-# radio correlation (q_IR = 2.64) in `radio_sfr_bell2003`.
+# α = −0.75, exponential cutoff at 10¹³ Hz) or a double power law (DPL,
+# Eq. 9–10: a self-absorption turnover ν_t and a synchrotron-aging cutoff
+# ν_cut). tengri ships both — `radio_agn` (SPL) and `radio_agn_dpl`, the
+# latter implementing AGNFITTER-RX Eq. 9–10 exactly. The driver carries the
+# upstream formulas verbatim (`A.agn_radio_spl` / `A.agn_radio_dpl`), so
+# both panels overlay tengri against AGNFITTER-RX itself at matched
+# parameters, not against a hand-written power law. DPL parameters sit
+# inside AGNFITTER-RX's own sampling grid (α₂ ∈ [−1, 0)).
+#
+# One deliberate difference: above ~300 GHz tengri's radio blocks return
+# exactly zero (the far-IR belongs to the dust components), while
+# AGNFITTER-RX lets the exponential cutoff decay smoothly through the THz
+# range. The comparison band below stops at 300 GHz; the difference beyond
+# it is visible in the top panel.
 
 # %%
 import jax.numpy as jnp
@@ -965,94 +1165,126 @@ from tengri.radio import radio_agn, radio_agn_dpl
 freq = np.geomspace(1e8, 1e12, 400)  # 0.1–1000 GHz
 wave_radio = jnp.asarray(U.C_ANGSTROM_PER_S / freq)
 L_AGN_BOL = 1e45  # erg/s
+_DPL_PARS = dict(alpha1=-0.75, alpha2=-0.1, log_nu_t=10.0, log_nu_cut=13.0)
 L_spl = np.asarray(radio_agn(wave_radio, L_AGN_BOL, radio_loudness=1.0, alpha_agn=0.75))
-L_dpl = np.asarray(
-    radio_agn_dpl(
-        wave_radio,
-        L_AGN_BOL,
-        radio_loudness=1.0,
-        alpha1=-0.75,
-        alpha2=0.5,
-        log_nu_t=10.0,
-        log_nu_cut=13.0,
-    )
-)
+L_dpl = np.asarray(radio_agn_dpl(wave_radio, L_AGN_BOL, radio_loudness=1.0, **_DPL_PARS))
 wave_radio = np.asarray(wave_radio)
 
+_, F_spl_af = A.agn_radio_spl(freq)  # upstream SPL: alpha=-0.75, nu_t=1e9, cutoff 1e13
+_, F_dpl_af = A.agn_radio_dpl(freq, **_DPL_PARS)
+
+_nu5 = U.C_ANGSTROM_PER_S / 5e9
+
+
+def _norm5(freq_hz, F):
+    """Normalize a radio shape to 1 at 5 GHz."""
+    return F / np.interp(5e9, freq_hz, F)
+
+
 fig, ax = plt.subplots(figsize=(7.5, 4.8))
-ax.loglog(
-    freq / 1e9,
-    norm_at(wave_radio, L_spl, U.C_ANGSTROM_PER_S / 5e9),
-    "C0-",
-    lw=1.5,
-    label=r"tengri radio_agn (SPL, $\alpha=-0.75$)",
-)
-ax.loglog(
-    freq / 1e9,
-    norm_at(wave_radio, L_dpl, U.C_ANGSTROM_PER_S / 5e9),
-    "C1-",
-    lw=1.5,
-    label="tengri radio_agn_dpl (AGNFITTER Eq. 9–10)",
-)
+ax.loglog(freq / 1e9, _norm5(freq, F_spl_af), "C0-", lw=2.2, alpha=0.45,
+          label=r"AGNFITTER-RX  SPL ($\alpha=-0.75$)")
+ax.loglog(freq / 1e9, norm_at(wave_radio, L_spl, _nu5), "C0--", lw=1.5,
+          label="tengri  radio_agn")
+ax.loglog(freq / 1e9, _norm5(freq, F_dpl_af), "C1-", lw=2.2, alpha=0.45,
+          label="AGNFITTER-RX  DPL (Eq. 9–10)")
+ax.loglog(freq / 1e9, norm_at(wave_radio, L_dpl, _nu5), "C1--", lw=1.5,
+          label="tengri  radio_agn_dpl")
 ax.set_xlabel(r"$\nu$ [GHz]")
 ax.set_ylabel(r"$L_\nu$ (norm. at 5 GHz)")
-ax.set_title("AGN core/jet radio: SPL vs DPL (turnover + aging cutoff)")
-ax.legend()
+ax.set_title("AGN core/jet radio — tengri on AGNFITTER-RX's own SPL/DPL")
+ax.legend(fontsize=8)
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("agnfitter_11a_radio_agn.png")
 
 # %% [markdown]
-# ### §11′ Radio SPL slope parity (tengri vs analytic ν^−0.75)
+# ### §11′ Radio SPL/DPL parity ratios (tengri vs AGNFITTER-RX)
 #
-# tengri's `radio_agn` SPL vs an analytic ν^−0.75, with the ratio below (over
-# `radio_agn`'s support, which falls to zero above ~300 GHz).
+# The ratio of each tengri radio model to the AGNFITTER-RX formula over
+# 0.1–300 GHz (both normalized at 5 GHz). The SPL ratio drifts up to ~3%
+# at 300 GHz because AGNFITTER-RX's SPL carries its exponential cutoff
+# (exp(−ν/10¹³ Hz)) while tengri's SPL is a pure power law within its
+# support; the DPL formulas are identical term by term.
 
 # %%
-ref_spl = (freq / 5e9) ** (-0.75)
-t_spl = np.asarray(norm_at(wave_radio, L_spl, U.C_ANGSTROM_PER_S / 5e9))
-valid_spl = t_spl > 0  # radio_agn support (zero above the ~300 GHz core cutoff)
-ratio_spl = np.where(valid_spl, t_spl / ref_spl, np.nan)
+_band = freq <= 3e11  # 0.1–300 GHz comparison band
+t_spl = np.asarray(norm_at(wave_radio, L_spl, _nu5))
+t_dpl = np.asarray(norm_at(wave_radio, L_dpl, _nu5))
+ratio_spl = np.where(_band & (t_spl > 0), t_spl / _norm5(freq, F_spl_af), np.nan)
+ratio_dpl = np.where(_band & (t_dpl > 0), t_dpl / _norm5(freq, F_dpl_af), np.nan)
 fig, (ax, axr) = plt.subplots(
     2, 1, figsize=(8, 5.5), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
 )
-ax.loglog(
-    freq / 1e9, np.where(valid_spl, t_spl, np.nan), "C0-", lw=1.6, label="tengri  radio_agn (SPL)"
-)
-ax.loglog(freq / 1e9, ref_spl, "k--", lw=1.2, label=r"analytic  $\nu^{-0.75}$")
+ax.loglog(freq / 1e9, np.where(t_spl > 0, t_spl, np.nan), "C0-", lw=1.6,
+          label="tengri  radio_agn (SPL)")
+ax.loglog(freq / 1e9, _norm5(freq, F_spl_af), "C0:", lw=1.4, label="AGNFITTER-RX  SPL")
+ax.loglog(freq / 1e9, np.where(t_dpl > 0, t_dpl, np.nan), "C1-", lw=1.6,
+          label="tengri  radio_agn_dpl")
+ax.loglog(freq / 1e9, _norm5(freq, F_dpl_af), "C1:", lw=1.4, label="AGNFITTER-RX  DPL")
 ax.set_ylabel(r"$L_\nu$ (norm. at 5 GHz)")
-ax.set_title("Radio SPL slope parity (within radio_agn support)")
-ax.legend(fontsize=9)
+ax.set_title("Radio parity (0.1–300 GHz band)")
+ax.legend(fontsize=8)
 ax.grid(True, alpha=0.3)
 axr.axhline(1.0, color="0.5", lw=0.8)
-axr.semilogx(freq / 1e9, ratio_spl, "C0-", lw=1.2)
-axr.set_ylim(0.98, 1.02)
-axr.set_ylabel(r"tengri / $\nu^{-0.75}$", fontsize=9)
+axr.semilogx(freq / 1e9, ratio_spl, "C0-", lw=1.2, label="SPL")
+axr.semilogx(freq / 1e9, ratio_dpl, "C1-", lw=1.2, label="DPL")
+axr.set_ylim(0.95, 1.05)
+axr.set_ylabel("tengri / AGNFITTER", fontsize=9)
 axr.set_xlabel(r"$\nu$ [GHz]")
+axr.legend(fontsize=8)
 axr.grid(True, alpha=0.3)
-_spl_dmax = float(np.nanmax(np.abs(ratio_spl[valid_spl] - 1.0)))
-print(f"§11 radio SPL slope parity (within support): max |ratio − 1| = {_spl_dmax:.2e}")
+_spl_dmax = float(np.nanmax(np.abs(ratio_spl - 1.0)))
+_dpl_dmax = float(np.nanmax(np.abs(ratio_dpl - 1.0)))
+print(f"§11 radio parity (0.1-300 GHz): SPL max |ratio − 1| = {_spl_dmax:.2e}   "
+      f"DPL max |ratio − 1| = {_dpl_dmax:.2e}")
 fig.tight_layout()
 save_fig("agnfitter_11c_radio_spl_residual.png")
 plt.show()
 
 # %% [markdown]
-# ## §10b X-ray corona shape + host-galaxy floor
+# ## §10b X-ray corona: exact parity, then tengri's default extras
 #
-# Given the 2500 Å disk luminosity, the corona is a Γ = 1.8 power law with a
-# 300 keV cutoff whose 2 keV normalization comes from the α_ox relation.
-# tengri's `xray_agn_corona_from_disc` and AGNFITTER-RX's disk X-ray extension
-# build the same spectrum from the same inputs. The host galaxy contributes an
-# X-ray *floor* from its X-ray binaries (Mineo et al. 2014), which tengri's
-# `xray_xrb` adds and AGNFITTER-RX folds in as a post-processing prior — far
-# below the AGN corona for an accreting nucleus, as the panel shows.
+# Given the 2500 Å disk luminosity, both codes build the same corona: a
+# Γ = 1.8 power law in F_ν with a 300 keV exponential cutoff, normalized at
+# 2 keV through the Just+2007 α_ox relation (AGNFITTER-RX's cutoff constant
+# ``exp(−ν/7.254·10¹⁹ Hz)`` *is* 300 keV). The **left panel** compares the
+# bare prescriptions — tengri's `xray_agn_corona_from_disc` with its
+# X-CIGALE extensions switched off (`apply_anisotropy=False`) against
+# AGNFITTER-RX's disk X-ray extension at the same L₂₅₀₀. The residual is a
+# flat ~+1% (tengri adds a constant 1% Thomson-scattered fraction to the
+# absorbed primary) plus soft-X-ray curvature from tengri's tbabs
+# photoelectric absorption at its default column log N_H = 20 — both printed.
+#
+# The **right panel** shows what tengri's *defaults* add on top of the bare
+# corona, because they are on by default and AGNFITTER-RX has no analog:
+# the Yang et al. (2022) viewing-angle anisotropy (normalized at the 30°
+# X-CIGALE anchor, so even a face-on sightline sits ×1.07 above isotropic)
+# and the tbabs/Compton line-of-sight absorption. For AGNFITTER-RX-parity
+# work, switch the anisotropy off.
+#
+# On the host side, tengri adds an X-ray-binary floor (`xray_xrb`,
+# Mineo et al. 2014) as a bona-fide SED component. AGNFITTER-RX's code has
+# no host X-ray component; its X-ray physics beyond the corona lives in two
+# *priors* — a Lusso & Risaliti (2016)-calibrated α_ox prior (σ = 0.4) and
+# a Stern (2015) 6 µm ↔ 2–10 keV prior (σ = 0.5) — which shape posteriors
+# but never emit flux. The XRB curve is plotted for scale.
 
 # %%
 from tengri.xray import xray_agn_corona_from_disc, xray_xrb
 
 L_2500 = 1.0e30  # erg/s/Hz — representative bright-Seyfert disk
 wave_x = np.geomspace(1e-2, 1e2, 600)  # ~600 keV down to ~0.12 keV
-L_corona = np.asarray(xray_agn_corona_from_disc(jnp.asarray(wave_x), L_2500, delta_alpha_ox=0.0))
+# Bare corona: X-CIGALE anisotropy off; tbabs stays at its log N_H = 20 default.
+L_corona_bare = np.asarray(
+    xray_agn_corona_from_disc(
+        jnp.asarray(wave_x), L_2500, delta_alpha_ox=0.0, apply_anisotropy=False
+    )
+)
+# tengri defaults: Yang+2022 anisotropy on (30°-anchored), face-on sightline.
+L_corona_default = np.asarray(
+    xray_agn_corona_from_disc(jnp.asarray(wave_x), L_2500, delta_alpha_ox=0.0, cos_inc=1.0)
+)
 # AGNFITTER-RX disk X-ray extension off the THB21 disk, anchored to the same L_2500.
 w_thb, L_thb = A.disk_template("THB21")
 L_thb_at_2500 = norm_at(w_thb, L_thb, 2500.0) * L_2500
@@ -1060,51 +1292,133 @@ xw_af, xL_af = A.disk_xray_extension(w_thb, L_thb_at_2500, scatter=0.0)
 # Host XRB floor for a star-forming host (SFR ~ 5, M* ~ 1e10).
 L_xrb = np.asarray(xray_xrb(jnp.asarray(wave_x), sfr=5.0, stellar_mass=1e10))
 
-fig, ax = plt.subplots(figsize=(7.8, 4.8))
-ax.loglog(xw_af, xL_af, "C0-", lw=1.5, label="AGNFITTER-RX  disk X-ray extension")
-ax.loglog(wave_x, L_corona, "C1--", lw=1.5, label="tengri  xray_agn_corona_from_disc")
-ax.loglog(wave_x, L_xrb, "C2:", lw=1.4, label="tengri  xray_xrb (host floor, Mineo+14)")
-ax.set_xlim(1e-2, 1e2)
-ax.set_ylim(L_corona.max() * 1e-6, L_corona.max() * 5)
-ax.set_xlabel(r"$\lambda$ [Å]")
-ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
-ax.set_title(r"X-ray corona ($\Gamma$ = 1.8, 300 keV cutoff) + host XRB floor")
-ax.legend(fontsize=8)
-ax.grid(True, alpha=0.3)
+fig, (axl, axr) = plt.subplots(1, 2, figsize=(12.5, 4.8))
+axl.loglog(xw_af, xL_af, "C0-", lw=1.5, label="AGNFITTER-RX  disk X-ray extension")
+axl.loglog(wave_x, L_corona_bare, "C1--", lw=1.5,
+           label="tengri  corona (anisotropy off)")
+axl.loglog(wave_x, L_xrb, "C2:", lw=1.4, label="tengri  xray_xrb (host floor, Mineo+14)")
+axl.set_xlim(1e-2, 1e2)
+axl.set_ylim(L_corona_bare.max() * 1e-6, L_corona_bare.max() * 5)
+axl.set_xlabel(r"$\lambda$ [Å]")
+axl.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+axl.set_title(r"Bare corona parity ($\Gamma$ = 1.8, 300 keV cutoff)")
+axl.legend(fontsize=8)
+axl.grid(True, alpha=0.3)
+
+_af_on_wave = np.interp(wave_x, xw_af, xL_af, left=np.nan, right=np.nan)
+_ratio_bare = L_corona_bare / _af_on_wave
+_ratio_default = L_corona_default / _af_on_wave
+axr.semilogx(wave_x, _ratio_bare, "C1-", lw=1.5, label="bare (anisotropy off)")
+axr.semilogx(wave_x, _ratio_default, "C3-", lw=1.5,
+             label="tengri defaults (Yang+22 anisotropy, face-on)")
+axr.axhline(1.0, color="0.5", lw=0.8)
+axr.set_xlim(1e-2, 1e2)
+axr.set_ylim(0.8, 1.3)
+axr.set_xlabel(r"$\lambda$ [Å]")
+axr.set_ylabel("tengri / AGNFITTER-RX")
+axr.set_title("Corona ratio — what tengri's defaults add")
+axr.legend(fontsize=8)
+axr.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("agnfitter_10b_xray_corona.png")
 
+# %%
+# Quantify over the 0.5-100 keV band (lambda ~ 0.12-25 A).
+_hard = (wave_x > 0.12) & (wave_x < 25.0) & np.isfinite(_ratio_bare)
+print(
+    f"§10b corona parity (0.5-100 keV): bare median ratio = "
+    f"{np.nanmedian(_ratio_bare[_hard]):.4f} (the +1% scattered fraction), "
+    f"max |ratio-1| = {np.nanmax(np.abs(_ratio_bare[_hard] - 1.0)):.3f}; "
+    f"defaults median ratio = {np.nanmedian(_ratio_default[_hard]):.4f} "
+    f"(x1.072 = the 30 deg-anchored Yang+22 anisotropy, face-on)"
+)
+
 # %% [markdown]
-# ## §11b Star-formation radio (Bell 2003)
+# ## §11b Star-formation radio (Bell 2003) vs AGNFITTER-RX's S17_radio
 #
-# The host's radio emission follows the IR–radio correlation: AGNFITTER-RX
-# adopts q_IR = 2.64 (Bell 2003), 90% non-thermal synchrotron + 10% thermal
-# free-free, smoothly joined to the cold-dust FIR. tengri's
-# `radio_sfr_bell2003` is the matching block. We anchor it to a fiducial IR
-# luminosity and show the synchrotron power law extending the cold-dust tail
-# into the radio.
+# AGNFITTER-RX delivers the host's radio emission *inside* its starburst
+# template: the `S17_radio` model extends each Schreiber+2018 (T_dust,
+# f_PAH) dust SED into the radio with the Bell (2003) IR–radio correlation
+# (q_IR = 2.64, synchrotron plus a thermal free-free component that
+# flattens the slope near 10 GHz). tengri keeps the two pieces separate —
+# `schreiber2018` for the dust, `radio_sfr_bell2003` for the radio — so the
+# genuine comparison is the *sum*, anchored to the same total IR
+# luminosity. The panel overlays tengri's dust + radio against the upstream
+# S17_radio template at (T_dust = 35 K, f_PAH = 0.02), and prints the
+# 1.4 GHz ratio — which turns out to be a precise measurement of a q_IR
+# bookkeeping difference between the codes, quantified below the panel.
 
 # %%
+from tengri.dust import DUST_EMISSION_MODELS as _DEM
 from tengri.radio import radio_sfr_bell2003
 
-freq_sf = np.geomspace(1e8, 5e12, 500)  # 0.1 GHz – 5 THz
-wave_sf = jnp.asarray(U.C_ANGSTROM_PER_S / freq_sf)
-L_IR = 1e45  # erg/s
-L_sf_radio = np.asarray(radio_sfr_bell2003(wave_sf, L_IR, q_ir=2.64, alpha_sf=0.8))
-wave_sf = np.asarray(wave_sf)
+w_afr, L_afr = A.cold_dust_radio_template(tdust=35.0, fpah=0.02)
+_axes_radio = A.cold_dust_radio_axes()
+_t_idx = int(np.argmin(np.abs(_axes_radio["tdust"] - 35.0)))
+# Upstream tabulates LIR per T_dust node in L_sun; convert to erg/s.
+L_IR_NODE = float(_axes_radio["lir_conv"][_t_idx]) * 3.826e33
 
-fig, ax = plt.subplots(figsize=(7.5, 4.6))
-ax.loglog(
-    freq_sf / 1e9, L_sf_radio, "C1-", lw=1.5, label="tengri radio_sfr_bell2003 (q$_{IR}$=2.64)"
+wave_all = np.geomspace(1e4, 3e9, 1200)  # 1 µm – 30 cm
+L_dust = np.asarray(
+    _DEM["schreiber2018"](jnp.asarray(wave_all), 1.0, dust_T=35.0, dust_f_pah=0.02)
 )
-ax.axvline(1.4, color="0.7", ls=":", lw=1, label="1.4 GHz")
-ax.set_xlabel(r"$\nu$ [GHz]")
-ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
-ax.set_title("Star-formation radio (IR–radio correlation, Bell 2003)")
+# schreiber2018 returns a normalized shape; scale so its 8-1000 µm integral
+# equals the upstream node's L_IR, then add the Bell-2003 radio at that L_IR.
+_nu_all = U.C_ANGSTROM_PER_S / wave_all
+_ir_band = (wave_all > 8e4) & (wave_all < 1e7)
+_order = np.argsort(_nu_all)
+L_dust_ir = -float(np.trapezoid(np.where(_ir_band, L_dust, 0.0)[_order], _nu_all[_order]))
+L_dust = L_dust * (L_IR_NODE / abs(L_dust_ir))
+L_radio = np.asarray(radio_sfr_bell2003(jnp.asarray(wave_all), L_IR_NODE, q_ir=2.64))
+L_te_total = L_dust + L_radio
+
+fig, ax = plt.subplots(figsize=(8.2, 4.8))
+msk_af = (w_afr > 1e4) & (w_afr < 3e9)
+ax.loglog(w_afr[msk_af], L_afr[msk_af] / np.max(L_afr[msk_af]), "C0-", lw=2.2, alpha=0.5,
+          label="AGNFITTER-RX  S17_radio (dust + Bell 03 radio)")
+_peak_te = float(np.max(np.where((wave_all > 1e4), L_te_total, 0.0)))
+ax.loglog(wave_all, L_te_total / _peak_te, "C1--", lw=1.5,
+          label="tengri  schreiber2018 + radio_sfr_bell2003")
+ax.axvline(U.C_ANGSTROM_PER_S / 1.4e9, color="0.7", ls=":", lw=1, label="1.4 GHz")
+ax.set_xlim(1e4, 3e9)
+ax.set_ylim(1e-8, 3)
+ax.set_xlabel(r"$\lambda$ [Å]")
+ax.set_ylabel(r"$L_\nu$ (norm. at FIR peak)")
+ax.set_title("Host dust + star-formation radio, joined at matched $L_{IR}$")
 ax.legend(fontsize=8)
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("agnfitter_11b_radio_sf.png")
+
+# %%
+# Quantify at 1.4 GHz (peak-normalized shapes). The radio-to-FIR offset is a
+# pure q_IR bookkeeping difference: the upstream template's baked radio
+# corresponds to q_IR ≈ 2.92 measured against its OWN 8-1000 µm integral
+# (its Bell normalization is applied to the tabulated LIR_conv, a smaller
+# quantity than the template integral), while tengri applies q_IR = 2.64 to
+# the 8-1000 µm integral directly. 2.64 + log10(ratio) recovers the
+# upstream's effective q — printed as the check.
+_lam_14 = U.C_ANGSTROM_PER_S / 1.4e9
+_af_14 = np.interp(np.log10(_lam_14), np.log10(w_afr), L_afr / np.max(L_afr[msk_af]))
+_te_14 = np.interp(np.log10(_lam_14), np.log10(wave_all), L_te_total / _peak_te)
+_nu_afr = U.C_ANGSTROM_PER_S / w_afr
+_o_afr = np.argsort(_nu_afr)
+_ir_afr = (w_afr > 8e4) & (w_afr < 1e7)
+_L_IR_self = np.trapezoid(np.where(_ir_afr, L_afr, 0.0)[_o_afr], _nu_afr[_o_afr])
+_L14_abs = 10 ** np.interp(
+    np.log10(_lam_14), np.log10(w_afr), np.log10(np.maximum(L_afr, 1e-300))
+)
+_q_upstream = np.log10((_L_IR_self / 3.75e12) / _L14_abs)
+_lam_10g = U.C_ANGSTROM_PER_S / 1.0e10
+_af_10 = np.interp(np.log10(_lam_10g), np.log10(w_afr), L_afr / np.max(L_afr[msk_af]))
+_slope = np.log10(_af_10 / _af_14) / np.log10(1.0e10 / 1.4e9)
+print(
+    f"§11b SF radio:  L(1.4 GHz) tengri/AGNFITTER = {_te_14 / _af_14:.3f}  ==  "
+    f"upstream effective q_IR = {_q_upstream:.3f} vs Bell's 2.64 "
+    f"(2.64 + log10(ratio) = {2.64 + np.log10(_te_14 / _af_14):.3f}); "
+    f"upstream 1.4-10 GHz slope alpha = {_slope:.2f} (free-free-flattened; "
+    f"tengri's pure synchrotron is -0.80)"
+)
 
 # %% [markdown]
 # ## Capstone — the radio-to-X-ray SED
@@ -1143,19 +1457,23 @@ def _assemble(disc_wL, torus_wL, xray_wL, radio_fL, *, f_torus=0.5, f_xray=3e-2,
 # 1e13 Hz); the §11 grid stopped at 1e12 and truncated the jet mid-curve.
 freq_cap = np.geomspace(1e8, 3e13, 800)
 wave_cap = jnp.asarray(U.C_ANGSTROM_PER_S / freq_cap)
-_dpl_kw = dict(radio_loudness=1.0, alpha1=-0.75, alpha2=0.5, log_nu_t=10.0, log_nu_cut=13.0)
+_dpl_kw = dict(radio_loudness=1.0, **_DPL_PARS)
 
 # AGNFITTER-RX side.
 w_d, L_d = A.disk_template("THB21")
-w_t, L_t = A.torus_template("CAT3D", incl=0.0)
+w_t, L_t = A.torus_template("CAT3D", **_CAT3D_NODE)
 xw, xL = A.disk_xray_extension(w_d, norm_at(w_d, L_d, 2500.0) * 1e30, scatter=0.0)
 L_rad_dpl = np.asarray(radio_agn_dpl(wave_cap, 1e45, **_dpl_kw))
 af_sed = _assemble((w_d, L_d), (w_t, L_t), (xw, xL), (freq_cap, L_rad_dpl))
 
 # tengri side.
 wd_t, Ld_t = tengri_disc("qsogen")
-wt_t, Lt_t = tengri_torus("cat3d_wind")
-Lc_t = np.asarray(xray_agn_corona_from_disc(jnp.asarray(wave_x), 1e30, delta_alpha_ox=0.0))
+wt_t, Lt_t = tengri_torus("cat3d_wind", **_CAT3D_NODE_TE)
+Lc_t = np.asarray(
+    xray_agn_corona_from_disc(
+        jnp.asarray(wave_x), 1e30, delta_alpha_ox=0.0, apply_anisotropy=False
+    )
+)
 Lr_t = np.asarray(radio_agn_dpl(wave_cap, 1e45, **_dpl_kw))
 te_sed = _assemble((wd_t, Ld_t), (wt_t, Lt_t), (wave_x, Lc_t), (freq_cap, Lr_t))
 
@@ -1189,25 +1507,122 @@ fig.tight_layout()
 save_fig("agnfitter_full_sed_headtohead.png")
 
 # %% [markdown]
+# ### Capstone′ — the same composition as one `SEDModel.build`
+#
+# The panel above assembles the components by hand so the two codes can be
+# normalized identically. In practice you would not do that: the entire
+# AGNFITTER-RX-style model — host stars and dust, THB21-analog disc with
+# its lines and FeII, CAT3D-Wind torus, α_ox corona, DPL jet — composes as
+# *one* tengri model through the public grammar, and that is the object you
+# fit. This cell builds it and plots the pipeline's own total SED across
+# the same eleven decades; every AGNFITTER-RX-parity knob used in this
+# notebook (`agn_ebv_disc`, the torus axes, the DPL turnover/cutoff) is a
+# regular parameter of this one model and could be declared free.
+
+# %%
+m_full = SEDModel.build(
+    ssp_data=ssp,
+    sfh=SFH_FIDUCIAL,
+    dust={
+        "type": "two_component",
+        "tau_bc": Fixed(0.3),
+        "tau_diff": Fixed(0.1),
+        "emission": {"type": "schreiber2018", "*": FIXED},
+        "*": FIXED,
+    },
+    agn={
+        "type": "composable",
+        "disc": {"type": "qsogen", "*": FIXED},
+        "lines": {"type": "qsogen", "*": FIXED},
+        "feii": {"type": "qsogen_balmer", "*": FIXED},
+        "torus": {
+            "type": "cat3d_wind",
+            "cos_inc": Fixed(1.0),
+            "a_cat3d": Fixed(-2.0),
+            "fwd_cat3d": Fixed(1.75),
+            "*": FIXED,
+        },
+        "agn_log_lbol": Fixed(12.0),
+        "agn_ebv_disc": Fixed(0.0),
+        "agn_polar_ebv": Fixed(0.0),
+        "*": FIXED,
+    },
+    xray={"type": "yang20"},
+    radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
+    redshift=Fixed(0.0),
+)
+s_full = m_full.predict_state({})
+w_full = np.asarray(s_full.wave)
+# The pipeline's total rest-frame SED after every component has applied.
+L_full = np.asarray(s_full.sed_intrinsic)
+nu_full = U.C_ANGSTROM_PER_S / w_full
+anchor_full = float(np.interp(2500.0, w_full, L_full))
+nuL = np.where(L_full > 0, nu_full * L_full / (anchor_full * (U.C_ANGSTROM_PER_S / 2500.0)), np.nan)
+
+fig, ax = plt.subplots(figsize=(9.5, 4.6))
+ax.loglog(nu_full, nuL, "C1-", lw=1.4, label="tengri — one SEDModel.build, all components")
+ax.set_xlim(1e8, 1e20)
+ax.set_xlabel(r"$\nu$ [Hz]")
+ax.set_ylabel(r"$\nu L_\nu$ (norm. at 2500 Å)")
+ax.set_title("Full composed model: host + AGN + corona + jet in a single build")
+ax.legend(fontsize=8, loc="lower center")
+ax.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("agnfitter_capstone_composed.png")
+print(
+    f"capstone′  composed model wavelength coverage: {w_full.min():.2e} – {w_full.max():.2e} Å "
+    f"({np.log10(nu_full.max() / nu_full.min()):.1f} decades of frequency)"
+)
+
+# %% [markdown]
 # ## Summary
 #
 # At matched parameters, tengri matches AGNFITTER-RX's AGN model
-# component by component: all four accretion-disk libraries (R06, SN12, KD18,
-# THB21 — SN12 added here as the `slone_netzer` block), all four torus
-# libraries (S04, NK08, SKIRTOR, CAT3D-Wind — two of them evaluated by tengri
-# from these very templates), the Schreiber cold-dust family, the α_ox–L₂₅₀₀
-# X-ray corona with its host-XRB floor, and the SPL/DPL radio jets joined to
-# the Bell-2003 star-formation radio. The notebook reproduces the paper's two
-# central results directly: THB21's 0.7 µm Hα+[N II] bump (§9a) and the torus
-# residual features the CAT3D-Wind model is built to address (§9c), and spans
-# the full radio-to-X-ray range AGNFITTER-RX was built for (capstone).
+# component by component, with every claim quantified in-notebook and every
+# tengri model composed through the public `SEDModel.build` grammar: all
+# four accretion-disk libraries (R06, SN12, KD18, THB21), the Prevot disc
+# reddening, the four torus libraries (S04, NK08, SKIRTOR, CAT3D-Wind —
+# three of them node-exact on these very published templates, including
+# all three CAT3D-Wind axes), the Schreiber cold-dust
+# family with its S17_radio extension, the α_ox–L₂₅₀₀ X-ray corona, and the
+# SPL/DPL radio jets joined to the Bell-2003 star-formation radio. The
+# notebook reproduces the paper's two central results directly: THB21's
+# 0.7 µm Hα+[N II] bump (§9a) and the near-IR wind excess the CAT3D-Wind
+# model is built to address (§9c, §9c‴), and spans the full radio-to-X-ray
+# range AGNFITTER-RX was built for (capstone) — as one buildable,
+# fittable model (capstone′).
 #
-# The one apparent disagreement — tengri's `richards2006` peaking a factor of
-# ν redward of AGNFITTER-RX's R06 — turns out to be a pure convention choice:
-# put tengri's disk back into AGNFITTER-RX's νL_ν carriage and the two
-# overlay to 0.0% (§9a). For the cold dust, tengri's new `schreiber2018`
-# evaluates AGNFITTER-RX's S17 library from the same tables, matching its
-# dust + PAH SED to a median of ~0.05% at fixed (T_dust, f_PAH); the older
+# The residuals that remain are understood and stated where they appear:
+#
+# * **R06** — a pure carriage convention (L_ν vs νL_ν); in AGNFITTER-RX's
+#   convention the two overlay to ~0 (§9a).
+# * **Prevot reddening** — identical spectral shape; tengri pins the
+#   published R_V = 2.72 where AGNFITTER-RX evaluates the raw UV fit at V
+#   (k_raw(V) ≈ 2.468), a uniform 1.102× rescaling of the effective E(B−V)
+#   (§4, §9b).
+# * **KD18** — tengri's disc is luminosity-first (λ_Edd derived from L_bol
+#   and M_BH); at matched nodes the residual is the documented
+#   warm-Comptonization proxy, ≲0.17 dex in the disc window (§9a).
+# * **Corona** — bit-matched prescription up to a flat +1% scattered
+#   fraction; tengri's X-CIGALE extras (Yang+2022 anisotropy, tbabs) are
+#   additions to switch off for AGNFITTER-RX-parity work (§10b).
+# * **NK08** — a family-level comparison only: tengri carries the
+#   FSPS/CLUMPY reduction, not AGNFITTER-RX's inclination-averaged
+#   NK0_mean_1p (§9c).
+# * **Host X-rays** — tengri models an XRB floor (Mineo+2014) as a real
+#   component; AGNFITTER-RX has no host X-ray component and instead applies
+#   α_ox (Lusso & Risaliti 2016, σ = 0.4) and 6 µm↔2–10 keV (Stern 2015,
+#   σ = 0.5) priors during fitting (§10b).
+# * **Radio > 300 GHz** — tengri's radio blocks end where the dust begins;
+#   AGNFITTER-RX lets the exponential cutoff decay through the THz (§11).
+# * **SF radio normalization** — upstream's S17_radio template carries an
+#   effective q_IR ≈ 2.92 against its own 8–1000 µm integral (Bell's 2.64
+#   applied to the smaller tabulated LIR_conv); tengri applies q_IR = 2.64
+#   to the integral directly, so its 1.4 GHz output is 1.9× brighter at
+#   matched L_IR — same correlation, different L_IR bookkeeping (§11b).
+#
+# For the cold dust, tengri's `schreiber2018` matches AGNFITTER-RX's S17
+# dust + PAH SED to a median of ~0.05% at fixed (T_dust, f_PAH); the
 # analytic `schreiber2016` remains available as a fast, differentiable —
 # but PAH-approximate — alternative.
 #
@@ -1257,7 +1672,7 @@ save_fig("agnfitter_full_sed_headtohead.png")
 #   et al. 1984, A&A 132, 389 — SMC reddening [`prevot1984typical`].
 #
 # **Codes & inference**
-# - Martínez-Ramírez, G. C., et al. 2024, MNRAS 535, 2961 — AGNFITTER-RX
+# - Martínez-Ramírez, L. N., et al. 2024, A&A 688, A46 — AGNFITTER-RX
 #   [`martinez2024agnfitter`].
 # - Hearin, A. P., et al. 2023, MNRAS 521, 1741 — DSPS [`hearin2023dsps`].
 # - Buchner, J. 2019, PASP 131, 108005 — UltraNest [`buchner2019collaborative`].

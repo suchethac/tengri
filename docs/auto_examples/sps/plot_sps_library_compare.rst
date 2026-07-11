@@ -21,11 +21,6 @@
 SSP library comparison at a fixed age and metallicity
 ======================================================
 
-.. image:: images/sphx_glr_plot_sps_library_compare_001.png
-   :alt: plot sps library compare
-   :class: sphx-glr-single-img
-
-
 Different stellar population synthesis codes use different stellar
 spectral libraries, isochrone families, and binary treatments. The
 SED of a ~1 Gyr-old, solar-metallicity simple stellar population
@@ -34,7 +29,7 @@ hot continuum) and in the NIR (treatment of TP-AGB).
 
 At a fixed lookback age of 1 Gyr (single 50 Myr-wide burst) we
 overlay the rest-frame ``νL_ν`` for each bundled SSP grid, all
-normalised at 5500 Å so the chromatic differences read cleanly.
+normalized at 5500 Å so the chromatic differences read cleanly.
 
 The bundled SSPs include both ``wNE`` ("with nebular emission" baked
 into the grid at fixed ``log U``) and bare-stellar variants; we use
@@ -51,23 +46,8 @@ physics, not nebular treatment.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.259 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.259 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.124 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.124 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -151,7 +131,7 @@ physics, not nebular treatment.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.528 seconds)
+   **Total running time of the script:** (0 minutes 7.848 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_sps_library_compare.py:

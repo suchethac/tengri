@@ -105,4 +105,4 @@ else:
 ax_res.set_xlabel(r"Wavelength [$\mathrm{\AA}$]")
 fig.tight_layout()
 
-plt.show()
+plt.savefig("plot_diag_dust_extinction_vs_pypi.png", dpi=150, bbox_inches="tight")

@@ -200,10 +200,12 @@ nu_ir = C_AA_PER_S / wave[ir_mask]
 order_ir = np.argsort(nu_ir)
 L_ir = np.trapezoid(sed[ir_mask][order_ir], nu_ir[order_ir])
 
+l_ir_exp = np.log10(L_ir / L_SUN_CGS)
+ir_label = rf"$L_{{IR}}^{{8-1000\mu m}} \approx 10^{{{l_ir_exp:.1f}}}\,L_\odot$"
 ax.text(
     0.97,
     0.06,
-    rf"$L_{{\rm IR}}^{{(8\text{{–}}1000\,\mu\mathrm{{m}})}} \approx 10^{{{np.log10(L_ir / L_SUN_CGS):.1f}}}\,L_\odot$",
+    ir_label,
     transform=ax.transAxes,
     ha="right",
     fontsize=9,

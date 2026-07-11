@@ -518,6 +518,233 @@ def cold_dust_axes(name: str) -> dict[str, np.ndarray]:
     raise ValueError(f"Unknown cold-dust library {name!r}; choose from {list_cold_dust()}")
 
 
+# ── Radio (AGN + starburst) formulas ────────────────────────────────────────
+def agn_radio_spl(
+    freq_hz: np.ndarray,
+    *,
+    alpha: float = -0.75,
+    nu_t: float = 1.0e9,
+    log_nu_cut: float = 13.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Single power-law AGN radio SED (nRADdata==1 branch).
+
+    Computes the simple power-law radio spectrum used when insufficient radio
+    data constrain the AGN. This reproduces the ``nRADdata==1`` path in
+    ``MODEL_AGNfitter.AGN_RAD`` (Martinez-Ramirez et al. 2024, Eqs. 9-10).
+
+    Parameters
+    ----------
+    freq_hz : ndarray, shape (n,)
+        Frequencies [Hz], ascending.
+    alpha : float, optional
+        Spectral index (default -0.75, hardcoded in upstream).
+    nu_t : float, optional
+        Turnover frequency [Hz] (default 1.0e9, hardcoded in upstream).
+    log_nu_cut : float, optional
+        Cutoff exponent: high-frequency exponential cutoff at nu_cut =
+        10**log_nu_cut [Hz] (default 13.0).
+
+    Returns
+    -------
+    freq_hz : ndarray, shape (n,)
+        Input frequencies, ascending.
+    F_nu : ndarray, shape (n,)
+        Flux density F_nu [dimensionless in upstream convention], unnormalized;
+        the notebook normalizes to physical flux at 5 GHz.
+
+    Notes
+    -----
+    Functional form: F_nu ∝ (freq/nu_t)^alpha * exp(-freq/10^log_nu_cut).
+    The upstream code skips a cosmetic renormalization factor of 1e-30
+    (applied later via ``_renorm('AGN_RAD', ...)``).
+
+    References
+    ----------
+    .. [1] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
+       radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
+       (2024). doi:10.1051/0004-6361/202449329. arXiv:2405.12111.
+    """
+    freq_hz = np.asarray(freq_hz, dtype=np.float64)
+    fnu = (freq_hz / nu_t) ** alpha * np.exp(-freq_hz / (10.0 ** log_nu_cut))
+    return freq_hz, fnu
+
+
+def agn_radio_dpl(
+    freq_hz: np.ndarray,
+    *,
+    alpha1: float = -0.75,
+    alpha2: float = -0.1,
+    log_nu_t: float = 10.0,
+    log_nu_cut: float = 13.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Broken power-law AGN radio SED (nRADdata>3 / DPL-4 branch).
+
+    Computes a double power-law radio spectrum used when sufficient radio data
+    constrain both the low- and high-frequency slopes. This reproduces the
+    ``nRADdata > 3`` / ``DPL-4`` path in ``MODEL_AGNfitter.AGN_RAD``
+    (Martinez-Ramirez et al. 2024, Eqs. 9-10).
+
+    Parameters
+    ----------
+    freq_hz : ndarray, shape (n,)
+        Frequencies [Hz], ascending.
+    alpha1 : float, optional
+        Low-frequency spectral index (default -0.75).
+    alpha2 : float, optional
+        High-frequency spectral index (default -0.1).
+    log_nu_t : float, optional
+        Turnover exponent: breakpoint frequency nu_t = 10**log_nu_t [Hz]
+        (default 10.0).
+    log_nu_cut : float, optional
+        Cutoff exponent: high-frequency exponential cutoff at nu_cut =
+        10**log_nu_cut [Hz] (default 13.0).
+
+    Returns
+    -------
+    freq_hz : ndarray, shape (n,)
+        Input frequencies, ascending.
+    F_nu : ndarray, shape (n,)
+        Flux density F_nu [dimensionless in upstream convention], unnormalized;
+        the notebook normalizes to physical flux at 5 GHz.
+
+    Notes
+    -----
+    Functional form:
+    F_nu ∝ (freq/10^log_nu_t)^alpha1 * (1 - exp(-(10^log_nu_t/freq)^(alpha1-alpha2)))
+          * exp(-freq/10^log_nu_cut).
+    The upstream code skips a cosmetic renormalization factor of 1e-30
+    (applied later via ``_renorm('AGN_RAD', ...)``).
+
+    References
+    ----------
+    .. [1] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
+       radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
+       (2024). doi:10.1051/0004-6361/202449329. arXiv:2405.12111.
+    """
+    freq_hz = np.asarray(freq_hz, dtype=np.float64)
+    nu_t = 10.0 ** log_nu_t
+    fnu = (
+        (freq_hz / nu_t) ** alpha1
+        * (1.0 - np.exp(-((nu_t / freq_hz) ** (alpha1 - alpha2))))
+        * np.exp(-freq_hz / (10.0 ** log_nu_cut))
+    )
+    return freq_hz, fnu
+
+
+@cache
+def _s17_radio_tables():
+    """Load and cache the S17 radio dust table from the committed h5.
+
+    Reads the ``s17_radio`` group vendored into the committed cold-dust h5
+    by ``scripts/build_agnfitter_s17_reference.py`` — runtime never touches
+    the AGNfitter-rX clone (same contract as every other template here).
+
+    Returns
+    -------
+    dust_nu_hz : ndarray, shape (n_tdust, n_wave)
+        Dust-table frequencies [Hz], ascending per-row.
+    dust_sed_lnu : ndarray, shape (n_tdust, n_wave)
+        Dust SED L_nu values [dimensionless upstream units].
+    pah_nu_hz : ndarray, shape (n_pah,)
+        PAH-table frequencies [Hz], from wavelengths.
+    pah_sed_lnu : ndarray, shape (n_tdust, n_pah)
+        PAH SED L_nu values [dimensionless upstream units].
+    tdust : ndarray, shape (n_tdust,)
+        Dust temperatures [K].
+    lir_conv : ndarray, shape (n_tdust,)
+        LIR conversion factors (Bell 2003 convention).
+    fpah : ndarray, shape (n_fpah,)
+        PAH mass fraction grid.
+    """
+    require_available()
+    d = _ref(_COLD_H5, "s17_radio")
+    dust_nu_hz = np.asarray(d["dust_nu_hz"], dtype=np.float64)  # (n_tdust, n_wave)
+    dust_sed_lnu = np.asarray(d["dust_sed_lnu"], dtype=np.float64)
+    pah_lam_um = np.asarray(d["pah_lam_um"], dtype=np.float64)  # (n_wave,) micron
+    pah_sed_nulnu = np.asarray(d["pah_sed_nulnu"], dtype=np.float64)  # (n_tdust, n_wave)
+    tdust = np.asarray(d["tdust"], dtype=np.float64)
+    lir_conv = np.asarray(d["lir_conv"], dtype=np.float64)
+
+    # Convert PAH wavelengths to frequencies
+    pah_nu_hz = _C_AA / (pah_lam_um * 1e4)  # micron -> Angstrom -> Hz
+    pah_sed_lnu = pah_sed_nulnu / pah_nu_hz  # (n_tdust, n_wave)
+
+    fpah = np.concatenate(
+        ((np.arange(0.0, 0.1, 0.01) / 100.0), (np.arange(0.1, 5.5, 0.1) / 100.0))
+    )
+
+    return dust_nu_hz, dust_sed_lnu, pah_nu_hz, pah_sed_lnu, tdust, lir_conv, fpah
+
+
+def cold_dust_radio_template(
+    *,
+    tdust: float | None = None,
+    fpah: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Load one S17 cold-dust radio template in tengri units.
+
+    Extends :func:`cold_dust_template` to the S17 model with embedded radio
+    extension. This reproduces the template access in
+    ``MODEL_AGNfitter.STARBURST`` for the ``S17_radio`` branch.
+
+    Parameters
+    ----------
+    tdust : float, optional
+        S17 dust temperature [K] grid point (nearest-neighbor). Defaults to
+        grid midpoint.
+    fpah : float, optional
+        S17 PAH mass fraction grid point (nearest-neighbor). Defaults to grid
+        midpoint.
+
+    Returns
+    -------
+    wave_aa : ndarray, shape (n,)
+        Wavelength [Angstrom], ascending.
+    L_nu : ndarray, shape (n,)
+        Cold-dust (+ radio) luminosity density [erg/s/Hz], AGNFITTER-RX
+        normalization.
+
+    Notes
+    -----
+    This model includes radio frequencies (down to ~1.4 GHz = 0.2 mm) and was
+    calibrated against the infrared-radio correlation (Bell 2003). The radio
+    tail above ~1 mm is a power law with spectral index ~-0.75.
+
+    References
+    ----------
+    .. [1] C. Schreiber, et al., "Dust temperature and mid-to-total infrared
+       color distributions for star-forming galaxies at 0 < z < 4," A&A 609,
+       A30 (2018). arXiv:1710.10276. doi:10.1051/0004-6361/201731506.
+    .. [2] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
+       radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
+       (2024). doi:10.1051/0004-6361/202449329. arXiv:2405.12111.
+    """
+    dust_nu_hz, dust_sed_lnu, _pah_nu_hz, pah_sed_lnu, tdust_ax, _lir_conv, fpah_ax = (
+        _s17_radio_tables()
+    )
+    t = _nearest(tdust_ax, tdust)
+    f = _nearest(fpah_ax, fpah)
+
+    # Mirror MODEL_AGNfitter line 404: pad PAH with 23 zeros for radio alignment
+    log_nu = np.log10(dust_nu_hz[t])
+    pah_padded = np.concatenate((np.zeros(23), pah_sed_lnu[t, ::-1]))
+    fnu = (1.0 - fpah_ax[f]) * dust_sed_lnu[t] + fpah_ax[f] * pah_padded
+    return units.lognu_fnu_to_lnu(log_nu, _renorm("SB", fnu))
+
+
+def cold_dust_radio_axes() -> dict[str, np.ndarray]:
+    """Grid axes for the S17_radio cold-dust library.
+
+    Returns
+    -------
+    dict
+        Keys ``tdust`` (dust temperature [K]) and ``fpah`` (PAH mass fraction),
+        ``lir_conv`` (LIR conversion factor for Bell 2003 relation).
+    """
+    _, _, _, _, tdust_ax, lir_conv, fpah_ax = _s17_radio_tables()
+    return {"tdust": tdust_ax, "fpah": fpah_ax, "lir_conv": lir_conv}
+
+
 # ── Reddening + X-ray extension (as in MODEL_AGNfitter helpers) ──────────────
 def apply_bbb_reddening(wave_aa: np.ndarray, L_nu: np.ndarray, ebv: float) -> np.ndarray:
     """Redden a disk SED with AGNFITTER-RX's Prevot SMC law (R_V = 2.72).

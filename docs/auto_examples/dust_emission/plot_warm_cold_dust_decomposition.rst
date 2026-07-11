@@ -21,11 +21,6 @@
 Dust IR SED: Warm and cold dust decomposition
 ==============================================
 
-.. image:: images/sphx_glr_plot_warm_cold_dust_decomposition_001.png
-   :alt: plot warm cold dust decomposition
-   :class: sphx-glr-single-img
-
-
 Dust re-radiates absorbed starlight across a broad range of temperatures:
 colder dust (e.g., diffuse cirrus at ~20 K) peaks in the far-infrared
 (~250 μm), while warmer dust grains (e.g., starburst regions at ~40 K)
@@ -59,12 +54,12 @@ References
    *The Astrophysical Journal*, 787(1), 35.
    https://doi.org/10.1088/0004-637X/787/1/35
 
-.. GENERATED FROM PYTHON SOURCE LINES 38-232
+.. GENERATED FROM PYTHON SOURCE LINES 38-230
 
 
 
 .. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_warm_cold_dust_decomposition_001.png
-   :alt: Dust Temperature Decomposition: Varying $U_{\min}$ (q$_{\mathrm{PAH}}$ = 2.5%)
+   :alt: plot warm cold dust decomposition
    :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_warm_cold_dust_decomposition_001.png
    :class: sphx-glr-single-img
 
@@ -252,7 +247,6 @@ References
         ylim=(1e41, 5e44),
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mu\mathrm{m}$]",
         ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
-        title=r"Dust Temperature Decomposition: Varying $U_{\min}$ (q$_{\mathrm{PAH}}$ = 2.5%)",
     )
 
     ax.legend(frameon=False, fontsize=10, loc="upper right", title="Draine & Li (2007)")
@@ -267,7 +261,6 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_warm_cold_dust_decomposition.png", dpi=150, bbox_inches="tight")
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_warm_cold_dust_decomposition.py:

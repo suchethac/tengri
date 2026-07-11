@@ -21,11 +21,6 @@
 Diffuse ISM dust attenuates all stellar populations
 ====================================================
 
-.. image:: images/sphx_glr_plot_tau_diff_sweep_001.png
-   :alt: plot tau diff sweep
-   :class: sphx-glr-single-img
-
-
 Diffuse ISM dust optical depth ``τ_diff`` attenuates all stellar light (young + old).
 Higher τ_diff reddens the optical continuum and weakens the 4000 Å break,
 signaling aging stellar populations. We vary τ_diff across a range with every
@@ -43,19 +38,8 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718 (two-component dust model).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 24% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

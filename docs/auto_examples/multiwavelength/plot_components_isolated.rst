@@ -21,18 +21,13 @@
 Each tengri SED component shown in isolation
 ==============================================
 
-.. image:: images/sphx_glr_plot_components_isolated_001.png
-   :alt: plot components isolated
-   :class: sphx-glr-single-img
-
-
 Six physics blocks added cumulatively to the same star-forming host
 so the contribution of each is visible at every wavelength.
 
-Reading order: stellar continuum (grey), then nebular (HII region
+Reading order: stellar continuum (gray), then nebular (HII region
 lines added at the source), then dust (UV attenuated, reprocessed
 into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
-The colour at each wavelength tells you which block matters most.
+The color at each wavelength tells you which block matters most.
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-102
 
@@ -142,7 +137,7 @@ The colour at each wavelength tells you which block matters most.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.313 seconds)
+   **Total running time of the script:** (0 minutes 11.747 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_components_isolated.py:

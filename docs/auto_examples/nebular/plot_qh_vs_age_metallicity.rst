@@ -44,25 +44,18 @@ References
 - Eldridge, J. J. & Stanway, E. R. 2016, "Binary population synthesis and the
   morphology-density relation at z ~ 0.05," MNRAS, 462, 3302 (binaries).
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-116
+.. GENERATED FROM PYTHON SOURCE LINES 28-111
+
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_qh_vs_age_metallicity_001.png
+   :alt: plot qh vs age metallicity
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_qh_vs_age_metallicity_001.png
+   :class: sphx-glr-single-img
 
 
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Saved plot_qh_vs_age_metallicity.png
-    SSP age range: 0.0003 to 12.6 Gyr
-    SSP metallicity range: -4.00 to -1.22 dex
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -79,7 +72,7 @@ References
 
     import tengri
     from tengri.analysis.plotting import setup_style
-    from tengri.components.nebular._shared import compute_qh
+    from tengri.nebular import compute_qh
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -149,11 +142,6 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_qh_vs_age_metallicity.png", dpi=150, bbox_inches="tight")
-    plt.close()
-
-    print("Saved plot_qh_vs_age_metallicity.png")
-    print(f"SSP age range: {ssp_ages.min():.4f} to {ssp_ages.max():.1f} Gyr")
-    print(f"SSP metallicity range: {ssp_z_values.min():.2f} to {ssp_z_values.max():.2f} dex")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_qh_vs_age_metallicity.py:

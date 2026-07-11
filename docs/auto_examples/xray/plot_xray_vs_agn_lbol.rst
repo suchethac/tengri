@@ -21,18 +21,13 @@
 X-ray SED response to AGN bolometric luminosity
 ================================================
 
-.. image:: images/sphx_glr_plot_xray_vs_agn_lbol_001.png
-   :alt: plot xray vs agn lbol
-   :class: sphx-glr-single-img
-
-
 At fixed host (constant SFR = 3 M_sun/yr, Mineo+12 HMXB contribution)
 we sweep the composable AGN's bolometric luminosity ``agn_log_lbol``
 from 9 to 13 (in log L_sun). The host XRB component is a flat
 power-law below ~10 keV; the AGN corona contributes a much harder
 power-law that dominates above ``log L_bol ≳ 11``.
 
-The colour gradient shows where the AGN corona overtakes the XRB
+The color gradient shows where the AGN corona overtakes the XRB
 emission band by band — the central diagnostic for AGN selection in
 deep X-ray surveys (Lehmer+2010, 2016).
 
@@ -140,7 +135,7 @@ deep X-ray surveys (Lehmer+2010, 2016).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.781 seconds)
+   **Total running time of the script:** (0 minutes 5.769 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_vs_agn_lbol.py:

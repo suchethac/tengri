@@ -21,11 +21,6 @@
 PSD-Governed Stochastic SFH Prior: Burstiness Corner Cases
 ===========================================================
 
-.. image:: images/sphx_glr_plot_psd_burstiness_prior_001.png
-   :alt: plot psd burstiness prior
-   :class: sphx-glr-single-img
-
-
 The field SFH employs a damped random walk (DRW) power spectral density (PSD)
 to govern stochastic star formation history realizations. Two parameters control
 the prior distribution of SFR time-variability:
@@ -51,7 +46,7 @@ References:
 - Iyer & Gawiser (2017), ApJ 838, 127 — Dense basis SFH reconstruction
 - NIFTy correlated field formalism (Selig et al. 2013)
 
-.. GENERATED FROM PYTHON SOURCE LINES 31-187
+.. GENERATED FROM PYTHON SOURCE LINES 31-185
 
 
 
@@ -71,7 +66,6 @@ References:
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
-    import os
     import warnings
 
     import jax.numpy as jnp
@@ -220,8 +214,7 @@ References:
 
     fig.tight_layout(rect=[0, 0, 1, 0.96])
 
-    plt.show()
-
+    plt.savefig("plot_psd_burstiness_prior.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_psd_burstiness_prior.py:

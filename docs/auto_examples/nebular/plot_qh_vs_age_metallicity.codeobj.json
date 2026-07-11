@@ -565,8 +565,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.nebular._shared",
-   "module_short": "tengri.components.nebular._shared",
+   "module": "tengri.nebular",
+   "module_short": "tengri.nebular",
    "name": "compute_qh"
   }
  ],
@@ -747,22 +747,6 @@
    "module": "os",
    "module_short": "os",
    "name": "environ"
-  }
- ],
- "plt.close": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "close"
   }
  ],
  "plt.get_cmap": [
@@ -966,24 +950,6 @@
    "name": "ndarray"
   }
  ],
- "ssp_ages.max": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  }
- ],
- "ssp_ages.min": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  }
- ],
  "ssp_flux": [
   {
    "is_class": false,
@@ -1018,24 +984,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "ndarray"
-  }
- ],
- "ssp_z_values.max": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  }
- ],
- "ssp_z_values.min": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
   }
  ],
  "target_z_log": [

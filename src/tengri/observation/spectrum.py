@@ -394,6 +394,97 @@ def apply_lsf(
         return _apply_lsf_variable_r(spectrum, wave_obs, sigma_eff_kms, n_bins)
 
 
+def project_spectrum(
+    sed_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    redshift: float,
+    dl_cm: float,
+    *,
+    resolution: jnp.ndarray | float | None = None,
+    sigma_lib_kms: float = 0.0,
+    n_bins: int = 16,
+    sigma_v_kms: float = 0.0,
+) -> jnp.ndarray:
+    r"""Project a panchromatic model SED onto an observed-frame spectrum grid.
+
+    Consolidates the spectrum projection pipeline: compute observed-frame fluxes
+    at pixel wavelengths via interpolation, then optionally apply wavelength-dependent
+    Line Spread Function (LSF) convolution accounting for instrument resolution.
+
+    **Flux calibration and absorption (IGM/DLA/Milky Way) are composed by callers,
+    not here.** This function implements the pixel-level spectral forward model only.
+
+    Parameters
+    ----------
+    sed_rest : array, shape (n_wave,)
+        Rest-frame spectral luminosity density [erg/s/Hz] on the
+        rest-frame wavelength grid.
+    wave_rest : array, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom].
+    wave_obs : array, shape (n_pix,)
+        Observed-frame wavelength at each spectral pixel [Angstrom].
+    redshift : float
+        Source redshift z.
+    dl_cm : float
+        Luminosity distance [cm].
+    resolution : float, array, or None
+        Spectral resolution :math:`R(\lambda) = \lambda / \Delta\lambda`.
+        If ``None``, LSF is skipped. If scalar, constant resolution; if array,
+        per-pixel wavelength-dependent resolution (e.g., JWST NIRSpec PRISM).
+    sigma_lib_kms : float, optional
+        SSP library velocity dispersion [km/s], subtracted in quadrature from
+        instrument LSF. Default 0.0 (no subtraction). Common values: MILES 70 km/s,
+        C3K 15 km/s.
+    n_bins : int, optional
+        Number of piecewise-constant segments for variable-R LSF approximation.
+        Ignored when resolution is scalar. Default 16.
+    sigma_v_kms : float, optional
+        Intrinsic galaxy velocity dispersion [km/s] added in quadrature to LSF.
+        Default 0.0 (no extra broadening).
+
+    Returns
+    -------
+    ndarray, shape (n_pix,)
+        Observed spectral flux density [erg/s/cm²/Hz] at each pixel, optionally
+        broadened by the instrument LSF.
+
+    Notes
+    -----
+    **JIT-compatible**: yes when `resolution`'s None-ness is fixed at trace time.
+    The resolution None check is a Python-level structural branch; the body is
+    fully JAX-compatible whether resolution is computed from a scalar or array.
+
+    **What this does**: Projects the panchromatic model-grid SED onto an
+    instrument wavelength grid — the result is a *spectrum* (observed-frame F_nu
+    on `wave_obs`), distinct from the model-grid SED itself.
+
+    **Composition pattern**: Called by observers/projectors that (1) may apply
+    IGM/DLA attenuation BEFORE calling this function, (2) may apply flux
+    calibration AFTER this function, and (3) may apply Milky Way reddening
+    BEFORE or AFTER. This function does none of those — it is a pure
+    resampling + resolution-broadening kernel.
+
+    See Also
+    --------
+    compute_spectrum : Compute observed spectrum (no LSF).
+    apply_lsf : Apply LSF convolution separately.
+    velocity_broaden : Broaden by velocity dispersion only.
+
+    """
+    flux = compute_spectrum(sed_rest, wave_rest, wave_obs, redshift, dl_cm)
+    if resolution is not None:
+        flux = apply_lsf(
+            flux,
+            wave_obs,
+            resolution,
+            sigma_lib_kms=sigma_lib_kms,
+            n_bins=n_bins,
+            sigma_v_kms=sigma_v_kms,
+        )
+    return flux
+
+
 @jax.jit
 def compute_spectrum(
     sed_rest: jnp.ndarray,

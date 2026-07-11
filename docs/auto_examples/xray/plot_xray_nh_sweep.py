@@ -18,7 +18,6 @@ This sweep reproduces the spectral evolution behind Matsumoto+2026
 Figure 11 (hardness-ratio model tracks) for log N_H from 20 to 25.
 
 References
-
 ----------
 - Ricci et al. 2017, Nature 549, 488 (zphabs × cabs × cut-off PL +
   scattered component spectral model).

@@ -87,4 +87,3 @@ cbar.set_label(r"$\sigma_v$ [km/s]")
 
 fig.tight_layout()
 plt.savefig("plot_line_sigma_sweep.png", dpi=150, bbox_inches="tight")
-plt.close(fig)

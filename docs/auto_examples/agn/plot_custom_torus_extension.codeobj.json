@@ -250,7 +250,7 @@
    "name": "Artist.set"
   }
  ],
- "demo_greybody_torus": [
+ "demo_graybody_torus": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -605,7 +605,7 @@
    "name": "subplots"
   }
  ],
- "register_agn_model": [
+ "register_agn_block": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -616,18 +616,9 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.agn.unified",
-   "module_short": "tengri.components.agn",
-   "name": "register_agn_model"
-  }
- ],
- "registered": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "set"
+   "module": "tengri.agn",
+   "module_short": "tengri.agn",
+   "name": "register_agn_block"
   }
  ],
  "setup_style": [
@@ -792,22 +783,6 @@
    "module": "tengri.SEDModel",
    "module_short": "tengri.SEDModel",
    "name": "build"
-  }
- ],
- "tengri.list_agn_models": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "list_agn_models"
   }
  ],
  "tengri.load_ssp": [

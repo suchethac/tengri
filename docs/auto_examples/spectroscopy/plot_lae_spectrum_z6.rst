@@ -21,18 +21,13 @@
 Lyman-alpha emitter spectrum at z=6: IGM absorption and Lyα escape
 ==================================================================
 
-.. image:: images/sphx_glr_plot_lae_spectrum_z6_001.png
-   :alt: plot lae spectrum z6
-   :class: sphx-glr-single-img
-
-
 High-redshift Lyα emitter at z=6 with young age (~10 Myr), low metallicity
 (Z~0.1 Zsun), and minimal dust. The observed-frame spectrum (7000–13000 Å)
 reveals the redshifted Lyα emission line at 8512 Å, the Lyman break at
 6384 Å, characteristic IGM blue-wing absorption, and the rest-UV continuum.
 Demonstrates Lyα radiative transfer and reionization-era observability.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-157
+.. GENERATED FROM PYTHON SOURCE LINES 11-160
 
 
 
@@ -42,21 +37,15 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Saved: plot_lae_spectrum_z6.png
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
     import warnings
 
@@ -202,7 +191,6 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
     ax_lya.grid(True, alpha=0.3, which="major", axis="y")
 
     plt.savefig("plot_lae_spectrum_z6.png", dpi=150, bbox_inches="tight")
-    print("Saved: plot_lae_spectrum_z6.png")
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_lae_spectrum_z6.py:

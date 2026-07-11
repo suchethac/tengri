@@ -8,12 +8,12 @@ star-dust mix), and *dusty* (a clumpy two-phase medium) — crossed with two gra
 populations (Milky-Way and SMC). At a fixed ``tau_V`` these choices set the
 *shape* of the transmission ``exp(-A(lambda))``: the foreground screen is the
 reddest (steepest UV), while the mixed and clumpy geometries are progressively
-greyer because short-wavelength photons escape through low-opacity sightlines.
+grayer because short-wavelength photons escape through low-opacity sightlines.
 
 This figure fixes ``tau_V = 3`` and overlays the three geometries for the MW
 (solid) and SMC (dashed) grain curves, using the public
 ``tengri.dust.wg00_attenuation`` accessor. The SMC curves bite harder in the
-far-UV (steeper grains); the geometry ordering (shell reddest, cloudy greyest)
+far-UV (steeper grains); the geometry ordering (shell reddest, cloudy grayest)
 holds for both. See :doc:`plot_wg00_tau_v_sweep` for how these shapes themselves
 evolve with ``tau_V``.
 
@@ -62,11 +62,10 @@ ax.set(
     xscale="log",
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mu$m]",
     ylabel=r"Transmission $\exp[-A(\lambda;\,\tau_V)]$",
-    title=r"WG00 geometry $\times$ grain type at $\tau_V = 3$",
     xlim=(0.1, 3.0),
     ylim=(0, 1.0),
 )
 ax.legend(frameon=False, fontsize=8, ncol=1, loc="lower right")
 
 plt.tight_layout()
-plt.show()
+plt.savefig("plot_wg00_geometry_compare.png", dpi=150, bbox_inches="tight")

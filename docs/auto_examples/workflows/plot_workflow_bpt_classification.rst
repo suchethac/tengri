@@ -21,14 +21,9 @@
 BPT diagram: emission lines from the baked-in nebular SSP
 =========================================================
 
-.. image:: images/sphx_glr_plot_workflow_bpt_classification_001.png
-   :alt: plot workflow bpt classification
-   :class: sphx-glr-single-img
-
-
 Demonstrates BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed
 directly from the model's rest-frame SED via continuum-subtracted
-boxcar integration around each line centre, swept across a stellar
+boxcar integration around each line center, swept across a stellar
 metallicity grid. The Kewley+2001 and Kauffmann+2003 demarcation
 lines are overlaid for context.
 
@@ -40,7 +35,7 @@ here does not. See issue #361 for the per-backend status.
 Reference: Kewley et al. 2001, ApJ, 556, 121 (theoretical classification);
 Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-141
+.. GENERATED FROM PYTHON SOURCE LINES 19-140
 
 
 
@@ -82,11 +77,11 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
     CONT_HALF_WIDTH = 8.0
 
 
-    def boxcar_line_flux(wave, sed, line_centre):
+    def boxcar_line_flux(wave, sed, line_center):
         """Continuum-subtracted boxcar flux around a single line."""
-        line_mask = np.abs(wave - line_centre) < LINE_HALF_WIDTH
-        blue_mask = np.abs(wave - (line_centre - CONT_OFFSET)) < CONT_HALF_WIDTH
-        red_mask = np.abs(wave - (line_centre + CONT_OFFSET)) < CONT_HALF_WIDTH
+        line_mask = np.abs(wave - line_center) < LINE_HALF_WIDTH
+        blue_mask = np.abs(wave - (line_center - CONT_OFFSET)) < CONT_HALF_WIDTH
+        red_mask = np.abs(wave - (line_center + CONT_OFFSET)) < CONT_HALF_WIDTH
         cont = 0.5 * (sed[blue_mask].mean() + sed[red_mask].mean())
         return float(np.trapezoid(sed[line_mask] - cont, wave[line_mask]))
 
@@ -173,7 +168,6 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
     ax.set_ylabel(r"log [OIII]$\lambda$5007 / H$\beta$")
     ax.set_xlim(-1.6, 0.6)
     ax.set_ylim(-1.2, 1.5)
-    ax.legend(frameon=False, loc="lower left")
 
     fig.tight_layout()
     plt.savefig("plot_workflow_bpt_classification.png", dpi=150, bbox_inches="tight")

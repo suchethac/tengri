@@ -83,7 +83,7 @@ for tau_myr in tau_grid_myr:
     t_gyr = np.asarray(sfh["t_gyr"])  # lookback time: 0 = present, AGE_GYR = formation
     sfr = np.asarray(sfh["sfr_full"])
     # Convert to time-since-formation (present at right, as in the paper) and
-    # normalise to the peak ("a.u.") so each tau's shape is visible.
+    # normalize to the peak ("a.u.") so each tau's shape is visible.
     t_since = (AGE_GYR - t_gyr) * 1e3  # Myr
     keep = (t_since >= 0) & (t_gyr <= AGE_GYR)
     axin.plot(t_since[keep], sfr[keep] / sfr.max(), color=cmap(norm(tau_myr)), lw=1.3)
@@ -112,4 +112,4 @@ cbar = fig.colorbar(sm, ax=ax, fraction=0.05, pad=0.02)
 cbar.set_label(r"$\tau$ [Myr]")
 
 fig.tight_layout()
-plt.show()
+plt.savefig("plot_grahsp_paper_sfh_tau_sweep.png", dpi=150, bbox_inches="tight")

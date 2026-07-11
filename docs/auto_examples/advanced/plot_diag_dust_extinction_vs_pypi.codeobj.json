@@ -845,8 +845,15 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.dust.attenuation",
-   "module_short": "tengri.components.dust.attenuation",
+   "module": "tengri.components.dust.laws._registry",
+   "module_short": "tengri.components.dust.laws._registry",
+   "name": "DustLawRegistryEntry"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.dust.laws",
+   "module_short": "tengri.components.dust.laws",
    "name": "DustLawRegistryEntry"
   },
   {
@@ -875,8 +882,15 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.dust.attenuation",
-   "module_short": "tengri.components.dust.attenuation",
+   "module": "tengri.components.dust.laws._registry",
+   "module_short": "tengri.components.dust.laws._registry",
+   "name": "DustLawRegistryEntry"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.dust.laws",
+   "module_short": "tengri.components.dust.laws",
    "name": "DustLawRegistryEntry"
   },
   {
@@ -1266,7 +1280,7 @@
    "name": "logspace"
   }
  ],
- "plt.show": [
+ "plt.savefig": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -1279,7 +1293,7 @@
    "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
-   "name": "show"
+   "name": "savefig"
   }
  ],
  "plt.subplots": [

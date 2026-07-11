@@ -21,11 +21,6 @@
 Strong-lensing magnification: EoR galaxy SEDs at μ = 1, 5, 20, 100
 =========================================================
 
-.. image:: images/sphx_glr_plot_usecase_lensed_galaxy_magnification_001.png
-   :alt: plot usecase lensed galaxy magnification
-   :class: sphx-glr-single-img
-
-
 Demonstrates how strong gravitational lensing elevates intrinsically-faint
 high-redshift (z=7) galaxies above the JWST NIRCam 5σ detection threshold.
 
@@ -45,75 +40,18 @@ References:
 - Bouwens, R. J., et al. 2022, ApJ, 931, 160 (EoR LBGs)
 - Rieke, M. J., et al. 2023, PASP, 135, 028001 (JWST NIRCam performance)
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-242
+.. GENERATED FROM PYTHON SOURCE LINES 24-212
 
 
 
 .. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_lensed_galaxy_magnification_001.png
-   :alt: Strong-lensed z=7 LAE: JWST NIRCam detection thresholds
+   :alt: plot usecase lensed galaxy magnification
    :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_lensed_galaxy_magnification_001.png
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
 
 
-    ======================================================================
-    STRONG-LENSING MAGNIFICATION SUMMARY (z=7 LAE)
-    ======================================================================
-
-    Intrinsic (unlensed) magnitudes:
-    ----------------------------------------------------------------------
-      JWST_F150W          :  24.58 AB (5.370e-30 erg/s/Hz)
-      JWST_F200W          :  24.63 AB (5.128e-30 erg/s/Hz)
-      JWST_F277W          :  24.52 AB (5.635e-30 erg/s/Hz)
-      JWST_F356W          :  24.26 AB (7.196e-30 erg/s/Hz)
-      JWST_F444W          :  24.29 AB (6.998e-30 erg/s/Hz)
-
-    JWST NIRCam 5σ detection limit: 28.0 AB
-    (Rieke+2023, NIRCam module performance)
-
-    Magnified magnitudes and detectability:
-    ----------------------------------------------------------------------
-
-    μ =    1.0:
-      JWST_F150W          :  24.58 AB  [✓ DETECT]
-      JWST_F200W          :  24.63 AB  [✓ DETECT]
-      JWST_F277W          :  24.52 AB  [✓ DETECT]
-      JWST_F356W          :  24.26 AB  [✓ DETECT]
-      JWST_F444W          :  24.29 AB  [✓ DETECT]
-
-    μ =    5.0:
-      JWST_F150W          :  22.83 AB  [✓ DETECT]
-      JWST_F200W          :  22.88 AB  [✓ DETECT]
-      JWST_F277W          :  22.78 AB  [✓ DETECT]
-      JWST_F356W          :  22.51 AB  [✓ DETECT]
-      JWST_F444W          :  22.54 AB  [✓ DETECT]
-
-    μ =   20.0:
-      JWST_F150W          :  21.32 AB  [✓ DETECT]
-      JWST_F200W          :  21.37 AB  [✓ DETECT]
-      JWST_F277W          :  21.27 AB  [✓ DETECT]
-      JWST_F356W          :  21.00 AB  [✓ DETECT]
-      JWST_F444W          :  21.04 AB  [✓ DETECT]
-
-    μ =  100.0:
-      JWST_F150W          :  19.58 AB  [✓ DETECT]
-      JWST_F200W          :  19.63 AB  [✓ DETECT]
-      JWST_F277W          :  19.52 AB  [✓ DETECT]
-      JWST_F356W          :  19.26 AB  [✓ DETECT]
-      JWST_F444W          :  19.29 AB  [✓ DETECT]
-
-    ======================================================================
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -278,11 +216,6 @@ References:
 
     ax.set_xlabel(r"Magnification $\mu$", fontsize=12, weight="bold")
     ax.set_ylabel(r"AB Magnitude (obs-frame)", fontsize=12, weight="bold")
-    ax.set_title(
-        r"Strong-lensed z=7 LAE: JWST NIRCam detection thresholds",
-        fontsize=13,
-        weight="bold",
-    )
     ax.set_xscale("log")
     ax.set_xlim(0.7, 150)
     ax.set_ylim(20, 31)
@@ -310,31 +243,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_usecase_lensed_galaxy_magnification.png", dpi=150, bbox_inches="tight")
-    plt.show()
-
-    # ── Summary ────────────────────────────────────────────────────────────────
-
-    print("\n" + "=" * 70)
-    print("STRONG-LENSING MAGNIFICATION SUMMARY (z=7 LAE)")
-    print("=" * 70)
-    print("\nIntrinsic (unlensed) magnitudes:")
-    print("-" * 70)
-    for j, band in enumerate(bands):
-        print(f"  {band.upper():20s}: {mag_intrinsic[j]:6.2f} AB ({flux_intrinsic[j]:.3e} erg/s/Hz)")
-
-    print(f"\nJWST NIRCam 5σ detection limit: {mag_5sigma_limit:.1f} AB")
-    print("(Rieke+2023, NIRCam module performance)")
-
-    print("\nMagnified magnitudes and detectability:")
-    print("-" * 70)
-    for i, mu in enumerate(magnifications):
-        print(f"\nμ = {mu:6.1f}:")
-        for j, band in enumerate(bands):
-            mag = mag_lensed[i, j]
-            detectable = "✓ DETECT" if mag < mag_5sigma_limit else "✗ faint"
-            print(f"  {band.upper():20s}: {mag:6.2f} AB  [{detectable}]")
-
-    print("\n" + "=" * 70)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_lensed_galaxy_magnification.py:

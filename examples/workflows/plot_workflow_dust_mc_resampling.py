@@ -33,7 +33,6 @@ ssp = tengri.load_ssp()
 bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
-# Model with free dust parameters
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
@@ -55,7 +54,6 @@ model = tengri.SEDModel.build(
     redshift=tengri.Fixed(0.1),
 )
 
-# Generate mock data
 key = jax.random.PRNGKey(42)
 truth_params = {
     "sfh_tsnorm_log_total_mass": 0.8,
@@ -71,7 +69,6 @@ truth_params = {
 }
 mock = model.mock(truth_params, snr=20.0, key=key)
 
-# Fit with MAP
 forward = tengri.ForwardModel.build(sed=model, observation=obs)
 posterior = forward.fit(
     mock.flux_obs,
@@ -82,32 +79,28 @@ posterior = forward.fit(
     verbose=False,
 )
 
-# Generate uncertainty envelope via parameter perturbation
 n_resample = 100
 key_pert = jax.random.PRNGKey(999)
 posterior_photometry = []
 
 for _i in range(n_resample):
     key_pert, subkey = jax.random.split(key_pert)
-    perturbation = 0.15 * jax.random.normal(subkey, shape=(len(posterior.params),))
+    noise = 0.015 * jax.random.normal(subkey, shape=(len(posterior.params),))
     param_names = list(posterior.params.keys())
     perturbed = {
-        name: float(posterior.params[name]) + 0.1 * pert
-        for name, pert in zip(param_names, perturbation)
+        name: float(posterior.params[name]) + pert for name, pert in zip(param_names, noise)
     }
     phot_i = model.predict_photometry(perturbed)
     posterior_photometry.append(np.array(phot_i))
 
 posterior_photometry = np.array(posterior_photometry)
 
-# Compute envelopes
 phot_map = np.asarray(model.predict_photometry(posterior.params))
 phot_p16 = np.percentile(posterior_photometry, 16, axis=0)
 phot_p84 = np.percentile(posterior_photometry, 84, axis=0)
 phot_p2_5 = np.percentile(posterior_photometry, 2.5, axis=0)
 phot_p97_5 = np.percentile(posterior_photometry, 97.5, axis=0)
 
-# Plot
 fig, ax = plt.subplots(figsize=(9, 5))
 
 wave_eff = np.array([3551, 4686, 6166, 7480, 8932])

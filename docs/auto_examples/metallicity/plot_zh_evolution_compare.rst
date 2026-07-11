@@ -21,22 +21,17 @@
 Chemical evolution: closed-box vs leaky-box enrichment histories
 ================================================================
 
-.. image:: images/sphx_glr_plot_zh_evolution_compare_001.png
-   :alt: plot zh evolution compare
-   :class: sphx-glr-single-img
-
-
 Metallicity evolution Z(t) depends on the balance between metal production
 (in supernovae) and metal removal (via outflows). This four-panel figure shows
 how different star formation timescales and outflow efficiencies η alter the
 enrichment history relative to a closed box (zero outflow). Top-left: closed-box
 enrichment timescale dependence. Top-right: impact of variable outflow rates.
 Bottom-left: closed vs leaky enrichment under constant SFR. Bottom-right:
-age-metallicity relation analogue — how different assembly epochs lead to
+age-metallicity relation analog — how different assembly epochs lead to
 different final metal content.
 
 Reference: Maeder 1992, A&A, 264, 105 (chemical evolution); Schmidt 1959 (solar
-neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics).
+neighborhood models); Dalcanton et al. 2007 (mass-metallicity relation physics).
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-161
 
@@ -62,8 +57,8 @@ neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics)
     import numpy as np
 
     from tengri.analysis.plotting import setup_style
-    from tengri.components.stellar.sfh import closed_box_metallicity
-    from tengri.utils.cosmology import age_at_z0
+    from tengri.cosmology import age_at_z0
+    from tengri.sfh import closed_box_metallicity
 
     setup_style()
 
@@ -158,7 +153,7 @@ neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics)
     ax.set_xlim(0, 13)
     ax.set_ylim(0, 0.6)
 
-    # Panel 4: Assembly-metallicity analogue
+    # Panel 4: Assembly-metallicity analog
     ax = axes[1, 1]
     t_assembly = np.array([1.0, 3.0, 7.0, 10.0])  # Lookback time of assembly (Gyr)
     z_assembly = []
@@ -197,11 +192,6 @@ neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics)
 
     fig.tight_layout()
     plt.savefig("plot_zh_evolution_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.220 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_zh_evolution_compare.py:

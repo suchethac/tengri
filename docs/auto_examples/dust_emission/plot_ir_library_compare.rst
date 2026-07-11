@@ -21,11 +21,6 @@
 Dust IR-emission library comparison: models and templates
 =========================================================
 
-.. image:: images/sphx_glr_plot_ir_library_compare_001.png
-   :alt: plot ir library compare
-   :class: sphx-glr-single-img
-
-
 All dust IR-emission libraries shipped in tengri, shown on two scales:
 
 (Top) Fixed L_abs = 1e10 L_sun comparison using simple function calls
@@ -49,12 +44,12 @@ The L_IR normalization isolates the shape differences; combined with the fixed-L
 view, both perspectives reveal the diversity of grain models and their physical
 implications.
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-196
+.. GENERATED FROM PYTHON SOURCE LINES 28-194
 
 
 
 .. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_ir_library_compare_001.png
-   :alt: Fixed absorbed luminosity (L_abs = 1e10 L_sun), L_IR-normalized SEDModel comparison (tau_diff=1, tau_bc=1.5)
+   :alt: plot ir library compare
    :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_ir_library_compare_001.png
    :class: sphx-glr-single-img
 
@@ -166,7 +161,6 @@ implications.
         ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]",
     )
     ax_fixed.legend(frameon=False, fontsize=8, ncol=2, loc="lower center")
-    ax_fixed.set_title("Fixed absorbed luminosity (L_abs = 1e10 L_sun)", fontsize=10)
 
     for lam_um, name in [(8, "PAH"), (24, "MIPS 24"), (100, "FIR peak"), (850, "submm")]:
         ax_fixed.axvline(lam_um, color="0.85", lw=0.5, alpha=0.7)
@@ -204,7 +198,7 @@ implications.
         out = model.predict_rest_sed(p)
         wave = np.asarray(out.wavelength)
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
-        # Normalise on integrated L_IR(8-1000 μm).
+        # Normalize on integrated L_IR(8-1000 μm).
         ir = (wave > 8e4) & (wave < 1e7)
         if ir.sum() < 5:
             continue
@@ -221,7 +215,6 @@ implications.
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
         ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]",
     )
-    ax_lir.set_title("L_IR-normalized SEDModel comparison (tau_diff=1, tau_bc=1.5)", fontsize=10)
 
     for um, name in [(8, "8 μm"), (24, "MIPS 24"), (70, "FIR 70"), (160, "FIR 160")]:
         lam = um * 1.0e4
@@ -236,7 +229,7 @@ implications.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.953 seconds)
+   **Total running time of the script:** (0 minutes 5.575 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_ir_library_compare.py:

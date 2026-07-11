@@ -103,12 +103,4 @@ for idx in range(len(free_params), len(axes)):
     axes[idx].set_visible(False)
 
 fig.tight_layout()
-plt.show()
-
-if ks_stats:
-    worst_param = max(ks_stats, key=ks_stats.get)
-    worst_ks = ks_stats[worst_param]
-    if worst_ks > 0.05:
-        print(f"WARNING: {worst_param} has KS = {worst_ks:.4f} (> 0.05)")
-    else:
-        print(f"All correct. Worst KS: {worst_param} = {worst_ks:.4f}")
+plt.savefig("plot_diag_prior_sample_distributions.png", dpi=150, bbox_inches="tight")

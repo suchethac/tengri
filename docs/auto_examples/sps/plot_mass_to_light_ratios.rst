@@ -21,17 +21,12 @@
 Stellar mass-to-light ratios vs SSP age, per band
 ====================================================
 
-.. image:: images/sphx_glr_plot_mass_to_light_ratios_001.png
-   :alt: plot mass to light ratios
-   :class: sphx-glr-single-img
-
-
 ``M_★/L_band`` rises with stellar age in every band; the rise is
 steepest in g, where massive young stars dominate, and shallowest in
 ``K_s``, where red giants contribute at every age past the first
 ~100 Myr.
 
-A narrow burst centred at a sweep of lookback times approximates an
+A narrow burst centered at a sweep of lookback times approximates an
 SSP. ``M_★`` comes from integrating the recovered SFH; ``L_band``
 from inverting tengri's photometric prediction back to ``L_ν``
 (using a fixed ``d_L`` at ``z = 0.01``) and multiplying by the
@@ -47,19 +42,8 @@ band's effective frequency.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.51 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behaviour.
-      param_map_deltas.append(self._init_sfh(spec))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -113,7 +97,7 @@ band's effective frequency.
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
     # Past ~1 Gyr the narrow burst window starts to clip against the
-    # universe age and the SFH normalisation goes noisy.
+    # universe age and the SFH normalization goes noisy.
     ages = np.geomspace(0.03, 1.0, 16)
     ml = np.empty((len(BANDS), ages.size))
 

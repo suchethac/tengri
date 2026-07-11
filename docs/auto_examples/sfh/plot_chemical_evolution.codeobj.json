@@ -1229,8 +1229,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.stellar.sfh.chemical_evolution",
-   "module_short": "tengri.components.stellar.sfh",
+   "module": "tengri.sfh",
+   "module_short": "tengri.sfh",
    "name": "closed_box_metallicity"
   }
  ],
@@ -1397,50 +1397,6 @@
    "module": "matplotlib",
    "module_short": "matplotlib",
    "name": "Artist.add_subplot"
-  }
- ],
- "fig_met.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.figure",
-   "module_short": "matplotlib.figure",
-   "name": "Figure.savefig"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Figure.savefig"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.figure",
-   "module_short": "matplotlib.figure",
-   "name": "FigureBase.savefig"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "FigureBase.savefig"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.artist",
-   "module_short": "matplotlib.artist",
-   "name": "Artist.savefig"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Artist.savefig"
   }
  ],
  "fig_met.tight_layout": [

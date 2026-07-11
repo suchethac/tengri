@@ -64,6 +64,7 @@ try:
         "dust_slope": jnp.asarray(-0.7),
         "dust_T": jnp.asarray(35.0),
         "dust_beta_ir": jnp.asarray(1.6),
+        "dust_epsilon_mbb": jnp.asarray(1.0),
         "radio_q_ir": jnp.asarray(2.64),
         "radio_alpha_sf": jnp.asarray(0.8),
         "radio_loudness": jnp.asarray(0.0),

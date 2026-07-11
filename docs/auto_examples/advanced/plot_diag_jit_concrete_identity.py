@@ -148,7 +148,6 @@ ax.hist(
 ax.axvline(np.log10(1e-10), color="red", linestyle="--", linewidth=1.5, label="1e-10 threshold")
 ax.set_xlabel(r"$\log_{10}(\max \Delta_{\rm rel})$")
 ax.set_ylabel("Count")
-ax.set_title("predict_photometry")
 ax.legend(fontsize=8, frameon=False)
 ax.grid(axis="y", alpha=0.3)
 
@@ -167,14 +166,8 @@ if diffs_lines:
     )
     ax.set_xlabel(r"$\log_{10}(\max \Delta_{\rm rel})$")
     ax.set_ylabel("Count")
-    ax.set_title("predict_emission_lines")
     ax.legend(fontsize=8, frameon=False)
     ax.grid(axis="y", alpha=0.3)
 
 fig.tight_layout()
 plt.savefig("plot_diag_jit_concrete_identity.png", dpi=150, bbox_inches="tight")
-
-# Print summary statistics
-print(f"Photometry:      max={max(diffs_phot):.2e}, median={np.median(diffs_phot):.2e}")
-if diffs_lines:
-    print(f"Emission lines:  max={max(diffs_lines):.2e}, median={np.median(diffs_lines):.2e}")

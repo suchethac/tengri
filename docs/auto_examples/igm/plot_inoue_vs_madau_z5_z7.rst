@@ -21,11 +21,6 @@
 Inoue+2014 vs Madau 1995 across the Lyman break at z=5 and z=7
 ==============================================================
 
-.. image:: images/sphx_glr_plot_inoue_vs_madau_z5_z7_001.png
-   :alt: plot inoue vs madau z5 z7
-   :class: sphx-glr-single-img
-
-
 The two standard IGM transmission prescriptions diverge most
 visibly across the Lyman-alpha forest and the Lyman limit. Madau
 (1995) is the original analytic Lyman-series effective optical

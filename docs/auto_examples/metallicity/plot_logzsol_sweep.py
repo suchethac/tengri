@@ -1,5 +1,5 @@
 """
-Stellar metallicity drives UV-optical SED colour
+Stellar metallicity drives UV-optical SED color
 =================================================
 
 Metal-poor stars are hotter and bluer (less line blanketing), while metal-rich

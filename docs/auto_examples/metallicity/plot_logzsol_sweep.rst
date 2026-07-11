@@ -18,13 +18,8 @@
 .. _sphx_glr_auto_examples_metallicity_plot_logzsol_sweep.py:
 
 
-Stellar metallicity drives UV-optical SED colour
+Stellar metallicity drives UV-optical SED color
 =================================================
-
-.. image:: images/sphx_glr_plot_logzsol_sweep_001.png
-   :alt: plot logzsol sweep
-   :class: sphx-glr-single-img
-
 
 Metal-poor stars are hotter and bluer (less line blanketing), while metal-rich
 stars are redder due to increased opacity. We sweep stellar metallicity across
@@ -43,19 +38,8 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SSP synthesis and metallicity effects).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 24% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

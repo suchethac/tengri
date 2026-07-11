@@ -81,6 +81,11 @@ specialist/figures/
 /*.png
 /*.pdf
 
+# Gallery scripts savefig locally for standalone runs; the committed copies
+# live in docs/auto_examples/*/images/ (sphinx-gallery scrapes open figures,
+# it never reads these).
+examples/**/*.png
+
 # Internal research outputs (not for distribution)
 analysis/figures/
 explore/

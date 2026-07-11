@@ -21,11 +21,6 @@
 GRAHSP Balmer continuum: building the small blue bump
 ======================================================
 
-.. image:: images/sphx_glr_plot_grahsp_balmer_continuum_001.png
-   :alt: plot grahsp balmer continuum
-   :class: sphx-glr-single-img
-
-
 The GRAHSP AGN model (Buchner+ 2024) optionally adds a **Balmer continuum**
 following Grandi (1982): a 15,000 K blackbody truncated at the Balmer edge
 (3646 Å) and Gaussian-broadened by the line width. Together with the FeII
@@ -65,13 +60,13 @@ isolation (zero above the edge, rising blueward).
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.analysis.plotting import setup_style
-    from tengri.components.agn.grahsp.model import (
+    from tengri.agn import (
         GRAHSPParams,
         compute_grahsp_sed,
         evaluate_grahsp_agn,
+        load_grahsp_templates,
     )
-    from tengri.components.agn.grahsp.templates import load_grahsp_templates
+    from tengri.analysis.plotting import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -84,7 +79,7 @@ isolation (zero above the edge, rising blueward).
     A_BC = [0.0, 0.5, 1.0, 2.0]
     colors = plt.cm.viridis(np.linspace(0.15, 0.85, len(A_BC)))
 
-    # Precompute both panels so each can be normalised to O(1) (these are in
+    # Precompute both panels so each can be normalized to O(1) (these are in
     # arbitrary units; only the relative strengths are physical).
     totals, balmers = [], []
     for a_bc in A_BC:
@@ -123,7 +118,7 @@ isolation (zero above the edge, rising blueward).
         ax.axvline(3646.0 / 1e4, color="0.5", ls=":", lw=1.0)
         ax.set_xlabel(r"rest wavelength [$\mu$m]")
     ax1.text(3646.0 / 1e4, ax1.get_ylim()[1] * 0.9, " Balmer\n edge", fontsize=8, color="0.4")
-    ax1.set_ylabel(r"$\lambda L_\lambda$ [normalised]")
+    ax1.set_ylabel(r"$\lambda L_\lambda$ [normalized]")
     ax1.set_title("Bending power-law + Balmer continuum")
     ax1.legend(frameon=False, fontsize=9)
     ax2.set_title("Balmer continuum contribution (isolated)")

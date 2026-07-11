@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:04.061** total execution time for 8 files **from auto_examples/workflows**:
+**00:03.472** total execution time for 8 files **from auto_examples/workflows**:
 
 .. container::
 
@@ -32,16 +32,13 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_quenching_diagnostics.py` (``plot_workflow_quenching_diagnostics.py``)
-     - 00:01.810
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_photoz_degeneracy.py` (``plot_workflow_photoz_degeneracy.py``)
-     - 00:01.371
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_bpt_classification.py` (``plot_workflow_bpt_classification.py``)
-     - 00:00.880
+   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_method_comparison.py` (``plot_workflow_method_comparison.py``)
+     - 00:03.472
      - 0.0
    * - :ref:`sphx_glr_auto_examples_workflows_plot_prior_systematic_dust.py` (``plot_prior_systematic_dust.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_bpt_classification.py` (``plot_workflow_bpt_classification.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_dust_mc_resampling.py` (``plot_workflow_dust_mc_resampling.py``)
@@ -50,9 +47,12 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_high_z_lbg.py` (``plot_workflow_high_z_lbg.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_method_comparison.py` (``plot_workflow_method_comparison.py``)
+   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_photoz_degeneracy.py` (``plot_workflow_photoz_degeneracy.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_post_starburst.py` (``plot_workflow_post_starburst.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_quenching_diagnostics.py` (``plot_workflow_quenching_diagnostics.py``)
      - 00:00.000
      - 0.0

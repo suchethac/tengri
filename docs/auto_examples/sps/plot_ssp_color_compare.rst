@@ -21,11 +21,6 @@
 Galaxy broadband colors depend on the SSP library
 ===================================================
 
-.. image:: images/sphx_glr_plot_ssp_color_compare_001.png
-   :alt: plot ssp color compare
-   :class: sphx-glr-single-img
-
-
 The choice of SSP library propagates into the colors a photometric
 fitter recovers — a single fixed galaxy SFH and dust law, rebuilt
 with FSPS-MIST, FSPS-Padova/MILES, BPASS, BC03, and CB19 in turn,
@@ -142,7 +137,7 @@ grid even before any prior or noise is involved.
 
     ax.set_xticks(x)
     ax.set_xticklabels([name for name, _, _ in COLORS_TO_PLOT])
-    ax.set_ylabel(r"AB colour  [mag]")
+    ax.set_ylabel(r"AB color  [mag]")
     ax.axhline(0.0, color="0.55", lw=0.6)
     ax.legend(frameon=False, fontsize=8, loc="upper left", ncol=2)
     ax.text(
@@ -157,11 +152,6 @@ grid even before any prior or noise is involved.
 
     fig.tight_layout()
     plt.savefig("plot_ssp_color_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.284 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_ssp_color_compare.py:

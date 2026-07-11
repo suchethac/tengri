@@ -118,16 +118,3 @@ ax_right.grid(True, alpha=0.3)
 
 plt.tight_layout()
 plt.savefig("plot_diag_madau_published_table.png", dpi=150, bbox_inches="tight")
-
-# ── Verification report ────────────────────────────────────────────────────
-max_abs_error = np.max(np.abs(residual_line))
-max_rel_error = np.max(np.abs(rel_error_line)) * 100
-
-print(f"Madau 1995 diagnostic: z_source={z_source}")
-print(f"λ_obs range: {wave_forest.min():.0f}–{wave_forest.max():.0f} Å")
-print(f"Max absolute τ_LS error: {max_abs_error:.2e}")
-print(f"Max relative error: {max_rel_error:.2f}%")
-if max_rel_error > 10.0:
-    print("WARNING: Residuals exceed ±10% threshold.")
-else:
-    print("✓ PASS: Residuals within ±10% band.")

@@ -21,16 +21,11 @@
 HSC vs DES filter i-band differences at high redshift
 ======================================================
 
-.. image:: images/sphx_glr_plot_hsc_vs_des_color_high_z_001.png
-   :alt: plot hsc vs des color high z
-   :class: sphx-glr-single-img
-
-
 The Subaru HSC and Blanco DECam i-bands have different red-edge cutoffs
 (HSC i-2 at ~850 nm, DECam i at ~870 nm). This 20 nm difference produces
-measurable colour offsets when a sharp spectral feature sweeps through
+measurable color offsets when a sharp spectral feature sweeps through
 the i-band — particularly the Lyman break at z~3.5–4.5. We show (r − i)
-colours for an LBG template across both filter sets to highlight the
+colors for an LBG template across both filter sets to highlight the
 divergence in the high-redshift regime.
 
 .. GENERATED FROM PYTHON SOURCE LINES 12-106
@@ -146,7 +141,7 @@ divergence in the high-redshift regime.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.881 seconds)
+   **Total running time of the script:** (0 minutes 5.157 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_hsc_vs_des_color_high_z.py:

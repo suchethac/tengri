@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:02.193** total execution time for 7 files **from auto_examples/radio**:
+**00:00.544** total execution time for 7 files **from auto_examples/radio**:
 
 .. container::
 
@@ -32,24 +32,24 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_radio_plot_alpha_sf_sweep.py` (``plot_alpha_sf_sweep.py``)
-     - 00:00.590
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_radio_plot_radio_loudness_sweep.py` (``plot_radio_loudness_sweep.py``)
-     - 00:00.425
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_radio_lir_relation.py` (``plot_radio_lir_relation.py``)
-     - 00:00.400
+     - 00:00.544
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_radio_plot_alpha_sf_sweep.py` (``plot_alpha_sf_sweep.py``)
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_q_ir_sweep.py` (``plot_q_ir_sweep.py``)
-     - 00:00.391
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_radio_plot_synchrotron_thermal_decomposition.py` (``plot_synchrotron_thermal_decomposition.py``)
-     - 00:00.387
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_radio_crossover_frequency.py` (``plot_radio_crossover_frequency.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_radio_plot_radio_loudness_sweep.py` (``plot_radio_loudness_sweep.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_radio_vs_agn_lbol.py` (``plot_radio_vs_agn_lbol.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_radio_plot_synchrotron_thermal_decomposition.py` (``plot_synchrotron_thermal_decomposition.py``)
      - 00:00.000
      - 0.0

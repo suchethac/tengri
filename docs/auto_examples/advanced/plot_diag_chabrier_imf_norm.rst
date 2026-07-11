@@ -18,22 +18,17 @@
 .. _sphx_glr_auto_examples_advanced_plot_diag_chabrier_imf_norm.py:
 
 
-Chabrier 2003 IMF — analytic normalisation and SSP mean stellar mass
+Chabrier 2003 IMF — analytic normalization and SSP mean stellar mass
 ====================================================================
-
-.. image:: images/sphx_glr_plot_diag_chabrier_imf_norm_001.png
-   :alt: plot diag chabrier imf norm
-   :class: sphx-glr-single-img
-
 
 External ground truth: Chabrier 2003 PASP 115 763, Eq. 16–17.
 
   ξ(m) ∝ (1/m) exp[-(log10 m - log10 0.22)² / (2·0.57²)]   for m ≤ 1 M_sun
   ξ(m) ∝ m^{-2.3}                                          for m > 1 M_sun
 
-Normalised so ∫ m ξ(m) dm = 1 M_sun over [0.1, 100].
+Normalized so ∫ m ξ(m) dm = 1 M_sun over [0.1, 100].
 
-We compute this analytical normalisation from the paper, and check
+We compute this analytical normalization from the paper, and check
 the FSPS Chabrier SSP's recorded scalar `ssp_mass_remaining`
 (zero-age value) against the expected 1.0. The per-age
 mass-remaining curve is NOT currently exposed on the public surface
@@ -81,7 +76,7 @@ References:
         return out
 
 
-    # normalise so ∫ m ξ(m) dm  =  1 M_sun over [0.1, 100]
+    # normalize so ∫ m ξ(m) dm  =  1 M_sun over [0.1, 100]
     norm_const, _ = quad(lambda m: m * chabrier_imf_analytic(m)[0], 0.1, 100.0)
     mass_integral_after_norm, _ = quad(
         lambda m: m * chabrier_imf_analytic(m)[0] / norm_const,
@@ -102,13 +97,13 @@ References:
         chabrier_imf_analytic(m_plot) / norm_const,
         color="C0",
         lw=1.6,
-        label="Chabrier 2003 (normalised)",
+        label="Chabrier 2003 (normalized)",
     )
     ax.axvline(1.0, color="0.5", ls=":", lw=0.8)
     ax.text(1.0, 5e-4, " 0.22 M⊙ peak ←   → Salpeter $m^{-2.3}$", fontsize=8, color="0.4")
     ax.set(
         xlabel=r"stellar mass $m$  [M$_\odot$]",
-        ylabel=r"$\xi(m)$ — normalised so $\int m\,\xi\,dm = 1$",
+        ylabel=r"$\xi(m)$ — normalized so $\int m\,\xi\,dm = 1$",
         xlim=(0.1, 100),
     )
     ax.text(

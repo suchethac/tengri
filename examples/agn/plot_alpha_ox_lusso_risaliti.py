@@ -126,7 +126,6 @@ ax.legend(loc="best", fontsize=11)
 
 fig.tight_layout()
 plt.savefig("plot_alpha_ox_lusso_risaliti.png", dpi=150, bbox_inches="tight")
-plt.close()
 
 print(f"α_OX values: min={alpha_ox_values.min():.3f}, max={alpha_ox_values.max():.3f}")
 print(f"Log L_2500: min={log_l_2500_values.min():.2f}, max={log_l_2500_values.max():.2f}")

@@ -21,11 +21,6 @@
 Register and use a custom photometric filter
 ==============================================
 
-.. image:: images/sphx_glr_plot_recipe_custom_filter_001.png
-   :alt: plot recipe custom filter
-   :class: sphx-glr-single-img
-
-
 How do I combine a custom photometric filter with standard filters? This
 recipe generates a synthetic Gaussian filter at 2 μm and pairs it with
 SDSS optical bands, then predicts the full SED and photometry.
@@ -57,8 +52,8 @@ SDSS optical bands, then predicts the full SED and photometry.
     import numpy as np
 
     import tengri
+    from tengri import FilterCurve
     from tengri.analysis.plotting import setup_style
-    from tengri.observation.photometry import FilterCurve
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -122,7 +117,7 @@ SDSS optical bands, then predicts the full SED and photometry.
     sed_rest = np.asarray(sed_result.sed)
     ax_sed.loglog(wave_rest, sed_rest, color="C0", lw=1.4, label="Model SED (rest-frame)")
     ax_sed.plot(phot_wave, phot_flux, "o", color="C3", ms=7, label="Photometry", zorder=10)
-    ax_sed.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+    ax_sed.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
     ax_sed.legend(frameon=False, fontsize=8, loc="lower right")
     ax_sed.set_xlim(1e3, 1e5)
 
@@ -139,11 +134,6 @@ SDSS optical bands, then predicts the full SED and photometry.
     ax_filters.set_xlim(2e3, 2.5e4)
 
     plt.savefig("plot_recipe_custom_filter.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.610 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_custom_filter.py:

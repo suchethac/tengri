@@ -650,22 +650,6 @@
    "name": "Normalize"
   }
  ],
- "mpl.use": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "use"
-  }
- ],
  "norm": [
   {
    "is_class": false,
@@ -753,6 +737,22 @@
    "name": "Observation"
   }
  ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "_Environ"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "params": [
   {
    "is_class": false,
@@ -815,7 +815,7 @@
    "name": "get_cmap"
   }
  ],
- "plt.show": [
+ "plt.savefig": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -828,7 +828,7 @@
    "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
-   "name": "show"
+   "name": "savefig"
   }
  ],
  "plt.subplots": [

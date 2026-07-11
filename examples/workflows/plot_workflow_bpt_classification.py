@@ -134,7 +134,6 @@ ax.set_xlabel(r"log [NII]$\lambda$6584 / H$\alpha$")
 ax.set_ylabel(r"log [OIII]$\lambda$5007 / H$\beta$")
 ax.set_xlim(-1.6, 0.6)
 ax.set_ylim(-1.2, 1.5)
-ax.legend(frameon=False, loc="lower left")
 
 fig.tight_layout()
 plt.savefig("plot_workflow_bpt_classification.png", dpi=150, bbox_inches="tight")

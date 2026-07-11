@@ -224,27 +224,3 @@ ax.grid(True, alpha=0.2)
 
 fig.tight_layout()
 plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
-plt.show()
-
-# ────────────────────────────────────────────────────────────────────────
-# 6. Verify recovery accuracy
-# ────────────────────────────────────────────────────────────────────────
-
-# At low tau_V: SFR(UV) should match truth; at high tau_V it should fail
-# At all tau_V: SFR(UV+IR) should recover truth within ~10%
-
-rel_error_hybrid = np.abs(sfr_hybrid - true_sfr) / true_sfr * 100.0
-
-print("SFR recovery statistics:")
-print(f"  tau_V range: {tau_v_values.min():.2f} – {tau_v_values.max():.2f}")
-err_min = rel_error_hybrid.min()
-err_max = rel_error_hybrid.max()
-print(f"  Hybrid SFR relative error: {err_min:.1f}% – {err_max:.1f}%")
-print(f"  Mean error: {rel_error_hybrid.mean():.1f}%")
-
-# Diagnostic: if hybrid SFR deviates by >100% at high tau_V, investigate dust emission model
-if np.any(rel_error_hybrid > 100.0):
-    print(
-        "\n⚠ WARNING: hybrid SFR error >100% detected."
-        " Check dust emission model or IR integration bounds."
-    )

@@ -21,11 +21,6 @@
 Comprehensive 2D sweep of ionization parameter and metallicity (Cue)
 ====================================================================
 
-.. image:: images/sphx_glr_plot_cue_parameter_atlas_001.png
-   :alt: plot cue parameter atlas
-   :class: sphx-glr-single-img
-
-
 Cue (Li, Leja & Speagle 2023) maps a four-dimensional HII region
 control space — ionization parameter ``log U``, gas-phase metallicity
 ``log Z_gas``, ionizing-spectrum shape, and dust-to-metal ratio —
@@ -178,7 +173,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (21 minutes 5.483 seconds)
+   **Total running time of the script:** (0 minutes 54.283 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_parameter_atlas.py:

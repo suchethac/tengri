@@ -21,11 +21,6 @@
 HST+JWST+LSST+Spitzer Filter Overlay on Star-Forming SED at z=1
 ================================================================
 
-.. image:: images/sphx_glr_plot_filter_throughput_overlay_001.png
-   :alt: plot filter throughput overlay
-   :class: sphx-glr-single-img
-
-
 Show a typical star-forming galaxy SED at z=1 with observed-frame filter
 throughputs overlaid as semi-transparent fills from 0.3 to 25 μm. This helps
 visualize which rest-frame stellar and dust features each photometric system
@@ -52,19 +47,8 @@ IGM attenuation.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/examples/photometry/plot_filter_throughput_overlay.py:143: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
-      fig.tight_layout()
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -196,7 +180,7 @@ IGM attenuation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.925 seconds)
+   **Total running time of the script:** (0 minutes 5.222 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_throughput_overlay.py:

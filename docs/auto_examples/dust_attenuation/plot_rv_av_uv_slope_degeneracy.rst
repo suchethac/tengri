@@ -21,14 +21,9 @@
 Rv and Av degeneracy in UV slope: the Calzetti trap
 =====================================================
 
-.. image:: images/sphx_glr_plot_rv_av_uv_slope_degeneracy_001.png
-   :alt: plot rv av uv slope degeneracy
-   :class: sphx-glr-single-img
-
-
 At fixed UV slope β_UV (the observable astronomers measure), many
-(R_V, A_V) pairs produce identical colours — this is a classical dust
-modelling pitfall. Shows β_UV as contours on the (R_V, A_V) grid
+(R_V, A_V) pairs produce identical colors — this is a classical dust
+modeling pitfall. Shows β_UV as contours on the (R_V, A_V) grid
 for Cardelli MW attenuation. Standard reference points (SMC, LMC,
 Milky Way diffuse, Calzetti starburst) sit on different iso-β_UV contours,
 illustrating why dust-law assumptions strongly bias inferred properties.
@@ -177,7 +172,7 @@ illustrating why dust-law assumptions strongly bias inferred properties.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.641 seconds)
+   **Total running time of the script:** (0 minutes 6.597 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_rv_av_uv_slope_degeneracy.py:

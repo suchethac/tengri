@@ -21,11 +21,6 @@
 Rest-frame spectrum with stellar population ages
 ==================================================
 
-.. image:: images/sphx_glr_plot_spectrum_fit_001.png
-   :alt: plot spectrum fit
-   :class: sphx-glr-single-img
-
-
 Compare the rest-frame spectrum of a young and old galaxy at fixed redshift.
 Shows how the optical continuum color, Balmer decrement, and absorption line
 strengths depend on mean stellar age, holding metallicity and dust fixed.
@@ -42,27 +37,8 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_log_total_mass' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(9.75, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
-    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_peak_lbt_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(6.25, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
-    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_skew' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(0., dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
-    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_trunc' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(5.5, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
-    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_width_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(2.6, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
-      final_dist, tag = _resolve_value(
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -146,10 +122,10 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     )
 
     # Feature annotations
-    ax.axvline(4102, color="grey", ls=":", lw=0.8, alpha=0.5)
-    ax.text(4102, 2.0, r"H$\delta$", fontsize=9, ha="center", color="grey")
-    ax.axvline(6563, color="grey", ls=":", lw=0.8, alpha=0.5)
-    ax.text(6563, 2.0, r"H$\alpha$", fontsize=9, ha="center", color="grey")
+    ax.axvline(4102, color="gray", ls=":", lw=0.8, alpha=0.5)
+    ax.text(4102, 2.0, r"H$\delta$", fontsize=9, ha="center", color="gray")
+    ax.axvline(6563, color="gray", ls=":", lw=0.8, alpha=0.5)
+    ax.text(6563, 2.0, r"H$\alpha$", fontsize=9, ha="center", color="gray")
 
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
     ax.set_ylabel(r"Normalized $f_\lambda$")

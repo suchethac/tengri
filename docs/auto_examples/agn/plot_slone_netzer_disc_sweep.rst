@@ -21,11 +21,6 @@
 Slone & Netzer 2012 disc: Black-hole mass and Eddington ratio
 =============================================================
 
-.. image:: images/sphx_glr_plot_slone_netzer_disc_sweep_001.png
-   :alt: plot slone netzer disc sweep
-   :class: sphx-glr-single-img
-
-
 The Slone & Netzer (2012) accretion-disc library (SN12, as packaged by
 AGNfitter-rX) tabulates the big-blue-bump continuum over black-hole mass and
 Eddington ratio. The disc's characteristic temperature scales as
@@ -38,10 +33,10 @@ spectral peak walks across the UV/optical as those two knobs change:
   the peak moves blueward and the disc brightens.
 
 The two panels sweep each parameter in turn (the other held fixed), with the
-swept value encoded by colour. Bolometric luminosity is held fixed across each
+swept value encoded by color. Bolometric luminosity is held fixed across each
 sweep so the curves isolate the *spectral shape* — the SN12 template shape is
 governed purely by :math:`(M_\mathrm{BH}, \dot m)`, with :math:`L_\mathrm{bol}`
-setting only the normalisation — and the peak migration stands out cleanly.
+setting only the normalization — and the peak migration stands out cleanly.
 
 The SN12 grid is reproduced node-exactly in tengri via monotone-cubic
 interpolation, so these curves track the AGNfitter templates at the tabulated
@@ -111,7 +106,7 @@ References
 
     def disc_sed(log_mbh: float, log_ledd: float) -> tuple[np.ndarray, np.ndarray]:
         """Return (wavelength [AA], nu*L_nu [erg/s]) for one SN12 disc state."""
-        log_lbol = LOG_LBOL_FIXED  # shape set by (M_BH, Edd); L_bol only normalises
+        log_lbol = LOG_LBOL_FIXED  # shape set by (M_BH, Edd); L_bol only normalizes
         model = tengri.SEDModel.build(
             ssp,
             sfh=SFH,
@@ -174,6 +169,11 @@ References
     )
     fig.tight_layout()
     plt.savefig("plot_slone_netzer_disc_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.044 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_slone_netzer_disc_sweep.py:

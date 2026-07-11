@@ -21,18 +21,13 @@
 Recipe introspection and SED morphology comparison
 ===================================================
 
-.. image:: images/sphx_glr_plot_recipe_introspection_tour_001.png
-   :alt: plot recipe introspection tour
-   :class: sphx-glr-single-img
-
-
 The tengri public API ships recipes for common SED fitting scenarios
 (star-forming, quiescent, AGN). This example showcases the introspection API
 (``tengri.list_recipes()``, ``tengri.describe_recipe()``) and visually
 differentiates the rest-frame SED morphology across three representative
 models: young star-former, quiescent, and AGN-dominated.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-87
+.. GENERATED FROM PYTHON SOURCE LINES 11-86
 
 
 
@@ -102,8 +97,7 @@ models: young star-former, quiescent, and AGN-dominated.
     for name, recipe_fn, color in RECIPE_CONFIGS:
         try:
             model = tengri.SEDModel.build(ssp_data=ssp, **recipe_fn())
-        except Exception as exc:
-            print(f"skip {name}: {type(exc).__name__}: {exc}")
+        except Exception:
             continue
 
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -127,7 +121,7 @@ models: young star-former, quiescent, and AGN-dominated.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.291 seconds)
+   **Total running time of the script:** (0 minutes 4.841 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_introspection_tour.py:

@@ -18,24 +18,19 @@
 .. _sphx_glr_auto_examples_nebular_plot_oiii_hbeta_logu_at_fixed_z.py:
 
 
-[O III]/Hβ vs ionisation parameter at fixed gas metallicity
+[O III]/Hβ vs ionization parameter at fixed gas metallicity
 ===========================================================
 
-.. image:: images/sphx_glr_plot_oiii_hbeta_logu_at_fixed_z_001.png
-   :alt: plot oiii hbeta logu at fixed z
-   :class: sphx-glr-single-img
-
-
 The optical [O III] 5007 / Hβ ratio is set primarily by the
-ionisation parameter ``log U``: more energetic Lyman continuum
-photons per H atom ionise more O+ to O++, while Hβ recombination
-depends mostly on the ionising photon rate (``Q_H``) and is roughly
+ionization parameter ``log U``: more energetic Lyman continuum
+photons per H atom ionize more O+ to O++, while Hβ recombination
+depends mostly on the ionizing photon rate (``Q_H``) and is roughly
 insensitive to ``log U``. The ratio therefore rises monotonically
 with ``log U`` at fixed gas metallicity.
 
 We sweep ``log U`` from -3 to -1 at three sub-solar metallicities
 covered by the Cue emulator (Li+2024), with dust-on-lines and LyC
-escape switched off so the trend isolates the photoionisation
+escape switched off so the trend isolates the photoionization
 response cleanly.
 
 Reference: Kewley & Dopita 2002 ApJS 142 35; Li et al. 2024
@@ -119,7 +114,7 @@ Reference: Kewley & Dopita 2002 ApJS 142 35; Li et al. 2024
         )
 
     ax.set(
-        xlabel=r"Ionisation parameter $\log U$",
+        xlabel=r"Ionization parameter $\log U$",
         ylabel=r"$[\mathrm{O\,III}]\,5007 \,/\, \mathrm{H}\beta$",
         xlim=(-3.05, -0.95),
     )
@@ -130,7 +125,7 @@ Reference: Kewley & Dopita 2002 ApJS 142 35; Li et al. 2024
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.722 seconds)
+   **Total running time of the script:** (0 minutes 3.779 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_oiii_hbeta_logu_at_fixed_z.py:

@@ -47,9 +47,14 @@ References:
 - Baldry et al. 2012, MNRAS, 421, 621 (Schechter fit z~0)
 - Blanton et al. 2003, ApJ, 592, 819 (SDSS luminosity function)
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-351
+.. GENERATED FROM PYTHON SOURCE LINES 32-315
 
 
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_stellar_mass_luminosity_function_001.png
+   :alt: plot usecase stellar mass luminosity function
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_stellar_mass_luminosity_function_001.png
+   :class: sphx-glr-single-img
 
 
 .. rst-class:: sphx-glr-script-out
@@ -60,44 +65,15 @@ References:
     Sampled 200 galaxies from Schechter SMF
       M* range: 6.36e+07 – 8.28e+10 M_sun
       log10(M*) range: 7.80 – 10.92
-    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:771: UserWarning: WavePrecomp applies dust as a first-order Taylor projection across each filter (#617); at z~3.00 these rest-UV band(s) are biased versus the exact path: sdss_r (rest~1549 Å). The bias grows steeply toward the far-UV (>10x for the bluest bands at moderate/high z) and with optical depth. For unbiased blue-band photometry use approx=None, or validate against it; SpectrumPrecomp is unaffected. See docs/known_limitations.md.
-      self._warn_if_wave_precomp_dust_blue_bias()
 
     Predicting r-band absolute magnitudes...
-      50/200: log10(M*)=8.04, m_r=-17.55, M_r=-17.55
-      100/200: log10(M*)=8.37, m_r=-18.12, M_r=-18.12
-      150/200: log10(M*)=8.91, m_r=-19.08, M_r=-19.08
-      200/200: log10(M*)=10.92, m_r=-22.59, M_r=-22.59
+      50/200: log10(M*)=8.04, m_r=-17.57, M_r=-17.57
+      100/200: log10(M*)=8.37, m_r=-18.14, M_r=-18.14
+      150/200: log10(M*)=8.91, m_r=-19.10, M_r=-19.10
+      200/200: log10(M*)=10.92, m_r=-22.61, M_r=-22.61
 
     Computed 200 absolute magnitudes
-      M_r range: -22.59 to -17.13
-
-    Luminosity Function Summary
-    ======================================================================
-    M_r (center)    Counts       Φ(M_r)          Blanton+03     
-    ----------------------------------------------------------------------
-    -22.75          1            0.0200          2.1992         
-    -21.75          3            0.0600          1.5377         
-    -21.25          6            0.1200          1.1847         
-    -20.75          6            0.1200          0.8270         
-    -20.25          8            0.1600          0.4937         
-    -19.75          13           0.2600          0.2301         
-    -19.25          15           0.3000          0.0724         
-    -18.75          27           0.5400          0.0122         
-    -18.25          33           0.6600          0.0008         
-    -17.75          41           0.8200          0.0000         
-    -17.25          47           0.9400          0.0000         
-    ----------------------------------------------------------------------
-
-    Peak of LF (mock survey):
-      M_r = -17.25
-      Φ(M_r) = 9.4000e-01 Mpc^-3 mag^-1
-
-    Interpretation:
-      - Schechter SMF (M*=6.03e+10 M_sun, α=-1.45) maps to bright magnitudes
-      - Peak M_r ~ -21 is characteristic of L* galaxies (SDSS characteristic)
-      - Faint end (M_r > -18) is underdensity due to Schechter alpha=-1.45 slope
-      - Comparison with Blanton+2003 validates M-L correlation and SED predictions
+      M_r range: -22.61 to -17.16
 
 
 
@@ -114,7 +90,6 @@ References:
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
-    from pathlib import Path
 
     import jax
     import jax.numpy as jnp
@@ -206,15 +181,8 @@ References:
     # Load SSP and prepare observation
     # ============================================================================
 
-    # Load bare-stellar SSP (required for Cue nebular backend)
-    # Use explicit path to avoid loading wNE by default
-
-    repo_root = next(
-        p
-        for p in [Path.cwd(), *Path.cwd().parents]
-        if (p / "data" / "fsps_prsc_miles_chabrier.h5").exists()
-    )
-    SSP = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5"))
+    # Load SSP
+    SSP = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
     # r-band photometry (rest-frame for z~0)
     from tengri.units import fnu_to_ab_mag
@@ -399,39 +367,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_usecase_stellar_mass_luminosity_function.png", dpi=150, bbox_inches="tight")
-    plt.close()
-
-    # ============================================================================
-    # Summary statistics
-    # ============================================================================
-
-    print("\nLuminosity Function Summary")
-    print("=" * 70)
-    print(f"{'M_r (center)':<15} {'Counts':<12} {'Φ(M_r)':<15} {'Blanton+03':<15}")
-    print("-" * 70)
-    for m_c, c, phi_n, phi_b in zip(m_r_centers, counts, lf_norm, phi_blanton * survey_volume_mpc3):
-        if c > 0:
-            print(f"{m_c:<15.2f} {c:<12.0f} {phi_n:<15.4f} {phi_b:<15.4f}")
-    print("-" * 70)
-
-    # Peak of the luminosity function
-    idx_peak = np.argmax(counts)
-    M_r_peak = m_r_centers[idx_peak]
-    phi_peak = lf_norm[idx_peak]
-
-    print("\nPeak of LF (mock survey):")
-    print(f"  M_r = {M_r_peak:.2f}")
-    print(f"  Φ(M_r) = {phi_peak:.4e} Mpc^-3 mag^-1")
-    print("\nInterpretation:")
-    print(f"  - Schechter SMF (M*={10**10.78:.2e} M_sun, α=-1.45) maps to bright magnitudes")
-    print("  - Peak M_r ~ -21 is characteristic of L* galaxies (SDSS characteristic)")
-    print("  - Faint end (M_r > -18) is underdensity due to Schechter alpha=-1.45 slope")
-    print("  - Comparison with Blanton+2003 validates M-L correlation and SED predictions")
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.558 seconds)
+   **Total running time of the script:** (0 minutes 4.533 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_stellar_mass_luminosity_function.py:

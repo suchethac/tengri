@@ -119,7 +119,7 @@ def cat3d_spec_with_filters(synthetic_ssp):
         agn_log_lbol=Fixed(44.0),
         agn_cos_inc=Fixed(0.5),
         agn_a_cat3d=Fixed(-2.0),
-        agn_fwd_cat3d=Fixed(0.45),
+        agn_fwd_cat3d=Fixed(1.75),
         agn_torus_frac=Fixed(0.5),
         redshift=Fixed(0.1),
     )

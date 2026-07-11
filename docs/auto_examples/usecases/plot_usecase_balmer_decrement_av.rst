@@ -21,11 +21,6 @@
 Balmer Decrement Tests Dust Attenuation on Emission Lines
 ==========================================================
 
-.. image:: images/sphx_glr_plot_usecase_balmer_decrement_av_001.png
-   :alt: plot usecase balmer decrement av
-   :class: sphx-glr-single-img
-
-
 The Balmer decrement measures dust attenuation via hydrogen recombination line
 ratios: H-alpha / H-beta is sensitive to extinction (Calzetti et al. 2000).
 Without dust, the intrinsic ratio is ~2.78–2.86 (Case B). Here we sweep
@@ -36,7 +31,7 @@ Calzetti+2000 expectation.
 Status: as of issue #313 fix, ``predict_emission_lines`` now folds in the
 diffuse dust attenuation. The tengri trace rises from the intrinsic ~2.85
 to ~4.3 at A_V ≈ 2 mag; the Calzetti+2000 curve climbs steeper, suggesting
-the birth-cloud component or the dust normalisation differs slightly from
+the birth-cloud component or the dust normalization differs slightly from
 the pure Calzetti law applied here as the reference.
 
 Reference: Calzetti et al. 2000, ApJ, 533, 682 (Balmer decrement and dust
@@ -198,7 +193,7 @@ attenuation law).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.990 seconds)
+   **Total running time of the script:** (0 minutes 3.273 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_balmer_decrement_av.py:

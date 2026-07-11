@@ -60,8 +60,7 @@ fig, ax = plt.subplots(figsize=(7.4, 4.8))
 for name, recipe_fn, color in RECIPE_FNS:
     try:
         model = tengri.SEDModel.build(ssp_data=SSPS[name], **recipe_fn())
-    except Exception as exc:
-        print(f"skip {name}: {type(exc).__name__}: {exc}")
+    except Exception:
         continue
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict_rest_sed(p)

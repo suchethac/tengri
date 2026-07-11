@@ -21,13 +21,8 @@
 X-ray corona shape across the alpha_OX vs log L_bol plane
 ==========================================================
 
-.. image:: images/sphx_glr_plot_agn_alpha_ox_lbol_2d_001.png
-   :alt: plot agn alpha ox lbol 2d
-   :class: sphx-glr-single-img
-
-
 The X-ray corona response of an AGN depends jointly on bolometric
-luminosity (which sets the X-ray normalisation through the
+luminosity (which sets the X-ray normalization through the
 Lusso & Risaliti L_X-L_UV correlation) and on the UV-to-X-ray slope
 alpha_OX (which sets the relative balance of UV and X-ray emission).
 Four panels at log L_bol = 44, 45, 46, 47 erg/s overlay three
@@ -115,11 +110,6 @@ correlation); Wilkins et al. 2020, MNRAS, 493, 5548.
 
     fig.tight_layout()
     plt.savefig("plot_agn_alpha_ox_lbol_2d.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.128 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py:

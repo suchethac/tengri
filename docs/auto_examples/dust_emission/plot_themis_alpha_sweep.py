@@ -69,7 +69,6 @@ ax.set(
     ylim=(1e42, 1e45),
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
     ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
-    title=r"THEMIS: radiation-field slope $\alpha$ ($\alpha=2$ = FSPS anchor)",
 )
 ax.legend(frameon=False, fontsize=9, loc="upper right", title=r"$dU/dM\propto U^{-\alpha}$")
 

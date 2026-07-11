@@ -21,11 +21,6 @@
 Mass conservation in SFH: manual integration vs predict_sfh_quantities
 ======================================================================
 
-.. image:: images/sphx_glr_plot_diag_mass_conservation_sfh_001.png
-   :alt: plot diag mass conservation sfh
-   :class: sphx-glr-single-img
-
-
 Internal consistency check: the cumulative SFR integral ∫₀ᵗ SFR(t) dt should
 equal the stellar mass returned by ``predict_sfh_quantities()``. This diagnostic
 varies the DPL SFH parameters and verifies that the two pathways (manual trapz
@@ -35,7 +30,7 @@ the mass integration kernel.
 
 Reference: Mass conservation identity: M_formed = ∫ SFR(t) dt.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-134
+.. GENERATED FROM PYTHON SOURCE LINES 14-127
 
 
 
@@ -45,23 +40,8 @@ Reference: Mass conservation identity: M_formed = ∫ SFR(t) dt.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
 
 
-    Mass conservation diagnostic:
-    N combos: 36
-    Mean relative error: 0.02%
-    Max relative error: 0.04%
-    Status: PASS
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -178,13 +158,6 @@ Reference: Mass conservation identity: M_formed = ∫ SFR(t) dt.
 
     plt.tight_layout()
     plt.savefig("plot_diag_mass_conservation_sfh.png", dpi=150, bbox_inches="tight")
-
-    # Print summary
-    print("\nMass conservation diagnostic:")
-    print(f"N combos: {len(m_manual)}")
-    print(f"Mean relative error: {mean_error:.2%}")
-    print(f"Max relative error: {max_error:.2%}")
-    print(f"Status: {'PASS' if max_error < 0.05 else 'FAIL (> 5%)'}")
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_mass_conservation_sfh.py:

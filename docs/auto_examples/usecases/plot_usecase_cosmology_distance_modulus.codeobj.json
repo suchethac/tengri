@@ -754,15 +754,6 @@
    "name": "ndarray"
   }
  ],
- "dm": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
  "fig": [
   {
    "is_class": false,
@@ -855,15 +846,6 @@
    "name": "SEDModel"
   }
  ],
- "mu_p": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
  "mu_planck": [
   {
    "is_class": false,
@@ -871,15 +853,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "ndarray"
-  }
- ],
- "mu_r": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
   }
  ],
  "mu_riess": [
@@ -1019,7 +992,7 @@
    "name": "dict"
   }
  ],
- "plt.show": [
+ "plt.savefig": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -1032,7 +1005,7 @@
    "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
-   "name": "show"
+   "name": "savefig"
   }
  ],
  "plt.subplots": [
@@ -1309,15 +1282,6 @@
    "module": "warnings",
    "module_short": "warnings",
    "name": "filterwarnings"
-  }
- ],
- "z": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
   }
  ],
  "z_grid": [

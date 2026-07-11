@@ -62,7 +62,7 @@ titles = [
     f"Met = {met_values[3]:.3f}\n(outside grid)",
 ]
 
-for ax, met, title in zip(axes.flat, met_values, titles):
+for ax, met, _title in zip(axes.flat, met_values, titles):
     params = {**baseline, "met_logzsol": jnp.float64(met)}
 
     try:
@@ -103,8 +103,6 @@ for ax, met, title in zip(axes.flat, met_values, titles):
             fontsize=10,
             color="red",
         )
-
-    ax.set_title(title, fontsize=10)
 
 plt.tight_layout()
 plt.savefig("plot_diag_ssp_grid_edge_behavior.png", dpi=150, bbox_inches="tight")

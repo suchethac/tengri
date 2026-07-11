@@ -21,11 +21,6 @@
 SSP grid edge behavior: clipping, extrapolation, NaN
 =====================================================
 
-.. image:: images/sphx_glr_plot_diag_ssp_grid_edge_behavior_001.png
-   :alt: plot diag ssp grid edge behavior
-   :class: sphx-glr-single-img
-
-
 Stellar population synthesis grids cover finite (age, metallicity) ranges.
 This diagnostic probes what happens at boundaries: clip, extrapolate, or error?
 We fix the SFH and vary stellar metallicity across the SSP grid boundary—inside,
@@ -34,12 +29,12 @@ any NaN or error surfaces immediately in the plot.
 
 Reference: SSP boundary handling is governed by DSPS interpolation (Hearin+ 2023).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-111
+.. GENERATED FROM PYTHON SOURCE LINES 13-109
 
 
 
 .. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_diag_ssp_grid_edge_behavior_001.png
-   :alt: Met = -3.700 (inside grid), Met = -1.322 (near boundary), Met = -1.222 (at boundary), Met = -1.022 (outside grid)
+   :alt: plot diag ssp grid edge behavior
    :srcset: /auto_examples/advanced/images/sphx_glr_plot_diag_ssp_grid_edge_behavior_001.png
    :class: sphx-glr-single-img
 
@@ -101,7 +96,7 @@ Reference: SSP boundary handling is governed by DSPS interpolation (Hearin+ 2023
         f"Met = {met_values[3]:.3f}\n(outside grid)",
     ]
 
-    for ax, met, title in zip(axes.flat, met_values, titles):
+    for ax, met, _title in zip(axes.flat, met_values, titles):
         params = {**baseline, "met_logzsol": jnp.float64(met)}
 
         try:
@@ -142,8 +137,6 @@ Reference: SSP boundary handling is governed by DSPS interpolation (Hearin+ 2023
                 fontsize=10,
                 color="red",
             )
-
-        ax.set_title(title, fontsize=10)
 
     plt.tight_layout()
     plt.savefig("plot_diag_ssp_grid_edge_behavior.png", dpi=150, bbox_inches="tight")

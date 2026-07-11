@@ -83,9 +83,11 @@ for i, age_gyr in enumerate(AGES_GYR):
         }
         # Predict photometry and compute colors
         flux = np.asarray(model.predict_photometry(p))
+        # Protect against log of zero by ensuring positive flux
+        flux = np.where(flux > 0, flux, 1e-30)
         for name, idx_1, idx_2 in COLORS_TO_PLOT:
-            mag_1 = -2.5 * np.log10(np.maximum(flux[idx_1], 1e-20))
-            mag_2 = -2.5 * np.log10(np.maximum(flux[idx_2], 1e-20))
+            mag_1 = -2.5 * np.log10(flux[idx_1])
+            mag_2 = -2.5 * np.log10(flux[idx_2])
             color_grids[name][i, j] = mag_1 - mag_2
 
 # Create 3-panel figure

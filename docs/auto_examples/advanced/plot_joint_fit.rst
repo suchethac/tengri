@@ -21,11 +21,6 @@
 Joint Photometry + Spectroscopy Fit
 ====================================
 
-.. image:: images/sphx_glr_plot_joint_fit_001.png
-   :alt: plot joint fit
-   :class: sphx-glr-single-img
-
-
 Demonstrates tengri's Observation API for joint fitting across two data
 streams. Creates a mock galaxy with SDSS photometry and low-resolution
 spectroscopy, then recovers parameters via MAP. Shows how spectroscopy
@@ -35,6 +30,17 @@ Reference: Conroy 2013 (ARA&A, 51, 393); Leja et al. 2019 on spectroscopic
 constraints for star formation histories.
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-124
+
+
+
+.. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_joint_fit_001.png
+   :alt: plot joint fit
+   :srcset: /auto_examples/advanced/images/sphx_glr_plot_joint_fit_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -141,7 +147,7 @@ constraints for star formation histories.
     n_phot = 5
     spec_obs = np.array(flux_obs[n_phot:])
     spec_fit = np.array(model.predict_spectrum(fit_params, wave_obs))
-    ax.plot(wave_plot, spec_obs, color="grey", lw=0.5, alpha=0.7, label="Observed")
+    ax.plot(wave_plot, spec_obs, color="gray", lw=0.5, alpha=0.7, label="Observed")
     ax.plot(wave_plot, spec_fit, color="C3", lw=1.5, label="MAP")
     ax.set_xlabel(r"Wavelength [$\mu$m]")
     ax.set_ylabel(r"Flux density [$\mu$Jy]")
@@ -149,6 +155,11 @@ constraints for star formation histories.
 
     fig.tight_layout()
     plt.savefig("plot_joint_fit.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 8.507 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_joint_fit.py:

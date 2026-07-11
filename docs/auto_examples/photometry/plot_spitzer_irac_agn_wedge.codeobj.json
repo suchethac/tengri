@@ -1,36 +1,4 @@
 {
- "Path": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "Path"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "PurePath"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "Path"
-  }
- ],
- "_FILTER_DIRS": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "list"
-  }
- ],
  "agn_color_x": [
   {
    "is_class": false,
@@ -610,15 +578,6 @@
    "module": "matplotlib",
    "module_short": "matplotlib",
    "name": "Artist.set_ylim"
-  }
- ],
- "cache_dir": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "PosixPath"
   }
  ],
  "cbar": [

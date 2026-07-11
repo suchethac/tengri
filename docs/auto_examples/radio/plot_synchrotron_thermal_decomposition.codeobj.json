@@ -366,8 +366,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.radio.radio",
-   "module_short": "tengri.components.radio",
+   "module": "tengri.radio",
+   "module_short": "tengri.radio",
    "name": "compute_radio_components"
   }
  ],

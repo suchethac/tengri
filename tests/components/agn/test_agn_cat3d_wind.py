@@ -75,7 +75,7 @@ def test_output_shape_and_finiteness(torus_fn, wavelength) -> None:
         agn_log_lbol=44.0,
         agn_cos_inc=0.5,
         agn_a_cat3d=-2.0,
-        agn_fwd_cat3d=0.2,
+        agn_fwd_cat3d=1.5,
         agn_torus_frac=0.5,
     )
     chex.assert_equal_shape([sed, wavelength])
@@ -93,11 +93,11 @@ def test_luminosity_scales_linearly_with_lbol(torus_fn, wavelength) -> None:
 
 def test_each_axis_actually_interpolated(torus_fn, wavelength) -> None:
     """Endpoints span the real grid extent: cos(incl) ∈ [0, 1] (incl ∈ [0, 90°]),
-    a ∈ [-3, -1.5], fwd ∈ [0.15, 2.25] per CAT3D_mean_3p.pickle."""
-    base = torus_fn(wavelength, agn_cos_inc=0.5, agn_a_cat3d=-2.0, agn_fwd_cat3d=0.15)
+    a ∈ [-3, -1.5], fwd ∈ [1.0, 2.25] — AGNfitter's rows-210+ sub-library (#1036)."""
+    base = torus_fn(wavelength, agn_cos_inc=0.5, agn_a_cat3d=-2.0, agn_fwd_cat3d=1.0)
     variants = [
-        torus_fn(wavelength, agn_cos_inc=0.0, agn_a_cat3d=-2.0, agn_fwd_cat3d=0.15),
-        torus_fn(wavelength, agn_cos_inc=0.5, agn_a_cat3d=-3.0, agn_fwd_cat3d=0.15),
+        torus_fn(wavelength, agn_cos_inc=0.0, agn_a_cat3d=-2.0, agn_fwd_cat3d=1.0),
+        torus_fn(wavelength, agn_cos_inc=0.5, agn_a_cat3d=-3.0, agn_fwd_cat3d=1.0),
         torus_fn(wavelength, agn_cos_inc=0.5, agn_a_cat3d=-2.0, agn_fwd_cat3d=2.25),
     ]
     for i, v in enumerate(variants):
@@ -142,7 +142,7 @@ def test_unified_dispatch_registered() -> None:
         agn_frac=0.1,
         agn_cos_inc=0.5,
         agn_a_cat3d=-2.0,
-        agn_fwd_cat3d=0.2,
+        agn_fwd_cat3d=1.5,
     )
     chex.assert_equal_shape([sed, wl])
     assert float(sed.max()) > 0.0

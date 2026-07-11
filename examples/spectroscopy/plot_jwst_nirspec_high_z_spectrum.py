@@ -141,4 +141,3 @@ ax.set_xlabel(r"Observed wavelength [$\mu$m]")
 ax.set_ylabel(r"$F_\lambda$ [arbitrary]")
 
 plt.savefig("plot_jwst_nirspec_high_z_spectrum.png", dpi=150, bbox_inches="tight")
-print("Saved: plot_jwst_nirspec_high_z_spectrum.png")

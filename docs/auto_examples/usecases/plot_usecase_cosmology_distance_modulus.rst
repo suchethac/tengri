@@ -21,11 +21,6 @@
 Hubble Tension: Cosmology-dependent distance modulus
 =====================================================
 
-.. image:: images/sphx_glr_plot_usecase_cosmology_distance_modulus_001.png
-   :alt: plot usecase cosmology distance modulus
-   :class: sphx-glr-single-img
-
-
 Observed-frame flux of a rest-frame SED depends on cosmological distances,
 which vary with H0 and Ω_M. This example quantifies the Hubble tension
 (H0 tension between local measurements ~73 km/s/Mpc and CMB measurements
@@ -45,7 +40,7 @@ References
 * Riess et al. 2022: ApJL, 934, L7 (local H0=73.04±1.04 km/s/Mpc)
 * Hubble tension review: Di Valentino et al. 2021, Nature Astron., 5, 629
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-139
+.. GENERATED FROM PYTHON SOURCE LINES 24-124
 
 
 
@@ -55,39 +50,8 @@ References
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-rescan-main/examples/usecases/plot_usecase_cosmology_distance_modulus.py:122: UserWarning: Glyph 8320 (\N{SUBSCRIPT ZERO}) missing from font(s) STIXGeneral.
-      fig.tight_layout()
-    Hubble Tension: Distance Modulus Shifts
-    ============================================================
-    Redshift     μ_Planck     μ_Riess      Δμ (mmag)   
-    ------------------------------------------------------------
-    0.050        36.808       36.643       -164.17     
-    0.076        37.767       37.604       -163.76     
-    0.117        38.745       38.582       -163.13     
-    0.178        39.748       39.586       -162.19     
-    0.272        40.782       40.621       -160.80     
-    0.416        41.851       41.692       -158.81     
-    0.635        42.953       42.797       -156.12     
-    0.970        44.079       43.926       -152.86     
-    1.481        45.213       45.064       -149.42     
-    2.262        46.339       46.193       -146.31     
-    ------------------------------------------------------------
-    |Δμ| at z=3.0: 144.59 mmag
-
-    Interpretation: Under Riess H0=73 km/s/Mpc vs. Planck H0=67.4,
-    the distance modulus is SMALLER (galaxy appears BRIGHTER) by ~0.14 mag at z=3.
-    This difference accumulates with redshift and is a key signature of the Hubble tension.
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -190,22 +154,7 @@ References
     )
 
     fig.tight_layout()
-    plt.show()
-
-    # Print summary
-    print("Hubble Tension: Distance Modulus Shifts")
-    print("=" * 60)
-    print(f"{'Redshift':<12} {'μ_Planck':<12} {'μ_Riess':<12} {'Δμ (mmag)':<12}")
-    print("-" * 60)
-    for z, mu_p, mu_r, dm in zip(z_grid[::3], mu_planck[::3], mu_riess[::3], delta_m[::3]):
-        print(f"{z:<12.3f} {mu_p:<12.3f} {mu_r:<12.3f} {dm * 1000:<12.2f}")
-    print("-" * 60)
-    print(f"|Δμ| at z=3.0: {abs(delta_m[-1]) * 1e3:.2f} mmag")
-    print(
-        "\nInterpretation: Under Riess H0=73 km/s/Mpc vs. Planck H0=67.4,"
-        "\nthe distance modulus is SMALLER (galaxy appears BRIGHTER) by ~0.14 mag at z=3."
-        "\nThis difference accumulates with redshift and is a key signature of the Hubble tension."
-    )
+    plt.savefig("plot_usecase_cosmology_distance_modulus.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_cosmology_distance_modulus.py:

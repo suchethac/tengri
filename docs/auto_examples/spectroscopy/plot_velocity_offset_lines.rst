@@ -28,11 +28,7 @@ distinguishing AGN BLR from NLR.
 
 .. sphx-glr-precomputed-img:
 
-.. image:: images/sphx_glr_plot_velocity_offset_lines_001.png
-   :alt: plot_velocity_offset_lines
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 17-98
+.. GENERATED FROM PYTHON SOURCE LINES 17-99
 
 
 
@@ -48,6 +44,10 @@ distinguishing AGN BLR from NLR.
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
     import warnings
 
     import jax
@@ -55,9 +55,6 @@ distinguishing AGN BLR from NLR.
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
-
-    # Ensure non-interactive backend (required for headless execution)
-    mpl.use("Agg")
 
     import tengri
     from tengri.analysis.plotting import setup_style
@@ -121,13 +118,13 @@ distinguishing AGN BLR from NLR.
         xlim=(6480, 6680),
         yscale="log",
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-        ylabel=r"$F_\lambda\,/\,F_{\rm cont}$ (normalised at 6600-6650 Å)",
+        ylabel=r"$F_\lambda\,/\,F_{\rm cont}$ (normalized at 6600-6650 Å)",
     )
     cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
     cb.set_label(r"$\sigma_v$  [km s$^{-1}$]")
 
     fig.tight_layout()
-    plt.show()
+    plt.savefig("plot_velocity_offset_lines.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_velocity_offset_lines.py:

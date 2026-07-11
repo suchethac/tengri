@@ -21,11 +21,6 @@
 Gas-phase metallicity effect on nebular continuum
 ==================================================
 
-.. image:: images/sphx_glr_plot_gas_z_continuum_effect_001.png
-   :alt: plot gas z continuum effect
-   :class: sphx-glr-single-img
-
-
 Nebular free-free, free-bound, and two-photon emission respond to gas-phase
 metallicity (``logZ_gas``) through changes in metal cooling efficiency and
 ionization balance. metallicity sensitivity of
@@ -41,7 +36,7 @@ References:
   Galactic Nuclei*, 2nd ed., University Science Books
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue nebular model)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-116
+.. GENERATED FROM PYTHON SOURCE LINES 20-114
 
 
 
@@ -112,7 +107,7 @@ References:
     labels = [f"$Z_{{\\rm gas}}/Z_\\odot = 10^{{{z:.1f}}}$" for z in logz_values]
 
     # Compute SEDs at each metallicity AND a reference baseline (lowest Z) so we
-    # can visualise the *nebular* response — the stellar continuum dominates by
+    # can visualize the *nebular* response — the stellar continuum dominates by
     # factors of 10–100 at these wavelengths, so plotting νLν directly hides
     # everything. We show the fractional residual against the lowest-Z model.
     seds = []
@@ -140,9 +135,7 @@ References:
     ax.axhline(0.0, color="0.4", lw=0.6, ls=":")
     ax.set_xlim(1000, 1e4)
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]", fontsize=12)
-    ax.set_ylabel(
-        r"$\Delta L_\nu / L_\nu(Z_{\rm gas}=10^{-1.5}Z_\odot)$  [%]", fontsize=12
-    )
+    ax.set_ylabel(r"$\Delta L_\nu / L_\nu(Z_{\rm gas}=10^{-1.5}Z_\odot)$  [%]", fontsize=12)
     ax.set_title(
         "Nebular continuum sensitivity to gas-phase metallicity (residual vs. lowest-Z)",
         fontsize=11,

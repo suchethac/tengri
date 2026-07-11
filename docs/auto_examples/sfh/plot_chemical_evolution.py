@@ -24,8 +24,8 @@ import numpy as np
 
 import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.components.stellar.sfh.chemical_evolution import closed_box_metallicity
 from tengri.cosmology import age_at_z0
+from tengri.sfh import closed_box_metallicity
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -228,6 +228,4 @@ ax_sed.legend(frameon=False, fontsize=9, loc="upper right")
 ax_sed.grid(True, alpha=0.25, which="both", axis="both")
 
 fig_met.tight_layout()
-fig_met.savefig("plot_chemical_evolution_scenarios.png", dpi=150, bbox_inches="tight")
-
 plt.savefig("plot_chemical_evolution.png", dpi=150, bbox_inches="tight")

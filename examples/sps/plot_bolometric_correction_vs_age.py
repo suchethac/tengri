@@ -72,7 +72,7 @@ for (name, *_), c in zip(bands, cmap_colors):
 ax.axhline(0, color="0.75", lw=0.6)
 ax.set(
     xlabel=r"$\log_{10}\,t$ [yr]",
-    ylabel=r"BC$_X = M_{\rm bol} - M_X = 2.5\,\log_{10}(L_{\rm bol}/L_X)$",
+    ylabel=r"Bolometric correction  $\mathrm{BC}_X = M_{\mathrm{bol}} - M_X$",
     xlim=(log_age_yr.min(), log_age_yr.max()),
 )
 ax.legend(frameon=False, fontsize=9, title="band", title_fontsize=9)
