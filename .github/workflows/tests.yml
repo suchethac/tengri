@@ -283,7 +283,13 @@ jobs:
           key: tengri-jax-${{ matrix.suite }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
           restore-keys: |
             tengri-jax-${{ matrix.suite }}-${{ hashFiles('pyproject.toml') }}-
-      - run: pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval
+      # `-m 'not crossval'` overrides the default addopts selector, which
+      # deselects the `slow` marker that conftest auto-applies to exactly these
+      # two trees — without it this job would collect everything and run nothing.
+      # `-n 0` keeps the tier serial: the default addopts now request `-n auto`,
+      # but the sampler-heavy tests peak at several GB each and xdist workers
+      # would OOM the 16 GB runner (the reason this tier was never parallelized).
+      - run: pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0
         timeout-minutes: ${{ matrix.timeout }}
       - uses: actions/cache/save@v4
         if: always()
