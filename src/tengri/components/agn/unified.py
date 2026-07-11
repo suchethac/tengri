@@ -394,8 +394,8 @@ def resolve_agn_model(name: str) -> Callable:
     #   * skirtor_stalevski — the raw Stalevski (2016) SKIRTOR radiative-transfer
     #     *total* (disc + torus + scattering computed jointly), physically NOT a
     #     disc-block + torus-block sum (see test_skirtor_stalevski.py).
-    #   * grahsp — a self-contained parity port whose ``torus_model`` /
-    #     ``disc_model`` variant selectors are GrahspConfig structural choices,
+    #   * grahsp — a self-contained parity implementation whose ``torus_model``
+    #     / ``disc_model`` variant selectors are GrahspConfig structural choices,
     #     not forwardable block kwargs (see grahsp/test_parity_integration.py).
     # Routing them here preserves full param forwarding; the composable blocks
     # (disc='skirtor'/'grahsp_sbpl', torus='skirtor'/'grahsp', …) remain

@@ -586,8 +586,9 @@ print(
 # SN12 (Slone & Netzer 2012) was, until this work, the one disk library
 # tengri lacked — every "Netzer" reference in tengri pointed to the unrelated
 # Laor & Netzer (1989) self-gravity radius. tengri's new `slone_netzer` disc
-# block ports the SN12 α-disc grid directly from AGNFITTER-RX's `SN12.pickle`
-# (the M_BH = 8.6, log Ṁ/Ṁ_edd ≈ −2.0 grid point is shown on both sides).
+# block reads the SN12 α-disc grid directly from AGNFITTER-RX's published
+# `SN12.pickle` (the M_BH = 8.6, log Ṁ/Ṁ_edd ≈ −2.0 grid point is shown on
+# both sides).
 #
 # How well each tengri block matches, panel by panel:
 #

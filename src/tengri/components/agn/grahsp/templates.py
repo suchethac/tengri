@@ -67,7 +67,7 @@ class GRAHSPTemplates:
     -----
     The template-path fields (``torus_mn12_*``, ``feii_vc04_*``, ``disc_*``)
     default to ``None`` for backward compatibility with bundles built before
-    the GRAHSP parity port; regenerate via ``tools/build_grahsp_hdf5.py``.
+    the GRAHSP parity implementation; regenerate via ``tools/build_grahsp_hdf5.py``.
     """
 
     feii_wave_nm: Array

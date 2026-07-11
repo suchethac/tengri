@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Integration tests for the GRAHSP parity port (Balmer continuum, MN12
+"""Integration tests for the GRAHSP parity implementation (Balmer continuum, MN12
 template torus, Veron-Cetty FeII, Netzer disc).
 
 Verifies the four upstream-faithful variants flow through the full

@@ -554,7 +554,7 @@ def stellar_chem_evol_model(ssp):
     Chemical-evolution closed-box gas regulator — Z(t) is derived
     self-consistently from the SFH using `chem_yield`, `chem_eta_outflow`,
     `chem_f_gas_init`, `chem_return_frac`. Mirrors the legacy code path
-    at sed_model.py:3578-3592 and the orchestrator port at
+    at sed_model.py:3578-3592 and the orchestrator component at
     component.py (Phase II-2.4).
     """
     spec = Parameters(

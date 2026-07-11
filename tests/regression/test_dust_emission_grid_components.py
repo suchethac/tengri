@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Bit-exact regression tests for dust emission grid SEDModelComponent ports.
+"""Bit-exact regression tests for dust emission grid SEDModelComponents.
 
-These tests verify that the grid/template dust-emission ports (dale2014,
+These tests verify that the grid/template dust-emission components (dale2014,
 draine_li2007, draine_li2014, astrodust, bosa, themis) are bit-exact with
 the original closures they wrap.
 
@@ -63,7 +63,7 @@ def L_ir(golden_data: dict) -> float:
 
 
 class TestDale2014GridPort:
-    """Bit-exact regression for dale2014 SEDModelComponent port."""
+    """Bit-exact regression for dale2014 SEDModelComponent."""
 
     def test_dale2014_bit_exact(
         self,
@@ -103,7 +103,7 @@ class TestDale2014GridPort:
 
 
 class TestDale2014CigaleGridPort:
-    """Bit-exact regression for dale2014_cigale SEDModelComponent port."""
+    """Bit-exact regression for dale2014_cigale SEDModelComponent."""
 
     def test_dale2014_cigale_bit_exact(
         self,
@@ -143,7 +143,7 @@ class TestDale2014CigaleGridPort:
 
 
 class TestDraineLi2007GridPort:
-    """Bit-exact regression for draine_li2007 SEDModelComponent port."""
+    """Bit-exact regression for draine_li2007 SEDModelComponent."""
 
     def test_draine_li2007_bit_exact(
         self,
@@ -183,7 +183,7 @@ class TestDraineLi2007GridPort:
 
 
 class TestDraineLi2014GridPort:
-    """Bit-exact regression for draine_li2014 SEDModelComponent port."""
+    """Bit-exact regression for draine_li2014 SEDModelComponent."""
 
     def test_draine_li2014_bit_exact(
         self,
@@ -222,15 +222,15 @@ class TestDraineLi2014GridPort:
         np.testing.assert_allclose(sed_out, golden, rtol=1e-14, atol=1e-15)
 
 
-# NOTE (#871): the astrodust port was re-parameterized from the DL07-costume
+# NOTE (#871): the astrodust component was re-parameterized from the DL07-costume
 # (umin/gamma/qpah) to the faithful Hensley & Draine 2023 native lgU model. Its
 # bit-exact regression now lives in tests/regression/test_dust_goldens_852.py
-# (port-native golden, energy-balance, no-op guard) — the lazy_loader golden path
+# (component-native golden, energy-balance, no-op guard) — the lazy_loader golden path
 # used here no longer applies.
 
 
 class TestBosaGridPort:
-    """Bit-exact regression for bosa SEDModelComponent port."""
+    """Bit-exact regression for bosa SEDModelComponent."""
 
     def test_bosa_bit_exact(
         self,
@@ -270,7 +270,7 @@ class TestBosaGridPort:
 
 
 class TestThemisGridPort:
-    """Bit-exact regression for themis SEDModelComponent port."""
+    """Bit-exact regression for themis SEDModelComponent."""
 
     def test_themis_bit_exact(
         self,

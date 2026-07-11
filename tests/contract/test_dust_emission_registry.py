@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for the dust emission loader cache and public convenience API.
 
-Dispatch is single via ``_REGISTRY`` (SEDModelComponent ports); the surviving
-``DUST_EMISSION_MODELS`` dict is an internal loader cache for the tabulated HDF5
-templates the grid ports call into (NOT a dispatch table). These tests pin the
-loader-cache contract and the public ``apply_dust_emission`` / module-alias
-convenience surface.
+Dispatch is single via ``_REGISTRY`` (SEDModelComponents); the
+surviving ``DUST_EMISSION_MODELS`` dict is an internal loader cache for the
+tabulated HDF5 templates the grid components call into (NOT a dispatch table).
+These tests pin the loader-cache contract and the public
+``apply_dust_emission`` / module-alias convenience surface.
 """
 
 import jax.numpy as jnp
@@ -25,11 +25,11 @@ class TestRegistration:
     """The eagerly- and lazily-registered emission models are in the cache."""
 
     def test_analytic_models_registered(self):
-        # energy_balance_split is intentionally NOT here: its port
+        # energy_balance_split is intentionally NOT here: its component
         # (EnergyBalanceSplitIRSEDComponent) calls the closure with a
         # non-default eta_balance=1.0, so a loader-cache entry would be a
         # divergent second dispatch path — removed for single dispatch (#850).
-        # See test_dust_emission_single_dispatch.py for the port-side assertion.
+        # See test_dust_emission_single_dispatch.py for the component-side assertion.
         for name in ("modified_blackbody", "casey2012"):
             assert name in DUST_EMISSION_MODELS
             assert callable(DUST_EMISSION_MODELS[name])
@@ -78,7 +78,7 @@ class TestApplyDustEmission:
     """The high-level ``apply_dust_emission(name, ...)`` convenience wrapper.
 
     This routes to the loader cache (not the pipeline dispatch); the pipeline
-    itself dispatches only through ``_REGISTRY`` ports.
+    itself dispatches only through ``_REGISTRY`` components.
     """
 
     def test_delegates_to_modified_blackbody(self):

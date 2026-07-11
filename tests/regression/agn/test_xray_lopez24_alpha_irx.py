@@ -7,7 +7,7 @@ Lopez+2024), matching CIGALE `lopez24.py`:
 
     l_agn_2to10keV = L_12um / 10**alpha_irx          # CIGALE lopez24.py:200
 
-An earlier port had the ratio **inverted** (`L_X = 10**α_IRX · νLν`), which put
+An earlier implementation had the ratio **inverted** (`L_X = 10**α_IRX · νLν`), which put
 the X-ray a factor `10**(2·α_IRX) ≈ 4×` too high at the α_IRX = 0.3 default. This
 guards the direction: at α_IRX = 0.3 the integrated corona L_X(2-10 keV) must be
 ≈ `νLν(12µm) / 10**0.3` (X-ray *below* the 12 µm), not above it.
@@ -49,7 +49,7 @@ def test_lopez24_lx_is_below_12um_at_default_alpha():
     lx = _integrated_lx_2to10(nu_lnu_12um, alpha)
     expected = nu_lnu_12um / 10.0**alpha  # CIGALE lopez24.py:200
     np.testing.assert_allclose(lx, expected, rtol=0.02)
-    # The old inverted port would give ~10**(2α) = 4× this — well outside 2%.
+    # The old inverted implementation would give ~10**(2α) = 4× this — well outside 2%.
     assert lx < nu_lnu_12um, "X-ray must sit below the 12 µm luminosity (α_IRX > 0)"
 
 

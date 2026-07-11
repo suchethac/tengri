@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Unit tests for the Silva+04 smooth-torus port.
+"""Unit tests for the Silva+04 smooth-torus component.
 
 Grid templates come from AGNfitter (Calistro Rivera et al. 2016); see
 ``scripts/build_silva04_grid.py``. Tests skip cleanly when the grid HDF5 is

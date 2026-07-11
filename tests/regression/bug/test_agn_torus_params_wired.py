@@ -14,7 +14,7 @@ This test pins both failure modes:
    set through the builder (the user's "verify a param is not a no-op" rule).
 2. **Normalization guard** — the skirtor_agnfitter torus must emit at a physical
    magnitude (comparable to the disc it reprocesses), not the ~1e-18 the
-   un-normalized port produced.
+   un-normalized implementation produced.
 
 Shape-only crossvals cannot catch either: a peak-normalized comparison is blind
 to absolute scale and to dead parameters.

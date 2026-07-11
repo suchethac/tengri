@@ -4,7 +4,7 @@
 The previous implementation of ``_tau_lc_laf`` / ``_tau_lc_dla`` masked out
 ``wave_obs <= _LAMBDA_LIMIT`` so the rest-frame Lyman-continuum region
 returned exactly zero opacity (T = 1 from the LC channel, but the function
-returned T = 0 because the Lyman-series opacity blew up). The fix ports the
+returned T = 0 because the Lyman-series opacity blew up). The fix implements the
 eazy-py analytic formulas from Inoue et al. (2014, Eqs. 25–29), with the
 correct active mask ``wave_obs < lamL*(1+z_source)``, which extends opacity
 continuously below the limit.
@@ -38,7 +38,7 @@ class TestBug494LyCBelowLimit:
         """At z=4, rest 800–900 Å transmission has the same order of magnitude as BAGPIPES.
 
         BAGPIPES reads the Inoue+2014 supplementary table; tengri uses the analytic
-        formulas (eazy-py port). Both should agree to a factor of ~few in the LyC
+        formulas (matching eazy-py). Both should agree to a factor of ~few in the LyC
         region — the previous T = 0 floor was wrong by 6+ orders of magnitude.
         """
         z = 4.0

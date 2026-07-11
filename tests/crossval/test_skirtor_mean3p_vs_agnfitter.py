@@ -15,7 +15,7 @@ intentionally different reductions of the same model, and this committed block
 gives the AGNfitter-matched one.
 
 Interpolation note: the runtime uses node-exact monotone-cubic (PCHIP)
-interpolation (``interp_nd_pchip``, shared with the cat3d / slone_netzer ports),
+interpolation (``interp_nd_pchip``, shared with the cat3d / slone_netzer components),
 so at a grid node it reproduces the stored AGNfitter template to floating-point
 precision while keeping C¹-continuous gradients for HMC/geoVI. This replaced the
 C²-smooth triweight *smoother*, which mixed in neighbors (~10% peak-normalized

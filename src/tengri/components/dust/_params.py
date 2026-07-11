@@ -21,7 +21,7 @@ Three tuples, each the canonical source for one legacy bucket in
 
 Why not also share with `declared_parameters`
 ---------------------------------------------
-Each emission port's ``declared_parameters`` is **per-template** —
+Each emission component's ``declared_parameters`` is **per-template** —
 modified_blackbody returns ``dust_T`` + ``dust_beta_ir``,
 draine2021_pah returns only ``dust_lgU``, astrodust uses a different
 ``dust_lgU`` bound, etc. The flat-builder bucket is the static superset
@@ -195,7 +195,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0.0 and hi < 1.0,
         "must be in [0, 1)",
     ),
-    # dust_tdust (#849): retired — the Schreiber tabulated ports now share the
+    # dust_tdust (#849): retired — the Schreiber tabulated components now share the
     # canonical ``dust_T`` (used by modified_blackbody / casey2012 / the
     # schreiber2016 closure). ``dust_tdust`` resolves to ``dust_T`` via
     # _LEGACY_PARAM_ALIASES.

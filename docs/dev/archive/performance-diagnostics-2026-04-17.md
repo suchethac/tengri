@@ -165,7 +165,7 @@ Created `docs/user/performance-expectations.md` covering:
 - Pre-allocate memory to avoid GC during inference
 - Use `nice -n -20` to prioritize Python process
 
-**Risk:** May not port to user environments (requires root on some systems).
+**Risk:** May not transfer to user environments (requires root on some systems).
 
 ### 2. Should we implement automatic retry logic?
 

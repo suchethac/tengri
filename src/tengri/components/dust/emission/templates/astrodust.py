@@ -39,8 +39,8 @@ from tengri.components.dust.astrodust_hd23 import (
     load_astrodust_hd23_or_raise,
     resample_lnu_on_aa_grid,
 )
+from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.components.dust.emission._physics import integrate_lnu_over_nu
-from tengri.components.dust.emission._port_base import EmissionPort
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig
 
@@ -98,7 +98,7 @@ class AstrodustIRConfig(SEDComponentConfig):
     template_path: str | None = None
 
 
-class AstrodustIRSEDComponent(EmissionPort):
+class AstrodustIRSEDComponent(EmissionComponent):
     r"""Hensley & Draine (2023) Astrodust+PAH dust IR emission template.
 
     Re-emits the dust-absorbed luminosity ``L_ir`` with the shape of the

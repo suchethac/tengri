@@ -367,7 +367,7 @@ def _detect_native_lsun(h5_file, filename: str) -> float | None:
     Resolution order (mirrors :func:`_detect_imf`):
 
     1. ``h5_file.attrs["lsun_erg_per_s"]`` — the explicit unit contract;
-       ports should write this going forward.
+       components should write this going forward.
     2. Filename prefix ``fsps_`` → FSPS's native 3.839e33 erg/s (the
        published catalog grids store FSPS's raw numbers; §1 of the
        Prospector reproduction pins this bit-exactly).
@@ -508,7 +508,7 @@ def _synthesize_mass_remaining(
             "surviving-mass fractions from dsps.imf.surviving_mstar with "
             "the Chabrier-fit-to-FSPS parameters. Set the 'imf' HDF5 "
             "attribute or use a filename suffix matching _detect_imf's "
-            "_KNOWN_IMFS to silence, or port the upstream table for a "
+            "_KNOWN_IMFS to silence, or integrate the upstream table for a "
             "bit-exact match.",
             UserWarning,
             stacklevel=3,

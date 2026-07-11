@@ -582,12 +582,12 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
 
     Derived from the SAME source as the ``SEDModel.build`` grammar validator
     (:func:`tengri.parameters.groups._valid_dust_emission_types`): the
-    ``_REGISTRY`` emission ports (those publishing ``sed_dust_ir``) plus the
+    ``_REGISTRY`` emission components (those publishing ``sed_dust_ir``) plus the
     canonical grammar alias map. The ``DUST_EMISSION_MODELS`` loader cache is
     **not** consulted — it is load-only — so the menu and the validator can
     never drift (closes #495).
     """
-    # Import triggers port registration into _REGISTRY + the alias map.
+    # Import triggers component registration into _REGISTRY + the alias map.
     import tengri.components.dust.emission  # noqa: F401
     from tengri.components.sed_model_component import _REGISTRY
     from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Source-pinned regression tests for the Cue clip discipline (#477).
 
-The ``CueNebularSEDComponent`` port — a thin wrapper over ``CueBackend`` — was
+The ``CueNebularSEDComponent`` — a thin wrapper over ``CueBackend`` — was
 deleted in #738 (Phase 3b); the canonical path is ``NebularSEDComponent`` +
 ``CueBackend``, exercised by
 ``tests/components/nebular/test_cue_param_translation.py``,
@@ -10,7 +10,7 @@ deleted in #738 (Phase 3b); the canonical path is ``NebularSEDComponent`` +
 
 What remains here is the ±50-dex clip regression on the cue-module
 ``predict_all_lines`` / ``predict_continuum`` functions, which is independent of
-the (now-deleted) port.
+the (now-deleted) component.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.contract
 def test_cue_predict_all_lines_clip_bounded_at_50dex():
     """The exponent clip in ``predict_all_lines`` must not exceed ±50 dex.
 
-    The ±100-dex bound shipped with the original Cue port was wide enough
+    The ±100-dex bound shipped with the original Cue component was wide enough
     that the +51-dex ``gas_logq = logU`` bug (#477) produced saturated-but-
     near-physical line luminosities instead of obviously-broken output. ±50
     dex is the discipline: any normalization slip ≥ 50 dex now hits the

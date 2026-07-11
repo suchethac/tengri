@@ -35,7 +35,7 @@ from tengri.protocols.derived_state import DerivedState
 # Deprecated alias kept on tengri.protocols.component for one release —
 # imports of ``DerivedBundle`` from this module continue to work via the
 # renamed canonical type ``DerivedState``. The walker in
-# ``tengri.citations.collect`` and a few port-era test fixtures still
+# ``tengri.citations.collect`` and a few legacy test fixtures still
 # read this attribute; remove in v1.0.
 DerivedBundle = DerivedState
 
@@ -561,7 +561,7 @@ class SEDComponent(Protocol):
         ...
 
     def citations(self) -> tuple[str, ...]:
-        """Bib keys for papers this component implements, solves for, or ports.
+        """Bib keys for papers this component implements or solves for.
 
         Returns
         -------

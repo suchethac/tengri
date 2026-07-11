@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Grid/template dust-emission SEDModelComponents.
 
-This package provides SEDModelComponent ports for tabulated dust IR emission
-templates. Each model wraps a closure from the parent `emission` module and
-registers itself for automatic discovery in the SEDModelComponent registry.
+This package provides SEDModelComponents for tabulated dust IR
+emission templates. Each model wraps a closure from the parent `emission`
+module and registers itself for automatic discovery in the SEDModelComponent
+registry.
 
 Available models (auto-registered):
 - ``dale2014`` — Dale et al. (2014) 1-parameter template

@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Silva, Maiolino & Granato (2004) AGN torus SEDModelComponent adapter.
+"""Silva+04 semi-empirical smooth torus library (Silva et al. 2004)
+SEDModelComponent.
 
-Ports the Silva+04 semi-empirical smooth torus library to the
-SEDModelComponent framework, enabling use of column-density-parameterized
-templates in the model-building API.
+Implements the Silva+04 torus model on the SEDModelComponent contract,
+enabling use of column-density-parameterized templates in the model-building
+API.
 
 This is an opt-in adapter — the existing AGNSEDComponent continues to
 support Silva+04 through the unified AGN registry.

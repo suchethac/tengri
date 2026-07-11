@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tengri.components.dust.emission._port_base import EmissionPort
+from tengri.components.dust.emission._component_base import EmissionComponent
 
 __all__ = ["EnergyBalanceSplitIRSEDComponent"]
 
 
-class EnergyBalanceSplitIRSEDComponent(EmissionPort):
+class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
     """Two-temperature (warm + cold) energy-balance dust IR emission.
 
     Decomposes the re-radiated IR into a warm, SF-heated component and a cold,

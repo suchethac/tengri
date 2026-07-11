@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for Nested Slice Sampling integration.
 
-Tests the local NS port (tengri.inference.ns) against known analytic
+Tests the local NS implementation (tengri.inference.ns) against known analytic
 evidence values for simple targets, verifies guards, and checks
 Posterior.log_evidence.
 """

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Contract tests for the Shock + Radio DPL SEDModelComponent ports."""
+"""Contract tests for the Shock + Radio DPL SEDModelComponents."""
 
 from __future__ import annotations
 

@@ -10,7 +10,7 @@ HDF5 (no pickle, no AGNfitter driver) so it runs in CI rather than skipping
 (#613). The grid's stored node templates ARE the AGNfitter reference; the test
 checks that the runtime component reproduces them.
 
-Tolerance note: unlike the triweight-based torus ports, the SN12 runtime uses
+Tolerance note: unlike the triweight-based torus components, the SN12 runtime uses
 **node-exact bilinear** interpolation over ``(log M_BH, log Edd)`` (the disc
 peak wavelength varies strongly with accretion rate, so a smooth kernel would
 smear it). At a grid node bilinear returns the stored template exactly, so the
