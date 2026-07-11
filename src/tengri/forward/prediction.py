@@ -111,6 +111,29 @@ from tengri.utils.sed_quantities import (
     extract_line_luminosity,
 )
 
+# ── Module-level warn-once guard ──────────────────────────────────
+
+_WARNED_RUNTIME_PHOTOMETRY = False
+
+
+def _warn_runtime_photometry_once():
+    """Issue one-time warning for runtime photometry filter construction."""
+    global _WARNED_RUNTIME_PHOTOMETRY
+    if not _WARNED_RUNTIME_PHOTOMETRY:
+        import warnings
+
+        _WARNED_RUNTIME_PHOTOMETRY = True
+        warnings.warn(
+            "Runtime filter resolution (Photometry.from_names) uses the exact path "
+            "(full SED integration) and is slower than build-time filters. "
+            "For repeated calls with the same filters, cache the result. "
+            "For significantly faster photometry, rebuild the model with "
+            "approx=WavePrecomp() and use pred.photometry(fast=True).",
+            UserWarning,
+            stacklevel=4,
+        )
+
+
 # ── NamedTuples for JIT-compatible batch computation ──────────────
 
 
@@ -1873,6 +1896,7 @@ class Prediction:
         "_cache",
         "_model",
         "_params",
+        "_photometry_cache",
         "ionizing",
         "lines",
         "properties",
@@ -1886,6 +1910,7 @@ class Prediction:
         self._model = model
         self._params = params
         self._cache = {}
+        self._photometry_cache = {}
         self.sfh = SFHProperties(self)
         self.sed = SEDProperties(self)
         self.lines = LineProperties(self)
@@ -2181,29 +2206,364 @@ class Prediction:
         self._ensure_sed()
         return self._cache["sed_total"]
 
-    @property
-    def photometry(self):
-        """Observed photometric flux densities.
+    def photometry(self, filters=None, fast=False):
+        r"""Observed-frame photometric flux densities.
+
+        Integrates the model SED through each filter and applies the cosmological
+        dimming, returning :math:`F_\nu` in the observer frame. For the same
+        quantity as AB magnitudes, see :meth:`magnitudes`.
+
+        **Exact by default, fast by choice.** The default integrates the full SED
+        — including on a model built with ``approx=WavePrecomp(...)``, where the
+        lean :meth:`~tengri.SEDModel.predict_photometry` would instead read the
+        lookup table. That is deliberate: ``pred.photometry()`` must mean the same
+        thing on every model. The LUT is an approximation carrying real error (of
+        order a few percent at high redshift), so you reach it only by asking for
+        it, with ``fast=True``.
+
+        Parameters
+        ----------
+        filters : sequence of str or FilterCurve, optional
+            Filter names (e.g., ``["jwst_f356w", "jwst_f444w"]``) or
+            :class:`~tengri.observation.photometry.FilterCurve` objects.
+            If None, uses the filters configured at model build time.
+        fast : bool, optional
+            If True, use the build-time WavePrecomp LUT (20–50× faster).
+            Only valid when the model was built with ``approx=WavePrecomp(...)``.
+            If `filters` is also provided, raises ValueError.
+            Default: False (exact path).
 
         Returns
         -------
         ndarray, shape (n_filters,)
-            Photometry at the filters defined in the SEDModel [erg/s/cm²/Hz].
+            Observed-frame flux densities [erg/s/cm²/Hz].
+
+        Raises
+        ------
+        ValueError
+            If the model was not built with ``approx=WavePrecomp(...)`` but
+            ``fast=True`` is requested, or if both `filters` and `fast=True`.
+        ValueError
+            If no photometry is configured on the model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python method with caching. Use in postprocessing,
+        not inside :func:`jax.jit`.
+
+        **Default (exact) path**: integrates ``state.sed_intrinsic`` through each
+        filter via :func:`~tengri.observation.photometry.project_photometry` — the
+        same kernel the likelihood uses — on the ``ForwardState`` this Prediction
+        already cached, so it costs the filter integration and not a second
+        forward pass.
+
+        **Fast path** (``fast=True``): Uses the precomputed photometric LUT
+        (filter effective wavelengths × SSP grid). Requires
+        ``approx=WavePrecomp(...)`` at model build time. Runtime cost is
+        ~150 μs per forward model (20–50× speedup for typical models).
+
+        **Runtime filters** (``filters=...``): Constructs a runtime Photometry
+        object from filter names or objects. Cached on ``self._photometry_cache``
+        keyed by filter tuple for zero-cost repeat calls. Issues a one-time
+        UserWarning (exact-path cost). The exact path is always used; a LUT
+        built for one filter set cannot cover filters it was never built for.
+
+        Examples
+        --------
+        **Default exact path:**
+
+        >>> pred = model.predict(params)
+        >>> phot = pred.photometry()  # shape (n_filters,)
+        >>> phot.shape
+        (8,)
+
+        **Fast path (requires WavePrecomp):**
+
+        >>> phot_fast = pred.photometry(fast=True)  # ≈ same result, 20–50× faster
+        >>> jnp.allclose(phot, phot_fast, rtol=1e-12)
+        True
+
+        **Runtime filter set:**
+
+        >>> phot_custom = pred.photometry(filters=["jwst_f356w", "jwst_f444w"])
+        >>> phot_custom.shape
+        (2,)
+        """
+        # Validate arguments
+        if fast and filters is not None:
+            raise ValueError(
+                "fast=True and filters=[...] are mutually exclusive. "
+                "A LUT built for one filter set cannot cover filters it was never built for."
+            )
+
+        # Mode 1: Fast path (WavePrecomp LUT)
+        if fast:
+            if not self._model._approx.get("wave_precomp"):
+                raise ValueError(
+                    "fast=True requires the model to be built with approx=WavePrecomp(...). "
+                    "Rebuild the model with approx=WavePrecomp() and try again."
+                )
+            state = self._ensure_state()
+            result = self._model.observation.predict_via_precomp(state, self._params)
+            return result["phot_fnu"]
+
+        # Mode 2: Runtime filters
+        if filters is not None:
+            # Convert filter names/objects to a hashable cache key
+            filter_names = tuple(f if isinstance(f, str) else f.name for f in filters)
+            # Check cache first
+            if filter_names in self._photometry_cache:
+                phot_obj = self._photometry_cache[filter_names]
+            else:
+                # Build runtime Photometry from names
+                from tengri.observation.photometry_config import Photometry
+
+                phot_obj = Photometry.from_names(list(filter_names))
+                self._photometry_cache[filter_names] = phot_obj
+
+                # One-time warning
+
+                _warn_runtime_photometry_once()
+
+            # Project via exact path
+            from tengri.observation.photometry import project_photometry
+
+            state = self._ensure_state()
+            return project_photometry(state, self._params, phot_obj)
+
+        # Mode 3: Default — the EXACT path, on the build-time filters.
+        #
+        # This deliberately does NOT call ``model.predict_photometry``: that is
+        # the lean inference shortcut, and on a model built with
+        # ``approx=WavePrecomp(...)`` it returns the LUT. Routing the default
+        # here through it would make ``pred.photometry()`` silently mean "exact"
+        # on one model and "approximate" on another, which is precisely the
+        # ambiguity the exact-by-default rule exists to kill. The fast path is
+        # reachable — but only by asking for it, with ``fast=True``.
+        if self._model.observation.photometry is None:
+            raise ValueError(
+                "No photometry is configured on the model. "
+                "Build the model with observation=Observation(photometry=...) and try again."
+            )
+        from tengri.observation.photometry import project_photometry
+
+        return project_photometry(
+            self._ensure_state(), self._params, self._model.observation.photometry
+        )
+
+    def magnitudes(self, filters=None, fast=False):
+        r"""AB magnitudes through filters.
+
+        Computes AB magnitudes by converting observed flux densities from
+        :meth:`photometry` using the AB magnitude system.
+
+        Parameters
+        ----------
+        filters : sequence of str or FilterCurve, optional
+            Filter names or :class:`~tengri.observation.photometry.FilterCurve`
+            objects. If None, uses the filters configured at model build time.
+        fast : bool, optional
+            If True, use the build-time WavePrecomp LUT (20–50× faster).
+            Only valid when the model was built with ``approx=WavePrecomp(...)``.
+            If `filters` is also provided, raises ValueError.
+            Default: False (exact path).
+
+        Returns
+        -------
+        ndarray, shape (n_filters,)
+            AB magnitudes [dimensionless].
+
+        Raises
+        ------
+        ValueError
+            If the model was not built with ``approx=WavePrecomp(...)`` but
+            ``fast=True`` is requested, or if both `filters` and `fast=True`.
+        ValueError
+            If no photometry is configured on the model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python method delegating to :meth:`photometry`.
+        Use in postprocessing, not inside :func:`jax.jit`.
+
+        **Semantics**: Computes :meth:`photometry` in the requested mode
+        (exact, fast, or runtime filters), then converts flux densities to
+        AB magnitudes via:
+
+        .. math::
+
+            m_{\mathrm{AB}} = -2.5 \log_{10}(f_\nu / f_0)
+
+        where f_0 = 3.631×10⁻²⁰ erg s⁻¹ cm⁻² Hz⁻¹ is the AB zeropoint.
+
+        References
+        ----------
+        Oke & Gunn 1983, ApJ, 266, 713 — AB magnitude definition.
+
+        Examples
+        --------
+        >>> pred = model.predict(params)
+        >>> mags = pred.magnitudes()  # AB mags, shape (n_filters,)
+        >>> mags[0]  # first filter AB magnitude
+        20.5
+        """
+        from tengri.utils.magnitudes import fnu_to_ab_mag
+
+        fnu = self.photometry(filters=filters, fast=fast)
+        return fnu_to_ab_mag(fnu)
+
+    def spectrum(self, wave_obs=None):
+        r"""Instrument-grid, LSF-convolved spectrum.
+
+        Computes the observed-frame spectrum at the instrument wavelength grid,
+        convolved with the line-spread function and calibrated.
+
+        Parameters
+        ----------
+        wave_obs : ndarray, optional
+            Custom observed-frame wavelength grid [Ångstrom]. If None, uses
+            the grid configured in the spectroscopy setup at model build time.
+
+        Returns
+        -------
+        ndarray, shape (n_wave_obs,)
+            Observed-frame flux density [erg/s/cm²/Hz].
+
+        Raises
+        ------
+        ValueError
+            If no spectroscopy is configured on the model.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python accessor delegating to
+        :meth:`SEDModel.predict_spectrum`. Use in postprocessing,
+        not inside :func:`jax.jit`.
+
+        **Naming contract**: SED = panchromatic model-grid array
+        (:meth:`rest_sed` / :meth:`obs_sed`); spectrum = instrument-grid,
+        LSF-convolved, calibrated observable (:meth:`spectrum`).
+
+        **Preprocessing**: The instrument LSF (Gaussian with resolution R),
+        velocity broadening, and calibration polynomial all apply on top
+        of the SED redshift.
+
+        Examples
+        --------
+        >>> pred = model.predict(params)
+        >>> spec = pred.spectrum()  # shape (n_wave,)
+        >>> spec.shape
+        (2048,)
+        """
+        if self._model.observation.spectroscopy is None:
+            raise ValueError(
+                "No spectroscopy is configured on the model. "
+                "Build the model with observation=Observation(spectroscopy=...) and try again."
+            )
+        return self._model.predict_spectrum(self._params, wave_obs=wave_obs)
+
+    @property
+    def rest_sed(self):
+        r"""Rest-frame panchromatic SED.
+
+        Returns the rest-frame spectral energy distribution (luminosity)
+        evaluated on the model's default wavelength grid. Includes all
+        stellar, emission-line (nebular, AGN), and multi-wavelength
+        (radio, X-ray) components pre-dust attenuation.
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Rest-frame luminosity density [erg/s/Hz].
 
         Notes
         -----
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
 
+        **Naming contract**: SED = panchromatic model-grid array
+        (:meth:`rest_sed` / :meth:`obs_sed`); spectrum = instrument-grid,
+        LSF-convolved, calibrated observable (:meth:`spectrum`).
+
+        **Grid**: Wavelengths follow the model's SSP grid
+        (from ``ssp_data.ssp_wave``), optionally extended to radio and
+        X-ray if configured in spec (``radio=True``, ``xray=True``).
+
+        **Pre-dust**: This is the attenuation-applied SED (dust-redenned
+        continuum, no intrinsic stellar emission below Lyman limit).
+        For intrinsic (dust-free) stellar SED only, access the internal
+        cache (not a public API).
+
         Examples
         --------
-        .. code-block:: python
+        >>> pred = model.predict(params)
+        >>> sed_rest = pred.rest_sed  # shape (n_wave,)
+        >>> sed_rest.shape
+        (6000,)
 
-            pred = model.predict(params)
-            phot = pred.photometry  # ndarray, shape (n_filters,)
-            print(phot.shape)  # e.g. (8,) for 8 photometric bands
+        See Also
+        --------
+        obs_sed : Observed-frame SED (redshifted + IGM + DLA).
+        photometry : Filter-integrated quantities.
         """
-        return self._model.predict_photometry(self._params)
+        # Use the cached ForwardState to extract the rest-frame SED
+        state = self._ensure_state()
+        return state.sed_intrinsic
+
+    @property
+    def obs_sed(self):
+        r"""Observed-frame panchromatic SED.
+
+        Returns the observed-frame spectral energy distribution (flux density)
+        evaluated on the observed wavelength grid (rest-frame shifted by 1+z).
+        Includes redshift, IGM absorption (Inoue+2014), and DLA transmission
+        when configured.
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Observed-frame flux density [erg/s/cm²/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+
+        **Naming contract**: SED = panchromatic model-grid array
+        (:meth:`rest_sed` / :meth:`obs_sed`); spectrum = instrument-grid,
+        LSF-convolved, calibrated observable (:meth:`spectrum`).
+
+        **Wavelength frame**: Observed-frame wavelength
+        (rest-frame wavelength × (1+z)) [Ångstrom].
+
+        **Absorption**: Includes:
+
+        - IGM Lyman absorption (Inoue et al. 2014 [1]_) when ``igm=True``
+        - DLA (damping wing absorption) when ``dla=True``
+        - Reionization epoch (CGM) when configured
+        - Patchy reionization when configured
+
+        **Unit note**: Returns F_ν, not L_ν. Accounts for the
+        (1+z)/(4π d_L²) cosmological dimming factor.
+
+        References
+        ----------
+        .. [1] Inoue A. K., et al. 2014, MNRAS, 442, 1805 — IGM absorption
+           tables and mean transmission.
+
+        Examples
+        --------
+        >>> pred = model.predict(params)
+        >>> sed_obs = pred.obs_sed  # shape (n_wave,)
+        >>> sed_obs.shape
+        (6000,)
+
+        See Also
+        --------
+        rest_sed : Rest-frame SED (no absorption, no redshift).
+        spectrum : Instrument-grid observable (LSF-convolved).
+        """
+        return self._model.predict_obs_sed(self._params).sed
 
     # ── Top-level shortcuts to grouped derived quantities ───────────────
     # ``pred.stellar_mass`` and ``pred.sfh.stellar_mass`` return the same value;
