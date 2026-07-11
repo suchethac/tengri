@@ -479,12 +479,37 @@ def project_spectrum(
     non-negotiable: the polynomial models wavelength-dependent instrumental
     flux-calibration error on the observed, already-smoothed spectrum.
 
-    **Calibration convention**: The polynomial is ``C(lambda) = 1 + sum c_k *
-    T_k(x)`` where ``T_k`` are Chebyshev polynomials and ``x`` normalises
-    ``[wave_min, wave_max]`` to ``[-1, 1]``. The constant term is fixed to 1
-    (overall normalisation is handled elsewhere); provided coefficients represent
-    *deviations* from flat calibration.
+    **Calibration convention**:
+
+    .. math::
+
+        C(\lambda) = 1 + \sum_{n=1}^{N} c_n \, T_n(x), \qquad
+        x = \frac{2\lambda - \lambda_{\min} - \lambda_{\max}}
+                 {\lambda_{\max} - \lambda_{\min}}
+
+    where :math:`T_n` are Chebyshev polynomials of the first kind, :math:`x` maps
+    ``cal_wave_range`` onto :math:`[-1, 1]` (dimensionless), :math:`c_n` are the
+    coefficients ``cal_c1..cal_cN`` (dimensionless), and :math:`C(\lambda)` is a
+    dimensionless multiplicative correction to the observed spectrum.
+
+    The constant term is **fixed** at :math:`c_0 = 1`: a free constant is
+    degenerate with the model's overall normalisation (stellar mass), so the
+    coefficients describe only the *wavelength-dependent* part of the calibration
+    error. This is a deliberate difference from Prospector [1]_, whose
+    ``PolyOptCal`` instead solves for every coefficient including the constant by
+    least squares against the data; tengri samples ``cal_c1..cal_cN`` under
+    explicit priors, or marginalises them analytically (see
+    :func:`~tengri.observation.calibration.marginalize_calibration`). The
+    multiplicative Chebyshev form and its application *after* instrumental
+    smoothing follow Prospector.
+
     See :func:`~tengri.observation.calibration.calibration_polynomial`.
+
+    References
+    ----------
+    .. [1] Johnson, B. D., Leja, J., Conroy, C., & Speagle, J. S. (2021).
+           "Stellar Population Inference with Prospector."
+           ApJS, 254, 22. arXiv:2012.01426.
 
     See Also
     --------

@@ -333,23 +333,29 @@ class Spectroscopy:
         return jnp.asarray([params[f"cal_c{i + 1}"] for i in range(self.calibration_order)])
 
     @property
-    def calibration_wave_range(self) -> tuple[float, float]:
-        """Wavelength range for calibration polynomial normalization.
+    def calibration_wave_range(self):
+        """Wavelength range anchoring the calibration polynomial to [-1, 1].
 
         Returns
         -------
-        tuple[float, float]
-            ``(wave_min, wave_max)`` of the configured ``self.wave_obs``,
-            anchoring the Chebyshev polynomial normalisation to [-1, 1].
+        tuple of scalar
+            ``(wave_min, wave_max)`` [Angstrom] of the configured ``wave_obs``.
 
         Notes
         -----
-        The calibration polynomial is normalised to the observed-frame
-        wavelength range so that a given coefficient value has a consistent
-        meaning regardless of the grid passed to the forward model.
+        **JIT-compatible**: yes. The bounds are returned as JAX scalars, never
+        Python floats: ``Spectroscopy`` is a pytree, so ``wave_obs`` is a tracer
+        inside ``predict_observables_jit`` and ``float()`` on it would raise
+        ``ConcretizationTypeError``. They are only ever consumed arithmetically
+        (by :func:`~tengri.observation.calibration.calibration_polynomial`), so
+        tracers are fine.
+
+        The polynomial is normalised to the *configured instrument* grid, not to
+        whatever grid a caller passes, so a given ``cal_cN`` keeps the same
+        meaning when the model is evaluated on a custom ``wave_obs``.
 
         """
-        return (float(self.wave_obs.min()), float(self.wave_obs.max()))
+        return (self.wave_obs.min(), self.wave_obs.max())
 
     # ── Instrument factories ──────────────────────────────────────
 
