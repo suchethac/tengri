@@ -41,6 +41,22 @@ from tengri.protocols.component import (
 
 __all__ = ["IGMSEDComponent", "IGMSEDComponentConfig"]
 
+#: Floor on the number of redshift nodes for the IGM transmission tables.
+#:
+#: The IGM table is far cheaper per node than the SSP×filter ztable — a handful of
+#: numbers per redshift, against a full SSP block — so it has no business inheriting
+#: the SSP grid's ``n_z``. Linear-interpolation error falls as h², and the IGM factor
+#: is the steepest function of z in the model (the Lyman forest thickens rapidly),
+#: so the coarse default was the dominant interpolation error: 3.0e-3 in sdss_u at
+#: z=3.98 with n_z=100 over z∈[0,4]. Densifying the IGM grid alone cuts that to the
+#: 1e-4 level for a few hundred kB.
+_IGM_MIN_N_Z = 400
+
+
+def _igm_n_z(n_z: int) -> int:
+    """Redshift nodes for the IGM tables: at least :data:`_IGM_MIN_N_Z`."""
+    return max(int(n_z), _IGM_MIN_N_Z)
+
 
 @dataclass(frozen=True)
 class IGMSEDComponentConfig(SEDComponentConfig):
@@ -254,7 +270,7 @@ class IGMSEDComponent:
             zgrid = np.linspace(
                 float(spec.get("z_min", 0.001)),
                 float(spec.get("z_max", 3.0)),
-                int(spec.get("n_z", 100)),
+                _igm_n_z(int(spec.get("n_z", 100))),
             )
         else:
             zgrid = np.asarray([float(spec.get("value", 0.0))])
@@ -338,7 +354,7 @@ class IGMSEDComponent:
             zgrid = np.linspace(
                 float(spec.get("z_min", 0.001)),
                 float(spec.get("z_max", 3.0)),
-                int(spec.get("n_z", 100)),
+                _igm_n_z(int(spec.get("n_z", 100))),
             )
         else:
             zgrid = np.asarray([float(spec.get("value", 0.0))])

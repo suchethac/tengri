@@ -95,6 +95,13 @@ from tengri.utils.grid import (
     make_log_age_grid,
 )
 
+#: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
+#: :meth:`SEDModel._dust_emission_band_response`. A physically plausible L_IR
+#: (~1e44 erg/s ≈ 2.6e10 Lsun, a LIRG), paired with the L=1 unit probe. An emitter
+#: whose template *shape* depends on luminosity (BOSA: L_TIR–sSFR) fails to scale
+#: between the two and is refused a constant band response.
+_L_IR_PROBE = 1.0e44
+
 # Re-export supporting types for backwards compatibility
 __all__ = [
     "MockData",
@@ -810,15 +817,17 @@ class SEDModel:
         # a user ``jax.jit(predict_photometry)`` trace, leaking tracers and
         # baking the LUT in as a constant (XLA constant-folds → ~100× slower).
         if self._approx.get("wave_precomp"):
+            # The two precomputes are independent and fail independently. A single
+            # try around both meant a band-response failure disabled the *energy
+            # balance* LUT too — and reported itself under the energy-balance
+            # warning, blaming the wrong subsystem.
             try:
                 chain = self._build_component_chain()
                 self._cached_component_chain = chain
                 self._energy_balance_lut(chain)
-                self._dust_emission_band_response(chain)
             except Exception as e:
-                # Any build-time failure leaves the LUT disabled — the exact
-                # full-wave energy-balance path is the correct fallback, but
-                # it forfeits the speedup the astronomer opted into, so say so.
+                # The exact full-wave energy-balance path is the correct fallback,
+                # but it forfeits the speedup the astronomer opted into, so say so.
                 warnings.warn(
                     f"WavePrecomp energy-balance LUT precompute failed ({e!r}); "
                     "falling back to the exact energy-balance path (correct, "
@@ -827,6 +836,17 @@ class SEDModel:
                     stacklevel=2,
                 )
                 self._energy_balance_lut_cache = None
+
+            try:
+                self._dust_emission_band_response(self._cached_component_chain)
+            except Exception as e:
+                warnings.warn(
+                    f"WavePrecomp dust-emission band-response precompute failed "
+                    f"({e!r}); falling back to the exact per-call filter integral "
+                    "(correct, but without the precomputed-response speedup).",
+                    UserWarning,
+                    stacklevel=2,
+                )
                 self._dust_band_response_cache = None
 
         # Build-time accuracy guard (#617): the photometry LUT bakes the
@@ -5614,12 +5634,14 @@ class SEDModel:
         fw_pad = getattr(st, "phot_fw_padded", None)
         ft_pad = getattr(st, "phot_ft_padded", None)
 
-        # The emission *shape* must be fixed for R to be a build-time constant.
-        # (The filter integral is linear in the template, so R could equally be
-        # tabulated at the template nodes and contracted with the interpolation
-        # weights — exact even for a free shape knob. Not done yet; see #TODO.)
+        # ALLOWLIST, not a denylist. R is a build-time constant only if the emission
+        # *shape* is fixed. Gating on "no free param from a known shape-param set"
+        # fails DANGEROUS when a param is missing from that set (dust_log_ssfr was);
+        # gating on "no free dust_* param outside the known attenuation knobs" fails
+        # SAFE — an unrecognized free parameter simply disables the optimization.
         free = set(self.spec.free_params)
-        shape_free = (free & self._EB_EMISSION_PARAMS) or ("redshift" in free)
+        free_dust = {p for p in free if p.startswith("dust_")}
+        shape_free = bool(free_dust - self._EB_ATTEN_FREE_OK) or ("redshift" in free)
 
         if (
             emitter is not None
@@ -5639,8 +5661,26 @@ class SEDModel:
             # precompute that slices differently silently builds R from default
             # template parameters and returns confidently wrong IR photometry.
             p = emitter.slice_params({k: jnp.asarray(v) for k, v in fixed.items()})
-            unit_sed_ir, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=1.0)
-            response = lnu_filter_integral_batch(unit_sed_ir, wave, fw_pad, ft_pad, z)
+
+            # HOMOGENEITY CHECK. The band response is exact only because an additive
+            # emitter is linear (degree-1 homogeneous) in its luminosity:
+            #
+            #     sed(L) = L * S_unit(lambda)   =>   int sed(L) R_f = L * int S_unit R_f
+            #
+            # Not every IR model obeys this. BOSA parameterizes its template by
+            # (L_TIR, sSFR), so its *shape* is a function of L_ir — probing it at
+            # L_ir = 1 erg/s samples a template ~44 dex from anything physical and
+            # builds a response that is wrong by ~13% in W4. Luminosity-dependent
+            # shapes (L-T relations) are common in IR SED models, so verify the
+            # property rather than maintaining a list of which models have it:
+            # probe at two luminosities and require the SED to scale.
+            lo, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=1.0)
+            hi, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=_L_IR_PROBE)
+            if not bool(jnp.allclose(hi, _L_IR_PROBE * lo, rtol=1e-10)):
+                self._dust_band_response_cache = None
+                return None
+
+            response = lnu_filter_integral_batch(lo, wave, fw_pad, ft_pad, z)
 
         self._dust_band_response_cache = response
         return response

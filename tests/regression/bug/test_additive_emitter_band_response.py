@@ -39,18 +39,34 @@ from tengri.observation.photometry_config import Photometry
 # w4 (22 um) is where the IR template actually lands at z=0.1.
 FILTERS = ["sdss_g", "sdss_r", "sdss_i", "wise_w4"]
 
-# Deliberately non-default shape knobs, so a precompute that silently sliced the
-# DEFAULTS would produce different fluxes and fail the exactness check.
+# EVERY dust-emission model in the registry, not a hand-picked subset. The first
+# version of this file listed eight models, all of them linear, and so could never
+# fail -- while its own docstring claimed to catch "a non-linear emitter". bosa is
+# exactly that emitter, and it was the one left out.
+#
+# Non-default shape knobs where the model has them, so a precompute that silently
+# sliced the DEFAULTS would produce different fluxes and fail the exactness check.
 SHAPES = {
     "dale2014": {"alpha_dale": 2.5},
+    "dale2014_cigale": {},
     "draine_li2007": {"umin": 2.0, "qpah": 3.0},
     "draine_li2014": {},
     "themis": {"qhac": 0.10},
     "casey2012": {"T": 40.0, "beta_ir": 1.8},
     "modified_blackbody": {"T": 40.0, "beta_ir": 1.8},
     "schreiber2016": {},
+    "schreiber2018": {},
     "astrodust": {},
+    "pah_drude": {},
+    "bosa": {},  # NOT homogeneous in L_ir -- must be refused a band response
 }
+
+#: Emitters whose template *shape* depends on L_ir, so no build-time-constant band
+#: response can exist. BOSA parameterizes by (L_TIR, sSFR). Luminosity-dependent
+#: shapes (L-T relations) are common in IR SED models, so the code detects this by
+#: *property* (a homogeneity probe), not by consulting this list -- the list only
+#: pins the expected outcome for the models we ship.
+NON_HOMOGENEOUS = {"bosa"}
 
 # Emission-free WavePrecomp photometry compiles ~2.9e5 FLOPs. With the band response the
 # emitter adds only L_ir * R (a few ops per filter). The dense per-call integral cost
@@ -101,20 +117,24 @@ def test_band_response_is_exact_against_the_dense_filter_integral(emission_type)
     # Compare RATIOS: these fluxes are ~1e-30, so an absolute tolerance would be
     # vacuously satisfied by anything at all.
     #
-    # Bound is 1e-4, not machine epsilon, because this compares the WHOLE model: the
+    # This is a COARSE guard, deliberately. It compares the WHOLE model, and the
     # WavePrecomp *stellar* path carries its own documented approximation (the
-    # first-order Taylor dust attenuation, #617), which leaks a little even into W4.
-    # That residual is pre-existing and unrelated to the additive projection --
-    # astrodust sits at 6e-6 here both before and after the band response.
+    # first-order Taylor dust attenuation, #617) which leaks into W4 at the 1e-6 to
+    # 1e-3 level depending on the SSP grid and filter set -- pre-existing, present on
+    # main, and nothing to do with the band response. A tight bound here would go red
+    # for that pre-existing reason (pah_drude has been measured at 2.4e-3).
     #
-    # The exactness of the additive projection *itself* is what the emitter-linearity
-    # argument guarantees, and it is measured directly: switching this projection from
-    # the dense per-call filter integral to L_ir * R leaves every one of these eight
-    # models' fluxes unchanged to <= 4.4e-16 (fp re-association). This assertion is the
-    # coarse guard that catches a *gross* error -- a non-linear emitter, or a build-time
-    # slice that grabbed default template parameters.
+    # The *fine* guarantee lives elsewhere and is stronger: the projection is exact by
+    # homogeneity (pinned by test_homogeneity_probe_actually_discriminates), and
+    # switching from the dense per-call integral to L_ir * R was measured to leave
+    # every homogeneous emitter's flux unchanged to <= 4.4e-16 (fp re-association).
+    #
+    # What this bound must catch is a GROSS error: a non-homogeneous emitter given a
+    # constant response (bosa: 1.3e-1), or a build-time slice that grabbed default
+    # template params. 5e-3 clears the pre-existing residual and still catches bosa by
+    # a factor of 25.
     w4 = np.abs(f_lut[-1] / f_exact[-1] - 1)
-    assert w4 < 1e-4, (
+    assert w4 < 5e-3, (
         f"{emission_type}: WISE-W4 (IR-dominated) differs by {w4:.3e} between the "
         "band-response LUT and the dense filter integral. The additive projection is "
         "supposed to be EXACT -- either the emitter is not linear in L_ir, or the "
@@ -123,9 +143,14 @@ def test_band_response_is_exact_against_the_dense_filter_integral(emission_type)
 
 
 @pytest.mark.regression_bug
-@pytest.mark.parametrize("emission_type", sorted(SHAPES))
+@pytest.mark.parametrize("emission_type", sorted(set(SHAPES) - NON_HOMOGENEOUS))
 def test_dust_emission_does_not_force_a_dense_per_call_filter_integral(emission_type):
-    """...and it must actually be fast. Asserts on compiled FLOPs, not wall-clock."""
+    """...and a homogeneous emitter must actually be fast.
+
+    Asserts on compiled FLOPs, not wall-clock: deterministic, fails for the right
+    reason. Non-homogeneous emitters are excluded — they are *supposed* to keep the
+    dense integral, and `test_a_non_homogeneous_emitter_is_refused` pins that.
+    """
     m = _model(emission_type, SHAPES[emission_type], approx=WavePrecomp())
     cost = jax.jit(m.predict_photometry).lower(_params(m)).compile().cost_analysis()
     flops = (cost[0] if isinstance(cost, list) else cost)["flops"]
@@ -136,3 +161,65 @@ def test_dust_emission_does_not_force_a_dense_per_call_filter_integral(emission_
         "wavelength grid and integrated through the filters on every call, instead of "
         "projecting through the precomputed band response."
     )
+
+
+@pytest.mark.regression_bug
+@pytest.mark.parametrize("emission_type", sorted(NON_HOMOGENEOUS))
+def test_a_non_homogeneous_emitter_is_refused_a_band_response(emission_type):
+    """An emitter whose SHAPE depends on L_ir must NOT get a constant band response.
+
+    The band response is exact only because sed(L) = L * S_unit(lambda). BOSA
+    parameterizes its template by (L_TIR, sSFR), so probing it at the unit luminosity
+    L_ir = 1 erg/s samples a template ~44 dex from anything physical, and the resulting
+    response is wrong by ~13% in WISE-W4 — silently, with correct-looking fluxes.
+
+    The build-time homogeneity probe must detect this and fall back to the dense
+    per-call integral. This is the test that the first version of this file was
+    missing: it claimed to guard against "a non-linear emitter" while listing only
+    linear ones.
+    """
+    m = _model(emission_type, SHAPES[emission_type], approx=WavePrecomp())
+
+    assert m._dust_band_response_cache is None, (
+        f"{emission_type} is not homogeneous in L_ir, so no build-time-constant band "
+        "response exists — but one was built. Its photometry is now silently wrong."
+    )
+
+    # ...and having been refused, it must still be *correct*.
+    exact = _model(emission_type, SHAPES[emission_type], approx=None)
+    f_lut = np.asarray(m.predict_photometry(_params(m)))
+    f_exact = np.asarray(exact.predict_photometry(_params(exact)))
+    w4 = np.abs(f_lut[-1] / f_exact[-1] - 1)
+    assert w4 < 1e-4, (
+        f"{emission_type}: W4 differs by {w4:.3e} from the exact path even on the "
+        "dense-integral fallback."
+    )
+
+
+@pytest.mark.regression_bug
+def test_homogeneity_probe_actually_discriminates():
+    """The probe must not be vacuous: it must SEE the L_ir dependence it screens for.
+
+    If BOSA happened to scale linearly, the guard above would pass for the wrong
+    reason. Assert the property directly: bosa's SED does not scale with L_ir, and a
+    linear emitter's does.
+    """
+    from tengri.components.igm.component import IGMSEDComponent  # noqa: F401
+
+    L = 1.0e44
+    for name, homogeneous in (("bosa", False), ("dale2014", True)):
+        m = _model(name, SHAPES[name], approx=WavePrecomp())
+        emitter = next(
+            c for c in m._build_component_chain() if getattr(c, "name", "") == "dust_emission"
+        )
+        wave = jnp.asarray(m.wavelengths)
+        p = emitter.slice_params(
+            {k: jnp.asarray(float(v)) for k, v in m.spec.get_fixed_values().items()}
+        )
+        lo, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=1.0)
+        hi, _ = emitter.predict(p, jnp.zeros_like(wave), wave, L_ir=L)
+        scales = bool(jnp.allclose(hi, L * lo, rtol=1e-10))
+        assert scales is homogeneous, (
+            f"{name}: expected homogeneous={homogeneous} in L_ir, measured {scales}. "
+            "The homogeneity probe is not discriminating what it claims to."
+        )

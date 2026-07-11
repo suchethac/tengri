@@ -227,6 +227,63 @@ def test_the_igm_is_still_applied_to_the_lut_spectrum():
 
 
 @pytest.mark.regression_bug
+def test_free_redshift_band_factor_interpolation_stays_bounded():
+    """Free z is the ONE case where the tabulated <T>_f is not exact — bound it.
+
+    A fixed-z model gets a single node and is bit-identical. A free-z model
+    interpolates <T>_f over a z-table, so it carries an interpolation error that main
+    (which evaluated the transmission at the traced z) did not have. Every other test
+    here pins z=3.0, so nothing covered this at all.
+
+    The IGM factor is the steepest function of z in the model — the Lyman forest
+    thickens fast — and the error grows toward z_max. Sharing the SSP ztable's coarse
+    n_z put it at 3.0e-3 in sdss_u at z=3.98; the IGM table gets its own denser grid
+    (_IGM_MIN_N_Z), which brings it to ~1e-4.
+
+    Compares against the EXACT path, so this bounds the band factor's own error at low
+    z where the LUT's band-average and Taylor-dust errors are still small. (Both of
+    those explode in the rest-UV at high z -- the documented #617 blue bias -- which is
+    why this checks the red bands at high z and all bands at low z.)
+    """
+    ssp = pytest.importorskip("tengri").load_ssp()
+    obs = Observation(photometry=Photometry.from_names(FILTERS))
+
+    def build(approx):
+        from tengri import Uniform
+
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            redshift=Uniform(0.0, 4.0),
+            sfh={"type": "dpl", "*": FIXED},
+            dust={"type": "single_component", "law_bc": "calzetti", "*": FIXED},
+            approx=approx,
+        )
+
+    lut, exact = build(WavePrecomp()), build(None)
+
+    def at(m, z):
+        p = _params(m)
+        p["redshift"] = jnp.asarray(z)
+        return np.asarray(m.predict_photometry(p))
+
+    # Low z: the forest is thin, so every band is a fair test of the z-interpolation.
+    for z in (0.5, 1.0, 2.0):
+        dev = np.abs(at(lut, z) / at(exact, z) - 1).max()
+        assert dev < 1e-2, (
+            f"free-z WavePrecomp deviates by {dev:.3e} from the exact path at z={z}. "
+            "The <T>_f z-table interpolation has regressed (or its grid was coarsened)."
+        )
+
+    # High z: the reddest band still samples the rest-optical, where the LUT's own
+    # approximations are small, so it isolates the IGM interpolation.
+    dev_red = abs(at(lut, 3.98)[-1] / at(exact, 3.98)[-1] - 1)
+    assert dev_red < 1e-2, (
+        f"free-z WavePrecomp deviates by {dev_red:.3e} in the reddest band at z=3.98."
+    )
+
+
+@pytest.mark.regression_bug
 def test_dla_falls_back_to_the_exact_full_grid_path():
     """A DLA carries free parameters, so <T>_f is not a function of z alone.
 
