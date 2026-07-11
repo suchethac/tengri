@@ -51,33 +51,39 @@ def test_schreiber2016_builds_and_balances():
     )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
     pred = m.predict_rest_sed(p)
-    wave_e = np.asarray(pred.wavelength)
     sed = np.asarray(pred.sed)
     assert np.isfinite(sed).all() and sed.max() > 0.0
 
-    # Energy-balance against a no-dust baseline.
-    m_no = tengri.SEDModel.build(
-        ssp,
-        sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        redshift=tengri.Fixed(0.05),
-    )
-    p0 = dict(m_no.spec.sample(jax.random.PRNGKey(0)))
-    pred_i = m_no.predict_rest_sed(p0)
-    wave_i = np.asarray(pred_i.wavelength)
-    sed_i = np.asarray(pred_i.sed)
+    # Energy balance against the model's own published L_absorbed — the
+    # canonical, LyC-masked quantity the dust IR is normalized to (#922/#961).
+    #
+    # The absorbed side used to be re-derived here as a band proxy
+    # (no-dust minus dusty, integrated over 912 A - 3 um). A proxy measures the
+    # *test's* choice of band, not the model's energy budget: it silently omits
+    # absorption redward of 3 um and counts the dust IR that leaks blueward into
+    # the window, and it drifted to a 1.110 false failure the moment the fiducial
+    # galaxy changed (the tsnorm registry defaults, #1034) — with the model's
+    # true balance still exact. Assert the physics, not a band.
+    state = m.predict_state(p)
+    wave = np.asarray(state.wave)
+    sed_ir = np.asarray(state.derived["sed_dust_ir"])
+    l_absorbed = float(np.asarray(state.derived["L_absorbed"]))
 
-    c_aa = 2.998e18
+    c_aa = 2.99792458e18
 
-    def L(wave: np.ndarray, L_nu: np.ndarray, wmin: float, wmax: float) -> float:
-        mask = (wave >= wmin) & (wave <= wmax)
-        nu = c_aa / wave[mask]
+    def bolo(wave_aa: np.ndarray, l_nu: np.ndarray, wmin: float = 0.0, wmax: float = np.inf):
+        mask = (wave_aa >= wmin) & (wave_aa <= wmax)
+        nu = c_aa / wave_aa[mask]
         order = np.argsort(nu)
-        return float(np.trapezoid(L_nu[mask][order], nu[order]))
+        return float(np.trapezoid(l_nu[mask][order], nu[order]))
 
-    # The emission model's master grid extends into the submm (analytic-emitter
-    # native grid, #1005) while the no-emission baseline stays on the SSP grid —
-    # evaluate the absorbed integral on the baseline grid.
-    sed_on_i = np.interp(wave_i, wave_e, sed)
-    ratio = L(wave_e, sed, 8.0e4, 1.0e7) / L(wave_i, sed_i - sed_on_i, 912.0, 3.0e4)
-    assert 0.90 < ratio < 1.10, f"Schreiber2016 energy balance off: ratio={ratio:.3f}"
+    l_ir = bolo(wave, sed_ir)
+    ratio = l_ir / l_absorbed
+    assert 0.99 < ratio < 1.01, (
+        f"Schreiber2016 breaks energy balance: emitted L_IR / L_absorbed = {ratio:.4f}"
+    )
+
+    # ...and the emission must live in the IR, not be smeared across the grid
+    # (the #1005 native-grid regression put it partly outside 8-1000 um).
+    in_band = bolo(wave, sed_ir, 8.0e4, 1.0e7) / l_ir
+    assert in_band > 0.95, f"only {in_band:.1%} of the dust IR falls in 8-1000 um"

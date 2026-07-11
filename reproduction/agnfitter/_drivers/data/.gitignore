@@ -1,7 +1,8 @@
-# AGNFITTER-RX model template libraries are loaded from an external checkout
-# ($AGNFITTER_HOME, default /tmp/AGNfitter-rX) at notebook runtime, never
-# committed -- see reproduction/agnfitter/README.md. Any repackaged DSPS grids
-# built here are likewise generated, not tracked.
+# The AGNFITTER-RX reference templates the notebook overlays live in the
+# committed h5 grids under the repo-root data/ -- the driver reads only those,
+# never an external checkout (see reproduction/agnfitter/README.md). Anything
+# generated into this directory (repackaged DSPS grids, scratch downloads) is
+# build output, not tracked.
 *.h5
 *.pickle
 *.fits
