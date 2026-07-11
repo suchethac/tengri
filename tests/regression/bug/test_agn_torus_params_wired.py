@@ -67,7 +67,11 @@ def _sed(ssp, torus: dict) -> np.ndarray:
     "torus_type,key,v1,v2",
     [
         ("cat3d_wind", "a_cat3d", -2.5, -1.5),
-        ("cat3d_wind", "fwd_cat3d", 0.2, 1.5),
+        # fwd grid is [1.0, 2.25] — AGNfitter's rows-210+ sub-library. The
+        # pre-fix values (0.2 vs 1.5) straddled the fabricated flat region
+        # below 1.0 and only passed because 0.2 clamped onto the (cloned)
+        # fwd=1.0 plane while 1.5 hit a real one (#1036).
+        ("cat3d_wind", "fwd_cat3d", 1.0, 2.25),
         ("silva04", "log_nh_silva", 22.0, 25.0),
         ("skirtor_agnfitter", "oa_skirtor", 20.0, 70.0),
         ("skirtor_agnfitter", "incl_skirtor", 10.0, 80.0),
