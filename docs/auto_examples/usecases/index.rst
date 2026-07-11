@@ -104,23 +104,6 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The 4000 Å break D_n(4000) — Bruzual 1983, Balogh+1999 — measures the discontinuity around 4000 Å produced by the line-blanketing of ionized metals in the atmospheres of old stars. It rises monotonically with the mass-weighted age of the stellar population and is one of the most widely used age indicators in SDSS-style optical-only data (Kauffmann+2003).">
-
-.. only:: html
-
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_d4000_age_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/usecases/plot_usecase_d4000_age`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">The 4000 Å break as a stellar age proxy</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The Kauffmann+2003 separation of star-forming and quiescent SDSS galaxies plotted as a sample track: stellar-burst age varied from 30 Myr to 11 Gyr (single-burst SSP), with each model giving a (``D_n(4000)``, sSFR) pair.">
 
 .. only:: html
@@ -150,23 +133,6 @@ emission-line Pearson coefficients.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">z~3 Lyman-break galaxy U-dropout selection: color-color diagnosis</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates how the SSP-baked nebular emission shapes the [OIII] λ5007 / Hβ and [NII] λ6584 / Hα ratios as stellar metallicity is varied across the grid. The line fluxes are extracted directly from the predicted rest-frame SED via continuum-subtracted boxcar integration — no toy formulas.">
-
-.. only:: html
-
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_emission_line_pcc_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/usecases/plot_usecase_emission_line_pcc`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Emission-line ratios from a baked-in nebular SSP SED</div>
     </div>
 
 
@@ -269,23 +235,6 @@ emission-line Pearson coefficients.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Star-forming main sequence: z = 0 → 2 cosmic evolution + recovery</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Measures the 95% stellar mass completeness threshold for SDSS-like photometry. Mocks a population of 150 star-forming and passive galaxies spanning log M* [7-12] at z=0.1, injects realistic photometric noise, and measures below which stellar mass more than 5% of sources drop below detection limit. Critical for constructing mass-limited galaxy samples and understanding survey selection effects.">
-
-.. only:: html
-
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_mass_completeness_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/usecases/plot_usecase_mass_completeness`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Mass completeness limit in SDSS-like photometric surveys</div>
     </div>
 
 
@@ -440,17 +389,14 @@ emission-line Pearson coefficients.
    /auto_examples/usecases/plot_usecase_balmer_decrement_av
    /auto_examples/usecases/plot_usecase_cosmology_distance_modulus
    /auto_examples/usecases/plot_usecase_cosmology_ladder
-   /auto_examples/usecases/plot_usecase_d4000_age
    /auto_examples/usecases/plot_usecase_d4000_vs_ssfr
    /auto_examples/usecases/plot_usecase_dropout_selection_z3
-   /auto_examples/usecases/plot_usecase_emission_line_pcc
    /auto_examples/usecases/plot_usecase_fundamental_metallicity_relation
    /auto_examples/usecases/plot_usecase_hubble_sequence
    /auto_examples/usecases/plot_usecase_jwst_color_color
    /auto_examples/usecases/plot_usecase_kennicutt_sfr_calibrations
    /auto_examples/usecases/plot_usecase_lensed_galaxy_magnification
    /auto_examples/usecases/plot_usecase_main_sequence_cosmic_evolution
-   /auto_examples/usecases/plot_usecase_mass_completeness
    /auto_examples/usecases/plot_usecase_sdss_lrg_stack_template
    /auto_examples/usecases/plot_usecase_sfh_to_madau_dickinson
    /auto_examples/usecases/plot_usecase_sfr_uv_ir_consistency

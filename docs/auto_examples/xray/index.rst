@@ -149,23 +149,6 @@ AGN Coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="In the X-CIGALE AGN model (Yang et al. 2020), the X-ray corona is tied to the accretion-disc UV continuum through the α_OX–L_2500 relation. A deviation delta_alpha_ox lets the intrinsic X-ray-to-UV ratio float around that empirical relation: positive values brighten the corona, negative values suppress it. Because the disc anchors the normalization, all SEDs pivot at the EUV/soft-X-ray join; only the hard-X-ray side fans out.">
-
-.. only:: html
-
-  .. image:: /auto_examples/xray/images/thumb/sphx_glr_plot_xray_delta_alpha_ox_sed_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/xray/plot_xray_delta_alpha_ox_sed`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">AGN UV-to-X-ray SED: delta alpha_OX deviation shifts X-ray relative to disc</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The X-ray photon index γ controls how rapidly the AGN corona&#x27;s power-law spectrum falls off above a few keV. Flat spectra (low γ ~1.4) extend more photons to high energies; steep spectra (high γ ~2.4) drop quickly. We vary γ across its typical observational range at fixed bolometric luminosity.">
 
 .. only:: html
@@ -266,7 +249,6 @@ AGN Coronae
    /auto_examples/xray/plot_xray_agn
    /auto_examples/xray/plot_xray_alpha_ox_nh
    /auto_examples/xray/plot_xray_component_decomposition
-   /auto_examples/xray/plot_xray_delta_alpha_ox_sed
    /auto_examples/xray/plot_xray_gamma_sweep
    /auto_examples/xray/plot_xray_nh_sweep
    /auto_examples/xray/plot_xray_pexrav_compton_hump

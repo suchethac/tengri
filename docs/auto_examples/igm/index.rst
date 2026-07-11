@@ -88,23 +88,6 @@ signature that drives high-z photometric selection.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The intergalactic medium (IGM) opacity increases dramatically with redshift due to the expanding neutral hydrogen fraction. We sweep redshift z ∈ {2, 3, 4, 5, 6, 7, 8} on Inoue et al. (2014) IGM transmission curves, showing how the Lyman alpha forest deepens and the Lyman break (912 Å rest-frame) shifts to longer observed wavelengths at higher z, suppressing flux blueward of the break.">
-
-.. only:: html
-
-  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_igm_z_evolution_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/igm/plot_igm_z_evolution`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Lyman forest deepens with redshift: high-z IGM opacity suppresses UV flux</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The two standard IGM transmission prescriptions diverge most visibly across the Lyman-alpha forest and the Lyman limit. Madau (1995) is the original analytic Lyman-series effective optical depth; Inoue+2014 added Lyman-continuum and damped-Lyα systems in a more careful integral over the H I distribution.">
 
 .. only:: html
@@ -168,7 +151,6 @@ signature that drives high-z photometric selection.
    /auto_examples/igm/plot_dla_redshift_evolution
    /auto_examples/igm/plot_igm_models_comparison
    /auto_examples/igm/plot_igm_redshift
-   /auto_examples/igm/plot_igm_z_evolution
    /auto_examples/igm/plot_inoue_vs_madau_z5_z7
    /auto_examples/igm/plot_lyman_alpha_igm_attenuation
    /auto_examples/igm/plot_sed_with_igm

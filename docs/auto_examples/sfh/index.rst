@@ -191,23 +191,6 @@ pathways and double bursts, mass-formed vs mass-observed, and the
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The field SFH employs a damped random walk (DRW) power spectral density (PSD) to govern stochastic star formation history realizations. Two parameters control the prior distribution of SFR time-variability:">
-
-.. only:: html
-
-  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_psd_burstiness_prior_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/sfh/plot_psd_burstiness_prior`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">PSD-Governed Stochastic SFH Prior: Burstiness Corner Cases</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Compare three star-formation histories representing distinct quenching scenarios: (1) Constantly star-forming (no quenching), (2) Slowly quenched exponential decay (tau=4 Gyr, peak 6 Gyr ago), and (3) Rapidly quenched post-starburst (truncated skew-normal, peak 2 Gyr ago, width 0.3 Gyr). The resulting rest-frame SEDs exhibit markedly different colors, equivalent widths (Hα), and spectral slopes, highlighting how quenching timescale imprints on observable photometry and spectroscopy.">
 
 .. only:: html
@@ -237,23 +220,6 @@ pathways and double bursts, mass-formed vs mass-observed, and the
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">sfh2exp: double declining exponential (old population + recent burst)</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="A galaxy with two separated bursts—one at 10 Gyr (old) and one at 0.3 Gyr (recent)— produces a SED that blends young hot and old cool stellar populations. Left panel shows the optical-to-NIR region in linear scale; right panel shows the full panchromatic SED in log-log, revealing the emission from both young and old stars.">
-
-.. only:: html
-
-  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_sfh_double_burst_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/sfh/plot_sfh_double_burst`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Dual-epoch star formation: old and recent bursts leave distinct SED signatures</div>
     </div>
 
 
@@ -379,10 +345,8 @@ pathways and double bursts, mass-formed vs mass-observed, and the
    /auto_examples/sfh/plot_lnorm_peak_sweep
    /auto_examples/sfh/plot_prospector_priors_compare
    /auto_examples/sfh/plot_psd_burstiness
-   /auto_examples/sfh/plot_psd_burstiness_prior
    /auto_examples/sfh/plot_quenching_pathway_compare
    /auto_examples/sfh/plot_sfh2exp_main_plus_burst
-   /auto_examples/sfh/plot_sfh_double_burst
    /auto_examples/sfh/plot_sfh_form_compare
    /auto_examples/sfh/plot_sfh_nonparametric_compare
    /auto_examples/sfh/plot_sfh_quenching_compare

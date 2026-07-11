@@ -54,23 +54,6 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep infrared luminosity across the BOSA grid at fixed specific star formation rate. Increasing L_TIR heats dust, shifting FIR peak blueward and enhancing PAH relative to continuum. Library is normalized by ∫Lν dν=1; shape variation with L_TIR is intentionally small.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_bosa_ltir_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_emission/plot_bosa_ltir_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">BOSA: log L_TIR sweep at fixed log sSFR</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The Dale et al. (2014) IR template family can be combined with a pure-AGN (&quot;quasar&quot;) template to represent dust heated by an obscured AGN in addition to the star-forming ISM. tengri reproduces CIGALE&#x27;s convention, where the AGN is a separate power source added on top of the stellar-heated dust:">
 
 .. only:: html
@@ -319,7 +302,6 @@ Astrodust (HD23) template grids.
 
    /auto_examples/dust_emission/plot_astrodust_hd23_03_components_at_fiducial_U
    /auto_examples/dust_emission/plot_bosa_grid
-   /auto_examples/dust_emission/plot_bosa_ltir_sweep
    /auto_examples/dust_emission/plot_dale2014_agn_fraction
    /auto_examples/dust_emission/plot_dust_T_sweep
    /auto_examples/dust_emission/plot_dust_qpah_umin_grid

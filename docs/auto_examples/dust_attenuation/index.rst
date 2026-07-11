@@ -87,23 +87,6 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Three dust geometries—foreground screen (power-law), mixed slab (Calzetti), and clumpy two-phase (SMC)—proxy different physical arrangements via their attenuation laws. At fixed τ_V = 1, geometry controls the spectral shape: screens are reddest, clumpy geometries are grayest. Transmission curves show how each law transforms a stellar continuum.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_dust_geometry_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_dust_geometry_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Dust geometry shapes the extinction: screen vs mixed vs clumpy</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Each of the bundled dust-attenuation laws applied to the same intrinsic SED at the same V-band optical depth — so the differences between the curves are entirely in the wavelength dependence of the attenuation. The intrinsic (unreddened) SED is shown in black for reference.">
 
 .. only:: html
@@ -223,40 +206,6 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Birth-cloud dust optical depth τ_bc attenuates only the youngest stellar light (age &lt; ~10 Myr), controlling nebular emission from embedded HII regions. τ_bc effects are clearest on young star-forming populations; we use a 500 Myr starburst and vary τ_bc across the prior range.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_tau_bc_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_tau_bc_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Birth cloud dust suppresses young-stellar UV and nebular emission</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Diffuse ISM dust optical depth τ_diff attenuates all stellar light (young + old). Higher τ_diff reddens the optical continuum and weakens the 4000 Å break, signaling aging stellar populations. We vary τ_diff across a range with every other parameter fixed on a typical star-forming galaxy.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_tau_diff_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_tau_diff_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Diffuse ISM dust attenuates all stellar populations</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall two-component dust model separates birth-cloud dust (young stars only, age &lt; ~10 Myr) from diffuse ISM dust (all stars). Two panels show: (left) V-band transmission versus age for three (τ_bc, τ_diff) combinations, revealing the sharp ~10 Myr transition; (right) full transmission spectra for 1 Myr and 1 Gyr stars under the same dust column.">
 
 .. only:: html
@@ -303,23 +252,6 @@ depths, two-component geometry, and law comparisons.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">UV bump shape controlled by attenuation curve slope</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å UV bump from PAHs and small graphite grains sweeps from absent to Milky-Way strength via the dust_bump_strength knob. At zero, the attenuation curve is a smooth power law; at MW-like values, the bump dominates the UV. We show the attenuation law (not a galaxy SED) to isolate the curve shape.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_uv_bump_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_uv_bump_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">The 2175 Å UV bump traces small-grain dust populations</div>
     </div>
 
 
@@ -388,7 +320,6 @@ depths, two-component geometry, and law comparisons.
    /auto_examples/dust_attenuation/plot_bump_delta_joint_grid
    /auto_examples/dust_attenuation/plot_cardelli_rv_sweep
    /auto_examples/dust_attenuation/plot_dust_geometry_screen_vs_mixed
-   /auto_examples/dust_attenuation/plot_dust_geometry_sweep
    /auto_examples/dust_attenuation/plot_dust_law_application
    /auto_examples/dust_attenuation/plot_dust_law_uv_slope_response
    /auto_examples/dust_attenuation/plot_dust_slope_sweep
@@ -396,12 +327,9 @@ depths, two-component geometry, and law comparisons.
    /auto_examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation
    /auto_examples/dust_attenuation/plot_reddy15_highz_curve
    /auto_examples/dust_attenuation/plot_rv_av_uv_slope_degeneracy
-   /auto_examples/dust_attenuation/plot_tau_bc_sweep
-   /auto_examples/dust_attenuation/plot_tau_diff_sweep
    /auto_examples/dust_attenuation/plot_two_component
    /auto_examples/dust_attenuation/plot_usecase_irx_beta_meurer
    /auto_examples/dust_attenuation/plot_uv_bump_strength_sweep
-   /auto_examples/dust_attenuation/plot_uv_bump_sweep
    /auto_examples/dust_attenuation/plot_uv_ir_energy_balance
    /auto_examples/dust_attenuation/plot_wg00_geometry_compare
    /auto_examples/dust_attenuation/plot_wg00_tau_v_sweep

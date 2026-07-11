@@ -54,23 +54,6 @@ tracks.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Metal-poor stars are hotter and bluer (less line blanketing), while metal-rich stars are redder due to increased opacity. We sweep stellar metallicity across the prior range with every other parameter fixed on a typical intermediate-age galaxy with modest dust attenuation.">
-
-.. only:: html
-
-  .. image:: /auto_examples/metallicity/images/thumb/sphx_glr_plot_logzsol_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/metallicity/plot_logzsol_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Stellar metallicity drives UV-optical SED color</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Metal-rich young populations and metal-poor old populations can produce similar optical colors — a fundamental degeneracy in galaxy fitting. This 3×4 grid shows normalized rest-frame continua at nine points in the age–metallicity plane, with each row fixed at one lookback-formation age and each column fixed at one metallicity. Dust is zeroed to expose the clean stellar continuum shape.">
 
 .. only:: html
@@ -115,7 +98,6 @@ tracks.
 
    /auto_examples/metallicity/plot_alpha_fe_sweep
    /auto_examples/metallicity/plot_logzsol_panchromatic
-   /auto_examples/metallicity/plot_logzsol_sweep
    /auto_examples/metallicity/plot_metallicity_age_grid
    /auto_examples/metallicity/plot_zh_evolution_compare
 
