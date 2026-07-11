@@ -2069,6 +2069,21 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
     tmpl_wave = template_data["wavelength_aa"]
     umin_grid = template_data["umin_grid"]
     qhac_grid = template_data["qhac_grid"]
+    # The shipped THEMIS grid (data/themis_templates.h5) stores its qhac axis
+    # in FSPS scaling (CIGALE value x 100/2.2, i.e. [0.909 .. 18.18]). The
+    # user-facing parameter follows CIGALE ([0.02, 0.40], default 0.17 — see
+    # ThemisIRSEDComponent.qhac and CIGALE's themis.qhac). Relabel an FSPS-scaled
+    # axis to the CIGALE convention so the interpolation happens in the input's
+    # units; without this every physical qhac < 0.909 (the entire CIGALE range,
+    # including the 0.17 default) silently clipped to the grid minimum and
+    # selected the wrong grain composition, shifting the mid-IR PAH strength and
+    # FIR peak by tens of percent. The a-C(:H) mass fraction never exceeds ~0.5
+    # in the CIGALE convention, so a grid whose max exceeds that is unambiguously
+    # FSPS-scaled — this keeps CIGALE-unit grids (e.g. synthetic test grids)
+    # untouched. Regression: tests/components/dust/test_themis_qhac_convention.py.
+    _QHAC_FSPS_TO_CIGALE = 2.2 / 100.0
+    if float(jnp.max(qhac_grid)) > 0.5:
+        qhac_grid = qhac_grid * _QHAC_FSPS_TO_CIGALE
 
     # Optional: alpha-dependent PDR component
     alpha_grid = template_data.get("alpha_grid", None)

@@ -889,9 +889,13 @@ plt.show()
 # **Right — THEMIS slope $\alpha$ (`themis.alpha`, $dU/dM \propto U^{-\alpha}$,
 # matched `qhac=0.17, umin=1.0, gamma=0.1`).** tengri's THEMIS templates are
 # built from the published DustEM grids (Jones+2017) and conserve the absorbed
-# energy. CIGALE runs its own DustEM with `umax=1e7` (a hotter PDR), so the IR
-# partition — and the band total — differ at the tens-of-percent level, not the
-# few percent the energy-balanced FIR peak alone would suggest.
+# energy. The a-C(:H) aromatic fraction `qhac` is pinned to CIGALE's 0.17 on
+# both sides — CIGALE quotes it as a fraction while the DustEM grid tabulates
+# it in FSPS scaling (`qhac × 100/2.2`), so the two must be reconciled before
+# interpolation or the wrong grain model is selected. With the composition
+# matched the curves track across the whole $\alpha$ sweep; the small residual
+# is CIGALE's own DustEM run using `umax=1e7` (a slightly hotter PDR), which
+# nudges the IR partition at the few-percent level.
 
 # %%
 import jax
@@ -971,7 +975,7 @@ ax_l.legend(fontsize=8, frameon=False, ncol=2)
 
 # RIGHT — THEMIS slope alpha: tengri (solid) vs pcigale themis.alpha (dashed),
 # matched qhac=0.17, umin=1.0, gamma=0.1.
-m_alpha = _knob_model("themis", dust_gamma_dl=Fixed(0.1))
+m_alpha = _knob_model("themis", dust_gamma_dl=Fixed(0.1), dust_qhac=Fixed(0.17))
 p_alpha = dict(m_alpha.spec.sample(jax.random.PRNGKey(0)))
 for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
     o = m_alpha.predict_rest_sed({**p_alpha, "dust_alpha": jnp.float64(a)})
@@ -1076,14 +1080,23 @@ plt.show()
 # measure line width and grid resolution (CIGALE broadens to
 # `lines_width = 300 km/s`) rather than physics.
 #
-# **Grid coverage.** The Cue emulator ships a native continuum grid
-# (~915 Å – 10⁸ Å, 1841 points) inside `cue_weights.npz`. The
-# wavelength-extension registry routes that grid into the master
-# union, so attaching Cue alone is enough to extend the SED past the
-# SSP edge — no `dust.emission` component required. The Cue continuum
-# now plots all the way out to the radio without the artificial
-# 160-µm truncation that earlier versions of the registry left in
-# place when only Cue (and no dust template) was active.
+# **Grid coverage — why the two panels span different ranges.** The Cue
+# emulator ships a native continuum grid (~915 Å – 10⁸ Å, 1841 points)
+# inside `cue_weights.npz`, and its trained line list is the optical/UV
+# forest. CIGALE's static CLOUDY grid additionally carries the *far-IR
+# fine-structure line forest* — [O III] 88 µm, [C II] 158 µm, [N II],
+# [S III] 18.7 µm, [Ne III] 15.6 µm and companions out to ~10⁶ Å — which
+# is why the left panel shows tall line spikes at 10⁵–10⁶ Å that the Cue
+# panel does not. That is the emulator's scope, not a defect: for a
+# CLOUDY-vs-CLOUDY match on the same wavelength range (FIR lines included)
+# tengri exposes its own static CLOUDY grid via `neb={'type': 'cloudy'}`
+# (`data/cloudy_grid_*.h5`, 166 lines to 6.1×10⁶ Å); Cue is the
+# differentiable emulator you reach for when the gas parameters must be
+# free in a fit. The wavelength-extension registry routes the Cue grid
+# into the master union, so attaching Cue alone extends the SED past the
+# SSP edge — no `dust.emission` component required — all the way out to
+# the radio without the artificial 160-µm truncation earlier registry
+# versions left in place when only Cue (and no dust template) was active.
 
 # %%
 # §8 young fiducial: τ=300 Myr, age=100 Myr — Hα-bright. CIGALE accepts
@@ -1348,6 +1361,11 @@ m_agn_base = SEDModel.build(
         "law_diff": "leitherer02",
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+        # Match CIGALE's dustatt_modified_starburst, which drops to zero at the
+        # Lyman limit; §7/§11 do the same. Without it the Calzetti/Leitherer
+        # polynomial extrapolates below 912 Å and the stellar+dust baseline
+        # sits above CIGALE in the far-UV, muddying the AGN comparison.
+        "lyman_cutoff": True,
         "*": FIXED,
     },
     redshift=Fixed(0.0),
@@ -1401,6 +1419,11 @@ m_agn = SEDModel.build(
         "law_diff": "leitherer02",
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+        # Match CIGALE's dustatt_modified_starburst, which drops to zero at the
+        # Lyman limit; §7/§11 do the same. Without it the Calzetti/Leitherer
+        # polynomial extrapolates below 912 Å and the stellar+dust baseline
+        # sits above CIGALE in the far-UV, muddying the AGN comparison.
+        "lyman_cutoff": True,
         "*": FIXED,
     },
     # ``agn_log_lbol`` matches CIGALE's ``sed.info["agn.accretion_power"]``
@@ -1985,6 +2008,24 @@ fig, ax, ax_r, ratio = U.overlay_ratio_fig(
     xlim=(0.1, 100.0),
     ratio_ylim=(0.5, 2.0),
 )
+# Overlay tengri's synchrotron-only term (Bell 2003) so the reader can see it
+# lies on top of CIGALE's synchrotron-only sf_nonthermal. The gap above unity in
+# the ratio panel is then unambiguously the Murphy+2011 free-free that CIGALE
+# omits, not a synchrotron-normalization difference.
+from tengri.radio import radio_sfr_bell2003 as _bell03
+
+_syn_only = np.asarray(
+    _bell03(w_t, float(np.asarray(state_r.derived["L_ir"])), q_ir=2.5, alpha_sf=0.8)
+)
+ax.plot(
+    2.998e18 / w_t / 1e9,
+    _syn_only,
+    color="0.45",
+    ls=":",
+    lw=1.6,
+    label="tengri  synchrotron only (Bell 2003)",
+)
+ax.legend(fontsize=8, frameon=False)
 _nu_r = 2.998e18 / w_r / 1e9
 _g14 = (_nu_r >= 1.0) & (_nu_r <= 1.5) & (L_r > 0)
 print(f"§11 radio tengri/CIGALE median (1.0–1.5 GHz): {float(np.median(ratio[_g14])):.3f}×")
