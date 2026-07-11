@@ -35,6 +35,7 @@ __all__ = [
     "lnu_filter_integral",
     "lnu_filter_integral_batch",
     "pad_filters",
+    "project_photometry",
 ]
 
 
@@ -543,6 +544,100 @@ def compute_flux_density_batch(
         functools.partial(_compute_flux_density_padded, convention=convention),
         in_axes=(None, None, 0, 0, None, None),
     )(sed_rest, wave_rest, fw_padded, ft_padded, redshift, dl_cm)
+
+
+def project_photometry(state, params, photometry, *, dl_cm=None) -> jnp.ndarray:
+    r"""Project a panchromatic model SED onto photometric filter bands.
+
+    Consolidates the photometric projection pipeline: extract rest-frame SED
+    and redshift from ``state`` and ``params``, apply IGM attenuation when
+    present, compute observed-frame flux densities through all filters via
+    :func:`compute_flux_density_batch`. This is the single canonical exact
+    projection path — the fast precompute LUT is available via
+    :meth:`Observation.predict_via_precomp`.
+
+    **This is the canonical exact (compositional) projection path for photometry.**
+    Integrates ``state.sed_intrinsic`` through each filter without approximation.
+    Clients that need post-build integration of arbitrary filters through the
+    identical photometry path should call this kernel directly.
+
+    Parameters
+    ----------
+    state : ForwardState
+        Orchestrator output. Reads ``state.sed_intrinsic`` (rest-frame
+        L_nu [erg/s/Hz]), ``state.wave`` (rest-frame Angstrom), and
+        optionally ``state.derived["igm_transmission"]`` (dimensionless,
+        same shape as ``state.wave``).
+    params : Mapping[str, jnp.ndarray]
+        Parameter dict. Reads ``params["redshift"]`` for cosmology and
+        redshift. If redshift is absent, defaults to 0.0.
+    photometry : Photometry
+        Photometry configuration. Reads ``n_filters`` (count of real filters),
+        ``_fw_padded`` and ``_ft_padded`` (zero-padded filter wavelengths and
+        transmissions), and ``convention`` (FilterConvention for bandpass weight).
+    dl_cm : float or jnp.ndarray, optional
+        Luminosity distance [cm]. If ``None``, derived from
+        ``params["redshift"]`` via :func:`tengri.cosmology.luminosity_distance`.
+
+    Returns
+    -------
+    ndarray, shape (n_filters,)
+        Observed flux density per filter [erg/s/cm²/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to vmapped
+    :func:`compute_flux_density_batch`. ``redshift`` and ``dl_cm``
+    must be array scalars or scalars; ``photometry`` properties are
+    pytree leaves and statically known. IGM multiplication is traceable.
+
+    **Gradient-safe**: yes — all operations are JAX operations.
+
+    **Composition pattern**: This kernel applies IGM attenuation internally
+    when ``state.derived["igm_transmission"]`` is present. The transmission
+    curve captures the sharp Lyman break across broad photometric bands at
+    high redshift (#932).
+
+    See Also
+    --------
+    compute_flux_density_batch : Low-level batched filter convolution.
+    project_spectrum : Spectroscopy projection twin (IGM composed by callers).
+    """
+    from tengri.cosmology import luminosity_distance
+
+    z = jnp.asarray(params.get("redshift", 0.0))
+    if dl_cm is None:
+        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+    else:
+        dl_cm = jnp.asarray(dl_cm)
+
+    sed_rest = state.sed_intrinsic
+    wave_rest = state.wave
+
+    # IGM attenuation is an observed-frame transmission the IGM component
+    # publishes on the rest grid (``T`` evaluated at ``wave_obs =
+    # wave*(1+z)``). Multiplying here — before redshifting in
+    # ``compute_flux_density_batch`` — applies the full transmission curve
+    # (not a single per-band effective-wavelength factor) and captures the
+    # sharp Lyman break across broad bands at high redshift (#932).
+    # ``T`` shares the rest grid with ``sed_rest``; the key is absent
+    # (structural no-op) when IGM is disabled, so low-z / IGM-off models are
+    # bit-unchanged.
+    igm_trans = state.derived.get("igm_transmission", None) if state.derived is not None else None
+    if igm_trans is not None:
+        sed_rest = sed_rest * igm_trans
+
+    n_real = photometry.n_filters
+    fluxes = compute_flux_density_batch(
+        sed_rest,
+        wave_rest,
+        photometry._fw_padded,
+        photometry._ft_padded,
+        z,
+        dl_cm,
+        convention=photometry.convention,
+    )
+    return fluxes[:n_real]
 
 
 def compute_photometry(

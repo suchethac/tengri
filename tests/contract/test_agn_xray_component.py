@@ -75,6 +75,43 @@ class TestAGNXRayCoronaPort:
         assert state is not None
         assert hasattr(state, "name")
 
+    def test_prefers_l_2500_intrinsic_over_bc_fallback(self):
+        """The α_ox corona anchors to the actual disc L_2500 (``L_2500_intrinsic``,
+        published for every disc), not the L_bol BC fallback.
+
+        Regression: reading only ``L_2500_30deg`` (SKIRTOR-only) made the X-ray
+        ~1.6× too bright for non-SKIRTOR discs (qsogen, richards2006, …), because
+        the BC estimate over-predicts L_2500.
+        """
+        import numpy as np
+
+        from tengri.xray import xray_agn_corona
+
+        comp = AGNXRayCoronaSEDComponent()
+        wave = jnp.asarray(np.geomspace(0.05, 200.0, 400))
+        p = {"gamma": jnp.array(1.8), "e_cut": jnp.array(300.0), "delta_alpha_ox": jnp.array(0.0)}
+        l_2500 = 3.79e29
+        l_bol = 10.0**12 * 3.828e33
+
+        def at_2kev(sed):
+            sed = np.asarray(sed)
+            ok = sed > 0
+            return float(np.interp(6.199, np.asarray(wave)[ok], sed[ok]))
+
+        # With L_2500_intrinsic published, the corona matches the direct corona
+        # at that L_2500 exactly (not the BC estimate).
+        out, _ = comp.predict(
+            p, jnp.zeros_like(wave), wave, L_2500_intrinsic=l_2500, L_agn_bol=l_bol
+        )
+        ref = xray_agn_corona(
+            wave, l_2500_30deg_erg_hz=l_2500, gamma=1.8, E_cut=300.0, delta_alpha_ox=0.0
+        )
+        np.testing.assert_allclose(at_2kev(out), at_2kev(ref), rtol=1e-4)
+
+        # The BC fallback (no disc L_2500 published) is measurably brighter.
+        out_bc, _ = comp.predict(p, jnp.zeros_like(wave), wave, L_agn_bol=l_bol)
+        assert at_2kev(out) < at_2kev(out_bc)
+
     def test_predict_returns_valid_output(self):
         """predict() returns SED and published dict."""
         comp = AGNXRayCoronaSEDComponent()

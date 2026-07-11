@@ -373,7 +373,7 @@ class ForwardModel:
         Symmetric with :meth:`SEDModel.predict`. Delegates to the inner
         SED's ``predict``, so the rich attribute groups
         (``.sfh``, ``.sed``, ``.lines``, ``.radio``, ``.xray``,
-        ``.ionizing``, ``.photometry``, ``.spectrum``, ``.magnitudes``)
+        ``.ionizing``, ``.photometry()``, ``.spectrum()``, ``.magnitudes()``)
         are available directly on a ``ForwardModel``.
 
         For the JIT-safe channel dict consumed by the inference path
@@ -391,7 +391,7 @@ class ForwardModel:
         -------
         Prediction
             Lazy caching wrapper with ``.sfh``, ``.sed``, ``.lines``,
-            ``.radio``, ``.xray``, ``.ionizing``, ``.photometry``,
+            ``.radio``, ``.xray``, ``.ionizing``, ``.photometry()``,
             ``.spectrum``, and ``.magnitudes`` property groups.
 
         Raises
