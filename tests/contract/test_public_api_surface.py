@@ -38,7 +38,6 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "Population",
         "PopulationSEDModel",
         "SEDModel",
-        "SEDModelComponent",
         "SpatialModel",
         "SpatialSEDModel",
         "WavePrecomp",
@@ -46,10 +45,9 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # ── Spatial profile components ──────────────────────────────
         "Exponential",
         "FilterConvention",
-        "FilterCurve",
         "FlatSlab",
         "Sersic",
-        # ── SEDComponent extension surface (re-exported top-level, #1060) ────
+        # ── SEDComponent extension surface — demoted; see DEMOTED_BUT_IMPORTABLE
         # ── Priors (parameters/) ─────────────────────────────────────
         "Fixed",
         "Gaussian",

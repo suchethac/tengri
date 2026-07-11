@@ -33,7 +33,6 @@ EXPECTED_ALL = frozenset(
         # Core
         "Exponential",
         "FilterConvention",
-        "FilterCurve",
         "FlatSlab",
         "ForwardModel",
         "Galaxy",
@@ -42,7 +41,6 @@ EXPECTED_ALL = frozenset(
         "Population",
         "PopulationSEDModel",
         "SEDModel",
-        "SEDModelComponent",
         "Sersic",
         "SpatialModel",
         "SpatialSEDModel",
