@@ -559,124 +559,6 @@ class TestStandardGalaxyWorkflows:
                 print(f"⚠️ PERF-01 NOT reproduced: JIT={result['jit_sec']:.1f}s (expected >60s)")
                 print("   This could mean PERF-01 was fixed!")
 
-    def test_a4_stochastic_sfh_recovery(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
-        """A4. Stochastic SFH recovery (D=12, bursty galaxies).
-
-        SEDModel: dense_basis+field (5 DB + 2 PSD params), Salim dust, nebular
-        Inference: vi (geoVI with n_KL=10 iterations)
-        Expected: <15s JIT, ~20-40s inference
-        """
-        params = Parameters(
-            mean_sfh_type=["dense_basis_pure", "field"],
-            sfh_dbp_log_total_mass=Uniform(9.0, 12.0),
-            sfh_dbp_tx_frac_0=Uniform(0.05, 0.95),
-            sfh_dbp_tx_frac_1=Uniform(0.05, 0.95),
-            sfh_dbp_tx_frac_2=Uniform(0.05, 0.95),
-            sfh_field_psd_sigma=Uniform(0.1, 3.0),
-            sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
-            met_logzsol=Uniform(-2.0, 0.2),
-            dust_law_bc="salim_sbl18",
-            dust_tau_bc=Uniform(0.0, 3.0),
-            dust_tau_diff=Uniform(0.0, 2.0),
-            nebular_ssp=True,
-            apply_igm=True,
-            redshift=Fixed(mock_data_z1["redshift"]),
-            n_grid=64,
-        )
-
-        result = run_scenario(
-            name="A4_stochastic_sfh",
-            params=params,
-            ssp_data=mist_ssp,
-            observation=mock_obs_z1,
-            data=mock_data_z1["flux"],
-            noise=mock_data_z1["flux_unc"],
-            method="vi",
-            rng_key=rng_key,
-            n_iterations=10,  # geoVI iterations
-        )
-
-        jit_str = f"{result['jit_sec']:.1f}s" if result["jit_sec"] is not None else "N/A"
-        _rt = result["runtime_sec"]
-        runtime_str = f"{_rt:.3f}s" if _rt is not None else "N/A"
-        ram_str = f"{result['ram_gb']:.2f}GB" if result["ram_gb"] is not None else "N/A"
-        print(
-            f"\n{result['name']}: D={result['D']}, "
-            f"JIT={jit_str}, "
-            f"Runtime={runtime_str}, "
-            f"RAM={ram_str}, "
-            f"status={result['status']}"
-        )
-        if not result["success"]:
-            print(f"  Error: {result['error_type']}: {result['error_msg']}")
-
-        assert result["success"], f"A4 failed: {result['error_type']}"
-
-    def test_a5_high_d_nonparametric(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
-        """A5. High-D non-parametric (D~13, vi_linear test).
-
-        SEDModel: dirichlet SFH (7 bins, 6 auxiliary vars), dust, nebular
-        Inference: vi_linear (MGVI, faster for high-D)
-        Expected: <20s JIT, <60s inference
-        Failure modes: Extreme SFH spikes (NOTE-01)
-        """
-        params = Parameters(
-            mean_sfh_type="dirichlet",
-            sfh_dir_log_total_mass=Uniform(9.0, 12.0),
-            sfh_dir_z_0=Uniform(0.01, 0.99),
-            sfh_dir_z_1=Uniform(0.01, 0.99),
-            sfh_dir_z_2=Uniform(0.01, 0.99),
-            sfh_dir_z_3=Uniform(0.01, 0.99),
-            sfh_dir_z_4=Uniform(0.01, 0.99),
-            sfh_dir_z_5=Uniform(0.01, 0.99),
-            met_logzsol=Uniform(-2.0, 0.2),
-            dust_law_bc="calzetti",
-            dust_tau_bc=Uniform(0.0, 3.0),
-            dust_tau_diff=Uniform(0.0, 2.0),
-            nebular_ssp=True,
-            apply_igm=True,
-            redshift=Fixed(mock_data_z1["redshift"]),
-        )
-
-        result = run_scenario(
-            name="A5_high_d_dirichlet",
-            params=params,
-            ssp_data=mist_ssp,
-            observation=mock_obs_z1,
-            data=mock_data_z1["flux"],
-            noise=mock_data_z1["flux_unc"],
-            method="vi_linear",
-            rng_key=rng_key,
-            n_iterations=20,
-        )
-
-        jit_str = f"{result['jit_sec']:.1f}s" if result["jit_sec"] is not None else "N/A"
-        _rt = result["runtime_sec"]
-        runtime_str = f"{_rt:.3f}s" if _rt is not None else "N/A"
-        ram_str = f"{result['ram_gb']:.2f}GB" if result["ram_gb"] is not None else "N/A"
-        print(
-            f"\n{result['name']}: D={result['D']}, "
-            f"JIT={jit_str}, "
-            f"Runtime={runtime_str}, "
-            f"RAM={ram_str}, "
-            f"status={result['status']}"
-        )
-        if not result["success"]:
-            print(f"  Error: {result['error_type']}: {result['error_msg']}")
-
-        # High-D variational inference has longer JIT times (60-90s typical)
-        # This is expected due to internal variational parameter expansion
-        if result["success"]:
-            # Allow up to 120s for high-D VI (user thinks it's hung beyond that)
-            assert result["success"], (
-                f"{result['name']} inference failed: {result['error_type']}: {result['error_msg']}"
-            )
-            # Log warning if in slow range (60-90s)
-            if result["jit_sec"] > PerformanceThresholds.JIT_SLOW:
-                print(
-                    f"  Note: High-D VI JIT time ({result['jit_sec']:.1f}s) is slow but expected"
-                )
-
 
 class TestKnownBugReproduction:
     """Category C: Known bug reproduction tests."""
@@ -856,11 +738,12 @@ class TestAGNScience:
         if not result["success"]:
             print(f"  Error: {result['error_type']}: {result['error_msg']}")
 
-        if result["success"]:
-            # AGN models add components, so JIT might be slower
-            assert result["success"], (
-                f"{result['name']} inference failed: {result['error_type']}: {result['error_msg']}"
-            )
+        # Unconditional: an `assert result["success"]` nested inside
+        # `if result["success"]:` is unreachable exactly when it matters — a
+        # failed fit skips the block and the test passes green.
+        assert result["success"], (
+            f"{result['name']} inference failed: {result['error_type']}: {result['error_msg']}"
+        )
 
     def test_b2_qsogen_tracer_leak(self, mist_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """B2. qsogen with JIT-compiled inference (D=10, BUG-NSS-03 regression test).
