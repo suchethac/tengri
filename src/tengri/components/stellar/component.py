@@ -1678,6 +1678,16 @@ class StellarSEDComponent:
         lnu_age = total_mass * ssp_flux_at_age * LSUN_ERG_PER_S
         sed_intrinsic = lnu_age.sum(axis=0)
 
+        # The bare erg/s scale ``total_mass x L_sun``. Written out on its own it
+        # is ~1e42 for a 1e9 Msun galaxy, which overflows float32 (max 3.4e38)
+        # to ``inf`` — silently, since JAX neither warns nor NaNs. The SED above
+        # never trips this because ``total_mass x ssp_flux_at_age`` lands first
+        # and keeps the magnitude small; the two consumers below have no such
+        # small factor to hide behind. Pin the scale at working precision so a
+        # float32 SSP grid (bc03_*, pgny_*) cannot poison the nebular backends
+        # through the ionizing SED (#1099).
+        mass_scale_erg = total_mass.astype(jnp.result_type(float)) * LSUN_ERG_PER_S
+
         # ── 8. Mass quantities ──────────────────────────────────────────
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))
         if ssp.ssp_mass_remaining is not None:
@@ -1731,7 +1741,7 @@ class StellarSEDComponent:
         # back to the full integral when the static bound was not precomputed.
         _n_ion = self._state.n_ion_bins if self._state is not None else None
         if _n_ion is not None:
-            _sed_ion = (total_mass * LSUN_ERG_PER_S) * jnp.tensordot(
+            _sed_ion = mass_scale_erg * jnp.tensordot(
                 joint_weights, ssp_flux_for_csp[:, :, :_n_ion], axes=([0, 1], [0, 1])
             )
             nion = _integrate_nion(_sed_ion, wave[:_n_ion])
@@ -1781,7 +1791,7 @@ class StellarSEDComponent:
             # L_ir from a precomputed bolometric (tau_bc, tau_diff) LUT instead
             # of the full-wavelength stellar cube (WavePrecomp speed path).
             joint_weights=joint_weights,
-            stellar_mass_scale=total_mass * LSUN_ERG_PER_S,
+            stellar_mass_scale=mass_scale_erg,
             # CSP mass weights (Msun per SSP age bin), summed
             # over the metallicity axis. Published so downstream
             # nebular backends (Cue, CloudyGrid) can call their
