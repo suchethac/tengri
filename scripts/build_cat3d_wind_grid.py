@@ -170,9 +170,10 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
         if col not in df.columns:
             raise KeyError(f"CAT3D pickle DataFrame missing column '{col}'.")
 
-    # Mirror AGNfitter's exact slicing: the `a` axis is drawn from the
+    # Mirror AGNfitter's exact slicing: the `a` and `fwd` axes are drawn from the
     # second sub-library starting at row index 210 (see
-    # MODEL_AGNfitter.TORUS CAT3D_3P branch).
+    # MODEL_AGNfitter.TORUS CAT3D_3P branch). The first sub-library (rows 0–209)
+    # uses a different parameter convention and must be ignored.
     if len(df) < 210:
         raise RuntimeError(
             f"CAT3D DataFrame has only {len(df)} rows; AGNfitter's [210:] "
@@ -180,7 +181,7 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 4096) -> None:
         )
     incl_axis = np.sort(np.asarray(df["incl-values"].unique(), dtype=np.float64))
     a_axis = np.sort(np.asarray(df["a-values"][210:].unique(), dtype=np.float64))
-    fwd_axis = np.sort(np.asarray(df["fwd-values"].unique(), dtype=np.float64))
+    fwd_axis = np.sort(np.asarray(df["fwd-values"][210:].unique(), dtype=np.float64))
 
     # Build a per-row lookup keyed on the exact float triple (incl, a, fwd).
     by_key: dict[tuple[float, float, float], tuple[np.ndarray, np.ndarray]] = {}
