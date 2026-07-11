@@ -49,6 +49,15 @@ _DPL_AGE_DEFAULT = float(
 )
 
 # ── Test cases: (name, spec_kwargs, fiducial_params_dict, free_params, skip_reason) ───
+#: VI iterations for the smoke fits. Sized to exercise each emitter's forward
+#: path, not to converge -- the test asserts finiteness, never descent.
+#:
+#: Note this count is NOT what sets the wall clock: the fit is dominated by the
+#: VI backend's XLA compile, which is step-count-independent. Dropping it from
+#: 50 to 10 under geoVI changed the file's runtime by <1 %. What did move it was
+#: switching backends (see the call site).
+_VI_SMOKE_ITERATIONS = 10
+
 _VI_SMOKE_CASES = [
     # modified_blackbody: Modified blackbody dust SED
     (
@@ -154,7 +163,13 @@ def simple_filters():
 def test_vi_smoke_fit(
     synthetic_ssp, simple_filters, emitter_name, spec_kwargs, fid_params, free_params, skip_reason
 ):
-    """Run a 50-step VI fit on a mock SED; check convergence and posterior finiteness.
+    """Run a short VI fit on a mock SED; check the loss history and posterior are finite.
+
+    This is a smoke test: it asserts finiteness, not convergence (nothing below
+    checks that the loss actually descended). The iteration count is therefore
+    sized to exercise the emitter's forward path, not to converge -- the dust-IR
+    emitters cost ~15x per forward call (#708/#1022), so a longer run bought
+    minutes of wall clock and no additional assertion.
 
     Parameters
     ----------
@@ -190,15 +205,20 @@ def test_vi_smoke_fit(
     noise = jax.random.normal(key, fid_phot.shape) * noise_std
     mock_phot = fid_phot + noise
 
-    # ── Build Fitter and run 50-step VI ──────────────────────────────
+    # ── Build Fitter and run a short VI ──────────────────────────────
     # Fitter takes (model, data, noise_std) directly
     fitter = Fitter(model, mock_phot, noise_std)
 
-    # Run VI: native_vi_nonlinear is fastest for small D
+    # native_vi_linear (MGVI), NOT native_vi_nonlinear (geoVI). The backend here
+    # is incidental -- what is under test is the emitter's forward path staying
+    # finite through inference -- so it should be the cheapest VI that still
+    # returns posterior samples. Measured on this very model (D=10, casey2012):
+    # nonlinear 417 s, linear 62 s, and the forward model itself is 1 ms warm.
+    # The cost is geoVI's *compile*, so it is invariant to n_iterations (#1061).
     try:
         posterior = fitter.run(
-            "native_vi_nonlinear",
-            n_iterations=50,
+            "native_vi_linear",
+            n_iterations=_VI_SMOKE_ITERATIONS,
             n_samples=2,
             key=jax.random.PRNGKey(0),
         )

@@ -89,68 +89,59 @@ def _cheap_elbo_draws(monkeypatch):
     monkeypatch.setattr(_shared, "_PATHFINDER_ELBO_DRAWS", 5)
 
 
+#: One NUTS configuration for both warmup paths. A NUTS run here is dominated by
+#: the XLA kernel compile, which is independent of the step count -- so shrinking
+#: these numbers buys nothing, and every *distinct* setting buys another compile.
+#: Four tests previously triggered five runs across three configurations; they
+#: assert plumbing (a Posterior comes back, the diagnostics are labeled, the two
+#: warmup paths do not share a cache entry), none of which depends on the counts.
+_NUTS_KWARGS = dict(n_warmup=50, n_burnin=5, n_samples=20, verbose=False)
+
+
+@pytest.fixture(scope="module")
+def window_result(fitter_and_mock):
+    """One window-adapted NUTS run, shared across the class.
+
+    ``pathfinder_warmstart`` is deliberately NOT passed: the default must remain
+    window adaptation, so omitting it pins the default rather than merely
+    re-stating it.
+    """
+    fitter, _ = fitter_and_mock
+    return fitter.run("mcmc_nuts", **_NUTS_KWARGS)
+
+
+@pytest.fixture(scope="module")
+def pathfinder_result(fitter_and_mock, window_result):
+    """One pathfinder-warmstarted NUTS run, shared across the class.
+
+    Depends on ``window_result`` so both adaptations run in the same process and
+    against the same fitter -- which is precisely what makes the cache-separation
+    assertion meaningful: a shared cache entry would hand this run back the
+    window-adapted diagnostics.
+    """
+    fitter, _ = fitter_and_mock
+    return fitter.run("mcmc_nuts", pathfinder_warmstart=True, **_NUTS_KWARGS)
+
+
 @pytest.mark.skipif(not _has_blackjax(), reason="blackjax not installed")
 class TestPathfinderWarmstart:
     """Contract: run_nuts(pathfinder_warmstart=True) must produce a valid
     Posterior and label itself in diagnostics."""
 
-    def test_runs_without_error(self, fitter_and_mock):
-        fitter, _ = fitter_and_mock
-        result = fitter.run(
-            "mcmc_nuts",
-            pathfinder_warmstart=True,
-            n_warmup=50,
-            n_burnin=10,
-            n_samples=30,
-            verbose=False,
-        )
-        assert isinstance(result, Posterior)
-        assert result.samples is not None
-        for arr in result.samples.values():
-            assert arr.shape[0] == 30
+    def test_runs_without_error(self, pathfinder_result):
+        assert isinstance(pathfinder_result, Posterior)
+        assert pathfinder_result.samples is not None
+        for arr in pathfinder_result.samples.values():
+            assert arr.shape[0] == _NUTS_KWARGS["n_samples"]
 
-    def test_diagnostics_label(self, fitter_and_mock):
-        fitter, _ = fitter_and_mock
-        result = fitter.run(
-            "mcmc_nuts",
-            pathfinder_warmstart=True,
-            n_warmup=50,
-            n_burnin=5,
-            n_samples=20,
-            verbose=False,
-        )
-        assert result.diagnostics.get("warmup") == "pathfinder"
+    def test_diagnostics_label(self, pathfinder_result):
+        assert pathfinder_result.diagnostics.get("warmup") == "pathfinder"
 
-    def test_window_adaptation_still_default(self, fitter_and_mock):
+    def test_window_adaptation_still_default(self, window_result):
         """Regression: default path must still use window adaptation."""
-        fitter, _ = fitter_and_mock
-        result = fitter.run(
-            "mcmc_nuts",
-            n_warmup=50,
-            n_burnin=5,
-            n_samples=20,
-            verbose=False,
-        )
-        assert result.diagnostics.get("warmup") == "window"
+        assert window_result.diagnostics.get("warmup") == "window"
 
-    def test_cache_key_separation(self, fitter_and_mock):
+    def test_cache_key_separation(self, window_result, pathfinder_result):
         """Window-adapted and pathfinder-adapted runs must not share cache."""
-        fitter, _ = fitter_and_mock
-        r1 = fitter.run(
-            "mcmc_nuts",
-            pathfinder_warmstart=False,
-            n_warmup=50,
-            n_burnin=5,
-            n_samples=20,
-            verbose=False,
-        )
-        r2 = fitter.run(
-            "mcmc_nuts",
-            pathfinder_warmstart=True,
-            n_warmup=50,
-            n_burnin=5,
-            n_samples=20,
-            verbose=False,
-        )
-        assert r1.diagnostics["warmup"] == "window"
-        assert r2.diagnostics["warmup"] == "pathfinder"
+        assert window_result.diagnostics["warmup"] == "window"
+        assert pathfinder_result.diagnostics["warmup"] == "pathfinder"

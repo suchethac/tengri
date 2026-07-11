@@ -17,8 +17,15 @@ Differentiable SED fitting code in JAX. Models galaxy star formation histories a
 .venv/bin/ruff check --fix src/ tests/    # auto-fix
 .venv/bin/ruff format src/ tests/          # auto-format
 
-# Tests (~2224 tests, ~295s)
+# Tests — the default run is the PR-gating fast tier, in parallel (~7.3k tests)
 .venv/bin/pytest tests/ -q
+
+# The heavy trees (tests/inference, tests/integration) are auto-marked `slow`
+# in tests/conftest.py and deselected by default: 15% of the tests, but the
+# overwhelming majority of the wall clock (two test_user_scenarios tests alone
+# run 24 min and 18 min). They run in CI as a schedule/label-gated job.
+.venv/bin/pytest tests/ -q -m slow            # the heavy trees only
+.venv/bin/pytest tests/ -q -m 'not crossval'  # everything (fast + slow)
 
 # Benchmarks (run after changes to forward model or inference)
 JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_forward_model.py
