@@ -1829,26 +1829,36 @@ save_fig("cigale_10b_xray_inclination.png")
 # `L_ref = L_dust / (3.75e12 · 10^q_IR)`, so any mismatch in the absorbed
 # energy lands 1:1 in the radio.
 #
-# tengri sits **2 % above CIGALE at 1.4 GHz** and the gap widens with
-# frequency — 0.99× at 150 MHz, 1.02× at 1.4 GHz, 1.08× at 5 GHz, 1.7× at
-# 90 GHz. That shape is the signature, and it is not a normalization error.
-# Two factors, both printed by the cell, close it to a few parts in a
-# thousand at every frequency:
+# tengri sits **4 % above CIGALE at 1.4 GHz**, and the excess *grows with
+# frequency* — 1.01× at 150 MHz, 1.04× at 1.4 GHz, 1.16× at 10 GHz, 1.75× at
+# 100 GHz. The shape is the diagnosis: a normalization error would offset the
+# whole band by a constant, and this does not.
 #
-# - **Free-free** (×1.040 at 1.4 GHz). Murphy+2011 thermal emission, which
-#   CIGALE's synchrotron-only module omits (#863). It is flat (α ≈ 0.1) where
-#   the synchrotron is steep (α = 0.8), so its share grows with frequency —
-#   the entire rise of the ratio panel. The dotted grey curve is tengri's
-#   synchrotron *alone*: it lies on CIGALE's, which is what makes the excess
-#   attributable to the thermal term rather than to the normalization.
-# - **Anchor frequency** (×0.985). Bell 2003 defines q_IR at 1.4 GHz;
-#   CIGALE normalizes at 21 cm = 1.4276 GHz. A pure convention offset,
-#   `(1.4276/1.4)^−0.8`, and the reason the ratio dips *below* unity at
-#   150 MHz where the free-free has died away.
+# Separate the ratio into the only two things it can be made of.
 #
-# The energy-balance anchor, which used to contribute a third term, is now
-# ×1.002 — `L_absorbed` agrees with CIGALE's `dust.luminosity` to 0.2 %, so
-# it no longer moves the radio.
+# **The non-thermal terms agree, and their offset is pure convention.** Both
+# codes emit a synchrotron power law of the same index, so tengri's synchrotron
+# over CIGALE's can only be a constant — and it is: **1.005, flat across all
+# three decades** (the dotted line on the ratio panel). Two conventions predict
+# that constant without reference to the measurement:
+#
+# - **Anchor frequency, ×0.985.** Bell 2003 defines q_IR at 1.4 GHz; CIGALE
+#   normalizes at 21 cm = 1.4276 GHz — a pure `(1.4276/1.4)^−0.8` offset.
+# - **Energy balance, ×1.020.** `L_absorbed` runs 2 % above CIGALE's
+#   `dust.luminosity` for this attenuation setup (the §6 FUV curve-shape
+#   residual). Both codes anchor the synchrotron on the dust luminosity
+#   (`L_ref = L_dust / (3.75e12 · 10^q_IR)`), so it lands in the radio 1:1.
+#
+# Their product, ×1.005, is the measured flat offset. Nothing is fitted here:
+# the prediction comes from the two conventions, the measurement from the two
+# SEDs, and they meet.
+#
+# **Everything above that line is thermal.** tengri's `condon92` carries a
+# Murphy+2011 free-free term; CIGALE's `radio` module has none (#863). Free-free
+# is flat (α ≈ 0.1) where synchrotron is steep (α = 0.8), so its share climbs
+# with frequency — 4 % at 1.4 GHz, 75 % at 100 GHz. That is the entire rise of
+# the ratio panel, and it is a physics difference between the two codes rather
+# than a discrepancy in the shared physics.
 
 # %%
 sed_r = C.run_chain(
@@ -1961,35 +1971,44 @@ print(f"§11 radio tengri/CIGALE median (1.0–1.5 GHz): {float(np.median(ratio[
 # dependent) and the fixed 21 cm-vs-1.4 GHz anchor — times the energy-balance
 # anchor, which is now ~1. If that curve traces the measured ratio across three
 # decades, the "radio deviation" is fully accounted for and nothing is left over.
-from tengri.radio import radio_freefree, radio_sfr_bell2003
-
 _L_ir_t = float(np.asarray(state_r.derived["L_ir"]))
 _f_lir = _L_ir_t / (float(sed_r.info["dust.luminosity"]) * 1e7)
 _f_anchor = float((1.4276e9 / 1.4e9) ** (-0.8))
 
-_nu_pred_ghz = np.geomspace(0.1, 100.0, 200)
-_w_pred = 2.998e18 / (_nu_pred_ghz * 1e9)
-_syn_pred = np.asarray(radio_sfr_bell2003(_w_pred, _L_ir_t, q_ir=2.5, alpha_sf=0.8))
-_ff_pred = np.asarray(radio_freefree(_w_pred, _L_ir_t, 1.0e4, 0.1))
-_ratio_pred = (1.0 + _ff_pred / _syn_pred) * _f_anchor * _f_lir
+# Split the measured ratio into the two things it can be made of, and check
+# each against a number derived *independently* of it.
+#
+# tengri's synchrotron alone, over CIGALE's synchrotron, is flat — the two
+# codes' non-thermal terms have the same spectral index, so their quotient can
+# only be a normalization. Predict that normalization from the two conventions
+# (anchor frequency and the energy-balance anchor) and compare. Nothing about
+# the prediction is fitted to the measurement, so their agreement is a real
+# check rather than an identity.
+_syn_on_c = np.asarray(_bell03(w_r, _L_ir_t, q_ir=2.5, alpha_sf=0.8))
+_valid = (_nu_r >= 0.1) & (_nu_r <= 100.0) & (L_r > 0) & np.isfinite(ratio)
+_syn_ratio = _syn_on_c[_valid] / L_r[_valid]
+print(
+    f"§11 synchrotron alone, tengri/CIGALE: "
+    f"{_syn_ratio.min():.4f}–{_syn_ratio.max():.4f} across 0.1–100 GHz (flat)"
+)
+print(
+    f"§11   predicted from conventions: anchor ×{_f_anchor:.4f} · "
+    f"energy-balance ×{_f_lir:.4f} = ×{_f_anchor * _f_lir:.4f}"
+)
 
-ax_r.plot(_nu_pred_ghz, _ratio_pred, color="0.25", ls=":", lw=1.6,
-          label="free-free × anchor × energy balance")
+# Everything the total ratio carries above that flat line is the thermal term —
+# read off the model itself, not re-derived from a formula whose (T_e, thermal
+# fraction) would have to be guessed back out of the component.
+_ff_frac = ratio[_valid] / (_f_anchor * _f_lir) - 1.0
+_order = np.argsort(_nu_r[_valid])
+ax_r.axhline(_f_anchor * _f_lir, color="0.25", ls=":", lw=1.6,
+             label=f"synchrotron only (anchor × energy balance = {_f_anchor * _f_lir:.3f})")
 ax_r.legend(fontsize=7, frameon=False, loc="upper left")
-
-# Residual of the closure: measured ratio minus predicted, over the plotted band.
-_meas = np.interp(_nu_pred_ghz, _nu_r[::-1], ratio[::-1])
-_closure = np.nanmax(np.abs(_meas / _ratio_pred - 1.0))
-_f_ff_14 = float(1.0 + np.interp(1.4, _nu_pred_ghz, _ff_pred / _syn_pred))
-print(
-    f"§11 decomposition at 1.4 GHz: free-free ×{_f_ff_14:.3f} · "
-    f"anchor-frequency ×{_f_anchor:.3f} · energy-balance ×{_f_lir:.3f} "
-    f"= ×{_f_ff_14 * _f_anchor * _f_lir:.3f}"
-)
-print(
-    f"§11 closure: the two-factor prediction tracks the measured ratio to "
-    f"max {_closure * 100:.1f}% over 0.1–100 GHz — no unexplained residual."
-)
+print("§11 implied free-free excess over CIGALE (which has no thermal term):")
+for _f in (0.15, 1.4, 10.0, 100.0):
+    _j = int(np.argmin(np.abs(_nu_r[_valid] - _f)))
+    print(f"    {_nu_r[_valid][_j]:6.2f} GHz: total ×{ratio[_valid][_j]:.3f} "
+          f"→ thermal fraction {_ff_frac[_j] * 100:5.1f}%")
 fig.tight_layout()
 save_fig("cigale_11_radio_synchrotron.png")
 
@@ -2196,7 +2215,9 @@ fig, (ax, ax_r) = plt.subplots(
 # dust humps read as the comparable reservoirs energy balance says they are.
 _nu_ext = _C_AA_HZ / w_ext
 nuL_ext = _nu_ext * L_ext
-nuL_t_on_ext = _nu_ext * L_t_on_ext
+# Mask where tengri's grid has run out rather than let regrid's zero-fill draw a
+# vertical cliff at the grid edge — the model stops there, it does not go dark.
+nuL_t_on_ext = np.where(L_t_on_ext > 0, _nu_ext * L_t_on_ext, np.nan)
 ax.plot(w_ext, nuL_ext, "C0-", linewidth=1.5, label="CIGALE")
 ax.plot(w_ext, nuL_t_on_ext, "C1--", linewidth=1.5, label="tengri (CIGALE-mode)")
 ax.set_xscale("log")

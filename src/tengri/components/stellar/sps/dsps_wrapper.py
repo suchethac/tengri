@@ -214,15 +214,11 @@ def load_ssp(name: str | None = None) -> "SSPData":
 def _load_float(dataset) -> jnp.ndarray:
     """Read an HDF5 float dataset at tengri's working precision (#1099).
 
-    Several repackaged grids store float32 on disk (``bc03_*``, ``pgny_*``);
-    the catalog ``fsps_*`` / ``ssp_*`` grids store float64. Reading a float32
-    grid with a bare ``jnp.array`` keeps it float32 all the way through the
-    forward model, and ``stellar_mass_scale = total_mass x L_sun`` ~ 1e42 is
-    not representable in float32 (max 3.4e38): it silently overflows to
-    ``inf``, which propagates into the ionizing SED handed to the nebular
-    backends. The upcast is lossless — every float32 is exactly a float64 —
-    so it changes no stored value, only the precision of the arithmetic
-    downstream, which tengri runs in 64-bit everywhere else.
+    Several repackaged grids store float32 (``bc03_*``, ``pgny_*``). Left as
+    float32, ``stellar_mass_scale = total_mass x L_sun`` ~ 1e42 overflows the
+    float32 ceiling of 3.4e38 to ``inf`` — silently — and poisons the ionizing
+    SED the nebular backends consume. The upcast is lossless: every float32 is
+    exactly a float64, so no stored value changes.
     """
     return jnp.asarray(dataset[:], dtype=jnp.result_type(float))
 
