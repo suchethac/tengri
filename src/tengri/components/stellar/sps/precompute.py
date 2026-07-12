@@ -124,6 +124,14 @@ class PhotometricPrecomputation(NamedTuple):
     ssp_subband_waves_rest : array or None, shape (n_met, n_age, n_filters, n_subbands)
         Rest-frame quadrature node of each sub-band — the template's own
         flux-weighted centroid there. None unless ``n_subbands > 0``. [Angstrom]
+    ssp_subband_phot_igm : array or None, shape (n_met, n_age, n_filters, n_subbands)
+        ``ssp_subband_phot`` with the IGM transmission at each node folded in
+        (#1135): Φ_{majk} · T_IGM(λ*_{majk} · (1+z), z) [erg/s/Hz], where λ* is
+        the sub-band's quadrature node. Injected by ``SEDModel.build`` when a
+        mean-IGM model is present and precomputable; None otherwise. Folded here
+        — on the metallicity axis, before the SSP contraction — because the
+        runtime node is a met-weighted average whose weights move with the free
+        ``met_logzsol``.
 
     Notes
     -----
@@ -142,6 +150,7 @@ class PhotometricPrecomputation(NamedTuple):
     n_filters: int
     ssp_subband_phot: "jnp.ndarray | None" = None
     ssp_subband_waves_rest: "jnp.ndarray | None" = None
+    ssp_subband_phot_igm: "jnp.ndarray | None" = None
 
 
 class SpectroscopicPrecomputation(NamedTuple):
@@ -480,6 +489,12 @@ class PhotometricZTable(NamedTuple):
     ssp_subband_phot_table: jnp.ndarray | None = None
     #: (n_z, n_met, n_age, n_filters, n_subbands) rest-frame quadrature nodes [A].
     subband_waves_rest_table: jnp.ndarray | None = None
+    #: (n_z, n_met, n_age, n_filters, n_subbands) sub-band filter integrals with the
+    #: IGM transmission at each node folded in (#1135). Injected by ``SEDModel.build``
+    #: from the *cached* node table, so it is not part of the on-disk z-table (and the
+    #: cache key needs no IGM term). ``None`` when the IGM is absent or reads free
+    #: parameters (patchy reionization, DLAs).
+    ssp_subband_phot_igm_table: jnp.ndarray | None = None
 
 
 # Bump when the quadrature or table layout changes — invalidates every

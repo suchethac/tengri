@@ -890,6 +890,20 @@ class Observation:
         sub_per_age = state.derived.get("stellar_phot_lnu_per_age_subband_precomp")
         a_bc_sub = state.derived.get("dust_bc_attenuation_subband_precomp")
         _have_subband = a_bc_sub is not None and sub_per_age is not None
+
+        # The sub-band tensor with the IGM already folded in at the quadrature
+        # nodes (#1135). Present only when a mean-IGM model is precomputable.
+        # ``igm_phot_factor`` band-averages T *alone*, unweighted by the spectrum
+        # — ⟨S⟩·⟨T⟩ where the flux needs ⟨S·T⟩; across GALEX FUV at z≈0.8 the
+        # transmission runs from ~1 to ~0 inside the band and that covariance term
+        # reaches −9.5 %. Contracting this tensor against the same dust screen
+        # captures SED × dust × IGM in one sum.
+        #
+        # Carried SEPARATELY from ``stellar_attenuated`` rather than replacing it:
+        # ``phot_rest_fnu`` is projected at z=0 and carries no IGM by contract.
+        sub_per_age_igm = state.derived.get("stellar_phot_lnu_per_age_subband_igm_precomp")
+        stellar_attenuated_igm = None
+
         if a_bc_lut is not None and (_have_subband or per_age is not None):
             a_diff_lut = state.derived["dust_diff_attenuation_precomp"]
             y_age = state.derived["dust_young_indicator"]
@@ -907,6 +921,9 @@ class Observation:
                 a_diff_sub = state.derived["dust_diff_attenuation_subband_precomp"]
                 t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
                 stellar_attenuated = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
+                if sub_per_age_igm is not None:
+                    # Same screen, same nodes — only the weights carry T (#1135).
+                    stellar_attenuated_igm = jnp.sum(sub_per_age_igm * t_sub, axis=(0, 2))
             else:
                 atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]  # A_bc(λ_eff)^y(a)
                 t_per_age = a_diff_lut[None, :] * atten_bc_per_age  # A_diff·A_bc^y
@@ -966,6 +983,9 @@ class Observation:
                 # drop to the bare A(λ_eff) form once ``taylor_correction``
                 # defaulted off — worse than what it replaced.
                 stellar_attenuated = jnp.sum(sub_per_age * a_sub, axis=(0, 2))
+                if sub_per_age_igm is not None:
+                    # Same screen, same nodes — only the weights carry T (#1135).
+                    stellar_attenuated_igm = jnp.sum(sub_per_age_igm * a_sub, axis=(0, 2))
                 # Nebular (if any) publishes no sub-band tensors; keep it at λ_eff.
                 dust_attenuated = stellar_attenuated + a_lut * nebular_phi_for_dust
             else:
@@ -982,6 +1002,15 @@ class Observation:
                 if a_slope_lut is not None and stellar_psi is not None:
                     dust_attenuated = dust_attenuated + a_slope_lut * stellar_psi
             total_lnu = dust_attenuated + unattenuated_phi
+        elif sub_per_age_igm is not None and sub_per_age is not None:
+            # No dust component at all, but the IGM still needs the quadrature —
+            # the ⟨S⟩·⟨T⟩ gap is a property of the band average, not of the dust.
+            # Rebuild the stellar term from the sub-band sums so the IGM-free and
+            # IGM-folded halves are consistent (Σ_k Φ_k = Φ exactly — the partition
+            # is flux-conserving by construction, asserted in subband_quadrature).
+            stellar_attenuated = jnp.sum(sub_per_age, axis=(0, 2))
+            stellar_attenuated_igm = jnp.sum(sub_per_age_igm, axis=(0, 2))
+            total_lnu = stellar_attenuated + (total_phi - stellar_phi)
         else:
             total_lnu = total_phi
 
@@ -1045,7 +1074,17 @@ class Observation:
             else:
                 igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
         if igm_factor is not None:
-            phot_fnu = phot_fnu * igm_factor
+            if stellar_attenuated_igm is not None:
+                # Stellar already carries T evaluated AT the quadrature nodes
+                # (#1135), so the band factor must not touch it — that would apply
+                # the IGM twice. Everything the quadrature cannot reach (nebular
+                # lines, AGN, dust emission) keeps ⟨T⟩_f, which is what it had
+                # before; the stellar continuum dominates the broadband and is now
+                # the accurate term.
+                other_lnu = total_lnu - stellar_attenuated
+                phot_fnu = (other_lnu * igm_factor + stellar_attenuated_igm) * cosmology
+            else:
+                phot_fnu = phot_fnu * igm_factor
 
         out = {"phot_fnu": phot_fnu, "phot_rest_fnu": phot_rest_fnu}
 
