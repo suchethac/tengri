@@ -8,7 +8,7 @@ Kewley+2001 and Kauffmann+2003 demarcation lines are overlaid.
 
 **Ask the model for a line; do not measure it off the continuum grid.**
 An earlier version of this example integrated a continuum-subtracted
-boxcar (half-width 8 Å) around each line centre on the SSP wavelength
+boxcar (half-width 8 Å) around each line center on the SSP wavelength
 grid. That grid is log-spaced and coarse — 64 Å per pixel at Hα — so an
 8 Å box contains at most *one* sample, and ``np.trapezoid`` over one
 point is exactly ``0.0``. The example divided by that zero and crashed.
