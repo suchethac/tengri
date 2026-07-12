@@ -341,7 +341,7 @@ def sweep_parameter(
     for i, val in enumerate(values):
         # Override single parameter; use model defaults for rest
         override = {param_name: float(val)}
-        pred = model.predict_rest_sed(override)
+        pred = model._predict_rest_sed(override)
         wave = np.asarray(pred.wavelength)
         lnu = np.asarray(pred.sed)
 
@@ -506,7 +506,7 @@ def sfh_sed_comparison(
 
                 # SED panel - stochastic
                 try:
-                    pred = model.predict_rest_sed(override_with_xi)
+                    pred = model._predict_rest_sed(override_with_xi)
                     wave = np.asarray(pred.wavelength)
                     lnu = np.asarray(pred.sed)
                     idx_norm = int(np.argmin(np.abs(wave - 5500.0)))
@@ -530,7 +530,7 @@ def sfh_sed_comparison(
 
         # SED panel - deterministic mean
         try:
-            pred = model.predict_rest_sed(override)
+            pred = model._predict_rest_sed(override)
             wave = np.asarray(pred.wavelength)
             lnu = np.asarray(pred.sed)
             idx_norm = int(np.argmin(np.abs(wave - 5500.0)))
@@ -663,7 +663,7 @@ def posterior_plot_sed(result, mock=None, ax=None):
         sed_samples = []
         for i in range(n_samples):
             sample_i = {k: v[i] for k, v in result.samples.items()}
-            sed_i = result._model.predict_rest_sed(sample_i).sed
+            sed_i = result._model._predict_rest_sed(sample_i).sed
             sed_samples.append(sed_i)
         sed_array = np.array(sed_samples)
 
@@ -678,12 +678,12 @@ def posterior_plot_sed(result, mock=None, ax=None):
         )
 
         # Plot MAP SED
-        sed_map = result._model.predict_rest_sed(result.params).sed
+        sed_map = result._model._predict_rest_sed(result.params).sed
         ax_sed.plot(wave_rest, sed_map, "-", color="C0", lw=2, label="MAP SED")
     else:
         # MAP only: just plot the best fit
         wave_rest = np.array(result._model.ssp_data.ssp_wave)
-        sed_map = result._model.predict_rest_sed(result.params).sed
+        sed_map = result._model._predict_rest_sed(result.params).sed
         ax_sed.plot(wave_rest, sed_map, "-", color="C0", lw=2, label="Best fit")
 
     # Overlay mock data if provided

@@ -218,7 +218,12 @@ _C_AA_S = 2.99792458e18
 
 
 class _FakeSED:
-    """Minimal stand-in for SEDModel exposing predict_rest_sed only."""
+    """Minimal stand-in for SEDModel exposing the rest-SED entry point only.
+
+    Mocks the *private* ``_predict_rest_sed``: the public ``predict_rest_sed``
+    is a deprecation shim now (#1049), and internal callers were migrated to the
+    private twin so the library never warns at its own users.
+    """
 
     def __init__(self, wave, line_centers, line_amplitudes, sigma_aa=5.0, cont_f_lambda=1.0):
         self._wave = wave
@@ -227,7 +232,7 @@ class _FakeSED:
         self._sigma = sigma_aa
         self._cont = cont_f_lambda
 
-    def predict_rest_sed(self, params, wave=None):
+    def _predict_rest_sed(self, params, wave=None):
         from tengri.forward.result import SEDResult
 
         f_lambda = jnp.full_like(self._wave, self._cont)

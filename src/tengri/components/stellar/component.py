@@ -746,6 +746,13 @@ class StellarSEDComponent:
         """
         return (
             DerivedKey("log_mstar", "dex", "log10(surviving stellar mass / Msun)"),
+            DerivedKey(
+                "log_mstar_surviving",
+                "dex",
+                "log10(surviving stellar mass / Msun); NaN when the SSP grid has no "
+                "mass-remaining table (unlike log_mstar, this never falls back to the "
+                "formed mass)",
+            ),
             DerivedKey("log_mstar_formed", "dex", "log10(formed stellar mass / Msun)"),
             DerivedKey("sfr", "Msun/yr", "SFR at lookback ~ 0"),
             DerivedKey("sfr_10myr", "Msun/yr", "Time-weighted SFR over last 10 Myr"),
@@ -1683,6 +1690,15 @@ class StellarSEDComponent:
         sed_intrinsic = lnu_age.sum(axis=0)
 
         # ── 8. Mass quantities ──────────────────────────────────────────
+        #
+        # Two keys, on purpose. ``log_mstar`` keeps its documented fallback to the
+        # formed mass when the SSP grid carries no mass-remaining table, because
+        # downstream normalization needs *a* mass and cannot take a NaN.
+        # ``log_mstar_surviving`` does NOT fall back: it is the user-facing answer
+        # to "how much stellar mass is left", and when the grid cannot say, the
+        # honest answer is NaN — not the formed mass, which silently asserts zero
+        # mass loss (typically 30-40% of the formed mass; #1131). The old
+        # ``predict_sfh_quantities`` returned NaN here and was right to.
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))
         if ssp.ssp_mass_remaining is not None:
             mr_at_met = interpolate_mass_remaining(
@@ -1690,8 +1706,10 @@ class StellarSEDComponent:
             )
             mstar_surv = compute_surviving_mass(age_weights, mr_at_met)
             log_mstar = jnp.log10(jnp.maximum(mstar_surv, 1e-30))
+            log_mstar_surviving = log_mstar
         else:
             log_mstar = log_mstar_formed
+            log_mstar_surviving = jnp.asarray(jnp.nan)
 
         # ── 9. SFR averages on the SFH grid ─────────────────────────────
         sfr_now = sfr_history[0]
@@ -1775,6 +1793,7 @@ class StellarSEDComponent:
         derived_overrides = dict(
             log_mstar=log_mstar,
             log_mstar_formed=log_mstar_formed,
+            log_mstar_surviving=log_mstar_surviving,
             sfr=sfr_now,
             sfr_10myr=sfr_10myr,
             sfr_100myr=sfr_100myr,
@@ -2254,7 +2273,7 @@ def _stellar_mass_fn(state, params):
 
 def _stellar_mass_surviving_fn(state, params):
     """Total surviving stellar mass [Msun]."""
-    log_mstar = jnp.asarray(state.derived["log_mstar"])
+    log_mstar = jnp.asarray(state.derived["log_mstar_surviving"])
     return jnp.power(10.0, log_mstar)
 
 
@@ -2269,11 +2288,24 @@ def _sfr_10myr_fn(state, params):
 
 
 def _ssfr_fn(state, params):
-    """Specific star formation rate (SFR / stellar_mass) [1/Gyr]."""
+    """Specific star formation rate (SFR / surviving stellar mass) [1/yr].
+
+    Notes
+    -----
+    Reads ``log_mstar``, **not** ``log_mstar_surviving`` — and that asymmetry with
+    :func:`_stellar_mass_surviving_fn` is deliberate, not an oversight. When the
+    SSP grid carries no mass-remaining table, "how much mass survives" has no
+    answer and the property says NaN; but sSFR is still a meaningful number
+    against the formed mass, so it falls back rather than going dark. That is
+    exactly what the method this replaces did::
+
+        mass_for_ssfr = jnp.where(jnp.isnan(mass_surviving), mass_formed, mass_surviving)
+
+    and the deprecation shim must stay bit-exact with it (#1049, contract §6).
+    """
     log_mstar = jnp.asarray(state.derived["log_mstar"])
     stellar_mass_surviving = jnp.power(10.0, log_mstar)
     sfr_100myr = jnp.asarray(state.derived["sfr_100myr"])
-    # Use surviving mass in denominator to match legacy convention
     return sfr_100myr / jnp.maximum(stellar_mass_surviving, _TINY)
 
 
