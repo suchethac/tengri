@@ -127,7 +127,7 @@ sfh_young_component = tengri.tsnorm(
 sfh_combined = sfh_ancient_component + sfh_young_component
 
 # Note: tengri does not currently support multi-component tsnorm in the builder.
-# Build as two separate models and sum the SEDs externally after predict_rest_sed.
+# Build as two separate models and sum the SEDs externally after pred.rest_sed().
 model_combined_ancient = tengri.SEDModel.build(
     ssp_data=ssp,
     sfh={

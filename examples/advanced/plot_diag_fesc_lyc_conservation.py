@@ -50,7 +50,7 @@ halpha_lums = []
 
 for fesc in fesc_vals:
     params = {**baseline, "neb_fesc": float(fesc)}
-    lines = model.predict_emission_lines(params)
+    lines = model.predict(params).lines
     halpha_lums.append(float(lines.halpha))
 
 halpha_lums = np.array(halpha_lums)

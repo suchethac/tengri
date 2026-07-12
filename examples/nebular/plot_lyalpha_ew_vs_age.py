@@ -88,7 +88,7 @@ for met in met_logzsol:
         )
 
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        lines = model.predict_emission_lines(params)
+        lines = model.predict(params).lines
         sed_result = model.predict(params)
 
         lya_lum = float(lines.lya)

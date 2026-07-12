@@ -87,7 +87,7 @@ for logu in logu_array:
         )
 
         params = dict(model.spec.sample(jax.random.PRNGKey(42)))
-        lines = model.predict_emission_lines(params)
+        lines = model.predict(params).lines
 
         if lines is not None:
             ha = float(lines.halpha)
@@ -142,7 +142,7 @@ for config in agn_configs:
     )
 
     params = dict(model.spec.sample(jax.random.PRNGKey(123)))
-    lines = model.predict_emission_lines(params)
+    lines = model.predict(params).lines
 
     if lines is not None:
         ha = float(lines.halpha)

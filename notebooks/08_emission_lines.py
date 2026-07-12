@@ -401,7 +401,7 @@ lines_annotate = [
     (6731.47, "[SII]"),
 ]
 z_ref_display = 0.1
-for lam, label in lines_annotate:
+for lam, label in lines_annotate:  # noqa: B007
     lam_obs = lam * (1.0 + z_ref_display)
     ax.axvline(lam_obs, color="0.6", ls=":", lw=0.5, alpha=0.6)
 

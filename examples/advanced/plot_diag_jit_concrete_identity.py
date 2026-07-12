@@ -3,7 +3,7 @@ JAX JIT Compilation: Eager vs Compiled Numerical Equivalence
 =============================================================
 
 Verifies that JIT-compiled predictions are bit-identical to eager-mode evaluations.
-For ``predict_photometry`` and ``predict_emission_lines``, we sample random parameter
+For ``predict_photometry`` and ``predict(params).lines``, we sample random parameter
 sets and compare max relative difference between eager and JIT outputs. A value < 1e-10
 confirms no spurious numerical divergence; > 1e-10 suggests platform-dependent
 floating-point behavior.
@@ -92,9 +92,17 @@ for _ in range(n_samples):
 # Predict and compare emission lines (Cue model)
 # ============================================================================
 diffs_lines = []
-has_cue = hasattr(model, "predict_emission_lines") and callable(model.predict_emission_lines)
+# The emission lines are catalog properties, and ``predict_properties`` is the
+# single JIT/vmap-safe surface for them (NAMING_CONTRACT §4b.5). Stack them into
+# one array so the eager-vs-jit comparison below is a plain elementwise diff.
+_LINE_NAMES = ("halpha", "hbeta", "oiii_5007", "nii_6584")
+has_cue = all(name in model.available_properties for name in _LINE_NAMES)
 if has_cue:
-    f_lines = model.predict_emission_lines
+
+    def f_lines(p):
+        q = model.predict_properties(p, names=_LINE_NAMES)
+        return jnp.stack([jnp.asarray(q[n]) for n in _LINE_NAMES])
+
     f_lines_jit = jax.jit(f_lines)
 
     for _ in range(n_samples):

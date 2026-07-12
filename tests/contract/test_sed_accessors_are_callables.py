@@ -149,11 +149,50 @@ _ALLOWED = {
 }
 
 
+# Sphinx cross-reference roles name the attribute, not a call: `:meth:`Prediction.rest_sed``
+# is correct reStructuredText and must not be flagged.
+_SPHINX_ROLE = re.compile(r":(meth|attr|func|obj|class):`")
+
+
+def _code_lines(path: pathlib.Path):
+    """Yield (lineno, line) for CODE only — prose about the misuse is not a misuse.
+
+    In markdown only fenced *code* blocks count. A MyST directive
+    (```` ```{note} ````) also opens with a fence but its body is prose, and the
+    API guide's note deliberately writes ``pred.rest_sed`` without parens to
+    explain why that raises. A guard that fails on the sentence explaining the
+    rule is a guard people delete.
+    """
+    text = path.read_text().splitlines()
+    if path.suffix == ".py":
+        yield from ((i, ln) for i, ln in enumerate(text, 1) if not _SPHINX_ROLE.search(ln))
+        return
+    # Track "inside a fence" and "that fence is code" SEPARATELY. Collapsing them
+    # into one flag inverts the state at the first MyST directive: ```{note} opens
+    # without setting code-mode, and then its CLOSING ``` reads as an opening
+    # fence, so every later prose line looks like code and every code block looks
+    # like prose. (That bug made this guard silently vacuous once already.)
+    in_fence = False
+    fence_is_code = False
+    for i, line in enumerate(text, 1):
+        stripped = line.lstrip()
+        if stripped.startswith("```"):
+            if in_fence:
+                in_fence = fence_is_code = False
+            else:
+                in_fence = True
+                # ```{note} / ```{warning} are MyST directives — prose, not code.
+                fence_is_code = not stripped[3:].strip().startswith("{")
+            continue
+        if in_fence and fence_is_code:
+            yield i, line
+
+
 def test_no_call_site_uses_the_bare_property_form():
     """Static sweep: ``x.rest_sed`` without ``()`` is now always a bug.
 
-    Catches the regression in code that is never executed by CI — the gallery
-    skips any example that already has a committed figure, so a bare
+    Catches the regression in code that CI never executes — the gallery skips
+    any example that already has a committed figure (#1146), so a bare
     ``pred.rest_sed`` there would ship unnoticed.
     """
     offenders = []
@@ -164,7 +203,7 @@ def test_no_call_site_uses_the_bare_property_form():
             rel = path.relative_to(_REPO).as_posix()
             if rel in _ALLOWED or "archive" in path.parts or "auto_examples" in path.parts:
                 continue
-            for i, line in enumerate(path.read_text().splitlines(), 1):
+            for i, line in _code_lines(path):
                 if _NO_PARENS.search(line) and "predict_rest_sed" not in line:
                     offenders.append(f"{rel}:{i}: {line.strip()}")
     assert not offenders, "bare .rest_sed / .obs_sed (missing call parens):\n" + "\n".join(

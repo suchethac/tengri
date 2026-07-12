@@ -58,7 +58,7 @@ for met in met_logzsol:
             redshift=tengri.Fixed(0.0),
         )
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        l_halpha = float(model.predict_emission_lines(params).halpha)
+        l_halpha = float(model.predict(params).lines.halpha)
         sfr_inferred.append(murphy_const * l_halpha)
         ages_valid.append(age_myr)
 

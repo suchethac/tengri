@@ -44,7 +44,7 @@ C_AA_PER_S = 2.998e18
 ssp = tengri.load_ssp()
 
 COMMON = dict(
-    redshift=tengri.Fixed(0.0),  # Rest-frame only (predict_rest_sed)
+    redshift=tengri.Fixed(0.0),  # Rest-frame only (pred.rest_sed())
 )
 
 
@@ -58,7 +58,7 @@ def build_agn_archetype(log_lbol, agn_frac, agn_blocks, sfr_log, dust_config):
     agn_frac : float
         AGN fraction of total luminosity.
     agn_blocks : dict
-        Composable AGN dict with 'disc', 'torus', 'lines', 'feii', 'atten'.
+        Composable AGN dict with 'disc', 'torus', 'nlr', 'blr', 'feii', 'atten'.
     sfr_log : float
         log10(SFR / M_sun yr^-1); -10 for pure AGN, positive for starburst blend.
     dust_config : dict
@@ -108,7 +108,8 @@ wave_sy2, sed_sy2 = build_agn_archetype(
     agn_blocks=dict(
         disc={"type": "multicolor", "*": tengri.FIXED},
         torus={"type": "skirtor", "*": tengri.FIXED},
-        lines={"type": "nlr", "*": tengri.FIXED},
+        nlr={"type": "analytic", "*": tengri.FIXED},
+        blr={"type": "none", "*": tengri.FIXED},
     ),
     sfr_log=-10.0,  # Pure AGN, negligible starburst
     dust_config={
@@ -133,7 +134,8 @@ wave_q, sed_q = build_agn_archetype(
     agn_blocks=dict(
         disc={"type": "multicolor", "*": tengri.FIXED},
         torus={"type": "skirtor", "*": tengri.FIXED},
-        lines={"type": "blr", "*": tengri.FIXED},  # BLR instead of NLR
+        nlr={"type": "none", "*": tengri.FIXED},
+        blr={"type": "analytic", "*": tengri.FIXED},  # BLR instead of NLR
     ),
     sfr_log=-10.0,  # Pure AGN
     dust_config={
@@ -158,7 +160,8 @@ wave_lirg, sed_lirg = build_agn_archetype(
     agn_blocks=dict(
         disc={"type": "multicolor", "*": tengri.FIXED},
         torus={"type": "skirtor", "*": tengri.FIXED},
-        lines={"type": "nlr", "*": tengri.FIXED},
+        nlr={"type": "analytic", "*": tengri.FIXED},
+        blr={"type": "none", "*": tengri.FIXED},
     ),
     sfr_log=2.0,  # ~100 M_sun / yr ongoing starburst
     dust_config={

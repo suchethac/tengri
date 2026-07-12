@@ -9,7 +9,7 @@ dust optical depth (τ_diff ∈ [0, 2]) and measure how the predicted H-alpha
 and H-beta change. We derive A_V = 1.086 × τ_diff and compare against the
 Calzetti+2000 expectation.
 
-Status: as of issue #313 fix, ``predict_emission_lines`` now folds in the
+Status: as of issue #313 fix, ``predict(params).lines`` now folds in the
 diffuse dust attenuation. The tengri trace rises from the intrinsic ~2.85
 to ~4.3 at A_V ≈ 2 mag; the Calzetti+2000 curve climbs steeper, suggesting
 the birth-cloud component or the dust normalization differs slightly from
@@ -80,7 +80,7 @@ baseline_params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 for tau_diff in tau_diff_values:
     # Only vary dust optical depth
     params = {**baseline_params, "dust_tau_diff": np.float64(tau_diff), "dust_tau_bc": 0.1}
-    lines = model.predict_emission_lines(params)
+    lines = model.predict(params).lines
 
     if lines is not None:
         ha = float(lines.halpha)

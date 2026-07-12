@@ -60,7 +60,7 @@ o3, n2_ha, hb, oii, ne3, sii, o3_o2, r23 = [np.empty_like(z_grid) for _ in range
 
 for i, z in enumerate(z_grid):
     p = {**baseline, "neb_logZ_gas": jnp.float64(z)}
-    L = model.predict_emission_lines(p)
+    L = model.predict(p).lines
     o3[i] = float(L.oiii_5007)
     n2_ha[i] = float(L.nii_6584 / L.halpha)
     hb[i] = float(L.hbeta)

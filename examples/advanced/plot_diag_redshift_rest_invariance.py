@@ -5,7 +5,7 @@ Rest-frame SED Redshift Invariance
 The rest-frame SED depends only on intrinsic galaxy properties (SFH, dust,
 metallicity, nebular, AGN) and is independent of redshift. Redshift only
 enters via the observation (wavelength shift, distance dimming, IGM
-attenuation). This diagnostic verifies that :meth:`predict_rest_sed` returns
+attenuation). This diagnostic verifies that :meth:`Prediction.rest_sed` returns
 bit-identical SEDs across a range of redshifts for identical intrinsic
 parameters. Age-of-the-Universe constraints at high-z may truncate the SFH
 legitimately, producing smooth variation; any non-smooth jump signals a

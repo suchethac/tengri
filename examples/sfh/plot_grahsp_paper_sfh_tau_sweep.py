@@ -48,7 +48,7 @@ axin = ax.inset_axes([0.13, 0.13, 0.40, 0.30])
 
 # Build the model ONCE; the delayed-tau SFH timescale ``sfh_delayed_tau_gyr``
 # is a parameter, so the sweep just overrides that key per iteration and re-runs
-# the (already-compiled) forward pass — both predict_rest_sed and predict_sfh
+# the (already-compiled) forward pass — both the SED and the SFH come off one
 # read it from the params dict. Rebuilding inside the loop would recompile the
 # SSP pipeline every iteration and accumulate XLA buffers (gallery-OOM).
 model = SEDModel.build(
