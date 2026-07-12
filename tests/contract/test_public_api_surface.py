@@ -110,6 +110,11 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "SpectralIndexData",
         "STANDARD_INDICES",
         "measure_index_jax",
+        # ── Model-free measurement namespace (#1047, API Phase 3) ───
+        # The astronomer-facing façade over the measurement engines. The bare
+        # ``measure_index_jax`` above stays importable for one deprecation
+        # cycle (Phase 5, #1049) — ``tengri.measure.spectral_index`` supersedes it.
+        "measure",
         # ── Composite spectral indices (closes #505) ────────────────
         "CompositeIndexDef",
         "STANDARD_COMPOSITE_INDICES",

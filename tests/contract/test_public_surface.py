@@ -66,6 +66,7 @@ EXPECTED_ALL = frozenset(
         "filters",
         "inference",
         "io",
+        "measure",
         "observation",
         "pipeline",
         "plot",
