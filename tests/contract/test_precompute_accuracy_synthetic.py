@@ -257,21 +257,35 @@ def test_taylor_correction_toggle_two_component(synthetic_ssp):
             )
 
     pe = np.asarray(build(None).predict_photometry({}))
-    p_taylor = np.asarray(build(WavePrecomp()).predict_photometry({}))  # default True
-    p_flat = np.asarray(build(WavePrecomp(taylor_correction=False)).predict_photometry({}))
+    # Taylor and flat must BOTH have the quadrature off, or they route through it
+    # and the comparison is vacuous — the two arms would be bit-identical (#1122).
+    p_taylor = np.asarray(
+        build(WavePrecomp(n_subbands=0, taylor_correction=True)).predict_photometry({})
+    )
+    p_flat = np.asarray(
+        build(WavePrecomp(n_subbands=0, taylor_correction=False)).predict_photometry({})
+    )
+    p_quad = np.asarray(build(WavePrecomp()).predict_photometry({}))  # the new default
 
     rel_taylor = np.abs(p_taylor - pe) / np.abs(pe)
     rel_flat = np.abs(p_flat - pe) / np.abs(pe)
+    rel_quad = np.abs(p_quad - pe) / np.abs(pe)
 
-    # Default (Taylor on) is the more accurate path and stays comfortably sub-%.
     assert rel_taylor.max() < 0.005, f"taylor-on residual {rel_taylor.max():.3%}"
     # The Ψ correction must measurably beat the flat form on the BC layer (the
     # whole point of #617) — guards against the moment term being silently dropped.
     assert rel_taylor.max() < rel_flat.max(), (
         f"taylor-on ({rel_taylor.max():.3%}) should beat flat ({rel_flat.max():.3%})"
     )
-    # Both paths are finite and positive regardless.
+    # And the sub-band quadrature — the default since #1122 — must beat Taylor.
+    # Taylor EXTRAPOLATES the screen from one point per filter; the quadrature
+    # EVALUATES it at K nodes.
+    assert rel_quad.max() < rel_taylor.max(), (
+        f"quadrature ({rel_quad.max():.3%}) should beat taylor ({rel_taylor.max():.3%})"
+    )
+    # All paths are finite and positive regardless.
     assert np.all(np.isfinite(p_flat)) and np.all(p_flat > 0)
+    assert np.all(np.isfinite(p_quad)) and np.all(p_quad > 0)
 
 
 def test_taylor_correction_default_is_true():
@@ -279,5 +293,9 @@ def test_taylor_correction_default_is_true():
     ``taylor_correction=False`` (SSP/dust systematics usually dominate it)."""
     from tengri import WavePrecomp
 
-    assert WavePrecomp().taylor_correction is True
+    # Superseded by the sub-band quadrature and OFF by default since #1122: the
+    # Taylor form extrapolates the screen from one point per filter and diverges
+    # in the rest-UV. Still supported as an explicit opt-in.
+    assert WavePrecomp().taylor_correction is False
+    assert WavePrecomp().n_subbands == 5
     assert WavePrecomp(taylor_correction=False).taylor_correction is False
