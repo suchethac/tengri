@@ -113,6 +113,52 @@ jobs:
         run: pip-audit --disable-pip
         continue-on-error: true
 
+  # Execute every sphinx-gallery example (#1146).
+  #
+  # Nothing else does. `docs/conf.py` builds its skip-list FROM DISK — sphinx-
+  # gallery skips any example that already has a committed figure, and every
+  # example has one — and `docs.yml` only runs on push:[main], never on a PR.
+  # So the gallery was un-executed by CI entirely: during #1145 five examples
+  # were "migrated" to `model.predict(p, wave=...)`, a kwarg that does not
+  # exist. They raise TypeError. py_compile passed, ruff passed, the docs build
+  # never ran them, and they would have shipped next to stale figures.
+  #
+  # All 279 run in ONE process (~8 min). Spawning a process each would add
+  # ~15-20 s of JAX import + compile-cache load apiece — 8 minutes becomes 40.
+  gallery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      # Both SSP grids the examples need are committed (#1146), so there is no
+      # download step and a fresh clone behaves exactly like CI.
+      - uses: actions/cache/restore@v4
+        id: gallery_jax_cache
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: jax-gallery-${{ runner.os }}-${{ hashFiles('src/tengri/**/*.py') }}
+          restore-keys: jax-gallery-${{ runner.os }}-
+      - name: Execute the gallery
+        env:
+          JAX_PLATFORMS: cpu
+          MPLBACKEND: Agg
+        run: python tools/run_gallery_examples.py
+      - uses: actions/cache/save@v4
+        # `actions/cache` skips its implicit post-save when a job fails, so a cache
+        # can never warm on a job that is ever red (the trap from #1055). Save
+        # explicitly, and always.
+        if: always() && steps.gallery_jax_cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: ${{ steps.gallery_jax_cache.outputs.cache-primary-key }}
+
   smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 5

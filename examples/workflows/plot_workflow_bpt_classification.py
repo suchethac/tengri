@@ -1,17 +1,25 @@
 """
-BPT diagram: emission lines from the baked-in nebular SSP
-=========================================================
+BPT diagram: line ratios from the property catalog
+==================================================
 
-Demonstrates BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed
-directly from the model's rest-frame SED via continuum-subtracted
-boxcar integration around each line center, swept across a stellar
-metallicity grid. The Kewley+2001 and Kauffmann+2003 demarcation
-lines are overlaid for context.
+BPT ([OIII]/Hβ vs [NII]/Hα) line ratios swept across a stellar
+metallicity grid, read straight off the property catalog. The
+Kewley+2001 and Kauffmann+2003 demarcation lines are overlaid.
 
-The AGN-fraction axis of the previous version requires the discrete
-``Prediction.lines.*`` API on a backend that exposes per-line
-luminosities (cb19 / cloudy / cue); the BakedIn SSP backend used
-here does not. See issue #361 for the per-backend status.
+**Ask the model for a line; do not measure it off the continuum grid.**
+An earlier version of this example integrated a continuum-subtracted
+boxcar (half-width 8 Å) around each line centre on the SSP wavelength
+grid. That grid is log-spaced and coarse — 64 Å per pixel at Hα — so an
+8 Å box contains at most *one* sample, and ``np.trapezoid`` over one
+point is exactly ``0.0``. The example divided by that zero and crashed.
+It had been broken in the published gallery for a long time, because CI
+never executed the gallery (#1146).
+
+The lines are a *derived property*, not something to re-measure: build
+with a photoionization backend (Cue, on a bare-stellar SSP) and read
+``pred.halpha`` / ``pred.nii_6584`` / … from the catalog. Those are
+per-line luminosities the backend actually solved for, at the correct
+resolution.
 
 Reference: Kewley et al. 2001, ApJ, 556, 121 (theoretical classification);
 Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
@@ -32,27 +40,11 @@ from tengri.analysis.plotting import setup_style
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-LINES = {
-    "halpha": 6564.7,
-    "hbeta": 4862.7,
-    "oiii_5007": 5008.3,
-    "nii_6584": 6585.4,
-}
-LINE_HALF_WIDTH = 8.0
-CONT_OFFSET = 30.0
-CONT_HALF_WIDTH = 8.0
-
-
-def boxcar_line_flux(wave, sed, line_center):
-    """Continuum-subtracted boxcar flux around a single line."""
-    line_mask = np.abs(wave - line_center) < LINE_HALF_WIDTH
-    blue_mask = np.abs(wave - (line_center - CONT_OFFSET)) < CONT_HALF_WIDTH
-    red_mask = np.abs(wave - (line_center + CONT_OFFSET)) < CONT_HALF_WIDTH
-    cont = 0.5 * (sed[blue_mask].mean() + sed[red_mask].mean())
-    return float(np.trapezoid(sed[line_mask] - cont, wave[line_mask]))
-
-
-ssp = tengri.load_ssp()
+# Cue is a photoionization backend: it solves for per-line luminosities and
+# publishes them to the property catalog. It needs a BARE-STELLAR SSP — pairing
+# it with a wNE grid (nebular already baked into the templates) would
+# double-count the nebular emission, and tengri refuses.
+ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 logzsol_grid = np.linspace(-1.0, 0.2, 15)
 
 log_n2_ha = []
@@ -78,14 +70,15 @@ for logz in logzsol_grid:
             "tau_diff": 0.1,
             "slope": -0.7,
         },
+        neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": float(logz)},
+        redshift=tengri.Fixed(0.1),
     )
 
-    pred = model.predict({"redshift": 0.1})
-    wave = np.asarray(model.wavelengths)
-    sed = np.asarray(pred.rest_sed())
-    fluxes = {name: boxcar_line_flux(wave, sed, lam) for name, lam in LINES.items()}
-    log_n2_ha.append(np.log10(max(fluxes["nii_6584"] / fluxes["halpha"], 1e-3)))
-    log_o3_hb.append(np.log10(max(fluxes["oiii_5007"] / fluxes["hbeta"], 1e-3)))
+    # The lines come off the catalog by name — no continuum subtraction, no
+    # boxcar, no dependence on the SSP grid spacing.
+    pred = model.predict(model.spec.get_fixed_values())
+    log_n2_ha.append(np.log10(float(pred.nii_6584) / float(pred.halpha)))
+    log_o3_hb.append(np.log10(float(pred.oiii_5007) / float(pred.hbeta)))
 
 log_n2_ha = np.array(log_n2_ha)
 log_o3_hb = np.array(log_o3_hb)
