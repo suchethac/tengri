@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression: the Cue AGN-NLR line luminosities were L_SUN too bright (#1073).
 
 ``CueBackend.predict_nebular_line_luminosities`` returns erg/s, but
