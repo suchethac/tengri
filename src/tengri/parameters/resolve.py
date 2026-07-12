@@ -44,6 +44,17 @@ def resolve_fixed_params(model, params):
     (attenuation-law names and the like) are structural choices consumed at build
     time; they are not parameters and must never enter a dict that gets traced.
 
+    Notes
+    -----
+    This function reads ``model.spec.fixed_params`` and ``spec.fixed_value``
+    **directly**, with no ``getattr`` defaults and no blanket ``except``. That is
+    deliberate. An earlier version fell back to an empty tuple if the attribute
+    were missing, which meant a rename anywhere upstream would silently turn the
+    resolver into a no-op and bring the 1e17 error back with no warning at all
+    (#1127). A guard against a silent failure must not itself be able to fail
+    silently: if the spec API moves, this raises ``AttributeError`` and someone
+    fixes it.
+
     Parameters
     ----------
     model : SEDModel
@@ -56,19 +67,28 @@ def resolve_fixed_params(model, params):
     dict
         A **new** dict: ``params`` plus every numeric fixed value it omitted.
         User-supplied values always win — an explicit override is never clobbered.
+
+    Raises
+    ------
+    AttributeError
+        If ``model`` has no ``spec``, or the spec has no ``fixed_params`` /
+        ``fixed_value``. Loud on purpose — see Notes.
     """
-    spec = getattr(model, "spec", None)
-    if spec is None:
-        return dict(params)
+    spec = model.spec
 
     resolved = dict(params)
-    for name in getattr(spec, "fixed_params", ()):
+    for name in spec.fixed_params:
         if name in resolved:
             continue  # the user passed it explicitly — never override
-        try:
-            value = spec.fixed_value(name)
-        except (KeyError, ValueError):
+        value = spec.fixed_value(name)
+        if value is None or isinstance(value, (str, bool)):
+            # Structural choices (attenuation-law names, backend flags), not
+            # parameters. They are consumed at build time and must never enter a
+            # dict that gets traced.
             continue
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            resolved[name] = jnp.asarray(value)
+        # Anything else is numeric. Note this deliberately does NOT gate on
+        # ``isinstance(value, (int, float))``: a numpy float32 or a 0-d array is
+        # not a Python float, and an allowlist of concrete types would silently
+        # skip it — reintroducing the very drop this function exists to prevent.
+        resolved[name] = jnp.asarray(value)
     return resolved
