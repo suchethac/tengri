@@ -473,7 +473,7 @@ class Posterior:
 
         if self.samples is None:
             # MAP: single point
-            return self._model.predict_derived(self.params)
+            return self._model._predict_derived(self.params)
 
         # vmap materializes the whole batch at once, so very large posteriors
         # can exhaust memory here with no obvious culprit — warn before it hurts.
@@ -1013,7 +1013,7 @@ class Posterior:
         wavelengths = [float(w) for w in np.asarray(self.eline_wavelengths)]
 
         def _ew_for_params(p: dict) -> jnp.ndarray:
-            sed = self._model.predict_rest_sed(p)
+            sed = self._model._predict_rest_sed(p)
             return jnp.stack(
                 [
                     equivalent_width(sed.wavelength, sed.sed, lc, window_aa, continuum_width_aa)
@@ -2101,7 +2101,7 @@ class Posterior:
             # Compute truth derived quantities for truth lines
             if truths is not None:
                 try:
-                    d_true = self._model.predict_derived(truths)
+                    d_true = self._model._predict_derived(truths)
                     for k in derived:
                         if k in d_true:
                             derived_truths[k] = float(d_true[k])
@@ -2331,7 +2331,7 @@ class Posterior:
                     for k, v in self.samples.items()
                 }
                 try:
-                    sed = np.array(model.predict_rest_sed(p).sed)
+                    sed = np.array(model._predict_rest_sed(p).sed)
                     seds.append(sed)
                 except (AttributeError, TypeError, ValueError):
                     # AttributeError: predict_rest_sed doesn't exist or .sed attribute missing
@@ -2359,7 +2359,7 @@ class Posterior:
         else:
             wave = np.array(model.wavelengths)
             mask = (wave >= wave_range[0]) & (wave <= wave_range[1])
-            sed = np.array(model.predict_rest_sed(self.params).sed)
+            sed = np.array(model._predict_rest_sed(self.params).sed)
             norm = float(sed[np.argmin(np.abs(wave - 5500))]) or 1.0
             ax.plot(
                 wave[mask], sed[mask] * wave[mask] / norm, color="C0", lw=1.8, label="best-fit"

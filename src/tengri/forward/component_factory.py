@@ -624,7 +624,13 @@ def state_to_sfh_quantities(state: Any):
     derived = state.derived
     log_mstar = jnp.asarray(derived["log_mstar"])
     log_mstar_formed = jnp.asarray(derived["log_mstar_formed"])
-    stellar_mass_surviving = jnp.power(10.0, log_mstar)
+    # The *honest* surviving mass: NaN when the SSP grid has no mass-remaining
+    # table, rather than ``log_mstar``'s silent fallback to the formed mass (which
+    # asserts zero mass loss). ``predict_sfh_quantities`` already returned NaN
+    # here; this path returned the formed mass, and the two had drifted apart
+    # under one name (#1131). sSFR below keeps the fallback on purpose — see there.
+    log_mstar_surviving = jnp.asarray(derived["log_mstar_surviving"])
+    stellar_mass_surviving = jnp.power(10.0, log_mstar_surviving)
     stellar_mass = jnp.power(10.0, log_mstar_formed)
 
     sfh_lbt = jnp.asarray(derived["sfh_grid_lbt_yr"])
@@ -650,7 +656,11 @@ def state_to_sfh_quantities(state: Any):
 
     sfr_100myr = jnp.asarray(derived["sfr_100myr"])
     sfr_10myr = jnp.asarray(derived["sfr_10myr"])
-    ssfr = sfr_100myr / jnp.maximum(stellar_mass_surviving, _TINY)
+    # sSFR keeps ``log_mstar``'s fallback: "how much mass survives" has no answer
+    # without a mass-remaining table, but sSFR against the formed mass still does,
+    # and going NaN here would be a regression. Same asymmetry as the ``ssfr``
+    # property and as the method this replaces.
+    ssfr = sfr_100myr / jnp.maximum(jnp.power(10.0, log_mstar), _TINY)
 
     return SFHQuantities(
         stellar_mass=stellar_mass,

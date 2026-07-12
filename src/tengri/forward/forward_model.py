@@ -216,7 +216,7 @@ class ForwardModel:
 
     def predict_derived(self, params):
         """Delegate to :meth:`SEDModel.predict_derived` on the inner SED."""
-        return self._inner_sed_for_delegation().predict_derived(params)
+        return self._inner_sed_for_delegation()._predict_derived(params)
 
     def predict_sfh(self, params, *args, **kwargs):
         """Delegate to :meth:`SEDModel.predict_sfh` on the inner SED."""
@@ -224,15 +224,15 @@ class ForwardModel:
 
     def predict_sfh_quantities(self, params, *args, **kwargs):
         """Delegate to :meth:`SEDModel.predict_sfh_quantities` on the inner SED."""
-        return self._inner_sed_for_delegation().predict_sfh_quantities(params, *args, **kwargs)
+        return self._inner_sed_for_delegation()._predict_sfh_quantities(params, *args, **kwargs)
 
     def predict_rest_sed(self, params, *args, **kwargs):
         """Delegate to :meth:`SEDModel.predict_rest_sed` on the inner SED."""
-        return self._inner_sed_for_delegation().predict_rest_sed(params, *args, **kwargs)
+        return self._inner_sed_for_delegation()._predict_rest_sed(params, *args, **kwargs)
 
     def predict_magnitudes(self, params):
         """Delegate to :meth:`SEDModel.predict_magnitudes` on the inner SED."""
-        return self._inner_sed_for_delegation().predict_magnitudes(params)
+        return self._inner_sed_for_delegation()._predict_magnitudes(params)
 
     def xi_to_params(self, xi):
         """Delegate to :meth:`SEDModel.xi_to_params` on the inner SED."""
