@@ -380,6 +380,109 @@ class IGMSEDComponent:
             spec_table=jnp.stack(rows),
         )
 
+    def subband_node_transmission(
+        self,
+        subband_waves_rest: Any,
+        z_grid: Any,
+    ) -> Any | None:
+        r"""Evaluate the IGM transmission at the sub-band quadrature nodes.
+
+        The photometry LUT integrates each filter as a K-point sub-band
+        quadrature (#1122), and :meth:`precompute_band_factors` averages
+        :math:`T` *alone* over the bandpass — forming
+        :math:`\langle S \rangle \langle T \rangle` where the flux needs
+        :math:`\langle S T \rangle`. Across GALEX FUV at :math:`z \approx 0.8`
+        the transmission runs from ~1 to ~0 *inside* the band, so that
+        covariance term reaches −9.5 %. Evaluating :math:`T` at the same nodes
+        the dust screen uses folds it into one contraction:
+
+        .. math::
+
+            F_b = \sum_a \sum_k \Phi[a, b, k]\;
+                  A_{\rm dust}(\lambda^*[a, b, k])\;
+                  T_{\rm IGM}(\lambda^*[a, b, k])
+
+        where :math:`\lambda^*` is the sub-band's flux-weighted centroid [Å].
+
+        The nodes are supplied **metallicity-resolved**, before the SSP grid is
+        contracted. That is not incidental: the node published at runtime is a
+        metallicity-weighted average whose weights move with the free parameter
+        ``met_logzsol``, so :math:`T` at "the node" is a function of
+        :math:`(z, Z)` — not of :math:`z` alone. Across the SSP metallicity grid
+        the node shifts by up to 68 % of a sub-band width and :math:`T` there by
+        up to 1.3 % in GALEX FUV. Evaluating on the met axis and folding *before*
+        the contraction is exact, and costs nothing at runtime: the product is a
+        build-time constant of the same shape as the tensor it multiplies.
+
+        Parameters
+        ----------
+        subband_waves_rest : array_like
+            Rest-frame quadrature nodes [Angstrom], shape
+            ``(n_met, n_age, n_filters, n_subbands)`` for a fixed-redshift model
+            or ``(n_z, n_met, n_age, n_filters, n_subbands)`` for the free-z
+            z-table.
+        z_grid : array_like
+            The redshift(s) the nodes were tabulated at — a single value for a
+            fixed-redshift model, else the z-table's own grid, whose length must
+            match the leading axis of ``subband_waves_rest``.
+
+        Returns
+        -------
+        ndarray or None
+            :math:`T` at each node, dimensionless, same shape as
+            ``subband_waves_rest``. ``None`` when the transmission is not a
+            function of :math:`(\lambda, z)` alone and so cannot be tabulated.
+
+        Notes
+        -----
+        **JIT-compatible**: build-time only — call outside any trace.
+
+        **Not precomputable** when ``igm_patchy`` or ``use_dla`` is set: both read
+        free parameters (``igm_x_HI``, ``igm_bubble_mpc``, ``dla_log_n_hi``, …),
+        so :math:`T` moves with the sampler and freezing it here would silently
+        pin a live transmission. Those configs return ``None`` and keep the exact
+        full-grid path — the gate fails **safe**.
+        """
+        import numpy as np
+
+        if self.config.igm_patchy or self.config.use_dla:
+            return None
+        if subband_waves_rest is None or z_grid is None:
+            return None
+
+        waves = np.asarray(subband_waves_rest)
+        zs = np.atleast_1d(np.asarray(z_grid, dtype=float))
+
+        if zs.shape[0] == 1 and waves.ndim == 4:
+            # Fixed redshift: one constant, no z axis.
+            z = float(zs[0])
+            trans = igm_absorption(
+                jnp.asarray(waves.reshape(-1) * (1.0 + z)),
+                z,
+                igm_patchy=False,
+                igm_model=self.config.igm_model,
+                use_dla=False,
+            )
+            return jnp.asarray(trans).reshape(waves.shape)
+
+        if waves.ndim != 5 or waves.shape[0] != zs.shape[0]:
+            # Shapes disagree with the z-table contract — refuse rather than
+            # broadcast something plausible into the forward model.
+            return None
+
+        rows = []
+        for i, z in enumerate(zs):
+            nodes = waves[i]
+            trans = igm_absorption(
+                jnp.asarray(nodes.reshape(-1) * (1.0 + float(z))),
+                float(z),
+                igm_patchy=False,
+                igm_model=self.config.igm_model,
+                use_dla=False,
+            )
+            rows.append(np.asarray(trans).reshape(nodes.shape))
+        return jnp.asarray(np.stack(rows))
+
     def _interp_table(self, z, zgrid, table):
         """Interpolate a (n_z, n_col) table at ``z``; exact for a single node."""
         if zgrid.shape[0] == 1:  # fixed-redshift model: no interpolation at all

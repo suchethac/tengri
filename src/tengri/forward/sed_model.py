@@ -359,6 +359,87 @@ def _warn_agn_dust_double_count(spec) -> None:
     )
 
 
+def _fold_igm_into_subbands(igm_comp, stellar_state):
+    r"""Fold the IGM transmission into the stellar sub-band quadrature weights.
+
+    The photometry LUT's IGM band factor :math:`\langle T \rangle_f` averages the
+    transmission *alone*, unweighted by the spectrum, so it forms
+    :math:`\langle S \rangle \langle T \rangle` where the flux needs
+    :math:`\langle S T \rangle`. Where :math:`T` varies strongly *inside* a
+    bandpass — GALEX FUV at :math:`z \approx 0.8`, where it runs from ~1 to ~0 —
+    that covariance term reaches −9.5 %.
+
+    The sub-band quadrature already carries the machinery to fix it: evaluate
+    :math:`T` at the same nodes the dust screen uses and multiply it into the
+    weights,
+
+    .. math::
+
+        \Phi^{\rm IGM}[m, a, f, k] = \Phi[m, a, f, k]\;
+        T_{\rm IGM}\!\left(\lambda^*[m, a, f, k]\,(1 + z),\; z\right)
+
+    Both factors are build-time constants, so the product is too and the runtime
+    einsum is unchanged in shape and cost — the correction is free.
+
+    The fold happens on the **metallicity axis**, before the SSP grid is
+    contracted, and that is load-bearing. The node published at runtime is a
+    met-weighted average whose weights move with the free ``met_logzsol``, so
+    :math:`T` at "the node" is a function of :math:`(z, Z)`, not of :math:`z`
+    alone: across the SSP grid the node shifts by up to 68 % of a sub-band width
+    and :math:`T` there by up to 1.3 % in GALEX FUV. Folding first is exact.
+
+    Parameters
+    ----------
+    igm_comp : IGMSEDComponent
+        Supplies :meth:`~IGMSEDComponent.subband_node_transmission` and the gate.
+    stellar_state : StellarSEDComponentState
+        Carrying the fixed-z photometry LUT or the free-z z-table.
+
+    Returns
+    -------
+    StellarSEDComponentState
+        With the IGM-folded sub-band tensor attached, or ``stellar_state``
+        unchanged when there is nothing to fold.
+
+    Notes
+    -----
+    **JIT-compatible**: build-time only.
+
+    Returns the state untouched when the sub-band quadrature is off
+    (``WavePrecomp(n_subbands=0)``) or when the transmission is not a function of
+    :math:`(\lambda, z)` alone — patchy reionization and DLAs read free
+    parameters. Those keep the live per-call evaluation, so the gate fails safe.
+    """
+    from dataclasses import replace as _replace
+
+    if stellar_state is None:
+        return stellar_state
+
+    lut = getattr(stellar_state, "ssp_phot_lut", None)
+    if lut is not None and lut.ssp_subband_phot is not None:
+        trans = igm_comp.subband_node_transmission(lut.ssp_subband_waves_rest, [lut.redshift])
+        if trans is None:
+            return stellar_state
+        return _replace(
+            stellar_state,
+            ssp_phot_lut=lut._replace(ssp_subband_phot_igm=lut.ssp_subband_phot * trans),
+        )
+
+    ztable = getattr(stellar_state, "ssp_phot_ztable", None)
+    if ztable is not None and ztable.ssp_subband_phot_table is not None:
+        trans = igm_comp.subband_node_transmission(ztable.subband_waves_rest_table, ztable.z_grid)
+        if trans is None:
+            return stellar_state
+        return _replace(
+            stellar_state,
+            ssp_phot_ztable=ztable._replace(
+                ssp_subband_phot_igm_table=ztable.ssp_subband_phot_table * trans
+            ),
+        )
+
+    return stellar_state
+
+
 class SEDModel:
     """Differentiable SED forward model with modular physics and clean API.
 
@@ -994,22 +1075,34 @@ class SEDModel:
     def _warn_if_wave_precomp_dust_blue_bias(self) -> None:
         """Warn when the WavePrecomp first-order dust projection (#617) is unreliable.
 
-        The photometry LUT re-applies dust as a first-order Taylor expansion of
-        the attenuation about each filter's effective wavelength. That linear
-        model is accurate where the attenuation curve is smooth across the
-        bandpass (optical/IR) but biases bands sampling the rest-UV, where the
-        curve is steep and extrapolated — silently, and by an order of magnitude
-        for far-UV bands at moderate/high redshift. The exact path
-        (``approx=None``) and ``SpectrumPrecomp`` (per-pixel attenuation; only a
-        small intra-pixel error) are unaffected.
+        Fires only when the sub-band quadrature is **off**
+        (``WavePrecomp(n_subbands=0)``). There the LUT re-applies dust as a
+        first-order Taylor expansion of the attenuation about each filter's
+        effective wavelength — a linear model that is accurate where the
+        attenuation curve is smooth across the bandpass (optical/IR) but biases
+        bands sampling the rest-UV, where the curve is steep and *extrapolated*:
+        silently, and by an order of magnitude for far-UV bands at moderate/high
+        redshift.
 
-        Configuration-level heuristic — fires only when a photometry LUT, a
-        non-trivial dust screen, and at least one rest-UV band coincide. Does
-        **not** evaluate the SED, so it is cheap on every build. It flags the
-        *risk*; quantify the actual per-band bias by comparing against
-        ``approx=None``.
+        With the default ``n_subbands=5`` the screen is **evaluated** at K nodes
+        per band rather than extrapolated from one (#1122), and the IGM rides the
+        same nodes (#1135), so there is no such bias to warn about — see
+        :meth:`_fold_igm_into_subbands`.
+
+        Configuration-level heuristic — fires only when a photometry LUT with the
+        quadrature disabled, a non-trivial dust screen, and at least one rest-UV
+        band coincide. Does **not** evaluate the SED, so it is cheap on every
+        build. It flags the *risk*; quantify the actual per-band bias by comparing
+        against ``approx=None``.
         """
         if not self._approx.get("wave_precomp"):
+            return
+        # The K-point sub-band quadrature EVALUATES the screen at each node
+        # instead of extrapolating from λ_eff, and the IGM is folded into the
+        # same nodes at build time. Measured against the exact path across
+        # GALEX→WISE at z ≤ 1.5 with τ_diff=0.7 / τ_bc=1.0, the worst rest-UV
+        # residual is ≤ 0.5 % — the Taylor-era warning does not apply.
+        if int(self._approx.get("n_subbands", 0) or 0) > 0:
             return
         if self.observation is None or self.filter_waves is None:
             return
@@ -1037,13 +1130,16 @@ class SEDModel:
             return
         bands = ", ".join(f"{n} (rest~{lam:.0f} Å)" for n, lam in blue)
         warnings.warn(
-            "WavePrecomp applies dust as a first-order Taylor projection across "
-            f"each filter (#617); at z~{z_rep:.2f} these rest-UV band(s) are "
-            f"biased versus the exact path: {bands}. The bias grows steeply "
-            "toward the far-UV (>10x for the bluest bands at moderate/high z) "
-            "and with optical depth. For unbiased blue-band photometry use "
-            "approx=None, or validate against it; SpectrumPrecomp is unaffected. "
-            "See docs/known_limitations.md.",
+            "This model resolves to n_subbands=0, which applies dust as a first-order "
+            f"Taylor projection across each filter (#617); at z~{z_rep:.2f} these "
+            f"rest-UV band(s) are biased versus the exact path: {bands}. The bias "
+            "grows steeply toward the far-UV (>10x for the bluest bands at "
+            "moderate/high z) and with optical depth. The default WavePrecomp() "
+            "EVALUATES the screen at n_subbands=5 quadrature nodes per band instead "
+            "and does not have this bias — pass approx=WavePrecomp(), or approx=None "
+            "for the exact path. On a joint photometry+spectroscopy observation the "
+            "photometry channel routes through this same projection, so the warning "
+            "applies there too. See docs/known_limitations.md.",
             UserWarning,
             stacklevel=2,
         )
@@ -6163,6 +6259,16 @@ class SEDModel:
                             redshift_spec=redshift_spec,
                         )
                         chain[idx] = replace(comp, _state=igm_state)
+                        # <T>_f alone is not enough: it averages the transmission
+                        # UNWEIGHTED by the spectrum, forming <S>*<T> where the flux
+                        # needs <S*T>. Across GALEX FUV at z~0.8 the transmission runs
+                        # from ~1 to ~0 inside the bandpass and that covariance term
+                        # reaches -9.5% (#1135). Fold T into the sub-band quadrature
+                        # weights instead — at BUILD time, so it is free at runtime.
+                        chain[0] = replace(
+                            chain[0],
+                            _state=_fold_igm_into_subbands(comp, chain[0]._state),
+                        )
                         break
 
         # SpectrumPrecomp — pre-rebin the SSP grid to the spectrum

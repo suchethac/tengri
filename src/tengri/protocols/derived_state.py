@@ -132,6 +132,31 @@ class DerivedState:
     stellar_phot_lnu_per_age_subband_precomp: jnp.ndarray | None = None
     stellar_subband_waves_rest_precomp: jnp.ndarray | None = None
 
+    #: The same sub-band tensor with the IGM transmission folded in at the
+    #: quadrature nodes, shape ``(n_age, n_filter, n_subbands)`` [erg/s/Hz]
+    #: (#1135). Published only when a mean-IGM model is precomputable — patchy
+    #: reionization and DLAs read free parameters, so ``T`` is not a function of
+    #: ``(λ, z)`` alone and those configs keep the live per-call path.
+    #:
+    #: ``igm_phot_factor`` band-averages ``T`` *alone*, unweighted by the
+    #: spectrum, forming ``⟨S⟩·⟨T⟩`` where the flux needs ``⟨S·T⟩``. Across GALEX
+    #: FUV at z≈0.8 the transmission runs from ~1 to ~0 *inside* the bandpass and
+    #: that covariance term reaches −9.5 %. Folding ``T`` into the sub-band
+    #: weights captures it in the same contraction as the dust screen.
+    #:
+    #: Folded at BUILD time, into the ``(n_met, n_age, n_filter, n_subbands)``
+    #: SSP node tensor — where the nodes actually live. The node is a
+    #: metallicity-weighted average whose weights move with the free
+    #: ``met_logzsol``, so a table keyed on ``(z, age, filter, k)`` alone would be
+    #: valid at one metallicity only (the node shifts by up to 68 % of a sub-band
+    #: width across the SSP grid; ``T`` there by up to 1.3 % in GALEX FUV). Folding
+    #: before the met contraction handles that exactly, and for free — the runtime
+    #: einsum is the same shape and cost as the IGM-free one.
+    #:
+    #: The IGM-free twin above is retained, not replaced: ``phot_rest_fnu`` is
+    #: projected at z=0 and carries no IGM by contract.
+    stellar_phot_lnu_per_age_subband_igm_precomp: jnp.ndarray | None = None
+
     # Dust attenuation / emission
     L_ir: jnp.ndarray | None = None
     L_absorbed: jnp.ndarray | None = None
