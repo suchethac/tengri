@@ -2495,6 +2495,27 @@ class SEDModel:
         }
 
     def predict_rest_sed(self, params, wave=None):
+        """Deprecated. Use ``model.predict(params).rest_sed``.
+
+        .. deprecated:: 2026-07
+           Superseded by the property catalog and the ``Prediction`` surface
+           (#1043 contract §2). The body is unchanged — this shim is bit-exact
+           with the method it replaces — so migrating changes no number.
+           Will be removed in tengri v1.0.
+
+        Returns
+        -------
+        Same as :meth:`_predict_rest_sed`.
+        """
+        warnings.warn(
+            "predict_rest_sed() is deprecated — use model.predict(params).rest_sed "
+            "instead (cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._predict_rest_sed(params, wave=wave)
+
+    def _predict_rest_sed(self, params, wave=None):
         """Compute rest-frame panchromatic SED luminosity spectrum.
 
         Evaluates all stellar populations, emission (nebular, AGN), and
@@ -2555,7 +2576,7 @@ class SEDModel:
 
         Examples
         --------
-        >>> sed = model.predict_rest_sed(params)
+        >>> sed = model._predict_rest_sed(params)
         >>> import matplotlib.pyplot as plt
         >>> plt.loglog(sed.wavelength, sed.sed)
         >>> plt.xlabel("Rest-frame wavelength (Angstrom)")
@@ -2587,6 +2608,27 @@ class SEDModel:
         return SEDResult(wavelength=wave_target, sed=sed_interp)
 
     def predict_obs_sed(self, params, wave=None):
+        """Deprecated. Use ``model.predict(params).obs_sed``.
+
+        .. deprecated:: 2026-07
+           Superseded by the property catalog and the ``Prediction`` surface
+           (#1043 contract §2). The body is unchanged — this shim is bit-exact
+           with the method it replaces — so migrating changes no number.
+           Will be removed in tengri v1.0.
+
+        Returns
+        -------
+        Same as :meth:`_predict_obs_sed`.
+        """
+        warnings.warn(
+            "predict_obs_sed() is deprecated — use model.predict(params).obs_sed "
+            "instead (cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._predict_obs_sed(params, wave=wave)
+
+    def _predict_obs_sed(self, params, wave=None):
         """Compute observed-frame SED (redshifted + IGM + DLA transmission).
 
         Evaluates the rest-frame SED, redshifts to observed frame
@@ -2643,7 +2685,7 @@ class SEDModel:
 
         Examples
         --------
-        >>> sed_obs = model.predict_obs_sed(params)
+        >>> sed_obs = model._predict_obs_sed(params)
         >>> # IGM and redshift already applied
         >>> print(f"z={params['redshift']}: wavelength {sed_obs.wavelength[0]:.0f} Å")
 
@@ -2669,7 +2711,7 @@ class SEDModel:
         """
         from tengri.forward.result import SEDResult
 
-        rest_result = self.predict_rest_sed(params, wave=wave)
+        rest_result = self._predict_rest_sed(params, wave=wave)
         z = self._get_redshift(params)
         wave_obs = rest_result.wavelength * (1.0 + z)
         sed_obs = rest_result.sed
@@ -3213,7 +3255,7 @@ class SEDModel:
         Examples
         --------
         >>> flux = model.predict_photometry(params)
-        >>> mags = model.predict_magnitudes(params)
+        >>> mags = model._predict_magnitudes(params)
         >>> # For the fast LUT path, build with ``approx=WavePrecomp()``.
 
         References
@@ -3406,7 +3448,7 @@ class SEDModel:
         from tengri.cosmology import luminosity_distance
         from tengri.observation.spectrum import project_spectrum
 
-        sed_obs = self.predict_obs_sed(params)
+        sed_obs = self._predict_obs_sed(params)
         z = self._get_redshift(params)
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         wave_rest = sed_obs.wavelength / (1.0 + z)
@@ -3438,6 +3480,27 @@ class SEDModel:
         return flux
 
     def predict_magnitudes(self, params):
+        """Deprecated. Use ``model.predict(params).magnitudes()``.
+
+        .. deprecated:: 2026-07
+           Superseded by the property catalog and the ``Prediction`` surface
+           (#1043 contract §2). The body is unchanged — this shim is bit-exact
+           with the method it replaces — so migrating changes no number.
+           Will be removed in tengri v1.0.
+
+        Returns
+        -------
+        Same as :meth:`_predict_magnitudes`.
+        """
+        warnings.warn(
+            "predict_magnitudes() is deprecated — use model.predict(params).magnitudes() "
+            "instead (cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._predict_magnitudes(params)
+
+    def _predict_magnitudes(self, params):
         """Compute observed AB magnitudes through all filters.
 
         **Raw forward-pass output.** For interactive use, see
@@ -3510,7 +3573,7 @@ class SEDModel:
         )
         from tengri.utils.physics_constants import L_SUN
 
-        sed_erg = self.predict_rest_sed(params).sed
+        sed_erg = self._predict_rest_sed(params).sed
         return sed_erg / L_SUN
 
     def _has_line_catalog(self):
@@ -3961,7 +4024,7 @@ class SEDModel:
         # ``(state.wave, state.sed_intrinsic)`` on the native grid, so deriving
         # ``rest`` from a shared state is bit-identical to recomputing it.
         if state is None:
-            rest = self.predict_rest_sed(params)
+            rest = self._predict_rest_sed(params)
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         wave_rest, flux_rest = rest.wavelength, rest.sed
@@ -4110,7 +4173,7 @@ class SEDModel:
         # Slope indices are not a single-window functional → the LUT leaves NaN
         # in those slots; fill them from one exact rest-frame SED measurement.
         if pc.has_slope:
-            rest = self.predict_rest_sed(params)
+            rest = self._predict_rest_sed(params)
             slots = pc.index_slots
             values = jnp.stack(
                 [
@@ -4207,7 +4270,7 @@ class SEDModel:
             )
 
         if state is None:
-            rest = self.predict_rest_sed(params)
+            rest = self._predict_rest_sed(params)
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         return jnp.stack(
@@ -4292,7 +4355,7 @@ class SEDModel:
         # => L_Hbeta = 4.76e-13 * 4.2e53 / 3.828e33 * SFR ≈ 5.22e7 * SFR
         _L_HBETA_PER_SFR = 5.22e7  # Lsun per Msun/yr (Leitherer+1999)
         try:
-            sfh_q = self.predict_sfh_quantities(params)
+            sfh_q = self._predict_sfh_quantities(params)
             sfr_10 = float(sfh_q.sfr_10myr)
             sfr_10 = max(sfr_10, 1e-10)
             return float(_L_HBETA_PER_SFR * sfr_10)
@@ -4303,6 +4366,27 @@ class SEDModel:
             return 1.0  # 1 Lsun safe fallback
 
     def predict_derived(self, params):
+        """Deprecated. Use ``model.predict(params).properties``.
+
+        .. deprecated:: 2026-07
+           Superseded by the property catalog and the ``Prediction`` surface
+           (#1043 contract §2). The body is unchanged — this shim is bit-exact
+           with the method it replaces — so migrating changes no number.
+           Will be removed in tengri v1.0.
+
+        Returns
+        -------
+        Same as :meth:`_predict_derived`.
+        """
+        warnings.warn(
+            "predict_derived() is deprecated — use model.predict(params).properties "
+            "instead (cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._predict_derived(params)
+
+    def _predict_derived(self, params):
         """Compute derived physical quantities as a flat dict.
 
         Convenience wrapper around :meth:`predict` that extracts the key
@@ -4504,6 +4588,28 @@ class SEDModel:
         return result
 
     def predict_sfh_quantities(self, params):
+        """Deprecated. Use ``model.predict_properties(params, names=(...))``.
+
+        .. deprecated:: 2026-07
+           Superseded by the property catalog and the ``Prediction`` surface
+           (#1043 contract §2). The body is unchanged — this shim is bit-exact
+           with the method it replaces — so migrating changes no number.
+           Will be removed in tengri v1.0.
+
+        Returns
+        -------
+        Same as :meth:`_predict_sfh_quantities`.
+        """
+        warnings.warn(
+            "predict_sfh_quantities() is deprecated — use "
+            "model.predict_properties(params, names=(...)) instead "
+            "(cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._predict_sfh_quantities(params)
+
+    def _predict_sfh_quantities(self, params):
         """Compute SFH-derived quantities in JIT-compatible form.
 
         Integrates the SFH to compute stellar mass, recent SFR, specific SFR,
@@ -4570,7 +4676,7 @@ class SEDModel:
         --------
         **Single galaxy:**
 
-        >>> sfh = model.predict_sfh_quantities(params)
+        >>> sfh = model._predict_sfh_quantities(params)
         >>> sfh.stellar_mass
         Array(1.23e10, dtype=float64)
 
@@ -4716,6 +4822,28 @@ class SEDModel:
         )
 
     def predict_sed_quantities(self, params):
+        """Deprecated. Use ``model.predict_properties(params, names=(...))``.
+
+        .. deprecated:: 2026-07
+           Superseded by the property catalog and the ``Prediction`` surface
+           (#1043 contract §2). The body is unchanged — this shim is bit-exact
+           with the method it replaces — so migrating changes no number.
+           Will be removed in tengri v1.0.
+
+        Returns
+        -------
+        Same as :meth:`_predict_sed_quantities`.
+        """
+        warnings.warn(
+            "predict_sed_quantities() is deprecated — use "
+            "model.predict_properties(params, names=(...)) instead "
+            "(cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._predict_sed_quantities(params)
+
+    def _predict_sed_quantities(self, params):
         """Compute SED-derived quantities in JIT-compatible form.
 
         Evaluates the full forward model and computes UV slope, spectral
@@ -4794,7 +4922,7 @@ class SEDModel:
         --------
         **Single galaxy:**
 
-        >>> sed_q = model.predict_sed_quantities(params)
+        >>> sed_q = model._predict_sed_quantities(params)
         >>> sed_q.l_bol
         Array(2.5e10, dtype=float64)
         >>> sed_q.dn4000
@@ -4877,7 +5005,7 @@ class SEDModel:
             DeprecationWarning,
             stacklevel=2,
         )
-        return self.predict_sed_quantities(params)
+        return self._predict_sed_quantities(params)
 
     def predict_radio_quantities(self, params):
         """Orchestrator-path radio quantities.
@@ -5128,7 +5256,7 @@ class SEDModel:
             line catalog (BakedIn or shock). Switch to ``neb={'type':
             'cue', ...}`` or ``neb={'type': 'cloudy_grid', ...}`` for
             discrete line predictions, or read the continuous nebular
-            SED from ``model.predict_rest_sed(params).sed`` directly.
+            SED from ``model._predict_rest_sed(params).sed`` directly.
 
         Notes
         -----
@@ -5168,7 +5296,7 @@ class SEDModel:
                 "backend, e.g. neb={'type': 'cue', '*': FIXED} (requires "
                 "a bare-stellar SSP) or neb={'type': 'cloudy_grid', ...}. "
                 "For a quick narrow-band measurement on the BakedIn SED, "
-                "integrate model.predict_rest_sed(params).sed across the "
+                "integrate model._predict_rest_sed(params).sed across the "
                 "line wavelength range yourself."
             )
         from tengri.forward import state_to_emission_lines

@@ -415,7 +415,7 @@ def from_prediction(pred, *, indices=None, lines=None, filters=_UNSET):
     out = {}
 
     if indices or lines:
-        rest = model.predict_rest_sed(params)
+        rest = model._predict_rest_sed(params)
         wave, lnu = rest.wavelength, rest.sed
 
     for name in indices or ():

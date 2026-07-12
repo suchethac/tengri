@@ -369,7 +369,7 @@ class EmissionLines(NamedTuple):
 class DerivedQuantities(NamedTuple):
     """All derived physical quantities (convenience container).
 
-    Returned by ``model.predict_derived()``.
+    Returned by ``model._predict_derived()``.
 
     Attributes
     ----------
@@ -395,7 +395,7 @@ class DerivedQuantities(NamedTuple):
 
         from tengri import DerivedQuantities
 
-        derived = model.predict_derived(params)
+        derived = model._predict_derived(params)
         print(float(derived.sfh.stellar_mass))  # [Msun]
         print(float(derived.sed.dn4000))  # 4000 Å break
         print(float(derived.sed.uv_slope_beta))  # UV slope β
@@ -1889,8 +1889,8 @@ class Prediction:
             "Prediction objects are not JIT/vmap-compatible due to Python-level "
             "caching. For batch computations, use the JIT-compatible methods "
             "instead: model.predict_properties(params, names=...) for properties, "
-            "model.predict_sfh_quantities(params) for SFH, "
-            "model.predict_sed_quantities(params) for SED, etc. "
+            "model._predict_sfh_quantities(params) for SFH, "
+            "model._predict_sed_quantities(params) for SED, etc. "
             "These return JAX pytrees suitable for jax.vmap and jax.jit."
         )
 
@@ -2492,7 +2492,7 @@ class Prediction:
         rest_sed : Rest-frame SED (no absorption, no redshift).
         spectrum : Instrument-grid observable (LSF-convolved).
         """
-        return self._model.predict_obs_sed(self._params).sed
+        return self._model._predict_obs_sed(self._params).sed
 
     # ── Top-level shortcuts to grouped derived quantities ───────────────
     # ``pred.stellar_mass`` and ``pred.sfh.stellar_mass`` return the same value;

@@ -76,8 +76,15 @@ class DerivedState:
     """
 
     # Stellar — formed/surviving mass + SFR variants
+    #
+    # ``log_mstar`` falls back to the formed mass when the SSP grid carries no
+    # mass-remaining table, because downstream normalization needs *a* mass.
+    # ``log_mstar_surviving`` does not: it is NaN when the grid cannot answer,
+    # so the user-facing ``stellar_mass_surviving`` and ``ssfr`` properties never
+    # silently report the formed mass as the surviving one (#1131).
     log_mstar: jnp.ndarray | None = None
     log_mstar_formed: jnp.ndarray | None = None
+    log_mstar_surviving: jnp.ndarray | None = None
     sfr: jnp.ndarray | None = None
     sfr_10myr: jnp.ndarray | None = None
     sfr_100myr: jnp.ndarray | None = None
