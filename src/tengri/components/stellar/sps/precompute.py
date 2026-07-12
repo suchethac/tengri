@@ -118,6 +118,12 @@ class PhotometricPrecomputation(NamedTuple):
         Source redshift [dimensionless].
     n_filters : int
         Number of filters [dimensionless].
+    ssp_subband_phot : array or None, shape (n_met, n_age, n_filters, n_subbands)
+        Filter integral restricted to each sub-band. Sums over the last axis
+        to ``ssp_phot``. None unless ``n_subbands > 0``. [erg/s/Hz]
+    ssp_subband_waves_rest : array or None, shape (n_met, n_age, n_filters, n_subbands)
+        Rest-frame quadrature node of each sub-band — the template's own
+        flux-weighted centroid there. None unless ``n_subbands > 0``. [Angstrom]
 
     Notes
     -----
@@ -134,6 +140,8 @@ class PhotometricPrecomputation(NamedTuple):
     flux_scale: float
     redshift: float
     n_filters: int
+    ssp_subband_phot: "jnp.ndarray | None" = None
+    ssp_subband_waves_rest: "jnp.ndarray | None" = None
 
 
 class SpectroscopicPrecomputation(NamedTuple):
@@ -175,6 +183,7 @@ def precompute_photometry(
     redshift,
     dl_cm,
     taylor_correction: bool = True,
+    n_subbands: int = 0,
     fixed: dict[int, float] | None = None,
 ) -> PhotometricPrecomputation:
     """Pre-compute SSP broadband fluxes for all filters.
@@ -208,6 +217,16 @@ def precompute_photometry(
         dust correction (default True).  Adds one tensor of the same shape
         as Φ; inference cost is negligible (one extra dust derivative per
         filter, computed via finite differences).
+
+        Superseded by ``n_subbands``: the Taylor form *extrapolates* the
+        attenuation linearly away from λ_eff, which diverges where the
+        curve steepens (GALEX FUV +45 % at z=0.05, +215 % at z=1). See #1122.
+    n_subbands : int
+        Number of sub-bands K for the multiplicative dust quadrature
+        (default 0 = off). Builds Φ_k and the per-template quadrature nodes,
+        so the screen is *evaluated* at K points per band rather than
+        extrapolated from one. Converges as 1/K²; K=3 is the working point
+        and is cheaper at runtime than the Taylor moment it replaces.
     fixed : dict[int, float], optional
         Mapping of axis index → fixed value. Axes are numbered from 0:
         - 0: lgmet (metallicity in log10(Z/Zsun))
@@ -243,6 +262,7 @@ def precompute_photometry(
             np.asarray(ssp_data.ssp_lg_age_gyr),
         ),
         taylor=taylor_correction,
+        n_subbands=n_subbands,
     )
 
     # Collapse fixed axes if provided
@@ -257,6 +277,8 @@ def precompute_photometry(
         flux_scale=preint.flux_scale,
         redshift=float(redshift),
         n_filters=preint.n_filters,
+        ssp_subband_phot=preint.subband_phot,
+        ssp_subband_waves_rest=preint.subband_waves_rest,
     )
 
 

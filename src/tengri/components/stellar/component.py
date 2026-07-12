@@ -877,7 +877,9 @@ class StellarSEDComponent:
                     dl_cm=1.0,  # placeholder; cosmology applied at projection time
                     # Ψ moment for the dust-attenuation Taylor correction (#617),
                     # toggled by approx=WavePrecomp(taylor_correction=...).
-                    taylor_correction=approx.get("taylor_correction", True),
+                    taylor_correction=approx.get("taylor_correction", False),
+                    # Sub-band quadrature for the dust screen (#1122) — supersedes Ψ.
+                    n_subbands=int(approx.get("n_subbands", 0)),
                 )
                 state = _replace_state(state, ssp_phot_lut=lut)
             else:  # mode == "free"
@@ -896,6 +898,8 @@ class StellarSEDComponent:
                     apply_igm=False,
                     # Ψ moment for the dust-attenuation Taylor correction (#617),
                     # toggled by approx=WavePrecomp(taylor_correction=...).
+                    # The free-z ztable does not carry the sub-band quadrature yet
+                    # (#1122 follow-up), so it keeps Ψ on regardless of the default.
                     taylor_correction=approx.get("taylor_correction", True),
                 )
                 state = _replace_state(state, ssp_phot_ztable=ztable)
@@ -1832,6 +1836,25 @@ class StellarSEDComponent:
                 )
                 derived_overrides["stellar_phot_moment_per_age_precomp"] = (
                     stellar_phot_moment_per_age
+                )
+            # Sub-band quadrature tensors (#1122). Φ_k carries the same mass and
+            # L_sun scaling as Φ; the node λ_k is a RATIO, so those scalings cancel
+            # and it is computed from the unscaled sums.
+            ssp_sub_phot = self._state.ssp_phot_lut.ssp_subband_phot
+            if ssp_sub_phot is not None:
+                ssp_sub_waves = self._state.ssp_phot_lut.ssp_subband_waves_rest
+                sub_phi = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot)
+                sub_num = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_waves * ssp_sub_phot)
+                derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = (
+                    total_mass * sub_phi * LSUN_ERG_PER_S
+                )
+                # Zero-weight sub-bands contribute nothing, but their node still
+                # goes through the 1/λ dust law — keep it finite and positive.
+                live = sub_phi != 0.0
+                derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
+                    live,
+                    sub_num / jnp.where(live, sub_phi, 1.0),
+                    jnp.asarray(self._state.ssp_phot_lut.effective_wavelengths_rest)[:, None],
                 )
             # Publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.

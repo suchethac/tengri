@@ -860,6 +860,16 @@ def slice_fixed_axes(
     if isinstance(preint, PreintegratedGrid):
         phot = preint.phot
         moment = preint.moment
+        sub_phot = preint.subband_phot
+        sub_waves = preint.subband_waves
+        sub_waves_rest = preint.subband_waves_rest
+        # A quadrature node is a RATIO, λ_k = ∫λSw / ∫Sw, and the weighted mean
+        # of ratios is not the ratio of weighted means. Interpolate the node's
+        # numerator (λ_k·Φ_k) and denominator (Φ_k) separately and divide at the
+        # end — that reproduces the centroid of the interpolated template exactly,
+        # where averaging the nodes directly would bias them.
+        sub_num = None if sub_waves is None else sub_waves * sub_phot
+        sub_num_rest = None if sub_waves_rest is None else sub_waves_rest * sub_phot
 
         # Process in reverse order so axis indices remain valid after each slice
         for axis_idx in sorted(fixed.keys(), reverse=True):
@@ -878,9 +888,28 @@ def slice_fixed_axes(
             if moment is not None:
                 moment = jnp.tensordot(w, moment, axes=([0], [axis_idx]))
 
+            if sub_phot is not None:
+                sub_phot = jnp.tensordot(w, sub_phot, axes=([0], [axis_idx]))
+                sub_num = jnp.tensordot(w, sub_num, axes=([0], [axis_idx]))
+                sub_num_rest = jnp.tensordot(w, sub_num_rest, axes=([0], [axis_idx]))
+
             # Remove from axes and edges lists
             axes.pop(axis_idx)
             edges.pop(axis_idx)
+
+        if sub_phot is not None:
+            # Where a template has no flux in a sub-band the node is multiplied by
+            # zero, so its value cannot change the result — but it is still fed
+            # through the dust law, which goes as 1/λ. A zero node there yields
+            # inf/NaN that survives into the GRADIENT even though the forward value
+            # is finite. Fall back to the filter's effective wavelength: finite,
+            # positive, and physically sane.
+            live = sub_phot != 0.0
+            safe = jnp.where(live, sub_phot, 1.0)
+            sub_waves = jnp.where(live, sub_num / safe, preint.effective_wavelengths[:, None])
+            sub_waves_rest = jnp.where(
+                live, sub_num_rest / safe, preint.effective_wavelengths_rest[:, None]
+            )
 
         return PreintegratedGrid(
             phot=phot,
@@ -891,6 +920,9 @@ def slice_fixed_axes(
             effective_wavelengths_rest=preint.effective_wavelengths_rest,
             flux_scale=preint.flux_scale,
             n_filters=preint.n_filters,
+            subband_phot=sub_phot,
+            subband_waves=sub_waves,
+            subband_waves_rest=sub_waves_rest,
         )
 
     # Handle PreintegratedLines (has line_filter_weights)
