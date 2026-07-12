@@ -664,13 +664,17 @@ class Observation:
         # absent (structural no-op) when IGM is disabled, so low-z / IGM-off
         # models are bit-unchanged.
         #
-        # ``sed_atten`` feeds the spectroscopy and rest-frame-photometry blocks.
-        # The observed-photometry block does NOT use it: ``project_photometry``
-        # reads ``state.sed_intrinsic`` and applies the same transmission itself,
-        # so that arbitrary post-build filters (``Prediction.photometry
-        # (filters=...)``) go through the identical kernel instead of a copy that
-        # could silently omit the IGM factor. Handing it ``sed_atten`` would
-        # square the transmission.
+        # ``sed_atten`` feeds the spectroscopy block ONLY — that is an observed-frame
+        # channel, where the absorber belongs.
+        #
+        # The observed-photometry block does NOT use it: ``project_photometry`` reads
+        # ``state.sed_intrinsic`` and applies the same transmission itself, so that
+        # arbitrary post-build filters (``Prediction.photometry(filters=...)``) go
+        # through the identical kernel instead of a copy that could silently omit the
+        # IGM factor. Handing it ``sed_atten`` would square the transmission.
+        #
+        # The rest-frame-photometry block does NOT use it either (#1115): the IGM is a
+        # line-of-sight absorber, not part of the galaxy's rest-frame SED. See there.
         igm_trans = (
             state.derived.get("igm_transmission", None) if state.derived is not None else None
         )
@@ -729,14 +733,29 @@ class Observation:
 
                 dl_rest = TEN_PC_CM  # 10 pc in cm
                 n_real = self.photometry.n_filters
-                # ``sed_atten``, not ``sed_rest``: this block consumed the
-                # IGM-attenuated SED before the projector extraction, and this
-                # method's contract is bit-identical output. Whether rest-frame
-                # absolute photometry *should* carry an observed-frame absorption
-                # is a separate physics question — not one to settle silently
-                # inside a refactor.
+                # ``sed_rest``, NOT ``sed_atten`` (#1115). ``phot_rest_fnu`` is the
+                # SED reprojected at z=0, d_L=10 pc — the galaxy as it is. The IGM is
+                # a line-of-sight absorber *between us and the source*; it is not part
+                # of the galaxy's rest-frame SED. Feeding the attenuated SED here made
+                # an object's absolute magnitude depend on how far away it happens to
+                # be. (The galaxy's own LyC absorption — ``neb_fesc``, dust — already
+                # lives in ``sed_rest`` and correctly stays.)
+                #
+                # This projects at z=0, so the filter's OWN wavelengths are read as
+                # REST wavelengths, and T is stored on the rest grid as
+                # T(λ_rest·(1+z)). The corruption was therefore confined to filters
+                # with support at rest λ < 1216 Å — blueward of Lyα, where Madau/Inoue
+                # absorption begins — and the (1+z) cancels, so that boundary is
+                # redshift-invariant while its depth is not. Measured on a rest-900 Å
+                # band: −5.2 % at z=1, −30.0 % at z=3, −95.9 % (≈ −3.5 mag) at z=6.
+                #
+                # Zero-diff for every shipped filter (the bluest, GALEX FUV, starts at
+                # 1341 Å and has no throughput below Lyα) — which is exactly why it
+                # lands now, before a Lyman-continuum band added for escape-fraction
+                # work quietly returns an answer that scales with source redshift.
+                # ``predict_via_precomp`` already did this; the two paths now agree.
                 phot_rest = compute_flux_density_batch(
-                    sed_atten,
+                    sed_rest,
                     wave_rest,
                     self.photometry._fw_padded,
                     self.photometry._ft_padded,
