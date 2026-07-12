@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+import functools
 import time
 import warnings
 from dataclasses import dataclass, field
@@ -77,6 +78,67 @@ class PopulationPosterior:
     method: str = ""
     wall_time_s: float = 0.0
     diagnostics: dict = field(default_factory=dict)
+    _model: object = field(default=None, repr=False)
+
+    @functools.cached_property
+    def properties(self):
+        """The property catalog over the galaxy axis of a population fit.
+
+        Contract §1 — **same names, more axes**. Each galaxy's properties are
+        evaluated on its own parameter draws **merged with the shared
+        hyperparameters**: in a hierarchical fit the per-galaxy block alone is
+        not a complete parameter set, and evaluating it without the shared PSD
+        block would silently answer a different question.
+
+        Returns
+        -------
+        CatalogProperties
+            ``[name]`` -> shape ``(n_galaxies, n_samples)``; ``ci(name)`` ->
+            ``(n_galaxies, 3)``.
+
+        Raises
+        ------
+        RuntimeError
+            If the fit carries no per-galaxy samples, or no model reference.
+
+        Examples
+        --------
+        >>> pop = pop_fitter.run(...)  # doctest: +SKIP
+        >>> pop.properties["stellar_mass"].shape  # doctest: +SKIP
+        (12, 400)
+        """
+        from tengri.inference.catalog_fitter import CatalogPosterior, CatalogProperties
+        from tengri.inference.posterior import Posterior
+
+        if self.individual_samples is None:
+            raise RuntimeError(
+                "This population fit carries no per-galaxy samples, so it has no "
+                "per-galaxy properties. Shared hyperparameters are in "
+                "`shared_samples` / `summary()`."
+            )
+        if self._model is None:
+            raise RuntimeError(
+                "No model reference on this PopulationPosterior — cannot compute "
+                "properties. (It is populated automatically by PopulationFitter.run().)"
+            )
+
+        posts = [
+            Posterior(
+                # The per-galaxy block is NOT a complete parameter set on its own:
+                # the shared PSD hyperparameters live in `shared_samples`. Merge
+                # them, per-galaxy values winning on any key collision.
+                samples={**self.shared_samples, **samp},
+                params={},
+                method=self.method,
+                wall_time_s=0.0,
+                diagnostics={},
+                _model=self._model,
+            )
+            for samp in self.individual_samples
+        ]
+        return CatalogProperties(
+            CatalogPosterior(posteriors=posts, method=self.method, n_galaxies=len(posts))
+        )
 
     def summary(self) -> dict:
         """Median and 68% CI for shared PSD parameters.
@@ -863,6 +925,7 @@ class PopulationFitter:
             print(f"  σ_PSD = {s['psd_sigma']:.2f}, τ_PSD = {s['psd_tau_myr']:.1f} Myr")
 
         return PopulationPosterior(
+            _model=self._template,
             shared_samples=shared_samples,
             shared_params=shared_params,
             individual_samples=individual_samples,
@@ -1234,6 +1297,7 @@ class PopulationFitter:
             print(f"  σ_PSD = {s['psd_sigma']:.2f}, τ_PSD = {s['psd_tau_myr']:.1f} Myr")
 
         return PopulationPosterior(
+            _model=self._template,
             shared_samples=shared_samples,
             shared_params=shared_params,
             individual_samples=individual_samples,

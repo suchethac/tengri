@@ -120,6 +120,8 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "STANDARD_COMPOSITE_INDICES",
         # ── Per-age stellar mass-remaining curve (closes #447) ──────
         "compute_mass_remaining_fraction",
+        # ── Memory-bounded batched evaluation (#1048, API Phase 4) ─
+        "vmap_chunked",
         # ── Registry introspection ──────────────────────────────────
         "describe",
         "describe_agn_block",

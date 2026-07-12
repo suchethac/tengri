@@ -1814,6 +1814,8 @@ class PropertyCatalog:
         raise AttributeError("PropertyCatalog is read-only")
 
 
+from tengri.parameters.resolve import resolve_fixed_params
+
 # ── Main Prediction class ─────────────────────────────────────────
 
 
@@ -1908,7 +1910,7 @@ class Prediction:
 
     def __init__(self, model, params):
         self._model = model
-        self._params = params
+        self._params = resolve_fixed_params(model, params)
         self._cache = {}
         self._photometry_cache = {}
         self.sfh = SFHProperties(self)

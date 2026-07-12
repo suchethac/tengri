@@ -10,6 +10,7 @@ execute simultaneously on-device.
 
 from __future__ import annotations
 
+import functools
 import math
 import time
 import warnings
@@ -19,6 +20,7 @@ __all__ = ["CatalogFitter", "CatalogPosterior"]
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax.flatten_util import ravel_pytree
 
 from tengri.inference._sample_utils import _mean_params
@@ -113,10 +115,103 @@ class CatalogPosterior:
     def __len__(self):
         return len(self.posteriors)
 
+    @functools.cached_property
+    def properties(self):
+        """The property catalog over the galaxy axis.
+
+        Contract §1 — **same names, more axes**. The keys are the ones a single
+        :class:`~tengri.inference.posterior.Posterior` answers to; the leading
+        axis is now the galaxy.
+
+        Returns
+        -------
+        CatalogProperties
+            Dict-like: ``[name]`` -> shape ``(n_galaxies, n_samples)`` when every
+            galaxy has the same number of draws (or ``(n_galaxies,)`` for MAP
+            fits), else a list of per-galaxy arrays. ``ci(name)`` gives the
+            per-galaxy credible interval, shape ``(n_galaxies, 3)``.
+
+        Examples
+        --------
+        >>> cat = fitter.run("map")  # doctest: +SKIP
+        >>> cat.properties["stellar_mass"].shape  # doctest: +SKIP
+        (500,)
+        """
+        return CatalogProperties(self)
+
     def __repr__(self) -> str:
         return (
             f"CatalogPosterior(n_galaxies={self.n_galaxies}, "
             f"method='{self.method}', wall_time={self.wall_time_s:.1f}s)"
+        )
+
+
+class CatalogProperties:
+    """The property catalog lifted over the galaxy axis of a :class:`CatalogPosterior`.
+
+    A ``CatalogPosterior`` is a *list of independent* ``Posterior`` objects, not
+    a batched array — each galaxy was fit separately and may carry a different
+    number of draws. So the lift here is a **stack over galaxies**, not a vmap:
+    each galaxy's own (already chunk-vmapped) property array is gathered, and the
+    results are stacked when their shapes agree and returned as a list when they
+    do not. Ragged posteriors are a fact of catalog fitting, and silently padding
+    or truncating them would be worse than handing back the list.
+    """
+
+    def __init__(self, catalog):
+        object.__setattr__(self, "_catalog", catalog)
+        object.__setattr__(self, "_cache", {})
+
+    def _posteriors(self):
+        return object.__getattribute__(self, "_catalog").posteriors
+
+    def __getitem__(self, name: str):
+        cache = object.__getattribute__(self, "_cache")
+        if name in cache:
+            return cache[name]
+
+        per_galaxy = [p.properties[name] for p in self._posteriors()]
+        shapes = {np.shape(v) for v in per_galaxy}
+        value = np.stack([np.asarray(v) for v in per_galaxy]) if len(shapes) == 1 else per_galaxy
+
+        cache[name] = value
+        return value
+
+    def __contains__(self, name: str) -> bool:
+        posts = self._posteriors()
+        return bool(posts) and name in posts[0].properties
+
+    def __iter__(self):
+        posts = self._posteriors()
+        return iter(posts[0].properties.keys() if posts else [])
+
+    def keys(self):
+        """Available property names — identical to the per-galaxy ones."""
+        return list(self)
+
+    def to_dict(self, names=None) -> dict:
+        """Export properties as a plain dict keyed by name."""
+        if names is None:
+            names = list(self)
+        return {name: self[name] for name in names}
+
+    def ci(self, name: str, level: float = 0.68) -> np.ndarray:
+        """Per-galaxy credible interval.
+
+        Returns
+        -------
+        ndarray, shape (n_galaxies, 3)
+            ``(lo, median, hi)`` per galaxy.
+        """
+        return np.array([p.properties.ci(name, level=level) for p in self._posteriors()])
+
+    def __setattr__(self, name, value):
+        raise AttributeError("CatalogProperties is read-only")
+
+    def __repr__(self):
+        return (
+            f"<CatalogProperties: {len(self.keys())} properties over "
+            f"{len(self._posteriors())} galaxies>"
         )
 
 
