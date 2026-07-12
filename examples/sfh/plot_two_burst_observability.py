@@ -167,30 +167,30 @@ key = jax.random.PRNGKey(42)
 
 # Scenario A: Ancient only
 params_a = dict(model_ancient.spec.sample(key))
-pred_a = model_ancient.predict_rest_sed(params_a)
-wave_rest_a = np.array(pred_a.wavelength)
-sed_a = np.array(pred_a.sed)  # erg/s/Hz
+pred_a = model_ancient.predict(params_a)
+wave_rest_a = np.array(model_ancient.wavelengths)
+sed_a = np.array(pred_a.rest_sed())  # erg/s/Hz
 
 # Scenario B: Young only
 params_b = dict(model_young.spec.sample(key))
-pred_b = model_young.predict_rest_sed(params_b)
-wave_rest_b = np.array(pred_b.wavelength)
-sed_b = np.array(pred_b.sed)  # erg/s/Hz
+pred_b = model_young.predict(params_b)
+wave_rest_b = np.array(model_young.wavelengths)
+sed_b = np.array(pred_b.rest_sed())  # erg/s/Hz
 
 # Scenario C: Both (sum the rest-frame SEDs)
 # Note: combining at the SED level (erg/s/Hz) requires both on same wavelength grid.
 # Use model_young's grid as reference (finer); interpolate ancient onto it.
 params_c_a = dict(model_combined_ancient.spec.sample(key))
 params_c_y = dict(model_combined_young.spec.sample(key))
-pred_c_a = model_combined_ancient.predict_rest_sed(params_c_a)
-pred_c_y = model_combined_young.predict_rest_sed(params_c_y)
+pred_c_a = model_combined_ancient.predict(params_c_a)
+pred_c_y = model_combined_young.predict(params_c_y)
 
-wave_rest_c = np.array(pred_c_y.wavelength)
-sed_c_a = np.array(pred_c_a.sed)
-sed_c_y = np.array(pred_c_y.sed)
+wave_rest_c = np.array(model_combined_young.wavelengths)
+sed_c_a = np.array(pred_c_a.rest_sed())
+sed_c_y = np.array(pred_c_y.rest_sed())
 
 # Interpolate ancient SED onto young's grid
-sed_c_a_interp = np.interp(wave_rest_c, np.array(pred_c_a.wavelength), sed_c_a)
+sed_c_a_interp = np.interp(wave_rest_c, np.array(model_combined_ancient.wavelengths), sed_c_a)
 sed_c_combined = sed_c_a_interp + sed_c_y
 
 # ────────────────────────────────────────────────────────────────────────────

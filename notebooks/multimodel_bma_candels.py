@@ -584,7 +584,7 @@ def vmap_chunked(fn, batch, n, chunk=16):
 def collect_predictions(g):
     """Per-config posterior draws of spectrum, SFH, and (logM*, logSFR).
 
-    The continuous SED is the observed-frame model spectrum. ``predict_obs_sed``
+    The continuous SED is the observed-frame model spectrum. ``model.predict``
     gives the rest-frame :math:`L_\\nu` on each SSP's native (line-resolved)
     grid; we convert it to observed :math:`f_\\nu` with the exact public relation
     ``lnu_to_fnu`` — the same :math:`f_\\nu = L_\\nu (1+z) / (4\\pi d_L^2)` that
@@ -610,17 +610,31 @@ def collect_predictions(g):
 
         # Observed-frame wavelength grid (config-fixed, so a single eager call).
         s0 = {k: v[0] for k, v in samples.items()}
-        wave_nat = np.asarray(model.predict_obs_sed(s0).wavelength)
+        pred_s0 = model.predict(s0)
+        wave_nat = np.asarray(pred_s0.wave_obs)
 
         # SED + derived quantities: chunked jit(vmap) over the draw batch.
-        lnu_b = np.asarray(vmap_chunked(model.predict_obs_sed, batch, n_use).sed)
+        pred_batch = vmap_chunked(model.predict, batch, n_use)
+        lnu_b = np.asarray(pred_batch.obs_sed())
         spec[cfg] = np.array(
             [bin_to_grid(wave_nat, lnu_b[i] * flux_factor, WAVE_SPEC) for i in range(n_use)]
         )
-        q = vmap_chunked(model.predict_sfh_quantities, batch, n_use)
+
+        # Predict properties with vmap (returns dict with array values after vmap)
+        # Wrap model.predict to extract .properties while preserving vmappability
+        def _get_properties(m):
+            def predict_props(params):
+                return m.predict(params).properties
+
+            return predict_props
+
+        predict_fn = _get_properties(model)
+        q_dict = vmap_chunked(predict_fn, batch, n_use)
         props[cfg] = {
-            "log_mass": np.log10(np.maximum(np.asarray(q.stellar_mass) * RETURN_FRAC, 1e-30)),
-            "log_sfr": np.log10(np.maximum(np.asarray(q.sfr_100myr), 1e-30)),
+            "log_mass": np.log10(
+                np.maximum(np.asarray(q_dict.get("stellar_mass", np.nan)) * RETURN_FRAC, 1e-30)
+            ),
+            "log_sfr": np.log10(np.maximum(np.asarray(q_dict.get("sfr_100myr", np.nan)), 1e-30)),
         }
 
         # SFH curve: eager loop (predict_sfh is not jittable).

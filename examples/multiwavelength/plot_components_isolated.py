@@ -53,9 +53,9 @@ DUST_OFF = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc
 def _nuLnu(**blocks):
     model = tengri.SEDModel.build(SSP, **HOST, **blocks)
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    return wave, 2.998e18 / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    return wave, 2.998e18 / wave * np.asarray(out.rest_sed())
 
 
 RUNS = [

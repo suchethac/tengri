@@ -192,17 +192,17 @@ mag_b = -2.5 * np.log10(flux_b) - 48.6
 mag_c = -2.5 * np.log10(flux_c) - 48.6
 
 # Predict rest-frame SEDs for display
-sed_a = model_a.predict_rest_sed(params_a)
-sed_b = model_b.predict_rest_sed(params_b)
-sed_c = model_c.predict_rest_sed(params_c)
+sed_a = model_a.predict(params_a)
+sed_b = model_b.predict(params_b)
+sed_c = model_c.predict(params_c)
 
-wave_a = np.asarray(sed_a.wavelength)
-wave_b = np.asarray(sed_b.wavelength)
-wave_c = np.asarray(sed_c.wavelength)
+wave_a = np.asarray(model_a.wavelengths)
+wave_b = np.asarray(model_b.wavelengths)
+wave_c = np.asarray(model_c.wavelengths)
 
-sed_a_lnu = np.asarray(sed_a.sed)
-sed_b_lnu = np.asarray(sed_b.sed)
-sed_c_lnu = np.asarray(sed_c.sed)
+sed_a_lnu = np.asarray(sed_a.rest_sed())
+sed_b_lnu = np.asarray(sed_b.rest_sed())
+sed_c_lnu = np.asarray(sed_c.rest_sed())
 
 # Create figure
 fig, axes = plt.subplots(2, 1, figsize=(10, 8))

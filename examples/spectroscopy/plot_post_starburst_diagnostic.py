@@ -152,9 +152,9 @@ for i, tsq in enumerate(time_since_quench_gyr):
     baseline = dict(model.spec.sample(jax.random.PRNGKey(i)))
 
     # Predict rest-frame SED
-    pred = model.predict_rest_sed(baseline)
-    wave = np.asarray(pred.wavelength)
-    l_nu = np.asarray(pred.sed)
+    pred = model.predict(baseline)
+    wave = np.asarray(model.wavelengths)
+    l_nu = np.asarray(pred.rest_sed())
 
     # Compute Hδ_A equivalent width (negative = absorption)
     hdelta_a[i] = _compute_hdelta_a(wave, l_nu)

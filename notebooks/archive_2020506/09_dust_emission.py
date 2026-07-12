@@ -820,7 +820,9 @@ spec_eb = Parameters(
 model_eb = SEDModel(
     spec_eb,
     ssp,
-    observation=Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])),
+    observation=Observation(
+        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    ),
 )
 
 # Generate prediction

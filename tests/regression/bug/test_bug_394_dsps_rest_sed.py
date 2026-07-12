@@ -3,7 +3,7 @@
 trapezoid-contract ``Σ(weights × ssp_flux) × total_mass`` reconstruction —
 **not** from DSPS's own ``rest_sed`` (= ``sed_unit_mstar × mstar_obs``).
 
-History: #394 originally switched ``sed_intrinsic`` TO ``dsps_result.rest_sed``
+History: #394 originally switched ``sed_intrinsic`` TO ``dsps_result.rest_sed()``
 for "kernel self-consistency". That was **reversed by #616**: ``mstar_obs``
 (DSPS's cumulative-SFH quadrature) and ``total_mass`` (the trapezoid that
 defines the ``trapezoid(sfr, t) = 10**log_total_mass`` normalization contract)
@@ -16,12 +16,12 @@ See issues #616 (DSPS quadrature) and #617 (birth-cloud dust LUT residual).
 
 The tests below pin that:
 
-1. ``dsps_result.rest_sed`` and the einsum reconstruction with ``total_mass``
+1. ``dsps_result.rest_sed()`` and the einsum reconstruction with ``total_mass``
    agree at moderate ``t_obs`` (here 5 Gyr) — the quadratures only diverge at
    low z (large ``t_obs``); see #616.
 
 2. ``StellarSEDComponent`` wires ``sed_intrinsic`` to the ``total_mass``
-   reconstruction (the contract path), not ``dsps_result.rest_sed``.
+   reconstruction (the contract path), not ``dsps_result.rest_sed()``.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def _build_tau_fiducial():
 
 
 def test_dsps_rest_sed_matches_einsum_reconstruction():
-    """``dsps_result.rest_sed = Σ_m,a (weights × ssp_flux) × mstar_obs``.
+    """``dsps_result.rest_sed() = Σ_m,a (weights × ssp_flux) × mstar_obs``.
     The einsum reconstruction with ``total_mass`` agrees to 1e-3 relative
     at every wavelength on a fiducial tau SFH."""
     from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_lognormal_mdf
@@ -78,7 +78,7 @@ def test_dsps_rest_sed_matches_einsum_reconstruction():
     )
 
     einsum_recon = jnp.einsum("ma,maw->aw", res.weights, ssp.ssp_flux).sum(axis=0) * total_mass
-    rest_sed = res.rest_sed
+    rest_sed = res.rest_sed()
 
     # Strip leading SSP wavelengths where the flux is identically zero
     # (some libraries pad below Lyman alpha).
@@ -89,7 +89,7 @@ def test_dsps_rest_sed_matches_einsum_reconstruction():
     # correction were silently in DSPS's rest_sed, this would fail with
     # a wavelength-dependent 2x-3x spread — see #394 audit table.
     assert jnp.allclose(ratio, 1.0, rtol=1e-3), (
-        f"einsum recon vs dsps.rest_sed disagree: "
+        f"einsum recon vs dsps.rest_sed() disagree: "
         f"min ratio = {float(jnp.min(ratio)):.4f}, "
         f"max ratio = {float(jnp.max(ratio)):.4f}"
     )
@@ -109,9 +109,9 @@ def test_sed_intrinsic_uses_total_mass_reconstruction():
     assert "sed_intrinsic = lnu_age.sum(axis=0)" in src, (
         "StellarSEDComponent no longer builds sed_intrinsic from the total_mass "
         "reconstruction (Σ_age lnu_age) — this would re-introduce the #394 "
-        "dsps_result.rest_sed path that violates the trapezoid normalization "
+        "dsps_result.rest_sed() path that violates the trapezoid normalization "
         "contract by up to ~6.6% at low z (see #616)."
     )
-    assert "sed_intrinsic = dsps_result.rest_sed" not in src, (
+    assert "sed_intrinsic = dsps_result.rest_sed()" not in src, (
         "sed_intrinsic must not use DSPS's mstar_obs-normalized rest_sed (reversed in #616)."
     )

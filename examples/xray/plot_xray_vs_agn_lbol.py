@@ -65,9 +65,9 @@ baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
 fig, ax = plt.subplots(figsize=(7.0, 4.6))
 for log_lbol in log_lbol_grid:
-    out = model.predict_rest_sed({**baseline, "agn_log_lbol": jnp.float64(log_lbol)})
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict({**baseline, "agn_log_lbol": jnp.float64(log_lbol)})
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=cmap(norm(log_lbol)), lw=1.4)
 
 ax.set(

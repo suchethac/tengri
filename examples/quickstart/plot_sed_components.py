@@ -53,11 +53,11 @@ model = tengri.SEDModel.build(
 )
 
 params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-sed_total = np.array(model.predict_rest_sed(params).sed)
+sed_total = np.array(model.predict(params).rest_sed())
 sed_intrinsic = np.array(
-    model.predict_rest_sed(
+    model.predict(
         {**params, "dust_tau_bc": jnp.array(0.0), "dust_tau_diff": jnp.array(0.0)}
-    ).sed
+    ).rest_sed()
 )
 
 wave_um = np.array(model.ssp_data.ssp_wave) / 1e4

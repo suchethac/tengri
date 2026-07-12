@@ -63,10 +63,10 @@ params["sfh_tsnorm_peak_lbt_gyr"] = jnp.float64(3.0)
 params["sfh_tsnorm_skew"] = jnp.float64(-0.2)
 
 # Predict rest-frame SED
-sed = model.predict_rest_sed(params)
-wave = np.asarray(sed.wavelength)
+sed = model.predict(params)
+wave = np.asarray(model.wavelengths)
 nu = 2.998e18 / wave  # Å/s -> Hz
-nu_l_nu = nu * np.asarray(sed.sed)
+nu_l_nu = nu * np.asarray(sed.rest_sed())
 
 # Create a 2-panel figure:
 # LEFT: text rendering of summary (monospace, annotated)

@@ -1,9 +1,9 @@
 """
-Mass conservation in SFH: manual integration vs predict_sfh_quantities
+Mass conservation in SFH: manual integration vs predict_properties
 ======================================================================
 
 Internal consistency check: the cumulative SFR integral ∫₀ᵗ SFR(t) dt should
-equal the stellar mass returned by ``predict_sfh_quantities()``. This diagnostic
+equal the stellar mass returned by ``predict_properties()``. This diagnostic
 varies the DPL SFH parameters and verifies that the two pathways (manual trapz
 of the trajectory vs library integration) agree to ~0.1%. Discrepancies > 5%
 trigger a warning and would indicate a bug in either the SFH trajectory or
@@ -67,9 +67,9 @@ for alpha in alpha_vals:
                 t_lookback_yr = t_lookback_gyr * 1e9  # Convert Gyr to yr
                 m_manual = float(np.trapz(sfr, t_lookback_yr))
 
-                # Library integration via predict_sfh_quantities
-                q = model.predict_sfh_quantities(params)
-                m_lib = float(q.stellar_mass)
+                # Library integration via predict_properties
+                q = model.predict_properties(params, names=("stellar_mass",))
+                m_lib = float(q["stellar_mass"])
 
                 m_manual_list.append(m_manual)
                 m_lib_list.append(m_lib)

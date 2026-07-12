@@ -188,10 +188,10 @@ for ax_idx, stages_pair in enumerate([(STAGES[0], STAGES[1]), (STAGES[2], STAGES
             "agn_log_mbh": jnp.float64(log_mbh),
             "agn_log_lbol": jnp.float64(log_lbol),
         }
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
         nu = C_AA_PER_S / wave  # frequency in Hz
-        nu_l_nu = nu * np.asarray(out.sed)
+        nu_l_nu = nu * np.asarray(out.rest_sed())
 
         ax.loglog(wave, nu_l_nu, color=color, lw=1.5, label=label)
 

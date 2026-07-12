@@ -74,8 +74,8 @@ base_params = model.spec.get_fixed_values()
 
 for tau_myr in tau_grid_myr:
     params = {**base_params, "sfh_delayed_tau_gyr": tau_myr / 1e3}
-    rest = model.predict_rest_sed(params, wave_aa)  # (wave, L_nu) erg/s/Hz
-    lnu = np.asarray(rest[1] if isinstance(rest, tuple) or np.ndim(rest) == 2 else rest)
+    rest = model.predict(params)  # L_nu on the model grid [erg/s/Hz]
+    lnu = np.asarray(rest.rest_sed(np.asarray(wave_aa)))
     lam_Llam_W = lnu * (C_NM_HZ / (np.asarray(wave_aa) * 0.1)) * ERG_TO_W
     ax.plot(wave_um, lam_Llam_W, color=cmap(norm(tau_myr)), lw=1.3, zorder=3)
 

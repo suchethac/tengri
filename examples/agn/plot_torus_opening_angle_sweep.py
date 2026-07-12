@@ -71,9 +71,9 @@ baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 fig, ax = plt.subplots(figsize=(7.0, 4.5))
 for oa in oa_values:
     params = {**baseline, "agn_oa_skirtor": jnp.float64(oa)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
-    nu_lnu = (C_AA_PER_S / wave) * np.asarray(out.sed)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    nu_lnu = (C_AA_PER_S / wave) * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_lnu, color=cmap(norm(oa)), lw=1.4)
 
 cbar = fig.colorbar(

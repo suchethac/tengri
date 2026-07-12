@@ -126,9 +126,9 @@ cmap = plt.get_cmap("viridis")
 
 for i, (label, model) in enumerate(STAGES):
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    sed = model.predict_rest_sed(params)
-    wave = np.asarray(sed.wavelength)
-    L_nu = np.asarray(sed.sed)
+    sed = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    L_nu = np.asarray(sed.rest_sed())
     # rest-frame nu L_nu in erg/s
     nu_L_nu = (2.998e18 / wave) * L_nu
     color = cmap(i / (len(STAGES) - 1))

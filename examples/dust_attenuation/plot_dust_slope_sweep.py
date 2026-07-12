@@ -57,10 +57,10 @@ cmap = plt.get_cmap("viridis")
 fig, ax = plt.subplots(figsize=(6.5, 4.2))
 for slope in slope_values:
     params = {**baseline, "dust_slope": jnp.float64(slope)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave  # Å/s -> Hz
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=cmap(norm(slope)), lw=1.4)
 
 ax.set_xlim(800, 3e4)

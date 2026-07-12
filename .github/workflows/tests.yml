@@ -82,6 +82,7 @@ jobs:
       - run: python tools/add_spdx_headers.py --check
       - run: python tools/check_british_spelling.py
       - run: python tools/check_file_size.py
+      - run: python tools/gen_property_table.py --check
       # Gallery freshness — warn-only (#805): reports examples whose committed
       # docs/auto_examples render has drifted from the source. Informational
       # until the heavy-fit examples (#612) are handled; promote to --strict then.

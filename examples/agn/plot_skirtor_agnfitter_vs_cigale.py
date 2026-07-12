@@ -120,10 +120,10 @@ except Exception as e:
 # Plot each model
 for label, model, color in torus_models:
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
+    out = model.predict(p)
 
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = c_aa_s / wave * np.asarray(out.sed)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = c_aa_s / wave * np.asarray(out.rest_sed())
 
     ax.loglog(wave, nu_l_nu, color=color, lw=2.0, label=label, alpha=0.8)
 

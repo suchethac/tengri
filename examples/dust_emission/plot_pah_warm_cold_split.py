@@ -85,9 +85,9 @@ colors = {"Cold cirrus": "#1f77b4", "Spiral galaxy": "#ff7f0e", "Starburst": "#d
 
 for regime, params in regimes.items():
     model, p = _build(q_pah=params["q_pah"], u_min=params["u_min"])
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
 
     ax.loglog(
         wave,

@@ -62,9 +62,9 @@ for i, beta in enumerate(betas):
         baseline_params = dict(model.spec.sample(jax.random.PRNGKey(0)))
         params_eval = {**baseline_params}
 
-        out = model.predict_rest_sed(params_eval)
-        wave = np.asarray(out.wavelength)
-        sed = np.asarray(out.sed)
+        out = model.predict(params_eval)
+        wave = np.asarray(model.wavelengths)
+        sed = np.asarray(out.rest_sed())
 
         # Optical region
         mask = (wave > 4000) & (wave < 8000)
@@ -111,10 +111,10 @@ ax_beta = fig_bottom.add_subplot(122)
 
 for alpha in alpha_values:
     params = {**baseline_alpha, "sfh_dpl_alpha": jnp.float64(alpha)}
-    out = model_alpha.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model_alpha.predict(params)
+    wave = np.asarray(model_alpha.wavelengths)
     nu = C_AA_PER_S / wave
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax_alpha.loglog(wave, nu_l_nu, color=cmap(norm_alpha(alpha)), lw=1.4)
 
 ax_alpha.set_xlim(800, 3e4)
@@ -147,10 +147,10 @@ norm_beta = mpl.colors.Normalize(vmin=beta_values.min(), vmax=beta_values.max())
 
 for beta in beta_values:
     params = {**baseline_beta, "sfh_dpl_beta": jnp.float64(beta)}
-    out = model_beta.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model_beta.predict(params)
+    wave = np.asarray(model_beta.wavelengths)
     nu = C_AA_PER_S / wave
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax_beta.loglog(wave, nu_l_nu, color=cmap(norm_beta(beta)), lw=1.4)
 
 ax_beta.set_xlim(800, 3e4)

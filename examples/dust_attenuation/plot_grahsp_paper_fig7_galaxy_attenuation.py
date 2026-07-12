@@ -93,8 +93,8 @@ norm_ref = None
 for ebv in ebv_grid:
     tau_diff = R_V * ebv / 1.086  # diffuse screen scales with E(B-V)
     params = {**base_params, "dust_tau_diff": tau_diff}
-    rest = model.predict_rest_sed(params, wave_aa)
-    lnu = np.asarray(rest[1] if np.ndim(rest) == 2 else rest)
+    rest = model.predict(params)
+    lnu = np.asarray(rest.rest_sed(np.asarray(wave_aa)))
     lflam = nu_Lnu(lnu)
     if norm_ref is None:
         # Normalize so the FIR dust peak sits near ~5 (paper scaling).

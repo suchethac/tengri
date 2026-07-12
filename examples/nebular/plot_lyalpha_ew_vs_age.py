@@ -89,11 +89,11 @@ for met in met_logzsol:
 
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))
         lines = model.predict_emission_lines(params)
-        sed_result = model.predict_rest_sed(params)
+        sed_result = model.predict(params)
 
         lya_lum = float(lines.lya)
-        wave = np.asarray(sed_result.wavelength)
-        sed = np.asarray(sed_result.sed)
+        wave = np.asarray(model.wavelengths)
+        sed = np.asarray(sed_result.rest_sed())
 
         idx_lya = np.argmin(np.abs(wave - wave_lya))
         continu_at_lya = sed[idx_lya]

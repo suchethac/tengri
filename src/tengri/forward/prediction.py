@@ -85,6 +85,56 @@ from tengri.utils.sed_quantities import (
     extract_line_luminosity,
 )
 
+
+class _SEDCallable:
+    """A callable SED accessor that refuses to be mistaken for an array.
+
+    ``pred.rest_sed`` / ``pred.obs_sed`` are *methods* — ``pred.rest_sed()``
+    gives the model's own grid, ``pred.rest_sed(wave)`` resamples onto yours
+    (contract §4b.3: uniform callables with defaults, like ``photometry()``
+    and ``spectrum()``).
+
+    They were briefly plain properties. Had they simply become methods, the
+    forgotten-parenthesis mistake would fail *silently*: ``np.asarray`` of a
+    bound method yields a ``dtype=object`` array, which plots and arithmetics
+    happily turn into garbage rather than an exception. Every numeric dunder
+    below therefore raises with the fix spelled out. Failing loudly on a
+    misuse is the whole point — this package has shipped enough silent
+    NaN-and-carry-on bugs already.
+    """
+
+    __slots__ = ("_fn", "_name")
+
+    def __init__(self, fn, name):
+        self._fn = fn
+        self._name = name
+
+    def __call__(self, wave=None):
+        return self._fn(wave)
+
+    def _not_an_array(self, *_args, **_kwargs):
+        raise TypeError(
+            f"Prediction.{self._name} is a method, not an array — you left off the "
+            f"parentheses. Use pred.{self._name}() for the model's own grid, or "
+            f"pred.{self._name}(wave) to resample onto your own grid [Angstrom]. "
+            f"The matching wavelength axis is pred."
+            f"{'wave_rest' if self._name == 'rest_sed' else 'wave_obs'}."
+        )
+
+    # Everything that would otherwise silently coerce to a dtype=object array.
+    __array__ = _not_an_array
+    __len__ = _not_an_array
+    __iter__ = _not_an_array
+    __getitem__ = _not_an_array
+    __add__ = __radd__ = _not_an_array
+    __sub__ = __rsub__ = _not_an_array
+    __mul__ = __rmul__ = _not_an_array
+    __truediv__ = __rtruediv__ = _not_an_array
+
+    def __repr__(self):
+        return f"<Prediction.{self._name}(wave=None) — a method; call it to get the array>"
+
+
 # ── Module-level warn-once guard ──────────────────────────────────
 
 _WARNED_RUNTIME_PHOTOMETRY = False
@@ -2393,51 +2443,63 @@ class Prediction:
 
     @property
     def rest_sed(self):
-        r"""Rest-frame panchromatic SED.
+        r"""Rest-frame panchromatic SED — **call it**: ``pred.rest_sed()``.
 
-        Returns the rest-frame spectral energy distribution (luminosity)
-        evaluated on the model's default wavelength grid. Includes all
-        stellar, emission-line (nebular, AGN), and multi-wavelength
-        (radio, X-ray) components pre-dust attenuation.
+        A uniform callable with a default, like :meth:`photometry`,
+        :meth:`magnitudes` and :meth:`spectrum` (contract §4b.3).
+
+        Parameters
+        ----------
+        wave : array_like, shape (n_out,), optional
+            Rest-frame wavelength grid to resample onto [Angstrom]. Default
+            ``None`` returns the SED on the model's own grid
+            (:attr:`wave_rest`), with no interpolation.
 
         Returns
         -------
-        ndarray, shape (n_wave,)
+        ndarray, shape (n_wave,) or (n_out,)
             Rest-frame luminosity density [erg/s/Hz].
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
-        not inside :func:`jax.jit`.
+        **JIT-compatible**: no — a postprocessing accessor. Use the lean
+        ``model.predict_photometry`` / ``predict_properties`` shortcuts inside
+        :func:`jax.jit`.
 
         **Naming contract**: SED = panchromatic model-grid array
         (:meth:`rest_sed` / :meth:`obs_sed`); spectrum = instrument-grid,
         LSF-convolved, calibrated observable (:meth:`spectrum`).
 
-        **Grid**: Wavelengths follow the model's SSP grid
-        (from ``ssp_data.ssp_wave``), optionally extended to radio and
-        X-ray if configured in spec (``radio=True``, ``xray=True``).
+        **Grid**: the model's SSP grid, auto-extended when dust emission,
+        radio or X-ray components are configured. The axis is
+        :attr:`wave_rest` — the SED array does not carry it.
 
-        **Pre-dust**: This is the attenuation-applied SED (dust-redenned
-        continuum, no intrinsic stellar emission below Lyman limit).
-        For intrinsic (dust-free) stellar SED only, access the internal
-        cache (not a public API).
+        **Resampling** is ``jnp.interp`` onto ``wave``, bit-exact with the
+        wavelength argument of the deprecated ``model.predict_rest_sed``.
 
         Examples
         --------
         >>> pred = model.predict(params)
-        >>> sed_rest = pred.rest_sed  # shape (n_wave,)
-        >>> sed_rest.shape
-        (6000,)
+        >>> lnu = pred.rest_sed()  # the model's own grid
+        >>> lnu = pred.rest_sed(np.logspace(3, 5, 500))  # your grid
+        >>> plt.loglog(pred.wave_rest, pred.rest_sed())
 
         See Also
         --------
         obs_sed : Observed-frame SED (redshifted + IGM + DLA).
-        photometry : Filter-integrated quantities.
+        wave_rest : The wavelength axis this SED lives on.
         """
-        # Use the cached ForwardState to extract the rest-frame SED
+        return _SEDCallable(self._rest_sed_on, "rest_sed")
+
+    def _rest_sed_on(self, wave):
+        """Rest-frame L_nu, optionally resampled onto ``wave`` [Angstrom]."""
         state = self._ensure_state()
-        return state.sed_intrinsic
+        sed = state.sed_intrinsic
+        if wave is None:
+            return sed
+        # Same interpolation the deprecated predict_rest_sed(wave=...) used, so
+        # migrating a call site changes no number.
+        return jnp.interp(jnp.asarray(wave), state.wave, sed)
 
     @property
     def obs_sed(self):
@@ -2483,16 +2545,116 @@ class Prediction:
         Examples
         --------
         >>> pred = model.predict(params)
-        >>> sed_obs = pred.obs_sed  # shape (n_wave,)
-        >>> sed_obs.shape
-        (6000,)
+        >>> fnu = pred.obs_sed()  # the model's own grid
+        >>> fnu = pred.obs_sed(np.logspace(3, 5, 500))  # your grid
+        >>> plt.loglog(pred.wave_obs, pred.obs_sed())
 
         See Also
         --------
         rest_sed : Rest-frame SED (no absorption, no redshift).
+        wave_obs : The observed-frame wavelength axis this SED lives on.
         spectrum : Instrument-grid observable (LSF-convolved).
         """
-        return self._model._predict_obs_sed(self._params).sed
+        return _SEDCallable(self._obs_sed_on, "obs_sed")
+
+    def _obs_sed_on(self, wave_obs):
+        """Observed-frame F_nu, optionally resampled onto ``wave_obs`` [Angstrom].
+
+        ``wave_obs`` is OBSERVED-frame, matching this SED's own axis
+        (:attr:`wave_obs`) and :meth:`spectrum`. The deprecated
+        ``model.predict_obs_sed(params, wave=...)`` took a *rest*-frame grid
+        and redshifted it — an observed-frame result with a rest-frame
+        argument. That asymmetry was a footgun; it is not reproduced here.
+        """
+        result = self._model._predict_obs_sed(self._params)
+        if wave_obs is None:
+            return result.sed
+        return jnp.interp(jnp.asarray(wave_obs), result.wavelength, result.sed)
+
+    @property
+    def wave_rest(self):
+        r"""Rest-frame wavelength grid.
+
+        Returns the wavelength grid on which ``rest_sed`` and ``obs_sed`` are
+        evaluated. The grid is determined by the model's SSP wavelength array,
+        optionally extended for dust emission (IR), radio, and X-ray components.
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Rest-frame wavelengths [Angstrom].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+
+        Pairs exactly with ``rest_sed`` and forms the x-axis for plotting
+        the rest-frame SED. The same wavelength grid is shared with derived
+        properties (e.g., ``l_bol``, ``l_tir``, ``fuv_flux``) that integrate
+        over it.
+
+        Examples
+        --------
+        >>> pred = model.predict(params)
+        >>> wave_rest = pred.wave_rest  # shape (n_wave,)
+        >>> sed_rest = pred.rest_sed()  # the SED is a call, not an attribute
+        >>> wave_rest.shape == sed_rest.shape
+        True
+
+        See Also
+        --------
+        wave_obs : Observed-frame wavelength grid.
+        rest_sed : Rest-frame SED on this grid.
+        """
+        self._ensure_sfh()
+        return self._cache["_state"].wave
+
+    @property
+    def wave_obs(self):
+        r"""Observed-frame wavelength grid.
+
+        Returns the observed-frame wavelength grid, computed as the rest-frame
+        wavelengths shifted by redshift: ``wave_obs = wave_rest * (1 + z)``.
+        Pairs exactly with ``obs_sed``.
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Observed-frame wavelengths [Angstrom].
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+
+        The redshift value is resolved through the model's spec:
+        - If ``redshift`` is a free parameter, it is taken from ``params``.
+        - If ``redshift`` is fixed in the spec, the fixed value is used.
+        - If ``redshift`` is not found in either place, raises ``KeyError``.
+
+        This design avoids the silent bugs (#1097, #1124, #1127) that arose
+        from using ``params.get("redshift", 0.0)``, which can silently return
+        a default value instead of raising an error when redshift is absent.
+
+        Examples
+        --------
+        >>> pred = model.predict(params)
+        >>> wave_obs = pred.wave_obs  # shape (n_wave,)
+        >>> sed_obs = pred.obs_sed()  # the SED is a call, not an attribute
+        >>> wave_obs.shape == sed_obs.shape
+        True
+        >>> # For a model with Fixed redshift:
+        >>> (wave_obs / wave_rest - 1).mean()  # should be z
+        0.1
+
+        See Also
+        --------
+        wave_rest : Rest-frame wavelength grid.
+        obs_sed : Observed-frame SED on this grid.
+        """
+        z = self._model._get_redshift(self._params)
+        return self.wave_rest * (1.0 + z)
 
     # ── Top-level shortcuts to grouped derived quantities ───────────────
     # ``pred.stellar_mass`` and ``pred.sfh.stellar_mass`` return the same value;

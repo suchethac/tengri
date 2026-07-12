@@ -154,6 +154,7 @@ setup_style()
 # %%
 # tengri logo banner — prints the hex-spiral mark (default size).
 import tengri as tg
+
 tg.print_logo()
 print(f"tengri {tg.__version__}")
 
@@ -164,8 +165,20 @@ from tengri.observation import Photometry
 
 # Try to load candidate filters (UV to radio); fall back to 2MASS if unavailable
 _candidate_filters = [
-    "galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "twomass_j", "twomass_h", "twomass_ks", "wise_w1", "wise_w2", "herschel_pacs70", "herschel_pacs160",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "twomass_j",
+    "twomass_h",
+    "twomass_ks",
+    "wise_w1",
+    "wise_w2",
+    "herschel_pacs70",
+    "herschel_pacs160",
 ]
 phot_bands_list = []
 for band in _candidate_filters:
@@ -179,7 +192,9 @@ if not phot_bands_list:
 
 phot_obs = Photometry.from_names(phot_bands_list, cache_dir="data/filters")
 obs = Observation(photometry=phot_obs)
-print(f"SSP: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ")
+print(
+    f"SSP: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ"
+)
 print(f"Photometry ({phot_obs.n_filters} bands): {', '.join(phot_obs.names)}")
 
 # %% [markdown]
@@ -468,7 +483,7 @@ for name in spec_param.free_params:
     print(f"  {name:<28s} {truth:8.3f} {med:8.3f} [{lo:6.3f}, {hi:6.3f}] {covered:>6s}")
 
 n_mcmc = len(next(iter(result_mcmc.samples.values())))
-print(f"\nNUTS: {t_mcmc:.1f}s, {n_mcmc} samples, {n_mcmc/t_mcmc:.0f} ESS/s")
+print(f"\nNUTS: {t_mcmc:.1f}s, {n_mcmc} samples, {n_mcmc / t_mcmc:.0f} ESS/s")
 
 # %%
 print("\n✓ Quickstart complete: NUTS inference on mock photometry (7 parameters, <5s)")

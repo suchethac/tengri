@@ -55,7 +55,7 @@ from tengri import (
 )
 from tengri.analysis.diagnostics.fisher import compute_fisher_matrix, fisher_parameter_errors
 
-import sys, os  # noqa: E401, E402
+import sys, os  # noqa: E401
 
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
@@ -76,7 +76,7 @@ elif os.path.exists(os.path.join("..", "..", "..", "data")):
 FIGDIR = os.path.join("demonstrations", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-from _plot_style import (  # noqa: E402
+from _plot_style import (
     COLORS,
     convergence_table,
     plot_sfh,
@@ -103,7 +103,9 @@ HAS_DATA = os.path.exists(SSP_PATH)
 
 if HAS_DATA:
     ssp_data = load_ssp_data(SSP_PATH)
-    print(f"SSP grid: {ssp_data.ssp_lg_age_gyr.shape[0]} ages x {ssp_data.ssp_lgmet.shape[0]} metallicities")
+    print(
+        f"SSP grid: {ssp_data.ssp_lg_age_gyr.shape[0]} ages x {ssp_data.ssp_lgmet.shape[0]} metallicities"
+    )
 else:
     print(
         "SSP data not found. Cells that require forward-model evaluation will "
@@ -192,9 +194,7 @@ if HAS_DATA:
     t_compile = time.perf_counter() - t0_compile
 
     t0_run = time.perf_counter()
-    result_sdss = fitter.run(
-        "vi", n_iterations=10, n_samples=6, n_seeds=3, verbose=False
-    )
+    result_sdss = fitter.run("vi", n_iterations=10, n_samples=6, n_seeds=3, verbose=False)
     t_run = time.perf_counter() - t0_run
 
     print(f"XLA compile: {t_compile:.1f}s | runtime: {t_run:.1f}s")
@@ -434,7 +434,13 @@ if HAS_DATA:
         ax_top.plot(wave_eff, draw, "-", color=COLORS["geovi"], alpha=0.08, lw=0.8)
     median_pred = np.median(posterior_phot, axis=0)
     ax_top.plot(
-        wave_eff, median_pred, "s", ms=5, color=COLORS["geovi"], zorder=4, label="SEDModel (median)"
+        wave_eff,
+        median_pred,
+        "s",
+        ms=5,
+        color=COLORS["geovi"],
+        zorder=4,
+        label="SEDModel (median)",
     )
     ax_top.errorbar(
         wave_eff,

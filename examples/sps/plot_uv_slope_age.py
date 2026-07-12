@@ -77,8 +77,8 @@ ages = np.geomspace(0.01, 1.0, 24)
 beta = np.empty_like(ages)
 for i, age in enumerate(ages):
     p = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
-    out = model.predict_rest_sed(p)
-    beta[i] = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
+    out = model.predict(p)
+    beta[i] = _beta_uv(np.asarray(model.wavelengths), np.asarray(out.rest_sed()))
 
 fig, ax = plt.subplots(figsize=(6.4, 4.4))
 ax.plot(ages * 1.0e3, beta, color="C0", lw=1.6)

@@ -68,6 +68,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 # Optional plot styling
 try:
     from _plot_style import setup_style
+
     setup_style()
 except ImportError:
     pass
@@ -137,6 +138,7 @@ print("  ...")
 #
 # **We'll time it.**
 
+
 # %%
 def measure_speedup(model, params, n_warmup=1, n_timed=10):
     """Measure first-call (compile + exec) vs steady-state (pure JIT)."""
@@ -153,6 +155,7 @@ def measure_speedup(model, params, n_warmup=1, n_timed=10):
         times.append((time.perf_counter() - t0) * 1e3)  # ms
 
     return times
+
 
 print("\nMeasuring forward model performance...\n")
 times_ms = measure_speedup(model, params, n_warmup=1, n_timed=10)
@@ -171,12 +174,14 @@ print(f"  For 1000 evals:         {jit_time_ms * 1000 / 1e3:>7.1f} seconds")
 
 # %%
 fig, ax = plt.subplots(figsize=(6, 4))
-ax.barh(["Steady-state\n(JIT)", "Without JIT\n(Python loop)"],
-        [jit_time_ms, 100],
-        color=["#2ca02c", "#d62728"],
-        alpha=0.8,
-        edgecolor="black",
-        linewidth=1.5)
+ax.barh(
+    ["Steady-state\n(JIT)", "Without JIT\n(Python loop)"],
+    [jit_time_ms, 100],
+    color=["#2ca02c", "#d62728"],
+    alpha=0.8,
+    edgecolor="black",
+    linewidth=1.5,
+)
 ax.set_xlabel("Time per forward pass [ms]")
 ax.set_title("JIT speedup: Compiled vs Python", fontweight="bold")
 ax.set_xscale("log")
@@ -197,6 +202,7 @@ print("\n✓ Saved: jax_jit_speedup.png")
 # **Key insight:** In JAX, the cost of `∇L/∂θ` is **the same as the forward pass** (within 2–3×).
 # This is why every modern inference method works: MAP (gradient descent), Laplace (curvature), Pathfinder (iterative grad), HMC (alternating forward+grad) all reuse the same model.
 
+
 # %%
 def log_likelihood_chi2(params_dict, model):
     """Negative χ² likelihood for the 7-D model.
@@ -208,14 +214,16 @@ def log_likelihood_chi2(params_dict, model):
     """
     sed_pred = model.predict_photometry(params_dict, mode="exact")
     sed_obs = sed_pred * 0.95  # mock observation
-    noise = sed_pred * 0.1     # 10% fractional uncertainty
+    noise = sed_pred * 0.1  # 10% fractional uncertainty
     chi2 = jnp.sum(((sed_pred - sed_obs) / noise) ** 2)
     return -0.5 * chi2
+
 
 # Compile forward pass
 print("\nCompiling forward model for gradient computation...")
 sed = model.predict_photometry(params, mode="exact")
 print(f"  Model output: shape {sed.shape}, range [{sed.min():.2e}, {sed.max():.2e}] erg/s/Hz")
+
 
 # Define and JIT the gradient function. We close over `model` so JAX doesn't
 # need to trace the SEDModel object — only the numeric `params` dict.
@@ -276,6 +284,7 @@ params_batch = spec.sample_batch(jax.random.PRNGKey(123), n_galaxies)
 print(f"Batch params shape: {next(iter(params_batch.values())).shape}")
 print(f"  (n_galaxies={n_galaxies},)")
 
+
 # Define a vectorized forward model
 @jax.jit
 def batch_forward(params_batch):
@@ -284,10 +293,12 @@ def batch_forward(params_batch):
     ``params_batch`` is a dict of arrays with shape (n_galaxies,). vmap over
     axis 0 of each entry produces a stacked photometry array (n_galaxies, n_bands).
     """
+
     def single_galaxy(param_dict):
         return model.predict_photometry(param_dict, mode="exact")
 
     return jax.vmap(single_galaxy)(params_batch)
+
 
 print("\nTiming batched forward model (100 galaxies)...")
 t0 = time.perf_counter()
@@ -315,6 +326,7 @@ print("  Scales to GPU/TPU naturally: ✓")
 
 # %%
 print("\nBuilding a combined inference function...\n")
+
 
 def _make_batch_ll(model):
     @jax.jit

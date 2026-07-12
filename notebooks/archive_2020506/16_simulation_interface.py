@@ -97,6 +97,7 @@ if _spec_tengri is not None and _spec_tengri.origin:
 
 try:
     from _plot_style import setup_style, COLORS as _COLORS_DICT
+
     setup_style()
     # The shared COLORS palette is a band-keyed dict; this notebook indexes
     # by integer for arbitrary curves, so flatten to a list of hex values.
@@ -126,7 +127,9 @@ def savefig(fig, name, dpi=200):
 # Start with the standard SED modeling infrastructure: SSP templates and a filter set.
 
 # %%
-SSP_FILE = os.path.join(_repo_root, "data", "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
+SSP_FILE = os.path.join(
+    _repo_root, "data", "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+)
 if not os.path.exists(SSP_FILE):
     print(f"WARNING: SSP file not found at {SSP_FILE}")
     print("Using alternate SSP path search...")
@@ -185,7 +188,9 @@ sfr_bursty[200:220] += 50.0  # Recent starburst (t ~ 11 Gyr, z ~ 0.05)
 fig, ax = plt.subplots(figsize=(9, 5))
 ax.plot(t_gyr, sfr_exp, color=COLORS[0], lw=2.5, label="Exponential decline (τ = 2 Gyr)")
 ax.plot(t_gyr, sfr_delayed, color=COLORS[1], lw=2.5, label="Delayed-tau (τ = 3 Gyr)")
-ax.plot(t_gyr, sfr_bursty, color=COLORS[2], lw=2.5, ls="--", label="Bursty (delayed + recent burst)")
+ax.plot(
+    t_gyr, sfr_bursty, color=COLORS[2], lw=2.5, ls="--", label="Bursty (delayed + recent burst)"
+)
 ax.set_xlabel("Cosmic time (Gyr)", fontsize=11)
 ax.set_ylabel(r"SFR ($M_\odot\,\mathrm{yr}^{-1}$)", fontsize=11)
 ax.set_title("Input Star Formation Histories from Simulations", fontsize=12, fontweight="bold")
@@ -511,6 +516,7 @@ for res in batch_results:
 # %%
 try:
     from tengri import cite_all
+
     cite_all()
 except ImportError:
     print("(citations unavailable)")

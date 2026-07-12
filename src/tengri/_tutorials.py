@@ -500,15 +500,14 @@ _KEY_CLASSES = _Tutorial(
 
         ┌── SEDModel  ─────────────────────────────────────────────────┐
         │ The FORWARD MODEL.  Wires Parameters + SSP + Observation into  │
-        │ one JIT-compiled function: predict_photometry(params) → flux.  │
+        │ one JIT-compiled function: predict(params) → Prediction object.│
         │ Holds physics dispatch (which dust law, which SFH, AGN on/off).│
         │                                                                │
         │   model = tengri.SEDModel(spec, ssp_data, observation=obs)     │
         │   repr(model)                                                  │
         │   # SEDModel(sfh='dpl', dust='two_component', agn='off', ...)  │
         │                                                                │
-        │ Methods: predict_photometry, predict_sfh, predict_derived,     │
-        │          mock, predict_rest_sed                                 │
+        │ Methods: predict, predict_properties, predict_photometry, mock │
         └────────────────────────────────────────────────────────────────┘
 
         ┌── Fitter  ────────────────────────────────────────────────────┐
@@ -531,7 +530,7 @@ _KEY_CLASSES = _Tutorial(
         │   posterior.plot_corner(truths=...)  # parameter degeneracies  │
         │   posterior.plot_sed()               # data vs model band      │
         │   posterior.plot_sfh()               # SFH(t) posterior band   │
-        │   posterior.derived["stellar_mass"]  # array (n_samples,)      │
+        │   posterior.properties["stellar_mass"]  # array (n_samples,)   │
         │   posterior.save("fit.h5")                                     │
         │   refined = posterior.refine("nuts") # method chaining          │
         └────────────────────────────────────────────────────────────────┘
@@ -789,8 +788,259 @@ _JOINT_PHOT_SPEC = _Tutorial(
         )
         posterior = fitter.run("nuts")
         posterior.summary()
-        posterior.plot_sed()
-        posterior.plot_spectrum_fit()      # spectrum panel with calib polynomial
+        posterior.plot_sed()               # photometry + spectrum, calibration applied
+        """
+    ).strip(),
+)
+
+
+# ──────────────────────────────────────────────────────────────────
+# Recipe 14 — derived quantities / properties
+# ──────────────────────────────────────────────────────────────────
+
+
+_PROPERTIES = _Tutorial(
+    name="properties",
+    title="Derived quantities: the property catalog",
+    code=textwrap.dedent(
+        """
+        # After a fit, every galaxy (synthetic or real) has the same
+        # derived quantities: stellar mass, SFR, sSFR, age, emission
+        # lines, SED shape indices, and more.  The catalog is topology
+        # agnostic: same names on every topology, just with different
+        # shapes.
+
+        import jax
+        import tengri
+
+        # 1. DISCOVERY — see what properties are available
+        tengri.list_properties()                  # all 49 properties
+        tengri.list_properties(group="sfh")       # SFH group only
+        tengri.describe_property("stellar_mass")  # full metadata
+
+        # 2. SINGLE GALAXY — lazy access via model.predict()
+        pred = model.predict(params)
+        pred.stellar_mass              # attribute shorthand
+        pred.properties["stellar_mass"]  # dict-like access
+        pred.sfh.stellar_mass          # grouped (same value)
+        pred.sed.dn4000                # SED shape quantities
+        pred.lines.halpha              # emission line luminosity
+
+        # 3. POSTERIOR — array of shape (n_samples,)
+        posterior.properties["stellar_mass"]     # array
+        lo, med, hi = posterior.properties.ci("stellar_mass")
+        # → (lower 16%, median, upper 84%)
+
+        posterior.properties.ci("stellar_mass", level=0.95)  # 95% CI
+
+        # 4. BATCH / MOCK CATALOG — JIT-compatible vmap
+        # Compute properties for many parameter sets at once (no fit needed)
+        import jax
+        params_batch = spec.sample_batch(jax.random.PRNGKey(0), n=10_000)
+
+        # vmap-compatible; returns shape (10000,) arrays
+        props = jax.vmap(model.predict_properties,
+                        in_axes=(0, None),  # params_batch, names
+                        )(params_batch, ("stellar_mass", "sfr_100myr"))
+        props["stellar_mass"]  # shape (10_000,)
+
+        # 5. FULL PROPERTY DICT — export names='all' or unspecified
+        pred_dict = model.predict_properties(params)  # all 49
+        pred_dict.to_dict(names=("stellar_mass", "dn4000"))  # select subset
+
+        Notes
+        ─────
+        The topology rule: derived quantities follow the parameter topology.
+        • Prediction (single galaxy): scalars
+        • Posterior (MCMC/VI samples): shape (n_samples,)
+        • Population / Catalog (many galaxies): shape (n_galaxies, ...)
+        All use the same property names and discovery API.
+
+        See:  tengri.tutorial("mock_catalog") — batch mock using vmap
+              tengri.tutorial("fast_vs_exact") — exact vs precomputed paths
+        """
+    ).strip(),
+)
+
+
+# ──────────────────────────────────────────────────────────────────
+# Recipe 15 — exact vs fast photometry prediction
+# ──────────────────────────────────────────────────────────────────
+
+
+_FAST_VS_EXACT = _Tutorial(
+    name="fast_vs_exact",
+    title="Exact by default, fast by choice — photometry prediction paths",
+    code=textwrap.dedent(
+        """
+        # Two prediction paths for photometry:
+        #
+        # EXACT — full SED integration (default)
+        #   Always safe; valid for any filter and any redshift.
+        #   ~300 μs per call. Used in fitting.
+        #
+        # FAST — lookup table (WavePrecomp)
+        #   Precomputed at build time on the model's filters + z grid.
+        #   ~10 μs per call. ~30× speedup. Valid only for build-time
+        #   filters + grid; arbitrary filters always use EXACT.
+
+        import jax
+        import tengri
+
+        # ── BUILD TIME ──
+
+        # Default: uses exact photometry throughout
+        model_exact = tengri.SEDModel.build(ssp_data=ssp, observation=obs, ...)
+
+        # Opt into the fast path: precompute a lookup table
+        # (cost: ~5 s, saves at every subsequent predict call)
+        model_fast = tengri.SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            ...,
+            approx=tengri.WavePrecomp(n_z=200, z_min=0.0, z_max=3.0),
+        )
+
+        # ── INFERENCE ──
+
+        # Each model keeps its build-time choice. Fitting uses whatever
+        # was chosen at build — no per-call control there.
+        posterior_exact = fitter_exact.run("map")
+        posterior_fast  = fitter_fast.run("map")
+
+        # ── POST-FIT PREDICTION ──
+
+        # Default: exact (always correct, never silently wrong)
+        pred = model_exact.predict(params)
+        photo_exact = pred.photometry()           # exact path
+
+        # Opt into fast for post-fit batches on build-time filters
+        photo_fast = pred.photometry(fast=True)  # ~30× speedup
+
+        # ── VMAP BATCH (MOCK CATALOG) ──
+
+        # For many parameter sets on build-time filters, fast is right:
+        params_batch = spec.sample_batch(jax.random.PRNGKey(0), n=10_000)
+        fn_fast = jax.vmap(
+            lambda p: model_fast.predict(p).photometry(fast=True)
+        )
+        batch_photos = fn_fast(params_batch)  # shape (10000, n_filters)
+
+        Rules
+        ─────
+        1. EXACT is always safe; default in post-fit exploration.
+        2. FAST requires:
+           • build-time filters (model.observation.photometry.names)
+           • wavelengths within the build-time z grid
+        3. fast=True + arbitrary filters → ValueError
+        4. Fitting always uses build-time choice (no override).
+        5. fast=True is most useful for vmap'd batches on big n_samples.
+
+        Why two paths?
+        ───────────────
+        A precomputed lookup table is an approximation (interpolant), not
+        the true physics. The default (exact) must never silently change
+        the result. fast=True is an explicit opt-in speed knob that users
+        must think about: "Am I using build-time filters? Is this on the
+        z grid?" If you answer no, the exact path is your only choice.
+
+        See:  tengri.tutorial("mock_catalog")  — batch examples
+              tengri.list_properties()         — derived quantities
+        """
+    ).strip(),
+)
+
+
+# ──────────────────────────────────────────────────────────────────
+# Recipe 16 — mock catalog via vmap (no fit required)
+# ──────────────────────────────────────────────────────────────────
+
+
+_MOCK_CATALOG = _Tutorial(
+    name="mock_catalog",
+    title="Mock a catalog from your own parameters — vmap, no fit needed",
+    code=textwrap.dedent(
+        """
+        # The SEDModel is a pure function: given params, compute observables.
+        # Use jax.vmap to evaluate it over any parameter batch (no fit
+        # or observed data required).  Useful for forecasting, validation,
+        # ablation studies, or testing your model choices.
+
+        import jax
+        import jax.numpy as jnp
+        import tengri
+
+        # 1. BUILD THE MODEL (same as fitting)
+        spec = tengri.Parameters(
+            mean_sfh_type="dpl",
+            redshift=tengri.Fixed(0.05),
+            sfh_dpl_alpha=tengri.Uniform(0.5, 3.0),
+            sfh_dpl_beta=tengri.Uniform(0.5, 3.0),
+            sfh_dpl_tau_gyr=tengri.Uniform(0.5, 8.0),
+            sfh_dpl_log_total_mass=tengri.Uniform(8, 12),
+            dust_tau_diff=tengri.Uniform(0, 2),
+            met_logzsol=tengri.Uniform(-1.5, 0.2),
+        )
+        obs = tengri.Observation(photometry=photometry)
+        model = tengri.SEDModel(spec, ssp_data, observation=obs)
+
+        # 2a. HAND-BUILT BATCH — dict of arrays
+        params_batch = {
+            "sfh_dpl_alpha": jnp.array([0.5, 1.0, 2.0]),      # shape (3,)
+            "sfh_dpl_beta": jnp.array([1.0, 2.0, 3.0]),
+            ...
+            "redshift": jnp.array([0.05, 0.05, 0.05]),
+        }
+
+        # 2b. OR RANDOM BATCH — prior samples
+        key = jax.random.PRNGKey(42)
+        params_batch = spec.sample_batch(key, n=1_000)
+
+        # 3. VMAP OVER PHOTOMETRY
+        fn_phot = jax.vmap(
+            lambda p: model.predict(p).photometry(fast=False)
+        )
+        batch_photos = fn_phot(params_batch)  # shape (n_params, n_filters)
+
+        # 4. VMAP OVER PROPERTIES — jit-compatible subset
+        fn_props = jax.vmap(
+            lambda p: model.predict_properties(p)
+        )
+        batch_props = fn_props(params_batch)  # dict of shape (n_params,)
+        batch_props["stellar_mass"]  # shape (1000,)
+
+        # 5. VMAP OVER REST-FRAME SED (mock spectroscopy)
+        fn_sed = jax.vmap(
+            lambda p: model.predict(p).rest_sed()
+        )
+        batch_seds = fn_sed(params_batch)  # shape (n_params, n_wave)
+
+        Statistics
+        ───────────
+        # Compute summary stats over your mock catalog
+        stellar_mass_batch = batch_props["stellar_mass"]
+        lo = jnp.percentile(stellar_mass_batch, 16)
+        med = jnp.percentile(stellar_mass_batch, 50)
+        hi = jnp.percentile(stellar_mass_batch, 84)
+        print(f"M* = {med:.2e} [+{hi-med:.2e} -{med-lo:.2e}] Msun")
+
+        Why vmap?
+        ─────────
+        • No Python loop overhead; pure JAX graph.
+        • Automatic differentiation works through batches (if needed).
+        • Scales to millions of parameter sets (GPU memory permitting).
+        • Same binary as single-galaxy predict — one compile, many evals.
+
+        Common uses
+        ────────────
+        • Forecast detection limits on a JWST catalog
+        • Validate model physics (mock recovery without MCMC)
+        • Ablation: "what if we exclude AGN?" (change agn_model, vmap)
+        • Parametric study: "how does SFR depend on stellar mass?"
+        • Generate training data for a neural network surrogate
+
+        See:  tengri.tutorial("properties")     — derived quantities
+              tengri.tutorial("fast_vs_exact")  — exact vs precomputed paths
         """
     ).strip(),
 )
@@ -813,6 +1063,9 @@ _TUTORIALS: dict[str, _Tutorial] = {
         _CUSTOM_LIKELIHOOD,
         _DIAGNOSTICS,
         _HIERARCHICAL,
+        _PROPERTIES,
+        _FAST_VS_EXACT,
+        _MOCK_CATALOG,
     )
 }
 

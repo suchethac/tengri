@@ -136,9 +136,9 @@ def build_ulirg_qso_model(tau_v, agn_frac):
 seds = []
 for item in sequence:
     model, params = build_ulirg_qso_model(item["tau_v"], item["agn_frac"])
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
-    sed = np.asarray(out.sed)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(out.rest_sed())
     nu_l_nu = (C_AA_PER_S / wave) * sed
     seds.append({"stage": item["stage"], "wave": wave, "nu_l_nu": nu_l_nu})
 

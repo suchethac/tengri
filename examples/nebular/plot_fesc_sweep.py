@@ -63,9 +63,9 @@ cmap = plt.get_cmap("Purples")
 seds_by_fesc = {}
 for fesc in fesc_values:
     params = {**baseline, "neb_fesc": jnp.float64(fesc)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
-    sed = np.asarray(out.sed)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(out.rest_sed())
     seds_by_fesc[fesc] = (wave, sed)
 
 # Main plot with full SED

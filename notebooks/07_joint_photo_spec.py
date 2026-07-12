@@ -101,10 +101,18 @@ ssp = load_ssp_data(str(ssp_path))
 
 Z_GAL = 0.05
 FILTERS = [
-    "galex_fuv", "galex_nuv",
-    "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "2mass_j", "2mass_h", "2mass_ks",
-    "wise_w1", "wise_w2",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+    "wise_w1",
+    "wise_w2",
 ]
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 260)  # SDSS spectral coverage
 
@@ -169,15 +177,20 @@ truth_full = {**model_joint.spec.get_fixed_values(), **{k: float(v) for k, v in 
 
 p_phot = np.asarray(model_joint.predict_photometry(truth_full))
 p_spec = np.asarray(model_joint.predict_spectrum(truth_full, wave_obs=WAVE_OBS))
-n_phot = p_phot / 20.0          # SNR = 20 photometry
-n_spec = p_spec / 30.0          # SNR = 30 per spectral pixel
+n_phot = p_phot / 20.0  # SNR = 20 photometry
+n_spec = p_spec / 30.0  # SNR = 30 per spectral pixel
 _rng = np.random.default_rng(0)
 flux_phot = p_phot + _rng.normal(size=p_phot.shape) * n_phot
 flux_spec = p_spec + _rng.normal(size=p_spec.shape) * n_spec
 
 wave_eff_um = (
-    np.array([np.trapezoid(w * t, w) / np.trapezoid(t, w)
-              for w, t in zip(phot_obs.filter_waves, phot_obs.filter_trans)]) / 1e4
+    np.array(
+        [
+            np.trapezoid(w * t, w) / np.trapezoid(t, w)
+            for w, t in zip(phot_obs.filter_waves, phot_obs.filter_trans)
+        ]
+    )
+    / 1e4
 )
 print(f"Truth metallicity log(Z/Zsun) = {float(truth['met_logzsol']):+.2f}")
 print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum (SNR 30/pix)")
@@ -196,16 +209,24 @@ print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum 
 # run sequentially in one process, per the OOM-orchestration rule.
 
 # %%
-HMC = dict(n_warmup=1000, n_samples=600, n_leapfrog_steps=20,
-           dense_mass_matrix=True, target_accept_rate=0.9, key=key_fit)
+HMC = dict(
+    n_warmup=1000,
+    n_samples=600,
+    n_leapfrog_steps=20,
+    dense_mass_matrix=True,
+    target_accept_rate=0.9,
+    key=key_fit,
+)
 
 
 def run(model, data, noise, data_type, label):
     t0 = time.perf_counter()
     post = Fitter(model, data, noise, data_type=data_type).run("mcmc_hmc", **HMC)
     rmax = max(float(v) for v in post.rhat().values())
-    print(f"  {label:12s} {time.perf_counter() - t0:6.0f}s   max R-hat {rmax:.3f}   "
-          f"divergences {post.diagnostics.get('n_divergent', 'n/a')}")
+    print(
+        f"  {label:12s} {time.perf_counter() - t0:6.0f}s   max R-hat {rmax:.3f}   "
+        f"divergences {post.diagnostics.get('n_divergent', 'n/a')}"
+    )
     return post
 
 
@@ -249,7 +270,9 @@ order = sorted(params, key=lambda p: w_joint[p] / w_phot[p])
 x = np.arange(len(order))
 fig, ax = plt.subplots(figsize=(9.0, 4.2))
 ax.axhline(1.0, color="0.6", lw=0.8, ls="--")
-ax.bar(x - 0.18, [1.0 for _ in order], width=0.32, color=C_DATA, alpha=0.5, label="photometry (=1)")
+ax.bar(
+    x - 0.18, [1.0 for _ in order], width=0.32, color=C_DATA, alpha=0.5, label="photometry (=1)"
+)
 ax.bar(x + 0.18, [w_joint[p] / w_phot[p] for p in order], width=0.32, color=C_POST, label="joint")
 ax.set_yscale("log")
 ax.set_xticks(x)
@@ -302,8 +325,11 @@ w_spec_um = np.asarray(WAVE_OBS) / 1e4
 
 
 def sed_fnu(p):
-    rest = model_joint.predict_rest_sed(p, wave=WAVE_FULL / (1.0 + Z_GAL))
-    return np.asarray(lnu_to_fnu(jnp.asarray(rest.sed), DL, Z_GAL))
+    pred = model_joint.predict(p)
+    lnu_interp = np.interp(
+        WAVE_FULL / (1.0 + Z_GAL), np.asarray(model_joint.wavelengths), np.asarray(pred.rest_sed())
+    )
+    return np.asarray(lnu_to_fnu(jnp.asarray(lnu_interp), DL, Z_GAL))
 
 
 sed_draws = np.stack([sed_fnu(p) for p in draws])
@@ -317,12 +343,35 @@ ax.axvspan(w_spec_um.min(), w_spec_um.max(), color=C_SPEC, alpha=0.06, lw=0, zor
 ax.fill_between(w_full_um, sed_lo, sed_hi, color=C_POST, alpha=0.25, lw=0, label="posterior 68%")
 ax.plot(w_full_um, sed_med, color=C_POST, lw=1.2, label="posterior median")
 ax.plot(w_full_um, sed_truth, color=C_TRUTH, lw=1.0, ls="--", label="truth")
-ax.plot(w_spec_um, flux_spec, color=C_SPEC, lw=0.7, alpha=0.85, zorder=4, label="observed spectrum")
-ax.errorbar(wave_eff_um, flux_phot, yerr=n_phot, fmt="o", ms=6.5, color=C_DATA,
-            mec="white", mew=0.7, elinewidth=1.1, capsize=2, zorder=6, label="observed photometry")
+ax.plot(
+    w_spec_um, flux_spec, color=C_SPEC, lw=0.7, alpha=0.85, zorder=4, label="observed spectrum"
+)
+ax.errorbar(
+    wave_eff_um,
+    flux_phot,
+    yerr=n_phot,
+    fmt="o",
+    ms=6.5,
+    color=C_DATA,
+    mec="white",
+    mew=0.7,
+    elinewidth=1.1,
+    capsize=2,
+    zorder=6,
+    label="observed photometry",
+)
 for name, x, y, e in zip(BAND_LABELS, wave_eff_um, flux_phot, n_phot):
-    ax.annotate(name, (x, y + e), textcoords="offset points", xytext=(0, 6),
-                ha="center", va="bottom", fontsize=7, color=C_DATA, zorder=7)
+    ax.annotate(
+        name,
+        (x, y + e),
+        textcoords="offset points",
+        xytext=(0, 6),
+        ha="center",
+        va="bottom",
+        fontsize=7,
+        color=C_DATA,
+        zorder=7,
+    )
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(w_full_um.min(), w_full_um.max())
@@ -333,7 +382,9 @@ ax.legend(frameon=False, fontsize=9, loc="lower right")
 
 # Inset in the empty upper-left corner (above the rising SED) so it does not
 # cover the spectrum or the NIR photometry.
-spec_draws_arr = np.stack([np.asarray(model_joint.predict_spectrum(p, wave_obs=WAVE_OBS)) for p in draws])
+spec_draws_arr = np.stack(
+    [np.asarray(model_joint.predict_spectrum(p, wave_obs=WAVE_OBS)) for p in draws]
+)
 sp_lo, sp_med, sp_hi = np.percentile(spec_draws_arr, [16, 50, 84], axis=0)
 axin = ax.inset_axes([0.045, 0.60, 0.36, 0.34], zorder=10)
 axin.set_facecolor("white")

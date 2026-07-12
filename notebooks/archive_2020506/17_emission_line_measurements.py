@@ -175,9 +175,9 @@ sigma_ang = sigma_true_kms / _C_KMS * halpha_obs_shifted
 amp_true = 2.5e-16
 
 rng = np.random.default_rng(7)
-flux_ha = amp_true * np.exp(
-    -0.5 * ((wave_ha - halpha_obs_shifted) / sigma_ang) ** 2
-) + rng.normal(0.0, 3e-18, size=len(wave_ha))
+flux_ha = amp_true * np.exp(-0.5 * ((wave_ha - halpha_obs_shifted) / sigma_ang) ** 2) + rng.normal(
+    0.0, 3e-18, size=len(wave_ha)
+)
 ivar_ha = np.full_like(flux_ha, 1.0 / (3e-18) ** 2)
 
 residual_ha = flux_ha - 3.5e-18
@@ -208,7 +208,9 @@ ax.plot(
     ls="--",
     label=f"true profile (σ = {sigma_true_kms} km/s)",
 )
-ax.axvline(float(v_cent), color=COLORS["model"], lw=1.5, label=f"centroid = {float(v_cent):+.1f} km/s")
+ax.axvline(
+    float(v_cent), color=COLORS["model"], lw=1.5, label=f"centroid = {float(v_cent):+.1f} km/s"
+)
 ax.fill_betweenx(
     [0, 1],
     float(v_cent) - float(sigma_int),
@@ -255,8 +257,12 @@ log_oiii_hb_kew = 0.61 / (log_nii_ha_kew - 0.05) + 1.3
 log_nii_ha_kau = np.linspace(-2, 0.2, 100)
 log_oiii_hb_kau = 0.61 / (log_nii_ha_kau - 0.47) + 1.19
 
-ax.semilogy(10.0**log_nii_ha_kew, 10.0**log_oiii_hb_kew, "k--", lw=1.5, label="Kewley+01 (HII/Seyfert2)")
-ax.semilogy(10.0**log_nii_ha_kau, 10.0**log_oiii_hb_kau, "k-", lw=1.0, label="Kauffmann+03 (SF/LINER)")
+ax.semilogy(
+    10.0**log_nii_ha_kew, 10.0**log_oiii_hb_kew, "k--", lw=1.5, label="Kewley+01 (HII/Seyfert2)"
+)
+ax.semilogy(
+    10.0**log_nii_ha_kau, 10.0**log_oiii_hb_kau, "k-", lw=1.0, label="Kauffmann+03 (SF/LINER)"
+)
 
 ax.plot(nii_ha, oiii_hb, "o", markersize=10, color=COLORS["model"], label="This galaxy", zorder=5)
 
@@ -275,6 +281,7 @@ plt.show()
 #
 # Every line measurement is a pure-JAX function. You can compute gradients
 # w.r.t. physical parameters inside a loss function — something FastSpecFit cannot do.
+
 
 # %%
 # Example: gradient of Hα flux w.r.t. all amplitudes

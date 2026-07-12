@@ -162,9 +162,9 @@ baseline_solar = dict(model_solar.spec.sample(jax.random.PRNGKey(0)))
 for i, age in enumerate(ages_gyr):
     params = {**baseline_solar, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
 
-    pred = model_solar.predict_rest_sed(params)
-    wave_rest = np.asarray(pred.wavelength)
-    l_nu = np.asarray(pred.sed)
+    pred = model_solar.predict(params)
+    wave_rest = np.asarray(model_solar.wavelengths)
+    l_nu = np.asarray(pred.rest_sed())
     f_lambda = l_nu * C_AA_PER_S / (wave_rest**2)
 
     mgb_at_age[i] = mgb_pseudo_ew(wave_rest, f_lambda)
@@ -204,9 +204,9 @@ for j, age in enumerate(ages_multimet):
         # Set metallicity
         params_met = {**baseline_met, "met_logzsol": jnp.float64(met)}
 
-        pred = model_met.predict_rest_sed(params_met)
-        wave_rest = np.asarray(pred.wavelength)
-        l_nu = np.asarray(pred.sed)
+        pred = model_met.predict(params_met)
+        wave_rest = np.asarray(model_met.wavelengths)
+        l_nu = np.asarray(pred.rest_sed())
         f_lambda = l_nu * C_AA_PER_S / (wave_rest**2)
 
         mgb_grid[j, k] = mgb_pseudo_ew(wave_rest, f_lambda)

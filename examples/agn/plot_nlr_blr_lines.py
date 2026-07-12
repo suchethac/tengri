@@ -56,9 +56,9 @@ def _build(lines_type):
         redshift=tengri.Fixed(0.0),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    return wave, C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    return wave, C_AA_PER_S / wave * np.asarray(out.rest_sed())
 
 
 wave_nlr, nl_nlr = _build("nlr")

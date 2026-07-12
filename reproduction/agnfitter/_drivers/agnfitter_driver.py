@@ -456,7 +456,7 @@ def agn_radio_spl(
        (2024). doi:10.1051/0004-6361/202449329. arXiv:2405.12111.
     """
     freq_hz = np.asarray(freq_hz, dtype=np.float64)
-    fnu = (freq_hz / nu_t) ** alpha * np.exp(-freq_hz / (10.0 ** log_nu_cut))
+    fnu = (freq_hz / nu_t) ** alpha * np.exp(-freq_hz / (10.0**log_nu_cut))
     return freq_hz, fnu
 
 
@@ -513,11 +513,11 @@ def agn_radio_dpl(
        (2024). doi:10.1051/0004-6361/202449329. arXiv:2405.12111.
     """
     freq_hz = np.asarray(freq_hz, dtype=np.float64)
-    nu_t = 10.0 ** log_nu_t
+    nu_t = 10.0**log_nu_t
     fnu = (
         (freq_hz / nu_t) ** alpha1
         * (1.0 - np.exp(-((nu_t / freq_hz) ** (alpha1 - alpha2))))
-        * np.exp(-freq_hz / (10.0 ** log_nu_cut))
+        * np.exp(-freq_hz / (10.0**log_nu_cut))
     )
     return freq_hz, fnu
 

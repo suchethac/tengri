@@ -80,9 +80,9 @@ for logz in logzsol_grid:
         },
     )
 
-    pred = model.predict_rest_sed({"redshift": 0.1})
-    wave = np.asarray(pred.wavelength)
-    sed = np.asarray(pred.sed)
+    pred = model.predict({"redshift": 0.1})
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(pred.rest_sed())
     fluxes = {name: boxcar_line_flux(wave, sed, lam) for name, lam in LINES.items()}
     log_n2_ha.append(np.log10(max(fluxes["nii_6584"] / fluxes["halpha"], 1e-3)))
     log_o3_hb.append(np.log10(max(fluxes["oiii_5007"] / fluxes["hbeta"], 1e-3)))

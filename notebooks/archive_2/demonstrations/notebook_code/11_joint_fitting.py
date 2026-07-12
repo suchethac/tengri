@@ -75,7 +75,7 @@ elif os.path.exists(os.path.join("..", "..", "..", "data")):
 FIGDIR = os.path.join("demonstrations", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-from _plot_style import (  # noqa: E402
+from _plot_style import (
     COLORS,
     convergence_table,
     plot_corner_comparison,
@@ -87,9 +87,7 @@ from _plot_style import (  # noqa: E402
 setup_style()
 
 # %%
-ssp_data = load_ssp_data(
-    "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-)
+ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 
 # %% [markdown]
 # ## Creating a Joint Observation
@@ -103,9 +101,7 @@ ssp_data = load_ssp_data(
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 
 obs = Observation(
-    photometry=Photometry.from_names(
-        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    ),
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
     spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=100),
 )
 
@@ -162,19 +158,27 @@ print(f"Joint data vector shape: {data_joint.shape}")
 
 # %%
 # --- FIGURE 1: Two-panel mock data ---
-fig, (ax_p, ax_s) = plt.subplots(
-    1, 2, figsize=(12, 3.5), gridspec_kw={"width_ratios": [1, 3]}
-)
+fig, (ax_p, ax_s) = plt.subplots(1, 2, figsize=(12, 3.5), gridspec_kw={"width_ratios": [1, 3]})
 
 # Photometry panel
 wave_eff = np.array([3551, 4686, 6166, 7480, 8932])  # SDSS effective wavelengths
 ax_p.errorbar(
-    wave_eff, np.array(mock_phot.flux_obs), yerr=np.array(mock_phot.noise),
-    fmt="o", ms=6, color=COLORS["data"], label="Observed (SNR=20)",
+    wave_eff,
+    np.array(mock_phot.flux_obs),
+    yerr=np.array(mock_phot.noise),
+    fmt="o",
+    ms=6,
+    color=COLORS["data"],
+    label="Observed (SNR=20)",
 )
 ax_p.scatter(
-    wave_eff, np.array(mock_phot.flux_true),
-    marker="s", s=40, color=COLORS["truth"], zorder=5, label="Truth",
+    wave_eff,
+    np.array(mock_phot.flux_true),
+    marker="s",
+    s=40,
+    color=COLORS["truth"],
+    zorder=5,
+    label="Truth",
 )
 ax_p.set_xlabel("Wavelength [A]")
 ax_p.set_ylabel("Flux density")
@@ -184,8 +188,14 @@ ax_p.legend(fontsize=7)
 # Spectrum panel
 w = np.array(WAVE_OBS)
 ax_s.errorbar(
-    w, np.array(mock_spec.flux_obs), yerr=np.array(mock_spec.noise),
-    fmt=".", ms=2, color=COLORS["data"], alpha=0.4, label="Observed (SNR=30)",
+    w,
+    np.array(mock_spec.flux_obs),
+    yerr=np.array(mock_spec.noise),
+    fmt=".",
+    ms=2,
+    color=COLORS["data"],
+    alpha=0.4,
+    label="Observed (SNR=30)",
 )
 ax_s.plot(w, np.array(mock_spec.flux_true), color=COLORS["truth"], lw=1.2, label="Truth")
 ax_s.set_xlabel("Observed wavelength [A]")
@@ -194,9 +204,7 @@ ax_s.legend(fontsize=7)
 
 fig.suptitle("Joint Mock Galaxy at z = 0.1", fontsize=13)
 fig.tight_layout()
-plt.savefig(
-    os.path.join(FIGDIR, "fig11_joint_mock_data.png"), dpi=150, bbox_inches="tight"
-)
+plt.savefig(os.path.join(FIGDIR, "fig11_joint_mock_data.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -224,7 +232,9 @@ pred_phot = np.array(model.predict_photometry(map_params))
 pred_spec = np.array(model.predict_spectrum(map_params))
 
 fig, axes = plt.subplots(
-    2, 2, figsize=(12, 6),
+    2,
+    2,
+    figsize=(12, 6),
     gridspec_kw={"height_ratios": [3, 1], "width_ratios": [1, 3]},
 )
 ax_p, ax_s = axes[0]
@@ -232,12 +242,24 @@ ax_pr, ax_sr = axes[1]
 
 # Photometry fit
 ax_p.errorbar(
-    wave_eff, np.array(mock_phot.flux_obs), yerr=np.array(mock_phot.noise),
-    fmt="o", ms=5, color=COLORS["data"], alpha=0.7,
+    wave_eff,
+    np.array(mock_phot.flux_obs),
+    yerr=np.array(mock_phot.noise),
+    fmt="o",
+    ms=5,
+    color=COLORS["data"],
+    alpha=0.7,
 )
 ax_p.scatter(wave_eff, pred_phot, marker="D", s=30, color=COLORS["geovi"], zorder=5, label="MAP")
-ax_p.scatter(wave_eff, np.array(mock_phot.flux_true), marker="s", s=20,
-             color=COLORS["truth"], zorder=4, label="Truth")
+ax_p.scatter(
+    wave_eff,
+    np.array(mock_phot.flux_true),
+    marker="s",
+    s=20,
+    color=COLORS["truth"],
+    zorder=4,
+    label="Truth",
+)
 ax_p.set_ylabel("Flux density")
 ax_p.set_title("Photometry")
 ax_p.legend(fontsize=7)
@@ -253,8 +275,13 @@ ax_pr.set_ylabel(r"Resid./$\sigma$")
 
 # Spectrum fit
 ax_s.errorbar(
-    w, np.array(mock_spec.flux_obs), yerr=np.array(mock_spec.noise),
-    fmt=".", ms=2, color=COLORS["data"], alpha=0.3,
+    w,
+    np.array(mock_spec.flux_obs),
+    yerr=np.array(mock_spec.noise),
+    fmt=".",
+    ms=2,
+    color=COLORS["data"],
+    alpha=0.3,
 )
 ax_s.plot(w, pred_spec, color=COLORS["geovi"], lw=1.2, label="MAP")
 ax_s.plot(w, np.array(mock_spec.flux_true), color=COLORS["truth"], lw=0.8, ls="--", label="Truth")
@@ -277,9 +304,7 @@ fig.suptitle(
     fontsize=13,
 )
 fig.tight_layout()
-plt.savefig(
-    os.path.join(FIGDIR, "fig11_joint_map_fit.png"), dpi=150, bbox_inches="tight"
-)
+plt.savefig(os.path.join(FIGDIR, "fig11_joint_map_fit.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -292,9 +317,7 @@ plt.show()
 # %%
 # Photometry-only model and fit
 obs_phot = Observation(
-    photometry=Photometry.from_names(
-        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    ),
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
 model_phot = SEDModel(spec, ssp_data, observation=obs_phot)
 fitter_phot = Fitter(model_phot, mock_phot.flux_obs, mock_phot.noise)
@@ -342,9 +365,7 @@ for i, pname in enumerate(param_names):
 
 fig.suptitle("Parameter Recovery: MAP Error by Data Combination", fontsize=12)
 fig.tight_layout()
-plt.savefig(
-    os.path.join(FIGDIR, "fig11_constraint_comparison.png"), dpi=150, bbox_inches="tight"
-)
+plt.savefig(os.path.join(FIGDIR, "fig11_constraint_comparison.png"), dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -358,21 +379,33 @@ k_post, k_lap, k_pf = jax.random.split(jax.random.PRNGKey(99), 3)
 
 t0 = time.perf_counter()
 result_geovi = fitter.run(
-    "vi", key=k_post,
-    n_iterations=15, n_samples=6, n_seeds=5,
-    n_posterior_samples=2000, verbose=False,
+    "vi",
+    key=k_post,
+    n_iterations=15,
+    n_samples=6,
+    n_seeds=5,
+    n_posterior_samples=2000,
+    verbose=False,
 )
 t_geovi = time.perf_counter() - t0
 
 t0 = time.perf_counter()
 result_laplace = fitter.run(
-    "laplace", key=k_lap, init_from=result_map, n_samples=2000, verbose=False,
+    "laplace",
+    key=k_lap,
+    init_from=result_map,
+    n_samples=2000,
+    verbose=False,
 )
 t_laplace = time.perf_counter() - t0
 
 t0 = time.perf_counter()
 result_pathfinder = fitter.run(
-    "pathfinder", key=k_pf, n_samples=2000, maxiter=30, verbose=False,
+    "pathfinder",
+    key=k_pf,
+    n_samples=2000,
+    maxiter=30,
+    verbose=False,
 )
 t_pathfinder = time.perf_counter() - t0
 
@@ -383,8 +416,15 @@ print(f"Pathfinder:   {t_pathfinder:.1f}s")
 # %%
 # --- SFH recovery from joint posterior ---
 fig, ax = plt.subplots(figsize=(9, 4))
-plot_sfh(model, result_geovi, true_params=true_params, ax=ax,
-         color=COLORS["geovi"], label="native_geovi (joint)", method="geoVI")
+plot_sfh(
+    model,
+    result_geovi,
+    true_params=true_params,
+    ax=ax,
+    color=COLORS["geovi"],
+    label="native_geovi (joint)",
+    method="geoVI",
+)
 ax.set_title("SFH Recovery: Joint Phot + Spec (native_geovi)")
 fig.tight_layout()
 plt.savefig(os.path.join(FIGDIR, "fig11_sfh_joint.png"), dpi=150, bbox_inches="tight")
@@ -404,7 +444,8 @@ if fig is not None:
     fig.suptitle("Laplace vs geoVI — Joint Fit", y=1.02)
     plt.savefig(
         os.path.join(FIGDIR, "fig11_corner_laplace_vs_geovi.png"),
-        dpi=150, bbox_inches="tight",
+        dpi=150,
+        bbox_inches="tight",
     )
 plt.show()
 
@@ -413,14 +454,22 @@ plt.show()
 k_phot_vi, k_spec_vi = jax.random.split(jax.random.PRNGKey(77), 2)
 
 result_geovi_phot = fitter_phot.run(
-    "vi", key=k_phot_vi,
-    n_iterations=15, n_samples=6, n_seeds=5,
-    n_posterior_samples=2000, verbose=False,
+    "vi",
+    key=k_phot_vi,
+    n_iterations=15,
+    n_samples=6,
+    n_seeds=5,
+    n_posterior_samples=2000,
+    verbose=False,
 )
 result_geovi_spec = fitter_spec.run(
-    "vi", key=k_spec_vi,
-    n_iterations=15, n_samples=6, n_seeds=5,
-    n_posterior_samples=2000, verbose=False,
+    "vi",
+    key=k_spec_vi,
+    n_iterations=15,
+    n_samples=6,
+    n_seeds=5,
+    n_posterior_samples=2000,
+    verbose=False,
 )
 
 fig = plot_corner_comparison(
@@ -433,19 +482,22 @@ if fig is not None:
     fig.suptitle("Phot-only vs Spec-only vs Joint (native_geovi)", y=1.02)
     plt.savefig(
         os.path.join(FIGDIR, "fig11_corner_data_comparison.png"),
-        dpi=150, bbox_inches="tight",
+        dpi=150,
+        bbox_inches="tight",
     )
 plt.show()
 
 # %%
 # Convergence diagnostics
-convergence_table({
-    "Laplace (joint)": result_laplace,
-    "Pathfinder (joint)": result_pathfinder,
-    "geoVI (joint)": result_geovi,
-    "geoVI (phot)": result_geovi_phot,
-    "geoVI (spec)": result_geovi_spec,
-})
+convergence_table(
+    {
+        "Laplace (joint)": result_laplace,
+        "Pathfinder (joint)": result_pathfinder,
+        "geoVI (joint)": result_geovi,
+        "geoVI (phot)": result_geovi_phot,
+        "geoVI (spec)": result_geovi_spec,
+    }
+)
 
 # %% [markdown]
 # ## The pack_data / unpack_prediction Interface

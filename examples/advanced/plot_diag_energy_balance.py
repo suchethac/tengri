@@ -67,10 +67,14 @@ for tau_diff in tau_diffs:
     # Baseline parameters (redshift=0, SFH fixed, dust bc fixed)
     p_base = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
+    # The SED lives on the model's own grid; resample onto ``wave`` so the
+    # trapezoid integrals below line up with the masks built from it.
+    grid = np.asarray(model.wavelengths)
+
     p_int = {**p_base, "dust_tau_bc": 0.0, "dust_tau_diff": 0.0}
-    sed_int = np.asarray(model.predict_rest_sed(p_int, wave=wave_jax)).sum(axis=0)
+    sed_int = np.interp(wave, grid, np.asarray(model.predict(p_int).rest_sed()))
     p_full = {**p_base, "dust_tau_bc": 0.2, "dust_tau_diff": tau_diff}
-    sed_full = np.asarray(model.predict_rest_sed(p_full, wave=wave_jax)).sum(axis=0)
+    sed_full = np.interp(wave, grid, np.asarray(model.predict(p_full).rest_sed()))
     nu = C_AA_PER_S / wave
 
     # L = ∫ L_ν dν.  np.trapz needs frequency in INCREASING order.

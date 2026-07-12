@@ -61,9 +61,9 @@ colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(SPIN_VALUES)))
 uv_slopes = []
 for spin, color in zip(SPIN_VALUES, colors):
     params = {**baseline, "agn_a_spin": jnp.float64(spin)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
-    l_nu = np.asarray(out.sed)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    l_nu = np.asarray(out.rest_sed())
     wave_um = wave * 1.0e-4
     nu = C_AA_PER_S / wave
     mask = (l_nu > 0) & (wave > 50.0)

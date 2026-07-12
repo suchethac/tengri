@@ -81,10 +81,10 @@ for log_mbh in log_mbh_values:
         "agn_log_mbh": jnp.float64(log_mbh),
         "agn_log_lbol": jnp.float64(log_lbol),
     }
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave  # frequency in Hz
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=cmap(norm(log_mbh)), lw=1.4)
 
 ax.set_xlim(100, 1e4)

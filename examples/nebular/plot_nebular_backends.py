@@ -69,15 +69,15 @@ model_baked = tengri.SEDModel.build(
 params_cue = dict(model_cue.spec.sample(jax.random.PRNGKey(0)))
 params_baked = dict(model_baked.spec.sample(jax.random.PRNGKey(0)))
 
-out_cue = model_cue.predict_rest_sed(params_cue)
-out_baked = model_baked.predict_rest_sed(params_baked)
+out_cue = model_cue.predict(params_cue)
+out_baked = model_baked.predict(params_baked)
 
 # The two backends use different SSP grids (bare-stellar vs wNE), so each
 # SED carries its own wavelength array — never share a single mask between them.
-wave = np.asarray(out_cue.wavelength)
-sed_cue = np.asarray(out_cue.sed)
-wave_baked = np.asarray(out_baked.wavelength)
-sed_baked = np.asarray(out_baked.sed)
+wave = np.asarray(model_cue.wavelengths)
+sed_cue = np.asarray(out_cue.rest_sed())
+wave_baked = np.asarray(model_baked.wavelengths)
+sed_baked = np.asarray(out_baked.rest_sed())
 
 fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.2))
 

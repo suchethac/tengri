@@ -56,10 +56,10 @@ model = tengri.SEDModel.build(
     redshift=tengri.Fixed(0.5),
 )
 p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-out = model.predict_rest_sed(p)
-wave_rest = np.asarray(out.wavelength)
+out = model.predict(p)
+wave_rest = np.asarray(model.wavelengths)
 wave_obs = wave_rest * 1.5
-nu_l_nu = C_AA_PER_S / wave_obs * np.asarray(out.sed)
+nu_l_nu = C_AA_PER_S / wave_obs * np.asarray(out.rest_sed())
 
 FILTERS_BY_GROUP = [
     ("GALEX", ["galex_fuv", "galex_nuv"], "#4477aa"),

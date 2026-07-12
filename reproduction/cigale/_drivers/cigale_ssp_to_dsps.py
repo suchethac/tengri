@@ -17,13 +17,13 @@ Unit conversion:
 
 import pickle
 from pathlib import Path
-import numpy as np
-import h5py
 
+import h5py
+import numpy as np
 
 # Physical constants
 C_ANGSTROM_PER_S = 2.998e18  # speed of light in Angstrom/s
-L_SUN_ERG_PER_S = 3.828e33   # solar luminosity in erg/s
+L_SUN_ERG_PER_S = 3.828e33  # solar luminosity in erg/s
 
 
 def load_bc03_pickle(metallicity: float, imf: str = "chab") -> dict:
@@ -43,7 +43,10 @@ def load_bc03_pickle(metallicity: float, imf: str = "chab") -> dict:
         't' (age in Myr), 'Z' (metallicity), 'imf'.
     """
     import sys
-    cigale_data_path = Path(sys.prefix) / "lib" / "python3.12" / "site-packages" / "pcigale" / "data" / "bc03"
+
+    cigale_data_path = (
+        Path(sys.prefix) / "lib" / "python3.12" / "site-packages" / "pcigale" / "data" / "bc03"
+    )
 
     filename = cigale_data_path / f"Z={metallicity}_imf={imf}.pickle"
     if not filename.exists():
@@ -55,14 +58,14 @@ def load_bc03_pickle(metallicity: float, imf: str = "chab") -> dict:
     # ssp.info rows: [m_star surviving, m_gas returned, n_ly ionizing photons s^-1]
     # m_star + m_gas = 1 exactly at every age (mass conservation).
     return {
-        'wl': ssp.wl,                 # nm
-        'spec': ssp.spec,             # W/nm/Msun, shape (n_wave, n_age)
-        't': ssp.t,                   # Myr
-        'Z': ssp.Z,
-        'm_star': ssp.info[0, :],     # surviving stellar mass fraction (n_age,)
-        'm_gas':  ssp.info[1, :],     # mass returned to ISM (n_age,)
-        'n_ly':   ssp.info[2, :],     # ionizing photon rate [s^-1 per Msun formed]
-        'imf': ssp.imf,
+        "wl": ssp.wl,  # nm
+        "spec": ssp.spec,  # W/nm/Msun, shape (n_wave, n_age)
+        "t": ssp.t,  # Myr
+        "Z": ssp.Z,
+        "m_star": ssp.info[0, :],  # surviving stellar mass fraction (n_age,)
+        "m_gas": ssp.info[1, :],  # mass returned to ISM (n_age,)
+        "n_ly": ssp.info[2, :],  # ionizing photon rate [s^-1 per Msun formed]
+        "imf": ssp.imf,
     }
 
 
@@ -76,7 +79,9 @@ def convert_age_myr_to_gyr(t_myr: np.ndarray) -> np.ndarray:
     return t_myr / 1000.0
 
 
-def convert_flux_cigale_to_dsps(spec_cigale_w_nm: np.ndarray, wl_angstrom: np.ndarray) -> np.ndarray:
+def convert_flux_cigale_to_dsps(
+    spec_cigale_w_nm: np.ndarray, wl_angstrom: np.ndarray
+) -> np.ndarray:
     """
     Convert flux from CIGALE (W/nm/Msun) to DSPS (Lsun/Hz/Msun).
 
@@ -102,7 +107,7 @@ def convert_flux_cigale_to_dsps(spec_cigale_w_nm: np.ndarray, wl_angstrom: np.nd
     #                        × 0.1 nm/Å             → erg/s/Å
     #   L_λ [erg/s/Å] × λ²[Å²] / c[Å/s]            → erg/s/Hz
     #                        / L_sun[erg/s]         → Lsun/Hz
-    spec_dsps = spec_cigale_w_nm * 1e6 * (wl_broadcasted ** 2) / C_ANGSTROM_PER_S / L_SUN_ERG_PER_S
+    spec_dsps = spec_cigale_w_nm * 1e6 * (wl_broadcasted**2) / C_ANGSTROM_PER_S / L_SUN_ERG_PER_S
 
     return spec_dsps
 
@@ -133,11 +138,11 @@ def repackage_bc03_chabrier(out_path: str | Path) -> None:
         data_by_z[z] = load_bc03_pickle(z, imf="chab")
 
     # Verify all have same wavelength and age grids
-    ref_wl = data_by_z[metallicities[0]]['wl']
-    ref_t = data_by_z[metallicities[0]]['t']
+    ref_wl = data_by_z[metallicities[0]]["wl"]
+    ref_t = data_by_z[metallicities[0]]["t"]
     for z in metallicities[1:]:
-        assert np.allclose(data_by_z[z]['wl'], ref_wl), f"Wavelength grid mismatch at Z={z}"
-        assert np.allclose(data_by_z[z]['t'], ref_t), f"Age grid mismatch at Z={z}"
+        assert np.allclose(data_by_z[z]["wl"], ref_wl), f"Wavelength grid mismatch at Z={z}"
+        assert np.allclose(data_by_z[z]["t"], ref_t), f"Age grid mismatch at Z={z}"
 
     # Convert wavelength nm → Å and age Myr → Gyr
     wl_angstrom = convert_wavelength_nm_to_angstrom(ref_wl)
@@ -159,36 +164,36 @@ def repackage_bc03_chabrier(out_path: str | Path) -> None:
     print("Converting units...")
     for i_z, z in enumerate(metallicities):
         # spec shape from CIGALE: (n_wave, n_age)
-        spec_cigale = data_by_z[z]['spec']  # W/nm/Msun
+        spec_cigale = data_by_z[z]["spec"]  # W/nm/Msun
 
         # Convert to Lsun/Hz/Msun
         spec_converted = convert_flux_cigale_to_dsps(spec_cigale, wl_angstrom)
 
         # Transpose to (n_age, n_wave) and store
         flux_dsps[i_z, :, :] = spec_converted.T.astype(np.float32)
-        mass_remaining[i_z, :] = data_by_z[z]['m_star'].astype(np.float32)
+        mass_remaining[i_z, :] = data_by_z[z]["m_star"].astype(np.float32)
 
     # Compute log10(Z) absolute (not log10(Z/Zsun))
     lgmet = np.log10(np.array(metallicities, dtype=np.float32))
 
     # Write HDF5
     print(f"Writing to {out_path}...")
-    with h5py.File(out_path, 'w') as f:
-        f.create_dataset('ssp_flux', data=flux_dsps, dtype=np.float32)
-        f.create_dataset('ssp_lg_age_gyr', data=lg_age_gyr.astype(np.float32), dtype=np.float32)
-        f.create_dataset('ssp_lgmet', data=lgmet, dtype=np.float32)
-        f.create_dataset('ssp_wave', data=wl_angstrom.astype(np.float32), dtype=np.float32)
+    with h5py.File(out_path, "w") as f:
+        f.create_dataset("ssp_flux", data=flux_dsps, dtype=np.float32)
+        f.create_dataset("ssp_lg_age_gyr", data=lg_age_gyr.astype(np.float32), dtype=np.float32)
+        f.create_dataset("ssp_lgmet", data=lgmet, dtype=np.float32)
+        f.create_dataset("ssp_wave", data=wl_angstrom.astype(np.float32), dtype=np.float32)
         # Surviving stellar mass fraction. tengri's SSPData loader looks
         # for this under ssp_mass_remaining (n_met, n_age).
-        f.create_dataset('ssp_mass_remaining', data=mass_remaining, dtype=np.float32)
+        f.create_dataset("ssp_mass_remaining", data=mass_remaining, dtype=np.float32)
 
         # Attributes matching tengri convention
-        f.attrs['flux_units'] = 'Lsun/Hz/Msun'
-        f.attrs['wave_units'] = 'Angstrom'
-        f.attrs['n_met'] = n_met
-        f.attrs['n_age'] = n_age
-        f.attrs['n_wave'] = n_wave
-        f.attrs['source'] = 'CIGALE BC03 Chabrier (repackaged)'
+        f.attrs["flux_units"] = "Lsun/Hz/Msun"
+        f.attrs["wave_units"] = "Angstrom"
+        f.attrs["n_met"] = n_met
+        f.attrs["n_age"] = n_age
+        f.attrs["n_wave"] = n_wave
+        f.attrs["source"] = "CIGALE BC03 Chabrier (repackaged)"
 
     print(f"✓ Wrote {out_path}")
     print(f"  Shape: ({n_met}, {n_age}, {n_wave}) [met, age, wave]")

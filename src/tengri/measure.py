@@ -369,7 +369,7 @@ def from_prediction(pred, *, indices=None, lines=None, filters=_UNSET):
     r"""Measure indices, line fluxes, and photometry off a :class:`Prediction`.
 
     The convenient path. It pairs the model's rest-frame SED with the grid it
-    lives on (``Prediction.rest_sed`` alone does not carry its axis), reads the
+    lives on (``Prediction.rest_sed()`` alone does not carry its axis), reads the
     redshift from the prediction's parameters, and — for photometry — routes
     through the model's own exact projector so the **filter convention and IGM
     attenuation are inherited rather than re-derived**.

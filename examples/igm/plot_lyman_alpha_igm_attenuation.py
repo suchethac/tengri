@@ -96,9 +96,9 @@ for z, color in zip(REDSHIFTS, COLORS):
     params = {**p_base, "redshift": float(z)}
 
     # Get rest-frame SED
-    out = model.predict_rest_sed(params)
-    wave_rest_out = np.asarray(out.wavelength)
-    sed_rest = np.asarray(out.sed)
+    out = model.predict(params)
+    wave_rest_out = np.asarray(model.wavelengths)
+    sed_rest = np.asarray(out.rest_sed())
 
     # Interpolate to our wavelength grid for cleaner visualization
     sed_interp = np.interp(wave_rest, wave_rest_out, sed_rest, left=0, right=0)

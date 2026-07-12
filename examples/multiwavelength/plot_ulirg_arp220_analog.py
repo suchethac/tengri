@@ -52,9 +52,9 @@ model = tengri.SEDModel.build(
     redshift=tengri.Fixed(0.018),  # Arp 220 redshift
 )
 p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-out = model.predict_rest_sed(p)
-wave = np.asarray(out.wavelength)
-nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+out = model.predict(p)
+wave = np.asarray(model.wavelengths)
+nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
 
 fig, ax = plt.subplots(figsize=(7.6, 4.6))
 ax.loglog(wave, nu_l_nu, color="0.15", lw=1.2)
@@ -81,7 +81,7 @@ ax.set(
 ir = (wave > 8e4) & (wave < 1e7)
 nu_ir = C_AA_PER_S / wave[ir]
 order = np.argsort(nu_ir)
-L_ir = np.trapezoid(np.asarray(out.sed)[ir][order], nu_ir[order])
+L_ir = np.trapezoid(np.asarray(out.rest_sed())[ir][order], nu_ir[order])
 l_ir_exp = np.log10(L_ir / 3.84e33)
 ir_label = rf"$L_{{IR}}^{{8-1000\mu m}} \approx 10^{{{l_ir_exp:.1f}}}\,L_\odot$"
 ax.text(

@@ -51,9 +51,9 @@ baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 params = {**baseline}
 
 # Predict stellar + dust SED (rest-frame, UV through IR)
-out = model.predict_rest_sed(params)
-wave_sed = np.asarray(out.wavelength)
-sed = np.asarray(out.sed)
+out = model.predict(params)
+wave_sed = np.asarray(model.wavelengths)
+sed = np.asarray(out.rest_sed())
 
 # Wavelength grid: UV through radio
 wave_full = jnp.logspace(jnp.log10(500.0), jnp.log10(1e10), 3000)

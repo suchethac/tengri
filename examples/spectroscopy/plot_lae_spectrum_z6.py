@@ -82,9 +82,9 @@ rest_to_obs = 1.0 + z
 wave_obs_aa = np.linspace(7000.0, 13000.0, 3000)
 
 # Predict rest-frame SED
-out_rest = model.predict_rest_sed(p)
-wave_rest = np.asarray(out_rest.wavelength)
-sed_rest = np.asarray(out_rest.sed)
+out_rest = model.predict(p)
+wave_rest = np.asarray(model.wavelengths)
+sed_rest = np.asarray(out_rest.rest_sed())
 
 # Map observed wavelengths back to rest-frame for interpolation
 wave_rest_from_obs = wave_obs_aa / rest_to_obs

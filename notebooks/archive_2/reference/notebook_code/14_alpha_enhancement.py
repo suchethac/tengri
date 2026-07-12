@@ -93,13 +93,17 @@ base_flux = jnp.abs(jax.random.normal(key, (n_met, n_alpha, n_age, n_wave))) * 1
 # Metallicity: redder at higher Z
 z_reddening = jnp.exp(-0.0003 * (wave - 5500.0))  # redder = more flux at long λ
 met_scale = 10.0 ** (0.3 * feh_grid)  # brighter at higher Z
-base_flux = base_flux * met_scale[:, None, None, None] * (1.0 + 0.1 * z_reddening[None, None, None, :])
+base_flux = (
+    base_flux * met_scale[:, None, None, None] * (1.0 + 0.1 * z_reddening[None, None, None, :])
+)
 
 # Age: bluer (more UV) when young
-age_gyr = 10.0 ** lg_age_gyr
+age_gyr = 10.0**lg_age_gyr
 uv_boost = jnp.exp(-0.001 * (wave - 3500.0))
 age_weight = jnp.clip(1.0 / (age_gyr + 0.01), 0.1, 10.0)
-base_flux = base_flux * (1.0 + 0.5 * age_weight[None, None, :, None] * uv_boost[None, None, None, :])
+base_flux = base_flux * (
+    1.0 + 0.5 * age_weight[None, None, :, None] * uv_boost[None, None, None, :]
+)
 
 # Alpha enhancement effects:
 # 1. Mg b feature at ~5170 Å (stronger at high [α/Fe])
@@ -112,9 +116,9 @@ ca_hk = jnp.exp(-0.5 * ((wave - 3950.0) / 20.0) ** 2)
 for i_alpha, afe in enumerate(alpha_grid):
     # Absorption features (subtract from continuum)
     alpha_effect = (
-        0.15 * float(afe) * mg_feature   # Mg b deeper at high α
+        0.15 * float(afe) * mg_feature  # Mg b deeper at high α
         - 0.10 * float(afe) * fe_feature  # Fe weaker at high α (negative = less absorption)
-        + 0.08 * float(afe) * ca_hk        # Ca stronger at high α
+        + 0.08 * float(afe) * ca_hk  # Ca stronger at high α
     )
     # Scale by age: effect stronger for old populations
     old_weight = jnp.clip(age_gyr / 5.0, 0.0, 1.0)
@@ -136,7 +140,7 @@ ssp_4d = SSPData(
 print(f"4D SSP grid: {base_flux.shape}")
 print(f"[Fe/H] grid: {feh_grid}")
 print(f"[α/Fe] grid: {alpha_grid}")
-print(f"Ages: {float(10**lg_age_gyr[0]):.3f} to {float(10**lg_age_gyr[-1]):.1f} Gyr")
+print(f"Ages: {float(10 ** lg_age_gyr[0]):.3f} to {float(10 ** lg_age_gyr[-1]):.1f} Gyr")
 
 # %% [markdown]
 # ## 2. How [α/Fe] Changes an SSP Spectrum
@@ -159,8 +163,11 @@ colors_alpha = plt.cm.coolwarm(np.linspace(0.1, 0.9, len(alpha_grid)))
 
 for i, afe in enumerate(alpha_grid):
     sed = interpolate_met_alpha(
-        ssp_4d.ssp_flux, ssp_4d.ssp_lgmet, ssp_4d.ssp_alpha_fe,
-        log_z=feh_val, alpha_fe=float(afe),
+        ssp_4d.ssp_flux,
+        ssp_4d.ssp_lgmet,
+        ssp_4d.ssp_alpha_fe,
+        log_z=feh_val,
+        alpha_fe=float(afe),
     )
     spec = np.array(sed[age_idx])
     label = f"[α/Fe] = {float(afe):+.1f}"
@@ -169,18 +176,24 @@ for i, afe in enumerate(alpha_grid):
 # Mark key features
 for feat_wave, feat_name in [(5170, "Mg b"), (5270, "Fe 5270"), (3950, "Ca H&K")]:
     axes[0].axvline(feat_wave, ls=":", color="grey", alpha=0.4, lw=0.5)
-    axes[0].text(feat_wave + 10, axes[0].get_ylim()[1] * 0.95, feat_name,
-                 fontsize=7, color="grey", va="top")
+    axes[0].text(
+        feat_wave + 10, axes[0].get_ylim()[1] * 0.95, feat_name, fontsize=7, color="grey", va="top"
+    )
 
 axes[0].set_ylabel("Flux density [Lsun/Hz/Msun]")
 axes[0].legend(fontsize=8, ncol=2, loc="upper right")
-axes[0].set_title(f"Old SSP (age ≈ {float(10**lg_age_gyr[age_idx]):.1f} Gyr, [Fe/H] = {feh_val})")
+axes[0].set_title(
+    f"Old SSP (age ≈ {float(10 ** lg_age_gyr[age_idx]):.1f} Gyr, [Fe/H] = {feh_val})"
+)
 axes[0].set_xlim(3500, 9500)
 
 # Ratio panel: normalized to solar [α/Fe]
 sed_solar = interpolate_met_alpha(
-    ssp_4d.ssp_flux, ssp_4d.ssp_lgmet, ssp_4d.ssp_alpha_fe,
-    log_z=feh_val, alpha_fe=0.0,
+    ssp_4d.ssp_flux,
+    ssp_4d.ssp_lgmet,
+    ssp_4d.ssp_alpha_fe,
+    log_z=feh_val,
+    alpha_fe=0.0,
 )
 spec_solar = np.array(sed_solar[age_idx])
 
@@ -188,8 +201,11 @@ for i, afe in enumerate(alpha_grid):
     if float(afe) == 0.0:
         continue
     sed = interpolate_met_alpha(
-        ssp_4d.ssp_flux, ssp_4d.ssp_lgmet, ssp_4d.ssp_alpha_fe,
-        log_z=feh_val, alpha_fe=float(afe),
+        ssp_4d.ssp_flux,
+        ssp_4d.ssp_lgmet,
+        ssp_4d.ssp_alpha_fe,
+        log_z=feh_val,
+        alpha_fe=float(afe),
     )
     ratio = np.array(sed[age_idx]) / (spec_solar + 1e-30)
     axes[1].plot(np.array(wave), ratio, color=colors_alpha[i], lw=1.0)
@@ -231,14 +247,20 @@ fig, ax = plt.subplots(figsize=(8, 4))
 
 for feh in [-1.5, -0.5, 0.0]:
     sed_4d = interpolate_met_alpha(
-        ssp_4d.ssp_flux, ssp_4d.ssp_lgmet, ssp_4d.ssp_alpha_fe,
-        log_z=feh, alpha_fe=0.0,
+        ssp_4d.ssp_flux,
+        ssp_4d.ssp_lgmet,
+        ssp_4d.ssp_alpha_fe,
+        log_z=feh,
+        alpha_fe=0.0,
     )
     sed_3d = interpolate_metallicity(ssp_3d_solar, ssp_4d.ssp_lgmet, feh)
 
     diff = float(jnp.max(jnp.abs(sed_4d - sed_3d)))
-    ax.plot(np.array(wave), np.array(sed_4d[20] - sed_3d[20]),
-            label=f"[Fe/H] = {feh}: max diff = {diff:.2e}")
+    ax.plot(
+        np.array(wave),
+        np.array(sed_4d[20] - sed_3d[20]),
+        label=f"[Fe/H] = {feh}: max diff = {diff:.2e}",
+    )
 
 ax.axhline(0, ls="--", color="grey", lw=0.5)
 ax.set_xlabel("Wavelength [Å]")
@@ -270,12 +292,16 @@ fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
 # Left: the ramp itself
 t_universe = 13.7  # Gyr
-lookback_gyr = 10.0 ** lg_age_gyr
+lookback_gyr = 10.0**lg_age_gyr
 
 for alpha_old in [0.0, 0.2, 0.4, 0.6]:
     afe_per_age = compute_alpha_fe_evolving(lg_age_gyr, alpha_old, 0.0, t_universe)
-    axes[0].plot(np.array(lookback_gyr), np.array(afe_per_age),
-                 label=f"[α/Fe]$_{{old}}$ = +{alpha_old:.1f}", lw=1.5)
+    axes[0].plot(
+        np.array(lookback_gyr),
+        np.array(afe_per_age),
+        label=f"[α/Fe]$_{{old}}$ = +{alpha_old:.1f}",
+        lw=1.5,
+    )
 
 axes[0].set_xlabel("Lookback time [Gyr]")
 axes[0].set_ylabel("[α/Fe]")
@@ -290,21 +316,33 @@ afe_constant = jnp.full(n_age, 0.2)  # average of old and young
 feh_per_age = jnp.full(n_age, feh)
 
 sed_evolving = interpolate_met_alpha_evolving(
-    ssp_4d.ssp_flux, ssp_4d.ssp_lgmet, ssp_4d.ssp_alpha_fe,
-    feh_per_age, afe_evolving,
+    ssp_4d.ssp_flux,
+    ssp_4d.ssp_lgmet,
+    ssp_4d.ssp_alpha_fe,
+    feh_per_age,
+    afe_evolving,
 )
 sed_constant = interpolate_met_alpha_evolving(
-    ssp_4d.ssp_flux, ssp_4d.ssp_lgmet, ssp_4d.ssp_alpha_fe,
-    feh_per_age, afe_constant,
+    ssp_4d.ssp_flux,
+    ssp_4d.ssp_lgmet,
+    ssp_4d.ssp_alpha_fe,
+    feh_per_age,
+    afe_constant,
 )
 
 # Weight by a simple declining SFH to get a CSP
 sfr = jnp.exp(-lookback_gyr / 5.0)
-weights = sfr * jnp.concatenate([
-    jnp.array([10 ** lg_age_gyr[1] - 10 ** lg_age_gyr[0]]),
-    0.5 * (10 ** lg_age_gyr[2:] - 10 ** lg_age_gyr[:-2]),
-    jnp.array([10 ** lg_age_gyr[-1] - 10 ** lg_age_gyr[-2]]),
-]) * 1e9  # convert Gyr to yr
+weights = (
+    sfr
+    * jnp.concatenate(
+        [
+            jnp.array([10 ** lg_age_gyr[1] - 10 ** lg_age_gyr[0]]),
+            0.5 * (10 ** lg_age_gyr[2:] - 10 ** lg_age_gyr[:-2]),
+            jnp.array([10 ** lg_age_gyr[-1] - 10 ** lg_age_gyr[-2]]),
+        ]
+    )
+    * 1e9
+)  # convert Gyr to yr
 
 csp_evolving = jnp.einsum("i,iw->w", weights, sed_evolving)
 csp_constant = jnp.einsum("i,iw->w", weights, sed_constant)
@@ -350,9 +388,14 @@ axes[0].axvline(0, ls="--", color="grey", lw=0.5)
 for afe_val, color in [(0.0, "C0"), (0.3, "C1"), (0.4, "C2")]:
     mh = salaris_mh_from_feh(0.0, afe_val)
     axes[0].plot(afe_val, mh, "o", ms=8, color=color)
-    axes[0].annotate(f"[α/Fe]={afe_val:+.1f}\nΔ={mh:+.3f}",
-                     (afe_val, mh), textcoords="offset points",
-                     xytext=(10, -15), fontsize=7, color=color)
+    axes[0].annotate(
+        f"[α/Fe]={afe_val:+.1f}\nΔ={mh:+.3f}",
+        (afe_val, mh),
+        textcoords="offset points",
+        xytext=(10, -15),
+        fontsize=7,
+        color=color,
+    )
 
 axes[0].set_xlabel("[α/Fe] [dex]")
 axes[0].set_ylabel("[M/H] − [Fe/H] [dex]")
@@ -362,8 +405,7 @@ axes[0].set_title("Salaris relation: offset from total vs iron metallicity")
 feh_vals = np.array([-2.0, -1.5, -1.0, -0.5, 0.0])
 for i, afe in enumerate([0.0, 0.2, 0.4]):
     mh_vals = [salaris_mh_from_feh(f, afe) for f in feh_vals]
-    axes[1].plot(feh_vals, mh_vals, "o-", ms=6,
-                 label=f"[α/Fe] = +{afe:.1f}", color=f"C{i}")
+    axes[1].plot(feh_vals, mh_vals, "o-", ms=6, label=f"[α/Fe] = +{afe:.1f}", color=f"C{i}")
 
 axes[1].plot([-2.5, 0.5], [-2.5, 0.5], "k--", lw=0.5, label="[M/H] = [Fe/H]")
 axes[1].set_xlabel("[Fe/H]")
@@ -400,8 +442,11 @@ age_idx_old = 35  # ~8 Gyr
 colors_by_alpha = {}
 for afe_val in alpha_grid:
     sed = interpolate_met_alpha(
-        ssp_4d.ssp_flux, ssp_4d.ssp_lgmet, ssp_4d.ssp_alpha_fe,
-        log_z=-0.5, alpha_fe=float(afe_val),
+        ssp_4d.ssp_flux,
+        ssp_4d.ssp_lgmet,
+        ssp_4d.ssp_alpha_fe,
+        log_z=-0.5,
+        alpha_fe=float(afe_val),
     )
     spec = np.array(sed[age_idx_old])
     mags = []
@@ -427,8 +472,11 @@ mg_b_ew = []
 fe_5270_ew = []
 for afe_val in alpha_grid:
     sed = interpolate_met_alpha(
-        ssp_4d.ssp_flux, ssp_4d.ssp_lgmet, ssp_4d.ssp_alpha_fe,
-        log_z=-0.5, alpha_fe=float(afe_val),
+        ssp_4d.ssp_flux,
+        ssp_4d.ssp_lgmet,
+        ssp_4d.ssp_alpha_fe,
+        log_z=-0.5,
+        alpha_fe=float(afe_val),
     )
     spec = np.array(sed[age_idx_old])
     # Pseudo-EW: sum of (1 - flux/continuum) in feature window

@@ -1911,6 +1911,7 @@ _TOPIC_HELP: dict[str, tuple[str, callable]] = {
     "components": ("physics components", lambda: list_components()),
     "inference": ("inference methods", lambda: list_inference_methods()),
     "filters": ("photometric filters", lambda: list_filters()),
+    "properties": ("derived properties", lambda: list_properties()),
     "plot": ("plotting helpers", lambda: list_plots()),
     "plots": ("plotting helpers", lambda: list_plots()),
     # "citations" is handled specially in _help_topic to print the
@@ -1928,8 +1929,8 @@ def help(topic: str | None = None) -> None:
     topic : str, optional
         If given, narrow the cheatsheet to one menu. Recognized topics:
         ``"agn"``, ``"dust"``, ``"sfh"``, ``"nebular"``, ``"components"``,
-        ``"inference"``, ``"filters"``. Without a topic the full
-        cheatsheet is printed.
+        ``"inference"``, ``"filters"``, ``"properties"``. Without a topic
+        the full cheatsheet is printed.
 
     Notes
     -----
@@ -1970,6 +1971,7 @@ tengri — differentiable galaxy SED fitting in JAX
     tengri.list_nebular_backends()        {n_neb} nebular backends
     tengri.list_inference_methods(tier="primary")  {n_inf} primary methods
     tengri.list_filters()                 {n_filt} filter curves
+    tengri.list_properties()              derived quantities (M*, SFR, age, lines, …)
     tengri.describe("skirtor")            full metadata for any name
     tengri.search("torus")                cross-menu fuzzy search
     tengri.doctor()                       env / install / SSP health check
@@ -1987,6 +1989,9 @@ tengri — differentiable galaxy SED fitting in JAX
     tengri.tutorial("custom_likelihood")  Student-t / calibration / Protocol
     tengri.tutorial("swap_inference")     same model, NUTS → geoVI → MCMC
     tengri.tutorial("diagnostics")        ESS / R-hat / convergence checking
+    tengri.tutorial("properties")         derived quantities catalog (M*, SFR, …)
+    tengri.tutorial("mock_catalog")       batch mock catalogs via vmap (no fit)
+    tengri.tutorial("fast_vs_exact")      exact vs fast photometry paths
 
     tengri.explain(tengri.SEDModel)       architectural role of any class
     tengri.examples()                     list every runnable example script
@@ -2001,6 +2006,11 @@ tengri — differentiable galaxy SED fitting in JAX
     fitter     = tengri.Fitter(forward, data, noise)
     posterior  = fitter.run("map")             # or "nuts", "vi", …
     posterior.summary()                        # median ± 68% CI per param
+
+    Extract derived quantities:
+      posterior.properties["stellar_mass"]     # array (n_samples,)
+      posterior.properties.ci("stellar_mass") # credible interval
+      tengri.list_properties()                # see all available names
 
     Pick the right kwargs:
       tengri.suggest_parameters(mean_sfh_type="dpl", agn_model="skirtor")

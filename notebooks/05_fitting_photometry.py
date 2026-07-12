@@ -82,10 +82,20 @@ if not ssp_path.exists():
 ssp = load_ssp_data(str(ssp_path))
 
 FILTERS = [
-    "galex_fuv", "galex_nuv",
-    "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "2mass_j", "2mass_h", "2mass_ks",
-    "wise_w1", "wise_w2", "wise_w3", "wise_w4",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+    "wise_w1",
+    "wise_w2",
+    "wise_w3",
+    "wise_w4",
 ]
 obs = Observation(photometry=Photometry.from_names(FILTERS))
 
@@ -205,7 +215,8 @@ print(f"\nmax R̂ = {rhat_max:.4f}   divergences = {n_div}   (2 chains × 600 dr
 
 # %%
 trace_params = [
-    p for p in ("sfh_tsnorm_log_total_mass", "met_logzsol", "dust_tau_diff")
+    p
+    for p in ("sfh_tsnorm_log_total_mass", "met_logzsol", "dust_tau_diff")
     if p in posterior.samples
 ]
 fig_tr, axes_tr = plt.subplots(
@@ -248,13 +259,15 @@ def draw_dicts(n):
 DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "ssfr")
 dsamples = {k: [] for k in DERIVED_KEYS}
 for p in draw_dicts(N_DRAWS):
-    d = sed_model.predict_derived(p)
+    pred = sed_model.predict(p)
+    d = pred.properties
     for k in DERIVED_KEYS:
         v = d.get(k)
         dsamples[k].append(float("nan") if v is None else float(v))
 
 truth_full = {**fixed, **truth}
-truth_derived = sed_model.predict_derived(truth_full)
+pred_truth = sed_model.predict(truth_full)
+truth_derived = pred_truth.properties
 print(f"{'quantity':<14}{'truth':>14}{'p16':>14}{'p50':>14}{'p84':>14}")
 print("-" * 70)
 for k in DERIVED_KEYS:
@@ -278,8 +291,11 @@ dl_cm = cosmology.luminosity_distance(z_obs)
 
 
 def obs_fnu(params):
-    rest = sed_model.predict_rest_sed(params, wave=WAVE_OBS / (1.0 + z_obs))
-    return np.asarray(lnu_to_fnu(jnp.asarray(rest.sed), dl_cm, z_obs))
+    pred = sed_model.predict(params)
+    lnu_interp = np.interp(
+        WAVE_OBS / (1.0 + z_obs), np.asarray(sed_model.wavelengths), np.asarray(pred.rest_sed())
+    )
+    return np.asarray(lnu_to_fnu(jnp.asarray(lnu_interp), dl_cm, z_obs))
 
 
 spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(60)])
@@ -312,8 +328,20 @@ for fw, ft, color in zip(phot.filter_waves, phot.filter_trans, band_palette):
 ax.fill_between(wave_um, spec_lo, spec_hi, color=C_POST, alpha=0.30, lw=0, label="posterior 68%")
 ax.plot(wave_um, spec_med, color=C_POST, lw=1.4, label="posterior median")
 ax.plot(wave_um, spec_truth, color=C_TRUTH, lw=1.1, ls="--", label="truth")
-ax.errorbar(wave_eff_um, flux_obs, yerr=noise, fmt="o", color=C_DATA, ms=5.5, capsize=2,
-            elinewidth=1.0, mec="white", mew=0.6, label="observed", zorder=5)
+ax.errorbar(
+    wave_eff_um,
+    flux_obs,
+    yerr=noise,
+    fmt="o",
+    color=C_DATA,
+    ms=5.5,
+    capsize=2,
+    elinewidth=1.0,
+    mec="white",
+    mew=0.6,
+    label="observed",
+    zorder=5,
+)
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_ylim(ymin, ymax)
@@ -325,8 +353,15 @@ plt.setp(ax.get_xticklabels(), visible=False)
 
 ax_res.axhspan(-1, 1, alpha=0.08, color="0.5")
 ax_res.axhline(0, color="0.4", lw=0.8)
-ax_res.bar(wave_eff_um, resid, width=wave_eff_um * 0.12, color=C_DATA, alpha=0.85,
-           edgecolor="white", linewidth=0.5)
+ax_res.bar(
+    wave_eff_um,
+    resid,
+    width=wave_eff_um * 0.12,
+    color=C_DATA,
+    alpha=0.85,
+    edgecolor="white",
+    linewidth=0.5,
+)
 ax_res.set_xscale("log")
 ax_res.set_xlim(wave_um.min(), wave_um.max())
 ax_res.set_ylim(-3.5, 3.5)

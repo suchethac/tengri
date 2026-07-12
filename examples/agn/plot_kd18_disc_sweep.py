@@ -83,11 +83,11 @@ for i_mbh, log_mbh in enumerate(log_mbh_values):
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
+        out = model.predict(p)
 
-        wave = np.asarray(out.wavelength)
+        wave = np.asarray(model.wavelengths)
         c_aa_s = 2.998e18
-        nu_l_nu = c_aa_s / wave * np.asarray(out.sed)
+        nu_l_nu = c_aa_s / wave * np.asarray(out.rest_sed())
         all_nu_l_nu.append(nu_l_nu)
 
         color = cmap_mbh(norm_mbh(log_mbh))

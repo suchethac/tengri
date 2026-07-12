@@ -2410,7 +2410,7 @@ class SEDModel:
         }
 
     def predict_rest_sed(self, params, wave=None):
-        """Deprecated. Use ``model.predict(params).rest_sed``.
+        """Deprecated. Use ``model.predict(params).rest_sed()``.
 
         .. deprecated:: 2026-07
            Superseded by the property catalog and the ``Prediction`` surface
@@ -2423,7 +2423,7 @@ class SEDModel:
         Same as :meth:`_predict_rest_sed`.
         """
         warnings.warn(
-            "predict_rest_sed() is deprecated — use model.predict(params).rest_sed "
+            "predict_rest_sed() is deprecated — use model.predict(params).rest_sed() "
             "instead (cached, one forward pass). Will be removed in tengri v1.0.",
             DeprecationWarning,
             stacklevel=2,
@@ -2523,7 +2523,7 @@ class SEDModel:
         return SEDResult(wavelength=wave_target, sed=sed_interp)
 
     def predict_obs_sed(self, params, wave=None):
-        """Deprecated. Use ``model.predict(params).obs_sed``.
+        """Deprecated. Use ``model.predict(params).obs_sed()``.
 
         .. deprecated:: 2026-07
            Superseded by the property catalog and the ``Prediction`` surface
@@ -2536,7 +2536,7 @@ class SEDModel:
         Same as :meth:`_predict_obs_sed`.
         """
         warnings.warn(
-            "predict_obs_sed() is deprecated — use model.predict(params).obs_sed "
+            "predict_obs_sed() is deprecated — use model.predict(params).obs_sed() "
             "instead (cached, one forward pass). Will be removed in tengri v1.0.",
             DeprecationWarning,
             stacklevel=2,

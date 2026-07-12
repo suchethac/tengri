@@ -90,9 +90,9 @@ def build_agn_archetype(log_lbol, agn_frac, agn_blocks, sfr_log, dust_config):
         **COMMON,
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    return wave, np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    return wave, np.asarray(out.rest_sed())
 
 
 # ============================================================================

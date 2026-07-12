@@ -284,13 +284,15 @@ def draw_dicts(n):
 DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "ssfr")
 samples = {k: [] for k in DERIVED_KEYS}
 for p in draw_dicts(N_DRAWS):
-    d = sed_model.predict_derived(p)
+    pred = sed_model.predict(p)
+    d = pred.properties
     for k in DERIVED_KEYS:
         v = d.get(k)
         samples[k].append(float("nan") if v is None else float(v))
 
 truth_full = {**fixed, **truth}
-truth_derived = sed_model.predict_derived(truth_full)
+pred_truth = sed_model.predict(truth_full)
+truth_derived = pred_truth.properties
 print(f"{'quantity':<14}{'truth':>14}{'p16':>14}{'p50':>14}{'p84':>14}")
 print("-" * 70)
 for k in DERIVED_KEYS:
@@ -313,8 +315,11 @@ dl_cm = cosmology.luminosity_distance(z_truth)
 
 
 def obs_fnu(params):
-    rest = sed_model.predict_rest_sed(params, wave=WAVE_OBS / (1.0 + z_truth))
-    return np.asarray(lnu_to_fnu(jnp.asarray(rest.sed), dl_cm, z_truth))
+    pred = sed_model.predict(params)
+    lnu_interp = np.interp(
+        WAVE_OBS / (1.0 + z_truth), np.asarray(sed_model.wavelengths), np.asarray(pred.rest_sed())
+    )
+    return np.asarray(lnu_to_fnu(jnp.asarray(lnu_interp), dl_cm, z_truth))
 
 
 spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(60)])

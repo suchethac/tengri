@@ -51,8 +51,11 @@ def _agn(extra_blocks=(), wave=None):
     # overplot SEDs: components such as the GRAHSP FeII template otherwise
     # inject their own wavelength nodes, giving each config a different-length
     # native grid (5994 vs 6127).
-    out = model.predict_rest_sed(p, wave=wave)
-    return np.asarray(out.wavelength), np.asarray(out.sed)
+    lnu = np.asarray(model.predict(p).rest_sed())
+    grid = np.asarray(model.wavelengths)
+    if wave is None:
+        return grid, lnu
+    return np.asarray(wave), np.interp(np.asarray(wave), grid, lnu)
 
 
 configs = [

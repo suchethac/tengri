@@ -154,9 +154,7 @@ ax.loglog(wave_xray, L_hmxb, "--", label="HMXB (SFR-scaled)")
 ax.loglog(wave_xray, L_lmxb, ":", label="LMXB ($M_\\star$-scaled)")
 ax.set_xlabel(r"Wavelength ($\AA$)")
 ax.set_ylabel(r"$L_\nu$ (L$_\odot$ / Hz)")
-ax.set_title(
-    rf"XRB decomposition (SFR={sfr_val}, $M_\star=10^{{{int(np.log10(mstar_val))}}}$)"
-)
+ax.set_title(rf"XRB decomposition (SFR={sfr_val}, $M_\star=10^{{{int(np.log10(mstar_val))}}}$)")
 ax.set_xlim(0.5, 124)
 ax.legend()
 

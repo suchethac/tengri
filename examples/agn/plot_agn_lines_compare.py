@@ -68,9 +68,9 @@ for (region, kind, label), color in zip(LINE_BACKBONES, COLORS):
         redshift=tengri.Fixed(0.05),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     ax.semilogy(wave, nu_l_nu, color=color, lw=1.0, label=label, alpha=0.85)
 
 ax.set(

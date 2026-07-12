@@ -85,9 +85,9 @@ fig, axes = plt.subplots(1, 3, figsize=(13.5, 4.2), sharex=True, sharey=True)
 for ax, (param, values, label) in zip(axes, SWEEPS):
     cmap = plt.cm.viridis(np.linspace(0.15, 0.9, len(values)))
     for v, color in zip(values, cmap):
-        out = model.predict_rest_sed({**base, param: float(v)})
-        wave_um = np.asarray(out.wavelength) * 1.0e-4
-        nu_lnu = C_AA_PER_S / np.asarray(out.wavelength) * np.asarray(out.sed)
+        out = model.predict({**base, param: float(v)})
+        wave_um = np.asarray(model.wavelengths) * 1.0e-4
+        nu_lnu = C_AA_PER_S / np.asarray(model.wavelengths) * np.asarray(out.rest_sed())
         ax.loglog(
             wave_um,
             np.where(nu_lnu > 0, nu_lnu, np.nan),

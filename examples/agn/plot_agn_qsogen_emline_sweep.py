@@ -62,9 +62,9 @@ for lbol in log_lbol_values:
         redshift=tengri.Fixed(0.0),
     )
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
-    nu_lnu = (C_AA_PER_S / wave) * np.asarray(out.sed)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    nu_lnu = (C_AA_PER_S / wave) * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_lnu, color=cmap(norm(lbol)), lw=1.4)
 
 cbar = fig.colorbar(

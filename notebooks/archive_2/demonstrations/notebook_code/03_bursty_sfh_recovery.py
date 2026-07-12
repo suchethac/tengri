@@ -44,7 +44,7 @@ from tengri import (
 )
 from tengri.observation import Spectroscopy
 
-import sys, os  # noqa: E401, E402
+import sys, os  # noqa: E401
 
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
@@ -66,7 +66,7 @@ elif os.path.exists(os.path.join("..", "..", "..", "data")):
 FIGDIR = os.path.join("demonstrations", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-from _plot_style import (  # noqa: E402
+from _plot_style import (
     COLORS,
     convergence_table,
     plot_corner_comparison,
@@ -264,7 +264,10 @@ bursty_mock_ess = model_stoch.mock_spectrum(
 fitter_ess = Fitter(model_stoch, bursty_mock_ess.flux_obs, bursty_mock_ess.noise)
 _ = fitter_ess.run("map", n_steps=1000, verbose=False)
 result_ess = fitter_ess.run(
-    "mcmc_ess", n_samples=2000, n_burnin=300, verbose=False,
+    "mcmc_ess",
+    n_samples=2000,
+    n_burnin=300,
+    verbose=False,
 )
 print(f"  ESS: {result_ess.wall_time_s:.1f}s")
 
@@ -274,14 +277,28 @@ fig, (ax_gv, ax_ess) = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
 
 bursty_true_p = regime_data["Bursty"]["params"]
 
-plot_sfh(model_stoch, regime_results["Bursty"], true_params=bursty_true_p,
-         ax=ax_gv, color=COLORS["geovi"], label="vi", method="geoVI",
-         show_mean_sfh=True)
+plot_sfh(
+    model_stoch,
+    regime_results["Bursty"],
+    true_params=bursty_true_p,
+    ax=ax_gv,
+    color=COLORS["geovi"],
+    label="vi",
+    method="geoVI",
+    show_mean_sfh=True,
+)
 ax_gv.set_title("geoVI (variational)")
 
-plot_sfh(model_stoch, result_ess, true_params=bursty_true_p,
-         ax=ax_ess, color=COLORS["ess"], label="ESS", method="ESS",
-         show_mean_sfh=True)
+plot_sfh(
+    model_stoch,
+    result_ess,
+    true_params=bursty_true_p,
+    ax=ax_ess,
+    color=COLORS["ess"],
+    label="ESS",
+    method="ESS",
+    show_mean_sfh=True,
+)
 ax_ess.set_title("Elliptical Slice Sampling (exact MCMC)")
 
 fig.suptitle("SFH Recovery: geoVI vs ESS — Bursty (σ=2, τ=20 Myr)", fontsize=11)
@@ -302,16 +319,19 @@ if fig is not None:
     fig.suptitle("PSD Corner: geoVI vs ESS (Bursty)", y=1.02)
     plt.savefig(
         os.path.join(FIGDIR, "fig04b_ess_vs_geovi_corner.png"),
-        dpi=150, bbox_inches="tight",
+        dpi=150,
+        bbox_inches="tight",
     )
 plt.show()
 
 # %%
 # Convergence comparison
-print(convergence_table(
-    {"geoVI (Bursty)": regime_results["Bursty"], "ESS (Bursty)": result_ess},
-    verbose=True,
-))
+print(
+    convergence_table(
+        {"geoVI (Bursty)": regime_results["Bursty"], "ESS (Bursty)": result_ess},
+        verbose=True,
+    )
+)
 
 # %% [markdown]
 # ## The Wrong SEDModel Trap

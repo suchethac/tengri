@@ -97,9 +97,9 @@ wave_rest = np.logspace(2.8, 4.2, 1024)  # 631 Å to 15800 Å rest-frame
 seds_obs = {}
 for z in REDSHIFTS:
     params = {**p_base, "redshift": float(z)}
-    out = model.predict_rest_sed(params)
-    wave_rest_out = np.asarray(out.wavelength)
-    sed_rest = np.asarray(out.sed)
+    out = model.predict(params)
+    wave_rest_out = np.asarray(model.wavelengths)
+    sed_rest = np.asarray(out.rest_sed())
 
     # Transform to observer frame
     wave_obs = wave_rest_out * (1.0 + z)

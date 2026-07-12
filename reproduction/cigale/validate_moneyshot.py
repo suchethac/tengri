@@ -274,7 +274,9 @@ def main():
     # tengri MORE correct than the CIGALE double count, so it is deliberately not
     # applied in this reproduction figure.
     print("    radio step ~2.25e5 µm = Dale2014 template radio-tail edge (double-counts condon92;")
-    print("               shared CIGALE convention, #883). Radio band >1 cm is not single-component.")
+    print(
+        "               shared CIGALE convention, #883). Radio band >1 cm is not single-component."
+    )
 
     # Figure
     fig, (ax, axr) = plt.subplots(
@@ -290,8 +292,16 @@ def main():
     # Flag the Dale2014 template radio-tail edge (the #883 step): both codes'
     # dale2014 carries a built-in radio synchrotron that double-counts condon92.
     ax.axvline(2.25e5, color="0.6", ls=":", lw=1.0)
-    ax.text(2.25e5, ymax * 5, "Dale radio-tail edge\n(#883)", fontsize=7,
-            color="0.4", ha="right", va="top", rotation=90)
+    ax.text(
+        2.25e5,
+        ymax * 5,
+        "Dale radio-tail edge\n(#883)",
+        fontsize=7,
+        color="0.4",
+        ha="right",
+        va="top",
+        rotation=90,
+    )
     ax.legend(fontsize=10)
     ax.grid(True, alpha=0.3)
 
