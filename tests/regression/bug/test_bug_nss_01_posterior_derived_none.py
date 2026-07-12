@@ -26,9 +26,15 @@ class TestBugNSS01PosteriorDerivedNone:
     def test_derived_with_none_field_returns_nan_array(self):
         """Verify posterior.derived handles NaN fields by returning NaN arrays.
 
-        After optimization to use vmap(predict_sfh_quantities), the derived property
-        now returns JAX arrays with NaN values (not Python None) when data is
-        unavailable, which is correct for JIT-compatible batch computation.
+        After optimization to use ``vmap(_predict_sfh_quantities)``, the derived
+        property now returns JAX arrays with NaN values (not Python None) when data
+        is unavailable, which is correct for JIT-compatible batch computation.
+
+        The mock targets the **private** twin: ``Posterior.derived`` drives its batch
+        with ``_predict_sfh_quantities`` so that a deprecated shim does not warn about
+        a second method the user never called (#1049). Mocking the public name would
+        silently miss — a MagicMock happily returns a Mock for any attribute, so the
+        vmap would batch over the auto-mock instead of this function.
         """
         from unittest.mock import MagicMock
 
@@ -59,7 +65,7 @@ class TestBugNSS01PosteriorDerivedNone:
                 mass_weighted_metallicity=jnp.array(-1.5),
             )
 
-        mock_model.predict_sfh_quantities = mock_predict_sfh
+        mock_model._predict_sfh_quantities = mock_predict_sfh
 
         # Create Posterior with samples
         posterior = Posterior(
