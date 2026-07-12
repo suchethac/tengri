@@ -42,6 +42,30 @@ __all__ = [
 _np_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
 
+def _cumtrapz_rows(y: np.ndarray, x: np.ndarray) -> np.ndarray:
+    """Cumulative trapezoid along the last axis, starting at 0.
+
+    Shapes: y (..., m), x (m,) -> (..., m).
+    """
+    seg = 0.5 * (y[..., 1:] + y[..., :-1]) * np.diff(x)
+    head = np.zeros((*y.shape[:-1], 1), dtype=seg.dtype)
+    return np.concatenate([head, np.cumsum(seg, axis=-1)], axis=-1)
+
+
+def _interp_rows(xq: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """Linear interpolation of every row of ``y`` (over ``x``) at ``xq``.
+
+    ``np.interp`` takes a single 1-D table, so it cannot do this in one call.
+    Shapes: xq (q,), x (m,), y (..., m) -> (..., q).
+    """
+    idx = np.clip(np.searchsorted(x, xq) - 1, 0, x.size - 2)
+    x0, x1 = x[idx], x[idx + 1]
+    span = x1 - x0
+    t = np.where(span > 0, (xq - x0) / np.where(span > 0, span, 1.0), 0.0)
+    y0, y1 = y[..., idx], y[..., idx + 1]
+    return y0 + (y1 - y0) * t
+
+
 @dataclasses.dataclass(frozen=True)
 class PreintegratedGrid:
     """Template grid with wavelength dimension collapsed into filter integrals.
@@ -58,6 +82,15 @@ class PreintegratedGrid:
     moment : jnp.ndarray or None
         (*grid_dims, n_filters). Taylor moment for dust correction,
         or None if not precomputed.
+    subband_phot : jnp.ndarray or None
+        (*grid_dims, n_filters, n_subbands). Filter integral restricted to
+        each sub-band, or None. Sums over the sub-band axis to ``phot``.
+    subband_waves : jnp.ndarray or None
+        (*grid_dims, n_filters, n_subbands). Observed-frame quadrature node
+        of each sub-band — the template's own flux-weighted centroid there,
+        so it tracks the spectrum. [Ångström]
+    subband_waves_rest : jnp.ndarray or None
+        (*grid_dims, n_filters, n_subbands). Same nodes, rest frame. [Ångström]
     axes : tuple[jnp.ndarray, ...]
         One array per grid dimension, giving node coordinates.
     edges : tuple[jnp.ndarray, ...]
@@ -80,6 +113,9 @@ class PreintegratedGrid:
     effective_wavelengths_rest: jnp.ndarray
     flux_scale: float
     n_filters: int
+    subband_phot: jnp.ndarray | None = None
+    subband_waves: jnp.ndarray | None = None
+    subband_waves_rest: jnp.ndarray | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -158,6 +194,7 @@ def preintegrate_grid(
     dl_cm: float,
     axes: tuple[np.ndarray, ...] = (),
     taylor: bool = False,
+    n_subbands: int = 0,
     energy_normalize: bool = False,
     convention: FilterConvention = FilterConvention.BESSELL,
 ) -> PreintegratedGrid:
@@ -172,13 +209,41 @@ def preintegrate_grid(
     :func:`tengri.observation.photometry.compute_flux_density`:
         Φ = ∫ L_ν(λ_obs) T_b(λ_obs) w(λ_obs) dλ / ∫ T_b(λ_obs) w(λ_obs) dλ
 
-    When ``taylor=True``, also precomputes the first spectral moment:
+    When ``n_subbands=K > 0``, the same integral is also computed **restricted
+    to each of K sub-bands** carrying equal filter mass, together with the
+    template's own flux-weighted centroid in each:
+
+    .. math::
+
+        \\Phi_{k} = \\int_{\\lambda_k}^{\\lambda_{k+1}} L_\\nu T w \\,d\\lambda
+                    \\Big/ \\int T w \\,d\\lambda
+        \\qquad
+        \\bar\\lambda_{k} = \\frac{\\int_{\\lambda_k}^{\\lambda_{k+1}}
+            \\lambda L_\\nu T w \\,d\\lambda}
+            {\\int_{\\lambda_k}^{\\lambda_{k+1}} L_\\nu T w \\,d\\lambda}
+
+    Both are attenuation-independent, so a *multiplicative* screen A(λ) is
+    then applied at runtime as a K-point quadrature, exactly factorized:
+
+    .. math::
+
+        \\int L_\\nu A T w \\,d\\lambda \\Big/ \\int T w \\,d\\lambda
+        \\;\\approx\\; \\sum_k \\Phi_k \\, A(\\bar\\lambda_k)
+
+    This supersedes ``taylor``. The Taylor form evaluates A at one point per
+    filter and *extrapolates* linearly away from it, which diverges where the
+    attenuation curve steepens (GALEX FUV: +45 % at z=0.05 rising to +215 % at
+    z=1). The quadrature *evaluates* A instead of extrapolating it and converges
+    as 1/K²: K=3 holds ≲1.2 % in FUV, K=5 ≲0.5 %. See #1122.
+
+    Only *multiplicative* transformations need this. Additive emitters (dust IR,
+    radio, X-ray, AGN) factorize exactly through the rank-1/rank-K band response
+    (#1107, #1117) and need no sub-bands.
+
+    When ``taylor=True``, precomputes instead the first spectral moment:
         Ψ = ∫ L_ν(λ) (λ - λ_eff) T(λ) w(λ) dλ / ∫ T(λ) w(λ) dλ
     where ``λ_eff = ∫ λ T w dλ / ∫ T w dλ`` is the weight's first moment, so
     Ψ ≡ 0 for a flat template.
-
-    This enables first-order Taylor dust correction at runtime, reducing
-    the age-dust-metallicity factorization error by ~5×.
 
     Parameters
     ----------
@@ -200,6 +265,13 @@ def preintegrate_grid(
         If empty, runtime interpolation is disabled.
     taylor : bool
         If True, precompute first spectral moment tensor. Default False.
+        Superseded by ``n_subbands``; see the equations above.
+    n_subbands : int
+        Number of equal-filter-mass sub-bands K for the multiplicative
+        quadrature. ``0`` (default) disables it. K=3 is the recommended
+        working point: it is *cheaper* than the Taylor moment at runtime
+        (one tensor and an ``exp``, versus two tensors and a ``pow``) and
+        ~40× more accurate in the rest-UV.
     energy_normalize : bool
         If True, normalize each template to unit bolometric luminosity
         ``∫ L_ν dν = 1`` before filter integration, so runtime
@@ -260,6 +332,9 @@ def preintegrate_grid(
     eff_waves_obs = np.zeros(n_filters)
     phot_flat = np.zeros((n_grid_points, n_filters))
     moment_flat = np.zeros((n_grid_points, n_filters)) if taylor else None
+    K = int(n_subbands)
+    sub_phot = np.zeros((n_grid_points, n_filters, K)) if K > 0 else None
+    sub_waves = np.zeros((n_grid_points, n_filters, K)) if K > 0 else None
 
     for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
         fw_np = np.asarray(fw, dtype=np.float64)
@@ -294,11 +369,58 @@ def preintegrate_grid(
             num_moment = _np_trapezoid(templates_on_grid * dlam * weight, grid, axis=-1)
             moment_flat[:, f_idx] = num_moment / np.maximum(denom, 1e-30)
 
+        # Sub-band quadrature nodes and weights (#1122).
+        if K > 0:
+            # Edges split the band into K pieces of equal filter mass, so the
+            # nodes land where the filter actually has throughput.
+            #
+            # Everything below is built from CUMULATIVE integrals evaluated at
+            # the edges. Selecting grid points inside each sub-band instead
+            # would silently drop the fractional interval at every edge: the
+            # sub-integrals would no longer sum to the whole, and the
+            # quadrature error would GROW with K rather than shrink. The
+            # conservation assert at the end of the loop pins this.
+            cum_w = _cumtrapz_rows(tw_grid, grid)
+            sb_edges = np.interp(np.linspace(0.0, cum_w[-1], K + 1), cum_w, grid)
+
+            cum_sw = _cumtrapz_rows(integrand, grid)
+            cum_lsw = _cumtrapz_rows(integrand * grid, grid)
+            i_k = np.diff(_interp_rows(sb_edges, grid, cum_sw), axis=-1)
+            l_k = np.diff(_interp_rows(sb_edges, grid, cum_lsw), axis=-1)
+
+            sub_phot[:, f_idx, :] = i_k / np.maximum(denom, 1e-30)
+            # The node is the template's OWN flux-weighted centroid in the
+            # sub-band, which is what makes the rule track the spectrum and
+            # converge as 1/K². It is a build-time constant: the SSP grid is
+            # fixed, and no free parameter enters. Where a template has no flux
+            # in a sub-band its weight is zero, so the node is irrelevant — fall
+            # back to the midpoint rather than divide by zero.
+            mid = 0.5 * (sb_edges[:-1] + sb_edges[1:])
+            nonzero = i_k != 0.0
+            sub_waves[:, f_idx, :] = np.where(nonzero, l_k / np.where(nonzero, i_k, 1.0), mid)
+
+    if K > 0:
+        # The partition must neither lose nor create flux.
+        resid = np.abs(sub_phot.sum(axis=-1) - phot_flat)
+        scale = np.maximum(np.abs(phot_flat), 1e-300)
+        if not np.all(resid / scale < 1e-10):
+            raise AssertionError(
+                "sub-band partition is not flux-conserving "
+                f"(max relative residual {float(np.max(resid / scale)):.3e}). "
+                "The sub-band integrals must sum to the full filter integral."
+            )
+
     eff_waves_rest = eff_waves_obs / (1.0 + redshift)
 
     # Reshape back to original grid dimensions
     phot = jnp.array(phot_flat.reshape(*grid_dims, n_filters))
     moment = jnp.array(moment_flat.reshape(*grid_dims, n_filters)) if taylor else None
+    if K > 0:
+        sub_phot_j = jnp.array(sub_phot.reshape(*grid_dims, n_filters, K))
+        sub_waves_j = jnp.array(sub_waves.reshape(*grid_dims, n_filters, K))
+        sub_waves_rest_j = sub_waves_j / (1.0 + redshift)
+    else:
+        sub_phot_j = sub_waves_j = sub_waves_rest_j = None
 
     # Compute flux scale (geometric factor). Avoid calling the ``@jit``'d
     # ``lnu_to_fnu`` and then ``float()``-casting its result — under a
@@ -323,6 +445,9 @@ def preintegrate_grid(
         effective_wavelengths_rest=jnp.asarray(eff_waves_rest),
         flux_scale=flux_scale,
         n_filters=n_filters,
+        subband_phot=sub_phot_j,
+        subband_waves=sub_waves_j,
+        subband_waves_rest=sub_waves_rest_j,
     )
 
 
