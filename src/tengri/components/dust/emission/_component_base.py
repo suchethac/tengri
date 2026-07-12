@@ -117,19 +117,28 @@ class EmissionComponent(SEDModelComponent):
         filter_eff_waves = state.derived.get("filter_eff_waves")
 
         if spec_eff_waves is not None or filter_eff_waves is not None:
+            # ONE full-grid evaluation, shared by every consumer below. Each LUT branch
+            # used to recompute it, which jit made free (CSE) but eager execution did not
+            # — and predict_state, Prediction, and most of the test suite run eager.
+            sed_ir, published_full = self.predict(
+                p_sliced, jnp.zeros_like(state.wave), state.wave, **input_kwargs
+            )
+
             # LUT path: publish the precomp families the LUT projectors consume...
             published: dict[str, Any] = {}
 
             if filter_eff_waves is not None:
                 published.update(
                     self._apply_photometry_precomp(
-                        p_sliced, state, filter_eff_waves, template_data, **input_kwargs
+                        p_sliced, state, filter_eff_waves, template_data, sed_ir, **input_kwargs
                     )
                 )
 
             if spec_eff_waves is not None:
                 published.update(
-                    self._apply_spectrum_precomp(p_sliced, state, spec_eff_waves, **input_kwargs)
+                    self._apply_spectrum_precomp(
+                        p_sliced, state, spec_eff_waves, sed_ir, **input_kwargs
+                    )
                 )
 
             # ...and STILL add to sed_intrinsic. This used to return without touching it,
@@ -144,9 +153,12 @@ class EmissionComponent(SEDModelComponent):
             # never READS ``sed_intrinsic``, so XLA prunes the full-grid chain outright.
             # Writing an array nobody reads is still dead code. Radio and X-ray have
             # always added unconditionally and still compile to ~143 us.
-            sed_out, published_full = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
+            # An emission component is additive by contract, so sed_in + sed_ir is exactly
+            # what predict(p, sed_in, wave) returns — pinned by
+            # tests/regression/bug/test_precomp_sed_intrinsic_completeness.py, which
+            # compares this against the exact path.
             new_derived = self._merge_published(state.derived, {**published_full, **published})
-            return state.with_(sed_intrinsic=sed_out, derived=new_derived)
+            return state.with_(sed_intrinsic=sed_in + sed_ir, derived=new_derived)
         else:
             # Exact full-wave path
             sed_out, published = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
@@ -159,6 +171,7 @@ class EmissionComponent(SEDModelComponent):
         state: ForwardState,
         filter_eff_waves: jnp.ndarray,
         template_data: Mapping[str, Any] | None,
+        sed_ir: jnp.ndarray,
         **inputs: Any,
     ) -> Mapping[str, jnp.ndarray]:
         """Project dust IR emission onto photometry filters.
@@ -188,9 +201,11 @@ class EmissionComponent(SEDModelComponent):
         mapping[str, ndarray]
             Published dict with dust_emission_phot_lnu_precomp key.
         """
-        # Compute full-wave emission for projection
+        # ``sed_ir`` is the full-grid emission, computed ONCE by apply() and shared with
+        # the spectrum branch and with sed_intrinsic. Recomputing it per branch was three
+        # identical full-grid evaluations: free under jit (CSE + DCE), but real work in
+        # eager mode, which is what predict_state and the test suite actually run.
         L_ir = jnp.asarray(inputs.get("L_ir", 0.0))
-        sed_ir, _ = self.predict(p, jnp.zeros_like(state.wave), state.wave, L_ir=L_ir)
 
         # Try to get band response (exact for linear models)
         band_response = None
@@ -226,6 +241,7 @@ class EmissionComponent(SEDModelComponent):
         p: Mapping[str, jnp.ndarray],
         state: ForwardState,
         spec_eff_waves: jnp.ndarray,
+        sed_ir: jnp.ndarray,
         **inputs: Any,
     ) -> Mapping[str, jnp.ndarray]:
         """Project dust IR emission onto spectrum pixels.
@@ -249,11 +265,8 @@ class EmissionComponent(SEDModelComponent):
         mapping[str, ndarray]
             Published dict with dust_emission_spec_lnu_precomp key.
         """
-        # Compute full-wave emission (on the model wave grid) and sample at spectrum pixels
-        L_ir = jnp.asarray(inputs.get("L_ir", 0.0))
-        sed_ir, _ = self.predict(p, jnp.zeros_like(state.wave), state.wave, L_ir=L_ir)
-
-        # Sample at spectrum pixels (always simple interp for spectrum path)
+        # ``sed_ir`` is the shared full-grid emission from apply() (see the photometry
+        # branch). Sample at spectrum pixels.
         spec_lnu = jnp.interp(spec_eff_waves, state.wave, sed_ir)
 
         return {"dust_emission_spec_lnu_precomp": spec_lnu}
