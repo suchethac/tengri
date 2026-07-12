@@ -127,6 +127,15 @@ jobs:
       - run: python tools/check_single_dispatch.py
       - run: python tools/check_registry_completeness.py
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
+      # The `benchmark` tier: five tests that assert a wall-clock RATIO (fast path
+      # vs exact path, cached vs cold). They are real regression guards — they catch
+      # a precompute path silently degrading to the slow one — but they measure at
+      # the ~30-60 us scale, where scheduler noise under `-n auto` swamps the signal:
+      # `test_fast_path_not_slower` failed the default run at 324 us vs 32 us, then
+      # passed 3/3 standalone. So they are deselected from the parallel gate in
+      # pyproject and run HERE, serially (`-n 0`), where the ratio means something.
+      # Serial is the whole point — do not "speed this up" with -n.
+      - run: pytest tests/ -q --no-header -m 'benchmark and not slow and not crossval' -n 0
 
   test:
     runs-on: ubuntu-latest

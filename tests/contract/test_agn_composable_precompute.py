@@ -266,6 +266,7 @@ def test_parity_at_grid_center():
 # ──────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.benchmark
 @requires_grahsp
 def test_lookup_jit_compiles_and_caches():
     fw, ft = _toy_filter()
