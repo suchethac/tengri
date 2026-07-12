@@ -80,34 +80,8 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
-from tengri.components.stellar.sps.dsps_wrapper import (
-    compute_surviving_mass,
-    interpolate_mass_remaining,
-)
 from tengri.utils.sed_quantities import (
     KEY_LINES,
-    compute_balmer_break,
-    compute_bolometric_luminosity,
-    compute_dn4000,
-    compute_fuv_flux,
-    compute_ionizing_efficiency,
-    compute_irx,
-    compute_l_dust_absorbed,
-    compute_l_radio_1p4ghz_from_sfr,
-    compute_l_radio_thermal,
-    compute_l_tir,
-    compute_l_x_agn,
-    compute_l_x_xrb,
-    compute_luminosity_weighted_age,
-    compute_luminosity_weighted_metallicity,
-    compute_m_uv,
-    compute_mass_weighted_age,
-    compute_mass_weighted_metallicity,
-    compute_nuv_flux,
-    compute_q_ir,
-    compute_rest_uv_color,
-    compute_uv_luminosity_1600,
-    compute_uv_slope_beta,
     extract_line_luminosity,
 )
 
@@ -509,8 +483,7 @@ class SFHProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        self._pred._ensure_sfh()
-        return jnp.sum(self._pred._cache["weights"])
+        return self._pred.properties["stellar_mass"]
 
     @property
     def stellar_mass_surviving(self):
@@ -529,15 +502,7 @@ class SFHProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        self._pred._ensure_sfh()
-        model = self._pred._model
-        if model.ssp_data.ssp_mass_remaining is None:
-            return jnp.array(jnp.nan)
-        log_z = self._pred._cache["p"].get("log_z_abs", 0.0)
-        mr_at_met = interpolate_mass_remaining(
-            model.ssp_data.ssp_mass_remaining, model.ssp_data.ssp_lgmet, log_z
-        )
-        return compute_surviving_mass(self._pred._cache["weights"], mr_at_met)
+        return self._pred.properties["stellar_mass_surviving"]
 
     @property
     def sfr_100myr(self):
@@ -553,15 +518,7 @@ class SFHProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        self._pred._ensure_sfh()
-        sfr = self._pred._cache["sfr"]
-        model = self._pred._model
-        mask = model.age_yr <= 1e8
-        return jnp.where(
-            jnp.sum(mask) > 0,
-            jnp.sum(sfr * mask) / jnp.maximum(jnp.sum(mask), 1.0),
-            sfr[0],
-        )
+        return self._pred.properties["sfr_100myr"]
 
     @property
     def sfr_10myr(self):
@@ -577,15 +534,7 @@ class SFHProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        self._pred._ensure_sfh()
-        sfr = self._pred._cache["sfr"]
-        model = self._pred._model
-        mask = model.age_yr <= 1e7
-        return jnp.where(
-            jnp.sum(mask) > 0,
-            jnp.sum(sfr * mask) / jnp.maximum(jnp.sum(mask), 1.0),
-            sfr[0],
-        )
+        return self._pred.properties["sfr_10myr"]
 
     @property
     def ssfr(self):
@@ -603,9 +552,7 @@ class SFHProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        mass_surv = self.stellar_mass_surviving
-        mass = jnp.where(jnp.isnan(mass_surv), self.stellar_mass, mass_surv)
-        return self.sfr_100myr / jnp.maximum(mass, 1.0)
+        return self._pred.properties["ssfr"]
 
     @property
     def mass_weighted_age_gyr(self):
@@ -621,10 +568,7 @@ class SFHProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        self._pred._ensure_sfh()
-        return compute_mass_weighted_age(
-            self._pred._cache["weights"], self._pred._model.ssp_ages_yr
-        )
+        return self._pred.properties["mass_weighted_age_gyr"]
 
     @property
     def mass_weighted_metallicity(self):
@@ -643,15 +587,7 @@ class SFHProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        self._pred._ensure_sfh()
-        p = self._pred._cache["p"]
-        return compute_mass_weighted_metallicity(
-            self._pred._cache["weights"],
-            self._pred._model.ssp_ages_yr,
-            p.get("log_z_abs", 0.0),
-            log_z_initial=p.get("log_z_abs_initial"),
-            log_z_final=p.get("log_z_abs_final"),
-        )
+        return self._pred.properties["mass_weighted_metallicity"]
 
     @property
     def luminosity_weighted_age_gyr(self):
@@ -669,13 +605,7 @@ class SFHProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        self._pred._ensure_sed()
-        return compute_luminosity_weighted_age(
-            self._pred._cache["weights"],
-            self._pred._cache["ssp_flux_at_z"],
-            self._pred._model.ssp_ages_yr,
-            self._pred._cache["_state"].wave,
-        )
+        return self._pred.properties["luminosity_weighted_age_gyr"]
 
     @property
     def luminosity_weighted_metallicity(self):
@@ -693,17 +623,7 @@ class SFHProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        self._pred._ensure_sed()
-        p = self._pred._cache["p"]
-        return compute_luminosity_weighted_metallicity(
-            self._pred._cache["weights"],
-            self._pred._cache["ssp_flux_at_z"],
-            self._pred._model.ssp_ages_yr,
-            self._pred._cache["_state"].wave,
-            p.get("log_z_abs", 0.0),
-            log_z_initial=p.get("log_z_abs_initial"),
-            log_z_final=p.get("log_z_abs_final"),
-        )
+        return self._pred.properties["luminosity_weighted_metallicity"]
 
 
 # ── SED properties (lazy) ─────────────────────────────────────────
@@ -833,7 +753,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return compute_bolometric_luminosity(self._sed(), self._wave())
+        return self._pred.properties["l_bol"]
 
     @property
     def l_tir(self):
@@ -849,7 +769,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return compute_l_tir(self._sed(), self._wave())
+        return self._pred.properties["l_tir"]
 
     @property
     def l_dust_absorbed(self):
@@ -867,11 +787,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        sed_intr = self._sed_intrinsic()
-        if sed_intr is None:
-            return jnp.array(jnp.nan)
-        self._pred._ensure_sed()
-        return compute_l_dust_absorbed(sed_intr, self._pred._cache["sed_attenuated"], self._wave())
+        return self._pred.properties["l_dust_absorbed"]
 
     @property
     def irx(self):
@@ -887,9 +803,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        l_tir = self.l_tir
-        l_uv = compute_uv_luminosity_1600(self._sed(), self._wave())
-        return compute_irx(l_tir, l_uv)
+        return self._pred.properties["irx"]
 
     @property
     def uv_slope_beta(self):
@@ -905,7 +819,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return compute_uv_slope_beta(self._sed(), self._wave())
+        return self._pred.properties["uv_slope_beta"]
 
     @property
     def dn4000(self):
@@ -921,7 +835,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return compute_dn4000(self._sed(), self._wave())
+        return self._pred.properties["dn4000"]
 
     @property
     def balmer_break(self):
@@ -937,7 +851,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return compute_balmer_break(self._sed(), self._wave())
+        return self._pred.properties["balmer_break"]
 
     @property
     def m_uv(self):
@@ -953,7 +867,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return compute_m_uv(self._sed(), self._wave())
+        return self._pred.properties["m_uv"]
 
     @property
     def fuv_flux(self):
@@ -969,7 +883,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return compute_fuv_flux(self._sed(), self._wave())
+        return self._pred.properties["fuv_flux"]
 
     @property
     def nuv_flux(self):
@@ -985,7 +899,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return compute_nuv_flux(self._sed(), self._wave())
+        return self._pred.properties["nuv_flux"]
 
     @property
     def fuv_flux_intrinsic(self):
@@ -1004,10 +918,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        sed_intr = self._sed_intrinsic()
-        if sed_intr is None:
-            return jnp.array(jnp.nan)
-        return compute_fuv_flux(sed_intr, self._wave())
+        return self._pred.properties["fuv_flux_intrinsic"]
 
     @property
     def nuv_flux_intrinsic(self):
@@ -1026,10 +937,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        sed_intr = self._sed_intrinsic()
-        if sed_intr is None:
-            return jnp.array(jnp.nan)
-        return compute_nuv_flux(sed_intr, self._wave())
+        return self._pred.properties["nuv_flux_intrinsic"]
 
     @property
     def rest_uv_color(self):
@@ -1045,7 +953,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return compute_rest_uv_color(self._sed(), self._wave())
+        return self._pred.properties["rest_uv_color"]
 
     @property
     def luminosity_weighted_age_gyr(self):
@@ -1061,13 +969,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        self._pred._ensure_sed()
-        return compute_luminosity_weighted_age(
-            self._pred._cache["weights"],
-            self._pred._cache["ssp_flux_at_z"],
-            self._pred._model.ssp_ages_yr,
-            self._pred._cache["_state"].wave,
-        )
+        return self._pred.properties["luminosity_weighted_age_gyr"]
 
     @property
     def luminosity_weighted_metallicity(self):
@@ -1083,17 +985,7 @@ class SEDProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        self._pred._ensure_sed()
-        p = self._pred._cache["p"]
-        return compute_luminosity_weighted_metallicity(
-            self._pred._cache["weights"],
-            self._pred._cache["ssp_flux_at_z"],
-            self._pred._model.ssp_ages_yr,
-            self._pred._cache["_state"].wave,
-            p.get("log_z_abs", 0.0),
-            log_z_initial=p.get("log_z_abs_initial"),
-            log_z_final=p.get("log_z_abs_final"),
-        )
+        return self._pred.properties["luminosity_weighted_metallicity"]
 
 
 # ── Emission line properties (lazy) ───────────────────────────────
@@ -1192,7 +1084,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self._get_line("lya")
+        self._pred._ensure_lines()
+        return self._pred.properties["lya"]
 
     @property
     def civ_1549(self):
@@ -1208,7 +1101,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self._get_line("civ_1549")
+        self._pred._ensure_lines()
+        return self._pred.properties["civ_1549"]
 
     @property
     def oii(self):
@@ -1224,7 +1118,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self._get_line("oii")
+        self._pred._ensure_lines()
+        return self._pred.properties["oii"]
 
     @property
     def hbeta(self):
@@ -1240,7 +1135,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self._get_line("hbeta")
+        self._pred._ensure_lines()
+        return self._pred.properties["hbeta"]
 
     @property
     def oiii_4959(self):
@@ -1256,7 +1152,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self._get_line("oiii_4959")
+        self._pred._ensure_lines()
+        return self._pred.properties["oiii_4959"]
 
     @property
     def oiii_5007(self):
@@ -1272,7 +1169,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self._get_line("oiii_5007")
+        self._pred._ensure_lines()
+        return self._pred.properties["oiii_5007"]
 
     @property
     def nii_6548(self):
@@ -1288,7 +1186,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self._get_line("nii_6548")
+        self._pred._ensure_lines()
+        return self._pred.properties["nii_6548"]
 
     @property
     def halpha(self):
@@ -1304,7 +1203,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self._get_line("halpha")
+        self._pred._ensure_lines()
+        return self._pred.properties["halpha"]
 
     @property
     def nii_6584(self):
@@ -1320,7 +1220,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self._get_line("nii_6584")
+        self._pred._ensure_lines()
+        return self._pred.properties["nii_6584"]
 
     @property
     def sii_6717(self):
@@ -1336,7 +1237,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self._get_line("sii_6717")
+        self._pred._ensure_lines()
+        return self._pred.properties["sii_6717"]
 
     @property
     def sii_6731(self):
@@ -1352,7 +1254,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self._get_line("sii_6731")
+        self._pred._ensure_lines()
+        return self._pred.properties["sii_6731"]
 
     # --- Diagnostic ratios ---
 
@@ -1370,10 +1273,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return jnp.log10(
-            jnp.maximum(self.nii_6584, _LINE_RATIO_FLOOR)
-            / jnp.maximum(self.halpha, _LINE_RATIO_FLOOR)
-        )
+        self._pred._ensure_lines()
+        return self._pred.properties["bpt_nii"]
 
     @property
     def bpt_sii(self):
@@ -1389,10 +1290,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        sii_total = self.sii_6717 + self.sii_6731
-        return jnp.log10(
-            jnp.maximum(sii_total, _LINE_RATIO_FLOOR) / jnp.maximum(self.halpha, _LINE_RATIO_FLOOR)
-        )
+        self._pred._ensure_lines()
+        return self._pred.properties["bpt_sii"]
 
     @property
     def o3hb(self):
@@ -1408,10 +1307,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return jnp.log10(
-            jnp.maximum(self.oiii_5007, _LINE_RATIO_FLOOR)
-            / jnp.maximum(self.hbeta, _LINE_RATIO_FLOOR)
-        )
+        self._pred._ensure_lines()
+        return self._pred.properties["o3hb"]
 
     @property
     def r23(self):
@@ -1427,10 +1324,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        numerator = self.oii + self.oiii_4959 + self.oiii_5007
-        return jnp.log10(
-            jnp.maximum(numerator, _LINE_RATIO_FLOOR) / jnp.maximum(self.hbeta, _LINE_RATIO_FLOOR)
-        )
+        self._pred._ensure_lines()
+        return self._pred.properties["r23"]
 
     @property
     def o32(self):
@@ -1446,10 +1341,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return jnp.log10(
-            jnp.maximum(self.oiii_5007, _LINE_RATIO_FLOOR)
-            / jnp.maximum(self.oii, _LINE_RATIO_FLOOR)
-        )
+        self._pred._ensure_lines()
+        return self._pred.properties["o32"]
 
     @property
     def balmer_decrement(self):
@@ -1465,7 +1358,8 @@ class LineProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self.halpha / jnp.maximum(self.hbeta, _LINE_RATIO_FLOOR)
+        self._pred._ensure_lines()
+        return self._pred.properties["balmer_decrement"]
 
 
 # ── Radio properties (lazy) ───────────────────────────────────────
@@ -1516,8 +1410,7 @@ class RadioProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        sfr = self._pred.sfh.sfr_100myr
-        return compute_l_radio_1p4ghz_from_sfr(sfr)
+        return self._pred.properties["l_1p4ghz"]
 
     @property
     def l_thermal(self):
@@ -1533,8 +1426,7 @@ class RadioProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        q_h = self._pred.ionizing.q_h
-        return compute_l_radio_thermal(q_h)
+        return self._pred.properties["l_thermal"]
 
     @property
     def l_nonthermal(self):
@@ -1550,7 +1442,7 @@ class RadioProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self.l_1p4ghz - self.l_thermal
+        return self._pred.properties["l_nonthermal"]
 
     @property
     def q_ir(self):
@@ -1566,8 +1458,7 @@ class RadioProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        l_tir = self._pred.sed.l_tir
-        return compute_q_ir(l_tir, self.l_1p4ghz)
+        return self._pred.properties["q_ir"]
 
 
 # ── X-ray properties (lazy) ───────────────────────────────────────
@@ -1615,9 +1506,7 @@ class XRayProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        sfr = self._pred.sfh.sfr_100myr
-        mstar = self._pred.sfh.stellar_mass
-        return compute_l_x_xrb(sfr, mstar)
+        return self._pred.properties["l_x_xrb"]
 
     @property
     def l_x_agn(self):
@@ -1633,9 +1522,7 @@ class XRayProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        self._pred._ensure_sed()
-        agn_bol = self._pred._cache.get("agn_bol_erg", 0.0)
-        return compute_l_x_agn(agn_bol)
+        return self._pred.properties["l_x_agn"]
 
     @property
     def l_x_total(self):
@@ -1651,7 +1538,7 @@ class XRayProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        return self.l_x_xrb + self.l_x_agn
+        return self._pred.properties["l_x_total"]
 
 
 # ── Ionizing properties (lazy) ────────────────────────────────────
@@ -1700,8 +1587,7 @@ class IonizingProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        self._pred._ensure_lines()
-        return self._pred._cache.get("q_h_total", jnp.array(jnp.nan))
+        return self._pred.properties["q_h"]
 
     @property
     def xi_ion(self):
@@ -1720,9 +1606,7 @@ class IonizingProperties(_CachedBase):
         **JIT-compatible**: no — Python property accessor. Use in postprocessing,
         not inside :func:`jax.jit`.
         """
-        q_h = self.q_h
-        l_uv = compute_uv_luminosity_1600(self._pred.sed._sed(), self._pred.sed._wave())
-        return compute_ionizing_efficiency(q_h, l_uv)
+        return self._pred.properties["xi_ion"]
 
 
 # ── Property catalog accessor ────────────────────────────────────
@@ -1770,7 +1654,7 @@ class PropertyCatalog:
             If the property is unknown or not available in this model.
         """
         pred = object.__getattribute__(self, "_prediction")
-        catalog = pred._model._property_catalog
+        catalog = pred._model._ensure_property_catalog()
         if name not in catalog:
             available = sorted(catalog.keys())
             raise KeyError(f"Unknown property {name!r}. Available: {available}")
@@ -1781,12 +1665,12 @@ class PropertyCatalog:
     def __contains__(self, name: str) -> bool:
         """Check if a property is available."""
         pred = object.__getattribute__(self, "_prediction")
-        return name in pred._model._property_catalog
+        return name in pred._model._ensure_property_catalog()
 
     def __iter__(self):
         """Iterate over property names."""
         pred = object.__getattribute__(self, "_prediction")
-        return iter(sorted(pred._model._property_catalog.keys()))
+        return iter(sorted(pred._model._ensure_property_catalog().keys()))
 
     def keys(self):
         """Return property names."""

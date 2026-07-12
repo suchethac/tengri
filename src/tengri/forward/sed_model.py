@@ -4235,17 +4235,27 @@ class SEDModel:
         >>> model.available_properties
         ('stellar_mass', 'stellar_mass_surviving', 'sfr_10myr', ...)
         """
-        # Lazy assemble the property catalog
+        return tuple(sorted(self._ensure_property_catalog().keys()))
+
+    def _ensure_property_catalog(self):
+        """Assemble the model's property catalog once, and return it.
+
+        The catalog is built lazily from the active component chain. This is the
+        **only** place that assembles it: it used to be inlined in both
+        ``available_properties`` and ``predict_properties``, while
+        ``Prediction.properties`` read ``_property_catalog`` directly — so on a
+        fresh model, ``pred.properties["stellar_mass"]`` raised ``AttributeError``
+        unless the user happened to touch one of the other two first (#1131).
+        """
         if not hasattr(self, "_property_catalog"):
             from tengri.forward.properties import assemble_available_properties
 
-            # Get the active components in the built chain
             chain = getattr(self, "_cached_component_chain", None)
             if chain is None:
                 chain = self._build_component_chain()
             active_names = {c.name for c in chain}
             self._property_catalog = assemble_available_properties(active_names)
-        return tuple(sorted(self._property_catalog.keys()))
+        return self._property_catalog
 
     def predict_properties(self, params, names=None):
         """Compute derived properties from the forward state.
@@ -4328,15 +4338,7 @@ class SEDModel:
         predict : Lazy Prediction object with attribute-access syntax.
         predict_sfh_quantities : Legacy SFH quantity interface.
         """
-        # Resolve the catalog
-        if not hasattr(self, "_property_catalog"):
-            from tengri.forward.properties import assemble_available_properties
-
-            chain = getattr(self, "_cached_component_chain", None)
-            if chain is None:
-                chain = self._build_component_chain()
-            active_names = {c.name for c in chain}
-            self._property_catalog = assemble_available_properties(active_names)
+        self._ensure_property_catalog()
 
         # Resolve names to compute (default = all)
         if names is None:
