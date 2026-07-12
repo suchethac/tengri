@@ -1649,6 +1649,40 @@ _register(
 
 # ── Composition: resolve_sfh() ────────────────────────────────────
 
+#: ``dense_basis`` carries SFR-constraint points that pin the recent SFH, which
+#: fights both the GP field modulator and the triweight burst kernel
+#: (Zacharegkas+2025). Composing with either swaps in the quantile-only variant.
+#: Its public parameters are prefixed ``sfh_dbp_*``, not ``sfh_db_*``.
+_DB_TO_PURE: dict[str, str] = {"dense_basis": "dense_basis_pure", "db": "dbp"}
+
+#: SFH names that compose with (rather than replace) the smooth model.
+_COMPOSITORS: frozenset[str] = frozenset({"field", "burst"})
+
+
+def apply_compositor_swap(names: list[str]) -> list[str]:
+    """Apply the ``dense_basis`` → ``dense_basis_pure`` auto-swap (#1074).
+
+    Every consumer that resolves an SFH name to a spec must apply this — the
+    swap renames the public parameters (``sfh_db_*`` → ``sfh_dbp_*``), so a
+    consumer that skips it looks up the wrong spec, fails to find the user's
+    parameters, and silently substitutes registry defaults. That is exactly how
+    ``tx_frac_*`` became a no-op in the composite forward model (#1074).
+
+    Parameters
+    ----------
+    names : list of str
+        Requested SFH model names, e.g. ``["dense_basis", "field"]``.
+
+    Returns
+    -------
+    list of str
+        The names with ``dense_basis`` swapped for its pure variant when a
+        compositor (``field`` or ``burst``) is present. Unchanged otherwise.
+    """
+    if not any(n in _COMPOSITORS for n in names):
+        return list(names)
+    return [_DB_TO_PURE.get(n, n) for n in names]
+
 
 def resolve_sfh(
     mean_sfh_type: str | list[str],
@@ -1713,14 +1747,7 @@ def resolve_sfh(
     if isinstance(mean_sfh_type, str):
         mean_sfh_type = [mean_sfh_type]
 
-    # Auto-swap: dense_basis → dense_basis_pure when field or burst is present.
-    # The SFR constraint points in dense_basis pin recent SFH shape, which
-    # interferes with both the GP field modulator and the triweight burst
-    # kernel (Zacharegkas+2025) that also control recent SFR variability.
-    _DB_TO_PURE = {"dense_basis": "dense_basis_pure", "db": "dbp"}
-    has_compositor = any(n in ("field", "burst") for n in mean_sfh_type)
-    if has_compositor:
-        mean_sfh_type = [_DB_TO_PURE.get(n, n) for n in mean_sfh_type]
+    mean_sfh_type = apply_compositor_swap(mean_sfh_type)
 
     # Look up models
     specs = []
