@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import logging
 import warnings
@@ -26,6 +27,160 @@ import jax.numpy as jnp
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+# Draws per compiled kernel when lifting properties over a posterior. Peak
+# memory scales with this, not with n_samples.
+_PROPERTY_CHUNK = 64
+
+
+class PosteriorProperties:
+    r"""The property catalog lifted over the sample axis.
+
+    The topology-agnostic seam of contract §1 — **same names, more axes**. Every
+    key a :class:`~tengri.forward.prediction.Prediction` answers to, a
+    :class:`Posterior` answers to as well; a scalar simply becomes
+    ``(n_samples,)``. Nothing about the name, the units, or the meaning changes
+    with the topology.
+
+    Values are computed lazily (first access per name), memoized, and evaluated
+    through :func:`~tengri.utils.batching.vmap_chunked` so that a large posterior
+    does not materialize every intermediate for every draw at once.
+
+    Parameters
+    ----------
+    posterior : Posterior
+        The parent posterior, supplying ``samples`` (or ``params`` for a MAP
+        fit, which has no sample axis) and the model.
+
+    See Also
+    --------
+    tengri.forward.prediction.PropertyCatalog : the scalar (single-Prediction) twin.
+    """
+
+    def __init__(self, posterior):
+        object.__setattr__(self, "_posterior", posterior)
+        object.__setattr__(self, "_cache", {})
+
+    # ── the catalog protocol ─────────────────────────────────────
+
+    def _model(self):
+        post = object.__getattribute__(self, "_posterior")
+        if post._model is None:
+            raise RuntimeError(
+                "No model reference on this Posterior — cannot compute properties. "
+                "(It is populated automatically by Fitter.run().)"
+            )
+        return post._model
+
+    def __getitem__(self, name: str):
+        """Property values over the sample axis — ``(n_samples,)``, or a scalar for MAP."""
+        cache = object.__getattribute__(self, "_cache")
+        if name in cache:
+            return cache[name]
+
+        post = object.__getattribute__(self, "_posterior")
+        model = self._model()
+
+        available = model.available_properties
+        if name not in available:
+            raise KeyError(f"Unknown property {name!r}. Available: {sorted(available)}")
+
+        if post.samples is None:
+            # MAP: one point, no sample axis. Same key, zero extra axes.
+            value = model.predict_properties(post.params, names=(name,))[name]
+        else:
+            from tengri.utils.batching import vmap_chunked
+
+            fn = vmap_chunked(
+                lambda p: model.predict_properties(p, names=(name,))[name],
+                chunk_size=_PROPERTY_CHUNK,
+            )
+            value = fn(post.samples)
+
+        cache[name] = value
+        return value
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._model().available_properties
+
+    def __iter__(self):
+        return iter(sorted(self._model().available_properties))
+
+    def keys(self):
+        """Available property names — identical to the model's."""
+        return list(self)
+
+    def to_dict(self, names=None) -> dict:
+        """Export properties as a plain dict, ready for a table.
+
+        Parameters
+        ----------
+        names : sequence of str, optional
+            Names to export. Defaults to every available property.
+
+        Returns
+        -------
+        dict
+            ``name -> ndarray, shape (n_samples,)`` (scalars for a MAP fit).
+        """
+        if names is None:
+            names = list(self)
+        return {name: self[name] for name in names}
+
+    # ── the sample-axis-only verb ────────────────────────────────
+
+    def ci(self, name: str, level: float = 0.68) -> tuple[float, float, float]:
+        """Credible interval for a property.
+
+        Parameters
+        ----------
+        name : str
+            Property name.
+        level : float, default 0.68
+            Central credible level. ``0.68`` gives the 16th/84th percentiles.
+
+        Returns
+        -------
+        tuple of float
+            ``(lo, median, hi)`` — the equal-tailed interval and the median.
+
+        Raises
+        ------
+        ValueError
+            If the posterior has no samples (a MAP fit has no interval to give),
+            or ``level`` is not in ``(0, 1)``.
+
+        Examples
+        --------
+        >>> lo, med, hi = posterior.properties.ci("stellar_mass")  # doctest: +SKIP
+        >>> lo, med, hi = posterior.properties.ci("sfr_100myr", level=0.95)  # doctest: +SKIP
+        """
+        if not 0.0 < level < 1.0:
+            raise ValueError(f"level must be in (0, 1), got {level}")
+
+        post = object.__getattribute__(self, "_posterior")
+        if post.samples is None:
+            raise ValueError(
+                f"This is a {post.method!r} fit with no samples, so {name!r} has no "
+                "credible interval. Use posterior.properties[name] for the point value."
+            )
+
+        tail = 100.0 * (1.0 - level) / 2.0
+        arr = np.asarray(self[name])
+        lo, med, hi = np.percentile(arr, [tail, 50.0, 100.0 - tail])
+        return float(lo), float(med), float(hi)
+
+    def __setattr__(self, name, value):
+        raise AttributeError("PosteriorProperties is read-only")
+
+    def __repr__(self):
+        post = object.__getattribute__(self, "_posterior")
+        n = (
+            "MAP"
+            if post.samples is None
+            else f"{next(iter(post.samples.values())).shape[0]} draws"
+        )
+        return f"<PosteriorProperties: {len(self.keys())} properties over {n}>"
 
 
 @dataclass
@@ -204,8 +359,71 @@ class Posterior:
     # ── Derived quantities ────────────────────────────────────────
 
     @functools.cached_property
+    def properties(self) -> PosteriorProperties:
+        r"""The property catalog, lifted over the sample axis.
+
+        Contract §1 — **same names, more axes**. Every property the model
+        provides is here under exactly the name a ``Prediction`` uses; a scalar
+        becomes ``(n_samples,)``. Values are computed lazily per name and
+        evaluated in memory-bounded chunks, so a large posterior does not OOM.
+
+        Returns
+        -------
+        PosteriorProperties
+            Dict-like: ``[name]``, ``keys()``, ``to_dict(names=)``, plus the
+            sample-axis verb ``ci(name, level=0.68)``.
+
+        Examples
+        --------
+        >>> post.properties["stellar_mass"].shape  # doctest: +SKIP
+        (4000,)
+        >>> post.stellar_mass.shape  # attribute sugar  # doctest: +SKIP
+        (4000,)
+        >>> lo, med, hi = post.properties.ci("stellar_mass")  # doctest: +SKIP
+
+        See Also
+        --------
+        PosteriorProperties : the catalog object.
+        tengri.vmap_chunked : the memory-bounded evaluation used underneath.
+        """
+        return PosteriorProperties(self)
+
+    def __getattr__(self, name: str):
+        """Attribute sugar for catalog properties — ``post.stellar_mass``.
+
+        Only reached for attributes that do not otherwise exist, so it never
+        shadows a real field. Guards against recursion during ``__init__`` and
+        unpickling, when ``_model`` may not be set yet.
+        """
+        if name.startswith("_") or name in ("samples", "params", "method"):
+            raise AttributeError(name)
+
+        model = self.__dict__.get("_model")
+        if model is None:
+            raise AttributeError(name)
+
+        try:
+            available = model.available_properties
+        except Exception:
+            raise AttributeError(name) from None
+
+        if name in available:
+            return self.properties[name]
+        raise AttributeError(
+            f"{type(self).__name__!r} has no attribute {name!r}. "
+            f"Available properties: {sorted(available)}"
+        )
+
+    @functools.cached_property
     def derived(self) -> dict:
         """Derived physical quantities (stellar mass, SFR, sSFR).
+
+        .. deprecated:: 2026-07
+           Use :attr:`properties` instead — it exposes **every** property the
+           model provides (not a hardcoded five), under the same names as the
+           model side, and evaluates them in memory-bounded chunks.
+           ``posterior.derived["stellar_mass"]`` becomes
+           ``posterior.properties["stellar_mass"]`` (or ``posterior.stellar_mass``).
 
         For MAP: computed on the single best-fit → dict of scalars.
         For NUTS/geoVI: computed on all samples → dict of arrays.
@@ -232,6 +450,24 @@ class Posterior:
         >>> stellar_masses = derived["stellar_mass"]  # Shape (n_samples,)
         >>> med, lo, hi = np.percentile(stellar_masses, [50, 16, 84])
         """
+        warnings.warn(
+            "Posterior.derived is deprecated; use Posterior.properties instead. "
+            "It carries every property the model provides — not this hardcoded five — "
+            "under the same names the model side uses, and evaluates them in "
+            "memory-bounded chunks. Replace posterior.derived['stellar_mass'] with "
+            "posterior.properties['stellar_mass'] (or posterior.stellar_mass); "
+            "posterior.properties.ci('stellar_mass') gives (lo, med, hi) directly.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+        # The body below is UNCHANGED on purpose. `derived` routes through
+        # `predict_sfh_quantities`, a separate internal recompute path from the
+        # orchestrator `state_to_*` functions the property catalog is pinned to,
+        # so the two agree to ~1e-10 but are not bit-identical (the Phase 1
+        # finding). Contract §7 requires a *bit-exact* shim for one cycle, so we
+        # keep the old numbers rather than silently re-routing every existing
+        # user's results through the new path.
         if self._model is None:
             raise RuntimeError("No model reference — cannot compute derived quantities")
 
@@ -1763,11 +1999,15 @@ class Posterior:
         derived_truths = {}
         if self._model is not None:
             try:
-                d = self.derived
+                # The property catalog, not the deprecated `derived` — same keys,
+                # and reading it here would otherwise fire a DeprecationWarning at
+                # every corner plot (contract §7: migrate internal callers with the
+                # deprecation, never after it).
+                cat = self.properties
                 for k in ["stellar_mass", "sfr_100myr", "sfr_10myr"]:
-                    if k in d:
-                        derived[k] = np.array(d[k])
-            except (AttributeError, TypeError, ValueError) as exc:
+                    if k in cat:
+                        derived[k] = np.array(cat[k])
+            except (AttributeError, TypeError, ValueError, KeyError, RuntimeError) as exc:
                 logger.debug("derived quantity computation failed: %s", exc)
             # Compute truth derived quantities for truth lines
             if truths is not None:
@@ -2184,13 +2424,25 @@ class Posterior:
         "refine",
         "resample",
         # 5.  Post-fit physics
+        "properties",
         "posterior_predictive",
         "sed_components",
     )
 
     def __dir__(self) -> list[str]:
-        """Curated tab-completion list. Other attrs remain accessible."""
-        return list(self._CURATED_DIR)
+        """Curated tab-completion list, plus this model's catalog properties.
+
+        The curation is deliberate — a Posterior has a large surface and the
+        useful verbs would otherwise be lost in it. The catalog property names
+        are appended because they are reachable as attributes (``__getattr__``)
+        and would otherwise be invisible to autocomplete.
+        """
+        names = list(self._CURATED_DIR)
+        model = self.__dict__.get("_model")
+        if model is not None:
+            with contextlib.suppress(Exception):
+                names.extend(model.available_properties)
+        return sorted(set(names))
 
     # ── Method chaining ───────────────────────────────────────────
 

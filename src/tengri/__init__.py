@@ -275,6 +275,7 @@ from tengri.parameters.registry import (
 from tengri.parameters.sentinels import FIXED, FREE
 from tengri.protocols import ComponentIOError, DerivedKey, DerivedState, ForwardState
 from tengri.utils import jit_logging
+from tengri.utils.batching import vmap_chunked
 
 agn = _components.agn
 dust = _components.dust
@@ -519,6 +520,7 @@ __all__ = [
     "tutorial",
     "units",
     "velocity_broaden",
+    "vmap_chunked",
     "xray",
 ]
 

@@ -74,6 +74,7 @@ EXPECTED_ALL = frozenset(
         "presets",
         "results",
         "units",
+        "vmap_chunked",
         # Registry verbs
         "describe",
         "describe_agn_block",

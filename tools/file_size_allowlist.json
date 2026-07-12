@@ -5,7 +5,7 @@
   "src/tengri/inference/fitter.py": 3176,
   "src/tengri/components/dust/attenuation.py": 1882,
   "src/tengri/parameters/groups.py": 2617,
-  "src/tengri/inference/posterior.py": 2349,
+  "src/tengri/inference/posterior.py": 2571,
   "src/tengri/components/agn/disc.py": 2138,
   "src/tengri/forward/prediction.py": 2771,
   "src/tengri/inference/hierarchical.py": 2076,
