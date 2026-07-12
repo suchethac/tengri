@@ -66,6 +66,101 @@ def _interp_rows(xq: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
     return y0 + (y1 - y0) * t
 
 
+def subband_quadrature(
+    grid: np.ndarray,
+    tw_grid: np.ndarray,
+    integrand: np.ndarray,
+    denom: float,
+    n_subbands: int,
+    eff_wave_obs: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    r"""Sub-band weights and quadrature nodes for one filter (#1122).
+
+    Splits the band into ``K`` sub-bands of equal filter mass and returns, per
+    template, the filter integral restricted to each and the template's own
+    flux-weighted centroid there:
+
+    .. math::
+
+        \Phi_k = \int_{\lambda_k}^{\lambda_{k+1}} L_\nu T w \,d\lambda
+                 \Big/ \int T w \,d\lambda
+        \qquad
+        \bar\lambda_k = \frac{\int_k \lambda L_\nu T w \,d\lambda}
+                             {\int_k L_\nu T w \,d\lambda}
+
+    Both are attenuation-independent, so a multiplicative screen is applied at
+    runtime as :math:`\sum_k \Phi_k A(\bar\lambda_k)` — an exact factorization.
+
+    The single implementation, shared by the fixed-z (:func:`preintegrate_grid`)
+    and free-z (ztable) precomputes so the two cannot drift.
+
+    Parameters
+    ----------
+    grid : ndarray, shape (m,)
+        Union quadrature grid, observed frame [Angstrom].
+    tw_grid : ndarray, shape (m,)
+        Transmission x filter weight on ``grid`` [dimensionless].
+    integrand : ndarray, shape (..., m)
+        ``templates * tw_grid`` — the thing whose band integral is wanted.
+    denom : float
+        ``int tw dlambda``, the filter normalization.
+    n_subbands : int
+        Number of sub-bands K.
+    eff_wave_obs : float
+        Filter effective wavelength, observed frame — the node fallback where a
+        template has no flux in a sub-band [Angstrom].
+
+    Returns
+    -------
+    phi : ndarray, shape (..., K)
+        Sub-band filter integrals. Sums over K to the full band integral.
+    nodes : ndarray, shape (..., K)
+        Quadrature nodes, observed frame [Angstrom].
+
+    Raises
+    ------
+    AssertionError
+        If the partition is not flux-conserving.
+
+    Notes
+    -----
+    **JIT-compatible**: no — build-time numpy precompute.
+
+    The partition is built from CUMULATIVE integrals interpolated at the edges.
+    Selecting grid points inside each sub-band instead silently drops the
+    fractional interval at every edge: the sub-integrals stop summing to the
+    whole and the quadrature error then GROWS with K. Conservation is asserted.
+    """
+    K = int(n_subbands)
+    cum_w = _cumtrapz_rows(tw_grid, grid)
+    edges = np.interp(np.linspace(0.0, cum_w[-1], K + 1), cum_w, grid)
+
+    cum_sw = _cumtrapz_rows(integrand, grid)
+    cum_lsw = _cumtrapz_rows(integrand * grid, grid)
+    i_k = np.diff(_interp_rows(edges, grid, cum_sw), axis=-1)
+    l_k = np.diff(_interp_rows(edges, grid, cum_lsw), axis=-1)
+
+    total = cum_sw[..., -1]
+    resid = np.abs(i_k.sum(axis=-1) - total)
+    scale = np.maximum(np.abs(total), 1e-300)
+    if not np.all(resid / scale < 1e-10):
+        raise AssertionError(
+            "sub-band partition is not flux-conserving (max relative residual "
+            f"{float(np.max(resid / scale)):.3e}). The sub-band integrals must "
+            "sum to the full filter integral."
+        )
+
+    # The node is the template's OWN flux-weighted centroid in the sub-band —
+    # that is what makes the rule track the spectrum and converge as 1/K^2, and
+    # it also makes the first moment vanish identically, so a Taylor term on top
+    # would add exactly zero. Where a template has no flux the weight is zero, so
+    # the node cannot change the result — but it is still fed through the dust
+    # law, which goes as 1/lambda, so it must stay finite and positive.
+    live = i_k != 0.0
+    nodes = np.where(live, l_k / np.where(live, i_k, 1.0), eff_wave_obs)
+    return i_k / np.maximum(denom, 1e-30), nodes
+
+
 @dataclasses.dataclass(frozen=True)
 class PreintegratedGrid:
     """Template grid with wavelength dimension collapsed into filter integrals.
@@ -369,45 +464,12 @@ def preintegrate_grid(
             num_moment = _np_trapezoid(templates_on_grid * dlam * weight, grid, axis=-1)
             moment_flat[:, f_idx] = num_moment / np.maximum(denom, 1e-30)
 
-        # Sub-band quadrature nodes and weights (#1122).
+        # Sub-band quadrature nodes and weights (#1122) — the single
+        # implementation, shared with the free-z ztable precompute so the two
+        # cannot drift.
         if K > 0:
-            # Edges split the band into K pieces of equal filter mass, so the
-            # nodes land where the filter actually has throughput.
-            #
-            # Everything below is built from CUMULATIVE integrals evaluated at
-            # the edges. Selecting grid points inside each sub-band instead
-            # would silently drop the fractional interval at every edge: the
-            # sub-integrals would no longer sum to the whole, and the
-            # quadrature error would GROW with K rather than shrink. The
-            # conservation assert at the end of the loop pins this.
-            cum_w = _cumtrapz_rows(tw_grid, grid)
-            sb_edges = np.interp(np.linspace(0.0, cum_w[-1], K + 1), cum_w, grid)
-
-            cum_sw = _cumtrapz_rows(integrand, grid)
-            cum_lsw = _cumtrapz_rows(integrand * grid, grid)
-            i_k = np.diff(_interp_rows(sb_edges, grid, cum_sw), axis=-1)
-            l_k = np.diff(_interp_rows(sb_edges, grid, cum_lsw), axis=-1)
-
-            sub_phot[:, f_idx, :] = i_k / np.maximum(denom, 1e-30)
-            # The node is the template's OWN flux-weighted centroid in the
-            # sub-band, which is what makes the rule track the spectrum and
-            # converge as 1/K². It is a build-time constant: the SSP grid is
-            # fixed, and no free parameter enters. Where a template has no flux
-            # in a sub-band its weight is zero, so the node is irrelevant — fall
-            # back to the midpoint rather than divide by zero.
-            mid = 0.5 * (sb_edges[:-1] + sb_edges[1:])
-            nonzero = i_k != 0.0
-            sub_waves[:, f_idx, :] = np.where(nonzero, l_k / np.where(nonzero, i_k, 1.0), mid)
-
-    if K > 0:
-        # The partition must neither lose nor create flux.
-        resid = np.abs(sub_phot.sum(axis=-1) - phot_flat)
-        scale = np.maximum(np.abs(phot_flat), 1e-300)
-        if not np.all(resid / scale < 1e-10):
-            raise AssertionError(
-                "sub-band partition is not flux-conserving "
-                f"(max relative residual {float(np.max(resid / scale)):.3e}). "
-                "The sub-band integrals must sum to the full filter integral."
+            sub_phot[:, f_idx, :], sub_waves[:, f_idx, :] = subband_quadrature(
+                grid, tw_grid, integrand, denom, K, float(eff_waves_obs[f_idx])
             )
 
     eff_waves_rest = eff_waves_obs / (1.0 + redshift)
