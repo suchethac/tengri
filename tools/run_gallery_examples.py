@@ -66,14 +66,27 @@ _RUNS_A_FIT = re.compile(
 # explicit and hand-maintained on purpose: "the file is missing, so skip it" as an
 # automatic rule would silently drop an example the day someone's data/ went stale,
 # and the gate would still report green. If you add an entry here, say why.
+_PAHSPEC = "needs data/pahspec_draine2021.h5 (99 MB, 404 on the host, not shipped)"
+_MULTI_SSP = (
+    "compares SSP libraries — needs bc03 (35 MB) + fsps_mist (109 MB) + "
+    "pgny (104 MB) beyond the shipped grids"
+)
+_MULTI_IMF = "compares IMFs — needs fsps_prsc_miles_{kroupa,salpeter} (64 MB each)"
+
 _NEEDS_ABSENT_DATA = {
-    # data/pahspec_draine2021.h5 is 99 MB and a 404 on the template host, so it can
-    # be neither committed cheaply nor fetched. It buys exactly these two examples:
     # `draine2021_pah` is 1 of 18 dust-emission models, an explicit opt-in used by
-    # no notebook and no recipe, and its tests live in tests/integration (auto-
-    # marked `slow`, deselected from the PR gate). Not worth 99 MB in git.
-    "plot_pahspec_starlight_sweep.py": "needs data/pahspec_draine2021.h5 (99 MB, not shipped)",
-    "plot_logu_cross_library.py": "needs data/pahspec_draine2021.h5 (99 MB, not shipped)",
+    # no notebook and no recipe, and its tests all live in tests/integration
+    # (auto-marked `slow`, deselected from the PR gate). 99 MB for two figures.
+    "plot_pahspec_starlight_sweep.py": _PAHSPEC,
+    "plot_logu_cross_library.py": _PAHSPEC,
+    # These five are *library/IMF comparisons* — needing several SSP grids is the
+    # entire point of the figure, so there is no lighter version of them. Shipping
+    # every grid they touch would add ~376 MB to git for five examples.
+    "plot_sps_library_compare.py": _MULTI_SSP,
+    "plot_ssp_color_compare.py": _MULTI_SSP,
+    "plot_ssp_library_shootout.py": _MULTI_SSP,
+    "plot_ionizing_lum.py": _MULTI_SSP,
+    "plot_imf_choice_sweep.py": _MULTI_IMF,
 }
 
 
