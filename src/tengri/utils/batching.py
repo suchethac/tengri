@@ -28,10 +28,22 @@ along with everything else, or evaluate unchunked.
 
 from __future__ import annotations
 
+import warnings
+
 import jax
 import jax.numpy as jnp
 
 __all__ = ["vmap_chunked"]
+
+# The failures that genuinely mean "this function cannot be traced" — it inspects
+# concrete values, or leaks a tracer. Everything else (a typo'd key, a shape
+# mismatch, an OOM) is a real bug and must propagate: catching it here would
+# silently reclassify it as a fact of life and route around it forever (#1128).
+_NOT_TRACEABLE = (
+    jax.errors.ConcretizationTypeError,  # base of the Tracer*ConversionError family
+    jax.errors.UnexpectedTracerError,
+    jax.errors.NonConcreteBooleanIndexError,
+)
 
 
 def _leading_axis_size(batch) -> int:
@@ -56,8 +68,13 @@ def vmap_chunked(fn, chunk_size: int = 16):
     kernel.
 
     If ``fn`` cannot be jitted — some nebular backends are not traceable — the
-    call degrades to an **eager per-draw loop** rather than raising. The
-    jittability probe runs **once** per returned callable, not once per draw.
+    call degrades to an **eager per-draw loop** rather than raising, and warns
+    once so the ~7x slowdown is never silent. The jittability probe runs **once**
+    per returned callable, not once per draw.
+
+    Only genuine *tracing* failures count as "not jittable". A typo'd key, a shape
+    mismatch, or any other real bug propagates rather than being quietly
+    reclassified and routed around (#1128).
 
     Parameters
     ----------
@@ -75,10 +92,19 @@ def vmap_chunked(fn, chunk_size: int = 16):
         leading draw axis of length ``n``, and each result leaf has leading axis
         ``n``.
 
+    Warns
+    -----
+    UserWarning
+        Once per callable, when ``fn`` turns out not to be traceable and the
+        evaluation falls back to the eager per-draw loop.
+
     Raises
     ------
     ValueError
         If ``chunk_size`` is not positive, or the batch has no leaves.
+    Exception
+        Whatever ``fn`` raises, if the failure is not a tracing failure — a real
+        bug is never swallowed by the jittability probe.
 
     Notes
     -----
@@ -132,8 +158,17 @@ def vmap_chunked(fn, chunk_size: int = 16):
             try:
                 jitted(_slice_batch(batch, 0, min(chunk_size, n)))
                 can_jit[0] = True
-            except Exception:
+            except _NOT_TRACEABLE as exc:
                 can_jit[0] = False
+                warnings.warn(
+                    f"vmap_chunked: {getattr(fn, '__name__', 'the mapped function')} "
+                    f"cannot be traced ({type(exc).__name__}), so it will be evaluated "
+                    f"one draw at a time in an eager loop — roughly 7x slower than the "
+                    f"batched path. This is expected for backends that inspect concrete "
+                    f"values; if you did not intend it, make the function jittable.",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
         if not can_jit[0]:
             return _eager(batch, n)
