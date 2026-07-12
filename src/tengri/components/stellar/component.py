@@ -1875,6 +1875,19 @@ class StellarSEDComponent:
                     sub_num / jnp.where(live, sub_phi, 1.0),
                     jnp.asarray(self._state.ssp_phot_lut.effective_wavelengths_rest)[:, None],
                 )
+                # The same tensor with the IGM folded in at the nodes (#1135).
+                # Identical einsum, on a constant that already carries T — the met
+                # axis is contracted here, so T had to be evaluated on it (the node
+                # moves with the free met_logzsol). Kept alongside the IGM-free
+                # tensor rather than replacing it: phot_rest_fnu is projected at
+                # z=0 and carries no IGM.
+                ssp_sub_phot_igm = self._state.ssp_phot_lut.ssp_subband_phot_igm
+                if ssp_sub_phot_igm is not None:
+                    derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
+                        total_mass
+                        * jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm)
+                        * LSUN_ERG_PER_S
+                    )
             # Publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.
             derived_overrides["filter_eff_waves"] = jnp.asarray(
@@ -1966,6 +1979,16 @@ class StellarSEDComponent:
                 derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
                     live, sub_num / jnp.where(live, sub_phi, 1.0), eff_waves_at_z[:, None]
                 )
+                # IGM folded in at the nodes (#1135) — tabulated against this same
+                # z grid at build time, so it rides the same triweight interpolation
+                # as the sub-band photometry it multiplies.
+                if ztable.ssp_subband_phot_igm_table is not None:
+                    sub_phot_igm_at_z = _interp(ztable.ssp_subband_phot_igm_table)
+                    derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
+                        total_mass
+                        * jnp.einsum("ma,mafk->afk", joint_weights, sub_phot_igm_at_z)
+                        * LSUN_ERG_PER_S
+                    )
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded

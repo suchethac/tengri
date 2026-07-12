@@ -23,6 +23,13 @@ pytestmark = pytest.mark.contract
 
 _MATCH = "first-order Taylor projection"
 
+#: The warning describes the Taylor form, which since #1122 lives only behind an
+#: explicit opt-out. Every "does not warn" case below must be built HERE, not on
+#: the default: on the default the quadrature short-circuits the check, and the
+#: tests would pass without exercising the dust-off / optical-only reason they
+#: claim to test.
+_TAYLOR = WavePrecomp(n_subbands=0, taylor_correction=True)
+
 # Observed-frame centers: at z=1, 1500 Å -> rest 750 Å (deep UV, flagged);
 # 6000 Å -> rest 3000 Å and 8000 Å -> rest 4000 Å (optical/NIR, not flagged).
 _UV = (1500.0, "uv")
@@ -63,10 +70,10 @@ def _flagged(recwarn) -> list:
 
 
 def test_warns_for_uv_band_with_dust_under_wave_precomp(synthetic_ssp_wide):
-    """A rest-UV band + dust + WavePrecomp must raise the bias warning."""
+    """A rest-UV band + dust + the Taylor projection must raise the bias warning."""
     obs = _obs([_UV, _OPT])
     with pytest.warns(UserWarning, match=_MATCH):
-        _build(synthetic_ssp_wide, obs, WavePrecomp(), tau="free")
+        _build(synthetic_ssp_wide, obs, _TAYLOR, tau="free")
 
 
 def test_no_warning_on_exact_path(synthetic_ssp_wide, recwarn):
@@ -77,11 +84,26 @@ def test_no_warning_on_exact_path(synthetic_ssp_wide, recwarn):
 
 def test_no_warning_when_dust_off(synthetic_ssp_wide, recwarn):
     """Zero dust → the LUT is exact → no warning."""
-    _build(synthetic_ssp_wide, _obs([_UV, _OPT]), WavePrecomp(), tau=0.0)
+    _build(synthetic_ssp_wide, _obs([_UV, _OPT]), _TAYLOR, tau=0.0)
     assert not _flagged(recwarn)
 
 
 def test_no_warning_for_optical_only(synthetic_ssp_wide, recwarn):
     """No rest-UV band → the Taylor projection is accurate → no warning."""
-    _build(synthetic_ssp_wide, _obs([_OPT, _NIR]), WavePrecomp(), tau="free")
+    _build(synthetic_ssp_wide, _obs([_OPT, _NIR]), _TAYLOR, tau="free")
+    assert not _flagged(recwarn)
+
+
+def test_the_default_quadrature_does_not_warn(synthetic_ssp_wide, recwarn):
+    """The default WavePrecomp() EVALUATES the screen at n_subbands=5 nodes per band
+    (#1122) and folds the IGM into the same nodes at build time (#1135), so the
+    Taylor-era bias is gone and the warning must not fire.
+
+    This is the whole point of the sub-band quadrature. A warning here would send
+    astronomers to ``approx=None`` — 80x slower — to escape a bias that measurement
+    against the exact path puts at <=0.5% in the worst rest-UV band. Guards against
+    the warning silently outliving the defect it describes, which is exactly what
+    happened between #1122 landing and #1135.
+    """
+    _build(synthetic_ssp_wide, _obs([_UV, _OPT]), WavePrecomp(), tau="free")
     assert not _flagged(recwarn)
