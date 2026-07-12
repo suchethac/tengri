@@ -120,7 +120,13 @@ def test_attribute_sugar_is_the_catalog(model, pred):
         if not np.isclose(catalog, sugar, rtol=1e-9, equal_nan=True):
             split.append((name, catalog, sugar))
 
-    assert compared >= 25, (
+    # Two families are legitimately NaN on this fixture and carry no signal:
+    # the emission lines (no nebular backend publishes a per-line catalog) and
+    # stellar_mass_surviving (the synthetic SSP has no mass-remaining table, so
+    # "how much mass survives" genuinely has no answer — see #1131). That leaves
+    # ~23 with signal; the floor guards against the sweep silently degenerating
+    # further, which is the only way it could pass while proving nothing.
+    assert compared >= 20, (
         f"only {compared} properties carried any signal — this sweep has gone "
         "vacuous and can no longer detect a shadowed accessor"
     )
