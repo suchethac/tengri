@@ -82,9 +82,9 @@ for ax_idx, (lib_name, torus_block) in enumerate(torus_configs):
             redshift=tengri.Fixed(0.0),
         )
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
-        nu_lnu = (C_AA_PER_S / wave) * np.asarray(out.sed)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
+        nu_lnu = (C_AA_PER_S / wave) * np.asarray(out.rest_sed())
         inc_deg = np.degrees(np.arccos(cos_inc))
         ax.loglog(wave, nu_lnu, color=cmap(norm(inc_deg)), lw=1.2)
 

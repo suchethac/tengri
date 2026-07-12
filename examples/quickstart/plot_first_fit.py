@@ -74,9 +74,9 @@ flux_obs = np.asarray(mock.flux_obs)
 noise = np.asarray(mock.noise)
 wave_eff = np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
 
-sed_truth = model.predict_rest_sed(truth)
-sed_fit = model.predict_rest_sed(fit_params)
-wave_rest = np.asarray(sed_truth.wavelength)
+sed_truth = model.predict(truth)
+sed_fit = model.predict(fit_params)
+wave_rest = np.asarray(model.wavelengths)
 z = 0.05
 wave_obs = wave_rest * (1.0 + z)
 
@@ -89,9 +89,9 @@ def _band_anchor(sed):
     return sed[idx]
 
 
-scale_truth = flux_truth[2] / _band_anchor(np.asarray(sed_truth.sed))
-fnu_truth = scale_truth * np.asarray(sed_truth.sed)
-fnu_fit = scale_truth * np.asarray(sed_fit.sed)
+scale_truth = flux_truth[2] / _band_anchor(np.asarray(sed_truth.rest_sed()))
+fnu_truth = scale_truth * np.asarray(sed_truth.rest_sed())
+fnu_fit = scale_truth * np.asarray(sed_fit.rest_sed())
 
 fig, (ax_sed, ax_res) = plt.subplots(
     2,

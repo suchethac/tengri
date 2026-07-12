@@ -56,9 +56,9 @@ for (ssp_name, imf_label), color in zip(IMFS, colors):
         redshift=tengri.Fixed(0.01),
     )
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_S / wave * np.asarray(out.sed)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_S / wave * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=imf_label)
 
 ax.set_xlim(1000, 3e4)

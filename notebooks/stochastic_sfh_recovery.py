@@ -102,15 +102,15 @@ def silence():
 warnings.filterwarnings("ignore", message=r".*Fitter\(sed_model.*deprecated.*")
 
 sys.path.insert(0, ".")
-from _plot_style import COLORS, setup_style  # noqa: E402
+from _plot_style import COLORS, setup_style
 
 setup_style()
 os.makedirs("figures", exist_ok=True)
 
-from pathlib import Path  # noqa: E402
+from pathlib import Path
 
-import tengri  # noqa: E402
-from tengri import (  # noqa: E402
+import tengri
+from tengri import (
     FREE,
     Fitter,
     Fixed,

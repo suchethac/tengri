@@ -45,7 +45,8 @@ from tengri.sfh.gp_sfh import compute_sqrt_power_drw
 from tengri.sfh.gp_sfh import gp_from_xi
 from tengri.utils.grid import make_log_age_grid, grid_spacing
 
-import sys, os  # noqa: E401, E402
+import sys, os  # noqa: E401
+
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
@@ -66,14 +67,12 @@ elif os.path.exists(os.path.join("..", "..", "..", "data")):
 FIGDIR = os.path.join("demonstrations", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-from _plot_style import COLORS, setup_style  # noqa: E402
+from _plot_style import COLORS, setup_style
 
 setup_style()
 
 # %%
-ssp_data = load_ssp_data(
-    "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-)
+ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
 # %% [markdown]
@@ -91,6 +90,7 @@ filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 # %% [markdown]
 # ## Custom Prior: TruncatedCauchy
 
+
 # %%
 class TruncatedCauchy(Distribution):
     """Cauchy distribution truncated to [lo, hi]."""
@@ -104,6 +104,7 @@ class TruncatedCauchy(Distribution):
     def unstandardize(self, xi):
         """N(0,1) → Cauchy truncated to [lo, hi]."""
         from jax.scipy.stats import norm
+
         u = norm.cdf(xi)  # uniform on [0, 1]
         # Map to Cauchy quantile then truncate
         return self.lo + (self.hi - self.lo) * u
@@ -111,11 +112,13 @@ class TruncatedCauchy(Distribution):
     def standardize(self, theta):
         """Inverse: physical → latent."""
         from jax.scipy.stats import norm
+
         u = (theta - self.lo) / (self.hi - self.lo)
         return norm.ppf(jnp.clip(u, 1e-6, 1 - 1e-6))
 
     def log_prob(self, theta):
         from jax.scipy.stats import cauchy
+
         lp = cauchy.logpdf(theta, loc=self.loc, scale=self.scale)
         in_bounds = (theta >= self.lo) & (theta <= self.hi)
         return jnp.where(in_bounds, lp, -jnp.inf)
@@ -123,6 +126,7 @@ class TruncatedCauchy(Distribution):
     @property
     def bounds(self):
         return (self.lo, self.hi)
+
 
 # %%
 # --- FIGURE: Custom prior ---
@@ -159,14 +163,16 @@ N_GRID = 128
 log_ages = make_log_age_grid(N_GRID)
 d_log_age = grid_spacing(log_ages)
 
+
 def compute_sqrt_power_matern(n_grid, d_log_age, sigma, tau_yr, nu=1.5):
     """Matérn PSD with variable smoothness ν."""
     freqs = jnp.fft.rfftfreq(n_grid, d=d_log_age)
     omega = 2 * jnp.pi * freqs
     kappa = jnp.sqrt(2 * nu) / (tau_yr * d_log_age)
-    power = sigma**2 * (2 * nu / kappa**2 + omega**2)**(-nu - 0.5)
+    power = sigma**2 * (2 * nu / kappa**2 + omega**2) ** (-nu - 0.5)
     power = power.at[0].set(0.0)
     return jnp.sqrt(power)
+
 
 # %%
 # --- FIGURE: DRW vs Matérn ---
@@ -184,9 +190,13 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
 
 # PSD
 freqs = np.array(jnp.fft.rfftfreq(N_GRID, d=d_log_age))
-ax1.loglog(freqs[1:], np.array(sqrt_drw[1:])**2, color=COLORS["rt"], lw=1.5, label="DRW (ν=∞)")
-ax1.loglog(freqs[1:], np.array(sqrt_m15[1:])**2, color=COLORS["geovi"], lw=1.5, label="Matérn ν=1.5")
-ax1.loglog(freqs[1:], np.array(sqrt_m05[1:])**2, color=COLORS["nuts"], lw=1.5, label="Matérn ν=0.5")
+ax1.loglog(freqs[1:], np.array(sqrt_drw[1:]) ** 2, color=COLORS["rt"], lw=1.5, label="DRW (ν=∞)")
+ax1.loglog(
+    freqs[1:], np.array(sqrt_m15[1:]) ** 2, color=COLORS["geovi"], lw=1.5, label="Matérn ν=1.5"
+)
+ax1.loglog(
+    freqs[1:], np.array(sqrt_m05[1:]) ** 2, color=COLORS["nuts"], lw=1.5, label="Matérn ν=0.5"
+)
 ax1.set_xlabel("Frequency")
 ax1.set_ylabel("P(ω)")
 ax1.legend(fontsize=8)
@@ -219,7 +229,8 @@ wave = np.linspace(1000, 10000, 500)
 tau_v = 1.0
 
 # Power law (Charlot & Fall default)
-atten_pl = np.exp(-tau_v * (wave / 5500.0)**(-0.7))
+atten_pl = np.exp(-tau_v * (wave / 5500.0) ** (-0.7))
+
 
 # Calzetti (2000)
 def calzetti_k(wave_ang):
@@ -230,6 +241,7 @@ def calzetti_k(wave_ang):
         2.659 * (-1.857 + 1.040 / w_um) + 4.05,
     )
     return np.clip(k, 0, None)
+
 
 k_calz = calzetti_k(wave)
 atten_calz = np.exp(-tau_v * k_calz / 4.05)

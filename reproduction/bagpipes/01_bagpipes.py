@@ -1626,8 +1626,9 @@ for _b, _f, _mf, _mn, _mfn, _mnn in zip(
     _nb = _band_avg(w_b_full, _L_b_neb_only, _f)
     _nt = _band_avg(_w_t_full, _L_t_neb_only, _f)
     print(
-        f"{_b:8s} {_d_full:+8.3f} {_d_nn:+9.3f} {_d_full - _d_nn:+11.3f}"
-        f"  {_nt / _nb:.2f}×" if _nb > 0 else f"{_b:8s} {_d_full:+8.3f}"
+        f"{_b:8s} {_d_full:+8.3f} {_d_nn:+9.3f} {_d_full - _d_nn:+11.3f}  {_nt / _nb:.2f}×"
+        if _nb > 0
+        else f"{_b:8s} {_d_full:+8.3f}"
     )
 
 

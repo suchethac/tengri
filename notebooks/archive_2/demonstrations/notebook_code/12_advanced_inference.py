@@ -52,6 +52,7 @@ from tengri import (
 )
 
 import sys, os  # noqa: E401
+
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
@@ -67,7 +68,7 @@ elif os.path.exists(os.path.join("..", "..", "data")):
 elif os.path.exists(os.path.join("..", "..", "..", "data")):
     os.chdir(os.path.join("..", "..", ".."))
 
-from _plot_style import (  # noqa: E402
+from _plot_style import (
     COLORS,
     convergence_table,
     plot_corner_comparison,
@@ -82,9 +83,7 @@ setup_style()
 # ## 1. Setup: Parametric SEDModel (D = 7)
 
 # %%
-ssp_data = load_ssp_data(
-    "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-)
+ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 
 spec = Parameters(
@@ -131,7 +130,10 @@ print(f"MAP: {timings['MAP']:.1f}s")
 # %%
 t0 = time.perf_counter()
 result_laplace = fitter.run(
-    "laplace", init_from=result_map, n_samples=5000, verbose=False,
+    "laplace",
+    init_from=result_map,
+    n_samples=5000,
+    verbose=False,
 )
 timings["Laplace"] = time.perf_counter() - t0
 print(f"Laplace: {timings['Laplace']:.1f}s")
@@ -156,7 +158,10 @@ if "eigenvalues" in result_laplace.diagnostics:
 # %%
 t0 = time.perf_counter()
 result_pathfinder = fitter.run(
-    "pathfinder", n_samples=5000, maxiter=30, verbose=False,
+    "pathfinder",
+    n_samples=5000,
+    maxiter=30,
+    verbose=False,
 )
 timings["Pathfinder"] = time.perf_counter() - t0
 print(f"Pathfinder: {timings['Pathfinder']:.1f}s")
@@ -167,8 +172,11 @@ print(f"Pathfinder: {timings['Pathfinder']:.1f}s")
 # %%
 t0 = time.perf_counter()
 result_ess = fitter.run(
-    "mcmc_ess", init_from=result_map,
-    n_samples=5000, n_burnin=500, verbose=False,
+    "mcmc_ess",
+    init_from=result_map,
+    n_samples=5000,
+    n_burnin=500,
+    verbose=False,
 )
 timings["ESS"] = time.perf_counter() - t0
 print(f"Elliptical Slice: {timings['ESS']:.1f}s")
@@ -181,15 +189,22 @@ fitter.compile(verbose=False)
 
 t0 = time.perf_counter()
 result_geovi = fitter.run(
-    "vi", n_iterations=15, n_samples=6, n_seeds=5,
-    n_posterior_samples=5000, verbose=False,
+    "vi",
+    n_iterations=15,
+    n_samples=6,
+    n_seeds=5,
+    n_posterior_samples=5000,
+    verbose=False,
 )
 timings["geoVI"] = time.perf_counter() - t0
 
 t0 = time.perf_counter()
 result_nuts = fitter.run(
-    "mcmc_nuts", n_warmup=500, n_samples=5000,
-    init_from=result_map, verbose=False,
+    "mcmc_nuts",
+    n_warmup=500,
+    n_samples=5000,
+    init_from=result_map,
+    verbose=False,
 )
 timings["NUTS"] = time.perf_counter() - t0
 
@@ -250,8 +265,13 @@ plt.show()
 fig = plot_corner_comparison(
     [result_laplace, result_pathfinder, result_ess, result_geovi, result_nuts],
     labels=["Laplace", "Pathfinder", "ESS", "geoVI", "NUTS"],
-    colors=[COLORS["laplace"], COLORS["pathfinder"], COLORS["ess"],
-            COLORS["geovi"], COLORS["nuts"]],
+    colors=[
+        COLORS["laplace"],
+        COLORS["pathfinder"],
+        COLORS["ess"],
+        COLORS["geovi"],
+        COLORS["nuts"],
+    ],
     truths=true_params,
 )
 if fig is not None:
@@ -300,13 +320,23 @@ for idx, pname in enumerate(phys_params):
             samples = np.array(result.samples[pname]).ravel()
             lw = 2.5 if method_name == "NUTS" else 1.5
             ax.hist(
-                samples, bins=60, density=True, histtype="step",
-                color=color, ls=ls, lw=lw, label=method_name,
+                samples,
+                bins=60,
+                density=True,
+                histtype="step",
+                color=color,
+                ls=ls,
+                lw=lw,
+                label=method_name,
             )
             if method_name == "NUTS":
                 ax.hist(
-                    samples, bins=60, density=True, histtype="stepfilled",
-                    color=color, alpha=0.12,
+                    samples,
+                    bins=60,
+                    density=True,
+                    histtype="stepfilled",
+                    color=color,
+                    alpha=0.12,
                 )
 
     if np.isfinite(truth_val):
@@ -322,7 +352,8 @@ for idx in range(n_params, len(axes_flat)):
 
 fig.suptitle(
     "1D Marginal Posteriors: Laplace (Gaussian) vs Sampling Methods",
-    fontsize=12, y=1.02,
+    fontsize=12,
+    y=1.02,
 )
 fig.tight_layout()
 plt.savefig("fig05_marginal_posteriors.png", dpi=150, bbox_inches="tight")
@@ -384,8 +415,12 @@ for pname in phys_params:
 # %%
 method_names = ["MAP", "Laplace", "Pathfinder", "geoVI", "ESS", "NUTS"]
 method_colors = [
-    COLORS["map"], COLORS["laplace"], COLORS["pathfinder"],
-    COLORS["geovi"], COLORS["ess"], COLORS["nuts"],
+    COLORS["map"],
+    COLORS["laplace"],
+    COLORS["pathfinder"],
+    COLORS["geovi"],
+    COLORS["ess"],
+    COLORS["nuts"],
 ]
 times = [timings[m] for m in method_names]
 
@@ -399,7 +434,9 @@ for bar, t in zip(bars, times):
     ax.text(
         bar.get_width() + max(times) * 0.02,
         bar.get_y() + bar.get_height() / 2,
-        f"{t:.1f}s", va="center", fontsize=8,
+        f"{t:.1f}s",
+        va="center",
+        fontsize=8,
     )
 fig.tight_layout()
 plt.savefig("fig02_timing_comparison.png", dpi=150, bbox_inches="tight")
@@ -409,13 +446,15 @@ plt.show()
 # ## 10. Convergence Diagnostics
 
 # %%
-ct = convergence_table({
-    "Laplace": result_laplace,
-    "Pathfinder": result_pathfinder,
-    "ESS": result_ess,
-    "geoVI": result_geovi,
-    "NUTS": result_nuts,
-})
+ct = convergence_table(
+    {
+        "Laplace": result_laplace,
+        "Pathfinder": result_pathfinder,
+        "ESS": result_ess,
+        "geoVI": result_geovi,
+        "NUTS": result_nuts,
+    }
+)
 
 # %% [markdown]
 # ## 11. SFH Recovery
@@ -429,11 +468,9 @@ sfh_results = {
     "NUTS": (result_nuts, COLORS["nuts"]),
 }
 
-fig, axes = plt.subplots(1, len(sfh_results), figsize=(4 * len(sfh_results), 4),
-                          sharey=True)
+fig, axes = plt.subplots(1, len(sfh_results), figsize=(4 * len(sfh_results), 4), sharey=True)
 for ax, (name, (result, color)) in zip(axes, sfh_results.items()):
-    plot_sfh(model, result, true_params=true_params, ax=ax,
-             color=color, label=name, method=name)
+    plot_sfh(model, result, true_params=true_params, ax=ax, color=color, label=name, method=name)
     ax.set_title(f"{name} ({timings[name]:.1f}s)")
 
 fig.suptitle("SFH Recovery: All Methods", fontsize=12, y=1.02)
@@ -447,14 +484,21 @@ plt.show()
 # %%
 t0 = time.perf_counter()
 result_nuts_cold = fitter.run(
-    "mcmc_nuts", n_warmup=500, n_samples=2000, verbose=False,
+    "mcmc_nuts",
+    n_warmup=500,
+    n_samples=2000,
+    verbose=False,
 )
 t_cold = time.perf_counter() - t0
 
 t0 = time.perf_counter()
 result_pf_init = fitter.run("pathfinder", n_samples=100, maxiter=20, verbose=False)
 result_nuts_warm = fitter.run(
-    "mcmc_nuts", n_warmup=200, n_samples=2000, init_from=result_pf_init, verbose=False,
+    "mcmc_nuts",
+    n_warmup=200,
+    n_samples=2000,
+    init_from=result_pf_init,
+    verbose=False,
 )
 t_warm = time.perf_counter() - t0
 
@@ -505,25 +549,35 @@ timings_s = {}
 
 t0 = time.perf_counter()
 result_ess_s = fitter_stoch.run(
-    "mcmc_ess", init_from=result_map_s,
-    n_samples=2000, n_burnin=500, verbose=False,
+    "mcmc_ess",
+    init_from=result_map_s,
+    n_samples=2000,
+    n_burnin=500,
+    verbose=False,
 )
 timings_s["ESS"] = time.perf_counter() - t0
 
 fitter_stoch.compile(verbose=False)
 t0 = time.perf_counter()
 result_geovi_s = fitter_stoch.run(
-    "vi", n_iterations=20, n_samples=6, n_seeds=5,
-    n_posterior_samples=2000, verbose=False,
+    "vi",
+    n_iterations=20,
+    n_samples=6,
+    n_seeds=5,
+    n_posterior_samples=2000,
+    verbose=False,
 )
 timings_s["geoVI"] = time.perf_counter() - t0
 
 # RT: step_size=0.03, n_leapfrog=100 for D~137
 t0 = time.perf_counter()
 result_rt_s = fitter_stoch.run(
-    "mcmc_raytrace", init_from=result_map_s,
-    n_burnin=200, n_steps=2000,
-    step_size=0.03, n_leapfrog_steps=100,
+    "mcmc_raytrace",
+    init_from=result_map_s,
+    n_burnin=200,
+    n_steps=2000,
+    step_size=0.03,
+    n_leapfrog_steps=100,
     verbose=False,
 )
 timings_s["RT"] = time.perf_counter() - t0
@@ -531,26 +585,48 @@ timings_s["RT"] = time.perf_counter() - t0
 for name, t in timings_s.items():
     print(f"  {name}: {t:.1f}s")
 if hasattr(result_rt_s, "diagnostics"):
-    acc = result_rt_s.diagnostics.get("accept_rate_post_burnin",
-          result_rt_s.diagnostics.get("accept_rate", "N/A"))
+    acc = result_rt_s.diagnostics.get(
+        "accept_rate_post_burnin", result_rt_s.diagnostics.get("accept_rate", "N/A")
+    )
     print(f"  RT acceptance: {acc}")
 
 # %%
 fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(14, 4), sharey=True)
 
-plot_sfh(model_stoch, result_ess_s, true_params=true_stoch,
-         ax=ax1, color=COLORS["ess"], label="ESS", method="ESS",
-         show_mean_sfh=True)
+plot_sfh(
+    model_stoch,
+    result_ess_s,
+    true_params=true_stoch,
+    ax=ax1,
+    color=COLORS["ess"],
+    label="ESS",
+    method="ESS",
+    show_mean_sfh=True,
+)
 ax1.set_title(f"ESS ({timings_s['ESS']:.1f}s)")
 
-plot_sfh(model_stoch, result_geovi_s, true_params=true_stoch,
-         ax=ax2, color=COLORS["geovi"], label="geoVI", method="geoVI",
-         show_mean_sfh=True)
+plot_sfh(
+    model_stoch,
+    result_geovi_s,
+    true_params=true_stoch,
+    ax=ax2,
+    color=COLORS["geovi"],
+    label="geoVI",
+    method="geoVI",
+    show_mean_sfh=True,
+)
 ax2.set_title(f"geoVI ({timings_s['geoVI']:.1f}s)")
 
-plot_sfh(model_stoch, result_rt_s, true_params=true_stoch,
-         ax=ax3, color=COLORS["rt"], label="RT", method="RT",
-         show_mean_sfh=True)
+plot_sfh(
+    model_stoch,
+    result_rt_s,
+    true_params=true_stoch,
+    ax=ax3,
+    color=COLORS["rt"],
+    label="RT",
+    method="RT",
+    show_mean_sfh=True,
+)
 ax3.set_title(f"Ray Tracing ({timings_s['RT']:.1f}s)")
 
 fig.suptitle("D = 137: High-D Methods Compared", fontsize=12, y=1.02)

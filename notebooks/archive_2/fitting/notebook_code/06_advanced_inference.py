@@ -228,7 +228,9 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle("Laplace (Gaussian) vs NUTS (exact)", y=1.02)
-    plt.savefig(os.path.join(FIGDIR, "fig01a_corner_laplace_vs_nuts.png"), dpi=150, bbox_inches="tight")
+    plt.savefig(
+        os.path.join(FIGDIR, "fig01a_corner_laplace_vs_nuts.png"), dpi=150, bbox_inches="tight"
+    )
 plt.show()
 
 # %% [markdown]
@@ -243,7 +245,9 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle("Pathfinder vs NUTS", y=1.02)
-    plt.savefig(os.path.join(FIGDIR, "fig01b_corner_pathfinder_vs_nuts.png"), dpi=150, bbox_inches="tight")
+    plt.savefig(
+        os.path.join(FIGDIR, "fig01b_corner_pathfinder_vs_nuts.png"), dpi=150, bbox_inches="tight"
+    )
 plt.show()
 
 # %% [markdown]
@@ -258,7 +262,9 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle("Elliptical Slice Sampling vs NUTS", y=1.02)
-    plt.savefig(os.path.join(FIGDIR, "fig01c_corner_ess_vs_nuts.png"), dpi=150, bbox_inches="tight")
+    plt.savefig(
+        os.path.join(FIGDIR, "fig01c_corner_ess_vs_nuts.png"), dpi=150, bbox_inches="tight"
+    )
 plt.show()
 
 # %% [markdown]
@@ -279,7 +285,9 @@ fig = plot_corner_comparison(
 )
 if fig is not None:
     fig.suptitle("D = 7: Five Methods Compared", y=1.02)
-    plt.savefig(os.path.join(FIGDIR, "fig01d_corner_all_methods.png"), dpi=150, bbox_inches="tight")
+    plt.savefig(
+        os.path.join(FIGDIR, "fig01d_corner_all_methods.png"), dpi=150, bbox_inches="tight"
+    )
 plt.show()
 
 # %% [markdown]

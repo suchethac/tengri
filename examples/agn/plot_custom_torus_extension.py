@@ -110,21 +110,23 @@ model_skirtor = tengri.SEDModel.build(
     redshift=tengri.Fixed(0.0),
 )
 p_skirtor = dict(model_skirtor.spec.sample(jax.random.PRNGKey(0)))
-out_skirtor = model_skirtor.predict_rest_sed(p_skirtor)
+out_skirtor = model_skirtor.predict(p_skirtor)
 
-wave_um = np.asarray(out_skirtor.wavelength) * 1.0e-4
-nu_lnu_skirtor = C_AA_PER_S / np.asarray(out_skirtor.wavelength) * np.asarray(out_skirtor.sed)
+wave_um = np.asarray(model_skirtor.wavelengths) * 1.0e-4
+nu_lnu_skirtor = (
+    C_AA_PER_S / np.asarray(model_skirtor.wavelengths) * np.asarray(out_skirtor.rest_sed())
+)
 
 L_nu_toy = np.asarray(
     demo_graybody_torus(
-        jnp.asarray(out_skirtor.wavelength),
+        jnp.asarray(model_skirtor.wavelengths),
         agn_log_lbol=LOG_LBOL,
         agn_frac=1.0,
         agn_T_torus=300.0,
         agn_torus_frac=0.5,
     )
 )
-nu_lnu_toy = C_AA_PER_S / np.asarray(out_skirtor.wavelength) * L_nu_toy
+nu_lnu_toy = C_AA_PER_S / np.asarray(model_skirtor.wavelengths) * L_nu_toy
 
 fig, ax = plt.subplots(figsize=(7.5, 4.6))
 ax.loglog(wave_um, nu_lnu_skirtor, color="C0", lw=1.6, label="SKIRTOR (production)")

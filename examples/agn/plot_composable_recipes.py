@@ -48,7 +48,8 @@ RECIPES = [
         "tab:blue",
         {
             "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
-            "lines": {"type": "grahsp", "*": tengri.FIXED},
+            "nlr": {"type": "grahsp", "*": tengri.FIXED},
+            "blr": {"type": "grahsp", "*": tengri.FIXED},
             "feii": {"type": "grahsp", "*": tengri.FIXED},
             "torus": {"type": "grahsp", "*": tengri.FIXED},
             "atten": {"type": "grahsp_biatten", "*": tengri.FIXED},
@@ -60,7 +61,8 @@ RECIPES = [
         {
             "disc": {"type": "multicolor", "*": tengri.FIXED},
             "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "lines": {"type": "nlr", "*": tengri.FIXED},
+            "nlr": {"type": "analytic", "*": tengri.FIXED},
+            "blr": {"type": "none", "*": tengri.FIXED},
         },
     ),
     (
@@ -75,9 +77,9 @@ for label, color, blocks in RECIPES:
     agn = {"*": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **blocks}
     model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave_um = np.asarray(out.wavelength) * 1.0e-4
-    nu_lnu = C_AA_PER_S / np.asarray(out.wavelength) * np.asarray(out.sed)
+    out = model.predict(p)
+    wave_um = np.asarray(model.wavelengths) * 1.0e-4
+    nu_lnu = C_AA_PER_S / np.asarray(model.wavelengths) * np.asarray(out.rest_sed())
     ax.loglog(wave_um, np.where(nu_lnu > 0, nu_lnu, np.nan), lw=1.6, color=color, label=label)
 
 ax.set(

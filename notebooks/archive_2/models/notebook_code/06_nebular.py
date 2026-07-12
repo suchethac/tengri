@@ -223,12 +223,18 @@ if CUE_WEIGHTS_PATH.exists():
 
     # Base parameters: stellar ionizing spectrum, solar metallicity
     _base = {
-        "ionspec_index1": -1.0, "ionspec_index2": -1.5,
-        "ionspec_index3": -2.0, "ionspec_index4": -2.5,
-        "ionspec_logLratio1": 0.0, "ionspec_logLratio2": -0.5,
+        "ionspec_index1": -1.0,
+        "ionspec_index2": -1.5,
+        "ionspec_index3": -2.0,
+        "ionspec_index4": -2.5,
+        "ionspec_logLratio1": 0.0,
+        "ionspec_logLratio2": -0.5,
         "ionspec_logLratio3": -1.0,
-        "gas_logu": -3.0, "gas_logn": 2.0, "gas_logz": 0.0,
-        "gas_logno": -0.5, "gas_logco": -0.3,
+        "gas_logu": -3.0,
+        "gas_logn": 2.0,
+        "gas_logz": 0.0,
+        "gas_logno": -0.5,
+        "gas_logco": -0.3,
     }
 
     def _line_ratio(params, wav1, wav2):
@@ -244,32 +250,39 @@ if CUE_WEIGHTS_PATH.exists():
 
     # Panel 1: N/O effect — sweep gas_logno, track [NII]6583/Hα
     logno_grid = np.linspace(-1.5, 0.5, 18)
-    nii_ha = [_line_ratio({**_base, "gas_logno": float(v)}, 6583.0, 6563.0)
-              for v in logno_grid]
+    nii_ha = [_line_ratio({**_base, "gas_logno": float(v)}, 6583.0, 6563.0) for v in logno_grid]
 
     # Panel 2: C/O effect — sweep gas_logco, track CIII]1909/Hβ
     logco_grid = np.linspace(-1.0, 0.5, 18)
-    ciii_hb = [_line_ratio({**_base, "gas_logco": float(v)}, 1909.0, 4861.0)
-               for v in logco_grid]
+    ciii_hb = [_line_ratio({**_base, "gas_logco": float(v)}, 1909.0, 4861.0) for v in logco_grid]
 
     # Panel 3: Ionizing spectrum shape → BPT position (log [OIII]/Hβ vs log [NII]/Hα)
     ionspec_configs = {
         "Stellar (O-star)": {
-            "ionspec_index1": -1.0, "ionspec_index2": -1.5,
-            "ionspec_index3": -2.0, "ionspec_index4": -2.5,
-            "ionspec_logLratio1": 0.0, "ionspec_logLratio2": -0.5,
+            "ionspec_index1": -1.0,
+            "ionspec_index2": -1.5,
+            "ionspec_index3": -2.0,
+            "ionspec_index4": -2.5,
+            "ionspec_logLratio1": 0.0,
+            "ionspec_logLratio2": -0.5,
             "ionspec_logLratio3": -1.0,
         },
         "AGN-like (flat)": {
-            "ionspec_index1": -0.5, "ionspec_index2": -0.5,
-            "ionspec_index3": -0.5, "ionspec_index4": -0.5,
-            "ionspec_logLratio1": 0.0, "ionspec_logLratio2": 0.0,
+            "ionspec_index1": -0.5,
+            "ionspec_index2": -0.5,
+            "ionspec_index3": -0.5,
+            "ionspec_index4": -0.5,
+            "ionspec_logLratio1": 0.0,
+            "ionspec_logLratio2": 0.0,
             "ionspec_logLratio3": 0.0,
         },
         "Soft (cool star)": {
-            "ionspec_index1": -2.5, "ionspec_index2": -3.0,
-            "ionspec_index3": -3.5, "ionspec_index4": -4.0,
-            "ionspec_logLratio1": 0.0, "ionspec_logLratio2": -1.0,
+            "ionspec_index1": -2.5,
+            "ionspec_index2": -3.0,
+            "ionspec_index3": -3.5,
+            "ionspec_index4": -4.0,
+            "ionspec_logLratio1": 0.0,
+            "ionspec_logLratio2": -1.0,
             "ionspec_logLratio3": -2.0,
         },
     }
@@ -296,11 +309,15 @@ if CUE_WEIGHTS_PATH.exists():
     axes[1].set_ylabel(r"[CIII]1909 / H$\beta$", fontsize=9)
     axes[1].set_title(r"C/O effect on [CIII]1909/H$\beta$")
 
-    for (name, col, mk) in zip(ionspec_configs, ionspec_colors, ionspec_markers):
+    for name, col, mk in zip(ionspec_configs, ionspec_colors, ionspec_markers):
         axes[2].scatter(
             np.log10(bpt_nii_ha[name]),
             np.log10(bpt_oiii_hb[name]),
-            s=130, color=col, marker=mk, label=name, zorder=5,
+            s=130,
+            color=col,
+            marker=mk,
+            label=name,
+            zorder=5,
         )
     axes[2].set_xlabel(r"log [NII]6583 / H$\alpha$", fontsize=9)
     axes[2].set_ylabel(r"log [OIII]5007 / H$\beta$", fontsize=9)

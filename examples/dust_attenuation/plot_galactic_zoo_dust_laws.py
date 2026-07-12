@@ -64,8 +64,8 @@ ref_model = tengri.SEDModel.build(
     redshift=tengri.Fixed(0.05),
 )
 p_ref = dict(ref_model.spec.sample(jax.random.PRNGKey(0)))
-sed_ref = np.asarray(ref_model.predict_rest_sed(p_ref).sed)
-wave = np.asarray(ref_model.predict_rest_sed(p_ref).wavelength)
+sed_ref = np.asarray(ref_model.predict(p_ref).rest_sed())
+wave = np.asarray(ref_model.wavelengths)
 C_AA_PER_S = 2.998e18
 nu = C_AA_PER_S / wave
 ax.loglog(wave, nu * sed_ref, color="0.05", lw=2.0, label="intrinsic", zorder=10, ls="--")
@@ -89,7 +89,7 @@ for (law, label), color in zip(LAWS, colors):
         redshift=tengri.Fixed(0.05),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    sed = np.asarray(model.predict_rest_sed(p).sed)
+    sed = np.asarray(model.predict(p).rest_sed())
     ax.loglog(wave, nu * sed, color=color, lw=1.4, label=label.split("(")[0].strip(), alpha=0.8)
 
 ax.axvline(2175, color="0.55", lw=0.5, ls=":", alpha=0.7)

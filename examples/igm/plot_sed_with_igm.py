@@ -62,11 +62,11 @@ for z, color in zip(REDSHIFTS, COLORS):
         redshift=tengri.Fixed(z),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave_rest = np.asarray(out.wavelength)
+    out = model.predict(p)
+    wave_rest = np.asarray(model.wavelengths)
     wave_obs = wave_rest * (1.0 + z)
     nu = C_AA_PER_S / wave_obs
-    nu_f_nu = nu * np.asarray(out.sed)
+    nu_f_nu = nu * np.asarray(out.rest_sed())
     ax.loglog(wave_obs, nu_f_nu, color=color, lw=1.5, label=f"$z={z:g}$")
 
 for z, color in zip(REDSHIFTS, COLORS):

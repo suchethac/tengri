@@ -2,7 +2,7 @@
 SED additivity: stellar, dust attenuation, emission, and nebular components
 ===========================================================================
 
-Verifies the SED chain is additive by comparing the full ``predict_rest_sed``
+Verifies the SED chain is additive by comparing the full ``pred.rest_sed()``
 output against a manual sum of per-component SEDs. The forward model chains
 stellar continuum through dust attenuation, dust emission, and nebular
 processing; if modular, the sum should reconstruct the total.
@@ -55,22 +55,22 @@ params.update(
     dust_tau_diff=0.5,
 )
 
-sed_total = model.predict_rest_sed(params)
-wave = np.asarray(sed_total.wavelength)
-lnu_total = np.asarray(sed_total.sed)
+sed_total = model.predict(params)
+wave = np.asarray(model.wavelengths)
+lnu_total = np.asarray(sed_total.rest_sed())
 
 model_stellar = tengri.SEDModel.build(ssp, sfh=sfh_cfg, redshift=tengri.Fixed(0.05))
-_sed_stellar = model_stellar.predict_rest_sed(params)
+_sed_stellar = model_stellar.predict(params)
 
 model_dust = tengri.SEDModel.build(ssp, sfh=sfh_cfg, dust=dust_cfg, redshift=tengri.Fixed(0.05))
-_sed_dust = model_dust.predict_rest_sed(params)
+_sed_dust = model_dust.predict(params)
 
 # The sub-models omit nebular (and dust), so their rest-frame wavelength grids
 # are shorter than the full model's — Cue injects emission-line wavelengths the
 # bare-stellar grid lacks. Interpolate each component onto the full model's grid
 # before differencing so the additivity reconstruction lines up.
-lnu_stellar = np.interp(wave, np.asarray(_sed_stellar.wavelength), np.asarray(_sed_stellar.sed))
-lnu_dust = np.interp(wave, np.asarray(_sed_dust.wavelength), np.asarray(_sed_dust.sed))
+lnu_stellar = np.asarray(_sed_stellar.rest_sed(wave))
+lnu_dust = np.asarray(_sed_dust.rest_sed(wave))
 
 lnu_dust_emission = lnu_dust - lnu_stellar
 lnu_nebular = lnu_total - lnu_dust

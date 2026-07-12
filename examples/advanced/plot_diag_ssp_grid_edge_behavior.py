@@ -66,9 +66,9 @@ for ax, met, _title in zip(axes.flat, met_values, titles):
     params = {**baseline, "met_logzsol": jnp.float64(met)}
 
     try:
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
-        sed = np.asarray(out.sed)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
+        sed = np.asarray(out.rest_sed())
         ok = np.isfinite(sed)
 
         if not ok.any():

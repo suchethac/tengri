@@ -47,7 +47,7 @@ from tengri import (
 )
 from tengri.observation import Spectroscopy
 
-import sys, os  # noqa: E401, E402
+import sys, os  # noqa: E401
 
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
@@ -69,7 +69,7 @@ elif os.path.exists(os.path.join("..", "..", "..", "data")):
 FIGDIR = os.path.join("demonstrations", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-from _plot_style import (  # noqa: E402
+from _plot_style import (
     COLORS,
     SPECTRAL_FEATURES,
     convergence_table,
@@ -275,12 +275,18 @@ plt.show()
 
 # %%
 result_laplace = fitter_spec.run(
-    "laplace", key=jax.random.PRNGKey(10), init_from=result_map,
-    n_samples=5000, verbose=False,
+    "laplace",
+    key=jax.random.PRNGKey(10),
+    init_from=result_map,
+    n_samples=5000,
+    verbose=False,
 )
 result_pathfinder = fitter_spec.run(
-    "pathfinder", key=jax.random.PRNGKey(11), init_from=result_map,
-    n_samples=5000, verbose=False,
+    "pathfinder",
+    key=jax.random.PRNGKey(11),
+    init_from=result_map,
+    n_samples=5000,
+    verbose=False,
 )
 print(f"Laplace:    {result_laplace.wall_time_s:.1f}s")
 print(f"Pathfinder: {result_pathfinder.wall_time_s:.1f}s")
@@ -298,7 +304,8 @@ if fig is not None:
     fig.suptitle("Laplace vs Pathfinder vs geoVI (Spectroscopy)", y=1.02)
     plt.savefig(
         os.path.join(FIGDIR, "fig04b_laplace_pathfinder.png"),
-        dpi=150, bbox_inches="tight",
+        dpi=150,
+        bbox_inches="tight",
     )
 plt.show()
 
@@ -317,12 +324,20 @@ for ax, pname in zip(_axes, _free):
         ("Laplace", result_laplace, COLORS["laplace"], "--"),
         ("Pathfinder", result_pathfinder, COLORS["pathfinder"], "-."),
     ]:
-        ax.hist(np.array(res.samples[pname]), bins=40, histtype="step",
-                density=True, color=color, ls=ls, lw=1.5, label=label)
+        ax.hist(
+            np.array(res.samples[pname]),
+            bins=40,
+            histtype="step",
+            density=True,
+            color=color,
+            ls=ls,
+            lw=1.5,
+            label=label,
+        )
     ax.axvline(tv, color=COLORS["truth"], lw=1.5, ls=":")
     ax.set_xlabel(pname.replace("sfh_tsnorm_", ""), fontsize=8)
     ax.set_yticks([])
-for ax in _axes[len(_free):]:
+for ax in _axes[len(_free) :]:
     ax.set_visible(False)
 _axes[0].legend(fontsize=7, loc="upper right")
 fig.suptitle("1D Marginals: Laplace vs Pathfinder vs geoVI", fontsize=11)
@@ -332,11 +347,16 @@ plt.show()
 
 # %%
 # Convergence diagnostics — parametric model
-print(convergence_table({
-    "geoVI": result_geovi_spec,
-    "Laplace": result_laplace,
-    "Pathfinder": result_pathfinder,
-}, verbose=True))
+print(
+    convergence_table(
+        {
+            "geoVI": result_geovi_spec,
+            "Laplace": result_laplace,
+            "Pathfinder": result_pathfinder,
+        },
+        verbose=True,
+    )
+)
 
 # %%
 # Parameter recovery table — parametric D=7

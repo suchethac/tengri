@@ -91,9 +91,9 @@ ha_arr = np.empty_like(ages)
 
 for i, age in enumerate(ages):
     p = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    l_nu = np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    l_nu = np.asarray(out.rest_sed())
     d4000_arr[i] = _balogh_d4000(wave, l_nu)
     mgb_arr[i] = _mgb_ew(wave, l_nu)
     ha_arr[i] = _halpha_ew(wave, l_nu)

@@ -91,9 +91,9 @@ model = tengri.SEDModel.build(
 
 # Sample parameters and compute rest-frame SED
 p = dict(model.spec.sample(jax.random.PRNGKey(42)))
-out = model.predict_rest_sed(p)
-wave = np.asarray(out.wavelength)
-sed = np.asarray(out.sed)
+out = model.predict(p)
+wave = np.asarray(model.wavelengths)
+sed = np.asarray(out.rest_sed())
 nu_l_nu = C_AA_PER_S / wave * sed
 
 # Compute intrinsic (dust-free) SED for comparison
@@ -117,9 +117,9 @@ model_intrinsic = tengri.SEDModel.build(
     redshift=tengri.Fixed(0.0),
 )
 p_int = dict(model_intrinsic.spec.sample(jax.random.PRNGKey(42)))
-out_int = model_intrinsic.predict_rest_sed(p_int)
-wave_int = np.asarray(out_int.wavelength)
-nu_l_nu_int = C_AA_PER_S / wave_int * np.asarray(out_int.sed)
+out_int = model_intrinsic.predict(p_int)
+wave_int = np.asarray(model_intrinsic.wavelengths)
+nu_l_nu_int = C_AA_PER_S / wave_int * np.asarray(out_int.rest_sed())
 
 # M82 photometric points (literature values, approximate fluxes)
 # Wavelength (Angstrom) and nu*L_nu (erg/s); values from Förster Schreiber+2003,
@@ -140,7 +140,7 @@ mask = sed > 0
 ax.loglog(wave[mask], nu_l_nu[mask], color="0.15", lw=1.8, label="M82 starburst model", zorder=5)
 
 # Overplot intrinsic stellar SED (faint dashed)
-mask_int = np.asarray(out_int.sed) > 0
+mask_int = np.asarray(out_int.rest_sed()) > 0
 ax.loglog(
     wave_int[mask_int],
     nu_l_nu_int[mask_int],

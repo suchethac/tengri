@@ -117,9 +117,9 @@ def compute_integrated_sed(scenario):
         params = dict(model.spec.sample(jax.random.PRNGKey(i)))
         params["met_logzsol"] = jnp.float64(met_logzsol)
 
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
-        sed = np.asarray(out.sed)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
+        sed = np.asarray(out.rest_sed())
 
         if wave_ref is None:
             wave_ref = wave

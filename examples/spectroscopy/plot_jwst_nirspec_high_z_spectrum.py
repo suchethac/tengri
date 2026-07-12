@@ -65,9 +65,9 @@ wave_obs_aa = wave_obs_um * 1e4  # Convert to Ångströms
 # ============================================================================
 # Predict Spectrum (Rest-frame SED, no observation)
 # ============================================================================
-out = model.predict_rest_sed(p)
-wave_rest = np.asarray(out.wavelength)  # Rest-frame Å
-sed_rest = np.asarray(out.sed)  # Rest-frame L_ν (erg/s/Hz)
+out = model.predict(p)
+wave_rest = np.asarray(model.wavelengths)  # Rest-frame Å
+sed_rest = np.asarray(out.rest_sed())  # Rest-frame L_ν (erg/s/Hz)
 
 # Map to observed frame via linear interpolation
 # Observed wavelength maps back to rest via: λ_rest = λ_obs / (1+z)

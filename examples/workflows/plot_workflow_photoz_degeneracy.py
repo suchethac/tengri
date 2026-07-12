@@ -78,9 +78,9 @@ flux_hi = flux_hi * (flux_low[2] / flux_hi[2])
 
 
 def _rest_to_obs(model, params, z, scale):
-    out = model.predict_rest_sed(params)
-    wave_obs = np.asarray(out.wavelength) * (1.0 + z)
-    fnu_obs = scale * np.asarray(out.sed)
+    out = model.predict(params)
+    wave_obs = np.asarray(model.wavelengths) * (1.0 + z)
+    fnu_obs = scale * np.asarray(out.rest_sed())
     return wave_obs, fnu_obs
 
 

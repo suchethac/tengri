@@ -76,10 +76,10 @@ for label, peak, width, tau, color in ATLAS:
         "sfh_tsnorm_width_gyr": jnp.float64(width),
         "dust_tau_diff": jnp.float64(tau),
     }
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = C_AA_PER_S / wave
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     # Normalize each spectrum to its 5500 Å value so the chromatic
     # ordering — not the absolute luminosity — reads cleanly.
     norm = nu_l_nu[np.argmin(np.abs(wave - 5500.0))]

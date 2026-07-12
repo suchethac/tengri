@@ -72,9 +72,9 @@ model = tengri.SEDModel.build(
 
 # Sample parameters and compute rest-frame SED
 p = dict(model.spec.sample(jax.random.PRNGKey(42)))
-out_rest = model.predict_rest_sed(p)
-wave_rest = np.asarray(out_rest.wavelength)
-sed_rest = np.asarray(out_rest.sed)
+out_rest = model.predict(p)
+wave_rest = np.asarray(model.wavelengths)
+sed_rest = np.asarray(out_rest.rest_sed())
 
 # Apply IGM attenuation and shift to observer frame
 igm_trans = igm_transmission(wave_rest * (1 + z), z)

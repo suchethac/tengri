@@ -125,7 +125,7 @@ for i, tau_v in enumerate(tau_v_values):
 
     # Predict rest-frame SED
     # (no observed-frame transformation needed; we work in rest-frame)
-    pred = model.predict_rest_sed({})
+    pred = model.predict({})
 
     # Extract actual SFH-derived SFR (if available)
     if hasattr(pred, "sfr_100myr"):
@@ -133,8 +133,8 @@ for i, tau_v in enumerate(tau_v_values):
     else:
         actual_sfr = None
 
-    wave = np.asarray(pred.wavelength)
-    sed = np.asarray(pred.sed)
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(pred.rest_sed())
 
     if wave_grid is None:
         wave_grid = wave

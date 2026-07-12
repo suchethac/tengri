@@ -68,7 +68,7 @@ for i, log_u in enumerate(log_u_vals):
             "neb_logU": jnp.float64(log_u),
             "neb_logZ_gas": jnp.float64(log_z),
         }
-        lines = model.predict_emission_lines(params)
+        lines = model.predict(params).lines
         h_alpha = float(lines.halpha)
         h_beta = float(lines.hbeta)
         ratio_grid[i, j] = h_alpha / h_beta if h_beta > 0 else np.nan

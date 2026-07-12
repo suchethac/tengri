@@ -55,7 +55,8 @@ COMMON = dict(
 AGN = {
     "disc": {"type": "multicolor", "*": tengri.FIXED},
     "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": 7.0},
-    "lines": {"type": "none", "*": tengri.FIXED},
+    "nlr": {"type": "none", "*": tengri.FIXED},
+    "blr": {"type": "none", "*": tengri.FIXED},
     "atten": {"type": "polar_dust", "*": tengri.FIXED},
     "*": tengri.FIXED,
     "log_lbol": 12.0,
@@ -85,9 +86,9 @@ for ebv in ebv_values:
         "agn_polar_ebv": jnp.float64(ebv),
         "agn_cos_inc": jnp.float64(1.0),
     }
-    out_t1 = model.predict_rest_sed(params_t1)
-    wave_t1 = np.asarray(out_t1.wavelength)
-    sed_t1 = np.asarray(out_t1.sed)
+    out_t1 = model.predict(params_t1)
+    wave_t1 = np.asarray(model.wavelengths)
+    sed_t1 = np.asarray(out_t1.rest_sed())
     nu_t1 = C_AA_PER_S / wave_t1
     nu_lnu_t1 = nu_t1 * sed_t1
     ax1.loglog(wave_t1, nu_lnu_t1, color=cmap(norm(ebv)), lw=1.4)
@@ -106,9 +107,9 @@ for ebv in ebv_values:
         "agn_polar_ebv": jnp.float64(ebv),
         "agn_cos_inc": jnp.float64(0.0),
     }
-    out_t2 = model.predict_rest_sed(params_t2)
-    wave_t2 = np.asarray(out_t2.wavelength)
-    sed_t2 = np.asarray(out_t2.sed)
+    out_t2 = model.predict(params_t2)
+    wave_t2 = np.asarray(model.wavelengths)
+    sed_t2 = np.asarray(out_t2.rest_sed())
     nu_t2 = C_AA_PER_S / wave_t2
     nu_lnu_t2 = nu_t2 * sed_t2
     ax2.loglog(wave_t2, nu_lnu_t2, color=cmap(norm(ebv)), lw=1.4)

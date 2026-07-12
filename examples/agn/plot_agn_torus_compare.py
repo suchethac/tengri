@@ -70,9 +70,9 @@ for (torus, label), color in zip(TORI, COLORS):
         redshift=tengri.Fixed(0.05),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
 ax.set(

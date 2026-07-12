@@ -125,6 +125,7 @@ if _repo_data_root is None:
 
 try:
     from _plot_style import setup_style, COLORS as _COLORS_DICT
+
     setup_style()
     # The shared COLORS palette is a band-keyed dict; this notebook indexes
     # by integer for arbitrary curves, so flatten to a list of hex values.
@@ -174,7 +175,9 @@ def savefig(fig, name, dpi=200):
 
 # %%
 # Load SSP data and build the model from quickstart
-SSP_FILE = os.path.join(_repo_root, "data", "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
+SSP_FILE = os.path.join(
+    _repo_root, "data", "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+)
 if not os.path.exists(SSP_FILE):
     print(f"WARNING: SSP file not found at {SSP_FILE}")
     print("Using alternate SSP path search...")
@@ -294,6 +297,7 @@ print(f"\nSpeedup: vi_native is {speedup:.1f}× faster ({t_native:.2f}s vs {t_ni
 # find **different modes** — not drop-in-equivalent, but similar enough for exploratory
 # inference if you cross-check with MCMC.
 
+
 # %%
 # Extract posterior summaries
 def summarize_posterior(result, label):
@@ -329,11 +333,11 @@ for name in mu_nifty:
     is_close = n_sigma <= 0.25
     n_close += is_close
     symbol = "✓" if is_close else "✗"
-    print(
-        f"  {name:25s}  |Δμ|/σ = {n_sigma:5.2f}  {symbol}"
-    )
+    print(f"  {name:25s}  |Δμ|/σ = {n_sigma:5.2f}  {symbol}")
 
-print(f"\nResult: {n_close}/{len([k for k in mu_nifty if k != 'psd_xi' and 'xi' not in k])} params agree within 0.25σ")
+print(
+    f"\nResult: {n_close}/{len([k for k in mu_nifty if k != 'psd_xi' and 'xi' not in k])} params agree within 0.25σ"
+)
 print("(Benchmark: 1/8 pass on this setup — different modes, but both plausible)")
 
 # %% [markdown]
@@ -372,7 +376,9 @@ times_p = [
     benchmark_data["parametric"]["vi"]["run"],
     benchmark_data["parametric"]["vi_native"]["run"],
 ]
-ax1.bar(methods, times_p, color=[COLORS[0], COLORS[1]], alpha=0.8, edgecolor="black", linewidth=1.5)
+ax1.bar(
+    methods, times_p, color=[COLORS[0], COLORS[1]], alpha=0.8, edgecolor="black", linewidth=1.5
+)
 ax1.set_ylabel("Wall time (s)", fontsize=11)
 ax1.set_title("Parametric (7-D)", fontsize=12, fontweight="bold")
 ax1.set_ylim(0, 50)
@@ -384,7 +390,9 @@ times_s = [
     benchmark_data["stochastic"]["vi"]["run"],
     benchmark_data["stochastic"]["vi_native"]["run"],
 ]
-ax2.bar(methods, times_s, color=[COLORS[0], COLORS[1]], alpha=0.8, edgecolor="black", linewidth=1.5)
+ax2.bar(
+    methods, times_s, color=[COLORS[0], COLORS[1]], alpha=0.8, edgecolor="black", linewidth=1.5
+)
 ax2.set_ylabel("Wall time (s)", fontsize=11)
 ax2.set_title("Stochastic (137-D)", fontsize=12, fontweight="bold")
 ax2.set_ylim(0, 80)
@@ -435,7 +443,9 @@ print("Caveat Examples")
 print("=" * 70)
 
 print("\n1. Mode degeneracy on parametric (7-D):")
-print(f"   dust_tau_diff: NIFTy={mu_nifty['dust_tau_diff']:.2f}, native={mu_native['dust_tau_diff']:.2f}")
+print(
+    f"   dust_tau_diff: NIFTy={mu_nifty['dust_tau_diff']:.2f}, native={mu_native['dust_tau_diff']:.2f}"
+)
 print("   (2.3σ apart — different modes)")
 
 print("\n2. Order-of-magnitude PSD timescale drift on 137-D:")
@@ -477,6 +487,7 @@ print("   - See notebook 06_inference_methods.py for sampler comparison.")
 # %%
 try:
     from tengri import cite_all
+
     cite_all()
 except ImportError:
     print("(citations unavailable)")

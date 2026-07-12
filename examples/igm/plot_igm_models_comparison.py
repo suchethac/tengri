@@ -97,9 +97,9 @@ params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 wave_rest = np.linspace(WAVE_REST_MIN, WAVE_REST_MAX, N_WAVE)
 
 # Intrinsic (no IGM) SED
-out_intrinsic = model.predict_rest_sed(params)
-wave_rest_out = np.asarray(out_intrinsic.wavelength)
-sed_intrinsic_full = np.asarray(out_intrinsic.sed)
+out_intrinsic = model.predict(params)
+wave_rest_out = np.asarray(model.wavelengths)
+sed_intrinsic_full = np.asarray(out_intrinsic.rest_sed())
 
 # Interpolate to diagnostic wavelength grid
 sed_intrinsic = np.interp(wave_rest, wave_rest_out, sed_intrinsic_full, left=0, right=0)

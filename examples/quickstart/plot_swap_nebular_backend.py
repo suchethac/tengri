@@ -68,13 +68,13 @@ model_none = tengri.SEDModel.build(
 
 p_cue = dict(model_cue.spec.sample(jax.random.PRNGKey(0)))
 p_none = {k: v for k, v in p_cue.items() if not k.startswith("neb_")}
-out_cue = model_cue.predict_rest_sed(p_cue)
-out_none = model_none.predict_rest_sed(p_none)
-wave = np.asarray(out_cue.wavelength)
-sed_cue = np.asarray(out_cue.sed)
+out_cue = model_cue.predict(p_cue)
+out_none = model_none.predict(p_none)
+wave = np.asarray(model_cue.wavelengths)
+sed_cue = np.asarray(out_cue.rest_sed())
 # neb='none' yields a shorter rest-frame grid (no Cue emission-line wavelengths),
 # so interpolate it onto the Cue grid to share the wavelength masks below.
-sed_none = np.interp(wave, np.asarray(out_none.wavelength), np.asarray(out_none.sed))
+sed_none = np.asarray(out_none.rest_sed(wave))
 
 fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), sharey=False)
 

@@ -57,10 +57,10 @@ fig, ax = plt.subplots(figsize=(6.5, 4.2))
 all_curve_data = []
 for logz in logz_values:
     params = {**baseline, "neb_logZ_gas": jnp.float64(logz)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax.semilogy(wave, nu_l_nu, color=cmap(norm(logz)), lw=1.4)
 
     # Track values in the plotted window for ylim

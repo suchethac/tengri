@@ -76,9 +76,9 @@ for cos_inc, color in zip(COS_INC, COLORS):
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     if cos_inc_boundary is None:
         cos_inc_boundary = float(np.sin(np.radians(float(p["agn_oa_skirtor"]))))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     incl_deg = np.degrees(np.arccos(cos_inc))
     kind = "Type 1" if cos_inc > cos_inc_boundary else "Type 2"
     ax.loglog(wave, nu_l_nu, color=color, lw=1.5, label=rf"$i={incl_deg:.0f}^\circ$ ({kind})")

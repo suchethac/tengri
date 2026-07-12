@@ -122,10 +122,10 @@ for i, sigma in enumerate(sigma_values):
     for k in range(3):
         params = {**baseline_sigma, "sfh_field_psd_sigma": jnp.float64(sigma)}
         key = jax.random.fold_in(key_base_sigma, i * 10 + k)
-        out = model_sigma.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
+        out = model_sigma.predict(params)
+        wave = np.asarray(model_sigma.wavelengths)
         nu = C_AA_PER_S / wave
-        nu_l_nu = nu * np.asarray(out.sed)
+        nu_l_nu = nu * np.asarray(out.rest_sed())
         ax_sigma.loglog(wave, nu_l_nu, color=cmap(norm_sigma(sigma)), lw=0.8, alpha=0.6)
 
 ax_sigma.set_xlim(800, 3e4)
@@ -162,10 +162,10 @@ for i, tau in enumerate(tau_values):
     for k in range(3):
         params = {**baseline_tau, "sfh_field_psd_tau_myr": jnp.float64(tau)}
         key = jax.random.fold_in(key_base_tau, i * 10 + k)
-        out = model_tau.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
+        out = model_tau.predict(params)
+        wave = np.asarray(model_tau.wavelengths)
         nu = C_AA_PER_S / wave
-        nu_l_nu = nu * np.asarray(out.sed)
+        nu_l_nu = nu * np.asarray(out.rest_sed())
         ax_tau.loglog(wave, nu_l_nu, color=cmap(norm_tau(tau)), lw=0.8, alpha=0.6)
 
 ax_tau.set_xlim(800, 3e4)

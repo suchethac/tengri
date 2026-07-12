@@ -55,10 +55,10 @@ ymax = 0.0
 ymin = np.inf
 for fesc_lya in fesc_lya_values:
     params = {**baseline, "neb_fesc_lya": jnp.float64(fesc_lya)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     vis = (wave > 1100) & (wave < 1300)
     ymax = max(ymax, float(np.max(nu_l_nu[vis])))
     pos = nu_l_nu[vis][nu_l_nu[vis] > 0]

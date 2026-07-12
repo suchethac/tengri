@@ -88,10 +88,10 @@ c_aa_s = 2.998e18
 seds = []
 for fe2_strength in fe2_strength_values:
     params = {**baseline, "agn_fe2_strength": jnp.float64(fe2_strength)}
-    out = model.predict_rest_sed(params)
+    out = model.predict(params)
 
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = c_aa_s / wave * np.asarray(out.sed)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = c_aa_s / wave * np.asarray(out.rest_sed())
     seds.append(nu_l_nu)
 
     color = cmap(norm(fe2_strength))

@@ -95,7 +95,7 @@ ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 # Build a fixed star-forming galaxy and vary one knob. `sweep_parameter`
 # loops in Python, but each forward call hits tengri's persistent JIT
 # cache, so the per-iteration cost after the first is the cost of
-# `predict_rest_sed` itself.
+# `model.predict` itself.
 
 # %%
 spec_sf = Parameters(
@@ -138,7 +138,7 @@ plt.show()
 
 # %%
 age_grid_yr, curves = sample_sfh_prior(
-    "dpl",                       # double-power-law SFH (Carnall+2018)
+    "dpl",  # double-power-law SFH (Carnall+2018)
     jax.random.PRNGKey(0),
     n=24,
 )
@@ -163,8 +163,8 @@ _, narrow = sample_sfh_prior(
     "dpl",
     jax.random.PRNGKey(0),
     n=24,
-    sfh_dpl_alpha=Uniform(0.5, 1.5),         # default is Uniform(0.1, 5.0)
-    sfh_dpl_tau_gyr=Uniform(2.0, 4.0),       # default is Uniform(0.1, 12.0)
+    sfh_dpl_alpha=Uniform(0.5, 1.5),  # default is Uniform(0.1, 5.0)
+    sfh_dpl_tau_gyr=Uniform(2.0, 4.0),  # default is Uniform(0.1, 12.0)
 )
 
 fig, ax = plt.subplots(figsize=(9, 4))
@@ -232,8 +232,8 @@ for k, v in base.items():
     else:
         params_batch[k] = jnp.broadcast_to(v, (n_total, *v.shape))
 
-flux = model_grid.predict_photometry_batch(params_batch)        # (256, 5) for SDSS
-flux = flux.reshape(n_z, n_d, -1)                                # (n_z, n_d, n_filters)
+flux = model_grid.predict_photometry_batch(params_batch)  # (256, 5) for SDSS
+flux = flux.reshape(n_z, n_d, -1)  # (n_z, n_d, n_filters)
 
 i_g = inst_sdss.filter_names.index("sdss_g")
 i_r = inst_sdss.filter_names.index("sdss_r")
@@ -291,13 +291,13 @@ for i, (law_name, label) in enumerate(DUST_LAW_LABELS.items()):
         dust_tau_bc=Fixed(0.5),
         dust_tau_diff=Fixed(0.7),
         dust_slope=Fixed(-0.7),
-        dust_law_diff=law_name,         # <-- the categorical sweep
+        dust_law_diff=law_name,  # <-- the categorical sweep
         redshift=Fixed(0.0),
     )
     model_law = SEDModel(spec_law, ssp)
-    pred = model_law.predict_rest_sed(spec_law.sample(jax.random.PRNGKey(0)))
-    wave = np.asarray(pred.wavelength)
-    lnu = np.asarray(pred.sed)
+    pred = model_law.predict(spec_law.sample(jax.random.PRNGKey(0)))
+    wave = np.asarray(pred.wave_rest)
+    lnu = np.asarray(pred.rest_sed())
     mask = (wave >= 1000) & (wave <= 10000)
     # Normalize at 5500 Å for side-by-side shape comparison.
     inorm = int(np.argmin(np.abs(wave - 5500.0)))
@@ -345,17 +345,19 @@ model_z = SEDModel(spec_z, ssp, observation=inst_jwst.observation())
 
 z_grid = jnp.linspace(0.5, 8.0, 64)
 base_z = spec_z.sample(jax.random.PRNGKey(0))
-batch_z = {k: jnp.broadcast_to(jnp.asarray(v), (z_grid.size, *jnp.asarray(v).shape))
-           for k, v in base_z.items()}
+batch_z = {
+    k: jnp.broadcast_to(jnp.asarray(v), (z_grid.size, *jnp.asarray(v).shape))
+    for k, v in base_z.items()
+}
 batch_z["redshift"] = z_grid
 
-flux_z = model_z.predict_photometry_batch(batch_z)              # (64, 8 NIRCam bands)
+flux_z = model_z.predict_photometry_batch(batch_z)  # (64, 8 NIRCam bands)
 i150 = inst_jwst.filter_names.index("jwst_f150w")
 i277 = inst_jwst.filter_names.index("jwst_f277w")
 i444 = inst_jwst.filter_names.index("jwst_f444w")
 
-c1 = -2.5 * (jnp.log10(flux_z[:, i150]) - jnp.log10(flux_z[:, i277]))   # F150W - F277W
-c2 = -2.5 * (jnp.log10(flux_z[:, i277]) - jnp.log10(flux_z[:, i444]))   # F277W - F444W
+c1 = -2.5 * (jnp.log10(flux_z[:, i150]) - jnp.log10(flux_z[:, i277]))  # F150W - F277W
+c2 = -2.5 * (jnp.log10(flux_z[:, i277]) - jnp.log10(flux_z[:, i444]))  # F277W - F444W
 
 fig, ax = plt.subplots(figsize=(6.5, 5))
 sc = ax.scatter(np.asarray(c2), np.asarray(c1), c=np.asarray(z_grid), cmap="viridis", s=28)
@@ -403,9 +405,9 @@ fig, ax = sweep_parameter(
     [9.0, 10.0, 11.0, 12.0, 13.0],
     cmap=SWEEP_CMAPS["agn"],
     label_fmt=r"$\log L_{{\rm bol}}/L_\odot$ = {:.0f}",
-    wave_range=(1000, 1e6),                  # UV through MIR
+    wave_range=(1000, 1e6),  # UV through MIR
     log_scale=True,
-    normalize_at=None,                       # show absolute scaling
+    normalize_at=None,  # show absolute scaling
 )
 ax.set_title("AGN turns up: same SF host, log L_bol = 9 → 13")
 fig.tight_layout()
@@ -444,8 +446,9 @@ sigma_dex = 0.5
 tau_values_myr = [10.0, 50.0, 250.0, 1000.0]
 n_realizations = 6
 
-fig, axes = plt.subplots(1, len(tau_values_myr), figsize=(4 * len(tau_values_myr), 3.2),
-                         sharey=True)
+fig, axes = plt.subplots(
+    1, len(tau_values_myr), figsize=(4 * len(tau_values_myr), 3.2), sharey=True
+)
 for ax, tau_myr in zip(axes, tau_values_myr):
     key = jax.random.PRNGKey(int(tau_myr))
     for r in range(n_realizations):
@@ -457,9 +460,14 @@ for ax, tau_myr in zip(axes, tau_values_myr):
             n_grid=n_grid,
             d_log_age=d_log,
         )
-        modulator = jnp.exp(gp_x - k0_half)            # mass-conserving lognormal
-        ax.plot(age_gyr_field, np.asarray(modulator), lw=1.0, alpha=0.85,
-                color=viridis(0.1 + 0.7 * r / max(n_realizations - 1, 1)))
+        modulator = jnp.exp(gp_x - k0_half)  # mass-conserving lognormal
+        ax.plot(
+            age_gyr_field,
+            np.asarray(modulator),
+            lw=1.0,
+            alpha=0.85,
+            color=viridis(0.1 + 0.7 * r / max(n_realizations - 1, 1)),
+        )
     ax.set_xscale("log")
     ax.set_xlim(1e-3, 14)
     ax.axhline(1.0, color="0.6", lw=0.7, ls="--", zorder=0)
@@ -494,8 +502,9 @@ met_grid_1d = jnp.linspace(-1.5, 0.0, n)
 base_t = spec_grid.sample(jax.random.PRNGKey(0))
 
 # vmap path: build (n,)-batch dict, one compiled call.
-batch_t = {k: jnp.broadcast_to(jnp.asarray(v), (n, *jnp.asarray(v).shape))
-           for k, v in base_t.items()}
+batch_t = {
+    k: jnp.broadcast_to(jnp.asarray(v), (n, *jnp.asarray(v).shape)) for k, v in base_t.items()
+}
 batch_t["met_logzsol"] = met_grid_1d
 
 # Warm up (first call compiles).

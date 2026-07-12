@@ -69,7 +69,7 @@ for logu in logu_grid:
             redshift=tengri.Fixed(0.05),
         )
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        lines = model.predict_emission_lines(params)
+        lines = model.predict(params).lines
         ha = float(lines.halpha)
         hb = float(lines.hbeta)
         nii = float(lines.nii_6584)

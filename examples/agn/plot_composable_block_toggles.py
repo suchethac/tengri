@@ -45,14 +45,16 @@ BLOCK_PROGRESSION = [
         "+ lines",
         {
             "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
-            "lines": {"type": "grahsp", "*": tengri.FIXED},
+            "nlr": {"type": "grahsp", "*": tengri.FIXED},
+            "blr": {"type": "grahsp", "*": tengri.FIXED},
         },
     ),
     (
         "+ Fe II",
         {
             "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
-            "lines": {"type": "grahsp", "*": tengri.FIXED},
+            "nlr": {"type": "grahsp", "*": tengri.FIXED},
+            "blr": {"type": "grahsp", "*": tengri.FIXED},
             "feii": {"type": "grahsp", "*": tengri.FIXED},
         },
     ),
@@ -60,7 +62,8 @@ BLOCK_PROGRESSION = [
         "+ torus",
         {
             "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
-            "lines": {"type": "grahsp", "*": tengri.FIXED},
+            "nlr": {"type": "grahsp", "*": tengri.FIXED},
+            "blr": {"type": "grahsp", "*": tengri.FIXED},
             "feii": {"type": "grahsp", "*": tengri.FIXED},
             "torus": {"type": "grahsp", "*": tengri.FIXED},
         },
@@ -69,7 +72,8 @@ BLOCK_PROGRESSION = [
         "+ attenuation (full)",
         {
             "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
-            "lines": {"type": "grahsp", "*": tengri.FIXED},
+            "nlr": {"type": "grahsp", "*": tengri.FIXED},
+            "blr": {"type": "grahsp", "*": tengri.FIXED},
             "feii": {"type": "grahsp", "*": tengri.FIXED},
             "torus": {"type": "grahsp", "*": tengri.FIXED},
             "atten": {"type": "grahsp_biatten", "*": tengri.FIXED},
@@ -82,9 +86,9 @@ def predict_nu_lnu(blocks):
     agn = {"*": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **blocks}
     model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave_um = np.asarray(out.wavelength) * 1.0e-4
-    nu_lnu = C_AA_PER_S / np.asarray(out.wavelength) * np.asarray(out.sed)
+    out = model.predict(p)
+    wave_um = np.asarray(model.wavelengths) * 1.0e-4
+    nu_lnu = C_AA_PER_S / np.asarray(model.wavelengths) * np.asarray(out.rest_sed())
     return wave_um, np.where(nu_lnu > 0, nu_lnu, np.nan)
 
 

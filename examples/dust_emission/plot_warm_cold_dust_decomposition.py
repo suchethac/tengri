@@ -158,11 +158,11 @@ wavelength_peaks = {}
 for regime_name, params_dict in regimes.items():
     # Build model and predict
     model, params = _build_model(u_min=params_dict["u_min"])
-    prediction = model.predict_rest_sed(params)
+    prediction = model.predict(params)
 
     # Extract and convert to νL_ν
-    wave_aa = np.asarray(prediction.wavelength)
-    l_nu = np.asarray(prediction.sed)
+    wave_aa = np.asarray(model.wavelengths)
+    l_nu = np.asarray(prediction.rest_sed())
     nu_l_nu = _compute_νlν(wave_aa, l_nu)
 
     # Convert to microns for diagnostic lines

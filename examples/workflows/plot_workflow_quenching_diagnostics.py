@@ -83,9 +83,9 @@ for i, t in enumerate(t_q):
     params = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(t)}
     flux = np.asarray(model.predict_photometry(params))
     nuv_r[i] = -2.5 * np.log10(flux[0] / flux[1])
-    sed = model.predict_rest_sed(params)
-    wave = np.asarray(sed.wavelength)
-    l_nu = np.asarray(sed.sed)
+    sed = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    l_nu = np.asarray(sed.rest_sed())
     d4000[i] = _d4000(wave, l_nu)
     ha_ew[i] = _halpha_ew(wave, l_nu)
 

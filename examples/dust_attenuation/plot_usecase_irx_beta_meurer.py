@@ -216,9 +216,9 @@ for tau_diff in TAU_DIFF_VALUES:
 
     # Predict rest-frame SED
     try:
-        sed_rest = model.predict_rest_sed(params_dict)
-        wave_rest = np.asarray(sed_rest.wavelength)
-        l_nu_rest = np.asarray(sed_rest.sed)
+        sed_rest = model.predict(params_dict)
+        wave_rest = np.asarray(model.wavelengths)
+        l_nu_rest = np.asarray(sed_rest.rest_sed())
     except Exception as e:
         print(f"  τ_diff={tau_diff:.2f}: predict failed ({str(e)[:50]}...)")
         continue

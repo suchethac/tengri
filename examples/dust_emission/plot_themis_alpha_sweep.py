@@ -56,9 +56,9 @@ colors = plt.cm.inferno(np.linspace(0.15, 0.8, len(alpha_values)))
 fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
 for a, c in zip(alpha_values, colors):
-    out = model.predict_rest_sed({**p0, "dust_alpha": jnp.float64(a)})
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict({**p0, "dust_alpha": jnp.float64(a)})
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     lw = 2.6 if a == 2.0 else 1.8
     ax.loglog(
         wave, nu_l_nu, color=c, lw=lw, label=rf"$\alpha={a:.1f}$" + (" (FSPS)" if a == 2.0 else "")

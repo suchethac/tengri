@@ -181,9 +181,7 @@ fim, param_names = compute_fisher_matrix(
 fisher_errors = fisher_parameter_errors(fim)
 
 # Compare to posterior widths from the NUTS run above.
-posterior_errors = np.array(
-    [np.nanstd(np.asarray(result.samples[name])) for name in PARAM_NAMES]
-)
+posterior_errors = np.array([np.nanstd(np.asarray(result.samples[name])) for name in PARAM_NAMES])
 
 fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
@@ -316,10 +314,7 @@ print(f"Parameters: {param_names_phot}")
 # %%
 # Check convergence of the NUTS chain. Posterior.samples is a dict
 # {param_name: ndarray of shape (n_samples,)} — pass it straight through.
-chain_dict = {
-    name: np.asarray(result.samples[name])
-    for name in PARAM_NAMES
-}
+chain_dict = {name: np.asarray(result.samples[name]) for name in PARAM_NAMES}
 
 convergence_info = check_chain_length(
     chain_dict,

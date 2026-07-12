@@ -65,9 +65,9 @@ fig, ax = plt.subplots(figsize=(6.6, 4.4))
 for rv in rv_grid:
     model = _model(float(rv))
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=cmap(norm(rv)), lw=1.4)
 
 ax.axvline(2175, color="0.55", lw=0.4, ls=":")

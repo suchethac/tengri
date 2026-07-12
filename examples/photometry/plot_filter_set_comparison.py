@@ -64,9 +64,9 @@ model = tengri.SEDModel.build(
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-pred = model.predict_rest_sed(baseline)
-wave = np.asarray(pred.wavelength)
-sed = np.asarray(pred.sed)
+pred = model.predict(baseline)
+wave = np.asarray(model.wavelengths)
+sed = np.asarray(pred.rest_sed())
 # Smooth the emission-line spikes for display only — the photometry path
 # still integrates the spiky SED through the filters.
 sed_smooth = median_filter(sed, size=51)

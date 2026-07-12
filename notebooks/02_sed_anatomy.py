@@ -164,7 +164,8 @@ kitchen_sink = dict(
     agn={
         "disc": {"type": "multicolor", "*": FIXED, "log_lbol": 10.5},
         "torus": {"type": "skirtor", "*": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
-        "lines": {"type": "nlr", "*": FIXED},
+        "nlr": {"type": "analytic", "*": FIXED},
+        "blr": {"type": "none", "*": FIXED},
     },
     radio=True,
     xray=True,
@@ -486,7 +487,8 @@ money_shot = dict(
     agn={
         "disc": {"type": "multicolor", "*": FIXED, "log_lbol": 10.5},
         "torus": {"type": "skirtor", "*": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
-        "lines": {"type": "nlr", "*": FIXED},
+        "nlr": {"type": "analytic", "*": FIXED},
+        "blr": {"type": "none", "*": FIXED},
     },
     radio={"type": "condon92", "*": FIXED},
     xray={"type": "simple", "*": FIXED},

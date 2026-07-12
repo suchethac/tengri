@@ -70,9 +70,9 @@ for agn_log_lbol, agn_frac in zip(agn_log_lbols, agn_fracs):
     params["agn_log_lbol"] = agn_log_lbol
 
     # Predict composite SED
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
-    sed = np.asarray(out.sed)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(out.rest_sed())
     wave_um = wave / 1e4
 
     # Compute nu * L_nu for plotting

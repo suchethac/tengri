@@ -39,23 +39,26 @@ line the parameters up:
 The frozen assertions live in
 ``tests/crossval/test_carvajal2025_stochastic_sfh_crossval.py``.
 """
+
 import os
+
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
-import numpy as np
 import jax
-
 import matplotlib
+import numpy as np
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-
 import pcigale.sed_modules.sfhstochastic_carvajal2025 as C
+
 from tengri import make_log_age_grid
-from tengri.components.stellar.sfh.registry import compute_field_gp
 from tengri.components.stellar.sfh.psd_models import psd_drw
+from tengri.components.stellar.sfh.registry import compute_field_gp
 
 LN10 = np.log(10.0)
 N = 400
@@ -64,7 +67,7 @@ N_GRID = 256
 
 def acf(x):
     x0 = x - x.mean()
-    a = np.correlate(x0, x0, "full")[len(x0) - 1:]
+    a = np.correlate(x0, x0, "full")[len(x0) - 1 :]
     return a / a[0]
 
 
@@ -76,12 +79,21 @@ def decorr_lag(a, dx):
 def tengri_ensemble(psd_sigma, tau_yr):
     grid = np.asarray(make_log_age_grid(n_grid=N_GRID, log_age_min=6.0, log_age_max=10.14))
     d_log = float(grid[1] - grid[0])
-    gp = np.array([
-        np.asarray(compute_field_gp(
-            jax.random.normal(jax.random.PRNGKey(i), (N_GRID,)),
-            psd_sigma, tau_yr, N_GRID, d_log, log_age_grid=grid)[0])
-        for i in range(N)
-    ])
+    gp = np.array(
+        [
+            np.asarray(
+                compute_field_gp(
+                    jax.random.normal(jax.random.PRNGKey(i), (N_GRID,)),
+                    psd_sigma,
+                    tau_yr,
+                    N_GRID,
+                    d_log,
+                    log_age_grid=grid,
+                )[0]
+            )
+            for i in range(N)
+        ]
+    )
     return grid, d_log, gp
 
 
@@ -90,9 +102,14 @@ def cigale_ensemble(tau_break_myr, sigma_dex, age_myr=1000):
     curves = []
     for seed in range(N):
         lc, _, _ = C.TimmerKoenig(
-            C.PSD, (1.0, f_break, 2.0, 0.0, 0.0),
-            age_myr, C.DEFAULT_TIME_BIN_MYR, seed,
-            RedNoiseL=C.DEFAULT_RED_NOISE_FACTOR, aliasTbin=C.DEFAULT_ALIAS_TBIN)
+            C.PSD,
+            (1.0, f_break, 2.0, 0.0, 0.0),
+            age_myr,
+            C.DEFAULT_TIME_BIN_MYR,
+            seed,
+            RedNoiseL=C.DEFAULT_RED_NOISE_FACTOR,
+            aliasTbin=C.DEFAULT_ALIAS_TBIN,
+        )
         curves.append(lc / lc.std() * sigma_dex)
     return np.arange(age_myr), np.array(curves)
 
@@ -106,10 +123,14 @@ def main():
     tau_yr = 150e6
     f = np.geomspace(1e-10, 1e-7, 300)
     f_break = 1.0 / (2.0 * np.pi * tau_yr)
-    p_t = np.asarray(psd_drw(2 * np.pi * f, 1.0, tau_yr)); p_t /= p_t[0]
-    p_c = C.PSD(f, 1.0, f_break, 2.0, 0.0, 0.0); p_c /= p_c[0]
-    print(f"\n[1] PSD form   max|tengri-CIGALE| (normalized) = {np.max(np.abs(p_t - p_c)):.2e}"
-          f"   -> same Lorentzian at f_break=1/(2 pi tau)")
+    p_t = np.asarray(psd_drw(2 * np.pi * f, 1.0, tau_yr))
+    p_t /= p_t[0]
+    p_c = C.PSD(f, 1.0, f_break, 2.0, 0.0, 0.0)
+    p_c /= p_c[0]
+    print(
+        f"\n[1] PSD form   max|tengri-CIGALE| (normalized) = {np.max(np.abs(p_t - p_c)):.2e}"
+        f"   -> same Lorentzian at f_break=1/(2 pi tau)"
+    )
 
     # 2. amplitude: psd_sigma is now the dex std directly (one-to-one with sigma)
     target = 0.30
@@ -117,15 +138,19 @@ def main():
     t_dex = gp.std() / LN10
     t_myr, lcs = cigale_ensemble(150.0, target)
     c_dex = lcs.std()
-    print(f"[2] amplitude  tengri psd_sigma={target} -> {t_dex:.3f} dex ;"
-          f" CIGALE sigma={target} -> {c_dex:.3f} dex   (psd_sigma == sigma, one-to-one)")
+    print(
+        f"[2] amplitude  tengri psd_sigma={target} -> {t_dex:.3f} dex ;"
+        f" CIGALE sigma={target} -> {c_dex:.3f} dex   (psd_sigma == sigma, one-to-one)"
+    )
 
     # 3. CIGALE timescale convention
     for tb in (50.0, 150.0):
         _, lc = cigale_ensemble(tb, 0.3)
         a = np.mean([acf(x) for x in lc], axis=0)
-        print(f"[3] timescale  CIGALE tau_break={tb:.0f} Myr -> 1/e decorr"
-              f" {decorr_lag(a, 1.0):.1f} Myr   (tau_break/2pi={tb / 2 / np.pi:.1f})")
+        print(
+            f"[3] timescale  CIGALE tau_break={tb:.0f} Myr -> 1/e decorr"
+            f" {decorr_lag(a, 1.0):.1f} Myr   (tau_break/2pi={tb / 2 / np.pi:.1f})"
+        )
 
     # 4. tengri now decorrelates in LINEAR time too -> matches CIGALE
     t_phys = 10.0**grid
@@ -138,30 +163,42 @@ def main():
         return (t_phys[i0 + b[0]] - t_phys[i0]) / 1e6 if b.size else np.nan
 
     cdec = decorr_lag(np.mean([acf(x) for x in lcs], axis=0), 1.0)
-    print(f"[4] linear-time decorr  tengri @30Myr={tdecorr_myr(30e6):.0f} @300Myr="
-          f"{tdecorr_myr(300e6):.0f} Myr ; CIGALE={cdec:.0f} Myr"
-          f"   -> both FIXED in Myr (no age-stretch), agree")
+    print(
+        f"[4] linear-time decorr  tengri @30Myr={tdecorr_myr(30e6):.0f} @300Myr="
+        f"{tdecorr_myr(300e6):.0f} Myr ; CIGALE={cdec:.0f} Myr"
+        f"   -> both FIXED in Myr (no age-stretch), agree"
+    )
 
     # figure: both are linear-time DRWs now
     fig, ax = plt.subplots(1, 3, figsize=(15, 4.2))
     for g in gp[:30]:
         ax[0].plot(t_phys / 1e6, g / LN10, color="C0", alpha=0.15, lw=0.6)
-    ax[0].set(title="tengri field: linear-time DRW (#865)", xlabel="lookback [Myr]",
-              ylabel="log10 SFR modulation [dex]", xscale="log")
+    ax[0].set(
+        title="tengri field: linear-time DRW (#865)",
+        xlabel="lookback [Myr]",
+        ylabel="log10 SFR modulation [dex]",
+        xscale="log",
+    )
     for x in lcs[:30]:
         ax[1].plot(t_myr, x, color="C1", alpha=0.15, lw=0.6)
-    ax[1].set(title="CIGALE Carvajal: linear-time DRW", xlabel="lookback [Myr]",
-              ylabel="log10 SFR modulation [dex]")
+    ax[1].set(
+        title="CIGALE Carvajal: linear-time DRW",
+        xlabel="lookback [Myr]",
+        ylabel="log10 SFR modulation [dex]",
+    )
     at_myr = np.array([np.corrcoef(mod[:, 0], mod[:, j])[0, 1] for j in range(len(t_phys))])
     ac = np.mean([acf(x) for x in lcs], axis=0)
     ax[2].plot((t_phys - t_phys[0]) / 1e6, at_myr, "C0", label="tengri")
     ax[2].plot(np.arange(len(ac)), ac, "C1", label="CIGALE", alpha=0.7)
     ax[2].axhline(1 / np.e, ls=":", c="k", lw=1)
-    ax[2].set(title="autocorrelation vs linear-time lag", xlabel="lag [Myr]",
-              ylabel="ACF", xlim=(0, 600)); ax[2].legend()
+    ax[2].set(
+        title="autocorrelation vs linear-time lag", xlabel="lag [Myr]", ylabel="ACF", xlim=(0, 600)
+    )
+    ax[2].legend()
     fig.tight_layout()
-    out = os.path.join(os.path.dirname(__file__), "_figs",
-                       "cigale_carvajal2025_stochastic_sfh.png")
+    out = os.path.join(
+        os.path.dirname(__file__), "_figs", "cigale_carvajal2025_stochastic_sfh.png"
+    )
     os.makedirs(os.path.dirname(out), exist_ok=True)
     fig.savefig(out, dpi=110)
     print(f"\nfigure -> {out}")

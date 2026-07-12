@@ -61,9 +61,9 @@ for z in redshifts:
     params = {**baseline}
 
     # Predict rest-frame SED
-    out = model.predict_rest_sed(params)
-    wave_rest = np.asarray(out.wavelength)
-    sed_rest = np.asarray(out.sed)
+    out = model.predict(params)
+    wave_rest = np.asarray(model.wavelengths)
+    sed_rest = np.asarray(out.rest_sed())
 
     # Shift to observed frame
     wave_obs_um = (wave_rest / 1e4) * (1 + z)

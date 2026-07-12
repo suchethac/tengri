@@ -69,14 +69,14 @@ model = tengri.SEDModel.build(
 
 # Sample and predict rest-frame SED
 p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-out = model.predict_rest_sed(p)
-wave = np.asarray(out.wavelength)
-nu_l_nu = 2.998e18 / wave * np.asarray(out.sed)
+out = model.predict(p)
+wave = np.asarray(model.wavelengths)
+nu_l_nu = 2.998e18 / wave * np.asarray(out.rest_sed())
 
 fig, ax = plt.subplots(figsize=(8.0, 5.0))
 
 # Plot full panchromatic SED (mask zeros for clean loglog)
-mask = np.asarray(out.sed) > 0
+mask = np.asarray(out.rest_sed()) > 0
 ax.loglog(
     wave[mask],
     nu_l_nu[mask],
