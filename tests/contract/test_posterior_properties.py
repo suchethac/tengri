@@ -339,6 +339,101 @@ def test_catalog_properties_stack_over_galaxies(model, samples):
     assert ci.shape == (3, 3), "expected (n_galaxies, 3) for (lo, med, hi)"
 
 
+# ── observables over the sample axis (contract §3: exact by default) ──
+
+
+def test_observables_shape_and_exactness(model, posterior, samples):
+    """Exact by default: each draw's bands equal the model's own exact photometry.
+
+    The reference is composed INDEPENDENTLY — ``model.predict(p).photometry()``,
+    the Prediction surface — not by re-calling the batched path under test.
+    """
+    got = posterior.observables()
+    n_filters = model.observation.photometry.n_filters
+    assert got.shape == (37, n_filters)
+
+    for i in (0, 18, 36):
+        one = model.predict({k: v[i] for k, v in samples.items()}).photometry()
+        np.testing.assert_allclose(np.asarray(got[i]), np.asarray(one), rtol=1e-12)
+
+
+def test_observables_thins_to_n_draws(posterior, model):
+    got = posterior.observables(n_draws=5, key=jax.random.PRNGKey(1))
+    assert got.shape == (5, model.observation.photometry.n_filters)
+
+
+def test_observables_fast_is_opt_in_not_default(posterior):
+    """``fast=True`` must be a *different* code path, or the flag is a lie.
+
+    On a model built with no ``approx=``, the lean path and the exact path
+    coincide numerically — so this pins the CONTRACT (both run, both finite,
+    same shape) rather than asserting a difference that this model cannot show.
+    """
+    exact = posterior.observables(n_draws=4, key=jax.random.PRNGKey(2))
+    fast = posterior.observables(n_draws=4, key=jax.random.PRNGKey(2), fast=True)
+
+    assert exact.shape == fast.shape
+    assert np.all(np.isfinite(exact)) and np.all(np.isfinite(fast))
+    # This model carries no build-time LUT, so the two paths must agree here.
+    # (A WavePrecomp model is where they diverge — that is Phase 2's territory.)
+    np.testing.assert_allclose(np.asarray(fast), np.asarray(exact), rtol=1e-10)
+
+
+# ── the population topology ──────────────────────────────────────
+
+
+def test_population_properties_merge_the_shared_hyperparameters(model, samples):
+    """A per-galaxy block is NOT a complete parameter set in a hierarchical fit.
+
+    The shared hyperparameters must be merged in, or the properties silently
+    answer a different question. Here the model has no shared params, so the
+    merge is a no-op numerically — what this pins is that the galaxy axis exists,
+    carries the right keys, and equals each galaxy's own posterior.
+    """
+    from tengri.inference.hierarchical import PopulationPosterior
+    from tengri.inference.posterior import Posterior
+
+    individual = [{k: v + float(g) for k, v in samples.items()} for g in range(2)]
+    pop = PopulationPosterior(
+        shared_samples={},
+        shared_params={},
+        individual_samples=individual,
+        method="test",
+        _model=model,
+    )
+
+    assert set(pop.properties.keys()) == set(model.available_properties)
+
+    got = pop.properties["stellar_mass"]
+    assert got.shape == (2, 37)
+
+    for g in range(2):
+        ref = Posterior(
+            samples=individual[g],
+            params={},
+            method="test",
+            wall_time_s=0.0,
+            diagnostics={},
+            _model=model,
+        )
+        np.testing.assert_allclose(got[g], np.asarray(ref.properties["stellar_mass"]), rtol=1e-12)
+
+
+def test_population_without_individual_samples_raises_clearly(model):
+    """No per-galaxy samples -> a clear error, never a silent empty array."""
+    from tengri.inference.hierarchical import PopulationPosterior
+
+    pop = PopulationPosterior(
+        shared_samples={"x": jnp.ones(3)},
+        shared_params={},
+        individual_samples=None,
+        method="test",
+        _model=model,
+    )
+    with pytest.raises(RuntimeError, match="no per-galaxy samples"):
+        pop.properties["stellar_mass"]
+
+
 def test_properties_agree_with_derived_to_tolerance(posterior):
     """The two paths are NOT bit-identical (different recompute routes) but must agree.
 

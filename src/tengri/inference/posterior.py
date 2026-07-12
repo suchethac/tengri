@@ -1588,6 +1588,95 @@ class Posterior:
 
         return "\n".join(lines)
 
+    # ── Observables over the sample axis ──────────────────────────
+
+    def observables(self, filters=None, n_draws=None, fast=False, key=None, chunk_size=64):
+        r"""Photometry for every posterior draw — the arrays an SED plot needs.
+
+        Contract §3, **exact by default**. The default path integrates the model
+        SED through the filters with no approximation, per draw. ``fast=True``
+        opts into the lean build-time path (the ``approx=`` LUT the model was
+        built with, if any) — much faster, and an approximation.
+
+        Parameters
+        ----------
+        filters : Photometry, optional
+            Bands to integrate. Defaults to the ones the model was built with.
+        n_draws : int, optional
+            Thin to this many draws (resampled with replacement) before
+            evaluating. ``None`` uses every draw — which for a large posterior is
+            exactly the memory problem :func:`~tengri.vmap_chunked` exists to
+            bound, so it is chunked either way.
+        fast : bool, default False
+            Route through the lean ``predict_photometry`` (build-time approx)
+            instead of the exact projector.
+        key : PRNGKey, optional
+            Used only when ``n_draws`` is given. Defaults to ``PRNGKey(0)``.
+        chunk_size : int, default 64
+            Draws per compiled kernel.
+
+        Returns
+        -------
+        ndarray, shape (n_draws, n_filters)
+            Observed-frame flux density per draw per band, F_nu [erg/s/cm^2/Hz].
+            For a MAP fit (no samples), shape ``(1, n_filters)``.
+
+        Raises
+        ------
+        RuntimeError
+            If no model is attached.
+
+        Notes
+        -----
+        **JIT-compatible**: no (drives compilation internally). The per-draw
+        kernel it maps *is* jitted.
+
+        Examples
+        --------
+        >>> bands = post.observables(n_draws=200)  # exact  # doctest: +SKIP
+        >>> lo, med, hi = np.percentile(bands, [16, 50, 84], axis=0)  # doctest: +SKIP
+        """
+        from tengri.observation.photometry import project_photometry
+        from tengri.parameters.resolve import resolve_fixed_params
+        from tengri.utils.batching import vmap_chunked
+
+        if self._model is None:
+            raise RuntimeError("No model reference — cannot compute observables")
+
+        model = self._model
+        phot = filters if filters is not None else model.observation.photometry
+        if phot is None:
+            raise RuntimeError("This model has no photometry to evaluate.")
+
+        if self.samples is None:
+            draws = {k: jnp.atleast_1d(v) for k, v in self.params.items()}
+        elif n_draws is None:
+            draws = self.samples
+        else:
+            draws = self.resample(jax.random.PRNGKey(0) if key is None else key, n=n_draws)
+
+        # Posterior draws carry only the FREE parameters. The exact projector
+        # reads the luminosity distance out of this dict, so a Fixed redshift
+        # would be silently dropped and every band computed at 10 pc — the same
+        # defect this campaign found in Prediction (see
+        # tests/regression/bug/test_fixed_redshift_dropped_in_exact_projection.py).
+        # Broadcast each fixed scalar across the draw axis so vmap sees it.
+        n = next(iter(draws.values())).shape[0]
+        fixed = resolve_fixed_params(model, {})
+        draws = {**{k: jnp.broadcast_to(v, (n,)) for k, v in fixed.items()}, **draws}
+
+        if fast:
+            # The lean hot-loop path: honors whatever `approx=` the model was
+            # built with. Faster, and an approximation.
+            fn = model.predict_photometry
+        else:
+            # The canonical exact projector — the same kernel Prediction.photometry()
+            # uses, so a posterior band and a Prediction band answer the same question.
+            def fn(p):
+                return project_photometry(model.predict_state(p), p, phot)
+
+        return vmap_chunked(fn, chunk_size=chunk_size)(draws)
+
     # ── Resampling ────────────────────────────────────────────────
 
     def resample(self, key, n=1) -> dict:
