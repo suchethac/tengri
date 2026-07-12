@@ -50,12 +50,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components._term_response import term_band_response as _term_band_response
 from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
-from tengri.components.radio.radio import radio_freefree, radio_total, radio_total_dpl
+from tengri.components.radio.radio import (
+    radio_freefree,
+    radio_total_dpl_terms,
+    radio_total_terms,
+)
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -201,6 +206,193 @@ class RadioSEDComponent:
             DerivedKey("log_mstar", "dex", "Read from stellar if present; falls back to 10.0"),
         )
 
+    #: Cross-component scalars this emitter reads off ``state.derived``, with two
+    #: deliberately distant probe draws. The build-time band-response builder
+    #: (:meth:`tengri.SEDModel._additive_term_band_response`) evaluates
+    #: :meth:`emission_terms` at both and requires every term to come back
+    #: *proportional*: a term whose spectral **shape** — not merely its amplitude —
+    #: responds to a runtime input is not rank-1, so no constant band response
+    #: exists for it and the emitter drops to the dense per-call filter integral.
+    #: Verifying the property beats declaring it (#1107: BOSA's template shape
+    #: tracked its own luminosity and returned fluxes 13 % wrong, silently).
+    #:
+    #: Every value is nonzero on purpose. A term that stays identically zero across
+    #: both draws is zero for a *structural* reason — ``include_freefree=False``, or
+    #: ``radio_loudness = 0`` (the default, i.e. radio-quiet) — never because a probe
+    #: happened to zero it out.
+    EMITTER_PROBE_INPUTS: ClassVar[tuple[dict[str, float], dict[str, float]]] = (
+        {
+            "L_ir": 1.0e44,
+            "L_agn_bol": 1.0e45,
+            "L_4400_intrinsic": 1.0e28,
+            "log_mstar": 10.0,
+        },
+        {
+            "L_ir": 8.0e45,
+            "L_agn_bol": 6.0e46,
+            "L_4400_intrinsic": 5.0e30,
+            "log_mstar": 11.5,
+        },
+    )
+
+    def emitter_inputs(self, derived: Mapping[str, Any]) -> dict[str, jnp.ndarray]:
+        """Read this emitter's cross-component scalars off the derived state.
+
+        Parameters
+        ----------
+        derived : mapping
+            ``state.derived``. Missing keys take the documented fallbacks — a model
+            with no dust block publishes no ``L_ir``, and radio must still build.
+
+        Returns
+        -------
+        dict
+            Keyword arguments for :meth:`emission_terms`: ``L_ir`` [erg/s],
+            ``L_agn_bol`` [erg/s], ``L_4400_intrinsic`` [erg/s/Hz], ``log_mstar``
+            [dex Msun].
+        """
+        return {
+            "L_ir": jnp.asarray(derived.get("L_ir", 0.0)),
+            "L_agn_bol": jnp.asarray(derived.get("L_agn_bol", 0.0)),
+            "L_4400_intrinsic": jnp.asarray(derived.get("L_4400_intrinsic", 0.0)),
+            "log_mstar": jnp.asarray(derived.get("log_mstar", 10.0)),
+        }
+
+    def emission_terms(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        wave: jnp.ndarray,
+        *,
+        L_ir: jnp.ndarray,
+        L_agn_bol: jnp.ndarray,
+        L_4400_intrinsic: jnp.ndarray,
+        log_mstar: jnp.ndarray,
+    ) -> dict[str, jnp.ndarray]:
+        r"""The additive terms of the radio SED, unsummed.
+
+        Single source of truth: :meth:`apply` sums these to build the SED, and the
+        build-time band-response precompute integrates *these same terms* through the
+        filters. Two paths, one definition — so they cannot drift, which is exactly
+        how #1107 nearly shipped a band response built from the wrong parameters.
+
+        Parameters
+        ----------
+        params : mapping
+            Full (un-sliced) parameter dict; reads the ``radio_*`` keys and the bare
+            ``redshift``.
+        wave : array_like, shape (n_wave,)
+            Rest-frame wavelength grid [Angstrom]. Any grid: the full model grid in
+            :meth:`apply`, or the per-term reference wavelengths under the LUT.
+        L_ir : array_like, scalar
+            Dust-reradiated IR luminosity [erg/s], drives the SF synchrotron and
+            free-free amplitudes via the FIR-radio correlation.
+        L_agn_bol : array_like, scalar
+            AGN bolometric luminosity [erg/s].
+        L_4400_intrinsic : array_like, scalar
+            Un-reddened AGN B-band luminosity [erg/s/Hz], the radio-loudness reference.
+        log_mstar : array_like, scalar
+            log10 stellar mass [dex Msun]; used by the mass-evolving FIRRC modes.
+
+        Returns
+        -------
+        dict of ndarray, each shape (n_wave,)
+            ``{"sf", "ff", "agn"}`` — star-forming synchrotron, free-free, and the AGN
+            jet [erg/s/Hz]. ``"agn"`` is zeros when ``agn_radio_model == "none"``, and
+            ``"ff"`` is zeros when ``include_freefree`` is off.
+
+        Notes
+        -----
+        **JIT/grad/vmap-safe.** Pure ``jnp``; the model branch is a static config read.
+
+        Each term is *rank-1* in wavelength — a scalar amplitude times a spectral shape
+        set only by the shape parameters (``alpha_sf``, ``alpha_agn``/``alpha_thin``/
+        ``alpha_thick``, ``log_nu_t``, ``log_nu_cut``, ``T_e``, ``alpha_ff``). The
+        *total* is not: three power laws of different index do not share a shape. That
+        is why the terms are exposed separately — the band integral factorizes per term
+        and not on the sum (#1109).
+        """
+        model = self.config.agn_radio_model
+        z = jnp.asarray(params.get("redshift", 0.0))
+
+        # FIRRC evolution coefficients for the evolving SF-radio models. The
+        # active ``sfr_mode`` (static config) selects which model-specific
+        # triplet is consumed; bell2003 / none ignore them (pass None → the
+        # SF functions fall through to their literature defaults / zeros).
+        firrc_q0, firrc_mass_slope, firrc_z_slope = self._firrc_overrides(params)
+
+        if model == "none":
+            from tengri.components.radio.radio import _dispatch_sfr
+
+            sf = _dispatch_sfr(
+                wave,
+                L_ir=L_ir,
+                sfr_mode=self.config.sfr_mode,
+                q_ir=jnp.asarray(params["radio_q_ir"]),
+                alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
+                log_mstar=log_mstar,
+                redshift=z,
+                q0=firrc_q0,
+                mass_slope=firrc_mass_slope,
+                z_slope=firrc_z_slope,
+                apply_suppression=True,
+            )
+            ff = (
+                radio_freefree(
+                    wave,
+                    L_ir,
+                    jnp.asarray(params["radio_T_e"]),
+                    jnp.asarray(params["radio_alpha_ff"]),
+                )
+                if self.config.include_freefree
+                else jnp.zeros_like(wave)
+            )
+            return {"sf": sf, "ff": ff, "agn": jnp.zeros_like(wave)}
+
+        if model == "powerlaw":
+            return radio_total_terms(
+                wave,
+                L_ir=L_ir,
+                L_agn_bol=L_agn_bol,
+                q_ir=jnp.asarray(params["radio_q_ir"]),
+                alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
+                radio_loudness=jnp.asarray(params["radio_loudness"]),
+                alpha_agn=jnp.asarray(params["radio_alpha_agn"]),
+                sfr_mode=self.config.sfr_mode,
+                log_mstar=log_mstar,
+                redshift=z,
+                q0=firrc_q0,
+                mass_slope=firrc_mass_slope,
+                z_slope=firrc_z_slope,
+                include_freefree=self.config.include_freefree,
+                T_e=jnp.asarray(params["radio_T_e"]),
+                alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
+                l_bband=L_4400_intrinsic,
+            )
+
+        # model == "dpl"
+        return radio_total_dpl_terms(
+            wave,
+            L_ir=L_ir,
+            L_agn_bol=L_agn_bol,
+            q_ir=jnp.asarray(params["radio_q_ir"]),
+            alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
+            radio_loudness=jnp.asarray(params["radio_loudness"]),
+            alpha1=jnp.asarray(params["radio_alpha_thin"]),
+            alpha2=jnp.asarray(params["radio_alpha_thick"]),
+            log_nu_t=jnp.asarray(params["radio_log_nu_t"]),
+            log_nu_cut=jnp.asarray(params["radio_log_nu_cut"]),
+            sfr_mode=self.config.sfr_mode,
+            log_mstar=log_mstar,
+            redshift=z,
+            q0=firrc_q0,
+            mass_slope=firrc_mass_slope,
+            z_slope=firrc_z_slope,
+            include_freefree=self.config.include_freefree,
+            T_e=jnp.asarray(params["radio_T_e"]),
+            alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
+            l_bband=L_4400_intrinsic,
+        )
+
     def precompute(
         self,
         ssp_data: Any | None = None,
@@ -281,117 +473,45 @@ class RadioSEDComponent:
         # NotImplementedError. They now fail earlier — at construction —
         # because they are no longer in AGN_RADIO_MODELS. That validation
         # lives in RadioSEDComponentConfig.__post_init__.
-        model = self.config.agn_radio_model
-
         wave = state.wave
-
-        L_ir = jnp.asarray(state.derived.get("L_ir", 0.0))
-        L_agn_bol = jnp.asarray(state.derived.get("L_agn_bol", 0.0))
-        L_4400_intrinsic = jnp.asarray(state.derived.get("L_4400_intrinsic", 0.0))
-        log_mstar = jnp.asarray(state.derived.get("log_mstar", 10.0))
         z = jnp.asarray(params.get("redshift", 0.0))
+        inputs = self.emitter_inputs(state.derived)
 
-        # FIRRC evolution coefficients for the evolving SF-radio models. The
-        # active ``sfr_mode`` (static config) selects which model-specific
-        # triplet is consumed; bell2003 / none ignore them (pass None → the
-        # SF functions fall through to their literature defaults / zeros).
-        firrc_q0, firrc_mass_slope, firrc_z_slope = self._firrc_overrides(params)
-
-        # Rest-frame radio Lν on an arbitrary wavelength grid. Radio is a smooth
-        # (broken-)power-law, so evaluating it at the per-filter / per-pixel
-        # effective wavelength is an excellent LUT approximation (#624).
-        # Dispatch on agn_radio_model ("none" = SF only, "powerlaw" = SF + AGN,
-        # "dpl" = SF + AGN double power-law).
         def _emit(w):
-            if model == "none":
-                # SF component only; AGN radio turned off
-                from tengri.components.radio.radio import _dispatch_sfr
-
-                sf = _dispatch_sfr(
-                    w,
-                    L_ir=L_ir,
-                    sfr_mode=self.config.sfr_mode,
-                    q_ir=jnp.asarray(params["radio_q_ir"]),
-                    alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
-                    log_mstar=log_mstar,
-                    redshift=z,
-                    q0=firrc_q0,
-                    mass_slope=firrc_mass_slope,
-                    z_slope=firrc_z_slope,
-                    apply_suppression=True,
-                )
-                ff = (
-                    radio_freefree(
-                        w,
-                        L_ir,
-                        jnp.asarray(params["radio_T_e"]),
-                        jnp.asarray(params["radio_alpha_ff"]),
-                    )
-                    if self.config.include_freefree
-                    else 0.0
-                )
-                return sf + ff
-            elif model == "powerlaw":
-                return radio_total(
-                    w,
-                    L_ir=L_ir,
-                    L_agn_bol=L_agn_bol,
-                    q_ir=jnp.asarray(params["radio_q_ir"]),
-                    alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
-                    radio_loudness=jnp.asarray(params["radio_loudness"]),
-                    alpha_agn=jnp.asarray(params["radio_alpha_agn"]),
-                    sfr_mode=self.config.sfr_mode,
-                    log_mstar=log_mstar,
-                    redshift=z,
-                    q0=firrc_q0,
-                    mass_slope=firrc_mass_slope,
-                    z_slope=firrc_z_slope,
-                    include_freefree=self.config.include_freefree,
-                    T_e=jnp.asarray(params["radio_T_e"]),
-                    alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
-                    l_bband=L_4400_intrinsic,
-                )
-            # model == "dpl"
-            return radio_total_dpl(
-                w,
-                L_ir=L_ir,
-                L_agn_bol=L_agn_bol,
-                q_ir=jnp.asarray(params["radio_q_ir"]),
-                alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
-                radio_loudness=jnp.asarray(params["radio_loudness"]),
-                alpha1=jnp.asarray(params["radio_alpha_thin"]),
-                alpha2=jnp.asarray(params["radio_alpha_thick"]),
-                log_nu_t=jnp.asarray(params["radio_log_nu_t"]),
-                log_nu_cut=jnp.asarray(params["radio_log_nu_cut"]),
-                sfr_mode=self.config.sfr_mode,
-                log_mstar=log_mstar,
-                redshift=z,
-                q0=firrc_q0,
-                mass_slope=firrc_mass_slope,
-                z_slope=firrc_z_slope,
-                include_freefree=self.config.include_freefree,
-                T_e=jnp.asarray(params["radio_T_e"]),
-                alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
-                l_bband=L_4400_intrinsic,
-            )
+            t = self.emission_terms(params, w, **inputs)
+            return t["sf"] + t["ff"] + t["agn"]
 
         L_radio = _emit(wave)
         derived_overrides = {"sed_radio": L_radio}
 
         # Precompute LUT families (#624): radio is additive and unattenuated,
         # summed by predict_via_precomp / predict_spectrum_via_precomp.
-        # Photometry: integrate the dense radio SED through the true filter
-        # transmission (the same integral the exact path uses) so a wide radio
-        # bandpass — over which the (broken-)power-law has real curvature — is
-        # exact, not sampled at one effective wavelength. Spectroscopy: a pixel
-        # is a point-sample, so evaluating at the pixel wavelength is exact.
+        # Spectroscopy: a pixel is a point-sample, so evaluating at the pixel
+        # wavelength is exact.
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
+            band = _term_band_response(template_data, "radio")
             fw_pad = state.derived.get("phot_filter_waves_padded")
-            ft_pad = state.derived.get("phot_filter_trans_padded")
-            if fw_pad is not None:
+            if band is not None:
+                # Exact fast path. Radio is a sum of rank-1 terms — SF synchrotron,
+                # free-free, AGN jet — each a scalar amplitude times a spectral shape
+                # fixed by the (fixed) shape parameters. The filter integral is linear,
+                # so the band flux is sum_k A_k * R_kf with R_kf integrated once at
+                # build time through the true filter transmission. Recover each A_k
+                # from a single-wavelength evaluation rather than the dense grid: that
+                # is what lets XLA dead-code-eliminate the full-resolution SED, which
+                # is where the whole WavePrecomp speedup lives (#1109).
+                ref = self.emission_terms(params, band["lam_ref"], **inputs)
+                amps = jnp.stack([t[i] for i, t in enumerate(ref.values())]) / band["S_ref"]
+                derived_overrides["radio_phot_lnu_precomp"] = amps @ band["R"]
+            elif fw_pad is not None:
+                # Exact dense path: integrate the radio SED through the true filter
+                # transmission on every call, so a wide radio bandpass — over which the
+                # (broken-)power-law has real curvature — stays exact rather than being
+                # sampled at one effective wavelength.
                 from tengri.observation.photometry import lnu_filter_integral_batch
 
+                ft_pad = state.derived.get("phot_filter_trans_padded")
                 derived_overrides["radio_phot_lnu_precomp"] = lnu_filter_integral_batch(
                     L_radio, wave, fw_pad, ft_pad, z
                 )

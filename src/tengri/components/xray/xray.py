@@ -405,7 +405,7 @@ def pexrav_reflection(
     return jnp.where(in_band, R * mu_factor * g_branching * g_kn * l_primary, 0.0)
 
 
-def xray_xrb(
+def xray_xrb_terms(
     wavelength: jnp.ndarray,
     sfr: float,
     stellar_mass: float,
@@ -416,18 +416,17 @@ def xray_xrb(
     E_cut: float = 100.0,
     log_L_hmxb_offset: float = 0.0,
     log_L_lmxb_offset: float = 0.0,
-) -> jnp.ndarray:
-    r"""Predict X-ray SED from accretion-powered binaries.
+) -> dict[str, jnp.ndarray]:
+    r"""Predict unsummed X-ray SED terms from accretion-powered binaries.
 
-    Computes the combined X-ray emission from high-mass (HMXB) and low-mass
-    (LMXB) X-ray binary populations. HMXB luminosity scales with SFR and
-    metallicity (Lehmer et al. 2016). LMXB luminosity scales with stellar
-    mass and age (Lehmer et al. 2016). Both are modeled as power-laws
-    with exponential cutoff.
+    Computes HMXB and LMXB X-ray emission as separate terms with different
+    photon indices (Γ_HMXB = 2.0, Γ_LMXB = 1.6). Unlike :func:`xray_xrb`,
+    returns the unsummed contributions so each can be precomputed independently
+    at build time through broadband filters.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid in Å (rest-frame). [Å]
     sfr : float
         Star formation rate. [Msun/yr]
@@ -444,20 +443,29 @@ def xray_xrb(
     E_cut : float, optional
         Exponential cutoff energy for both populations. Default: 100 keV. [keV]
     log_L_hmxb_offset : float, optional
-        Departure from mean SFR relation (dex). Allows scatter or evolution.
-        Default: 0.0. [dex]
+        Departure from mean SFR relation (dex). Default: 0.0. [dex]
     log_L_lmxb_offset : float, optional
         Departure from mean stellar-mass relation (dex). Default: 0.0. [dex]
 
     Returns
     -------
-    array, shape (n_wave,)
-        Spectral luminosity density of X-ray binary populations.
-        [erg/s/Hz]
+    dict with keys {"hmxb", "lmxb"}
+        "hmxb" : ndarray, shape (n_wave,)
+            High-mass X-ray binary spectral luminosity density. [erg/s/Hz]
+        "lmxb" : ndarray, shape (n_wave,)
+            Low-mass X-ray binary spectral luminosity density. [erg/s/Hz]
 
     Notes
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    **Why separate terms**: Each binary population carries a distinct photon
+    index (Γ_HMXB = 2.0, Γ_LMXB = 1.6), so their sum is **not** a single
+    amplitude-times-fixed-shape product. Each term separately *is* rank-1 in
+    wavelength. Precomputation at build time can therefore integrate each
+    through the filters independently, then sum at evaluation time. The
+    summed :func:`xray_xrb` must return bit-identical results to ``xray_xrb_terms()["hmxb"]
+    + xray_xrb_terms()["lmxb"]``.
 
     **HMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
         HMXBs are young binary systems (age < 100 Myr) with massive companions,
@@ -487,21 +495,14 @@ def xray_xrb(
         Gilfanov 2004.
 
     **Spectral shape**: Both HMXB and LMXB are modeled as power-laws with
-    a high-energy exponential cutoff (photoelectric absorption, or intrinsic
-    accretion torque limits):
+    a high-energy exponential cutoff:
 
         .. math::
 
             F_\nu \propto \nu^{-\Gamma} \exp(-h\nu / E_{\mathrm{cut}})
 
-        Typical cutoffs: E_cut ≈ 100 keV (LMXB) to 200 keV (HMXB).
-        The exponent E_cut controls the shape at high energies.
-
-    **Wavelength coverage**: X-ray binaries emit primarily in 0.1–10 keV
-    (λ ≈ 1.2 Å – 124 Å). Outside this range, flux is negligible.
-
-    **Offsets**: The log_L_*_offset parameters allow captured intrinsic
-    scatter (e.g., redshift-dependent evolution) in hierarchical models.
+        Each term is masked independently and separately to zero outside the
+        X-ray band (E > 0.1 keV, λ < 124 Å).
 
     References
     ----------
@@ -571,9 +572,144 @@ def xray_xrb(
     L_nu_hmxb = L_hmxb_ref / band_int_hmxb * spec_hmxb
     L_nu_lmxb = L_lmxb_ref / band_int_lmxb * spec_lmxb
 
-    # X-ray only (E > 0.1 keV = lambda < 124 A)
+    # X-ray only (E > 0.1 keV = lambda < 124 A); mask each term independently
     xray_mask = wavelength < 124.0
-    return jnp.where(xray_mask, L_nu_hmxb + L_nu_lmxb, 0.0)
+    return {
+        "hmxb": jnp.where(xray_mask, L_nu_hmxb, 0.0),
+        "lmxb": jnp.where(xray_mask, L_nu_lmxb, 0.0),
+    }
+
+
+def xray_xrb(
+    wavelength: jnp.ndarray,
+    sfr: float,
+    stellar_mass: float,
+    metallicity_z: float = 0.02,
+    stellar_age_gyr: float = 1.0,
+    gamma_hmxb: float = 2.0,
+    gamma_lmxb: float = 1.6,
+    E_cut: float = 100.0,
+    log_L_hmxb_offset: float = 0.0,
+    log_L_lmxb_offset: float = 0.0,
+) -> jnp.ndarray:
+    r"""Predict X-ray SED from accretion-powered binaries.
+
+    Computes the combined X-ray emission from high-mass (HMXB) and low-mass
+    (LMXB) X-ray binary populations. HMXB luminosity scales with SFR and
+    metallicity (Lehmer et al. 2016). LMXB luminosity scales with stellar
+    mass and age (Lehmer et al. 2016). Both are modeled as power-laws
+    with exponential cutoff.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid in Å (rest-frame). [Å]
+    sfr : float
+        Star formation rate. [Msun/yr]
+    stellar_mass : float
+        Stellar mass. [Msun]
+    metallicity_z : float, optional
+        Metallicity (mass fraction, not log Z/Z_sun). Default: 0.02 (solar). []
+    stellar_age_gyr : float, optional
+        Stellar age in Gyr. Default: 1.0. [Gyr]
+    gamma_hmxb : float, optional
+        HMXB photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 2.0.
+    gamma_lmxb : float, optional
+        LMXB photon index. Default: 1.6.
+    E_cut : float, optional
+        Exponential cutoff energy for both populations. Default: 100 keV. [keV]
+    log_L_hmxb_offset : float, optional
+        Departure from mean SFR relation (dex). Allows scatter or evolution.
+        Default: 0.0. [dex]
+    log_L_lmxb_offset : float, optional
+        Departure from mean stellar-mass relation (dex). Default: 0.0. [dex]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density of X-ray binary populations.
+        [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    This function computes the sum of HMXB and LMXB contributions.
+    Use :func:`xray_xrb_terms` to access the individual unsummed terms.
+
+    **HMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
+        HMXBs are young binary systems (age < 100 Myr) with massive companions,
+        so their population follows the instantaneous SFR. The luminosity
+        depends strongly on metallicity Z (mass fraction):
+
+        .. math::
+
+            \log(L_X^{\mathrm{HMXB}}(2\text{–}10\,\mathrm{keV})/\mathrm{SFR}) =
+                40.28 - 62.12Z + 569.44Z^2 - 1833.80Z^3 + 1968.33Z^4
+                \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
+
+        At solar metallicity (Z=0.02), this yields ≈ 2.6×10^39 erg/s per
+        M_sun/yr SFR, consistent with Grimm et al. 2003.
+
+    **LMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
+        LMXBs are old systems (age > 1 Gyr), so their population traces
+        stellar mass. The luminosity depends on stellar age t (Gyr):
+
+        .. math::
+
+            \log(L_X^{\mathrm{LMXB}}(2\text{–}10\,\mathrm{keV})/M_\star) =
+                40.276 - 1.503\log t - 0.423(\log t)^2 + 0.425(\log t)^3 + 0.136(\log t)^4
+                \quad [\mathrm{erg\,s^{-1}\,M_\odot^{-1}}]
+
+        At t=1 Gyr, this yields ≈ 8.3×10^28 erg/s per M_sun, consistent with
+        Gilfanov 2004.
+
+    **Spectral shape**: Both HMXB and LMXB are modeled as power-laws with
+    a high-energy exponential cutoff (photoelectric absorption, or intrinsic
+    accretion torque limits):
+
+        .. math::
+
+            F_\nu \propto \nu^{-\Gamma} \exp(-h\nu / E_{\mathrm{cut}})
+
+        Typical cutoffs: E_cut ≈ 100 keV (LMXB) to 200 keV (HMXB).
+        The exponent E_cut controls the shape at high energies.
+
+    **Wavelength coverage**: X-ray binaries emit primarily in 0.1–10 keV
+    (λ ≈ 1.2 Å – 124 Å). Outside this range, flux is negligible.
+
+    **Offsets**: The log_L_*_offset parameters allow captured intrinsic
+    scatter (e.g., redshift-dependent evolution) in hierarchical models.
+
+    References
+    ----------
+    .. [1] B. D. Lehmer et al., "The evolution of the X-ray binary
+       luminosity functions of nearby galaxies with the Chandra COSMOS
+       survey," ApJ, 825, 7 (2016).
+       https://doi.org/10.3847/0004-637X/825/1/7
+    .. [2] H.-J. Grimm et al., "High-mass X-ray binaries as a star formation
+       rate indicator in distant galaxies," MNRAS, 339, 793 (2003).
+       https://doi.org/10.1046/j.1365-8711.2003.06224.x
+    .. [3] M. Gilfanov, "Low-mass X-ray binaries as a stellar mass indicator
+       for the host galaxy," MNRAS, 349, 146 (2004). arXiv:astro-ph/0309171.
+       https://doi.org/10.1111/j.1365-2966.2004.07473.x
+    .. [4] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
+       CIGALE and improvement of the code," ApJ, 927, 192 (2022).
+       https://doi.org/10.3847/1538-4357/ac4971
+    """
+    t = xray_xrb_terms(
+        wavelength,
+        sfr,
+        stellar_mass,
+        metallicity_z=metallicity_z,
+        stellar_age_gyr=stellar_age_gyr,
+        gamma_hmxb=gamma_hmxb,
+        gamma_lmxb=gamma_lmxb,
+        E_cut=E_cut,
+        log_L_hmxb_offset=log_L_hmxb_offset,
+        log_L_lmxb_offset=log_L_lmxb_offset,
+    )
+    return t["hmxb"] + t["lmxb"]
 
 
 ALPHA_OX_RELATIONS: tuple[str, ...] = (
@@ -1163,6 +1299,149 @@ def _xray_agn_corona_bolometric(
     return jnp.where(xray_mask, L_nu, 0.0)
 
 
+def xray_total_terms(
+    wavelength: jnp.ndarray,
+    sfr: float = 1.0,
+    stellar_mass: float = 1e10,
+    metallicity_z: float = 0.02,
+    stellar_age_gyr: float = 1.0,
+    l_2500_30deg: float = 0.0,
+    gamma_hmxb: float = 2.0,
+    gamma_lmxb: float = 1.6,
+    gamma_agn: float = 1.8,
+    E_cut: float = 300.0,
+    delta_alpha_ox: float = 0.0,
+    cos_inc: float = COS_INC_REF_30DEG,
+    apply_anisotropy: bool = True,
+    a1: float = 0.5,
+    a2: float = 0.0,
+    log_nh: float = 20.0,
+    alpha_ox_relation: str = "just2007",
+    pexrav_R: float = 0.0,
+    log_L_hmxb_offset: float = 0.0,
+    log_L_lmxb_offset: float = 0.0,
+    **_kwargs,
+) -> dict[str, jnp.ndarray]:
+    """Unsummed X-ray SED terms: HMXB, LMXB, hot gas, AGN.
+
+    Computes all four X-ray components as separate unsummed terms, enabling
+    independent precomputation through broadband filters at build time. Unlike
+    :func:`xray_total`, returns a dictionary with keys ``"hmxb"``, ``"lmxb"``,
+    ``"hotgas"``, and ``"agn"``, each as a rank-1 spectral shape times amplitude.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength [Angstrom].
+    sfr : float
+        Star formation rate [Msun/yr]. Default: 1.0.
+    stellar_mass : float
+        Stellar mass [Msun]. Default: 1e10.
+    metallicity_z : float
+        Metallicity (mass fraction). Default: 0.02 (solar). []
+    stellar_age_gyr : float
+        Stellar age in Gyr. Default: 1.0. [Gyr]
+    l_2500_30deg : float
+        AGN monochromatic luminosity at 2500 Å at 30° inclination [erg/s/Hz].
+        Default: 0.0 (no AGN X-ray).
+    gamma_hmxb : float
+        HMXB photon index. Default: 2.0.
+    gamma_lmxb : float
+        LMXB photon index. Default: 1.6.
+    gamma_agn : float
+        AGN X-ray photon index. Default: 1.8.
+    E_cut : float
+        Exponential cutoff energy [keV]. Default: 300.
+    delta_alpha_ox : float
+        Additive offset to Just+2007 α_ox relation [dex]. Default: 0.0.
+    cos_inc : float
+        Cosine of inclination angle (1 = face-on, 0 = edge-on). Default:
+        ``COS_INC_REF_30DEG`` — the Yang+2020 anchor, factor exactly 1 (#980). []
+    apply_anisotropy : bool
+        Whether to apply Yang+2022 viewing-angle correction. Default: True.
+    a1 : float
+        Linear anisotropy coefficient. Default: 0.5. []
+    a2 : float
+        Quadratic anisotropy coefficient. Default: 0.0. []
+    log_nh : float
+        Line-of-sight equivalent hydrogen column density [log10(cm⁻²)].
+        Default: 20.0. Range: 20.0–26.0.
+    alpha_ox_relation : str
+        Empirical α_OX relation. Default: "just2007". Options: "just2007",
+        "lusso_risaliti_2016", "lusso_risaliti_2017".
+    pexrav_R : float
+        Cold-disc Compton reflection covering fraction. Default: 0.0 (disabled).
+        [dimensionless]
+    log_L_hmxb_offset : float
+        Departure from expected HMXB log L_X [dex]. Default: 0.0. [dex]
+    log_L_lmxb_offset : float
+        Departure from expected LMXB log L_X [dex]. Default: 0.0. [dex]
+
+    Returns
+    -------
+    dict with keys {"hmxb", "lmxb", "hotgas", "agn"}
+        Each value is ndarray, shape (n_wave,), units [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
+
+    **Why separate terms**: HMXB and LMXB carry distinct photon indices
+    (Γ_HMXB = 2.0, Γ_LMXB = 1.6), so their sum is not a single
+    amplitude-times-fixed-shape product. Hot gas and AGN have different
+    dependencies on physical parameters and spectral shapes. By returning
+    unsummed terms, precompute mechanisms can integrate each through filters
+    independently at build time, then sum at evaluation. The summed
+    :func:`xray_total` must return bit-identical results to summing all
+    four values from this dict.
+
+    **Components**:
+    - HMXB: Lehmer+2016 metallicity quartic, scaling with SFR
+    - LMXB: Lehmer+2016 age quartic, scaling with M_star
+    - Hot gas: Yang+2020, scaling with SFR
+    - AGN corona: Just+2007 / Yang+2020, scaling with L_2500 and α_OX
+
+    **XRB offsets** (``log_L_hmxb_offset``, ``log_L_lmxb_offset``):
+    Multiplicative offsets in log space allowing intrinsic scatter or
+    redshift-dependent evolution around the Lehmer+2016 empirical relations.
+    """
+    xrb_terms = xray_xrb_terms(
+        wavelength,
+        sfr,
+        stellar_mass,
+        metallicity_z=metallicity_z,
+        stellar_age_gyr=stellar_age_gyr,
+        gamma_hmxb=gamma_hmxb,
+        gamma_lmxb=gamma_lmxb,
+        E_cut=E_cut,
+        log_L_hmxb_offset=log_L_hmxb_offset,
+        log_L_lmxb_offset=log_L_lmxb_offset,
+    )
+    hotgas = xray_hotgas(wavelength, sfr, gamma=1.0, E_cut=1.0)
+    # AGN corona path uses the X-CIGALE driver (L_2500_30deg) with the
+    # PR #325 line-of-sight absorber (log_nh -> tbabs × cabs + scattered floor).
+    agn = xray_agn_corona(
+        wavelength,
+        l_2500_30deg,
+        gamma=gamma_agn,
+        E_cut=E_cut,
+        delta_alpha_ox=delta_alpha_ox,
+        cos_inc=cos_inc,
+        apply_anisotropy=apply_anisotropy,
+        a1=a1,
+        a2=a2,
+        log_nh=log_nh,
+        alpha_ox_relation=alpha_ox_relation,
+        pexrav_R=pexrav_R,
+    )
+    return {
+        "hmxb": xrb_terms["hmxb"],
+        "lmxb": xrb_terms["lmxb"],
+        "hotgas": hotgas,
+        "agn": agn,
+    }
+
+
 def xray_total(
     wavelength: jnp.ndarray,
     sfr: float = 1.0,
@@ -1195,7 +1474,7 @@ def xray_total(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength [Angstrom].
     sfr : float
         Star formation rate [Msun/yr]. Default: 1.0.
@@ -1250,6 +1529,10 @@ def xray_total(
     -----
     **JIT-compatible**: yes — pure JAX function.
 
+    This function returns the sum of all four X-ray components. Use
+    :func:`xray_total_terms` to access the individual unsummed terms for
+    precomputation.
+
     **Components**:
     - HMXB: Lehmer+2016 metallicity quartic, scaling with SFR
     - LMXB: Lehmer+2016 age quartic, scaling with M_star
@@ -1261,25 +1544,16 @@ def xray_total(
     redshift-dependent evolution around the Lehmer+2016 empirical relations.
     Implemented as additive terms in the log luminosity (Yang+2020 [1]_).
     """
-    xrb = xray_xrb(
+    t = xray_total_terms(
         wavelength,
-        sfr,
-        stellar_mass,
+        sfr=sfr,
+        stellar_mass=stellar_mass,
         metallicity_z=metallicity_z,
         stellar_age_gyr=stellar_age_gyr,
+        l_2500_30deg=l_2500_30deg,
         gamma_hmxb=gamma_hmxb,
         gamma_lmxb=gamma_lmxb,
-        E_cut=E_cut,
-        log_L_hmxb_offset=log_L_hmxb_offset,
-        log_L_lmxb_offset=log_L_lmxb_offset,
-    )
-    hotgas = xray_hotgas(wavelength, sfr, gamma=1.0, E_cut=1.0)
-    # AGN corona path uses the X-CIGALE driver (L_2500_30deg) with the
-    # PR #325 line-of-sight absorber (log_nh -> tbabs × cabs + scattered floor).
-    agn = xray_agn_corona(
-        wavelength,
-        l_2500_30deg,
-        gamma=gamma_agn,
+        gamma_agn=gamma_agn,
         E_cut=E_cut,
         delta_alpha_ox=delta_alpha_ox,
         cos_inc=cos_inc,
@@ -1289,8 +1563,10 @@ def xray_total(
         log_nh=log_nh,
         alpha_ox_relation=alpha_ox_relation,
         pexrav_R=pexrav_R,
+        log_L_hmxb_offset=log_L_hmxb_offset,
+        log_L_lmxb_offset=log_L_lmxb_offset,
     )
-    return xrb + hotgas + agn
+    return t["hmxb"] + t["lmxb"] + t["hotgas"] + t["agn"]
 
 
 # ── Lopez+2024 IRX-based X-ray (for low-luminosity AGN) ─────────
@@ -1485,6 +1761,102 @@ def xray_agn_corona_lopez24(
     return l_nu
 
 
+def xray_total_lopez24_terms(
+    wavelength: jnp.ndarray,
+    sfr: float = 1.0,
+    stellar_mass: float = 1e10,
+    stellar_age_gyr: float = 1.0,
+    l_12um_erg_hz: float = 0.0,
+    alpha_irx: float = 0.3,
+    gamma_hmxb: float = 2.0,
+    gamma_lmxb: float = 1.6,
+    gamma_agn: float = 1.8,
+    E_cut: float = 300.0,
+    log_nh: float = 20.0,
+    **_kwargs,
+) -> dict[str, jnp.ndarray]:
+    r"""Unsummed X-ray SED terms using IRX-based AGN (Lopez+2024) + XRBs.
+
+    Computes HMXB, LMXB, hot gas, and AGN corona terms as separate unsummed
+    arrays, each enabling independent precomputation through broadband filters.
+    Identical structure to :func:`xray_total_terms`, but using α_IRX(L_12μm)
+    for AGN normalization instead of α_OX(L_2500).
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid in Angstrom. [Å]
+    sfr : float
+        Star formation rate. [Msun/yr]. Default: 1.0.
+    stellar_mass : float
+        Stellar mass. [Msun]. Default: 1e10.
+    stellar_age_gyr : float
+        Stellar age in Gyr. Default: 1.0. [Gyr]
+    l_12um_erg_hz : float
+        Nuclear 12μm luminosity density. [erg/s/Hz]
+        Default: 0.0 (no AGN X-ray contribution).
+    alpha_irx : float
+        Log ratio of L_X to L_12μm. [dimensionless]
+        Default: 0.3.
+    gamma_hmxb : float
+        HMXB photon index. Default: 2.0.
+    gamma_lmxb : float
+        LMXB photon index. Default: 1.6.
+    gamma_agn : float
+        AGN photon index. Default: 1.8.
+    E_cut : float
+        Exponential cutoff energy. [keV] Default: 300.
+    log_nh : float
+        Line-of-sight hydrogen column density [log10(cm⁻²)].
+        Default: 20.0.
+
+    Returns
+    -------
+    dict with keys {"hmxb", "lmxb", "hotgas", "agn"}
+        Each value is ndarray, shape (n_wave,), units [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
+
+    **Why separate terms**: HMXB and LMXB carry distinct photon indices,
+    and the AGN component via α_IRX has independent parameter dependencies.
+    By returning unsummed terms, precompute mechanisms can integrate each
+    through filters at build time, then sum at evaluation. The summed
+    :func:`xray_total_lopez24` must return bit-identical results to summing
+    all four values from this dict.
+
+    See :func:`xray_agn_corona_lopez24` for the α_IRX model details
+    and :func:`xray_xrb_terms` for the XRB component structure.
+    """
+    xrb_terms = xray_xrb_terms(
+        wavelength,
+        sfr=sfr,
+        stellar_mass=stellar_mass,
+        stellar_age_gyr=stellar_age_gyr,
+        gamma_hmxb=gamma_hmxb,
+        gamma_lmxb=gamma_lmxb,
+        E_cut=E_cut,
+    )
+    # Hot gas (CIGALE lopez24: 8.3e31 × SFR), shared with the yang20 path.
+    hotgas = xray_hotgas(wavelength, sfr, gamma=1.0, E_cut=1.0)
+    agn = xray_agn_corona_lopez24(
+        wavelength,
+        l_12um_erg_hz,
+        alpha_irx,
+        gamma_agn,
+        E_cut,
+        apply_anisotropy=False,
+        log_nh=log_nh,
+    )
+    return {
+        "hmxb": xrb_terms["hmxb"],
+        "lmxb": xrb_terms["lmxb"],
+        "hotgas": hotgas,
+        "agn": agn,
+    }
+
+
 def xray_total_lopez24(
     wavelength: jnp.ndarray,
     sfr: float = 1.0,
@@ -1506,15 +1878,17 @@ def xray_total_lopez24(
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Wavelength grid in Angstrom. [Å]
     sfr : float
-        Star formation rate. [Msun/yr]
+        Star formation rate. [Msun/yr]. Default: 1.0.
     stellar_mass : float
-        Stellar mass. [Msun]
+        Stellar mass. [Msun]. Default: 1e10.
+    stellar_age_gyr : float
+        Stellar age in Gyr. Default: 1.0. [Gyr]
     l_12um_erg_hz : float
         Nuclear 12μm luminosity density. [erg/s/Hz]
-        0 = no AGN X-ray contribution.
+        Default: 0.0 (no AGN X-ray contribution).
     alpha_irx : float
         Log ratio of L_X to L_12μm. [dimensionless]
         Default: 0.3.
@@ -1526,6 +1900,9 @@ def xray_total_lopez24(
         AGN photon index. Default: 1.8.
     E_cut : float
         Exponential cutoff energy. [keV] Default: 300.
+    log_nh : float
+        Line-of-sight hydrogen column density [log10(cm⁻²)].
+        Default: 20.0.
 
     Returns
     -------
@@ -1536,30 +1913,27 @@ def xray_total_lopez24(
     -----
     **JIT-compatible**: yes — pure JAX function.
 
+    This function returns the sum of all X-ray components. Use
+    :func:`xray_total_lopez24_terms` to access the individual unsummed terms
+    for precomputation.
+
     See :func:`xray_agn_corona_lopez24` for the α_IRX model details
     and :func:`xray_xrb` for the XRB component.
     """
-    xrb = xray_xrb(
+    t = xray_total_lopez24_terms(
         wavelength,
         sfr=sfr,
         stellar_mass=stellar_mass,
         stellar_age_gyr=stellar_age_gyr,
+        l_12um_erg_hz=l_12um_erg_hz,
+        alpha_irx=alpha_irx,
         gamma_hmxb=gamma_hmxb,
         gamma_lmxb=gamma_lmxb,
+        gamma_agn=gamma_agn,
         E_cut=E_cut,
-    )
-    # Hot gas (CIGALE lopez24: 8.3e31 × SFR), shared with the yang20 path.
-    hotgas = xray_hotgas(wavelength, sfr, gamma=1.0, E_cut=1.0)
-    agn = xray_agn_corona_lopez24(
-        wavelength,
-        l_12um_erg_hz,
-        alpha_irx,
-        gamma_agn,
-        E_cut,
-        apply_anisotropy=False,
         log_nh=log_nh,
     )
-    return xrb + hotgas + agn
+    return t["hmxb"] + t["lmxb"] + t["hotgas"] + t["agn"]
 
 
 # ── Deprecation shims ──

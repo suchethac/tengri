@@ -22,7 +22,10 @@ from tengri.components.xray.xray import (
     xray_hotgas,
     xray_total,
     xray_total_lopez24,
+    xray_total_lopez24_terms,
+    xray_total_terms,
     xray_xrb,
+    xray_xrb_terms,
 )
 from tengri.components.xray.xray_model import (
     XRayAirdSEDComponent,
@@ -79,5 +82,8 @@ __all__ = [
     "xray_hotgas",
     "xray_total",
     "xray_total_lopez24",
+    "xray_total_lopez24_terms",
+    "xray_total_terms",
     "xray_xrb",
+    "xray_xrb_terms",
 ]

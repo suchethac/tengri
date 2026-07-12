@@ -641,8 +641,22 @@ class SEDModelComponent:
                 published.update(
                     self._apply_precomp(p_sliced, sed_in, filter_eff_waves, **input_kwargs)
                 )
-            new_derived = self._merge_published(state.derived, published)
-            return state.with_(derived=new_derived)
+            # ...and STILL add to sed_intrinsic. The LUT families are what
+            # ``predict_via_precomp`` consumes, but ``sed_intrinsic`` is the panchromatic
+            # model SED that ``Prediction.photometry()`` / ``rest_sed`` / ``obs_sed`` and
+            # every best-fit overlay project directly. Leaving this component out of it
+            # made a WavePrecomp model's "exact" photometry read ~6x low in W3/W4 —
+            # bit-identical to a model built with no dust emission at all — while the
+            # likelihood (which reads the LUT) was fine. Silent, and invisible to a fit.
+            #
+            # Free on the fit path: ``predict_via_precomp`` never READS ``sed_intrinsic``,
+            # so XLA dead-code-eliminates the full-grid chain and the compiled kernel is
+            # unchanged (358,180 FLOPs, ~130 us). It is NOT free in eager mode, which is
+            # what ``predict_state`` and the test suite run — hence the single shared
+            # evaluation here rather than one per LUT branch.
+            sed_out, published_full = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
+            new_derived = self._merge_published(state.derived, {**published_full, **published})
+            return state.with_(sed_intrinsic=sed_out, derived=new_derived)
         else:
             # Default full-grid path
             sed_out, published = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)

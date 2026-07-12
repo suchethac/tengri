@@ -33,12 +33,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components._term_response import term_band_response as _term_band_response
 from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
-from tengri.components.xray.xray import COS_INC_REF_30DEG, xray_total, xray_total_lopez24
+from tengri.components.xray.xray import (
+    COS_INC_REF_30DEG,
+    xray_total_lopez24_terms,
+    xray_total_terms,
+)
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -223,13 +228,99 @@ class XRaySEDComponent:
             ``derived["sed_xray"]`` published for downstream readers.
         """
         wave = state.wave
+        inputs = self.emitter_inputs(state.derived)
 
-        sfr = jnp.asarray(state.derived.get("sfr", 1.0))
+        def _emit(w):
+            t = self.emission_terms(params, w, **inputs)
+            return t["hmxb"] + t["lmxb"] + t["hotgas"] + t["agn"]
+
+        L_xray = _emit(wave)
+        derived_overrides = {"sed_xray": L_xray}
+
+        # Precompute LUT families (#624): X-ray is additive and unattenuated.
+        # Spectroscopy: a pixel is a point-sample, so evaluating at the pixel
+        # wavelength is exact.
+        filter_eff = state.derived.get("filter_eff_waves")
+        if filter_eff is not None:
+            band = _term_band_response(template_data, "xray")
+            fw_pad = state.derived.get("phot_filter_waves_padded")
+            if band is not None:
+                # Exact fast path. X-ray is a sum of rank-1 terms — HMXB, LMXB, hot
+                # gas, corona — each a scalar amplitude times a spectral shape fixed
+                # by the (fixed) shape parameters. Their *sum* is not rank-1: HMXB
+                # (Gamma=2.0) and LMXB (Gamma=1.6) carry different photon indices, so
+                # the mix shifts with SFR and stellar mass. Integrating each term
+                # separately at build time is therefore exact where integrating the
+                # total would not be. See SEDModel._additive_term_band_response.
+                ref = self.emission_terms(params, band["lam_ref"], **inputs)
+                amps = jnp.stack([t[i] for i, t in enumerate(ref.values())]) / band["S_ref"]
+                derived_overrides["xray_phot_lnu_precomp"] = amps @ band["R"]
+            elif fw_pad is not None:
+                # Exact dense path: integrate the X-ray SED through the true filter
+                # transmission on every call (same integral as the exact path).
+                from tengri.observation.photometry import lnu_filter_integral_batch
+
+                ft_pad = state.derived.get("phot_filter_trans_padded")
+                derived_overrides["xray_phot_lnu_precomp"] = lnu_filter_integral_batch(
+                    L_xray, wave, fw_pad, ft_pad, jnp.asarray(params.get("redshift", 0.0))
+                )
+            else:
+                derived_overrides["xray_phot_lnu_precomp"] = _emit(filter_eff)
+        spec_eff = state.derived.get("spec_eff_waves")
+        if spec_eff is not None:
+            derived_overrides["xray_spec_lnu_precomp"] = _emit(spec_eff)
+
+        return state.add_intrinsic(L_xray).with_(
+            derived=state.derived.with_(**derived_overrides),
+        )
+
+    #: Cross-component scalars this emitter reads off ``state.derived``, with two
+    #: deliberately distant probe draws — see
+    #: :meth:`tengri.SEDModel._additive_term_band_response`. Every term must come back
+    #: *proportional* between the two, or it is not rank-1 and earns no constant band
+    #: response. Every value is nonzero on purpose, so a term that stays identically
+    #: zero across both draws is zero for a structural reason, not a probe artifact.
+    EMITTER_PROBE_INPUTS: ClassVar[tuple[dict[str, float], dict[str, float]]] = (
+        {
+            "sfr": 1.0,
+            "stellar_mass": 1.0e10,
+            "stellar_age_gyr": 1.0,
+            "l_2500": 1.0e29,
+            "cos_inc": 0.9,
+            "l_12um": 1.0e28,
+        },
+        {
+            "sfr": 50.0,
+            "stellar_mass": 3.0e11,
+            "stellar_age_gyr": 8.0,
+            "l_2500": 7.0e31,
+            "cos_inc": 0.3,
+            "l_12um": 5.0e30,
+        },
+    )
+
+    def emitter_inputs(self, derived: Mapping[str, Any]) -> dict[str, jnp.ndarray]:
+        r"""Reduce ``state.derived`` to the scalars :meth:`emission_terms` needs.
+
+        Owns the two fallback chains, so they exist in exactly one place.
+
+        Parameters
+        ----------
+        derived : mapping
+            ``state.derived``.
+
+        Returns
+        -------
+        dict
+            ``sfr`` [Msun/yr], ``stellar_mass`` [Msun], ``stellar_age_gyr`` [Gyr],
+            ``l_2500`` [erg/s/Hz], ``cos_inc`` [dimensionless], ``l_12um`` [erg/s/Hz].
+        """
+        sfr = jnp.asarray(derived.get("sfr", 1.0))
         # Contract: stellar publishes log_mstar (log10 M_⊙). xray_total
         # takes M_* in M_⊙; exponentiate at the boundary.
-        log_mstar = jnp.asarray(state.derived.get("log_mstar", 10.0))
+        log_mstar = jnp.asarray(derived.get("log_mstar", 10.0))
         stellar_mass = 10.0**log_mstar
-        L_agn_bol = jnp.asarray(state.derived.get("L_agn_bol", 0.0))
+        L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
 
         # LMXB scaling (Lehmer+2016) is a steep polynomial in the stellar-
         # population age, so it must see the galaxy's actual age — not the
@@ -238,8 +329,8 @@ class XRaySEDComponent:
         # ``stellar.age_m_star``). Without this the LMXB — which dominates the
         # galaxy X-ray — over-predicts by ~3x for an evolved (~3 Gyr)
         # population. Falls back to 1 Gyr only if the weights are absent.
-        age_weights = jnp.asarray(state.derived.get("age_weights", 0.0))
-        ssp_ages_yr = jnp.asarray(state.derived.get("ssp_ages_yr", 0.0))
+        age_weights = jnp.asarray(derived.get("age_weights", 0.0))
+        ssp_ages_yr = jnp.asarray(derived.get("ssp_ages_yr", 0.0))
         _w_sum = jnp.sum(age_weights)
         stellar_age_gyr = jnp.where(
             _w_sum > 0.0,
@@ -251,8 +342,8 @@ class XRaySEDComponent:
         # 1. L_2500_intrinsic from composable AGN (un-reddened disc shape)
         # 2. L_2500_30deg from SKIRTOR or other torus models
         # 3. L_bol -> L_2500 BC (Hopkins+2007) as last resort
-        L_2500 = jnp.asarray(state.derived.get("L_2500_intrinsic", 0.0))
-        L_2500_skirtor = jnp.asarray(state.derived.get("L_2500_30deg", 0.0))
+        L_2500 = jnp.asarray(derived.get("L_2500_intrinsic", 0.0))
+        L_2500_skirtor = jnp.asarray(derived.get("L_2500_30deg", 0.0))
         # BC_2500 from Hopkins+2007: nu_2500 = 1.199e15 Hz, BC = 5.15
         L_2500_fallback = L_agn_bol / (5.15 * 1.199e15)
         l_2500 = jnp.where(
@@ -268,82 +359,120 @@ class XRaySEDComponent:
         # Without this the corona was stuck face-on — a flat ×1.072 — and
         # ``agn_cos_inc`` was a silent no-op for the X-ray block (#980).
         # No published AGN inclination → stay at the anchor (factor 1).
-        cos_inc = jnp.asarray(state.derived.get("agn_cos_inc", COS_INC_REF_30DEG))
+        cos_inc = jnp.asarray(derived.get("agn_cos_inc", COS_INC_REF_30DEG))
         # Lopez+2024 (lopez24) ties the corona to the AGN 12 µm luminosity
         # instead of L_2500. Prefer the AGN-published ``L_12um`` [erg/s/Hz]; fall
         # back to a bolometric correction from L_agn_bol when the composable AGN
         # does not publish a monochromatic 12 µm luminosity: νLν(12µm) = f_12·L_bol
         # (Gandhi+2009 f_12 ≈ 0.07), so Lν(12µm) = f_12·L_bol / ν_12µm.
         _nu_12um = 2.998e18 / 1.2e5  # 12 µm = 120000 Å
-        _l_12um_pub = jnp.asarray(state.derived.get("L_12um", 0.0))
+        _l_12um_pub = jnp.asarray(derived.get("L_12um", 0.0))
         _l_12um_bc = 0.07 * L_agn_bol / _nu_12um
         l_12um = jnp.where(_l_12um_pub > 0.0, _l_12um_pub, _l_12um_bc)
-        use_lopez24 = self.config.model == "lopez24"
 
-        def _emit(w):
-            if use_lopez24:
-                # α_IRX corona (Lopez+2024): L_X(2-10 keV) = νLν(12µm) / 10^α_IRX,
-                # shared Lehmer+2016 XRBs (age-aware LMXB, #854) + hot gas.
-                return xray_total_lopez24(
-                    w,
-                    sfr=sfr,
-                    stellar_mass=stellar_mass,
-                    stellar_age_gyr=stellar_age_gyr,
-                    l_12um_erg_hz=l_12um,
-                    alpha_irx=jnp.asarray(params["xray_alpha_irx"]),
-                    gamma_hmxb=jnp.asarray(params["xray_gamma_hmxb"]),
-                    gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
-                    gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
-                    E_cut=jnp.asarray(params["xray_E_cut"]),
-                    log_nh=jnp.asarray(params["xray_log_nh"]),
-                )
-            # ``alpha_ox`` is derived from ``l_2500_30deg`` via the Just+2007
-            # relation inside ``xray_total`` (#722 — the disc 2500 A now drives
-            # the X-ray corona). ``xray_delta_alpha_ox`` is now a live *offset* knob
-            # (default 0.0 = pure empirical alpha_ox(L_2500); negative hardens
-            # the corona, positive softens it). See ADR-0009 / xray_precompute.py
-            # line 149 for the delta semantics.
-            return xray_total(
-                w,
+        return {
+            "sfr": sfr,
+            "stellar_mass": stellar_mass,
+            "stellar_age_gyr": stellar_age_gyr,
+            "l_2500": l_2500,
+            "cos_inc": cos_inc,
+            "l_12um": l_12um,
+        }
+
+    def emission_terms(
+        self,
+        params: Mapping[str, jnp.ndarray],
+        wave: jnp.ndarray,
+        *,
+        sfr: jnp.ndarray,
+        stellar_mass: jnp.ndarray,
+        stellar_age_gyr: jnp.ndarray,
+        l_2500: jnp.ndarray,
+        cos_inc: jnp.ndarray,
+        l_12um: jnp.ndarray,
+    ) -> dict[str, jnp.ndarray]:
+        r"""The additive terms of the X-ray SED, unsummed.
+
+        Single source of truth: :meth:`apply` sums these to build the SED, and the
+        build-time band-response precompute integrates *these same terms* through the
+        filters. Two paths, one definition — so they cannot drift.
+
+        Parameters
+        ----------
+        params : mapping
+            Full (un-sliced) parameter dict; reads the ``xray_*`` keys.
+        wave : array_like, shape (n_wave,)
+            Rest-frame wavelength grid [Angstrom].
+        sfr : array_like, scalar
+            Star-formation rate [Msun/yr] — sets the HMXB and hot-gas amplitudes.
+        stellar_mass : array_like, scalar
+            Stellar mass [Msun] — sets the LMXB amplitude.
+        stellar_age_gyr : array_like, scalar
+            Mass-weighted stellar age [Gyr] — Lehmer+2016 LMXB age term.
+        l_2500 : array_like, scalar
+            Disc L_nu at rest-frame 2500 A seen at 30 deg [erg/s/Hz]; drives the
+            corona through the alpha_ox relation (``yang20``).
+        cos_inc : array_like, scalar
+            Cosine of the AGN inclination [dimensionless]; a Yang+2022 anisotropy
+            factor, hence a pure *amplitude* term, not a spectral shape.
+        l_12um : array_like, scalar
+            AGN L_nu at 12 micron [erg/s/Hz]; drives the corona through alpha_IRX
+            (``lopez24``).
+
+        Returns
+        -------
+        dict of ndarray, each shape (n_wave,)
+            ``{"hmxb", "lmxb", "hotgas", "agn"}`` [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT/grad/vmap-safe.** Pure ``jnp``; the model branch is a static config read.
+
+        Each term is *rank-1* in wavelength — a scalar amplitude times a spectral shape
+        set only by the shape parameters (photon indices, ``E_cut``, ``log_nh``). The
+        amplitudes need not be *linear* in their inputs, and are not: ``alpha_ox``
+        depends on ``log10(l_2500)``, so the corona amplitude is a power law in it. That
+        is irrelevant — it is still a scalar, and a scalar is all the factorization needs.
+
+        The *total* is not rank-1: HMXB (Gamma=2.0) and LMXB (Gamma=1.6) carry different
+        photon indices, so the HMXB/LMXB mix — and hence the summed spectral shape —
+        shifts with SFR and stellar mass. That is why the terms are exposed separately.
+        """
+        if self.config.model == "lopez24":
+            # α_IRX corona (Lopez+2024): L_X(2-10 keV) = νLν(12µm) / 10^α_IRX,
+            # shared Lehmer+2016 XRBs (age-aware LMXB, #854) + hot gas.
+            return xray_total_lopez24_terms(
+                wave,
                 sfr=sfr,
                 stellar_mass=stellar_mass,
                 stellar_age_gyr=stellar_age_gyr,
-                l_2500_30deg=l_2500,
+                l_12um_erg_hz=l_12um,
+                alpha_irx=jnp.asarray(params["xray_alpha_irx"]),
                 gamma_hmxb=jnp.asarray(params["xray_gamma_hmxb"]),
                 gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
                 gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
                 E_cut=jnp.asarray(params["xray_E_cut"]),
-                delta_alpha_ox=jnp.asarray(params["xray_delta_alpha_ox"]),
-                cos_inc=cos_inc,
                 log_nh=jnp.asarray(params["xray_log_nh"]),
             )
-
-        L_xray = _emit(wave)
-        derived_overrides = {"sed_xray": L_xray}
-
-        # Precompute LUT families (#624): X-ray is additive and unattenuated.
-        # Photometry: integrate the dense X-ray SED through the true filter
-        # transmission (same integral as the exact path) — exact over the
-        # bandpass, not sampled at one effective wavelength. Spectroscopy: a
-        # pixel is a point-sample, so evaluating at the pixel wavelength is exact.
-        filter_eff = state.derived.get("filter_eff_waves")
-        if filter_eff is not None:
-            fw_pad = state.derived.get("phot_filter_waves_padded")
-            ft_pad = state.derived.get("phot_filter_trans_padded")
-            if fw_pad is not None:
-                from tengri.observation.photometry import lnu_filter_integral_batch
-
-                derived_overrides["xray_phot_lnu_precomp"] = lnu_filter_integral_batch(
-                    L_xray, wave, fw_pad, ft_pad, jnp.asarray(params.get("redshift", 0.0))
-                )
-            else:
-                derived_overrides["xray_phot_lnu_precomp"] = _emit(filter_eff)
-        spec_eff = state.derived.get("spec_eff_waves")
-        if spec_eff is not None:
-            derived_overrides["xray_spec_lnu_precomp"] = _emit(spec_eff)
-
-        return state.add_intrinsic(L_xray).with_(
-            derived=state.derived.with_(**derived_overrides),
+        # ``alpha_ox`` is derived from ``l_2500_30deg`` via the Just+2007
+        # relation inside ``xray_total`` (#722 — the disc 2500 A now drives
+        # the X-ray corona). ``xray_delta_alpha_ox`` is now a live *offset* knob
+        # (default 0.0 = pure empirical alpha_ox(L_2500); negative hardens
+        # the corona, positive softens it). See ADR-0009 / xray_precompute.py
+        # line 149 for the delta semantics.
+        return xray_total_terms(
+            wave,
+            sfr=sfr,
+            stellar_mass=stellar_mass,
+            stellar_age_gyr=stellar_age_gyr,
+            l_2500_30deg=l_2500,
+            gamma_hmxb=jnp.asarray(params["xray_gamma_hmxb"]),
+            gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
+            gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
+            E_cut=jnp.asarray(params["xray_E_cut"]),
+            delta_alpha_ox=jnp.asarray(params["xray_delta_alpha_ox"]),
+            cos_inc=cos_inc,
+            log_nh=jnp.asarray(params["xray_log_nh"]),
         )
 
 
