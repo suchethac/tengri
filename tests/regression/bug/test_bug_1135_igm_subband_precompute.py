@@ -165,26 +165,38 @@ def test_rest_frame_photometry_carries_no_igm(ssp):
 # ── 4. the metallicity axis — why the fold happens before the SSP contraction ──
 
 
-def test_the_transmission_is_evaluated_on_the_metallicity_axis(ssp):
+def test_the_transmission_is_evaluated_at_the_per_metallicity_node(ssp):
     """T must be folded per-(met, age, filter, sub-band), not at a marginalized node.
 
-    The node published at runtime is a metallicity-weighted average whose weights
-    move with the FREE ``met_logzsol``. Across the SSP grid the node shifts by up to
-    68% of a sub-band width, and T there by up to 1.3% in GALEX FUV — so a table
-    keyed on (z, age, filter, k) alone would be valid at one metallicity only, and
-    would drift silently as the sampler explores met.
+    The node published at runtime is a metallicity-weighted average whose weights move
+    with the FREE ``met_logzsol``, so T at "the node" is a function of (z, Z) — not of
+    z alone. On the production SSP grid the node shifts by up to 68% of a sub-band
+    width across metallicity and T there by up to 1.3% in GALEX FUV, so a table keyed
+    on (z, age, filter, k) — which is what #1135 originally proposed — would be built
+    at one metallicity and used at all of them, drifting silently as the sampler
+    explores met.
 
-    Guard the shape: the folded tensor must still carry the met axis.
+    Recovers the implied transmission from the folded weights and checks it against
+    ``igm_absorption`` evaluated independently AT THE PER-MET NODES. Folding at a
+    marginalized node, or on a met-collapsed table, turns this red.
+
+    Asserting the *wiring* rather than the size of the met effect: the magnitude is a
+    property of the SSP grid (it vanishes on grids whose templates do not reach the
+    rest-UV of these bands), so a threshold on it is not an invariant and would make
+    this test depend on which SSP is installed.
     """
-    m = _build(ssp, WavePrecomp())
+    from tengri.components.igm.igm import igm_absorption
+
+    z = 0.8
+    m = _build(ssp, WavePrecomp(), z=z)
     lut = m._cached_component_chain[0]._state.ssp_phot_lut
     assert lut.ssp_subband_phot_igm is not None, "the IGM fold did not happen"
     assert lut.ssp_subband_phot_igm.shape == lut.ssp_subband_phot.shape
     assert lut.ssp_subband_phot_igm.ndim == 4, "(n_met, n_age, n_filter, n_subbands)"
 
-    # Recover the implied transmission. Compare on the RATIO, not on the weights:
-    # Phi is a filter integral in L_sun/Hz and is small enough that allclose's
-    # absolute tolerance would swamp a factor-of-0.85 attenuation outright.
+    # Recover T on the RATIO, not on the weights: Phi is a filter integral in small
+    # L_sun/Hz units, so allclose's absolute tolerance would swamp a factor-of-0.85
+    # attenuation outright and report a broken fold as fine.
     folded = np.asarray(lut.ssp_subband_phot_igm)
     bare = np.asarray(lut.ssp_subband_phot)
     live = bare > 0.0
@@ -192,17 +204,17 @@ def test_the_transmission_is_evaluated_on_the_metallicity_axis(ssp):
     assert np.all(implied_T > 0.0) and np.all(implied_T <= 1.0 + 1e-9), (
         "the folded factor is not a transmission"
     )
-    # At z=0.8 the Lyman forest bites into GALEX FUV: T there runs ~0.79-0.96, so the
-    # fold must be a long way from unity somewhere. A no-op fold would leave T == 1.
-    assert implied_T.min() < 0.99, f"T never departs from 1 (min {implied_T.min():.4f})"
 
-    # And it must vary ACROSS the metallicity axis within a sub-band — that variation
-    # is the entire reason the fold happens here rather than at a marginalized node.
-    T_full = np.where(bare > 0.0, folded / np.where(bare > 0.0, bare, 1.0), 1.0)
-    met_spread = (T_full.max(axis=0) - T_full.min(axis=0)).max()
-    assert met_spread > 1e-3, (
-        f"T is met-independent (spread {met_spread:.2e}) — a (z, age, filter, k) "
-        f"table would have sufficed and this fold is over-engineered"
+    # The wiring invariant: T at each node, recomputed independently.
+    nodes = np.asarray(lut.ssp_subband_waves_rest)
+    expected = np.asarray(igm_absorption((nodes * (1.0 + z)).reshape(-1), z)).reshape(nodes.shape)[
+        live
+    ]
+    np.testing.assert_allclose(
+        implied_T,
+        expected,
+        rtol=1e-10,
+        err_msg="the folded transmission was not evaluated at the per-metallicity node",
     )
 
 
