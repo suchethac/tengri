@@ -127,11 +127,40 @@ jobs:
       - run: python tools/check_single_dispatch.py
       - run: python tools/check_registry_completeness.py
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
+      # The `benchmark` tier: five tests that assert a wall-clock RATIO (fast path
+      # vs exact path, cached vs cold). They are real regression guards — they catch
+      # a precompute path silently degrading to the slow one — but they measure at
+      # the ~30-60 us scale, where scheduler noise under `-n auto` swamps the signal:
+      # `test_fast_path_not_slower` failed the default run at 324 us vs 32 us, then
+      # passed 3/3 standalone. So they are deselected from the parallel gate in
+      # pyproject and run HERE, serially (`-n 0`), where the ratio means something.
+      # Serial is the whole point — do not "speed this up" with -n.
+      - run: pytest tests/ -q --no-header -m 'benchmark and not slow and not crossval' -n 0
 
   test:
     runs-on: ubuntu-latest
     needs: smoke
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    # Sharded across runners, one tree per shard. The suite had grown to 22-24 min
+    # against a 25 min cap — it was about to start failing on timeout rather than on
+    # any test. More workers per runner is NOT the lever (that is exactly what OOM-
+    # killed the VM; see the -n 2 note below), but more RUNNERS is free: matrix jobs
+    # run concurrently, each still capped at -n 2, so peak RSS per runner is unchanged.
+    #
+    # Shares of the old single-job wall clock, measured at -n 2:
+    #   contract 43% · components 28% · regression 22% · physics 7%
+    # so regression+physics pair into one shard and `contract` (the long pole) sets
+    # the wall clock. Wall = slowest shard, not the sum.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: contract
+            paths: tests/contract
+          - shard: components
+            paths: tests/components
+          - shard: physics-regression
+            paths: tests/physics tests/regression
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -140,12 +169,29 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
+      # Persist the XLA compile cache. Measured locally at -n 2: 468 s cold vs 307 s
+      # warm — a ~1.5x saving that this job has been paying on every run.
+      #
+      # It was dropped once with the note "it never warmed — cancelled runs don't save
+      # it". That diagnosis was right and the conclusion was wrong: the combined
+      # `actions/cache` skips its implicit post-save when the job is cancelled OR fails,
+      # so a cache can never warm on a job that is ever red — the same trap that made
+      # the slow tier's cache a no-op until #1055. `cache/restore` + `cache/save` with
+      # `if: always()` writes regardless of outcome. Keyed per shard (each sees a
+      # different slice of the compile graph) with a run-id key + prefix restore-keys,
+      # so each run restores the newest snapshot and saves its own superset.
+      - uses: actions/cache/restore@v4
+        id: jax_cache
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: tengri-jax-test-${{ matrix.shard }}-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            tengri-jax-test-${{ matrix.shard }}-${{ hashFiles('pyproject.toml') }}-
       # Fast PR feedback: NO coverage instrumentation (cov adds ~30-50% wall
-      # clock) and NO JAX disk-cache (it never warmed — cancelled runs don't
-      # save it — and added restore/save overhead). Coverage runs separately on
-      # push/nightly in the `coverage` job below. tests/inference + integration
-      # are gated to the slow tier; crossval + the data-only nebular/draine
-      # parity files are ignored (they skip without their grids).
+      # clock) — coverage runs separately on push/nightly in the `coverage` job
+      # below. tests/inference + integration are gated to the slow tier; crossval
+      # + the data-only nebular/draine parity files are ignored (they skip
+      # without their grids).
       #
       # pytest-xdist parallelism is capped at `-n 2`, NOT `-n auto`. The runner
       # is 4 vCPU / 16 GB; `-n auto` spawns 4 workers, and when several
@@ -155,11 +201,11 @@ jobs:
       # "##[error]The runner has received a shutdown signal" → "operation was
       # canceled" at 85–94 %, intermittently, with zero test failures (it hit
       # `main`, this job, and the `coverage` job below for ~2 days). `-n 2` caps
-      # peak at ~2×5 GB + base ≈ 12 GB, which fits with headroom. Trade-off:
-      # ~9–10 min → ~15 min wall clock; a warm JAX compile cache is the
-      # speed-recovery follow-up. The OOM kills the VM before any per-test
-      # `--timeout` thread can fire, so fewer workers — not a tighter timeout —
-      # is the fix.
+      # peak at ~2×5 GB + base ≈ 12 GB, which fits with headroom. The OOM kills the
+      # VM before any per-test `--timeout` thread can fire, so fewer workers — not a
+      # tighter timeout — is the fix. The wall clock this cost is recovered above,
+      # by sharding (more runners) and the compile cache (the follow-up this note
+      # used to point at) — NOT by raising -n, which would just OOM again.
       #
       # `--timeout=600 --timeout-method=thread` still guards the OTHER tail
       # failure mode: a single test that genuinely hangs (cold compile / deadlock)
@@ -167,14 +213,19 @@ jobs:
       # into a fast, named failure (10 min ≫ any healthy test — all run < 150 s
       # locally) instead of a silent job-timeout.
       - run: |
-          pytest tests/components tests/contract tests/physics tests/regression -q \
+          pytest ${{ matrix.paths }} -q \
             -n 2 \
             --timeout=600 --timeout-method=thread \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        timeout-minutes: 25
+        timeout-minutes: 20
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: ${{ steps.jax_cache.outputs.cache-primary-key }}
 
   # Full-suite coverage → Codecov, WITHOUT slowing PR feedback. Runs on
   # push-to-main, the nightly schedule, and manual dispatch — not on PRs.

@@ -57,6 +57,7 @@ import contextlib
 import dataclasses
 import types
 import warnings
+from collections.abc import Mapping
 from typing import ClassVar
 
 import jax
@@ -101,6 +102,51 @@ from tengri.utils.grid import (
 #: whose template *shape* depends on luminosity (BOSA: L_TIR–sSFR) fails to scale
 #: between the two and is refused a constant band response.
 _L_IR_PROBE = 1.0e44
+
+
+def _chain_consumes(chain, key: str) -> bool:
+    """Does any component in ``chain`` declare ``key`` as a (possibly optional) input?
+
+    Reads the declared cross-component contract (ADR-0009), which components expose
+    either as ``inputs``/``optional_inputs`` methods returning ``DerivedKey`` tuples
+    (bare-Protocol components) or as ``inputs`` dicts (``SEDModelComponent``). Both
+    shapes are accepted so a caller never has to know which kind it is holding.
+
+    Parameters
+    ----------
+    chain : sequence
+        The component chain.
+    key : str
+        Derived-state key, e.g. ``"L_ir"``.
+
+    Returns
+    -------
+    bool
+        True if some component reads ``key``.
+    """
+    for comp in chain:
+        for attr in ("inputs", "optional_inputs"):
+            declared = getattr(comp, attr, None)
+            if declared is None:
+                continue
+            try:
+                items = declared() if callable(declared) else declared
+            except Exception:
+                continue
+            if not items:
+                continue
+            names = items if isinstance(items, Mapping) else [getattr(i, "name", i) for i in items]
+            if key in names:
+                return True
+    return False
+
+
+#: Relative tolerance for the rank-1 check in
+#: :meth:`SEDModel._additive_term_band_response`. Two probe draws must reproduce
+#: each term's spectral shape to this precision for the term to earn a constant
+#: band response. Loose enough not to trip on fp re-association across a ~6000-node
+#: grid, ~7 orders tighter than any shape error worth exploiting.
+_RANK1_RTOL = 1e-9
 
 # Re-export supporting types for backwards compatibility
 __all__ = [
@@ -167,13 +213,40 @@ class WavePrecomp:
     z_min: float | None = None
     z_max: float | None = None
     catalog_z_range: tuple[float, float] | None = None
-    taylor_correction: bool = True
+
+    n_subbands: int = 5
+    """Sub-bands per filter for the multiplicative dust quadrature (#1122).
+
+    The dust screen is *evaluated* at ``n_subbands`` quadrature nodes per band
+    rather than extrapolated from a single effective wavelength. Each node is the
+    template's own flux-weighted centroid in its sub-band, and both the nodes and
+    the sub-band SSP × filter integrals are build-time constants, so the exact
+    factorization of the fast path is preserved.
+
+    Converges as 1/K². Worst case over z ≤ 1, τ ≤ 2 (GALEX FUV): K=1 → 8.7 %,
+    K=3 → 1.4 %, **K=5 → 0.6 %** (default), K=8 → 0.3 %. Runtime is *cheaper* than
+    the Taylor form it replaces (0.93× its gradient at K=5), because that form
+    carries a second tensor and a ``pow`` with a traced exponent.
+
+    ``0`` disables the quadrature and falls back to the effective-wavelength form
+    (plus ``taylor_correction`` if set) — kept for comparison, not recommended:
+    that path reads the GALEX FUV band +45 % high at z=0.05, rising to +215 % at z=1.
+
+    Only the *multiplicative* stellar + nebular screen needs this. Additive emitters
+    (dust IR, radio, X-ray, AGN) factorize exactly through the rank-1/rank-K band
+    response of #1107/#1117 and are unaffected."""
+
+    taylor_correction: bool = False
     """First-order spectral-moment (Ψ) correction to the effective-wavelength dust
-    attenuation (Zacharegkas+2025). ``True`` (default) applies ``A(λ_eff)·Φ +
-    A'(λ_eff)·Ψ`` for both single- and two-component dust, cutting the attenuation
-    residual to ~0.3%. Set ``False`` for the bare ``A(λ_eff)·Φ`` (flat) form —
-    ~0.8–1.5% on the birth-cloud layer, but well below typical SSP/dust template
-    systematics, and slightly cheaper (the Ψ tensor is not built)."""
+    attenuation (Zacharegkas+2025, #617). **Superseded by** ``n_subbands`` and off by
+    default since #1122.
+
+    It applies ``A(λ_eff)·Φ + A'(λ_eff)·Ψ`` — i.e. it *extrapolates* the attenuation
+    linearly away from one point per band. That is fine in the optical/IR and diverges
+    in the rest-UV where the curve steepens: the residual is not the ~0.3 % once
+    claimed here but **+45 % (z=0.05) to +215 % (z=1)** in GALEX FUV.
+
+    Only consulted when ``n_subbands=0``. Set both to reproduce the pre-#1122 path."""
 
     fast_dust_emission: bool = False
     """Approximate the dust IR re-emission *band projection* when its exact, fast
@@ -470,6 +543,7 @@ class SEDModel:
         "spectrum_precomp": False,
         "igm": True,
         "taylor_correction": True,
+        "n_subbands": 0,
         "fast_dust_emission": False,
     }
 
@@ -651,6 +725,10 @@ class SEDModel:
             self._approx["fast_dust_emission"] = getattr(
                 self._approx_config, "fast_dust_emission", False
             )
+            # Sub-band quadrature order for the dust screen (#1122). Must be
+            # threaded here or the stellar precompute silently falls back to its
+            # own default and the knob is inert.
+            self._approx["n_subbands"] = int(getattr(self._approx_config, "n_subbands", 0))
 
         # Part A (joint precompute): on a joint photometry+spectroscopy
         # observation, any precompute opt-in builds BOTH LUT families. The
@@ -848,6 +926,19 @@ class SEDModel:
                     stacklevel=2,
                 )
                 self._dust_band_response_cache = None
+
+            for _emitter in ("xray", "radio"):
+                try:
+                    self._additive_term_band_response(self._cached_component_chain, _emitter)
+                except Exception as e:
+                    warnings.warn(
+                        f"WavePrecomp {_emitter} term band-response precompute failed "
+                        f"({e!r}); falling back to the exact per-call filter integral "
+                        "(correct, but without the precomputed-response speedup).",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+                    setattr(self, f"_{_emitter}_term_response_cache", None)
 
         # Build-time accuracy guard (#617): the photometry LUT bakes the
         # SSP×filter integral at zero dust and re-applies attenuation as a
@@ -2308,6 +2399,27 @@ class SEDModel:
         }
 
     def predict_rest_sed(self, params, wave=None):
+        """Deprecated. Use ``model.predict(params).rest_sed``.
+
+        .. deprecated:: 2026-07
+           Superseded by the property catalog and the ``Prediction`` surface
+           (#1043 contract §2). The body is unchanged — this shim is bit-exact
+           with the method it replaces — so migrating changes no number.
+           Will be removed in tengri v1.0.
+
+        Returns
+        -------
+        Same as :meth:`_predict_rest_sed`.
+        """
+        warnings.warn(
+            "predict_rest_sed() is deprecated — use model.predict(params).rest_sed "
+            "instead (cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._predict_rest_sed(params, wave=wave)
+
+    def _predict_rest_sed(self, params, wave=None):
         """Compute rest-frame panchromatic SED luminosity spectrum.
 
         Evaluates all stellar populations, emission (nebular, AGN), and
@@ -2368,7 +2480,7 @@ class SEDModel:
 
         Examples
         --------
-        >>> sed = model.predict_rest_sed(params)
+        >>> sed = model._predict_rest_sed(params)
         >>> import matplotlib.pyplot as plt
         >>> plt.loglog(sed.wavelength, sed.sed)
         >>> plt.xlabel("Rest-frame wavelength (Angstrom)")
@@ -2400,6 +2512,27 @@ class SEDModel:
         return SEDResult(wavelength=wave_target, sed=sed_interp)
 
     def predict_obs_sed(self, params, wave=None):
+        """Deprecated. Use ``model.predict(params).obs_sed``.
+
+        .. deprecated:: 2026-07
+           Superseded by the property catalog and the ``Prediction`` surface
+           (#1043 contract §2). The body is unchanged — this shim is bit-exact
+           with the method it replaces — so migrating changes no number.
+           Will be removed in tengri v1.0.
+
+        Returns
+        -------
+        Same as :meth:`_predict_obs_sed`.
+        """
+        warnings.warn(
+            "predict_obs_sed() is deprecated — use model.predict(params).obs_sed "
+            "instead (cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._predict_obs_sed(params, wave=wave)
+
+    def _predict_obs_sed(self, params, wave=None):
         """Compute observed-frame SED (redshifted + IGM + DLA transmission).
 
         Evaluates the rest-frame SED, redshifts to observed frame
@@ -2456,7 +2589,7 @@ class SEDModel:
 
         Examples
         --------
-        >>> sed_obs = model.predict_obs_sed(params)
+        >>> sed_obs = model._predict_obs_sed(params)
         >>> # IGM and redshift already applied
         >>> print(f"z={params['redshift']}: wavelength {sed_obs.wavelength[0]:.0f} Å")
 
@@ -2482,7 +2615,7 @@ class SEDModel:
         """
         from tengri.forward.result import SEDResult
 
-        rest_result = self.predict_rest_sed(params, wave=wave)
+        rest_result = self._predict_rest_sed(params, wave=wave)
         z = self._get_redshift(params)
         wave_obs = rest_result.wavelength * (1.0 + z)
         sed_obs = rest_result.sed
@@ -2834,6 +2967,13 @@ class SEDModel:
                 ("n_z", int(cfg.n_z)),
                 ("z_min", None if cfg.z_min is None else round(float(cfg.z_min), 12)),
                 ("z_max", None if cfg.z_max is None else round(float(cfg.z_max), 12)),
+                # The sub-band quadrature order changes the compiled kernel and the
+                # numbers it produces (#1122). It is an int, so — unlike
+                # ``taylor_correction`` — it is NOT picked up by
+                # ``approx_resolved_flags`` above, which filters on ``isinstance(v, bool)``.
+                # Without this entry, WavePrecomp(n_subbands=3) and (n_subbands=8)
+                # collide and the second silently reuses the first's compiled LUT.
+                ("n_subbands", int(getattr(cfg, "n_subbands", 0))),
             )
 
         if self._approx_config is not None or self._approx_config_spec is not None:
@@ -3019,7 +3159,7 @@ class SEDModel:
         Examples
         --------
         >>> flux = model.predict_photometry(params)
-        >>> mags = model.predict_magnitudes(params)
+        >>> mags = model._predict_magnitudes(params)
         >>> # For the fast LUT path, build with ``approx=WavePrecomp()``.
 
         References
@@ -3212,7 +3352,7 @@ class SEDModel:
         from tengri.cosmology import luminosity_distance
         from tengri.observation.spectrum import project_spectrum
 
-        sed_obs = self.predict_obs_sed(params)
+        sed_obs = self._predict_obs_sed(params)
         z = self._get_redshift(params)
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         wave_rest = sed_obs.wavelength / (1.0 + z)
@@ -3244,6 +3384,27 @@ class SEDModel:
         return flux
 
     def predict_magnitudes(self, params):
+        """Deprecated. Use ``model.predict(params).magnitudes()``.
+
+        .. deprecated:: 2026-07
+           Superseded by the property catalog and the ``Prediction`` surface
+           (#1043 contract §2). The body is unchanged — this shim is bit-exact
+           with the method it replaces — so migrating changes no number.
+           Will be removed in tengri v1.0.
+
+        Returns
+        -------
+        Same as :meth:`_predict_magnitudes`.
+        """
+        warnings.warn(
+            "predict_magnitudes() is deprecated — use model.predict(params).magnitudes() "
+            "instead (cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._predict_magnitudes(params)
+
+    def _predict_magnitudes(self, params):
         """Compute observed AB magnitudes through all filters.
 
         **Raw forward-pass output.** For interactive use, see
@@ -3316,7 +3477,7 @@ class SEDModel:
         )
         from tengri.utils.physics_constants import L_SUN
 
-        sed_erg = self.predict_rest_sed(params).sed
+        sed_erg = self._predict_rest_sed(params).sed
         return sed_erg / L_SUN
 
     def _has_line_catalog(self):
@@ -3767,7 +3928,7 @@ class SEDModel:
         # ``(state.wave, state.sed_intrinsic)`` on the native grid, so deriving
         # ``rest`` from a shared state is bit-identical to recomputing it.
         if state is None:
-            rest = self.predict_rest_sed(params)
+            rest = self._predict_rest_sed(params)
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         wave_rest, flux_rest = rest.wavelength, rest.sed
@@ -3916,7 +4077,7 @@ class SEDModel:
         # Slope indices are not a single-window functional → the LUT leaves NaN
         # in those slots; fill them from one exact rest-frame SED measurement.
         if pc.has_slope:
-            rest = self.predict_rest_sed(params)
+            rest = self._predict_rest_sed(params)
             slots = pc.index_slots
             values = jnp.stack(
                 [
@@ -3985,7 +4146,12 @@ class SEDModel:
         )
 
         line_defs = tuple(DESI_LINES if line_defs is None else line_defs)
-        z = jnp.asarray(params.get("redshift", 0.0))
+        # Resolve the redshift through the spec, not out of the dict. A Fixed
+        # redshift is legitimately absent from ``params``, and reading it back with
+        # a 0.0 default put the galaxy at 10 pc — 1e17 too bright, silently
+        # (#1127). ``_get_redshift`` lets an explicit value win, falls back to the
+        # fixed one, and raises if the model has neither.
+        z = jnp.asarray(self._get_redshift(params))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         four_pi_dl2 = 4.0 * jnp.pi * dl_cm**2
 
@@ -4008,7 +4174,7 @@ class SEDModel:
             )
 
         if state is None:
-            rest = self.predict_rest_sed(params)
+            rest = self._predict_rest_sed(params)
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         return jnp.stack(
@@ -4093,7 +4259,7 @@ class SEDModel:
         # => L_Hbeta = 4.76e-13 * 4.2e53 / 3.828e33 * SFR ≈ 5.22e7 * SFR
         _L_HBETA_PER_SFR = 5.22e7  # Lsun per Msun/yr (Leitherer+1999)
         try:
-            sfh_q = self.predict_sfh_quantities(params)
+            sfh_q = self._predict_sfh_quantities(params)
             sfr_10 = float(sfh_q.sfr_10myr)
             sfr_10 = max(sfr_10, 1e-10)
             return float(_L_HBETA_PER_SFR * sfr_10)
@@ -4104,6 +4270,27 @@ class SEDModel:
             return 1.0  # 1 Lsun safe fallback
 
     def predict_derived(self, params):
+        """Deprecated. Use ``model.predict(params).properties``.
+
+        .. deprecated:: 2026-07
+           Superseded by the property catalog and the ``Prediction`` surface
+           (#1043 contract §2). The body is unchanged — this shim is bit-exact
+           with the method it replaces — so migrating changes no number.
+           Will be removed in tengri v1.0.
+
+        Returns
+        -------
+        Same as :meth:`_predict_derived`.
+        """
+        warnings.warn(
+            "predict_derived() is deprecated — use model.predict(params).properties "
+            "instead (cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._predict_derived(params)
+
+    def _predict_derived(self, params):
         """Compute derived physical quantities as a flat dict.
 
         Convenience wrapper around :meth:`predict` that extracts the key
@@ -4176,17 +4363,27 @@ class SEDModel:
         >>> model.available_properties
         ('stellar_mass', 'stellar_mass_surviving', 'sfr_10myr', ...)
         """
-        # Lazy assemble the property catalog
+        return tuple(sorted(self._ensure_property_catalog().keys()))
+
+    def _ensure_property_catalog(self):
+        """Assemble the model's property catalog once, and return it.
+
+        The catalog is built lazily from the active component chain. This is the
+        **only** place that assembles it: it used to be inlined in both
+        ``available_properties`` and ``predict_properties``, while
+        ``Prediction.properties`` read ``_property_catalog`` directly — so on a
+        fresh model, ``pred.properties["stellar_mass"]`` raised ``AttributeError``
+        unless the user happened to touch one of the other two first (#1131).
+        """
         if not hasattr(self, "_property_catalog"):
             from tengri.forward.properties import assemble_available_properties
 
-            # Get the active components in the built chain
             chain = getattr(self, "_cached_component_chain", None)
             if chain is None:
                 chain = self._build_component_chain()
             active_names = {c.name for c in chain}
             self._property_catalog = assemble_available_properties(active_names)
-        return tuple(sorted(self._property_catalog.keys()))
+        return self._property_catalog
 
     def predict_properties(self, params, names=None):
         """Compute derived properties from the forward state.
@@ -4269,15 +4466,7 @@ class SEDModel:
         predict : Lazy Prediction object with attribute-access syntax.
         predict_sfh_quantities : Legacy SFH quantity interface.
         """
-        # Resolve the catalog
-        if not hasattr(self, "_property_catalog"):
-            from tengri.forward.properties import assemble_available_properties
-
-            chain = getattr(self, "_cached_component_chain", None)
-            if chain is None:
-                chain = self._build_component_chain()
-            active_names = {c.name for c in chain}
-            self._property_catalog = assemble_available_properties(active_names)
+        self._ensure_property_catalog()
 
         # Resolve names to compute (default = all)
         if names is None:
@@ -4303,6 +4492,28 @@ class SEDModel:
         return result
 
     def predict_sfh_quantities(self, params):
+        """Deprecated. Use ``model.predict_properties(params, names=(...))``.
+
+        .. deprecated:: 2026-07
+           Superseded by the property catalog and the ``Prediction`` surface
+           (#1043 contract §2). The body is unchanged — this shim is bit-exact
+           with the method it replaces — so migrating changes no number.
+           Will be removed in tengri v1.0.
+
+        Returns
+        -------
+        Same as :meth:`_predict_sfh_quantities`.
+        """
+        warnings.warn(
+            "predict_sfh_quantities() is deprecated — use "
+            "model.predict_properties(params, names=(...)) instead "
+            "(cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._predict_sfh_quantities(params)
+
+    def _predict_sfh_quantities(self, params):
         """Compute SFH-derived quantities in JIT-compatible form.
 
         Integrates the SFH to compute stellar mass, recent SFR, specific SFR,
@@ -4369,7 +4580,7 @@ class SEDModel:
         --------
         **Single galaxy:**
 
-        >>> sfh = model.predict_sfh_quantities(params)
+        >>> sfh = model._predict_sfh_quantities(params)
         >>> sfh.stellar_mass
         Array(1.23e10, dtype=float64)
 
@@ -4515,6 +4726,28 @@ class SEDModel:
         )
 
     def predict_sed_quantities(self, params):
+        """Deprecated. Use ``model.predict_properties(params, names=(...))``.
+
+        .. deprecated:: 2026-07
+           Superseded by the property catalog and the ``Prediction`` surface
+           (#1043 contract §2). The body is unchanged — this shim is bit-exact
+           with the method it replaces — so migrating changes no number.
+           Will be removed in tengri v1.0.
+
+        Returns
+        -------
+        Same as :meth:`_predict_sed_quantities`.
+        """
+        warnings.warn(
+            "predict_sed_quantities() is deprecated — use "
+            "model.predict_properties(params, names=(...)) instead "
+            "(cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._predict_sed_quantities(params)
+
+    def _predict_sed_quantities(self, params):
         """Compute SED-derived quantities in JIT-compatible form.
 
         Evaluates the full forward model and computes UV slope, spectral
@@ -4593,7 +4826,7 @@ class SEDModel:
         --------
         **Single galaxy:**
 
-        >>> sed_q = model.predict_sed_quantities(params)
+        >>> sed_q = model._predict_sed_quantities(params)
         >>> sed_q.l_bol
         Array(2.5e10, dtype=float64)
         >>> sed_q.dn4000
@@ -4676,7 +4909,7 @@ class SEDModel:
             DeprecationWarning,
             stacklevel=2,
         )
-        return self.predict_sed_quantities(params)
+        return self._predict_sed_quantities(params)
 
     def predict_radio_quantities(self, params):
         """Orchestrator-path radio quantities.
@@ -4927,7 +5160,7 @@ class SEDModel:
             line catalog (BakedIn or shock). Switch to ``neb={'type':
             'cue', ...}`` or ``neb={'type': 'cloudy_grid', ...}`` for
             discrete line predictions, or read the continuous nebular
-            SED from ``model.predict_rest_sed(params).sed`` directly.
+            SED from ``model._predict_rest_sed(params).sed`` directly.
 
         Notes
         -----
@@ -4967,7 +5200,7 @@ class SEDModel:
                 "backend, e.g. neb={'type': 'cue', '*': FIXED} (requires "
                 "a bare-stellar SSP) or neb={'type': 'cloudy_grid', ...}. "
                 "For a quick narrow-band measurement on the BakedIn SED, "
-                "integrate model.predict_rest_sed(params).sed across the "
+                "integrate model._predict_rest_sed(params).sed across the "
                 "line wavelength range yourself."
             )
         from tengri.forward import state_to_emission_lines
@@ -5497,6 +5730,14 @@ class SEDModel:
         if band_response is not None:
             result.setdefault("dust_ir", {})["emission_band_response"] = band_response
 
+        # The other additive emitters (X-ray, radio) are sums of rank-1 terms, so
+        # they get a response *per term* rather than the single L_ir * R that dust's
+        # one-term SED admits. Same exactness, same build-time integral.
+        for emitter in ("xray", "radio"):
+            term_response = self._additive_term_band_response(cached, emitter)
+            if term_response is not None:
+                result.setdefault(emitter, {})["term_band_response"] = term_response
+
         return result if result else None
 
     #: dust_* params that change the *emission* template only (not the
@@ -5566,8 +5807,16 @@ class SEDModel:
         has_dust_emission = (
             dust is not None and getattr(dust.config, "emission_model", None) is not None
         ) or self._dust_emission_model is not None
+        # Dust emission is not the only consumer of L_ir. Radio reads it too — the
+        # FIR-radio correlation sets the SF synchrotron amplitude — so a radio model
+        # with no dust *emission* block still needs the LUT, and without it the
+        # full-grid energy-balance integral (and the stellar cube behind it) stays
+        # alive: 33.3M FLOPs against 368k with it. Ask the declared cross-component
+        # contract (ADR-0009) who consumes L_ir rather than hardcoding a list, so a
+        # future L_ir consumer inherits the LUT instead of silently forfeiting it.
+        needs_l_ir = has_dust_emission or _chain_consumes(chain, "L_ir")
         if (
-            has_dust_emission
+            needs_l_ir
             and dust is not None
             and self._approx.get("wave_precomp")
             and not bool(getattr(self.spec, "alpha_fe_evolving", False))
@@ -5683,6 +5932,156 @@ class SEDModel:
             response = lnu_filter_integral_batch(lo, wave, fw_pad, ft_pad, z)
 
         self._dust_band_response_cache = response
+        return response
+
+    def _additive_term_band_response(self, chain, name):
+        r"""Build-time per-filter response of each rank-1 term of an additive emitter.
+
+        Generalizes :meth:`_dust_emission_band_response` from one term to many. An
+        additive emitter is a *sum of rank-1 terms* — each a scalar amplitude times a
+        spectral shape that depends only on the emitter's own (fixed) shape parameters:
+
+        .. math::
+
+            L_\nu(\lambda) = \sum_k A_k(\text{inputs}) \, S_k(\lambda; \text{shape})
+
+        The filter integral is linear, so each term's band flux factorizes and
+
+        .. math::
+
+            \int \Big[\sum_k A_k S_k(\lambda)\Big] R_f(\lambda)\, d\lambda
+                = \sum_k A_k \underbrace{\int S_k(\lambda) R_f(\lambda)\, d\lambda}_{R_{kf}}
+
+        with :math:`R_{kf}` a build-time constant. This is **exact**, not an
+        approximation: the true filter transmission is still integrated on the full
+        wavelength grid with the identical quadrature the dense path uses
+        (:func:`~tengri.observation.photometry.lnu_filter_integral_batch`), just once
+        instead of on every call. Contrast ``fast_emission``, which samples the emitter
+        at one effective wavelength, and the stellar WavePrecomp Taylor projection (#617).
+
+        Dust IR happens to be the :math:`k=1` case (``sed = L_ir * S_unit``). X-ray is
+        :math:`k=4` (HMXB, LMXB, hot gas, corona) and radio :math:`k=3` (SF synchrotron,
+        free-free, AGN jet). Their *summed* SEDs are **not** rank-1 — HMXB and LMXB carry
+        different photon indices, so the HMXB/LMXB mix shifts with SFR and stellar mass —
+        which is why the terms must be integrated separately rather than as a total.
+
+        At runtime the amplitudes come back from a single-wavelength evaluation,
+        :math:`A_k = \text{term}_k(\lambda^{\rm ref}_k) / S_k(\lambda^{\rm ref}_k)`. That
+        needs no knowledge of *which* input carries the amplitude, nor that it enters
+        linearly — :math:`\alpha_{\rm ox}` is famously nonlinear in :math:`L_{2500}`, and
+        it does not matter, because it is still a scalar.
+
+        Parameters
+        ----------
+        chain : sequence
+            The cached component chain.
+        name : str
+            Component name to look for (``"xray"``, ``"radio"``).
+
+        Returns
+        -------
+        dict or None
+            ``{"R": (n_terms, n_filters), "lam_ref": (n_terms,), "S_ref": (n_terms,)}``
+            [erg/s/Hz per unit amplitude, Å, erg/s/Hz], or ``None`` when the fast path
+            is refused — in which case the caller keeps the exact per-call dense filter
+            integral. Term order is the emitter's ``emission_terms`` dict order.
+
+        Notes
+        -----
+        **Gate.** The response is a constant only while every one of the emitter's own
+        parameters and ``redshift`` are fixed: a free *shape* parameter (a photon index,
+        a spectral index, a turnover frequency) would move :math:`S_k` under the LUT, and
+        a free redshift would move :math:`R_f`. Gating on *all* the emitter's parameters
+        rather than on a known set of shape parameters fails **safe** — an unrecognized
+        free parameter simply disables the optimization. Denylisting known shape knobs
+        would fail *dangerous* the day a new one is added and forgotten (#1107 shipped
+        exactly that hole with ``dust_log_ssfr``).
+
+        **Rank-1 probe.** Being a sum of rank-1 terms is a *property*, not a promise, so
+        it is verified rather than declared: each term is built twice from deliberately
+        distant input draws (``EMITTER_PROBE_INPUTS``) and must come back proportional.
+        A term whose *shape* — not just amplitude — responds to a runtime input fails,
+        and the whole emitter drops to the dense path. This is the BOSA lesson from
+        #1107: an emitter whose template shape tracked its luminosity sailed through a
+        band response built at ``L_ir = 1`` and returned fluxes 13 % wrong, silently.
+
+        **Zero terms.** A term that is identically zero under both probes is zero for a
+        *structural* reason — a Python-level switch (``include_freefree=False``) or a
+        fixed zero parameter (``radio_loudness = 0``, the default) — never because a
+        probe happened to zero it: every probe input is nonzero by construction. Under
+        the all-parameters-fixed gate it is therefore zero at runtime too, so
+        :math:`R_k = 0` is correct rather than a silent drop.
+
+        **JIT.** Runs at build time on concrete values; the returned arrays are threaded
+        into the JIT as ``template_data``.
+        """
+        cache_attr = f"_{name}_term_response_cache"
+        cached = getattr(self, cache_attr, "unset")
+        if cached != "unset":
+            return cached
+
+        response = None
+        comp = next((c for c in chain if getattr(c, "name", "") == name), None)
+        stellar = next((c for c in chain if getattr(c, "name", "") == "stellar"), None)
+        st = getattr(stellar, "_state", None)
+        fw_pad = getattr(st, "phot_fw_padded", None)
+        ft_pad = getattr(st, "phot_ft_padded", None)
+
+        free = set(self.spec.free_params)
+        prefix = f"{name}_"
+        gate_ok = not any(p.startswith(prefix) for p in free) and "redshift" not in free
+
+        if (
+            comp is not None
+            and gate_ok
+            and self._approx.get("wave_precomp")
+            and fw_pad is not None
+            and ft_pad is not None
+            and hasattr(comp, "emission_terms")
+            and hasattr(comp, "EMITTER_PROBE_INPUTS")
+        ):
+            from tengri.observation.photometry import lnu_filter_integral_batch
+
+            fixed = {k: jnp.asarray(v) for k, v in self.spec.get_fixed_values().items()}
+            wave = self._rest_wavelength
+            z = jnp.asarray(fixed.get("redshift", 0.0))
+
+            probe_a, probe_b = comp.EMITTER_PROBE_INPUTS
+            terms_a = comp.emission_terms(fixed, wave, **probe_a)
+            terms_b = comp.emission_terms(fixed, wave, **probe_b)
+
+            rows, lam_ref, s_ref = [], [], []
+            for key, s_a in terms_a.items():
+                s_b = terms_b[key]
+                peak = int(jnp.argmax(jnp.abs(s_a)))
+                s_at_ref = s_a[peak]
+
+                if not bool(jnp.abs(s_at_ref) > 0.0):
+                    # Structurally off under the all-fixed gate (see Notes). A zero
+                    # response contributes nothing; S_ref = 1 keeps A = term/1 = 0
+                    # finite instead of 0/0.
+                    rows.append(jnp.zeros(fw_pad.shape[0], dtype=wave.dtype))
+                    lam_ref.append(wave[peak])
+                    s_ref.append(jnp.asarray(1.0, dtype=wave.dtype))
+                    continue
+
+                # RANK-1 CHECK: the second draw must be proportional to the first.
+                scale = s_b[peak] / s_at_ref
+                if not bool(jnp.allclose(s_b, scale * s_a, rtol=_RANK1_RTOL, atol=0.0)):
+                    setattr(self, cache_attr, None)
+                    return None
+
+                rows.append(lnu_filter_integral_batch(s_a, wave, fw_pad, ft_pad, z))
+                lam_ref.append(wave[peak])
+                s_ref.append(s_at_ref)
+
+            response = {
+                "R": jnp.stack(rows),
+                "lam_ref": jnp.stack(lam_ref),
+                "S_ref": jnp.stack(s_ref),
+            }
+
+        setattr(self, cache_attr, response)
         return response
 
     def _build_component_chain(self):

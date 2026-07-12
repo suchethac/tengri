@@ -191,10 +191,16 @@ testpaths = ["tests"]
 # `--dist=loadfile` (not the default `load`): the SSP grids are session-scoped
 # fixtures, so keeping a whole file on one worker pays that load once per
 # worker instead of once per scattered test.
-addopts = "--tb=short -m 'not crossval and not slow' -n auto --dist=loadfile"
+#
+# `benchmark` is deselected because it asserts on wall-clock ratios at the
+# ~30-60 us scale, which scheduler noise swamps once `-n auto` puts a dozen
+# workers on the same cores. The guard is still worth having, so CI runs it
+# serially: `pytest -m benchmark -n 0`.
+addopts = "--tb=short -m 'not crossval and not slow and not benchmark' -n auto --dist=loadfile"
 markers = [
     "slow: heavy end-to-end tests (inference/integration trees); excluded from the default run",
     "crossval: cross-validation tests against community SED codes (bagpipes, etc.)",
+    "benchmark: asserts a wall-clock ratio; run serially (`-m benchmark -n 0`), never under -n auto",
     "conservation: energy/mass/photon balance across a transformation",
     "bounds: non-negativity, monotonicity, unit-interval, credible-interval ordering",
     "limit: zero-input recovers the analytical answer (tau=0 -> intrinsic, etc.)",

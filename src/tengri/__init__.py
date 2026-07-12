@@ -275,6 +275,7 @@ from tengri.parameters.registry import (
 from tengri.parameters.sentinels import FIXED, FREE
 from tengri.protocols import ComponentIOError, DerivedKey, DerivedState, ForwardState
 from tengri.utils import jit_logging
+from tengri.utils.batching import vmap_chunked
 
 agn = _components.agn
 dust = _components.dust
@@ -326,6 +327,7 @@ from tengri import (
     config,
     cosmology,
     inference,
+    measure,
     pipeline,
     plot,
     results,
@@ -495,6 +497,7 @@ __all__ = [
     "load_ssp",
     "load_ssp_data",
     "matern32_kernel",
+    "measure",
     "measure_index_jax",
     "nebular",
     "observation",
@@ -517,6 +520,7 @@ __all__ = [
     "tutorial",
     "units",
     "velocity_broaden",
+    "vmap_chunked",
     "xray",
 ]
 

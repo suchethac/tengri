@@ -746,6 +746,13 @@ class StellarSEDComponent:
         """
         return (
             DerivedKey("log_mstar", "dex", "log10(surviving stellar mass / Msun)"),
+            DerivedKey(
+                "log_mstar_surviving",
+                "dex",
+                "log10(surviving stellar mass / Msun); NaN when the SSP grid has no "
+                "mass-remaining table (unlike log_mstar, this never falls back to the "
+                "formed mass)",
+            ),
             DerivedKey("log_mstar_formed", "dex", "log10(formed stellar mass / Msun)"),
             DerivedKey("sfr", "Msun/yr", "SFR at lookback ~ 0"),
             DerivedKey("sfr_10myr", "Msun/yr", "Time-weighted SFR over last 10 Myr"),
@@ -877,7 +884,9 @@ class StellarSEDComponent:
                     dl_cm=1.0,  # placeholder; cosmology applied at projection time
                     # Ψ moment for the dust-attenuation Taylor correction (#617),
                     # toggled by approx=WavePrecomp(taylor_correction=...).
-                    taylor_correction=approx.get("taylor_correction", True),
+                    taylor_correction=approx.get("taylor_correction", False),
+                    # Sub-band quadrature for the dust screen (#1122) — supersedes Ψ.
+                    n_subbands=int(approx.get("n_subbands", 0)),
                 )
                 state = _replace_state(state, ssp_phot_lut=lut)
             else:  # mode == "free"
@@ -896,7 +905,9 @@ class StellarSEDComponent:
                     apply_igm=False,
                     # Ψ moment for the dust-attenuation Taylor correction (#617),
                     # toggled by approx=WavePrecomp(taylor_correction=...).
-                    taylor_correction=approx.get("taylor_correction", True),
+                    taylor_correction=approx.get("taylor_correction", False),
+                    # Sub-band quadrature for the dust screen (#1122) — supersedes Ψ.
+                    n_subbands=int(approx.get("n_subbands", 0)),
                 )
                 state = _replace_state(state, ssp_phot_ztable=ztable)
 
@@ -1689,6 +1700,15 @@ class StellarSEDComponent:
         mass_scale_erg = total_mass.astype(jnp.result_type(float)) * LSUN_ERG_PER_S
 
         # ── 8. Mass quantities ──────────────────────────────────────────
+        #
+        # Two keys, on purpose. ``log_mstar`` keeps its documented fallback to the
+        # formed mass when the SSP grid carries no mass-remaining table, because
+        # downstream normalization needs *a* mass and cannot take a NaN.
+        # ``log_mstar_surviving`` does NOT fall back: it is the user-facing answer
+        # to "how much stellar mass is left", and when the grid cannot say, the
+        # honest answer is NaN — not the formed mass, which silently asserts zero
+        # mass loss (typically 30-40% of the formed mass; #1131). The old
+        # ``predict_sfh_quantities`` returned NaN here and was right to.
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))
         if ssp.ssp_mass_remaining is not None:
             mr_at_met = interpolate_mass_remaining(
@@ -1696,8 +1716,10 @@ class StellarSEDComponent:
             )
             mstar_surv = compute_surviving_mass(age_weights, mr_at_met)
             log_mstar = jnp.log10(jnp.maximum(mstar_surv, 1e-30))
+            log_mstar_surviving = log_mstar
         else:
             log_mstar = log_mstar_formed
+            log_mstar_surviving = jnp.asarray(jnp.nan)
 
         # ── 9. SFR averages on the SFH grid ─────────────────────────────
         sfr_now = sfr_history[0]
@@ -1781,6 +1803,7 @@ class StellarSEDComponent:
         derived_overrides = dict(
             log_mstar=log_mstar,
             log_mstar_formed=log_mstar_formed,
+            log_mstar_surviving=log_mstar_surviving,
             sfr=sfr_now,
             sfr_10myr=sfr_10myr,
             sfr_100myr=sfr_100myr,
@@ -1842,6 +1865,25 @@ class StellarSEDComponent:
                 )
                 derived_overrides["stellar_phot_moment_per_age_precomp"] = (
                     stellar_phot_moment_per_age
+                )
+            # Sub-band quadrature tensors (#1122). Φ_k carries the same mass and
+            # L_sun scaling as Φ; the node λ_k is a RATIO, so those scalings cancel
+            # and it is computed from the unscaled sums.
+            ssp_sub_phot = self._state.ssp_phot_lut.ssp_subband_phot
+            if ssp_sub_phot is not None:
+                ssp_sub_waves = self._state.ssp_phot_lut.ssp_subband_waves_rest
+                sub_phi = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot)
+                sub_num = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_waves * ssp_sub_phot)
+                derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = (
+                    total_mass * sub_phi * LSUN_ERG_PER_S
+                )
+                # Zero-weight sub-bands contribute nothing, but their node still
+                # goes through the 1/λ dust law — keep it finite and positive.
+                live = sub_phi != 0.0
+                derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
+                    live,
+                    sub_num / jnp.where(live, sub_phi, 1.0),
+                    jnp.asarray(self._state.ssp_phot_lut.effective_wavelengths_rest)[:, None],
                 )
             # Publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.
@@ -1916,6 +1958,24 @@ class StellarSEDComponent:
             # downstream consumers (dust LUT, AGN, IGM).
             eff_waves_at_z = _interp(ztable.eff_waves_rest_table)
             derived_overrides["filter_eff_waves"] = eff_waves_at_z
+
+            # Sub-band quadrature tensors at runtime z (#1122), same contract as
+            # the fixed-z path. Φ_k carries the mass and L_sun scaling; the node
+            # λ_k is a RATIO, so those cancel and it comes from the unscaled sums.
+            if ztable.ssp_subband_phot_table is not None:
+                sub_phot_at_z = _interp(ztable.ssp_subband_phot_table)
+                sub_wave_at_z = _interp(ztable.subband_waves_rest_table)
+                sub_phi = jnp.einsum("ma,mafk->afk", joint_weights, sub_phot_at_z)
+                sub_num = jnp.einsum("ma,mafk->afk", joint_weights, sub_wave_at_z * sub_phot_at_z)
+                derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = (
+                    total_mass * sub_phi * LSUN_ERG_PER_S
+                )
+                # Zero-weight sub-bands cannot change the result, but their node
+                # still goes through the 1/λ dust law — keep it finite and positive.
+                live = sub_phi != 0.0
+                derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
+                    live, sub_num / jnp.where(live, sub_phi, 1.0), eff_waves_at_z[:, None]
+                )
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
@@ -2223,7 +2283,7 @@ def _stellar_mass_fn(state, params):
 
 def _stellar_mass_surviving_fn(state, params):
     """Total surviving stellar mass [Msun]."""
-    log_mstar = jnp.asarray(state.derived["log_mstar"])
+    log_mstar = jnp.asarray(state.derived["log_mstar_surviving"])
     return jnp.power(10.0, log_mstar)
 
 
@@ -2238,23 +2298,59 @@ def _sfr_10myr_fn(state, params):
 
 
 def _ssfr_fn(state, params):
-    """Specific star formation rate (SFR / stellar_mass) [1/Gyr]."""
+    """Specific star formation rate (SFR / surviving stellar mass) [1/yr].
+
+    Notes
+    -----
+    Reads ``log_mstar``, **not** ``log_mstar_surviving`` — and that asymmetry with
+    :func:`_stellar_mass_surviving_fn` is deliberate, not an oversight. When the
+    SSP grid carries no mass-remaining table, "how much mass survives" has no
+    answer and the property says NaN; but sSFR is still a meaningful number
+    against the formed mass, so it falls back rather than going dark. That is
+    exactly what the method this replaces did::
+
+        mass_for_ssfr = jnp.where(jnp.isnan(mass_surviving), mass_formed, mass_surviving)
+
+    and the deprecation shim must stay bit-exact with it (#1049, contract §6).
+    """
     log_mstar = jnp.asarray(state.derived["log_mstar"])
     stellar_mass_surviving = jnp.power(10.0, log_mstar)
     sfr_100myr = jnp.asarray(state.derived["sfr_100myr"])
-    # Use surviving mass in denominator to match legacy convention
     return sfr_100myr / jnp.maximum(stellar_mass_surviving, _TINY)
 
 
 def _mass_weighted_age_gyr_fn(state, params):
-    """Mass-weighted mean age of stellar population [Gyr]."""
-    sfh_lbt = jnp.asarray(state.derived["sfh_grid_lbt_yr"])
-    sfr_history = jnp.asarray(state.derived["sfr_history"])
-    bin_widths = jnp.gradient(sfh_lbt)
-    bin_mass = jnp.maximum(sfr_history * bin_widths, 0.0)
-    bin_mass_total = jnp.maximum(jnp.sum(bin_mass), _TINY)
-    mw_age_yr = jnp.sum(sfh_lbt * bin_mass) / bin_mass_total
-    return mw_age_yr / 1e9
+    r"""Mass-weighted mean age of the stellar population [Gyr].
+
+    .. math::
+
+        t_\mathrm{mw} = \frac{\sum_i w_i\, t_i}{\sum_i w_i}
+
+    :math:`w_i` are the CSP mass weights per SSP age bin [Msun] and :math:`t_i`
+    the SSP isochrone ages [yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    Weighted on the **SSP age grid** — the stars that actually exist in the SED —
+    not by integrating the raw SFH grid. The two are not equivalent: an SFH can
+    place stellar mass at lookback times beyond the age of the universe at the
+    model's redshift (the orchestrator already warns when it does), and the SED
+    truncates that mass while a raw-SFH integral would still count it. Weighting
+    the population that the SED actually contains keeps this quantity consistent
+    with the spectrum it accompanies; the two definitions differed by ~4.6% and
+    were both live under this one name until #1131.
+
+    Shares :func:`~tengri.utils.sed_quantities.compute_mass_weighted_age` with
+    ``predict_sfh_quantities`` and ``Prediction.sfh`` — one implementation, so
+    they cannot drift apart again.
+    """
+    from tengri.utils.sed_quantities import compute_mass_weighted_age
+
+    weights = jnp.asarray(state.derived["age_weights"])
+    ssp_ages_yr = jnp.asarray(state.derived["ssp_ages_yr"])
+    return compute_mass_weighted_age(weights, ssp_ages_yr)
 
 
 def _mass_weighted_metallicity_fn(state, params):
@@ -2300,14 +2396,70 @@ def _l_dust_absorbed_fn(state, params):
 
 
 def _irx_fn(state, params):
-    """IRX (infrared excess) diagnostic [dimensionless]."""
+    r"""Infrared excess against the **monochromatic 1600 A** UV luminosity [dex].
+
+    .. math::
+
+        \mathrm{IRX} = \log_{10}\!\left(
+            \frac{L_\mathrm{TIR}}{(\nu L_\nu)_{1600\,\mathrm{A}}}\right)
+
+    :math:`L_\mathrm{TIR}` is the 8-1000 um dust luminosity [erg/s] and
+    :math:`(\nu L_\nu)_{1600}` the monochromatic UV luminosity at rest-frame
+    1600 A [erg/s]. This is the anchor of the IRX-beta relation (Meurer et al.
+    1999 [1]_) and the definition tengri has reported all along.
+
+    See :func:`_irx_fuv_fn` for the band-averaged FUV variant — the two anchors
+    differ by ~0.12 dex and are not interchangeable.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    References
+    ----------
+    .. [1] Meurer, G. R., Heckman, T. M., & Calzetti, D. 1999, "Dust Absorption
+       and the Ultraviolet Luminosity Density at z ~ 3 as Calibrated by Local
+       Starburst Galaxies", ApJ, 521, 64. doi:10.1086/307523
+    """
+    from tengri.utils.sed_quantities import compute_irx, compute_l_tir, compute_uv_luminosity_1600
+
+    sed = state.sed_intrinsic
+    wave = state.wave
+    l_tir = compute_l_tir(sed, wave)
+    l_uv = compute_uv_luminosity_1600(sed, wave)
+    return compute_irx(l_tir, l_uv)
+
+
+def _irx_fuv_fn(state, params):
+    r"""Infrared excess against the **band-averaged FUV** luminosity [dex].
+
+    .. math::
+
+        \mathrm{IRX_{FUV}} = \log_{10}\!\left(
+            \frac{L_\mathrm{TIR}}{\nu_{1500}\,\langle L_\nu\rangle_\mathrm{FUV}}\right)
+
+    :math:`\langle L_\nu \rangle_\mathrm{FUV}` is the mean :math:`L_\nu` over
+    1000-1700 A [erg/s/Hz] — a GALEX-FUV-like window rather than a single
+    wavelength — and :math:`\nu_{1500} = c / 1500\,\mathrm{A}` the pivot
+    frequency [Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    The pivot frequency takes ``C_AA`` from
+    :mod:`tengri.utils.physics_constants`. It previously used a hardcoded
+    ``2.998e15`` — the speed of light 1000x too small in [A/s] — which inflated
+    every reported IRX by exactly :math:`\log_{10}(1000) = 3` dex (#1131).
+    """
+    from tengri.utils.physics_constants import C_AA
     from tengri.utils.sed_quantities import compute_fuv_flux, compute_irx, compute_l_tir
 
     sed = state.sed_intrinsic
     wave = state.wave
     l_tir = compute_l_tir(sed, wave)
     fuv = compute_fuv_flux(sed, wave)
-    return compute_irx(l_tir, fuv * 2.998e15 / 1500.0)
+    return compute_irx(l_tir, fuv * C_AA / 1500.0)
 
 
 def _uv_slope_beta_fn(state, params):
@@ -2551,10 +2703,16 @@ _SED_PROPERTIES = {
         fn=_l_dust_absorbed_fn,
     ),
     "irx": Property(
-        units="",
+        units="dex",
         group="sed",
-        doc="Infrared excess (IRX) diagnostic",
+        doc="Infrared excess, log10(L_TIR / nu*L_nu at 1600 A) — the Meurer+99 IRX-beta anchor",
         fn=_irx_fn,
+    ),
+    "irx_fuv": Property(
+        units="dex",
+        group="sed",
+        doc="Infrared excess against the band-averaged FUV (1000-1700 A), pivoted at 1500 A",
+        fn=_irx_fuv_fn,
     ),
     "uv_slope_beta": Property(
         units="",

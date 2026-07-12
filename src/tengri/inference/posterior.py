@@ -14,6 +14,7 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import logging
 import warnings
@@ -26,6 +27,160 @@ import jax.numpy as jnp
 import numpy as np
 
 logger = logging.getLogger(__name__)
+
+# Draws per compiled kernel when lifting properties over a posterior. Peak
+# memory scales with this, not with n_samples.
+_PROPERTY_CHUNK = 64
+
+
+class PosteriorProperties:
+    r"""The property catalog lifted over the sample axis.
+
+    The topology-agnostic seam of contract §1 — **same names, more axes**. Every
+    key a :class:`~tengri.forward.prediction.Prediction` answers to, a
+    :class:`Posterior` answers to as well; a scalar simply becomes
+    ``(n_samples,)``. Nothing about the name, the units, or the meaning changes
+    with the topology.
+
+    Values are computed lazily (first access per name), memoized, and evaluated
+    through :func:`~tengri.utils.batching.vmap_chunked` so that a large posterior
+    does not materialize every intermediate for every draw at once.
+
+    Parameters
+    ----------
+    posterior : Posterior
+        The parent posterior, supplying ``samples`` (or ``params`` for a MAP
+        fit, which has no sample axis) and the model.
+
+    See Also
+    --------
+    tengri.forward.prediction.PropertyCatalog : the scalar (single-Prediction) twin.
+    """
+
+    def __init__(self, posterior):
+        object.__setattr__(self, "_posterior", posterior)
+        object.__setattr__(self, "_cache", {})
+
+    # ── the catalog protocol ─────────────────────────────────────
+
+    def _model(self):
+        post = object.__getattribute__(self, "_posterior")
+        if post._model is None:
+            raise RuntimeError(
+                "No model reference on this Posterior — cannot compute properties. "
+                "(It is populated automatically by Fitter.run().)"
+            )
+        return post._model
+
+    def __getitem__(self, name: str):
+        """Property values over the sample axis — ``(n_samples,)``, or a scalar for MAP."""
+        cache = object.__getattribute__(self, "_cache")
+        if name in cache:
+            return cache[name]
+
+        post = object.__getattribute__(self, "_posterior")
+        model = self._model()
+
+        available = model.available_properties
+        if name not in available:
+            raise KeyError(f"Unknown property {name!r}. Available: {sorted(available)}")
+
+        if post.samples is None:
+            # MAP: one point, no sample axis. Same key, zero extra axes.
+            value = model.predict_properties(post.params, names=(name,))[name]
+        else:
+            from tengri.utils.batching import vmap_chunked
+
+            fn = vmap_chunked(
+                lambda p: model.predict_properties(p, names=(name,))[name],
+                chunk_size=_PROPERTY_CHUNK,
+            )
+            value = fn(post.samples)
+
+        cache[name] = value
+        return value
+
+    def __contains__(self, name: str) -> bool:
+        return name in self._model().available_properties
+
+    def __iter__(self):
+        return iter(sorted(self._model().available_properties))
+
+    def keys(self):
+        """Available property names — identical to the model's."""
+        return list(self)
+
+    def to_dict(self, names=None) -> dict:
+        """Export properties as a plain dict, ready for a table.
+
+        Parameters
+        ----------
+        names : sequence of str, optional
+            Names to export. Defaults to every available property.
+
+        Returns
+        -------
+        dict
+            ``name -> ndarray, shape (n_samples,)`` (scalars for a MAP fit).
+        """
+        if names is None:
+            names = list(self)
+        return {name: self[name] for name in names}
+
+    # ── the sample-axis-only verb ────────────────────────────────
+
+    def ci(self, name: str, level: float = 0.68) -> tuple[float, float, float]:
+        """Credible interval for a property.
+
+        Parameters
+        ----------
+        name : str
+            Property name.
+        level : float, default 0.68
+            Central credible level. ``0.68`` gives the 16th/84th percentiles.
+
+        Returns
+        -------
+        tuple of float
+            ``(lo, median, hi)`` — the equal-tailed interval and the median.
+
+        Raises
+        ------
+        ValueError
+            If the posterior has no samples (a MAP fit has no interval to give),
+            or ``level`` is not in ``(0, 1)``.
+
+        Examples
+        --------
+        >>> lo, med, hi = posterior.properties.ci("stellar_mass")  # doctest: +SKIP
+        >>> lo, med, hi = posterior.properties.ci("sfr_100myr", level=0.95)  # doctest: +SKIP
+        """
+        if not 0.0 < level < 1.0:
+            raise ValueError(f"level must be in (0, 1), got {level}")
+
+        post = object.__getattribute__(self, "_posterior")
+        if post.samples is None:
+            raise ValueError(
+                f"This is a {post.method!r} fit with no samples, so {name!r} has no "
+                "credible interval. Use posterior.properties[name] for the point value."
+            )
+
+        tail = 100.0 * (1.0 - level) / 2.0
+        arr = np.asarray(self[name])
+        lo, med, hi = np.percentile(arr, [tail, 50.0, 100.0 - tail])
+        return float(lo), float(med), float(hi)
+
+    def __setattr__(self, name, value):
+        raise AttributeError("PosteriorProperties is read-only")
+
+    def __repr__(self):
+        post = object.__getattribute__(self, "_posterior")
+        n = (
+            "MAP"
+            if post.samples is None
+            else f"{next(iter(post.samples.values())).shape[0]} draws"
+        )
+        return f"<PosteriorProperties: {len(self.keys())} properties over {n}>"
 
 
 @dataclass
@@ -204,8 +359,71 @@ class Posterior:
     # ── Derived quantities ────────────────────────────────────────
 
     @functools.cached_property
+    def properties(self) -> PosteriorProperties:
+        r"""The property catalog, lifted over the sample axis.
+
+        Contract §1 — **same names, more axes**. Every property the model
+        provides is here under exactly the name a ``Prediction`` uses; a scalar
+        becomes ``(n_samples,)``. Values are computed lazily per name and
+        evaluated in memory-bounded chunks, so a large posterior does not OOM.
+
+        Returns
+        -------
+        PosteriorProperties
+            Dict-like: ``[name]``, ``keys()``, ``to_dict(names=)``, plus the
+            sample-axis verb ``ci(name, level=0.68)``.
+
+        Examples
+        --------
+        >>> post.properties["stellar_mass"].shape  # doctest: +SKIP
+        (4000,)
+        >>> post.stellar_mass.shape  # attribute sugar  # doctest: +SKIP
+        (4000,)
+        >>> lo, med, hi = post.properties.ci("stellar_mass")  # doctest: +SKIP
+
+        See Also
+        --------
+        PosteriorProperties : the catalog object.
+        tengri.vmap_chunked : the memory-bounded evaluation used underneath.
+        """
+        return PosteriorProperties(self)
+
+    def __getattr__(self, name: str):
+        """Attribute sugar for catalog properties — ``post.stellar_mass``.
+
+        Only reached for attributes that do not otherwise exist, so it never
+        shadows a real field. Guards against recursion during ``__init__`` and
+        unpickling, when ``_model`` may not be set yet.
+        """
+        if name.startswith("_") or name in ("samples", "params", "method"):
+            raise AttributeError(name)
+
+        model = self.__dict__.get("_model")
+        if model is None:
+            raise AttributeError(name)
+
+        try:
+            available = model.available_properties
+        except Exception:
+            raise AttributeError(name) from None
+
+        if name in available:
+            return self.properties[name]
+        raise AttributeError(
+            f"{type(self).__name__!r} has no attribute {name!r}. "
+            f"Available properties: {sorted(available)}"
+        )
+
+    @functools.cached_property
     def derived(self) -> dict:
         """Derived physical quantities (stellar mass, SFR, sSFR).
+
+        .. deprecated:: 2026-07
+           Use :attr:`properties` instead — it exposes **every** property the
+           model provides (not a hardcoded five), under the same names as the
+           model side, and evaluates them in memory-bounded chunks.
+           ``posterior.derived["stellar_mass"]`` becomes
+           ``posterior.properties["stellar_mass"]`` (or ``posterior.stellar_mass``).
 
         For MAP: computed on the single best-fit → dict of scalars.
         For NUTS/geoVI: computed on all samples → dict of arrays.
@@ -232,12 +450,30 @@ class Posterior:
         >>> stellar_masses = derived["stellar_mass"]  # Shape (n_samples,)
         >>> med, lo, hi = np.percentile(stellar_masses, [50, 16, 84])
         """
+        warnings.warn(
+            "Posterior.derived is deprecated; use Posterior.properties instead. "
+            "It carries every property the model provides — not this hardcoded five — "
+            "under the same names the model side uses, and evaluates them in "
+            "memory-bounded chunks. Replace posterior.derived['stellar_mass'] with "
+            "posterior.properties['stellar_mass'] (or posterior.stellar_mass); "
+            "posterior.properties.ci('stellar_mass') gives (lo, med, hi) directly.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+        # The body below is UNCHANGED on purpose. `derived` routes through
+        # `predict_sfh_quantities`, a separate internal recompute path from the
+        # orchestrator `state_to_*` functions the property catalog is pinned to,
+        # so the two agree to ~1e-10 but are not bit-identical (the Phase 1
+        # finding). Contract §7 requires a *bit-exact* shim for one cycle, so we
+        # keep the old numbers rather than silently re-routing every existing
+        # user's results through the new path.
         if self._model is None:
             raise RuntimeError("No model reference — cannot compute derived quantities")
 
         if self.samples is None:
             # MAP: single point
-            return self._model.predict_derived(self.params)
+            return self._model._predict_derived(self.params)
 
         # vmap materializes the whole batch at once, so very large posteriors
         # can exhaust memory here with no obvious culprit — warn before it hurts.
@@ -777,7 +1013,7 @@ class Posterior:
         wavelengths = [float(w) for w in np.asarray(self.eline_wavelengths)]
 
         def _ew_for_params(p: dict) -> jnp.ndarray:
-            sed = self._model.predict_rest_sed(p)
+            sed = self._model._predict_rest_sed(p)
             return jnp.stack(
                 [
                     equivalent_width(sed.wavelength, sed.sed, lc, window_aa, continuum_width_aa)
@@ -1352,6 +1588,200 @@ class Posterior:
 
         return "\n".join(lines)
 
+    # ── Observables over the sample axis ──────────────────────────
+
+    def observables(self, filters=None, n_draws=None, fast=False, key=None, chunk_size=64):
+        r"""Photometry for every posterior draw — the arrays an SED plot needs.
+
+        Contract §3, **exact by default**. The default path integrates the model
+        SED through the filters with no approximation, per draw. ``fast=True``
+        opts into the lean build-time path (the ``approx=`` LUT the model was
+        built with, if any) — much faster, and an approximation.
+
+        Parameters
+        ----------
+        filters : sequence of str or FilterCurve, or Photometry, optional
+            Bands to integrate — filter names (``["jwst_f356w", ...]``), curves, or
+            a prebuilt :class:`~tengri.observation.Photometry`. Accepts exactly what
+            :meth:`Prediction.photometry` accepts. Defaults to the ones the model
+            was built with.
+        n_draws : int, optional
+            Thin to this many draws (resampled with replacement) before
+            evaluating. ``None`` uses every draw — which for a large posterior is
+            exactly the memory problem :func:`~tengri.vmap_chunked` exists to
+            bound, so it is chunked either way.
+        fast : bool, default False
+            Route through the lean ``predict_photometry`` (build-time approx)
+            instead of the exact projector.
+        key : PRNGKey, optional
+            Used only when ``n_draws`` is given. Defaults to ``PRNGKey(0)``.
+        chunk_size : int, default 64
+            Draws per compiled kernel.
+
+        Returns
+        -------
+        ndarray, shape (n_draws, n_filters)
+            Observed-frame flux density per draw per band, F_nu [erg/s/cm^2/Hz].
+            For a MAP fit (no samples), shape ``(1, n_filters)``.
+
+        Raises
+        ------
+        RuntimeError
+            If no model is attached.
+
+        Notes
+        -----
+        **JIT-compatible**: no (drives compilation internally). The per-draw
+        kernel it maps *is* jitted.
+
+        Examples
+        --------
+        >>> bands = post.observables(n_draws=200)  # exact  # doctest: +SKIP
+        >>> lo, med, hi = np.percentile(bands, [16, 50, 84], axis=0)  # doctest: +SKIP
+        """
+        from tengri.observation.photometry import project_photometry
+        from tengri.observation.photometry_config import resolve_runtime_photometry
+        from tengri.utils.batching import vmap_chunked
+
+        if self._model is None:
+            raise RuntimeError("No model reference — cannot compute observables")
+
+        model = self._model
+        build_time = model.observation.photometry
+        if filters is None:
+            phot = build_time
+        else:
+            # Same normalizer as Prediction.photometry, so ``filters=`` means the
+            # same thing on both surfaces — names, curves, or a Photometry (#1129).
+            phot = resolve_runtime_photometry(filters, build_time=build_time)
+        if phot is None:
+            raise RuntimeError("This model has no photometry to evaluate.")
+
+        draws = self._draws_for_lift(n_draws=n_draws, key=key)
+
+        if fast:
+            # The lean hot-loop path: honors whatever `approx=` the model was
+            # built with. Faster, and an approximation.
+            fn = model.predict_photometry
+        else:
+            # The canonical exact projector — the same kernel Prediction.photometry()
+            # uses, so a posterior band and a Prediction band answer the same question.
+            def fn(p):
+                return project_photometry(model.predict_state(p), p, phot)
+
+        return vmap_chunked(fn, chunk_size=chunk_size)(draws)
+
+    def spectra(self, wave_obs=None, n_draws=None, fast=False, key=None, chunk_size=64):
+        r"""Model spectrum for every posterior draw — the other half of an SED plot.
+
+        The spectroscopic counterpart of :meth:`observables`, and the posterior
+        lift of :meth:`Prediction.spectrum`. Contract §3, **exact by default**:
+        the spectrum is LSF-convolved and calibrated exactly as the likelihood
+        sees it, so a posterior band and a posterior spectrum answer the same
+        question as the fit did. ``fast=True`` opts into the build-time
+        ``approx=`` path.
+
+        Parameters
+        ----------
+        wave_obs : array_like, shape (n_wave,), optional
+            Observed-frame wavelength grid [Angstrom]. Defaults to the
+            instrument grid the model was built with.
+        n_draws : int, optional
+            Thin to this many draws (resampled with replacement). ``None`` uses
+            every draw, chunked either way.
+        fast : bool, default False
+            Route through the lean ``predict_spectrum`` (build-time approx)
+            instead of the exact projector.
+        key : PRNGKey, optional
+            Used only when ``n_draws`` is given. Defaults to ``PRNGKey(0)``.
+        chunk_size : int, default 64
+            Draws per compiled kernel.
+
+        Returns
+        -------
+        ndarray, shape (n_draws, n_wave)
+            Observed-frame flux density per draw, F_nu [erg/s/cm^2/Hz].
+            For a MAP fit (no samples), shape ``(1, n_wave)``.
+
+        Raises
+        ------
+        RuntimeError
+            If no model is attached, or the model has no spectroscopy and no
+            ``wave_obs`` was given.
+
+        Notes
+        -----
+        **JIT-compatible**: no (drives compilation internally). The per-draw
+        kernel it maps *is* jitted.
+
+        Examples
+        --------
+        >>> spec = post.spectra(n_draws=200)  # doctest: +SKIP
+        >>> lo, med, hi = np.percentile(spec, [16, 50, 84], axis=0)  # doctest: +SKIP
+        """
+        from tengri.utils.batching import vmap_chunked
+
+        if self._model is None:
+            raise RuntimeError("No model reference — cannot compute spectra")
+
+        model = self._model
+        if model.observation.spectroscopy is None:
+            raise RuntimeError(
+                "No spectroscopy is configured on the model, so there is no LSF to "
+                "convolve with. Build it with observation=Observation(spectroscopy=...); "
+                "wave_obs=... then overrides the grid."
+            )
+
+        draws = self._draws_for_lift(n_draws=n_draws, key=key)
+
+        if fast:
+            # Mirrors Prediction.spectrum: the LUT is an approximation (measured
+            # 5-7% off on a SpectrumPrecomp model), so it is opt-in and must not be
+            # silently substituted for the exact answer.
+            if not model._approx.get("spectrum_precomp"):
+                raise ValueError(
+                    "fast=True requires the model to be built with "
+                    "approx=SpectrumPrecomp(...). Rebuild the model with "
+                    "approx=SpectrumPrecomp() and try again."
+                )
+
+            def fn(p):
+                return model.predict_spectrum(p, wave_obs=wave_obs)
+        else:
+            # Exact, and the same kernel Prediction.spectrum uses:
+            # Observation.predict calls project_spectrum (#1052) and applies the flux
+            # calibration (#1086), so a posterior spectrum and the likelihood's
+            # spec_fnu answer the same question by construction.
+            def fn(p):
+                out = model.observation.predict(model.predict_state(p), p, wave_obs=wave_obs)
+                return out["spec_fnu"]
+
+        return vmap_chunked(fn, chunk_size=chunk_size)(draws)
+
+    def _draws_for_lift(self, *, n_draws=None, key=None):
+        r"""The draw batch to map a per-draw kernel over, with fixed values filled in.
+
+        Posterior draws carry only the FREE parameters. The exact projectors read
+        the luminosity distance out of this dict, so a ``Fixed`` redshift would be
+        silently dropped and every draw evaluated at 10 pc (#1124, #1127). Resolve
+        once, here, so every lift on this class inherits it — rather than each new
+        method rediscovering the bug.
+        """
+        import jax
+
+        from tengri.parameters.resolve import resolve_fixed_params
+
+        if self.samples is None:
+            draws = {k: jnp.atleast_1d(v) for k, v in self.params.items()}
+        elif n_draws is None:
+            draws = self.samples
+        else:
+            draws = self.resample(jax.random.PRNGKey(0) if key is None else key, n=n_draws)
+
+        n = next(iter(draws.values())).shape[0]
+        fixed = resolve_fixed_params(self._model, {})
+        return {**{k: jnp.broadcast_to(v, (n,)) for k, v in fixed.items()}, **draws}
+
     # ── Resampling ────────────────────────────────────────────────
 
     def resample(self, key, n=1) -> dict:
@@ -1763,16 +2193,20 @@ class Posterior:
         derived_truths = {}
         if self._model is not None:
             try:
-                d = self.derived
+                # The property catalog, not the deprecated `derived` — same keys,
+                # and reading it here would otherwise fire a DeprecationWarning at
+                # every corner plot (contract §7: migrate internal callers with the
+                # deprecation, never after it).
+                cat = self.properties
                 for k in ["stellar_mass", "sfr_100myr", "sfr_10myr"]:
-                    if k in d:
-                        derived[k] = np.array(d[k])
-            except (AttributeError, TypeError, ValueError) as exc:
+                    if k in cat:
+                        derived[k] = np.array(cat[k])
+            except (AttributeError, TypeError, ValueError, KeyError, RuntimeError) as exc:
                 logger.debug("derived quantity computation failed: %s", exc)
             # Compute truth derived quantities for truth lines
             if truths is not None:
                 try:
-                    d_true = self._model.predict_derived(truths)
+                    d_true = self._model._predict_derived(truths)
                     for k in derived:
                         if k in d_true:
                             derived_truths[k] = float(d_true[k])
@@ -2002,7 +2436,7 @@ class Posterior:
                     for k, v in self.samples.items()
                 }
                 try:
-                    sed = np.array(model.predict_rest_sed(p).sed)
+                    sed = np.array(model._predict_rest_sed(p).sed)
                     seds.append(sed)
                 except (AttributeError, TypeError, ValueError):
                     # AttributeError: predict_rest_sed doesn't exist or .sed attribute missing
@@ -2030,7 +2464,7 @@ class Posterior:
         else:
             wave = np.array(model.wavelengths)
             mask = (wave >= wave_range[0]) & (wave <= wave_range[1])
-            sed = np.array(model.predict_rest_sed(self.params).sed)
+            sed = np.array(model._predict_rest_sed(self.params).sed)
             norm = float(sed[np.argmin(np.abs(wave - 5500))]) or 1.0
             ax.plot(
                 wave[mask], sed[mask] * wave[mask] / norm, color="C0", lw=1.8, label="best-fit"
@@ -2184,13 +2618,25 @@ class Posterior:
         "refine",
         "resample",
         # 5.  Post-fit physics
+        "properties",
         "posterior_predictive",
         "sed_components",
     )
 
     def __dir__(self) -> list[str]:
-        """Curated tab-completion list. Other attrs remain accessible."""
-        return list(self._CURATED_DIR)
+        """Curated tab-completion list, plus this model's catalog properties.
+
+        The curation is deliberate — a Posterior has a large surface and the
+        useful verbs would otherwise be lost in it. The catalog property names
+        are appended because they are reachable as attributes (``__getattr__``)
+        and would otherwise be invisible to autocomplete.
+        """
+        names = list(self._CURATED_DIR)
+        model = self.__dict__.get("_model")
+        if model is not None:
+            with contextlib.suppress(Exception):
+                names.extend(model.available_properties)
+        return sorted(set(names))
 
     # ── Method chaining ───────────────────────────────────────────
 

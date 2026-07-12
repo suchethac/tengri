@@ -624,25 +624,43 @@ def state_to_sfh_quantities(state: Any):
     derived = state.derived
     log_mstar = jnp.asarray(derived["log_mstar"])
     log_mstar_formed = jnp.asarray(derived["log_mstar_formed"])
-    stellar_mass_surviving = jnp.power(10.0, log_mstar)
+    # The *honest* surviving mass: NaN when the SSP grid has no mass-remaining
+    # table, rather than ``log_mstar``'s silent fallback to the formed mass (which
+    # asserts zero mass loss). ``predict_sfh_quantities`` already returned NaN
+    # here; this path returned the formed mass, and the two had drifted apart
+    # under one name (#1131). sSFR below keeps the fallback on purpose — see there.
+    log_mstar_surviving = jnp.asarray(derived["log_mstar_surviving"])
+    stellar_mass_surviving = jnp.power(10.0, log_mstar_surviving)
     stellar_mass = jnp.power(10.0, log_mstar_formed)
 
     sfh_lbt = jnp.asarray(derived["sfh_grid_lbt_yr"])
     sfr_history = jnp.asarray(derived["sfr_history"])
     log_z_history = jnp.asarray(derived["log_metallicity_history"])
 
-    # Mass per SFH bin (∫ SFR dt locally) — used as weight for the
-    # mass-weighted age and metallicity.
+    # Mass-weighted age on the SSP age grid — the stars the SED actually contains.
+    # Integrating the raw SFH grid instead counts mass the SED truncates (an SFH
+    # can form stars before the Big Bang at the model's redshift), and the two
+    # answers differed by ~4.6% under this one name until #1131. Shared with the
+    # property catalog and Prediction.sfh so they cannot drift apart again.
+    from tengri.utils.sed_quantities import compute_mass_weighted_age
+
+    mw_age_gyr = compute_mass_weighted_age(
+        jnp.asarray(derived["age_weights"]), jnp.asarray(derived["ssp_ages_yr"])
+    )
+
+    # Mass per SFH bin (∫ SFR dt locally) — the weight for the mass-weighted metallicity.
     bin_widths = jnp.gradient(sfh_lbt)
     bin_mass = jnp.maximum(sfr_history * bin_widths, 0.0)
     bin_mass_total = jnp.maximum(jnp.sum(bin_mass), _TINY)
-    mw_age_yr = jnp.sum(sfh_lbt * bin_mass) / bin_mass_total
-    mw_age_gyr = mw_age_yr / 1e9
     mw_z = jnp.sum(log_z_history * bin_mass) / bin_mass_total
 
     sfr_100myr = jnp.asarray(derived["sfr_100myr"])
     sfr_10myr = jnp.asarray(derived["sfr_10myr"])
-    ssfr = sfr_100myr / jnp.maximum(stellar_mass_surviving, _TINY)
+    # sSFR keeps ``log_mstar``'s fallback: "how much mass survives" has no answer
+    # without a mass-remaining table, but sSFR against the formed mass still does,
+    # and going NaN here would be a regression. Same asymmetry as the ``ssfr``
+    # property and as the method this replaces.
+    ssfr = sfr_100myr / jnp.maximum(jnp.power(10.0, log_mstar), _TINY)
 
     return SFHQuantities(
         stellar_mass=stellar_mass,
@@ -699,6 +717,7 @@ def state_to_sed_quantities(state: Any):
         compute_m_uv,
         compute_nuv_flux,
         compute_rest_uv_color,
+        compute_uv_luminosity_1600,
         compute_uv_slope_beta,
     )
 
@@ -729,7 +748,14 @@ def state_to_sed_quantities(state: Any):
     # take ``(sed, wave)`` arrays directly.
     fuv = compute_fuv_flux(sed, wave)
     nuv = compute_nuv_flux(sed, wave)
-    irx = compute_irx(l_tir, fuv * 2.998e15 / 1500.0)  # νLν at 1500 Å in erg/s
+
+    # IRX against the monochromatic 1600 A anchor (Meurer+99), the same
+    # definition as the ``irx`` property. This used to read
+    # ``compute_irx(l_tir, fuv * 2.998e15 / 1500.0)`` — the speed of light 1000x
+    # too small in [A/s], inflating IRX by exactly 3 dex. ``C_AA`` was already
+    # imported in this very function. See #1131; the band-averaged FUV variant is
+    # published separately as ``irx_fuv``.
+    irx = compute_irx(l_tir, compute_uv_luminosity_1600(sed, wave))
 
     # Pre-dust stellar SED reconstructed from the per-age cube
     # ``lnu_age``, which StellarSEDComponent publishes before

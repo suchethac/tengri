@@ -887,42 +887,64 @@ class Observation:
         # ``A_bc(b)^y(a)`` interpolates between BC-attenuated (y=1) and
         # bare (y=0) stars. Smooth y(a) handles the transition.
         per_age = state.derived.get("stellar_phot_lnu_per_age_precomp")
-        if a_bc_lut is not None and per_age is not None:
+        sub_per_age = state.derived.get("stellar_phot_lnu_per_age_subband_precomp")
+        a_bc_sub = state.derived.get("dust_bc_attenuation_subband_precomp")
+        _have_subband = a_bc_sub is not None and sub_per_age is not None
+        if a_bc_lut is not None and (_have_subband or per_age is not None):
             a_diff_lut = state.derived["dust_diff_attenuation_precomp"]
             y_age = state.derived["dust_young_indicator"]
-            atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]  # A_bc(λ_eff)^y(a)
-            t_per_age = a_diff_lut[None, :] * atten_bc_per_age  # T_a(λ_eff) = A_diff·A_bc^y
-            stellar_attenuated = jnp.sum(per_age * t_per_age, axis=0)
-            # First-order Taylor (Ψ) correction — only when the moment tensor was
-            # built (approx=WavePrecomp(taylor_correction=True), the default; #617).
-            # Expand T_a(λ) ≈ T_a(λ_eff) + T_a'(λ_eff)·(λ−λ_eff). Using the
-            # log-derivative identity T_a'/T_a = (ln A_diff)' + y·(ln A_bc)':
-            #   T_a' = T_a · (logslope_diff + y·logslope_bc)
-            # This avoids the A_bc^(y−1) pole — at X-ray/UV bands far off the dust
-            # curve A_bc → 0, but T_a → 0 too, so T_a' → 0 cleanly (no 0·inf NaN).
-            moment_per_age = state.derived.get("stellar_phot_moment_per_age_precomp")
-            logslope_diff = state.derived.get("dust_diff_log_attenuation_slope_precomp")
-            logslope_bc = state.derived.get("dust_bc_log_attenuation_slope_precomp")
-            _have_taylor = (
-                moment_per_age is not None
-                and logslope_diff is not None
-                and logslope_bc is not None
-            )
-            if _have_taylor:
-                t_slope_per_age = t_per_age * (
-                    logslope_diff[None, :] + y_age[:, None] * logslope_bc[None, :]
-                )
-                stellar_attenuated = stellar_attenuated + jnp.sum(
-                    moment_per_age * t_slope_per_age, axis=0
-                )
+
+            if _have_subband:
+                # K-point sub-band quadrature (#1122) — supersedes the Taylor form.
+                # Same Charlot & Fall factorization T(a, λ) = T_diff(λ)·T_bc(λ)^y(a),
+                # but the screen is EVALUATED at each sub-band's quadrature node
+                # rather than extrapolated from λ_eff:
+                #
+                #   stellar_b = Σ_a Σ_k Φ[a,b,k]·T_diff[a,b,k]·T_bc[a,b,k]^y(a)
+                #
+                # Converges as 1/K² (K=5: ≲0.6 % worst case in GALEX FUV) where the
+                # Taylor extrapolation diverges (+45 % at z=0.05 → +215 % at z=1).
+                a_diff_sub = state.derived["dust_diff_attenuation_subband_precomp"]
+                t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
+                stellar_attenuated = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
+            else:
+                atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]  # A_bc(λ_eff)^y(a)
+                t_per_age = a_diff_lut[None, :] * atten_bc_per_age  # A_diff·A_bc^y
+                stellar_attenuated = jnp.sum(per_age * t_per_age, axis=0)
+                # First-order Taylor (Ψ) correction — only when the moment tensor was
+                # built (approx=WavePrecomp(taylor_correction=True); #617).
+                # Expand T_a(λ) ≈ T_a(λ_eff) + T_a'(λ_eff)·(λ−λ_eff). Using the
+                # log-derivative identity T_a'/T_a = (ln A_diff)' + y·(ln A_bc)':
+                #   T_a' = T_a · (logslope_diff + y·logslope_bc)
+                # This avoids the A_bc^(y−1) pole — at X-ray/UV bands far off the
+                # dust curve A_bc → 0, but T_a → 0 too, so T_a' → 0 (no 0·inf NaN).
+                moment_per_age = state.derived.get("stellar_phot_moment_per_age_precomp")
+                logslope_diff = state.derived.get("dust_diff_log_attenuation_slope_precomp")
+                logslope_bc = state.derived.get("dust_bc_log_attenuation_slope_precomp")
+                if (
+                    moment_per_age is not None
+                    and logslope_diff is not None
+                    and logslope_bc is not None
+                ):
+                    t_slope_per_age = t_per_age * (
+                        logslope_diff[None, :] + y_age[:, None] * logslope_bc[None, :]
+                    )
+                    stellar_attenuated = stellar_attenuated + jnp.sum(
+                        moment_per_age * t_slope_per_age, axis=0
+                    )
+
             # Nebular emission (Cue / CloudyGrid) arises in the HII regions
             # around the youngest stars, so it sees the full young-limit screen
             # — birth cloud AND diffuse (A_bc·A_diff, i.e. y=1) — matching the
             # exact path (two_component.py reddens the nebular SED by both
             # screens). The earlier diffuse-only ``A_diff·Φ_neb`` left
             # nebular-line-dominated bands ~18 % (τ=0.5) to ~37 % (τ=1) too
-            # bright. Zeroth order in the filter; the residual intra-filter
-            # Taylor term (#617) is the same one the stellar continuum carries.
+            # bright.
+            #
+            # Still evaluated at λ_eff: the nebular component publishes no sub-band
+            # tensors, so the quadrature cannot reach it. Its intra-filter residual
+            # is unchanged from before #1122 — no regression, but the stellar
+            # continuum (which dominates the broadband) is now the accurate term.
             nebular_attenuated = a_diff_lut * a_bc_lut * nebular_phi_for_dust
             total_lnu = stellar_attenuated + nebular_attenuated + unattenuated_phi
 
@@ -931,18 +953,34 @@ class Observation:
         # When dust precompute is present, the Taylor moment Ψ MUST also be
         # present (the dust expansion is only valid with the second term).
         elif a_lut is not None:
-            # Zeroth order: flat attenuation at the filter effective wavelength.
-            dust_attenuated = a_lut * dust_attenuable_phi
-            # First-order Taylor (Ψ) correction — applied only when the moment
-            # tensor and attenuation slope were built, i.e.
-            # approx=WavePrecomp(taylor_correction=True) (the default; #617).
-            # With taylor_correction=False neither is published, so the flat
-            # A(λ_eff)·Φ form stands. Only stellar publishes a moment; nebular is
-            # treated as Φ-only.
-            a_slope_lut = state.derived.get("dust_attenuation_slope_precomp")
-            stellar_psi = state.derived.get("stellar_phot_moment_precomp")
-            if a_slope_lut is not None and stellar_psi is not None:
-                dust_attenuated = dust_attenuated + a_slope_lut * stellar_psi
+            # Sub-band quadrature (#1122), single screen. Per-age Phi_k contracted
+            # against the law EVALUATED at each node. Must be checked before the
+            # Taylor form: the quadrature supersedes it, and without this branch a
+            # single-component model would silently drop to the bare A(lam_eff)
+            # form once ``taylor_correction`` defaulted off.
+            a_sub = state.derived.get("dust_attenuation_subband_precomp")
+            if a_sub is not None and sub_per_age is not None:
+                # Per-age Φ_k contracted against the law EVALUATED at each node.
+                # Checked before the Taylor form because the quadrature supersedes
+                # it: without this branch a single-component model would silently
+                # drop to the bare A(λ_eff) form once ``taylor_correction``
+                # defaulted off — worse than what it replaced.
+                stellar_attenuated = jnp.sum(sub_per_age * a_sub, axis=(0, 2))
+                # Nebular (if any) publishes no sub-band tensors; keep it at λ_eff.
+                dust_attenuated = stellar_attenuated + a_lut * nebular_phi_for_dust
+            else:
+                # Zeroth order: flat attenuation at the filter effective wavelength.
+                dust_attenuated = a_lut * dust_attenuable_phi
+                # First-order Taylor (Ψ) correction — applied only when the moment
+                # tensor and attenuation slope were built, i.e.
+                # approx=WavePrecomp(taylor_correction=True) (#617). With
+                # taylor_correction=False neither is published, so the flat
+                # A(λ_eff)·Φ form stands. Only stellar publishes a moment; nebular
+                # is treated as Φ-only.
+                a_slope_lut = state.derived.get("dust_attenuation_slope_precomp")
+                stellar_psi = state.derived.get("stellar_phot_moment_precomp")
+                if a_slope_lut is not None and stellar_psi is not None:
+                    dust_attenuated = dust_attenuated + a_slope_lut * stellar_psi
             total_lnu = dust_attenuated + unattenuated_phi
         else:
             total_lnu = total_phi
