@@ -84,7 +84,13 @@ def test_default_keeps_old_lyc_absorbs_young():
     sda_o0 = np.asarray(_apply(_state(0.0, young=0.0, old=1e29)).derived["sed_dust_attenuated"])
     sda_o1 = np.asarray(_apply(_state(1.0, young=0.0, old=1e29)).derived["sed_dust_attenuated"])
     assert np.all(sda_o0[_LYC] > 0.0)
-    np.testing.assert_allclose(sda_o0[_LYC], sda_o1[_LYC], rtol=1e-6)  # fesc-independent
+    # fesc-independent to within the young indicator's tail. The indicator is a
+    # LOGISTIC (unified with the exact dust screen in #1122; it used to be a 2.3x
+    # sharper base-10 sigmoid here), and a logistic never reaches exactly zero: a
+    # 1e10 yr population keeps y = 4.5e-5 of birth-cloud membership. The dust screen
+    # has always assumed exactly that, so the LyC must too. The old rtol=1e-6 was
+    # calibrated to the sharper curve, i.e. to the bug.
+    np.testing.assert_allclose(sda_o0[_LYC], sda_o1[_LYC], rtol=1e-3)
 
 
 def test_absorb_all_zeros_all_lyc():
