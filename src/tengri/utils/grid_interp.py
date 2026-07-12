@@ -42,6 +42,125 @@ __all__ = [
 _np_trapezoid = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
 
 
+def _cumtrapz_rows(y: np.ndarray, x: np.ndarray) -> np.ndarray:
+    """Cumulative trapezoid along the last axis, starting at 0.
+
+    Shapes: y (..., m), x (m,) -> (..., m).
+    """
+    seg = 0.5 * (y[..., 1:] + y[..., :-1]) * np.diff(x)
+    head = np.zeros((*y.shape[:-1], 1), dtype=seg.dtype)
+    return np.concatenate([head, np.cumsum(seg, axis=-1)], axis=-1)
+
+
+def _interp_rows(xq: np.ndarray, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """Linear interpolation of every row of ``y`` (over ``x``) at ``xq``.
+
+    ``np.interp`` takes a single 1-D table, so it cannot do this in one call.
+    Shapes: xq (q,), x (m,), y (..., m) -> (..., q).
+    """
+    idx = np.clip(np.searchsorted(x, xq) - 1, 0, x.size - 2)
+    x0, x1 = x[idx], x[idx + 1]
+    span = x1 - x0
+    t = np.where(span > 0, (xq - x0) / np.where(span > 0, span, 1.0), 0.0)
+    y0, y1 = y[..., idx], y[..., idx + 1]
+    return y0 + (y1 - y0) * t
+
+
+def subband_quadrature(
+    grid: np.ndarray,
+    tw_grid: np.ndarray,
+    integrand: np.ndarray,
+    denom: float,
+    n_subbands: int,
+    eff_wave_obs: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    r"""Sub-band weights and quadrature nodes for one filter (#1122).
+
+    Splits the band into ``K`` sub-bands of equal filter mass and returns, per
+    template, the filter integral restricted to each and the template's own
+    flux-weighted centroid there:
+
+    .. math::
+
+        \Phi_k = \int_{\lambda_k}^{\lambda_{k+1}} L_\nu T w \,d\lambda
+                 \Big/ \int T w \,d\lambda
+        \qquad
+        \bar\lambda_k = \frac{\int_k \lambda L_\nu T w \,d\lambda}
+                             {\int_k L_\nu T w \,d\lambda}
+
+    Both are attenuation-independent, so a multiplicative screen is applied at
+    runtime as :math:`\sum_k \Phi_k A(\bar\lambda_k)` — an exact factorization.
+
+    The single implementation, shared by the fixed-z (:func:`preintegrate_grid`)
+    and free-z (ztable) precomputes so the two cannot drift.
+
+    Parameters
+    ----------
+    grid : ndarray, shape (m,)
+        Union quadrature grid, observed frame [Angstrom].
+    tw_grid : ndarray, shape (m,)
+        Transmission x filter weight on ``grid`` [dimensionless].
+    integrand : ndarray, shape (..., m)
+        ``templates * tw_grid`` — the thing whose band integral is wanted.
+    denom : float
+        ``int tw dlambda``, the filter normalization.
+    n_subbands : int
+        Number of sub-bands K.
+    eff_wave_obs : float
+        Filter effective wavelength, observed frame — the node fallback where a
+        template has no flux in a sub-band [Angstrom].
+
+    Returns
+    -------
+    phi : ndarray, shape (..., K)
+        Sub-band filter integrals. Sums over K to the full band integral.
+    nodes : ndarray, shape (..., K)
+        Quadrature nodes, observed frame [Angstrom].
+
+    Raises
+    ------
+    AssertionError
+        If the partition is not flux-conserving.
+
+    Notes
+    -----
+    **JIT-compatible**: no — build-time numpy precompute.
+
+    The partition is built from CUMULATIVE integrals interpolated at the edges.
+    Selecting grid points inside each sub-band instead silently drops the
+    fractional interval at every edge: the sub-integrals stop summing to the
+    whole and the quadrature error then GROWS with K. Conservation is asserted.
+    """
+    K = int(n_subbands)
+    cum_w = _cumtrapz_rows(tw_grid, grid)
+    edges = np.interp(np.linspace(0.0, cum_w[-1], K + 1), cum_w, grid)
+
+    cum_sw = _cumtrapz_rows(integrand, grid)
+    cum_lsw = _cumtrapz_rows(integrand * grid, grid)
+    i_k = np.diff(_interp_rows(edges, grid, cum_sw), axis=-1)
+    l_k = np.diff(_interp_rows(edges, grid, cum_lsw), axis=-1)
+
+    total = cum_sw[..., -1]
+    resid = np.abs(i_k.sum(axis=-1) - total)
+    scale = np.maximum(np.abs(total), 1e-300)
+    if not np.all(resid / scale < 1e-10):
+        raise AssertionError(
+            "sub-band partition is not flux-conserving (max relative residual "
+            f"{float(np.max(resid / scale)):.3e}). The sub-band integrals must "
+            "sum to the full filter integral."
+        )
+
+    # The node is the template's OWN flux-weighted centroid in the sub-band —
+    # that is what makes the rule track the spectrum and converge as 1/K^2, and
+    # it also makes the first moment vanish identically, so a Taylor term on top
+    # would add exactly zero. Where a template has no flux the weight is zero, so
+    # the node cannot change the result — but it is still fed through the dust
+    # law, which goes as 1/lambda, so it must stay finite and positive.
+    live = i_k != 0.0
+    nodes = np.where(live, l_k / np.where(live, i_k, 1.0), eff_wave_obs)
+    return i_k / np.maximum(denom, 1e-30), nodes
+
+
 @dataclasses.dataclass(frozen=True)
 class PreintegratedGrid:
     """Template grid with wavelength dimension collapsed into filter integrals.
@@ -58,6 +177,15 @@ class PreintegratedGrid:
     moment : jnp.ndarray or None
         (*grid_dims, n_filters). Taylor moment for dust correction,
         or None if not precomputed.
+    subband_phot : jnp.ndarray or None
+        (*grid_dims, n_filters, n_subbands). Filter integral restricted to
+        each sub-band, or None. Sums over the sub-band axis to ``phot``.
+    subband_waves : jnp.ndarray or None
+        (*grid_dims, n_filters, n_subbands). Observed-frame quadrature node
+        of each sub-band — the template's own flux-weighted centroid there,
+        so it tracks the spectrum. [Ångström]
+    subband_waves_rest : jnp.ndarray or None
+        (*grid_dims, n_filters, n_subbands). Same nodes, rest frame. [Ångström]
     axes : tuple[jnp.ndarray, ...]
         One array per grid dimension, giving node coordinates.
     edges : tuple[jnp.ndarray, ...]
@@ -80,6 +208,9 @@ class PreintegratedGrid:
     effective_wavelengths_rest: jnp.ndarray
     flux_scale: float
     n_filters: int
+    subband_phot: jnp.ndarray | None = None
+    subband_waves: jnp.ndarray | None = None
+    subband_waves_rest: jnp.ndarray | None = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -158,6 +289,7 @@ def preintegrate_grid(
     dl_cm: float,
     axes: tuple[np.ndarray, ...] = (),
     taylor: bool = False,
+    n_subbands: int = 0,
     energy_normalize: bool = False,
     convention: FilterConvention = FilterConvention.BESSELL,
 ) -> PreintegratedGrid:
@@ -172,13 +304,41 @@ def preintegrate_grid(
     :func:`tengri.observation.photometry.compute_flux_density`:
         Φ = ∫ L_ν(λ_obs) T_b(λ_obs) w(λ_obs) dλ / ∫ T_b(λ_obs) w(λ_obs) dλ
 
-    When ``taylor=True``, also precomputes the first spectral moment:
+    When ``n_subbands=K > 0``, the same integral is also computed **restricted
+    to each of K sub-bands** carrying equal filter mass, together with the
+    template's own flux-weighted centroid in each:
+
+    .. math::
+
+        \\Phi_{k} = \\int_{\\lambda_k}^{\\lambda_{k+1}} L_\\nu T w \\,d\\lambda
+                    \\Big/ \\int T w \\,d\\lambda
+        \\qquad
+        \\bar\\lambda_{k} = \\frac{\\int_{\\lambda_k}^{\\lambda_{k+1}}
+            \\lambda L_\\nu T w \\,d\\lambda}
+            {\\int_{\\lambda_k}^{\\lambda_{k+1}} L_\\nu T w \\,d\\lambda}
+
+    Both are attenuation-independent, so a *multiplicative* screen A(λ) is
+    then applied at runtime as a K-point quadrature, exactly factorized:
+
+    .. math::
+
+        \\int L_\\nu A T w \\,d\\lambda \\Big/ \\int T w \\,d\\lambda
+        \\;\\approx\\; \\sum_k \\Phi_k \\, A(\\bar\\lambda_k)
+
+    This supersedes ``taylor``. The Taylor form evaluates A at one point per
+    filter and *extrapolates* linearly away from it, which diverges where the
+    attenuation curve steepens (GALEX FUV: +45 % at z=0.05 rising to +215 % at
+    z=1). The quadrature *evaluates* A instead of extrapolating it and converges
+    as 1/K²: K=3 holds ≲1.2 % in FUV, K=5 ≲0.5 %. See #1122.
+
+    Only *multiplicative* transformations need this. Additive emitters (dust IR,
+    radio, X-ray, AGN) factorize exactly through the rank-1/rank-K band response
+    (#1107, #1117) and need no sub-bands.
+
+    When ``taylor=True``, precomputes instead the first spectral moment:
         Ψ = ∫ L_ν(λ) (λ - λ_eff) T(λ) w(λ) dλ / ∫ T(λ) w(λ) dλ
     where ``λ_eff = ∫ λ T w dλ / ∫ T w dλ`` is the weight's first moment, so
     Ψ ≡ 0 for a flat template.
-
-    This enables first-order Taylor dust correction at runtime, reducing
-    the age-dust-metallicity factorization error by ~5×.
 
     Parameters
     ----------
@@ -200,6 +360,13 @@ def preintegrate_grid(
         If empty, runtime interpolation is disabled.
     taylor : bool
         If True, precompute first spectral moment tensor. Default False.
+        Superseded by ``n_subbands``; see the equations above.
+    n_subbands : int
+        Number of equal-filter-mass sub-bands K for the multiplicative
+        quadrature. ``0`` (default) disables it. K=3 is the recommended
+        working point: it is *cheaper* than the Taylor moment at runtime
+        (one tensor and an ``exp``, versus two tensors and a ``pow``) and
+        ~40× more accurate in the rest-UV.
     energy_normalize : bool
         If True, normalize each template to unit bolometric luminosity
         ``∫ L_ν dν = 1`` before filter integration, so runtime
@@ -260,6 +427,9 @@ def preintegrate_grid(
     eff_waves_obs = np.zeros(n_filters)
     phot_flat = np.zeros((n_grid_points, n_filters))
     moment_flat = np.zeros((n_grid_points, n_filters)) if taylor else None
+    K = int(n_subbands)
+    sub_phot = np.zeros((n_grid_points, n_filters, K)) if K > 0 else None
+    sub_waves = np.zeros((n_grid_points, n_filters, K)) if K > 0 else None
 
     for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
         fw_np = np.asarray(fw, dtype=np.float64)
@@ -294,11 +464,25 @@ def preintegrate_grid(
             num_moment = _np_trapezoid(templates_on_grid * dlam * weight, grid, axis=-1)
             moment_flat[:, f_idx] = num_moment / np.maximum(denom, 1e-30)
 
+        # Sub-band quadrature nodes and weights (#1122) — the single
+        # implementation, shared with the free-z ztable precompute so the two
+        # cannot drift.
+        if K > 0:
+            sub_phot[:, f_idx, :], sub_waves[:, f_idx, :] = subband_quadrature(
+                grid, tw_grid, integrand, denom, K, float(eff_waves_obs[f_idx])
+            )
+
     eff_waves_rest = eff_waves_obs / (1.0 + redshift)
 
     # Reshape back to original grid dimensions
     phot = jnp.array(phot_flat.reshape(*grid_dims, n_filters))
     moment = jnp.array(moment_flat.reshape(*grid_dims, n_filters)) if taylor else None
+    if K > 0:
+        sub_phot_j = jnp.array(sub_phot.reshape(*grid_dims, n_filters, K))
+        sub_waves_j = jnp.array(sub_waves.reshape(*grid_dims, n_filters, K))
+        sub_waves_rest_j = sub_waves_j / (1.0 + redshift)
+    else:
+        sub_phot_j = sub_waves_j = sub_waves_rest_j = None
 
     # Compute flux scale (geometric factor). Avoid calling the ``@jit``'d
     # ``lnu_to_fnu`` and then ``float()``-casting its result — under a
@@ -323,6 +507,9 @@ def preintegrate_grid(
         effective_wavelengths_rest=jnp.asarray(eff_waves_rest),
         flux_scale=flux_scale,
         n_filters=n_filters,
+        subband_phot=sub_phot_j,
+        subband_waves=sub_waves_j,
+        subband_waves_rest=sub_waves_rest_j,
     )
 
 
@@ -735,6 +922,16 @@ def slice_fixed_axes(
     if isinstance(preint, PreintegratedGrid):
         phot = preint.phot
         moment = preint.moment
+        sub_phot = preint.subband_phot
+        sub_waves = preint.subband_waves
+        sub_waves_rest = preint.subband_waves_rest
+        # A quadrature node is a RATIO, λ_k = ∫λSw / ∫Sw, and the weighted mean
+        # of ratios is not the ratio of weighted means. Interpolate the node's
+        # numerator (λ_k·Φ_k) and denominator (Φ_k) separately and divide at the
+        # end — that reproduces the centroid of the interpolated template exactly,
+        # where averaging the nodes directly would bias them.
+        sub_num = None if sub_waves is None else sub_waves * sub_phot
+        sub_num_rest = None if sub_waves_rest is None else sub_waves_rest * sub_phot
 
         # Process in reverse order so axis indices remain valid after each slice
         for axis_idx in sorted(fixed.keys(), reverse=True):
@@ -753,9 +950,28 @@ def slice_fixed_axes(
             if moment is not None:
                 moment = jnp.tensordot(w, moment, axes=([0], [axis_idx]))
 
+            if sub_phot is not None:
+                sub_phot = jnp.tensordot(w, sub_phot, axes=([0], [axis_idx]))
+                sub_num = jnp.tensordot(w, sub_num, axes=([0], [axis_idx]))
+                sub_num_rest = jnp.tensordot(w, sub_num_rest, axes=([0], [axis_idx]))
+
             # Remove from axes and edges lists
             axes.pop(axis_idx)
             edges.pop(axis_idx)
+
+        if sub_phot is not None:
+            # Where a template has no flux in a sub-band the node is multiplied by
+            # zero, so its value cannot change the result — but it is still fed
+            # through the dust law, which goes as 1/λ. A zero node there yields
+            # inf/NaN that survives into the GRADIENT even though the forward value
+            # is finite. Fall back to the filter's effective wavelength: finite,
+            # positive, and physically sane.
+            live = sub_phot != 0.0
+            safe = jnp.where(live, sub_phot, 1.0)
+            sub_waves = jnp.where(live, sub_num / safe, preint.effective_wavelengths[:, None])
+            sub_waves_rest = jnp.where(
+                live, sub_num_rest / safe, preint.effective_wavelengths_rest[:, None]
+            )
 
         return PreintegratedGrid(
             phot=phot,
@@ -766,6 +982,9 @@ def slice_fixed_axes(
             effective_wavelengths_rest=preint.effective_wavelengths_rest,
             flux_scale=preint.flux_scale,
             n_filters=preint.n_filters,
+            subband_phot=sub_phot,
+            subband_waves=sub_waves,
+            subband_waves_rest=sub_waves_rest,
         )
 
     # Handle PreintegratedLines (has line_filter_weights)
