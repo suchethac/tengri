@@ -446,6 +446,7 @@ class TestFusedSpectrumAccuracy:
 class TestFusedKernelSpeedup:
     """Benchmark fused vs unfused forward model."""
 
+    @pytest.mark.benchmark
     def test_fused_photometry_speedup(
         self,
         ssp_phot,

@@ -225,6 +225,7 @@ class TestCspBenchmark:
             trials.append((t1 - t0) / n_repeats * 1e6)  # µs
         return min(trials)
 
+    @pytest.mark.benchmark
     def test_precomputed_vs_inline_speed(self):
         """Precomputed age_dt (model._csp_age_dt) should not be slower than inline."""
         ages = make_log_spaced_ages(107)

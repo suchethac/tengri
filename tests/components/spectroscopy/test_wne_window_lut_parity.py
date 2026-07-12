@@ -309,6 +309,7 @@ def test_compute_nion_matches_predict_state():
     assert worst < 1e-6, f"compute_nion diverges from predict_state by {worst:.2e}"
 
 
+@pytest.mark.benchmark
 def test_fast_path_is_faster_than_full_grid(real_ssp_only):
     """The window-LUT fast path must be materially faster than the full-grid path.
 
