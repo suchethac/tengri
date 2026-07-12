@@ -67,6 +67,39 @@ def posterior(model, samples):
     )
 
 
+@pytest.fixture(scope="module")
+def model_with_spectroscopy(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Photometry + spectroscopy, redshift FIXED — so the draws legitimately omit it."""
+    from tengri import Fixed, Observation, Spectroscopy
+
+    obs = Observation(
+        photometry=synthetic_tophat_obs.photometry,
+        spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4000.0, 8000.0, 64)),
+    )
+    return SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=obs,
+        sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
+        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        neb={"type": "none"},
+        redshift=Fixed(0.5),
+    )
+
+
+@pytest.fixture(scope="module")
+def spec_posterior(model_with_spectroscopy, samples):
+    from tengri.inference.posterior import Posterior
+
+    return Posterior(
+        samples=samples,
+        params={k: v[0] for k, v in samples.items()},
+        method="test",
+        wall_time_s=0.0,
+        diagnostics={},
+        _model=model_with_spectroscopy,
+    )
+
+
 # ── vmap_chunked ─────────────────────────────────────────────────
 
 
@@ -159,11 +192,64 @@ def test_vmap_chunked_falls_back_to_eager_when_fn_is_not_jittable(samples):
             return jnp.asarray(1.0)
         return jnp.asarray(0.0)
 
-    got = vmap_chunked(not_jittable, chunk_size=8)(samples)
+    with pytest.warns(UserWarning, match="eager"):
+        got = vmap_chunked(not_jittable, chunk_size=8)(samples)
 
     assert got.shape == (37,)
     expected = np.where(np.asarray(samples["sfh_dpl_log_total_mass"]) > 10.0, 1.0, 0.0)
     np.testing.assert_array_equal(np.asarray(got), expected)
+
+
+def test_the_eager_fallback_announces_itself(samples):
+    """Contract (#1048, #1128): the fallback must not be silent.
+
+    The eager path is ~7x slower. A user who lands on it silently has no way to
+    learn why their posterior lift crawls — and the fallback exists precisely for
+    configurations nobody chose deliberately.
+    """
+    from tengri import vmap_chunked
+
+    def not_jittable(p):
+        return jnp.asarray(1.0 if float(p["sfh_dpl_log_total_mass"]) > 10.0 else 0.0)
+
+    with pytest.warns(UserWarning) as record:
+        vmap_chunked(not_jittable, chunk_size=8)(samples)
+
+    assert len(record) == 1, "warn ONCE per callable, not once per draw"
+    msg = str(record[0].message)
+    assert "eager" in msg
+    assert "ConcretizationTypeError" in msg, "the warning must name what made it non-jittable"
+
+
+def test_the_probe_warns_once_not_once_per_chunk(samples):
+    """The jittability probe is once per callable — so is its warning."""
+    from tengri import vmap_chunked
+
+    def not_jittable(p):
+        return jnp.asarray(1.0 if float(p["sfh_dpl_log_total_mass"]) > 10.0 else 0.0)
+
+    mapped = vmap_chunked(not_jittable, chunk_size=4)  # 37 draws / 4 = 10 chunks
+    with pytest.warns(UserWarning) as record:
+        mapped(samples)
+        mapped(samples)  # called twice: still one warning, the probe is settled
+
+    assert len(record) == 1
+
+
+def test_a_genuine_bug_is_not_misfiled_as_not_jittable(samples):
+    """Contract (#1128): only *tracing* failures mean "not jittable".
+
+    ``except Exception`` swallowed everything — so a real bug (a typo'd key, a
+    tracer leak, a shape mismatch) was silently reclassified as a fact of life and
+    routed around forever. It must propagate instead.
+    """
+    from tengri import vmap_chunked
+
+    def buggy(p):
+        return p["a_key_that_does_not_exist"] * 2.0
+
+    with pytest.raises(KeyError, match="a_key_that_does_not_exist"):
+        vmap_chunked(buggy, chunk_size=8)(samples)
 
 
 # ── the topology lift: same names, more axes ─────────────────────
@@ -377,6 +463,91 @@ def test_observables_fast_is_opt_in_not_default(posterior):
     # This model carries no build-time LUT, so the two paths must agree here.
     # (A WavePrecomp model is where they diverge — that is Phase 2's territory.)
     np.testing.assert_allclose(np.asarray(fast), np.asarray(exact), rtol=1e-10)
+
+
+def test_observables_filters_means_the_same_thing_as_on_prediction(model, posterior):
+    """Contract (#1129): ``filters=`` must not mean two different things.
+
+    ``Prediction.photometry(filters=["sdss_g"])`` took filter *names*;
+    ``Posterior.observables(filters=...)`` took a Photometry *object*. Same
+    keyword, same concept, two incompatible types — in the API-consistency
+    campaign's own surface. Both now route through one normalizer.
+    """
+    from tengri.observation.photometry_config import Photometry
+
+    names = ["sdss_g", "sdss_r"]
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # the one-time runtime-photometry notice
+        by_name = posterior.observables(filters=names)
+        by_object = posterior.observables(filters=Photometry.from_names(names))
+
+    assert by_name.shape == (len(posterior.samples["sfh_dpl_log_total_mass"]), 2)
+    np.testing.assert_allclose(np.asarray(by_name), np.asarray(by_object), rtol=1e-12)
+
+
+def test_spectra_lifts_the_spectrum_over_draws(model_with_spectroscopy, spec_posterior):
+    """Contract (#1048, #1129): the seam must give spectrum draws, not only bands.
+
+    #1048 asked ``observables`` for "band/spectrum sample arrays"; only bands
+    shipped. For a spectroscopic fit the spectrum draws ARE the SED plot, and
+    without them callers loop ``predict_spectrum`` per draw — the exact memory
+    problem ``vmap_chunked`` was added to solve.
+    """
+    spec = spec_posterior.spectra()
+    n_draws = spec_posterior.samples["sfh_dpl_log_total_mass"].shape[0]
+
+    assert spec.ndim == 2
+    assert spec.shape[0] == n_draws
+    assert np.all(np.isfinite(spec))
+
+    # Exact by default: the same kernel Prediction.spectrum uses, per draw.
+    first = {k: v[0] for k, v in spec_posterior.samples.items()}
+    expected = model_with_spectroscopy.predict(first).spectrum()
+    np.testing.assert_allclose(np.asarray(spec[0]), np.asarray(expected), rtol=1e-10)
+
+
+def test_spectra_honors_a_fixed_redshift(model_with_spectroscopy, spec_posterior):
+    """The draws carry only free params — a Fixed redshift must still reach the projector.
+
+    Not a hypothetical: the identical bug was introduced in ``observables`` while
+    fixing it in ``Prediction`` (#1124), and was still live in
+    ``measure_line_fluxes`` (#1127). Both lifts now share ``_draws_for_lift``.
+
+    The exact spectrum path runs ``Observation.predict``, which takes the
+    luminosity distance from the params **dict** — so if the draws did not carry
+    the resolved redshift, every draw would come back at 10 pc.
+    """
+    assert "redshift" not in spec_posterior.samples  # vacuity guard: it IS omitted
+
+    spec = np.asarray(spec_posterior.spectra())
+    first = {k: v[0] for k, v in spec_posterior.samples.items()}
+
+    at_z = np.asarray(model_with_spectroscopy.predict({**first, "redshift": 0.5}).spectrum())
+    at_zero = np.asarray(model_with_spectroscopy.predict({**first, "redshift": 0.0}).spectrum())
+
+    # Power check: z must genuinely move the spectrum, or this proves nothing.
+    assert np.nanmax(np.abs(at_zero / at_z)) > 1e3
+
+    np.testing.assert_allclose(spec[0], at_z, rtol=1e-10)
+
+
+def test_spectra_without_spectroscopy_raises_clearly(posterior):
+    """No spectroscopy is a user error, not a silent empty array."""
+    with pytest.raises(RuntimeError, match="spectroscopy"):
+        posterior.spectra()
+
+
+def test_spectra_fast_is_opt_in_and_not_a_dropped_kwarg(spec_posterior):
+    """``fast=True`` on a model with no SpectrumPrecomp must RAISE, not silently
+    hand back the exact answer.
+
+    A ``fast`` flag that is accepted and then ignored is the dropped-kwarg
+    failure mode: the user believes they opted into the LUT, the docstring says
+    they did, and the number says otherwise.
+    """
+    with pytest.raises(ValueError, match="SpectrumPrecomp"):
+        spec_posterior.spectra(fast=True)
 
 
 # ── the population topology ──────────────────────────────────────

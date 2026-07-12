@@ -116,3 +116,35 @@ def test_measure_from_prediction_inherits_the_fixed_redshift(model_fixed_z):
         1.0,
         rtol=1e-10,
     )
+
+
+def test_measure_line_fluxes_honors_a_fixed_redshift(model_fixed_z):
+    """The same bug, at a boundary the original fix missed (#1127).
+
+    ``measure_line_fluxes`` is public, takes a raw user params dict, and does not
+    route through ``Prediction`` — so resolving fixed values inside
+    ``Prediction.__init__`` did nothing for it. It read the redshift out of the
+    dict and converted L to F through :math:`4\\pi d_L^2` at **10 pc**, coming back
+    ~1e17 too bright with no warning.
+
+    This is the line flux you compare against an observed Halpha, so a wrong
+    answer here is a wrong scientific answer, not a wrong plot.
+    """
+    omitted = {"sfh_dpl_log_total_mass": jnp.asarray(10.0)}  # legal: z is Fixed
+    explicit = {**omitted, "redshift": jnp.asarray(0.5)}
+
+    got = np.asarray(model_fixed_z.measure_line_fluxes(omitted))
+    expected = np.asarray(model_fixed_z.measure_line_fluxes(explicit))
+
+    # Vacuity guard: under the bug both arms are the *same* number, so an
+    # equivalence assertion alone would pass on a model where z barely matters.
+    # Pin that the redshift genuinely moves this quantity by orders of magnitude.
+    at_zero = np.asarray(
+        model_fixed_z.measure_line_fluxes({**omitted, "redshift": jnp.asarray(0.0)})
+    )
+    assert np.nanmax(np.abs(at_zero / expected)) > 1e3, (
+        "z=0 and z=0.5 give comparable line fluxes here, so this test cannot "
+        "detect the dropped-redshift bug — pick a redshift further from 0"
+    )
+
+    np.testing.assert_allclose(got, expected, rtol=1e-10)

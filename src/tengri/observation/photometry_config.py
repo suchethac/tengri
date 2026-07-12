@@ -260,3 +260,43 @@ class Photometry:
 
         """
         return f"{self.n_filters} filters: {', '.join(self.names)}"
+
+
+def resolve_runtime_photometry(filters, build_time=None):
+    r"""Build a :class:`Photometry` from user-supplied filters at predict time.
+
+    The single normalizer behind every ``filters=[...]`` argument on the public
+    surface — :meth:`Prediction.photometry`, :meth:`Prediction.magnitudes`, and
+    :meth:`Posterior.observables`. They shared a concept and not an
+    implementation, so ``filters=`` meant *filter names* on one and *a Photometry
+    object* on the other (#1129); routing them all through here is what keeps the
+    two spellings from drifting again.
+
+    Parameters
+    ----------
+    filters : sequence of str or FilterCurve, or Photometry
+        Filter names (``["jwst_f356w", ...]``), filter curves, or an
+        already-built :class:`Photometry` (returned unchanged).
+    build_time : Photometry or None, optional
+        The model's build-time photometry. Its **convention** is inherited.
+
+    Returns
+    -------
+    Photometry
+        Ready for the exact projector.
+
+    Notes
+    -----
+    The convention (Bessell photon-counting vs energy, ADR-0017) belongs to the
+    filter *integral*, not to the filter. ``Photometry.from_names`` defaults to
+    Bessell, so resolving runtime filters without the model's own convention
+    silently answers a different question than the model's own photometry does —
+    the same filters, two numbers, ~0.5% apart on an energy-convention model.
+    Inheriting it is therefore a correctness requirement, not a convenience.
+    """
+    if isinstance(filters, Photometry):
+        return filters
+
+    convention = build_time.convention if build_time is not None else FilterConvention.BESSELL
+    names = [f if isinstance(f, str) else f.name for f in filters]
+    return Photometry.from_names(names, convention=convention)

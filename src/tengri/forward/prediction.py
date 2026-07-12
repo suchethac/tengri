@@ -2326,7 +2326,7 @@ class Prediction:
             # ``photometry()`` does — same filters, two numbers (~0.5% apart on an
             # energy-convention model). It is part of the cache key for the same
             # reason.
-            from tengri.observation.photometry_config import Photometry
+            from tengri.observation.photometry_config import resolve_runtime_photometry
             from tengri.utils.filter_convention import FilterConvention
 
             build_time = self._model.observation.photometry
@@ -2339,7 +2339,9 @@ class Prediction:
             if cache_key in self._photometry_cache:
                 phot_obj = self._photometry_cache[cache_key]
             else:
-                phot_obj = Photometry.from_names(list(filter_names), convention=convention)
+                # The shared normalizer, so ``filters=`` resolves identically here
+                # and on Posterior.observables (#1129).
+                phot_obj = resolve_runtime_photometry(filters, build_time=build_time)
                 self._photometry_cache[cache_key] = phot_obj
                 _warn_runtime_photometry_once()
 
