@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from tengri import Uniform
@@ -95,26 +96,42 @@ class TestWavePrecompActivation:
         assert "test_dust_phot_lnu_precomp" not in result.derived
 
     def test_precomp_path_with_filter_eff_waves(self):
-        """WavePrecomp path when filter_eff_waves IS in state.derived."""
+        """WavePrecomp path publishes the LUT *and* keeps ``sed_intrinsic`` complete.
+
+        This used to assert the opposite — ``result.sed_intrinsic is state.sed_intrinsic``,
+        pinning a policy that the LUT branch must never touch the full-grid SED, on the
+        theory that keeping components off it is what makes the fast path fast.
+
+        That policy was the bug. ``predict_via_precomp`` sums the ``*_phot_lnu_precomp``
+        families and never *reads* ``sed_intrinsic``, so XLA prunes the full-grid chain
+        either way — writing an array nobody reads is still dead code, and the compiled
+        WavePrecomp photometry kernel is unchanged (~3.6e5 FLOPs) with the write restored.
+        What the omission actually produced was a WavePrecomp model whose panchromatic SED
+        carried no dust IR, so ``Prediction.photometry()`` (exact-by-default, #1097) read
+        ~6x low in W3/W4 while the likelihood — which reads the LUT — was correct. Silent.
+
+        So the contract is now: the LUT branch publishes the precomp families AND leaves
+        ``sed_intrinsic`` equal to what the exact path would have produced.
+        """
         comp = SimpleDustComponent()
         wave = jnp.linspace(1000, 10000, 100)
         filter_eff = jnp.array([3500.0, 4700.0, 5500.0, 7000.0, 9000.0])
-
-        state = ForwardState(
-            wave=wave,
-            sed_intrinsic=jnp.ones(100),
-            derived={"filter_eff_waves": filter_eff},
-        )
+        sed_in = jnp.ones(100)
         params = {"dust_tau_v": 0.5}
 
+        state = ForwardState(
+            wave=wave, sed_intrinsic=sed_in, derived={"filter_eff_waves": filter_eff}
+        )
         result = comp.apply(state, params)
 
-        # Should NOT update sed_intrinsic on LUT path (same array object passed through)
-        assert result.sed_intrinsic is state.sed_intrinsic
-        # Should publish precomp LUT
+        # The LUT family is published...
         assert "test_dust_phot_lnu_precomp" in result.derived
-        lut = result.derived["test_dust_phot_lnu_precomp"]
-        assert lut.shape == filter_eff.shape
+        assert result.derived["test_dust_phot_lnu_precomp"].shape == filter_eff.shape
+
+        # ...AND sed_intrinsic is updated, to exactly what the exact path produces.
+        exact = comp.apply(ForwardState(wave=wave, sed_intrinsic=sed_in, derived={}), params)
+        assert result.sed_intrinsic is not state.sed_intrinsic
+        np.testing.assert_array_equal(result.sed_intrinsic, exact.sed_intrinsic)
 
     def test_precomp_photometry_accuracy(self):
         """Verify WavePrecomp photometry within ~1% of exact full-grid path.

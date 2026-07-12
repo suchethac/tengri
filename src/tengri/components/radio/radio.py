@@ -646,6 +646,131 @@ def radio_agn_dpl(
     return L_nu
 
 
+def radio_total_terms(
+    wavelength: jnp.ndarray,
+    L_ir: float = 0.0,
+    L_agn_bol: float = 0.0,
+    q_ir: float = 2.64,
+    alpha_sf: float = 0.8,
+    radio_loudness: float = 0.0,
+    alpha_agn: float = 0.7,
+    sfr_mode: str = "bell2003",
+    log_mstar: float = 10.0,
+    redshift: float = 0.0,
+    q0: float | None = None,
+    mass_slope: float | None = None,
+    z_slope: float | None = None,
+    apply_suppression: bool = True,
+    include_freefree: bool = True,
+    T_e: float = 1e4,
+    alpha_ff: float = -0.1,
+    l_bband: float = 0.0,
+    **_kwargs,
+) -> dict[str, jnp.ndarray]:
+    """Decompose radio emission into additive terms for precomputation.
+
+    Returns the three additive components of total radio emission separately:
+    star-forming synchrotron, thermal free-free, and AGN power-law. Each term
+    is rank-1 in wavelength (a scalar amplitude times a fixed spectral shape
+    given shape parameters), enabling build-time precomputation of their
+    individual filter integrals. At runtime, the cost collapses to three
+    scalar multiplications per passband.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
+    L_ir : float
+        Total infrared luminosity (8–1000 μm) [erg/s] for star-forming and
+        free-free components.
+    L_agn_bol : float
+        AGN bolometric luminosity [erg/s] for AGN component.
+    q_ir : float
+        FIR-radio correlation parameter (bell2003 mode only) [dimensionless].
+        Default 2.64.
+    alpha_sf : float
+        Synchrotron spectral index [dimensionless]. Default 0.8.
+    radio_loudness : float
+        AGN radio-loudness log10(L_5GHz / L_B) [dimensionless]. Default 0.0.
+    alpha_agn : float
+        AGN radio spectral index [dimensionless]. Default 0.7.
+    sfr_mode : str
+        Star formation radio physics model. One of:
+        - ``"bell2003"`` (default): fixed q_IR, no mass/z dependence.
+        - ``"delvecchio2021"``: mass+z dependent FIRRC at 1.4 GHz.
+        - ``"mccheyne2022"``: mass+z dependent FIRRC at 150 MHz.
+    log_mstar : float
+        log10(M★ / M⊙). Used by delvecchio2021 and mccheyne2022 modes.
+        Default 10.0.
+    redshift : float
+        Galaxy redshift. Used by delvecchio2021 and mccheyne2022 modes.
+        Default 0.0.
+    q0 : float or None
+        FIRRC normalization override; None uses the mode's literature default.
+    mass_slope : float or None
+        Mass slope override; None uses the mode's literature default.
+    z_slope : float or None
+        Redshift slope override; None uses the mode's literature default.
+    apply_suppression : bool
+        Apply Bell+2003 synchrotron suppression for low-SFR galaxies
+        (delvecchio2021/mccheyne2022 modes). Default True.
+    include_freefree : bool
+        Include thermal free-free (bremsstrahlung) component. Default True.
+    T_e : float
+        Electron temperature [K] for free-free component. Default 1e4.
+    alpha_ff : float
+        Free-free spectral index (L_ν ∝ ν^{α}) [dimensionless].
+        Default -0.1.
+    l_bband : float
+        AGN intrinsic disc B-band (4400 A) monochromatic luminosity
+        [erg/s/Hz]. When > 0, used directly in radio_agn instead of deriving
+        from L_agn_bol bolometric correction. Default 0.0 (uses L_bol
+        correction).
+
+    Returns
+    -------
+    dict[str, ndarray]
+        Dictionary with three keys:
+        - ``"sf"`` : array, shape (n_wave,) — star-forming synchrotron [erg/s/Hz]
+        - ``"ff"`` : array, shape (n_wave,) — thermal free-free [erg/s/Hz]
+        - ``"agn"`` : array, shape (n_wave,) — AGN radio [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function. **Grad/vmap compatible**: yes.
+
+    Each term is rank-1 in wavelength: a scalar amplitude times a fixed
+    spectral shape (parameterized by fixed shape parameters like α or T_e).
+    This factorization enables build-time computation of ∫ term(λ) × R_filter(λ) dλ
+    for each filter R and term, collapsing runtime cost to one scalar per
+    filter per component. Combined with WavePrecomp, this eliminates the
+    dominant wavelength-loop bottleneck.
+
+    When ``include_freefree=False``, the ``"ff"`` key contains an all-zero array
+    (shape-matched to wavelength) to maintain array structure for summing.
+    """
+    sf = _dispatch_sfr(
+        wavelength,
+        L_ir,
+        sfr_mode,
+        q_ir,
+        alpha_sf,
+        log_mstar,
+        redshift,
+        q0,
+        mass_slope,
+        z_slope,
+        apply_suppression,
+    )
+    agn = radio_agn(wavelength, L_agn_bol, radio_loudness, alpha_agn, l_bband=l_bband)
+    ff = (
+        radio_freefree(wavelength, L_ir, T_e, alpha_ff)
+        if include_freefree
+        else jnp.zeros_like(wavelength)
+    )
+    return {"sf": sf, "ff": ff, "agn": agn}
+
+
 def radio_total(
     wavelength: jnp.ndarray,
     L_ir: float = 0.0,
@@ -723,6 +848,143 @@ def radio_total(
     -----
     **JIT-compatible**: yes — pure JAX function.
     """
+    t = radio_total_terms(
+        wavelength,
+        L_ir,
+        L_agn_bol,
+        q_ir,
+        alpha_sf,
+        radio_loudness,
+        alpha_agn,
+        sfr_mode,
+        log_mstar,
+        redshift,
+        q0,
+        mass_slope,
+        z_slope,
+        apply_suppression,
+        include_freefree,
+        T_e,
+        alpha_ff,
+        l_bband,
+    )
+    return t["sf"] + t["ff"] + t["agn"]
+
+
+def radio_total_dpl_terms(
+    wavelength: jnp.ndarray,
+    L_ir: float = 0.0,
+    L_agn_bol: float = 0.0,
+    q_ir: float = 2.64,
+    alpha_sf: float = 0.8,
+    radio_loudness: float = 0.0,
+    alpha1: float = -0.75,
+    alpha2: float = -0.1,
+    log_nu_t: float = 10.0,
+    log_nu_cut: float = 13.0,
+    sfr_mode: str = "bell2003",
+    log_mstar: float = 10.0,
+    redshift: float = 0.0,
+    q0: float | None = None,
+    mass_slope: float | None = None,
+    z_slope: float | None = None,
+    apply_suppression: bool = True,
+    include_freefree: bool = True,
+    T_e: float = 1e4,
+    alpha_ff: float = -0.1,
+    l_bband: float = 0.0,
+    **_kwargs,
+) -> dict[str, jnp.ndarray]:
+    """Decompose AGN double power-law radio emission into additive terms.
+
+    Returns the three additive components of total radio emission with an
+    AGNfitter-rx double power-law AGN model separately: star-forming
+    synchrotron, thermal free-free, and AGN double power-law. Each term is
+    rank-1 in wavelength (a scalar amplitude times a fixed spectral shape given
+    shape parameters), enabling build-time precomputation of their individual
+    filter integrals.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
+    L_ir : float
+        Total infrared luminosity (8–1000 μm) [erg/s] for star-forming and
+        free-free components.
+    L_agn_bol : float
+        AGN bolometric luminosity [erg/s] for AGN component.
+    q_ir : float
+        FIR-radio correlation parameter (bell2003 mode only) [dimensionless].
+        Default 2.64.
+    alpha_sf : float
+        Synchrotron spectral index [dimensionless]. Default 0.8.
+    radio_loudness : float
+        AGN radio-loudness log10(L_5GHz / L_B) [dimensionless]. Default 0.0.
+    alpha1 : float
+        AGN optically thin (steep) spectral slope [dimensionless].
+        Default -0.75.
+    alpha2 : float
+        AGN optically thick (flat/inverted) spectral slope [dimensionless].
+        Default -0.1.
+    log_nu_t : float
+        log10(AGN spectral break frequency / Hz) [dimensionless].
+        Default 10.0.
+    log_nu_cut : float
+        log10(synchrotron aging cutoff frequency / Hz) [dimensionless].
+        Default 13.0.
+    sfr_mode : str
+        Star formation radio physics model. One of:
+        - ``"bell2003"`` (default): fixed q_IR, no mass/z dependence.
+        - ``"delvecchio2021"``: mass+z dependent FIRRC at 1.4 GHz.
+        - ``"mccheyne2022"``: mass+z dependent FIRRC at 150 MHz.
+    log_mstar : float
+        log10(M★ / M⊙). Used by delvecchio2021 and mccheyne2022 modes.
+        Default 10.0.
+    redshift : float
+        Galaxy redshift. Used by delvecchio2021 and mccheyne2022 modes.
+        Default 0.0.
+    q0 : float or None
+        FIRRC normalization override; None uses the mode's literature default.
+    mass_slope : float or None
+        Mass slope override; None uses the mode's literature default.
+    z_slope : float or None
+        Redshift slope override; None uses the mode's literature default.
+    apply_suppression : bool
+        Apply Bell+2003 synchrotron suppression for low-SFR galaxies
+        (delvecchio2021/mccheyne2022 modes). Default True.
+    include_freefree : bool
+        Include thermal free-free (bremsstrahlung) component. Default True.
+    T_e : float
+        Electron temperature [K] for free-free component. Default 1e4.
+    alpha_ff : float
+        Free-free spectral index (L_ν ∝ ν^{α}) [dimensionless].
+        Default -0.1.
+    l_bband : float
+        AGN intrinsic disc B-band (4400 A) monochromatic luminosity
+        [erg/s/Hz]. When > 0, used directly in radio_agn_dpl instead of
+        deriving from L_agn_bol bolometric correction. Default 0.0 (uses
+        L_bol correction).
+
+    Returns
+    -------
+    dict[str, ndarray]
+        Dictionary with three keys:
+        - ``"sf"`` : array, shape (n_wave,) — star-forming synchrotron [erg/s/Hz]
+        - ``"ff"`` : array, shape (n_wave,) — thermal free-free [erg/s/Hz]
+        - ``"agn"`` : array, shape (n_wave,) — AGN double power-law [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function. **Grad/vmap compatible**: yes.
+
+    Each term is rank-1 in wavelength: a scalar amplitude times a fixed
+    spectral shape (parameterized by fixed shape parameters). This enables
+    build-time computation of ∫ term(λ) × R_filter(λ) dλ for each filter R
+    and term, collapsing runtime cost to one scalar per filter per component.
+
+    When ``include_freefree=False``, the ``"ff"`` key contains an all-zero array
+    (shape-matched to wavelength) to maintain array structure for summing.
+    """
     sf = _dispatch_sfr(
         wavelength,
         L_ir,
@@ -736,9 +998,22 @@ def radio_total(
         z_slope,
         apply_suppression,
     )
-    agn = radio_agn(wavelength, L_agn_bol, radio_loudness, alpha_agn, l_bband=l_bband)
-    ff = radio_freefree(wavelength, L_ir, T_e, alpha_ff) if include_freefree else 0.0
-    return sf + ff + agn
+    agn = radio_agn_dpl(
+        wavelength,
+        L_agn_bol,
+        radio_loudness,
+        alpha1,
+        alpha2,
+        log_nu_t,
+        log_nu_cut,
+        l_bband=l_bband,
+    )
+    ff = (
+        radio_freefree(wavelength, L_ir, T_e, alpha_ff)
+        if include_freefree
+        else jnp.zeros_like(wavelength)
+    )
+    return {"sf": sf, "ff": ff, "agn": agn}
 
 
 def radio_total_dpl(
@@ -826,31 +1101,30 @@ def radio_total_dpl(
     -----
     **JIT-compatible**: yes — pure JAX function.
     """
-    sf = _dispatch_sfr(
+    t = radio_total_dpl_terms(
         wavelength,
         L_ir,
-        sfr_mode,
+        L_agn_bol,
         q_ir,
         alpha_sf,
+        radio_loudness,
+        alpha1,
+        alpha2,
+        log_nu_t,
+        log_nu_cut,
+        sfr_mode,
         log_mstar,
         redshift,
         q0,
         mass_slope,
         z_slope,
         apply_suppression,
+        include_freefree,
+        T_e,
+        alpha_ff,
+        l_bband,
     )
-    agn = radio_agn_dpl(
-        wavelength,
-        L_agn_bol,
-        radio_loudness,
-        alpha1,
-        alpha2,
-        log_nu_t,
-        log_nu_cut,
-        l_bband=l_bband,
-    )
-    ff = radio_freefree(wavelength, L_ir, T_e, alpha_ff) if include_freefree else 0.0
-    return sf + ff + agn
+    return t["sf"] + t["ff"] + t["agn"]
 
 
 def compute_radio_components(
