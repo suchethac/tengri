@@ -129,6 +129,16 @@ class DerivedState:
     stellar_phot_lnu_per_age_precomp: jnp.ndarray | None = None
     stellar_phot_moment_per_age_precomp: jnp.ndarray | None = None
 
+    # Sub-band quadrature for the multiplicative dust screen (#1122), shape
+    # ``(n_age, n_filter, n_subbands)``. ``..._subband_precomp`` is the filter
+    # integral restricted to each sub-band (sums over k to the per-age LUT);
+    # ``..._waves_rest_precomp`` is that sub-band's quadrature node — the
+    # template's own flux-weighted centroid, rest frame [Angstrom]. Both are
+    # build-time constants, so the dust screen is EVALUATED at K points per band
+    # rather than Taylor-extrapolated from one (which diverges in the rest-UV).
+    stellar_phot_lnu_per_age_subband_precomp: jnp.ndarray | None = None
+    stellar_subband_waves_rest_precomp: jnp.ndarray | None = None
+
     # Dust attenuation / emission
     L_ir: jnp.ndarray | None = None
     L_absorbed: jnp.ndarray | None = None
@@ -154,6 +164,14 @@ class DerivedState:
     dust_bc_attenuation_slope_precomp: jnp.ndarray | None = None
     dust_diff_attenuation_precomp: jnp.ndarray | None = None
     dust_diff_attenuation_slope_precomp: jnp.ndarray | None = None
+    # The same two transmissions, evaluated at the sub-band quadrature nodes
+    # (#1122), shape ``(n_age, n_filter, n_subbands)``. The law is evaluated live
+    # on the node grid rather than tabulated, so its shape parameters (``n_slope``,
+    # bump) stay FREE — no gate, unlike a tau-axis LUT.
+    dust_bc_attenuation_subband_precomp: jnp.ndarray | None = None
+    dust_diff_attenuation_subband_precomp: jnp.ndarray | None = None
+    #: Single-screen counterpart, shape ``(n_age, n_filter, n_subbands)``.
+    dust_attenuation_subband_precomp: jnp.ndarray | None = None
     # Log-attenuation slopes d(ln A)/dλ = −τ·k'(λ_eff), per filter. Published so
     # the two-component first-order Taylor projection (#617) can be written
     # T_a' = T_a·(logslope_diff + y·logslope_bc) — NaN-safe where A → 0 (avoids

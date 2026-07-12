@@ -213,13 +213,40 @@ class WavePrecomp:
     z_min: float | None = None
     z_max: float | None = None
     catalog_z_range: tuple[float, float] | None = None
-    taylor_correction: bool = True
+
+    n_subbands: int = 5
+    """Sub-bands per filter for the multiplicative dust quadrature (#1122).
+
+    The dust screen is *evaluated* at ``n_subbands`` quadrature nodes per band
+    rather than extrapolated from a single effective wavelength. Each node is the
+    template's own flux-weighted centroid in its sub-band, and both the nodes and
+    the sub-band SSP × filter integrals are build-time constants, so the exact
+    factorization of the fast path is preserved.
+
+    Converges as 1/K². Worst case over z ≤ 1, τ ≤ 2 (GALEX FUV): K=1 → 8.7 %,
+    K=3 → 1.4 %, **K=5 → 0.6 %** (default), K=8 → 0.3 %. Runtime is *cheaper* than
+    the Taylor form it replaces (0.93× its gradient at K=5), because that form
+    carries a second tensor and a ``pow`` with a traced exponent.
+
+    ``0`` disables the quadrature and falls back to the effective-wavelength form
+    (plus ``taylor_correction`` if set) — kept for comparison, not recommended:
+    that path reads the GALEX FUV band +45 % high at z=0.05, rising to +215 % at z=1.
+
+    Only the *multiplicative* stellar + nebular screen needs this. Additive emitters
+    (dust IR, radio, X-ray, AGN) factorize exactly through the rank-1/rank-K band
+    response of #1107/#1117 and are unaffected."""
+
+    taylor_correction: bool = False
     """First-order spectral-moment (Ψ) correction to the effective-wavelength dust
-    attenuation (Zacharegkas+2025). ``True`` (default) applies ``A(λ_eff)·Φ +
-    A'(λ_eff)·Ψ`` for both single- and two-component dust, cutting the attenuation
-    residual to ~0.3%. Set ``False`` for the bare ``A(λ_eff)·Φ`` (flat) form —
-    ~0.8–1.5% on the birth-cloud layer, but well below typical SSP/dust template
-    systematics, and slightly cheaper (the Ψ tensor is not built)."""
+    attenuation (Zacharegkas+2025, #617). **Superseded by** ``n_subbands`` and off by
+    default since #1122.
+
+    It applies ``A(λ_eff)·Φ + A'(λ_eff)·Ψ`` — i.e. it *extrapolates* the attenuation
+    linearly away from one point per band. That is fine in the optical/IR and diverges
+    in the rest-UV where the curve steepens: the residual is not the ~0.3 % once
+    claimed here but **+45 % (z=0.05) to +215 % (z=1)** in GALEX FUV.
+
+    Only consulted when ``n_subbands=0``. Set both to reproduce the pre-#1122 path."""
 
     fast_dust_emission: bool = False
     """Approximate the dust IR re-emission *band projection* when its exact, fast
@@ -516,6 +543,7 @@ class SEDModel:
         "spectrum_precomp": False,
         "igm": True,
         "taylor_correction": True,
+        "n_subbands": 0,
         "fast_dust_emission": False,
     }
 
@@ -697,6 +725,10 @@ class SEDModel:
             self._approx["fast_dust_emission"] = getattr(
                 self._approx_config, "fast_dust_emission", False
             )
+            # Sub-band quadrature order for the dust screen (#1122). Must be
+            # threaded here or the stellar precompute silently falls back to its
+            # own default and the knob is inert.
+            self._approx["n_subbands"] = int(getattr(self._approx_config, "n_subbands", 0))
 
         # Part A (joint precompute): on a joint photometry+spectroscopy
         # observation, any precompute opt-in builds BOTH LUT families. The
@@ -2935,6 +2967,13 @@ class SEDModel:
                 ("n_z", int(cfg.n_z)),
                 ("z_min", None if cfg.z_min is None else round(float(cfg.z_min), 12)),
                 ("z_max", None if cfg.z_max is None else round(float(cfg.z_max), 12)),
+                # The sub-band quadrature order changes the compiled kernel and the
+                # numbers it produces (#1122). It is an int, so — unlike
+                # ``taylor_correction`` — it is NOT picked up by
+                # ``approx_resolved_flags`` above, which filters on ``isinstance(v, bool)``.
+                # Without this entry, WavePrecomp(n_subbands=3) and (n_subbands=8)
+                # collide and the second silently reuses the first's compiled LUT.
+                ("n_subbands", int(getattr(cfg, "n_subbands", 0))),
             )
 
         if self._approx_config is not None or self._approx_config_spec is not None:

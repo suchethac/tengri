@@ -37,7 +37,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
-from tengri.utils.grid_interp import preintegrate_grid
+from tengri.utils.grid_interp import preintegrate_grid, subband_quadrature
 
 # SSP precompute grid axes: (lgmet, lg_age_gyr). The age axis is never user-fixed
 # (ages are determined by the SFH). Only metallicity may be Fixed.
@@ -118,6 +118,12 @@ class PhotometricPrecomputation(NamedTuple):
         Source redshift [dimensionless].
     n_filters : int
         Number of filters [dimensionless].
+    ssp_subband_phot : array or None, shape (n_met, n_age, n_filters, n_subbands)
+        Filter integral restricted to each sub-band. Sums over the last axis
+        to ``ssp_phot``. None unless ``n_subbands > 0``. [erg/s/Hz]
+    ssp_subband_waves_rest : array or None, shape (n_met, n_age, n_filters, n_subbands)
+        Rest-frame quadrature node of each sub-band — the template's own
+        flux-weighted centroid there. None unless ``n_subbands > 0``. [Angstrom]
 
     Notes
     -----
@@ -134,6 +140,8 @@ class PhotometricPrecomputation(NamedTuple):
     flux_scale: float
     redshift: float
     n_filters: int
+    ssp_subband_phot: "jnp.ndarray | None" = None
+    ssp_subband_waves_rest: "jnp.ndarray | None" = None
 
 
 class SpectroscopicPrecomputation(NamedTuple):
@@ -175,6 +183,7 @@ def precompute_photometry(
     redshift,
     dl_cm,
     taylor_correction: bool = True,
+    n_subbands: int = 0,
     fixed: dict[int, float] | None = None,
 ) -> PhotometricPrecomputation:
     """Pre-compute SSP broadband fluxes for all filters.
@@ -208,6 +217,16 @@ def precompute_photometry(
         dust correction (default True).  Adds one tensor of the same shape
         as Φ; inference cost is negligible (one extra dust derivative per
         filter, computed via finite differences).
+
+        Superseded by ``n_subbands``: the Taylor form *extrapolates* the
+        attenuation linearly away from λ_eff, which diverges where the
+        curve steepens (GALEX FUV +45 % at z=0.05, +215 % at z=1). See #1122.
+    n_subbands : int
+        Number of sub-bands K for the multiplicative dust quadrature
+        (default 0 = off). Builds Φ_k and the per-template quadrature nodes,
+        so the screen is *evaluated* at K points per band rather than
+        extrapolated from one. Converges as 1/K²; K=3 is the working point
+        and is cheaper at runtime than the Taylor moment it replaces.
     fixed : dict[int, float], optional
         Mapping of axis index → fixed value. Axes are numbered from 0:
         - 0: lgmet (metallicity in log10(Z/Zsun))
@@ -243,6 +262,7 @@ def precompute_photometry(
             np.asarray(ssp_data.ssp_lg_age_gyr),
         ),
         taylor=taylor_correction,
+        n_subbands=n_subbands,
     )
 
     # Collapse fixed axes if provided
@@ -257,6 +277,8 @@ def precompute_photometry(
         flux_scale=preint.flux_scale,
         redshift=float(redshift),
         n_filters=preint.n_filters,
+        ssp_subband_phot=preint.subband_phot,
+        ssp_subband_waves_rest=preint.subband_waves_rest,
     )
 
 
@@ -454,6 +476,10 @@ class PhotometricZTable(NamedTuple):
     # :func:`precompute_photometry_ztable`. Used by the free-z dust LUT
     # path to apply ``A·Φ + A'·Ψ`` at the source's redshift.
     ssp_phot_moment_table: jnp.ndarray | None = None
+    #: (n_z, n_met, n_age, n_filters, n_subbands) sub-band filter integrals (#1122).
+    ssp_subband_phot_table: jnp.ndarray | None = None
+    #: (n_z, n_met, n_age, n_filters, n_subbands) rest-frame quadrature nodes [A].
+    subband_waves_rest_table: jnp.ndarray | None = None
 
 
 # Bump when the quadrature or table layout changes — invalidates every
@@ -478,7 +504,14 @@ def _ztable_cache_dir():
 
 
 def _ztable_cache_key(
-    ssp_data, filter_waves, filter_trans, z_grid, apply_igm, taylor_correction, convention
+    ssp_data,
+    filter_waves,
+    filter_trans,
+    z_grid,
+    apply_igm,
+    taylor_correction,
+    convention,
+    n_subbands=0,
 ) -> str:
     """Content hash over everything the table depends on."""
     import hashlib
@@ -494,7 +527,12 @@ def _ztable_cache_key(
             a = np.ascontiguousarray(np.asarray(arr, dtype=np.float64))
             h.update(a)
     h.update(np.ascontiguousarray(np.asarray(z_grid, dtype=np.float64)))
-    h.update(repr((bool(apply_igm), bool(taylor_correction), str(convention))).encode())
+    # n_subbands changes the table's CONTENT, so it must change the hash. Without
+    # it a cached K=0 table is reused for a K=5 model and the quadrature silently
+    # no-ops -- persistently, across processes (#1122).
+    h.update(
+        repr((bool(apply_igm), bool(taylor_correction), str(convention), int(n_subbands))).encode()
+    )
     return h.hexdigest()
 
 
@@ -508,6 +546,7 @@ def precompute_photometry_ztable(
     n_z=100,
     apply_igm=False,
     taylor_correction: bool = False,
+    n_subbands: int = 0,
     convention: FilterConvention = FilterConvention.BESSELL,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid, disk-cached.
@@ -534,7 +573,14 @@ def precompute_photometry_ztable(
     cache_path = None
     if cache_dir is not None:
         key = _ztable_cache_key(
-            ssp_data, filter_waves, filter_trans, z_grid, apply_igm, taylor_correction, convention
+            ssp_data,
+            filter_waves,
+            filter_trans,
+            z_grid,
+            apply_igm,
+            taylor_correction,
+            convention,
+            n_subbands,
         )
         cache_path = cache_dir / f"ztable_{key}.npz"
         if cache_path.is_file():
@@ -551,6 +597,16 @@ def precompute_photometry_ztable(
                         if "ssp_phot_moment_table" in d.files
                         else None
                     ),
+                    ssp_subband_phot_table=(
+                        jnp.array(d["ssp_subband_phot_table"])
+                        if "ssp_subband_phot_table" in d.files
+                        else None
+                    ),
+                    subband_waves_rest_table=(
+                        jnp.array(d["subband_waves_rest_table"])
+                        if "subband_waves_rest_table" in d.files
+                        else None
+                    ),
                 )
 
     table = _compute_photometry_ztable(
@@ -560,6 +616,7 @@ def precompute_photometry_ztable(
         z_grid=z_grid,
         apply_igm=apply_igm,
         taylor_correction=taylor_correction,
+        n_subbands=n_subbands,
         convention=convention,
     )
 
@@ -578,6 +635,9 @@ def precompute_photometry_ztable(
         }
         if table.ssp_phot_moment_table is not None:
             payload["ssp_phot_moment_table"] = np.asarray(table.ssp_phot_moment_table)
+        if table.ssp_subband_phot_table is not None:
+            payload["ssp_subband_phot_table"] = np.asarray(table.ssp_subband_phot_table)
+            payload["subband_waves_rest_table"] = np.asarray(table.subband_waves_rest_table)
         # Atomic publish: concurrent builds of the same key race benignly.
         fd, tmp = tempfile.mkstemp(dir=cache_dir, suffix=".npz.tmp")
         try:
@@ -603,6 +663,7 @@ def _compute_photometry_ztable(
     n_z=100,
     apply_igm=False,
     taylor_correction: bool = False,
+    n_subbands: int = 0,
     convention: FilterConvention = FilterConvention.BESSELL,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid.
@@ -666,6 +727,15 @@ def _compute_photometry_ztable(
     # Taylor moment Ψ on the z grid (only if requested).
     ssp_phot_moment_all = (
         np.zeros((n_z_pts, n_met, n_age, n_filters)) if taylor_correction else None
+    )
+    # n_z_pts, NOT n_z: the caller may pass an explicit ``z_grid``, in which case
+    # ``n_z`` is a stale default and the tables come out the wrong length.
+    K = int(n_subbands)
+    ssp_subband_all = (
+        np.zeros((n_z_pts, n_met, n_age, n_filters, K), dtype=np.float64) if K > 0 else None
+    )
+    subband_waves_all = (
+        np.zeros((n_z_pts, n_met, n_age, n_filters, K), dtype=np.float64) if K > 0 else None
     )
 
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
@@ -744,6 +814,16 @@ def _compute_photometry_ztable(
                 moment_num = _np_trapezoid(moment_integrand, grid, axis=-1)
                 ssp_phot_moment_all[zi, :, :, f_idx] = moment_num / max(denom, 1e-30)
 
+            # Sub-band quadrature (#1122) — same helper the fixed-z precompute
+            # uses, so the two paths cannot drift. Nodes come back observed-frame;
+            # store them rest-frame, which is where the dust law is evaluated.
+            if K > 0:
+                phi_k, nodes_obs = subband_quadrature(
+                    grid, tw_np, integrand, denom, K, float(eff_waves_obs[f_idx])
+                )
+                ssp_subband_all[zi, :, :, f_idx, :] = phi_k
+                subband_waves_all[zi, :, :, f_idx, :] = nodes_obs / (1.0 + z_val)
+
         # Geometric flux scale
         dl_cm = float(luminosity_distance(z_val))
         flux_scale_all[zi] = (1.0 + z_val) / (4.0 * np.pi * dl_cm**2)
@@ -757,6 +837,12 @@ def _compute_photometry_ztable(
         igm_trans_table=jnp.array(igm_trans_all),
         ssp_phot_moment_table=(
             jnp.array(ssp_phot_moment_all) if ssp_phot_moment_all is not None else None
+        ),
+        ssp_subband_phot_table=(
+            jnp.array(ssp_subband_all) if ssp_subband_all is not None else None
+        ),
+        subband_waves_rest_table=(
+            jnp.array(subband_waves_all) if subband_waves_all is not None else None
         ),
     )
 

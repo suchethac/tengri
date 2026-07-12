@@ -41,6 +41,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import (
@@ -62,6 +63,49 @@ __all__ = [
     "DustSEDComponentConfig",
     "DustSEDComponentState",
 ]
+
+
+def _young_indicator(
+    ssp_ages_yr: jnp.ndarray, t_birth_yr: float, transition_width_dex: float
+) -> jnp.ndarray:
+    r"""Fraction of stars of each age still inside their birth cloud.
+
+    .. math::
+
+        y(t) = \sigma\!\left(-\frac{\log_{10} t - \log_{10} t_{\rm birth}}
+                                  {\Delta_{\rm trans}}\right)
+
+    with :math:`\sigma` the logistic sigmoid. 1 for the youngest bins, 0 for the
+    oldest.
+
+    This is the single definition. It is the same function
+    :func:`~tengri.components.dust._apply.two_component_dust` uses for the screen
+    itself, so the stars that sit behind the birth cloud, the stars whose Lyman
+    continuum is reprocessed, and the stars the photometry LUT reddens are all the
+    same stars. Two other spellings — ``1 / (1 + 10**u)`` — existed here and in the
+    LUT's ``dust_young_indicator``; because :math:`10^u = e^{u\ln 10}`, they were
+    2.3x sharper than the screen they claimed to match (#1122).
+
+    Parameters
+    ----------
+    ssp_ages_yr : ndarray, shape (n_age,)
+        SSP lookback ages [yr].
+    t_birth_yr : float
+        Birth-cloud dispersal age — the sigmoid center [yr].
+    transition_width_dex : float
+        Sigmoid width [dex].
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Young-star indicator in [0, 1] [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
+    log_t = jnp.log10(jnp.maximum(jnp.asarray(ssp_ages_yr), 1.0))
+    return jax.nn.sigmoid(-(log_t - jnp.log10(t_birth_yr)) / transition_width_dex)
 
 
 @dataclass(frozen=True)
@@ -488,10 +532,15 @@ class DustSEDComponent:
             if self.config.lyc_absorb_all:
                 sed_attenuated = sed_attenuated * _lyc_t
             else:
-                log_t = jnp.log10(ssp_ages_yr)
-                log_t_birth = jnp.log10(self.config.t_birth_yr)
-                y_age = 1.0 / (
-                    1.0 + 10.0 ** ((log_t - log_t_birth) / self.config.transition_width_dex)
+                # "Which stars are inside their birth cloud" is ONE physical
+                # quantity, so it must be ONE function. It was previously spelled
+                # three different ways: the logistic in ``two_component_dust``, and
+                # base-10 sigmoids here and in the LUT's ``dust_young_indicator``.
+                # 10^u = e^(u·ln10), so those two were 2.3× sharper than the screen
+                # they were supposed to agree with — the LyC escape fraction was
+                # applied to a different set of stars than the birth-cloud dust.
+                y_age = _young_indicator(
+                    ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
                 )
                 lyc_factor = 1.0 - y_age[:, None] * (1.0 - _lyc_t[None, :])  # (n_age, n_wave)
                 sed_attenuated = jnp.sum(lnu_age_attenuated * lyc_factor, axis=0)
@@ -684,6 +733,23 @@ class DustSEDComponent:
             derived_overrides["dust_bc_log_attenuation_slope_precomp"] = -tau_bc * k_bc_slope
             derived_overrides["dust_diff_log_attenuation_slope_precomp"] = -tau_diff * k_diff_slope
 
+            # Sub-band quadrature (#1122). The attenuation is EVALUATED at each
+            # sub-band's quadrature node instead of being Taylor-extrapolated away
+            # from λ_eff — the extrapolation is what diverges in the rest-UV, where
+            # the curve steepens (GALEX FUV +45 % at z=0.05, +215 % at z=1).
+            #
+            # The law is evaluated live on the (n_age, n_filter, K) node grid, not
+            # baked into a table, so ``n_slope`` (and any other shape parameter)
+            # stays FREE. Measured cheaper than pre-baking it: the baked form has
+            # to stream two extra tensors, while this one is compute-bound and XLA
+            # fuses it into the contraction.
+            sub_waves = state.derived.get("stellar_subband_waves_rest_precomp")
+            if sub_waves is not None:
+                a_bc_sub = jnp.exp(-tau_bc * law_bc_fn(sub_waves, n_slope=n_slope_bc))
+                a_diff_sub = jnp.exp(-tau_diff * law_diff_fn(sub_waves, n_slope=n_slope_diff))
+                derived_overrides["dust_bc_attenuation_subband_precomp"] = a_bc_sub
+                derived_overrides["dust_diff_attenuation_subband_precomp"] = a_diff_sub
+
             # IR re-emission is now handled by separate dust emission components.
             # This component no longer computes or publishes photometric
             # dust emission — the emission components handle that via their own
@@ -691,13 +757,14 @@ class DustSEDComponent:
 
             # Young-star indicator on the SSP age grid: smooth sigmoid
             # transition around t_birth (matches two_component_dust).
-            t_birth = self.config.t_birth_yr
-            transition = self.config.transition_width_dex
-            log_t = jnp.log10(jnp.maximum(ssp_ages_yr, 1.0))
-            log_t_birth = jnp.log10(t_birth)
-            # y(a) = 1 / (1 + 10^((log_t - log_t_birth) / transition))
-            # → 1 for log_t << log_t_birth (young), 0 for log_t >> log_t_birth (old).
-            y_age = 1.0 / (1.0 + 10.0 ** ((log_t - log_t_birth) / transition))
+            # The LUT must redden exactly the stars the exact screen reddens. This
+            # line used to spell the indicator as ``1 / (1 + 10**u)`` while the
+            # exact path used the logistic — 2.3x sharper, so the fast path put a
+            # different set of stars behind the birth cloud (#1122). One function,
+            # one definition.
+            y_age = _young_indicator(
+                ssp_ages_yr, self.config.t_birth_yr, self.config.transition_width_dex
+            )
             derived_overrides["dust_young_indicator"] = y_age
 
         # SpectrumPrecomp: per-pixel BC + diffuse transmission.
