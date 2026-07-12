@@ -128,7 +128,7 @@ def test_gradient_is_finite_through_the_quadrature(ssp):
         assert bool(jnp.all(jnp.isfinite(v)))
 
 
-# ── 3. n_subbands must colour the compiled-kernel cache ────────────────────────
+# ── 3. n_subbands must color the compiled-kernel cache ────────────────────────
 
 
 def test_n_subbands_changes_the_compiled_kernel(ssp):

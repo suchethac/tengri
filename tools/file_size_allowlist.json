@@ -49,5 +49,7 @@
   "src/tengri/observation/spectroscopy.py": 852,
   "src/tengri/inference/backends/mcmc/_shared.py": 860,
   "src/tengri/components/dust/emission_templates.py": 2612,
-  "src/tengri/components/sed_model_component.py": 856
+  "src/tengri/components/sed_model_component.py": 856,
+  "src/tengri/components/dust/two_component.py": 812,
+  "src/tengri/utils/grid_interp.py": 1019
 }
