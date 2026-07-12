@@ -517,6 +517,13 @@ class RadioSEDComponent:
                 )
             else:
                 derived_overrides["radio_phot_lnu_precomp"] = _emit(filter_eff)
+            # The REST band (#1148): ``phot_rest_fnu`` projects at z=0, so its
+            # filter samples the pivot itself, not pivot/(1+z). Same emission,
+            # different wavelengths — reusing the observed-band value here is
+            # what made the LUT report a different quantity from the exact path.
+            _rb_eff = state.derived.get("filter_restband_eff_waves")
+            if _rb_eff is not None:
+                derived_overrides["radio_restband_lnu_precomp"] = _emit(_rb_eff)
         spec_eff = state.derived.get("spec_eff_waves")
         if spec_eff is not None:
             derived_overrides["radio_spec_lnu_precomp"] = _emit(spec_eff)

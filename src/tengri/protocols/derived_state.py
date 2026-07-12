@@ -164,6 +164,49 @@ class DerivedState:
     #: projected at z=0 and carries no IGM by contract.
     stellar_phot_lnu_per_age_subband_igm_precomp: jnp.ndarray | None = None
 
+    # ── The REST-frame band (#1148) ────────────────────────────────────────────
+    # ``phot_rest_fnu`` (and ``Observables.mag_absolute``) is the SED reprojected at
+    # z=0, d_L=10 pc — *the galaxy as it is*. The filter therefore sits in the REST
+    # frame and samples the rest SED at its OWN pivot wavelength. That is a
+    # different integral from the ``*_phot_lnu_precomp`` family above, which places
+    # the filter in the observed frame and so samples rest λ_eff/(1+z).
+    #
+    # The LUT used to reuse the observed-band tensors for the rest-frame flux. It
+    # therefore reported a *different physical quantity* from the exact path — 769 %
+    # apart in des_g at z=0.5, orders of magnitude in the blue — so an object's
+    # ABSOLUTE magnitude depended on its redshift, and on which `approx` you passed.
+    #
+    # Every emitter publishes ``<name>_restband_lnu_precomp``; the projector
+    # auto-discovers them exactly as it does the observed family, so a new component
+    # gets rest-frame photometry for free and cannot silently omit it.
+    #
+    # None of these carry a redshift axis: the rest band does not move with z, so
+    # they are build-time constants and cost nothing at runtime.
+    stellar_restband_lnu_precomp: jnp.ndarray | None = None
+    nebular_restband_lnu_precomp: jnp.ndarray | None = None
+    agn_restband_lnu_precomp: jnp.ndarray | None = None
+    radio_restband_lnu_precomp: jnp.ndarray | None = None
+    xray_restband_lnu_precomp: jnp.ndarray | None = None
+    #: Per-age sub-band quadrature over the rest band, shape (n_age, n_filter, K),
+    #: and its nodes [Angstrom] — the #1122 machinery applied to the rest-frame
+    #: projection, so the dust screen is EVALUATED across the band rather than
+    #: extrapolated from its pivot.
+    stellar_restband_lnu_per_age_subband_precomp: jnp.ndarray | None = None
+    stellar_restband_subband_waves_precomp: jnp.ndarray | None = None
+    #: The wavelength the rest band samples — the filter's own pivot, since the
+    #: projection is at z=0 [Angstrom]. Contrast ``filter_eff_waves`` = pivot/(1+z),
+    #: the rest wavelength the OBSERVED band samples.
+    filter_restband_eff_waves: jnp.ndarray | None = None
+    #: The dust screen evaluated on the rest band — at its pivot, and at its
+    #: quadrature nodes. Separate from the observed-band screens because the two
+    #: bands sample different rest wavelengths.
+    dust_restband_attenuation_precomp: jnp.ndarray | None = None
+    dust_bc_restband_attenuation_precomp: jnp.ndarray | None = None
+    dust_diff_restband_attenuation_precomp: jnp.ndarray | None = None
+    dust_restband_attenuation_subband_precomp: jnp.ndarray | None = None
+    dust_bc_restband_attenuation_subband_precomp: jnp.ndarray | None = None
+    dust_diff_restband_attenuation_subband_precomp: jnp.ndarray | None = None
+
     # Dust attenuation / emission
     L_ir: jnp.ndarray | None = None
     L_absorbed: jnp.ndarray | None = None

@@ -313,6 +313,21 @@ class DustAttenuationSEDComponent:
                     k_sub = resolve_dust_law(self.config.law)(sub_waves)
                 derived_overrides["dust_attenuation_subband_precomp"] = jnp.exp(-tau_v * k_sub)
 
+            # The same screen on the REST band (#1148). ``phot_rest_fnu`` projects at
+            # z=0, so its filter samples rest λ_pivot, not rest λ_pivot/(1+z) — a
+            # different set of wavelengths, and the galaxy's own dust belongs THERE.
+            _law = calzetti if self.config.law == "calzetti" else resolve_dust_law(self.config.law)
+            rb_eff = state.derived.get("filter_restband_eff_waves")
+            if rb_eff is not None:
+                derived_overrides["dust_restband_attenuation_precomp"] = jnp.exp(
+                    -tau_v * _law(rb_eff)
+                )
+            rb_sub_waves = state.derived.get("stellar_restband_subband_waves_precomp")
+            if rb_sub_waves is not None:
+                derived_overrides["dust_restband_attenuation_subband_precomp"] = jnp.exp(
+                    -tau_v * _law(rb_sub_waves)
+                )
+
         # SpectrumPrecomp: per-pixel transmission. A spectrum pixel
         # is a single wavelength, so T(λ_pix) = exp(-τ·k(λ_pix)) is exact —
         # no Taylor slope needed (contrast the filter branch above).

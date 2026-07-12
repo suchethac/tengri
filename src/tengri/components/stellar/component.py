@@ -611,6 +611,11 @@ class StellarSEDComponentState(SEDComponentState):
     name: str = "stellar"
     ssp_phot_lut: Any | None = None
     ssp_phot_ztable: Any | None = None
+    # The SSP grid preintegrated through each filter placed in the REST frame
+    # (a :class:`RestBandPrecomputation`), i.e. at z=0 — what ``phot_rest_fnu``
+    # actually needs (#1148). Redshift-independent, so ONE constant serves the
+    # fixed-z LUT and the free-z z-table alike.
+    restband_lut: Any | None = None
     # SpectrumPrecomp: SSP flux pre-rebinned to spectrum pixel
     # centers in the galaxy rest frame. ``ssp_spec_lut`` is a
     # :class:`SpectroscopicPrecomputation` (fixed-z); ``ssp_spec_ztable``
@@ -910,6 +915,30 @@ class StellarSEDComponent:
                     n_subbands=int(approx.get("n_subbands", 0)),
                 )
                 state = _replace_state(state, ssp_phot_ztable=ztable)
+
+            # The REST-frame band (#1148), built ONCE for both dispatches above.
+            # ``phot_rest_fnu`` is the SED reprojected at z=0, d_L=10 pc, so the
+            # filter sits in the REST frame and samples the rest SED at its own
+            # pivot — a different integral from ``ssp_phot``, which places the
+            # filter in the observed frame and samples rest λ_eff/(1+z). Reusing
+            # the observed-band tensor for the rest-frame flux is #1148: it put the
+            # LUT 769 % from the exact path in des_g at z=0.5.
+            #
+            # Redshift does not enter, so this is one constant for fixed-z AND
+            # free-z — no z-table, no interpolation, no runtime cost.
+            from tengri.components.stellar.sps.precompute import (
+                precompute_restband_photometry,
+            )
+
+            state = _replace_state(
+                state,
+                restband_lut=precompute_restband_photometry(
+                    ssp_data=self.ssp_data,
+                    filter_waves=filter_list,
+                    filter_trans=filter_trans_list,
+                    n_subbands=int(approx.get("n_subbands", 0)),
+                ),
+            )
 
         return state
 
@@ -2002,6 +2031,44 @@ class StellarSEDComponent:
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
+
+        # ── 12b-rest. The REST-frame band (#1148) ───────────────────────────
+        # ``phot_rest_fnu`` is the SED reprojected at z=0, d_L=10 pc — the galaxy
+        # as it is — so the filter sits in the REST frame and samples the rest SED
+        # at its own pivot. That is a different integral from the observed-band
+        # tensors above, which sample rest λ_eff/(1+z). The LUT used to reuse those
+        # for the rest-frame flux, which put it 769 % from the exact path in des_g
+        # at z=0.5 and orders of magnitude out in the blue.
+        #
+        # Published for the fixed-z and free-z paths alike, from ONE constant: the
+        # rest band does not move with redshift, so there is nothing to interpolate.
+        if self._state is not None and self._state.restband_lut is not None:
+            rb = self._state.restband_lut
+            derived_overrides["stellar_restband_lnu_precomp"] = (
+                total_mass
+                * jnp.einsum("ma,maf->f", joint_weights, rb.ssp_restband_phot)
+                * LSUN_ERG_PER_S
+            )
+            derived_overrides["filter_restband_eff_waves"] = jnp.asarray(rb.restband_eff_waves)
+            if rb.ssp_restband_subband_phot is not None:
+                rb_phi = jnp.einsum("ma,mafk->afk", joint_weights, rb.ssp_restband_subband_phot)
+                rb_num = jnp.einsum(
+                    "ma,mafk->afk",
+                    joint_weights,
+                    rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot,
+                )
+                derived_overrides["stellar_restband_lnu_per_age_subband_precomp"] = (
+                    total_mass * rb_phi * LSUN_ERG_PER_S
+                )
+                # The node is a RATIO, so mass and L_sun cancel — take it from the
+                # unscaled sums. Zero-weight sub-bands keep a finite, positive node:
+                # a zero would go to inf through the 1/λ dust law.
+                rb_live = rb_phi != 0.0
+                derived_overrides["stellar_restband_subband_waves_precomp"] = jnp.where(
+                    rb_live,
+                    rb_num / jnp.where(rb_live, rb_phi, 1.0),
+                    jnp.asarray(rb.restband_eff_waves)[:, None],
+                )
 
         # ── 12c. Stellar spectrum LUT (SpectrumPrecomp) ─────────────────
         # Pre-rebinned SSP × pixel LUT: the continuum at the spectrum pixel
