@@ -287,6 +287,13 @@ class DerivedState:
     # curve here instead keeps the whole model grid live and defeats the
     # dead-code elimination that IS the WavePrecomp speedup (#932).
     igm_phot_factor: jnp.ndarray | None = None
+    #: IGM transmission evaluated AT the sub-band quadrature nodes, shape
+    #: ``(n_age, n_filter, n_subbands)`` (#1122). ``igm_phot_factor`` band-averages
+    #: T *alone*, unweighted by the spectrum, so it computes <S>*<T> where the flux
+    #: needs <S*T>. Across GALEX FUV at z~0.8 the transmission swings from ~1 to ~0
+    #: within the bandpass and that covariance term reaches -9.5%. Evaluating T at
+    #: the nodes captures it, in the same quadrature as the dust screen.
+    igm_subband_factor: jnp.ndarray | None = None
     # Per-pixel IGM transmission, shape (n_pix,), dimensionless — the
     # SpectrumPrecomp twin of ``igm_phot_factor``. A pixel's rest effective
     # wavelength is wave_obs/(1+z) and the curve is T(wave_rest*(1+z), z), so

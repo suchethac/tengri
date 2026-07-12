@@ -238,3 +238,39 @@ def test_ztable_disk_cache_key_includes_n_subbands(ssp):
     )
     assert _ztable_cache_key(*args, 0) != _ztable_cache_key(*args, 5)
     assert _ztable_cache_key(*args, 3) != _ztable_cache_key(*args, 5)
+
+
+# ── 6. IGM belongs INSIDE the quadrature, not as a band factor ────────────────
+
+
+@pytest.mark.parametrize("z", [0.8, 1.0, 1.5])
+def test_igm_is_evaluated_at_the_quadrature_nodes(ssp, z):
+    """``igm_phot_factor`` band-averages T *alone*, unweighted by the spectrum.
+
+    That forms <S>*<T> where the flux needs <S*T>. Across GALEX FUV at z~0.8 the
+    IGM transmission runs from ~1 to ~0 inside the bandpass, and the covariance
+    term reached **-9.5%** — bigger than the dust bug this issue started from.
+    Evaluating T at the same nodes the dust screen uses captures it.
+
+    Dust is OFF here, so this isolates the IGM term exactly.
+    """
+    kw = dict(
+        ssp_data=ssp,
+        observation=Observation(photometry=Photometry.from_names(["galex_fuv", "galex_nuv"])),
+        sfh={"type": "dpl", "*": FREE},
+        dust={"type": "two_component", "*": FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        redshift=Fixed(z),
+    )
+    m_exact = SEDModel.build(**kw, approx=None)
+    m_lut = SEDModel.build(**kw, approx=WavePrecomp())
+    p = dict(m_exact.spec.sample(KEY))
+
+    st = m_lut.predict_state(p)
+    assert st.derived.get("igm_subband_factor") is not None, (
+        "IGM published no sub-band factor — it is back to band-averaging T alone"
+    )
+
+    exact = np.asarray(m_exact.predict_photometry(p))
+    lut = np.asarray(m_lut.predict_photometry(p))
+    err = float(np.max(np.abs(lut / exact - 1.0)))
+    assert err < 0.01, f"IGM-dominated bands off by {err:.2%} (was up to 10.8%)"

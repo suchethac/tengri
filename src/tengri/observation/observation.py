@@ -886,6 +886,11 @@ class Observation:
         #
         # ``A_bc(b)^y(a)`` interpolates between BC-attenuated (y=1) and
         # bare (y=0) stars. Smooth y(a) handles the transition.
+        # When IGM is folded into the sub-band sum it must NOT be applied again as
+        # a band factor at the end. Track which part of total_lnu already carries it.
+        stellar_igm_prefolded = False
+        stellar_lnu_with_igm = None
+
         per_age = state.derived.get("stellar_phot_lnu_per_age_precomp")
         sub_per_age = state.derived.get("stellar_phot_lnu_per_age_subband_precomp")
         a_bc_sub = state.derived.get("dust_bc_attenuation_subband_precomp")
@@ -894,6 +899,7 @@ class Observation:
             a_diff_lut = state.derived["dust_diff_attenuation_precomp"]
             y_age = state.derived["dust_young_indicator"]
 
+            igm_sub = state.derived.get("igm_subband_factor")
             if _have_subband:
                 # K-point sub-band quadrature (#1122) — supersedes the Taylor form.
                 # Same Charlot & Fall factorization T(a, λ) = T_diff(λ)·T_bc(λ)^y(a),
@@ -906,6 +912,13 @@ class Observation:
                 # Taylor extrapolation diverges (+45 % at z=0.05 → +215 % at z=1).
                 a_diff_sub = state.derived["dust_diff_attenuation_subband_precomp"]
                 t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
+                if igm_sub is not None:
+                    # IGM belongs INSIDE the quadrature. The band factor averages T
+                    # alone, unweighted by the spectrum -- <S>*<T> where the flux
+                    # needs <S*T>. Folding T in here captures the SED x dust x IGM
+                    # covariance in one sum (GALEX FUV at z~0.8: -9.5% -> ~0).
+                    t_sub = t_sub * igm_sub
+                    stellar_igm_prefolded = True
                 stellar_attenuated = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
             else:
                 atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]  # A_bc(λ_eff)^y(a)
@@ -946,7 +959,12 @@ class Observation:
             # is unchanged from before #1122 — no regression, but the stellar
             # continuum (which dominates the broadband) is now the accurate term.
             nebular_attenuated = a_diff_lut * a_bc_lut * nebular_phi_for_dust
-            total_lnu = stellar_attenuated + nebular_attenuated + unattenuated_phi
+            if stellar_igm_prefolded:
+                # Held out of total_lnu: the band factor below must not touch it.
+                stellar_lnu_with_igm = stellar_attenuated
+                total_lnu = nebular_attenuated + unattenuated_phi
+            else:
+                total_lnu = stellar_attenuated + nebular_attenuated + unattenuated_phi
 
         # Single-component dust via the Taylor expansion
         # f_b = A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
@@ -1046,6 +1064,10 @@ class Observation:
                 igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
         if igm_factor is not None:
             phot_fnu = phot_fnu * igm_factor
+        if stellar_lnu_with_igm is not None:
+            # Stellar already carries IGM evaluated at the quadrature nodes -- the
+            # band factor above deliberately skipped it. Add it back now.
+            phot_fnu = phot_fnu + stellar_lnu_with_igm * cosmology
 
         out = {"phot_fnu": phot_fnu, "phot_rest_fnu": phot_rest_fnu}
 
