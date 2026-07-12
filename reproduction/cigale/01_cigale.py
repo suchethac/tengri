@@ -883,8 +883,15 @@ _c_aa_dust = 2.998e18
 _KNOB_MASS = 1e11
 _SFH_CHAIN = (
     "sfhdelayed",
-    dict(tau_main=1000, age_main=5000, tau_burst=50, age_burst=20, f_burst=0.0,
-         sfr_A=1.0, normalise=True),
+    dict(
+        tau_main=1000,
+        age_main=5000,
+        tau_burst=50,
+        age_burst=20,
+        f_burst=0.0,
+        sfr_A=1.0,
+        normalise=True,
+    ),
 )
 _BC03_CHAIN = ("bc03", dict(imf=1, metallicity=0.02, separation_age=10))
 _DUSTATT_CHAIN = ("dustatt_modified_starburst", dict(E_BV_lines=0.3))
@@ -906,8 +913,13 @@ def _knob_model(emission_type, **emkw):
     return SEDModel.build(
         ssp_data=ssp,
         stellar=STELLAR_FIDUCIAL,
-        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-             "log_total_mass": Fixed(11.0), "*": FIXED},
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(11.0),
+            "*": FIXED,
+        },
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
@@ -942,8 +954,9 @@ _peaks = []
 m_frac = _knob_model("dale2014", alpha_mir=Fixed(2.0))
 p_frac = dict(m_frac.spec.sample(jax.random.PRNGKey(0)))
 for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
-    sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, _DUSTATT_CHAIN,
-                       ("dale2014", dict(alpha=2.0, fracAGN=f))])
+    sed = C.run_chain(
+        [_SFH_CHAIN, _BC03_CHAIN, _DUSTATT_CHAIN, ("dale2014", dict(alpha=2.0, fracAGN=f))]
+    )
     w_c, nl_c = _nu_lnu(*C.to_lnu(sed))
     ax_l.loglog(w_c, nl_c * _KNOB_MASS, color=c, **_REF_KW)
     o = m_frac.predict({**p_frac, "dust_frac_agn": jnp.float64(f)})
@@ -952,16 +965,26 @@ for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
     _peaks.append(float(np.nanmax(nl_t)))
 ax_l.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_l.plot([], [], "k-", lw=_TNG_LW, label="tengri")
-ax_l.set(xlim=(1e4, 1e7), xlabel=r"$\lambda$ [Å]",
-         ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]", title="Dale 2014 AGN fraction")
+ax_l.set(
+    xlim=(1e4, 1e7),
+    xlabel=r"$\lambda$ [Å]",
+    ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]",
+    title="Dale 2014 AGN fraction",
+)
 ax_l.legend(fontsize=8, frameon=False, ncol=2)
 
 # RIGHT — THEMIS slope alpha, matched qhac=0.17, umin=1.0, gamma=0.1.
 m_alpha = _knob_model("themis", dust_gamma_dl=Fixed(0.1), dust_qhac=Fixed(0.17))
 p_alpha = dict(m_alpha.spec.sample(jax.random.PRNGKey(0)))
 for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
-    sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, _DUSTATT_CHAIN,
-                       ("themis", dict(qhac=0.17, umin=1.0, gamma=0.1, alpha=a))])
+    sed = C.run_chain(
+        [
+            _SFH_CHAIN,
+            _BC03_CHAIN,
+            _DUSTATT_CHAIN,
+            ("themis", dict(qhac=0.17, umin=1.0, gamma=0.1, alpha=a)),
+        ]
+    )
     w_c, nl_c = _nu_lnu(*C.to_lnu(sed))
     ax_r.loglog(w_c, nl_c * _KNOB_MASS, color=c, **_REF_KW)
     o = m_alpha.predict({**p_alpha, "dust_alpha": jnp.float64(a)})
@@ -970,8 +993,7 @@ for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
     _peaks.append(float(np.nanmax(nl_t)))
 ax_r.plot([], [], "k-", **_REF_KW, label="pcigale")
 ax_r.plot([], [], "k-", lw=_TNG_LW, label="tengri")
-ax_r.set(xlim=(3e4, 1e7), xlabel=r"$\lambda$ [Å]",
-         title=r"THEMIS radiation-field slope $\alpha$")
+ax_r.set(xlim=(3e4, 1e7), xlabel=r"$\lambda$ [Å]", title=r"THEMIS radiation-field slope $\alpha$")
 ax_r.legend(fontsize=8, frameon=False, ncol=2)
 
 # Five decades below the peak rather than the old three: at alpha = 1 the
@@ -1215,8 +1237,7 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
     _lt = U.line_lum(_w_t_dense, _L_t_dense, _c)
     if _lc > 0:
         print(
-            f"    {_name} {_c:.0f} Å: CIGALE {_lc:.2e}, "
-            f"tengri {_lt:.2e} erg/s → {_lt / _lc:.2f}×"
+            f"    {_name} {_c:.0f} Å: CIGALE {_lc:.2e}, tengri {_lt:.2e} erg/s → {_lt / _lc:.2f}×"
         )
 
 
@@ -1527,10 +1548,21 @@ sed_skirtor0 = C.run_chain(
         (
             "skirtor2016",
             dict(
-                t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=30,
+                t=7,
+                pl=1.0,
+                q=1.0,
+                oa=40,
+                R=20,
+                Mcl=0.97,
+                i=30,
                 disk_type=0,  # ← skirtor_disk ↔ tengri disc.skirtor
-                delta=0, fracAGN=0.3, lambda_fracAGN="0/0", law=0,
-                EBV=0.03, temperature=100.0, emissivity=1.6,
+                delta=0,
+                fracAGN=0.3,
+                lambda_fracAGN="0/0",
+                law=0,
+                EBV=0.03,
+                temperature=100.0,
+                emissivity=1.6,
             ),
         ),
     ]
@@ -1540,21 +1572,37 @@ w_sk0, L_sk0 = C.to_lnu(sed_skirtor0)
 m_agn_sk = SEDModel.build(
     ssp_data=ssp,
     stellar=STELLAR_FIDUCIAL,
-    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-         "log_total_mass": Fixed(0.0), "*": FIXED},
-    dust={"type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
-          "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
-    agn={"type": "composable",
-         "disc": {"type": "skirtor", "*": FIXED},  # ← the SKIRTOR analytic disc
-         "torus": {"type": "skirtor", "*": FIXED},
-         "agn_log_lbol": Fixed(-0.42), "agn_fracAGN": Fixed(0.3), "*": FIXED},
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(1.0),
+        "age_gyr": Fixed(5.0),
+        "log_total_mass": Fixed(0.0),
+        "*": FIXED,
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "leitherer02",
+        "law_diff": "leitherer02",
+        "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+        "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+        "*": FIXED,
+    },
+    agn={
+        "type": "composable",
+        "disc": {"type": "skirtor", "*": FIXED},  # ← the SKIRTOR analytic disc
+        "torus": {"type": "skirtor", "*": FIXED},
+        "agn_log_lbol": Fixed(-0.42),
+        "agn_fracAGN": Fixed(0.3),
+        "*": FIXED,
+    },
     redshift=Fixed(0.0),
 )
 s_agn_sk = m_agn_sk.predict_state({})
 
 fig, ax_l, ax_r = U.two_panel_fig()
 U.panel(
-    ax_l, ax_r,
+    ax_l,
+    ax_r,
     label_l="pcigale  + SKIRTOR2016 (disk_type = 0)",
     label_r="tengri  agn[skirtor disc + skirtor torus + polar BB]",
 )
@@ -1565,12 +1613,25 @@ ax_l.plot(w_sk0, L_sk0_only, "C0:", linewidth=1.5, label="SKIRTOR component only
 ax_l.legend(fontsize=9)
 ax_l.grid(True, alpha=0.3)
 L_sk_only = np.maximum(np.asarray(s_agn_sk.derived["sed_agn"]), 1e-50)
-ax_r.plot(s_agn_base.wave, s_agn_base.sed_intrinsic, "k--", linewidth=1.0, alpha=0.5,
-          label="stellar + dust")
-ax_r.plot(s_agn_sk.wave, s_agn_sk.sed_intrinsic, "C1-", linewidth=1.5, alpha=0.7,
-          label="stellar + dust + AGN")
-ax_r.plot(s_agn_sk.wave, L_sk_only, "C1:", linewidth=1.5,
-          label="skirtor disc + SKIRTOR torus only")
+ax_r.plot(
+    s_agn_base.wave,
+    s_agn_base.sed_intrinsic,
+    "k--",
+    linewidth=1.0,
+    alpha=0.5,
+    label="stellar + dust",
+)
+ax_r.plot(
+    s_agn_sk.wave,
+    s_agn_sk.sed_intrinsic,
+    "C1-",
+    linewidth=1.5,
+    alpha=0.7,
+    label="stellar + dust + AGN",
+)
+ax_r.plot(
+    s_agn_sk.wave, L_sk_only, "C1:", linewidth=1.5, label="skirtor disc + SKIRTOR torus only"
+)
 ax_r.legend(fontsize=9)
 ax_r.grid(True, alpha=0.3)
 _xmin_b = float(min(w_sk0.min(), float(np.asarray(s_agn_sk.wave).min())))
@@ -1778,9 +1839,7 @@ for _i_deg, _col in zip((0, 30, 60, 80), ("C0", "C2", "C3", "C4")):
     # hold the corona anchor at the alpha_ox crossing: fracAGN raises the
     # intrinsic disc as the torus hides it, so rescale sfr_A per angle
     _probe_i = _cigale_xray(_SFR_A_XRAY, _i_deg)
-    sed_i = _cigale_xray(
-        _SFR_A_XRAY * 10.0**_LOG_L2500_TARGET / _cigale_l2500(_probe_i), _i_deg
-    )
+    sed_i = _cigale_xray(_SFR_A_XRAY * 10.0**_LOG_L2500_TARGET / _cigale_l2500(_probe_i), _i_deg)
     w_ci, L_ci = _cigale_corona(sed_i)
     _l25_i = _cigale_l2500(sed_i)
     _mu = float(np.cos(np.radians(_i_deg)))
@@ -2001,14 +2060,21 @@ print(
 # fraction) would have to be guessed back out of the component.
 _ff_frac = ratio[_valid] / (_f_anchor * _f_lir) - 1.0
 _order = np.argsort(_nu_r[_valid])
-ax_r.axhline(_f_anchor * _f_lir, color="0.25", ls=":", lw=1.6,
-             label=f"synchrotron only (anchor × energy balance = {_f_anchor * _f_lir:.3f})")
+ax_r.axhline(
+    _f_anchor * _f_lir,
+    color="0.25",
+    ls=":",
+    lw=1.6,
+    label=f"synchrotron only (anchor × energy balance = {_f_anchor * _f_lir:.3f})",
+)
 ax_r.legend(fontsize=7, frameon=False, loc="upper left")
 print("§11 implied free-free excess over CIGALE (which has no thermal term):")
 for _f in (0.15, 1.4, 10.0, 100.0):
     _j = int(np.argmin(np.abs(_nu_r[_valid] - _f)))
-    print(f"    {_nu_r[_valid][_j]:6.2f} GHz: total ×{ratio[_valid][_j]:.3f} "
-          f"→ thermal fraction {_ff_frac[_j] * 100:5.1f}%")
+    print(
+        f"    {_nu_r[_valid][_j]:6.2f} GHz: total ×{ratio[_valid][_j]:.3f} "
+        f"→ thermal fraction {_ff_frac[_j] * 100:5.1f}%"
+    )
 fig.tight_layout()
 save_fig("cigale_11_radio_synchrotron.png")
 
@@ -2192,14 +2258,10 @@ def _ratio_at(target_aa: float) -> float:
 
 _C_AA_HZ = 2.998e18  # Å/s
 print(
-    "  X-ray  1 keV = {:.2f}×, 5 keV = {:.2f}×  (XRB + hot gas; no AGN corona)".format(
-        _ratio_at(12.398 / 1.0), _ratio_at(12.398 / 5.0)
-    )
+    f"  X-ray  1 keV = {_ratio_at(12.398 / 1.0):.2f}×, 5 keV = {_ratio_at(12.398 / 5.0):.2f}×  (XRB + hot gas; no AGN corona)"
 )
 print(
-    "  radio  1.4 GHz = {:.2f}×, 150 MHz = {:.2f}×  (SF synchrotron, q_IR = 2.5)".format(
-        _ratio_at(_C_AA_HZ / 1.4e9), _ratio_at(_C_AA_HZ / 0.15e9)
-    )
+    f"  radio  1.4 GHz = {_ratio_at(_C_AA_HZ / 1.4e9):.2f}×, 150 MHz = {_ratio_at(_C_AA_HZ / 0.15e9):.2f}×  (SF synchrotron, q_IR = 2.5)"
 )
 _assert_comparable(L_ext, L_t, name="full-SED head-to-head")
 
@@ -2252,8 +2314,6 @@ ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("cigale_full_sed_headtohead.png")
 plt.show()
-
-
 
 
 # %% [markdown]
