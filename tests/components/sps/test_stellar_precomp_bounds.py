@@ -217,9 +217,54 @@ def test_per_age_lut_sums_to_marginalized_lut(stellar_only_model):
     )
 
 
-def test_per_age_moment_lut_sums_to_marginalized_moment(stellar_only_model):
-    """Same invariant for the Taylor moment Ψ."""
-    m = stellar_only_model
+@pytest.fixture(scope="module")
+def stellar_only_taylor_model(ssp, synthetic_tophat_obs):
+    """``stellar_only_model``, but opting IN to the Taylor moment.
+
+    Since #1122 the moment is superseded by the sub-band quadrature and
+    ``taylor_correction`` defaults to False, so Psi is no longer built unless
+    asked for. The machinery is still supported; these tests exercise it.
+    """
+    spec = Parameters(
+        mean_sfh_type=["tsnorm"],
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5),
+        sfh_tsnorm_skew=Uniform(-1, 1),
+        sfh_tsnorm_trunc=Uniform(1, 10),
+        met_logzsol=Fixed(-0.5),
+        redshift=Fixed(0.05),
+        dust_tau_bc=Fixed(0.0),
+        dust_tau_diff=Fixed(0.0),
+        apply_igm=False,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel(
+            spec,
+            ssp,
+            observation=synthetic_tophat_obs,
+            approx=WavePrecomp(n_subbands=0, taylor_correction=True),
+        )
+
+
+def test_default_publishes_the_subband_quadrature_not_the_moment(stellar_only_model):
+    """The DEFAULT WavePrecomp now ships the sub-band quadrature (#1122).
+
+    The Taylor moment extrapolated the dust screen from one point per filter and
+    diverged in the rest-UV; the quadrature evaluates it at K nodes instead. Ψ is
+    no longer built by default — pin that, so a silent revert to the old default
+    cannot pass.
+    """
+    state = stellar_only_model.predict_state(_PARAMS)
+    assert "stellar_phot_lnu_per_age_subband_precomp" in state.derived
+    assert "stellar_subband_waves_rest_precomp" in state.derived
+    assert "stellar_phot_moment_precomp" not in state.derived
+
+
+def test_per_age_moment_lut_sums_to_marginalized_moment(stellar_only_taylor_model):
+    """Same invariant for the Taylor moment Ψ (opt-in since #1122)."""
+    m = stellar_only_taylor_model
     state = m.predict_state(_PARAMS)
     per_age = state.derived["stellar_phot_moment_per_age_precomp"]
     marginalized = state.derived["stellar_phot_moment_precomp"]
@@ -230,7 +275,7 @@ def test_per_age_moment_lut_sums_to_marginalized_moment(stellar_only_model):
     )
 
 
-def test_taylor_moment_published_in_fixed_z(stellar_only_model):
+def test_taylor_moment_published_in_fixed_z(stellar_only_taylor_model):
     """Phase 3c-3c: stellar_phot_moment_precomp Ψ is published alongside the LUT
     in fixed-z mode.
 
@@ -240,10 +285,11 @@ def test_taylor_moment_published_in_fixed_z(stellar_only_model):
     negative depending on filter shape and SED slope, so we only check
     that it's finite and the magnitude is in a plausible range.
     """
-    m = stellar_only_model
+    m = stellar_only_taylor_model
     state = m.predict_state(_PARAMS)
     assert "stellar_phot_moment_precomp" in state.derived, (
-        "Taylor moment should be published when wave_precomp=True (fixed-z mode)"
+        "Taylor moment should be published when it is explicitly requested "
+        "(taylor_correction=True); it is no longer the default (#1122)"
     )
     moment = state.derived["stellar_phot_moment_precomp"]
     lnu = state.derived["stellar_phot_lnu_precomp"]
@@ -279,7 +325,9 @@ def test_taylor_moment_published_in_free_z(ssp, synthetic_tophat_obs):
     obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
+        m = SEDModel(
+            spec, ssp, observation=obs, approx=WavePrecomp(n_subbands=0, taylor_correction=True)
+        )
     params = {**_PARAMS, "redshift": 0.5}
     state = m.predict_state(params)
     for k in (
@@ -289,7 +337,10 @@ def test_taylor_moment_published_in_free_z(ssp, synthetic_tophat_obs):
         "stellar_phot_moment_per_age_precomp",
         "filter_eff_waves",
     ):
-        assert k in state.derived, f"free-z model should publish {k} (Phase 3c-3c-v)"
+        assert k in state.derived, (
+            f"free-z model should publish {k} when taylor_correction=True "
+            "(no longer the default since #1122)"
+        )
         assert jnp.all(jnp.isfinite(state.derived[k])), f"{k} contains non-finite values"
 
 
