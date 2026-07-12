@@ -73,11 +73,6 @@ data/*.h5
 # does not have XSPEC — which is everyone — while its committed figure showed the
 # curve anyway.
 !data/relagn_disc_grid.h5
-# Draine+2021 PAHspec grid (99 MB). Two dust-emission examples plot it, and it is
-# a 404 on the template host — it cannot be downloaded, so it cannot be fetched in
-# CI either. Committed for the same reason as the grids above: without it the
-# examples are broken for everyone.
-!data/pahspec_draine2021.h5
 !data/skirtor_templates_v3.h5
 !data/nthcomp_templates.h5
 !data/nenkova08_torus_grid.h5

@@ -62,9 +62,25 @@ _RUNS_A_FIT = re.compile(
     r"""\.fit\(|Fitter\(|\.run\(\s*["'](?:nuts|vi|vi_native|mcmc|map|nss|pathfinder)["']""",
 )
 
+# Examples that need a data grid we deliberately do NOT ship. This list is
+# explicit and hand-maintained on purpose: "the file is missing, so skip it" as an
+# automatic rule would silently drop an example the day someone's data/ went stale,
+# and the gate would still report green. If you add an entry here, say why.
+_NEEDS_ABSENT_DATA = {
+    # data/pahspec_draine2021.h5 is 99 MB and a 404 on the template host, so it can
+    # be neither committed cheaply nor fetched. It buys exactly these two examples:
+    # `draine2021_pah` is 1 of 18 dust-emission models, an explicit opt-in used by
+    # no notebook and no recipe, and its tests live in tests/integration (auto-
+    # marked `slow`, deselected from the PR gate). Not worth 99 MB in git.
+    "plot_pahspec_starlight_sweep.py": "needs data/pahspec_draine2021.h5 (99 MB, not shipped)",
+    "plot_logu_cross_library.py": "needs data/pahspec_draine2021.h5 (99 MB, not shipped)",
+}
+
 
 def _classify(path: pathlib.Path) -> str | None:
     """Return a skip reason, or None if the example should run."""
+    if path.name in _NEEDS_ABSENT_DATA:
+        return _NEEDS_ABSENT_DATA[path.name]
     src = path.read_text()
     if _RUNS_A_FIT.search(src):
         return "runs inference (20+ GB warmup)"
