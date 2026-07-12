@@ -82,7 +82,7 @@ for tau_diff in tau_diffs:
     nu_uv = nu[mask_uv_opt]
     order = np.argsort(nu_uv)
     L_absorbed = float(
-        np.trapz(
+        np.trapezoid(
             (sed_int[mask_uv_opt] - sed_full[mask_uv_opt])[order],
             nu_uv[order],
         )
@@ -90,7 +90,7 @@ for tau_diff in tau_diffs:
     mask_fir = (wave >= 80000.0) & (wave <= 1.0e7)
     nu_fir = nu[mask_fir]
     order = np.argsort(nu_fir)
-    L_emitted = float(np.trapz(sed_full[mask_fir][order], nu_fir[order]))
+    L_emitted = float(np.trapezoid(sed_full[mask_fir][order], nu_fir[order]))
     ratio = L_emitted / L_absorbed if L_absorbed > 0 else np.nan
     ratios.append(ratio)
     L_abs_list.append(L_absorbed)

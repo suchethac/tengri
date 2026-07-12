@@ -533,8 +533,8 @@ def _filter_eff_and_halfwidth(names):
         t = np.asarray(phot.filter_trans[i], dtype=float)
         good = t > 0
         w, t = w[good], t[good]
-        eff[nm] = float(np.trapz(w * t, w) / np.trapz(t, w))
-        half[nm] = float(0.5 * np.trapz(t, w) / t.max())
+        eff[nm] = float(np.trapezoid(w * t, w) / np.trapezoid(t, w))
+        half[nm] = float(0.5 * np.trapezoid(t, w) / t.max())
     return eff, half
 
 

@@ -65,7 +65,7 @@ for alpha in alpha_vals:
                 # t_gyr is in lookback time; trapz integrates over parameter order
                 # so integrate from present (t=0) back to ancient times
                 t_lookback_yr = t_lookback_gyr * 1e9  # Convert Gyr to yr
-                m_manual = float(np.trapz(sfr, t_lookback_yr))
+                m_manual = float(np.trapezoid(sfr, t_lookback_yr))
 
                 # Library integration via predict_properties
                 q = model.predict_properties(params, names=("stellar_mass",))
