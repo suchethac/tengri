@@ -237,7 +237,7 @@ ax_age.legend(loc="lower right", fontsize=10)
 ax_age.grid(True, alpha=0.3, linestyle="--")
 
 # Right: metallicity at multiple fixed ages
-cmap = plt.cm.get_cmap("coolwarm")
+cmap = plt.get_cmap("coolwarm")
 norm = plt.Normalize(vmin=ages_multimet.min(), vmax=ages_multimet.max())
 
 for j, age in enumerate(ages_multimet):

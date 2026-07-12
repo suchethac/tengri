@@ -70,7 +70,8 @@ RUNS = [
             agn={
                 "disc": {"type": "multicolor", "*": tengri.FIXED},
                 "torus": {"type": "skirtor", "*": tengri.FIXED},
-                "lines": {"type": "nlr", "*": tengri.FIXED},
+                "nlr": {"type": "analytic", "*": tengri.FIXED},
+                "blr": {"type": "none", "*": tengri.FIXED},
                 "*": tengri.FIXED,
                 "log_lbol": 11.5,
                 "frac": 0.5,

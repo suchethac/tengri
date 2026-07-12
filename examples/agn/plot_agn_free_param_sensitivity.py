@@ -52,7 +52,8 @@ DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0
 BLOCKS = {
     "disc": {"type": "multicolor"},
     "torus": {"type": "nenkova"},
-    "lines": {"type": "nlr"},
+    "nlr": {"type": "analytic"},
+    "blr": {"type": "none"},
 }
 
 ssp = tengri.load_ssp()

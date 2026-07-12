@@ -55,7 +55,8 @@ COMMON = dict(
 AGN = {
     "disc": {"type": "multicolor", "*": tengri.FIXED},
     "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": 7.0},
-    "lines": {"type": "none", "*": tengri.FIXED},
+    "nlr": {"type": "none", "*": tengri.FIXED},
+    "blr": {"type": "none", "*": tengri.FIXED},
     "atten": {"type": "polar_dust", "*": tengri.FIXED},
     "*": tengri.FIXED,
     "log_lbol": 12.0,

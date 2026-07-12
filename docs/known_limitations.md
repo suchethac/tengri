@@ -17,14 +17,23 @@ publication-grade until your component has been cross-validated.**
 ## Approximations
 
 - **`WavePrecomp` accelerates the photometry channel.** It precomputes the
-  SSP × filter integrals, with free redshift via interpolation. Stellar
-  photometry is ~0.4% accurate. Dust is re-applied as a first-order Taylor
-  projection across each filter (suchethac/tengri#617). This linear-in-λ model
-  is accurate for smooth attenuation curves (optical/IR) but biases rest-UV
-  bands where the curve is steep. At z ≈ 2 with τ ≈ 0.5: SDSS *u/g* runs 5–10%
-  high, GALEX FUV >10× high. With zero dust the LUT is exact. Build-time
-  `UserWarning` flags problematic configurations. Use `approx=None` for
-  unbiased blue-band photometry.
+  SSP × filter integrals, with free redshift via interpolation. Each filter is
+  split into `n_subbands` sub-bands of equal filter mass (default 5), and the
+  multiplicative screens — dust attenuation and IGM transmission — are
+  **evaluated** at each sub-band's quadrature node, the template's own
+  flux-weighted centroid there. Measured against the exact path across
+  GALEX→WISE at z ≤ 1.5 with τ_diff = 0.7 / τ_bc = 1.0, the worst band agrees to
+  ≲0.5%, and the optical/NIR bands to ≲0.01%. Accuracy improves as 1/K²; raise
+  `WavePrecomp(n_subbands=8)` for the deep rest-UV. Emission that the quadrature
+  cannot reach — nebular lines, AGN, dust IR — is still projected at the filter's
+  effective wavelength.
+- **`WavePrecomp(n_subbands=0)` restores the old first-order Taylor projection**
+  (suchethac/tengri#617), which extrapolates the screen from each filter's
+  effective wavelength instead of evaluating it. That linear-in-λ model is
+  accurate for smooth attenuation curves (optical/IR) but biases rest-UV bands
+  where the curve is steep: at z ≈ 2 with τ ≈ 0.5, SDSS *u/g* run 5–10% high and
+  GALEX FUV >10× high. A build-time `UserWarning` flags such configurations. It
+  is retained only for reproducing pre-#1122 results.
 - **`SpectrumPrecomp` accelerates the spectroscopy channel.** It precomputes a
   per-pixel effective-wavelength continuum LUT. It agrees with the exact path
   to machine precision with zero dust. With dust, it carries the same error

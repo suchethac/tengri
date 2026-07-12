@@ -55,7 +55,8 @@ TIERS = [
         {
             "disc": {"type": "multicolor", "*": tengri.FIXED},
             "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "lines": {"type": "nlr", "*": tengri.FIXED},
+            "nlr": {"type": "analytic", "*": tengri.FIXED},
+            "blr": {"type": "none", "*": tengri.FIXED},
         },
     ),
     (

@@ -75,7 +75,8 @@ BASE_AGN = {
 print("Building Type 1 (face-on, BLR) model...")
 agn_type1 = {
     **BASE_AGN,
-    "lines": {"type": "blr", "*": tengri.FIXED},
+    "nlr": {"type": "none", "*": tengri.FIXED},
+    "blr": {"type": "analytic", "*": tengri.FIXED},
 }
 model_type1 = tengri.SEDModel.build(ssp, agn=agn_type1, **COMMON)
 params_type1 = dict(model_type1.spec.sample(jax.random.PRNGKey(42)))
@@ -89,7 +90,8 @@ sed_type1 = np.asarray(out_type1.rest_sed())
 print("Building Type 2 (edge-on, NLR) model...")
 agn_type2 = {
     **BASE_AGN,
-    "lines": {"type": "nlr", "*": tengri.FIXED},
+    "nlr": {"type": "analytic", "*": tengri.FIXED},
+    "blr": {"type": "none", "*": tengri.FIXED},
 }
 model_type2 = tengri.SEDModel.build(ssp, agn=agn_type2, **COMMON)
 params_type2 = dict(model_type2.spec.sample(jax.random.PRNGKey(42)))
@@ -168,7 +170,8 @@ for label, cos_inc, color in INCLINATIONS:
             "cos_inc": cos_inc,
             "disc": {"type": "multicolor", "*": tengri.FIXED},
             "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "lines": {"type": "blr", "*": tengri.FIXED},
+            "nlr": {"type": "none", "*": tengri.FIXED},
+            "blr": {"type": "analytic", "*": tengri.FIXED},
         },
         redshift=tengri.Fixed(0.0),
     )

@@ -54,7 +54,7 @@ wave_um = np.asarray(wave_aa) / 1e4
 
 ebv_grid = np.logspace(np.log10(0.01), np.log10(10.0), 9)
 norm = colors.LogNorm(vmin=0.01, vmax=10.0)
-cmap = cm.get_cmap("RdBu_r")
+cmap = plt.get_cmap("RdBu_r")
 
 
 def nu_Lnu(lnu):

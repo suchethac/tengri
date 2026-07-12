@@ -48,7 +48,8 @@ RECIPES = [
         "tab:blue",
         {
             "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
-            "lines": {"type": "grahsp", "*": tengri.FIXED},
+            "nlr": {"type": "grahsp", "*": tengri.FIXED},
+            "blr": {"type": "grahsp", "*": tengri.FIXED},
             "feii": {"type": "grahsp", "*": tengri.FIXED},
             "torus": {"type": "grahsp", "*": tengri.FIXED},
             "atten": {"type": "grahsp_biatten", "*": tengri.FIXED},
@@ -60,7 +61,8 @@ RECIPES = [
         {
             "disc": {"type": "multicolor", "*": tengri.FIXED},
             "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "lines": {"type": "nlr", "*": tengri.FIXED},
+            "nlr": {"type": "analytic", "*": tengri.FIXED},
+            "blr": {"type": "none", "*": tengri.FIXED},
         },
     ),
     (

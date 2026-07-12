@@ -45,14 +45,16 @@ BLOCK_PROGRESSION = [
         "+ lines",
         {
             "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
-            "lines": {"type": "grahsp", "*": tengri.FIXED},
+            "nlr": {"type": "grahsp", "*": tengri.FIXED},
+            "blr": {"type": "grahsp", "*": tengri.FIXED},
         },
     ),
     (
         "+ Fe II",
         {
             "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
-            "lines": {"type": "grahsp", "*": tengri.FIXED},
+            "nlr": {"type": "grahsp", "*": tengri.FIXED},
+            "blr": {"type": "grahsp", "*": tengri.FIXED},
             "feii": {"type": "grahsp", "*": tengri.FIXED},
         },
     ),
@@ -60,7 +62,8 @@ BLOCK_PROGRESSION = [
         "+ torus",
         {
             "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
-            "lines": {"type": "grahsp", "*": tengri.FIXED},
+            "nlr": {"type": "grahsp", "*": tengri.FIXED},
+            "blr": {"type": "grahsp", "*": tengri.FIXED},
             "feii": {"type": "grahsp", "*": tengri.FIXED},
             "torus": {"type": "grahsp", "*": tengri.FIXED},
         },
@@ -69,7 +72,8 @@ BLOCK_PROGRESSION = [
         "+ attenuation (full)",
         {
             "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
-            "lines": {"type": "grahsp", "*": tengri.FIXED},
+            "nlr": {"type": "grahsp", "*": tengri.FIXED},
+            "blr": {"type": "grahsp", "*": tengri.FIXED},
             "feii": {"type": "grahsp", "*": tengri.FIXED},
             "torus": {"type": "grahsp", "*": tengri.FIXED},
             "atten": {"type": "grahsp_biatten", "*": tengri.FIXED},

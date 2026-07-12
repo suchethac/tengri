@@ -54,7 +54,8 @@ for lbol in log_lbol_values:
         dust=DUST,
         agn={
             "disc": {"type": "qsogen", "*": tengri.FIXED},
-            "lines": {"type": "qsogen", "*": tengri.FIXED},
+            "nlr": {"type": "none", "*": tengri.FIXED},
+            "blr": {"type": "qsogen", "*": tengri.FIXED},
             "*": tengri.FIXED,
             "frac": 1.0,
             "log_lbol": lbol,

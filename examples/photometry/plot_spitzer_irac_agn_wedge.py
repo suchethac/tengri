@@ -100,7 +100,8 @@ def composite_photometry(ssp, agn_frac, redshift):
             "agn_log_lbol": 12.5,
             "disc": {"type": "multicolor", "*": tengri.FIXED},
             "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "lines": {"type": "nlr", "*": tengri.FIXED},
+            "nlr": {"type": "analytic", "*": tengri.FIXED},
+            "blr": {"type": "none", "*": tengri.FIXED},
         },
         redshift=tengri.Fixed(redshift),
     )

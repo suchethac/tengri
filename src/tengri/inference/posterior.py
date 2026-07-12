@@ -483,12 +483,16 @@ class Posterior:
                 f"Computing derived quantities vmaps the SFH forward pass over "
                 f"all {n_samples} posterior samples at once, which can use "
                 "significant memory. Consider thinning first, e.g. "
-                "posterior.properties.ci('stellar_mass') on result.resample(key, n=2000).",
+                "posterior.properties on result.resample(key, n=2000).",
                 UserWarning,
                 stacklevel=2,
             )
 
-        # Sampling: use JIT-compatible vmap for efficient batch computation
+        # The PRIVATE twin. `predict_sfh_quantities` is deprecated (#1049), and a
+        # deprecated shim must not warn about a *second* method the user never
+        # called — `derived` already tells them what to do. The public name is
+        # also invisible to the acceptance grep, because vmap takes the method as
+        # a REFERENCE (`vmap(model.name)`), not a call (`model.name(...)`).
         sfh_batch = jax.vmap(self._model._predict_sfh_quantities)(self.samples)
 
         # Extract and convert NamedTuple fields to dict

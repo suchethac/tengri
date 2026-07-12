@@ -41,7 +41,7 @@ wave_um = np.asarray(wave_aa) / 1e4
 AGE_GYR = 4.0
 tau_grid_myr = np.array([100.0, 300.0, 1000.0, 3000.0, 10000.0])
 norm = colors.LogNorm(vmin=100.0, vmax=10000.0)
-cmap = cm.get_cmap("cividis_r")
+cmap = plt.get_cmap("cividis_r")
 
 fig, ax = plt.subplots(figsize=(7.4, 6.0))
 axin = ax.inset_axes([0.13, 0.13, 0.40, 0.30])
