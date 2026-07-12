@@ -58,12 +58,11 @@ for log_total_mass in log_total_mass_vals:
     params = {**baseline, "sfh_const_log_total_mass": jnp.float64(log_total_mass)}
 
     # Get the actual 10 Myr SFR (what Hα traces)
-    sfh_q = model.predict_sfh_quantities(params)
-    sfr_10myr = float(sfh_q.sfr_10myr)
+    sfh_q = model.predict_properties(params, names=("sfr_10myr",))
+    sfr_10myr = float(sfh_q["sfr_10myr"])
 
     # Get Hα luminosity from nebular component
-    lines = model.predict_emission_lines(params)
-    halpha_lum = float(lines.halpha)
+    halpha_lum = float(model.predict(params).halpha)
 
     # Implied coefficient: SFR / L_Ha
     if halpha_lum > 0:

@@ -65,9 +65,9 @@ intrinsic_model = tengri.SEDModel.build(
     redshift=tengri.Fixed(0.05),
 )
 p_intrinsic = dict(intrinsic_model.spec.sample(jax.random.PRNGKey(0)))
-pred_intrinsic = intrinsic_model.predict_rest_sed(p_intrinsic)
-sed_intrinsic = np.asarray(pred_intrinsic.sed)
-wave = np.asarray(pred_intrinsic.wavelength)
+pred_intrinsic = intrinsic_model.predict(p_intrinsic)
+sed_intrinsic = np.asarray(pred_intrinsic.rest_sed())
+wave = np.asarray(intrinsic_model.wavelengths)
 nu = C_AA_PER_S / wave
 
 # Compute Calzetti k_lambda curve and normalize

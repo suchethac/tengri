@@ -132,15 +132,15 @@ for lib_type in LIB_TYPES:
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
         ir = (wave > 8e4) & (wave < 1e7)
         if ir.sum() < 5:
             continue
         nu_ir = C_AA_PER_S / wave[ir]
         order = np.argsort(nu_ir)
-        l_ir = np.trapezoid(np.asarray(out.sed)[ir][order], nu_ir[order])
+        l_ir = np.trapezoid(np.asarray(out.rest_sed())[ir][order], nu_ir[order])
         if l_ir > 0:
             nu_l_nu = nu_l_nu / l_ir
         label = rf"$U_{{\min}}$ = {umin:.1f} ({lib_type.replace('_', ' ')})"

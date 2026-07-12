@@ -59,9 +59,9 @@ fig, ax = plt.subplots(figsize=(7.4, 4.6))
 for f, c in zip(f_burst_values, colors):
     model = build(f)
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=c, lw=2.0, label=rf"$f_{{\rm burst}}={f:.2f}$")
 
 # Rest-frame UV window where the young burst dominates.

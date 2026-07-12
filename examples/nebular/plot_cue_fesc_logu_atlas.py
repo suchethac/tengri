@@ -67,7 +67,7 @@ n2_ha = np.empty(SHAPE)
 for i, logu in enumerate(LOGU_GRID):
     for j, fesc in enumerate(FESC_GRID):
         p = {**baseline, "neb_logU": jnp.float64(logu), "neb_fesc": jnp.float64(fesc)}
-        lines = model.predict_emission_lines(p)
+        lines = model.predict(p).lines
         log_halpha[i, j] = np.log10(max(float(lines.halpha), 1e-30))
         o3_hb[i, j] = np.log10(max(float(lines.oiii_5007 / lines.hbeta), 1e-6))
         n2_ha[i, j] = np.log10(max(float(lines.nii_6584 / lines.halpha), 1e-6))

@@ -138,6 +138,7 @@ setup_style()
 
 # %%
 import tengri as tg
+
 tg.print_logo()
 print(f"tengri {tg.__version__}")
 
@@ -429,9 +430,11 @@ for label, res in variant_results.items():
 if sampling_results:
     # Corner plot overlay
     fig = None
-    colors_overlay = {"NUTS": COLORS.get("mcmc_nuts", "C0"),
-                      "Ray Tracing": COLORS.get("mcmc_raytrace", "C1"),
-                      "NSS": COLORS.get("evidence", "C2")}
+    colors_overlay = {
+        "NUTS": COLORS.get("mcmc_nuts", "C0"),
+        "Ray Tracing": COLORS.get("mcmc_raytrace", "C1"),
+        "NSS": COLORS.get("evidence", "C2"),
+    }
 
     for method_name, result in sampling_results.items():
         if fig is None:

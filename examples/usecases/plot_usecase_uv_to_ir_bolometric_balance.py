@@ -123,8 +123,8 @@ for tau_v in tau_v_grid:
     # Generate intrinsic SED on rest-frame wavelength grid
     # Sample params and use all fixed values
     params_intrinsic = model_intrinsic.spec.sample(key)
-    result_intrinsic = model_intrinsic.predict_rest_sed(params_intrinsic, wave=wave_rest)
-    sed_intrinsic_np = np.array(result_intrinsic.sed)
+    result_intrinsic = model_intrinsic.predict(params_intrinsic)
+    sed_intrinsic_np = np.asarray(result_intrinsic.rest_sed(wave_rest))
 
     # Integrate UV: 912–3000 Å
     # Convert L_nu to luminosity: ∫ L_nu dν = ∫ L_nu * (c/λ²) dλ
@@ -154,8 +154,8 @@ for tau_v in tau_v_grid:
 
     # Generate attenuated SED
     params_dust = model_dust.spec.sample(key)
-    result_attenuated = model_dust.predict_rest_sed(params_dust, wave=wave_rest)
-    sed_attenuated_np = np.array(result_attenuated.sed)
+    result_attenuated = model_dust.predict(params_dust)
+    sed_attenuated_np = np.asarray(result_attenuated.rest_sed(wave_rest))
 
     # Integrate UV from attenuated SED
     integrand_uv_attenuated = sed_attenuated_np[mask_uv] * c_cgs / (wave_rest[mask_uv] ** 2)

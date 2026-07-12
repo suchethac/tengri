@@ -86,8 +86,8 @@ for i, av in enumerate(av_grid):
     for j, rv in enumerate(rv_grid):
         model = _model(float(av), float(rv))
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        BETA_GRID[j, i] = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
+        out = model.predict(p)
+        BETA_GRID[j, i] = _beta_uv(np.asarray(model.wavelengths), np.asarray(out.rest_sed()))
 REFS = [(1.0, 2.8, "SMC"), (1.0, 3.16, "LMC"), (1.0, 3.1, "MW (diffuse)"), (1.0, 4.05, "Calzetti")]
 
 fig, ax = plt.subplots(figsize=(7.5, 5.0))

@@ -61,9 +61,9 @@ model = tengri.SEDModel.build(
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 wave_grid = jnp.logspace(jnp.log10(1000.0), jnp.log10(3.0e5), 500)
-pred = model.predict_rest_sed(baseline, wave=wave_grid)
-wave_rest_um = np.asarray(pred.wavelength) / 1.0e4
-sed_rest = np.asarray(pred.sed)
+pred = model.predict(baseline)
+wave_rest_um = np.asarray(wave_grid) / 1.0e4
+sed_rest = np.asarray(pred.rest_sed(np.asarray(wave_grid)))
 
 _, _, filter_curves = tengri.load_filter_set(BANDS)
 

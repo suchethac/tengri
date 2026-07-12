@@ -80,7 +80,7 @@ colors = plt.cm.viridis(np.linspace(0, 1, len(ages)))
 
 for age, color in zip(ages, colors):
     params = {**baseline, "sfh_dpl_tau_gyr": jnp.float64(age)}
-    lines = model.predict_emission_lines(params)
+    lines = model.predict(params).lines
     ha = float(lines.halpha)
     hb = float(lines.hbeta)
     nii = float(lines.nii_6584)

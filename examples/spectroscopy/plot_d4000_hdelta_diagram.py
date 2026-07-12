@@ -169,9 +169,9 @@ for shape_i, (_shape_name, sfh_dict) in enumerate(sfh_shapes):
             wave_rest = np.linspace(3800, 4200, 320)  # ~1.25 Å resolution ≈ 95 km/s
 
             # Get rest-frame SED
-            pred = model.predict_rest_sed(baseline)
-            wave = np.asarray(pred.wavelength)
-            l_nu = np.asarray(pred.sed)
+            pred = model.predict(baseline)
+            wave = np.asarray(model.wavelengths)
+            l_nu = np.asarray(pred.rest_sed())
 
             # Extract D4000 and Hδ_A
             d4000[idx] = _compute_d4000(wave, l_nu)

@@ -53,7 +53,8 @@ model = tengri.SEDModel.build(
         "type": "composable",
         "disc": {"type": "qsogen", "*": tengri.FIXED},
         "torus": {"type": "skirtor", "*": tengri.FIXED},
-        "lines": {"type": "nlr", "*": tengri.FIXED},
+        "nlr": {"type": "analytic", "*": tengri.FIXED},
+        "blr": {"type": "none", "*": tengri.FIXED},
         "atten": {"type": "polar_dust", "*": tengri.FIXED},
         "*": tengri.FIXED,
         "agn_frac": 1.0,
@@ -73,10 +74,10 @@ for ebv in ebv_values:
     # agn_polar_ebv is a fixed model parameter; override it per curve to
     # sweep the reddening without re-fitting.
     params = {**baseline, "agn_polar_ebv": jnp.float64(ebv)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=cmap(norm(ebv)), lw=1.4)
 
 ax.set_xlim(100, 1e6)

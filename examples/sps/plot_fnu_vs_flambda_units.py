@@ -64,11 +64,11 @@ model = tengri.SEDModel.build(
 
 # Sample from the model (all parameters are fixed, so deterministic)
 params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-pred = model.predict_rest_sed(params)
+pred = model.predict(params)
 
 # Extract rest-frame wavelength [Angstrom] and SED [erg/s/Hz]
-lambda_rest = np.asarray(pred.wavelength)
-sed_fnu = np.asarray(pred.sed)
+lambda_rest = np.asarray(model.wavelengths)
+sed_fnu = np.asarray(pred.rest_sed())
 
 # Compute the three representations
 # 1. F_λ = F_ν * (c/λ²) [normalized for comparison]

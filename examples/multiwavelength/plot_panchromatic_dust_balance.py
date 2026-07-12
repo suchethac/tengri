@@ -57,9 +57,9 @@ fig, ax = plt.subplots(figsize=(10, 5.2))
 
 for tau_diff in tau_diffs:
     params = {**baseline, "dust_tau_diff": jnp.float64(tau_diff)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
-    sed = np.asarray(out.sed)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(out.rest_sed())
     nu = 2.998e18 / wave
     nu_l_nu = nu * sed
 

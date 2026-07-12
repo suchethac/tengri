@@ -113,9 +113,9 @@ noise = np.asarray(mock.noise)
 flux_fit = np.asarray(fit_model.predict_photometry(fit_params))
 wave_eff = np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
 
-sed_truth = truth_model.predict_rest_sed(truth)
-sed_fit = fit_model.predict_rest_sed(fit_params)
-wave_rest = np.asarray(sed_truth.wavelength)
+sed_truth = truth_model.predict(truth)
+sed_fit = fit_model.predict(fit_params)
+wave_rest = np.asarray(truth_model.wavelengths)
 wave_obs = wave_rest * (1.0 + Z)
 
 
@@ -124,8 +124,8 @@ def _scale_to_r(sed_arr):
     return flux_obs[BANDS.index("sdss_r")] / sed_arr[idx]
 
 
-fnu_truth = _scale_to_r(np.asarray(sed_truth.sed)) * np.asarray(sed_truth.sed)
-fnu_fit = _scale_to_r(np.asarray(sed_fit.sed)) * np.asarray(sed_fit.sed)
+fnu_truth = _scale_to_r(np.asarray(sed_truth.rest_sed())) * np.asarray(sed_truth.rest_sed())
+fnu_fit = _scale_to_r(np.asarray(sed_fit.rest_sed())) * np.asarray(sed_fit.rest_sed())
 
 # ─── Figure: SED + residuals ────────────────────────────────────────────────
 fig, (ax_sed, ax_res) = plt.subplots(

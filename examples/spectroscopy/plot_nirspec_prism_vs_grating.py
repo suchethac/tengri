@@ -72,9 +72,9 @@ p = dict(model.spec.sample(jax.random.PRNGKey(42)))
 z = 5.0
 rest_to_obs = 1.0 + z
 
-out = model.predict_rest_sed(p)
-wave_rest = np.asarray(out.wavelength)  # Rest-frame Å
-sed_rest = np.asarray(out.sed)  # erg/s/Hz
+out = model.predict(p)
+wave_rest = np.asarray(model.wavelengths)  # Rest-frame Å
+sed_rest = np.asarray(out.rest_sed())  # erg/s/Hz
 
 # Hα region in rest frame: 6400–6700 Å
 mask_rest = (wave_rest >= 6400.0) & (wave_rest <= 6700.0)

@@ -67,7 +67,7 @@ phot_fluxes = np.asarray(model.predict_photometry(params))
 mag_manual = -2.5 * np.log10(np.maximum(phot_fluxes, 1e-30)) - 48.6
 
 # Method 2: Use tengri's built-in converter
-mag_tengri = np.asarray(model.predict_magnitudes(params))
+mag_tengri = np.asarray(model.predict(params).magnitudes())
 
 # Residuals: manual − tengri (should be near zero if zero-point is correct)
 residuals = mag_manual - mag_tengri

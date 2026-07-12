@@ -62,9 +62,9 @@ def predict_with_torus(torus_type: str) -> tuple[np.ndarray, np.ndarray]:
         redshift=tengri.Fixed(0.0),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    return wave, np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    return wave, np.asarray(out.rest_sed())
 
 
 wave_skir, l_skir = predict_with_torus("skirtor")

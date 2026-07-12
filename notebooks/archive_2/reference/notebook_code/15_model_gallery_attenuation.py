@@ -62,7 +62,7 @@ from tengri.dust.attenuation import (
 )
 
 import os
-import sys  # noqa: E401
+import sys
 
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
@@ -212,7 +212,11 @@ fig, ax = plt.subplots(figsize=(7, 4))
 
 ax.plot(np.array(wave_uv), np.array(k_c00), color=COLORS["rt"], lw=2.5, label="Calzetti (C00)")
 ax.plot(
-    np.array(wave_uv), np.array(k_l02), color=COLORS["geovi"], lw=2.5, ls="--",
+    np.array(wave_uv),
+    np.array(k_l02),
+    color=COLORS["geovi"],
+    lw=2.5,
+    ls="--",
     label="Leitherer (L02)",
 )
 
@@ -223,7 +227,10 @@ ax.axvspan(1200, 1800, alpha=0.08, color=COLORS["geovi"])
 ax.axvline(1200, color="grey", ls=":", alpha=0.4)
 ax.annotate(
     "C00 lower limit\n(1200 A)",
-    xy=(1200, 4.5), fontsize=8, ha="center", color="grey",
+    xy=(1200, 4.5),
+    fontsize=8,
+    ha="center",
+    color="grey",
 )
 ax.axvline(5500, color="grey", ls=":", alpha=0.3)
 
@@ -297,8 +304,12 @@ for k_arr, label, color, ls in [
     (k_sbl18, "SBL18", COLORS["nuts"], "-."),
 ]:
     ax_zoom.plot(
-        np.array(wave_mod)[uv_mask], np.array(k_arr)[uv_mask],
-        label=label, color=color, ls=ls, lw=2,
+        np.array(wave_mod)[uv_mask],
+        np.array(k_arr)[uv_mask],
+        label=label,
+        color=color,
+        ls=ls,
+        lw=2,
     )
 
 ax_zoom.axvline(2175, color="grey", ls="--", alpha=0.3)
@@ -311,7 +322,9 @@ ax_zoom.legend(fontsize=12)
 
 fig.tight_layout()
 fig.savefig(
-    os.path.join(FIGDIR, "15_modified_calzetti_family.png"), dpi=150, bbox_inches="tight",
+    os.path.join(FIGDIR, "15_modified_calzetti_family.png"),
+    dpi=150,
+    bbox_inches="tight",
 )
 plt.show()
 
@@ -340,7 +353,9 @@ k_lmc = get_dust_law("lmc")(wave_ext)
 
 fig, ax = plt.subplots(figsize=(8, 5))
 
-ax.plot(np.array(wave_ext), np.array(k_mw), color=COLORS["rt"], lw=2.5, label="MW (CCM89, R_V=3.1)")
+ax.plot(
+    np.array(wave_ext), np.array(k_mw), color=COLORS["rt"], lw=2.5, label="MW (CCM89, R_V=3.1)"
+)
 ax.plot(np.array(wave_ext), np.array(k_smc), color=COLORS["geovi"], lw=2.5, label="SMC (Pei 1992)")
 ax.plot(np.array(wave_ext), np.array(k_lmc), color=COLORS["nuts"], lw=2.5, label="LMC (Pei 1992)")
 
@@ -350,18 +365,27 @@ ax.axvline(2175, color="grey", ls="--", alpha=0.4)
 
 # Annotations for bump strength
 ax.annotate(
-    "Strong bump", xy=(2175, np.float64(k_mw[np.argmin(np.abs(np.array(wave_ext) - 2175))])),
-    xytext=(3000, 6.5), fontsize=8, arrowprops={"arrowstyle": "->", "color": COLORS["rt"]},
+    "Strong bump",
+    xy=(2175, np.float64(k_mw[np.argmin(np.abs(np.array(wave_ext) - 2175))])),
+    xytext=(3000, 6.5),
+    fontsize=8,
+    arrowprops={"arrowstyle": "->", "color": COLORS["rt"]},
     color=COLORS["rt"],
 )
 ax.annotate(
-    "No bump", xy=(2175, np.float64(k_smc[np.argmin(np.abs(np.array(wave_ext) - 2175))])),
-    xytext=(3500, 4.0), fontsize=8, arrowprops={"arrowstyle": "->", "color": COLORS["geovi"]},
+    "No bump",
+    xy=(2175, np.float64(k_smc[np.argmin(np.abs(np.array(wave_ext) - 2175))])),
+    xytext=(3500, 4.0),
+    fontsize=8,
+    arrowprops={"arrowstyle": "->", "color": COLORS["geovi"]},
     color=COLORS["geovi"],
 )
 ax.annotate(
-    "Weak bump", xy=(2175, np.float64(k_lmc[np.argmin(np.abs(np.array(wave_ext) - 2175))])),
-    xytext=(3200, 5.2), fontsize=8, arrowprops={"arrowstyle": "->", "color": COLORS["nuts"]},
+    "Weak bump",
+    xy=(2175, np.float64(k_lmc[np.argmin(np.abs(np.array(wave_ext) - 2175))])),
+    xytext=(3200, 5.2),
+    fontsize=8,
+    arrowprops={"arrowstyle": "->", "color": COLORS["nuts"]},
     color=COLORS["nuts"],
 )
 
@@ -417,7 +441,10 @@ for delta_val, c in zip(deltas_tea, tea_colors):
     k_tea = get_dust_law("tea")(wave_phys, dust_delta=delta_val)
     eb_val = 2.5 * np.exp(3.5 * delta_val)
     ax.plot(
-        np.array(wave_phys), np.array(k_tea), color=c, lw=2,
+        np.array(wave_phys),
+        np.array(k_tea),
+        color=c,
+        lw=2,
         label=rf"$\delta={delta_val:.1f}$, $E_b={eb_val:.2f}$",
     )
 ax.axvline(2175, color="grey", ls="--", alpha=0.3)
@@ -435,11 +462,19 @@ k_mw_ref = get_dust_law("cardelli")(wave_phys, dust_Rv=3.1)
 k_pl_ref = get_dust_law("power_law")(wave_phys, n_slope=-0.7)
 ax.plot(np.array(wave_phys), np.array(k_con), color=COLORS["rt"], lw=2.5, label="Conroy2010 blend")
 ax.plot(
-    np.array(wave_phys), np.array(k_mw_ref), color="grey", lw=1.5, ls=":",
+    np.array(wave_phys),
+    np.array(k_mw_ref),
+    color="grey",
+    lw=1.5,
+    ls=":",
     label="Cardelli MW (R_V=3.1)",
 )
 ax.plot(
-    np.array(wave_phys), np.array(k_pl_ref), color="grey", lw=1.5, ls="--",
+    np.array(wave_phys),
+    np.array(k_pl_ref),
+    color="grey",
+    lw=1.5,
+    ls="--",
     label="Power law (n=-0.7)",
 )
 ax.axvline(5500, color="grey", ls=":", alpha=0.3, label="Blend transition")
@@ -468,7 +503,9 @@ ax.legend(fontsize=16, loc="upper right")
 
 fig.tight_layout()
 fig.savefig(
-    os.path.join(FIGDIR, "15_physics_motivated_curves.png"), dpi=150, bbox_inches="tight",
+    os.path.join(FIGDIR, "15_physics_motivated_curves.png"),
+    dpi=150,
+    bbox_inches="tight",
 )
 plt.show()
 
@@ -498,7 +535,10 @@ tau_colors = plt.cm.YlOrRd(np.linspace(0.2, 0.95, len(tau_vs)))
 for tau_val, c in zip(tau_vs, tau_colors):
     transmission = np.exp(-tau_val * np.array(k_calz))
     ax.plot(
-        np.array(wave_param), transmission, color=c, lw=2,
+        np.array(wave_param),
+        transmission,
+        color=c,
+        lw=2,
         label=rf"$\tau_V = {tau_val}$",
     )
 
@@ -529,7 +569,9 @@ for d, c in zip(deltas, delta_colors):
     ax.plot(np.array(wave_param), np.array(k), color=c, lw=2, label=rf"$\delta = {d:+.1f}$")
 
 k_ref = get_dust_law("calzetti")(wave_param)
-ax.plot(np.array(wave_param), np.array(k_ref), color="black", lw=1.5, ls=":", label="Calzetti (ref)")
+ax.plot(
+    np.array(wave_param), np.array(k_ref), color="black", lw=1.5, ls=":", label="Calzetti (ref)"
+)
 
 ax.set_xlabel(r"Wavelength ($\AA$)")
 ax.set_ylabel(r"$k(\lambda)$")
@@ -797,16 +839,27 @@ for i, tau_val in enumerate(tau_vals):
     t_dusty = wg00_dusty(wave_geom, tau_v=tau_val, law="cardelli", n_clumps=10.0)
 
     ax.plot(
-        np.array(wave_geom), np.array(t_shell),
-        color=geom_colors["Shell"], lw=2.5, label="Shell (screen)",
+        np.array(wave_geom),
+        np.array(t_shell),
+        color=geom_colors["Shell"],
+        lw=2.5,
+        label="Shell (screen)",
     )
     ax.plot(
-        np.array(wave_geom), np.array(t_cloudy),
-        color=geom_colors["Cloudy"], lw=2.5, ls="--", label="Cloudy (mixed)",
+        np.array(wave_geom),
+        np.array(t_cloudy),
+        color=geom_colors["Cloudy"],
+        lw=2.5,
+        ls="--",
+        label="Cloudy (mixed)",
     )
     ax.plot(
-        np.array(wave_geom), np.array(t_dusty),
-        color=geom_colors["Dusty"], lw=2.5, ls="-.", label="Dusty (clumpy)",
+        np.array(wave_geom),
+        np.array(t_dusty),
+        color=geom_colors["Dusty"],
+        lw=2.5,
+        ls="-.",
+        label="Dusty (clumpy)",
     )
 
     ax.set_xlabel(r"Wavelength ($\AA$)")
@@ -910,7 +963,10 @@ for t_birth, c in zip(
     w = precompute_dust_age_weights(age_grid, t_birth=t_birth)
     label_gyr = t_birth / 1e6
     ax.plot(
-        np.array(age_grid) / 1e9, np.array(w), color=c, lw=2,
+        np.array(age_grid) / 1e9,
+        np.array(w),
+        color=c,
+        lw=2,
         label=rf"$t_\mathrm{{birth}} = {label_gyr:.0f}$ Myr",
     )
 
@@ -941,9 +997,12 @@ tau_bc = 1.0
 tau_diff = 0.5
 
 transmission = two_component_dust(
-    wave_2c, ages_show,
-    tau_v1=tau_bc, tau_v2=tau_diff,
-    law_bc="power_law", law_diff="power_law",
+    wave_2c,
+    ages_show,
+    tau_v1=tau_bc,
+    tau_v2=tau_diff,
+    law_bc="power_law",
+    law_diff="power_law",
 )
 
 fig, ax = plt.subplots(figsize=(10, 5))
@@ -956,7 +1015,11 @@ for i, (age_val, c) in enumerate(zip(ages_show, age_colors)):
     else:
         label = f"{age_myr:.0f} Myr"
     ax.plot(
-        np.array(wave_2c), np.array(transmission[i]), color=c, lw=2, label=label,
+        np.array(wave_2c),
+        np.array(transmission[i]),
+        color=c,
+        lw=2,
+        label=label,
     )
 
 ax.set_xlabel(r"Wavelength ($\AA$)")
@@ -970,7 +1033,9 @@ ax.set_ylim(0, 1.05)
 ax.legend(fontsize=8, title="Stellar age", title_fontsize=9)
 fig.tight_layout()
 fig.savefig(
-    os.path.join(FIGDIR, "15_two_component_transmission.png"), dpi=150, bbox_inches="tight",
+    os.path.join(FIGDIR, "15_two_component_transmission.png"),
+    dpi=150,
+    bbox_inches="tight",
 )
 plt.show()
 
@@ -994,12 +1059,18 @@ bc_colors = plt.cm.Reds(np.linspace(0.2, 0.9, len(tau_bc_vals)))
 
 for tau_bc_val, c in zip(tau_bc_vals, bc_colors):
     trans = two_component_dust(
-        wave_vary, ages_2,
-        tau_v1=tau_bc_val, tau_v2=tau_diff_fixed,
-        law_bc="power_law", law_diff="power_law",
+        wave_vary,
+        ages_2,
+        tau_v1=tau_bc_val,
+        tau_v2=tau_diff_fixed,
+        law_bc="power_law",
+        law_diff="power_law",
     )
     ax1.plot(
-        np.array(wave_vary), np.array(trans[0]), color=c, lw=2,
+        np.array(wave_vary),
+        np.array(trans[0]),
+        color=c,
+        lw=2,
         label=rf"$\tau_\mathrm{{bc}} = {tau_bc_val}$ (young)",
     )
     ax1.plot(np.array(wave_vary), np.array(trans[1]), color=c, lw=1.5, ls=":")
@@ -1011,8 +1082,12 @@ ax1.set_xlim(1000, 15000)
 ax1.set_ylim(0, 1.05)
 ax1.legend(fontsize=7, loc="lower right")
 ax1.text(
-    0.02, 0.02, "Solid = 1 Myr, dotted = 1 Gyr", transform=ax1.transAxes,
-    fontsize=8, color="grey",
+    0.02,
+    0.02,
+    "Solid = 1 Myr, dotted = 1 Gyr",
+    transform=ax1.transAxes,
+    fontsize=8,
+    color="grey",
 )
 
 # Right panel: vary tau_diff at fixed tau_bc = 1.0
@@ -1022,12 +1097,18 @@ diff_colors = plt.cm.Blues(np.linspace(0.2, 0.9, len(tau_diff_vals)))
 
 for tau_diff_val, c in zip(tau_diff_vals, diff_colors):
     trans = two_component_dust(
-        wave_vary, ages_2,
-        tau_v1=tau_bc_fixed, tau_v2=tau_diff_val,
-        law_bc="power_law", law_diff="power_law",
+        wave_vary,
+        ages_2,
+        tau_v1=tau_bc_fixed,
+        tau_v2=tau_diff_val,
+        law_bc="power_law",
+        law_diff="power_law",
     )
     ax2.plot(
-        np.array(wave_vary), np.array(trans[0]), color=c, lw=2,
+        np.array(wave_vary),
+        np.array(trans[0]),
+        color=c,
+        lw=2,
         label=rf"$\tau_\mathrm{{diff}} = {tau_diff_val}$ (young)",
     )
     ax2.plot(np.array(wave_vary), np.array(trans[1]), color=c, lw=1.5, ls=":")
@@ -1037,14 +1118,20 @@ ax2.set_title(rf"Vary $\tau_\mathrm{{diff}}$ (fixed $\tau_\mathrm{{bc}} = {tau_b
 ax2.set_xlim(1000, 15000)
 ax2.legend(fontsize=7, loc="lower right")
 ax2.text(
-    0.02, 0.02, "Solid = 1 Myr, dotted = 1 Gyr", transform=ax2.transAxes,
-    fontsize=8, color="grey",
+    0.02,
+    0.02,
+    "Solid = 1 Myr, dotted = 1 Gyr",
+    transform=ax2.transAxes,
+    fontsize=8,
+    color="grey",
 )
 
 fig.suptitle("Two-Component Dust: Independent Parameter Variation", fontsize=13, y=1.02)
 fig.tight_layout()
 fig.savefig(
-    os.path.join(FIGDIR, "15_two_component_vary.png"), dpi=150, bbox_inches="tight",
+    os.path.join(FIGDIR, "15_two_component_vary.png"),
+    dpi=150,
+    bbox_inches="tight",
 )
 plt.show()
 

@@ -69,9 +69,9 @@ cmap = plt.get_cmap("inferno")
 
 fig, ax = plt.subplots(figsize=(6.6, 4.3))
 for tau in tau_values:
-    out = model.predict_rest_sed({**baseline, "agn_tau": jnp.float64(tau)})
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict({**baseline, "agn_tau": jnp.float64(tau)})
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=cmap(norm(tau)), lw=1.5)
 
 # Silicate feature marker.

@@ -93,9 +93,9 @@ def _nuLnu(**blocks):
     """Build model, sample, predict, and return nu*L_nu in rest frame."""
     model = tengri.SEDModel.build(SSP, **HOST, **blocks)
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    return wave, 2.998e18 / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    return wave, 2.998e18 / wave * np.asarray(out.rest_sed())
 
 
 # Build cumulative traces: each adds one physics layer

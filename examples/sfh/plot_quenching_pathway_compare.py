@@ -95,10 +95,10 @@ for scenario in scenarios:
     }
 
     # Rest-frame SED predictions
-    sed_out = model.predict_rest_sed(params)
-    wave = np.asarray(sed_out.wavelength)
+    sed_out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave  # c in A/s -> frequency in Hz
-    nu_l_nu = nu * np.asarray(sed_out.sed)
+    nu_l_nu = nu * np.asarray(sed_out.rest_sed())
     sed_data[name] = {"wave": wave, "nu_l_nu": nu_l_nu}
 
 # --- Create two-panel figure ---

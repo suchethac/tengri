@@ -82,7 +82,7 @@ n2o2 = np.empty(SHAPE)
 for i, logu in enumerate(LOGU_GRID):
     for j, logz in enumerate(LOGZ_GRID):
         p = {**baseline, "neb_logU": jnp.float64(logu), "neb_logZ_gas": jnp.float64(logz)}
-        lines = model.predict_emission_lines(p)
+        lines = model.predict(p).lines
         o3_hb[i, j] = float(lines.oiii_5007 / lines.hbeta)
         n2_ha[i, j] = float(lines.nii_6584 / lines.halpha)
         o32[i, j] = float(lines.oiii_5007 / lines.oii)

@@ -58,7 +58,7 @@ def _model(ssp, obs):
 def _rest(model, params):
     """``(wave_rest, L_nu)`` — the public rest-frame SED accessor.
 
-    ``Prediction.rest_sed`` returns the flux array *without* its grid, so the
+    ``Prediction.rest_sed()`` returns the flux array *without* its grid, so the
     grid comes from :meth:`SEDModel.predict_rest_sed`. This asymmetry is exactly
     why ``measure.from_prediction`` exists: a user holding a ``Prediction`` has
     no ergonomic way to pair the SED with the axis it lives on.

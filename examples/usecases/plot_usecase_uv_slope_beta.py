@@ -121,11 +121,9 @@ beta_arr = np.empty_like(tau_grid)
 irx_arr = np.empty_like(tau_grid)
 
 for i, tau in enumerate(tau_grid):
-    out = model_dust_sweep.predict_rest_sed(
-        {**baseline_dust_sweep, "dust_tau_diff": jnp.float64(tau)}
-    )
-    wave = np.asarray(out.wavelength)
-    l_nu = np.asarray(out.sed)
+    out = model_dust_sweep.predict({**baseline_dust_sweep, "dust_tau_diff": jnp.float64(tau)})
+    wave = np.asarray(model_dust_sweep.wavelengths)
+    l_nu = np.asarray(out.rest_sed())
     beta_arr[i] = _measure_beta(wave, l_nu)
     irx_arr[i] = _bolometric_lir(wave, l_nu) / _lfuv(wave, l_nu)
 
@@ -177,8 +175,10 @@ for age_idx, age in enumerate(age_values):
             "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age),
             "dust_tau_diff": jnp.float64(tau),
         }
-        out = model_age_dust.predict_rest_sed(p)
-        beta_2d[age_idx, tau_idx] = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
+        out = model_age_dust.predict(p)
+        beta_2d[age_idx, tau_idx] = _beta_uv(
+            np.asarray(model_age_dust.wavelengths), np.asarray(out.rest_sed())
+        )
 
 # ==============================================================================
 # Create two-panel figure

@@ -98,7 +98,8 @@ model_with_dust = tengri.SEDModel.build(
         "type": "composable",
         "disc": {"type": "multicolor", "*": tengri.FIXED},
         "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": 7.0},
-        "lines": {"type": "nlr", "*": tengri.FIXED},
+        "nlr": {"type": "analytic", "*": tengri.FIXED},
+        "blr": {"type": "none", "*": tengri.FIXED},
         "*": tengri.FIXED,
         "log_lbol": 12.5,
         "frac": 1.0,
@@ -117,9 +118,9 @@ fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(16.0, 5.0))
 # Panel (a): Full-spectrum inclination sweep (7 angles)
 for cos_inc, inc_deg, color in zip(cos_inc_values, inclination_deg, colors):
     params = {**baseline_agn, "agn_cos_inc": np.float64(cos_inc)}
-    out = model_agn_only.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
-    sed = np.asarray(out.sed)
+    out = model_agn_only.predict(params)
+    wave = np.asarray(model_agn_only.wavelengths)
+    sed = np.asarray(out.rest_sed())
     nu_l_nu = C_AA_PER_S / wave * sed
 
     ax1.loglog(
@@ -162,10 +163,10 @@ colors_silicate = ["gold", "orange", "red", "darkblue"]
 
 for cos_inc, color, label in zip(cos_inc_silicate, colors_silicate, labels_silicate):
     params = {**baseline_dust, "agn_cos_inc": jnp.float64(cos_inc)}
-    out = model_with_dust.predict_rest_sed(params)
+    out = model_with_dust.predict(params)
 
-    wave_rest = np.asarray(out.wavelength)
-    sed_rest = np.asarray(out.sed)
+    wave_rest = np.asarray(model_with_dust.wavelengths)
+    sed_rest = np.asarray(out.rest_sed())
 
     # Select 3–30 μm rest-frame window
     mask = (wave_rest >= 3e4) & (wave_rest <= 3e5)
@@ -213,10 +214,10 @@ cmap_osc = plt.get_cmap("viridis")
 
 for cos_inc in cos_inc_obscuration:
     params = {**baseline_dust, "agn_cos_inc": jnp.float64(cos_inc)}
-    out = model_with_dust.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model_with_dust.predict(params)
+    wave = np.asarray(model_with_dust.wavelengths)
     nu = C_AA_PER_S / wave
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax3.loglog(wave, nu_l_nu, color=cmap_osc(norm_osc(cos_inc)), lw=1.4, alpha=0.85)
 
 ax3.set_xlim(100, 1e6)

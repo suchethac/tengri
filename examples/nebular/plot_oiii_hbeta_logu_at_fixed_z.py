@@ -63,7 +63,7 @@ for k, logz in enumerate(logz_values):
     ratio = []
     for u in logu_grid:
         p = {**baseline, "neb_logU": np.float64(u)}
-        lines = model.predict_emission_lines(p)
+        lines = model.predict(p).lines
         o3 = float(lines.oiii_5007)
         hb = float(lines.hbeta)
         ratio.append(o3 / hb if hb > 0 else np.nan)

@@ -207,6 +207,63 @@ See `docs/dev/api_migration_v0.x.md` for the full grammar reference and
 variant swapping, and round-trip editing. Design plan:
 `~/.claude/plans/i-feel-like-its-serene-emerson.md`.
 
+## Prediction API (MANDATORY — read before writing ANY prediction code)
+
+**Canonical: `docs/dev/NAMING_CONTRACT.md` §4b.** Binding on all code, docs,
+notebooks, examples and agents. Violations are bugs, not style.
+
+**Two surfaces, nothing else public:**
+
+```python
+pred = model.predict(params)          # rich + cached; ONE forward pass. Exploration.
+model.predict_photometry(params)      # lean, JIT/vmap-safe. The inference hot path.
+model.predict_properties(params, names=(...))   # the ONE jit/vmap surface for derived quantities
+```
+
+**Observables are uniform callables with defaults** (no `_at`/`_for`/`_on` coinages):
+
+```python
+pred.rest_sed()          # L_nu [erg/s/Hz], rest axis    | axis: pred.wave_rest
+pred.rest_sed(wave)      # resampled onto YOUR rest-frame grid [Angstrom]
+pred.obs_sed()           # L_nu [erg/s/Hz] STILL — obs axis + IGM | axis: pred.wave_obs
+pred.obs_sed(wave_obs)   # resampled — OBSERVED-frame grid (its own frame!)
+pred.photometry(filters=None, fast=False)   # F_nu [erg/s/cm2/Hz]
+pred.spectrum(wave_obs=None)                # F_nu [erg/s/cm2/Hz]
+pred.properties["stellar_mass"]      # or the sugar: pred.stellar_mass
+```
+
+**UNITS (§4b.3b) — `obs_sed` is NOT a flux.** "Observed" names the *frame*, not a
+flux conversion. `rest_sed()` and `obs_sed()` are BOTH L_nu [erg/s/Hz]; they
+differ only by the wavelength axis and IGM absorption. The cosmological dimming
+`(1+z)/(4*pi*d_L^2)` is applied at the **projection** step
+(`observation/redshift_kernel.py`), so only `photometry()` / `magnitudes()` /
+`spectrum()` return a flux. Integrating `obs_sed()` as a flux is wrong by ~57
+orders of magnitude. (The docstring claimed the opposite for a long time — it was
+false. Measure, do not trust the prose.)
+
+**Five rules that have each already caused a shipped bug:**
+
+1. **`model.predict()` takes `params` and NOTHING else.** No `wave=`. Resampling
+   lives on the accessor (`pred.rest_sed(wave)`). `model.predict(p, wave=...)`
+   raises `TypeError` — and `py_compile` will not catch it.
+2. **Never `params.get("redshift", 0.0)`.** A `Fixed` redshift is legitimately
+   absent from `params`; the `0.0` default puts the galaxy at 10 pc — a silent
+   1e17 flux error. Use `model._get_redshift(params)`. (Not `_get_dl_cm`: it
+   discards an explicit override.)
+3. **`state.derived[...]` is NOT `posterior.derived`.** The former is
+   `ForwardState.derived`, the internal pipeline dict — **not deprecated, leave
+   it alone**. Only `Posterior.derived` is deprecated (→ `posterior.properties`).
+   Never grep-and-migrate a bare `.derived`.
+4. **The SED arrays do not carry their axis** — use `pred.wave_rest` /
+   `pred.wave_obs`. Never hand-roll `wave * (1 + z)`.
+5. **`pred.rest_sed` without `()` raises.** Deliberately: a bound method coerces
+   to a `dtype=object` array and would otherwise plot garbage. A public accessor
+   that can be misused must fail loudly, never fail open.
+
+Deprecated (warn + delegate; do not use, do not teach):
+`predict_rest_sed`, `predict_obs_sed`, `predict_derived`, `predict_magnitudes`,
+`predict_sfh_quantities`, `predict_sed_quantities`, `Posterior.derived`.
+
 ## Key conventions
 
 - **Physical constants**: Import from `utils/physics_constants.py` — do NOT define local constant literals. Exception: `L_SUN_CUE = 3.839e33` in `cue.py` is intentional (Cue training convention, not IAU 2015).

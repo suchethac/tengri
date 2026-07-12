@@ -60,11 +60,11 @@ for name, recipe_fn, color in RECIPES:
 
     # Sample at prior medians for canonical SED shape
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(params)
+    out = model.predict(params)
 
     # Convert to νL_ν for perceptual SED display
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
 
     ax.loglog(wave, nu_l_nu, color=color, lw=1.6, label=name)
 

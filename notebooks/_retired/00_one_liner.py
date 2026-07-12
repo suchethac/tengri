@@ -38,7 +38,7 @@ if ssp_path and os.path.exists(ssp_path):
     g = tg.Galaxy.from_arrays(
         filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
         flux=[1.0e-28, 2.0e-28, 3.0e-28, 2.5e-28, 2.0e-28],
-        flux_err=[1.0e-29]*5,
+        flux_err=[1.0e-29] * 5,
         flux_unit="erg/s/cm2/Hz",
         redshift=0.1,
         ssp_path=ssp_path,

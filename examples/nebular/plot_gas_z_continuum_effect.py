@@ -79,9 +79,9 @@ labels = [f"$Z_{{\\rm gas}}/Z_\\odot = 10^{{{z:.1f}}}$" for z in logz_values]
 seds = []
 for logz in logz_values:
     params = {**baseline, "neb_logZ_gas": jnp.float64(logz)}
-    pred = model.predict_rest_sed(params)
-    seds.append(np.asarray(pred.sed))
-wave = np.asarray(pred.wavelength)
+    pred = model.predict(params)
+    seds.append(np.asarray(pred.rest_sed()))
+wave = np.asarray(model.wavelengths)
 ref = seds[0]  # logz = -1.5 baseline
 
 mask = (wave >= 1000) & (wave <= 1e4)

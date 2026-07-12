@@ -88,9 +88,9 @@ def disc_sed(log_mbh: float, log_ledd: float) -> tuple[np.ndarray, np.ndarray]:
         redshift=tengri.Fixed(0.05),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    return wave, C_AA / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    return wave, C_AA / wave * np.asarray(out.rest_sed())
 
 
 fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.6), sharey=True)

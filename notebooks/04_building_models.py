@@ -490,9 +490,9 @@ for sfh_name, truth_sfh in sfh_families:
         "redshift": z,
     }
     sfr_curve = model.predict_sfh(truth)
-    sed = model.predict_rest_sed(truth)
-    wave_obs_um = np.asarray(sed.wavelength) * (1.0 + z) / 1e4
-    sed_fnu = np.asarray(units.lnu_to_fnu(sed.sed, dl_cm, z))
+    pred = model.predict(truth)
+    wave_obs_um = np.asarray(pred.wave_rest) * (1.0 + z) / 1e4
+    sed_fnu = np.asarray(units.lnu_to_fnu(pred.rest_sed(), dl_cm, z))
     sed_rows.append(
         {
             "name": sfh_name,
@@ -657,9 +657,9 @@ truth_nodust = {
     "redshift": z,
 }
 
-sed_nodust = model_nodust.predict_rest_sed(truth_nodust)
-wave_obs_um = np.asarray(sed_nodust.wavelength) * (1.0 + z) / 1e4
-sed_fnu_nodust = np.asarray(units.lnu_to_fnu(sed_nodust.sed, dl_cm, z))
+pred_nodust = model_nodust.predict(truth_nodust)
+wave_obs_um = np.asarray(pred_nodust.wave_rest) * (1.0 + z) / 1e4
+sed_fnu_nodust = np.asarray(units.lnu_to_fnu(pred_nodust.rest_sed(), dl_cm, z))
 
 # Clip to visible window — keeps log-autoscale honest
 _mask_ref = (wave_obs_um >= 0.1) & (wave_obs_um <= 30)
@@ -725,9 +725,9 @@ for idx, dust_law in enumerate(dust_laws):
         "redshift": z,
     }
 
-    sed = model.predict_rest_sed(truth)
-    wave_obs_um = np.asarray(sed.wavelength) * (1.0 + z) / 1e4
-    sed_fnu = np.asarray(units.lnu_to_fnu(sed.sed, dl_cm, z))
+    pred = model.predict(truth)
+    wave_obs_um = np.asarray(pred.wave_rest) * (1.0 + z) / 1e4
+    sed_fnu = np.asarray(units.lnu_to_fnu(pred.rest_sed(), dl_cm, z))
 
     palette = ["#1f4e79", "#2e7ab0", "#4ba6c8", "#7fb87a", "#e07a3a", "#a02c2c", "#5e3a8c"]
     color = palette[idx % len(palette)]
@@ -862,9 +862,9 @@ for idx, emission in enumerate(dust_emissions):
     spec = parse_groups(**groups_emission_fig)
     model = SEDModel(spec, ssp, observation=observation)
 
-    sed = model.predict_rest_sed(truth_base)
-    wave_obs_um = np.asarray(sed.wavelength) * (1.0 + z) / 1e4
-    sed_fnu = np.asarray(units.lnu_to_fnu(sed.sed, dl_cm, z))
+    pred = model.predict(truth_base)
+    wave_obs_um = np.asarray(pred.wave_rest) * (1.0 + z) / 1e4
+    sed_fnu = np.asarray(units.lnu_to_fnu(pred.rest_sed(), dl_cm, z))
 
     color = PALETTE_SEQ[idx % len(PALETTE_SEQ)]
     _m_em = (wave_obs_um >= 0.1) & (wave_obs_um <= 1000)
@@ -917,7 +917,8 @@ for emission in dust_emissions:
     }
     spec = parse_groups(**groups_energy_fig)
     model = SEDModel(spec, ssp, observation=observation)
-    derived = model.predict_derived(truth_base)
+    pred = model.predict(truth_base)
+    derived = pred.properties
     l_ir = derived.get("L_ir_rest", 1.0)  # Use fallback 1.0 if not available
     l_ir_values.append(l_ir)
 

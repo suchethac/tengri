@@ -76,10 +76,10 @@ log_l_2500_values = []
 
 for log_lbol in log_lbol_values:
     params = {**baseline, "agn_log_lbol": jnp.float64(log_lbol)}
-    out = model.predict_rest_sed(params)
+    out = model.predict(params)
 
-    wave = np.asarray(out.wavelength)
-    sed = np.asarray(out.sed)  # erg/s/Hz
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(out.rest_sed())  # erg/s/Hz
 
     # Linear interpolation to get L_ν at reference wavelengths
     # sed is L_ν(λ) in erg/s/Hz

@@ -135,6 +135,135 @@ All unit translations are implemented in `core/parameters.py :: translate_to_int
 
 ---
 
+## 4b. Public Method Verbs & API Contracts
+
+### 4b.1 Method verbs on public surfaces
+
+The public surface uses exactly these verbs. Anything else is a contract violation:
+
+| Verb | Meaning | Module | Examples |
+|------|---------|--------|----------|
+| `predict_*` | Forward model → observable or derived property | core | `predict_photometry()`, `predict_spectrum()` |
+| `measure_*` | Model-free extraction from spectra | `measure` | `measure_index_jax()`, `measure_equivalent_width()` |
+| `mock*` | Synthesize data | `results` | `generate_mock()` |
+| `fit*` | Inference entry point | `inference` | `Fitter.run()`, `PopulationFitter.run()` |
+| `plot_*` | Visualization | `plot` | `plot_sed_fit()`, `plot_sfh()` |
+
+**Rationale:** These verbs signal intent immediately. A user reading `model.predict_*` knows the call is deterministic and returns observables; `measure_*` signals model-free extraction; `fit*` signals inference.
+
+### 4b.2 The property-catalog contract
+
+Every derived physical quantity (stellar mass, SFR, ionization parameter, etc.) is declared by exactly ONE component via a `Property(units, group, doc, fn)` declaration in the protocol. Violations are architecture-level bugs.
+
+**Registry integrity:**
+- Flat snake_case keys, Bagpipes-compatible where the concepts overlap (e.g., `stellar_mass`, `sfr_total`)
+- Name collisions are a **BUILD-TIME error** caught at `SEDModel.build()`
+- Accessing an absent property raises `KeyError` listing the available names (never silently returns None/NaN/0 — this is the `silent-failure` class)
+- Metadata (units, group, doc, provenance, component name) is queryable via `tengri.list_properties()`, `describe_property()`
+
+**Topology contract — same keys everywhere:**
+- `Prediction` topology → scalar or band array
+- `Posterior` topology → `(n_samples,)` or `(n_samples, n_bands)`
+- `PopulationPosterior` topology → `(n_galaxies, n_samples,)` or `(n_galaxies, n_samples, n_bands)`
+
+Only the **axes change**; the **key name is identical** across topologies.
+
+### 4b.3 SED vs spectrum (frame & units)
+
+Naming rule for panchromatic quantities:
+
+- **SED** = panchromatic, model-grid array, **frame prefix required**: `rest_sed`, `obs_sed`. The frame prefix means "raw array"; every docstring must state frame and units.
+- **spectrum** = instrument-grid, LSF-convolved, calibrated observable. No frame prefix (the instrument frame is implied). Called via `pred.spectrum()`.
+
+**Every observable on `Prediction` is a uniform callable with a default.** No `_at` / `_for` / `_on` coinages, no bare properties that a user then has to resample by hand:
+
+```python
+pred.rest_sed()             # L_nu, rest-frame axis            [erg/s/Hz]
+pred.rest_sed(wave)         # resampled onto YOUR rest-frame grid   [Angstrom]
+pred.obs_sed()              # L_nu, observed-frame axis + IGM  [erg/s/Hz]  <- still L_nu!
+pred.obs_sed(wave_obs)      # resampled onto YOUR observed-frame grid
+pred.photometry(filters=None, fast=False)   # F_nu  [erg/s/cm2/Hz]
+pred.magnitudes(filters=None, fast=False)   # AB mag
+pred.spectrum(wave_obs=None)                # F_nu  [erg/s/cm2/Hz]
+```
+
+### 4b.3b Units: the distance is applied at PROJECTION, not on the SED
+
+This is the single easiest thing to get wrong, and the docstring got it wrong for a long time.
+
+| surface | quantity | units |
+|---|---|---|
+| `pred.rest_sed()` | L_ν, rest-frame axis | erg/s/Hz |
+| `pred.obs_sed()` | **L_ν** — observed-frame *axis* + IGM | **erg/s/Hz** |
+| `pred.photometry()` / `magnitudes()` / `spectrum()` | F_ν | erg/s/cm²/Hz (AB mag for `magnitudes`) |
+
+**`obs_sed` is NOT a flux.** "Observed" names the *frame*, not a flux conversion. It does **not** apply `(1+z)/(4π d_L²)`; that factor lives in the projection layer (`observation/redshift_kernel.py`). Measured, not assumed: at z = 3, `obs_sed` differs from `rest_sed` at exactly the 172 grid points below rest-frame Lyman-α — IGM absorption, and nothing else.
+
+Integrating `obs_sed()` as if it were a flux is wrong by ~57 orders of magnitude. If you want a flux, use `photometry()` or `spectrum()`.
+
+**The wavelength argument is in the accessor's own frame.** `rest_sed(wave)` takes rest-frame Angstrom; `obs_sed(wave_obs)` takes **observed**-frame Angstrom. (The deprecated `model.predict_obs_sed(params, wave=...)` took a *rest*-frame grid and redshifted it — an observed-frame result with a rest-frame argument. That asymmetry was a footgun and is deliberately **not** reproduced.)
+
+**The SED arrays do not carry their axis.** The axis is a separate property:
+
+| array | its axis |
+|---|---|
+| `pred.rest_sed()` | `pred.wave_rest` |
+| `pred.obs_sed()`  | `pred.wave_obs` |
+
+Never reconstruct the observed axis by hand as `wave * (1 + params["redshift"])` — see §4b.6.
+
+**Resampling is `jnp.interp` onto the requested grid**, bit-exact with the wavelength argument of the deprecated `predict_rest_sed`. Migrating a call site changes no number.
+
+### 4b.3a Misuse must fail loudly, never silently
+
+`pred.rest_sed` **without the parentheses** is a method object, not an array. Left alone, `np.asarray(bound_method)` yields a `dtype=object` array that plots and arithmetic will happily turn into garbage. It therefore raises `TypeError` with the fix spelled out (`_SEDCallable` in `forward/prediction.py`).
+
+This is the general rule, not a one-off: **a public accessor that can be misused must raise, not fail open.** This package has shipped enough silent NaN-and-carry-on bugs (the `silent-failure` label) to have earned the paranoia.
+
+### 4b.4 Exact vs fast
+
+Analysis and post-fit prediction is **EXACT by default** using the full wave grid.
+
+The fast path is a build-time optimization (e.g., `approx=WavePrecomp(...)`) that LUTs photometry and routes `predict_photometry` through precomputed sub-band weights. The fast path is **opted into explicitly** with a keyword argument at BUILD time. A speed knob must **never silently change the physics**.
+
+**Contract:**
+- Default `model.predict_photometry(params)` uses exact wave-grid integration
+- Fast path `model_fast = SEDModel.build(..., approx=WavePrecomp(...))` precomputes filters and returns results via LUT
+- Accuracy difference is bounded: approx-vs-exact tolerance is documented in the `approx` class docstring
+- User can never accidentally call the fast path; it must be explicit at model construction
+
+### 4b.5 The two prediction surfaces
+
+There are exactly two, and nothing else is public:
+
+| surface | what it is | when |
+|---|---|---|
+| `model.predict(params)` → `Prediction` | rich, cached; ONE forward pass, everything hangs off it | exploration, plotting, post-fit |
+| `model.predict_photometry / predict_spectrum / predict_line_fluxes / predict_properties(params)` | lean shortcuts, JIT/vmap-safe | the inference hot path (what the likelihood calls) |
+
+**`model.predict()` takes `params` and nothing else.** It has no `wave=` argument. (Resampling belongs to the accessor: `pred.rest_sed(wave)`.) Three separate agents have "migrated" a call site to `model.predict(p, wave=...)`; it raises `TypeError`, and `py_compile` does not catch it.
+
+`predict_properties(params, names=...)` is the **single** JIT/vmap surface for derived quantities.
+
+### 4b.6 Two names that are not what they look like
+
+These have each caused real, shipped bugs. Read them before touching prediction code.
+
+**1. `params.get("redshift", 0.0)` is forbidden.** A `Fixed` redshift is legitimately **absent** from the user's `params` dict (the spec holds it). Reading it back with a `0.0` default puts the galaxy at 10 pc and inflates the flux by ~1e17 — silently, with no NaN and no exception. This exact mistake shipped three times (#1097, #1124, #1127). **Always resolve through the spec**: `model._get_redshift(params)`, which lets an explicit value win, falls back to the fixed value, and *raises* if the model has neither.
+
+Do **not** reach for `_get_dl_cm` as "the obvious helper": it short-circuits to a precomputed distance and silently discards an explicit override.
+
+**2. `state.derived` is NOT `Posterior.derived`.**
+
+| expression | what it is | status |
+|---|---|---|
+| `state.derived["sed_agn"]`, `state.derived["L_absorbed"]`, … | `ForwardState.derived` — the internal cross-component pipeline dict (ADR-0009) | **not deprecated.** Leave it alone. |
+| `posterior.derived["stellar_mass"]` | the old `Posterior` accessor | **deprecated** → `posterior.properties[...]` |
+
+An audit that greps for `.derived` and "migrates" every hit will rewrite the physics accessors in the reproduction notebooks. Grep for `posterior.derived` / `\.derived\[` on a `Posterior`, never bare `.derived`.
+
+---
+
 ## 5. Inference Method Names
 
 ### Canonical method strings (13 total)

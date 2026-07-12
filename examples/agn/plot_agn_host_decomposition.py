@@ -77,8 +77,8 @@ def _build_model(agn_frac):
     agn_config = {**BASE_AGN, "*": tengri.FIXED, "frac": agn_frac}
     model = tengri.SEDModel.build(ssp, agn=agn_config, **COMMON)
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    return np.asarray(out.wavelength), np.asarray(out.sed)
+    out = model.predict(p)
+    return np.asarray(model.wavelengths), np.asarray(out.rest_sed())
 
 
 # Compute three traces: host-only, AGN-only, composite

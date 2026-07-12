@@ -68,9 +68,9 @@ model_sf = tengri.SEDModel.build(
 )
 
 p_sf = dict(model_sf.spec.sample(jax.random.PRNGKey(42)))
-out_sf = model_sf.predict_rest_sed(p_sf)
-wave_sf = np.asarray(out_sf.wavelength)
-sed_sf = np.asarray(out_sf.sed)
+out_sf = model_sf.predict(p_sf)
+wave_sf = np.asarray(model_sf.wavelengths)
+sed_sf = np.asarray(out_sf.rest_sed())
 nu_l_nu_sf = C_AA_PER_S / wave_sf * sed_sf
 
 # =============================================================================
@@ -112,9 +112,9 @@ model_agn = tengri.SEDModel.build(
 )
 
 p_agn = dict(model_agn.spec.sample(jax.random.PRNGKey(43)))
-out_agn = model_agn.predict_rest_sed(p_agn)
-wave_agn = np.asarray(out_agn.wavelength)
-sed_agn = np.asarray(out_agn.sed)
+out_agn = model_agn.predict(p_agn)
+wave_agn = np.asarray(model_agn.wavelengths)
+sed_agn = np.asarray(out_agn.rest_sed())
 nu_l_nu_agn = C_AA_PER_S / wave_agn * sed_agn
 
 # =============================================================================
@@ -156,9 +156,9 @@ model_composite = tengri.SEDModel.build(
 )
 
 p_composite = dict(model_composite.spec.sample(jax.random.PRNGKey(44)))
-out_composite = model_composite.predict_rest_sed(p_composite)
-wave_composite = np.asarray(out_composite.wavelength)
-sed_composite = np.asarray(out_composite.sed)
+out_composite = model_composite.predict(p_composite)
+wave_composite = np.asarray(model_composite.wavelengths)
+sed_composite = np.asarray(out_composite.rest_sed())
 nu_l_nu_composite = C_AA_PER_S / wave_composite * sed_composite
 
 # =============================================================================

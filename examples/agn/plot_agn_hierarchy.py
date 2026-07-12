@@ -55,7 +55,8 @@ TIERS = [
         {
             "disc": {"type": "multicolor", "*": tengri.FIXED},
             "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "lines": {"type": "nlr", "*": tengri.FIXED},
+            "nlr": {"type": "analytic", "*": tengri.FIXED},
+            "blr": {"type": "none", "*": tengri.FIXED},
         },
     ),
     (
@@ -70,9 +71,9 @@ for (label, blocks), color in zip(TIERS, colors):
     agn = {"*": tengri.FIXED, "log_lbol": LOG_LBOL, "frac": 1.0, **blocks}
     model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=color, lw=1.5, label=label)
 
 ax.set(

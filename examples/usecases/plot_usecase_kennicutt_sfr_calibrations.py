@@ -69,9 +69,9 @@ def _measure(log_sfr):
         redshift=tengri.Fixed(0.05),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    l_nu = np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    l_nu = np.asarray(out.rest_sed())
     i1500 = int(np.argmin(np.abs(wave - 1500)))
     L_uv = float(l_nu[i1500])
     ir = (wave > 8e4) & (wave < 1e7)

@@ -60,10 +60,10 @@ def _build(tau_diff):
 
 ref_model = _build(0.0)
 p_ref = dict(ref_model.spec.sample(jax.random.PRNGKey(0)))
-out_ref = ref_model.predict_rest_sed(p_ref)
-wave = np.asarray(out_ref.wavelength)
+out_ref = ref_model.predict(p_ref)
+wave = np.asarray(ref_model.wavelengths)
 nu = C_AA_PER_S / wave
-sed_ref = np.asarray(out_ref.sed)
+sed_ref = np.asarray(out_ref.rest_sed())
 uv_band = (wave > 912) & (wave < 3000)
 ir_band = (wave > 8e4) & (wave < 1e7)
 
@@ -82,8 +82,8 @@ L_abs, L_ir = np.empty_like(tau_grid), np.empty_like(tau_grid)
 for i, tau in enumerate(tau_grid):
     model = _build(float(tau))
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    sed = np.asarray(out.sed)
+    out = model.predict(p)
+    sed = np.asarray(out.rest_sed())
     L_abs[i] = L_uv_ref - _power_in_band(sed, uv_band)
     L_ir[i] = _power_in_band(sed, ir_band)
 

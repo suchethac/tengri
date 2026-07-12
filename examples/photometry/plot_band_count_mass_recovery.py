@@ -103,7 +103,7 @@ key = jax.random.PRNGKey(0)
 
 # Generate truth photometry at full resolution once
 truth_flux_full = np.asarray(truth_model.predict_photometry(truth_params))
-truth_sed_full = truth_model.predict_rest_sed(truth_params)
+truth_sed_full = truth_model.predict(truth_params)
 
 # Store results: (n_bands, recovered_mass, mass_uncertainty)
 results_mass = []

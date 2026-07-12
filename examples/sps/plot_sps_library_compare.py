@@ -71,9 +71,9 @@ for (ssp_name, label), color in zip(LIBRARIES, COLORS):
         redshift=tengri.Fixed(0.01),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     norm = nu_l_nu[np.argmin(np.abs(wave - 5500.0))]
     if norm > 0:
         nu_l_nu = nu_l_nu / norm
