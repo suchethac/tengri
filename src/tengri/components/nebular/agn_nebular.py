@@ -442,9 +442,14 @@ def agn_nlr_cue(
 
     # Cue predicts the line luminosity for the full Q_H; the NLR
     # intercepts only a fraction of those ionizing photons.
-    line_lum = line_lum * covering_fraction
+    line_lum_erg = line_lum * covering_fraction
 
-    return line_wav, line_lum
+    # ``predict_nebular_line_luminosities`` returns erg/s, but this function's
+    # contract — shared with the Feltre and Synthesizer backends behind
+    # :func:`agn_nlr_emission` — is L_sun (#1073). Every consumer multiplies by
+    # L_SUN on the way out, so returning erg/s here scaled the NLR lines by an
+    # extra L_SUN (~3.8e33).
+    return line_wav, line_lum_erg / _LSUN_ERG
 
 
 # ── Synthesizer NLR backend ───────────────────────────────────────

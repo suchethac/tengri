@@ -6205,11 +6205,19 @@ class SEDModel:
         and produces a list of :class:`SEDComponent` adapters in the
         canonical pipeline order.
         """
+        from tengri.components.stellar.sfh.registry import apply_compositor_swap
         from tengri.forward.component_factory import build_components
 
         # Mean SFH: first entry of mean_sfh_type, with "field" flag if
         # the GP modulator is composed in.
-        mean_types = list(getattr(self.spec, "mean_sfh_type", ["tsnorm"]))
+        #
+        # The compositor swap must be applied HERE too, not just in
+        # ``resolve_sfh`` (#1074). Composing dense_basis with field renames its
+        # public parameters ``sfh_db_*`` → ``sfh_dbp_*``; handing the component
+        # the pre-swap name made it resolve the wrong spec, miss every
+        # ``sfh_dbp_*`` the user set, and silently fall back to registry
+        # defaults — so tx_frac_* moved predict_sfh but never the photometry.
+        mean_types = apply_compositor_swap(list(getattr(self.spec, "mean_sfh_type", ["tsnorm"])))
         mean_model = next((m for m in mean_types if m != "field"), "tsnorm")
         field_on = "field" in mean_types
 
