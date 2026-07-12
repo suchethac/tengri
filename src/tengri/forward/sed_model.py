@@ -679,6 +679,7 @@ class SEDModel:
         # tuple is passed so a joint fit can accelerate BOTH channels (#610).
         self._approx_config: WavePrecomp | SpectrumPrecomp | None = None
         self._approx_config_spec: SpectrumPrecomp | None = None
+        self._approx_config_wave: WavePrecomp | None = None
         if approx is None:
             self._approx = dict(self._DEFAULT_APPROX)
             self._approx["wave_precomp"] = False
@@ -706,29 +707,35 @@ class SEDModel:
                 self._resolve_wave_precomp(wave_cfgs[0])
             if spec_cfgs:
                 self._resolve_spectrum_precomp(spec_cfgs[0], observation)
-            # Primary config: WavePrecomp drives the shared z-table / Taylor /
-            # catalog knobs when present (back-compat); else the SpectrumPrecomp
-            # (but only when it actually activated — an R-fallback leaves it None).
+            self._approx_config_wave = wave_cfgs[0] if wave_cfgs else None
+            # Primary config: WavePrecomp drives the shared z-table / catalog
+            # knobs when present (back-compat); else the SpectrumPrecomp (but only
+            # when it actually activated — an R-fallback leaves it None).
             if wave_cfgs:
                 self._approx_config = wave_cfgs[0]
             else:
                 self._approx_config = self._approx_config_spec
 
-        # Thread the Taylor-correction toggle (default True) from the config into
-        # the approx dict, so the stellar precompute knows whether to build the Ψ
-        # moment and predict_via_precomp whether to apply it (#617). When the
-        # exact path is selected (config is None) the default True is harmless.
+        # Thread the photometry LUT's band-projection knobs into the approx dict,
+        # so the stellar precompute knows what to build and predict_via_precomp
+        # what to apply.
+        #
+        # These are *photometry* knobs: they correct the effective-wavelength
+        # approximation of a bandpass. A spectrum pixel is a point, not a
+        # bandpass, so SpectrumPrecomp has no meaningful value for any of them.
+        # Source them from a WavePrecomp — never from whichever object the caller
+        # happened to pass. On a joint observation ANY opt-in promotes photometry
+        # onto the LUT, so ``approx=SpectrumPrecomp()`` reached this code with a
+        # live photometry LUT and no ``n_subbands`` field; the old
+        # ``getattr(cfg, "n_subbands", 0)`` then fell back to 0 — not WavePrecomp's
+        # default of 5, but the sentinel that *disables* the quadrature — and
+        # picked up its ``taylor_correction=True``. The photometry silently ran the
+        # pre-#1122 effective-wavelength path: several percent out in the rest-UV.
         if self._approx_config is not None:
-            self._approx["taylor_correction"] = getattr(
-                self._approx_config, "taylor_correction", True
-            )
-            self._approx["fast_dust_emission"] = getattr(
-                self._approx_config, "fast_dust_emission", False
-            )
-            # Sub-band quadrature order for the dust screen (#1122). Must be
-            # threaded here or the stellar precompute silently falls back to its
-            # own default and the knob is inert.
-            self._approx["n_subbands"] = int(getattr(self._approx_config, "n_subbands", 0))
+            screen = self._approx_config_wave or WavePrecomp()
+            self._approx["taylor_correction"] = screen.taylor_correction
+            self._approx["fast_dust_emission"] = screen.fast_dust_emission
+            self._approx["n_subbands"] = int(screen.n_subbands)
 
         # Part A (joint precompute): on a joint photometry+spectroscopy
         # observation, any precompute opt-in builds BOTH LUT families. The
@@ -761,9 +768,13 @@ class SEDModel:
         self._catalog_z_range: tuple[float, float] | None = None
         if self._approx["wave_precomp"]:
             redshift_dist = spec.get_distribution("redshift")
-            # ``catalog_z_range`` is a WavePrecomp-only knob; under a joint
-            # model the config may be a SpectrumPrecomp (no such field).
-            cz = getattr(self._approx_config, "catalog_z_range", None)
+            # ``catalog_z_range`` is a WavePrecomp-only knob, so read it from the
+            # WavePrecomp slot rather than from the primary config, which under a
+            # joint model may be a SpectrumPrecomp. A ``getattr(cfg, ..., None)``
+            # here would fail *open* — silently returning the default for a knob
+            # the caller may well have set — which is exactly how the sub-band
+            # quadrature above went missing.
+            cz = self._approx_config_wave.catalog_z_range if self._approx_config_wave else None
             if cz is not None:
                 if redshift_dist.is_fixed:
                     self._approx["ztable"] = True
@@ -2918,6 +2929,18 @@ class SEDModel:
             sorted((k, bool(v)) for k, v in (self._approx or {}).items() if isinstance(v, bool))
         )
 
+        # The sub-band quadrature order changes the compiled kernel and the numbers
+        # it produces (#1122). It is an int, so — unlike ``taylor_correction`` — it
+        # is NOT picked up by ``approx_resolved_flags`` above, which filters on
+        # ``isinstance(v, bool)``. Without it, WavePrecomp(n_subbands=3) and
+        # (n_subbands=8) collide and the second silently reuses the first's kernel.
+        #
+        # Keyed off the *resolved* value rather than re-derived from the config
+        # object: the resolution rule (photometry knobs come from a WavePrecomp,
+        # never from a SpectrumPrecomp) lives in one place, and a signature that
+        # re-derives it can silently disagree with the physics it is caching.
+        approx_n_subbands = int((self._approx or {}).get("n_subbands", 0))
+
         def _cfg_key(cfg):
             if cfg is None:
                 return None
@@ -2925,13 +2948,6 @@ class SEDModel:
                 ("n_z", int(cfg.n_z)),
                 ("z_min", None if cfg.z_min is None else round(float(cfg.z_min), 12)),
                 ("z_max", None if cfg.z_max is None else round(float(cfg.z_max), 12)),
-                # The sub-band quadrature order changes the compiled kernel and the
-                # numbers it produces (#1122). It is an int, so — unlike
-                # ``taylor_correction`` — it is NOT picked up by
-                # ``approx_resolved_flags`` above, which filters on ``isinstance(v, bool)``.
-                # Without this entry, WavePrecomp(n_subbands=3) and (n_subbands=8)
-                # collide and the second silently reuses the first's compiled LUT.
-                ("n_subbands", int(getattr(cfg, "n_subbands", 0))),
             )
 
         if self._approx_config is not None or self._approx_config_spec is not None:
@@ -2942,6 +2958,7 @@ class SEDModel:
                 approx_resolved_flags,
                 ("primary", _cfg_key(self._approx_config)),
                 ("spec", _cfg_key(self._approx_config_spec)),
+                ("n_subbands", approx_n_subbands),
             )
         else:
             approx_resolved = approx_resolved_flags
