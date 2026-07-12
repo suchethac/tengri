@@ -63,9 +63,27 @@ RADIO_BAND = load_tophat_filter(2.14e9, 2.14e8, name="radio_1p4ghz")
 #: adds no dense integral, and that claim is exactly the difference.
 #:
 #: With the term band response each emitter adds only sum_k A_k * R_kf — a few ops per
-#: filter — measured at 574 (radio) and 16,157 (X-ray). Without it the emitter added
-#: 5.2e6 (X-ray) to 3.3e7 (radio). 2e5 sits an order of magnitude either side.
-MAX_EMITTER_FLOPS = 200_000
+#: filter. Without it the emitter added 5.2e6 (X-ray) to 3.3e7 (radio). The budget has
+#: to sit between those, and comfortably.
+#:
+#: Raised 2e5 -> 5e5 in #1146. That PR committed the SSP grids, which turned this test
+#: ON in CI for the first time — it had been skipping for want of `data/`, so its budget
+#: had never been checked on a CI box. It does not hold there:
+#:
+#:     xray_lopez24, same code, same 5994-wavelength grid
+#:         macOS / arm64 : added = 148,600
+#:         linux / x86-64: added = 217,712     <- over the old 2e5 budget
+#:
+#: XLA's cost analysis is platform-dependent; the old budget was calibrated on arm64.
+#: The emitter itself is NOT regressing — the invariant under test is "no DENSE per-call
+#: integral", i.e. no O(n_wave) term, and that still holds:
+#:
+#:     n_wave x5.0 (1200 -> 5994)  ->  added FLOPs x1.40   (dense would be x5)
+#:
+#: 5e5 clears the platform spread while staying ~10x below the dense regression this
+#: test exists to catch (5.2e6). Do not raise it further without re-measuring the
+#: scaling above: a budget that no longer separates 1e5 from 5e6 is not a guard.
+MAX_EMITTER_FLOPS = 500_000
 
 #: An AGN block, so the radio jet term and the X-ray corona are genuinely LIT. Without
 #: it ``L_agn_bol = 0`` and both terms are identically zero — which is exactly how a
