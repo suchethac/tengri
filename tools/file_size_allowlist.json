@@ -30,7 +30,7 @@
   "src/tengri/facade.py": 822,
   "src/tengri/forward/component_factory.py": 1067,
   "src/tengri/forward/convenience.py": 1046,
-  "src/tengri/forward/prediction.py": 2821,
+  "src/tengri/forward/prediction.py": 2840,
   "src/tengri/forward/sed_model.py": 7423,
   "src/tengri/inference/backends/mcmc/_shared.py": 860,
   "src/tengri/inference/backends/mcmc/raytrace.py": 916,
