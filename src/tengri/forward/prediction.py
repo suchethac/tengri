@@ -2503,29 +2503,51 @@ class Prediction:
 
     @property
     def obs_sed(self):
-        r"""Observed-frame panchromatic SED.
+        r"""Observed-frame panchromatic SED — **call it**: ``pred.obs_sed()``.
 
-        Returns the observed-frame spectral energy distribution (flux density)
-        evaluated on the observed wavelength grid (rest-frame shifted by 1+z).
-        Includes redshift, IGM absorption (Inoue+2014), and DLA transmission
-        when configured.
+        The rest-frame SED moved onto the observed-frame wavelength axis, with
+        IGM (and DLA) absorption applied. "Observed" refers to the **frame**,
+        not to a flux conversion.
+
+        Parameters
+        ----------
+        wave_obs : array_like, shape (n_out,), optional
+            **Observed**-frame wavelength grid to resample onto [Angstrom] —
+            the same frame as :attr:`wave_obs`, and as :meth:`spectrum`. Default
+            ``None`` returns the SED on the model's own grid.
 
         Returns
         -------
         ndarray, shape (n_wave,)
-            Observed-frame flux density [erg/s/cm²/Hz].
+            Luminosity density L_nu [erg/s/Hz] — **not** a flux.
 
         Notes
         -----
-        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
-        not inside :func:`jax.jit`.
+        **Units — read this.** This returns **L_nu [erg/s/Hz]**, exactly like
+        :meth:`rest_sed`. It does **NOT** apply the cosmological dimming factor
+        ``(1+z) / (4 pi d_L^2)``. The only differences from :meth:`rest_sed` are
+        the wavelength axis and IGM absorption; at z = 3 the two arrays are
+        identical everywhere above rest-frame Lyman-alpha.
+
+        The distance is applied at the **projection** step, not here — see
+        ``observation/redshift_kernel.py``. The surfaces that return a genuine
+        flux F_nu [erg/s/cm^2/Hz] are :meth:`photometry`, :meth:`magnitudes`
+        and :meth:`spectrum`. Integrating ``obs_sed()`` as if it were a flux is
+        wrong by ~57 orders of magnitude.
+
+        (This docstring previously claimed the opposite — "Returns F_nu, not
+        L_nu ... accounts for the (1+z)/(4 pi d_L^2) dimming factor". It was
+        false, and the claim had propagated into the naming contract. Measured,
+        not assumed.)
+
+        **JIT-compatible**: no — a postprocessing accessor.
 
         **Naming contract**: SED = panchromatic model-grid array
         (:meth:`rest_sed` / :meth:`obs_sed`); spectrum = instrument-grid,
         LSF-convolved, calibrated observable (:meth:`spectrum`).
 
-        **Wavelength frame**: Observed-frame wavelength
-        (rest-frame wavelength × (1+z)) [Ångstrom].
+        **Wavelength frame**: observed-frame (rest x (1+z)) [Angstrom]; the
+        matching axis is :attr:`wave_obs`.
 
         **Absorption**: Includes:
 
@@ -2533,9 +2555,6 @@ class Prediction:
         - DLA (damping wing absorption) when ``dla=True``
         - Reionization epoch (CGM) when configured
         - Patchy reionization when configured
-
-        **Unit note**: Returns F_ν, not L_ν. Accounts for the
-        (1+z)/(4π d_L²) cosmological dimming factor.
 
         References
         ----------

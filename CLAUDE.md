@@ -223,14 +223,23 @@ model.predict_properties(params, names=(...))   # the ONE jit/vmap surface for d
 **Observables are uniform callables with defaults** (no `_at`/`_for`/`_on` coinages):
 
 ```python
-pred.rest_sed()          # L_nu, model grid            | axis: pred.wave_rest
+pred.rest_sed()          # L_nu [erg/s/Hz], rest axis    | axis: pred.wave_rest
 pred.rest_sed(wave)      # resampled onto YOUR rest-frame grid [Angstrom]
-pred.obs_sed()           # F_nu, model grid            | axis: pred.wave_obs
+pred.obs_sed()           # L_nu [erg/s/Hz] STILL — obs axis + IGM | axis: pred.wave_obs
 pred.obs_sed(wave_obs)   # resampled — OBSERVED-frame grid (its own frame!)
-pred.photometry(filters=None, fast=False)
-pred.spectrum(wave_obs=None)
+pred.photometry(filters=None, fast=False)   # F_nu [erg/s/cm2/Hz]
+pred.spectrum(wave_obs=None)                # F_nu [erg/s/cm2/Hz]
 pred.properties["stellar_mass"]      # or the sugar: pred.stellar_mass
 ```
+
+**UNITS (§4b.3b) — `obs_sed` is NOT a flux.** "Observed" names the *frame*, not a
+flux conversion. `rest_sed()` and `obs_sed()` are BOTH L_nu [erg/s/Hz]; they
+differ only by the wavelength axis and IGM absorption. The cosmological dimming
+`(1+z)/(4*pi*d_L^2)` is applied at the **projection** step
+(`observation/redshift_kernel.py`), so only `photometry()` / `magnitudes()` /
+`spectrum()` return a flux. Integrating `obs_sed()` as a flux is wrong by ~57
+orders of magnitude. (The docstring claimed the opposite for a long time — it was
+false. Measure, do not trust the prose.)
 
 **Five rules that have each already caused a shipped bug:**
 

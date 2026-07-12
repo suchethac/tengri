@@ -178,14 +178,28 @@ Naming rule for panchromatic quantities:
 **Every observable on `Prediction` is a uniform callable with a default.** No `_at` / `_for` / `_on` coinages, no bare properties that a user then has to resample by hand:
 
 ```python
-pred.rest_sed()             # L_nu on the model's own grid      [erg/s/Hz]
+pred.rest_sed()             # L_nu, rest-frame axis            [erg/s/Hz]
 pred.rest_sed(wave)         # resampled onto YOUR rest-frame grid   [Angstrom]
-pred.obs_sed()              # F_nu on the model's own grid   [erg/s/cm2/Hz]
+pred.obs_sed()              # L_nu, observed-frame axis + IGM  [erg/s/Hz]  <- still L_nu!
 pred.obs_sed(wave_obs)      # resampled onto YOUR observed-frame grid
-pred.photometry(filters=None, fast=False)
-pred.magnitudes(filters=None, fast=False)
-pred.spectrum(wave_obs=None)
+pred.photometry(filters=None, fast=False)   # F_nu  [erg/s/cm2/Hz]
+pred.magnitudes(filters=None, fast=False)   # AB mag
+pred.spectrum(wave_obs=None)                # F_nu  [erg/s/cm2/Hz]
 ```
+
+### 4b.3b Units: the distance is applied at PROJECTION, not on the SED
+
+This is the single easiest thing to get wrong, and the docstring got it wrong for a long time.
+
+| surface | quantity | units |
+|---|---|---|
+| `pred.rest_sed()` | L_ν, rest-frame axis | erg/s/Hz |
+| `pred.obs_sed()` | **L_ν** — observed-frame *axis* + IGM | **erg/s/Hz** |
+| `pred.photometry()` / `magnitudes()` / `spectrum()` | F_ν | erg/s/cm²/Hz (AB mag for `magnitudes`) |
+
+**`obs_sed` is NOT a flux.** "Observed" names the *frame*, not a flux conversion. It does **not** apply `(1+z)/(4π d_L²)`; that factor lives in the projection layer (`observation/redshift_kernel.py`). Measured, not assumed: at z = 3, `obs_sed` differs from `rest_sed` at exactly the 172 grid points below rest-frame Lyman-α — IGM absorption, and nothing else.
+
+Integrating `obs_sed()` as if it were a flux is wrong by ~57 orders of magnitude. If you want a flux, use `photometry()` or `spectrum()`.
 
 **The wavelength argument is in the accessor's own frame.** `rest_sed(wave)` takes rest-frame Angstrom; `obs_sed(wave_obs)` takes **observed**-frame Angstrom. (The deprecated `model.predict_obs_sed(params, wave=...)` took a *rest*-frame grid and redshifted it — an observed-frame result with a rest-frame argument. That asymmetry was a footgun and is deliberately **not** reproduced.)
 

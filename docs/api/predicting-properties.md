@@ -185,9 +185,9 @@ wave = pred.wave_rest           # (n_wave,)  [Angstrom]  — the matching axis
 lnu = pred.rest_sed(np.logspace(3, 5, 500))     # rest-frame Angstrom
 
 # Observed-frame: redshift + IGM attenuation applied
-fnu  = pred.obs_sed()           # (n_wave,)  [erg/s/cm2/Hz]
+lnu  = pred.obs_sed()           # (n_wave,)  [erg/s/Hz] — STILL L_nu, not a flux
 wave = pred.wave_obs            # the matching observed-frame axis
-fnu  = pred.obs_sed(np.logspace(3, 5, 500))     # OBSERVED-frame Angstrom
+lnu  = pred.obs_sed(np.logspace(3, 5, 500))     # OBSERVED-frame Angstrom
 ```
 
 **The wavelength argument is in the accessor's own frame** — `rest_sed(wave)` takes rest-frame Å, `obs_sed(wave_obs)` takes observed-frame Å.
@@ -200,7 +200,21 @@ The model grid is the SSP grid, auto-extended when dust emission, radio or X-ray
 `pred.rest_sed` **without the parentheses** raises `TypeError`. It is a method, and a bound method coerced with `np.asarray` would otherwise produce a `dtype=object` array that plots silently-wrong results. The error message tells you the fix.
 ```
 
-**Units:** `rest_sed` is L_ν [erg/s/Hz]; `obs_sed` is F_ν [erg/s/cm²/Hz].
+### Units: the distance is applied at *projection*, not on the SED
+
+**`obs_sed` is not a flux.** "Observed" names the *frame*, not a flux conversion.
+
+| surface | quantity | units |
+|---|---|---|
+| `pred.rest_sed()` | L_ν, rest-frame axis | erg/s/Hz |
+| `pred.obs_sed()` | **L_ν** — observed-frame *axis* + IGM | **erg/s/Hz** |
+| `pred.photometry()` | F_ν | erg/s/cm²/Hz |
+| `pred.magnitudes()` | AB magnitude | — |
+| `pred.spectrum()` | F_ν | erg/s/cm²/Hz |
+
+`obs_sed()` does **not** apply `(1+z)/(4π d_L²)`; that factor lives in the projection layer. The only differences from `rest_sed()` are the wavelength axis and IGM absorption — at z = 3 the two arrays are identical everywhere above rest-frame Lyman-α.
+
+Integrating `obs_sed()` as if it were a flux is wrong by ~57 orders of magnitude. **If you want a flux, use `photometry()` or `spectrum()`.**
 
 ### Spectrum: instrument-specific, LSF-convolved, calibrated
 

@@ -220,3 +220,53 @@ def test_the_static_sweep_is_not_vacuous():
     # and it must not fire on the wavelength axes, which ARE properties
     assert not _NO_PARENS.search("w = pred.wave_rest")
     assert not _NO_PARENS.search("w = pred.wave_obs")
+
+
+# ── units: the distance is applied at PROJECTION, not on the SED ──────────
+
+
+def test_obs_sed_is_a_luminosity_not_a_flux(model, params, pred):
+    """``obs_sed`` returns L_nu [erg/s/Hz]. "Observed" names the FRAME.
+
+    The docstring claimed the opposite for a long time — "Returns F_nu, not
+    L_nu ... accounts for the (1+z)/(4 pi d_L^2) cosmological dimming factor" —
+    and that claim had already propagated into the naming contract. It is false:
+    the dimming lives in the projection layer (``observation/redshift_kernel``),
+    and ``obs_sed`` never applies it.
+
+    This matters because the error is silent and enormous: a user who integrates
+    ``obs_sed()`` as a flux is wrong by ``1/(4 pi d_L^2)`` — about 57 orders of
+    magnitude at z ~ 0.3. Nothing would raise.
+    """
+    from tengri.utils.cosmology import luminosity_distance
+
+    z = float(np.asarray(model._get_redshift(params)))
+    assert z > 0.0, "fixture must be at non-zero redshift or this proves nothing"
+
+    rest = np.asarray(pred.rest_sed())
+    obs = np.asarray(pred.obs_sed())
+
+    dl_cm = float(np.asarray(luminosity_distance(z)))
+    dimming = (1.0 + z) / (4.0 * np.pi * dl_cm**2)  # ~1e-57 cm^-2
+    assert dimming < 1e-50, "sanity: the dimming factor should be astronomically small"
+
+    # Above rest-frame Lyman-alpha the IGM is transparent, so obs_sed must equal
+    # rest_sed EXACTLY. If the dimming were applied, it would be ~1e-57x smaller.
+    optical = np.asarray(pred.wave_rest) > 2000.0
+    assert optical.sum() > 100, "need a decent optical baseline"
+    assert np.allclose(obs[optical], rest[optical], rtol=1e-12), (
+        "obs_sed differs from rest_sed above Lyman-alpha — is the cosmological "
+        "dimming being applied? It must not be; obs_sed is L_nu."
+    )
+    # ...and explicitly: it is NOT the dimmed version.
+    assert not np.allclose(obs[optical], rest[optical] * dimming, rtol=1e-3)
+
+
+def test_photometry_is_a_flux_and_the_sed_is_not(pred):
+    """Only the PROJECTION surfaces carry the 1/(4 pi d_L^2). Orders of magnitude."""
+    lnu = float(np.median(np.abs(np.asarray(pred.rest_sed()))))
+    fnu = float(np.median(np.abs(np.asarray(pred.photometry()))))
+    # L_nu for a galaxy is ~1e28 erg/s/Hz; F_nu is ~1e-27 erg/s/cm^2/Hz.
+    # The exact values depend on the fixture, but they cannot be the same scale.
+    assert lnu > 1e10, f"rest_sed looks like a flux, not a luminosity: {lnu:.3e}"
+    assert fnu < 1e-3, f"photometry looks like a luminosity, not a flux: {fnu:.3e}"
