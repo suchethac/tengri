@@ -299,6 +299,20 @@ class DustAttenuationSEDComponent:
             derived_overrides["dust_attenuation_precomp"] = a_lut
             derived_overrides["dust_attenuation_slope_precomp"] = a_slope_lut
 
+            # Sub-band quadrature (#1122). Same treatment the two-component screen
+            # gets: EVALUATE the law at each sub-band's quadrature node instead of
+            # extrapolating it from λ_eff. Wiring this here is not optional — the
+            # quadrature supersedes ``taylor_correction``, so a single-component
+            # model whose sub-bands were never published would fall back to the bare
+            # ``A(λ_eff)·Φ`` form and be *worse* than before.
+            sub_waves = state.derived.get("stellar_subband_waves_rest_precomp")
+            if sub_waves is not None:
+                if self.config.law == "calzetti":
+                    k_sub = calzetti(sub_waves)
+                else:
+                    k_sub = resolve_dust_law(self.config.law)(sub_waves)
+                derived_overrides["dust_attenuation_subband_precomp"] = jnp.exp(-tau_v * k_sub)
+
         # SpectrumPrecomp: per-pixel transmission. A spectrum pixel
         # is a single wavelength, so T(λ_pix) = exp(-τ·k(λ_pix)) is exact —
         # no Taylor slope needed (contrast the filter branch above).
