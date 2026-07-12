@@ -657,7 +657,13 @@ axR.loglog(wave_ir, norm_peak(L_d14), "C4-", lw=1.5, label=r"tengri  dale2014 ($
 axR.set_title("Differentiable alternatives (not node-matched)")
 for ax in (axL, axR):
     ax.set_xlim(1e4, 1e8)
-    ax.set_ylim(1e-3, 3)
+    # Six decades below the peak, not three. A 1e-3 floor amputated most of
+    # what these libraries are being compared *on*: the near-IR rise, the
+    # sub-percent PAH forest at 3-8 um, and the whole Rayleigh-Jeans tail past
+    # ~2 mm — which is exactly where schreiber2016's analytic modified
+    # blackbody parts company with the tabulated S17. Cropping a comparison
+    # above the disagreement defeats the comparison.
+    ax.set_ylim(1e-6, 3)
     ax.set_xlabel(r"$\lambda$ [Å]")
     ax.legend(fontsize=8)
     ax.grid(True, alpha=0.3)

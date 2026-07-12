@@ -211,6 +211,18 @@ def load_ssp(name: str | None = None) -> "SSPData":
     )
 
 
+def _load_float(dataset) -> jnp.ndarray:
+    """Read an HDF5 float dataset at tengri's working precision (#1099).
+
+    Several repackaged grids store float32 (``bc03_*``, ``pgny_*``). Left as
+    float32, ``stellar_mass_scale = total_mass x L_sun`` ~ 1e42 overflows the
+    float32 ceiling of 3.4e38 to ``inf`` — silently — and poisons the ionizing
+    SED the nebular backends consume. The upcast is lossless: every float32 is
+    exactly a float64, so no stored value changes.
+    """
+    return jnp.asarray(dataset[:], dtype=jnp.result_type(float))
+
+
 def load_ssp_data(filepath: str) -> SSPData:
     """Load SSP templates from a DSPS-format HDF5 file.
 
@@ -286,8 +298,8 @@ def load_ssp_data(filepath: str) -> SSPData:
         )
 
     with h5py.File(filepath, "r") as f:
-        ssp_lg_age_gyr = jnp.array(f["ssp_lg_age_gyr"][:])
-        ssp_lgmet = jnp.array(f["ssp_lgmet"][:])
+        ssp_lg_age_gyr = _load_float(f["ssp_lg_age_gyr"])
+        ssp_lgmet = _load_float(f["ssp_lgmet"])
 
         # IMF discovery (#307): HDF5 attribute wins, else parse filename
         # tail. Surfaced as ``ssp.imf`` so model spec / summary / gallery
@@ -322,7 +334,7 @@ def load_ssp_data(filepath: str) -> SSPData:
         # flat 0.29 % absolute-flux offset. Rescale on load so the
         # in-memory arrays are IAU-Lsun-normalized and every downstream
         # conversion is exact.
-        ssp_flux = jnp.array(f["ssp_flux"][:])
+        ssp_flux = _load_float(f["ssp_flux"])
         native_lsun = _detect_native_lsun(f, fp.name)
         if native_lsun is not None:
             from tengri.utils.physics_constants import L_SUN
@@ -331,7 +343,7 @@ def load_ssp_data(filepath: str) -> SSPData:
                 ssp_flux = ssp_flux * (native_lsun / L_SUN)
 
         if "ssp_mass_remaining" in f:
-            mass_remaining = jnp.array(f["ssp_mass_remaining"][:])
+            mass_remaining = _load_float(f["ssp_mass_remaining"])
         else:
             mass_remaining = _synthesize_mass_remaining(
                 filepath, ssp_lg_age_gyr, ssp_lgmet, imf_tag=imf
@@ -339,10 +351,10 @@ def load_ssp_data(filepath: str) -> SSPData:
 
         alpha_fe = None
         if "ssp_alpha_fe" in f:
-            alpha_fe = jnp.array(f["ssp_alpha_fe"][:])
+            alpha_fe = _load_float(f["ssp_alpha_fe"])
 
         return SSPData(
-            ssp_wave=jnp.array(f["ssp_wave"][:]),
+            ssp_wave=_load_float(f["ssp_wave"]),
             ssp_flux=ssp_flux,
             ssp_lg_age_gyr=ssp_lg_age_gyr,
             ssp_lgmet=ssp_lgmet,

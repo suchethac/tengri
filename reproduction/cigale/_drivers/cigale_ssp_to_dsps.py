@@ -204,4 +204,4 @@ def repackage_bc03_chabrier(out_path: str | Path) -> None:
 
 if __name__ == "__main__":
     out_path = Path(__file__).parent / "data" / "bc03_from_cigale.h5"
-    port_bc03_chabrier(out_path)
+    repackage_bc03_chabrier(out_path)

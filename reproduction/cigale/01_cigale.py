@@ -883,15 +883,8 @@ _c_aa_dust = 2.998e18
 _KNOB_MASS = 1e11
 _SFH_CHAIN = (
     "sfhdelayed",
-    dict(
-        tau_main=1000,
-        age_main=5000,
-        tau_burst=50,
-        age_burst=20,
-        f_burst=0.0,
-        sfr_A=1.0,
-        normalise=True,
-    ),
+    dict(tau_main=1000, age_main=5000, tau_burst=50, age_burst=20, f_burst=0.0,
+         sfr_A=1.0, normalise=True),
 )
 _BC03_CHAIN = ("bc03", dict(imf=1, metallicity=0.02, separation_age=10))
 _DUSTATT_CHAIN = ("dustatt_modified_starburst", dict(E_BV_lines=0.3))
@@ -913,13 +906,8 @@ def _knob_model(emission_type, **emkw):
     return SEDModel.build(
         ssp_data=ssp,
         stellar=STELLAR_FIDUCIAL,
-        sfh={
-            "type": "delayed",
-            "tau_gyr": Fixed(1.0),
-            "age_gyr": Fixed(5.0),
-            "log_total_mass": Fixed(11.0),
-            "*": FIXED,
-        },
+        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+             "log_total_mass": Fixed(11.0), "*": FIXED},
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
@@ -940,56 +928,58 @@ def _nu_lnu(wave_aa, l_nu):
 
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11, 4.4))
 
-# LEFT — Dale 2014 AGN fraction: tengri (solid) vs pcigale dale2014.fracAGN (dashed).
+# Where the two codes agree, a thin pcigale line simply disappears under
+# tengri's — the panel then reads as though only one code were plotted, which
+# is the opposite of the point. Draw pcigale as a thick translucent band and
+# tengri as a thin line on top (the convention the AGNFITTER-RX notebook uses):
+# agreement shows as a crisp line running down the middle of its own halo, and
+# any divergence separates the two immediately.
+_REF_KW = dict(lw=4.0, alpha=0.35, solid_capstyle="round")
+_TNG_LW = 1.4
+_peaks = []
+
+# LEFT — Dale 2014 AGN fraction: pcigale dale2014.fracAGN (band) vs tengri (line).
 m_frac = _knob_model("dale2014", alpha_mir=Fixed(2.0))
 p_frac = dict(m_frac.spec.sample(jax.random.PRNGKey(0)))
 for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
+    sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, _DUSTATT_CHAIN,
+                       ("dale2014", dict(alpha=2.0, fracAGN=f))])
+    w_c, nl_c = _nu_lnu(*C.to_lnu(sed))
+    ax_l.loglog(w_c, nl_c * _KNOB_MASS, color=c, **_REF_KW)
     o = m_frac.predict({**p_frac, "dust_frac_agn": jnp.float64(f)})
     w_t, nl_t = _nu_lnu(m_frac.wavelengths, o.rest_sed())
-    ax_l.loglog(w_t, nl_t, color=c, lw=1.8, label=rf"$f_{{\rm AGN}}={f}$")
-    sed = C.run_chain(
-        [_SFH_CHAIN, _BC03_CHAIN, _DUSTATT_CHAIN, ("dale2014", dict(alpha=2.0, fracAGN=f))]
-    )
-    w_c, nl_c = _nu_lnu(*C.to_lnu(sed))
-    ax_l.loglog(w_c, nl_c * _KNOB_MASS, color=c, lw=1.2, ls=":")
-ax_l.plot([], [], "k-", lw=1.8, label="tengri")
-ax_l.plot([], [], "k:", lw=1.2, label="pcigale")
-ax_l.set(
-    xlim=(1e4, 1e7),
-    ylim=(1e42, 1e45),
-    xlabel=r"$\lambda$ [Å]",
-    ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]",
-    title="Dale 2014 AGN fraction",
-)
+    ax_l.loglog(w_t, nl_t, color=c, lw=_TNG_LW, label=rf"$f_{{\rm AGN}}={f}$")
+    _peaks.append(float(np.nanmax(nl_t)))
+ax_l.plot([], [], "k-", **_REF_KW, label="pcigale")
+ax_l.plot([], [], "k-", lw=_TNG_LW, label="tengri")
+ax_l.set(xlim=(1e4, 1e7), xlabel=r"$\lambda$ [Å]",
+         ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]", title="Dale 2014 AGN fraction")
 ax_l.legend(fontsize=8, frameon=False, ncol=2)
 
-# RIGHT — THEMIS slope alpha: tengri (solid) vs pcigale themis.alpha (dashed),
-# matched qhac=0.17, umin=1.0, gamma=0.1.
+# RIGHT — THEMIS slope alpha, matched qhac=0.17, umin=1.0, gamma=0.1.
 m_alpha = _knob_model("themis", dust_gamma_dl=Fixed(0.1), dust_qhac=Fixed(0.17))
 p_alpha = dict(m_alpha.spec.sample(jax.random.PRNGKey(0)))
 for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
+    sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, _DUSTATT_CHAIN,
+                       ("themis", dict(qhac=0.17, umin=1.0, gamma=0.1, alpha=a))])
+    w_c, nl_c = _nu_lnu(*C.to_lnu(sed))
+    ax_r.loglog(w_c, nl_c * _KNOB_MASS, color=c, **_REF_KW)
     o = m_alpha.predict({**p_alpha, "dust_alpha": jnp.float64(a)})
     w_t, nl_t = _nu_lnu(m_alpha.wavelengths, o.rest_sed())
-    ax_r.loglog(w_t, nl_t, color=c, lw=2.0, label=rf"$\alpha={a}$")
-    sed = C.run_chain(
-        [
-            _SFH_CHAIN,
-            _BC03_CHAIN,
-            _DUSTATT_CHAIN,
-            ("themis", dict(qhac=0.17, umin=1.0, gamma=0.1, alpha=a)),
-        ]
-    )
-    w_c, nl_c = _nu_lnu(*C.to_lnu(sed))
-    ax_r.loglog(w_c, nl_c * _KNOB_MASS, color=c, lw=1.2, ls=":")
-ax_r.plot([], [], "k-", lw=2.0, label="tengri")
-ax_r.plot([], [], "k:", lw=1.2, label="pcigale")
-ax_r.set(
-    xlim=(3e4, 1e7),
-    ylim=(1e42, 1e45),
-    xlabel=r"$\lambda$ [Å]",
-    title=r"THEMIS radiation-field slope $\alpha$",
-)
+    ax_r.loglog(w_t, nl_t, color=c, lw=_TNG_LW, label=rf"$\alpha={a}$")
+    _peaks.append(float(np.nanmax(nl_t)))
+ax_r.plot([], [], "k-", **_REF_KW, label="pcigale")
+ax_r.plot([], [], "k-", lw=_TNG_LW, label="tengri")
+ax_r.set(xlim=(3e4, 1e7), xlabel=r"$\lambda$ [Å]",
+         title=r"THEMIS radiation-field slope $\alpha$")
 ax_r.legend(fontsize=8, frameon=False, ncol=2)
+
+# Five decades below the peak rather than the old three: at alpha = 1 the
+# radiation field is hot enough that the FIR bump falls away steeply, and a
+# 1e42 floor cut the curve off mid-decline as though the model had stopped.
+_ypk = max(_peaks)
+for ax in (ax_l, ax_r):
+    ax.set_ylim(_ypk * 1e-5, _ypk * 2.0)
 
 fig.tight_layout()
 save_fig("cigale_06_dust_ir_knobs.png")
@@ -1225,7 +1215,8 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
     _lt = U.line_lum(_w_t_dense, _L_t_dense, _c)
     if _lc > 0:
         print(
-            f"    {_name} {_c:.0f} Å: CIGALE {_lc:.2e}, tengri {_lt:.2e} erg/s → {_lt / _lc:.2f}×"
+            f"    {_name} {_c:.0f} Å: CIGALE {_lc:.2e}, "
+            f"tengri {_lt:.2e} erg/s → {_lt / _lc:.2f}×"
         )
 
 
@@ -1536,21 +1527,10 @@ sed_skirtor0 = C.run_chain(
         (
             "skirtor2016",
             dict(
-                t=7,
-                pl=1.0,
-                q=1.0,
-                oa=40,
-                R=20,
-                Mcl=0.97,
-                i=30,
+                t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=30,
                 disk_type=0,  # ← skirtor_disk ↔ tengri disc.skirtor
-                delta=0,
-                fracAGN=0.3,
-                lambda_fracAGN="0/0",
-                law=0,
-                EBV=0.03,
-                temperature=100.0,
-                emissivity=1.6,
+                delta=0, fracAGN=0.3, lambda_fracAGN="0/0", law=0,
+                EBV=0.03, temperature=100.0, emissivity=1.6,
             ),
         ),
     ]
@@ -1560,37 +1540,21 @@ w_sk0, L_sk0 = C.to_lnu(sed_skirtor0)
 m_agn_sk = SEDModel.build(
     ssp_data=ssp,
     stellar=STELLAR_FIDUCIAL,
-    sfh={
-        "type": "delayed",
-        "tau_gyr": Fixed(1.0),
-        "age_gyr": Fixed(5.0),
-        "log_total_mass": Fixed(0.0),
-        "*": FIXED,
-    },
-    dust={
-        "type": "two_component",
-        "law_bc": "leitherer02",
-        "law_diff": "leitherer02",
-        "tau_bc": Fixed(TAU_BC_FIDUCIAL),
-        "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
-        "*": FIXED,
-    },
-    agn={
-        "type": "composable",
-        "disc": {"type": "skirtor", "*": FIXED},  # ← the SKIRTOR analytic disc
-        "torus": {"type": "skirtor", "*": FIXED},
-        "agn_log_lbol": Fixed(-0.42),
-        "agn_fracAGN": Fixed(0.3),
-        "*": FIXED,
-    },
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+         "log_total_mass": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
+          "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
+    agn={"type": "composable",
+         "disc": {"type": "skirtor", "*": FIXED},  # ← the SKIRTOR analytic disc
+         "torus": {"type": "skirtor", "*": FIXED},
+         "agn_log_lbol": Fixed(-0.42), "agn_fracAGN": Fixed(0.3), "*": FIXED},
     redshift=Fixed(0.0),
 )
 s_agn_sk = m_agn_sk.predict_state({})
 
 fig, ax_l, ax_r = U.two_panel_fig()
 U.panel(
-    ax_l,
-    ax_r,
+    ax_l, ax_r,
     label_l="pcigale  + SKIRTOR2016 (disk_type = 0)",
     label_r="tengri  agn[skirtor disc + skirtor torus + polar BB]",
 )
@@ -1601,25 +1565,12 @@ ax_l.plot(w_sk0, L_sk0_only, "C0:", linewidth=1.5, label="SKIRTOR component only
 ax_l.legend(fontsize=9)
 ax_l.grid(True, alpha=0.3)
 L_sk_only = np.maximum(np.asarray(s_agn_sk.derived["sed_agn"]), 1e-50)
-ax_r.plot(
-    s_agn_base.wave,
-    s_agn_base.sed_intrinsic,
-    "k--",
-    linewidth=1.0,
-    alpha=0.5,
-    label="stellar + dust",
-)
-ax_r.plot(
-    s_agn_sk.wave,
-    s_agn_sk.sed_intrinsic,
-    "C1-",
-    linewidth=1.5,
-    alpha=0.7,
-    label="stellar + dust + AGN",
-)
-ax_r.plot(
-    s_agn_sk.wave, L_sk_only, "C1:", linewidth=1.5, label="skirtor disc + SKIRTOR torus only"
-)
+ax_r.plot(s_agn_base.wave, s_agn_base.sed_intrinsic, "k--", linewidth=1.0, alpha=0.5,
+          label="stellar + dust")
+ax_r.plot(s_agn_sk.wave, s_agn_sk.sed_intrinsic, "C1-", linewidth=1.5, alpha=0.7,
+          label="stellar + dust + AGN")
+ax_r.plot(s_agn_sk.wave, L_sk_only, "C1:", linewidth=1.5,
+          label="skirtor disc + SKIRTOR torus only")
 ax_r.legend(fontsize=9)
 ax_r.grid(True, alpha=0.3)
 _xmin_b = float(min(w_sk0.min(), float(np.asarray(s_agn_sk.wave).min())))
@@ -1827,7 +1778,9 @@ for _i_deg, _col in zip((0, 30, 60, 80), ("C0", "C2", "C3", "C4")):
     # hold the corona anchor at the alpha_ox crossing: fracAGN raises the
     # intrinsic disc as the torus hides it, so rescale sfr_A per angle
     _probe_i = _cigale_xray(_SFR_A_XRAY, _i_deg)
-    sed_i = _cigale_xray(_SFR_A_XRAY * 10.0**_LOG_L2500_TARGET / _cigale_l2500(_probe_i), _i_deg)
+    sed_i = _cigale_xray(
+        _SFR_A_XRAY * 10.0**_LOG_L2500_TARGET / _cigale_l2500(_probe_i), _i_deg
+    )
     w_ci, L_ci = _cigale_corona(sed_i)
     _l25_i = _cigale_l2500(sed_i)
     _mu = float(np.cos(np.radians(_i_deg)))
@@ -1873,11 +1826,39 @@ save_fig("cigale_10b_xray_inclination.png")
 # includes Murphy 2011 free-free (Eq. 11) plus synchrotron (Bell 2003). The
 # build pins `radio_q_ir = 2.5` and `radio_alpha_sf = 0.8` to match. The
 # synchrotron amplitude is anchored on `L_absorbed`: both codes compute
-# `L_ref = L_dust / (3.75e12 · 10^q_IR)`. The ratio near 1.4 GHz has three
-# components: free-free (×1.036 at 1.25 GHz, Murphy+2011, absent from CIGALE
-# #863, rising to ~1.9 by 100 GHz), anchor-frequency (×0.985, Bell 2003 at
-# 1.4 GHz vs CIGALE's 1.4276 GHz; matches to 1.05× at 1.4 GHz and 1.02× at
-# 150 MHz), and energy-balance (×1.020, the §6 FUV-curve residual).
+# `L_ref = L_dust / (3.75e12 · 10^q_IR)`, so any mismatch in the absorbed
+# energy lands 1:1 in the radio.
+#
+# tengri sits **4 % above CIGALE at 1.4 GHz**, and the excess *grows with
+# frequency* — 1.01× at 150 MHz, 1.04× at 1.4 GHz, 1.16× at 10 GHz, 1.75× at
+# 100 GHz. The shape is the diagnosis: a normalization error would offset the
+# whole band by a constant, and this does not.
+#
+# Separate the ratio into the only two things it can be made of.
+#
+# **The non-thermal terms agree, and their offset is pure convention.** Both
+# codes emit a synchrotron power law of the same index, so tengri's synchrotron
+# over CIGALE's can only be a constant — and it is: **1.005, flat across all
+# three decades** (the dotted line on the ratio panel). Two conventions predict
+# that constant without reference to the measurement:
+#
+# - **Anchor frequency, ×0.985.** Bell 2003 defines q_IR at 1.4 GHz; CIGALE
+#   normalizes at 21 cm = 1.4276 GHz — a pure `(1.4276/1.4)^−0.8` offset.
+# - **Energy balance, ×1.020.** `L_absorbed` runs 2 % above CIGALE's
+#   `dust.luminosity` for this attenuation setup (the §6 FUV curve-shape
+#   residual). Both codes anchor the synchrotron on the dust luminosity
+#   (`L_ref = L_dust / (3.75e12 · 10^q_IR)`), so it lands in the radio 1:1.
+#
+# Their product, ×1.005, is the measured flat offset. Nothing is fitted here:
+# the prediction comes from the two conventions, the measurement from the two
+# SEDs, and they meet.
+#
+# **Everything above that line is thermal.** tengri's `condon92` carries a
+# Murphy+2011 free-free term; CIGALE's `radio` module has none (#863). Free-free
+# is flat (α ≈ 0.1) where synchrotron is steep (α = 0.8), so its share climbs
+# with frequency — 4 % at 1.4 GHz, 75 % at 100 GHz. That is the entire rise of
+# the ratio panel, and it is a physics difference between the two codes rather
+# than a discrepancy in the shared physics.
 
 # %%
 sed_r = C.run_chain(
@@ -1956,11 +1937,18 @@ fig, ax, ax_r, ratio = U.overlay_ratio_fig(
     xlim=(0.1, 100.0),
     ratio_ylim=(0.5, 2.0),
 )
-# Overlay tengri's synchrotron-only term (Bell 2003) so the reader can see it
-# lies on top of CIGALE's synchrotron-only sf_nonthermal. The gap above unity in
-# the ratio panel is then unambiguously the Murphy+2011 free-free that CIGALE
-# omits, not a synchrotron-normalization difference.
+# Overlay tengri's synchrotron-only term (Bell 2003). It is the load-bearing
+# curve of this panel: it lands *on* CIGALE's synchrotron-only sf_nonthermal,
+# which is what makes the excess at high frequency attributable to the
+# Murphy+2011 free-free CIGALE omits rather than to a synchrotron
+# normalization error. Landing on top of CIGALE also made it invisible — so
+# widen CIGALE into a translucent band and let the two thin curves read
+# against it.
 from tengri.radio import radio_sfr_bell2003 as _bell03
+
+for _ln in ax.get_lines():
+    if _ln.get_label().startswith("CIGALE"):
+        _ln.set(linewidth=4.0, alpha=0.35, solid_capstyle="round")
 
 _syn_only = np.asarray(
     _bell03(w_t, float(np.asarray(state_r.derived["L_ir"])), q_ir=2.5, alpha_sf=0.8)
@@ -1968,7 +1956,7 @@ _syn_only = np.asarray(
 ax.plot(
     2.998e18 / w_t / 1e9,
     _syn_only,
-    color="0.45",
+    color="0.25",
     ls=":",
     lw=1.6,
     label="tengri  synchrotron only (Bell 2003)",
@@ -1978,22 +1966,49 @@ _nu_r = 2.998e18 / w_r / 1e9
 _g14 = (_nu_r >= 1.0) & (_nu_r <= 1.5) & (L_r > 0)
 print(f"§11 radio tengri/CIGALE median (1.0–1.5 GHz): {float(np.median(ratio[_g14])):.3f}×")
 
-# Close the ratio with its three proven factors: free-free fraction,
-# 21 cm vs 1.4 GHz anchor, and the L_absorbed (energy-balance) residual.
-_f_lir = float(np.asarray(state_r.derived["L_ir"])) / (float(sed_r.info["dust.luminosity"]) * 1e7)
-_f_anchor = float((1.4276e9 / 1.4e9) ** (-0.8))
-from tengri.radio import radio_freefree, radio_sfr_bell2003
-
-_w_probe = np.array([2.998e18 / 1.25e9])
+# Close the ratio *at every frequency*, not at one probe point. The prediction
+# is purely the two convention/physics factors — thermal fraction (frequency
+# dependent) and the fixed 21 cm-vs-1.4 GHz anchor — times the energy-balance
+# anchor, which is now ~1. If that curve traces the measured ratio across three
+# decades, the "radio deviation" is fully accounted for and nothing is left over.
 _L_ir_t = float(np.asarray(state_r.derived["L_ir"]))
-_L_syn = float(np.asarray(radio_sfr_bell2003(_w_probe, _L_ir_t, q_ir=2.5, alpha_sf=0.8))[0])
-_L_ff = float(np.asarray(radio_freefree(_w_probe, _L_ir_t, 1.0e4, 0.1))[0])
-_f_ff = 1.0 + _L_ff / _L_syn
+_f_lir = _L_ir_t / (float(sed_r.info["dust.luminosity"]) * 1e7)
+_f_anchor = float((1.4276e9 / 1.4e9) ** (-0.8))
+
+# Split the measured ratio into the two things it can be made of, and check
+# each against a number derived *independently* of it.
+#
+# tengri's synchrotron alone, over CIGALE's synchrotron, is flat — the two
+# codes' non-thermal terms have the same spectral index, so their quotient can
+# only be a normalization. Predict that normalization from the two conventions
+# (anchor frequency and the energy-balance anchor) and compare. Nothing about
+# the prediction is fitted to the measurement, so their agreement is a real
+# check rather than an identity.
+_syn_on_c = np.asarray(_bell03(w_r, _L_ir_t, q_ir=2.5, alpha_sf=0.8))
+_valid = (_nu_r >= 0.1) & (_nu_r <= 100.0) & (L_r > 0) & np.isfinite(ratio)
+_syn_ratio = _syn_on_c[_valid] / L_r[_valid]
 print(
-    f"§11 decomposition at 1.25 GHz: free-free ×{_f_ff:.3f} · "
-    f"anchor-frequency ×{_f_anchor:.3f} · L_IR anchor ×{_f_lir:.3f} "
-    f"= ×{_f_ff * _f_anchor * _f_lir:.3f}"
+    f"§11 synchrotron alone, tengri/CIGALE: "
+    f"{_syn_ratio.min():.4f}–{_syn_ratio.max():.4f} across 0.1–100 GHz (flat)"
 )
+print(
+    f"§11   predicted from conventions: anchor ×{_f_anchor:.4f} · "
+    f"energy-balance ×{_f_lir:.4f} = ×{_f_anchor * _f_lir:.4f}"
+)
+
+# Everything the total ratio carries above that flat line is the thermal term —
+# read off the model itself, not re-derived from a formula whose (T_e, thermal
+# fraction) would have to be guessed back out of the component.
+_ff_frac = ratio[_valid] / (_f_anchor * _f_lir) - 1.0
+_order = np.argsort(_nu_r[_valid])
+ax_r.axhline(_f_anchor * _f_lir, color="0.25", ls=":", lw=1.6,
+             label=f"synchrotron only (anchor × energy balance = {_f_anchor * _f_lir:.3f})")
+ax_r.legend(fontsize=7, frameon=False, loc="upper left")
+print("§11 implied free-free excess over CIGALE (which has no thermal term):")
+for _f in (0.15, 1.4, 10.0, 100.0):
+    _j = int(np.argmin(np.abs(_nu_r[_valid] - _f)))
+    print(f"    {_nu_r[_valid][_j]:6.2f} GHz: total ×{ratio[_valid][_j]:.3f} "
+          f"→ thermal fraction {_ff_frac[_j] * 100:5.1f}%")
 fig.tight_layout()
 save_fig("cigale_11_radio_synchrotron.png")
 
@@ -2177,27 +2192,41 @@ def _ratio_at(target_aa: float) -> float:
 
 _C_AA_HZ = 2.998e18  # Å/s
 print(
-    f"  X-ray  1 keV = {_ratio_at(12.398 / 1.0):.2f}×, 5 keV = {_ratio_at(12.398 / 5.0):.2f}×  (XRB + hot gas; no AGN corona)"
+    "  X-ray  1 keV = {:.2f}×, 5 keV = {:.2f}×  (XRB + hot gas; no AGN corona)".format(
+        _ratio_at(12.398 / 1.0), _ratio_at(12.398 / 5.0)
+    )
 )
 print(
-    f"  radio  1.4 GHz = {_ratio_at(_C_AA_HZ / 1.4e9):.2f}×, 150 MHz = {_ratio_at(_C_AA_HZ / 0.15e9):.2f}×  (SF synchrotron, q_IR = 2.5)"
+    "  radio  1.4 GHz = {:.2f}×, 150 MHz = {:.2f}×  (SF synchrotron, q_IR = 2.5)".format(
+        _ratio_at(_C_AA_HZ / 1.4e9), _ratio_at(_C_AA_HZ / 0.15e9)
+    )
 )
 _assert_comparable(L_ext, L_t, name="full-SED head-to-head")
 
 fig, (ax, ax_r) = plt.subplots(
     2, 1, figsize=(11, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
 )
-ax.plot(w_ext, L_ext, "C0-", linewidth=1.5, label="CIGALE")
-ax.plot(w_ext, L_t_on_ext, "C1--", linewidth=1.5, label="tengri (CIGALE-mode)")
+# nu L_nu, not L_nu. Over eleven decades of wavelength L_nu is a hopeless
+# display coordinate: the synchrotron tail climbs as a power law to the grid
+# edge, so the SED spans 16.2 decades in L_nu and any peak-anchored y-limit
+# that keeps the stellar and dust humps legible amputates the X-ray and the
+# far-UV. The same SED spans 8.5 decades in nu L_nu, so everything fits on one
+# axis — and equal areas are equal energy, which is what makes the stellar and
+# dust humps read as the comparable reservoirs energy balance says they are.
+_nu_ext = _C_AA_HZ / w_ext
+nuL_ext = _nu_ext * L_ext
+# Mask where tengri's grid has run out rather than let regrid's zero-fill draw a
+# vertical cliff at the grid edge — the model stops there, it does not go dark.
+nuL_t_on_ext = np.where(L_t_on_ext > 0, _nu_ext * L_t_on_ext, np.nan)
+ax.plot(w_ext, nuL_ext, "C0-", linewidth=1.5, label="CIGALE")
+ax.plot(w_ext, nuL_t_on_ext, "C1--", linewidth=1.5, label="tengri (CIGALE-mode)")
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(1e-1, 1e12)  # hard X-ray -> radio
-# Peak-anchored y-limit: both SEDs cliff to ~0 at the grid edges, so the log
-# axis would otherwise autoscale across ~170 decades and flatten the SED.
-_ymax_h = float(max(np.nanmax(L_ext), np.nanmax(L_t_on_ext)))
-ax.set_ylim(_ymax_h * 1e-9, _ymax_h * 2.0)
-ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
-ax.set_title("tengri in CIGALE-mode vs CIGALE — full panchromatic SED")
+_ymax_h = float(max(np.nanmax(nuL_ext), np.nanmax(nuL_t_on_ext)))
+ax.set_ylim(_ymax_h * 1e-9, _ymax_h * 3.0)
+ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
+ax.set_title(r"tengri in CIGALE-mode vs CIGALE — full panchromatic SED")
 ax.legend(fontsize=10)
 ax.grid(True, alpha=0.3)
 ax.text(
@@ -2223,6 +2252,8 @@ ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("cigale_full_sed_headtohead.png")
 plt.show()
+
+
 
 
 # %% [markdown]

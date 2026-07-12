@@ -180,20 +180,47 @@ def build_energy_balance_lut(
     )
 
 
-def _interp_weight_vector(grid: jnp.ndarray, x: jnp.ndarray) -> jnp.ndarray:
-    """Linear-interpolation weights over *all* nodes of a uniform ascending grid.
+def _interp_bracket(grid: jnp.ndarray, x: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """Lower bracketing node index and the two linear weights for ``x``.
 
-    Returns a ``(n_nodes,)`` vector that is zero except on the two nodes
-    bracketing ``x`` (carrying weights ``1 - f`` and ``f``). Using a dense
-    weight vector + contraction — rather than a dynamic gather — keeps the
-    downstream interpolation a plain tensor product that XLA does not try to
-    constant-fold. A single-node grid returns ``[1.0]`` (no interpolation).
+    Linear interpolation on a uniform grid touches exactly two nodes, so the
+    dense ``(n_nodes,)`` weight vector this replaces was zero everywhere except
+    at ``i0`` and ``i0 + 1``. Returning just the bracket lets the caller contract
+    a two-node slice of ``G`` instead of all ``n_nodes`` of it.
+
+    The node wavelengths are reconstructed arithmetically (``grid`` is a uniform
+    linspace) rather than gathered, so no indexing op touches ``grid`` itself.
+
+    Parameters
+    ----------
+    grid : ndarray, shape (n_nodes,)
+        Uniform ascending grid.
+    x : ndarray, shape ()
+        Query point. May lie outside ``grid``.
+
+    Returns
+    -------
+    i0 : ndarray, shape (), int32
+        Lower node index, clipped to ``[0, n_nodes - 2]``.
+    weights : ndarray, shape (2,)
+        Weights on nodes ``i0`` and ``i0 + 1``. Both are zero when ``x`` lies
+        more than one spacing outside the grid, reproducing the dense form.
+
+    Notes
+    -----
+    JIT/grad/vmap safe. ``i0`` is piecewise constant, so it carries no gradient;
+    the derivative with respect to ``x`` flows entirely through ``weights``,
+    which is the correct derivative of a piecewise-linear interpolant.
     """
     n = grid.shape[0]
     if n == 1:
-        return jnp.ones((1,), dtype=grid.dtype)
+        return jnp.zeros((), dtype=jnp.int32), jnp.ones((1,), dtype=grid.dtype)
+
     dx = grid[1] - grid[0]  # uniform linspace spacing
-    return jnp.clip(1.0 - jnp.abs(x - grid) / dx, 0.0, 1.0)
+    i0 = jnp.clip(jnp.floor((x - grid[0]) / dx).astype(jnp.int32), 0, n - 2)
+    nodes = grid[0] + dx * (i0.astype(grid.dtype) + jnp.arange(2, dtype=grid.dtype))
+    weights = jnp.clip(1.0 - jnp.abs(x - nodes) / dx, 0.0, 1.0)
+    return i0, weights
 
 
 def lut_l_absorbed_stellar(
@@ -226,8 +253,20 @@ def lut_l_absorbed_stellar(
     float
         Signed stellar absorbed bolometric luminosity.
     """
-    w_bc = _interp_weight_vector(lut.tau_bc_grid, tau_bc)  # (n_bc,)
-    w_diff = _interp_weight_vector(lut.tau_diff_grid, tau_diff)  # (n_diff,)
-    # Bilinear interpolation as a contraction over the two optical-depth axes.
-    g_interp = jnp.einsum("maij,i,j->ma", lut.G, w_bc, w_diff)  # (n_met, n_age)
+    i0, w_bc = _interp_bracket(lut.tau_bc_grid, tau_bc)  # (), (2,)
+    j0, w_diff = _interp_bracket(lut.tau_diff_grid, tau_diff)  # (), (2,)
+
+    # Bilinear interpolation touches four nodes of ``G``, so slice those four
+    # out before contracting. Contracting the whole optical-depth grid instead
+    # — which is what a dense weight vector forces — costs n_met x n_age x
+    # n_bc x n_diff multiply-adds to use n_met x n_age x 4 of them: on a
+    # (15, 93, 24, 24) LUT that is 803,520 versus 5,580, a 144x overshoot, and
+    # it dominated the whole WavePrecomp forward pass.
+    n_met, n_age = lut.B.shape
+    g_sub = jax.lax.dynamic_slice(
+        lut.G,
+        (jnp.zeros((), jnp.int32), jnp.zeros((), jnp.int32), i0, j0),
+        (n_met, n_age, w_bc.shape[0], w_diff.shape[0]),
+    )
+    g_interp = jnp.einsum("maij,i,j->ma", g_sub, w_bc, w_diff)  # (n_met, n_age)
     return mass_scale * jnp.sum(joint_weights * (lut.B - g_interp))
