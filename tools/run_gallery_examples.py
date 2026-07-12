@@ -117,6 +117,7 @@ def main() -> int:
     ap.add_argument("--list", action="store_true", help="show what runs and what skips, then exit")
     ap.add_argument("--only", default="", help="substring filter on the example path")
     ap.add_argument("--changed-since", default="", help="only examples changed vs this git ref")
+    ap.add_argument("--shard", default="", metavar="I/N", help="run shard I of N (1-indexed)")
     args = ap.parse_args()
 
     import matplotlib
@@ -131,6 +132,17 @@ def main() -> int:
         changed = _changed_since(args.changed_since)
         run = [p for p in run if p in changed]
         print(f"restricting to examples changed vs {args.changed_since}: {len(run)}")
+    if args.shard:
+        i, n = (int(x) for x in args.shard.split("/"))
+        if not 1 <= i <= n:
+            raise SystemExit(f"--shard {args.shard}: I must be in 1..N")
+        # INTERLEAVED, not contiguous. Cost is wildly uneven and correlates with
+        # the path: the Cue/nebular examples run ~10-20 s each and sort together,
+        # so a block split would hand one shard every slow example and time out
+        # while its siblings idle. Striding spreads them evenly.
+        total = len(run)
+        run = run[i - 1 :: n]
+        print(f"shard {i}/{n}: {len(run)} of {total} examples (interleaved)")
 
     # Never silently drop coverage: say what is not being run, and why.
     print(f"gallery: {len(run)} to execute, {len(skip)} skipped")

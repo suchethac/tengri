@@ -123,12 +123,20 @@ jobs:
   # exist. They raise TypeError. py_compile passed, ruff passed, the docs build
   # never ran them, and they would have shipped next to stale figures.
   #
-  # All 279 run in ONE process (~8 min). Spawning a process each would add
-  # ~15-20 s of JAX import + compile-cache load apiece — 8 minutes becomes 40.
+  # Each example runs in-process, so a shard pays the JAX import once (~20 s) and
+  # then ~1.8 s per example locally — but a CI runner is ~2x slower, and the full
+  # 264 overran a 25-minute single job at example 133. Four shards, interleaved
+  # (see --shard: the slow Cue/nebular examples sort together, so a contiguous
+  # split would hand one shard every expensive one and time out while the others
+  # idle).
   gallery:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -137,19 +145,19 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
-      # Both SSP grids the examples need are committed (#1146), so there is no
-      # download step and a fresh clone behaves exactly like CI.
+      # Every grid the examples need is committed (#1146), so there is no download
+      # step and a fresh clone behaves exactly like CI.
       - uses: actions/cache/restore@v4
         id: gallery_jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
-          key: jax-gallery-${{ runner.os }}-${{ hashFiles('src/tengri/**/*.py') }}
-          restore-keys: jax-gallery-${{ runner.os }}-
+          key: jax-gallery-${{ runner.os }}-${{ matrix.shard }}-${{ hashFiles('src/tengri/**/*.py') }}
+          restore-keys: jax-gallery-${{ runner.os }}-${{ matrix.shard }}-
       - name: Execute the gallery
         env:
           JAX_PLATFORMS: cpu
           MPLBACKEND: Agg
-        run: python tools/run_gallery_examples.py
+        run: python tools/run_gallery_examples.py --shard ${{ matrix.shard }}/4
       - uses: actions/cache/save@v4
         # `actions/cache` skips its implicit post-save when a job fails, so a cache
         # can never warm on a job that is ever red (the trap from #1055). Save
