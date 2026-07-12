@@ -460,37 +460,6 @@ class IGMSEDComponent:
         derived = state.derived.with_(igm_transmission=T)
         if band_factor is not None:
             derived = derived.with_(igm_phot_factor=band_factor)
-
-        # Sub-band quadrature (#1122). ``igm_phot_factor`` averages T *alone*,
-        # unweighted by the spectrum, so it forms <S>*<T> where the flux needs
-        # <S*T>. Across GALEX FUV at z~0.8 the transmission runs from ~1 to ~0
-        # inside the bandpass and that covariance term reaches -9.5%. Evaluating T
-        # at the same quadrature nodes the dust screen uses captures it exactly --
-        # the nodes carry the spectrum's own weighting, which is the whole point.
-        sub_rest = state.derived.get("stellar_subband_waves_rest_precomp")
-        if sub_rest is not None:
-            # Evaluate the IGM AT the nodes -- do NOT interpolate off the full-grid
-            # curve ``T``. Reading ``T`` here would keep the 5994-point Inoue
-            # evaluation (and the whole model grid) alive, which is exactly the pin
-            # #1107 removed to get WavePrecomp from 1764 us back to 108 us. The node
-            # grid is ~n_age x n_filter x K, orders of magnitude smaller, and leaves
-            # the full-grid curve as dead code for XLA to eliminate.
-            # igm_absorption takes a 1-D grid; the nodes are (n_age, n_filter, K).
-            sub_shape = sub_rest.shape
-            igm_sub = igm_absorption(
-                (sub_rest * (1.0 + z)).reshape(-1),
-                z,
-                igm_x_HI=params.get("igm_x_HI", 0.0),
-                igm_bubble_mpc=params.get("igm_bubble_mpc", 10.0),
-                igm_patchy=self.config.igm_patchy,
-                igm_model=self.config.igm_model,
-                use_dla=self.config.use_dla,
-                dla_z=dla_z,
-                dla_log_n_hi=params.get("dla_log_n_hi", 20.0),
-                dla_temp=params.get("dla_temp", 1e4),
-                dla_b_turb=params.get("dla_b_turb", 0.0),
-            )
-            derived = derived.with_(igm_subband_factor=igm_sub.reshape(sub_shape))
         if spec_factor is not None:
             derived = derived.with_(igm_spec_factor=spec_factor)
 
