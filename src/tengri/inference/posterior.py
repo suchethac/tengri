@@ -1600,8 +1600,11 @@ class Posterior:
 
         Parameters
         ----------
-        filters : Photometry, optional
-            Bands to integrate. Defaults to the ones the model was built with.
+        filters : sequence of str or FilterCurve, or Photometry, optional
+            Bands to integrate — filter names (``["jwst_f356w", ...]``), curves, or
+            a prebuilt :class:`~tengri.observation.Photometry`. Accepts exactly what
+            :meth:`Prediction.photometry` accepts. Defaults to the ones the model
+            was built with.
         n_draws : int, optional
             Thin to this many draws (resampled with replacement) before
             evaluating. ``None`` uses every draw — which for a large posterior is
@@ -1637,33 +1640,24 @@ class Posterior:
         >>> lo, med, hi = np.percentile(bands, [16, 50, 84], axis=0)  # doctest: +SKIP
         """
         from tengri.observation.photometry import project_photometry
-        from tengri.parameters.resolve import resolve_fixed_params
+        from tengri.observation.photometry_config import resolve_runtime_photometry
         from tengri.utils.batching import vmap_chunked
 
         if self._model is None:
             raise RuntimeError("No model reference — cannot compute observables")
 
         model = self._model
-        phot = filters if filters is not None else model.observation.photometry
+        build_time = model.observation.photometry
+        if filters is None:
+            phot = build_time
+        else:
+            # Same normalizer as Prediction.photometry, so ``filters=`` means the
+            # same thing on both surfaces — names, curves, or a Photometry (#1129).
+            phot = resolve_runtime_photometry(filters, build_time=build_time)
         if phot is None:
             raise RuntimeError("This model has no photometry to evaluate.")
 
-        if self.samples is None:
-            draws = {k: jnp.atleast_1d(v) for k, v in self.params.items()}
-        elif n_draws is None:
-            draws = self.samples
-        else:
-            draws = self.resample(jax.random.PRNGKey(0) if key is None else key, n=n_draws)
-
-        # Posterior draws carry only the FREE parameters. The exact projector
-        # reads the luminosity distance out of this dict, so a Fixed redshift
-        # would be silently dropped and every band computed at 10 pc — the same
-        # defect this campaign found in Prediction (see
-        # tests/regression/bug/test_fixed_redshift_dropped_in_exact_projection.py).
-        # Broadcast each fixed scalar across the draw axis so vmap sees it.
-        n = next(iter(draws.values())).shape[0]
-        fixed = resolve_fixed_params(model, {})
-        draws = {**{k: jnp.broadcast_to(v, (n,)) for k, v in fixed.items()}, **draws}
+        draws = self._draws_for_lift(n_draws=n_draws, key=key)
 
         if fast:
             # The lean hot-loop path: honors whatever `approx=` the model was
@@ -1676,6 +1670,117 @@ class Posterior:
                 return project_photometry(model.predict_state(p), p, phot)
 
         return vmap_chunked(fn, chunk_size=chunk_size)(draws)
+
+    def spectra(self, wave_obs=None, n_draws=None, fast=False, key=None, chunk_size=64):
+        r"""Model spectrum for every posterior draw — the other half of an SED plot.
+
+        The spectroscopic counterpart of :meth:`observables`, and the posterior
+        lift of :meth:`Prediction.spectrum`. Contract §3, **exact by default**:
+        the spectrum is LSF-convolved and calibrated exactly as the likelihood
+        sees it, so a posterior band and a posterior spectrum answer the same
+        question as the fit did. ``fast=True`` opts into the build-time
+        ``approx=`` path.
+
+        Parameters
+        ----------
+        wave_obs : array_like, shape (n_wave,), optional
+            Observed-frame wavelength grid [Angstrom]. Defaults to the
+            instrument grid the model was built with.
+        n_draws : int, optional
+            Thin to this many draws (resampled with replacement). ``None`` uses
+            every draw, chunked either way.
+        fast : bool, default False
+            Route through the lean ``predict_spectrum`` (build-time approx)
+            instead of the exact projector.
+        key : PRNGKey, optional
+            Used only when ``n_draws`` is given. Defaults to ``PRNGKey(0)``.
+        chunk_size : int, default 64
+            Draws per compiled kernel.
+
+        Returns
+        -------
+        ndarray, shape (n_draws, n_wave)
+            Observed-frame flux density per draw, F_nu [erg/s/cm^2/Hz].
+            For a MAP fit (no samples), shape ``(1, n_wave)``.
+
+        Raises
+        ------
+        RuntimeError
+            If no model is attached, or the model has no spectroscopy and no
+            ``wave_obs`` was given.
+
+        Notes
+        -----
+        **JIT-compatible**: no (drives compilation internally). The per-draw
+        kernel it maps *is* jitted.
+
+        Examples
+        --------
+        >>> spec = post.spectra(n_draws=200)  # doctest: +SKIP
+        >>> lo, med, hi = np.percentile(spec, [16, 50, 84], axis=0)  # doctest: +SKIP
+        """
+        from tengri.utils.batching import vmap_chunked
+
+        if self._model is None:
+            raise RuntimeError("No model reference — cannot compute spectra")
+
+        model = self._model
+        if model.observation.spectroscopy is None:
+            raise RuntimeError(
+                "No spectroscopy is configured on the model, so there is no LSF to "
+                "convolve with. Build it with observation=Observation(spectroscopy=...); "
+                "wave_obs=... then overrides the grid."
+            )
+
+        draws = self._draws_for_lift(n_draws=n_draws, key=key)
+
+        if fast:
+            # Mirrors Prediction.spectrum: the LUT is an approximation (measured
+            # 5-7% off on a SpectrumPrecomp model), so it is opt-in and must not be
+            # silently substituted for the exact answer.
+            if not model._approx.get("spectrum_precomp"):
+                raise ValueError(
+                    "fast=True requires the model to be built with "
+                    "approx=SpectrumPrecomp(...). Rebuild the model with "
+                    "approx=SpectrumPrecomp() and try again."
+                )
+
+            def fn(p):
+                return model.predict_spectrum(p, wave_obs=wave_obs)
+        else:
+            # Exact, and the same kernel Prediction.spectrum uses:
+            # Observation.predict calls project_spectrum (#1052) and applies the flux
+            # calibration (#1086), so a posterior spectrum and the likelihood's
+            # spec_fnu answer the same question by construction.
+            def fn(p):
+                out = model.observation.predict(model.predict_state(p), p, wave_obs=wave_obs)
+                return out["spec_fnu"]
+
+        return vmap_chunked(fn, chunk_size=chunk_size)(draws)
+
+    def _draws_for_lift(self, *, n_draws=None, key=None):
+        r"""The draw batch to map a per-draw kernel over, with fixed values filled in.
+
+        Posterior draws carry only the FREE parameters. The exact projectors read
+        the luminosity distance out of this dict, so a ``Fixed`` redshift would be
+        silently dropped and every draw evaluated at 10 pc (#1124, #1127). Resolve
+        once, here, so every lift on this class inherits it — rather than each new
+        method rediscovering the bug.
+        """
+        import jax
+
+        from tengri.parameters.resolve import resolve_fixed_params
+
+        if self.samples is None:
+            draws = {k: jnp.atleast_1d(v) for k, v in self.params.items()}
+        elif n_draws is None:
+            draws = self.samples
+        else:
+            draws = self.resample(jax.random.PRNGKey(0) if key is None else key, n=n_draws)
+
+        n = next(iter(draws.values())).shape[0]
+        fixed = resolve_fixed_params(self._model, {})
+        return {**{k: jnp.broadcast_to(v, (n,)) for k, v in fixed.items()}, **draws}
 
     # ── Resampling ────────────────────────────────────────────────
 

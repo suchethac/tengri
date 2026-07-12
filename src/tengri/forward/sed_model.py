@@ -4083,7 +4083,12 @@ class SEDModel:
         )
 
         line_defs = tuple(DESI_LINES if line_defs is None else line_defs)
-        z = jnp.asarray(params.get("redshift", 0.0))
+        # Resolve the redshift through the spec, not out of the dict. A Fixed
+        # redshift is legitimately absent from ``params``, and reading it back with
+        # a 0.0 default put the galaxy at 10 pc — 1e17 too bright, silently
+        # (#1127). ``_get_redshift`` lets an explicit value win, falls back to the
+        # fixed one, and raises if the model has neither.
+        z = jnp.asarray(self._get_redshift(params))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         four_pi_dl2 = 4.0 * jnp.pi * dl_cm**2
 
