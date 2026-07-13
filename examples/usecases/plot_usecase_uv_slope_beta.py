@@ -79,7 +79,7 @@ def _bolometric_lir(wave_aa: np.ndarray, l_nu: np.ndarray) -> float:
     mask = (wave_aa >= 8.0e4) & (wave_aa <= 1.0e7)
     nu = C_AA_PER_S / wave_aa[mask]
     order = np.argsort(nu)
-    return float(np.trapz(l_nu[mask][order], nu[order]))
+    return float(np.trapezoid(l_nu[mask][order], nu[order]))
 
 
 def _lfuv(wave_aa: np.ndarray, l_nu: np.ndarray) -> float:

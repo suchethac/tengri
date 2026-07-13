@@ -75,6 +75,11 @@ ALLOWED_TOKENS = frozenset(
 # ---- American-invariant words the rules would otherwise mangle ----
 INVARIANT = frozenset(
     {
+        # -ise words that are American English, not British variants. The -ise
+        # -> -ize rule mangles them: it "corrects" disguise -> disguize.
+        "disguise",
+        "disguised",
+        "disguises",
         "noise",
         "noised",
         "noises",

@@ -113,6 +113,60 @@ jobs:
         run: pip-audit --disable-pip
         continue-on-error: true
 
+  # Execute every sphinx-gallery example (#1146).
+  #
+  # Nothing else does. `docs/conf.py` builds its skip-list FROM DISK — sphinx-
+  # gallery skips any example that already has a committed figure, and every
+  # example has one — and `docs.yml` only runs on push:[main], never on a PR.
+  # So the gallery was un-executed by CI entirely: during #1145 five examples
+  # were "migrated" to `model.predict(p, wave=...)`, a kwarg that does not
+  # exist. They raise TypeError. py_compile passed, ruff passed, the docs build
+  # never ran them, and they would have shipped next to stale figures.
+  #
+  # Each example runs in-process, so a shard pays the JAX import once (~20 s) and
+  # then ~1.8 s per example locally — but a CI runner is ~2x slower, and the full
+  # 264 overran a 25-minute single job at example 133. Four shards, interleaved
+  # (see --shard: the slow Cue/nebular examples sort together, so a contiguous
+  # split would hand one shard every expensive one and time out while the others
+  # idle).
+  gallery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      # Every grid the examples need is committed (#1146), so there is no download
+      # step and a fresh clone behaves exactly like CI.
+      - uses: actions/cache/restore@v4
+        id: gallery_jax_cache
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: jax-gallery-${{ runner.os }}-${{ matrix.shard }}-${{ hashFiles('src/tengri/**/*.py') }}
+          restore-keys: jax-gallery-${{ runner.os }}-${{ matrix.shard }}-
+      - name: Execute the gallery
+        env:
+          JAX_PLATFORMS: cpu
+          MPLBACKEND: Agg
+        run: python tools/run_gallery_examples.py --shard ${{ matrix.shard }}/4
+      - uses: actions/cache/save@v4
+        # `actions/cache` skips its implicit post-save when a job fails, so a cache
+        # can never warm on a job that is ever red (the trap from #1055). Save
+        # explicitly, and always.
+        if: always() && steps.gallery_jax_cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: ${{ steps.gallery_jax_cache.outputs.cache-primary-key }}
+
   smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 5
