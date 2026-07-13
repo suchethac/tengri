@@ -282,7 +282,20 @@ jobs:
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        timeout-minutes: 20
+        # 20 -> 35. #1146 committed the SSP grids, which turned ~36 previously-
+        # SKIPPED tests ON (main was 1418 passed / 85 skipped; now 1454 / 49). They
+        # are the expensive kind — real 5994-wavelength grids, Cue builds — and the
+        # `contract` shard, already the long pole, went from ~11 min to ~21 min. It
+        # passed at 18m24s on the PR branch and was KILLED at 21m29s on main: the
+        # margin was gone and runner variance ate it.
+        #
+        # This is more work getting done, not slower work: a data-gated test that
+        # skips on CI has zero coverage, which is the whole reason the grids are now
+        # committed. Give the shard headroom rather than un-cover 36 tests.
+        #
+        # The per-test `--timeout=600` above still guards the failure mode this
+        # number does NOT: a single hung test stalling a worker.
+        timeout-minutes: 35
       - uses: actions/cache/save@v4
         if: always()
         with:
