@@ -213,16 +213,38 @@ jobs:
     #   contract 43% · components 28% · regression 22% · physics 7%
     # so regression+physics pair into one shard and `contract` (the long pole) sets
     # the wall clock. Wall = slowest shard, not the sum.
+    #
+    # `contract` is split again (2026-07). #1151 committed the SSP grids so that a
+    # fresh clone behaves like CI — which also woke every test that had been quietly
+    # skipping on missing `data/`. They are SSP-heavy, and contract went 9m49s ->
+    # 18m24s on that PR and then blew through the 20 min cap on the push to main,
+    # turning main red on a timeout that named no test. Splitting is the fix rather
+    # than a bigger cap: the cap would have to grow again with every contract test
+    # anyone adds, and a timeout is the worst failure mode there is — it kills the
+    # run without naming a culprit. Two interleaved shards put it back near 10 min,
+    # which is also what every PR in the repo waits on.
+    #
+    # `--shard I/N` is implemented in tests/conftest.py (round-robin over the
+    # collected order, xdist-safe because it depends on position alone). Its
+    # partition property — every test in exactly one shard — is guarded by
+    # tests/contract/test_shard_partition.py, because the failure mode of a bad
+    # split is silent: tests vanish and every shard still reports green.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - shard: contract
+          - shard: contract-1
             paths: tests/contract
+            split: --shard 1/2
+          - shard: contract-2
+            paths: tests/contract
+            split: --shard 2/2
           - shard: components
             paths: tests/components
+            split: ""
           - shard: physics-regression
             paths: tests/physics tests/regression
+            split: ""
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -276,13 +298,19 @@ jobs:
       # locally) instead of a silent job-timeout.
       - run: |
           pytest ${{ matrix.paths }} -q \
-            -n 2 \
+            -n 2 ${{ matrix.split }} \
             --timeout=600 --timeout-method=thread \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        timeout-minutes: 20
+        # 25, not 20: each contract shard is ~half the work, but `matrix.shard` keys
+        # the JAX cache, so the renamed contract-1/contract-2 start with no cache to
+        # restore and pay the cold-compile penalty (~1.5x) exactly once. The cap is a
+        # hang detector, not a budget — leaving headroom above the steady state costs
+        # nothing on a healthy run and stops the next contract test from turning main
+        # red on a nameless timeout.
+        timeout-minutes: 25
       - uses: actions/cache/save@v4
         if: always()
         with:
@@ -305,8 +333,16 @@ jobs:
       - run: pip install -e ".[dev]"
       # `-n 2` (not `-n auto`): `--cov` adds ~30–50 % memory on top of the test
       # job, so this job OOM-killed the runner even more often than `test`
-      # (the dominant cause of red `main`). Same cap as the fast job; the 35 min
-      # timeout absorbs the longer cov wall clock.
+      # (the dominant cause of red `main`). Same cap as the fast job.
+      #
+      # 50 min, not 35 (2026-07). The SSP grids #1151 committed woke the tests that
+      # had been skipping on missing `data/`, and this job — which runs the whole
+      # fast tier in ONE process, under coverage instrumentation — went over its 35
+      # min cap and timed out, red-ing main alongside `contract`. Unlike `test`, the
+      # answer here is a bigger cap rather than more shards: `coverage` runs only on
+      # push/schedule/dispatch, never on a PR, so its wall clock is off the feedback
+      # path and buys nothing by being split — while sharding it would mean merging
+      # partial coverage reports, which is real machinery for zero latency win.
       - run: |
           pytest tests/components tests/contract tests/physics tests/regression -q \
             -n 2 \
@@ -315,7 +351,7 @@ jobs:
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        timeout-minutes: 35
+        timeout-minutes: 50
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:

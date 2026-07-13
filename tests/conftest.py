@@ -266,8 +266,93 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 _SLOW_TREES = ("inference", "integration")
 
 
+def pytest_addoption(parser):
+    """Register ``--shard I/N`` for splitting one tree across several runners."""
+    parser.addoption(
+        "--shard",
+        default=None,
+        metavar="I/N",
+        help=(
+            "Run only shard I of N (1-based), round-robin over the collected order. "
+            "Splits a tree across CI runners; omit to run the whole selection."
+        ),
+    )
+
+
+def parse_shard(spec):
+    """Parse a ``"I/N"`` shard spec into a 1-based ``(index, total)`` pair.
+
+    Parameters
+    ----------
+    spec : str
+        Shard specification, e.g. ``"2/4"``.
+
+    Returns
+    -------
+    tuple of int
+        ``(index, total)``, with ``1 <= index <= total``.
+
+    Raises
+    ------
+    ValueError
+        If the spec is malformed or out of range.
+
+    Notes
+    -----
+    Raising — rather than falling back to "run everything" — is the whole point.
+    A typo that silently ran the full tree on every runner would multiply CI cost
+    while still reporting green; a typo that silently ran *nothing* would report
+    green while testing nothing. Both are worse than a loud failure.
+    """
+    index_str, _, total_str = str(spec).partition("/")
+    if not total_str:
+        raise ValueError(f"--shard={spec!r} is malformed; expected the form 'I/N', e.g. '1/2'.")
+    try:
+        index, total = int(index_str), int(total_str)
+    except ValueError:
+        raise ValueError(
+            f"--shard={spec!r} is malformed; I and N must both be integers, e.g. '1/2'."
+        ) from None
+    if total < 1 or not 1 <= index <= total:
+        raise ValueError(f"--shard={spec!r} is out of range; need N >= 1 and 1 <= I <= N.")
+    return index, total
+
+
+def select_shard(items, index, total):
+    """Round-robin partition: the items shard ``index`` of ``total`` owns.
+
+    Parameters
+    ----------
+    items : list
+        Collected items, in pytest's (deterministic) collection order.
+    index, total : int
+        1-based shard index and shard count, from :func:`parse_shard`.
+
+    Returns
+    -------
+    tuple of list
+        ``(selected, deselected)``.
+
+    Notes
+    -----
+    Round-robin on collection position, not a contiguous slice. Adjacent tests
+    are usually the same file and so share compile artifacts and cost; a
+    contiguous split hands one runner a whole expensive file while another idles.
+    Interleaving spreads the tail. ``tools/run_gallery_examples.py`` shards the
+    gallery the same way, for the same reason.
+
+    The partition depends on position alone, so every xdist worker computes an
+    identical selection — required, since xdist demands all workers agree on the
+    collected set.
+    """
+    selected, deselected = [], []
+    for position, item in enumerate(items):
+        (selected if position % total == index - 1 else deselected).append(item)
+    return selected, deselected
+
+
 def pytest_collection_modifyitems(config, items):
-    """Auto-mark every test under the heavy trees as ``slow``.
+    """Auto-mark the heavy trees ``slow``, then apply ``--shard`` when one is given.
 
     Marking by path rather than by decorator keeps the two trees exhaustively
     covered: a new file dropped into tests/inference cannot silently rejoin the
@@ -281,6 +366,15 @@ def pytest_collection_modifyitems(config, items):
             continue
         if tree in _SLOW_TREES:
             item.add_marker(pytest.mark.slow)
+
+    spec = config.getoption("--shard")
+    if spec is None:
+        return
+    index, total = parse_shard(spec)
+    selected, deselected = select_shard(items, index, total)
+    if deselected:
+        config.hook.pytest_deselected(items=deselected)
+    items[:] = selected
 
 
 @pytest.fixture(autouse=True)
