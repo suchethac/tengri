@@ -82,3 +82,6 @@ def test_diag_1154_dump():
         print(f"{i:2d} {lu:8.4f} {rel.max():11.4e}  {t._BANDS[j]:11s}  {pf[j]:.6e} / {pe[j]:.6e}")
     print(f"\nWORST = {worst:.4e}   (tolerance 3.0e-2)")
     print("=" * 72)
+    # Assert on purpose: pytest CAPTURES stdout for a passing test, so a diagnostic
+    # that passes prints nothing into the CI log. Failing is how the dump gets out.
+    assert worst < 3e-2, f"#1154 diagnostic: fast vs exact worst = {worst:.4e} (see dump above)"
