@@ -97,18 +97,6 @@ def test_enable_attaches_grid_no_silent_noop():
     assert m._nebular_grid_table is not None
 
 
-@pytest.mark.xfail(
-    reason=(
-        "#1154: fast (WavePrecomp) nebular photometry is off by 21% from the exact path "
-        "on linux/x86 (passes on macOS/arm64). A speed knob must never change the physics, "
-        "so this is a real bug — NOT a tolerance to loosen. It only surfaced now because "
-        "#1146 committed the SSP grids: the test skips without them, so it had been dead "
-        "on CI for its whole life (main ran 3625 passed / 108 skipped; this was one of the "
-        "108). Non-strict on purpose — it XPASSes on arm64, and an XPASS here is a data "
-        "point about the platform split, not a reason to fail the suite."
-    ),
-    strict=False,
-)
 def test_fast_photometry_and_lines_match_exact():
     m_exact = _build(_CUE)
     m_fast = _build(_CUE)
