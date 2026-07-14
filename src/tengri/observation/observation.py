@@ -25,6 +25,99 @@ from tengri.observation.spectroscopy import Spectroscopy
 from tengri.parameters.priors import Distribution
 
 
+def _restband_lnu(state) -> jnp.ndarray:
+    r"""Total rest-frame band luminosity for ``phot_rest_fnu`` (#1148).
+
+    ``phot_rest_fnu`` — and so ``Observables.mag_absolute`` — is the SED reprojected
+    at :math:`z=0`, :math:`d_L=10\,{\rm pc}`: *the galaxy as it is*. The filter
+    therefore sits in the **rest** frame and samples the rest SED at its own pivot.
+
+    The LUT used to reuse ``total_lnu``, the **observed**-band sum, which samples
+    rest :math:`\lambda_{\rm eff}/(1+z)`. Those are different physical quantities:
+    against the exact path the LUT ran 769 % out in ``des_g`` at z=0.5 and orders of
+    magnitude out in the blue, so an object's *absolute* magnitude depended on its
+    redshift and on which ``approx`` was passed.
+
+    Assembled from the ``*_restband_lnu_precomp`` family, **auto-discovered** exactly
+    as ``predict_via_precomp`` discovers the observed ``*_phot_lnu_precomp`` family —
+    so a new emitter gets rest-frame photometry for free and cannot silently drop out
+    of it, which is how the fast path lost AGN and nebular emission once already
+    (#737/#740).
+
+    The galaxy's own dust stays (it is part of the SED); the IGM does not (it is a
+    line-of-sight absorber between us and the source — #1115).
+
+    Parameters
+    ----------
+    state : PipelineState
+        Carrying the ``*_restband_lnu_precomp`` family and the rest-band dust screens.
+
+    Returns
+    -------
+    ndarray, shape (n_filters,)
+        Rest-frame band luminosity [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX.
+
+    Falls back to the observed-band sum when no emitter published a rest-band tensor
+    (a model built without ``WavePrecomp``, whose ``phot_rest_fnu`` the exact
+    projector computes instead).
+    """
+    keys = [k for k in state.derived.field_names() if k.endswith("_restband_lnu_precomp")]
+    contribs = [state.derived.get(k) for k in keys]
+    contribs = [c for c in contribs if c is not None]
+    if not contribs:
+        # No rest-band LUT (e.g. n_subbands / WavePrecomp off). The caller's
+        # observed-band sum is the pre-#1148 behavior; keep it rather than return
+        # zeros, so this can never silently blank out a channel.
+        return state.derived.get("stellar_phot_lnu_precomp")
+
+    total = contribs[0]
+    for c in contribs[1:]:
+        total = total + c
+
+    # Dust reddens the stellar + nebular bucket, exactly as in the observed band.
+    # Everything else (AGN, radio, X-ray) carries its own attenuation already.
+    stellar = state.derived.get("stellar_restband_lnu_precomp")
+    nebular = state.derived.get("nebular_restband_lnu_precomp")
+    stellar = stellar if stellar is not None else jnp.zeros_like(total)
+    nebular = nebular if nebular is not None else jnp.zeros_like(total)
+    unattenuated = total - stellar - nebular
+
+    a_bc = state.derived.get("dust_bc_restband_attenuation_precomp")
+    a_diff = state.derived.get("dust_diff_restband_attenuation_precomp")
+    a_single = state.derived.get("dust_restband_attenuation_precomp")
+    sub_per_age = state.derived.get("stellar_restband_lnu_per_age_subband_precomp")
+    y_age = state.derived.get("dust_young_indicator")
+
+    if a_bc is not None and a_diff is not None:
+        # Two-component (Charlot & Fall): T(a, λ) = T_diff(λ)·T_bc(λ)^y(a).
+        a_bc_sub = state.derived.get("dust_bc_restband_attenuation_subband_precomp")
+        a_diff_sub = state.derived.get("dust_diff_restband_attenuation_subband_precomp")
+        if a_bc_sub is not None and sub_per_age is not None and y_age is not None:
+            # K-point quadrature across the rest band — the screen is EVALUATED at
+            # each node, not extrapolated from the pivot (#1122).
+            t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
+            stellar_att = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
+        else:
+            stellar_att = a_diff * a_bc * stellar
+        # Nebular arises in the HII regions around the youngest stars, so it sees the
+        # full young-limit screen (y=1), matching the exact path.
+        return stellar_att + a_diff * a_bc * nebular + unattenuated
+
+    if a_single is not None:
+        a_sub = state.derived.get("dust_restband_attenuation_subband_precomp")
+        if a_sub is not None and sub_per_age is not None:
+            stellar_att = jnp.sum(sub_per_age * a_sub, axis=(0, 2))
+        else:
+            stellar_att = a_single * stellar
+        return stellar_att + a_single * nebular + unattenuated
+
+    return total
+
+
 @dataclasses.dataclass(frozen=True)
 class Observation:
     """Unified observation configuration.
@@ -1038,11 +1131,11 @@ class Observation:
         cosmology = (1.0 + z) / (4.0 * jnp.pi * dl_cm**2)
         phot_fnu = total_lnu * cosmology
 
-        # phot_rest_fnu: same LUT sum projected at z=0, d_L=10pc.
+        # phot_rest_fnu: the SED reprojected at z=0, d_L=10 pc — the galaxy as it is.
         from tengri.utils.physics_constants import TEN_PC_CM
 
         cosmology_rest = 1.0 / (4.0 * jnp.pi * TEN_PC_CM**2)
-        phot_rest_fnu = total_lnu * cosmology_rest
+        phot_rest_fnu = _restband_lnu(state) * cosmology_rest
 
         # IGM / DLA attenuation. The IGM component publishes its full
         # transmission curve on the dense rest grid even under WavePrecomp, so

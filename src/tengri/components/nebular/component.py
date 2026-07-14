@@ -761,6 +761,21 @@ class NebularSEDComponent:
                 ]
             )
             derived_overrides["nebular_phot_lnu_precomp"] = nebular_phot_lnu_precomp
+            # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
+            # z=0, so the filter sits in the REST frame and samples the rest SED at
+            # its own pivot — the SAME integral with redshift=0, not the observed-band
+            # value reused. Reusing it is what made the LUT report a different
+            # physical quantity from the exact path (769 % in des_g at z=0.5).
+            derived_overrides["nebular_restband_lnu_precomp"] = jnp.asarray(
+                [
+                    lnu_filter_integral(nebular_sed, state.wave, fw, ft, redshift=0.0)
+                    for fw, ft in zip(
+                        self._state.filter_waves,
+                        self._state.filter_trans,
+                        strict=False,
+                    )
+                ]
+            )
 
         # Spectrum LUT family (SpectrumPrecomp): point-sample the *un-attenuated*
         # rest-frame nebular SED at the pixel wavelengths (a pixel is a single

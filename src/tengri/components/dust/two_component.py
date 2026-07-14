@@ -750,6 +750,28 @@ class DustSEDComponent:
                 derived_overrides["dust_bc_attenuation_subband_precomp"] = a_bc_sub
                 derived_overrides["dust_diff_attenuation_subband_precomp"] = a_diff_sub
 
+            # The same screen on the REST band (#1148). ``phot_rest_fnu`` projects at
+            # z=0, so its filter samples rest λ_pivot, not rest λ_pivot/(1+z) — a
+            # different set of wavelengths, and the galaxy's own dust must be
+            # evaluated THERE. The law is analytic, so this is the same expression on
+            # a different grid; τ, δ and the bump stay free.
+            rb_eff = state.derived.get("filter_restband_eff_waves")
+            if rb_eff is not None:
+                derived_overrides["dust_bc_restband_attenuation_precomp"] = jnp.exp(
+                    -tau_bc * law_bc_fn(rb_eff, n_slope=n_slope_bc)
+                )
+                derived_overrides["dust_diff_restband_attenuation_precomp"] = jnp.exp(
+                    -tau_diff * law_diff_fn(rb_eff, n_slope=n_slope_diff)
+                )
+            rb_sub_waves = state.derived.get("stellar_restband_subband_waves_precomp")
+            if rb_sub_waves is not None:
+                derived_overrides["dust_bc_restband_attenuation_subband_precomp"] = jnp.exp(
+                    -tau_bc * law_bc_fn(rb_sub_waves, n_slope=n_slope_bc)
+                )
+                derived_overrides["dust_diff_restband_attenuation_subband_precomp"] = jnp.exp(
+                    -tau_diff * law_diff_fn(rb_sub_waves, n_slope=n_slope_diff)
+                )
+
             # IR re-emission is now handled by separate dust emission components.
             # This component no longer computes or publishes photometric
             # dust emission — the emission components handle that via their own
