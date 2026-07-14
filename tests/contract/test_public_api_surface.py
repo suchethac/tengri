@@ -42,6 +42,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "SpatialSEDModel",
         "WavePrecomp",
         "SpectrumPrecomp",
+        "FeaturePrecomp",
         # ── Spatial profile components ──────────────────────────────
         "Exponential",
         "FilterConvention",
