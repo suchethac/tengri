@@ -99,13 +99,17 @@ def test_enable_attaches_grid_no_silent_noop():
 
 @pytest.mark.xfail(
     reason=(
-        "#1154: fast (WavePrecomp) nebular photometry is off by 21% from the exact path "
-        "on linux/x86 (passes on macOS/arm64). A speed knob must never change the physics, "
-        "so this is a real bug — NOT a tolerance to loosen. It only surfaced now because "
-        "#1146 committed the SSP grids: the test skips without them, so it had been dead "
-        "on CI for its whole life (main ran 3625 passed / 108 skipped; this was one of the "
-        "108). Non-strict on purpose — it XPASSes on arm64, and an XPASS here is a data "
-        "point about the platform split, not a reason to fail the suite."
+        "#1154: this test measures fast (WavePrecomp) vs exact nebular photometry at "
+        "3e-2. It fails at 0.21 on the linux/x86 CI worker and passes on macOS/arm64. "
+        "BUT the fast path itself is NOT wrong: a self-contained probe on the SAME CI "
+        "run built a bit-identical grid (log_line/log_phot sums match arm64 to the digit) "
+        "and measured 7.4e-4 — the same as local. So the discrepancy is CROSS-TEST "
+        "PROCESS STATE on that worker (numpy 2.5.1), not a physics or platform divergence. "
+        "Ruled out with evidence: committed data (git blob hashes match), x64 (off -> NaN, "
+        "not 0.21), and n_grid compile-signature collision (12-then-16 keeps 7.4e-4; the "
+        "grid hash is in the signature). Needs the linux/numpy-2.5 env to pin the "
+        "pollutant. Non-strict: the arm64 XPASS is a data point, not a suite failure. Do "
+        "NOT loosen the 3e-2 tolerance — in isolation the fast path meets it everywhere."
     ),
     strict=False,
 )
