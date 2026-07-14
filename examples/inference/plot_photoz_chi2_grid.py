@@ -20,6 +20,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING l
 import warnings
 
 import jax
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -30,10 +31,14 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*FutureWarning.*")
 
-# %% Build the template model (fixed SFH and dust; redshift / stellar mass vary)
+# %% Build the template model ONCE.
 #
-# We use a basic star-forming template: truncated-skew-normal SFH + Calzetti
-# dust attenuation. Redshift and stellar mass are the free parameters on the grid.
+# Redshift and stellar mass are *parameters*, not structural choices, so they
+# both vary inside a single model — there is no reason to rebuild anything as
+# we walk the grid. Declaring `redshift` free (rather than `Fixed(z)`) is what
+# lets us pass a different z on every evaluation.
+#
+# Template: truncated-skew-normal SFH + two-component dust, held fixed.
 
 BANDS = [
     "sdss_u",
@@ -47,10 +52,11 @@ BANDS = [
     "vista_ks",
 ]
 
+Z_MIN, Z_MAX = 0.5, 5.0
+
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
-# Template: star-forming with age ~2 Gyr, modest dust.
-model_template = tengri.SEDModel.build(
+model = tengri.SEDModel.build(
     tengri.load_ssp("fsps_prsc_miles_chabrier"),
     observation=obs,
     sfh={
@@ -70,7 +76,7 @@ model_template = tengri.SEDModel.build(
         "slope": -0.7,
     },
     neb={"type": "cue", "*": tengri.FIXED},
-    redshift=tengri.Fixed(0.0),  # will vary on grid
+    redshift=tengri.Uniform(Z_MIN, Z_MAX),
 )
 
 # %% Mock a galaxy at z_true = 2.5 with known mass.
@@ -79,7 +85,7 @@ z_true = 2.5
 log_mstar_true = 10.5  # ~3.2e10 Msun
 
 key = jax.random.PRNGKey(42)
-truth_params = dict(model_template.spec.sample(key))
+truth_params = dict(model.spec.sample(key))
 truth_params.update(
     sfh_tsnorm_peak_lbt_gyr=3.0,
     sfh_tsnorm_width_gyr=2.0,
@@ -94,77 +100,38 @@ truth_params.update(
     redshift=z_true,
 )
 
-# Create a model at truth z to generate mock data.
-model_truth = tengri.SEDModel.build(
-    tengri.load_ssp("fsps_prsc_miles_chabrier"),
-    observation=obs,
-    sfh={
-        "type": "tsnorm",
-        "*": tengri.FIXED,
-        "peak_lbt_gyr": 3.0,
-        "width_gyr": 2.0,
-        "log_total_mass": 10.0,
-        "skew": 0.3,
-        "trunc": 10.0,
-    },
-    dust={
-        "type": "two_component",
-        "*": tengri.FIXED,
-        "tau_diff": 0.3,
-        "tau_bc": 0.1,
-        "slope": -0.7,
-    },
-    neb={"type": "cue", "*": tengri.FIXED},
-    redshift=tengri.Fixed(z_true),
-)
-
-mock = model_truth.mock(truth_params, snr=10.0, key=key)
+mock = model.mock(truth_params, snr=10.0, key=key)
 flux_obs = np.asarray(mock.flux_obs)
 noise_obs = np.asarray(mock.noise)
 
 # %% Compute χ² on a 2D grid of (z, log_mstar).
 #
-# For each (z, M*) pair, build a model, predict photometry, and compute
-# χ² = sum((F_obs - F_pred)² / σ²).
+# `predict_photometry` is the lean, vmap-safe surface, so the whole grid is one
+# compiled call. We map over the mass axis and sequence the redshift axis with
+# `lax.map`: a flat 65x65 vmap would materialise every SED at once (>10 GB),
+# whereas one row at a time peaks near 3 GB.
 
-z_grid = np.linspace(0.5, 5.0, 65)
+z_grid = np.linspace(Z_MIN, Z_MAX, 65)
 log_mstar_grid = np.linspace(9.0, 11.5, 65)
-chi2_grid = np.zeros((z_grid.size, log_mstar_grid.size))
 
-for i, z in enumerate(z_grid):
-    for j, log_mstar in enumerate(log_mstar_grid):
-        # Build model at this redshift.
-        model_z = tengri.SEDModel.build(
-            tengri.load_ssp("fsps_prsc_miles_chabrier"),
-            observation=obs,
-            sfh={
-                "type": "tsnorm",
-                "*": tengri.FIXED,
-                "peak_lbt_gyr": 3.0,
-                "width_gyr": 2.0,
-                "log_total_mass": 10.0,
-                "skew": 0.3,
-                "trunc": 10.0,
-            },
-            dust={
-                "type": "two_component",
-                "*": tengri.FIXED,
-                "tau_diff": 0.3,
-                "tau_bc": 0.1,
-                "slope": -0.7,
-            },
-            neb={"type": "cue", "*": tengri.FIXED},
-            redshift=tengri.Fixed(z),
-        )
+fixed_params = {
+    k: v for k, v in truth_params.items() if k not in ("redshift", "sfh_tsnorm_log_total_mass")
+}
 
-        # Predict photometry at this stellar mass.
-        grid_params = dict(truth_params)
-        grid_params["sfh_tsnorm_log_total_mass"] = log_mstar
-        flux_pred = np.asarray(model_z.predict_photometry(grid_params))
 
-        # Compute χ².
-        chi2 = np.sum(((flux_obs - flux_pred) / noise_obs) ** 2)
-        chi2_grid[i, j] = chi2
+def _flux(z, log_mstar):
+    """Predicted photometry at one (z, M*) point."""
+    return model.predict_photometry(
+        {**fixed_params, "redshift": z, "sfh_tsnorm_log_total_mass": log_mstar}
+    )
+
+
+_row = jax.vmap(_flux, in_axes=(None, 0))  # over mass, at fixed z
+_grid = jax.jit(lambda zs, ms: jax.lax.map(lambda z: _row(z, ms), zs))
+
+flux_pred = np.asarray(_grid(jnp.asarray(z_grid), jnp.asarray(log_mstar_grid)))
+
+chi2_grid = np.sum(((flux_obs - flux_pred) / noise_obs) ** 2, axis=-1)
 
 # %% Plot χ² surface with contours.
 
