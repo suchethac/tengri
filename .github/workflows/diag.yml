@@ -1,0 +1,27 @@
+name: diag-1154
+
+# Disposable. Runs ONLY on diag/** branches so it cannot touch main or any PR.
+# Delete with the branch once #1154 is understood.
+on:
+  push:
+    branches: ["diag/**"]
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: 0.4.7
+      # No JAX cache restore on purpose: the question is what a COLD process computes.
+      - name: probe
+        env:
+          JAX_PLATFORMS: cpu
+        run: python tools/diag_1154.py
