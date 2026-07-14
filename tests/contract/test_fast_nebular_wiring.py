@@ -114,17 +114,48 @@ def test_fast_photometry_and_lines_match_exact():
     m_fast = _build(_CUE)
     m_fast.enable_fast_nebular(_LW, n_grid=16)
     wp = wl = 0.0
+    worst = None
     for i in range(8):
         p = dict(m_exact.spec.sample(jax.random.PRNGKey(600 + i)))
         pe = np.asarray(m_exact.predict_photometry(p))
         pf = np.asarray(m_fast.predict_photometry(p))
-        wp = max(wp, np.max(np.abs(pf - pe) / (np.abs(pe) + 1e-40)))
+        rel = np.abs(pf - pe) / (np.abs(pe) + 1e-40)
+        if rel.max() > wp:
+            wp = rel.max()
+            worst = (i, int(rel.argmax()), pe, pf, rel, p)
         le = np.asarray(m_exact.predict_line_fluxes(p, target_wavelengths=_LW, redden=True))
         lf = np.asarray(m_fast.predict_line_fluxes(p, target_wavelengths=_LW, redden=True))
         strong = np.abs(le) > 1e-3 * np.max(np.abs(le))
         wl = max(wl, np.max(np.abs(lf - le)[strong] / (np.abs(le)[strong] + 1e-40)))
-    assert wp < 3e-2, f"fast photometry off by {wp:.2e}"
+    assert wp < 3e-2, _photometry_report(wp, worst)
     assert wl < 5e-2, f"fast line fluxes off by {wl:.2e}"
+
+
+def _photometry_report(wp, worst):
+    """Turn the bare max-relative-error into something #1154 can be worked from.
+
+    ``fast photometry off by 2.09e-01`` names no band, no draw and no flux scale, so a
+    CI log cannot distinguish "the fast path is wrong" from "this band carries almost
+    no light and a near-zero denominator inflated a harmless difference" (the #1134
+    trap). Since the test is xfailed on linux and XPASSes on arm64, the log is the only
+    window anyone gets onto the platform split — so print the whole table: the offending
+    band and draw, both predictions, and each band's share of the des_r flux.
+    """
+    i, b, pe, pf, rel, p = worst
+    r = abs(pe[_BANDS.index("des_r")]) + 1e-300
+    out = [
+        f"fast photometry off by {wp:.2e} (tolerance 3e-2)  [#1154]",
+        f"  worst: band {_BANDS[b]!r} on prior draw {i}",
+        f"    exact = {pe[b]:.6e}   fast = {pf[b]:.6e}   rel = {rel[b]:.3%}",
+        f"    that band carries {abs(pe[b]) / r:.2e} x the des_r flux",
+        f"  params: { {k: round(float(v), 6) for k, v in sorted(p.items())} }",
+        f"    {'band':>10} {'exact':>13} {'fast':>13} {'rel':>9} {'/des_r':>9}",
+    ]
+    for k, band in enumerate(_BANDS):
+        out.append(
+            f"    {band:>10} {pe[k]:13.5e} {pf[k]:13.5e} {rel[k]:9.3%} {abs(pe[k]) / r:9.2e}"
+        )
+    return "\n".join(out)
 
 
 def test_signature_differs_fast_vs_exact():

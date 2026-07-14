@@ -318,8 +318,22 @@ jobs:
       - run: pip install -e ".[dev]"
       # `-n 2` (not `-n auto`): `--cov` adds ~30–50 % memory on top of the test
       # job, so this job OOM-killed the runner even more often than `test`
-      # (the dominant cause of red `main`). Same cap as the fast job; the 35 min
-      # timeout absorbs the longer cov wall clock.
+      # (the dominant cause of red `main`).
+      #
+      # 50 min, not 35 (2026-07). #1153 raised `contract` to 35 when the SSP grids
+      # #1146 committed woke ~36 skipped tests — but this job runs `contract` AND
+      # components AND physics AND regression in ONE process, under coverage
+      # instrumentation, so it needed the headroom even more and did not get it. It
+      # timed out at 35 min on main and has kept main red ever since:
+      #
+      #   ##[error]The action 'Run pytest tests/components tests/contract ...'
+      #            has timed out after 35 minutes.
+      #
+      # A bigger cap is the right lever HERE specifically (where sharding is the right
+      # lever for `test`): `coverage` runs only on push/schedule/dispatch, never on a
+      # PR, so its wall clock is off the feedback path entirely and buys nothing by
+      # being split — while sharding it would mean merging partial coverage reports
+      # across runners, real machinery for zero latency win.
       - run: |
           pytest tests/components tests/contract tests/physics tests/regression -q \
             -n 2 \
@@ -328,7 +342,7 @@ jobs:
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        timeout-minutes: 35
+        timeout-minutes: 50
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
