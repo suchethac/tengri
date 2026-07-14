@@ -304,10 +304,40 @@ jobs:
 
   # Full-suite coverage → Codecov, WITHOUT slowing PR feedback. Runs on
   # push-to-main, the nightly schedule, and manual dispatch — not on PRs.
+  #
+  # SHARDED, across the same three trees the `test` job uses (2026-07). This job ran
+  # the entire fast tier in ONE process under coverage instrumentation, and it does
+  # not fit in any sane cap:
+  #
+  #   test shards on main:  contract ~26 min + components ~11 + physics-regression ~11
+  #                         = ~48 min of work, and --cov adds a further 30-50%
+  #
+  # so it needs 70-80 min in a single job. It timed out at 35 (#1153), then at 50
+  # (#1156, mine), and each bump only moved the wall — main stayed red both times.
+  #
+  # I argued against sharding this job on the grounds that its wall clock is off the
+  # PR feedback path, so splitting buys no latency. That was the wrong frame: the cap
+  # is not a latency question when the work does not FIT. And the reason I gave for
+  # not splitting — "merging partial coverage reports is real machinery" — is simply
+  # false: Codecov merges multiple uploads for the same commit natively. There is no
+  # machinery. Three shards, three uploads, one merged report.
+  #
+  # Flags let Codecov attribute coverage per tree, which is a bonus, not a
+  # requirement — the merge happens regardless.
   coverage:
     runs-on: ubuntu-latest
     needs: smoke
     if: ${{ github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: contract
+            paths: tests/contract
+          - shard: components
+            paths: tests/components
+          - shard: physics-regression
+            paths: tests/physics tests/regression
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -318,24 +348,11 @@ jobs:
       - run: pip install -e ".[dev]"
       # `-n 2` (not `-n auto`): `--cov` adds ~30–50 % memory on top of the test
       # job, so this job OOM-killed the runner even more often than `test`
-      # (the dominant cause of red `main`).
-      #
-      # 50 min, not 35 (2026-07). #1153 raised `contract` to 35 when the SSP grids
-      # #1146 committed woke ~36 skipped tests — but this job runs `contract` AND
-      # components AND physics AND regression in ONE process, under coverage
-      # instrumentation, so it needed the headroom even more and did not get it. It
-      # timed out at 35 min on main and has kept main red ever since:
-      #
-      #   ##[error]The action 'Run pytest tests/components tests/contract ...'
-      #            has timed out after 35 minutes.
-      #
-      # A bigger cap is the right lever HERE specifically (where sharding is the right
-      # lever for `test`): `coverage` runs only on push/schedule/dispatch, never on a
-      # PR, so its wall clock is off the feedback path entirely and buys nothing by
-      # being split — while sharding it would mean merging partial coverage reports
-      # across runners, real machinery for zero latency win.
+      # (the dominant cause of red `main`). Sharding does not change peak RSS per
+      # runner — each shard still runs at -n 2 — it only stops one runner from having
+      # to carry the whole tier.
       - run: |
-          pytest tests/components tests/contract tests/physics tests/regression -q \
+          pytest ${{ matrix.paths }} -q \
             -n 2 \
             --cov=src/tengri --cov-report=xml --cov-report=term:skip-covered \
             --ignore=tests/crossval \
@@ -347,6 +364,7 @@ jobs:
         uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml
+          flags: ${{ matrix.shard }}
           fail_ci_if_error: false
         continue-on-error: true
 
