@@ -97,20 +97,29 @@ def _build_prediction(
     if pred_spec is not None:
         prediction["spec_fnu"] = pred_spec
 
-    # Fast path (2026-07-05): line fluxes, line ratios, and spectral indices
-    # all derive from the SAME orchestrator forward. Compute ``predict_state``
-    # ONCE when any feature channel is active and thread it into each
-    # predictor, so a joint fit with lines + ratios + indices runs the
-    # full-grid forward once per loss eval instead of two or three times.
-    feature_state = None
-    if has_line_fluxes or has_line_ratios or has_indices:
-        feature_state = model.predict_state(params)
+    # Line fluxes, line ratios, and spectral indices all derive from the SAME
+    # orchestrator forward, so ``predict_state`` is computed ONCE when a feature
+    # channel needs it and threaded into each predictor — a joint fit with lines +
+    # ratios + indices runs the full-grid forward once per loss eval, not three
+    # times.
+    #
+    # But ``predict_state`` *is* the full-grid forward, and that is exactly what
+    # the emission-line precompute (``approx=FeaturePrecomp()``) exists to skip:
+    # the window LUT reconstructs the lines from SED-free SFH weights. Calling
+    # predict_state anyway would leave the LUT wrapped around the cost it was
+    # meant to avoid — a fast path that is a no-op. So when lines are the only
+    # feature channel and the model carries the precompute, the full-grid forward
+    # is not built at all.
+    fast_lines = bool(getattr(model, "_fast_line_measurement", False))
+    needs_state = has_line_ratios or has_indices or (has_line_fluxes and not fast_lines)
+    feature_state = model.predict_state(params) if needs_state else None
     if has_line_fluxes:
         if measured_line_defs is not None:
             # No discrete line catalog (BakedIn) → measure the fluxes off the
-            # model spectrum the way a pipeline does (measure_line_fluxes).
+            # model spectrum the way a pipeline does (measure_line_fluxes). With
+            # FeaturePrecomp the measurement runs against the SSP window LUT.
             prediction["line_fluxes"] = model.measure_line_fluxes(
-                params, measured_line_defs, state=feature_state
+                params, measured_line_defs, fast=fast_lines, state=feature_state
             )
         else:
             prediction["line_fluxes"] = model.predict_line_fluxes(

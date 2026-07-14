@@ -863,6 +863,42 @@ their older siblings `list_agn_models()` / `describe_agn_model()`;
 
 ---
 
+## `FeaturePrecomp` — the emission-line precompute (2026-07)
+
+`approx=` gains a third member, alongside `WavePrecomp` (photometry) and
+`SpectrumPrecomp` (spectroscopy). `FeaturePrecomp` serves **emission-line
+fluxes** from a build-time lookup instead of re-running the forward on every
+likelihood evaluation, and composes with the other two:
+
+```python
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs,          # obs carries line_fluxes
+    neb={'type': 'cue', 'logU': Uniform(-4, -1)},
+    approx=(WavePrecomp(), FeaturePrecomp()),
+)
+```
+
+The line wavelengths default to `Observation.line_fluxes`, so the common case
+takes no arguments. What gets built depends on the nebular backend, because the
+two keep their lines in physically different places: **Cue** publishes a discrete
+catalog that is linear in the ionizing photon rate, so a grid over the free
+ionization axes replaces the forward; the **baked-in / wNE** backend has no
+catalog — its lines are inside the SSP templates — so it gets a per-line window
+LUT and the fluxes are *measured* off the reconstructed spectrum.
+
+This is an **opt-in approximation**. It never activates on its own, and an
+observation that merely contains lines does not switch it on.
+
+The imperative `SEDModel.enable_fast_nebular(...)` still works and is unchanged;
+it is now what `FeaturePrecomp` calls for the Cue backend.
+
+| Old path                                    | New path                                      | Status (v0.x) |
+| ------------------------------------------- | --------------------------------------------- | ------------- |
+| `model.enable_fast_nebular(waves, n_grid=…)` | `approx=FeaturePrecomp(n_grid=…)` at build     | Both supported |
+| (no build-time surface for baked-in lines)   | `approx=FeaturePrecomp()`                      | New            |
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

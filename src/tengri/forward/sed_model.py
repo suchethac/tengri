@@ -315,6 +315,86 @@ class SpectrumPrecomp:
     flag does not change the spectroscopy result."""
 
 
+@dataclasses.dataclass(frozen=True)
+class FeaturePrecomp:
+    r"""Configuration for the emission-line precompute (the *feature* LUT path).
+
+    Pass this to :class:`SEDModel` via ``approx=`` to serve emission-line fluxes
+    from a build-time lookup instead of the per-evaluation forward. It is the
+    line-channel sibling of :class:`WavePrecomp` (photometry) and
+    :class:`SpectrumPrecomp` (spectroscopy), and composes with either.
+
+    The line wavelengths default to those of ``Observation.line_fluxes`` — the
+    model already knows which lines it is being fitted against — so the common
+    case needs no arguments at all.
+
+    Which machinery is built depends on the nebular backend, because the two
+    backends put their lines in physically different places:
+
+    * **Cue** (and any backend publishing discrete line luminosities). Lines are
+      linear in the ionizing photon rate, :math:`L_{\rm line} = Q_H \times
+      \ell(\theta)`, with :math:`\ell` independent of the SFH *shape*. A grid of
+      :math:`\ell` over the free ionization axes is built once (one Cue forward
+      per node), and each evaluation reduces to :math:`Q_H \times
+      \mathrm{interp}(\text{grid})`. Nothing downstream needs the full-wavelength
+      SED, so XLA prunes the stellar einsum entirely.
+    * **Baked-in / wNE.** The lines are *inside* the SSP templates, so they must
+      be measured off the spectrum. A per-line window LUT of SSP integrals is
+      built instead, and the measurement contracts it with SED-free SFH weights
+      and the dust screen at the window centers.
+
+    Parameters
+    ----------
+    n_grid : int, default 16
+        Grid points per free ionization axis (Cue backend only; ignored for
+        baked-in, whose window LUT has no ionization axes). Denser is tighter.
+    lines : array_like or None, optional
+        Rest-frame vacuum line wavelengths [Angstrom] to tabulate. ``None``
+        (default) takes them from ``Observation.line_fluxes``.
+    ranges : dict, optional
+        Override ``{param: (lo, hi)}`` grid bounds (Cue only). Defaults to each
+        free parameter's prior support.
+
+    Notes
+    -----
+    **Explicit opt-in, by design.** This is a lossy approximation, so it never
+    activates on its own — a model acquires it only because the user asked for
+    it. An observation that merely *contains* lines does not switch it on.
+
+    **Accuracy (Cue).** Reconstruction is exact at grid nodes and node-exact
+    between them. Balmer lines are recombination lines (:math:`\propto Q_H`) and
+    converge quickly. Collisionally excited lines ([OIII], [NII], [SII]) depend
+    on the *shape* of the ionizing spectrum, which varies along the metallicity
+    axis; validate with a dense sweep strictly inside the grid range, never with
+    random draws (they under-sample the structure and report bounds that are
+    optimistic by orders of magnitude).
+
+    **Accuracy (baked-in).** The window LUT reconstructs the stellar + dust-screen
+    spectrum only, so any component adding rest-frame flux is excluded — with one
+    measured exception. A dust-IR component contributes a *smooth* continuum that
+    is common to the line window and its sidebands, and so cancels in the
+    continuum subtraction: the bias on the measured line flux is :math:`< 10^{-7}`
+    even at :math:`\tau_{\rm bc}=4,\ \tau_{\rm diff}=3`, against a 3% contamination
+    of the continuum level itself. Dust IR is therefore allowed for lines. It is
+    *not* allowed for spectral indices, where a break is a flux **ratio** and a
+    smooth additive offset does not cancel.
+
+    **JIT-compatible**: the resulting line prediction is JIT- and gradient-safe;
+    the one-time build is eager.
+
+    Examples
+    --------
+    >>> from tengri import FeaturePrecomp, SEDModel, WavePrecomp
+    >>> # lines from the observation, photometry on the LUT path too:
+    >>> SEDModel.build(..., approx=(WavePrecomp(), FeaturePrecomp()))
+    >>> SEDModel.build(..., approx=FeaturePrecomp(n_grid=24))  # denser Cue grid
+    """
+
+    n_grid: int = 16
+    lines: tuple[float, ...] | None = None
+    ranges: dict | None = None
+
+
 def _warn_agn_dust_double_count(spec) -> None:
     """Warn when composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
 
@@ -761,27 +841,37 @@ class SEDModel:
         self._approx_config: WavePrecomp | SpectrumPrecomp | None = None
         self._approx_config_spec: SpectrumPrecomp | None = None
         self._approx_config_wave: WavePrecomp | None = None
+        self._approx_config_feature: FeaturePrecomp | None = None
         if approx is None:
             self._approx = dict(self._DEFAULT_APPROX)
             self._approx["wave_precomp"] = False
             self._approx["ztable"] = False
         else:
-            # Accept a single config or a composite ``(WavePrecomp, SpectrumPrecomp)``
-            # sequence (order-independent, at most one of each).
+            # Accept a single config or a composite ``(WavePrecomp, SpectrumPrecomp,
+            # FeaturePrecomp)`` sequence (order-independent, at most one of each).
             configs = list(approx) if isinstance(approx, (tuple, list)) else [approx]
             wave_cfgs = [c for c in configs if isinstance(c, WavePrecomp)]
             spec_cfgs = [c for c in configs if isinstance(c, SpectrumPrecomp)]
-            unknown = [c for c in configs if not isinstance(c, (WavePrecomp, SpectrumPrecomp))]
-            if unknown or len(wave_cfgs) > 1 or len(spec_cfgs) > 1 or not configs:
+            feat_cfgs = [c for c in configs if isinstance(c, FeaturePrecomp)]
+            known = (WavePrecomp, SpectrumPrecomp, FeaturePrecomp)
+            unknown = [c for c in configs if not isinstance(c, known)]
+            if (
+                unknown
+                or len(wave_cfgs) > 1
+                or len(spec_cfgs) > 1
+                or len(feat_cfgs) > 1
+                or not configs
+            ):
                 raise TypeError(
                     f"approx={approx!r} is not a legal value. Legal forms: "
                     "None (default — exact wave-grid), "
                     "WavePrecomp() for the SSP × filter LUT path, "
-                    "SpectrumPrecomp() for the spectrum LUT path, or a composite "
-                    "(WavePrecomp(...), SpectrumPrecomp()) tuple for a joint fit "
-                    "(at most one of each). The pre-3d dict / bool / string forms "
-                    "(e.g. approx={'wave_precomp': True}, approx=True, "
-                    "approx='wave_precomp') were removed."
+                    "SpectrumPrecomp() for the spectrum LUT path, "
+                    "FeaturePrecomp() for the emission-line LUT path, or a composite "
+                    "tuple such as (WavePrecomp(...), FeaturePrecomp()) for a joint "
+                    "photometry + line fit (at most one of each). The pre-3d dict / "
+                    "bool / string forms (e.g. approx={'wave_precomp': True}, "
+                    "approx=True, approx='wave_precomp') were removed."
                 )
             self._approx = dict(self._DEFAULT_APPROX)
             if wave_cfgs:
@@ -789,6 +879,7 @@ class SEDModel:
             if spec_cfgs:
                 self._resolve_spectrum_precomp(spec_cfgs[0], observation)
             self._approx_config_wave = wave_cfgs[0] if wave_cfgs else None
+            self._approx_config_feature = feat_cfgs[0] if feat_cfgs else None
             # Primary config: WavePrecomp drives the shared z-table / catalog
             # knobs when present (back-compat); else the SpectrumPrecomp (but only
             # when it actually activated — an R-fallback leaves it None).
@@ -1041,6 +1132,72 @@ class SEDModel:
         # so no fit is biased without the astronomer knowing. Cheap: no SED
         # evaluation, so it is safe on every build.
         self._warn_if_wave_precomp_dust_blue_bias()
+
+        # The emission-line precompute, if the astronomer asked for one. Last,
+        # because it needs the nebular backend (``_init_nebular``) and the
+        # component chain both to exist.
+        self._fast_line_measurement = False
+        if self._approx_config_feature is not None:
+            self._resolve_feature_precomp(self._approx_config_feature, observation)
+
+    def _resolve_feature_precomp(self, cfg, observation) -> None:
+        """Build the emission-line precompute selected by ``approx=FeaturePrecomp()``.
+
+        Dispatches on where the backend keeps its lines. Cue publishes a discrete
+        catalog that is linear in Q_H, so a per-Q_H grid over the free ionization
+        axes replaces the forward. The baked-in backend has no catalog — its lines
+        are inside the SSP templates — so the lines must be *measured* off the
+        spectrum, and it gets the window LUT instead (plus the flag that lets the
+        likelihood reach it).
+
+        Parameters
+        ----------
+        cfg : FeaturePrecomp
+            The requested configuration.
+        observation : Observation
+            Source of the line wavelengths when ``cfg.lines`` is None.
+
+        Raises
+        ------
+        ValueError
+            If no lines can be resolved, or the backend supports neither path.
+        """
+        from tengri.observation.line_measurement import default_line_defs
+
+        lines = cfg.lines
+        if lines is None:
+            line_fluxes = getattr(observation, "line_fluxes", None) if observation else None
+            if line_fluxes is None:
+                raise ValueError(
+                    "approx=FeaturePrecomp() has no emission lines to tabulate: the "
+                    "Observation carries no line_fluxes and FeaturePrecomp(lines=...) "
+                    "was not given. Either fit lines — Observation(..., "
+                    "line_fluxes=LineFluxData(...)) — or name them explicitly."
+                )
+            lines = line_fluxes.wavelengths
+        lines = jnp.asarray(lines)
+
+        backend = self._nebular_backend
+        if backend is not None and hasattr(backend, "predict_nebular_line_luminosities"):
+            # Cue-like: L_line = Q_H x l(theta), l independent of the SFH shape.
+            self.enable_fast_nebular(lines, n_grid=cfg.n_grid, ranges=cfg.ranges)
+            return
+
+        if self._has_line_catalog():
+            raise ValueError(
+                f"approx=FeaturePrecomp() does not support the "
+                f"{type(backend).__name__} nebular backend: it publishes a discrete "
+                "line catalog but is not linear in Q_H, so neither the per-Q_H grid "
+                "nor the SSP window LUT reconstructs it. Use approx=None for the "
+                "lines, or switch to the Cue or baked-in backend."
+            )
+
+        # Baked-in / wNE: the lines are inside the SSP templates, so they are
+        # measured off the spectrum through the window LUT. Build it eagerly (the
+        # SSP grid is concrete at construction) and tell the likelihood to use it.
+        self._feature_precomp_lines = lines
+        self._line_window_precomp(tuple(default_line_defs(np.asarray(lines))))
+        self._fast_line_measurement = True
 
     def _max_plausible_tau(self, name: str) -> float:
         """Representative upper optical depth for a dust τ parameter.
@@ -4138,35 +4295,64 @@ class SEDModel:
             cache[key] = pc
         return pc
 
-    def _require_feature_fast_eligible(self, chain):
-        """Return the stellar component, or raise if the chain is unsupported.
+    def _require_feature_fast_eligible(self, chain, *, caller="predict_spectral_indices"):
+        r"""Return the stellar component, or raise if the chain is unsupported.
 
-        The window LUT reconstructs indices from ``scale * sum(jw * SSP * T)`` —
-        the baked-in stellar+dust SED only. Any component that adds rest-frame
-        flux the LUT does not model (additive nebular, AGN, radio, …) would make
-        the fast indices silently wrong, so those raise. IGM is rest-frame-
-        neutral (observer-frame, applied after redshifting) and is allowed.
+        The window LUT reconstructs the measurement from ``scale * sum(jw * SSP * T)``
+        — the baked-in stellar+dust-screen SED only. Any component that adds
+        rest-frame flux the LUT does not model (additive nebular, AGN, radio, …)
+        would make the fast measurement silently wrong, so those raise. IGM is
+        rest-frame-neutral (observer-frame, applied after redshifting) and is
+        allowed.
+
+        Dust *emission* is admitted for line fluxes but not for indices, and the
+        asymmetry is physical rather than a concession. A line flux is measured as
+        the window integral minus a continuum fitted from the sidebands. Dust IR
+        emission contributes a smooth continuum that is common to the window and
+        its sidebands, so it cancels in that subtraction: measured bias on the ten
+        DESI optical lines stays below :math:`10^{-7}` even at
+        :math:`\tau_{\rm bc}=4,\ \tau_{\rm diff}=3`, where the IR term is already
+        3% of the continuum *level*. A break index is a flux **ratio** of two
+        bands, with no such subtraction, so the same smooth offset does not cancel
+        and the exclusion stands.
+
+        Parameters
+        ----------
+        chain : list
+            The component chain to validate.
+        caller : str, default "predict_spectral_indices"
+            Name used in the error messages, and the switch for the dust-emission
+            rule: ``"measure_line_fluxes"`` admits a dust-IR component.
+
+        Returns
+        -------
+        StellarSEDComponent
+            The chain's stellar component.
         """
+        from tengri.components.dust.emission._component_base import EmissionComponent
         from tengri.components.dust.two_component import DustSEDComponent
         from tengri.components.igm.component import IGMSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
         from tengri.components.stellar.component import StellarSEDComponent
 
-        allowed = (StellarSEDComponent, DustSEDComponent, NebularSEDComponent, IGMSEDComponent)
+        allowed = [StellarSEDComponent, DustSEDComponent, NebularSEDComponent, IGMSEDComponent]
+        if caller == "measure_line_fluxes":
+            allowed.append(EmissionComponent)
+        allowed = tuple(allowed)
         stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
         if stellar is None:
-            raise ValueError("predict_spectral_indices(fast=True) requires a stellar component.")
+            raise ValueError(f"{caller}(fast=True) requires a stellar component.")
         for c in chain:
             if not isinstance(c, allowed):
                 raise ValueError(
-                    f"predict_spectral_indices(fast=True) does not support a "
+                    f"{caller}(fast=True) does not support a "
                     f"{type(c).__name__} in the chain: it adds rest-frame flux the window "
                     f"LUT does not model. Use fast=False for this model."
                 )
         neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
         if neb is not None and getattr(neb.config, "backend", None) != "baked_in":
             raise ValueError(
-                f"predict_spectral_indices(fast=True) supports baked-in nebular only "
+                f"{caller}(fast=True) supports baked-in nebular only "
                 f"(chain has backend={getattr(neb.config, 'backend', None)!r}); an additive "
                 f"backend's emission is not in the SSP window integrals. Use fast=False."
             )
@@ -4294,7 +4480,7 @@ class SEDModel:
             from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 
             chain = self._feature_chain()
-            stellar = self._require_feature_fast_eligible(chain)
+            stellar = self._require_feature_fast_eligible(chain, caller="measure_line_fluxes")
             joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(params)
             scale = total_mass * LSUN_ERG_PER_S
             pc = self._line_window_precomp(line_defs)

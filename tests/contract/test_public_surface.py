@@ -46,6 +46,7 @@ EXPECTED_ALL = frozenset(
         "SpatialSEDModel",
         "WavePrecomp",
         "SpectrumPrecomp",
+        "FeaturePrecomp",
         # Component-extension surface — demoted to `tengri.protocols.*`,
         # no longer advertised at top level (importable for back-compat).
         # Physics modules
