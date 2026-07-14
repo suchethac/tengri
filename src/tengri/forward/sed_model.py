@@ -3843,17 +3843,38 @@ class SEDModel:
 
         * **Gas axes** (``logU`` + ``neb_logZ_gas``) drive smooth per-Q_H line
           changes and converge with ``n_grid``.
-        * **Free ``met_logzsol``** does **NOT** converge for the collisionally
-          excited lines, at any ``n_grid``. The exact Cue forward is *discontinuous*
-          in metallicity — it selects the ionizing-spectrum shape from a single
-          ``argmax``-chosen age bin, so [OIII] steps ~33 % whenever the dominant bin
-          flips. No interpolant crosses a jump: a dense systematic sweep gives
-          [OIII] worst-case ~10-23 % irrespective of resolution. Balmer lines
-          (recombination, ∝ Q_H) are shape-insensitive and do converge.
+        * **Free ``met_logzsol``** used to be the pathological case, and is no
+          longer. The old text here (retained in spirit because the reasoning is
+          still worth knowing) said the exact Cue forward was *discontinuous* in
+          metallicity — it took the ionizing-spectrum shape from a single
+          ``argmax``-chosen age bin, so [OIII] stepped ~33 % whenever the dominant
+          bin flipped, and no interpolant crosses a jump: a dense sweep gave [OIII]
+          worst-case ~10-23 % at any ``n_grid``. **#1019 removed that argmax.** The
+          shape is now a luminosity-additive mix over every ionizing age bin
+          (``cue.py``), so the forward is smooth in metallicity and the grid
+          converges. Measured on the shipped bare SSP: 0.42 % between nodes, 0.21 %
+          at a node, identical on linux/x86 and macOS/arm64.
+
+        .. warning::
+
+           That stale ~10-23 % figure is a **trap**. It happens to bracket both the
+           20.9 % photometry and 14.7 % line-flux drifts reported in #1154, so it
+           offers a ready-made — and wrong — explanation for them. It cost a full
+           debugging session. When a number in a docstring matches your bug
+           suspiciously well, check that the mechanism behind it still exists before
+           you believe it: this one was removed by #1019.
+
+        **Caveat that #1019 introduced.** Making the shape a luminosity-weighted mix
+        also made it depend on the **SFH** — the old ``argmax`` forced
+        ``d(shape)/d(SFH) = 0``, and removing it was the point. But the SFH is *not*
+        a grid axis here (only ``met_logzsol`` / ``logU`` / ``neb_logZ_gas`` are), so
+        ``L = Q_H * l(...)`` assumes a shape-independence the exact forward no longer
+        has. Q_H carries the *number* of ionizing photons, not their *hardness*. In
+        practice the residual is small (the 0.42 % above is measured across free-SFH
+        draws), but it is an approximation, not an identity.
 
         Validate accuracy with a **dense sweep strictly inside the grid range** —
-        random parameter draws under-sample the discontinuity and report bounds
-        that are ~100x optimistic.
+        random parameter draws under-sample structure and report optimistic bounds.
 
         For the photometry channel the model must be built with
         ``approx=WavePrecomp()`` (so the grid can capture the intrinsic

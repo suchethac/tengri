@@ -8,11 +8,25 @@ only in the flux — by ~100x in the Lyman continuum, which is exactly the regio
 table integrates. So they collided in ``_IONSPEC_TABLE_CACHE``, and whichever grid a
 process loaded first silently supplied the ionizing spectrum for the other.
 
-The damage is asymmetric and therefore visible: the fast nebular path reads Q_H from
-the cached ``logqion_table``, while the exact path integrates the real SED. A poisoned
-table makes the two disagree — 20.9% in observed photometry — where a correct one has
-them agree to 0.07%. The poison also reaches disk, under a filename hashed from the
-same colliding key, and so outlives the process.
+The poison also reaches disk, under a filename hashed from the same colliding key, so it
+outlives the process — on CI and on a laptop — until someone clears the cache. When the
+wNE table wins the race, a bare model's Q_H is wrong by 4–7 dex, and the guard that
+exists for exactly that (``CueWNESSPError``) is disarmed suite-wide by conftest's
+``TENGRI_ALLOW_WNE_CUE=1``.
+
+**What this bug is NOT.** The first version of this docstring claimed the collision was
+the cause of #1154 (fast-vs-exact photometry drifting 20.9%). It is not, and the way that
+was established is worth recording, because the story was extremely plausible:
+
+* the corruption is *symmetric*. Poison the table and the fast and exact paths move
+  TOGETHER — they end up agreeing on the same wrong answer. Verified by neutering
+  ``_ssp_fingerprint`` and re-running the end-to-end comparison with the disk cache
+  isolated: agreement is unchanged. A fast-vs-exact parity test is therefore
+  structurally BLIND to this bug, which is precisely what makes it dangerous, and why
+  the guard below tests the CACHE rather than the physics downstream of it.
+* an end-to-end "poisoned model drifts" test was written, passed, and was then found to
+  pass just as happily with the fix stripped out. It was deleted. A regression test that
+  survives having its bug reintroduced is not a regression test.
 
 Regression for the silent-failure found while sharding the contract tier (2026-07).
 """
