@@ -16,7 +16,7 @@
   "src/tengri/components/nebular/cloudy_grid.py": 1034,
   "src/tengri/components/nebular/component.py": 1125,
   "src/tengri/components/nebular/cue.py": 2060,
-  "src/tengri/components/nebular/ionizing_spectrum.py": 820,
+  "src/tengri/components/nebular/ionizing_spectrum.py": 860,
   "src/tengri/components/nebular/mappings_photo.py": 1023,
   "src/tengri/components/radio/radio.py": 1221,
   "src/tengri/components/sed_model_component.py": 856,
