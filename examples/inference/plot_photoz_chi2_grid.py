@@ -108,7 +108,7 @@ noise_obs = np.asarray(mock.noise)
 #
 # `predict_photometry` is the lean, vmap-safe surface, so the whole grid is one
 # compiled call. We map over the mass axis and sequence the redshift axis with
-# `lax.map`: a flat 65x65 vmap would materialise every SED at once (>10 GB),
+# `lax.map`: a flat 65x65 vmap would materialize every SED at once (>10 GB),
 # whereas one row at a time peaks near 3 GB.
 
 z_grid = np.linspace(Z_MIN, Z_MAX, 65)
