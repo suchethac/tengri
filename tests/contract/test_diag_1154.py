@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""TEMPORARY diagnostic for #1154 — delete once the cause is known.
+"""TEMPORARY diagnostic for #1154 — DELETE once the cause is known.
 
-The fast (WavePrecomp) nebular photometry agrees with the exact path to 7.4e-4 on
-macOS/arm64 and is off by 2.09e-01 on linux/x86. Identical committed data (git
-blob hashes match), identical PRNG (threefry is bit-deterministic), and it XPASSes
-under `-n 2` locally, so it is not data, not x64, and not test-order.
+Fast (WavePrecomp) nebular photometry agrees with exact to 7.4e-4 on macOS/arm64
+and is off by 2.09e-01 on linux/x86. Ruled out: data (git blob hashes match),
+x64 (disabling gives NaN not 21%), test order (XPASSes under -n 2 locally).
 
-This dumps the intermediates FROM the failing platform, because guessing from the
-passing one has run out of road.
+The intermediates must come from the failing platform. This test ALWAYS fails, so
+pytest emits its captured stdout into the CI log (a passing test's stdout is
+discarded). It is self-contained — no sibling-module import — so xdist cannot
+change its behaviour.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import warnings
 
 import jax
@@ -21,56 +21,76 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
+from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, Uniform, WavePrecomp
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+from tengri.observation.line_flux_data import LineFluxData
+
 pytestmark = pytest.mark.contract
 
-_SPEC = importlib.util.spec_from_file_location(
-    "_fnw", str(__import__("pathlib").Path(__file__).with_name("test_fast_nebular_wiring.py"))
-)
+_BARE = "data/fsps_prsc_miles_chabrier.h5"
+_BANDS = ["galex_fuv", "galex_nuv", "des_g", "des_r", "des_i", "des_z", "wise_w1", "wise_w2"]
+_LINES = ("Halpha", "Hbeta", "OIII_5007", "NII_6584", "SII_6717")
+_LD = LineFluxData.from_dict({n: (1e-16, 1e-17) for n in _LINES})
+_LW = _LD.wavelengths
 
 
-def test_diag_1154_dump():
-    t = importlib.util.module_from_spec(_SPEC)
-    _SPEC.loader.exec_module(t)
-    t._require()
+def _build():
+    import pathlib
 
-    print("\n" + "=" * 72)
-    print(f"x64 enabled          : {jax.config.jax_enable_x64}")
-    print(f"jax backend/platform : {jax.default_backend()} {jax.devices()}")
-    print(f"numpy               : {np.__version__}")
-
+    if not pathlib.Path(_BARE).is_file() or not pathlib.Path("data/cue_weights.npz").is_file():
+        pytest.skip("SSP or cue_weights missing")
+    ssp = load_ssp_data(_BARE)
+    obs = Observation(photometry=Photometry.from_names(_BANDS), line_fluxes=_LD)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m_exact = t._build(t._CUE)
-        m_fast = t._build(t._CUE)
-        m_fast.enable_fast_nebular(t._LW, n_grid=16)
-
-    g = m_fast._nebular_grid_table
-    print(f"grid axis_names      : {getattr(g, 'axis_names', None)}")
-    print(f"grid axis_kinds      : {getattr(g, 'axis_kinds', None)}")
-    for nm, ax in zip(getattr(g, "axis_names", ()), getattr(g, "axes", ()) or ()):
-        a = np.asarray(ax)
-        print(f"  axis {nm:16s}: n={a.size:3d}  [{a.min():.6f}, {a.max():.6f}]")
-        print(f"      nodes: {np.array2string(a, precision=6, max_line_width=200)}")
-    lp = getattr(g, "log_line_per_qh", None)
-    if lp is not None:
-        lp = np.asarray(lp)
-        print(
-            f"log_line_per_qh      : shape={lp.shape} finite={np.isfinite(lp).all()} "
-            f"min={np.nanmin(lp):.4f} max={np.nanmax(lp):.4f}"
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "dpl", "*": FREE},
+            dust={
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "*": FIXED,
+                "tau_diff": Fixed(0.25),
+                "tau_bc": Fixed(0.4),
+            },
+            neb={"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)},
+            redshift=Fixed(0.15),
+            approx=WavePrecomp(),
         )
-    lph = getattr(g, "log_phot_per_qh", None)
-    print(
-        f"log_phot_per_qh      : {'present' if lph is not None else 'MISSING (fast photometry has no table!)'}"
+
+
+def test_diag_1154_always_fails_to_dump():
+    m_exact = _build()
+    m_fast = _build()
+    m_fast.enable_fast_nebular(_LW, n_grid=16)
+
+    lines = [
+        "",
+        "=" * 72,
+        f"platform : {jax.default_backend()}  x64={jax.config.jax_enable_x64}  numpy={np.__version__}",
+    ]
+    g = m_fast._nebular_grid_table
+    lines.append(f"axis_names : {g.axis_names}")
+    lines.append(f"axis_kinds : {getattr(g, 'axis_kinds', None)}")
+    for nm, ax in zip(g.axis_names, g.axes):
+        a = np.asarray(ax)
+        lines.append(
+            f"  {nm:14s} n={a.size:3d}  {np.array2string(a, precision=6, max_line_width=300)}"
+        )
+    lp = np.asarray(g.log_line_per_qh)
+    lines.append(
+        f"log_line_per_qh : {lp.shape} finite={np.isfinite(lp).all()} min={np.nanmin(lp):.5f} max={np.nanmax(lp):.5f} sum={np.nansum(lp):.5f}"
     )
+    lph = getattr(g, "log_phot_per_qh", None)
     if lph is not None:
         lph = np.asarray(lph)
-        print(
-            f"  shape={lph.shape} finite={np.isfinite(lph).all()} "
-            f"min={np.nanmin(lph):.4f} max={np.nanmax(lph):.4f}"
+        lines.append(
+            f"log_phot_per_qh : {lph.shape} finite={np.isfinite(lph).all()} min={np.nanmin(lph):.5f} max={np.nanmax(lph):.5f} sum={np.nansum(lph):.5f}"
         )
 
-    print(f"\n{'i':>2} {'logU':>8} {'max rel':>11}  worst band   fast/exact at worst")
     worst = 0.0
+    lines.append(f"{'i':>2} {'logU':>8} {'metZ':>8} {'maxrel':>11}  band")
     for i in range(8):
         p = dict(m_exact.spec.sample(jax.random.PRNGKey(600 + i)))
         pe = np.asarray(m_exact.predict_photometry(p))
@@ -79,9 +99,8 @@ def test_diag_1154_dump():
         j = int(np.argmax(rel))
         worst = max(worst, rel.max())
         lu = float(p.get("neb_logU", p.get("neb_cue_logU", np.nan)))
-        print(f"{i:2d} {lu:8.4f} {rel.max():11.4e}  {t._BANDS[j]:11s}  {pf[j]:.6e} / {pe[j]:.6e}")
-    print(f"\nWORST = {worst:.4e}   (tolerance 3.0e-2)")
-    print("=" * 72)
-    # Assert on purpose: pytest CAPTURES stdout for a passing test, so a diagnostic
-    # that passes prints nothing into the CI log. Failing is how the dump gets out.
-    assert worst < 3e-2, f"#1154 diagnostic: fast vs exact worst = {worst:.4e} (see dump above)"
+        mz = float(p.get("met_logzsol", np.nan))
+        lines.append(f"{i:2d} {lu:8.4f} {mz:8.4f} {rel.max():11.4e}  {_BANDS[j]}")
+    lines.append(f"WORST = {worst:.5e}")
+    lines.append("=" * 72)
+    pytest.fail("\n".join(lines))
