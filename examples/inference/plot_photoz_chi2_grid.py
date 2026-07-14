@@ -33,12 +33,11 @@ warnings.filterwarnings("ignore", message=".*FutureWarning.*")
 
 # %% Build the template model ONCE.
 #
-# Redshift and stellar mass are *parameters*, not structural choices, so they
-# both vary inside a single model — there is no reason to rebuild anything as
-# we walk the grid. Declaring `redshift` free (rather than `Fixed(z)`) is what
-# lets us pass a different z on every evaluation.
-#
-# Template: truncated-skew-normal SFH + two-component dust, held fixed.
+# Redshift and stellar mass are the two axes of the grid — so they are *free
+# parameters*, not structural choices, and both vary inside a single model.
+# There is no reason to rebuild anything as we walk the grid: a free parameter
+# takes a different value on every evaluation, which is exactly what a grid is.
+# The rest of the template (SFH shape, dust) is held fixed.
 
 BANDS = [
     "sdss_u",
@@ -53,6 +52,7 @@ BANDS = [
 ]
 
 Z_MIN, Z_MAX = 0.5, 5.0
+LOGM_MIN, LOGM_MAX = 9.0, 11.5
 
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
@@ -64,7 +64,7 @@ model = tengri.SEDModel.build(
         "*": tengri.FIXED,
         "peak_lbt_gyr": 3.0,
         "width_gyr": 2.0,
-        "log_total_mass": 10.0,
+        "log_total_mass": tengri.Uniform(LOGM_MIN, LOGM_MAX),  # free: the grid's mass axis
         "skew": 0.3,
         "trunc": 10.0,
     },
@@ -112,7 +112,7 @@ noise_obs = np.asarray(mock.noise)
 # whereas one row at a time peaks near 3 GB.
 
 z_grid = np.linspace(Z_MIN, Z_MAX, 65)
-log_mstar_grid = np.linspace(9.0, 11.5, 65)
+log_mstar_grid = np.linspace(LOGM_MIN, LOGM_MAX, 65)
 
 fixed_params = {
     k: v for k, v in truth_params.items() if k not in ("redshift", "sfh_tsnorm_log_total_mass")
