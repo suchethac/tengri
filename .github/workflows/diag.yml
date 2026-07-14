@@ -9,7 +9,7 @@ on:
 jobs:
   linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -20,8 +20,30 @@ jobs:
       - run: pip install -e ".[dev]"
         env:
           SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: 0.4.7
-      # No JAX cache restore on purpose: the question is what a COLD process computes.
-      - name: probe
-        env:
-          JAX_PLATFORMS: cpu
-        run: python tools/diag_1154.py
+
+      # #1154 claims "fails on linux/x86, XPASSes on macOS/arm64". A clean-process probe
+      # already gives 0.074% on BOTH, so the platform framing looks wrong and the real
+      # variable is the SUITE. Three runs, increasing context, same test:
+      - name: "1. the test ALONE (--runxfail: report the TRUE result, not the xfail)"
+        env: {JAX_PLATFORMS: cpu}
+        run: |
+          pytest tests/contract/test_fast_nebular_wiring.py -q --no-header -p no:randomly \
+            --runxfail -rA 2>&1 | tail -25
+        continue-on-error: true
+
+      - name: "2. the test alone, but SERIAL in the full contract collection (-n 0)"
+        env: {JAX_PLATFORMS: cpu}
+        run: |
+          pytest tests/contract -q --no-header --runxfail \
+            -k "fast_nebular or nebular_backend or cue" -rA 2>&1 | tail -25
+        continue-on-error: true
+
+      # 3. The real thing: the whole contract shard, as CI runs it. If the test passes
+      #    in (1) and (2) but fails here, #1154 is TEST POLLUTION, not a platform bug,
+      #    and the next question is only "which test poisons it".
+      - name: "3. the FULL contract shard, as CI runs it (-n 2)"
+        env: {JAX_PLATFORMS: cpu}
+        run: |
+          pytest tests/contract -q --no-header -n 2 --runxfail \
+            --timeout=600 --timeout-method=thread 2>&1 | tail -20
+        continue-on-error: true
