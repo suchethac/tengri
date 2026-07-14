@@ -59,7 +59,10 @@ print("=" * 78)
 print(f"platform : {platform.platform()}  machine={platform.machine()}")
 print("=" * 78)
 
+import hashlib
+
 NEW_FP = ion._ssp_fingerprint  # the #1156 (fixed) key
+NEW_HASH = ion._fingerprint_hash
 
 
 def OLD_FP(w, f, m):
@@ -70,6 +73,15 @@ def OLD_FP(w, f, m):
         bytes(np.asarray(w).tobytes()),
         bytes(np.asarray(m).tobytes()),
     )
+
+
+def OLD_HASH(key):
+    """The pre-#1156 disk hash — must move WITH the old key (it is a 4-tuple)."""
+    h = hashlib.sha256()
+    h.update(repr(key[:2]).encode())
+    h.update(key[2])
+    h.update(key[3])
+    return h.hexdigest()
 
 
 def _build(ssp):
@@ -119,9 +131,10 @@ def worst_photometry():
     return wp
 
 
-def scenario(tag, *, poison, fingerprint):
+def scenario(tag, *, poison, fingerprint, hasher):
     ion._IONSPEC_TABLE_CACHE.clear()
     ion._ssp_fingerprint = fingerprint
+    ion._fingerprint_hash = hasher
     if poison:
         wne = load_ssp_data(WNE)
         ion.precompute_ionizing_params_table(wne.ssp_wave, wne.ssp_flux, wne.ssp_lgmet)
@@ -135,10 +148,12 @@ def scenario(tag, *, poison, fingerprint):
     return w
 
 
-a = scenario("A  clean cache, fixed key", poison=False, fingerprint=NEW_FP)
-b = scenario("B  wNE first, OLD colliding key (pre-#1156)", poison=True, fingerprint=OLD_FP)
-c = scenario("C  wNE first, NEW key (#1156 — must be immune)", poison=True, fingerprint=NEW_FP)
-ion._ssp_fingerprint = NEW_FP
+a = scenario("A  clean cache, fixed key", poison=False, fingerprint=NEW_FP, hasher=NEW_HASH)
+b = scenario("B  wNE first, OLD colliding key (pre-#1156)", poison=True,
+             fingerprint=OLD_FP, hasher=OLD_HASH)
+c = scenario("C  wNE first, NEW key (#1156 — must be immune)", poison=True,
+             fingerprint=NEW_FP, hasher=NEW_HASH)
+ion._ssp_fingerprint, ion._fingerprint_hash = NEW_FP, NEW_HASH
 
 print("\n" + "=" * 78)
 print("VERDICT   (CI reported 2.09e-01 = 20.9%; tolerance 3%)")
