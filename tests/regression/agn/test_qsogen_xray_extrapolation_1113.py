@@ -30,9 +30,8 @@ References
 ----------
 .. [1] M. J. Temple, P. C. Hewett & M. Banerji, MNRAS, 508, 737 (2021).
    doi:10.1093/mnras/stab2586
-.. [2] A. T. Steffen et al., "The X-Ray-to-Optical Properties of Optically
-   Selected Active Galaxies over Wide Luminosity and Redshift Ranges," AJ,
-   131, 2826 (2006) — alpha_ox definition; the corona band is 0.1-10 keV.
+.. [2] A. T. Steffen et al., AJ, 131, 2826 (2006) — alpha_ox definition;
+   the corona band is 0.1-10 keV.
 """
 
 from __future__ import annotations
