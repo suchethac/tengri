@@ -67,7 +67,7 @@ def test_search_finds_agn_blocks_and_igm():
     the monolithic AGN model list."""
     assert len(tengri.search("skirtor")) > 0  # skirtor is an AGN *block*
     assert len(tengri.search("madau")) > 0  # madau is an IGM model
-    assert len(tengri.search("torus")) > 0  # unchanged behaviour still works
+    assert len(tengri.search("torus")) > 0  # unchanged behavior still works
 
 
 # ── list_sfh_models() hides unbuildable types by default ────────────────────
