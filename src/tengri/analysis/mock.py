@@ -13,6 +13,27 @@ from tengri.forward.sed_model import MockData
 __all__ = ["MockData", "generate_mock"]
 
 
+class _MockResult(dict):
+    """A ``dict`` that also allows attribute access to its keys.
+
+    ``generate_mock`` returns a mapping, but the natural idiom (and what
+    ``SEDModel.mock()``'s :class:`MockData` supports) is ``mock.flux_obs``.
+    Accepting both ``mock["flux_obs"]`` and ``mock.flux_obs`` removes a
+    recurring first-contact footgun (attribute access on a plain dict raised
+    ``AttributeError``) while staying a plain ``dict`` for every existing
+    consumer.
+    """
+
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError as exc:
+            raise AttributeError(
+                f"{name!r} — mock keys are {sorted(self)}"
+                + ("; pass key=... to include 'flux_obs'" if name == "flux_obs" else "")
+            ) from exc
+
+
 def generate_mock(model, params, key=None, snr=20.0):
     """Generate mock galaxy photometry with optional Gaussian noise.
 
@@ -61,11 +82,11 @@ def generate_mock(model, params, key=None, snr=20.0):
     flux_true = model.predict_photometry(params)
     noise = flux_true / snr
 
-    result = {
-        "flux_true": flux_true,
-        "noise": noise,
-        "params": params,
-    }
+    result = _MockResult(
+        flux_true=flux_true,
+        noise=noise,
+        params=params,
+    )
 
     if key is not None:
         flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)
