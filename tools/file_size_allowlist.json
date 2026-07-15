@@ -10,7 +10,7 @@
   "src/tengri/components/dust/dust_emission_precompute.py": 1435,
   "src/tengri/components/dust/emission_templates.py": 2612,
   "src/tengri/components/dust/two_component.py": 834,
-  "src/tengri/components/igm/igm.py": 1065,
+  "src/tengri/components/igm/igm.py": 1075,
   "src/tengri/components/nebular/agn_nebular.py": 1461,
   "src/tengri/components/nebular/cloudy_cb19.py": 1103,
   "src/tengri/components/nebular/cloudy_grid.py": 1034,

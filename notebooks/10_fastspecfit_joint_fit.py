@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # FastSpecFit-style joint fit: photometry + emission lines
+# # Joint fit: photometry + emission lines
 #
 # Notebook [`06`](06_fitting_spectroscopy.py) fits an optical *spectrum* and
 # [`07`](07_joint_photo_spec.py) fits photometry *and* a spectrum together. This
@@ -60,6 +60,9 @@ warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
 warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
 warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
 warnings.filterwarnings("ignore", message=".*Composable AGN.*")
+# The dense-mass NUTS run below deliberately uses dense_mass_matrix=True for
+# convergence; its RAM caveat is discussed in the summary, not repeated here.
+warnings.filterwarnings("ignore", message=".*dense_mass_matrix.*")
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 import time
@@ -150,6 +153,7 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 # `(WavePrecomp, FeaturePrecomp)` path (photometry LUT + per-Q_H line grid). The
 # line wavelengths for the feature grid default to those in the observation.
 
+
 # %%
 def build(line_data, approx):
     obs = Observation(photometry=phot_obs, line_fluxes=line_data)
@@ -168,7 +172,12 @@ def build(line_data, approx):
             "tau_bc": Uniform(0.0, 4.0),
             "tau_diff": Uniform(0.0, 3.0),
         },
-        neb={"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0), "logZ_gas": Uniform(-1.5, 0.3)},
+        neb={
+            "type": "cue",
+            "*": FIXED,
+            "logU": Uniform(-4.0, -1.0),
+            "logZ_gas": Uniform(-1.5, 0.3),
+        },
         approx=approx,
     )
 
@@ -204,7 +213,10 @@ _seed_lines = LineFluxData(
     wavelengths=LINE_WAVES,
 )
 model_truth = build(_seed_lines, approx=None)
-truth_full = {**model_truth.spec.get_fixed_values(), **{k: jnp.asarray(v) for k, v in TRUTH.items()}}
+truth_full = {
+    **model_truth.spec.get_fixed_values(),
+    **{k: jnp.asarray(v) for k, v in TRUTH.items()},
+}
 
 p_phot = np.asarray(model_truth.predict_photometry(truth_full))
 p_line = np.asarray(model_truth.predict_line_fluxes(truth_full, target_wavelengths=LINE_WAVES))
@@ -222,17 +234,36 @@ flux_line = p_line + _rng.normal(size=p_line.shape) * n_line
 # The observed line fluxes live in the Observation the fit model carries; the
 # observed photometry is passed to the Fitter. This is the public joint-fit API.
 line_data = LineFluxData(
-    names=tuple(LINE_NAMES), fluxes=jnp.asarray(flux_line), errors=jnp.asarray(n_line), wavelengths=LINE_WAVES
+    names=tuple(LINE_NAMES),
+    fluxes=jnp.asarray(flux_line),
+    errors=jnp.asarray(n_line),
+    wavelengths=LINE_WAVES,
 )
-print(f"Mock: {len(flux_phot)} bands (SNR {PHOT_SNR:.0f}) + {len(flux_line)} lines (SNR {LINE_SNR:.0f})")
-print(f"  truth  log M* = {float(TRUTH['sfh_dpl_log_total_mass']):.2f}   Halpha = {p_line[LINE_NAMES.index('Halpha')]:.3e} erg/s/cm2")
+print(
+    f"Mock: {len(flux_phot)} bands (SNR {PHOT_SNR:.0f}) + {len(flux_line)} lines (SNR {LINE_SNR:.0f})"
+)
+print(
+    f"  truth  log M* = {float(TRUTH['sfh_dpl_log_total_mass']):.2f}   Halpha = {p_line[LINE_NAMES.index('Halpha')]:.3e} erg/s/cm2"
+)
 
 # %% [markdown]
 # ## Measure the fit time: exact vs fast
 #
 # A MAP fit (200 Adam steps) on the joint photometry + line likelihood, timed on
-# both paths. The wall time includes the one-time JIT compile; we report the
-# compiled ("warm") cost too, since that is what a catalog loop pays per galaxy.
+# both paths. One `fitter.run()` bundles two very different costs, and it is
+# worth pulling them apart:
+#
+# - **`run()` wall** — the end-to-end cost of one call. It is dominated by a
+#   one-off **JIT compile** of the optimizer step (~1–2 s here). That compile
+#   recurs on each independent `run()`, so a second call is *not* much cheaper —
+#   the persistent cache spares the XLA backend compile, not the Python-level
+#   re-trace. This is the honest cost of an *interactive, single-galaxy* fit.
+# - **compiled step** (`post.wall_time_s`) — the optimization loop *after* the
+#   compile. This is the marginal compute, and the number that matters at
+#   catalog scale: batched over galaxies with `fit_batch` the compile is paid
+#   **once**, and each further galaxy costs only this (dropping further still
+#   under `vmap`). The often-quoted sub-100 ms/galaxy figure is *this* amortized
+#   compute — not the single-shot wall below.
 
 # %%
 model_exact = build(line_data, approx=None)
@@ -246,19 +277,25 @@ def timed_map(model, label):
     fitter = Fitter(model, flux_phot, n_phot, data_type="photometry")
     assert "line_flux_obs" in fitter._data_args, "line likelihood not active"
     t0 = time.perf_counter()
-    post = fitter.run(**MAP_KW)  # cold: includes compile
+    fitter.run(**MAP_KW)  # first call pays the JIT compile
     cold = time.perf_counter() - t0
     t0 = time.perf_counter()
-    post = fitter.run(**MAP_KW)  # warm: compiled
+    post = fitter.run(**MAP_KW)  # a second run re-traces the step -> wall ~= cold
     warm = time.perf_counter() - t0
-    print(f"  {label:22s} cold {cold:6.2f}s   warm {warm:6.3f}s")
-    return post, cold, warm
+    loop = post.wall_time_s  # the compiled optimization loop, compile excluded
+    print(f"  {label:22s} run() wall {warm:5.2f}s   compiled step {loop:5.2f}s")
+    return post, cold, warm, loop
 
 
 print("MAP fit (photometry + 10 lines):")
-post_exact, cold_e, warm_e = timed_map(model_exact, "exact (approx=None)")
-post_fast, cold_f, warm_f = timed_map(model_fast, "fast (Wave+Feature)")
-print(f"\n  speedup (warm): {warm_e / warm_f:5.1f}x   —   fast path is {warm_f * 1e3:.0f} ms/galaxy")
+post_exact, cold_e, warm_e, loop_e = timed_map(model_exact, "exact (approx=None)")
+post_fast, cold_f, warm_f, loop_f = timed_map(model_fast, "fast (Wave+Feature)")
+print(
+    f"\n  compiled-step speedup: {loop_e / loop_f:.1f}x   (fast {loop_f * 1e3:.0f} ms vs exact {loop_e * 1e3:.0f} ms of compute)"
+)
+print(
+    f"  run() wall is ~{warm_f:.1f}s on either path — that is per-call JIT compile, not the fit."
+)
 
 # %% [markdown]
 # ## Posterior on the fast path
@@ -374,13 +411,16 @@ w_full_um = WAVE_FULL / 1e4
 
 def _sed_fnu(p):
     lnu = np.interp(
-        WAVE_FULL / (1.0 + Z_GAL), np.asarray(model_fast.wavelengths),
+        WAVE_FULL / (1.0 + Z_GAL),
+        np.asarray(model_fast.wavelengths),
         np.asarray(model_fast.predict(p).rest_sed()),
     )
     return np.asarray(lnu_to_fnu(jnp.asarray(lnu), DL, Z_GAL))
 
 
-sed_lo, sed_med, sed_hi = np.percentile(np.stack([_sed_fnu(p) for p in draws]), [16, 50, 84], axis=0)
+sed_lo, sed_med, sed_hi = np.percentile(
+    np.stack([_sed_fnu(p) for p in draws]), [16, 50, 84], axis=0
+)
 sed_truth = _sed_fnu(truth_full)
 
 # %% [markdown]
@@ -403,20 +443,47 @@ axs.fill_between(w_full_um, sed_lo, sed_hi, color=C_POST, alpha=0.25, lw=0, labe
 axs.plot(w_full_um, sed_med, color=C_POST, lw=1.2, label="posterior-median SED")
 axs.plot(w_full_um, sed_truth, color=C_TRUTH, lw=1.0, ls="--", label="truth")
 axs.errorbar(
-    wave_eff_um, flux_phot, yerr=n_phot, fmt="o", ms=7, color=C_DATA, mec="white", mew=0.7,
-    elinewidth=1.1, capsize=2.5, zorder=6, label="observed photometry",
+    wave_eff_um,
+    flux_phot,
+    yerr=n_phot,
+    fmt="o",
+    ms=7,
+    color=C_DATA,
+    mec="white",
+    mew=0.7,
+    elinewidth=1.1,
+    capsize=2.5,
+    zorder=6,
+    label="observed photometry",
 )
 axs.plot(
-    wave_eff_um, phot_med, marker="s", ms=5, ls="none", mfc="none", mec=C_POST, mew=1.3,
-    zorder=7, label="model photometry (band-integrated)",
+    wave_eff_um,
+    phot_med,
+    marker="s",
+    ms=5,
+    ls="none",
+    mfc="none",
+    mec=C_POST,
+    mew=1.3,
+    zorder=7,
+    label="model photometry (band-integrated)",
 )
 for name, x, y, e in zip(BAND_LABELS, wave_eff_um, flux_phot, n_phot):
-    axs.annotate(name, (x, y + e), textcoords="offset points", xytext=(0, 7),
-                 ha="center", fontsize=7.5, color=C_DATA)
+    axs.annotate(
+        name,
+        (x, y + e),
+        textcoords="offset points",
+        xytext=(0, 7),
+        ha="center",
+        fontsize=7.5,
+        color=C_DATA,
+    )
 axs.set_xscale("log")
 axs.set_yscale("log")
 axs.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
-axs.set_title(f"Best-fit SED vs photometry  (reduced χ² = {chi2_phot / len(flux_phot):.2f}, 7 bands)")
+axs.set_title(
+    f"Best-fit SED vs photometry  (reduced χ² = {chi2_phot / len(flux_phot):.2f}, 7 bands)"
+)
 axs.legend(frameon=False, fontsize=8.5, loc="lower center")
 
 axr.axhspan(-1, 1, color="0.6", alpha=0.25, lw=0)
@@ -438,7 +505,9 @@ plt.show()
 # an independent measurement. The reduced χ² is over the ten lines.
 
 # %%
-line_draws = np.stack([np.asarray(model_fast.predict_line_fluxes(d, target_wavelengths=LINE_WAVES)) for d in draws])
+line_draws = np.stack(
+    [np.asarray(model_fast.predict_line_fluxes(d, target_wavelengths=LINE_WAVES)) for d in draws]
+)
 line_lo, line_med, line_hi = np.percentile(line_draws, [16, 50, 84], axis=0)
 pull_line = (flux_line - line_med) / n_line
 chi2_line = float(np.sum(pull_line**2))
@@ -448,15 +517,40 @@ fig, (axl, axp) = plt.subplots(
     2, 1, figsize=(8.4, 5.6), sharex=True, gridspec_kw={"height_ratios": [3, 1], "hspace": 0.08}
 )
 axl.errorbar(
-    x, flux_line, yerr=n_line, fmt="o", color=C_DATA, ms=6, mec="white", mew=0.6, elinewidth=1.1,
-    capsize=2.5, zorder=4, label="observed lines (FastSpecFit-style)",
+    x,
+    flux_line,
+    yerr=n_line,
+    fmt="o",
+    color=C_DATA,
+    ms=6,
+    mec="white",
+    mew=0.6,
+    elinewidth=1.1,
+    capsize=2.5,
+    zorder=4,
+    label="observed lines (FastSpecFit-style)",
 )
-axl.vlines(x, line_lo, line_hi, color=C_POST, alpha=0.5, lw=5, zorder=2, label="posterior-predictive 68%")
-axl.plot(x, line_med, marker="s", ms=5, ls="none", mfc="none", mec=C_POST, mew=1.3, zorder=3, label="model median")
+axl.vlines(
+    x, line_lo, line_hi, color=C_POST, alpha=0.5, lw=5, zorder=2, label="posterior-predictive 68%"
+)
+axl.plot(
+    x,
+    line_med,
+    marker="s",
+    ms=5,
+    ls="none",
+    mfc="none",
+    mec=C_POST,
+    mew=1.3,
+    zorder=3,
+    label="model median",
+)
 axl.plot(x, p_line, marker="_", ms=13, mew=1.8, ls="none", color=C_TRUTH, zorder=5, label="truth")
 axl.set_yscale("log")
 axl.set_ylabel(r"line flux  [erg s$^{-1}$ cm$^{-2}$]")
-axl.set_title(f"Best-fit vs emission lines  (reduced χ² = {chi2_line / len(LINE_NAMES):.2f}, 10 lines)")
+axl.set_title(
+    f"Best-fit vs emission lines  (reduced χ² = {chi2_line / len(LINE_NAMES):.2f}, 10 lines)"
+)
 axl.legend(fontsize=8.5, loc="lower left", ncol=2)
 
 axp.axhspan(-1, 1, color="0.6", alpha=0.25, lw=0)
@@ -472,19 +566,26 @@ plt.show()
 # %% [markdown]
 # ## Measured times, together
 #
-# The single-galaxy MAP wall times, exact vs fast. The fast path also skips the
-# exact forward's much larger compile. The per-galaxy warm number here is a
-# few-fold win; batched over a catalog it drops much further (the look-up is
-# shared work) — that regime is `fit_batch`, not this single-galaxy demo.
+# Two columns, because they answer different questions. **`run() wall`** is the
+# single-galaxy interactive cost — dominated by the per-call JIT compile, which
+# is why exact and fast are closer here than the compute alone would suggest.
+# **`compiled step`** is the optimization once compiled: the marginal per-galaxy
+# compute a catalog pays after amortizing the compile (via `fit_batch`), and
+# where the look-up table earns its keep.
 
 # %%
-print(f"{'fit':<34}{'cold (compile)':>16}{'warm/galaxy':>14}")
-print("-" * 64)
-print(f"{'MAP, exact wave grid':<34}{cold_e:>13.2f} s{warm_e * 1e3:>11.0f} ms")
-print(f"{'MAP, WavePrecomp+FeaturePrecomp':<34}{cold_f:>13.2f} s{warm_f * 1e3:>11.0f} ms")
-print(f"\nWarm MAP speedup (single galaxy): {warm_e / warm_f:.1f}x.")
-print(f"The FeaturePrecomp line grid is a one-time build ({model_fast.spec.n_free}-parameter model), "
-      "amortized over every fit that reuses the model.")
+print(f"{'fit':<34}{'run() wall':>13}{'compiled step':>15}")
+print("-" * 62)
+print(f"{'MAP, exact wave grid':<34}{warm_e:>10.2f} s{loop_e:>12.2f} s")
+print(f"{'MAP, WavePrecomp+FeaturePrecomp':<34}{warm_f:>10.2f} s{loop_f:>12.2f} s")
+print(
+    f"\nCompiled-step speedup: {loop_e / loop_f:.1f}x. The run() wall (~{warm_f:.0f}s) is per-call JIT"
+)
+print("compile, not the fit — a catalog amortizes it once with fit_batch and pays only the")
+print("compiled step per galaxy. The FeaturePrecomp line grid is likewise a one-time build")
+print(
+    f"({model_fast.spec.n_free}-parameter model), reused across every fit that shares the model."
+)
 
 # %% [markdown]
 # ## Summary
