@@ -113,6 +113,15 @@ _LAMBDA_NORM = 5500.0  # Angstrom
 # Reference wavelength for hot dust anchoring
 _LAMBDA_BB_ANCHOR = 20000.0  # 2 um in Angstrom
 
+# Short-wavelength floor of the disc continuum [Angstrom]. QSOgen is an
+# empirical template with no X-ray physics; its broken power law would
+# otherwise extrapolate unbounded into the X-ray and double-count with the
+# alpha_ox corona. 124 A = 0.1 keV is the corona's blue edge — the exact
+# ``wavelength < 124.0`` band used in components/xray/xray.py — so the disc
+# owns lambda >= 124 A (optical/UV/EUV) and the corona owns lambda < 124 A
+# (0.1-10 keV) with no overlap. See issue #1113.
+_XRAY_FLOOR_LAMBDA_AA = 124.0
+
 # ── Default parameters (Temple+2021 Table 3) ──────────────────────
 
 _DEFAULT_PLSLP1 = -0.349  # Blue power-law slope (f_nu ~ nu^alpha)
@@ -291,7 +300,16 @@ def _broken_powerlaw_continuum(
         + w_red_n * const2 * _LAMBDA_NORM**sl2
     )
 
-    return f_nu / jnp.maximum(f_norm, 1e-30)
+    # Floor the continuum below the alpha_ox corona's blue edge (0.1 keV). The
+    # broken power law has no intrinsic short-wavelength cutoff, so left free it
+    # extrapolates the EUV segment into the X-ray (nu*L_nu ~ nu^-0.349) and
+    # double-counts with the corona (#1113). This is a hard cut at a fixed grid
+    # wavelength (not a free parameter), mirroring the corona's own
+    # ``wavelength < 124.0`` band; the gradient w.r.t. the shape parameters
+    # flows unchanged for lambda >= 124 A. Applied here, before the caller's
+    # bolometric normalization, so the removed flux no longer dilutes L_bol.
+    continuum = f_nu / jnp.maximum(f_norm, 1e-30)
+    return jnp.where(wavelength >= _XRAY_FLOOR_LAMBDA_AA, continuum, 0.0)
 
 
 def _hot_dust_blackbody(
