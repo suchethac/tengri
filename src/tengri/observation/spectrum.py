@@ -407,6 +407,7 @@ def project_spectrum(
     sigma_v_kms: float = 0.0,
     cal_coeffs: jnp.ndarray | None = None,
     cal_wave_range: tuple[float, float] | None = None,
+    conserving: bool = False,
 ) -> jnp.ndarray:
     r"""Project a panchromatic model SED onto an observed-frame spectrum grid.
 
@@ -455,6 +456,12 @@ def project_spectrum(
         ``(wave_min, wave_max)`` wavelength range for normalizing the
         Chebyshev polynomial to [-1, 1]. Used only when ``cal_coeffs`` is not
         ``None``. If omitted, defaults to ``(wave_obs.min(), wave_obs.max())``.
+    conserving : bool, optional
+        Resample the model onto the pixel grid with a flux-conserving bin
+        integral (:func:`compute_spectrum_conserving`) instead of point
+        interpolation. Default ``False`` (point sampling — unbiased only when
+        the model grid is much finer than the pixels). Set for low-resolution
+        spectroscopy where point sampling aliases; see #1166.
 
     Returns
     -------
@@ -521,7 +528,10 @@ def project_spectrum(
     """
     from tengri.observation.calibration import apply_calibration
 
-    flux = compute_spectrum(sed_rest, wave_rest, wave_obs, redshift, dl_cm)
+    # ``conserving`` is a static structural flag (resolved from the ``resample``
+    # mode before the trace), so this branch resolves at trace time (#1166).
+    resampler = compute_spectrum_conserving if conserving else compute_spectrum
+    flux = resampler(sed_rest, wave_rest, wave_obs, redshift, dl_cm)
     if resolution is not None:
         flux = apply_lsf(
             flux,
@@ -595,6 +605,96 @@ def compute_spectrum(
     sed_at_pixels = jnp.interp(wave_rest_query, wave_rest, sed_rest, left=0.0, right=0.0)
 
     # Scale using lnu_to_fnu conversion for consistency with cosmological flux formula
+    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
+    return flux_scale * sed_at_pixels
+
+
+def _flux_conserving_resample(
+    wave_rest: jnp.ndarray, sed_rest: jnp.ndarray, wave_query: jnp.ndarray
+) -> jnp.ndarray:
+    r"""Bin-integrated (flux-conserving) resample of ``sed_rest`` onto ``wave_query``.
+
+    Each output value is the *mean flux density over that pixel's wavelength bin*
+    — the integral of the model over the bin divided by the bin width — rather
+    than a point sample at the pixel center (Carnall 2017, SpectRes, eq. 3):
+
+    .. math::
+
+        \tilde{f}_j = \frac{1}{\Delta\lambda_j}
+                      \int_{\lambda_j^-}^{\lambda_j^+} f(\lambda)\, d\lambda
+
+    where the bin edges :math:`\lambda_j^\pm` are the midpoints between adjacent
+    ``wave_query`` centers. Point sampling is unbiased only when the model grid is
+    much finer than the pixel spacing; when a pixel spans one or more model bins
+    (low-resolution spectroscopy, e.g. NIRSpec PRISM) it aliases the sub-pixel
+    structure, biasing the integrated continuum. The bin integral does not.
+
+    Implemented as a difference of the cumulative trapezoidal integral evaluated
+    at the bin edges, so it is O(n_wave + n_pix), JIT-compatible, and
+    differentiable w.r.t. ``sed_rest`` (the edges are static; only the SED varies).
+    Outside the model grid the cumulative integral is flat, so out-of-range bins
+    contribute zero — matching ``compute_spectrum``'s ``left=0, right=0`` clamp.
+
+    Parameters
+    ----------
+    wave_rest : array, shape (n_wave,)
+        Rest-frame model wavelength grid [Angstrom], strictly increasing.
+    sed_rest : array, shape (n_wave,)
+        Rest-frame flux density on ``wave_rest`` [erg/s/Hz].
+    wave_query : array, shape (n_pix,)
+        Rest-frame pixel-center wavelengths to resample onto [Angstrom].
+
+    Returns
+    -------
+    ndarray, shape (n_pix,)
+        Bin-averaged flux density at each pixel [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes (linear in ``sed_rest``).
+
+    References
+    ----------
+    .. [1] Carnall, A. C. 2017, "SpectRes: A Fast Spectral Resampling Tool in
+           Python", arXiv:1705.05165.
+    """
+    mid = 0.5 * (wave_query[1:] + wave_query[:-1])
+    lo = wave_query[:1] - 0.5 * (wave_query[1:2] - wave_query[:1])
+    hi = wave_query[-1:] + 0.5 * (wave_query[-1:] - wave_query[-2:-1])
+    edges = jnp.concatenate([lo, mid, hi])  # (n_pix + 1,)
+
+    # Cumulative trapezoidal integral of the model, clamped flat outside the grid.
+    cum = jnp.concatenate(
+        [jnp.zeros(1), jnp.cumsum(0.5 * (sed_rest[1:] + sed_rest[:-1]) * jnp.diff(wave_rest))]
+    )
+    flux_at_edges = jnp.interp(edges, wave_rest, cum)
+    return (flux_at_edges[1:] - flux_at_edges[:-1]) / (edges[1:] - edges[:-1])
+
+
+@jax.jit
+def compute_spectrum_conserving(
+    sed_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    redshift: float,
+    dl_cm: float,
+) -> jnp.ndarray:
+    """Flux-conserving twin of :func:`compute_spectrum`.
+
+    Identical cosmological scaling, but resamples the rest-frame SED onto the
+    observed pixels with a bin integral (:func:`_flux_conserving_resample`)
+    instead of point interpolation. Use for low-resolution spectroscopy
+    (``Spectroscopy(resample="conserving")`` or ``"auto"``), where point sampling
+    aliases the sub-pixel structure; see :func:`_flux_conserving_resample`.
+
+    Parameters and returns match :func:`compute_spectrum`.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes.
+    """
+    wave_rest_query = wave_obs / (1.0 + redshift)
+    sed_at_pixels = _flux_conserving_resample(wave_rest, sed_rest, wave_rest_query)
     flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
     return flux_scale * sed_at_pixels
 

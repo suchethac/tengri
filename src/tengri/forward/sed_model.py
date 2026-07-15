@@ -778,6 +778,24 @@ class SEDModel:
         else:
             self._approx["spectrum_precomp"] = True
             self._approx_config_spec = cfg
+            # #1166: the SpectrumPrecomp LUT point-interpolates the SSP onto the
+            # pixel grid at build time, so it does NOT honor a flux-conserving
+            # resample. Warn rather than silently ignore the request — the exact
+            # path (approx=None) carries the conserving low-resolution fix.
+            spectro = getattr(observation, "spectroscopy", None)
+            if spectro is not None and getattr(spectro, "resample", "point") != "point":
+                import numpy as _np
+
+                if spectro.resolve_conserving(_np.asarray(self.ssp_data.ssp_wave)):
+                    import warnings
+
+                    warnings.warn(
+                        f"resample={spectro.resample!r} requests a flux-conserving "
+                        f"resample, but approx=SpectrumPrecomp() point-interpolates the "
+                        f"SSP onto the pixel grid and does not apply it. Use approx=None "
+                        f"for the flux-conserving low-resolution spectrum (#1166).",
+                        stacklevel=3,
+                    )
 
     # ── Construction ──────────────────────────────────────────────────
 
@@ -3181,11 +3199,23 @@ class SEDModel:
             # coefficient lookup and either apply a calibration it was never given
             # or raise ``KeyError: 'cal_c1'`` on a dict that rightly has no such key.
             calibration_order = int(self.observation.spectroscopy.calibration_order)
+            # The RESOLVED resample decision (#1166): the spectrum projector closes
+            # over whether it point-samples or flux-conservingly integrates the
+            # model onto the pixels. Two models differing only in ``resample`` (or
+            # in an ``"auto"`` decision that lands differently for their grids) must
+            # NOT share a compiled kernel — otherwise the second silently inherits
+            # the first's resampler. Keyed on the resolved bool, not the mode
+            # string, so ``"auto"`` collides only with an explicit mode that
+            # actually resamples the same way.
+            spec_resample_conserving = bool(
+                self.observation.spectroscopy.resolve_conserving(self.wavelengths)
+            )
         else:
             spec_wave_shape = ()
             sigma_lib_kms = 0.0
             lsf_resolution = None
             calibration_order = 0
+            spec_resample_conserving = False
 
         # CSP integration method
         csp_integration = str(self._csp_integration)
@@ -3350,6 +3380,7 @@ class SEDModel:
             sigma_lib_kms,
             lsf_resolution,
             calibration_order,
+            spec_resample_conserving,
             csp_integration,
             forward_dtype,
             met_interp,
@@ -3638,6 +3669,14 @@ class SEDModel:
         )
         cal_coeffs = spectroscopy.calibration_coeffs(params) if spectroscopy is not None else None
         cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
+        # Static (pre-trace) resolution of the resample mode (#1166): the model
+        # grid is fixed, so this is a Python bool baked into the trace, not a
+        # branch on the sampled redshift.
+        conserving = (
+            spectroscopy.resolve_conserving(self.wavelengths)
+            if spectroscopy is not None
+            else False
+        )
 
         flux = project_spectrum(
             sed_obs.sed,
@@ -3650,6 +3689,7 @@ class SEDModel:
             sigma_v_kms=params.get("sigma_v_kms", 0.0),
             cal_coeffs=cal_coeffs,
             cal_wave_range=cal_wave_range,
+            conserving=conserving,
         )
         return flux
 

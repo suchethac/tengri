@@ -134,6 +134,7 @@ class Spectroscopy:
     sigma_lib_kms: float = 70.0
     lsf_n_bins: int = 16
     calibration_order: int = 0
+    resample: str = "point"
     eline_prior_sigma: float = 100.0
     eline_mode: str = "off"
     eline_catalog: object | None = dataclasses.field(default=None, hash=False)
@@ -148,6 +149,9 @@ class Spectroscopy:
         _valid_modes = ("off", "fixed", "marginalized", "fitted")
         if self.eline_mode not in _valid_modes:
             raise ValueError(f"eline_mode must be one of {_valid_modes}, got {self.eline_mode!r}")
+        _valid_resample = ("point", "conserving", "auto")
+        if self.resample not in _valid_resample:
+            raise ValueError(f"resample must be one of {_valid_resample}, got {self.resample!r}")
         if self.resolution is not None and not isinstance(self.resolution, (int, float)):
             res_arr = jnp.asarray(self.resolution)
             if res_arr.ndim > 0 and res_arr.shape[0] != len(self.wave_obs):
@@ -183,6 +187,44 @@ class Spectroscopy:
 
         """
         return len(self.wave_obs)
+
+    def resolve_conserving(self, wave_rest_model, z_ref: float = 0.0) -> bool:
+        """Resolve the ``resample`` mode to a flux-conserving flag (#1166).
+
+        ``"point"`` maps to ``False`` and ``"conserving"`` to ``True``. ``"auto"``
+        returns ``True`` only when the observed pixels are coarse enough that point
+        interpolation would skip model bins — the median rest-frame pixel spacing
+        exceeds the median model-grid spacing over their overlap, evaluated at
+        ``z_ref`` (pass the lowest redshift in the prior, the worst case for
+        under-sampling). A pure-Python decision made once before tracing, so the
+        forward branch stays static.
+
+        Parameters
+        ----------
+        wave_rest_model : array_like, shape (n_wave,)
+            Rest-frame model wavelength grid [Angstrom].
+        z_ref : float, optional
+            Redshift at which observed pixels are mapped to the rest frame.
+            Default 0.0.
+
+        Returns
+        -------
+        bool
+            Whether to use the flux-conserving resample.
+        """
+        if self.resample != "auto":
+            return self.resample == "conserving"
+        import numpy as np
+
+        wr = np.asarray(wave_rest_model)
+        wq = np.asarray(self.wave_obs) / (1.0 + float(z_ref))
+        lo = max(float(wq.min()), float(wr.min()))
+        hi = min(float(wq.max()), float(wr.max()))
+        qm = (wq >= lo) & (wq <= hi)
+        mm = (wr >= lo) & (wr <= hi)
+        if int(qm.sum()) < 2 or int(mm.sum()) < 2:
+            return False
+        return bool(np.median(np.diff(wq[qm])) > np.median(np.diff(wr[mm])))
 
     @property
     def has_covariance(self) -> bool:
