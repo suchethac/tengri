@@ -69,6 +69,7 @@ ALLOWED_TOKENS = frozenset(
     {
         "ionisation_parameter",  # Synthesizer grid HDF5 axis key
         "log10_specific_ionising_luminosity",  # Synthesizer grid HDF5 dataset key
+        "Modelling",  # verbatim paper title — Temple, Hewett & Banerji 2021, MNRAS 508, 737
     }
 )
 
