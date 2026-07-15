@@ -28,8 +28,7 @@ never affected: both zero outside their template range via
 
 References
 ----------
-.. [1] M. J. Temple, P. C. Hewett & M. Banerji, "Modelling the emission-line
-   properties of quasar accretion discs," MNRAS, 508, 737 (2021).
+.. [1] M. J. Temple, P. C. Hewett & M. Banerji, MNRAS, 508, 737 (2021).
    doi:10.1093/mnras/stab2586
 .. [2] A. T. Steffen et al., "The X-Ray-to-Optical Properties of Optically
    Selected Active Galaxies over Wide Luminosity and Redshift Ranges," AJ,
