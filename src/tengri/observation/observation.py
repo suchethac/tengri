@@ -638,6 +638,7 @@ class Observation:
 
         wave_rest = sed_result.wavelength / (1.0 + z)
         wave_obs = self.spectroscopy.wave_obs
+        conserving = self.spectroscopy.resolve_conserving(sed_result.wavelength)
         flux = project_spectrum(
             sed_result.sed,
             wave_rest,
@@ -649,6 +650,7 @@ class Observation:
             sigma_v_kms=sigma_v_kms,
             cal_coeffs=cal_coeffs,
             cal_wave_range=self.spectroscopy.calibration_wave_range,
+            conserving=conserving,
         )
         return flux
 
@@ -797,6 +799,7 @@ class Observation:
                 else self.spectroscopy.sigma_lib_kms
             )
             n_bins = lsf_n_bins if lsf_n_bins is not None else self.spectroscopy.lsf_n_bins
+            conserving = self.spectroscopy.resolve_conserving(state.wave)
             flux = project_spectrum(
                 sed_spec,
                 wave_rest,
@@ -809,6 +812,7 @@ class Observation:
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=self.spectroscopy.calibration_coeffs(params),
                 cal_wave_range=self.spectroscopy.calibration_wave_range,
+                conserving=conserving,
             )
             out["spec_fnu"] = flux
 
