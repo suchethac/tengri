@@ -622,7 +622,11 @@ def _ghmc_full_scan(
     step_size = parameters["step_size"]
     momentum_inv_scale = parameters["inverse_mass_matrix"]
 
-    state = blackjax.mcmc.ghmc.init(init_flat, ghmc_init_key, ld_1arg)
+    # Keyword args: blackjax reordered ghmc.init's (rng_key, logdensity_fn)
+    # between 1.3 and 1.6 — keywords are correct on both.
+    state = blackjax.mcmc.ghmc.init(
+        position=init_flat, logdensity_fn=ld_1arg, rng_key=ghmc_init_key
+    )
     kernel = _get_ghmc_kernel()
 
     def _step(s, k):
