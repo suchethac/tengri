@@ -322,6 +322,21 @@ for p in REPORT:
 print(f"\n68% coverage: {n_cov}/{len(REPORT)}")
 
 # %% [markdown]
+# ## Corner — the joint posterior
+#
+# The recovery table as a picture: 1-D marginals with the truth (lines), and the
+# 2-D contours where the degeneracies live. Stellar mass is tight; the
+# metallicity–dust–ionization block shows the correlated ridge that the broad
+# intervals above come from — a picture the coverage table cannot show.
+
+# %%
+fig_corner = posterior.plot_corner(
+    params=REPORT, truths={k: float(v) for k, v in truth_full.items()}, color=C_POST
+)
+fig_corner.savefig(FIG_DIR / "10_corner.png", dpi=150, bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
 # ## Posterior draws for the figures
 #
 # Evaluated once and reused by both figures below: the model photometry
