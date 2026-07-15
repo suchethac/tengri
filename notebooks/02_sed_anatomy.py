@@ -167,8 +167,8 @@ kitchen_sink = dict(
         "nlr": {"type": "analytic", "*": FIXED},
         "blr": {"type": "none", "*": FIXED},
     },
-    radio=True,
-    xray=True,
+    radio={"type": "condon92", "*": FIXED},
+    xray={"type": "simple", "*": FIXED},
     redshift=Fixed(2.0),
     apply_igm=True,
 )

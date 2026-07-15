@@ -118,9 +118,9 @@ _candidate_filters = [
     "sdss_r",
     "sdss_i",
     "sdss_z",
-    "twomass_j",
-    "twomass_h",
-    "twomass_ks",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
     "wise_w1",
     "wise_w2",
 ]
@@ -133,7 +133,7 @@ for band in _candidate_filters:
         pass
 
 if not phot_bands_list:
-    phot_bands_list = ["twomass_j", "twomass_h", "twomass_ks"]
+    phot_bands_list = ["2mass_j", "2mass_h", "2mass_ks"]
 
 phot_obs = Photometry.from_names(phot_bands_list, cache_dir="data/filters")
 obs = Observation(photometry=phot_obs)
@@ -467,7 +467,7 @@ for k in keys:
         # Convert to luminosity
         from tengri import cosmology
 
-        dl_cm = cosmology.luminosity_distance(z_ref).to_value("cm")
+        dl_cm = float(cosmology.luminosity_distance(z_ref))  # already in cm (JAX array)
         l_ha_ergs = ha_flux * 4.0 * np.pi * dl_cm**2
 
         # SFR from Hα
