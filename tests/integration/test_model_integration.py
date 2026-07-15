@@ -457,19 +457,26 @@ class TestPrediction:
 
     # --- Radio ---
 
-    def test_radio_l_1p4ghz(self, parametric_model, typical_params):
+    def test_radio_property_requires_radio_component(self, parametric_model, typical_params):
+        """A model without a radio component must NOT fabricate radio properties.
+
+        Pre-#1043 every model answered ``pred.radio.l_1p4ghz`` via fallback
+        defaults — the silent-failure pattern the component-gated property
+        catalog eliminated. The KeyError (listing what IS available) is the
+        contract now; value-level radio property tests live in
+        tests/contract/test_property_catalog.py on a radio-equipped model."""
         pred = parametric_model.predict(typical_params)
-        l_radio = pred.radio.l_1p4ghz
-        assert jnp.isfinite(l_radio)
-        assert float(l_radio) >= 0
+        with pytest.raises(KeyError, match="l_1p4ghz"):
+            _ = pred.radio.l_1p4ghz
 
     # --- X-ray ---
 
-    def test_xray_l_x_xrb(self, parametric_model, typical_params):
+    def test_xray_property_requires_xray_component(self, parametric_model, typical_params):
+        """Same contract as the radio twin: no x-ray component, no fabricated
+        ``l_x_xrb`` — loud KeyError instead (see test_property_catalog.py)."""
         pred = parametric_model.predict(typical_params)
-        l_x = pred.xray.l_x_xrb
-        assert jnp.isfinite(l_x)
-        assert float(l_x) > 0
+        with pytest.raises(KeyError, match="l_x_xrb"):
+            _ = pred.xray.l_x_xrb
 
     # --- Caching ---
 
@@ -483,10 +490,15 @@ class TestPrediction:
         assert "weights" in pred._cache
 
     def test_caching_sed_triggers_sfh(self, parametric_model, typical_params):
-        """Accessing SED property should also cache SFH intermediates."""
+        """SED accesses share one cached ForwardState; arrays materialize lazily.
+
+        The one-path migration replaced named intermediates with the cached
+        ``_state`` (every property reads it, so SFH/SED accesses share work);
+        ``sed_total`` only materializes when an SED *array* accessor runs."""
         pred = parametric_model.predict(typical_params)
         _ = pred.sed.l_bol
-        assert "weights" in pred._cache
+        assert "_state" in pred._cache
+        _ = pred.sed_array
         assert "sed_total" in pred._cache
 
     # --- sed_array ---
