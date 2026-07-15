@@ -387,7 +387,7 @@ sed_truth = _sed_fnu(truth_full)
 # ## Do the points match the best fit? — photometry
 #
 # The observed photometry on the best-fit SED, with the per-band residual below.
-# The lower panel is the pull, `(observed − model) / σ`: inside ±1 (grey band)
+# The lower panel is the pull, `(observed − model) / σ`: inside ±1 (gray band)
 # means the model reproduces that band within its error bar. The reduced χ² over
 # the 7 bands quantifies the overall photometric match.
 
