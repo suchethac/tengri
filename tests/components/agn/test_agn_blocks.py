@@ -304,9 +304,13 @@ def test_disc_only_recipe_is_pure_continuum():
         agn_attenuation_block="none",
         agn_grahsp_l5100=1.0e44,
     )
-    # Should be smooth (no line spikes) and positive.
+    # Should be smooth (no line spikes) and positive across the disc's
+    # physical range. The disc reads zero below the alpha_ox corona's blue
+    # edge (124 A), a band GRAHSP does not model (#1168).
     chex.assert_tree_all_finite(out)
-    assert jnp.all(out > 0)
+    physical = wave_aa >= 124.0
+    assert jnp.all(out[physical] > 0)
+    assert jnp.all(out[~physical] == 0)
 
 
 # ──────────────────────────────────────────────────────────────────────
