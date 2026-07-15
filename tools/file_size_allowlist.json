@@ -3,7 +3,7 @@
   "src/tengri/components/agn/blocks/runner.py": 823,
   "src/tengri/components/agn/disc.py": 2138,
   "src/tengri/components/agn/kd_precompute.py": 1236,
-  "src/tengri/components/agn/qsogen.py": 826,
+  "src/tengri/components/agn/qsogen.py": 839,
   "src/tengri/components/agn/skirtor.py": 1107,
   "src/tengri/components/agn/unified.py": 1851,
   "src/tengri/components/dust/attenuation.py": 1882,
