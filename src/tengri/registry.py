@@ -283,15 +283,15 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "filter":
         return f'Photometry.from_names(["{name}"])'
     if kind == "agn_model":
-        return f'Parameters(..., agn_model="{name}")'
+        return f"SEDModel.build(..., agn={{'type': '{name}'}})"
     if kind == "dust_attenuation":
-        return f'Parameters(..., dust_law="{name}")'
+        return f"SEDModel.build(..., dust={{'law_bc': '{name}'}})"
     if kind == "dust_emission":
-        return f'Parameters(..., dust_emission="{name}")'
+        return f"SEDModel.build(..., dust={{'emission': {{'type': '{name}'}}}})"
     if kind == "sfh_model":
-        return f'Parameters(..., mean_sfh_type="{name}")'
+        return f"SEDModel.build(..., sfh={{'type': '{name}'}})"
     if kind == "nebular_backend":
-        return f'Parameters(..., nebular_backend="{name}")'
+        return f"SEDModel.build(..., neb={{'type': '{name}'}})"
     if kind == "inference_method":
         return f'fitter.run("{name}")'
     if kind == "xray_model":
@@ -616,11 +616,34 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
-    """List all registered star formation history models."""
-    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+def list_sfh_models(
+    *, status: str | None = None, include_unvalidated: bool = False
+) -> _RegistryTable:
+    """List star formation history models available to the builder.
 
-    out = [_entry_to_dict(n, e, kind="sfh_model") for n, e in SFH_REGISTRY.items()]
+    By default this lists only the SFH types that ``SEDModel.build`` will
+    actually accept. Names in
+    :data:`~tengri.components.stellar.sfh.registry.UNVALIDATED_SFH_TYPES`
+    are registered but not yet wired into the DSPS forward path, so the
+    grammar refuses them — advertising them here would send a new user to a
+    ``ValueError`` at build time. Pass ``include_unvalidated=True`` to see
+    them anyway (e.g. for contributor work).
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
+        ``"deprecated"``.
+    include_unvalidated : bool, default False
+        Include SFH types that are registered but not yet buildable.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY, UNVALIDATED_SFH_TYPES
+
+    out = [
+        _entry_to_dict(n, e, kind="sfh_model")
+        for n, e in SFH_REGISTRY.items()
+        if include_unvalidated or n not in UNVALIDATED_SFH_TYPES
+    ]
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
@@ -709,12 +732,12 @@ _COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
     (
         "dust",
         "tengri.components.dust.component",
-        "Two-component attenuation (BC + diffuse) — 21 laws available",
+        "Two-component attenuation (BC + diffuse); see list_dust_laws()",
     ),
     (
         "agn",
         "tengri.components.agn.component",
-        "Disc + torus + polar dust + BLR/NLR — 12 models available",
+        "Disc + torus + polar dust + BLR/NLR; see list_agn_models / list_agn_blocks",
     ),
     (
         "nebular",
@@ -1215,6 +1238,31 @@ def list_inference_methods(
 # ──────────────────────────────────────────────────────────────────
 
 
+def _menu_listers() -> tuple:
+    """The canonical set of per-menu ``list_*`` functions.
+
+    :func:`describe`, :func:`search`, and :func:`list_all` all walk this one
+    tuple, so adding a new physics group (a new ``list_*`` menu) can't
+    silently leave one of them behind. That drift is exactly what once made
+    ``describe()`` and ``search()`` blind to the xray / radio / igm menus and
+    to the composable AGN blocks — the models auto-register into their own
+    registries, but these aggregators re-listed which registries to consult by
+    hand and fell out of sync.
+    """
+    return (
+        list_inference_methods,
+        list_agn_models,
+        list_agn_blocks,
+        list_dust_laws,
+        list_dust_emission_models,
+        list_sfh_models,
+        list_nebular_backends,
+        list_xray_models,
+        list_radio_models,
+        list_igm_models,
+    )
+
+
 def describe(name: str) -> _DescribeRecord:
     """Universal lookup across every menu.
 
@@ -1237,19 +1285,7 @@ def describe(name: str) -> _DescribeRecord:
     if name in _CORE_CLASSES:
         return _DescribeRecord(_CORE_CLASSES[name])
 
-    for fn in (
-        list_inference_methods,
-        list_agn_models,
-        list_agn_blocks,
-        list_dust_laws,
-        list_dust_emission_models,
-        list_sfh_models,
-        list_nebular_backends,
-        list_components,
-        list_filters,
-        list_plots,
-        list_recipes,
-    ):
+    for fn in (*_menu_listers(), list_components, list_filters, list_plots, list_recipes):
         for entry in fn():
             if entry["name"] == name:
                 return _DescribeRecord(entry)
@@ -1668,17 +1704,7 @@ def search(query: str) -> _RegistryTable:
     # band — i.e. everything except kind/use.
     _SKIP_FIELDS = {"kind", "use"}
     hits: list[dict] = []
-    for fn in (
-        list_components,
-        list_inference_methods,
-        list_agn_models,
-        list_dust_laws,
-        list_dust_emission_models,
-        list_sfh_models,
-        list_nebular_backends,
-        list_filters,
-        list_plots,
-    ):
+    for fn in (*_menu_listers(), list_components, list_filters, list_plots):
         for entry in fn():
             haystack = " ".join(
                 str(v) for k, v in entry.items() if k not in _SKIP_FIELDS and isinstance(v, str)
