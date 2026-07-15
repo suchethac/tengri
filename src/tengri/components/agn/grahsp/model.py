@@ -36,7 +36,7 @@ from jax import Array
 
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
 from tengri.components.agn.grahsp.balmer import balmer_continuum
-from tengri.components.agn.grahsp.bbb import sbpl_bbb
+from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
 from tengri.components.agn.grahsp.bolometric import (
     bolometric_luminosity_bbb,
     bolometric_luminosity_torus,
@@ -268,6 +268,10 @@ def evaluate_grahsp_agn(
             plbendwidth=params.plbendwidth,
             cutoff_nm=params.cutoff_nm,
         )
+    # GRAHSP has no X-ray physics: floor the disc below the alpha_ox corona's
+    # blue edge so it does not double-count with the corona (#1168). No-op for
+    # the netzer branch (already bounded via interp).
+    bbb = floor_disc_xray(wave, bbb)
     broad, narrow = gaussian_lines(
         wave_nm=wave,
         line_wave_nm=templates.line_wave_nm,
