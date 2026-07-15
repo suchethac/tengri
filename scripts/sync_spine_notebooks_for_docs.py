@@ -55,7 +55,7 @@ SPINE_TITLES: dict[str, str] = {
     "06_fitting_spectroscopy": "Fitting Spectroscopy",
     "07_joint_photo_spec": "Joint Photometry + Spectroscopy",
     "08_emission_lines": "Emission Lines",
-    "10_fastspecfit_joint_fit": "FastSpecFit Joint Fit (Photometry + Lines)",
+    "10_fastspecfit_joint_fit": "Joint Fit: Photometry + Lines",
     "09_parameter_sweeps": "Parameter Sweeps",
 }
 
