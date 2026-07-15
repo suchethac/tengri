@@ -561,6 +561,11 @@ def parse_groups(**kwargs) -> Parameters:
     ... )
     >>> assert "sfh_dpl_alpha" in params.free_params
     """
+    # ── Pass 0: Normalize the sfh 'field' modulator sub-block ─────────
+    # Rewrite sfh={'type': t, 'field': {...}} → sfh={'type': [t, 'field'], ...}
+    # so the stochastic field is reachable from the natural nested-dict idiom.
+    kwargs = _normalize_sfh_field(kwargs)
+
     # ── Pass 1: Translate structural choices ──────────────────────────
 
     structural_kwargs = _translate_structural(kwargs)
@@ -895,6 +900,65 @@ def _translate_structural(groups: dict) -> dict:
                 result[key] = val
 
     return result
+
+
+#: Field (stochastic IFT modulator) PSD parameter short names. The field is a
+#: DRW-governed correlated field; these are the priors a ``field`` sub-block
+#: scopes its ``'*'`` wildcard over. Keep in sync with the field SFH registry.
+_FIELD_PARAM_SHORT = ("psd_sigma", "psd_tau_myr")
+
+
+def _normalize_sfh_field(kwargs: dict) -> dict:
+    """Accept ``sfh={'type': <smooth>, 'field': {...}}`` for the stochastic field.
+
+    The IFT correlated-field burstiness is a *modulator* composed with a smooth
+    SFH, so internally it lives in ``mean_sfh_type`` as the list
+    ``[<smooth>, 'field']``. That list form has always worked
+    (``sfh={'type': ['dpl', 'field']}``) but is not the natural nested-dict
+    idiom — a user mirroring ``dust={'emission': {...}}`` reaches for
+    ``sfh={'type': 'dpl', 'field': {...}}`` and hit a bare "Unknown key 'field'".
+
+    Rewrite that sub-block form into the list-``type`` composition *before* the
+    validator and translator run, so the whole existing grammar (validation,
+    partition, wildcard/param resolution) handles it unchanged. The ``field``
+    sub-dict carries the PSD priors (``psd_sigma``, ``psd_tau_myr``) and an
+    optional ``'*'`` wildcard scoped to just those field params (the group-level
+    ``'*'`` still governs the smooth SFH).
+    """
+    sfh = kwargs.get("sfh")
+    if not isinstance(sfh, dict) or "field" not in sfh:
+        return kwargs
+
+    sfh = dict(sfh)  # copy — never mutate the caller's dict
+    field_block = sfh.pop("field")
+
+    base = sfh.get("type", "dpl")
+    types = list(base) if isinstance(base, (list, tuple)) else [base]
+    if "field" not in types:
+        types.append("field")
+    sfh["type"] = types
+
+    if field_block in (True, None):
+        pass  # enable with default field priors
+    elif isinstance(field_block, dict):
+        star = field_block.get("*")
+        if star is not None:
+            # Scope the field wildcard to the field params only (so the smooth
+            # SFH keeps its own '*' / defaults).
+            for short in _FIELD_PARAM_SHORT:
+                sfh.setdefault(short, star)
+        for key, value in field_block.items():
+            if key == "*":
+                continue
+            sfh[key] = value  # explicit per-param prior overrides the wildcard
+    else:
+        raise ValueError(
+            "sfh 'field' must be a dict of field/PSD priors (e.g. "
+            "sfh={'type': 'dpl', 'field': {'*': FREE}}), or True to enable it "
+            "with defaults."
+        )
+
+    return {**kwargs, "sfh": sfh}
 
 
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:

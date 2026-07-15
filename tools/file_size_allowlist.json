@@ -46,7 +46,7 @@
   "src/tengri/observation/observation.py": 1411,
   "src/tengri/observation/spectral_indices.py": 993,
   "src/tengri/observation/spectroscopy.py": 852,
-  "src/tengri/parameters/groups.py": 2627,
+  "src/tengri/parameters/groups.py": 2691,
   "src/tengri/parameters/parameters.py": 1886,
   "src/tengri/parameters/priors.py": 1820,
   "src/tengri/registry.py": 2120,
