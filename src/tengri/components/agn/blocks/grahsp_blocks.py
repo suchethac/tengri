@@ -29,7 +29,7 @@ from jax import Array
 
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
-from tengri.components.agn.grahsp.bbb import sbpl_bbb
+from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
 from tengri.components.agn.grahsp.lines import feii_forest, gaussian_lines
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.components.agn.grahsp.torus import si_feature, torus_dust_continuum
@@ -99,6 +99,11 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
         plbendwidth=agn_grahsp_plbendwidth,
         cutoff_nm=agn_grahsp_cutoff_nm,
     )
+    # GRAHSP has no X-ray physics: floor the disc below the alpha_ox corona's
+    # blue edge so this composable disc block does not double-count with the
+    # corona (#1168). Below the >=91.2 nm bolometric window, so normalization
+    # is unchanged.
+    L_lambda_unit_nm = floor_disc_xray(wave_nm, L_lambda_unit_nm)
     if agn_grahsp_l5100 is None:
         # Normalize by the requested bolometric luminosity above the Lyman limit.
         from tengri.components.agn.grahsp.bolometric import (

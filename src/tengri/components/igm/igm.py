@@ -1041,13 +1041,23 @@ def igm_absorption(
     Notes
     -----
     **JIT-compatible**: yes. ``igm_patchy`` / ``use_dla`` are static structural
-    flags, so their branches resolve at trace time.
+    flags, so their branches resolve at trace time. The absorber knobs
+    (``igm_x_HI``, ``igm_bubble_mpc``, ``dla_*``) are runtime values that may be
+    traced free parameters — they must never gate a Python branch. At
+    ``igm_x_HI = 0`` the patchy path reduces bit-for-bit to the mean-IGM model.
     """
     if igm_model in ("none", None):
         # Mean IGM disabled (e.g. DLA-only, or a low-z fit with only a
         # foreground absorber): start from unit transmission.
         transmission = jnp.ones_like(wave_obs)
-    elif igm_patchy and igm_x_HI > 0.0:
+    elif igm_patchy:
+        # ``igm_patchy`` is a static structural flag, so this branch resolves at
+        # trace time. ``igm_x_HI`` is a (possibly free) param and therefore a
+        # tracer under jit — it must NOT gate the branch. Guarding on it with
+        # ``and igm_x_HI > 0.0`` raised TracerBoolConversionError on every path
+        # (#1149). The guard was also redundant: the damping-wing optical depth
+        # scales linearly with ``x_HI``, so ``igm_transmission_patchy`` reduces
+        # bit-for-bit to the mean model at ``x_HI = 0`` (``exp(-0) = 1``).
         transmission = igm_transmission_patchy(wave_obs, z, x_HI=igm_x_HI, R_bubble=igm_bubble_mpc)
     else:
         transmission = resolve_igm_model(igm_model)(wave_obs, z)
