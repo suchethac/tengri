@@ -180,6 +180,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
 
    spine/06_fitting_spectroscopy
    spine/07_joint_photo_spec
+   spine/10_fastspecfit_joint_fit
 
 .. toctree::
    :caption: Examples
