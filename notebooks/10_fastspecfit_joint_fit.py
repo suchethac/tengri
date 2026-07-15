@@ -82,11 +82,13 @@ from tengri import (
     SEDModel,
     Uniform,
     WavePrecomp,
+    cosmology,
     load_ssp_data,
     plot,
 )
 from tengri.inference.fitter import Fitter
 from tengri.observation import LineFluxData
+from tengri.utils.conversions import lnu_to_fnu
 
 plot.setup_style()
 FIG_DIR = Path("_figs")
@@ -320,32 +322,136 @@ for p in REPORT:
 print(f"\n68% coverage: {n_cov}/{len(REPORT)}")
 
 # %% [markdown]
-# ## Data and posterior-predictive lines
+# ## Posterior draws for the figures
 #
-# The observed line fluxes (points) with the posterior-predictive band. Drawing
-# `predict_line_fluxes` over posterior samples propagates the parameter
-# uncertainty into the line prediction — the same quantity the catalog measured.
+# Evaluated once and reused by both figures below: the model photometry
+# (`predict_photometry`), the full model SED (`predict(...).rest_sed()` → observed
+# `F_ν`), and the model line fluxes (`predict_line_fluxes`) — each drawn over the
+# posterior so the bands carry the parameter uncertainty.
 
 # %%
-idx = np.linspace(0, len(next(iter(posterior.samples.values()))) - 1, 100).astype(int)
-draws = [{**model_fast.spec.get_fixed_values(), **{k: jnp.asarray(v[i]) for k, v in posterior.samples.items()}} for i in idx]
-pp = np.array([np.asarray(model_fast.predict_line_fluxes(d, target_wavelengths=LINE_WAVES)) for d in draws])
-pp_lo, pp_med, pp_hi = np.percentile(pp, [16, 50, 84], axis=0)
+N_DRAW = 80
+_sidx = np.linspace(0, len(next(iter(posterior.samples.values()))) - 1, N_DRAW).astype(int)
+_fixed = model_fast.spec.get_fixed_values()
+draws = [{**_fixed, **{k: jnp.asarray(v[i]) for k, v in posterior.samples.items()}} for i in _sidx]
 
-fig, ax = plt.subplots(figsize=(7.2, 4.0))
+# Effective wavelength of each band (transmission-weighted), for placing the points.
+wave_eff_um = (
+    np.array(
+        [
+            np.trapezoid(w * t, w) / np.trapezoid(t, w)
+            for w, t in zip(phot_obs.filter_waves, phot_obs.filter_trans)
+        ]
+    )
+    / 1e4
+)
+
+# Model photometry per draw (the band-integrated F_nu the fit is matching).
+phot_draws = np.stack([np.asarray(model_fast.predict_photometry(d)) for d in draws])
+phot_lo, phot_med, phot_hi = np.percentile(phot_draws, [16, 50, 84], axis=0)
+
+# Continuous model SED per draw: rest-frame L_nu -> observed F_nu (same recipe as
+# notebook 07). Observed-frame grid spanning the DECam-to-WISE range.
+DL = cosmology.luminosity_distance(Z_GAL)
+WAVE_FULL = np.geomspace(2.0e3, 3.0e5, 800)  # observed frame [Å]  (0.2–30 µm)
+w_full_um = WAVE_FULL / 1e4
+
+
+def _sed_fnu(p):
+    lnu = np.interp(
+        WAVE_FULL / (1.0 + Z_GAL), np.asarray(model_fast.wavelengths),
+        np.asarray(model_fast.predict(p).rest_sed()),
+    )
+    return np.asarray(lnu_to_fnu(jnp.asarray(lnu), DL, Z_GAL))
+
+
+sed_lo, sed_med, sed_hi = np.percentile(np.stack([_sed_fnu(p) for p in draws]), [16, 50, 84], axis=0)
+sed_truth = _sed_fnu(truth_full)
+
+# %% [markdown]
+# ## Do the points match the best fit? — photometry
+#
+# The observed photometry on the best-fit SED, with the per-band residual below.
+# The lower panel is the pull, `(observed − model) / σ`: inside ±1 (grey band)
+# means the model reproduces that band within its error bar. The reduced χ² over
+# the 7 bands quantifies the overall photometric match.
+
+# %%
+BAND_LABELS = ["g", "r", "z", "W1", "W2", "W3", "W4"]
+pull_phot = (flux_phot - phot_med) / n_phot
+chi2_phot = float(np.sum(pull_phot**2))
+
+fig, (axs, axr) = plt.subplots(
+    2, 1, figsize=(8.4, 5.6), sharex=True, gridspec_kw={"height_ratios": [3, 1], "hspace": 0.05}
+)
+axs.fill_between(w_full_um, sed_lo, sed_hi, color=C_POST, alpha=0.25, lw=0, label="posterior 68%")
+axs.plot(w_full_um, sed_med, color=C_POST, lw=1.2, label="posterior-median SED")
+axs.plot(w_full_um, sed_truth, color=C_TRUTH, lw=1.0, ls="--", label="truth")
+axs.errorbar(
+    wave_eff_um, flux_phot, yerr=n_phot, fmt="o", ms=7, color=C_DATA, mec="white", mew=0.7,
+    elinewidth=1.1, capsize=2.5, zorder=6, label="observed photometry",
+)
+axs.plot(
+    wave_eff_um, phot_med, marker="s", ms=5, ls="none", mfc="none", mec=C_POST, mew=1.3,
+    zorder=7, label="model photometry (band-integrated)",
+)
+for name, x, y, e in zip(BAND_LABELS, wave_eff_um, flux_phot, n_phot):
+    axs.annotate(name, (x, y + e), textcoords="offset points", xytext=(0, 7),
+                 ha="center", fontsize=7.5, color=C_DATA)
+axs.set_xscale("log")
+axs.set_yscale("log")
+axs.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
+axs.set_title(f"Best-fit SED vs photometry  (reduced χ² = {chi2_phot / len(flux_phot):.2f}, 7 bands)")
+axs.legend(frameon=False, fontsize=8.5, loc="lower center")
+
+axr.axhspan(-1, 1, color="0.6", alpha=0.25, lw=0)
+axr.axhline(0, color=C_POST, lw=0.8)
+axr.plot(wave_eff_um, pull_phot, "o", ms=6, color=C_DATA, mec="white", mew=0.6)
+axr.set_xscale("log")
+axr.set_ylim(-3.5, 3.5)
+axr.set_xlabel(r"observed wavelength  [$\mu$m]")
+axr.set_ylabel(r"$(O-M)/\sigma$")
+fig.savefig(FIG_DIR / "10_sed_photometry.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ## Do the points match the best fit? — emission lines
+#
+# The same test for the line channel: observed line fluxes (points) against the
+# posterior-predictive `predict_line_fluxes` (band + median), with the per-line
+# pull below. Lines are categorical, so they are *not* joined by a curve — each is
+# an independent measurement. The reduced χ² is over the ten lines.
+
+# %%
+line_draws = np.stack([np.asarray(model_fast.predict_line_fluxes(d, target_wavelengths=LINE_WAVES)) for d in draws])
+line_lo, line_med, line_hi = np.percentile(line_draws, [16, 50, 84], axis=0)
+pull_line = (flux_line - line_med) / n_line
+chi2_line = float(np.sum(pull_line**2))
 x = np.arange(len(LINE_NAMES))
-ax.errorbar(x, flux_line, yerr=n_line, fmt="o", color=C_DATA, ms=5, lw=1, capsize=2, label="mock data (FastSpecFit-style)", zorder=3)
-ax.fill_between(x, pp_lo, pp_hi, color=C_POST, alpha=0.30, lw=0, label="posterior-predictive 68%")
-ax.plot(x, pp_med, color=C_POST, lw=1.0, marker="s", ms=3, label="posterior median")
-ax.plot(x, p_line, color=C_TRUTH, lw=0, marker="_", ms=12, mew=1.6, label="truth")
-ax.set_yscale("log")
-ax.set_xticks(x)
-ax.set_xticklabels(LINE_NAMES, rotation=45, ha="right", fontsize=8)
-ax.set_ylabel(r"line flux  [erg s$^{-1}$ cm$^{-2}$]")
-ax.set_title("Joint phot+line fit: emission-line recovery")
-ax.legend(fontsize=8, loc="upper right")
-fig.tight_layout()
-fig.savefig(FIG_DIR / "10_line_recovery.png", dpi=130)
+
+fig, (axl, axp) = plt.subplots(
+    2, 1, figsize=(8.4, 5.6), sharex=True, gridspec_kw={"height_ratios": [3, 1], "hspace": 0.08}
+)
+axl.errorbar(
+    x, flux_line, yerr=n_line, fmt="o", color=C_DATA, ms=6, mec="white", mew=0.6, elinewidth=1.1,
+    capsize=2.5, zorder=4, label="observed lines (FastSpecFit-style)",
+)
+axl.vlines(x, line_lo, line_hi, color=C_POST, alpha=0.5, lw=5, zorder=2, label="posterior-predictive 68%")
+axl.plot(x, line_med, marker="s", ms=5, ls="none", mfc="none", mec=C_POST, mew=1.3, zorder=3, label="model median")
+axl.plot(x, p_line, marker="_", ms=13, mew=1.8, ls="none", color=C_TRUTH, zorder=5, label="truth")
+axl.set_yscale("log")
+axl.set_ylabel(r"line flux  [erg s$^{-1}$ cm$^{-2}$]")
+axl.set_title(f"Best-fit vs emission lines  (reduced χ² = {chi2_line / len(LINE_NAMES):.2f}, 10 lines)")
+axl.legend(fontsize=8.5, loc="lower left", ncol=2)
+
+axp.axhspan(-1, 1, color="0.6", alpha=0.25, lw=0)
+axp.axhline(0, color=C_POST, lw=0.8)
+axp.plot(x, pull_line, "o", ms=6, color=C_DATA, mec="white", mew=0.6)
+axp.set_ylim(-3.5, 3.5)
+axp.set_ylabel(r"$(O-M)/\sigma$")
+axp.set_xticks(x)
+axp.set_xticklabels(LINE_NAMES, rotation=45, ha="right", fontsize=8)
+fig.savefig(FIG_DIR / "10_line_recovery.png", dpi=300, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
