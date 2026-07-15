@@ -137,7 +137,7 @@ print()
 # Path 2: Nested-dict direct (hand-built nested dict)
 print("PATH 2: Nested-dict direct")
 groups_dict = {
-    "sfh": {"type": "dpl", "*": FREE, "met_logzsol": Fixed(-0.1)},
+    "sfh": {"type": "dpl", "*": FREE},
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
@@ -185,11 +185,12 @@ print()
 # Path 4: Round-trip (extract → edit → rebuild)
 print("PATH 4: Round-trip")
 groups_from_model = model1.spec.to_groups()
-# Tweak: change metallicity to free (lives inside the sfh group as 'met_logzsol')
-groups_from_model.setdefault("sfh", {})["met_logzsol"] = FREE
+# Tweak: pin the redshift to a known value (e.g. a spectroscopic z) instead of
+# fitting it — a common real edit that drops one free parameter.
+groups_from_model["redshift"] = Fixed(2.0)
 model3 = SEDModel.build(ssp_data=ssp, observation=observation, **groups_from_model)
-print(f"  Model: {model3.spec.n_free} free params from round-trip + edit")
-print(f"  Added metallicity freedom: {'met_logzsol' in model3.spec.free_params}")
+print(f"  Model: {model3.spec.n_free} free params after pinning redshift")
+print(f"  Redshift now fixed: {'redshift' not in model3.spec.free_params}")
 
 # %% [markdown]
 # ## Builder factories

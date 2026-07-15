@@ -993,6 +993,15 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     """
     dust_type = dust_dict.get("type", "two_component")
 
+    # 'none'/'off' disable the dust block entirely — parity with neb/agn/radio/
+    # xray/igm/shock, all of which accept type='none' (and the generic grammar
+    # error even promises it). The forward model reads dust_model=='off' as
+    # use_dust=False, so normalize both spellings onto that sentinel and skip
+    # law/emission parsing (there is nothing to attenuate or re-emit).
+    if dust_type in ("none", "off"):
+        result["dust_model"] = "off"
+        return
+
     # Lyman-limit clip is wired only through the two-component screen. Flag any
     # other type rather than silently dropping the request (single-component,
     # WG00, and SEDModelComponents do not route through it yet).
@@ -1109,6 +1118,10 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
         emission_dict = dust_dict["emission"]
         if isinstance(emission_dict, dict):
             emission_type = emission_dict.get("type", None)
+            if emission_type in ("none", "off"):
+                # Explicitly disable IR re-emission — parity with the group-level
+                # 'none'. Leave result['dust_emission'] unset (its off default).
+                emission_type = None
             if emission_type is not None:
                 # Dust IR emission types are engine names (modified_blackbody, dale2014,
                 # dl07, dl14, astrodust, etc.) resolved by the DUST_EMISSION_MODELS loader cache.

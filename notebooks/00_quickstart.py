@@ -203,10 +203,9 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # sampler stack on first use and persists it to the on-disk cache
 # (`~/.cache/tengri_jax_cache`), so a fresh session reuses the compile.
 #
-# *Note*: routing through `Fitter(sed_model, ...)` instead of
-# `forward.fit(...)` is a temporary workaround for issue #281
-# (`ForwardModel.predict` bypasses the WavePrecomp LUT, ~16× slowdown).
-# Will be removed once #281 closes.
+# *Note*: we pass the `SEDModel` straight to `Fitter` here rather than the
+# `ForwardModel`, because the model's `predict_photometry` keeps the fast
+# WavePrecomp photometry path that the fit relies on.
 
 # %%
 from tengri.inference.fitter import Fitter
