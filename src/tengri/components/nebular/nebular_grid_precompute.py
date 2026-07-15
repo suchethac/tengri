@@ -355,10 +355,26 @@ def precompute_nebular_grid(
     axis_kinds = tuple(axis_kinds)
 
     def _row(point_values):
-        """(line_per_qh, phot_per_qh|None) at one grid point — the Cue forward."""
+        """(line_per_qh, phot_per_qh|None) at one grid point — one eager Cue forward.
+
+        Kept for the single reference evaluation below (photometry-channel probe +
+        vmap sanity check); the full grid is built vmapped, not by looping this.
+        """
+        row = jnp.asarray([float(v) for v in point_values])
+        line, phot = _row_traced(row, want_phot=True)
+        return line, (None if phot is None else phot)
+
+    def _row_traced(row, *, want_phot):
+        """Per-Q_H line (and optionally phot) vector at one grid point, tracer-safe.
+
+        ``row`` is a ``(n_axes,)`` array so this vmaps: ``predict_state`` compiles
+        once and runs batched over every node, instead of one eager forward per node
+        (the #950 build looped ``predict_state`` ~n_grid**n_axes times — 256 eager
+        forwards, ~11 min; vmapped it is one compile, ~seconds).
+        """
         p = dict(ref_params)
-        for name, val in zip(axis_names, point_values, strict=True):
-            p[name] = jnp.asarray(float(val))
+        for i, name in enumerate(axis_names):
+            p[name] = row[i]
         state = model.predict_state(p)
         inv_qh = 1.0 / jnp.maximum(_nion_of_state(state), 1e-30)
         # intrinsic (redden=False) observed flux -> luminosity per Q_H
@@ -366,6 +382,8 @@ def precompute_nebular_grid(
             p, target_wavelengths=wavelengths, redden=False, state=state
         )
         line_per_qh = jnp.asarray(flux) * ref_divisor * inv_qh
+        if not want_phot:
+            return line_per_qh, None
         # intrinsic nebular filter-integrated rest-frame L_nu per Q_H (the exact
         # per-eval publish, captured once at build time). Absent when the model
         # has no WavePrecomp filters (line-only grid).
@@ -379,15 +397,47 @@ def precompute_nebular_grid(
     else:
         grid_shape = tuple(len(a) for a in axes)
         points = list(itertools.product(*[list(a) for a in axes]))
-    rows = [_row(pt) for pt in points]
 
-    def _stack_log(vectors) -> jnp.ndarray:
+    # One eager reference forward: detects the photometry channel (line-only grids
+    # have none) and anchors the vmap sanity check below.
+    ref_line, ref_phot = _row(points[0])
+    has_phot = ref_phot is not None
+
+    pts_arr = jnp.asarray([[float(v) for v in pt] for pt in points])  # (n_points, n_axes)
+
+    if has_phot:
+
+        @jax.jit
+        @jax.vmap
+        def _eval_both(row):
+            line, phot = _row_traced(row, want_phot=True)
+            return line, phot
+
+        line_all, phot_all = _eval_both(pts_arr)  # (n_points, n_line), (n_points, n_phot)
+    else:
+
+        @jax.jit
+        @jax.vmap
+        def _eval_line(row):
+            line, _ = _row_traced(row, want_phot=False)
+            return line
+
+        line_all = _eval_line(pts_arr)  # (n_points, n_line)
+        phot_all = None
+
+    # Sanity: the vmapped first node must reproduce the eager reference forward.
+    if not bool(jnp.allclose(line_all[0], ref_line, rtol=1e-5, atol=0.0)):
+        raise RuntimeError(
+            "nebular fast grid: vmapped build disagrees with the eager reference "
+            "forward at the first node — a tracer/vmap regression, not a rounding gap."
+        )
+
+    def _stack_log(arr) -> jnp.ndarray:
         # log space: nebular luminosities span decades across the ionization grid
-        arr = jnp.stack(vectors)  # (n_points, n_channel)
         return jnp.log10(jnp.maximum(arr, 1e-300)).reshape(*grid_shape, arr.shape[-1])
 
-    log_line = _stack_log([r[0] for r in rows])
-    log_phot = None if rows[0][1] is None else _stack_log([r[1] for r in rows])
+    log_line = _stack_log(line_all)
+    log_phot = None if phot_all is None else _stack_log(phot_all)
 
     return NebularGridTable(
         axis_names=axis_names,

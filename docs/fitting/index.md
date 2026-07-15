@@ -9,6 +9,7 @@ data, and the degeneracies that come with each.
 | [`06_fitting_spectroscopy`](../spine/06_fitting_spectroscopy) | Optical spectroscopy: Lick indices, line masking, calibration polynomial |
 | [`07_joint_photo_spec`](../spine/07_joint_photo_spec) | Joint photo + spec to break age/dust/metallicity degeneracies |
 | [`08_emission_lines`](../spine/08_emission_lines) | Emission-line diagnostics (BPT, Hα-SFR consistency) |
+| [`10_fastspecfit_joint_fit`](../spine/10_fastspecfit_joint_fit) | FastSpecFit-style joint fit: DESI photometry + emission-line fluxes, with measured fit times |
 
 For batch fitting many galaxies with shared infrastructure, see
 [advanced/batch_fitting](../advanced/batch_fitting).
