@@ -37,6 +37,7 @@ model = tengri.SEDModel.build(
     sfh={"type": "tsnorm", "*": tengri.FREE},
     dust={"type": "two_component", "*": tengri.FREE},
     redshift=tengri.Fixed(0.08),
+    approx=tengri.WavePrecomp(),
 )
 
 key = jax.random.PRNGKey(42)

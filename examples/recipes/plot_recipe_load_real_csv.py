@@ -46,6 +46,7 @@ for gal_id in range(3):
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "slope": -0.7},
         redshift=tengri.Fixed(0.1),
+        approx=tengri.WavePrecomp(),
     )
     params = dict(model_template.spec.sample(jax.random.fold_in(key, gal_id)))
     mock = model_template.mock(params, snr=20.0, key=jax.random.fold_in(key, 100 + gal_id))
@@ -68,6 +69,7 @@ for gal_idx, gal in enumerate(galaxy_data):
         sfh={"type": "tsnorm", "*": tengri.FREE},
         dust={"type": "two_component", "*": tengri.FREE},
         redshift=tengri.Fixed(gal["redshift"]),
+        approx=tengri.WavePrecomp(),
     )
 
     forward = tengri.ForwardModel.build(sed=model, observation=obs)

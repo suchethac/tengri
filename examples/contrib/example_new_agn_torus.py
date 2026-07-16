@@ -150,6 +150,7 @@ print(
             sfh={"type": "tsnorm", "*": tengri.FREE},
             agn={"model": "my_toy_torus", "*": tengri.FREE},
             redshift=tengri.Fixed(0.05),
+            approx=tengri.WavePrecomp(),
         )
 
         # Generate mock data

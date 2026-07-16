@@ -51,6 +51,7 @@ model_truth = tengri.SEDModel.build(
     sfh={"type": "tsnorm", "*": tengri.FIXED},
     dust={"type": "two_component", "*": tengri.FIXED},
     redshift=tengri.Fixed(0.1),
+    approx=tengri.WavePrecomp(),
 )
 mock = model_truth.mock(truth_params, snr=20.0, key=key)
 
@@ -74,6 +75,7 @@ model_correct = tengri.SEDModel.build(
         "slope": -0.7,
     },
     redshift=tengri.Fixed(0.1),
+    approx=tengri.WavePrecomp(),
 )
 forward_correct = tengri.ForwardModel.build(sed=model_correct, observation=obs)
 post_correct = forward_correct.fit(
@@ -104,6 +106,7 @@ model_wrong = tengri.SEDModel.build(
         "slope": -0.7,
     },
     redshift=tengri.Fixed(0.1),
+    approx=tengri.WavePrecomp(),
 )
 forward_wrong = tengri.ForwardModel.build(sed=model_wrong, observation=obs)
 post_wrong = forward_wrong.fit(

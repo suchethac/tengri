@@ -43,6 +43,7 @@ model = tengri.SEDModel.build(
         "slope": -0.7,
     },
     redshift=tengri.Fixed(0.05),
+    approx=tengri.WavePrecomp(),
 )
 
 key = jax.random.PRNGKey(42)

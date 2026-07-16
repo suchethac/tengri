@@ -70,6 +70,7 @@ truth_model = tengri.SEDModel.build(
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.25, "tau_bc": 0.3},
     redshift=tengri.Fixed(Z),
+    approx=tengri.WavePrecomp(),
 )
 
 # Seed picked so the GP realization has a recent (<~100 Myr) excursion —
@@ -94,6 +95,7 @@ fit_model = tengri.SEDModel.build(
         "tau_bc": tengri.Uniform(0.0, 1.5),
     },
     redshift=tengri.Fixed(Z),
+    approx=tengri.WavePrecomp(),
 )
 
 forward = tengri.ForwardModel.build(sed=fit_model, observation=obs)

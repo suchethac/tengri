@@ -58,6 +58,7 @@ model_template = tengri.SEDModel.build(
         **{k: v for k, v in true_params.items() if k.startswith("dust_")},
     },
     redshift=tengri.Fixed(TRUE_REDSHIFT),
+    approx=tengri.WavePrecomp(),
 )
 mock = model_template.mock(true_params, snr=25.0, key=key)
 
@@ -68,6 +69,7 @@ model_fixed = tengri.SEDModel.build(
     sfh={"type": "tsnorm", "*": tengri.FREE},
     dust={"type": "two_component", "*": tengri.FREE},
     redshift=tengri.Fixed(TRUE_REDSHIFT),
+    approx=tengri.WavePrecomp(),
 )
 forward_fixed = tengri.ForwardModel.build(sed=model_fixed, observation=obs)
 posterior_fixed = forward_fixed.fit(
@@ -81,6 +83,7 @@ model_free = tengri.SEDModel.build(
     sfh={"type": "tsnorm", "*": tengri.FREE},
     dust={"type": "two_component", "*": tengri.FREE},
     redshift=tengri.Uniform(0.0, 0.5),
+    approx=tengri.WavePrecomp(),
 )
 forward_free = tengri.ForwardModel.build(sed=model_free, observation=obs)
 posterior_free = forward_free.fit(

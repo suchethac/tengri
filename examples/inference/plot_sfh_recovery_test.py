@@ -45,6 +45,7 @@ model = tengri.SEDModel.build(
         "slope": -0.7,
     },
     redshift=tengri.Fixed(0.05),
+    approx=tengri.WavePrecomp(),
 )
 
 # Define true parameters: dpl model with alpha=2.5, beta=1.2, tau_gyr=8.0
