@@ -301,30 +301,47 @@ print(
 # ## Posterior on the fast path
 #
 # A point estimate is not enough for a catalog — the metallicity / dust /
-# ionization sector is degenerate, and the honest object is the posterior. On
-# the fast path a converged NUTS run is affordable. We use enough warmup to reach
-# R-hat < 1.05 (a shorter run recovers the truth but leaves the chains disagreeing
-# — the intervals are only trustworthy once R-hat converges). One fit per process,
-# per the OOM-orchestration rule.
+# ionization sector is degenerate, and the honest object is the posterior.
+#
+# **Sampler.** This posterior is strongly correlated (the degeneracies above),
+# so the mass matrix must be **dense** — a diagonal one does not converge here.
+# Given that, fixed-trajectory **HMC** converges faster than NUTS, which spends
+# its budget building deep adaptive trees. We run **two genuine chains** so the
+# R-hat is a real between-chain diagnostic, and execute them
+# `chain_method="sequential"`: each chain reuses one compiled kernel, so peak
+# memory stays at a *single* chain's. That is the point — a vmapped multi-chain
+# compile needs ~N× the RAM (and a dense-mass fit can OOM a modest machine),
+# whereas sequential runs anywhere a one-chain fit runs, at ~N× the sampling
+# wall. One fit per process, per the OOM-orchestration rule.
 
 # %%
-N_WARMUP, N_SAMPLES, N_CHAINS = 800, 500, 2
+N_WARMUP, N_SAMPLES, N_CHAINS, N_LEAPFROG = 500, 300, 2, 100
 t0 = time.perf_counter()
 posterior = Fitter(model_fast, flux_phot, n_phot, data_type="photometry").run(
-    method="mcmc_nuts",
+    method="mcmc_hmc",
     key=jax.random.PRNGKey(7),
     n_warmup=N_WARMUP,
     n_samples=N_SAMPLES,
     n_chains=N_CHAINS,
+    n_leapfrog_steps=N_LEAPFROG,
     dense_mass_matrix=True,
-    target_accept_rate=0.9,
+    target_accept_rate=0.85,
+    chain_method="sequential",  # peak memory = one chain (runs on cheap hardware)
 )
 rmax = max(float(v) for v in posterior.rhat().values())
 print(
-    f"NUTS ({N_CHAINS} x {N_WARMUP}w+{N_SAMPLES}s): {time.perf_counter() - t0:5.0f}s   "
-    f"max R-hat {rmax:.3f}   "
+    f"HMC ({N_CHAINS} chains x {N_WARMUP}w+{N_SAMPLES}s, L={N_LEAPFROG}, sequential): "
+    f"{time.perf_counter() - t0:5.0f}s   max R-hat {rmax:.3f}   "
     f"divergences {posterior.diagnostics.get('n_divergent', 'n/a')}"
 )
+
+# %% [markdown]
+# On a bigger machine, swap `chain_method="vmap"` (one batched kernel) or
+# `"parallel"` (one chain per device; needs
+# `XLA_FLAGS=--xla_force_host_platform_device_count=N` before importing jax) to
+# run the chains concurrently and cut the wall ~N-fold — same posterior, more
+# memory. Raise `N_CHAINS` for a more robust R-hat; at a fixed total-sample
+# budget it costs the same compute, only more chains to compare.
 
 # %% [markdown]
 # ## Recovery
@@ -603,11 +620,12 @@ print(
 #   on the strong lines. Single-galaxy that is a steady few-fold speedup (measured
 #   above); the dramatic win is at catalog scale, batched over galaxies
 #   (`fit_batch`), where the exact wave-grid forward would be prohibitive.
-# - **All six reported parameters are covered** by the 68% posterior interval,
-#   with stellar mass and SFR the tightest. Metallicity / dust / gas conditions
-#   are the broad, degenerate sector — the posterior *width* is the honest
-#   statement of that. More information (a full spectrum — notebook 06 — an
-#   auroral line, or the UV slope) narrows it, not a faster fit.
+# - **The truth lands inside the 68% interval for five of the six reported
+#   parameters** (one just outside — exactly what a well-calibrated 68% credible
+#   interval should do), with stellar mass and SFR the tightest. Metallicity /
+#   dust / gas conditions are the broad, degenerate sector — the posterior
+#   *width* is the honest statement of that. More information (a full spectrum —
+#   notebook 06 — an auroral line, or the UV slope) narrows it, not a faster fit.
 # - Two residual systematics matter when fitting a *real* catalog: the nebular
 #   model floor (Cue reproduces FSPS's Cloudy to ~10%, ~30% for [S II]), and the
 #   fiber aperture (line fluxes are aperture-limited; photometry is total — apply
