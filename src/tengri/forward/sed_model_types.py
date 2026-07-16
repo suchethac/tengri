@@ -66,6 +66,62 @@ class MockData(NamedTuple):
     noise: jnp.ndarray  # 1-sigma uncertainties
     params: dict  # input parameters
 
+    # ── Mapping-style access ──────────────────────────────────────────
+    # MockData is the object returned by ``SEDModel.mock()``; the standalone
+    # ``generate_mock()`` returns a mapping. Supporting both ``mock.flux_obs``
+    # and ``mock["flux_obs"]`` here means notebook/user code written against
+    # either surface works against both — see ``analysis/mock.py``.
+
+    def __getitem__(self, key):
+        """Field access by name (``mock["flux_obs"]``) or position (``mock[0]``).
+
+        Parameters
+        ----------
+        key : str or int or slice
+            Field name for dict-style access, or an index/slice for the
+            NamedTuple's positional access.
+
+        Returns
+        -------
+        object
+            The requested field value (or tuple slice).
+
+        Raises
+        ------
+        KeyError
+            If ``key`` is a string that is not a field name.
+        """
+        if isinstance(key, str):
+            try:
+                return getattr(self, key)
+            except AttributeError:
+                raise KeyError(key) from None
+        # Explicit base (not zero-arg super()): a typing.NamedTuple metaclass
+        # does not set the __class__ cell, so super() fails at class creation.
+        return tuple.__getitem__(self, key)
+
+    def __contains__(self, key) -> bool:
+        """``"flux_obs" in mock`` tests field names; other values fall back to tuple membership."""
+        if isinstance(key, str):
+            return key in self._fields
+        return tuple.__contains__(self, key)
+
+    def get(self, key: str, default=None):
+        """Return field ``key`` if present, else ``default`` (mirrors :meth:`dict.get`)."""
+        return getattr(self, key) if isinstance(key, str) and key in self._fields else default
+
+    def keys(self):
+        """Return the field names (``flux_true``, ``flux_obs``, ``noise``, ``params``)."""
+        return list(self._fields)
+
+    def values(self):
+        """Return the field values, in field order."""
+        return list(self)
+
+    def items(self):
+        """Return ``(name, value)`` pairs, in field order."""
+        return list(zip(self._fields, self))
+
     def plot(self, filter_names=None, ax=None):
         """Plot mock photometry with errorbars.
 

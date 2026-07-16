@@ -873,3 +873,28 @@ class TestPhase1BPropertyCounts:
         }
         missing = expected_in_sfh - sfh_names
         assert expected_in_sfh.issubset(sfh_names), f"Missing sfh: {missing}"
+
+
+class TestDictLikeInterface:
+    """PropertyCatalog is documented as dict-like — complete the mapping protocol.
+
+    Regression for the fresh-user audit (2026-07): the quickstart notebook did
+    ``pred.properties.get(name)`` and hit ``AttributeError: 'PropertyCatalog'
+    object has no attribute 'get'`` — the class implemented ``__getitem__`` /
+    ``__contains__`` / ``keys`` but not ``get`` / ``values`` / ``items``.
+    """
+
+    def test_get_returns_value_or_default(self, base_model):
+        params = base_model.spec.sample(jax.random.PRNGKey(0))
+        props = base_model.predict(params).properties
+        assert float(props.get("stellar_mass")) == float(props["stellar_mass"])
+        assert props.get("definitely_not_a_property") is None
+        assert props.get("definitely_not_a_property", 42) == 42
+
+    def test_values_and_items_align_with_keys(self, base_model):
+        params = base_model.spec.sample(jax.random.PRNGKey(0))
+        props = base_model.predict(params).properties
+        keys, vals, items = props.keys(), props.values(), props.items()
+        assert len(keys) == len(vals) == len(items) > 0
+        assert [name for name, _ in items] == keys
+        assert float(items[0][1]) == float(props[keys[0]])
