@@ -176,3 +176,33 @@ class TestSeedEntries:
         """Prospector seed must exist."""
         c = cite("prospector")
         assert "Prospector" in c.title or "Johnson" in c.short
+
+
+class TestPerFitCitationSurface:
+    """The documented per-fit BibTeX surface (README, docs/citation.md).
+
+    Regression for the fresh-user audit (2026-07): README and docs taught
+    ``print(tengri.cite_all(result))``, but ``cite_all()`` takes NO argument
+    and returns the whole registry — the per-fit emitter is
+    ``print_components_bibtex(result)`` / ``cite_components(result)``. This
+    guard keeps the taught call working and the semantics honest.
+    """
+
+    def test_cite_all_is_registry_wide_not_per_fit(self) -> None:
+        # Passing a model/result (the old doc bug) must not silently "work".
+        with pytest.raises(TypeError):
+            cite_all(object())
+
+    def test_print_components_bibtex_emits_for_a_model(self, synthetic_ssp_wide, capsys) -> None:
+        import tengri
+        from tengri import FREE, Fixed, SEDModel
+
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            sfh={"type": "dpl", "*": FREE},
+            neb={"type": "none"},
+            redshift=Fixed(0.1),
+        )
+        tengri.print_components_bibtex(model)
+        out = capsys.readouterr().out
+        assert "@" in out, "print_components_bibtex emitted no BibTeX entries"

@@ -107,7 +107,7 @@ and inference backend carries its own citation, so the BibTeX for a
 fit is assembled from what actually ran:
 
 ```python
-print(tengri.cite_all(result))   # BibTeX for every component that ran
+tengri.print_components_bibtex(result)   # BibTeX for every component that ran
 ```
 
 This keeps the acknowledgement section of a paper honest as you swap

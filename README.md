@@ -228,9 +228,9 @@ re-emission, unified across optical, IR, and X-ray. IGM, radio, and
 X-ray sit alongside as components, not afterthoughts.
 
 Every physics component is a pure JAX function, so `jit`, `vmap`, and
-`grad` compose through the whole forward model. `tengri.cite(fit)`
-returns the citations for every SSP, model, and code used in that fit
-(`tengri.cite_all()` lists every source tengri knows about).
+`grad` compose through the whole forward model.
+`tengri.print_components_bibtex(result)` prints BibTeX for every SSP,
+model, and code used in a fit.
 
 ## Community
 

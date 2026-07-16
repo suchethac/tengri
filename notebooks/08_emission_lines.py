@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.1
+#       jupytext_version: 1.19.4
 #   kernelspec:
 #     display_name: .venv
 #     language: python
@@ -467,7 +467,7 @@ for k in keys:
         # Convert to luminosity
         from tengri import cosmology
 
-        dl_cm = float(cosmology.luminosity_distance(z_ref))  # already in cm (JAX array)
+        dl_cm = cosmology.luminosity_distance(z_ref)  # already in cm
         l_ha_ergs = ha_flux * 4.0 * np.pi * dl_cm**2
 
         # SFR from Hα
