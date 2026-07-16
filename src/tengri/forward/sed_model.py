@@ -5632,7 +5632,7 @@ class SEDModel:
                 "nebular backend: emission is baked into the SSP grid and "
                 "no discrete line catalog is published. To predict line "
                 "luminosities, build the model with a photoionization "
-                "backend, e.g. neb={'type': 'cue', '*': FIXED} (requires "
+                "backend, e.g. neb={'type': 'cue', 'all_params': FIXED} (requires "
                 "a bare-stellar SSP) or neb={'type': 'cloudy_grid', ...}. "
                 "For a quick narrow-band measurement on the BakedIn SED, "
                 "integrate model._predict_rest_sed(params).sed across the "
@@ -7090,8 +7090,9 @@ class SEDModel:
         ssp_data : SSPData
             Pre-loaded SSP grid (from :func:`load_ssp_data`).
         sfh, dust, neb, agn, igm, radio, xray : dict, optional
-            Per-component nested dicts. Each may carry ``'type'``, ``'*'``
-            (wildcard set to :data:`~tengri.FREE` or :data:`~tengri.FIXED`),
+            Per-component nested dicts. Each may carry ``'type'``,
+            ``'all_params'`` (wildcard set to :data:`~tengri.FREE` or
+            :data:`~tengri.FIXED`; the ``'*'`` synonym is also accepted),
             and per-parameter overrides. See
             :func:`tengri.parameters.parse_groups` for the full grammar.
         redshift, apply_igm : scalar, Distribution, or sentinel, optional
@@ -7122,9 +7123,14 @@ class SEDModel:
         >>> from tengri import SEDModel, FREE, FIXED, Uniform, Fixed
         >>> model = SEDModel.build(
         ...     ssp_data=ssp,
-        ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
-        ...     dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
-        ...     neb={"type": "cue", "*": FIXED},
+        ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
+        ...     dust={
+        ...         "type": "two_component",
+        ...         "law_bc": "calzetti",
+        ...         "all_params": FIXED,
+        ...         "tau_bc": 0.5,
+        ...     },
+        ...     neb={"type": "cue", "all_params": FIXED},
         ...     redshift=Fixed(0.05),
         ...     filters=["sdss_u", "sdss_g", "sdss_r"],
         ... )

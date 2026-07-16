@@ -53,13 +53,13 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "dpl",
-        "*": tengri.FREE,
+        "all_params": tengri.FREE,
         "alpha": tengri.Fixed(0.5),  # Fix early slope; vary peak SFR, beta, tau
     },
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": tengri.FREE,  # Allow dust parameters to vary
+        "all_params": tengri.FREE,  # Allow dust parameters to vary
     },
     redshift=tengri.Fixed(0.0),
 )

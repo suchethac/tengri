@@ -25,7 +25,8 @@ unit, one dispatch table, no shape taxonomy).
 A model is a `SEDModel`. The **recommended** way to construct one is
 `SEDModel.build(...)`, the nested-dict grammar shipped in 2026-05
 (`parameters/groups.py`): one dict per physics group, each declaring a
-structural `type`, a `'*'` free/fixed wildcard, and per-parameter overrides.
+structural `type`, an `'all_params'` free/fixed wildcard, and per-parameter
+overrides.
 
 ```python
 from tengri import SEDModel, FREE, FIXED, Fixed, Uniform, recipes
@@ -37,15 +38,15 @@ model = SEDModel.build(ssp_data=ssp, observation=obs,
 # Or hand-rolled with the nested-dict grammar:
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
-    sfh={'type': 'dpl', '*': FREE, 'beta': Uniform(1, 3)},
-    dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FIXED,
-          'tau_bc': 0.5, 'emission': {'type': 'dale2014', '*': FIXED}},
-    neb={'type': 'cue', '*': FIXED},
+    sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)},
+    dust={'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FIXED,
+          'tau_bc': 0.5, 'emission': {'type': 'dale2014', 'all_params': FIXED}},
+    neb={'type': 'cue', 'all_params': FIXED},
     shock={'norm': 'frac', 'frac': Uniform(0, 1)},   # composes with neb
     redshift=Fixed(0.05),
 )
 
-model.spec.summary()          # provenance-tagged: [user]/[* FREE]/[* FIXED]/[default]
+model.spec.summary()          # provenance-tagged: [user]/[all_params FREE]/[all_params FIXED]/[default]
 groups = model.spec.to_groups()   # round-trip back to the grammar for editing
 ```
 
@@ -57,15 +58,17 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
 - Each group dict accepts:
   - `'type'` — the structural choice (which variant), validated against the
     domain's registered names.
-  - `'*'` — the wildcard: `FREE` or `FIXED` (default `FIXED`). It cascades over
-    the group's parameters. For groups whose bucket params default to `Fixed`
-    (e.g. `radio`, `shock`), `'*': FREE` is a no-op — use explicit priors
-    instead (`shock={'frac': Uniform(0, 1)}`).
+  - `'all_params'` — the wildcard: `FREE` or `FIXED` (default `FIXED`). It
+    cascades over the group's parameters. (`'*'` is an accepted synonym, kept
+    for back-compat and slated for deprecation — prefer `'all_params'`.) For
+    groups whose bucket params default to `Fixed` (e.g. `radio`, `shock`),
+    `'all_params': FREE` is a no-op — use explicit priors instead
+    (`shock={'frac': Uniform(0, 1)}`).
   - **Per-parameter short-forms** — a bare parameter name inside the group
     resolves to the full prefixed name (`'beta'` in the `sfh` group →
     `sfh_dpl_beta`; `'frac'` in `shock` → `shock_frac`). The full prefixed
     name also works.
-- **Sub-blocks** nest a dict with its own `'type'`/`'*'`/per-param keys:
+- **Sub-blocks** nest a dict with its own `'type'`/`'all_params'`/per-param keys:
   `dust.emission`, and the six composable AGN selectors `agn.disc`,
   `agn.torus`, `agn.nlr`, `agn.blr`, `agn.feii`, `agn.atten` (the deprecated
   `agn.lines` alias expands to an `nlr`/`blr` pair)

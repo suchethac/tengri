@@ -54,8 +54,8 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 ssp = tengri.load_ssp()
 
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 # SKIRTOR grid (CIGALE subset): tau 3-11, oa 10-80, cos i in (0, 1].
 TAU_VALUES = np.linspace(3.0, 11.0, 7)
@@ -65,8 +65,8 @@ COS_INC_REF = 0.85
 TAU_REF = 7.0
 
 BASE_AGN = {
-    "disc": {"type": "multicolor", "*": tengri.FIXED},
-    "*": tengri.FIXED,
+    "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+    "all_params": tengri.FIXED,
     "log_lbol": 12.0,
     "frac": 1.0,
 }
@@ -90,7 +90,7 @@ def torus_sed(oa: float, cos_inc: float, tau: float) -> tuple[np.ndarray, np.nda
     wave, total = _build_sed(
         {
             "type": "skirtor",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "oa_skirtor": oa,
             "cos_inc": cos_inc,
             "tau_skirtor": tau,

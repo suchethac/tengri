@@ -52,7 +52,7 @@ def test_module_surface_and_default_dict(
     assert representative_variant in mod.available()
     out = getattr(mod, representative_variant)()
     assert out["type"] == representative_variant
-    assert out["*"] is FIXED
+    assert out["all_params"] is FIXED
     if sample_short_param is not None:
         sig = inspect.signature(getattr(mod, representative_variant))
         assert sample_short_param in sig.parameters, (
@@ -157,4 +157,4 @@ def test_all_three_factories_emit_type_key() -> None:
         for variant in mod.available():
             out = getattr(mod, variant)()
             assert out["type"] == variant
-            assert out["*"] is FIXED
+            assert out["all_params"] is FIXED

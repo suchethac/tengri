@@ -4,13 +4,13 @@ AGN parameters are free-able now — and every one moves the SED
 
 Until recently the ``agn_*`` parameters were declared with *fixed* defaults and
 no prior range, so the build grammar's ``FREE`` controls
-(``agn={'*': FREE}``, ``recipes.agn_panchromatic()``) silently resolved every
+(``agn={'all_params': FREE}``, ``recipes.agn_panchromatic()``) silently resolved every
 AGN parameter to a constant — a fit would freeze the entire AGN sector with no
 error. The registry now gives each parameter a physically-motivated
 ``Uniform``/``LogUniform`` prior (Nenkova+2008, Kubota & Done 2018,
 Stalevski+2016 grid extents), so ``FREE`` actually frees them.
 
-A group-level ``agn={'*': FREE}`` is **block-scoped**: it frees only the
+A group-level ``agn={'all_params': FREE}`` is **block-scoped**: it frees only the
 parameters the active disc / torus / lines blocks actually consume, not the
 full declared superset — so you never get unconstrained no-op nuisance
 dimensions for parameters belonging to inactive blocks.
@@ -43,10 +43,11 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 C_AA_PER_S = 2.998e18
 
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
-# Bare type selectors: no per-block ``'*'``, so the *top-level* AGN wildcard
-# governs every block's parameters. (A sub-block's own ``'*'`` would override
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+# Bare type selectors: no per-block ``'all_params'``, so the *top-level* AGN
+# wildcard governs every block's parameters. (A sub-block's own ``'all_params'``
+# would override
 # the top-level one for that block — a useful nuance, but it would hide the
 # point here.)
 BLOCKS = {
@@ -59,20 +60,20 @@ BLOCKS = {
 ssp = tengri.load_ssp()
 
 # %%
-# The headline: ``'*': FREE`` now frees the AGN parameters the active blocks
-# consume. Before the registry fix this set was empty.
-agn_free = {"*": tengri.FREE, "log_lbol": 12.0, "frac": 1.0, **BLOCKS}
+# The headline: ``'all_params': FREE`` now frees the AGN parameters the active
+# blocks consume. Before the registry fix this set was empty.
+agn_free = {"all_params": tengri.FREE, "log_lbol": 12.0, "frac": 1.0, **BLOCKS}
 model_free = tengri.SEDModel.build(
     ssp, sfh=SFH, dust=DUST, agn=agn_free, redshift=tengri.Fixed(0.0)
 )
 free_agn = [p for p in model_free.spec.free_params if p.startswith("agn_")]
-print(f"AGN parameters freed by agn={{'*': FREE}} (block-scoped): {sorted(free_agn)}")
+print(f"AGN parameters freed by agn={{'all_params': FREE}} (block-scoped): {sorted(free_agn)}")
 
 # %%
 # Sweep three consumed parameters across their priors. We build the model once
 # with the AGN sector held fixed at its defaults, then override one parameter at
 # a time in the prediction dict — a clean, deterministic parameter sweep.
-agn_fixed = {"*": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **BLOCKS}
+agn_fixed = {"all_params": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **BLOCKS}
 model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn_fixed, redshift=tengri.Fixed(0.0))
 base = dict(model.spec.sample(jax.random.PRNGKey(0)))
 

@@ -57,7 +57,7 @@ truth_model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": ["dpl", "field"],
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         # Smooth backbone — peaks ~2 Gyr ago, falls toward present.
         "alpha": 3.0,
         "beta": 2.0,
@@ -68,7 +68,7 @@ truth_model = tengri.SEDModel.build(
         "psd_sigma": 0.8,
         "psd_tau_myr": 80.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.25, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.25, "tau_bc": 0.3},
     redshift=tengri.Fixed(Z),
 )
 
@@ -84,12 +84,12 @@ fit_model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "dexp",
-        "*": tengri.FREE,
+        "all_params": tengri.FREE,
         "start_gyr": tengri.Fixed(0.0),
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": tengri.Uniform(0.0, 1.5),
         "tau_bc": tengri.Uniform(0.0, 1.5),
     },

@@ -115,7 +115,7 @@ def _build_sfh(sfh_factory):
         ssp_data=ssp,
         observation=obs,
         sfh=sfh_factory(defaults=FIXED),
-        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=0.05,
     )
@@ -219,7 +219,7 @@ tengri.list_inference_methods()
 #
 # Two introspection surfaces close the loop:
 # `model.spec.summary()` tags every parameter with where its value came
-# from (`[user]` / `[* FREE]` / `[* FIXED]` / `[default]`).
+# from (`[user]` / `[all_params FREE]` / `[all_params FIXED]` / `[default]`).
 # `citations.collect_citations(model)` returns the bibliography of every
 # physics ingredient.
 
