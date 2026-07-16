@@ -259,3 +259,36 @@ def test_list_agn_blocks_use_strings_name_valid_grammar_keys(
             redshift=Fixed(0.1),
         )
     assert model is not None
+
+
+def test_model_menu_use_strings_teach_sedmodel_build():
+    """Every model-menu ``use:`` hint teaches the recommended build path.
+
+    The discovery menus used to split idioms: ``sfh``/``dust``/``nebular``/
+    ``agn_models`` advertised the flat ``Parameters(..., mean_sfh_type=...)``
+    expert escape hatch, while ``radio``/``xray``/``igm`` advertised
+    ``SEDModel.build(...)``. A fresh user was pointed at two different APIs
+    (and, per the naming contract, the non-recommended one). All model menus
+    now teach ``SEDModel.build(...)`` uniformly. (Filters and inference keep
+    their own idioms — ``Photometry.from_names`` / ``fitter.run``.)
+    """
+    import tengri
+
+    menus = [
+        tengri.list_sfh_models,
+        tengri.list_dust_laws,
+        tengri.list_dust_emission_models,
+        tengri.list_nebular_backends,
+        tengri.list_agn_models,
+        tengri.list_agn_blocks,
+        tengri.list_radio_models,
+        tengri.list_xray_models,
+        tengri.list_igm_models,
+    ]
+    offenders = [
+        (fn.__name__, row["name"], row["use"])
+        for fn in menus
+        for row in fn()
+        if not row["use"].startswith("SEDModel.build(")
+    ]
+    assert not offenders, offenders

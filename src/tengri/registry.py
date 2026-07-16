@@ -283,15 +283,15 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "filter":
         return f'Photometry.from_names(["{name}"])'
     if kind == "agn_model":
-        return f'Parameters(..., agn_model="{name}")'
+        return f"SEDModel.build(..., agn={{'type': '{name}'}})"
     if kind == "dust_attenuation":
-        return f'Parameters(..., dust_law="{name}")'
+        return f"SEDModel.build(..., dust={{'type': 'single_component', 'law_bc': '{name}'}})"
     if kind == "dust_emission":
-        return f'Parameters(..., dust_emission="{name}")'
+        return f"SEDModel.build(..., dust={{'emission': {{'type': '{name}'}}}})"
     if kind == "sfh_model":
-        return f'Parameters(..., mean_sfh_type="{name}")'
+        return f"SEDModel.build(..., sfh={{'type': '{name}'}})"
     if kind == "nebular_backend":
-        return f'Parameters(..., nebular_backend="{name}")'
+        return f"SEDModel.build(..., neb={{'type': '{name}'}})"
     if kind == "inference_method":
         return f'fitter.run("{name}")'
     if kind == "xray_model":
