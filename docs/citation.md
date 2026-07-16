@@ -2,9 +2,10 @@
 
 If tengri shows up in a publication, cite the methods paper
 (in preparation) and the upstream codes providing physics, grids, and
-samplers. `tengri.cite_all()` returns BibTeX for every model, SSP, and
-inference backend that ran in your fit, so the acknowledgement stays
-in sync with the components you used.
+samplers. `tengri.print_components_bibtex(result)` prints BibTeX for every
+model, SSP, and inference backend that ran in your fit, so the acknowledgement
+stays in sync with the components you used. (`tengri.cite_all()` — no argument —
+returns every citation registered in tengri, regardless of your fit.)
 
 ## The tengri methods paper
 
@@ -78,9 +79,10 @@ glued them together.
 import tengri
 fitter = ...
 result = fitter.run("mcmc_nuts")
-print(tengri.cite_all(result))   # BibTeX for every component that ran
+tengri.print_components_bibtex(result)   # BibTeX for every component that ran
 ```
 
-`cite_all` walks the model and inference call graph and emits BibTeX
-for everything that contributed, including the SSP grid — the easiest
-way to keep a paper's acknowledgements in sync with the fit.
+`print_components_bibtex` walks the model and inference call graph and emits
+BibTeX for everything that contributed, including the SSP grid — the easiest
+way to keep a paper's acknowledgements in sync with the fit. (For the table
+form, use `tengri.cite_components(result)`.)

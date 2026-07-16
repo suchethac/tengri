@@ -28,6 +28,69 @@ _needs_ssp = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
 # ── Helpers ───────────────────────────────────────────────────────
 
 
+class _FakeModel:
+    """Minimal model stub with predict_photometry (no SSP needed)."""
+
+    def predict_photometry(self, params):
+        return jnp.array([1.0, 2.0, 3.0, 4.0, 5.0])
+
+
+class TestMockAttributeAndKeyAccess:
+    """generate_mock() (mapping) and SEDModel.mock() (object) support both idioms.
+
+    Regression for the recurring "dict vs object" footgun (fresh-user audit
+    2026-07): the quickstart used ``generate_mock(...).flux_obs`` (attribute)
+    while the README used dict-style access on the ``.mock()`` object — code
+    written for one return type broke on the other. Now both types accept both
+    idioms, and generate_mock keeps full dict semantics.
+    """
+
+    def test_generate_mock_supports_attribute_access(self):
+        from tengri.analysis.mock import generate_mock
+
+        mock = generate_mock(_FakeModel(), {"a": 1.0}, key=jax.random.PRNGKey(0))
+        assert isinstance(mock, dict)  # dict semantics preserved
+        assert mock.flux_obs is mock["flux_obs"]  # attribute access added
+        assert mock.flux_true is mock["flux_true"]
+        assert mock.noise is mock["noise"]
+
+    def test_generate_mock_noiseless_has_no_flux_obs(self):
+        from tengri.analysis.mock import generate_mock
+
+        mock = generate_mock(_FakeModel(), {"a": 1.0})
+        assert "flux_obs" not in mock  # unchanged: no key ⇒ no noisy realization
+        with pytest.raises(AttributeError):
+            _ = mock.flux_obs
+
+    def test_generate_mock_flattens_to_its_values(self):
+        # Registered as a pytree so it flattens to its 4 values (sorted keys),
+        # exactly like the plain dict it used to be — NOT to a single opaque
+        # leaf (the default for an unregistered dict subclass).
+        from tengri.analysis.mock import generate_mock
+
+        mock = generate_mock(_FakeModel(), {"a": 1.0}, key=jax.random.PRNGKey(0))
+        mock_leaves = jax.tree_util.tree_leaves(mock)
+        dict_leaves = jax.tree_util.tree_leaves(dict(mock))
+        assert len(mock_leaves) == len(dict_leaves) > 1  # flattened, not one leaf
+        assert all(a is b for a, b in zip(mock_leaves, dict_leaves))  # same order/objects
+
+    def test_mockdata_object_supports_mapping_access(self):
+        from tengri.forward.sed_model import MockData
+
+        md = MockData(
+            flux_true=jnp.array([1.0, 2.0]),
+            flux_obs=jnp.array([1.1, 2.1]),
+            noise=jnp.array([0.1, 0.1]),
+            params={"a": 1.0},
+        )
+        assert md["flux_obs"] is md.flux_obs  # dict-style access on the object
+        assert md[0] is md.flux_true  # positional NamedTuple access still works
+        assert "flux_obs" in md and "nope" not in md
+        assert md.get("noise") is not None and md.get("nope") is None
+        assert md.keys() == ["flux_true", "flux_obs", "noise", "params"]
+        assert md.items()[0] == ("flux_true", md.flux_true)
+
+
 def _make_minimal_posterior(method="vi", n_samples=10):
     from tengri.inference.posterior import Posterior
 

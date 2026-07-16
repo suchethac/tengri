@@ -3267,12 +3267,25 @@ class SEDModel:
             spec_resample_conserving = bool(
                 self.observation.spectroscopy.resolve_conserving(self.wavelengths)
             )
+            # The banded resolution matrix (#1163) is structural: the spectrum
+            # projector closes over whether it applies ``R @ model`` or the
+            # Gaussian ``apply_lsf``. Two models differing only in
+            # ``resolution_matrix`` must NOT share a compiled kernel — else the
+            # second silently inherits the first's projector and drops (or
+            # wrongly reuses) the matrix. Keyed on presence + band shape, which
+            # is all the structural cache needs. Same cache-collision class as
+            # #1135/#1149/#1166.
+            _rm = self.observation.spectroscopy.resolution_matrix
+            spec_resolution_matrix = (
+                tuple(jnp.asarray(_rm.data).shape) if _rm is not None else None
+            )
         else:
             spec_wave_shape = ()
             sigma_lib_kms = 0.0
             lsf_resolution = None
             calibration_order = 0
             spec_resample_conserving = False
+            spec_resolution_matrix = None
 
         # CSP integration method
         csp_integration = str(self._csp_integration)
@@ -3438,6 +3451,7 @@ class SEDModel:
             lsf_resolution,
             calibration_order,
             spec_resample_conserving,
+            spec_resolution_matrix,
             csp_integration,
             forward_dtype,
             met_interp,
@@ -3734,6 +3748,9 @@ class SEDModel:
             if spectroscopy is not None
             else False
         )
+        resolution_matrix = (
+            getattr(spectroscopy, "resolution_matrix", None) if spectroscopy is not None else None
+        )
 
         flux = project_spectrum(
             sed_obs.sed,
@@ -3747,6 +3764,7 @@ class SEDModel:
             cal_coeffs=cal_coeffs,
             cal_wave_range=cal_wave_range,
             conserving=conserving,
+            resolution_matrix=resolution_matrix,
         )
         return flux
 
