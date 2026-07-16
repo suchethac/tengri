@@ -117,3 +117,46 @@ def test_wne_guard_is_two_sided(synthetic_ssp_wide, monkeypatch, fake_logqion, m
     monkeypatch.delenv("TENGRI_ALLOW_WNE_CUE", raising=False)
     with pytest.raises(CueWNESSPError, match=match):
         CueBackend(_WEIGHTS, ssp_data=synthetic_ssp_wide)
+
+
+# ── Filter discovery round-trip (list_filters() names must actually load) ──
+
+
+def test_list_filters_names_round_trip_through_from_names():
+    """Every name ``tengri.list_filters()`` advertises must load via from_names.
+
+    Regression for the two-registry mismatch (fresh-user audit 2026-07):
+    ``list_filters()`` displayed SVO-style names (e.g. ``'2MASS_2MASS_H'``)
+    that ``Photometry.from_names`` rejected with ``KeyError`` — even though
+    each row's own ``use`` hint told the user to call from_names with that
+    exact name. The menu and the loader read different registries.
+    """
+    import tengri
+
+    names = [row["name"] for row in tengri.list_filters()]
+    assert names, "list_filters() returned nothing — is data/filters present?"
+    # Spot-check a spread across the registry (loading all 249 is slow, though
+    # offline); a single KeyError here is the regression.
+    for name in names[::20]:
+        Photometry.from_names([name])  # must not raise
+
+
+def test_svo_display_name_and_short_alias_load_the_same_curve():
+    """An SVO display name (not itself a registry key) resolves like its alias."""
+    import numpy as np
+
+    from tengri.observation.filters import (
+        FILTER_REGISTRY,
+        _svo_name_to_key,
+        load_filter,
+    )
+
+    # Pick a display name that is NOT already a short key, so we exercise the
+    # SVO-alias branch of load_filter rather than the direct lookup.
+    svo_name, short_key = next(
+        (s, k) for s, k in _svo_name_to_key().items() if s not in FILTER_REGISTRY
+    )
+    a = load_filter(svo_name)
+    b = load_filter(short_key)
+    np.testing.assert_allclose(np.asarray(a.wave), np.asarray(b.wave))
+    np.testing.assert_allclose(np.asarray(a.trans), np.asarray(b.trans))

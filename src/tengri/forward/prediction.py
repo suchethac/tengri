@@ -1747,6 +1747,49 @@ class PropertyCatalog:
         """Return property names."""
         return list(self)
 
+    def get(self, name: str, default=None):
+        """Return the property value for ``name``, or ``default`` if absent.
+
+        Mirrors :meth:`dict.get` so the catalog is safe to probe without a
+        ``try``/``except KeyError`` when a property may not be available for
+        this model (e.g. asking for ``"agn_luminosity"`` on a galaxy-only fit).
+
+        Parameters
+        ----------
+        name : str
+            Property name (e.g., ``"stellar_mass"``).
+        default : object, optional
+            Value to return when ``name`` is not available. Default ``None``.
+
+        Returns
+        -------
+        scalar or object
+            Computed property value, or ``default`` if ``name`` is unknown.
+        """
+        if name in self:
+            return self[name]
+        return default
+
+    def values(self):
+        """Return computed values for every available property.
+
+        Returns
+        -------
+        list
+            One value per name in :meth:`keys`, in the same order.
+        """
+        return [self[name] for name in self]
+
+    def items(self):
+        """Return ``(name, value)`` pairs for every available property.
+
+        Returns
+        -------
+        list of tuple
+            ``(name, value)`` for each name in :meth:`keys`.
+        """
+        return [(name, self[name]) for name in self]
+
     def to_dict(self, names=None) -> dict:
         """Export properties as a dict.
 
