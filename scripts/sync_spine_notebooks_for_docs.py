@@ -41,6 +41,7 @@ SPINE_SLUGS = [
     "07_joint_photo_spec",
     "08_emission_lines",
     "10_fastspecfit_joint_fit",
+    "11_catalog_fits",
     "09_parameter_sweeps",
 ]
 
@@ -56,6 +57,7 @@ SPINE_TITLES: dict[str, str] = {
     "07_joint_photo_spec": "Joint Photometry + Spectroscopy",
     "08_emission_lines": "Emission Lines",
     "10_fastspecfit_joint_fit": "Joint Fit: Photometry + Lines",
+    "11_catalog_fits": "Catalog Fits in Parallel",
     "09_parameter_sweeps": "Parameter Sweeps",
 }
 

@@ -164,6 +164,8 @@ The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 | 06 | `06_fitting_spectroscopy.py`   | spectroscopy with calibration nuisance parameters           |
 | 07 | `07_joint_photo_spec.py`       | joint photo + spec to break degeneracies                    |
 | 08 | `08_emission_lines.py`         | BPT diagnostics, line ratios, Hα-based SFR                  |
+| 10 | `10_fastspecfit_joint_fit.py`  | joint DESI photometry + emission-line fluxes, timed        |
+| 11 | `11_catalog_fits.py`           | a catalog fit in parallel: LSST+Euclid photo-z, timed      |
 
 For single-figure recipes, see the [examples gallery](https://suchethacooray.com/tengri/auto_examples/index.html).
 
