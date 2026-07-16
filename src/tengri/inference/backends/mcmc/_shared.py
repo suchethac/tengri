@@ -36,6 +36,7 @@ import contextlib
 import functools
 
 import jax
+import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
@@ -976,3 +977,74 @@ def _parallel_chains(
     if isinstance(out, tuple):
         return tuple(_trim_and_flatten(a) for a in out)
     return _trim_and_flatten(out)
+
+
+def _sequential_chains(
+    init_state_fn,
+    chain_scan_fn,
+    *,
+    init_flat,
+    chain_key,
+    n_chains,
+    n_iter,
+    n_burnin,
+    jitter_scale=1e-3,
+):
+    """Run ``n_chains`` MCMC chains one at a time — the memory-frugal executor.
+
+    Same jitter / burn-in / flatten contract and return shape as
+    :func:`_vmap_chains`, but the chains are looped in Python instead of
+    SIMD-batched. ``chain_scan_fn`` is a single-chain program, compiled once on
+    the first call and reused, so **peak memory stays at one chain's** rather
+    than ``n_chains`` × (the vmap path compiles the whole batch into one XLA
+    program, which is what OOMs a dense-mass multi-chain fit on modest RAM).
+    The trade-off is wall time: ~``n_chains`` × a single chain's sampling. This
+    is the default for a converged multi-chain fit that must run on cheap
+    hardware; use ``chain_method="vmap"`` / ``"parallel"`` when RAM / devices
+    allow.
+
+    Parameters
+    ----------
+    init_state_fn, chain_scan_fn, init_flat, chain_key, n_chains, n_iter, \
+    n_burnin, jitter_scale
+        Identical to :func:`_vmap_chains`.
+
+    Returns
+    -------
+    Same shape as :func:`_vmap_chains`.
+    """
+    keys = jax.random.split(chain_key, n_chains + 2)
+    new_chain_key, jitter_key, init_key_seed = keys[0], keys[1], keys[2]
+    per_chain_init_keys = jax.random.split(init_key_seed, n_chains)
+    jitter = jitter_scale * jax.random.normal(jitter_key, shape=(n_chains, init_flat.shape[0]))
+    init_flat_batch = init_flat[None, :] + jitter
+    per_chain_keys = jax.random.split(new_chain_key, n_chains * n_iter)
+    per_chain_keys = per_chain_keys.reshape(n_chains, n_iter, 2)
+
+    import inspect as _inspect
+
+    arity = len(_inspect.signature(init_state_fn).parameters)
+
+    per_chain_out = []
+    for c in range(n_chains):
+        if arity == 1:
+            state = init_state_fn(init_flat_batch[c])
+        else:
+            state = init_state_fn(init_flat_batch[c], per_chain_init_keys[c])
+        out = chain_scan_fn(state, per_chain_keys[c])
+        if n_burnin > 0:
+            out = jax.tree_util.tree_map(lambda a: a[n_burnin:], out)
+        jax.block_until_ready(out)  # free this chain's trace before the next
+        per_chain_out.append(out)
+
+    # Stack over chains, then flatten (n_chains, per_chain, ...) -> (total, ...).
+    stacked = jax.tree_util.tree_map(lambda *xs: jnp.stack(xs), *per_chain_out)
+
+    def _flatten(arr):
+        if arr.ndim >= 2:
+            return arr.reshape(-1, *arr.shape[2:])
+        return arr.reshape(-1)
+
+    if isinstance(stacked, tuple):
+        return tuple(_flatten(a) for a in stacked)
+    return _flatten(stacked)

@@ -32,7 +32,7 @@
   "src/tengri/forward/convenience.py": 1046,
   "src/tengri/forward/prediction.py": 2883,
   "src/tengri/forward/sed_model.py": 7670,
-  "src/tengri/inference/backends/mcmc/_shared.py": 860,
+  "src/tengri/inference/backends/mcmc/_shared.py": 1050,
   "src/tengri/inference/backends/mcmc/raytrace.py": 916,
   "src/tengri/inference/backends/vi/native.py": 1717,
   "src/tengri/inference/backends/vi/nifty.py": 904,

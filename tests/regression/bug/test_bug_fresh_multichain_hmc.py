@@ -78,6 +78,30 @@ def test_fresh_hmc_samples_all_chains(synthetic_ssp_wide, synthetic_tophat_obs, 
 
 
 @pytest.mark.skipif(not HAS_BLACKJAX, reason="blackjax not available")
+@pytest.mark.parametrize("chain_method", ["vmap", "sequential"])
+def test_chain_method_yields_all_chains(synthetic_ssp_wide, synthetic_tophat_obs, chain_method):
+    """Both executors produce n_chains genuine chains; 'sequential' is the
+    memory-frugal path (peak = one chain) for cheap hardware."""
+    tengri, model, flux = _tiny_model_and_data(synthetic_ssp_wide, synthetic_tophat_obs)
+    n_chains, n_samples = 3, 20
+    fitter = tengri.Fitter(model, flux, flux / 20.0, data_type="photometry")
+    post = fitter.run(
+        "mcmc_hmc",
+        key=jax.random.PRNGKey(0),
+        n_warmup=60,
+        n_samples=n_samples,
+        n_burnin=0,
+        n_chains=n_chains,
+        n_leapfrog_steps=5,
+        dense_mass_matrix=True,
+        chain_method=chain_method,
+        verbose=False,
+    )
+    first = np.asarray(next(iter(post.samples.values())))
+    assert first.shape[0] == n_chains * n_samples
+
+
+@pytest.mark.skipif(not HAS_BLACKJAX, reason="blackjax not available")
 def test_chain_method_parallel_falls_back_without_devices(
     synthetic_ssp_wide, synthetic_tophat_obs
 ):

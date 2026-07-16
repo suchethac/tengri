@@ -20,6 +20,7 @@ from tengri.inference.backends.mcmc._shared import (
     _hmc_chain_scan,
     _hmc_warmup_only,
     _parallel_chains,
+    _sequential_chains,
     _set_cached_adaptation,
     _vmap_chains,
 )
@@ -29,13 +30,18 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_chain_runner(chain_method, n_chains):
-    """Pick the multi-chain executor: vmap (SIMD-batched) or parallel (pmap).
+    """Pick the multi-chain executor: sequential, vmap, or parallel.
 
-    ``chain_method='parallel'`` runs each chain on its own device — a ~n_chains×
-    wall-time win on CPU with enough forced host devices — but silently falls
-    back to vmap (with a warning) when too few devices are visible, so a fit
-    never fails just because ``XLA_FLAGS`` was not set.
+    - ``"sequential"``: loop the single-chain scan (peak memory = one chain);
+      runs on modest RAM, wall ~ ``n_chains`` × one chain.
+    - ``"vmap"``: SIMD-batch the chains (peak ~ ``n_chains`` × one chain);
+      one device, wall ~ ``n_chains`` × one chain but a single kernel.
+    - ``"parallel"``: one chain per device via ``jax.pmap`` (~one chain's wall
+      with enough forced host devices); falls back to vmap with a warning when
+      too few devices are visible, so a fit never fails for want of ``XLA_FLAGS``.
     """
+    if chain_method == "sequential":
+        return _sequential_chains
     if chain_method == "vmap":
         return _vmap_chains
     if chain_method == "parallel":
@@ -50,7 +56,9 @@ def _resolve_chain_runner(chain_method, n_chains):
             stacklevel=3,
         )
         return _vmap_chains
-    raise ValueError(f"chain_method must be 'vmap' or 'parallel', got {chain_method!r}")
+    raise ValueError(
+        f"chain_method must be 'sequential', 'vmap', or 'parallel', got {chain_method!r}"
+    )
 
 
 def run_hmc(
@@ -97,14 +105,20 @@ def run_hmc(
         Target acceptance rate for step size adaptation.
     dense_mass_matrix : bool
         Use dense mass matrix. Set False for D>30.
-    chain_method : {"vmap", "parallel"}, default "vmap"
-        How ``n_chains > 1`` chains are executed. ``"vmap"`` SIMD-batches them
-        into one device's kernel (cost ~ ``n_chains`` × one chain). ``"parallel"``
-        maps them across physical devices via ``jax.pmap`` (chains run
-        concurrently, ~one chain's wall) — on CPU this needs
-        ``XLA_FLAGS=--xla_force_host_platform_device_count=N`` set before
-        importing jax; it falls back to ``"vmap"`` with a warning if fewer than
-        ``n_chains`` devices are visible.
+    chain_method : {"vmap", "sequential", "parallel"}, default "vmap"
+        How ``n_chains > 1`` chains are executed.
+
+        - ``"vmap"`` (default): SIMD-batch the chains into one kernel. Peak
+          memory ~ ``n_chains`` × one chain — can OOM a dense-mass fit on
+          modest RAM.
+        - ``"sequential"``: loop the single-chain scan (compiled once, reused).
+          **Peak memory = one chain**, so it runs on cheap hardware; wall ~
+          ``n_chains`` × one chain. Prefer this when RAM is the constraint.
+        - ``"parallel"``: one chain per device via ``jax.pmap`` (~one chain's
+          wall) — on CPU needs
+          ``XLA_FLAGS=--xla_force_host_platform_device_count=N`` set before
+          importing jax; falls back to ``"vmap"`` with a warning if fewer than
+          ``n_chains`` devices are visible.
     verbose : bool
         Print progress.
     """
