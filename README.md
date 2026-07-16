@@ -122,7 +122,10 @@ from tengri import (
     Observation, Photometry, load_ssp_data, recipes,
 )
 
-ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+# download_ssp() fetches the default bare-stellar grid on first run and
+# skips (returns the same path) on every run after — so this block is
+# copy-paste-safe. See "SSP grids" above for other grids / a shell setup.
+ssp = load_ssp_data(tengri.download_ssp())
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))

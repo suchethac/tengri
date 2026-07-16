@@ -6,6 +6,7 @@ Auto-generated from docstrings. The public API is importable directly from
 ```{toctree}
 :maxdepth: 1
 
+discovery
 predicting-properties
 core
 contract
