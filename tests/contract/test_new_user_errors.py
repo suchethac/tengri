@@ -160,3 +160,102 @@ def test_svo_display_name_and_short_alias_load_the_same_curve():
     b = load_filter(short_key)
     np.testing.assert_allclose(np.asarray(a.wave), np.asarray(b.wave))
     np.testing.assert_allclose(np.asarray(a.trans), np.asarray(b.trans))
+
+
+# --------------------------------------------------------------------------
+# Fresh-user audit (2026-07): three discovery/loader mismatches — each is a
+# case where a menu/constructor the discovery API advertises fed the user
+# straight into a TypeError/ValueError.
+# --------------------------------------------------------------------------
+
+
+def test_observation_accepts_bare_photometry(synthetic_ssp_wide, synthetic_tophat_obs):
+    """A bare ``Photometry`` passed as ``observation=`` is auto-wrapped.
+
+    ``list_filters()`` advertises ``Photometry.from_names([...])``, which
+    returns a ``Photometry`` — not an ``Observation``. Passing it straight to
+    ``SEDModel.build(observation=...)`` used to raise ``TypeError`` with no
+    fix. It now wraps like the ``filters=`` path already does.
+    """
+    photometry = synthetic_tophat_obs.photometry  # a bare Photometry
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=photometry,
+            sfh={"type": "delayed", "*": FIXED},
+            redshift=Fixed(0.1),
+        )
+    assert model.observation.photometry is photometry
+
+
+def test_observation_wrong_type_names_the_fix(synthetic_ssp_wide):
+    """A genuinely wrong ``observation=`` type errors with the explicit wrap."""
+    with pytest.raises(TypeError, match=r"Observation\(photometry="):
+        SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=42,
+            sfh={"type": "delayed", "*": FIXED},
+            redshift=Fixed(0.1),
+        )
+
+
+def test_list_sfh_models_does_not_advertise_unbuildable_as_production():
+    """``list_sfh_models()`` must not call a builder-rejected SFH 'production'.
+
+    Types in ``UNVALIDATED_SFH_TYPES`` raise ``ValueError`` at
+    ``SEDModel.build(sfh={'type': ...})``; advertising them as production
+    sent a fresh user into a build-time crash. They now report
+    ``status='unvalidated'`` and drop out of the ``status='production'``
+    filter.
+    """
+    import tengri
+    from tengri.components.stellar.sfh.registry import UNVALIDATED_SFH_TYPES
+
+    rows = {r["name"]: r for r in tengri.list_sfh_models()}
+    for name in UNVALIDATED_SFH_TYPES:
+        assert rows[name]["status"] == "unvalidated", name
+
+    production = {r["name"] for r in tengri.list_sfh_models(status="production")}
+    assert not (production & UNVALIDATED_SFH_TYPES)
+    # A validated staple stays production.
+    assert rows["dpl"]["status"] == "production"
+
+
+def test_list_agn_blocks_use_strings_name_valid_grammar_keys(
+    synthetic_ssp_wide, synthetic_tophat_obs
+):
+    """Every AGN-block ``use:`` string must name a real ``agn`` group key.
+
+    The advertised strings used to be ``agn_<cat>_block='<name>'`` — a kwarg
+    ``SEDModel.build`` does not accept (``TypeError`` for all 42 blocks). They
+    now use the nested grammar ``agn={'<key>': {'type': '<name>'}}``, and the
+    'attenuation' category maps to its terser grammar key ``'atten'``.
+    """
+    import re
+
+    import tengri
+    from tengri.parameters.groups import _AGN_SUBBLOCK_KEYS
+
+    rows = tengri.list_agn_blocks()
+    for r in rows:
+        m = re.search(r"agn=\{'(\w+)':", r["use"])
+        assert m, f"unparseable use string: {r['use']!r}"
+        key = m.group(1)
+        assert key in _AGN_SUBBLOCK_KEYS, f"{r['category']}/{r['name']}: bad key {key!r}"
+        if r["category"] == "attenuation":
+            assert key == "atten", r["use"]
+
+    # The exact regression: the corrected attenuation key is actually accepted
+    # by the builder (the old 'attenuation' key raised "Unknown key").
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=synthetic_tophat_obs,
+            sfh={"type": "delayed", "*": FIXED},
+            neb={"type": "none"},
+            agn={"disc": {"type": "powerlaw"}, "atten": {"type": "qsogen"}},
+            redshift=Fixed(0.1),
+        )
+    assert model is not None
