@@ -109,19 +109,44 @@ When a modern `approx` is active on the (possibly cloned) fit model, the legacy
 and no silent legacy/modern conflict. The legacy hook remains only for the
 `approx=None` (explicit exact) fit path, unchanged.
 
-### 5. Auto-prewarm
+### 5. Auto-prewarm (loss + sampler + predict surface)
 
 `Fitter.run(..., prewarm=True)` (default), also exposed on `forward.fit(...)`.
 Before entering the sampling/optimization loop, compile and block:
-- the loss + gradient (`_get_or_build_loss_fn` / `_get_or_build_grad_fn`), and
+- the loss + gradient (`_get_or_build_loss_fn` / `_get_or_build_grad_fn`),
 - the selected method's sampler kernel (reusing `prewarm()` / `compile()` for
-  that method).
+  that method), and
+- the post-fit **predict surface** on the fit model: `predict_photometry` and
+  `predict_properties` (the JIT/vmap-safe accessors used for posterior-predictive
+  checks and derived-quantity roll-ups). Both route through the same
+  `predict_observables_jit` orchestrator, so warming them is one blocking call
+  each on the init-param structure.
 
 Effect: the JIT compile is a distinct up-front step, the persistent JAX cache is
-populated, and the fit loop runs warm. `prewarm=False` restores lazy
-compile-on-first-call. Redundant prewarm is cheap (cached), matching the existing
-`prewarm()` contract. Subsumes the manual `fitter.prewarm(...)` calls in the
-spine notebooks.
+populated, and both the fit loop **and** the immediate post-fit exploration run
+warm. `prewarm=False` restores lazy compile-on-first-call. Redundant prewarm is
+cheap (cached), matching the existing `prewarm()` contract. Subsumes the manual
+`fitter.prewarm(...)` calls in the spine notebooks.
+
+### 5b. Predict surface — JIT/LUT facts this relies on
+
+Per the `SEDModel` class contract, **all** prediction methods are JIT/vmap-safe
+and gradient-safe **except `predict()`** (the rich, lazy, cached exploration
+object — not a pure array→array function, so intentionally not jittable; its
+lean twins are `predict_photometry` / `predict_properties` / `predict_spectrum`
+/ `predict_*_quantities`). They route through `predict_observables_jit`.
+
+Two consequences the prewarm depends on:
+- **Use `predict_photometry`, not `predict_observables`, for warm/fast
+  posterior-predictive.** `predict_observables` bypasses the WavePrecomp LUT
+  (measured 16.5×); `predict_photometry` honors it. The prewarm warms the
+  LUT-honoring surface. (The spine notebooks currently chunk-vmap
+  `predict_observables` as a memory workaround; that becomes unnecessary on the
+  LUT path — a follow-up, not part of this PR.)
+- **The returned `Posterior` references the fit model.** Under `approx="auto"`
+  the fit model is the LUT clone, so `posterior`-driven `predict_photometry` is
+  warm and fast. The user's *original* (exact) model object is unchanged
+  (Goal 1). This is documented so the identity difference is not surprising.
 
 ## Data flow
 
@@ -134,7 +159,9 @@ forward.fit(data, noise, method, approx="auto", prewarm=True)
         ├─ build loss/grad from fit_model
         └─ .run(method, prewarm=True)
               ├─ if prewarm: compile+block loss/grad + sampler kernel
+              │             + predict_photometry + predict_properties (fit model)
               └─ run sampling/optimization loop (warm)
+                    → Posterior(_model = fit_model)  # LUT clone under "auto"
 ```
 
 ## Behavioral change
@@ -161,6 +188,13 @@ Handling (per decision): **silent at runtime**, documented in `fit()` docstrings
   precomp model's, and exact when `approx=None`.
 - **Prewarm:** with `prewarm=True`, the first post-prewarm loss/grad call issues
   no new compile (compile counter / timing); `prewarm=False` still fits.
+- **Predict prewarm:** after a `prewarm=True` fit, the first
+  `predict_photometry` and `predict_properties` calls on the returned posterior's
+  model issue no new compile; and they use the LUT (fast, not the
+  `predict_observables` bypass).
+- **Posterior model identity:** under `approx="auto"` the returned
+  `posterior._model` is the LUT clone (fast predict); the user's original model
+  object is unchanged and still exact.
 - **No double-precompute:** legacy `ensure_photometry_precomputed` is not invoked
   when a modern approx is active.
 
