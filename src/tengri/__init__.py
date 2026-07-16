@@ -677,10 +677,17 @@ _CURATED_DIR = (
     "search",
     "suggest_parameters",
     "cite_components",
+    "print_components_bibtex",
+    "describe_agn_block",
+    "describe_recipe",
     "tutorial",
     "examples",
     "explain",
     # 2.  Build a fit
+    "load_ssp_data",
+    "SSPData",
+    "recipes",
+    "builders",
     "Parameters",
     "parse_groups",
     "SEDModel",
@@ -694,7 +701,9 @@ _CURATED_DIR = (
     "LineList",
     "Instrument",
     "list_instruments",
-    # 3.  Priors / distributions
+    # 3.  Grammar sentinels + priors / distributions
+    "FREE",
+    "FIXED",
     "Uniform",
     "Gaussian",
     "LogUniform",
@@ -712,6 +721,9 @@ _CURATED_DIR = (
     "print_citations",
     "print_logo",
     "register_component",
+    "cosmology",
+    "units",
+    "plot",
     "__version__",
 )
 

@@ -83,6 +83,38 @@ def test_describe_discloses_ambiguous_names():
     assert "also_registered_as" not in dict(tengri.describe("dpl"))
 
 
+# ── tab-completion (dir) surfaces the recommended-workflow essentials ────────
+
+
+def test_tab_completion_includes_grammar_essentials():
+    """`dir(tengri)` is a curated tab-completion surface (deliberately not the
+    full __all__). It must still include the names the *recommended* workflow
+    depends on — the grammar sentinels, the recipe/builder entry points, and
+    the SSP loader — or a novice exploring `tengri.<TAB>` can't reach them.
+    """
+    completable = set(dir(tengri))
+    essentials = {
+        "FREE",
+        "FIXED",  # nested-dict grammar sentinels (sfh={'*': FREE})
+        "recipes",
+        "builders",  # recommended build entry points
+        "load_ssp_data",
+        "SSPData",  # the first call every user makes + its return type
+        "SEDModel",
+        "describe",
+        "cite",  # already curated — pin them
+    }
+    missing = essentials - completable
+    assert not missing, f"recommended-workflow names not tab-completable: {sorted(missing)}"
+
+
+def test_every_tab_completion_name_resolves():
+    """No curated tab-completion entry may be a dead name (attribute error on
+    access) — a broken completion is worse than an omission."""
+    for name in dir(tengri):
+        assert hasattr(tengri, name), f"dir(tengri) advertises {name!r} but it does not resolve"
+
+
 # ── list_sfh_models() hides unbuildable types by default ────────────────────
 
 
