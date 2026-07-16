@@ -1761,6 +1761,29 @@ def search(query: str) -> _RegistryTable:
         _display(f"  '{query}' is a menu name — redirecting to tengri.{call}\n")
         return fn()
 
+    # Concept synonyms: natural-language terms a beginner types that do not
+    # substring-match the terse model short_docs. "star formation" would
+    # otherwise return only an AGN model whose citation title happens to
+    # contain the phrase (and none of the 26 SFH models), and "dust emission"
+    # nothing at all — so point the user at the menu that actually holds those
+    # models. Same replace-with-menu behavior as the kind-name shortcut above.
+    _CONCEPT_ALIAS: dict[str, tuple[str, callable]] = {
+        "star formation": ("list_sfh_models()", list_sfh_models),
+        "star formation history": ("list_sfh_models()", list_sfh_models),
+        "star-forming": ("list_sfh_models()", list_sfh_models),
+        "star forming": ("list_sfh_models()", list_sfh_models),
+        "dust emission": ("list_dust_emission_models()", list_dust_emission_models),
+        "infrared emission": ("list_dust_emission_models()", list_dust_emission_models),
+        "extinction": ("list_dust_laws()", list_dust_laws),
+        "reddening": ("list_dust_laws()", list_dust_laws),
+        "emission line": ("list_nebular_backends()", list_nebular_backends),
+        "emission lines": ("list_nebular_backends()", list_nebular_backends),
+    }
+    if q in _CONCEPT_ALIAS:
+        call, fn = _CONCEPT_ALIAS[q]
+        _display(f"  '{query}' → tengri.{call} (the menu these models live in)\n")
+        return fn()
+
     # ``kind`` and ``use`` are structural/internal — searching them gives
     # spurious 100%-of-table hits (e.g. "filter" matching every filter
     # row's kind, or "fitter" matching every inference method's "use"

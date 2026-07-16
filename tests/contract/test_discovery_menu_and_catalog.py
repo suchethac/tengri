@@ -70,6 +70,31 @@ def test_search_finds_agn_blocks_and_igm():
     assert len(tengri.search("torus")) > 0  # unchanged behavior still works
 
 
+def test_search_concept_aliases_reach_the_right_menu():
+    """Natural-language concept terms a beginner types don't substring-match the
+    terse model short_docs: "star formation" would return only an AGN model
+    (its citation title contains the phrase) and none of the SFH models, and
+    "dust emission" nothing at all. Concept aliases redirect to the menu that
+    actually holds those models."""
+    sfh_names = set(tengri.list_sfh_models().names())
+    for term in ("star formation", "star-forming"):
+        hits = set(tengri.search(term).names())
+        assert hits == sfh_names, f"search({term!r}) should reach the SFH menu"
+        assert "feltre" not in hits  # the old misleading sole hit is gone
+
+    assert set(tengri.search("dust emission").names()) == set(
+        tengri.list_dust_emission_models().names()
+    )
+    assert set(tengri.search("extinction").names()) == set(tengri.list_dust_laws().names())
+    assert set(tengri.search("emission lines").names()) == set(
+        tengri.list_nebular_backends().names()
+    )
+
+    # a normal substring query is unaffected by the alias layer
+    assert "skirtor" in set(tengri.search("skirtor").names())
+    assert "madau" in set(tengri.search("madau").names())
+
+
 def test_describe_discloses_ambiguous_names():
     """A name registered in more than one menu/category (skirtor = disc+torus,
     simple = torus+xray, cue = nlr+nebular) must disclose the other locations
