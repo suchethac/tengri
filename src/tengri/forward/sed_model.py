@@ -2598,6 +2598,63 @@ class SEDModel:
             kw["log_mstar"] = jnp.log10(jnp.maximum(p.get("mstar", 1e10), 1e-10))
         return kw
 
+    # ── Clone with a different approximation policy ────────────────────
+
+    def _has_modern_approx(self) -> bool:
+        """Whether a build-time ``approx=`` LUT is active on this model.
+
+        ``True`` when any of the WavePrecomp / SpectrumPrecomp / FeaturePrecomp
+        precompute paths resolved and activated at construction; ``False`` for
+        the exact wave-grid model (including a SpectrumPrecomp that fell back to
+        the exact path because the spectral resolution was too high).
+        """
+        return (
+            self._approx_config is not None
+            or self._approx_config_spec is not None
+            or self._approx_config_feature is not None
+        )
+
+    def with_approx(self, approx):
+        """Return a copy of this model built with a different ``approx`` policy.
+
+        Parameters
+        ----------
+        approx : WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple or None
+            Approximation policy for the clone, with the same grammar as the
+            ``approx=`` constructor argument: ``None`` for the exact wave-grid
+            path, a single precompute config for one LUT family, or a composite
+            tuple (at most one of each) such as ``(WavePrecomp(), FeaturePrecomp())``.
+
+        Returns
+        -------
+        SEDModel
+            A new model sharing this model's ``spec``, ``ssp_data``,
+            ``observation`` and build settings, differing only in ``approx``.
+            Returns ``self`` unchanged when ``approx=None`` is requested on a
+            model that is already exact (a no-op).
+
+        Notes
+        -----
+        Building the clone only rebuilds the approximation LUT, which the
+        ``tengri_precomp`` cache persists (content-hashed on SSP grid, filters,
+        and z-grid), so repeat clones of the same combination are cheap. The
+        inference layer uses this to fit on the fast LUT path while leaving the
+        user's (exact) model untouched. **JIT-compatible**: build-time only.
+        """
+        if approx is None and not self._has_modern_approx():
+            return self
+        return SEDModel(
+            self.spec,
+            self.ssp_data,
+            observation=self.observation,
+            forward_dtype=str(self._forward_dtype),
+            csp_integration=str(self._csp_integration),
+            wave_chunk_size=self._wave_chunk_size,
+            agn_config=self._agn_config,
+            compile=str(self._compile_mode),
+            approx=approx,
+        )
+
     # ── Predictions (public API) ──────────────────────────────────────
 
     def predict_sfh(self, params, n_linear=1000):

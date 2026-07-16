@@ -522,22 +522,64 @@ class ForwardModel:
         }
         return _linear_flux_sum(per_pop_pred)
 
+    def _has_modern_approx(self) -> bool:
+        """Whether the wrapped SED carries a build-time ``approx=`` LUT."""
+        inner = self._inner_sed_for_delegation()
+        fn = getattr(inner, "_has_modern_approx", None)
+        return bool(fn()) if callable(fn) else False
+
+    def with_approx(self, approx):
+        """Return a copy of this forward model with a different ``approx`` policy.
+
+        Clones the wrapped SED via :meth:`SEDModel.with_approx` and re-wraps it,
+        preserving the observation. Only the common single-population, SED-only
+        forward is cloned; multi-population, spatial, and hierarchical
+        (PopulationSEDModel) forwards are returned unchanged, as is any request
+        that resolves to a no-op.
+
+        Parameters
+        ----------
+        approx : WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple or None
+            Approximation policy for the clone (same grammar as ``approx=`` on
+            :class:`SEDModel`).
+
+        Returns
+        -------
+        ForwardModel
+            A new forward model on the requested approximation path, or ``self``
+            when the request is a no-op or the topology is not a plain
+            single-population SED forward.
+        """
+        if len(self.populations) != 1 or self.populations[0].spatial is not None:
+            return self
+        sub = self.populations[0].sed
+        inner = getattr(sub, "sed", sub)
+        if inner is not sub:
+            # PopulationSEDModel-wrapped (hierarchical) — leave unchanged.
+            return self
+        if not hasattr(inner, "with_approx"):
+            return self
+        new_inner = inner.with_approx(approx)
+        if new_inner is inner:
+            return self
+        return ForwardModel.build(sed=new_inner, observation=self.observation)
+
     def fit(
         self,
         data: Any = None,
         noise: Any = None,
         method: str = "vi",
         *,
+        approx: Any = "auto",
         key: Any = None,
         **kwargs: Any,
     ):
         """Run inference. Canonical convenience entry point.
 
-        Equivalent to ``Fitter(self, data, noise).run(method, **kwargs)``
-        — wires the standard inference pipeline through the
-        :class:`ForwardModel` exactly as the architecture spec
-        prescribes ('inference is always through ForwardModel',
-        issue #211).
+        Equivalent to ``Fitter(self, data, noise, approx=approx).run(method,
+        **kwargs)`` — wires the standard inference pipeline through the
+        :class:`ForwardModel` exactly as the architecture spec prescribes
+        ('inference is always through ForwardModel', issue #211).
 
         Parameters
         ----------
@@ -551,10 +593,20 @@ class ForwardModel:
             Inference method. Any value accepted by
             :meth:`Fitter.run` (``"vi"``, ``"mcmc_nuts"``, ``"map"``,
             …).
+        approx : {"auto", None} or WavePrecomp or SpectrumPrecomp or tuple, default ``"auto"``
+            Approximation policy for the fit. ``"auto"`` (default) routes the
+            fit through the fast precompute LUT selected by data type
+            (``WavePrecomp`` for photometry, ``SpectrumPrecomp`` for
+            spectroscopy/joint, plus ``FeaturePrecomp`` when emission lines are
+            fit); ``None`` forces the exact wave-grid path; an explicit config
+            (or tuple) overrides. Model **prediction** stays exact regardless —
+            only the fit is accelerated. The user's model object is left
+            unchanged; the returned posterior references the fit clone.
         key : jax.random.PRNGKey, optional
             Inference seed.
         **kwargs : Any
-            Forwarded to :meth:`Fitter.run`.
+            Forwarded to :meth:`Fitter.run` (e.g. ``prewarm=`` — JIT-compile the
+            loss/sampler/predict surface before the fit loop, default ``True``).
 
         Returns
         -------
@@ -569,7 +621,7 @@ class ForwardModel:
         """
         from tengri.inference.fitter import Fitter
 
-        fitter = Fitter(self, data=data, noise=noise)
+        fitter = Fitter(self, data=data, noise=noise, approx=approx)
         return fitter.run(method, key=key, **kwargs)
 
     def _params_for_population(
