@@ -408,6 +408,7 @@ def project_spectrum(
     cal_coeffs: jnp.ndarray | None = None,
     cal_wave_range: tuple[float, float] | None = None,
     conserving: bool = False,
+    resolution_matrix: object | None = None,
 ) -> jnp.ndarray:
     r"""Project a panchromatic model SED onto an observed-frame spectrum grid.
 
@@ -462,6 +463,14 @@ def project_spectrum(
         interpolation. Default ``False`` (point sampling — unbiased only when
         the model grid is much finer than the pixels). Set for low-resolution
         spectroscopy where point sampling aliases; see #1166.
+    resolution_matrix : BandedMatrix or None, optional
+        Banded instrument resolution operator (DESI/PFS spectro-perfectionism;
+        Bolton & Schlegel 2010). When supplied, the flux-conserving-resampled
+        model is projected through ``R @ model`` at pixel resolution and this
+        **replaces** the Gaussian ``apply_lsf`` — the matrix already encodes the
+        true LSF (the Redrock/FastSpecFit convention). Default ``None`` (Gaussian
+        LSF from ``resolution``). See :func:`~tengri.observation.banded.banded_matvec`.
+        #1163.
 
     Returns
     -------
@@ -532,7 +541,17 @@ def project_spectrum(
     # mode before the trace), so this branch resolves at trace time (#1166).
     resampler = compute_spectrum_conserving if conserving else compute_spectrum
     flux = resampler(sed_rest, wave_rest, wave_obs, redshift, dl_cm)
-    if resolution is not None:
+    if resolution_matrix is not None:
+        # The banded resolution matrix (DESI/PFS spectro-perfectionism; Bolton &
+        # Schlegel 2010) encodes the true instrument LSF at pixel resolution and
+        # is applied to the model *after* resampling onto the pixel grid — it
+        # REPLACES the Gaussian ``apply_lsf`` (Redrock/FastSpecFit convention).
+        # ``resolution_matrix`` is static structural config, so this branch
+        # resolves at trace time. #1163.
+        from tengri.observation.banded import banded_matvec
+
+        flux = banded_matvec(resolution_matrix.offsets, resolution_matrix.data, flux)
+    elif resolution is not None:
         flux = apply_lsf(
             flux,
             wave_obs,

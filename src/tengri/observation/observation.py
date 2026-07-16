@@ -651,6 +651,7 @@ class Observation:
             cal_coeffs=cal_coeffs,
             cal_wave_range=self.spectroscopy.calibration_wave_range,
             conserving=conserving,
+            resolution_matrix=self.spectroscopy.resolution_matrix,
         )
         return flux
 
@@ -813,6 +814,7 @@ class Observation:
                 cal_coeffs=self.spectroscopy.calibration_coeffs(params),
                 cal_wave_range=self.spectroscopy.calibration_wave_range,
                 conserving=conserving,
+                resolution_matrix=self.spectroscopy.resolution_matrix,
             )
             out["spec_fnu"] = flux
 
