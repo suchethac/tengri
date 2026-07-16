@@ -295,6 +295,7 @@ class CatalogFitter:
         key,
         forward_chunk_size=1,
         n_pad: int | str | None = None,
+        devices=None,
         **kwargs,
     ):
         """Fit all galaxies independently.
@@ -370,9 +371,18 @@ class CatalogFitter:
                 key=key,
                 forward_chunk_size=forward_chunk_size,
                 n_pad=n_pad,
+                devices=devices,
                 **kwargs,
             )
         else:
+            if devices is not None:
+                warnings.warn(
+                    f"devices={devices!r} is ignored for method={method!r}. "
+                    "Multi-device sharding is currently supported for "
+                    "mcmc_nuts / mcmc_hmc only.",
+                    UserWarning,
+                    stacklevel=2,
+                )
             if forward_chunk_size != 1:
                 warnings.warn(
                     f"forward_chunk_size={forward_chunk_size} is ignored for "
@@ -608,6 +618,7 @@ class CatalogFitter:
         key,
         forward_chunk_size=1,
         n_pad: int | str | None = None,
+        devices=None,
         n_warmup=300,
         n_burnin=100,
         n_samples=1000,
@@ -630,6 +641,12 @@ class CatalogFitter:
         galaxy is low-D and the parallelism is *width over galaxies*, so a
         diagonal mass keeps the vmap flat and dodges the dense-mass warmup
         memory spike (see :func:`...mcmc.nuts.run_nuts`).
+
+        When ``devices`` is given (``"all"`` or a device list), the galaxy axis
+        is sharded across those devices via ``jax.shard_map`` — each device runs
+        ``lax.map`` on its own slice of the catalog with no cross-device
+        reduction (galaxies are independent). Bit-parity with the single-device
+        path holds up to float round-off.
         """
         from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
         from tengri.inference.posterior import Posterior
@@ -638,7 +655,15 @@ class CatalogFitter:
         t0 = time.time()
         K = max(1, int(forward_chunk_size))
         n_gal = self.n_galaxies
-        n_padded = _resolve_n_padded(n_gal, K, n_pad)
+        dev_list = self._resolve_devices(devices)
+        n_dev = len(dev_list) if dev_list else 1
+        if n_dev > 1:
+            # Pad to a multiple of both K (the lax.map chunk) and n_dev (even
+            # shards) so every device gets an equal, K-divisible slice.
+            unit = math.lcm(K, n_dev)
+            n_padded = math.ceil(n_gal / unit) * unit
+        else:
+            n_padded = _resolve_n_padded(n_gal, K, n_pad)
         n_pad_extra = n_padded - n_gal
         n_data = self._validate_uniform_data()
 
@@ -686,11 +711,11 @@ class CatalogFitter:
             ini, gk, d, n = args
             return run_one(ini, gk, d, n)
 
-        all_positions, all_divergent = jax.lax.map(
-            _run_one,
-            (all_init, gal_keys, all_data, all_noise),
-            batch_size=K,
-        )
+        xs = (all_init, gal_keys, all_data, all_noise)
+        if n_dev > 1:
+            all_positions, all_divergent = self._sharded_vmap(run_one, xs, dev_list)
+        else:
+            all_positions, all_divergent = jax.lax.map(_run_one, xs, batch_size=K)
         all_positions = all_positions[:n_gal]
         all_divergent = all_divergent[:n_gal]
         jax.block_until_ready(all_positions)
@@ -727,11 +752,47 @@ class CatalogFitter:
                 "vectorized": True,
                 "sampler": sampler,
                 "forward_chunk_size": K,
+                "n_devices": n_dev,
                 "n_divergent_total": int(jnp.sum(all_divergent)),
                 "n_warmup": n_warmup,
                 "n_samples": n_samples,
             },
         )
+
+    @staticmethod
+    def _resolve_devices(devices):
+        """Normalize the ``devices`` argument to a device list or ``None``.
+
+        ``None`` → single-device path; ``"all"`` → every ``jax.devices()``; a
+        list/tuple of devices → those devices.
+        """
+        if devices is None:
+            return None
+        if isinstance(devices, str):
+            if devices == "all":
+                return list(jax.devices())
+            raise ValueError(f"devices must be None, 'all', or a device list; got {devices!r}")
+        return list(devices)
+
+    @staticmethod
+    def _sharded_vmap(run_one, xs, dev_list):
+        """``jax.vmap(run_one)`` over a galaxy axis sharded across ``dev_list``.
+
+        Per-galaxy fits are independent, so this is pure data parallelism with
+        no cross-device reduction: the leading (galaxy) axis of every input is
+        sharded over the devices and GSPMD distributes the vmapped program —
+        each device samples its own slice of the catalog. GSPMD auto-partitioning
+        is used rather than ``shard_map`` because BlackJAX's NUTS tree-builder
+        contains ``lax.cond`` branches that trip ``shard_map``'s manual
+        varying-axis tracking. The leading axis must be divisible by
+        ``len(dev_list)`` (the caller pads to a multiple of ``lcm(K, n_dev)``).
+        Returns the gathered ``(positions, divergent)``.
+        """
+        mesh = jax.sharding.Mesh(np.asarray(dev_list, dtype=object), ("gal",))
+        sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec("gal"))
+        xs_sharded = jax.device_put(xs, sharding)
+        run_all = jax.jit(jax.vmap(run_one))
+        return run_all(*xs_sharded)
 
     # ------------------------------------------------------------------
     # Internal: sequential fallback (all other methods)
