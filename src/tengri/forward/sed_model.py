@@ -95,6 +95,7 @@ from tengri.utils.grid import (
     log_age_to_age_yr,
     make_log_age_grid,
 )
+from tengri.utils.scale import LOG10_4PI, apply_log10_scale
 
 #: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
 #: :meth:`SEDModel._dust_emission_band_response`. A physically plausible L_IR
@@ -578,15 +579,19 @@ class SEDModel:
         Affects both fused (photometry + precomputation) and exact paths:
 
         - **Fused path**: captured arrays (SSP grid, dust weights, effective
-          wavelengths) cast to ``forward_dtype`` at kernel build; outputs
-          always cast back to float64 for cosmological distance scaling.
+          wavelengths) cast to ``forward_dtype`` at kernel build.
         - **Exact path** (spectroscopy, non-precomputed AGN): three largest intermediates
           — metallicity-interpolated SSP ``(n_age, n_wave)``, dust attenuation
           ``(n_age, n_wave)``, dust age weights ``(n_age,)`` — computed in
           ``forward_dtype``, halving the 4.5 MB memory traffic that dominates
           exact-path dust cost.
 
-        Cosmological distances always use float64 (float32 overflows at z > 0.01).
+        Mixed-precision support: Multiplicative flux/distance seams (photometry,
+        spectrum, line flux projections) apply cosmological factors as range-safe
+        log offsets (see :mod:`tengri.utils.scale`), allowing float32 arrays without
+        out-of-range intermediates. Full pure-float32 output additionally requires
+        Tier B reduction reformulations (ionizing photon integral, energy-balance
+        cascades, AGN SKIRTOR table resolution) and is not yet supported.
     approx : dict or bool, optional
         Control which approximations enter the component chain. Default True enables
         all approximations (fastest). False disables all (forces exact path
@@ -4008,7 +4013,8 @@ class SEDModel:
         # NebularSEDComponent) — no L_sun conversion here. Multiplying by
         # L_SUN was a 33.6-dex unit error that made every joint
         # photometry+line-flux fit unusable against real data.
-        flux = selected_lums / (4.0 * jnp.pi * dl_cm**2)
+        log10_scale = -LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        flux = apply_log10_scale(selected_lums, log10_scale)
         return flux
 
     def enable_fast_nebular(self, target_wavelengths, *, n_grid=16, ranges=None):
@@ -4197,13 +4203,13 @@ class SEDModel:
         # ``line_lums`` are erg/s (DerivedKey contract) — same fix as
         # ``predict_line_fluxes``. The scale cancels in every ratio, so
         # this is unit hygiene, not a behavior change.
-        scale = 1.0 / (4.0 * jnp.pi * dl_cm**2)
+        log10_scale = -LOG10_4PI - 2.0 * jnp.log10(dl_cm)
 
         def _match(targets):
             targets = jnp.asarray(targets)
             deltas = jnp.abs(all_waves[None, :] - targets[:, None])
             idx = jnp.argmin(deltas, axis=1)
-            return all_lums[idx] * scale
+            return apply_log10_scale(all_lums[idx], log10_scale)
 
         num_flux = _match(line_ratio_data.numerator_waves)
         den_flux = _match(line_ratio_data.denominator_waves)

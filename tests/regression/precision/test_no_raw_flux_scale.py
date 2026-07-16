@@ -45,12 +45,8 @@ ALLOW = {
     ),
     "components/nebular/line_precompute.py": "Tier B — returns 4pi dL^2 scalar; caller-side fix",
     "forward/sed_model.py": (
-        "Task 6 — immediate-application property/flux projection; converted when "
-        "forward_dtype end-to-end parity lands"
-    ),
-    "observation/observation.py": (
-        "Task 6 — immediate-application observation flux projection; converted when "
-        "forward_dtype end-to-end parity lands"
+        "Tier B — line 4536 returns 4pi dL^2 scalar (f32-unrepresentable); "
+        "immediate-application sites converted in Task 6"
     ),
 }
 
