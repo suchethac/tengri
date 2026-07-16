@@ -38,7 +38,7 @@ def build(f_burst):
         ssp,
         sfh={
             "type": "sfh2exp",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.5,
             "tau_main_gyr": 4.0,
             "tau_burst_gyr": 0.1,
@@ -46,7 +46,7 @@ def build(f_burst):
             "age_gyr": 10.0,
             "burst_age_gyr": 0.3,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.2},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.2},
         redshift=tengri.Fixed(0.05),
     )
 

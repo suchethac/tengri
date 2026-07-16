@@ -61,7 +61,7 @@ SSP = tengri.load_ssp("fsps_prsc_miles_chabrier")
 HOST = dict(
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 9.0,  # Main growth timescale
         "log_total_mass": 10.0,  # Peak SFR ~ 2.2 Msun/yr (Kennicutt & Evans 2012)
         "alpha": 0.8,  # Early rise
@@ -74,16 +74,16 @@ HOST = dict(
 # τ values typical for MW analogs (Calzetti 2000 calibration)
 DUST_ON = {
     "type": "two_component",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "tau_diff": 0.35,  # Diffuse ISM optical depth
     "tau_bc": 0.45,  # Birth cloud optical depth
-    "emission": {"type": "dale2014", "*": tengri.FIXED},  # FIR + submm reprocessing
+    "emission": {"type": "dale2014", "all_params": tengri.FIXED},  # FIR + submm reprocessing
 }
 
 # Dust-free reference
 DUST_OFF = {
     "type": "two_component",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "tau_diff": 0.0,
     "tau_bc": 0.0,
 }
@@ -103,14 +103,18 @@ def _nuLnu(**blocks):
 RUNS = [
     ("Stellar continuum", "#666666", dict(dust=DUST_OFF)),
     ("Attenuated by dust", "#999999", dict(dust=DUST_ON)),
-    ("+ Dust emission", "#dd7733", dict(dust=DUST_ON, neb={"type": "cue", "*": tengri.FIXED})),
+    (
+        "+ Dust emission",
+        "#dd7733",
+        dict(dust=DUST_ON, neb={"type": "cue", "all_params": tengri.FIXED}),
+    ),
     (
         "+ Radio (SF regions)",
         "#3366cc",
         dict(
             dust=DUST_ON,
-            neb={"type": "cue", "*": tengri.FIXED},
-            radio={"type": "condon92", "*": tengri.FIXED},
+            neb={"type": "cue", "all_params": tengri.FIXED},
+            radio={"type": "condon92", "all_params": tengri.FIXED},
         ),
     ),
     (
@@ -118,9 +122,9 @@ RUNS = [
         "#9933cc",
         dict(
             dust=DUST_ON,
-            neb={"type": "cue", "*": tengri.FIXED},
-            radio={"type": "condon92", "*": tengri.FIXED},
-            xray={"type": "simple", "*": tengri.FIXED},
+            neb={"type": "cue", "all_params": tengri.FIXED},
+            radio={"type": "condon92", "all_params": tengri.FIXED},
+            xray={"type": "simple", "all_params": tengri.FIXED},
         ),
     ),
 ]

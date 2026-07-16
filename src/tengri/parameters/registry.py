@@ -324,9 +324,9 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
         Example::
 
             {
-                "sfh": {"type": "dpl", "*": FREE},
-                "dust": {"type": "two_component", "law_bc": "calzetti", "*": FREE},
-                "neb": {"type": "cue", "*": FIXED},
+                "sfh": {"type": "dpl", "all_params": FREE},
+                "dust": {"type": "two_component", "law_bc": "calzetti", "all_params": FREE},
+                "neb": {"type": "cue", "all_params": FIXED},
                 "redshift": Uniform(0.01, 6.0),
             }
 

@@ -45,7 +45,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.01,  # Very young: 10 Myr timescale
         "log_total_mass": 7.5,  # Total mass ~3e7 Msun (SFR from tau_gyr duration)
         "alpha": 3.5,  # Rising early SFR
@@ -53,13 +53,13 @@ model = tengri.SEDModel.build(
     },  # Declining late SFR
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.02,  # Minimal diffuse dust
         "tau_bc": 0.05,
     },  # Minimal birth cloud dust
     neb={
         "type": "cue",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "logU": -2.5,  # Low ionization parameter
         "logZ_gas": -1.0,  # Low metallicity: Z ~ 0.1 Zsun
         "fesc": 0.1,  # Hydrogen ionizing photon escape

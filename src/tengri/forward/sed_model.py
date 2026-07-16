@@ -7123,9 +7123,14 @@ class SEDModel:
         >>> from tengri import SEDModel, FREE, FIXED, Uniform, Fixed
         >>> model = SEDModel.build(
         ...     ssp_data=ssp,
-        ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
-        ...     dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
-        ...     neb={"type": "cue", "*": FIXED},
+        ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
+        ...     dust={
+        ...         "type": "two_component",
+        ...         "law_bc": "calzetti",
+        ...         "all_params": FIXED,
+        ...         "tau_bc": 0.5,
+        ...     },
+        ...     neb={"type": "cue", "all_params": FIXED},
         ...     redshift=Fixed(0.05),
         ...     filters=["sdss_u", "sdss_g", "sdss_r"],
         ... )

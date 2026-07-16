@@ -62,14 +62,14 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": tengri.Uniform(0.01, 8.0),
         "width_gyr": 0.05,  # narrow truncation: an explicit quench
         "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

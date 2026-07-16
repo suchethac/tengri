@@ -1189,10 +1189,11 @@ class Parameters:
         --------
         >>> from tengri import parse_groups, FREE, FIXED, Uniform, Fixed
         >>> spec = parse_groups(
-        ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
+        ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
         ...     redshift=Fixed(0.05),
         ... )
         >>> groups = spec.to_groups()
+        >>> assert "all_params" in groups["sfh"]  # preferred spelling on output
         >>> roundtripped = parse_groups(**groups)
         >>> spec.free_params == roundtripped.free_params
         True

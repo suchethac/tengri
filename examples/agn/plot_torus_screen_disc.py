@@ -48,8 +48,8 @@ C_AA_PER_S = 2.998e18
 COS_INC = [1.0, 0.7, 0.5, 0.3, 0.05]
 COLORS = plt.cm.RdYlBu(np.linspace(0.92, 0.05, len(COS_INC)))
 
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
 fig, ax = plt.subplots(figsize=(7.2, 4.6))
@@ -64,9 +64,9 @@ for cos_inc, color in zip(COS_INC, COLORS):
         sfh=SFH,
         dust=DUST,
         agn={
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "log_lbol": 12.5,
             "frac": 1.0,
             "cos_inc": cos_inc,

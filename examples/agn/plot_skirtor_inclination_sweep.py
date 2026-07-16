@@ -63,8 +63,8 @@ cos_inc_values = np.cos(np.radians(inclination_deg))
 # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
 # ``const`` SFH parametrizes by total mass over [start_gyr, end_gyr]
 # instead.
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
 
@@ -74,9 +74,9 @@ model_agn_only = tengri.SEDModel.build(
     sfh=SFH,
     dust=DUST,
     agn={
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "torus": {"type": "skirtor", "*": tengri.FIXED},
-        "*": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+        "all_params": tengri.FIXED,
         "log_lbol": 12.0,
         "frac": 1.0,
     },
@@ -87,20 +87,20 @@ model_with_dust = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 3.0,
         "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
     agn={
         "type": "composable",
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": 7.0},
-        "nlr": {"type": "analytic", "*": tengri.FIXED},
-        "blr": {"type": "none", "*": tengri.FIXED},
-        "*": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "torus": {"type": "skirtor", "all_params": tengri.FIXED, "tau_skirtor": 7.0},
+        "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+        "blr": {"type": "none", "all_params": tengri.FIXED},
+        "all_params": tengri.FIXED,
         "log_lbol": 12.5,
         "frac": 1.0,
     },
