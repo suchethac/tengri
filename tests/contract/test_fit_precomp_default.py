@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for precomp-by-default fits + auto-prewarm (2026-07).
 
 Covers the fit-time approximation policy added in the ``approx="auto"`` feature:
