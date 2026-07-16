@@ -15,6 +15,21 @@ def ssp_bare():
 
 
 def build_model(ssp, forward_dtype):
+    """Build the panchromatic parity model (stellar + dust + Cue + AGN + radio + X-ray).
+
+    Parameters
+    ----------
+    ssp : SSPData
+        Bare-stellar SSP library (Cue nebular backend).
+    forward_dtype : str
+        Forward-model compute dtype, ``"float64"`` or ``"float32"``.
+
+    Returns
+    -------
+    SEDModel
+        The exact-path (``approx=None``) panchromatic model used by every
+        float32 parity test as its shared subject.
+    """
     from tengri import SEDModel, recipes
     from tengri.observation import Observation, Photometry
 
@@ -50,6 +65,23 @@ def build_minimal_cue_model(ssp, forward_dtype):
 
 
 def forward_outputs(model, z, log10_mass):
+    """Run one forward pass and return the parity observables as float64 arrays.
+
+    Parameters
+    ----------
+    model : SEDModel
+        A model from :func:`build_model` (any ``forward_dtype``).
+    z : float
+        Redshift to evaluate at.
+    log10_mass : float
+        ``sfh_dpl_log_total_mass`` [log10 Msun] to evaluate at.
+
+    Returns
+    -------
+    dict
+        Keys ``"photometry"``, ``"rest_sed"``, ``"halpha"``, ``"l_tir"``,
+        ``"q_h"`` — all cast to float64 for cross-dtype comparison.
+    """
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     p["redshift"] = z
     p["sfh_dpl_log_total_mass"] = log10_mass
