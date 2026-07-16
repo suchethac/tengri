@@ -190,22 +190,25 @@ print(
 # %% [markdown]
 # ## Fit the catalog in parallel — timed in detail
 #
-# One call fits the whole catalog. `CatalogFitter.run("mcmc_nuts",
-# forward_chunk_size=K)` builds a **single** JIT'd NUTS program and streams the `N`
+# One call fits the whole catalog. `CatalogFitter.run("mcmc_hmc",
+# forward_chunk_size=K)` builds a **single** JIT'd HMC program and streams the `N`
 # galaxies through `jax.lax.map(..., batch_size=K)`: `K` galaxies advance their
 # chains *together* on every sampler step, and the compiled graph is `O(1)` in the
-# catalog size `N` — one program whether you fit 12 galaxies or 12 million. We set
-# `K = N` (fit them all at once), a diagonal mass matrix (each galaxy is low-D and
-# the parallelism is *width over galaxies*, not per-galaxy tree depth), and one
-# chain per galaxy. We time a single forward evaluation first, then the catalog.
+# catalog size `N` — one program whether you fit 12 galaxies or 12 million. We use
+# **HMC** (the catalog default): its fixed-length trajectories are cheap and
+# predictable, which matters for a *catalog* — NUTS can spend a whole step building
+# a deep tree on a banana-shaped photo-z posterior, and paid once per galaxy that
+# adds up. We set `K = N` (fit them all at once), a diagonal mass matrix (each
+# galaxy is low-D and the parallelism is *width over galaxies*), and one chain per
+# galaxy. We time a single forward evaluation first, then the catalog.
 
 # %%
 FIT_KW = dict(
-    method="mcmc_nuts",
+    method="mcmc_hmc",
     n_warmup=100,
     n_samples=120,
     n_burnin=20,
-    max_num_doublings=5,
+    n_leapfrog_steps=10,
     target_accept_rate=0.85,
     dense_mass_matrix=False,
     verbose=False,
@@ -227,7 +230,8 @@ jax.block_until_ready(catalog.posteriors[0].samples["redshift"])
 fit_wall = time.perf_counter() - t0
 n_div = catalog.diagnostics["n_divergent_total"]
 print(
-    f"fit {N_GAL} galaxies ({model.spec.n_free}-D each) in {fit_wall:.1f} s; {n_div} divergences"
+    f"fit {N_GAL} galaxies ({model.spec.n_free}-D each) in {fit_wall:.1f} s "
+    f"= {fit_wall / N_GAL:.2f} s per posterior; {n_div} divergences"
 )
 
 # %% [markdown]
@@ -258,8 +262,8 @@ print(f"{'free parameters per galaxy':<42}{model.spec.n_free:>15d}")
 print(f"{'WavePrecomp LUT build (one-time)':<42}{build_wall:>13.1f} s")
 print(f"{'one forward photometry eval':<42}{fwd_ms:>12.2f} ms")
 print(f"{'catalog fit wall (K = N)':<42}{fit_wall:>13.1f} s")
-print(f"{'  per galaxy (CPU: chains contend)':<42}{per_gal:>13.2f} s")
-print(f"{'  throughput (galaxies / s)':<42}{N_GAL / fit_wall:>15.2f}")
+print(f"{'  time per posterior (CPU)':<42}{per_gal:>13.2f} s")
+print(f"{'  throughput (posteriors / s)':<42}{N_GAL / fit_wall:>15.2f}")
 print("-" * 57)
 print(
     f"On {backend} the {N_GAL} chains share the cores, so the wall is the total sampling\n"
@@ -362,8 +366,10 @@ plt.show()
 #
 # - A catalog of independent galaxies is **embarrassingly parallel**, and each
 #   galaxy is a cheap low-dimensional posterior — so the catalog default is
-#   **per-galaxy sampling** (`mcmc_nuts` / `mcmc_hmc`), not VI.
-# - **`CatalogFitter.run("mcmc_nuts", forward_chunk_size=K)`** fits the whole
+#   **per-galaxy HMC** (`mcmc_hmc`; `mcmc_nuts` vectorizes too), not VI. HMC's
+#   fixed-length trajectories keep the per-posterior cost predictable, which is
+#   what a catalog rewards — the measured time per posterior is in the table above.
+# - **`CatalogFitter.run("mcmc_hmc", forward_chunk_size=K)`** fits the whole
 #   catalog as *one* vectorized program: `K` galaxies advance per sampler step and
 #   the compiled graph is `O(1)` in the catalog size, so the compile is paid once
 #   and amortizes over the catalog. `K = 1` is the serial baseline; `K = N` is
