@@ -336,12 +336,17 @@ print(
 )
 
 # %% [markdown]
-# On a bigger machine, swap `chain_method="vmap"` (one batched kernel) or
-# `"parallel"` (one chain per device; needs
-# `XLA_FLAGS=--xla_force_host_platform_device_count=N` before importing jax) to
-# run the chains concurrently and cut the wall ~N-fold — same posterior, more
-# memory. Raise `N_CHAINS` for a more robust R-hat; at a fixed total-sample
-# budget it costs the same compute, only more chains to compare.
+# On a machine with more RAM, run the chains concurrently instead of one at a
+# time: `chain_method="parallel"` puts one chain per device via `jax.pmap`
+# (needs `XLA_FLAGS=--xla_force_host_platform_device_count=N` set *before*
+# importing jax), cutting the wall ~N-fold. The cost is memory: pmap
+# **replicates** the model + the WavePrecomp / FeaturePrecomp lookup tables onto
+# every device, so peak RAM scales ~linearly with `N_CHAINS` (≈ N× the
+# sequential fit) — which is exactly why `"sequential"` is the default here.
+# `chain_method="vmap"` (SIMD-batch into one kernel) is the middle ground. Raise
+# `N_CHAINS` for a more robust R-hat; at a fixed total-sample budget it costs
+# the same compute, only more chains to compare (and, under vmap/parallel, more
+# memory).
 
 # %% [markdown]
 # ## Recovery
