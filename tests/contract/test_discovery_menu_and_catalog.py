@@ -70,6 +70,19 @@ def test_search_finds_agn_blocks_and_igm():
     assert len(tengri.search("torus")) > 0  # unchanged behavior still works
 
 
+def test_describe_discloses_ambiguous_names():
+    """A name registered in more than one menu/category (skirtor = disc+torus,
+    simple = torus+xray, cue = nlr+nebular) must disclose the other locations
+    rather than silently returning only the first match."""
+    for name in ("skirtor", "simple", "cue"):
+        rec = dict(tengri.describe(name))
+        assert "also_registered_as" in rec, f"describe({name!r}) hid its ambiguity"
+        assert name in rec["also_registered_as"]
+
+    # an unambiguous name carries no disambiguation note
+    assert "also_registered_as" not in dict(tengri.describe("dpl"))
+
+
 # ── list_sfh_models() hides unbuildable types by default ────────────────────
 
 
