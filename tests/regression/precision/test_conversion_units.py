@@ -5,9 +5,13 @@ Validates that the log-scale refactoring (issue #1186) preserves float64
 accuracy (rtol ≤ 1e-12 vs old formula) and produces finite float32 results
 (rtol ≤ 2e-3 from f64).
 
+Float32 tests run inside jax.enable_x64(False) context to ensure no silent
+upcast to float64 masks underflow bugs; this matches test_float32_parity.py.
+
 See: src/tengri/utils/conversions.py:438, :472.
 """
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -39,7 +43,10 @@ def test_lnu_to_fnu_parity_f64(redshift):
 
 @pytest.mark.parametrize("redshift", [0.01, 1.0, 6.0])
 def test_lnu_to_fnu_finite_f32(redshift):
-    """lnu_to_fnu produces finite float32 results (rtol ≤ 2e-3 from f64)."""
+    """lnu_to_fnu produces finite float32 results (rtol ≤ 2e-3 from f64).
+
+    Runs inside jax.enable_x64(False) to prevent silent upcast to float64.
+    """
     lnu = jnp.asarray(2.0e34)
     z = jnp.asarray(redshift)
     dl_cm = jnp.asarray(luminosity_distance(float(z)))
@@ -47,12 +54,12 @@ def test_lnu_to_fnu_finite_f32(redshift):
     # f64 result (reference)
     result_f64 = lnu_to_fnu(lnu, dl_cm, z)
 
-    # f32 result (explicit cast to float32)
-    result_f32 = lnu_to_fnu(
-        jnp.asarray(lnu, dtype=jnp.float32),
-        jnp.asarray(dl_cm, dtype=jnp.float32),
-        jnp.asarray(z, dtype=jnp.float32),
-    )
+    # f32 result: build inputs and call inside x64=False context
+    with jax.enable_x64(False):
+        lnu_f32 = jnp.asarray(2.0e34, dtype=jnp.float32)
+        z_f32 = jnp.asarray(redshift, dtype=jnp.float32)
+        dl_cm_f32 = jnp.asarray(luminosity_distance(float(z)), dtype=jnp.float32)
+        result_f32 = lnu_to_fnu(lnu_f32, dl_cm_f32, z_f32)
 
     # Check finite
     assert jnp.isfinite(result_f32).all(), f"f32 result has NaN/Inf: {result_f32}"
@@ -80,7 +87,10 @@ def test_fnu_to_lnu_parity_f64(redshift):
 
 @pytest.mark.parametrize("redshift", [0.01, 1.0, 6.0])
 def test_fnu_to_lnu_finite_f32(redshift):
-    """fnu_to_lnu produces finite float32 results (rtol ≤ 2e-3 from f64)."""
+    """fnu_to_lnu produces finite float32 results (rtol ≤ 2e-3 from f64).
+
+    Runs inside jax.enable_x64(False) to prevent silent upcast to float64.
+    """
     fnu = jnp.asarray(1e-29)
     z = jnp.asarray(redshift)
     dl_cm = jnp.asarray(luminosity_distance(float(z)))
@@ -88,12 +98,12 @@ def test_fnu_to_lnu_finite_f32(redshift):
     # f64 result (reference)
     result_f64 = fnu_to_lnu(fnu, dl_cm, z)
 
-    # f32 result (explicit cast to float32)
-    result_f32 = fnu_to_lnu(
-        jnp.asarray(fnu, dtype=jnp.float32),
-        jnp.asarray(dl_cm, dtype=jnp.float32),
-        jnp.asarray(z, dtype=jnp.float32),
-    )
+    # f32 result: build inputs and call inside x64=False context
+    with jax.enable_x64(False):
+        fnu_f32 = jnp.asarray(1e-29, dtype=jnp.float32)
+        z_f32 = jnp.asarray(redshift, dtype=jnp.float32)
+        dl_cm_f32 = jnp.asarray(luminosity_distance(float(z)), dtype=jnp.float32)
+        result_f32 = fnu_to_lnu(fnu_f32, dl_cm_f32, z_f32)
 
     # Check finite
     assert jnp.isfinite(result_f32).all(), f"f32 result has NaN/Inf: {result_f32}"
