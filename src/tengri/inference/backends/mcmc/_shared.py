@@ -296,6 +296,47 @@ def _nuts_chain_scan(
 # ---------------------------------------------------------------------------
 
 
+@functools.partial(jax.jit, static_argnums=(2, 4, 5, 6, 7))
+def _hmc_warmup_only(
+    init_flat,
+    warmup_key,
+    logdensity_fn_2arg,
+    data_args,
+    n_warmup,
+    n_leapfrog,
+    use_dense,
+    target_accept_rate,
+):
+    """BlackJAX HMC window adaptation only — returns tuned (step_size, inv_mass).
+
+    The warmup half of :func:`_hmc_full_scan`, split out so a *fresh*
+    ``run_hmc`` call can adapt once and then dispatch sampling through the
+    single- or multi-chain path (vmap/parallel) that honors ``n_chains`` —
+    without the old behavior of silently sampling a single chain on the first
+    call. Same static-arg / traced-``data_args`` contract as
+    :func:`_hmc_full_scan`.
+
+    Returns
+    -------
+    step_size : scalar
+    inv_mass_matrix : ndarray, shape (D,) or (D, D)
+    """
+    import blackjax
+
+    def ld_1arg(pos):
+        return logdensity_fn_2arg(pos, data_args)
+
+    warmup = blackjax.window_adaptation(
+        blackjax.hmc,
+        ld_1arg,
+        is_mass_matrix_diagonal=not use_dense,
+        target_acceptance_rate=target_accept_rate,
+        num_integration_steps=n_leapfrog,
+    )
+    (_, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+    return parameters["step_size"], parameters["inverse_mass_matrix"]
+
+
 @functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8))
 def _hmc_full_scan(
     init_flat,
@@ -844,6 +885,86 @@ def _vmap_chains(
     per_chain_keys = jax.random.split(new_chain_key, n_chains * n_iter)
     per_chain_keys = per_chain_keys.reshape(n_chains, n_iter, 2)
     out = jax.vmap(chain_scan_fn)(states, per_chain_keys)
+
+    def _trim_and_flatten(arr):
+        if n_burnin > 0:
+            arr = arr[:, n_burnin:]
+        if arr.ndim >= 3:
+            return arr.reshape(-1, *arr.shape[2:])
+        return arr.reshape(-1)
+
+    if isinstance(out, tuple):
+        return tuple(_trim_and_flatten(a) for a in out)
+    return _trim_and_flatten(out)
+
+
+def _parallel_chains(
+    init_state_fn,
+    chain_scan_fn,
+    *,
+    init_flat,
+    chain_key,
+    n_chains,
+    n_iter,
+    n_burnin,
+    jitter_scale=1e-3,
+):
+    """Run ``n_chains`` MCMC chains on separate devices via ``jax.pmap``.
+
+    True parallelism variant of :func:`_vmap_chains`: instead of SIMD-batching
+    the chains into one device's kernel (which costs ~``n_chains``× a single
+    chain on CPU), this maps them across physical devices so ``n_chains``
+    chains run in ~one chain's wall time. Same jitter / burn-in / flatten
+    contract and same return shape as :func:`_vmap_chains`, so callers can
+    swap the two.
+
+    On CPU, JAX exposes one device by default; obtaining ``n_chains`` devices
+    needs ``XLA_FLAGS=--xla_force_host_platform_device_count=N`` set **before**
+    JAX initializes. Raises :class:`RuntimeError` when fewer than ``n_chains``
+    devices are visible so callers can fall back to :func:`_vmap_chains`.
+
+    Parameters
+    ----------
+    init_state_fn, chain_scan_fn, init_flat, chain_key, n_chains, n_iter, \
+    n_burnin, jitter_scale
+        Identical to :func:`_vmap_chains`.
+
+    Returns
+    -------
+    Same shape as :func:`_vmap_chains`.
+
+    Raises
+    ------
+    RuntimeError
+        If ``jax.device_count() < n_chains``.
+    """
+    n_dev = jax.device_count()
+    if n_dev < n_chains:
+        raise RuntimeError(
+            f"chain_method='parallel' needs at least n_chains={n_chains} JAX devices, "
+            f"found {n_dev}. On CPU, set "
+            f"XLA_FLAGS=--xla_force_host_platform_device_count={n_chains} before importing "
+            f"jax / tengri, or use chain_method='vmap'."
+        )
+    devices = jax.devices()[:n_chains]
+
+    keys = jax.random.split(chain_key, n_chains + 2)
+    new_chain_key, jitter_key, init_key_seed = keys[0], keys[1], keys[2]
+    per_chain_init_keys = jax.random.split(init_key_seed, n_chains)
+    jitter = jitter_scale * jax.random.normal(jitter_key, shape=(n_chains, init_flat.shape[0]))
+    init_flat_batch = init_flat[None, :] + jitter
+
+    import inspect as _inspect
+
+    arity = len(_inspect.signature(init_state_fn).parameters)
+    if arity == 1:
+        states = jax.pmap(init_state_fn, devices=devices)(init_flat_batch)
+    else:
+        states = jax.pmap(init_state_fn, devices=devices)(init_flat_batch, per_chain_init_keys)
+
+    per_chain_keys = jax.random.split(new_chain_key, n_chains * n_iter)
+    per_chain_keys = per_chain_keys.reshape(n_chains, n_iter, 2)
+    out = jax.pmap(chain_scan_fn, devices=devices)(states, per_chain_keys)
 
     def _trim_and_flatten(arr):
         if n_burnin > 0:
