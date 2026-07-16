@@ -45,7 +45,7 @@ The stellar ionizing-photon array `_sed_ion` in `src/tengri/components/stellar/c
 
 **Fix:** Introduce a `log_nion` (log10 Q_H) contract — compute the integral as `log10(∫ of the mass-scale-free ionizing flux) + log10_mass_scale`, keeping both terms in representable range. Update `StellarSEDComponent` to publish both `nion` (or deprecate in favor of `log_nion`) and `log_nion`. Every consumer of Q_H (Cue ionization solver, CloudyGrid, the `q_h` property in `src/tengri/forward/sed_model.py`) must accept the log form.
 
-**Test:** `tests/inference/test_mixed_precision.py::test_ionizing_sed_pure_float32_cue_only` is marked xfail(strict) and validates this end-to-end once the contract is in place.
+**Test:** `tests/regression/precision/test_ionizing_scale.py::test_ionizing_sed_pure_float32_cue_only` is marked xfail(strict) and validates this end-to-end once the contract is in place.
 
 ---
 
@@ -72,7 +72,7 @@ The stellar ionizing-photon array `_sed_ion` in `src/tengri/components/stellar/c
 
 **Luminosity distance curvature factor:**
 - Symbol: `4π d_L²` (~1e57 cm²).
-- Locations: `src/tengri/components/nebular/line_precompute.py`, `src/tengri/forward/sed_model.py` (`four_pi_dl2`).
+- Function: `_four_pi_dl2` in `src/tengri/components/nebular/line_precompute.py` (line 84) and `src/tengri/measure.py` (line 151). Local variable `four_pi_dl2` (no leading underscore) used in `src/tengri/forward/sed_model.py`.
 - **Tier B decision:** Publish or consume in log form, or reparametrize the line-flux contract to absorb this scaling. (Allowlisted as "deferred" in the flux-scale guard.)
 
 ---
@@ -81,11 +81,8 @@ The stellar ionizing-photon array `_sed_ion` in `src/tengri/components/stellar/c
 
 **Fifteen emission-line and AGN luminosity properties return erg/s and exceed float32 max:**
 
-Emission lines (from `src/tengri/forward/sed_model.py`):
-- `halpha`, `hbeta`, `lya`
-- `oiii_5007`, `nii_6584`, `oii`
-- `sii_6716`, `sii_6731`
-- `civ_1549`
+Emission lines (11 properties from `src/tengri/forward/sed_model.py`):
+- `civ_1549`, `halpha`, `hbeta`, `lya`, `nii_6548`, `nii_6584`, `oii`, `oiii_4959`, `oiii_5007`, `sii_6717`, `sii_6731`
 
 AGN and X-ray (from `src/tengri/forward/sed_model.py`):
 - `l_x_agn`, `l_x_total`, `l_x_xrb` (X-ray luminosities, ~1e40–1e45 erg/s)
