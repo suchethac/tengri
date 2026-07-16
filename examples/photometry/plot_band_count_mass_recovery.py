@@ -92,7 +92,6 @@ truth_model = tengri.SEDModel.build(
         "slope": -0.7,
     },
     redshift=tengri.Fixed(0.5),
-    approx=tengri.WavePrecomp(),
 )
 
 truth_params = dict(truth_model.spec.sample(jax.random.PRNGKey(42)))
@@ -126,7 +125,6 @@ for _label, band_names in FILTER_SETS:
             "slope": -0.7,
         },
         redshift=tengri.Fixed(0.5),
-        approx=tengri.WavePrecomp(),
     )
 
     # Find indices of current bands in the full set and extract
@@ -174,7 +172,6 @@ for _label, band_names in FILTER_SETS:
             "slope": -0.7,
         },
         redshift=tengri.Fixed(0.5),
-        approx=tengri.WavePrecomp(),
     )
 
     masses_ensemble = []

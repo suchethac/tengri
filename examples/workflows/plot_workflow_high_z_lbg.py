@@ -58,7 +58,6 @@ model = tengri.SEDModel.build(
         "slope": -0.7,
     },
     redshift=tengri.Fixed(z_true),
-    approx=tengri.WavePrecomp(),
 )
 
 # Generate mock data

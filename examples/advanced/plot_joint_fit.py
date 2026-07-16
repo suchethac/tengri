@@ -61,7 +61,6 @@ model = tengri.SEDModel.build(
     sfh={"type": "tsnorm", "*": tengri.FREE, "skew": 0.3, "trunc": 5.0},
     dust={"type": "two_component", "*": tengri.FIXED},
     redshift=tengri.Fixed(0.1),
-    approx=tengri.SpectrumPrecomp(),
 )
 
 true_params = {
