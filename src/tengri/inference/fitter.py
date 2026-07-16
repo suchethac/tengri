@@ -369,6 +369,7 @@ class Fitter:
         use_components=False,
         compile_modes=None,
         cache=None,
+        approx="auto",
     ):
         # ── Auto-extract batched data for hierarchical ForwardModels ─
         # When ``model`` is a ForwardModel whose SubModel publishes
@@ -451,9 +452,6 @@ class Fitter:
                 f"data_type in (photometry, spectroscopy, joint); got {self.data_type!r}."
             )
 
-        # ── Auto-precompute photometry ─────────────────────────────
-        self._auto_precompute_photometry(model)
-
         # ── Calibration ────────────────────────────────────────────
         self._calibration_marginalize = calibration_marginalize
         self._cal_n_poly = cal_n_poly
@@ -461,7 +459,26 @@ class Fitter:
         self._has_spectroscopy = self.data_type in ("spectroscopy", "joint")
 
         # ── Emission lines ─────────────────────────────────────────
+        # Resolved before the approx policy below: the "auto" precompute
+        # config appends FeaturePrecomp when emission lines are fit.
         self._init_emission_lines(model, eline_marginalize, eline_prior_type)
+
+        # ── Fit-time approximation policy (2026-07) ─────────────────
+        # Fits default to the fast precompute LUT (approx="auto"); model
+        # *prediction* stays exact. ``with_approx`` returns a clone, so the
+        # user's original model is untouched and the returned posterior
+        # references this fit model. ``approx=None`` forces the exact
+        # wave-grid path; an explicit config (or tuple) overrides. Spec:
+        # docs/superpowers/specs/2026-07-15-fit-precomp-default-design.md.
+        self.model = self._resolve_fit_approx(model, approx)
+        self.spec = self.model.spec
+
+        # ── Auto-precompute photometry (legacy fused path) ──────────
+        # Only on the exact path — a modern ``approx=`` LUT supersedes it,
+        # and running both would double-precompute.
+        _has_approx = getattr(self.model, "_has_modern_approx", None)
+        if not (callable(_has_approx) and _has_approx()):
+            self._auto_precompute_photometry(self.model)
 
         # ── Parameters ─────────────────────────────────────────────
         self._free_names = self.spec.free_params
@@ -567,6 +584,61 @@ class Fitter:
         if obs is not None:
             return obs.data_type
         return "photometry"
+
+    def _auto_approx_config(self):
+        """Precompute config auto-selected for this fit's data type.
+
+        Photometry -> ``WavePrecomp``; spectroscopy/joint -> ``SpectrumPrecomp``;
+        ``FeaturePrecomp`` is appended when emission lines are fit
+        (``_eline_marginalize`` / ``_eline_fitted``). Returns ``None`` for data
+        types with no LUT mapping (the fit then stays on the exact path).
+        """
+        from tengri.forward.sed_model import (
+            FeaturePrecomp,
+            SpectrumPrecomp,
+            WavePrecomp,
+        )
+
+        if self.data_type in ("spectroscopy", "joint"):
+            base = SpectrumPrecomp()
+        elif self.data_type == "photometry":
+            base = WavePrecomp()
+        else:
+            return None
+        lines = bool(
+            getattr(self, "_eline_marginalize", False) or getattr(self, "_eline_fitted", False)
+        )
+        return (base, FeaturePrecomp()) if lines else base
+
+    def _resolve_fit_approx(self, model: Any, approx):
+        """Select the fit-time forward model per the ``approx`` policy.
+
+        - ``"auto"`` (default): route the fit through the precompute LUT chosen
+          by data type (see :meth:`_auto_approx_config`), unless ``model`` was
+          already built with a modern ``approx=`` — then it is respected as-is.
+        - ``None``: force the exact wave-grid path (overrides a build-time approx).
+        - an explicit config / tuple: use exactly that.
+
+        ``model.with_approx`` returns a clone (or ``self`` for a no-op), so the
+        user's original model object is never mutated. Models that cannot clone
+        (no ``with_approx``) are returned unchanged.
+        """
+        if isinstance(approx, str) and approx != "auto":
+            raise ValueError(
+                f"approx={approx!r} not understood; use 'auto' (default), None "
+                "(exact), or a precompute config (WavePrecomp/SpectrumPrecomp/"
+                "FeaturePrecomp, or a tuple)."
+            )
+        with_approx = getattr(model, "with_approx", None)
+        if not callable(with_approx):
+            return model
+        if isinstance(approx, str):  # "auto"
+            has = getattr(model, "_has_modern_approx", None)
+            if callable(has) and has():
+                return model  # respect the build-time approx
+            cfg = self._auto_approx_config()
+            return model if cfg is None else with_approx(cfg)
+        return with_approx(approx)
 
     def _auto_precompute_photometry(self, model: Any) -> None:
         """Auto-trigger photometry precomputation if conditions are met.
@@ -1552,7 +1624,9 @@ class Fitter:
         sample_kwarg = "n_steps" if method in ("mcmc_raytrace", "raytrace") else "n_samples"
         warmup_kw = {sample_kwarg: 10}
         try:
-            self.run(method=method, key=key, verbose=False, **warmup_kw)
+            # prewarm=False: this throwaway run must not re-enter auto-prewarm
+            # (run -> _auto_prewarm -> prewarm -> run would recurse).
+            self.run(method=method, key=key, verbose=False, prewarm=False, **warmup_kw)
         except Exception:
             return
         if n_chains is not None and n_chains > 1:
@@ -1560,7 +1634,45 @@ class Fitter:
             import contextlib
 
             with contextlib.suppress(Exception):
-                self.run(method=method, key=key, verbose=False, **warmup_kw)
+                self.run(method=method, key=key, verbose=False, prewarm=False, **warmup_kw)
+
+    def _auto_prewarm(self, key) -> None:
+        """JIT-compile the shared loss/grad + predict surface before the fit loop.
+
+        Called by :meth:`run` when ``prewarm=True`` (the default). Compiles the
+        two forward-model-heavy pieces every fit needs — the negative-log-
+        posterior **gradient** (which every backend evaluates and which subsumes
+        the loss compile) and the post-fit predict surface (``predict_photometry``
+        + ``predict_properties`` on the fit model) — by building and evaluating
+        each once, blocked. This populates the persistent JAX cache so the fit
+        loop and immediate posterior-predictive / derived-quantity exploration
+        run warm.
+
+        Deliberately does **not** run a throwaway sampler fit: for optimizer
+        backends (MAP) a throwaway ``run`` would repeat the full optimization,
+        and the method-specific sampler-loop kernel is compiled once on the real
+        run and persisted anyway. Use :meth:`prewarm` for explicit sampler AOT
+        (e.g. per-``n_chains`` NUTS warmup).
+
+        Best-effort: every step is wrapped so a failure here never masks the
+        genuine error the real :meth:`run` would raise.
+        """
+        import contextlib
+
+        import jax as _jax
+
+        if key is None:
+            key = _jax.random.PRNGKey(0)
+        # Loss + gradient: the forward-heavy compile shared by every backend.
+        with contextlib.suppress(Exception):
+            grad_fn = self._get_or_build_grad_fn()
+            init = self._initialize_unbounded(key)
+            _jax.block_until_ready(grad_fn(init, self._data_args))
+        # Post-fit predict surface on the fit model (LUT-honoring accessors).
+        with contextlib.suppress(Exception):
+            warm_p = self.spec.sample(key)
+            _jax.block_until_ready(_jax.jit(self.model.predict_photometry)(warm_p))
+            _jax.block_until_ready(_jax.jit(self.model.predict_properties)(warm_p))
 
     def save_cache(self, path) -> None:
         """Persist this model's adaptation cache (step size + mass matrix) to disk.
@@ -1958,6 +2070,10 @@ class Fitter:
             self._jit_sampler = None
         self._memory_mode = memory_mode
         self._posterior_chunk_size = kwargs.pop("posterior_chunk_size", None)
+        # Auto-prewarm the JIT (loss/grad + sampler + predict surface) before the
+        # fit loop unless opted out. Default True; internal throwaway runs from
+        # prewarm() pass prewarm=False to avoid re-entry.
+        prewarm = kwargs.pop("prewarm", True)
 
         # --- "auto" method: dimensionality-based selection ---
         if method == "auto":
@@ -2010,6 +2126,11 @@ class Fitter:
         # Friendly error if the backend's optional dependency is missing,
         # before we descend into a deep third-party traceback.
         check_requires(entry)
+
+        # Compile the loss/grad + predict surface up front so the fit loop runs
+        # warm and the persistent JAX cache is populated.
+        if prewarm:
+            self._auto_prewarm(key)
 
         # Build the Python-level InferenceContext once. Backends marked
         # ``legacy_fitter=True`` continue to receive the full Fitter
