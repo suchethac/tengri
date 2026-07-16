@@ -1717,27 +1717,6 @@ class PropertyCatalog:
         pred = object.__getattribute__(self, "_prediction")
         return name in pred._model._ensure_property_catalog()
 
-    def get(self, name: str, default=None):
-        """Return property ``name`` if available, else ``default``.
-
-        Mirrors :meth:`dict.get` so the catalog is safe to probe for
-        optional properties without catching :class:`KeyError`::
-
-            mass = pred.properties.get("stellar_mass")
-            sfr = pred.properties.get("sfr_10myr", 0.0)
-
-        Parameters
-        ----------
-        name : str
-            Property name (e.g., ``"stellar_mass"``).
-        default : optional
-            Value returned when the property is not available. Defaults to
-            ``None``.
-        """
-        if name in self:
-            return self[name]
-        return default
-
     def __iter__(self):
         """Iterate over property names."""
         pred = object.__getattribute__(self, "_prediction")
