@@ -1839,6 +1839,16 @@ class Fitter:
             JAX random key. Default ``PRNGKey(42)`` for reproducibility.
             Ignored for deterministic methods (``"map"``, ``"laplace"``).
 
+        prewarm : bool, optional
+            JIT-compile the loss/gradient and the predict surface
+            (``predict_photometry`` / ``predict_properties``) before the fit
+            loop, populating the persistent cache so the fit runs warm and
+            post-fit posterior-predictive / derived-quantity exploration is
+            already compiled. Default ``True``; pass ``False`` for the previous
+            lazy compile-on-first-call behavior. (The fit-time approximation
+            policy is set with ``approx=`` on the :class:`Fitter` constructor /
+            :meth:`ForwardModel.fit`, not here.)
+
         **kwargs
             Method-specific keyword arguments passed to the underlying backend:
 
