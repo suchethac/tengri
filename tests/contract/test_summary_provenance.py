@@ -95,18 +95,18 @@ class TestSummaryRendering:
         assert "[user]" in lines[0]
 
     def test_grouped_summary_includes_wildcard_free_tag(self, grouped_spec):
-        """Wildcard-FREE params show [* FREE]."""
+        """Wildcard-FREE params show [all_params FREE]."""
         out = grouped_spec.summary_str()
         lines = [ln for ln in out.splitlines() if "sfh_dpl_log_total_mass" in ln]
         assert len(lines) == 1
-        assert "[* FREE]" in lines[0]
+        assert "[all_params FREE]" in lines[0]
 
     def test_grouped_summary_includes_wildcard_fixed_tag(self, grouped_spec):
-        """Wildcard-FIXED params show [* FIXED]."""
+        """Wildcard-FIXED params show [all_params FIXED]."""
         out = grouped_spec.summary_str()
         lines = [ln for ln in out.splitlines() if "dust_tau_diff" in ln]
         assert len(lines) == 1
-        assert "[* FIXED]" in lines[0]
+        assert "[all_params FIXED]" in lines[0]
 
     def test_flat_summary_omits_source_column(self):
         """Flat-kwarg specs render the existing summary without a Source column."""
@@ -120,4 +120,4 @@ class TestSummaryRendering:
         assert "Source" not in out
         # Tags should not appear
         assert "[user]" not in out
-        assert "[* FREE]" not in out
+        assert "[all_params FREE]" not in out

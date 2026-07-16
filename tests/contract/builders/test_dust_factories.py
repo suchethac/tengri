@@ -65,7 +65,7 @@ def test_two_component_default_carries_law_strings() -> None:
     out = builders.dust.two_component()
     assert out == {
         "type": "two_component",
-        "*": FIXED,
+        "all_params": FIXED,
         "law_bc": "calzetti",
         "law_diff": "calzetti",
     }
@@ -75,13 +75,13 @@ def test_single_component_default_carries_one_law() -> None:
     out = builders.dust.single_component()
     assert out == {
         "type": "single_component",
-        "*": FIXED,
+        "all_params": FIXED,
         "law_bc": "calzetti",
     }
 
 
 def test_emission_default_does_not_include_settings() -> None:
-    assert builders.dust.emission.dale2014() == {"type": "dale2014", "*": FIXED}
+    assert builders.dust.emission.dale2014() == {"type": "dale2014", "all_params": FIXED}
 
 
 # ── Settings validation ───────────────────────────────────────────
@@ -110,9 +110,9 @@ def test_two_component_with_nested_emission() -> None:
         tau_bc=Uniform(0.0, 2.0),
         emission=builders.dust.emission.dale2014(_=FIXED),
     )
-    assert out["emission"] == {"type": "dale2014", "*": FIXED}
+    assert out["emission"] == {"type": "dale2014", "all_params": FIXED}
     assert out["tau_bc"] == Uniform(0.0, 2.0)
-    assert out["*"] is FREE
+    assert out["all_params"] is FREE
 
 
 def test_emission_kwarg_must_be_dict() -> None:

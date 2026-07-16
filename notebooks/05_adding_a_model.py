@@ -160,7 +160,7 @@ if os.path.exists(SSP_PATH):
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         dust={
             "type": "single_component",
             "law_bc": "calzetti",

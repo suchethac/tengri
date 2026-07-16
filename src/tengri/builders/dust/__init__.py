@@ -13,9 +13,9 @@ The grammar:
 ...     "type": "two_component",
 ...     "law_bc": "calzetti",
 ...     "law_diff": "calzetti",
-...     "*": FREE,
+...     "all_params": FREE,
 ...     "tau_bc": Uniform(0, 4),
-...     "emission": {"type": "dale2014", "*": FIXED},
+...     "emission": {"type": "dale2014", "all_params": FIXED},
 ... }
 
 The factory mirror:
@@ -47,7 +47,7 @@ from tengri.builders._factory import UNSET, _pop_wildcard, short_form
 from tengri.builders.dust import emission  # nested factory namespace
 from tengri.components.dust.attenuation import DUST_LAWS
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FIXED, FREE
+from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
 
 # Param shortlists per dust_model — discovered at import time so adding a
 # new attenuation knob in the registry surfaces here automatically.
@@ -78,7 +78,7 @@ def _discover_attenuation_params(dust_model: str) -> list[str]:
             "type": dust_model,
             "law_bc": "calzetti",
             "law_diff": "calzetti",
-            "*": FREE,
+            WILDCARD_ALIAS: FREE,
         },
     }
     import warnings
@@ -137,7 +137,7 @@ def _make_dust_factory(
                 f"{unknown}. Valid: {valid_kwargs}."
             )
 
-        out: dict[str, Any] = {"type": dust_model, "*": wildcard, **settings}
+        out: dict[str, Any] = {"type": dust_model, WILDCARD_ALIAS: wildcard, **settings}
         for short in short_params:
             if short in kwargs and kwargs[short] is not UNSET:
                 out[short] = kwargs[short]

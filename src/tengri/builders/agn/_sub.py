@@ -21,7 +21,7 @@ from collections.abc import Callable
 from tengri.builders._factory import make_factory, short_form
 from tengri.parameters.groups import _AGN_PARTITION
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FREE
+from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS
 
 
 def _discover_sub_block_params(axis: str, representative_variant: str) -> list[str]:
@@ -37,8 +37,8 @@ def _discover_sub_block_params(axis: str, representative_variant: str) -> list[s
         "sfh": {"type": "dpl"},
         "agn": {
             "type": "composable",
-            "*": FREE,
-            axis: {"type": representative_variant, "*": FREE},
+            WILDCARD_ALIAS: FREE,
+            axis: {"type": representative_variant, WILDCARD_ALIAS: FREE},
         },
     }
     import warnings

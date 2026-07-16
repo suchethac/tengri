@@ -95,23 +95,23 @@ def test_every_factory_has_a_real_signature(variant: str) -> None:
 
 
 def test_default_call_produces_minimal_dict() -> None:
-    assert builders.sfh.dpl() == {"type": "dpl", "*": FIXED}
+    assert builders.sfh.dpl() == {"type": "dpl", "all_params": FIXED}
 
 
 def test_wildcard_free() -> None:
-    assert builders.sfh.dpl(_=FREE) == {"type": "dpl", "*": FREE}
+    assert builders.sfh.dpl(_=FREE) == {"type": "dpl", "all_params": FREE}
 
 
 def test_per_param_override_is_preserved() -> None:
     prior = Uniform(1.0, 3.0)
     out = builders.sfh.dpl(beta=prior)
-    assert out == {"type": "dpl", "*": FIXED, "beta": prior}
+    assert out == {"type": "dpl", "all_params": FIXED, "beta": prior}
 
 
 def test_wildcard_plus_explicit_override() -> None:
     pin = Fixed(1.0)
     out = builders.sfh.dpl(_=FREE, log_total_mass=pin)
-    assert out == {"type": "dpl", "*": FREE, "log_total_mass": pin}
+    assert out == {"type": "dpl", "all_params": FREE, "log_total_mass": pin}
 
 
 # ── Validation: typos and bad sentinels ───────────────────────────
@@ -191,10 +191,10 @@ def test_burst_and_field_factories_emit_valid_dicts() -> None:
     though they cannot be used standalone as ``sfh=``."""
     burst_out = builders.sfh.burst()
     assert burst_out["type"] == "burst"
-    assert burst_out["*"] is FIXED
+    assert burst_out["all_params"] is FIXED
     field_out = builders.sfh.field(_=FREE)
     assert field_out["type"] == "field"
-    assert field_out["*"] is FREE
+    assert field_out["all_params"] is FREE
 
 
 # ── Docstring smoke ───────────────────────────────────────────────

@@ -20,7 +20,7 @@ import warnings
 from collections.abc import Callable
 from typing import Any
 
-from tengri.parameters.sentinels import FIXED, FREE
+from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
 
 # Sentinel marking a parameter that was not specified at call time. We
 # can't use ``None`` because ``None`` is a legitimate dict value users
@@ -88,7 +88,7 @@ def make_factory(
             if short in kwargs and kwargs[short] is not UNSET:
                 flag_values[flag] = True
 
-        out: dict[str, Any] = {"type": variant, "*": wildcard}
+        out: dict[str, Any] = {"type": variant, WILDCARD_ALIAS: wildcard}
         for flag, value in flag_values.items():
             if value:
                 out[flag] = True
@@ -140,7 +140,7 @@ def make_factory(
     lines.append(
         "    Wildcard policy for parameters not explicitly named. ``FREE`` "
         "makes them fit; ``FIXED`` (default) pins them to their registry "
-        "center. Mirrors the ``'*'`` key in the dict grammar."
+        "center. Mirrors the ``'all_params'`` key in the dict grammar."
     )
     for flag in bool_flags:
         lines.append(f"{flag} : bool, optional")

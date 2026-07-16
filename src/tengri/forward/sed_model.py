@@ -5632,7 +5632,7 @@ class SEDModel:
                 "nebular backend: emission is baked into the SSP grid and "
                 "no discrete line catalog is published. To predict line "
                 "luminosities, build the model with a photoionization "
-                "backend, e.g. neb={'type': 'cue', '*': FIXED} (requires "
+                "backend, e.g. neb={'type': 'cue', 'all_params': FIXED} (requires "
                 "a bare-stellar SSP) or neb={'type': 'cloudy_grid', ...}. "
                 "For a quick narrow-band measurement on the BakedIn SED, "
                 "integrate model._predict_rest_sed(params).sed across the "
@@ -7090,8 +7090,9 @@ class SEDModel:
         ssp_data : SSPData
             Pre-loaded SSP grid (from :func:`load_ssp_data`).
         sfh, dust, neb, agn, igm, radio, xray : dict, optional
-            Per-component nested dicts. Each may carry ``'type'``, ``'*'``
-            (wildcard set to :data:`~tengri.FREE` or :data:`~tengri.FIXED`),
+            Per-component nested dicts. Each may carry ``'type'``,
+            ``'all_params'`` (wildcard set to :data:`~tengri.FREE` or
+            :data:`~tengri.FIXED`; the ``'*'`` synonym is also accepted),
             and per-parameter overrides. See
             :func:`tengri.parameters.parse_groups` for the full grammar.
         redshift, apply_igm : scalar, Distribution, or sentinel, optional
