@@ -10,7 +10,45 @@ import jax
 # Re-export MockData so callers can import from one place
 from tengri.forward.sed_model import MockData
 
-__all__ = ["MockData", "generate_mock"]
+__all__ = ["MockData", "MockDict", "generate_mock"]
+
+
+class MockDict(dict):
+    """A ``dict`` that also exposes its keys as attributes.
+
+    ``generate_mock`` returns this container so that both mapping access
+    (``mock["flux_obs"]``) and attribute access (``mock.flux_obs``) work. That
+    matches the attribute surface of the :class:`MockData` object returned by
+    :meth:`SEDModel.mock`, so notebook and user code written against either
+    surface works against both — the recurring "dict vs object" footgun.
+
+    It is a genuine ``dict`` (``isinstance(mock, dict)`` is ``True`` and every
+    ``dict`` method is available), so existing key-based consumers are
+    unaffected.
+
+    Notes
+    -----
+    Registered as a JAX pytree that flattens identically to a plain ``dict``
+    (sorted keys), so ``jax.tree_util`` operations over a ``generate_mock``
+    result are unchanged.
+    """
+
+    def __getattr__(self, name: str):
+        # __getattr__ only fires when normal attribute lookup fails, so dict
+        # methods (keys/get/items/...) are never shadowed.
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(
+                f"MockDict has no key {name!r} (available: {sorted(self)})"
+            ) from None
+
+
+jax.tree_util.register_pytree_node(
+    MockDict,
+    lambda d: (tuple(d[k] for k in sorted(d)), tuple(sorted(d))),
+    lambda keys, values: MockDict(zip(keys, values)),
+)
 
 
 def generate_mock(model, params, key=None, snr=20.0):
@@ -35,8 +73,11 @@ def generate_mock(model, params, key=None, snr=20.0):
 
     Returns
     -------
-    dict
-        Mock observation data with keys:
+    MockDict
+        A ``dict`` subclass (so ``mock["flux_obs"]`` works) that also exposes
+        its keys as attributes (so ``mock.flux_obs`` works, matching the
+        :class:`MockData` object returned by :meth:`SEDModel.mock`). Keys:
+
         - ``flux_true`` : noiseless predicted photometry [erg/s/cm²/Hz]
         - ``noise`` : noise standard deviation per band [erg/s/cm²/Hz]
         - ``params`` : the input parameter values
@@ -61,11 +102,11 @@ def generate_mock(model, params, key=None, snr=20.0):
     flux_true = model.predict_photometry(params)
     noise = flux_true / snr
 
-    result = {
-        "flux_true": flux_true,
-        "noise": noise,
-        "params": params,
-    }
+    result = MockDict(
+        flux_true=flux_true,
+        noise=noise,
+        params=params,
+    )
 
     if key is not None:
         flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)
