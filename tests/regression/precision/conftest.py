@@ -1,0 +1,39 @@
+import jax
+import numpy as np
+import pytest
+
+pytestmark = pytest.mark.regression_bug
+
+Z_MASS_GRID = [(0.01, 10.0), (0.1, 8.0), (0.5, 11.0),
+               (1.0, 10.0), (3.0, 10.0), (6.0, 9.0)]
+
+
+@pytest.fixture(scope="module")
+def ssp_bare():
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+    return load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+
+
+def build_model(ssp, forward_dtype):
+    from tengri import SEDModel, recipes
+    from tengri.observation import Observation, Photometry
+    obs = Observation(photometry=Photometry.from_names(
+        ["galex_fuv", "sdss_r", "wise_w1", "wise_w4", "herschel_250"]))
+    recipe = recipes.agn_panchromatic()
+    recipe["approx"] = None
+    return SEDModel.build(ssp_data=ssp, observation=obs,
+                          forward_dtype=forward_dtype, **recipe)
+
+
+def forward_outputs(model, z, log10_mass):
+    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    p["redshift"] = z
+    p["sfh_dpl_log_total_mass"] = log10_mass
+    pred = model.predict(p)
+    return {
+        "photometry": np.asarray(pred.photometry(), dtype=np.float64),
+        "rest_sed": np.asarray(pred.rest_sed(), dtype=np.float64),
+        "halpha": np.float64(pred.lines.halpha),
+        "l_tir": np.float64(pred.properties["l_tir"]),
+        "q_h": np.float64(pred.properties["q_h"]),
+    }
