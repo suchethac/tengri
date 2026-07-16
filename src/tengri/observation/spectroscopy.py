@@ -144,6 +144,7 @@ class Spectroscopy:
     eline_broad: bool = False
     eline_broad_fwhm_min_kms: float = 500.0
     covariance: jnp.ndarray | None = dataclasses.field(default=None, hash=False)
+    resolution_matrix: object | None = dataclasses.field(default=None, hash=False)
 
     def __post_init__(self) -> None:
         _valid_modes = ("off", "fixed", "marginalized", "fitted")
@@ -169,6 +170,13 @@ class Spectroscopy:
             object.__setattr__(self, "_cov_inv", jnp.linalg.inv(cov))
         else:
             object.__setattr__(self, "_cov_inv", None)
+        if self.resolution_matrix is not None:
+            data = jnp.asarray(self.resolution_matrix.data)
+            if data.shape[1] != len(self.wave_obs):
+                raise ValueError(
+                    f"resolution_matrix has {data.shape[1]} columns but wave_obs "
+                    f"has length {len(self.wave_obs)}"
+                )
 
     # ── Properties ────────────────────────────────────────────────
 
@@ -241,6 +249,24 @@ class Spectroscopy:
 
         """
         return self._cov_inv is not None
+
+    @property
+    def has_resolution_matrix(self) -> bool:
+        """Whether a banded instrument resolution matrix is configured (#1163).
+
+        Returns
+        -------
+        bool
+            True if a :class:`~tengri.observation.banded.BandedMatrix` is set,
+            in which case it replaces the Gaussian ``apply_lsf`` in projection
+            (the DESI/PFS spectro-perfectionism convention; Bolton & Schlegel
+            2010).
+
+        Notes
+        -----
+        Read-only property; determined at initialization.
+        """
+        return self.resolution_matrix is not None
 
     @property
     def cov_inv(self) -> jnp.ndarray | None:
