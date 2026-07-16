@@ -4,25 +4,49 @@ import pytest
 
 pytestmark = pytest.mark.regression_bug
 
-Z_MASS_GRID = [(0.01, 10.0), (0.1, 8.0), (0.5, 11.0),
-               (1.0, 10.0), (3.0, 10.0), (6.0, 9.0)]
+Z_MASS_GRID = [(0.01, 10.0), (0.1, 8.0), (0.5, 11.0), (1.0, 10.0), (3.0, 10.0), (6.0, 9.0)]
 
 
 @pytest.fixture(scope="module")
 def ssp_bare():
     from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+
     return load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 
 
 def build_model(ssp, forward_dtype):
     from tengri import SEDModel, recipes
     from tengri.observation import Observation, Photometry
-    obs = Observation(photometry=Photometry.from_names(
-        ["galex_fuv", "sdss_r", "wise_w1", "wise_w4", "herschel_250"]))
+
+    obs = Observation(
+        photometry=Photometry.from_names(
+            ["galex_fuv", "sdss_r", "wise_w1", "wise_w4", "herschel_250"]
+        )
+    )
     recipe = recipes.agn_panchromatic()
     recipe["approx"] = None
-    return SEDModel.build(ssp_data=ssp, observation=obs,
-                          forward_dtype=forward_dtype, **recipe)
+    return SEDModel.build(ssp_data=ssp, observation=obs, forward_dtype=forward_dtype, **recipe)
+
+
+def build_minimal_cue_model(ssp, forward_dtype):
+    """Build a minimal stellar+Cue model (no AGN, dust IR, radio, xray).
+
+    Used to isolate the ionizing-SED float32 safety check without AGN
+    SKIRTOR interpolation failures that affect pure-f32 tests.
+    """
+    from tengri import FIXED, Fixed, SEDModel
+    from tengri.observation import Observation, Photometry
+
+    obs = Observation(photometry=Photometry.from_names(["sdss_r", "sdss_i"]))
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl", "*": FIXED},
+        neb={"type": "cue", "*": FIXED},
+        redshift=Fixed(1.0),
+        approx=None,
+        forward_dtype=forward_dtype,
+    )
 
 
 def forward_outputs(model, z, log10_mass):

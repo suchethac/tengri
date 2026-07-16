@@ -4,6 +4,7 @@ Validates that reparametrizing the ionizing-SED scale as a log offset
 prevents float32 overflow in the Cue nebular ionizing flux.
 Balmer decrement H-alpha/H-beta ≈ 2.86 (Case B, independent of total mass scale).
 """
+
 import jax
 import numpy as np
 import pytest
@@ -72,4 +73,47 @@ def test_balmer_decrement_pure_float32(ssp_bare):
     # For now, just check it's finite and in range.
     assert np.isfinite(dec32), f"pure-f32 Balmer decrement is non-finite: {dec32}"
     assert 2.7 < dec32 < 3.1, f"pure-f32 Balmer decrement {dec32} off Case B range"
+    assert_allclose(dec32, dec64, rtol=5e-3)
+
+
+def test_ionizing_sed_pure_float32_cue_only(ssp_bare):
+    """(C) Pure-float32 isolated stellar+Cue (no AGN SKIRTOR blocker).
+
+    Build a minimal model with stellar SFH + Cue nebular only (no AGN, dust IR,
+    radio, xray). Run under pure float32 (jax.enable_x64(False)) to validate
+    that the ionizing-SED reparametrization (_sed_ion via apply_log10_scale)
+    is safe and does not overflow.
+
+    This test isolates the ionizing-SED path without the AGN SKIRTOR dtype
+    mismatch that affects the panchromatic test_B.
+    """
+    from .conftest import build_minimal_cue_model
+
+    # Build f64 reference
+    m64 = build_minimal_cue_model(ssp_bare, "float64")
+    p = dict(m64.spec.sample(jax.random.PRNGKey(0)))
+    pred64 = m64.predict(p)
+    q_h_64 = float(pred64.properties["q_h"])
+    dec64 = float(pred64.properties["balmer_decrement"])
+
+    # Build and predict under pure float32
+    with jax.enable_x64(False):
+        m32 = build_minimal_cue_model(ssp_bare, "float32")
+        pred32 = m32.predict(p)
+        q_h_32 = float(pred32.properties["q_h"])
+        dec32 = float(pred32.properties["balmer_decrement"])
+
+    # Validate ionizing path (q_h) is finite
+    assert np.isfinite(q_h_32), (
+        f"pure-f32 q_h is non-finite: {q_h_32}; indicates _sed_ion overflow in Cue ionizing flux"
+    )
+
+    # Validate Balmer decrement is finite and in Case B range
+    assert np.isfinite(dec32), (
+        f"pure-f32 Balmer decrement is non-finite: {dec32}; indicates _sed_ion scale issue"
+    )
+    assert 2.5 < dec32 < 3.2, f"pure-f32 Balmer decrement {dec32} outside Case B range [2.5, 3.2]"
+
+    # Compare to f64 reference
+    assert_allclose(q_h_32, q_h_64, rtol=5e-3)
     assert_allclose(dec32, dec64, rtol=5e-3)
