@@ -146,7 +146,7 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
 
     def cat3d_wind_grid(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 44.0,
+        agn_log_lbol: float = 10.0,
         agn_cos_inc: float = 0.86602540378443864,
         agn_a_cat3d: float = -2.0,
         agn_fwd_cat3d: float = 1.0,
@@ -160,7 +160,7 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
         wavelength : array_like, shape (n_wave,)
             Rest-frame wavelength grid. [Å]
         agn_log_lbol : float, optional
-            ``log10(L_bol / L_sun)``. Default 44.0.
+            ``log10(L_bol / L_sun)``. Default 10.0.
         agn_cos_inc : float, optional
             Cosine of inclination (1 = face-on). Default 0.5.
         agn_a_cat3d : float, optional
@@ -247,7 +247,7 @@ def cat3d_wind_sed(*args, **kwargs) -> jnp.ndarray:
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
     agn_log_lbol : float, optional
-        ``log10(L_bol / L_sun)``. Default 44.0.
+        ``log10(L_bol / L_sun)``. Default 10.0.
     agn_cos_inc : float, optional
         Cosine of inclination. Default 0.5.
     agn_a_cat3d : float, optional
