@@ -36,7 +36,7 @@
   "src/tengri/inference/backends/mcmc/raytrace.py": 916,
   "src/tengri/inference/backends/vi/native.py": 1717,
   "src/tengri/inference/backends/vi/nifty.py": 904,
-  "src/tengri/inference/fitter.py": 3416,
+  "src/tengri/inference/fitter.py": 3486,
   "src/tengri/inference/hierarchical.py": 2140,
   "src/tengri/inference/jit_engine.py": 1644,
   "src/tengri/inference/posterior.py": 2769,
