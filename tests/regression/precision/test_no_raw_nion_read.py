@@ -7,10 +7,10 @@ that all allow-listed files still contain their expected patterns.
 
 Allowed exceptions (Tier B deferred — linear q_h / erg/s paths):
 - components/stellar/component.py — _q_h_fn linear q_h property (photons/s ~1e56)
-- forward/component_factory.py — state_to_ionizing_quantities.q_h linear surface + docstrings
-- components/nebular/line_precompute.py — build-path _nion_of_state (f64 build; L_line erg/s + 4pi dL^2)
+- forward/component_factory.py — state_to_ionizing_quantities.q_h linear surface
+- components/nebular/line_precompute.py — build-path _nion_of_state (erg/s + 4pi dL^2)
 - components/nebular/nebular_grid_precompute.py — build-path _nion_of_state (f64 build)
-- forward/sed_model.py — fast-line path feeds reconstruct_nebular_line_lums (erg/s ~1e41)
+- forward/sed_model.py — fast-line path feeds the erg/s line reconstruct (~1e41)
 
 Each entry will be removed when its corresponding Tier B item (2 or 3) migration lands
 (see issue #1206).
@@ -34,11 +34,11 @@ SRC = pathlib.Path("src/tengri")
 # Controller-authorized allow-list: each file mapped to its rationale.
 # When a file is converted (Tier B item 2/3 migration), remove its entry and rationale.
 ALLOW = {
-    "components/stellar/component.py": "Tier B item 3 — _q_h_fn linear q_h property (photons/s ~1e56)",
-    "forward/component_factory.py": "Tier B item 3 — state_to_ionizing_quantities.q_h linear surface + docstrings",
-    "components/nebular/line_precompute.py": "Tier B item 2/3 — build-path _nion_of_state (f64 build; L_line erg/s + 4pi dL^2)",
-    "components/nebular/nebular_grid_precompute.py": "Tier B item 2/3 — build-path _nion_of_state (f64 build)",
-    "forward/sed_model.py": "Tier B item 3 — fast-line path feeds reconstruct_nebular_line_lums (erg/s ~1e41)",
+    "components/stellar/component.py": "Tier B item 3 — _q_h_fn linear q_h property (~1e56)",
+    "forward/component_factory.py": "Tier B item 3 — state_to_ionizing_quantities.q_h linear",
+    "components/nebular/line_precompute.py": "Tier B item 2/3 — build-path _nion_of_state (erg/s)",
+    "components/nebular/nebular_grid_precompute.py": "Tier B item 2/3 — build _nion_of_state",
+    "forward/sed_model.py": "Tier B item 3 — fast-line feeds the erg/s reconstruct (~1e41)",
 }
 
 # Match raw nion-reader patterns: derived["nion"] or derived.get("nion"
@@ -72,5 +72,5 @@ def test_no_raw_nion_read():
     stale = set(ALLOW.keys()) - found_files
     assert not stale, (
         f"stale allow-list entries (files no longer containing the pattern): {stale}. "
-        f"If Tier B item 2/3 migration converted them, remove the entry and rationale from ALLOW dict."
+        f"If a Tier B item 2/3 migration converted them, remove the entry from ALLOW."
     )

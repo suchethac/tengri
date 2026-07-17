@@ -24,30 +24,27 @@ def test_log_q_h_property(ssp_bare):
     model = build_minimal_cue_model(ssp_bare, forward_dtype="float64")
 
     # 1. Check availability
-    assert "log_q_h" in model.available_properties, (
-        "log_q_h should be in available_properties"
-    )
+    assert "log_q_h" in model.available_properties, "log_q_h should be in available_properties"
 
     # Predict
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
     pred = model.predict(params)
 
     # 2. Check sugar (pred.log_q_h equals pred.properties["log_q_h"])
-    assert jnp.allclose(
-        pred.log_q_h, pred.properties["log_q_h"], atol=0.0
-    ), "sugar accessor must be exact"
+    assert jnp.allclose(pred.log_q_h, pred.properties["log_q_h"], atol=0.0), (
+        "sugar accessor must be exact"
+    )
 
     # 3. Check finiteness and consistency (log_q_h = log10(q_h))
     log_q_h = np.float64(pred.log_q_h)
     q_h = np.float64(pred.q_h)
     assert np.isfinite(log_q_h), "log_q_h must be finite"
     assert np.isfinite(q_h), "q_h must be finite in float64"
-    assert np.allclose(
-        log_q_h, np.log10(q_h), rtol=1e-12
-    ), "log_q_h should equal log10(q_h)"
+    assert np.allclose(log_q_h, np.log10(q_h), rtol=1e-12), "log_q_h should equal log10(q_h)"
 
     # 4. Pure float32: log_q_h finite, q_h overflows
-    with jax.disable_jit():  # Avoid compile overhead; focus on forward logic
+    # disable_jit keeps the forward eager so the float32 overflow is observable
+    with jax.disable_jit():
         with jax.enable_x64(False):
             # Rebuild model inside f32 context
             model_f32 = build_minimal_cue_model(ssp_bare, forward_dtype="float32")
