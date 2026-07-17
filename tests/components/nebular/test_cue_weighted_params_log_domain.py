@@ -90,7 +90,7 @@ def test_f64_exactness_vs_frozen_arithmetic():
     sfh_names = ["young_burst", "older_population"]
 
     for met_abs in metallicities:
-        for sfh_idx, sfh_label in enumerate(sfh_names):
+        for sfh_label in sfh_names:
             # Create a test SFH weighting
             log_ages = (
                 jnp.log10(be._ssp_ages_yr)
@@ -114,7 +114,7 @@ def test_f64_exactness_vs_frozen_arithmetic():
             # Get interpolated parameters for this population
             young_mask = ssp_log_ages <= _MAX_NEB_LOG_AGE
             ionspec_all, logqion_all = jax.vmap(
-                lambda log_age_yr: interpolate_ionizing_params(
+                lambda log_age_yr, met_abs=met_abs: interpolate_ionizing_params(
                     be._ionspec_table,
                     be._logqion_table,
                     be._ssp_lgmet,
@@ -125,7 +125,7 @@ def test_f64_exactness_vs_frozen_arithmetic():
             )(jnp.asarray(ssp_log_ages))
 
             log_seglum_all = jax.vmap(
-                lambda log_age_yr: interpolate_ionizing_seglum(
+                lambda log_age_yr, met_abs=met_abs: interpolate_ionizing_seglum(
                     be._seglum_table,
                     be._ssp_lgmet,
                     be._ssp_log_age_yr,
@@ -212,7 +212,7 @@ def test_pure_float32_correctness():
         be32 = CueBackend(_CUE_WEIGHTS, ssp_data=ssp)
         # CRITICAL: assert the backend was rebuilt in f32
         assert be32._logqion_table.dtype == jnp.float32, (
-            f"CueBackend was NOT rebuilt in f32 context: _logqion_table dtype={be32._logqion_table.dtype}"
+            f"CueBackend was NOT rebuilt in f32 context: dtype={be32._logqion_table.dtype}"
         )
 
         # Convert inputs to f32
