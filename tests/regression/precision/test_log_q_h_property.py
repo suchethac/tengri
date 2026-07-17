@@ -44,22 +44,21 @@ def test_log_q_h_property(ssp_bare):
 
     # 4. Pure float32: log_q_h finite, q_h overflows
     # disable_jit keeps the forward eager so the float32 overflow is observable
-    with jax.disable_jit():
-        with jax.enable_x64(False):
-            # Rebuild model inside f32 context
-            model_f32 = build_minimal_cue_model(ssp_bare, forward_dtype="float32")
-            params_f32 = dict(model_f32.spec.sample(jax.random.PRNGKey(0)))
-            pred_f32 = model_f32.predict(params_f32)
+    with jax.disable_jit(), jax.enable_x64(False):
+        # Rebuild model inside f32 context
+        model_f32 = build_minimal_cue_model(ssp_bare, forward_dtype="float32")
+        params_f32 = dict(model_f32.spec.sample(jax.random.PRNGKey(0)))
+        pred_f32 = model_f32.predict(params_f32)
 
-            log_q_h_f32 = np.asarray(pred_f32.log_q_h, dtype=np.float32)
-            q_h_f32 = np.asarray(pred_f32.q_h, dtype=np.float32)
+        log_q_h_f32 = np.asarray(pred_f32.log_q_h, dtype=np.float32)
+        q_h_f32 = np.asarray(pred_f32.q_h, dtype=np.float32)
 
-            # log_q_h must be finite
-            assert np.isfinite(log_q_h_f32), (
-                "log_q_h must be finite in pure float32 (the whole point)"
-            )
+        # log_q_h must be finite
+        assert np.isfinite(log_q_h_f32), (
+            "log_q_h must be finite in pure float32 (the whole point)"
+        )
 
-            # q_h overflows to inf (the problem we're solving)
-            assert not np.isfinite(q_h_f32), (
-                "q_h should NOT be finite in pure float32 (overflow ~1e56)"
-            )
+        # q_h overflows to inf (the problem we're solving)
+        assert not np.isfinite(q_h_f32), (
+            "q_h should NOT be finite in pure float32 (overflow ~1e56)"
+        )
