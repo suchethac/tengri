@@ -3127,6 +3127,50 @@ class Fitter:
 
         return results
 
+    def _memo_batch_map_kernel(self, key, builder):
+        """Cache a ``jax.jit(jax.vmap(...))`` batch-MAP kernel on this Fitter.
+
+        The vmapped optimizer kernel is a *fresh* closure on every
+        :meth:`fit_batch` call, and a fresh function object misses
+        ``jax.jit``'s compilation cache — so a catalog processed in repeated
+        same-shape ``fit_batch("map")`` calls recompiles the (expensive)
+        vmapped loss each time. Memoizing the wrapper object under a key that
+        fully determines the closure lets ``jax.jit`` reuse the compiled
+        executable across calls.
+
+        Safety: the observed data threads through as a *traced argument*
+        (never the closure), and ``loss_fn`` is already structurally cached
+        (:meth:`_get_or_build_loss_fn`), so the only closure-defining state is
+        the optimizer configuration carried in ``key``. The cache lives on the
+        Fitter instance, whose model structure is fixed at construction, so a
+        cached kernel is only ever reused for the same model structure and the
+        same optimizer config — per-galaxy data still flows in fresh through the
+        traced ``batch_data_args``. ``key=None`` (e.g. a caller-supplied custom
+        optimizer we cannot fingerprint) disables the memo — always build fresh
+        rather than risk a stale kernel.
+
+        Parameters
+        ----------
+        key : hashable or None
+            Signature that fully determines the built kernel, or ``None`` to
+            skip caching.
+        builder : callable
+            Zero-arg factory returning the ``jax.jit(jax.vmap(...))`` wrapper.
+
+        Returns
+        -------
+        callable
+            The (possibly cached) compiled batch kernel.
+        """
+        if key is None:
+            return builder()
+        cache = self.__dict__.setdefault("_batch_map_kernel_cache", {})
+        fn = cache.get(key)
+        if fn is None:
+            fn = builder()
+            cache[key] = fn
+        return fn
+
     def _fit_batch_vmap_map(self, batch, *, key, verbose=True, **kwargs):
         """Vectorized MAP optimization over a batch using jax.vmap.
 
@@ -3185,7 +3229,11 @@ class Fitter:
                     n_steps,
                 )
 
-            batch_result = jax.jit(jax.vmap(solver.run))(params_batch, batch_data_args)
+            run_kernel = self._memo_batch_map_kernel(
+                ("jaxopt", optimizer, int(n_steps), float(tol)),
+                lambda: jax.jit(jax.vmap(solver.run)),
+            )
+            batch_result = run_kernel(params_batch, batch_data_args)
 
             t_total = time.time() - t0
             if verbose:
@@ -3261,7 +3309,16 @@ class Fitter:
             new_params = optax.apply_updates(params, updates)
             return new_params, new_opt_state, loss
 
-        batch_step = jax.jit(jax.vmap(single_step))
+        # Memoize the vmapped step so repeated same-config fit_batch("map")
+        # calls reuse the compiled kernel (a fresh closure would miss jax.jit's
+        # cache). Only string optimizers are fingerprintable; a caller-supplied
+        # custom optax object disables the memo (build fresh).
+        _opt_memo_key = (
+            ("optax", optimizer, float(learning_rate)) if isinstance(optimizer, str) else None
+        )
+        batch_step = self._memo_batch_map_kernel(
+            _opt_memo_key, lambda: jax.jit(jax.vmap(single_step))
+        )
 
         params = params_batch
         opt_states = opt_states_batch
