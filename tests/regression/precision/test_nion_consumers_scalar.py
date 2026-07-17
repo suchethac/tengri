@@ -12,11 +12,11 @@ and the factory (state_to_ionizing_quantities) through a shared path.
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
 from tengri.utils.scale import pow10
+
 from .conftest import build_minimal_cue_model
 
 pytestmark = pytest.mark.regression_bug
@@ -92,8 +92,8 @@ class TestXiIonLogDomain:
         Build a synthetic stellar SED (1000-1700 Å FUV range plus filler)
         and verify xi_ion parity across a grid of log_q_h.
         """
-        from tengri.utils.sed_quantities import compute_xi_ion_from_log_qh
         from tengri.utils.physics_constants import C_AA
+        from tengri.utils.sed_quantities import compute_xi_ion_from_log_qh
 
         # Synthetic wave grid (Angstrom, ascending)
         wave = jnp.array([500.0, 700.0, 1000.0, 1200.0, 1500.0, 1700.0, 2500.0])
@@ -142,42 +142,32 @@ class TestXiIonLogDomain:
         """
         from tengri.utils.sed_quantities import (
             compute_xi_ion_from_log_qh,
-            compute_fuv_flux,
         )
-        from tengri.utils.physics_constants import C_AA
 
         # Synthetic f32 SED in the 1000-1700 Å range
         wave_f32 = jnp.asarray(
             [500.0, 700.0, 1000.0, 1200.0, 1500.0, 1700.0, 2500.0], dtype=jnp.float32
         )
-        sed_f32 = jnp.asarray(
-            [1e27, 1e27, 1e28, 1e28, 1e28, 1e28, 1e27], dtype=jnp.float32
-        )
+        sed_f32 = jnp.asarray([1e27, 1e27, 1e28, 1e28, 1e28, 1e28, 1e27], dtype=jnp.float32)
 
         log_q_h_f32 = jnp.asarray(56.0, dtype=jnp.float32)
 
         with jax.enable_x64(False):
             # Log-domain must stay finite
             xi_ion_log = compute_xi_ion_from_log_qh(log_q_h_f32, sed_f32, wave_f32)
-            assert jnp.isfinite(xi_ion_log), (
-                f"log-domain xi_ion is non-finite: {xi_ion_log}"
-            )
+            assert jnp.isfinite(xi_ion_log), f"log-domain xi_ion is non-finite: {xi_ion_log}"
 
             # Verify magnitude is reasonable (Hz/erg, in reasonable range)
             # In pure f32, the magnitude may be somewhat different due to
             # reduced precision, but should not be pathological
-            assert xi_ion_log > 1e10, (
-                f"xi_ion magnitude too small: {xi_ion_log}"
-            )
+            assert xi_ion_log > 1e10, f"xi_ion magnitude too small: {xi_ion_log}"
 
             # Verify f64 reference for comparison (we expect rtol≈5e-3 in pure f32)
             # Compute the f64 reference using the same inputs (but accessed as f64)
             xi_ion_f64_ref = float(
                 compute_xi_ion_from_log_qh(
                     jnp.asarray(56.0, dtype=jnp.float64),
-                    jnp.asarray(
-                        [1e27, 1e27, 1e28, 1e28, 1e28, 1e28, 1e27], dtype=jnp.float64
-                    ),
+                    jnp.asarray([1e27, 1e27, 1e28, 1e28, 1e28, 1e28, 1e27], dtype=jnp.float64),
                     jnp.asarray(
                         [500.0, 700.0, 1000.0, 1200.0, 1500.0, 1700.0, 2500.0],
                         dtype=jnp.float64,
