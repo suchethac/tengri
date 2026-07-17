@@ -836,7 +836,7 @@ def skirtor_agn(
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float, optional
-        log10 of bolometric luminosity [Lsun]. Default 44.0.
+        log10 of bolometric luminosity [Lsun]. Default 11.0.
     agn_frac : float, optional
         AGN luminosity fraction [dimensionless]. Default 0.1.
     agn_tau_skirtor : float, optional
@@ -982,7 +982,7 @@ def silva04_agn(
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
     agn_log_lbol : float, optional
-        ``log10(L_bol / L_sun)``. Default 44.0.
+        ``log10(L_bol / L_sun)``. Default 11.0.
     agn_frac : float, optional
         Overall AGN luminosity fraction applied on top of the
         disc-plus-torus sum. Default 0.1.
@@ -1039,7 +1039,7 @@ def cat3d_wind_agn(
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
     agn_log_lbol : float, optional
-        ``log10(L_bol / L_sun)``. Default 44.0.
+        ``log10(L_bol / L_sun)``. Default 11.0.
     agn_frac : float, optional
         Overall AGN luminosity fraction applied on top of the
         disc-plus-torus sum. Default 0.1.
@@ -1456,7 +1456,7 @@ def unified_nlr_blr(
         i.e. subtract :math:`\\approx 33.58`. Typical bright Seyfert: 10.5;
         bright quasar: 12.5. The default ``44.0`` is a legacy test fixture
         that is **not a physical AGN luminosity** — set this parameter
-        explicitly. See module-level "Convention" note. Default 44.0.
+        explicitly. See module-level "Convention" note. Default 11.0.
     agn_cos_inc : float
         Cosine of inclination angle (0 = edge-on/Type 2,
         1 = face-on/Type 1). Synthesizer uses inclination in degrees;

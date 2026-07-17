@@ -678,6 +678,9 @@ _CURATED_DIR = (
     "search",
     "suggest_parameters",
     "cite_components",
+    "print_components_bibtex",
+    "describe_agn_block",
+    "describe_recipe",
     "tutorial",
     "examples",
     "explain",
@@ -726,6 +729,9 @@ _CURATED_DIR = (
     "print_citations",
     "print_logo",
     "register_component",
+    "cosmology",
+    "units",
+    "plot",
     "__version__",
 )
 

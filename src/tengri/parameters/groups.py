@@ -609,10 +609,16 @@ def parse_groups(**kwargs) -> Parameters:
     ... )
     >>> assert "sfh_dpl_alpha" in params.free_params
     """
-    # ── Pass 0: Normalize the preferred ``all_params`` wildcard alias ──
+    # ── Pass 0a: Normalize the preferred ``all_params`` wildcard alias ──
     # Rewrite ``all_params`` -> ``'*'`` in every group dict (and nested
     # sub-block) so all downstream logic operates on the single canonical key.
     kwargs = {key: _normalize_wildcard_keys(value) for key, value in kwargs.items()}
+    # ── Pass 0b: Normalize the sfh 'field' modulator sub-block ─────────
+    # Rewrite sfh={'type': t, 'field': {...}} → sfh={'type': [t, 'field'], ...}
+    # so the stochastic field is reachable from the natural nested-dict idiom.
+    # Runs after wildcard normalization, so a field sub-block written with the
+    # ``all_params`` alias is already canonicalized to ``'*'`` before scoping.
+    kwargs = _normalize_sfh_field(kwargs)
 
     # ── Pass 1: Translate structural choices ──────────────────────────
 
@@ -951,6 +957,65 @@ def _translate_structural(groups: dict) -> dict:
     return result
 
 
+#: Field (stochastic IFT modulator) PSD parameter short names. The field is a
+#: DRW-governed correlated field; these are the priors a ``field`` sub-block
+#: scopes its ``'*'`` wildcard over. Keep in sync with the field SFH registry.
+_FIELD_PARAM_SHORT = ("psd_sigma", "psd_tau_myr")
+
+
+def _normalize_sfh_field(kwargs: dict) -> dict:
+    """Accept ``sfh={'type': <smooth>, 'field': {...}}`` for the stochastic field.
+
+    The IFT correlated-field burstiness is a *modulator* composed with a smooth
+    SFH, so internally it lives in ``mean_sfh_type`` as the list
+    ``[<smooth>, 'field']``. That list form has always worked
+    (``sfh={'type': ['dpl', 'field']}``) but is not the natural nested-dict
+    idiom — a user mirroring ``dust={'emission': {...}}`` reaches for
+    ``sfh={'type': 'dpl', 'field': {...}}`` and hit a bare "Unknown key 'field'".
+
+    Rewrite that sub-block form into the list-``type`` composition *before* the
+    validator and translator run, so the whole existing grammar (validation,
+    partition, wildcard/param resolution) handles it unchanged. The ``field``
+    sub-dict carries the PSD priors (``psd_sigma``, ``psd_tau_myr``) and an
+    optional ``'*'`` wildcard scoped to just those field params (the group-level
+    ``'*'`` still governs the smooth SFH).
+    """
+    sfh = kwargs.get("sfh")
+    if not isinstance(sfh, dict) or "field" not in sfh:
+        return kwargs
+
+    sfh = dict(sfh)  # copy — never mutate the caller's dict
+    field_block = sfh.pop("field")
+
+    base = sfh.get("type", "dpl")
+    types = list(base) if isinstance(base, (list, tuple)) else [base]
+    if "field" not in types:
+        types.append("field")
+    sfh["type"] = types
+
+    if field_block in (True, None):
+        pass  # enable with default field priors
+    elif isinstance(field_block, dict):
+        star = field_block.get("*")
+        if star is not None:
+            # Scope the field wildcard to the field params only (so the smooth
+            # SFH keeps its own '*' / defaults).
+            for short in _FIELD_PARAM_SHORT:
+                sfh.setdefault(short, star)
+        for key, value in field_block.items():
+            if key == "*":
+                continue
+            sfh[key] = value  # explicit per-param prior overrides the wildcard
+    else:
+        raise ValueError(
+            "sfh 'field' must be a dict of field/PSD priors (e.g. "
+            "sfh={'type': 'dpl', 'field': {'*': FREE}}), or True to enable it "
+            "with defaults."
+        )
+
+    return {**kwargs, "sfh": sfh}
+
+
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`.
 
@@ -1046,6 +1111,15 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     configuration and law selections.
     """
     dust_type = dust_dict.get("type", "two_component")
+
+    # 'none'/'off' disable the dust block entirely — parity with neb/agn/radio/
+    # xray/igm/shock, all of which accept type='none' (and the generic grammar
+    # error even promises it). The forward model reads dust_model=='off' as
+    # use_dust=False, so normalize both spellings onto that sentinel and skip
+    # law/emission parsing (there is nothing to attenuate or re-emit).
+    if dust_type in ("none", "off"):
+        result["dust_model"] = "off"
+        return
 
     # Lyman-limit clip is wired only through the two-component screen. Flag any
     # other type rather than silently dropping the request (single-component,
@@ -1163,6 +1237,10 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
         emission_dict = dust_dict["emission"]
         if isinstance(emission_dict, dict):
             emission_type = emission_dict.get("type", None)
+            if emission_type in ("none", "off"):
+                # Explicitly disable IR re-emission — parity with the group-level
+                # 'none'. Leave result['dust_emission'] unset (its off default).
+                emission_type = None
             if emission_type is not None:
                 # Dust IR emission types are engine names (modified_blackbody, dale2014,
                 # dl07, dl14, astrodust, etc.) resolved by the DUST_EMISSION_MODELS loader cache.

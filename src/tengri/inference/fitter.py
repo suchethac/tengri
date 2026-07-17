@@ -79,6 +79,54 @@ _AUTO_D_THRESHOLD = 20
 # D threshold for "mcmc": D <= this → NUTS, D > this → Ray Tracing
 _MCMC_AUTO_D_THRESHOLD = 20
 
+# Samplers that evaluate the forward model thousands of times per fit. On the
+# exact wave-grid photometry path (no WavePrecomp LUT) this is dramatically
+# slower — measured >100x for NUTS on a small model, enough that a fit appears
+# to hang for minutes. Used to steer users to the fast path (see run()).
+_MANY_EVAL_SAMPLERS = frozenset(
+    {
+        "mcmc",
+        "mcmc_nuts",
+        "mcmc_hmc",
+        "mcmc_dynamic_hmc",
+        "mcmc_ess",
+        "mcmc_ghmc",
+        "mcmc_mclmc",
+        "mcmc_adjusted_mclmc",
+        "nss",
+        "native_vi_linear",
+        "native_vi_nonlinear",
+    }
+)
+
+
+def _warn_if_exact_forward_path(model, backend_name: str) -> None:
+    """Warn when a many-evaluation sampler runs on the exact photometry path.
+
+    The WavePrecomp SSP x filter look-up table makes each forward evaluation
+    orders of magnitude cheaper; without it, an MCMC/nested sampler that calls
+    the model thousands of times can take minutes where WavePrecomp takes
+    seconds. Recipes (``tengri.recipes.*``) enable it; a hand-built model may
+    not, so nudge the user rather than let the fit silently crawl.
+    """
+    if backend_name not in _MANY_EVAL_SAMPLERS:
+        return
+    approx = getattr(model, "_approx", None) or {}
+    has_phot = getattr(getattr(model, "observation", None), "photometry", None) is not None
+    if has_phot and not approx.get("wave_precomp", False):
+        import warnings
+
+        warnings.warn(
+            f"Fitting with '{backend_name}' on the exact forward path: this "
+            f"sampler evaluates the model thousands of times, and photometry on "
+            f"the exact path is far slower than the WavePrecomp look-up table "
+            f"(>100x for NUTS on a small model). Rebuild the model with "
+            f"approx=WavePrecomp() — or start from a tengri.recipes.* config, "
+            f"which enables it — for much faster sampling.",
+            stacklevel=3,
+        )
+
+
 # Canonical method names (public API)
 _CANONICAL_METHODS = {
     # --- Variational inference: 6 canonical names ---
@@ -2132,6 +2180,10 @@ class Fitter:
             entry = get_backend(chosen)
         else:
             entry = get_backend(method)
+
+        # Pre-flight speed guard: steer many-evaluation samplers off the slow
+        # exact forward path onto the WavePrecomp LUT (see helper above).
+        _warn_if_exact_forward_path(self.model, entry.name)
 
         # Friendly error if the backend's optional dependency is missing,
         # before we descend into a deep third-party traceback.
