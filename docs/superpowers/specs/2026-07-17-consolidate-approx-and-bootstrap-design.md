@@ -56,7 +56,7 @@ tengri.load_ssp()       ->  ssp_prsc_miles_chabrier_wNE_logGasU-3.0_...h5  (wNE)
 Different files. The `load_ssp()` default is absent from `list_known_ssps()` **and** from
 the remote catalog — whose own comment states that wNE grids are not shipped from it. A
 fresh user therefore downloads one grid and the loader looks for another that cannot be
-obtained, and the resulting `FileNotFoundError` advises `tengri.download_ssp('<name>')`,
+obtained, and the resulting `FileNotFoundError` points to `tengri.download_ssp('<name>')`,
 which cannot fetch it either.
 
 Contributing fragmentation, all verified:
