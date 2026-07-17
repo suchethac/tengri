@@ -67,7 +67,7 @@ LAWS = [
 ]
 SFH = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": 0.05,
     "width_gyr": 0.05,
     "log_total_mass": 10.0,
@@ -83,7 +83,7 @@ def _model(law=None, tau=0.0):
         sfh=SFH,
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tau,
             "tau_bc": 0.0,
             "law_diff": law or "calzetti",

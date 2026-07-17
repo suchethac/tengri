@@ -27,7 +27,7 @@ factories give per-variant signatures generated from the registry, so:
 Examples
 --------
 >>> from tengri import SEDModel, builders, FREE, FIXED, Uniform, Fixed
->>> # Equivalent to {'type': 'dpl', '*': FIXED, 'beta': Uniform(1, 3)}
+>>> # Equivalent to {'type': 'dpl', 'all_params': FIXED, 'beta': Uniform(1, 3)}
 >>> sfh_config = builders.sfh.dpl(beta=Uniform(1, 3))
 >>> # All params free unless overridden:
 >>> sfh_config = builders.sfh.dpl(defaults=FREE)
@@ -47,7 +47,7 @@ from typing import Any
 
 from tengri.builders._factory import _pop_wildcard
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
-from tengri.parameters.sentinels import FIXED, FREE
+from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
 
 # Sentinel marking a parameter that was not specified at call time. We
 # can't use ``None`` because ``None`` is a legitimate dict value users
@@ -90,7 +90,7 @@ def _build_docstring(variant: str, spec, param_records: list[tuple[str, Any]]) -
     lines.append(
         "    Wildcard policy for parameters not explicitly named in this call. "
         "``FREE`` makes them fit; ``FIXED`` (default) pins them to their "
-        "registry-default center. Mirrors the ``'*'`` key in the dict grammar."
+        "registry-default center. Mirrors the ``'all_params'`` key in the dict grammar."
     )
     for short, pdef in param_records:
         default_repr = repr(pdef.default) if pdef.default is not None else "registry default"
@@ -136,7 +136,7 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
                 f"{variant}(defaults=...): expected FREE or FIXED, got "
                 f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
             )
-        out: dict[str, Any] = {"type": variant, "*": wildcard}
+        out: dict[str, Any] = {"type": variant, WILDCARD_ALIAS: wildcard}
         unknown = [k for k in kwargs if k not in short_names]
         if unknown:
             raise TypeError(

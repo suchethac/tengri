@@ -299,7 +299,7 @@ print(f"4 SSP libraries loaded in {time.time() - t0:.1f}s")
 # %% [markdown]
 # ## 4. The four model configurations (`SEDModel.build`)
 #
-# Each config is built with the nested-dict grammar. We set `'*': FIXED` and
+# Each config is built with the nested-dict grammar. We set `'all_params': FIXED` and
 # free **only** the parameters we want via explicit `Uniform` priors — this
 # reproduces the classic "free iff you give it a distribution" semantics and
 # keeps the four inference problems comparable. `approx=WavePrecomp()` turns on
@@ -346,15 +346,15 @@ def build_configs(z, obs):
 
     model_a = SEDModel.build(
         ssp_data=SSP["mist"],
-        sfh={"type": "continuity", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **CONT_SFH},
-        dust={"type": "two_component", "law_bc": "salim_sbl18", "*": FIXED, **DUST},
+        sfh={"type": "continuity", "all_params": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **CONT_SFH},
+        dust={"type": "two_component", "law_bc": "salim_sbl18", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
     model_b = SEDModel.build(
         ssp_data=SSP["padova"],
-        sfh={"type": "dirichlet", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **DIR_SFH},
-        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, **DUST},
+        sfh={"type": "dirichlet", "all_params": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **DIR_SFH},
+        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
@@ -362,7 +362,7 @@ def build_configs(z, obs):
         ssp_data=SSP["pdva"],
         sfh={
             "type": "tsnorm",
-            "*": FIXED,
+            "all_params": FIXED,
             "met_logzsol": Uniform(-2.0, 0.3),
             "log_total_mass": Uniform(8.0, 12.0),
             "peak_lbt_gyr": Uniform(0.5, 12.0),
@@ -370,7 +370,7 @@ def build_configs(z, obs):
             "skew": Uniform(-1.0, 1.0),
             "trunc": Uniform(1.0, 10.0),
         },
-        dust={"type": "two_component", "law_bc": "kriek_conroy", "*": FIXED, **DUST},
+        dust={"type": "two_component", "law_bc": "kriek_conroy", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
@@ -378,14 +378,14 @@ def build_configs(z, obs):
         ssp_data=SSP["basti"],
         sfh={
             "type": "dpl",
-            "*": FIXED,
+            "all_params": FIXED,
             "met_logzsol": Fixed(-0.3),
             "alpha": Uniform(0.5, 5.0),
             "beta": Uniform(0.3, 3.0),
             "tau_gyr": Uniform(0.5, 13.0),
             "log_total_mass": Uniform(8.0, 12.0),
         },
-        dust={"type": "two_component", "law_bc": "power_law", "*": FIXED, **DUST},
+        dust={"type": "two_component", "law_bc": "power_law", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )

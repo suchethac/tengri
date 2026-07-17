@@ -47,16 +47,16 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 1.2,
         "beta": 2.0,
         "tau_gyr": 0.5,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
     neb={
         "type": "cue",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         # NB: short-form keys inside the `neb` group (full `neb_*` is silently ignored)
         "logU": -2.0,
         "logZ_gas": tengri.Uniform(-2.0, 0.5),

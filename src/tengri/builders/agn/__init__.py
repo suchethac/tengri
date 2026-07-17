@@ -9,14 +9,14 @@ AGN composition has five orthogonal sub-block axes (``disc``,
 
 >>> agn = {
 ...     "type": "composable",
-...     "*": FREE,
+...     "all_params": FREE,
 ...     "log_lbol": Uniform(43, 47),
-...     "disc": {"type": "multicolor", "*": FREE},
-...     "torus": {"type": "skirtor", "*": FIXED},
+...     "disc": {"type": "multicolor", "all_params": FREE},
+...     "torus": {"type": "skirtor", "all_params": FIXED},
 ...     "nlr": {"type": "analytic"},
 ...     "blr": {"type": "analytic"},
 ...     "feii": {"type": "none"},
-...     "atten": {"type": "smc_prevot", "*": FIXED},
+...     "atten": {"type": "smc_prevot", "all_params": FIXED},
 ... }
 
 The factory mirror:
@@ -67,7 +67,7 @@ from tengri.builders._factory import UNSET, _pop_wildcard, make_factory, short_f
 from tengri.builders.agn import atten, blr, disc, feii, nlr, torus
 from tengri.parameters.groups import _AGN_PARTITION
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FIXED, FREE
+from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
 
 _AXIS_MODULES = {
     "disc": disc,
@@ -91,7 +91,7 @@ def _discover_shared_params() -> list[str]:
         "sfh": {"type": "dpl"},
         "agn": {
             "type": "composable",
-            "*": FREE,
+            WILDCARD_ALIAS: FREE,
             "disc": {"type": "powerlaw"},
             "torus": {"type": "skirtor"},
             "nlr": {"type": "analytic"},
@@ -137,7 +137,7 @@ def composable(**kwargs: Any) -> dict:
             f"Valid sub-blocks: {list(_AXIS_MODULES)}. "
             f"Valid shared params: {_SHARED_SHORT_PARAMS}."
         )
-    out: dict[str, Any] = {"type": "composable", "*": wildcard}
+    out: dict[str, Any] = {"type": "composable", WILDCARD_ALIAS: wildcard}
     for short in _SHARED_SHORT_PARAMS:
         if short in kwargs and kwargs[short] is not UNSET:
             out[short] = kwargs[short]
@@ -173,7 +173,7 @@ def _discover_top_level_params() -> list[str]:
     """
     recipe = {
         "sfh": {"type": "dpl"},
-        "agn": {"type": "simple", "*": FREE},
+        "agn": {"type": "simple", WILDCARD_ALIAS: FREE},
     }
     import warnings
 

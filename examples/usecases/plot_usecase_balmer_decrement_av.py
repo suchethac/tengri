@@ -45,7 +45,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 1.5,
         "beta": 2.0,
         "tau_gyr": 0.1,
@@ -53,14 +53,14 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": tengri.FIXED,  # Birth cloud dust fixed
         "tau_diff": tengri.Uniform(0.0, 2.0),  # Sweep diffuse dust
         "slope": tengri.Fixed(-0.7),
     },
     neb={
         "type": "cue",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "logZ_gas": -0.2,
         "logU": -3.0,
     },

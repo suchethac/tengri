@@ -39,17 +39,17 @@ cmap = plt.get_cmap("viridis")
 
 SFH = {
     "type": "const",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "log_total_mass": 10.61,
     "start_gyr": 13.0,
     "end_gyr": 0.0,
 }
 DUST = {
     "type": "two_component",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "tau_diff": 0.3,
     "tau_bc": 0.5,
-    "emission": {"type": "dale2014", "*": tengri.FIXED},
+    "emission": {"type": "dale2014", "all_params": tengri.FIXED},
 }
 
 ssp = tengri.load_ssp()
@@ -58,13 +58,13 @@ model = tengri.SEDModel.build(
     sfh=SFH,
     dust=DUST,
     agn={
-        "disc": {"type": "qsogen", "*": tengri.FIXED},
-        "torus": {"type": "skirtor", "*": tengri.FIXED},
-        "*": tengri.FIXED,
+        "disc": {"type": "qsogen", "all_params": tengri.FIXED},
+        "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+        "all_params": tengri.FIXED,
         "log_lbol": tengri.Uniform(8.0, 14.0),
         "frac": 1.0,
     },
-    radio={"type": "condon92", "*": tengri.FIXED},
+    radio={"type": "condon92", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

@@ -23,7 +23,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
-from tengri.inference._sample_utils import _mean_params
+from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
 
 def _resolve_n_padded(n_gal: int, K: int, n_pad: int | str | None) -> int:
@@ -265,6 +265,9 @@ class CatalogFitter:
     """
 
     _NATIVE_VMAPPABLE: frozenset = frozenset({"native_vi_linear", "native_vi_nonlinear"})
+    #: Sampling methods that honor ``forward_chunk_size`` by vmapping K galaxies'
+    #: NUTS/HMC chains per ``lax.map`` step (per-galaxy warmup, diagonal mass).
+    _MCMC_VMAPPABLE: frozenset = frozenset({"mcmc_nuts", "mcmc_hmc"})
 
     def __init__(self, model, galaxies, data_type="photometry"):
         from tengri.inference.jit_engine import CompileCache
@@ -292,6 +295,7 @@ class CatalogFitter:
         key,
         forward_chunk_size=1,
         n_pad: int | str | None = None,
+        devices=None,
         **kwargs,
     ):
         """Fit all galaxies independently.
@@ -361,7 +365,24 @@ class CatalogFitter:
                 n_pad=n_pad,
                 **kwargs,
             )
+        elif resolved in self._MCMC_VMAPPABLE:
+            return self._run_native_mcmc(
+                resolved,
+                key=key,
+                forward_chunk_size=forward_chunk_size,
+                n_pad=n_pad,
+                devices=devices,
+                **kwargs,
+            )
         else:
+            if devices is not None:
+                warnings.warn(
+                    f"devices={devices!r} is ignored for method={method!r}. "
+                    "Multi-device sharding is currently supported for "
+                    "mcmc_nuts / mcmc_hmc only.",
+                    UserWarning,
+                    stacklevel=2,
+                )
             if forward_chunk_size != 1:
                 warnings.warn(
                     f"forward_chunk_size={forward_chunk_size} is ignored for "
@@ -585,6 +606,193 @@ class CatalogFitter:
             n_galaxies=n_gal,
             diagnostics={"mean_n_iterations": float(jnp.mean(all_n_iters))},
         )
+
+    # ------------------------------------------------------------------
+    # Internal: vectorized sampling path (mcmc_nuts / mcmc_hmc)
+    # ------------------------------------------------------------------
+
+    def _run_native_mcmc(
+        self,
+        method_tag,
+        *,
+        key,
+        forward_chunk_size=1,
+        n_pad: int | str | None = None,
+        devices=None,
+        n_warmup=300,
+        n_burnin=100,
+        n_samples=1000,
+        max_num_doublings=10,
+        n_leapfrog_steps=10,
+        target_accept_rate=0.85,
+        dense_mass_matrix=False,
+        verbose=True,
+    ):
+        """Vectorized per-galaxy NUTS/HMC sampling via ``lax.map(batch_size=K)``.
+
+        Each galaxy runs its own BlackJAX window adaptation and chain inside a
+        single JIT'd program; K galaxies execute per ``lax.map`` step so the
+        compiled graph stays O(1) in the catalog size while K chains run in
+        parallel on the accelerator. Returns one :class:`Posterior` per galaxy,
+        each carrying posterior ``samples`` — the same public contract as the
+        sequential path, minus the N serial warmups.
+
+        Diagonal mass matrix is the default (``dense_mass_matrix=False``): each
+        galaxy is low-D and the parallelism is *width over galaxies*, so a
+        diagonal mass keeps the vmap flat and dodges the dense-mass warmup
+        memory spike (see :func:`...mcmc.nuts.run_nuts`).
+
+        When ``devices`` is given (``"all"`` or a device list), the galaxy axis
+        is sharded across those devices via ``jax.shard_map`` — each device runs
+        ``lax.map`` on its own slice of the catalog with no cross-device
+        reduction (galaxies are independent). Bit-parity with the single-device
+        path holds up to float round-off.
+        """
+        from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+        from tengri.inference.posterior import Posterior
+
+        sampler = "nuts" if method_tag == "mcmc_nuts" else "hmc"
+        t0 = time.time()
+        K = max(1, int(forward_chunk_size))
+        n_gal = self.n_galaxies
+        dev_list = self._resolve_devices(devices)
+        n_dev = len(dev_list) if dev_list else 1
+        if n_dev > 1:
+            # Pad to a multiple of both K (the lax.map chunk) and n_dev (even
+            # shards) so every device gets an equal, K-divisible slice.
+            unit = math.lcm(K, n_dev)
+            n_padded = math.ceil(n_gal / unit) * unit
+        else:
+            n_padded = _resolve_n_padded(n_gal, K, n_pad)
+        n_pad_extra = n_padded - n_gal
+        n_data = self._validate_uniform_data()
+
+        fitter = self._get_dummy_fitter()
+        run_one, unravel_fn = build_catalog_mcmc_engine(
+            fitter,
+            sampler,
+            n_warmup=n_warmup,
+            n_burnin=n_burnin,
+            n_samples=n_samples,
+            max_num_doublings=max_num_doublings,
+            n_leapfrog=n_leapfrog_steps,
+            target_accept_rate=target_accept_rate,
+            use_dense=bool(dense_mass_matrix),
+        )
+
+        dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
+        d_params = dummy_flat.shape[0]
+
+        if verbose:
+            tag = "NUTS" if sampler == "nuts" else "HMC"
+            print(
+                f"CatalogFitter ({tag}): {n_gal} galaxies, K={K}, D={d_params}, "
+                f"{n_warmup} warmup + {n_samples} samples"
+            )
+
+        # Stack per-galaxy data; pad with dummy galaxies (trimmed after).
+        all_data_orig = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
+        all_noise_orig = jnp.stack([jnp.asarray(g["noise"]) for g in self.galaxies])
+        if n_pad_extra > 0:
+            all_data = jnp.concatenate([all_data_orig, jnp.zeros((n_pad_extra, n_data))], axis=0)
+            all_noise = jnp.concatenate([all_noise_orig, jnp.ones((n_pad_extra, n_data))], axis=0)
+        else:
+            all_data, all_noise = all_data_orig, all_noise_orig
+
+        init_keys = jax.random.split(key, n_padded)
+        all_init = jnp.stack(
+            [ravel_pytree(fitter._initialize_unbounded(k))[0] for k in init_keys[:n_gal]]
+        )
+        if n_pad_extra > 0:
+            all_init = jnp.concatenate([all_init, jnp.zeros((n_pad_extra, d_params))], axis=0)
+        gal_keys = jax.random.split(jax.random.fold_in(key, 1), n_padded)
+
+        def _run_one(args):
+            ini, gk, d, n = args
+            return run_one(ini, gk, d, n)
+
+        xs = (all_init, gal_keys, all_data, all_noise)
+        if n_dev > 1:
+            all_positions, all_divergent = self._sharded_vmap(run_one, xs, dev_list)
+        else:
+            all_positions, all_divergent = jax.lax.map(_run_one, xs, batch_size=K)
+        all_positions = all_positions[:n_gal]
+        all_divergent = all_divergent[:n_gal]
+        jax.block_until_ready(all_positions)
+
+        posteriors = []
+        for i in range(n_gal):
+            samples_phys = _vmap_samples_to_physical(
+                all_positions[i], unravel_fn, fitter._to_physical
+            )
+            best_params = _mean_params(samples_phys)
+            n_div = int(jnp.sum(all_divergent[i]))
+            posteriors.append(
+                Posterior(
+                    samples=samples_phys,
+                    params=best_params,
+                    method=f"CatalogFitter/{method_tag}",
+                    wall_time_s=time.time() - t0,
+                    diagnostics={"n_divergent": n_div, "n_samples": n_samples},
+                    loss_history=None,
+                    _model=self.model,
+                )
+            )
+
+        wall = time.time() - t0
+        if verbose:
+            print(f"  Done in {wall:.1f}s ({wall / n_gal:.2f}s/galaxy)")
+
+        return CatalogPosterior(
+            posteriors=posteriors,
+            method=method_tag,
+            wall_time_s=wall,
+            n_galaxies=n_gal,
+            diagnostics={
+                "vectorized": True,
+                "sampler": sampler,
+                "forward_chunk_size": K,
+                "n_devices": n_dev,
+                "n_divergent_total": int(jnp.sum(all_divergent)),
+                "n_warmup": n_warmup,
+                "n_samples": n_samples,
+            },
+        )
+
+    @staticmethod
+    def _resolve_devices(devices):
+        """Normalize the ``devices`` argument to a device list or ``None``.
+
+        ``None`` → single-device path; ``"all"`` → every ``jax.devices()``; a
+        list/tuple of devices → those devices.
+        """
+        if devices is None:
+            return None
+        if isinstance(devices, str):
+            if devices == "all":
+                return list(jax.devices())
+            raise ValueError(f"devices must be None, 'all', or a device list; got {devices!r}")
+        return list(devices)
+
+    @staticmethod
+    def _sharded_vmap(run_one, xs, dev_list):
+        """``jax.vmap(run_one)`` over a galaxy axis sharded across ``dev_list``.
+
+        Per-galaxy fits are independent, so this is pure data parallelism with
+        no cross-device reduction: the leading (galaxy) axis of every input is
+        sharded over the devices and GSPMD distributes the vmapped program —
+        each device samples its own slice of the catalog. GSPMD auto-partitioning
+        is used rather than ``shard_map`` because BlackJAX's NUTS tree-builder
+        contains ``lax.cond`` branches that trip ``shard_map``'s manual
+        varying-axis tracking. The leading axis must be divisible by
+        ``len(dev_list)`` (the caller pads to a multiple of ``lcm(K, n_dev)``).
+        Returns the gathered ``(positions, divergent)``.
+        """
+        mesh = jax.sharding.Mesh(np.asarray(dev_list, dtype=object), ("gal",))
+        sharding = jax.sharding.NamedSharding(mesh, jax.sharding.PartitionSpec("gal"))
+        xs_sharded = jax.device_put(xs, sharding)
+        run_all = jax.jit(jax.vmap(run_one))
+        return run_all(*xs_sharded)
 
     # ------------------------------------------------------------------
     # Internal: sequential fallback (all other methods)

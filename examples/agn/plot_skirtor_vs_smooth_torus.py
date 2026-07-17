@@ -41,8 +41,8 @@ C_AA_PER_S = 2.998e18
 # Negligible host SFH: total mass ~1e-10 Msun, completely subdominant
 # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
 # ``const`` SFH parametrizes by total mass over [start_gyr, end_gyr].
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 ssp = tengri.load_ssp()
 
 
@@ -52,12 +52,12 @@ def predict_with_torus(torus_type: str) -> tuple[np.ndarray, np.ndarray]:
         sfh=SFH,
         dust=DUST,
         agn={
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_lbol": 12.5,
             "frac": 1.0,
             "cos_inc": 0.95,
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": torus_type, "*": tengri.FIXED},
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": torus_type, "all_params": tengri.FIXED},
         },
         redshift=tengri.Fixed(0.0),
     )

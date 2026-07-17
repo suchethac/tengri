@@ -163,18 +163,18 @@ def build(line_data, approx):
         redshift=Fixed(Z_GAL),
         # Free the SFH (normalization + shape), stellar metallicity, the dust
         # screen, and the gas conditions — the parameters a catalog fit solves for.
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         stellar={"met_logzsol": Uniform(-1.5, 0.3)},
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": Uniform(0.0, 4.0),
             "tau_diff": Uniform(0.0, 3.0),
         },
         neb={
             "type": "cue",
-            "*": FIXED,
+            "all_params": FIXED,
             "logU": Uniform(-4.0, -1.0),
             "logZ_gas": Uniform(-1.5, 0.3),
         },

@@ -134,16 +134,27 @@ Identity is preserved across pickle, copy, and deepcopy operations.
 FIXED = _Sentinel("FIXED")
 """Sentinel marking a parameter to pin to the registry's default value.
 
-Use in the nested-dict model builder API, especially in wildcard slots like
-``'*': FIXED`` to fix all parameters not explicitly mentioned. Example::
+Use in the nested-dict model builder API, especially in the wildcard slot
+``'all_params': FIXED`` to fix all parameters not explicitly mentioned. Example::
 
     from tengri import FREE, FIXED
     model = tengri.SEDModel({
-        "*": FIXED,                    # fix all parameters
+        "all_params": FIXED,           # fix all parameters
         "sfh_field_psd_sigma": FREE,   # except this one: use default prior
     })
 
 Identity is preserved across pickle, copy, and deepcopy operations.
 """
 
-__all__ = ["FIXED", "FREE"]
+#: Canonical wildcard key in the nested-dict grammar. Sets ``FREE``/``FIXED``
+#: for every parameter in a group. Accepted on input and internally canonical,
+#: but ``WILDCARD_ALIAS`` is the preferred user-facing spelling; ``'*'`` is
+#: slated for deprecation.
+WILDCARD_KEY = "*"
+
+#: Preferred, self-explanatory spelling of the wildcard key. Equivalent to
+#: ``WILDCARD_KEY`` in every group dict (e.g. ``sfh={'all_params': FREE}``).
+#: Emitted by :meth:`Parameters.to_groups` and shown in ``summary()`` tags.
+WILDCARD_ALIAS = "all_params"
+
+__all__ = ["FIXED", "FREE", "WILDCARD_ALIAS", "WILDCARD_KEY"]

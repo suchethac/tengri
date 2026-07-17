@@ -34,8 +34,8 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 C_AA_PER_S = 2.998e18
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
 
@@ -57,13 +57,13 @@ def _build(lines_type):
         sfh=SFH,
         dust=DUST,
         agn={
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_lbol": 12.5,
             "frac": 1.0,
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "nlr": {"type": mapping["nlr_type"], "*": tengri.FIXED},
-            "blr": {"type": mapping["blr_type"], "*": tengri.FIXED},
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "nlr": {"type": mapping["nlr_type"], "all_params": tengri.FIXED},
+            "blr": {"type": mapping["blr_type"], "all_params": tengri.FIXED},
         },
         redshift=tengri.Fixed(0.0),
     )

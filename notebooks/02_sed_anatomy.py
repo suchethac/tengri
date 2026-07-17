@@ -145,7 +145,7 @@ obs = Observation(photometry=Photometry.from_names(filters))
 kitchen_sink = dict(
     sfh={
         "type": "dpl",
-        "*": FIXED,
+        "all_params": FIXED,
         "log_total_mass": 10.5,
         "alpha": 2.2,
         "beta": 1.4,
@@ -154,21 +154,21 @@ kitchen_sink = dict(
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FIXED,
+        "all_params": FIXED,
         "tau_bc": 0.8,
         "tau_diff": 0.3,
         "slope": -0.4,
-        "emission": {"type": "dale2014", "*": FIXED, "alpha_dale": 2.2},
+        "emission": {"type": "dale2014", "all_params": FIXED, "alpha_dale": 2.2},
     },
-    neb={"type": "cue", "*": FIXED},
+    neb={"type": "cue", "all_params": FIXED},
     agn={
-        "disc": {"type": "multicolor", "*": FIXED, "log_lbol": 10.5},
-        "torus": {"type": "skirtor", "*": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
-        "nlr": {"type": "analytic", "*": FIXED},
-        "blr": {"type": "none", "*": FIXED},
+        "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": 10.5},
+        "torus": {"type": "skirtor", "all_params": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
+        "nlr": {"type": "analytic", "all_params": FIXED},
+        "blr": {"type": "none", "all_params": FIXED},
     },
-    radio=True,
-    xray=True,
+    radio={"type": "condon92", "*": FIXED},
+    xray={"type": "simple", "*": FIXED},
     redshift=Fixed(2.0),
     apply_igm=True,
 )
@@ -298,9 +298,9 @@ fig.savefig(FIG_DIR / "02_anatomy_panchromatic.png", dpi=300, bbox_inches="tight
 # %%
 base = recipes.star_forming_photometry()
 # Pin the model down to defaults, then sweep one parameter at a time.
-base["sfh"]["*"] = FIXED
-base["dust"]["*"] = FIXED
-base["dust"]["emission"]["*"] = FIXED
+base["sfh"]["all_params"] = FIXED
+base["dust"]["all_params"] = FIXED
+base["dust"]["emission"]["all_params"] = FIXED
 base["redshift"] = Fixed(0.5)
 
 base_model = SEDModel.build(ssp_data=ssp, observation=obs, **base)
@@ -366,8 +366,8 @@ cmap = plt.colormaps["plasma"]
 for log_lbol, col in zip(log_lbol_grid, cmap(np.linspace(0.15, 0.85, len(log_lbol_grid)))):
     cfg = deepcopy(base)
     cfg["agn"] = {
-        "disc": {"type": "multicolor", "*": FIXED, "log_lbol": log_lbol},
-        "torus": {"type": "nenkova", "*": FIXED},
+        "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": log_lbol},
+        "torus": {"type": "nenkova", "all_params": FIXED},
     }
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
@@ -468,7 +468,7 @@ money_shot = dict(
     # the current SFR is near peak (elevated, dusty main-sequence galaxy).
     sfh={
         "type": "dpl",
-        "*": FIXED,
+        "all_params": FIXED,
         "log_total_mass": 10.72,
         "alpha": 0.9,
         "beta": 2.7,
@@ -477,21 +477,21 @@ money_shot = dict(
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FIXED,
+        "all_params": FIXED,
         "tau_bc": 0.8,
         "tau_diff": 0.3,
         "slope": -0.4,
-        "emission": {"type": "dale2014", "*": FIXED, "alpha_dale": 2.2},
+        "emission": {"type": "dale2014", "all_params": FIXED, "alpha_dale": 2.2},
     },
-    neb={"type": "cue", "*": FIXED},
+    neb={"type": "cue", "all_params": FIXED},
     agn={
-        "disc": {"type": "multicolor", "*": FIXED, "log_lbol": 10.5},
-        "torus": {"type": "skirtor", "*": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
-        "nlr": {"type": "analytic", "*": FIXED},
-        "blr": {"type": "none", "*": FIXED},
+        "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": 10.5},
+        "torus": {"type": "skirtor", "all_params": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
+        "nlr": {"type": "analytic", "all_params": FIXED},
+        "blr": {"type": "none", "all_params": FIXED},
     },
-    radio={"type": "condon92", "*": FIXED},
-    xray={"type": "simple", "*": FIXED},
+    radio={"type": "condon92", "all_params": FIXED},
+    xray={"type": "simple", "all_params": FIXED},
     redshift=Fixed(0.1),
 )
 

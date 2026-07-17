@@ -46,8 +46,8 @@ LINE_BACKBONES = [
 COLORS = plt.cm.tab10(np.linspace(0, 1, 10))[: len(LINE_BACKBONES)]
 
 C_AA_PER_S = 2.998e18
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
 fig, ax = plt.subplots(figsize=(7.4, 4.6))
@@ -58,10 +58,10 @@ for (region, kind, label), color in zip(LINE_BACKBONES, COLORS):
         sfh=SFH,
         dust=DUST,
         agn={
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            region: {"type": kind, "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            region: {"type": kind, "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "log_lbol": 12.5,
             "frac": 1.0,
         },

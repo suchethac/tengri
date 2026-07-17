@@ -45,8 +45,8 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 C_AA_PER_S = 2.998e18
 LOG_LBOL = 12.0
 
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
 
@@ -56,9 +56,9 @@ norm = mpl.colors.Normalize(vmin=inclination_deg.min(), vmax=inclination_deg.max
 cmap = plt.get_cmap("viridis")
 
 torus_configs = [
-    ("SKIRTOR", {"type": "skirtor", "*": tengri.FIXED}),
-    ("CAT3D-WIND", {"type": "cat3d_wind", "*": tengri.FIXED}),
-    ("CLUMPY (Nenkova)", {"type": "nenkova", "*": tengri.FIXED}),
+    ("SKIRTOR", {"type": "skirtor", "all_params": tengri.FIXED}),
+    ("CAT3D-WIND", {"type": "cat3d_wind", "all_params": tengri.FIXED}),
+    ("CLUMPY (Nenkova)", {"type": "nenkova", "all_params": tengri.FIXED}),
 ]
 
 fig, axes = plt.subplots(1, len(torus_configs), figsize=(14, 4.5), sharey=True)
@@ -72,9 +72,9 @@ for ax_idx, (lib_name, torus_block) in enumerate(torus_configs):
             sfh=SFH,
             dust=DUST,
             agn={
-                "disc": {"type": "multicolor", "*": tengri.FIXED},
+                "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": torus_block,
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_lbol": LOG_LBOL,
                 "frac": 1.0,
                 "cos_inc": cos_inc,

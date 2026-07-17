@@ -231,9 +231,12 @@ class AGNSEDComponent:
         # they're available for JIT threading.
         if self.config.model == "skirtor":
             try:
-                from tengri.components.agn.skirtor import _load_skirtor_default
+                from tengri.components.agn.skirtor import _load_skirtor_default_grid
 
-                skirtor_templates = _load_skirtor_default()
+                # Store the template ARRAYS (a SKIRTORGrid pytree), not the
+                # interpolation closure — arrays thread through jax.jit as a
+                # runtime input; a closure cannot (#1198).
+                skirtor_templates = _load_skirtor_default_grid()
             except Exception:
                 # If SKIRTOR template loading fails (file not found),
                 # gracefully continue without threading. The apply() path

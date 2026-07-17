@@ -34,7 +34,7 @@ C_AA_PER_S = 2.998e18
 
 SFH = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": 2.0,
     "width_gyr": 1.5,
     "log_total_mass": 10.0,
@@ -43,10 +43,10 @@ SFH = {
 }
 DUST = {
     "type": "two_component",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "tau_diff": 0.4,
     "tau_bc": 0.6,
-    "emission": {"type": "dale2014", "*": tengri.FIXED},
+    "emission": {"type": "dale2014", "all_params": tengri.FIXED},
 }
 
 model = tengri.SEDModel.build(

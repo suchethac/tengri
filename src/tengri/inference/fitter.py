@@ -79,6 +79,54 @@ _AUTO_D_THRESHOLD = 20
 # D threshold for "mcmc": D <= this → NUTS, D > this → Ray Tracing
 _MCMC_AUTO_D_THRESHOLD = 20
 
+# Samplers that evaluate the forward model thousands of times per fit. On the
+# exact wave-grid photometry path (no WavePrecomp LUT) this is dramatically
+# slower — measured >100x for NUTS on a small model, enough that a fit appears
+# to hang for minutes. Used to steer users to the fast path (see run()).
+_MANY_EVAL_SAMPLERS = frozenset(
+    {
+        "mcmc",
+        "mcmc_nuts",
+        "mcmc_hmc",
+        "mcmc_dynamic_hmc",
+        "mcmc_ess",
+        "mcmc_ghmc",
+        "mcmc_mclmc",
+        "mcmc_adjusted_mclmc",
+        "nss",
+        "native_vi_linear",
+        "native_vi_nonlinear",
+    }
+)
+
+
+def _warn_if_exact_forward_path(model, backend_name: str) -> None:
+    """Warn when a many-evaluation sampler runs on the exact photometry path.
+
+    The WavePrecomp SSP x filter look-up table makes each forward evaluation
+    orders of magnitude cheaper; without it, an MCMC/nested sampler that calls
+    the model thousands of times can take minutes where WavePrecomp takes
+    seconds. Recipes (``tengri.recipes.*``) enable it; a hand-built model may
+    not, so nudge the user rather than let the fit silently crawl.
+    """
+    if backend_name not in _MANY_EVAL_SAMPLERS:
+        return
+    approx = getattr(model, "_approx", None) or {}
+    has_phot = getattr(getattr(model, "observation", None), "photometry", None) is not None
+    if has_phot and not approx.get("wave_precomp", False):
+        import warnings
+
+        warnings.warn(
+            f"Fitting with '{backend_name}' on the exact forward path: this "
+            f"sampler evaluates the model thousands of times, and photometry on "
+            f"the exact path is far slower than the WavePrecomp look-up table "
+            f"(>100x for NUTS on a small model). Rebuild the model with "
+            f"approx=WavePrecomp() — or start from a tengri.recipes.* config, "
+            f"which enables it — for much faster sampling.",
+            stacklevel=3,
+        )
+
+
 # Canonical method names (public API)
 _CANONICAL_METHODS = {
     # --- Variational inference: 6 canonical names ---
@@ -2133,6 +2181,10 @@ class Fitter:
         else:
             entry = get_backend(method)
 
+        # Pre-flight speed guard: steer many-evaluation samplers off the slow
+        # exact forward path onto the WavePrecomp LUT (see helper above).
+        _warn_if_exact_forward_path(self.model, entry.name)
+
         # Friendly error if the backend's optional dependency is missing,
         # before we descend into a deep third-party traceback.
         check_requires(entry)
@@ -3127,6 +3179,50 @@ class Fitter:
 
         return results
 
+    def _memo_batch_map_kernel(self, key, builder):
+        """Cache a ``jax.jit(jax.vmap(...))`` batch-MAP kernel on this Fitter.
+
+        The vmapped optimizer kernel is a *fresh* closure on every
+        :meth:`fit_batch` call, and a fresh function object misses
+        ``jax.jit``'s compilation cache — so a catalog processed in repeated
+        same-shape ``fit_batch("map")`` calls recompiles the (expensive)
+        vmapped loss each time. Memoizing the wrapper object under a key that
+        fully determines the closure lets ``jax.jit`` reuse the compiled
+        executable across calls.
+
+        Safety: the observed data threads through as a *traced argument*
+        (never the closure), and ``loss_fn`` is already structurally cached
+        (:meth:`_get_or_build_loss_fn`), so the only closure-defining state is
+        the optimizer configuration carried in ``key``. The cache lives on the
+        Fitter instance, whose model structure is fixed at construction, so a
+        cached kernel is only ever reused for the same model structure and the
+        same optimizer config — per-galaxy data still flows in fresh through the
+        traced ``batch_data_args``. ``key=None`` (e.g. a caller-supplied custom
+        optimizer we cannot fingerprint) disables the memo — always build fresh
+        rather than risk a stale kernel.
+
+        Parameters
+        ----------
+        key : hashable or None
+            Signature that fully determines the built kernel, or ``None`` to
+            skip caching.
+        builder : callable
+            Zero-arg factory returning the ``jax.jit(jax.vmap(...))`` wrapper.
+
+        Returns
+        -------
+        callable
+            The (possibly cached) compiled batch kernel.
+        """
+        if key is None:
+            return builder()
+        cache = self.__dict__.setdefault("_batch_map_kernel_cache", {})
+        fn = cache.get(key)
+        if fn is None:
+            fn = builder()
+            cache[key] = fn
+        return fn
+
     def _fit_batch_vmap_map(self, batch, *, key, verbose=True, **kwargs):
         """Vectorized MAP optimization over a batch using jax.vmap.
 
@@ -3185,7 +3281,11 @@ class Fitter:
                     n_steps,
                 )
 
-            batch_result = jax.jit(jax.vmap(solver.run))(params_batch, batch_data_args)
+            run_kernel = self._memo_batch_map_kernel(
+                ("jaxopt", optimizer, int(n_steps), float(tol)),
+                lambda: jax.jit(jax.vmap(solver.run)),
+            )
+            batch_result = run_kernel(params_batch, batch_data_args)
 
             t_total = time.time() - t0
             if verbose:
@@ -3261,7 +3361,16 @@ class Fitter:
             new_params = optax.apply_updates(params, updates)
             return new_params, new_opt_state, loss
 
-        batch_step = jax.jit(jax.vmap(single_step))
+        # Memoize the vmapped step so repeated same-config fit_batch("map")
+        # calls reuse the compiled kernel (a fresh closure would miss jax.jit's
+        # cache). Only string optimizers are fingerprintable; a caller-supplied
+        # custom optax object disables the memo (build fresh).
+        _opt_memo_key = (
+            ("optax", optimizer, float(learning_rate)) if isinstance(optimizer, str) else None
+        )
+        batch_step = self._memo_batch_map_kernel(
+            _opt_memo_key, lambda: jax.jit(jax.vmap(single_step))
+        )
 
         params = params_batch
         opt_states = opt_states_batch

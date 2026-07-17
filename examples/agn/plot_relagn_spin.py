@@ -35,8 +35,8 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 C_AA_PER_S = 2.998e18
 SPIN_VALUES = (0.0, 0.3, 0.6, 0.9, 0.998)
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
@@ -44,12 +44,12 @@ model = tengri.SEDModel.build(
     sfh=SFH,
     dust=DUST,
     agn={
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_lbol": 12.5,
         "frac": 1.0,
         "log_mbh": 8.5,
         "a_spin": tengri.Uniform(0.0, 0.998),
-        "disc": {"type": "kubota_done", "*": tengri.FIXED},
+        "disc": {"type": "kubota_done", "all_params": tengri.FIXED},
     },
     redshift=tengri.Fixed(0.0),
 )

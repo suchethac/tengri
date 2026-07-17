@@ -58,7 +58,7 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         # Tight informative priors: a star-forming galaxy in the local
         # Universe with SFR ~ 0.3-10 M_sun/yr, peak ~ 1-6 Gyr ago,
         # moderate width and trunc. These make the envelope narrow enough
@@ -72,7 +72,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": tengri.Uniform(0.0, 0.6),
         "tau_bc": tengri.Uniform(0.0, 0.8),
     },

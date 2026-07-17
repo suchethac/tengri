@@ -38,19 +38,19 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "const",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,  # 100 Msun/yr over 100 Myr → 1e10 Msun
         "start_gyr": 0.1,
         "end_gyr": 0.0,  # 100 Myr ongoing burst
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 3.0,  # diffuse dust: tau_V = 3 mag
         "tau_bc": 2.5,  # birth cloud opacity: tau_V = 2.5 mag
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
-    radio={"type": "condon92", "*": tengri.FIXED},
+    radio={"type": "condon92", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.018),  # Arp 220 redshift
 )
 
@@ -65,17 +65,17 @@ model_intrinsic = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "const",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,
         "start_gyr": 0.1,
         "end_gyr": 0.0,
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.0,
         "tau_bc": 0.0,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
     redshift=tengri.Fixed(0.018),
 )
@@ -89,19 +89,19 @@ model_attenuated = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "const",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,
         "start_gyr": 0.1,
         "end_gyr": 0.0,
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 3.0,
         "tau_bc": 2.5,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
-    radio={"type": "condon92", "*": tengri.FIXED},
+    radio={"type": "condon92", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.018),
 )
 p_att = dict(model_attenuated.spec.sample(jax.random.PRNGKey(0)))

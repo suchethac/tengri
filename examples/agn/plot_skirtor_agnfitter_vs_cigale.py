@@ -56,8 +56,8 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 ssp = tengri.load_ssp()
 
 # Minimal host
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 # Matched AGN parameters
 log_lbol = 12.0
@@ -80,9 +80,9 @@ try:
         dust=DUST,
         agn={
             "type": "composable",
-            "disc": {"type": "powerlaw", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "powerlaw", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "log_lbol": log_lbol,
             "frac": agn_frac,
             "oa_skirtor": 30.0,  # half-opening angle [deg]
@@ -102,9 +102,9 @@ try:
         dust=DUST,
         agn={
             "type": "composable",
-            "disc": {"type": "powerlaw", "*": tengri.FIXED},
-            "torus": {"type": "skirtor_agnfitter", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "powerlaw", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor_agnfitter", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "log_lbol": log_lbol,
             "frac": agn_frac,
             "oa_skirtor": 30.0,

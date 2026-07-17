@@ -55,7 +55,7 @@ model = SEDModel.build(
     ssp_data=ssp,
     sfh={
         "type": "delayed",
-        "*": FIXED,
+        "all_params": FIXED,
         "tau_gyr": tau_grid_myr[0] / 1e3,  # baseline; overridden per tau below
         "age_gyr": AGE_GYR,
         "log_total_mass": 10.5,
@@ -63,10 +63,10 @@ model = SEDModel.build(
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FIXED,
+        "all_params": FIXED,
         "tau_bc": 0.03,
         "tau_diff": 0.01,
-        "emission": {"type": "dale2014", "*": FIXED},
+        "emission": {"type": "dale2014", "all_params": FIXED},
     },
     redshift=Fixed(0.01),
 )

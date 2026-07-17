@@ -77,7 +77,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.1,  # minimal dust in z~7 LAEs
         "tau_diff": 0.05,
         "slope": -0.7,

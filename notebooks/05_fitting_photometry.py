@@ -142,8 +142,8 @@ key_truth, key_mock, key_fit = jax.random.split(key, 3)
 
 truth = sed_model.spec.sample(key_truth)
 mock = generate_mock(sed_model, truth, key=key_mock, snr=20.0)
-flux_obs = np.asarray(mock.flux_obs)
-noise = np.asarray(mock.noise)
+flux_obs = np.asarray(mock["flux_obs"])
+noise = np.asarray(mock["noise"])
 
 phot = obs.photometry
 wave_eff_um = (
@@ -302,10 +302,9 @@ spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(60)])
 spec_lo, spec_med, spec_hi = np.percentile(spec_draws, [16, 50, 84], axis=0)
 spec_truth = obs_fnu(truth_full)
 
-# Use predict_photometry (the WavePrecomp LUT path that generate_mock used) for
-# the model fluxes. forward.predict_observables bypasses the LUT (issue #281)
-# and disagrees at the few-% level — enough to inflate the residuals spuriously
-# at SNR = 20.
+# Use predict_photometry (the WavePrecomp LUT path the mock was generated with)
+# for the model fluxes, so the posterior photometry is consistent with the fit
+# and the residuals aren't inflated by a mismatched forward path.
 phot_draws = np.stack([np.asarray(sed_model.predict_photometry(p)) for p in draw_dicts(N_DRAWS)])
 phot_med = np.median(phot_draws, axis=0)
 

@@ -34,7 +34,7 @@ A new optional `lya_profile` block on `SEDModel.build`:
 ```python
 model = SEDModel.build(
     ssp_data=ssp,
-    sfh={...}, dust={...}, neb={'type': 'cue', '*': FIXED},
+    sfh={...}, dust={...}, neb={'type': 'cue', 'all_params': FIXED},
     lya_profile={
         'type': 'verhamme2006',
         'log_nhi': Uniform(18.0, 22.0, units='log10 cm^-2'),
