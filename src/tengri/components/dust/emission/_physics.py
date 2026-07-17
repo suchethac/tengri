@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.utils.blackbody import planck_bnu_wave as _planck_bnu_wave
 from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
     C_AA as _C_AA_PER_S,
@@ -101,20 +102,11 @@ def planck_bnu(
     where :math:`\nu = c / \lambda` is the frequency, :math:`h` is Planck's constant,
     :math:`k_B` is Boltzmann's constant, and :math:`c` is the speed of light.
 
+    Delegates to :func:`tengri.utils.blackbody.planck_bnu_wave`, the single
+    implementation shared with the AGN closures. See it for the numerical
+    stability contract.
     """
-    # Cast to float64 before computing nu to prevent nu**3 overflow.
-    # float32 max is ~3.4e38; at 5.6 Å, nu = 5.35e17 Hz so nu**3 ~ 1.5e53 —
-    # far beyond float32 range. JAX weak-type promotion keeps float32 arrays
-    # float32 even when combined with Python float scalars, so the cast must
-    # be explicit even though x64 is enabled globally.
-    wavelength_cm = jnp.asarray(wavelength_aa, dtype=jnp.float64) * _AA_TO_CM
-    nu = _C_CGS / wavelength_cm
-
-    # Clamp x = hν/kT to [1e-10, 500].  At x=500, expm1 ≈ 1.4e217
-    # (finite in float64).  The clamp avoids both expm1 overflow and
-    # division-by-zero, and keeps gradients finite everywhere.
-    x = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * temperature), 1e-10, 500.0)
-    return 2.0 * _H_PLANCK * nu**3 / (_C_CGS**2) / jnp.expm1(x)
+    return _planck_bnu_wave(wavelength_aa, temperature)
 
 
 # ── CMB heating correction (da Cunha+2013) ────────────────────────
