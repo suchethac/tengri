@@ -801,10 +801,14 @@ class Parameters:
     def _init_dust_config(self, kwargs):
         """Resolve dust model, attenuation law, and emission from kwargs."""
         self.dust_model = kwargs.pop("dust_model", "two_component")
-        if self.dust_model not in ("two_component", "single_component", "wg00"):
+        # 'none' is the user-facing spelling; 'off' is the internal sentinel the
+        # forward model reads as use_dust=False (a dust-free model).
+        if self.dust_model == "none":
+            self.dust_model = "off"
+        if self.dust_model not in ("two_component", "single_component", "wg00", "off"):
             raise ValueError(
-                f"dust_model must be 'two_component', 'single_component', or 'wg00', "
-                f"got '{self.dust_model}'"
+                f"dust_model must be 'two_component', 'single_component', 'wg00', "
+                f"or 'off'/'none' (no dust), got '{self.dust_model}'"
             )
 
         # Witt & Gordon (2000) screen (dust_model='wg00', FSPS dust_type=3):
