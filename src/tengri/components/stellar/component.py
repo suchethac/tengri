@@ -2864,6 +2864,13 @@ def _q_h_fn(state, params):
     return jnp.asarray(derived.get("nion", nan_scalar))
 
 
+def _log_q_h_fn(state, params):
+    """log10 ionizing photon production rate [dex re photons/s] — float32-safe."""
+    derived = state.derived
+    log_nion = derived.get("log_nion")
+    return jnp.asarray(log_nion) if log_nion is not None else jnp.asarray(jnp.nan)
+
+
 def _xi_ion_fn(state, params):
     """Ionizing photon efficiency [Hz/erg]."""
     from tengri.utils.sed_quantities import compute_xi_ion_from_log_qh
@@ -3031,6 +3038,12 @@ _IONIZING_PROPERTIES = {
         group="ionizing",
         doc="Ionizing photon production rate",
         fn=_q_h_fn,
+    ),
+    "log_q_h": Property(
+        units="dex",
+        group="ionizing",
+        doc="log10(ionizing photon production rate / (photons/s)) — float32-safe form of q_h",
+        fn=_log_q_h_fn,
     ),
     "xi_ion": Property(
         units="Hz/erg",
