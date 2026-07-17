@@ -28,6 +28,7 @@ def plot_sfh(
     ci_levels=(16, 84),
     xlim=(0, 13.5),
     show_mean_sfh=True,
+    xscale="linear",
 ):
     """Plot SFH posterior with uncertainty band — BAGPIPES/Prospector style.
 
@@ -64,10 +65,21 @@ def plot_sfh(
         x-axis limits in lookback time. [Gyr]
     show_mean_sfh : bool
         If True, overplot the smooth mean SFH backbone as a dashed line. Default True.
+    xscale : {"linear", "log"}
+        Lookback-time axis scale. Default ``"linear"`` (BAGPIPES convention:
+        present at right). ``"log"`` resolves the recent, bursty SFH that a
+        linear axis compresses into a sliver near the present — the lower limit
+        is clamped off zero to ``max(xlim[0], 1e-3)`` Gyr (~1 Myr, the youngest
+        SFH grid point) and the axis runs ascending (recent at left).
 
     Returns
     -------
     ax : matplotlib Axes
+
+    Raises
+    ------
+    ValueError
+        If ``xscale`` is not ``"linear"`` or ``"log"``.
 
     Examples
     --------
@@ -78,6 +90,9 @@ def plot_sfh(
         ax = plot_sfh(model, posterior, true_params=true_params, method="NUTS")
         ax.figure.savefig("sfh_recovery.pdf")
     """
+    if xscale not in ("linear", "log"):
+        raise ValueError(f"xscale must be 'linear' or 'log', got {xscale!r}")
+
     if ax is None:
         _, ax = plt.subplots(figsize=(7, 4))
 
@@ -145,10 +160,17 @@ def plot_sfh(
                 alpha=0.4,
             )
 
-    # BAGPIPES convention: lookback time with present at right
     ax.set_xlabel(r"$\mathrm{Lookback\ time\ /\ Gyr}$")
     ax.set_ylabel(r"$\mathrm{SFR\ /\ M_\odot\ yr^{-1}}$")
-    ax.set_xlim(xlim[1], xlim[0])  # reversed: high lookback at left, present at right
+    if xscale == "log":
+        # Log lookback time gives the recent, bursty SFH the resolution a linear
+        # axis denies it. Clamp off zero (youngest SFH grid point ~1 Myr) and run
+        # ascending: recent at left, oldest at right.
+        ax.set_xscale("log")
+        ax.set_xlim(max(xlim[0], 1e-3), xlim[1])
+    else:
+        # BAGPIPES convention: lookback time with present at right.
+        ax.set_xlim(xlim[1], xlim[0])  # reversed: high lookback at left, present at right
     ax.set_ylim(bottom=0.0)
     ax.legend(loc="upper left")
 

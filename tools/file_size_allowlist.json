@@ -30,8 +30,8 @@
   "src/tengri/facade.py": 829,
   "src/tengri/forward/component_factory.py": 1067,
   "src/tengri/forward/convenience.py": 1046,
-  "src/tengri/forward/prediction.py": 2883,
-  "src/tengri/forward/sed_model.py": 7987,
+  "src/tengri/forward/prediction.py": 2895,
+  "src/tengri/forward/sed_model.py": 8000,
   "src/tengri/inference/catalog_fitter.py": 837,
   "src/tengri/inference/backends/mcmc/_shared.py": 1054,
   "src/tengri/inference/backends/mcmc/raytrace.py": 916,
@@ -42,7 +42,7 @@
   "src/tengri/inference/jit_engine.py": 1644,
   "src/tengri/inference/posterior.py": 2769,
   "src/tengri/observation/filters/__init__.py": 1013,
-  "src/tengri/observation/line_list.py": 841,
+  "src/tengri/observation/line_list.py": 857,
   "src/tengri/observation/noise.py": 1011,
   "src/tengri/observation/observation.py": 1420,
   "src/tengri/observation/spectral_indices.py": 993,
@@ -51,7 +51,7 @@
   "src/tengri/parameters/groups.py": 2748,
   "src/tengri/parameters/parameters.py": 1889,
   "src/tengri/parameters/priors.py": 1820,
-  "src/tengri/registry.py": 2211,
+  "src/tengri/registry.py": 2243,
   "src/tengri/utils/grid_interp.py": 1019,
   "src/tengri/utils/sed_quantities.py": 837
 }
