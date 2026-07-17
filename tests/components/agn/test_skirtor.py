@@ -763,8 +763,11 @@ class TestSkirtorAnalyticErrorPaths:
         """skirtor_analytic must raise FileNotFoundError when no template file exists."""
         import tengri.components.agn.skirtor as _mod
 
-        # Clear functools.cache so the loader re-runs on next call
+        # Clear functools.cache so the loaders re-run on next call. skirtor_sed
+        # loads the threadable grid via _load_skirtor_default_grid (#1178); the
+        # legacy closure loader _load_skirtor_default is also cleared.
         _mod._load_skirtor_default.cache_clear()
+        _mod._load_skirtor_default_grid.cache_clear()
         from pathlib import Path
 
         def fake_is_file(self):
@@ -777,3 +780,4 @@ class TestSkirtorAnalyticErrorPaths:
         finally:
             # Clear again so the error result is not cached for subsequent tests
             _mod._load_skirtor_default.cache_clear()
+            _mod._load_skirtor_default_grid.cache_clear()

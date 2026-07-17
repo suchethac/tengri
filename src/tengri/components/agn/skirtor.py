@@ -294,6 +294,116 @@ def _compute_intrinsic_30deg_luminosity(
     return lumin_intrin_disk, l_nu_2500
 
 
+class SKIRTORGrid(NamedTuple):
+    """Threadable SKIRTOR template arrays — a JAX pytree.
+
+    Holds the interpolation grid as pure array data so it threads through
+    ``jax.jit`` as a runtime input (small compile), instead of baking into the
+    trace as a constant or — worse — being threaded as a Python closure, which
+    JAX cannot treat as a traced argument (issue #1198).
+
+    Attributes
+    ----------
+    grid : ndarray
+        Template luminosity cube (dust-only for v3 grids, total for v2).
+    wave_grid : ndarray, shape (n_wave,)
+        Template rest-frame wavelength grid. [Å]
+    axes : tuple of ndarray
+        Parameter-axis node values (tau, p, q, oa, radius, inc).
+    edges : tuple of ndarray
+        Per-axis triweight-kernel bin edges.
+    """
+
+    grid: jnp.ndarray
+    wave_grid: jnp.ndarray
+    axes: tuple
+    edges: tuple
+
+
+def _load_skirtor_grid_data(grid_path: str) -> SKIRTORGrid:
+    """Load a SKIRTOR grid file into a threadable :class:`SKIRTORGrid` pytree.
+
+    Prefers the v3 dust-only template when present (avoids disc/dust
+    double-counting); falls back to the v2 ``total`` cube.
+    """
+    raw = _load_grid_arrays(grid_path)
+    # ``ensure_compile_time_eval`` so the concrete arrays are captured even if
+    # the first call happens inside a jit trace (mirrors the legacy closure).
+    with jax.ensure_compile_time_eval():
+        _grid_key = "dust" if "dust" in raw else "total"
+        grid = jnp.array(raw[_grid_key])
+        wave_grid = jnp.array(raw["wave"])
+        axes = tuple(jnp.array(ax) for ax in raw["axes"])
+        edges = tuple(edges_for_grid(ax) for ax in axes)
+    return SKIRTORGrid(grid=grid, wave_grid=wave_grid, axes=axes, edges=edges)
+
+
+def _skirtor_grid_sed(
+    wavelength: jnp.ndarray,
+    grid_data: SKIRTORGrid,
+    agn_log_lbol: float = 44.0,
+    agn_tau_skirtor: float = 7.0,
+    agn_p_skirtor: float = 1.0,
+    agn_q_skirtor: float = 1.0,
+    agn_oa_skirtor: float = 40.0,
+    agn_radius_ratio: float = 20.0,
+    agn_cos_inc: float = 0.86602540378443864,
+    agn_torus_frac: float = 0.5,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""SKIRTOR torus :math:`L_\nu` interpolated from a threaded grid.
+
+    Pure JAX: ``grid_data`` carries ordinary arrays, so this composes under
+    ``jax.jit`` whether the grid is closed over (eager) or passed as a runtime
+    argument (threaded). See :func:`create_skirtor_from_grid` for the physics
+    of each parameter.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    grid_data : SKIRTORGrid
+        Threadable template arrays.
+    agn_log_lbol, agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor, \
+agn_oa_skirtor, agn_radius_ratio, agn_cos_inc, agn_torus_frac : float
+        SKIRTOR grid coordinates and normalization (see
+        :func:`create_skirtor_from_grid`).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Specific luminosity :math:`L_\nu`. [erg s⁻¹ Hz⁻¹]
+
+    Notes
+    -----
+    **JIT/grad-safe**: yes — triweight interpolation over threaded arrays.
+    """
+    l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
+    point = (
+        agn_tau_skirtor,
+        agn_p_skirtor,
+        agn_q_skirtor,
+        agn_oa_skirtor,
+        agn_radius_ratio,
+        agn_cos_inc,
+    )
+    return _interpolate_and_normalize(
+        grid_data.grid,
+        grid_data.wave_grid,
+        grid_data.axes,
+        grid_data.edges,
+        wavelength,
+        point,
+        l_scale,
+    )
+
+
+@functools.cache
+def _load_skirtor_default_grid() -> SKIRTORGrid:
+    """Cached default SKIRTOR grid arrays (first grid file found on disk)."""
+    return _load_skirtor_grid_data(_find_skirtor_grid())
+
+
 def create_skirtor_from_grid(grid_path: str) -> Callable:
     """Load SKIRTOR templates and return an interpolation function.
 
@@ -344,29 +454,9 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     .. [2] M. Stalevski et al., "The dust covering factor in AGN," MNRAS, 458,
        2288 (2016). arXiv:1602.01954. https://doi.org/10.1093/mnras/stw444
     """
-    raw = _load_grid_arrays(grid_path)
-
-    # Wrap conversion in ensure_compile_time_eval so the cached closure
-    # captures concrete arrays even if first invocation happens inside
-    # jax.jit. Without this, the @functools.cache wrapper around
-    # _load_skirtor_default would store DynamicJaxprTracer values that
-    # leak out of the trace scope (jax.errors.UnexpectedTracerError).
-    with jax.ensure_compile_time_eval():
-        # Prefer the dust-only grid when the v3 HDF5 layout provides it.
-        # The legacy v2 layout only stores ``total = disk + dust``, which
-        # smears the disc UV-optical into the IR normalization; v3
-        # separates ``disk_emission`` and ``dust_emission`` (see
-        # ``scripts/download_skirtor_templates.py``). For the torus block
-        # we want IR-only — pairing with a separate disc block (e.g.
-        # ``disc/schartmann2005``) avoids the double-counting that
-        # biased the §9 FIR-tail audit (Option D in the #487/#503 audit
-        # threads). For v2 grids we fall back to ``total`` and the user
-        # gets the legacy disc-mixed-in behavior.
-        _grid_key = "dust" if "dust" in raw else "total"
-        grid_jax = jnp.array(raw[_grid_key])
-        wave_grid = jnp.array(raw["wave"])
-        axes = tuple(jnp.array(ax) for ax in raw["axes"])
-        edges = tuple(edges_for_grid(ax) for ax in axes)
+    # Single-sourced array loading (dust-preferred for v3, total for v2) so the
+    # closure below and the threaded :func:`_skirtor_grid_sed` share one grid.
+    grid_data = _load_skirtor_grid_data(grid_path)
 
     def skirtor_grid(
         wavelength: jnp.ndarray,
@@ -409,17 +499,17 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         ndarray, shape (n_wave,)
             Specific luminosity L_ν. [erg s⁻¹ Hz⁻¹]
         """
-        l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
-        point = (
-            agn_tau_skirtor,
-            agn_p_skirtor,
-            agn_q_skirtor,
-            agn_oa_skirtor,
-            agn_radius_ratio,
-            agn_cos_inc,
-        )
-        return _interpolate_and_normalize(
-            grid_jax, wave_grid, axes, edges, wavelength, point, l_scale
+        return _skirtor_grid_sed(
+            wavelength,
+            grid_data,
+            agn_log_lbol=agn_log_lbol,
+            agn_tau_skirtor=agn_tau_skirtor,
+            agn_p_skirtor=agn_p_skirtor,
+            agn_q_skirtor=agn_q_skirtor,
+            agn_oa_skirtor=agn_oa_skirtor,
+            agn_radius_ratio=agn_radius_ratio,
+            agn_cos_inc=agn_cos_inc,
+            agn_torus_frac=agn_torus_frac,
         )
 
     return skirtor_grid
@@ -1025,10 +1115,15 @@ def skirtor_sed(*args, **kwargs):
     See ``create_skirtor_from_grid`` for full parameter documentation and
     grid-dependent ranges.
     """
-    # Allow the template to be threaded as a JIT runtime input
+    # Allow the template to be threaded as a JIT runtime input. Preferred form
+    # is a SKIRTORGrid pytree of arrays (threads as a runtime arg, small
+    # compile); a legacy closure is still accepted (#1198).
     _template = kwargs.pop("_template", None)
-    template_fn = _template if _template is not None else _load_skirtor_default()
-    return template_fn(*args, **kwargs)
+    if isinstance(_template, SKIRTORGrid):
+        return _skirtor_grid_sed(args[0], _template, *args[1:], **kwargs)
+    if _template is not None:
+        return _template(*args, **kwargs)
+    return _skirtor_grid_sed(args[0], _load_skirtor_default_grid(), *args[1:], **kwargs)
 
 
 def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
