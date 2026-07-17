@@ -19,7 +19,7 @@ One fit per process is the memory-safe unit; this loops sequentially and calls
 
     LIMIT_GB=20 scripts/run_with_oom_monitor.sh -- \
         .venv/bin/python scripts/stochastic_sfh_dimension_scaling.py \
-            --n-grid 16 32 64 128 --n-fit 4 --methods mcmc_nuts vi_nonlinear_fast mcmc_raytrace
+            --n-grid 16 32 64 128 --n-fit 4 --methods mcmc_hmc vi_nonlinear_fast mcmc_raytrace
 
 The heavy trees are not exercised by the PR-gating test tier; this is an
 operator script, not a test.
@@ -175,11 +175,15 @@ def run_backend(fitter, method, res_map, key, dim):
             verbose=False,
         )
     if method == "mcmc_hmc":
+        # L=100: a long trajectory is required on this ill-conditioned field
+        # geometry — a short one (blackjax default L=10) gets stuck near the mode
+        # and returns overconfident, non-covering bands.
         return fitter.run(
             method="mcmc_hmc",
             init_from=res_map,
-            n_warmup=800,
-            n_samples=500,
+            n_warmup=500,
+            n_samples=400,
+            n_leapfrog_steps=100,
             dense_mass_matrix=(dim <= 40),
             key=key,
             verbose=False,
@@ -227,8 +231,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--n-grid", type=int, nargs="+", default=[16, 32, 64, 128])
     ap.add_argument("--n-fit", type=int, default=4)
+    # HMC (L=100) is the practical honest reference (~9 min/fit at D=25); NUTS gives
+    # the same recovery but ~8x slower, so pass --methods mcmc_nuts ... only for a
+    # gold-standard cross-check on a few galaxies.
     ap.add_argument(
-        "--methods", nargs="+", default=["mcmc_nuts", "vi_nonlinear_fast", "mcmc_raytrace"]
+        "--methods", nargs="+", default=["mcmc_hmc", "vi_nonlinear_fast", "mcmc_raytrace"]
     )
     ap.add_argument("--ssp", default="data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
     ap.add_argument("--phot-snr", type=float, default=20.0)

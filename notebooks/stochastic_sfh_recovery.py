@@ -568,7 +568,7 @@ plt.show()
 # ```bash
 # LIMIT_GB=20 scripts/run_with_oom_monitor.sh -- \
 #     .venv/bin/python scripts/stochastic_sfh_dimension_scaling.py \
-#         --n-grid 16 32 64 128 --n-fit 16 --methods mcmc_nuts vi_nonlinear_fast mcmc_raytrace
+#         --n-grid 16 32 64 128 --n-fit 4 --methods mcmc_hmc vi_nonlinear_fast mcmc_raytrace
 # ```
 #
 # It reuses `figures/stochastic_catalog.npz`, fits each galaxy across the `n_grid`
