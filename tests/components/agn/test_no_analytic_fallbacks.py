@@ -45,7 +45,7 @@ def _reset_skirtor_caches():
     """Clear skirtor.py's ``@functools.cache`` grid loaders + the legacy global.
 
     The #1198/#1199 refactor threads the SKIRTOR grid as arrays through JIT and
-    memoises the loader with ``@functools.cache`` (``_load_skirtor_default_grid``
+    memoizes the loader with ``@functools.cache`` (``_load_skirtor_default_grid``
     and friends). A prior test in the shard that loads the committed grid leaves
     that cache warm, so resetting only ``_skirtor_default`` is no longer enough:
     ``skirtor_analytic`` returns the cached grid and the ``Path.is_file`` patch
