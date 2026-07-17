@@ -50,7 +50,7 @@ posterior = fitter.run("mcmc_hmc", n_warmup=300, n_samples=600,
                        dense_mass_matrix=False)
 ```
 
-**Prerequisites:** `phot_flux`, `spec_flux`, `phot_noise`, `spec_noise` are your joint photometry and spectroscopy observations. See [notebook 07 (joint_photo_spec)](../spine/07_joint_photo_spec.py) for a complete runnable example.
+**Prerequisites:** `phot_flux`, `spec_flux`, `phot_noise`, `spec_noise` are your joint photometry and spectroscopy observations. See [notebook 07 (joint_photo_spec)](spine/07_joint_photo_spec.ipynb) for a complete runnable example.
 
 `calibration_marginalize=True` analytically integrates out a low-order
 Chebyshev flux-calibration polynomial on the spectroscopy channel at every

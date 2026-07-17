@@ -29,7 +29,9 @@ flux and error arrays go to `Fitter`:
 
 ```python
 import tengri
-from tengri import SEDModel, Fitter, Spectroscopy, Observation, recipes, load_ssp_data
+from tengri import (
+    SEDModel, ForwardModel, Fitter, Spectroscopy, Observation, recipes, load_ssp_data,
+)
 
 spec = Spectroscopy(
     wave_obs=wave,
@@ -42,7 +44,8 @@ ssp = load_ssp_data(tengri.download_ssp())
 model = SEDModel.build(ssp_data=ssp, observation=obs,
                        **recipes.star_forming_photometry())
 
-fitter = Fitter(model, flux, err)
+forward = ForwardModel.build(sed=model, observation=obs)
+fitter = Fitter(forward, flux, err)
 result = fitter.run("map")
 print(result.summary_table())
 ```

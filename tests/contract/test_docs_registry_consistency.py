@@ -111,3 +111,47 @@ def test_hint_map_does_not_shadow_a_real_backend() -> None:
         f"{shadowed} are now real nebular backends, so their entries in "
         f"_NEBULAR_TYPE_HINTS are unreachable — remove them."
     )
+
+
+# ── Stale inference-method names (round 2 of the same failure mode) ──────
+# The published performance page taught ``vi_native`` for months after the
+# backend was renamed ``native_vi_nonlinear`` — a reader copying the row got
+# ``KeyError`` from ``fitter.run("vi_native")``. Same shape as the nebular
+# map above: the old name reads plausible, so it survives review. The exact
+# backtick-token regex keeps legitimate composites (the ``vi_native_vs_nifty``
+# benchmark suite, ``benchmark_vi_native_vs_nifty.py``) out of scope.
+
+_STALE_INFERENCE_NAMES = {"vi_native": "native_vi_nonlinear"}
+
+_METHOD_PAGES = (
+    *_PUBLISHED_PAGES,
+    "docs/performance/index.md",
+    "docs/performance/memory.md",
+    "docs/method_selection.md",
+    "docs/advanced/convergence.md",
+    "docs/inference/index.md",
+)
+
+
+@pytest.mark.parametrize("rel", _METHOD_PAGES)
+@pytest.mark.parametrize("stale", sorted(_STALE_INFERENCE_NAMES))
+def test_pages_do_not_teach_stale_inference_methods(rel: str, stale: str) -> None:
+    """No user-facing page may name an inference method run() rejects."""
+    text = _page_text(rel)
+    hits = [
+        line.strip() for line in text.splitlines() if re.search(rf"`{re.escape(stale)}`", line)
+    ]
+    assert not hits, (
+        f"{rel} teaches inference method `{stale}`, which fitter.run() rejects. "
+        f"Use `{_STALE_INFERENCE_NAMES[stale]}` instead. Offending lines: {hits}"
+    )
+
+
+def test_stale_inference_map_points_at_real_methods() -> None:
+    """Every replacement the stale map prescribes must resolve in the registry."""
+    live = {row["name"] for row in tengri.list_inference_methods()}
+    for stale, current in _STALE_INFERENCE_NAMES.items():
+        assert current in live, f"map prescribes {current!r} for {stale!r}, not in registry"
+        assert stale not in live, (
+            f"{stale!r} is a real method again — its stale-map entry is wrong"
+        )

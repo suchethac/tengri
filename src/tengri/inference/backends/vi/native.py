@@ -372,7 +372,7 @@ def run_native_vi(
     Python overhead. Stops automatically when KL converges.
 
     .. warning::
-       ``vi_native`` and the NIFTy ``vi`` path target the same KL
+       ``native_vi_nonlinear`` and the NIFTy ``vi`` path target the same KL
        objective but are **not posterior-equivalent**: the SFH PSD
        timescale ``sfh_field_psd_tau_myr`` has been observed to differ
        by ~10× between the two paths (e.g. 6 Myr vs 82 Myr on a 137-D

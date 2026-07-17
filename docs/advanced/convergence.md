@@ -167,7 +167,11 @@ Variational methods don't produce MCMC chains, so ESS and acceptance don't apply
    print(result.diagnostics.get("loss_history"))
    ```
 
-2. **Multi-seed agreement**: run with `n_seeds > 1`. > 10% Hamiltonian
+2. **Multi-seed agreement**: with the native backends
+   (`native_vi_nonlinear`, `native_vi_linear`), pass `n_seeds > 1`
+   (auto-set to 5 when omitted). The NIFTy `"vi"` driver has no
+   `n_seeds` parameter — `run("vi", n_seeds=...)` raises `TypeError`;
+   rerun it with different `key=` values instead. > 10% Hamiltonian
    disagreement suggests multimodality or insufficient iterations.
 
 3. **MCMC comparison**: run Ray Tracing or NUTS and compare posteriors.

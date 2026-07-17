@@ -2557,7 +2557,12 @@ def parameters_to_groups(spec: Parameters) -> dict:
         if group_name not in result:
             type_value = _extract_group_type(group_name, spec)
             if type_value is not None and (
-                type_value == "none" or (group_name == "dust" and type_value != "two_component")
+                type_value == "none"
+                or (group_name == "dust" and type_value != "two_component")
+                # An active non-default IGM selection has no params of its
+                # own, so without this it vanished from the round-trip and
+                # a ``madau`` spec silently rebuilt as the default model.
+                or (group_name == "igm" and type_value not in ("inoue", "inoue14"))
             ):
                 # Only add if it's a non-default type or a special case
                 # For now, only add 'none' types and other explicit settings
@@ -2614,9 +2619,21 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
         # ``"mappings"`` when active and ``"none"`` when off (#851).
         return "mappings" if getattr(spec, "shock", False) else "none"
     elif group_name == "igm":
+        # ``apply_igm`` is the on/off switch; ``igm_model`` stores the
+        # internal spelling (e.g. ``"inoue"``), which is also a registered
+        # grammar alias, so it round-trips through parse_groups unchanged.
+        if not getattr(spec, "apply_igm", True):
+            return "none"
         return spec.igm_model if hasattr(spec, "igm_model") else None
     elif group_name == "radio":
-        return spec.radio_model if hasattr(spec, "radio_model") else None
+        # The composable radio grammar carries its types on the ``sf`` /
+        # ``agn`` sub-blocks — parse_groups raises on a top-level ``type``
+        # mixed with sub-blocks, so the round-trip must not emit one here.
+        return None
+    elif group_name == "radio.sf":
+        return spec.radio_sfr_mode if getattr(spec, "radio", False) else None
+    elif group_name == "radio.agn":
+        return spec.radio_agn_model if getattr(spec, "radio", False) else None
     elif group_name == "xray":
         return spec.xray_model if hasattr(spec, "xray_model") else None
     elif group_name.startswith("agn"):

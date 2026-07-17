@@ -53,7 +53,7 @@ The full philosophy and an architecture flow chart are on the
 Most of tengri was built in about six months by a human author
 working closely with AI agents. That is a deliberate part of the
 design philosophy, and the development trail is kept open (see
-[`AGENTS.md`](AGENTS.md)). Trust has to be earned the usual way:
+[`docs/dev/agents.md`](docs/dev/agents.md)). Trust has to be earned the usual way:
 every piece gets checked against established codes, and the status
 of each one is tracked at
 [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md).
