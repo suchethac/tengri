@@ -42,6 +42,12 @@ def test_log_q_h_property(ssp_bare):
     assert np.isfinite(q_h), "q_h must be finite in float64"
     assert np.allclose(log_q_h, np.log10(q_h), rtol=1e-12), "log_q_h should equal log10(q_h)"
 
+    # 3b. log_q_h is a direct read of the published derived["log_nion"] (bit-exact)
+    state = model.predict_state(params)
+    assert jnp.allclose(pred.log_q_h, state.derived["log_nion"], atol=0.0), (
+        'log_q_h must directly equal derived["log_nion"]'
+    )
+
     # 4. Pure float32: log_q_h finite, q_h overflows
     # disable_jit keeps the forward eager so the float32 overflow is observable
     with jax.disable_jit(), jax.enable_x64(False):
