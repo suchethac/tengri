@@ -1634,7 +1634,9 @@ def suggest_parameters(
         IR emission template family from
         ``tengri.list_dust_emission_models()``.
     nebular_backend : str, optional
-        ``"baked_in"``, ``"cue"``, ``"cloudy_grid"``, or ``"cb19"``.
+        Nebular emission backend from ``tengri.list_nebular_backends()``:
+        ``"ssp"`` (emission baked into the SSP grid), ``"cue"``,
+        ``"cloudy"``, or ``"cb19"``.
     radio, xray, shock, chem_evol, evolving_metallicity : bool
         Toggle the corresponding physics module.
     eline_mode : str, default "off"
@@ -1989,7 +1991,16 @@ def summary() -> None:
             "dust emission templates",
             "list_dust_emission_models()",
         ),
-        (len(list_sfh_models()), "SFH models", "list_sfh_models()"),
+        # Two rows, mirroring the inference pair below: the raw registry holds
+        # SFH types that are registered but not yet wired into the DSPS forward
+        # path, and ``SEDModel.build`` rejects those. A single total would send
+        # a fresh user shopping among models that cannot build.
+        (
+            len(list_sfh_models(status="production")),
+            "buildable SFH models",
+            "list_sfh_models(status='production')",
+        ),
+        (len(list_sfh_models()), "total SFH models", "list_sfh_models()"),
         (len(list_nebular_backends()), "nebular backends", "list_nebular_backends()"),
         (len(list_filters()), "photometric filters", "list_filters()"),
         (len(list_plots()), "plotting helpers", "list_plots()"),

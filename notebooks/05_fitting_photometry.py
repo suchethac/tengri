@@ -167,7 +167,7 @@ print(f"Mock: {len(flux_obs)} bands, SNR = 20")
 # laptop (see docs/dev/notebook_orchestration_oom.md).
 
 # %%
-fitter = Fitter(sed_model, flux_obs, noise, data_type="photometry")
+fitter = Fitter(forward, flux_obs, noise, data_type="photometry")
 t = time.perf_counter()
 fitter.prewarm(method="mcmc_nuts", n_chains=2)
 print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")

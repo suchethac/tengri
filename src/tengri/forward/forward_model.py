@@ -546,6 +546,17 @@ class ForwardModel:
         }
         return _linear_flux_sum(per_pop_pred)
 
+    @property
+    def _approx(self) -> dict:
+        """Per-LUT activation flags, delegated from the inner SED.
+
+        Mirrors :attr:`SEDModel._approx` (``wave_precomp`` / ``spectrum_precomp``
+        / ``feature_precomp`` → bool) so callers can ask which precompute paths
+        are live without unwrapping the population. Empty for a forward whose
+        inner SED carries no flags (a stub or a non-SEDModel sub-model).
+        """
+        return getattr(self._inner_sed_for_delegation(), "_approx", None) or {}
+
     def _has_modern_approx(self) -> bool:
         """Whether the wrapped SED carries a build-time ``approx=`` LUT."""
         inner = self._inner_sed_for_delegation()

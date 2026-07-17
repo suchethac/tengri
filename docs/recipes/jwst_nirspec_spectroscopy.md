@@ -4,6 +4,8 @@ You have a JWST NIRSpec x1d extracted spectrum and want to fit the stellar mass
 and star formation history. Extract the 1D spectrum using the specutils bridge,
 then build an Observation manually.
 
+For a photometric equivalent using the Galaxy facade, see [SDSS photometry](sdss_photometry_oneliner.md).
+
 ## Extract spectrum from FITS
 
 ```python
@@ -27,7 +29,7 @@ flux and error arrays go to `Fitter`:
 
 ```python
 import tengri
-from tengri import SEDModel, Fitter, Spectroscopy, Observation, recipes
+from tengri import SEDModel, Fitter, Spectroscopy, Observation, recipes, load_ssp_data
 
 spec = Spectroscopy(
     wave_obs=wave,
@@ -36,7 +38,7 @@ spec = Spectroscopy(
 )
 obs = Observation(spectroscopy=spec)
 
-ssp = tengri.load_ssp()
+ssp = load_ssp_data(tengri.download_ssp())
 model = SEDModel.build(ssp_data=ssp, observation=obs,
                        **recipes.star_forming_photometry())
 

@@ -23,10 +23,11 @@ rather than assuming them.
 compilation cache so only the first galaxy pays the compile cost:
 
 ```python
-from tengri import Model, Parameters, Fitter
+from tengri import SEDModel, Fitter, ForwardModel
 
-model = Model(spec, ssp)
-fitter = Fitter(model, flux_obs, noise)  # template fitter
+model = SEDModel.build(ssp_data=ssp, observation=obs)
+forward = ForwardModel.build(sed=model, observation=obs)
+fitter = Fitter(forward, flux_obs, noise)  # template fitter
 
 galaxies = [
     {"flux_obs": flux_array_i, "noise": noise_array_i}
@@ -146,19 +147,20 @@ result = fitter_i.run("vi", init_from=result_map, n_iterations=25)
 ### SDSS photometry
 
 ```python
-from tengri import Model, Parameters, Uniform, Fitter, Observation, Photometry
-
-spec = Parameters(
-    redshift=0.05,       # fixed redshift from spectroscopic catalog
-    sfh="field",         # stochastic SFH
-    dust=True,
-)
+from tengri import SEDModel, Fitter, ForwardModel, Fixed, Observation, Photometry
 
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
-model = Model(spec, ssp, observation=obs)
-fitter = Fitter(model, flux_obs, noise)
+model = SEDModel.build(
+    ssp_data=ssp,
+    observation=obs,
+    sfh={'type': 'tsnorm'},  # simple parametric SFH
+    redshift=Fixed(0.05),  # fixed redshift from spectroscopic catalog
+)
+
+forward = ForwardModel.build(sed=model, observation=obs)
+fitter = Fitter(forward, flux_obs, noise)
 results = fitter.fit_batch(sdss_galaxies)
 ```
 

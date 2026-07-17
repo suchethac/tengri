@@ -34,7 +34,7 @@ For inference loops and likelihood evaluation, use the **lean methods** directly
 
 ```python
 # These methods are called by the inference loop
-photometry = model.predict_photometry(params, filters=filter_list)
+photometry = model.predict_photometry(params)
 spectrum = model.predict_spectrum(params, wave_obs)
 lines = model.predict_emission_lines(params)
 ```
@@ -222,12 +222,11 @@ The `.spectrum()` method returns an **instrument-ready** spectrum — convolved 
 
 ```python
 # Spectrum at specific observer-frame wavelengths
-obs_wave_rest = jnp.linspace(4000, 7000, 200)  # Å, rest-frame wavelengths
-obs_wave = obs_wave_rest * (1 + model.redshift)
+wave_obs = jnp.linspace(4000, 7000, 200)  # Å, observer-frame wavelengths
 
-spec = pred.spectrum(wave_obs=obs_wave)
-# spec.flux — F_ν at observed wavelengths [erg/s/cm²/Å]
-# spec.error — noise model prediction [erg/s/cm²/Å]
+spec = pred.spectrum(wave_obs=wave_obs)
+# spec.flux — F_ν at observed wavelengths [erg/s/cm²/Hz]
+# spec.error — noise model prediction [erg/s/cm²/Hz]
 ```
 
 **Key differences from SED:**
@@ -268,7 +267,7 @@ spectrum_fast = pred.spectrum(wave_obs=..., fast=True)  # interpolates precomput
 
 ### When to use fast
 
-- **During inference**: Fitting uses the approximation that was baked in at build time (configurable via `model.approx`).
+- **During inference**: Fitting uses the approximation that was baked in at build time (configured via `approx=WavePrecomp(...)` at model construction).
 - **Post-fit inspection**: Use `fast=True` to match inference exactly.
 - **Speed-critical analysis**: e.g., generating a mock catalog of 1 million galaxies.
 
@@ -335,19 +334,26 @@ catalog.to_csv("mock_catalog.csv", index=False)
 
 This workflow is pure JAX — no loop, fully differentiable, and trivial to parallelize.
 
-## Error handling: KeyError on unknown properties
+## Error handling: unknown properties
 
-If you request a property that doesn't exist or isn't active in the model, you get a clear error:
+If you request a property that doesn't exist or isn't active in the model, you get a clear error. The error type depends on the access pattern:
 
 ```python
 pred = model.predict(params)
 
+# Attribute access raises AttributeError
 try:
     print(pred.nonexistent_property)
 except AttributeError as e:
     print(f"Error: {e}")
     # Suggestion: list available properties
     print("Available properties:", list(pred.properties.keys()))
+
+# Dict access raises KeyError
+try:
+    value = pred.properties["nonexistent_property"]
+except KeyError as e:
+    print(f"Error: {e}")
 ```
 
 The model always knows which properties are available. Never silently return NaN for an unknown name.

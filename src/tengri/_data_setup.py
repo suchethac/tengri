@@ -8,8 +8,11 @@ from pathlib import Path
 
 __all__ = [
     "KNOWN_SSP_FILENAMES",
+    "SSP_FILENAME_GLOBS",
+    "data_dir",
     "data_path",
     "download_ssp",
+    "find_ssp_files",
     "list_available_ssps",
     "list_known_ssps",
 ]
@@ -192,6 +195,76 @@ def _ssp_file_present(filename: str) -> bool:
     return False
 
 
+# The documented environment variable is TENGRI_DATA_DIR (README, installation
+# docs) and it is what the download path writes to. TENGRI_DATA is an older
+# spelling that some reader paths grew independently, which split write and find
+# across two names: a user who set the documented one could download a grid and
+# then be told none existed. Both are honored here, in one place, so the two
+# halves can never drift apart again.
+_DATA_DIR_ENV_VARS = ("TENGRI_DATA_DIR", "TENGRI_DATA")
+
+# Every SSP grid family the public catalog ships, plus the ``ssp_*`` prefix used
+# by locally generated grids (nebular-baked, produced by the conversion scripts
+# rather than downloaded). A finder that globs only ``ssp_*`` cannot see a single
+# file ``download_ssp`` writes.
+SSP_FILENAME_GLOBS = ("ssp_*.h5", "fsps_*.h5", "bc03_*.h5", "bpss_*.h5", "pgny_*.h5")
+
+
+def data_dir() -> str:
+    """Directory tengri reads and writes SSP grids in.
+
+    Resolves ``$TENGRI_DATA_DIR`` (the documented spelling), then the legacy
+    ``$TENGRI_DATA``, then ``"data"`` relative to the working directory.
+
+    Returns
+    -------
+    str
+        Directory path. Not guaranteed to exist.
+    """
+    for var in _DATA_DIR_ENV_VARS:
+        value = os.environ.get(var)
+        if value:
+            return value
+    return "data"
+
+
+def find_ssp_files(extra_dirs: "list[str] | None" = None) -> "list[Path]":
+    """Every SSP grid visible to tengri, nearest first.
+
+    Searches :func:`data_dir`, then ``data/`` in the working directory and its
+    ancestors, matching all known grid families (:data:`SSP_FILENAME_GLOBS`) —
+    not just the locally generated ``ssp_*`` prefix.
+
+    Parameters
+    ----------
+    extra_dirs : list of str, optional
+        Additional directories to search first.
+
+    Returns
+    -------
+    list of Path
+        Matching grid paths, de-duplicated, in search order.
+    """
+    candidates: list[Path] = [Path(d) for d in (extra_dirs or [])]
+    candidates.append(Path(os.path.expanduser(os.path.expandvars(data_dir()))))
+    cwd = Path.cwd().resolve()
+    candidates.extend([p / "data" for p in (cwd, *list(cwd.parents)[:5])])
+    candidates.append(Path.home() / "tengri" / "data")
+
+    out: list[Path] = []
+    seen: set[Path] = set()
+    for directory in candidates:
+        if not directory.is_dir():
+            continue
+        for pattern in SSP_FILENAME_GLOBS:
+            for match in sorted(directory.glob(pattern)):
+                resolved = match.resolve()
+                if resolved not in seen:
+                    seen.add(resolved)
+                    out.append(match)
+    return out
+
+
 def download_ssp(
     name: str = "fsps_prsc_miles_chabrier",
     dest: str | os.PathLike | None = None,
@@ -231,7 +304,7 @@ def download_ssp(
     """
     # Resolve target directory
     if dest is None:
-        dest = os.environ.get("TENGRI_DATA_DIR", "data")
+        dest = data_dir()
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -317,7 +390,7 @@ def download_template(
         If the HTTP download fails (network error or non-200 status).
     """
     if dest is None:
-        dest = os.environ.get("TENGRI_DATA_DIR", "data")
+        dest = data_dir()
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
 

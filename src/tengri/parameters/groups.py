@@ -1256,6 +1256,20 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
                 result["dust_emission"] = emission_type
 
 
+# Backend *implementations* are named after their physics (BakedInBackend,
+# CloudyGridBackend) and the internal NebularConfig.backend enum spells two of
+# them "baked_in" / "cloudy". The builder grammar instead names each backend for
+# where its emission comes from ("ssp", "cloudy"). Users reasonably guess the
+# class/config spelling, and difflib cannot bridge "baked_in" -> "ssp" (no shared
+# substring), so map the guessable spellings explicitly to keep the error useful.
+_NEBULAR_TYPE_HINTS = {
+    "baked_in": "ssp",
+    "bakedin": "ssp",
+    "cloudy_grid": "cloudy",
+    "cloudygrid": "cloudy",
+}
+
+
 def _translate_neb(neb_dict: dict, result: dict) -> None:
     """Translate neb group to nebular settings."""
     neb_type = neb_dict.get("type", "none")
@@ -1263,9 +1277,17 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
     # Validate type
     valid_neb = _valid_nebular_types()
     if neb_type not in valid_neb:
-        suggestions = difflib.get_close_matches(neb_type, valid_neb, n=2, cutoff=0.6)
+        hint = _NEBULAR_TYPE_HINTS.get(str(neb_type).lower())
+        suggestions = (
+            [hint]
+            if hint in valid_neb
+            else difflib.get_close_matches(neb_type, valid_neb, n=2, cutoff=0.6)
+        )
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown nebular type '{neb_type}'.{suggest_str}")
+        raise ValueError(
+            f"Unknown nebular type '{neb_type}'.{suggest_str} "
+            f"Available: {', '.join(sorted(valid_neb))}."
+        )
 
     # Map type to nebular settings
     if neb_type == "none":
