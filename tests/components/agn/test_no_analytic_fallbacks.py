@@ -159,6 +159,10 @@ class TestSKIRTORNoFallback:
         # Patch Path.is_file to always return False so no candidate is found
         monkeypatch.setattr("pathlib.Path.is_file", lambda self: False)
         _skirtor_mod._skirtor_default = None
+        # The default grid loader is @functools.cache'd (#1199), so a grid cached
+        # by an earlier test in this worker would short-circuit the is_file check
+        # and mask the missing-templates path. Clear it to exercise the raise.
+        _skirtor_mod._load_skirtor_default_grid.cache_clear()
         import jax.numpy as jnp
 
         wave = jnp.linspace(1e3, 1e6, 100)
@@ -168,6 +172,10 @@ class TestSKIRTORNoFallback:
     def test_error_message_contains_download_hint(self, monkeypatch):
         monkeypatch.setattr("pathlib.Path.is_file", lambda self: False)
         _skirtor_mod._skirtor_default = None
+        # The default grid loader is @functools.cache'd (#1199), so a grid cached
+        # by an earlier test in this worker would short-circuit the is_file check
+        # and mask the missing-templates path. Clear it to exercise the raise.
+        _skirtor_mod._load_skirtor_default_grid.cache_clear()
         import jax.numpy as jnp
 
         wave = jnp.linspace(1e3, 1e6, 100)
