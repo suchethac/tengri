@@ -10,9 +10,9 @@ know whether emission lines need adding separately or are already
 present in the stellar templates.
 
 CueBackend and CloudyGridBackend become free-parameter components: they
-read ``state.derived["nion"]`` (the ionizing photon production rate
-from the stellar block) and add the resulting line + continuum SED to
-``sed_intrinsic``.
+read the stellar-published ionizing rate — ``log_nion`` for the log-domain
+consumers (grid path and Cue fallback), ``nion`` for the deferred erg/s
+line paths — and add the resulting line + continuum SED to ``sed_intrinsic``.
 """
 
 from __future__ import annotations
