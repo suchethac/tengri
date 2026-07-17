@@ -480,7 +480,16 @@ class TestSKIRTORJIT:
             fn_jit = jax.jit(test_fn)
             sed_jit = fn_jit(7.0, 0.5)
             chex.assert_equal_shape([sed_jit, wave])
-            chex.assert_trees_all_close(sed_eager, sed_jit, rtol=1e-6)
+            # JIT parity to 1 ppm of the SED's own scale. This is a torus-only
+            # template: the SED is ~0 across the UV/optical (dust emits nothing
+            # there) and peaks in the IR. A bare rtol=1e-6, atol=0 would demand
+            # bit-exact eager/jit agreement on that near-zero noise floor —
+            # values ~40 dex below the IR peak where XLA legitimately reorders
+            # sub-ULP terms differently across platforms (a false failure seen
+            # only on CI-Linux, #1195). Scaling atol to the peak asserts the
+            # physically meaningful statement: JIT preserves the SED.
+            atol = 1e-6 * float(jnp.max(jnp.abs(sed_eager)))
+            chex.assert_trees_all_close(sed_eager, sed_jit, rtol=1e-6, atol=atol)
 
     def test_jit_parity_registered_model(self, wave):
         """JIT parity for registered 'skirtor' model with all 5 parameters."""
@@ -507,7 +516,12 @@ class TestSKIRTORJIT:
             fn_jit = jax.jit(test_fn)
             sed_jit = fn_jit(7.0, 1.0, 1.0, 40.0, 0.5)
             chex.assert_equal_shape([sed_jit, wave])
-            chex.assert_trees_all_close(sed_eager, sed_jit, rtol=1e-6)
+            # JIT parity to 1 ppm of the SED's own scale (see the note in
+            # test_jit_parity_analytic): atol=0 would demand bit-exact agreement
+            # on the near-zero noise floor, which XLA does not guarantee across
+            # platforms for fused float ops (#1195).
+            atol = 1e-6 * float(jnp.max(jnp.abs(sed_eager)))
+            chex.assert_trees_all_close(sed_eager, sed_jit, rtol=1e-6, atol=atol)
 
     def test_jit_grad_combined(self, wave):
         """JIT of grad agrees with FD for agn_tau_skirtor."""
