@@ -77,7 +77,7 @@ def test_f64_exactness_vs_frozen_reference(ssp_bare):
     assert_allclose(log_new_blue, log_ref_blue, atol=1e-12)
 
     # Test 1c: steep red power law (proportional to nu^{1.5} or lambda^{-1.5})
-    sed_red = wave**(-1.5)
+    sed_red = wave ** (-1.5)
     ref_red = _frozen_integrate_nion(sed_red, wave)
     new_red = _integrate_nion(sed_red, wave)
     assert_allclose(new_red, ref_red, rtol=1e-12)

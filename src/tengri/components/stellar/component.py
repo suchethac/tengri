@@ -1808,7 +1808,8 @@ class StellarSEDComponent:
         # float32 SSP grid (bc03_*, pgny_*) cannot poison the nebular backends
         # through the ionizing SED (#1099).
         mass_scale_erg = total_mass.astype(jnp.result_type(float)) * LSUN_ERG_PER_S
-        # Log10 of the mass scale, for use in apply_log10_scale (ionizing SED only).
+        # Log10 of the mass scale, folded into the log-domain Q_H integral
+        # (_integrate_nion_log10 log10_scale) so no ~1e42 intermediate is materialized.
         log10_mass_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
             LSUN_ERG_PER_S
         )
@@ -2440,9 +2441,7 @@ class StellarSEDComponent:
             # max/argmax over zero-size arrays (#1193 fallout, #1207 fix).
             return jnp.full((), -jnp.inf)
 
-        sed_ion = jnp.tensordot(
-            joint_weights, ssp.ssp_flux[:, :, :n_ion], axes=([0, 1], [0, 1])
-        )
+        sed_ion = jnp.tensordot(joint_weights, ssp.ssp_flux[:, :, :n_ion], axes=([0, 1], [0, 1]))
         log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
             LSUN_ERG_PER_S
         )
