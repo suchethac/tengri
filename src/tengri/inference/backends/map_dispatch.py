@@ -298,11 +298,40 @@ def _run_map_multistart(context, *, key, n_restarts, n_steps, learning_rate, opt
         (params, _), losses = jax.lax.scan(_step, (p0, ostate), None, length=n_steps)
         return params, losses
 
-    _run_restarts = jax.jit(
-        lambda batched_inits, d_args: jax.vmap(_optimize_one, in_axes=(0, None))(
-            batched_inits, d_args
+    def _build_restarts():
+        return jax.jit(
+            lambda batched_inits, d_args: jax.vmap(_optimize_one, in_axes=(0, None))(
+                batched_inits, d_args
+            )
         )
-    )
+
+    # Memoize the vmapped restart kernel so repeated same-config
+    # ``run("map", n_restarts>1)`` calls (e.g. a sequential per-galaxy catalog
+    # loop) reuse the compiled executable instead of recompiling from a fresh
+    # closure that misses jax.jit's cache. ``loss_fn`` is structurally cached and
+    # the inits + data thread as arguments (see above), so the key need only
+    # carry the optimizer config; a non-string optimizer we cannot fingerprint
+    # disables the memo (build fresh, never risk a stale kernel).
+    _fitter = getattr(context, "fitter", None)
+    if (
+        isinstance(optimizer, str)
+        and _fitter is not None
+        and hasattr(_fitter, "_memo_batch_kernel")
+    ):
+        _run_restarts = _fitter._memo_batch_kernel(
+            "_map_multistart_kernel_cache",
+            (
+                "map_multistart",
+                _fitter.compile_signature(),
+                optimizer,
+                int(n_steps),
+                float(learning_rate),
+                int(n_restarts),
+            ),
+            _build_restarts,
+        )
+    else:
+        _run_restarts = _build_restarts()
     t0 = time.time()
     params_b, losses_b = _run_restarts(inits, data_args)
     jax.block_until_ready(losses_b)
