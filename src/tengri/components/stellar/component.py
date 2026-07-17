@@ -2866,21 +2866,16 @@ def _q_h_fn(state, params):
 
 def _xi_ion_fn(state, params):
     """Ionizing photon efficiency [Hz/erg]."""
-    from tengri.utils.physics_constants import C_AA
-    from tengri.utils.sed_quantities import compute_fuv_flux
+    from tengri.utils.sed_quantities import compute_xi_ion_from_log_qh
 
     derived = state.derived
     nan_scalar = jnp.asarray(jnp.nan)
-    q_h = jnp.asarray(derived.get("nion", nan_scalar))
-
     sed = state.sed_intrinsic
     if sed is None:
         return nan_scalar
     else:
-        fuv = compute_fuv_flux(sed, state.wave)
-        nu_uv = C_AA / 1500.0
-        nu_l_uv = fuv * nu_uv
-        return q_h / jnp.maximum(nu_l_uv, _TINY)
+        log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+        return compute_xi_ion_from_log_qh(log_nion, sed, state.wave)
 
 
 # Register properties in the global registry

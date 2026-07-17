@@ -560,16 +560,16 @@ def _l_1p4ghz_fn(state, params):
 
 def _l_thermal_fn(state, params):
     """Radio thermal (free-free) luminosity [erg/s/Hz]."""
-    from tengri.utils.sed_quantities import compute_l_radio_thermal
+    from tengri.utils.sed_quantities import compute_l_radio_thermal_from_log_qh
 
     derived = state.derived
-    nion = jnp.asarray(derived.get("nion", 0.0))
-    return compute_l_radio_thermal(nion)
+    log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+    return compute_l_radio_thermal_from_log_qh(log_nion)
 
 
 def _l_nonthermal_fn(state, params):
     """Radio non-thermal synchrotron luminosity [erg/s/Hz]."""
-    from tengri.utils.sed_quantities import compute_l_radio_thermal
+    from tengri.utils.sed_quantities import compute_l_radio_thermal_from_log_qh
 
     derived = state.derived
     if "sed_radio" not in derived:
@@ -579,8 +579,8 @@ def _l_nonthermal_fn(state, params):
     wave = state.wave
     l_1p4ghz = jnp.interp(_WAVE_21CM_AA, wave, L_radio)
 
-    nion = jnp.asarray(derived.get("nion", 0.0))
-    l_thermal = compute_l_radio_thermal(nion)
+    log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+    l_thermal = compute_l_radio_thermal_from_log_qh(log_nion)
     return l_1p4ghz - l_thermal
 
 
