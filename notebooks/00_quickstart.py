@@ -325,17 +325,11 @@ spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(60)])
 spec_lo, spec_med, spec_hi = np.percentile(spec_draws, [16, 50, 84], axis=0)
 spec_truth = obs_fnu(truth_full)
 
-# Chunk the vmap: ``forward.predict_observables`` bypasses the WavePrecomp LUT
-# (#281), so each call builds the full-resolution cube — vmapping all draws at
-# once would materialize hundreds of them simultaneously (multi-GB). Batches of
-# 25 keep peak memory flat while still using the fused kernel.
-_predict_phot = jax.jit(lambda p: forward.predict_observables(p)["phot_fnu"])
-phot_draws = np.concatenate(
-    [
-        np.asarray(jax.vmap(_predict_phot)(jax.tree.map(lambda a, lo=i: a[lo : lo + 25], draws)))
-        for i in range(0, N_DRAWS, 25)
-    ]
-)
+# Posterior photometry via ``predict_photometry`` — the same WavePrecomp LUT
+# path the fit used. It serves the filter fluxes straight from the SSP × filter
+# table without materializing the full-resolution SED cube, so the posterior
+# draws map cheaply (no vmap chunking needed).
+phot_draws = np.stack([np.asarray(sed_model.predict_photometry(p)) for p in draw_dicts(N_DRAWS)])
 phot_med = np.median(phot_draws, axis=0)
 
 fig = plt.figure(figsize=(8.6, 5.4))
