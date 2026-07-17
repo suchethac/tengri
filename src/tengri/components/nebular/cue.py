@@ -108,6 +108,7 @@ from typing import Any, ClassVar, NamedTuple
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.scipy.special import logsumexp
 
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
@@ -118,6 +119,7 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,
     L_SUN_CUE as _LSUN_ERG,  # 3.839e33 — Cue training convention, NOT IAU 2015
 )
+from tengri.utils.scale import LN10, pow10
 
 _LOG_LSUN = jnp.log10(_LSUN_ERG)
 _LOG_4PI = jnp.log10(4.0 * jnp.pi)
@@ -1398,21 +1400,22 @@ class CueBackend:
             )
         )(ssp_log_ages_yr)
 
-        # Q_H per bin, masked to young bins with positive weights.
-        # #1001 defense: a non-finite table row must never win the argmax
-        # below (NaN wins any comparison) nor poison the Q_H sum — zero it
-        # out with a finite dummy so neither forward nor gradient passes
-        # see a NaN.
-        qh_per_bin = 10.0**logqion_all  # (n_age,)
-        qh_per_bin = jnp.where(jnp.isfinite(qh_per_bin), qh_per_bin, 0.0)
-        weighted_qh = ssp_weights * qh_per_bin  # (n_age,)
-        # Zero out old bins and non-positive weights
-        weighted_qh = jnp.where(young_mask & (ssp_weights > 0), weighted_qh, 0.0)
+        # Q_H via log-domain logsumexp (#1206): log10( sum_a w_a * 10**logqion_a )
+        # Prevents float32 overflow (10**52 -> inf). Old linear arithmetic overflows
+        # on young populations (logqion ~ 44-52 in f32 range), silently zeroing
+        # emission via the #1001 isfinite guard. The log-domain formulation is
+        # exact in f64 and finite-and-correct in f32.
+        # #1001 defense: non-finite table rows are sanitized (replaced with 0.0 log)
+        # so they don't poison the exponent (0*exp(nan) is still nan).
+        finite_q = jnp.isfinite(logqion_all)  # (n_age,)
+        valid = young_mask & (ssp_weights > 0) & finite_q  # (n_age,) bool
+        logq_safe = jnp.where(finite_q, logqion_all, 0.0)
+        w_valid = jnp.where(valid, ssp_weights, 0.0)
+        lse = logsumexp(LN10 * logq_safe, b=w_valid)  # ln( sum w*10**logqion )
+        any_valid = jnp.any(valid)
+        total_logqion = jnp.where(any_valid, lse / LN10, -99.0)
 
-        total_qh = jnp.sum(weighted_qh)
-        total_logqion = jnp.where(total_qh > 0, jnp.log10(total_qh), -99.0)
-
-        # ── Effective ionizing-spectrum shape (#1018) ─────────────────────────
+        # ── Effective ionizing-spectrum shape via per-segment max-offset (#1018) ──
         # Cue is trained on the *time-averaged* ionizing spectrum of the whole
         # population (see the module header), so the shape must combine every
         # ionizing age bin — not the single argmax-dominant one. The old
@@ -1422,9 +1425,9 @@ class CueBackend:
         # does not depend on ``ssp_weights``, it forced d(shape)/d(SFH) ≡ 0 —
         # silently starving gradient-based inference.
         #
-        # Combine the way the physics does. The 7 params describe a 4-segment
-        # broken power law: 4 slopes + 3 log-ratios of the INTEGRATED segment
-        # luminosities. Across populations:
+        # Combine the way the physics does, now in log-domain for float32 safety.
+        # The 7 params describe a 4-segment broken power law: 4 slopes + 3 log-
+        # ratios of the INTEGRATED segment luminosities. Across populations:
         #   * segment luminosities ADD linearly     → L_k = Σ_a w_a L_k,a
         #   * the slope of a sum of power laws is the per-segment luminosity-
         #     weighted mean          → α_k = Σ_a (w_a L_k,a / L_k) · α_k,a
@@ -1443,24 +1446,37 @@ class CueBackend:
             )
         )(ssp_log_ages_yr)  # (n_age, 4)
 
-        # #1001 defense, mirroring qh_per_bin: a non-finite table row must never
-        # poison the luminosity sum nor the gradient.
-        seg_per_bin = 10.0**log_seglum_all
-        seg_per_bin = jnp.where(jnp.isfinite(seg_per_bin), seg_per_bin, 0.0)
-
-        w_mass = jnp.where(young_mask & (ssp_weights > 0), ssp_weights, 0.0)  # (n_age,)
-        seg_w = w_mass[:, None] * seg_per_bin  # (n_age, 4)
-        seg_tot = jnp.sum(seg_w, axis=0)  # (4,)
-        seg_safe = jnp.maximum(seg_tot, 1e-300)
-
-        alpha_eff = jnp.sum(seg_w * ionspec_all[:, :4], axis=0) / seg_safe  # (4,)
-        logLratio_eff = jnp.diff(jnp.log10(seg_safe))  # (3,)
+        # Per-segment max-offset scaling for log-domain arithmetic (#1206).
+        # For segment k: seg_w[a,k] = w_a * 10**log_seglum[a,k]. Factor out
+        # the per-segment peak m_k so 10**(log_seg_w - m_k) stays O(<=1);
+        # alpha (a ratio) is m_k-invariant, and log10(seg_tot_k) = m_k +
+        # log10(sum 10**(log_seg_w - m_k)).
+        w_pos = ssp_weights > 0  # (n_age,)
+        log_w = jnp.where(w_pos, jnp.log10(jnp.where(w_pos, ssp_weights, 1.0)), -jnp.inf)
+        finite_seg = jnp.isfinite(log_seglum_all)  # (n_age,4)
+        seg_valid = young_mask[:, None] & w_pos[:, None] & finite_seg
+        log_seg_w = jnp.where(
+            seg_valid, log_w[:, None] + jnp.where(finite_seg, log_seglum_all, 0.0), -jnp.inf
+        )  # (n_age,4)
+        m = jnp.max(log_seg_w, axis=0)  # (4,); -inf if a segment is fully invalid
+        m_safe = jnp.where(jnp.isfinite(m), m, 0.0)
+        seg_w_scaled = pow10(log_seg_w - m_safe[None, :])  # (n_age,4); pow10(-inf)=0
+        seg_tot_scaled = jnp.sum(seg_w_scaled, axis=0)  # (4,)
+        seg_pos = seg_tot_scaled > 0
+        alpha_eff = jnp.sum(seg_w_scaled * ionspec_all[:, :4], axis=0) / jnp.where(
+            seg_pos, seg_tot_scaled, 1.0
+        )  # (4,) — m_k cancels in the ratio
+        log_seg_tot = jnp.where(
+            seg_pos, m_safe + jnp.log10(jnp.where(seg_pos, seg_tot_scaled, 1.0)), -jnp.inf
+        )  # (4,)
+        logLratio_eff = jnp.diff(log_seg_tot)  # (3,)
         i7_weighted = jnp.concatenate([alpha_eff, logLratio_eff])
 
-        # Fully degenerate case (no ionizing bins at all, e.g. a quiescent SFH):
-        # fall back to the dominant-bin shape rather than 1e-300 floor artefacts.
-        # ``total_qh == 0`` already forces the emission to zero downstream.
-        i7 = jnp.where(total_qh > 0, i7_weighted, ionspec_all[jnp.argmax(weighted_qh)])
+        # Degenerate (no valid ionizing bin): dominant-bin fallback, picked in LOG
+        # space so the index selection never materializes 10**logqion.
+        # total_logqion == -99 already zeros emission.
+        log_terms = jnp.where(valid, logq_safe + log_w, -jnp.inf)  # (n_age,)
+        i7 = jnp.where(any_valid, i7_weighted, ionspec_all[jnp.argmax(log_terms)])
 
         # Gas metallicity: convert absolute → Z/Zsun for Cue
         gas_logz = neb_logZ_gas if neb_logZ_gas is not None else log_z

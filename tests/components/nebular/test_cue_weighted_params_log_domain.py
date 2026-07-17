@@ -26,7 +26,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri import load_ssp_data
-from tengri.components.nebular.cue import CueBackend, _MAX_NEB_LOG_AGE, _LOG10_ZSUN
+from tengri.components.nebular.cue import _MAX_NEB_LOG_AGE, CueBackend
 from tengri.components.nebular.ionizing_spectrum import (
     interpolate_ionizing_params,
     interpolate_ionizing_seglum,
@@ -44,9 +44,7 @@ def _load_ssp():
     return load_ssp_data(_BARE)
 
 
-def _frozen_weighted_combine(
-    logqion_all, log_seglum_all, ionspec_all, ssp_weights, young_mask
-):
+def _frozen_weighted_combine(logqion_all, log_seglum_all, ionspec_all, ssp_weights, young_mask):
     """FROZEN pre-log_nion Cue combine (#1206).
 
     This is the exact old linear-domain arithmetic from cue.py lines 1401-1463
@@ -94,8 +92,10 @@ def test_f64_exactness_vs_frozen_arithmetic():
     for met_abs in metallicities:
         for sfh_idx, sfh_label in enumerate(sfh_names):
             # Create a test SFH weighting
-            log_ages = jnp.log10(be._ssp_ages_yr) if hasattr(be, "_ssp_ages_yr") else np.log10(
-                np.linspace(1e6, 1.3e10, 30)
+            log_ages = (
+                jnp.log10(be._ssp_ages_yr)
+                if hasattr(be, "_ssp_ages_yr")
+                else np.log10(np.linspace(1e6, 1.3e10, 30))
             )
             n_age = len(log_ages) if hasattr(log_ages, "__len__") else 30
 
@@ -136,10 +136,10 @@ def test_f64_exactness_vs_frozen_arithmetic():
 
             # Check precondition: young population has all 4 segments populated
             seg_per_bin_frozen = 10.0**log_seglum_all
-            seg_per_bin_frozen = jnp.where(jnp.isfinite(seg_per_bin_frozen), seg_per_bin_frozen, 0.0)
-            w_mass_frozen = jnp.where(
-                young_mask & (ssp_weights > 0), ssp_weights, 0.0
+            seg_per_bin_frozen = jnp.where(
+                jnp.isfinite(seg_per_bin_frozen), seg_per_bin_frozen, 0.0
             )
+            w_mass_frozen = jnp.where(young_mask & (ssp_weights > 0), ssp_weights, 0.0)
             seg_w_frozen = w_mass_frozen[:, None] * seg_per_bin_frozen
             seg_tot_frozen = jnp.sum(seg_w_frozen, axis=0)
             assert jnp.all(seg_tot_frozen > 0), (
@@ -153,30 +153,26 @@ def test_f64_exactness_vs_frozen_arithmetic():
             )
 
             # Get the new method's result
-            result = be._compute_weighted_cue_params(
-                ssp_weights, ssp_log_ages, met_abs
-            )
+            result = be._compute_weighted_cue_params(ssp_weights, ssp_log_ages, met_abs)
             gas_logqion_new = result["gas_logqion"]
-            i7_new = jnp.array([
-                result["ionspec_index1"],
-                result["ionspec_index2"],
-                result["ionspec_index3"],
-                result["ionspec_index4"],
-                result["ionspec_logLratio1"],
-                result["ionspec_logLratio2"],
-                result["ionspec_logLratio3"],
-            ])
+            i7_new = jnp.array(
+                [
+                    result["ionspec_index1"],
+                    result["ionspec_index2"],
+                    result["ionspec_index3"],
+                    result["ionspec_index4"],
+                    result["ionspec_logLratio1"],
+                    result["ionspec_logLratio2"],
+                    result["ionspec_logLratio3"],
+                ]
+            )
 
             # Assert match at rtol=1e-12
-            assert jnp.allclose(
-                gas_logqion_new, total_logqion_frozen, rtol=1e-12, atol=1e-12
-            ), (
+            assert jnp.allclose(gas_logqion_new, total_logqion_frozen, rtol=1e-12, atol=1e-12), (
                 f"gas_logqion mismatch at met={met_abs}, sfh={sfh_label}: "
                 f"new={gas_logqion_new}, frozen={total_logqion_frozen}"
             )
-            assert jnp.allclose(
-                i7_new, i7_frozen, rtol=1e-12, atol=1e-12
-            ), (
+            assert jnp.allclose(i7_new, i7_frozen, rtol=1e-12, atol=1e-12), (
                 f"ionspec params mismatch at met={met_abs}, sfh={sfh_label}: "
                 f"new={i7_new}, frozen={i7_frozen}"
             )
@@ -197,65 +193,59 @@ def test_pure_float32_correctness():
     ssp_log_ages = np.log10(np.linspace(1e6, 1.3e10, n_age))
     log_z = -2.0  # absolute
 
-    result_f64 = be64._compute_weighted_cue_params(
-        ssp_weights_f64, ssp_log_ages, log_z
-    )
+    result_f64 = be64._compute_weighted_cue_params(ssp_weights_f64, ssp_log_ages, log_z)
     gas_logqion_f64 = result_f64["gas_logqion"]
-    i7_f64 = jnp.array([
-        result_f64["ionspec_index1"],
-        result_f64["ionspec_index2"],
-        result_f64["ionspec_index3"],
-        result_f64["ionspec_index4"],
-        result_f64["ionspec_logLratio1"],
-        result_f64["ionspec_logLratio2"],
-        result_f64["ionspec_logLratio3"],
-    ])
+    i7_f64 = jnp.array(
+        [
+            result_f64["ionspec_index1"],
+            result_f64["ionspec_index2"],
+            result_f64["ionspec_index3"],
+            result_f64["ionspec_index4"],
+            result_f64["ionspec_logLratio1"],
+            result_f64["ionspec_logLratio2"],
+            result_f64["ionspec_logLratio3"],
+        ]
+    )
 
     # NOW rebuild inside f32 context
     with jax.enable_x64(False):
         be32 = CueBackend(_CUE_WEIGHTS, ssp_data=ssp)
         # CRITICAL: assert the backend was rebuilt in f32
-        assert (
-            be32._logqion_table.dtype == jnp.float32
-        ), f"CueBackend was NOT rebuilt in f32 context: _logqion_table dtype={be32._logqion_table.dtype}"
+        assert be32._logqion_table.dtype == jnp.float32, (
+            f"CueBackend was NOT rebuilt in f32 context: _logqion_table dtype={be32._logqion_table.dtype}"
+        )
 
         # Convert inputs to f32
         ssp_weights_f32 = jnp.asarray(ssp_weights_f64, dtype=jnp.float32)
         ssp_log_ages_f32 = jnp.asarray(ssp_log_ages, dtype=jnp.float32)
 
-        result_f32 = be32._compute_weighted_cue_params(
-            ssp_weights_f32, ssp_log_ages_f32, log_z
-        )
+        result_f32 = be32._compute_weighted_cue_params(ssp_weights_f32, ssp_log_ages_f32, log_z)
         gas_logqion_f32 = result_f32["gas_logqion"]
-        i7_f32 = jnp.array([
-            result_f32["ionspec_index1"],
-            result_f32["ionspec_index2"],
-            result_f32["ionspec_index3"],
-            result_f32["ionspec_index4"],
-            result_f32["ionspec_logLratio1"],
-            result_f32["ionspec_logLratio2"],
-            result_f32["ionspec_logLratio3"],
-        ])
+        i7_f32 = jnp.array(
+            [
+                result_f32["ionspec_index1"],
+                result_f32["ionspec_index2"],
+                result_f32["ionspec_index3"],
+                result_f32["ionspec_index4"],
+                result_f32["ionspec_logLratio1"],
+                result_f32["ionspec_logLratio2"],
+                result_f32["ionspec_logLratio3"],
+            ]
+        )
 
     # Assert f32 is finite (not the old bug's -99.0 silencing)
     assert jnp.all(jnp.isfinite(gas_logqion_f32)), (
         f"f32 gas_logqion is non-finite: {gas_logqion_f32}"
     )
-    assert jnp.all(jnp.isfinite(i7_f32)), (
-        f"f32 ionspec params contain non-finite values: {i7_f32}"
-    )
+    assert jnp.all(jnp.isfinite(i7_f32)), f"f32 ionspec params contain non-finite values: {i7_f32}"
 
     # Assert f32 matches f64 reference (NOT merely finite)
     # The old bug returns finite -99.0 which is WRONG
-    assert jnp.allclose(
-        gas_logqion_f32, gas_logqion_f64, atol=5e-3
-    ), (
+    assert jnp.allclose(gas_logqion_f32, gas_logqion_f64, atol=5e-3), (
         f"f32/f64 gas_logqion mismatch: f32={gas_logqion_f32}, f64={gas_logqion_f64}, "
         f"difference={float(gas_logqion_f32 - gas_logqion_f64)}"
     )
-    assert jnp.allclose(
-        i7_f32, i7_f64, atol=0.02
-    ), (
+    assert jnp.allclose(i7_f32, i7_f64, atol=0.02), (
         f"f32/f64 ionspec mismatch: f32={i7_f32}, f64={i7_f64}"
     )
 
@@ -271,45 +261,43 @@ def test_degenerate_population():
 
     # Test 1: All-old population (weights only on old ages)
     ssp_weights_old = jnp.where(~young_mask, 1.0 / jnp.sum(~young_mask), 0.0)
-    result_old = be._compute_weighted_cue_params(
-        ssp_weights_old, ssp_log_ages, log_z=-2.0
-    )
+    result_old = be._compute_weighted_cue_params(ssp_weights_old, ssp_log_ages, log_z=-2.0)
     assert result_old["gas_logqion"] == -99.0, (
         f"all-old population should have gas_logqion=-99.0, got {result_old['gas_logqion']}"
     )
-    i7_old = jnp.array([
-        result_old["ionspec_index1"],
-        result_old["ionspec_index2"],
-        result_old["ionspec_index3"],
-        result_old["ionspec_index4"],
-        result_old["ionspec_logLratio1"],
-        result_old["ionspec_logLratio2"],
-        result_old["ionspec_logLratio3"],
-    ])
+    i7_old = jnp.array(
+        [
+            result_old["ionspec_index1"],
+            result_old["ionspec_index2"],
+            result_old["ionspec_index3"],
+            result_old["ionspec_index4"],
+            result_old["ionspec_logLratio1"],
+            result_old["ionspec_logLratio2"],
+            result_old["ionspec_logLratio3"],
+        ]
+    )
     assert jnp.all(jnp.isfinite(i7_old)), (
         f"all-old population ionspec should be finite, got {i7_old}"
     )
 
     # Test 2: All-zero weights
     ssp_weights_zero = jnp.zeros(n_age)
-    result_zero = be._compute_weighted_cue_params(
-        ssp_weights_zero, ssp_log_ages, log_z=-2.0
-    )
+    result_zero = be._compute_weighted_cue_params(ssp_weights_zero, ssp_log_ages, log_z=-2.0)
     assert result_zero["gas_logqion"] == -99.0, (
         f"zero weights should have gas_logqion=-99.0, got {result_zero['gas_logqion']}"
     )
-    i7_zero = jnp.array([
-        result_zero["ionspec_index1"],
-        result_zero["ionspec_index2"],
-        result_zero["ionspec_index3"],
-        result_zero["ionspec_index4"],
-        result_zero["ionspec_logLratio1"],
-        result_zero["ionspec_logLratio2"],
-        result_zero["ionspec_logLratio3"],
-    ])
-    assert jnp.all(jnp.isfinite(i7_zero)), (
-        f"zero weights ionspec should be finite, got {i7_zero}"
+    i7_zero = jnp.array(
+        [
+            result_zero["ionspec_index1"],
+            result_zero["ionspec_index2"],
+            result_zero["ionspec_index3"],
+            result_zero["ionspec_index4"],
+            result_zero["ionspec_logLratio1"],
+            result_zero["ionspec_logLratio2"],
+            result_zero["ionspec_logLratio3"],
+        ]
     )
+    assert jnp.all(jnp.isfinite(i7_zero)), f"zero weights ionspec should be finite, got {i7_zero}"
 
 
 def test_gradient_nonzero_and_smooth():
