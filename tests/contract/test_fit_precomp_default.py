@@ -182,20 +182,6 @@ def test_prewarm_completes_without_recursion(synthetic_ssp_wide, synthetic_topha
     assert post._model._has_modern_approx()
 
 
-def test_no_double_precompute_on_modern_approx(
-    synthetic_ssp_wide, synthetic_tophat_obs, monkeypatch
-):
-    """Legacy ensure_photometry_precomputed is skipped when a modern approx is active."""
-    from tengri.inference import fitter as fitter_mod
-
-    called = {"n": 0}
-    orig = fitter_mod.Fitter._auto_precompute_photometry
-
-    def _spy(self, model):
-        called["n"] += 1
-        return orig(self, model)
-
-    monkeypatch.setattr(fitter_mod.Fitter, "_auto_precompute_photometry", _spy)
-    exact = _model(synthetic_ssp_wide, synthetic_tophat_obs)
-    _fitter(exact, synthetic_ssp_wide, synthetic_tophat_obs)  # auto -> modern approx
-    assert called["n"] == 0, "legacy auto-precompute must not run on a modern-approx fit"
+# The legacy ``ensure_photometry_precomputed`` chain was deleted: it returned a
+# constant ``False`` that every caller discarded, so a "no double-precompute"
+# guard has nothing left to guard. ``approx=`` is now the only precompute path.

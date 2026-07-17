@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
+import warnings
 from typing import NamedTuple
 
 from tengri.protocols.component import ParamDeclaration
@@ -67,10 +68,20 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
             continue
         try:
             mod = importlib.import_module(module_info.name)
-        except Exception:
-            # A subpackage might fail to import in some environments
-            # (e.g. optional dep missing). Skip rather than break
-            # introspection — the registry is a best-effort view.
+        except ImportError as exc:
+            # A component may legitimately be unimportable when an optional
+            # dependency is absent. Degrade rather than break introspection —
+            # but say so: a silently vanishing component reads as "this
+            # parameter does not exist" and has shipped as a bug twice
+            # (#1165, #1179). Anything that is not an ImportError is a real
+            # defect and propagates.
+            warnings.warn(
+                f"tengri: parameters from {module_info.name!r} are missing from the "
+                f"registry because the module could not be imported ({exc}). Any "
+                f"parameter it declares will be reported as unknown.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
             continue
         for attr_name in dir(mod):
             if attr_name.startswith("_"):
@@ -95,69 +106,63 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
     # Observation _params.py module (noise model parameters).
     # As of Step E, noise parameters are owned by the observation module,
     # not the shared parameters module.
-    try:
-        from tengri.observation import _params as obs_params_module
-    except Exception:
-        obs_params_module = None  # type: ignore[assignment]
-    if obs_params_module is not None:
-        for attr_name in dir(obs_params_module):
-            if attr_name.startswith("_"):
-                continue
-            attr = getattr(obs_params_module, attr_name)
-            if not isinstance(attr, tuple):
-                continue
-            if not all(isinstance(x, ParamDeclaration) for x in attr):
-                continue
-            for decl in attr:
-                if decl.name in out:
-                    continue  # first-wins; matches legacy aggregator
-                out[decl.name] = ParameterRecord(
-                    name=decl.name,
-                    prior=decl.prior,
-                    description=decl.description,
-                    units=decl.units,
-                    owner="tengri.observation._params",
-                    group=attr_name,
-                )
+    # These are first-party modules with no optional dependency: if one fails
+    # to import that is a defect, and swallowing it would silently yield an
+    # incomplete registry. Let it raise.
+    from tengri.observation import _params as obs_params_module
+
+    for attr_name in dir(obs_params_module):
+        if attr_name.startswith("_"):
+            continue
+        attr = getattr(obs_params_module, attr_name)
+        if not isinstance(attr, tuple):
+            continue
+        if not all(isinstance(x, ParamDeclaration) for x in attr):
+            continue
+        for decl in attr:
+            if decl.name in out:
+                continue  # first-wins; matches legacy aggregator
+            out[decl.name] = ParameterRecord(
+                name=decl.name,
+                prior=decl.prior,
+                description=decl.description,
+                units=decl.units,
+                owner="tengri.observation._params",
+                group=attr_name,
+            )
 
     # Shared parameters: redshift, met_logzsol, sigma_v_kms.
     # These are declared cleanly in tengri.parameters._shared.PARAMS
     # as of ADR-0005 follow-up #1. Import and walk like a component.
-    try:
-        from tengri.parameters import _shared as shared_module
-    except Exception:
-        shared_module = None  # type: ignore[assignment]
-    if shared_module is not None:
-        for attr_name in dir(shared_module):
-            if attr_name.startswith("_"):
-                continue
-            attr = getattr(shared_module, attr_name)
-            if not isinstance(attr, tuple):
-                continue
-            if not all(isinstance(x, ParamDeclaration) for x in attr):
-                continue
-            for decl in attr:
-                if decl.name in out:
-                    continue  # first-wins; matches legacy aggregator
-                out[decl.name] = ParameterRecord(
-                    name=decl.name,
-                    prior=decl.prior,
-                    description=decl.description,
-                    units=decl.units,
-                    owner="tengri.parameters._shared",
-                    group=attr_name,
-                )
+    from tengri.parameters import _shared as shared_module
+
+    for attr_name in dir(shared_module):
+        if attr_name.startswith("_"):
+            continue
+        attr = getattr(shared_module, attr_name)
+        if not isinstance(attr, tuple):
+            continue
+        if not all(isinstance(x, ParamDeclaration) for x in attr):
+            continue
+        for decl in attr:
+            if decl.name in out:
+                continue  # first-wins; matches legacy aggregator
+            out[decl.name] = ParameterRecord(
+                name=decl.name,
+                prior=decl.prior,
+                description=decl.description,
+                units=decl.units,
+                owner="tengri.parameters._shared",
+                group=attr_name,
+            )
 
     # Legacy ``_NON_SFH_PARAMS`` bucket: provides ``noise_frac_cal`` and
     # ``noise_dof`` which aren't yet declared via the ParamDeclaration
     # path. 4-tuple shape ``(description, bound_check, bound_error, prior)``.
-    try:
-        from tengri.parameters._builders import _NON_SFH_PARAMS
-    except Exception:
-        _NON_SFH_PARAMS = {}  # type: ignore[assignment]
+    from tengri.parameters._builders import _NON_SFH_PARAMS
+
     if _NON_SFH_PARAMS:
-        legacy_bucket = _NON_SFH_PARAMS or {}
-        for name, payload in legacy_bucket.items():
+        for name, payload in _NON_SFH_PARAMS.items():
             if name in out:
                 continue
             description, _bcheck, _berr, prior = payload
@@ -173,10 +178,8 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
     # ``neb_xid`` orphan from AGN module: kept in _builders._AGN_EXTRAS
     # for the Feltre NLR backend. Not part of any component's _params.py
     # but must be registered for the parameter system to function.
-    try:
-        from tengri.parameters._builders import _AGN_EXTRAS
-    except Exception:
-        _AGN_EXTRAS = {}  # type: ignore[assignment]
+    from tengri.parameters._builders import _AGN_EXTRAS
+
     if _AGN_EXTRAS:
         for name, payload in _AGN_EXTRAS.items():
             if name in out:
