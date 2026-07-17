@@ -233,6 +233,17 @@ FIT_KW = dict(
     verbose=False,
 )
 
+
+def fit_catalog(K):
+    """Fit the whole catalog with chunk size K; return (wall seconds, CatalogPosterior)."""
+    t0 = time.perf_counter()
+    cp = CatalogFitter(model, galaxies, data_type="photometry").run(
+        key=jax.random.PRNGKey(0), forward_chunk_size=K, **FIT_KW
+    )
+    jax.block_until_ready(cp.posteriors[0].samples["redshift"])
+    return time.perf_counter() - t0, cp
+
+
 # One forward photometry evaluation — the inner cost the sampler pays per leapfrog.
 _probe = {
     **_fixed,
@@ -246,12 +257,7 @@ for _ in range(100):
     jax.block_until_ready(model.predict_photometry(_probe))
 fwd_ms = (time.perf_counter() - t0) / 100 * 1e3
 
-t0 = time.perf_counter()
-catalog = CatalogFitter(model, galaxies, data_type="photometry").run(
-    key=jax.random.PRNGKey(0), forward_chunk_size=N_GAL, **FIT_KW
-)
-jax.block_until_ready(catalog.posteriors[0].samples["redshift"])
-fit_wall = time.perf_counter() - t0
+fit_wall, catalog = fit_catalog(N_GAL)
 n_div = catalog.diagnostics["n_divergent_total"]
 print(
     f"fit {N_GAL} galaxies ({model.spec.n_free}-D each) in {fit_wall:.1f} s "
@@ -314,20 +320,9 @@ print(
 # %%
 K_VALUES = [1, 4, N_GAL]
 
-
-def _time_catalog(K):
-    """Wall time (s) to fit the whole catalog with chunk size K."""
-    t = time.perf_counter()
-    cp = CatalogFitter(model, galaxies, data_type="photometry").run(
-        key=jax.random.PRNGKey(0), forward_chunk_size=K, **FIT_KW
-    )
-    jax.block_until_ready(cp.posteriors[0].samples["redshift"])
-    return time.perf_counter() - t
-
-
-# Reuse the K=N fit already run above (fit_wall) as the K=N point; time the smaller
-# chunks at the identical config.
-sweep_wall = [_time_catalog(1), _time_catalog(4), fit_wall]
+# Same `fit_catalog` (and so the same FIT_KW) as the science fit above — the K=N
+# point *is* that fit, reused rather than re-run.
+sweep_wall = [fit_catalog(1)[0], fit_catalog(4)[0], fit_wall]
 sweep_per_gal = [w / N_GAL for w in sweep_wall]
 _serial = sweep_per_gal[0]
 
@@ -465,9 +460,12 @@ plt.show()
 #   evaluations; the 3 free parameters are cheap, the ~4400 SED evaluations are the
 #   cost. Batching `K` chains amortizes the per-step overhead, so the **measured
 #   time per galaxy falls as `K` grows even on one CPU**: the sweep above drops from
-#   31.6 s/posterior at `K=1` (serial) to 6.6 s at `K=12` — a **4.8x speedup from
+#   16.9 s/posterior at `K=1` (serial) to 5.8 s at `K=12` — a **2.9x speedup from
 #   batching alone, no GPU** (a 3-D fit is tiny and underfills the cores serially;
-#   batching feeds the vector units). A GPU extends this much further.
+#   batching feeds the vector units). The exact factor is machine- and load-
+#   dependent — measured here between ~3x and ~5x across runs — which is why the
+#   sweep measures it live rather than quoting a constant. A GPU extends this much
+#   further.
 # - **Free redshift rides `WavePrecomp`** — the LUT is tabulated over redshift, so
 #   a photo-z fit interpolates the table (nebular emission lines and all) instead
 #   of re-integrating the forward model per step. Baking the nebular emission into
@@ -482,4 +480,4 @@ plt.show()
 #   `bench/scripts/benchmark_catalog_throughput.py`; for cluster-scale catalogs
 #   (one GPU per slice, array jobs) see `scripts/slurm/`; and to shard *one* very
 #   high-dimensional hierarchical fit across devices, see
-#   [advanced/hierarchical](../advanced/hierarchical) (VI, the other track).
+#   `docs/advanced/hierarchical.md` (VI, the other track).
