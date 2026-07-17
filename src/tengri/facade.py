@@ -378,6 +378,8 @@ class Galaxy:
         self,
         backend: str = "map",
         verbose: bool = True,
+        *,
+        approx="auto",
         **kwargs,
     ) -> Galaxy:
         """Run inference and store result.
@@ -391,9 +393,14 @@ class Galaxy:
             Default: "map".
         verbose : bool
             Print progress. Default: True.
+        approx : {"auto", None} or precompute config, default "auto"
+            Fit-time approximation policy. "auto" routes the fit through the
+            precompute LUT selected by data type; None forces the exact
+            wave-grid path; an explicit config overrides. Model prediction
+            stays exact regardless. See :meth:`ForwardModel.fit`.
         **kwargs
             Additional arguments passed to Fitter.run() (e.g., n_steps, n_iterations,
-            n_samples, n_warmup, init_from, etc.).
+            n_samples, n_warmup, init_from, prewarm, etc.).
 
         Returns
         -------
@@ -414,7 +421,7 @@ class Galaxy:
             )
 
         # Instantiate Fitter (the model carries its Observation)
-        fitter = Fitter(self.model, self.flux_obs, self.noise)
+        fitter = Fitter(self.model, self.flux_obs, self.noise, approx=approx)
 
         # Run inference
         self.result = fitter.run(backend, verbose=verbose, **kwargs)

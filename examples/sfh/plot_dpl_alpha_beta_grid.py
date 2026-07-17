@@ -49,13 +49,18 @@ for i, beta in enumerate(betas):
             ssp,
             sfh={
                 "type": "dpl",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "alpha": alpha,
                 "beta": beta,
                 "tau_gyr": baseline["tau_gyr"],
                 "log_total_mass": 10.0,
             },
-            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+            dust={
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+                "tau_diff": 0.2,
+                "tau_bc": 0.3,
+            },
             redshift=tengri.Fixed(0.1),
         )
 
@@ -90,13 +95,13 @@ model_alpha = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": tengri.Uniform(0.3, 6.0),
         "beta": 2.5,
         "tau_gyr": 1.5,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 baseline_alpha = dict(model_alpha.spec.sample(jax.random.PRNGKey(0)))
@@ -131,13 +136,13 @@ model_beta = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "beta": tengri.Uniform(0.3, 10.0),
         "alpha": 1.5,
         "tau_gyr": 3.0,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 baseline_beta = dict(model_beta.spec.sample(jax.random.PRNGKey(0)))

@@ -35,13 +35,13 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 # A young starburst: peak ~30 Myr ago, still ionizing
 sfh = {
     "type": "dpl",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "alpha": 3.0,
     "beta": 0.3,
     "tau_gyr": 0.03,
     "log_total_mass": 10.0,
 }
-dust = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.0}
+dust = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.0}
 
 model_cue = tengri.SEDModel.build(
     ssp,
@@ -49,7 +49,7 @@ model_cue = tengri.SEDModel.build(
     dust=dust,
     neb={
         "type": "cue",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "neb_logU": tengri.Fixed(-2.5),
         "neb_logZ_gas": tengri.Fixed(-0.3),
         "neb_fesc": tengri.Fixed(0.0),
@@ -62,7 +62,7 @@ model_none = tengri.SEDModel.build(
     ssp,
     sfh=sfh,
     dust=dust,
-    neb={"type": "none", "*": tengri.FIXED},
+    neb={"type": "none", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.01),
 )
 

@@ -28,7 +28,7 @@ C_AA_PER_S = 2.998e18  # Speed of light in Å/s
 # Star-forming galaxy baseline (fixed, only tau_diff swept)
 SFH = {
     "type": "dpl",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "tau_gyr": 1.0,
     "log_total_mass": 10.0,
     "alpha": 2.5,
@@ -39,9 +39,9 @@ DUST_BASE = {
     "type": "two_component",
     "law_bc": "calzetti",
     "law_diff": "calzetti",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "tau_bc": 0.2,
-    "emission": {"type": "draine_li2007", "*": tengri.FIXED},
+    "emission": {"type": "draine_li2007", "all_params": tengri.FIXED},
 }
 
 # Load SSP and build model with dust emission enabled

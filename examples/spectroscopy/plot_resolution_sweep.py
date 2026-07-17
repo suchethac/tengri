@@ -41,14 +41,14 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.05,
         "log_total_mass": 10.0,
         "alpha": 2.5,
         "beta": 1.8,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.1, "tau_diff": 0.05},
-    neb={"type": "cue", "*": tengri.FIXED, "logU": -2.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.1, "tau_diff": 0.05},
+    neb={"type": "cue", "all_params": tengri.FIXED, "logU": -2.0},
     redshift=tengri.Fixed(REDSHIFT),
 )
 
@@ -70,14 +70,19 @@ for R in resolution_vals:
         observation=obs_r,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_gyr": 0.05,
             "log_total_mass": 10.0,
             "alpha": 2.5,
             "beta": 1.8,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.1, "tau_diff": 0.05},
-        neb={"type": "cue", "*": tengri.FIXED, "logU": -2.0},
+        dust={
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_bc": 0.1,
+            "tau_diff": 0.05,
+        },
+        neb={"type": "cue", "all_params": tengri.FIXED, "logU": -2.0},
         redshift=tengri.Fixed(REDSHIFT),
     )
 

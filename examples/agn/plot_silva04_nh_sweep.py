@@ -48,8 +48,8 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 ssp = tengri.load_ssp()
 
 # Minimal host: stellar light suppressed so the torus stands alone.
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 # Silva+04 grid: log N_H in [22, 25]. Sweep the full obscuration range.
 LOG_NH_VALUES = np.linspace(22.0, 25.0, 7)
@@ -57,8 +57,8 @@ LOG_NH_VALUES = np.linspace(22.0, 25.0, 7)
 # A torus block normalizes to the disc luminosity, so a disc must be present;
 # the torus contribution is then isolated by subtracting the disc-only SED.
 BASE_AGN = {
-    "disc": {"type": "multicolor", "*": tengri.FIXED},
-    "*": tengri.FIXED,
+    "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+    "all_params": tengri.FIXED,
     "log_lbol": 12.0,
     "frac": 1.0,
 }
@@ -79,7 +79,9 @@ WAVE, DISC_ONLY = _build_sed(None)  # disc-only baseline (subtracted off)
 
 def torus_sed(log_nh: float) -> tuple[np.ndarray, np.ndarray]:
     """Return (wavelength [AA], nu*L_nu [erg/s]) for the Silva+04 torus alone."""
-    wave, total = _build_sed({"type": "silva04", "*": tengri.FIXED, "log_nh_silva": log_nh})
+    wave, total = _build_sed(
+        {"type": "silva04", "all_params": tengri.FIXED, "log_nh_silva": log_nh}
+    )
     disc = np.interp(wave, WAVE, DISC_ONLY)  # disc build uses a different grid
     return wave, C_AA / wave * np.clip(total - disc, 0.0, None)
 

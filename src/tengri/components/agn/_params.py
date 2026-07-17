@@ -12,10 +12,10 @@ Every declaration carries a *prior* (``Uniform`` / ``LogUniform``) whose
 range is the documented physical or library-grid extent, and a
 ``default=`` equal to the historical fixed value. The two work together:
 
-* ``'*': FIXED`` (and the grammar's implicit default) collapses each param
-  to ``Fixed(default)`` — i.e. the exact pre-existing value, so behavior
+* ``'all_params': FIXED`` (and the grammar's implicit default) collapses each
+  param to ``Fixed(default)`` — i.e. the exact pre-existing value, so behavior
   is unchanged for any model that did not opt a parameter free.
-* ``'*': FREE`` / ``defaults=FREE`` / a bare per-param ``FREE`` now expands
+* ``'all_params': FREE`` / ``defaults=FREE`` / a bare per-param ``FREE`` now expands
   to the prior instead of silently resolving to a fixed scalar. Before this
   change every AGN parameter declared a ``Fixed(...)`` default, so the FREE
   grammar (and therefore ``recipes.agn_panchromatic()``) produced **zero**
@@ -53,7 +53,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "AGN luminosity fraction (L_AGN / L_stellar_bol) — used as a scalar "
         "multiplier on the composable runner output and as the AGN-to-stellar "
         "ratio in the non-parametric AGN path. Default 1.0 means 'use the "
-        "configured AGN at full strength'; a wildcard ``'*': FIXED`` on an "
+        "configured AGN at full strength'; a wildcard ``'all_params': FIXED`` on an "
         "AGN-configured group therefore yields a working AGN (closes #417). "
         "Set explicitly to 0.0 to disable the AGN while keeping the rest of "
         "the agn config in place.",

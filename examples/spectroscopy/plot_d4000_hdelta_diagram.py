@@ -145,8 +145,13 @@ for shape_i, (_shape_name, sfh_dict) in enumerate(sfh_shapes):
                 **sfh_dict,
                 "peak_lbt_gyr": age,  # Lookback time to burst
             }
-            dust = {"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0}
-            neb = {"type": "cue", "*": tengri.FIXED}
+            dust = {
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+                "tau_bc": 0.0,
+                "tau_diff": 0.0,
+            }
+            neb = {"type": "cue", "all_params": tengri.FIXED}
 
             model = tengri.SEDModel.build(
                 ssp,

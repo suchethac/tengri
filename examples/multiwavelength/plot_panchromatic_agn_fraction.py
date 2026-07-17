@@ -30,7 +30,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 1.0,
@@ -38,14 +38,14 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.3,
         "tau_diff": 0.2,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
     agn={
         "type": "composable",
-        "disc": {"type": "qsogen", "*": tengri.FIXED},
+        "disc": {"type": "qsogen", "all_params": tengri.FIXED},
     },
     redshift=tengri.Fixed(0.05),
 )

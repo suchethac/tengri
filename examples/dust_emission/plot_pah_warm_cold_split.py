@@ -49,17 +49,17 @@ def _build(q_pah=None, u_min=None):
     """Build SEDModel with DL07 dust at specified q_PAH and U_min."""
     dust = {
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 1.0,
         "tau_bc": 0.3,
         "emission": {
             "type": "draine_li2007",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
         },
     }
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0},
+        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
         dust=dust,
         redshift=tengri.Fixed(0.05),
     )

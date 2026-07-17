@@ -231,12 +231,13 @@ class TestToGroupsWildcardCollapse:
         # explicit keys in the sfh dict if they all came from the wildcard
         sfh_dict = result["sfh"]
         # 'type' is always there
-        # '*': FREE should be there
+        # 'all_params': FREE should be there (the preferred wildcard spelling)
+        assert "all_params" in sfh_dict
         # But individual params like 'alpha', 'beta', etc. should NOT be there
         # unless they were explicitly overridden
 
         # Only non-default params should be explicit
-        param_keys = [k for k in sfh_dict if k not in ("type", "*")]
+        param_keys = [k for k in sfh_dict if k not in ("type", "all_params")]
         assert len(param_keys) == 0, f"Expected no explicit params, got: {param_keys}"
 
     def test_to_groups_preserves_user_overrides(self):
@@ -312,6 +313,7 @@ class TestToGroupsFlatBuilt:
         assert "tau_gyr" in sfh_dict
         assert "log_total_mass" in sfh_dict
         assert "*" not in sfh_dict, "No wildcard should be present"
+        assert "all_params" not in sfh_dict, "No wildcard should be present"
 
     def test_round_trip_flat_built(self):
         """Flat-built Parameters roundtrip correctly."""

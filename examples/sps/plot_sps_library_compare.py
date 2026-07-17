@@ -48,14 +48,14 @@ COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(LIBRARIES)))
 C_AA_PER_S = 2.998e18
 SFH = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": 1.0,
     "width_gyr": 0.05,
     "log_total_mass": 10.0,
     "skew": 0.0,
     "trunc": 13.0,
 }
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 fig, ax = plt.subplots(figsize=(7.2, 4.6))
 

@@ -26,7 +26,7 @@ Examples
 --------
 >>> from tengri import builders, FREE, Uniform
 >>> builders.neb.cue(defaults=FREE, fesc=Uniform(0.0, 0.5))  # doctest: +SKIP
-{'type': 'cue', '*': FREE, 'fesc': Uniform(...)}
+{'type': 'cue', 'all_params': FREE, 'fesc': Uniform(...)}
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from collections.abc import Callable
 from tengri.builders._factory import make_factory, short_form
 from tengri.parameters.groups import _valid_nebular_types
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FREE
+from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS
 
 _PREFIXES = ("neb_", "ionspec_", "gas_log")
 
@@ -54,7 +54,7 @@ def _discover_params(variant: str) -> list[str]:
     introspect_variant = "cue" if variant == "cloudy" else variant
     recipe = {
         "sfh": {"type": "dpl"},
-        "neb": {"type": introspect_variant, "*": FREE},
+        "neb": {"type": introspect_variant, WILDCARD_ALIAS: FREE},
     }
     records = recipe_parameters(recipe, free_only=False)
     return [

@@ -43,8 +43,8 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 C_AA_PER_S = 2.998e18
 
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
 
@@ -57,9 +57,9 @@ model = tengri.SEDModel.build(
     sfh=SFH,
     dust=DUST,
     agn={
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "torus": {"type": "skirtor", "*": tengri.FIXED},
-        "*": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+        "all_params": tengri.FIXED,
         "log_lbol": 12.0,
         "frac": 1.0,
         "cos_inc": 0.5,

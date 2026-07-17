@@ -31,6 +31,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **Fits default to the precompute LUT** (behavioral change). `Fitter`,
+  `forward.fit(...)` and `Galaxy.fit(...)` gained `approx="auto"` (the default):
+  a fit now auto-routes through the fast precompute lookup table chosen by data
+  type — `WavePrecomp` for photometry, `SpectrumPrecomp` for spectroscopy/joint,
+  plus `FeaturePrecomp` when emission lines are fit — while a model already
+  built with an explicit `approx=` is respected untouched. Model **construction
+  and prediction stay exact** (`SEDModel.build` still defaults to `approx=None`);
+  only the fit is accelerated (~10–25× per step; posterior shift ≪ noise —
+  validated to <0.07 σ at SNR 20 and <0.006% band deviation at z=4 with IGM).
+  Opt out with `forward.fit(..., approx=None)` (exact wave-grid); pass an
+  explicit config to override. The fit clones the model via the new
+  `SEDModel.with_approx` / `ForwardModel.with_approx`, so the caller's model is
+  never mutated and the returned `Posterior` references the fast clone.
+  Additionally, `run(..., prewarm=True)` (default) JIT-compiles the
+  loss/gradient plus `predict_photometry` / `predict_properties` before the fit
+  loop — warming the persistent cache and post-fit posterior-predictive /
+  derived-quantity exploration; pass `prewarm=False` for the prior lazy-compile
+  behavior.
 - British → American spelling of public API identifiers, renamed in place
   without deprecation aliases (tengri is pre-1.0 — the public API is not yet
   stable, so renames ship directly; #819). Update imports and call sites:

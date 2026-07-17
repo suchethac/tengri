@@ -56,12 +56,12 @@ obs = Observation(
 model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
-    sfh={"type": "dpl", "*": FREE,
+    sfh={"type": "dpl", "all_params": FREE,
          "alpha": Uniform(0.5, 3.0),
          "beta": Uniform(0.3, 2.0),
          "tau_gyr": Uniform(0.5, 10),
          "log_total_mass": Uniform(8, 12)},
-    dust={"type": "two_component", "*": FIXED},
+    dust={"type": "two_component", "all_params": FIXED},
     neb={"type": "none"},
     redshift=Fixed(0.1),
 )
