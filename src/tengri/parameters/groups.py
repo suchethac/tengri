@@ -11,8 +11,8 @@ users can organize parameters into semantic groups::
     from tengri.parameters import parse_groups, FREE, FIXED
 
     params = parse_groups(
-        sfh={"type": "dpl", "*": FREE, "beta": 0.5},
-        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FREE, "beta": 0.5},
+        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
         neb={"type": "cue"},
         redshift=FREE,
     )
@@ -27,7 +27,7 @@ model configuration kwargs (e.g., ``sfh['type'] = 'dpl'`` → ``mean_sfh_type='d
 for each declared parameter, decide its final prior/value by:
 
 1. Checking for per-parameter override in the user's group dict.
-2. Checking for a wildcard directive ('*': FREE / FIXED).
+2. Checking for a wildcard directive ('all_params': FREE / FIXED).
 3. Using the registry's default (fixed at median for free defaults).
 
 Parameters
@@ -64,8 +64,10 @@ Notes
 **Not JAX-traced**: Like Parameters itself, parse_groups is a pure Python
 translator and cannot be called inside a JAX gradient tape.
 
-**Wildcard semantics**: The '*' key in a group dict applies a default
-(FREE or FIXED) to all parameters in that group not explicitly overridden.
+**Wildcard semantics**: The 'all_params' key (or its synonym '*') in a group
+dict applies a default (FREE or FIXED) to all parameters in that group not
+explicitly overridden. 'all_params' is the preferred spelling; '*' is accepted
+and slated for deprecation.
 
 **Sentinels**: FREE and FIXED are singleton objects that preserve identity
 across copy and pickle operations.
@@ -79,7 +81,7 @@ Examples
 >>> from tengri.parameters import parse_groups, FREE, FIXED
 >>> from tengri.parameters import Uniform
 >>> params = parse_groups(
-...     sfh={"type": "dpl", "*": FREE, "alpha": Uniform(0.5, 3.0)},
+...     sfh={"type": "dpl", "all_params": FREE, "alpha": Uniform(0.5, 3.0)},
 ...     redshift=0.1,
 ... )
 >>> "sfh_dpl_alpha" in params.free_params
@@ -94,7 +96,7 @@ import warnings
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Distribution, Fixed
-from tengri.parameters.sentinels import FIXED, FREE
+from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS, WILDCARD_KEY
 
 __all__ = ["parameters_to_groups", "parse_groups"]
 
@@ -157,7 +159,7 @@ def _default_fixed_value(param_name: str, registry_default: Distribution) -> flo
     # ``UserWarning`` so it shows up by default; do not silence it without
     # adding the default at the declaration site.
     warnings.warn(
-        f"{param_name!r} has no curated default, so '*': FIXED pins it at its "
+        f"{param_name!r} has no curated default, so 'all_params': FIXED pins it at its "
         f"prior midpoint ({float(registry_default.unstandardize(0.0)):.4g}) — "
         f"an arbitrary rather than physically motivated value. Pass an "
         f"explicit value for it in the group dict to silence this, or leave "
@@ -522,6 +524,52 @@ _SEDMODEL_PASSTHROUGH = {
 # ── Main API ───────────────────────────────────────────────────────────────
 
 
+def _normalize_wildcard_keys(group: object) -> object:
+    """Rewrite the preferred ``all_params`` wildcard key to canonical ``'*'``.
+
+    The nested-dict grammar accepts two spellings of the group wildcard:
+    ``all_params`` (preferred, human-readable) and ``'*'`` (canonical, slated
+    for deprecation). This normalizer converts the alias to the canonical key
+    once at the parser boundary so every downstream site keeps operating on the
+    single ``'*'`` invariant. Recurses through nested sub-block dicts
+    (``dust.emission``, the ``agn.*`` selectors, ``igm.dla``, ``radio.sf`` /
+    ``radio.agn``, …); per-parameter values are never dicts, so recursing into
+    every dict-valued entry is safe.
+
+    Parameters
+    ----------
+    group : object
+        A group dict (or any value). Non-dict values pass through unchanged.
+
+    Returns
+    -------
+    object
+        A new dict with ``all_params`` keys rewritten to ``'*'`` (the input is
+        never mutated), or the original value if it is not a dict.
+
+    Raises
+    ------
+    ValueError
+        If a dict sets both ``all_params`` and ``'*'`` (ambiguous intent).
+
+    Notes
+    -----
+    **JIT-compatible**: no — pure Python, runs at build time only.
+    """
+    if not isinstance(group, dict):
+        return group
+    if WILDCARD_ALIAS in group and WILDCARD_KEY in group:
+        raise ValueError(
+            f"A group dict may set the wildcard once: use {WILDCARD_ALIAS!r} "
+            f"(preferred) or {WILDCARD_KEY!r}, not both."
+        )
+    normalized: dict[object, object] = {}
+    for key, value in group.items():
+        canonical_key = WILDCARD_KEY if key == WILDCARD_ALIAS else key
+        normalized[canonical_key] = _normalize_wildcard_keys(value)
+    return normalized
+
+
 def parse_groups(**kwargs) -> Parameters:
     """Translate nested-dict model specification to Parameters.
 
@@ -556,11 +604,16 @@ def parse_groups(**kwargs) -> Parameters:
     --------
     >>> from tengri.parameters import parse_groups, FREE, FIXED
     >>> params = parse_groups(
-    ...     sfh={"type": "dpl", "*": FREE},
+    ...     sfh={"type": "dpl", "all_params": FREE},
     ...     redshift=0.1,
     ... )
     >>> assert "sfh_dpl_alpha" in params.free_params
     """
+    # ── Pass 0: Normalize the preferred ``all_params`` wildcard alias ──
+    # Rewrite ``all_params`` -> ``'*'`` in every group dict (and nested
+    # sub-block) so all downstream logic operates on the single canonical key.
+    kwargs = {key: _normalize_wildcard_keys(value) for key, value in kwargs.items()}
+
     # ── Pass 1: Translate structural choices ──────────────────────────
 
     structural_kwargs = _translate_structural(kwargs)
@@ -732,7 +785,8 @@ def parse_groups(**kwargs) -> Parameters:
             elif val is FREE or val is FIXED:
                 raise ValueError(
                     f"neb[{pname!r}] needs an explicit prior or value "
-                    f"(e.g. Uniform(lo, hi) or a number); the '*' wildcard and "
+                    f"(e.g. Uniform(lo, hi) or a number); the 'all_params' wildcard "
+                    f"(also '*') and "
                     f"bare FREE/FIXED are unsupported for optional Cue knobs "
                     f"because they carry no registry default."
                 )
@@ -925,7 +979,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         raise TypeError(
             f"sfh 'type' must be a string (or a list of strings for a "
             f"composition), got {type(sfh_type).__name__}: {sfh_type!r}. "
-            f"Example: sfh={{'type': 'delayed', '*': FIXED}}."
+            f"Example: sfh={{'type': 'delayed', 'all_params': FIXED}}."
         )
     if isinstance(sfh_type, list):
         for type_name in sfh_type:
@@ -2180,11 +2234,12 @@ def _resolve_value(
                     "wildcard_fixed",
                 )
         else:
-            # Bad wildcard value — only FREE or FIXED are accepted in the '*' slot
+            # Bad wildcard value — only FREE or FIXED are accepted in the
+            # wildcard slot ('all_params', or its synonym '*').
             raise ValueError(
-                f"Wildcard '*' must be FREE or FIXED (the sentinels exported "
-                f"from tengri), got {wildcard!r}. "
-                f"Did you mean ``'*': FREE`` or ``'*': FIXED``? "
+                f"The 'all_params' wildcard (also '*') must be FREE or FIXED "
+                f"(the sentinels exported from tengri), got {wildcard!r}. "
+                f"Did you mean ``'all_params': FREE`` or ``'all_params': FIXED``? "
                 f"Note: string 'free'/'fixed' is not accepted — use the sentinel."
             )
 
@@ -2310,8 +2365,8 @@ def parameters_to_groups(spec: Parameters) -> dict:
     -----
     **Provenance-aware collapsing**: If spec has _group_provenance metadata,
     parameters sharing the same wildcard tag ('wildcard_free' or 'wildcard_fixed')
-    are collapsed into a single '*': FREE or '*': FIXED entry, with explicit
-    overrides listed separately.
+    are collapsed into a single 'all_params': FREE or 'all_params': FIXED entry,
+    with explicit overrides listed separately.
 
     **Flat-built fallback**: If spec was built via flat-kwarg Parameters(...),
     all parameters are listed explicitly (no wildcard).
@@ -2323,10 +2378,11 @@ def parameters_to_groups(spec: Parameters) -> dict:
     Examples
     --------
     >>> spec = parse_groups(
-    ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
+    ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
     ...     redshift=Fixed(0.05),
     ... )
     >>> groups = spec.to_groups()
+    >>> assert "all_params" in groups["sfh"]  # preferred spelling on output
     >>> roundtripped = parse_groups(**groups)
     >>> spec.free_params == roundtripped.free_params
     True
@@ -2381,8 +2437,8 @@ def parameters_to_groups(spec: Parameters) -> dict:
         wildcard_intent = _analyze_wildcard_intent(param_names, spec, provenance)
 
         if wildcard_intent is not None:
-            # Use wildcard for collapsed params
-            group_output["*"] = wildcard_intent
+            # Emit the preferred wildcard spelling for collapsed params.
+            group_output[WILDCARD_ALIAS] = wildcard_intent
             explicit_params = _get_explicit_overrides(
                 param_names, spec, provenance, wildcard_intent
             )

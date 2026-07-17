@@ -20,8 +20,9 @@
 # law, a nebular backend, optionally an AGN — and a statement of which
 # parameters are free. The nested-dict grammar (after Bagpipes) lets you write
 # that down one block at a time: a dict per group, with `'type'` for the
-# structural choice and a `'*'` wildcard for free/fixed. It reads back the way
-# you wrote it.
+# structural choice and an `'all_params'` wildcard for free/fixed. It reads back
+# the way you wrote it. (`'all_params'` is the preferred spelling of the
+# wildcard; the older `'*'` is still accepted but is slated for deprecation.)
 #
 # This notebook builds the same model four ways and shows they agree, then uses
 # the grammar to swap one block at a time — SFH family, dust law, IR template —
@@ -137,14 +138,14 @@ print()
 # Path 2: Nested-dict direct (hand-built nested dict)
 print("PATH 2: Nested-dict direct")
 groups_dict = {
-    "sfh": {"type": "dpl", "*": FREE, "met_logzsol": Fixed(-0.1)},
+    "sfh": {"type": "dpl", "all_params": FREE, "met_logzsol": Fixed(-0.1)},
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FREE,
-        "emission": {"type": "dale2014", "*": FIXED},
+        "all_params": FREE,
+        "emission": {"type": "dale2014", "all_params": FIXED},
     },
-    "neb": {"type": "cue", "*": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Uniform(0.01, 6.0),
     "apply_igm": True,
 }
@@ -168,10 +169,10 @@ factory_groups = {
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FREE,
-        "emission": {"type": "dale2014", "*": FIXED},
+        "all_params": FREE,
+        "emission": {"type": "dale2014", "all_params": FIXED},
     },
-    "neb": {"type": "cue", "*": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Uniform(0.01, 6.0),
     "apply_igm": True,
 }
@@ -215,9 +216,9 @@ groups_sfh_tour = {
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    "neb": {"type": "cue", "*": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
 }
 spec_sfh_tour = parse_groups(**groups_sfh_tour)
@@ -236,14 +237,14 @@ print("─" * 70)
 
 # two_component with nested emission using a factory
 groups_dust_tour = {
-    "sfh": {"type": "tsnorm", "*": FIXED},
+    "sfh": {"type": "tsnorm", "all_params": FIXED},
     "dust": builders.dust.two_component(
         law_bc="calzetti",
         defaults=FREE,
         tau_bc=Uniform(0.0, 2.0),
         emission=builders.dust.emission.dale2014(defaults=FIXED),
     ),
-    "neb": {"type": "cue", "*": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
 }
 spec_dust_tour = parse_groups(**groups_dust_tour)
@@ -265,8 +266,8 @@ print()
 # Try cb19 (adds log_nH parameter)
 try:
     groups_neb_tour = {
-        "sfh": {"type": "tsnorm", "*": FIXED},
-        "dust": {"type": "two_component", "*": FIXED},
+        "sfh": {"type": "tsnorm", "all_params": FIXED},
+        "dust": {"type": "two_component", "all_params": FIXED},
         "neb": builders.neb.cb19(defaults=FREE, log_nH=Uniform(1.0, 4.0)),
         "redshift": Fixed(0.05),
     }
@@ -277,8 +278,8 @@ except Exception as e:
     # Fallback: bare-stellar SSP may not support non-Cue backends
     print(f"cb19 skipped (bare-stellar SSP limitation): {str(e)[:50]}...")
     groups_neb_tour = {
-        "sfh": {"type": "tsnorm", "*": FIXED},
-        "dust": {"type": "two_component", "*": FIXED},
+        "sfh": {"type": "tsnorm", "all_params": FIXED},
+        "dust": {"type": "two_component", "all_params": FIXED},
         "neb": builders.neb.cue(defaults=FIXED),
         "redshift": Fixed(0.05),
     }
@@ -331,8 +332,8 @@ print()
 # The tags show the source:
 #
 # - `[user]` — explicitly specified in your nested dict
-# - `[* FREE]` — matched by wildcard directive
-# - `[* FIXED]` — matched by wildcard directive
+# - `[all_params FREE]` — matched by wildcard directive
+# - `[all_params FIXED]` — matched by wildcard directive
 # - `[default]` — registry default (usually fixed at median)
 
 # %%
@@ -340,13 +341,13 @@ print()
 base_groups = {
     "sfh": {
         "type": "tsnorm",
-        "*": FREE,
+        "all_params": FREE,
         "skew": Uniform(-1.0, 1.0),
-    },  # skew is [user], others are [* FREE]
+    },  # skew is [user], others are [all_params FREE]
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FIXED,  # All dust params are [* FIXED]
+        "all_params": FIXED,  # All dust params are [all_params FIXED]
         "tau_bc": 0.5,  # Override to explicit value (still fixed)
     },
     "neb": {"type": "cue"},  # No wildcard → all use [default]
@@ -430,7 +431,7 @@ base_groups_sfh = {
         "slope": Fixed(-0.7),
         "emission": {"type": "dale2014"},
     },
-    "neb": {"type": "cue", "*": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
     "apply_igm": False,
 }
@@ -438,7 +439,7 @@ base_groups_sfh = {
 for sfh_name, _ in sfh_families:
     # Swap SFH family: one-line edit
     groups_variant = base_groups_sfh.copy()
-    groups_variant["sfh"] = {"type": sfh_name, "*": FIXED, "met_logzsol": Fixed(-0.1)}
+    groups_variant["sfh"] = {"type": sfh_name, "all_params": FIXED, "met_logzsol": Fixed(-0.1)}
 
     spec_sfh = parse_groups(**groups_variant)
     sfh_params = [p for p in spec_sfh.free_params if p.startswith("sfh_")]
@@ -466,7 +467,7 @@ dl_cm = float(cosmology.luminosity_distance(z))
 sed_rows = []
 for sfh_name, truth_sfh in sfh_families:
     groups_sfh_fig = {
-        "sfh": {"type": sfh_name, "*": FIXED, "met_logzsol": Fixed(-0.1)},
+        "sfh": {"type": sfh_name, "all_params": FIXED, "met_logzsol": Fixed(-0.1)},
         "dust": {
             "type": "two_component",
             "law_bc": "calzetti",
@@ -475,7 +476,7 @@ for sfh_name, truth_sfh in sfh_families:
             "slope": Fixed(-0.7),
             "emission": {"type": "dale2014"},
         },
-        "neb": {"type": "cue", "*": FIXED},
+        "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
     }
@@ -584,7 +585,7 @@ base_groups_dust = {
         "slope": Fixed(-0.7),
         "emission": {"type": "dale2014"},
     },
-    "neb": {"type": "cue", "*": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
     "apply_igm": False,
 }
@@ -641,7 +642,7 @@ groups_nodust = {
         "slope": Fixed(-0.7),
         "emission": {"type": "dale2014"},
     },
-    "neb": {"type": "cue", "*": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(z),
     "apply_igm": False,
 }
@@ -709,7 +710,7 @@ for idx, dust_law in enumerate(dust_laws):
             "slope": Fixed(-0.7),
             "emission": {"type": "dale2014"},
         },
-        "neb": {"type": "cue", "*": FIXED},
+        "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
     }
@@ -791,7 +792,7 @@ base_groups_emission = {
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
     },
-    "neb": {"type": "cue", "*": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
     "apply_igm": False,
 }
@@ -855,7 +856,7 @@ for idx, emission in enumerate(dust_emissions):
             "slope": Fixed(-0.7),
             "emission": {"type": emission},
         },
-        "neb": {"type": "cue", "*": FIXED},
+        "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
     }
@@ -911,7 +912,7 @@ for emission in dust_emissions:
             "slope": Fixed(-0.7),
             "emission": {"type": emission},
         },
-        "neb": {"type": "cue", "*": FIXED},
+        "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
     }
@@ -967,13 +968,13 @@ print("─" * 70)
 
 # Build a reference model to show summary()
 groups_ref = {
-    "sfh": {"type": "tsnorm", "*": FREE, "met_logzsol": Fixed(-0.1)},
+    "sfh": {"type": "tsnorm", "all_params": FREE, "met_logzsol": Fixed(-0.1)},
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FREE,
+        "all_params": FREE,
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014", "*": FIXED},
+        "emission": {"type": "dale2014", "all_params": FIXED},
     },
     "redshift": Uniform(0.01, 0.1),
     "apply_igm": False,
@@ -984,13 +985,13 @@ print(spec_ref.summary_str())
 
 # Model 1: free redshift
 groups_free_z = {
-    "sfh": {"type": "tsnorm", "*": FREE, "met_logzsol": Fixed(-0.1)},
+    "sfh": {"type": "tsnorm", "all_params": FREE, "met_logzsol": Fixed(-0.1)},
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FREE,
+        "all_params": FREE,
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014", "*": FIXED},
+        "emission": {"type": "dale2014", "all_params": FIXED},
     },
     "redshift": Uniform(0.01, 0.1),  # FREE
     "apply_igm": False,
@@ -999,13 +1000,13 @@ spec_free_z = parse_groups(**groups_free_z)
 
 # Model 2: fixed redshift
 groups_fixed_z = {
-    "sfh": {"type": "tsnorm", "*": FREE, "met_logzsol": Fixed(-0.1)},
+    "sfh": {"type": "tsnorm", "all_params": FREE, "met_logzsol": Fixed(-0.1)},
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FREE,
+        "all_params": FREE,
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014", "*": FIXED},
+        "emission": {"type": "dale2014", "all_params": FIXED},
     },
     "redshift": Fixed(0.05),  # FIXED
     "apply_igm": False,

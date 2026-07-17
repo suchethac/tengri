@@ -29,7 +29,7 @@ from __future__ import annotations
 import tengri.builders as builders
 from tengri.forward.sed_model import WavePrecomp
 from tengri.parameters.priors import Fixed, Uniform
-from tengri.parameters.sentinels import FIXED, FREE
+from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
 
 __all__ = [
     "agn_panchromatic",
@@ -398,7 +398,7 @@ def composable_agn() -> dict:
             "norm": "cigale_joint",
             # agn_fracAGN constraint is [0, 1) — keep the upper bound strictly < 1.
             "fracAGN": Uniform(0.01, 0.99),
-            "*": FREE,
+            WILDCARD_ALIAS: FREE,
         },
         radio={"type": "condon92"},
         xray={"type": "simple"},
@@ -447,7 +447,7 @@ def stochastic_sfh_jwst() -> dict:
     # type-list dict. The builder factories cover individual variants; the
     # composed form remains the canonical grammar for now.
     return dict(
-        sfh={"type": ["dpl", "field"], "*": FREE},
+        sfh={"type": ["dpl", "field"], WILDCARD_ALIAS: FREE},
         dust=builders.dust.two_component(
             defaults=FREE,
             emission=builders.dust.emission.dale2014(defaults=FIXED),
@@ -611,8 +611,8 @@ def unified_agn() -> dict:
     >>> assert params["agn"]["blr"]["type"] == "synthesizer_spectra"
     """
     return dict(
-        sfh={"type": "delayed", "*": FIXED},
-        dust={"type": "two_component", "*": FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        sfh={"type": "delayed", WILDCARD_ALIAS: FIXED},
+        dust={"type": "two_component", WILDCARD_ALIAS: FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         agn={
             "type": "composable",
             "disc": {"type": "kubota_done"},
@@ -624,7 +624,7 @@ def unified_agn() -> dict:
             # (freeing them would add no-op nuisance dimensions in this mode).
             "frac": Fixed(1.0),
             "fracAGN": Fixed(0.0),
-            "*": FREE,
+            WILDCARD_ALIAS: FREE,
         },
         redshift=Fixed(0.0),
     )

@@ -46,16 +46,16 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 ssp = tengri.load_ssp()
 
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 # CAT3D-Wind grid: fwd in [1.0, 2.25]. Two viewing angles (near face-on / edge-on).
 FWD_VALUES = np.linspace(1.0, 2.25, 7)
 COS_INC = {"face-on (cos i = 0.85)": 0.85, "edge-on (cos i = 0.2)": 0.2}
 
 BASE_AGN = {
-    "disc": {"type": "multicolor", "*": tengri.FIXED},
-    "*": tengri.FIXED,
+    "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+    "all_params": tengri.FIXED,
     "log_lbol": 12.0,
     "frac": 1.0,
 }
@@ -77,7 +77,7 @@ WAVE, DISC_ONLY = _build_sed(None)
 def torus_sed(cos_inc: float, fwd: float) -> tuple[np.ndarray, np.ndarray]:
     """Return (wavelength [AA], nu*L_nu [erg/s]) for the CAT3D-Wind torus alone."""
     wave, total = _build_sed(
-        {"type": "cat3d_wind", "*": tengri.FIXED, "cos_inc": cos_inc, "fwd_cat3d": fwd}
+        {"type": "cat3d_wind", "all_params": tengri.FIXED, "cos_inc": cos_inc, "fwd_cat3d": fwd}
     )
     disc = np.interp(wave, WAVE, DISC_ONLY)
     return wave, C_AA / wave * np.clip(total - disc, 0.0, None)

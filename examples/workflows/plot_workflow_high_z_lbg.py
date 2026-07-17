@@ -52,7 +52,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": tengri.Uniform(0.0, 0.5),
         "tau_diff": 0.0,
         "slope": -0.7,

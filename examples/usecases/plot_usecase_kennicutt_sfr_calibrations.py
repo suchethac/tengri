@@ -58,13 +58,17 @@ SSP = tengri.load_ssp()
 def _measure(log_sfr):
     model = tengri.SEDModel.build(
         SSP,
-        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": float(log_sfr + 10.13)},
+        sfh={
+            "type": "const",
+            "all_params": tengri.FIXED,
+            "log_total_mass": float(log_sfr + 10.13),
+        },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.0,
             "tau_bc": 0.0,
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -127,7 +131,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.3,
         "tau_diff": 0.2,
         "slope": -0.7,

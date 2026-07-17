@@ -33,12 +33,12 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "lnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_gyr": tengri.Uniform(1.0, 11.0),
         "log_total_mass": 10.0,
         "width_gyr": 0.3,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

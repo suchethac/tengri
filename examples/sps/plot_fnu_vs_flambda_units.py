@@ -55,7 +55,7 @@ model = tengri.SEDModel.build(
     tengri.load_ssp(),
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 0.5,
     },

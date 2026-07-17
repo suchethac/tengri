@@ -64,7 +64,7 @@ LIBS = [
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(LIBS)))
 
 C_AA_PER_S = 2.998e18
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0}
 
 ssp = tengri.load_ssp()
 
@@ -151,10 +151,10 @@ for (lib, label), color in zip(LIBS, COLORS):
             sfh=SFH,
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 1.0,
                 "tau_bc": 1.5,
-                "emission": {"type": lib, "*": tengri.FIXED},
+                "emission": {"type": lib, "all_params": tengri.FIXED},
             },
             redshift=tengri.Fixed(0.05),
         )

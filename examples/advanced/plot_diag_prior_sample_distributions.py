@@ -29,8 +29,8 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 model = tengri.SEDModel.build(
     tengri.load_ssp("fsps_prsc_miles_chabrier"),
-    sfh={"type": "dpl", "alpha": tengri.FREE, "beta": tengri.FREE, "*": tengri.FIXED},
-    dust={"type": "two_component", "*": tengri.FIXED},
+    sfh={"type": "dpl", "alpha": tengri.FREE, "beta": tengri.FREE, "all_params": tengri.FIXED},
+    dust={"type": "two_component", "all_params": tengri.FIXED},
 )
 spec = model.spec
 free_params = spec.free_params

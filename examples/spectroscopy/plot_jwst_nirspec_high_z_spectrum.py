@@ -39,14 +39,14 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.05,
         "log_total_mass": 10.0,
         "alpha": 3.5,
         "beta": 2.2,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.08, "tau_bc": 0.15},
-    neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -1.0, "logU": -2.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.08, "tau_bc": 0.15},
+    neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": -1.0, "logU": -2.0},
     redshift=tengri.Fixed(7.0),
 )
 

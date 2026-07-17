@@ -49,7 +49,7 @@ def _make(z_value: float, tau_diff: float, peak_lbt: float, log_total_mass: floa
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": peak_lbt,
             "width_gyr": 1.5,
             "log_total_mass": 10.0,
@@ -58,7 +58,7 @@ def _make(z_value: float, tau_diff: float, peak_lbt: float, log_total_mass: floa
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tau_diff,
             "tau_bc": 0.4,
             "slope": -0.7,

@@ -85,7 +85,7 @@ class ParameterDefaultMissingError(ParameterError):
     """A parameter was marked FIXED without a physically-motivated default.
 
     Raised by :func:`tengri.parameters.groups.parse_groups` when the
-    ``'*': FIXED`` wildcard (or an explicit short-form ``FIXED``) is applied
+    ``'all_params': FIXED`` wildcard (or an explicit short-form ``FIXED``) is applied
     to a registry entry whose ``Distribution`` carries no ``default=``. Prior
     behavior silently fell back to the midpoint of the prior support, which
     was an implicit and often physically wrong choice (e.g. ``Uniform(0, 5)``

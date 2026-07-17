@@ -71,14 +71,14 @@ def _halpha_ew(wave, l_nu):
 
 SFH = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
     "width_gyr": 0.05,
     "log_total_mass": 10.0,
     "skew": 0.0,
     "trunc": 13.0,
 }
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, redshift=tengri.Fixed(0.0))
