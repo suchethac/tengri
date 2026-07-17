@@ -87,7 +87,7 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",  # Truncated normal SFH (analytic burst)
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,  # peak SFR = 10 Msun/yr
         "peak_lbt_gyr": 0.5,  # peak at age = 0.5 Gyr lookback time
         "width_gyr": 0.2,  # narrow gaussian → bursty
@@ -96,7 +96,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",  # Adopted dust attenuation
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.3,  # diffuse attenuation optical depth
         "tau_bc": 0.5,  # birth-cloud attenuation
         "slope": -0.7,  # Calzetti-like slope
@@ -123,7 +123,7 @@ for i, z in enumerate(z_grid):
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": 0.5,
             "width_gyr": 0.2,
@@ -132,7 +132,7 @@ for i, z in enumerate(z_grid):
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.3,
             "tau_bc": 0.5,
             "slope": -0.7,

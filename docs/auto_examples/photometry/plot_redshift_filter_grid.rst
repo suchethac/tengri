@@ -77,7 +77,7 @@ Reference: Hogg et al. 2002, astro-ph/0210394 (k-correction primer).
         tengri.load_ssp(),
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": 2.0,
             "width_gyr": 1.5,
@@ -86,7 +86,7 @@ Reference: Hogg et al. 2002, astro-ph/0210394 (k-correction primer).
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.3,
             "tau_diff": 0.2,
             "slope": -0.7,
@@ -95,9 +95,9 @@ Reference: Hogg et al. 2002, astro-ph/0210394 (k-correction primer).
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
     wave_grid = jnp.logspace(jnp.log10(1000.0), jnp.log10(3.0e5), 500)
-    pred = model.predict_rest_sed(baseline, wave=wave_grid)
-    wave_rest_um = np.asarray(pred.wavelength) / 1.0e4
-    sed_rest = np.asarray(pred.sed)
+    pred = model.predict(baseline)
+    wave_rest_um = np.asarray(wave_grid) / 1.0e4
+    sed_rest = np.asarray(pred.rest_sed(np.asarray(wave_grid)))
 
     _, _, filter_curves = tengri.load_filter_set(BANDS)
 
@@ -127,11 +127,6 @@ Reference: Hogg et al. 2002, astro-ph/0210394 (k-correction primer).
 
     fig.tight_layout()
     plt.savefig("plot_redshift_filter_grid.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.301 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_redshift_filter_grid.py:

@@ -77,7 +77,7 @@ truth_model = tengri.SEDModel.build(
     observation=truth_obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 2.5,
         "width_gyr": 1.5,
         "log_total_mass": 10.5,  # Truth: log M* = 10.5
@@ -86,7 +86,7 @@ truth_model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.4,
         "tau_diff": 0.25,
         "slope": -0.7,
@@ -103,7 +103,7 @@ key = jax.random.PRNGKey(0)
 
 # Generate truth photometry at full resolution once
 truth_flux_full = np.asarray(truth_model.predict_photometry(truth_params))
-truth_sed_full = truth_model.predict_rest_sed(truth_params)
+truth_sed_full = truth_model.predict(truth_params)
 
 # Store results: (n_bands, recovered_mass, mass_uncertainty)
 results_mass = []
@@ -116,10 +116,10 @@ for _label, band_names in FILTER_SETS:
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FREE},
+        sfh={"type": "tsnorm", "all_params": tengri.FREE},
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": tengri.Uniform(0.0, 1.5),
             "tau_diff": tengri.Uniform(0.0, 1.5),
             "slope": -0.7,
@@ -163,10 +163,10 @@ for _label, band_names in FILTER_SETS:
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FREE},
+        sfh={"type": "tsnorm", "all_params": tengri.FREE},
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": tengri.Uniform(0.0, 1.5),
             "tau_diff": tengri.Uniform(0.0, 1.5),
             "slope": -0.7,

@@ -161,7 +161,7 @@ References
         # The population then ages post-quench for tsq Gyr.
         sfh = {
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": tsq,
             "width_gyr": 0.2,  # ~200 Myr width: moderate extended burst
             "log_total_mass": 10.0,  # ~6 Msun/yr SFR (brighter, more typical)
@@ -170,8 +170,8 @@ References
         }
 
         # K+A galaxies: no dust, no nebular emission (pure stellar absorption)
-        dust = {"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0}
-        neb = {"type": "cue", "*": tengri.FIXED}
+        dust = {"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0}
+        neb = {"type": "cue", "all_params": tengri.FIXED}
 
         # Build model; z=0.05 avoids NaN singularity at z=0 (#290)
         model = tengri.SEDModel.build(
@@ -186,9 +186,9 @@ References
         baseline = dict(model.spec.sample(jax.random.PRNGKey(i)))
 
         # Predict rest-frame SED
-        pred = model.predict_rest_sed(baseline)
-        wave = np.asarray(pred.wavelength)
-        l_nu = np.asarray(pred.sed)
+        pred = model.predict(baseline)
+        wave = np.asarray(model.wavelengths)
+        l_nu = np.asarray(pred.rest_sed())
 
         # Compute Hδ_A equivalent width (negative = absorption)
         hdelta_a[i] = _compute_hdelta_a(wave, l_nu)

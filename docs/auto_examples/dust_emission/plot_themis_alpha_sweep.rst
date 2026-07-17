@@ -44,19 +44,8 @@ composition and radiation-field minimum.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -83,13 +72,13 @@ composition and radiation-field minimum.
 
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0},
+        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 1.0,
             "tau_bc": 0.3,
-            "emission": {"type": "themis", "*": tengri.FIXED, "dust_gamma_dl": 0.1},
+            "emission": {"type": "themis", "all_params": tengri.FIXED, "dust_gamma_dl": 0.1},
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -101,9 +90,9 @@ composition and radiation-field minimum.
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
     for a, c in zip(alpha_values, colors):
-        out = model.predict_rest_sed({**p0, "dust_alpha": jnp.float64(a)})
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        out = model.predict({**p0, "dust_alpha": jnp.float64(a)})
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
         lw = 2.6 if a == 2.0 else 1.8
         ax.loglog(
             wave, nu_l_nu, color=c, lw=lw, label=rf"$\alpha={a:.1f}$" + (" (FSPS)" if a == 2.0 else "")

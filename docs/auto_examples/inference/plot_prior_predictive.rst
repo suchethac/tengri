@@ -92,7 +92,7 @@ This is best practice for Bayesian workflow — see Gelman et al. 2020
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             # Tight informative priors: a star-forming galaxy in the local
             # Universe with SFR ~ 0.3-10 M_sun/yr, peak ~ 1-6 Gyr ago,
             # moderate width and trunc. These make the envelope narrow enough
@@ -106,7 +106,7 @@ This is best practice for Bayesian workflow — see Gelman et al. 2020
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tengri.Uniform(0.0, 0.6),
             "tau_bc": tengri.Uniform(0.0, 0.8),
         },
@@ -151,7 +151,7 @@ This is best practice for Bayesian workflow — see Gelman et al. 2020
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.311 seconds)
+   **Total running time of the script:** (0 minutes 4.835 seconds)
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_prior_predictive.py:

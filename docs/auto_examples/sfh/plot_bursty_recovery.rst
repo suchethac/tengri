@@ -36,8 +36,19 @@ illustrating the range of morphologies that each regime produces before inferenc
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -65,15 +76,15 @@ illustrating the range of morphologies that each regime produces before inferenc
     model = tengri.SEDModel.build(
         ssp,
         sfh=[
-            {"type": "const", "*": tengri.FIXED, "log_total_mass": 10.5},
+            {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.5},
             {
                 "type": "field",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "psd_sigma": tengri.Uniform(0.1, 4.0),
                 "psd_tau_myr": tengri.Uniform(1.0, 300.0),
             },
         ],
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.0),
     )
 

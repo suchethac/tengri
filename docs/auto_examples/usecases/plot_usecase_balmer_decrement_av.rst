@@ -28,7 +28,7 @@ dust optical depth (τ_diff ∈ [0, 2]) and measure how the predicted H-alpha
 and H-beta change. We derive A_V = 1.086 × τ_diff and compare against the
 Calzetti+2000 expectation.
 
-Status: as of issue #313 fix, ``predict_emission_lines`` now folds in the
+Status: as of issue #313 fix, ``predict(params).lines`` now folds in the
 diffuse dust attenuation. The tengri trace rises from the intrinsic ~2.85
 to ~4.3 at A_V ≈ 2 mag; the Calzetti+2000 curve climbs steeper, suggesting
 the birth-cloud component or the dust normalization differs slightly from
@@ -79,7 +79,7 @@ attenuation law).
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 1.5,
             "beta": 2.0,
             "tau_gyr": 0.1,
@@ -87,14 +87,14 @@ attenuation law).
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": tengri.FIXED,  # Birth cloud dust fixed
             "tau_diff": tengri.Uniform(0.0, 2.0),  # Sweep diffuse dust
             "slope": tengri.Fixed(-0.7),
         },
         neb={
             "type": "cue",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "logZ_gas": -0.2,
             "logU": -3.0,
         },
@@ -114,7 +114,7 @@ attenuation law).
     for tau_diff in tau_diff_values:
         # Only vary dust optical depth
         params = {**baseline_params, "dust_tau_diff": np.float64(tau_diff), "dust_tau_bc": 0.1}
-        lines = model.predict_emission_lines(params)
+        lines = model.predict(params).lines
 
         if lines is not None:
             ha = float(lines.halpha)
@@ -193,7 +193,7 @@ attenuation law).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.273 seconds)
+   **Total running time of the script:** (0 minutes 3.210 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_balmer_decrement_av.py:

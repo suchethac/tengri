@@ -21,6 +21,11 @@
 Galaxy broadband colors depend on the SSP library
 ===================================================
 
+.. image:: images/sphx_glr_plot_ssp_color_compare_001.png
+   :alt: plot ssp color compare
+   :class: sphx-glr-single-img
+
+
 The choice of SSP library propagates into the colors a photometric
 fitter recovers — a single fixed galaxy SFH and dust law, rebuilt
 with FSPS-MIST, FSPS-Padova/MILES, BPASS, BC03, and CB19 in turn,
@@ -34,17 +39,6 @@ This is the systematic an SED fitter inherits from its assumed SSP
 grid even before any prior or noise is involved.
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-121
-
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_ssp_color_compare_001.png
-   :alt: plot ssp color compare
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_ssp_color_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -92,7 +86,7 @@ grid even before any prior or noise is involved.
             continue
         sfh = {
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": 3.0,
             "width_gyr": 2.0,
             "log_total_mass": 10.0,
@@ -101,7 +95,7 @@ grid even before any prior or noise is involved.
         }
         dust = {
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.2,
             "tau_bc": 0.3,
             "slope": -0.7,

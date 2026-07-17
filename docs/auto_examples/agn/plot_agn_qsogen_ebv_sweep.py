@@ -42,20 +42,21 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 3.0,
         "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
     agn={
         "type": "composable",
-        "disc": {"type": "qsogen", "*": tengri.FIXED},
-        "torus": {"type": "skirtor", "*": tengri.FIXED},
-        "lines": {"type": "nlr", "*": tengri.FIXED},
-        "atten": {"type": "polar_dust", "*": tengri.FIXED},
-        "*": tengri.FIXED,
+        "disc": {"type": "qsogen", "all_params": tengri.FIXED},
+        "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+        "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+        "blr": {"type": "none", "all_params": tengri.FIXED},
+        "atten": {"type": "polar_dust", "all_params": tengri.FIXED},
+        "all_params": tengri.FIXED,
         "agn_frac": 1.0,
         "log_lbol": 11.0,
         "frac": 1.0,  # composable AGN is scaled by agn_frac * frac; keep both at 1
@@ -73,10 +74,10 @@ for ebv in ebv_values:
     # agn_polar_ebv is a fixed model parameter; override it per curve to
     # sweep the reddening without re-fitting.
     params = {**baseline, "agn_polar_ebv": jnp.float64(ebv)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=cmap(norm(ebv)), lw=1.4)
 
 ax.set_xlim(100, 1e6)

@@ -34,7 +34,7 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,
         "peak_lbt_gyr": 5.0,
         "width_gyr": 2.0,
@@ -44,7 +44,7 @@ model = tengri.SEDModel.build(
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 1.0,
         "tau_diff": 0.5,
         "slope": -0.7,
@@ -53,11 +53,11 @@ model = tengri.SEDModel.build(
 )
 
 params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-sed_total = np.array(model.predict_rest_sed(params).sed)
+sed_total = np.array(model.predict(params).rest_sed())
 sed_intrinsic = np.array(
-    model.predict_rest_sed(
+    model.predict(
         {**params, "dust_tau_bc": jnp.array(0.0), "dust_tau_diff": jnp.array(0.0)}
-    ).sed
+    ).rest_sed()
 )
 
 wave_um = np.array(model.ssp_data.ssp_wave) / 1e4

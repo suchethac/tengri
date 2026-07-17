@@ -77,8 +77,8 @@ Reference: Fukugita et al. 1996, AJ, 111, 1748 (AB magnitude system).
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.2},
+        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.2},
         redshift=tengri.Fixed(0.05),
     )
 
@@ -101,7 +101,7 @@ Reference: Fukugita et al. 1996, AJ, 111, 1748 (AB magnitude system).
     mag_manual = -2.5 * np.log10(np.maximum(phot_fluxes, 1e-30)) - 48.6
 
     # Method 2: Use tengri's built-in converter
-    mag_tengri = np.asarray(model.predict_magnitudes(params))
+    mag_tengri = np.asarray(model.predict(params).magnitudes())
 
     # Residuals: manual − tengri (should be near zero if zero-point is correct)
     residuals = mag_manual - mag_tengri
@@ -132,6 +132,11 @@ Reference: Fukugita et al. 1996, AJ, 111, 1748 (AB magnitude system).
 
     fig.tight_layout()
     plt.savefig("plot_diag_ab_mag_zero_point.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.064 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_ab_mag_zero_point.py:

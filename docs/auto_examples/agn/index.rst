@@ -106,7 +106,7 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Until recently the agn_ parameters were declared with fixed defaults and no prior range, so the build grammar&#x27;s FREE controls (``agn={&#x27;&#x27;: FREE}``, recipes.agn_panchromatic()) silently resolved every AGN parameter to a constant — a fit would freeze the entire AGN sector with no error. The registry now gives each parameter a physically-motivated Uniform/``LogUniform`` prior (Nenkova+2008, Kubota &amp; Done 2018, Stalevski+2016 grid extents), so FREE actually frees them.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Until recently the agn_ parameters were declared with fixed* defaults and no prior range, so the build grammar&#x27;s FREE controls (``agn={&#x27;all_params&#x27;: FREE}``, recipes.agn_panchromatic()) silently resolved every AGN parameter to a constant — a fit would freeze the entire AGN sector with no error. The registry now gives each parameter a physically-motivated Uniform/``LogUniform`` prior (Nenkova+2008, Kubota &amp; Done 2018, Stalevski+2016 grid extents), so FREE actually frees them.">
 
 .. only:: html
 

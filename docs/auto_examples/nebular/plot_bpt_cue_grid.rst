@@ -26,7 +26,7 @@ Show how the Cue neural emulator (Li+2025) maps the 2D parameter space
 constant log U (varying metallicity) and constant log Z (varying ionization)
 show the full grid's coverage and demarcation positions.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-102
+.. GENERATED FROM PYTHON SOURCE LINES 10-107
 
 
 
@@ -87,23 +87,28 @@ show the full grid's coverage and demarcation positions.
                 ssp,
                 sfh={
                     "type": "dpl",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "alpha": 1.0,
                     "beta": 2.5,
                     "tau_gyr": 0.05,
                     "log_total_mass": 10.0,
                 },
-                dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+                dust={
+                    "type": "two_component",
+                    "all_params": tengri.FIXED,
+                    "tau_diff": 0.0,
+                    "tau_bc": 0.0,
+                },
                 neb={
                     "type": "cue",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "logU": tengri.Fixed(logu),
                     "logZ_gas": tengri.Fixed(logz),
                 },
                 redshift=tengri.Fixed(0.05),
             )
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-            lines = model.predict_emission_lines(params)
+            lines = model.predict(params).lines
             ha = float(lines.halpha)
             hb = float(lines.hbeta)
             nii = float(lines.nii_6584)
@@ -137,7 +142,7 @@ show the full grid's coverage and demarcation positions.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.737 seconds)
+   **Total running time of the script:** (0 minutes 58.409 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_cue_grid.py:

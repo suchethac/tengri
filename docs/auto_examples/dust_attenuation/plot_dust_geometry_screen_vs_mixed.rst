@@ -50,8 +50,19 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -84,7 +95,7 @@ References
     # Build an intrinsic (no-dust) model at z=0.05
     SFH = {
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 1.0,
         "beta": 2.0,
         "tau_gyr": 4.0,
@@ -95,13 +106,13 @@ References
     intrinsic_model = tengri.SEDModel.build(
         ssp,
         sfh=SFH,
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0},
         redshift=tengri.Fixed(0.05),
     )
     p_intrinsic = dict(intrinsic_model.spec.sample(jax.random.PRNGKey(0)))
-    pred_intrinsic = intrinsic_model.predict_rest_sed(p_intrinsic)
-    sed_intrinsic = np.asarray(pred_intrinsic.sed)
-    wave = np.asarray(pred_intrinsic.wavelength)
+    pred_intrinsic = intrinsic_model.predict(p_intrinsic)
+    sed_intrinsic = np.asarray(pred_intrinsic.rest_sed())
+    wave = np.asarray(intrinsic_model.wavelengths)
     nu = C_AA_PER_S / wave
 
     # Compute Calzetti k_lambda curve and normalize

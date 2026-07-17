@@ -39,8 +39,19 @@ at z ≳ 6.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=7.00 (cosmic age 0.76 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -73,14 +84,14 @@ at z ≳ 6.
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_gyr": 0.05,
             "log_total_mass": 10.0,
             "alpha": 3.5,
             "beta": 2.2,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.08, "tau_bc": 0.15},
-        neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -1.0, "logU": -2.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.08, "tau_bc": 0.15},
+        neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": -1.0, "logU": -2.0},
         redshift=tengri.Fixed(7.0),
     )
 
@@ -99,9 +110,9 @@ at z ≳ 6.
     # ============================================================================
     # Predict Spectrum (Rest-frame SED, no observation)
     # ============================================================================
-    out = model.predict_rest_sed(p)
-    wave_rest = np.asarray(out.wavelength)  # Rest-frame Å
-    sed_rest = np.asarray(out.sed)  # Rest-frame L_ν (erg/s/Hz)
+    out = model.predict(p)
+    wave_rest = np.asarray(model.wavelengths)  # Rest-frame Å
+    sed_rest = np.asarray(out.rest_sed())  # Rest-frame L_ν (erg/s/Hz)
 
     # Map to observed frame via linear interpolation
     # Observed wavelength maps back to rest via: λ_rest = λ_obs / (1+z)

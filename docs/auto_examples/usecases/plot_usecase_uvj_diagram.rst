@@ -39,8 +39,21 @@ Wuyts et al. 2007, ApJ, 655, 51.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -96,7 +109,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": tengri.Uniform(0.5, 4.0),
             "width_gyr": tengri.Uniform(1.0, 4.0),
@@ -106,7 +119,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": tengri.Uniform(0.1, 1.5),
             "tau_diff": tengri.Uniform(0.1, 1.0),
             "slope": -0.7,
@@ -120,7 +133,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": tengri.Uniform(7.0, 11.0),
             "width_gyr": tengri.Uniform(0.5, 1.5),
@@ -130,7 +143,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": tengri.Uniform(0.0, 0.15),
             "tau_diff": tengri.Uniform(0.0, 0.1),
             "slope": -0.7,
@@ -195,7 +208,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.373 seconds)
+   **Total running time of the script:** (0 minutes 2.578 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uvj_diagram.py:

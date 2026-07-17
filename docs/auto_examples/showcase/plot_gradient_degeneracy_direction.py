@@ -61,14 +61,14 @@ observation = tengri.Observation(photometry=tengri.Photometry.from_names(FILTERS
 model = tengri.SEDModel.build(
     ssp_data=BARE,
     observation=observation,
-    sfh={"type": "dpl", "*": tengri.FREE},
+    sfh={"type": "dpl", "all_params": tengri.FREE},
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": tengri.FREE,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "all_params": tengri.FREE,
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
-    neb={"type": "cue", "*": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.1),
 )
 

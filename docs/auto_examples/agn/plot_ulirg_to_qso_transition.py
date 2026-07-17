@@ -105,21 +105,22 @@ def build_ulirg_qso_model(tau_v, agn_frac):
         "type": "composable",
         "log_lbol": log_lbol,
         "frac": agn_frac,
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "torus": {"type": "skirtor", "*": tengri.FIXED},
-        "lines": {"type": "nlr", "*": tengri.FIXED},
-        "*": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+        "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+        "blr": {"type": "none", "all_params": tengri.FIXED},
+        "all_params": tengri.FIXED,
     }
 
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": log_total_mass},
+        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": log_total_mass},
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": tau_bc,
             "tau_diff": tau_diff,
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
         agn=agn_dict,
         redshift=tengri.Fixed(0.0),
@@ -136,9 +137,9 @@ def build_ulirg_qso_model(tau_v, agn_frac):
 seds = []
 for item in sequence:
     model, params = build_ulirg_qso_model(item["tau_v"], item["agn_frac"])
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
-    sed = np.asarray(out.sed)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(out.rest_sed())
     nu_l_nu = (C_AA_PER_S / wave) * sed
     seds.append({"stage": item["stage"], "wave": wave, "nu_l_nu": nu_l_nu})
 

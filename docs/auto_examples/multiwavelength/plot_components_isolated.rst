@@ -29,7 +29,7 @@ lines added at the source), then dust (UV attenuated, reprocessed
 into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
 The color at each wavelength tells you which block matters most.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-102
+.. GENERATED FROM PYTHON SOURCE LINES 13-111
 
 
 
@@ -66,7 +66,7 @@ The color at each wavelength tells you which block matters most.
     HOST = dict(
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_gyr": 1.5,
             "log_total_mass": 10.0,
             "alpha": 2.5,
@@ -76,25 +76,25 @@ The color at each wavelength tells you which block matters most.
     )
     DUST_ON = {
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.4,
         "tau_bc": 0.6,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     }
-    DUST_OFF = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST_OFF = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 
     def _nuLnu(**blocks):
         model = tengri.SEDModel.build(SSP, **HOST, **blocks)
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
-        return wave, 2.998e18 / wave * np.asarray(out.sed)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
+        return wave, 2.998e18 / wave * np.asarray(out.rest_sed())
 
 
     RUNS = [
         ("stellar", "#666666", dict(dust=DUST_OFF)),
-        ("+ nebular", "#33aa55", dict(dust=DUST_OFF, neb={"type": "cue", "*": tengri.FIXED})),
+        ("+ nebular", "#33aa55", dict(dust=DUST_OFF, neb={"type": "cue", "all_params": tengri.FIXED})),
         ("+ dust", "#cc6633", dict(dust=DUST_ON)),
         (
             "+ AGN",
@@ -102,17 +102,26 @@ The color at each wavelength tells you which block matters most.
             dict(
                 dust=DUST_ON,
                 agn={
-                    "disc": {"type": "multicolor", "*": tengri.FIXED},
-                    "torus": {"type": "skirtor", "*": tengri.FIXED},
-                    "lines": {"type": "nlr", "*": tengri.FIXED},
-                    "*": tengri.FIXED,
+                    "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+                    "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+                    "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+                    "blr": {"type": "none", "all_params": tengri.FIXED},
+                    "all_params": tengri.FIXED,
                     "log_lbol": 11.5,
                     "frac": 0.5,
                 },
             ),
         ),
-        ("+ radio", "#3377cc", dict(dust=DUST_ON, radio={"type": "condon92", "*": tengri.FIXED})),
-        ("+ X-ray (XRBs)", "#9933cc", dict(dust=DUST_ON, xray={"type": "simple", "*": tengri.FIXED})),
+        (
+            "+ radio",
+            "#3377cc",
+            dict(dust=DUST_ON, radio={"type": "condon92", "all_params": tengri.FIXED}),
+        ),
+        (
+            "+ X-ray (XRBs)",
+            "#9933cc",
+            dict(dust=DUST_ON, xray={"type": "simple", "all_params": tengri.FIXED}),
+        ),
     ]
 
     fig, ax = plt.subplots(figsize=(8.0, 5.0))
@@ -137,7 +146,7 @@ The color at each wavelength tells you which block matters most.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 11.747 seconds)
+   **Total running time of the script:** (0 minutes 40.501 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_components_isolated.py:

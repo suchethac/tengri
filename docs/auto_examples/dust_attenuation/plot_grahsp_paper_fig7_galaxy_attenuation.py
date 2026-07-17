@@ -54,7 +54,7 @@ wave_um = np.asarray(wave_aa) / 1e4
 
 ebv_grid = np.logspace(np.log10(0.01), np.log10(10.0), 9)
 norm = colors.LogNorm(vmin=0.01, vmax=10.0)
-cmap = cm.get_cmap("RdBu_r")
+cmap = plt.get_cmap("RdBu_r")
 
 
 def nu_Lnu(lnu):
@@ -72,7 +72,7 @@ model = SEDModel.build(
     ssp_data=ssp,
     sfh={
         "type": "delayed",
-        "*": FIXED,
+        "all_params": FIXED,
         "tau_gyr": 5.0,
         "age_gyr": 3.0,
         "log_total_mass": 10.0,
@@ -80,10 +80,10 @@ model = SEDModel.build(
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FIXED,
+        "all_params": FIXED,
         "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilizes the FIR peak)
         "tau_diff": 0.3,  # baseline; overridden per E(B-V) below
-        "emission": {"type": "dale2014", "*": FIXED},
+        "emission": {"type": "dale2014", "all_params": FIXED},
     },
     redshift=Fixed(0.01),
 )
@@ -93,8 +93,8 @@ norm_ref = None
 for ebv in ebv_grid:
     tau_diff = R_V * ebv / 1.086  # diffuse screen scales with E(B-V)
     params = {**base_params, "dust_tau_diff": tau_diff}
-    rest = model.predict_rest_sed(params, wave_aa)
-    lnu = np.asarray(rest[1] if np.ndim(rest) == 2 else rest)
+    rest = model.predict(params)
+    lnu = np.asarray(rest.rest_sed(np.asarray(wave_aa)))
     lflam = nu_Lnu(lnu)
     if norm_ref is None:
         # Normalize so the FIR dust peak sits near ~5 (paper scaling).

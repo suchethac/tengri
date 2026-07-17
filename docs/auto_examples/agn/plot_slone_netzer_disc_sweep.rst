@@ -89,8 +89,8 @@ References
     ssp = tengri.load_ssp()
 
     # Minimal host: stellar light suppressed so the disc continuum stands alone.
-    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     # SN12 grid extent: log_mbh in [7.4, 9.8], log_ledd in [-4.0, -1.96]. Stay inside.
     # Mass sweep starts at 8.0 so every disc peaks inside the grid (the bluest grid
@@ -112,8 +112,8 @@ References
             sfh=SFH,
             dust=DUST,
             agn={
-                "disc": {"type": "slone_netzer", "*": tengri.FIXED},
-                "*": tengri.FIXED,
+                "disc": {"type": "slone_netzer", "all_params": tengri.FIXED},
+                "all_params": tengri.FIXED,
                 "log_lbol": log_lbol,
                 "log_mbh": log_mbh,
                 "log_ledd": log_ledd,
@@ -122,9 +122,9 @@ References
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
-        return wave, C_AA / wave * np.asarray(out.sed)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
+        return wave, C_AA / wave * np.asarray(out.rest_sed())
 
 
     fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.6), sharey=True)
@@ -169,11 +169,6 @@ References
     )
     fig.tight_layout()
     plt.savefig("plot_slone_netzer_disc_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.044 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_slone_netzer_disc_sweep.py:

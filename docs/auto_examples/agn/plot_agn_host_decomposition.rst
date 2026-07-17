@@ -51,19 +51,8 @@ References
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -92,7 +81,7 @@ References
     COMMON = dict(
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_gyr": 2.0,
             "log_total_mass": 10.0,
             "alpha": 1.5,
@@ -100,30 +89,30 @@ References
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "law_bc": "calzetti",
             "tau_diff": 0.2,
             "tau_bc": 0.5,
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
         redshift=tengri.Fixed(0.05),
     )
 
     # Base AGN configuration: Seyfert II with log_lbol = 11.5 (L_bol ~ 3e11 L_sun)
     BASE_AGN = dict(
-        disc={"type": "multicolor", "*": tengri.FIXED},
-        torus={"type": "skirtor", "*": tengri.FIXED},
+        disc={"type": "multicolor", "all_params": tengri.FIXED},
+        torus={"type": "skirtor", "all_params": tengri.FIXED},
         log_lbol=11.5,
     )
 
 
     def _build_model(agn_frac):
         """Build a model with specified AGN fraction."""
-        agn_config = {**BASE_AGN, "*": tengri.FIXED, "frac": agn_frac}
+        agn_config = {**BASE_AGN, "all_params": tengri.FIXED, "frac": agn_frac}
         model = tengri.SEDModel.build(ssp, agn=agn_config, **COMMON)
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        return np.asarray(out.wavelength), np.asarray(out.sed)
+        out = model.predict(p)
+        return np.asarray(model.wavelengths), np.asarray(out.rest_sed())
 
 
     # Compute three traces: host-only, AGN-only, composite
@@ -155,11 +144,6 @@ References
     ax.grid(True, which="minor", alpha=0.2, linestyle=":")
 
     plt.savefig("plot_agn_host_decomposition.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 5.678 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_host_decomposition.py:

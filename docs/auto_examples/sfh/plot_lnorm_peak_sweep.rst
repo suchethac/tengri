@@ -38,8 +38,25 @@ across its prior range with every other parameter fixed.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 44% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 7% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 2% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -67,12 +84,12 @@ across its prior range with every other parameter fixed.
         ssp,
         sfh={
             "type": "lnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_gyr": tengri.Uniform(1.0, 11.0),
             "log_total_mass": 10.0,
             "width_gyr": 0.3,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.1),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -84,10 +101,10 @@ across its prior range with every other parameter fixed.
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
     for peak in peak_values:
         params = {**baseline, "sfh_lnorm_peak_gyr": jnp.float64(peak)}
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
         nu = 2.998e18 / wave  # Å/s -> Hz
-        nu_l_nu = nu * np.asarray(out.sed)
+        nu_l_nu = nu * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=cmap(norm(peak)), lw=1.4)
 
     ax.set_xlim(800, 3e4)

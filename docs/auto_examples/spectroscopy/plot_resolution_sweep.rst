@@ -27,7 +27,7 @@ distinct lines (high R). Varying R from 100 to 10000 reveals the transition
 from kinematically degenerate at R~100 (SDSS/DESI-like) to fully resolved
 at R~5000 (JWST-like).
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-103
+.. GENERATED FROM PYTHON SOURCE LINES 11-108
 
 
 
@@ -75,14 +75,14 @@ at R~5000 (JWST-like).
         observation=obs,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_gyr": 0.05,
             "log_total_mass": 10.0,
             "alpha": 2.5,
             "beta": 1.8,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.1, "tau_diff": 0.05},
-        neb={"type": "cue", "*": tengri.FIXED, "logU": -2.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.1, "tau_diff": 0.05},
+        neb={"type": "cue", "all_params": tengri.FIXED, "logU": -2.0},
         redshift=tengri.Fixed(REDSHIFT),
     )
 
@@ -104,14 +104,19 @@ at R~5000 (JWST-like).
             observation=obs_r,
             sfh={
                 "type": "dpl",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_gyr": 0.05,
                 "log_total_mass": 10.0,
                 "alpha": 2.5,
                 "beta": 1.8,
             },
-            dust={"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.1, "tau_diff": 0.05},
-            neb={"type": "cue", "*": tengri.FIXED, "logU": -2.0},
+            dust={
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+                "tau_bc": 0.1,
+                "tau_diff": 0.05,
+            },
+            neb={"type": "cue", "all_params": tengri.FIXED, "logU": -2.0},
             redshift=tengri.Fixed(REDSHIFT),
         )
 
@@ -134,6 +139,11 @@ at R~5000 (JWST-like).
 
     fig.tight_layout()
     plt.savefig("plot_resolution_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.063 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_resolution_sweep.py:

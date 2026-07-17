@@ -78,14 +78,14 @@ Kauffmann et al. 2003, MNRAS, 346, 1055.
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": tengri.Uniform(0.1, 2.0),
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.0),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -114,7 +114,7 @@ Kauffmann et al. 2003, MNRAS, 346, 1055.
 
     for age, color in zip(ages, colors):
         params = {**baseline, "sfh_dpl_tau_gyr": jnp.float64(age)}
-        lines = model.predict_emission_lines(params)
+        lines = model.predict(params).lines
         ha = float(lines.halpha)
         hb = float(lines.hbeta)
         nii = float(lines.nii_6584)
@@ -142,6 +142,11 @@ Kauffmann et al. 2003, MNRAS, 346, 1055.
 
     fig.tight_layout()
     plt.savefig("plot_neb_bpt_logu_grid.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.422 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_neb_bpt_logu_grid.py:

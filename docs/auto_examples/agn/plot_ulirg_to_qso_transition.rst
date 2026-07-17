@@ -40,7 +40,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 
 - Veilleux et al. (2009) ARA&A 47, 63: ULIRG/QSO transition review
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-173
+.. GENERATED FROM PYTHON SOURCE LINES 24-174
 
 
 
@@ -50,8 +50,19 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -139,21 +150,22 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
             "type": "composable",
             "log_lbol": log_lbol,
             "frac": agn_frac,
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "lines": {"type": "nlr", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+            "blr": {"type": "none", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
         }
 
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": log_total_mass},
+            sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": log_total_mass},
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_bc": tau_bc,
                 "tau_diff": tau_diff,
-                "emission": {"type": "dale2014", "*": tengri.FIXED},
+                "emission": {"type": "dale2014", "all_params": tengri.FIXED},
             },
             agn=agn_dict,
             redshift=tengri.Fixed(0.0),
@@ -170,9 +182,9 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
     seds = []
     for item in sequence:
         model, params = build_ulirg_qso_model(item["tau_v"], item["agn_frac"])
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
-        sed = np.asarray(out.sed)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
+        sed = np.asarray(out.rest_sed())
         nu_l_nu = (C_AA_PER_S / wave) * sed
         seds.append({"stage": item["stage"], "wave": wave, "nu_l_nu": nu_l_nu})
 
@@ -208,7 +220,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.596 seconds)
+   **Total running time of the script:** (0 minutes 3.094 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_ulirg_to_qso_transition.py:
