@@ -3134,7 +3134,13 @@ class Fitter:
             init_key, burn_key, sample_key = jax.random.split(gal_key, 3)
 
             if method == "mcmc_ghmc":
-                state = blackjax.mcmc.ghmc.init(init_flat_i, init_key, ld)
+                # Keyword args: blackjax reordered ghmc.init's (rng_key, logdensity_fn)
+                # between 1.3 and 1.6 — keywords are correct on both. (The single-galaxy
+                # GHMC paths were already fixed this way; this batch path was missed
+                # because it had no test.)
+                state = blackjax.mcmc.ghmc.init(
+                    position=init_flat_i, logdensity_fn=ld, rng_key=init_key
+                )
             elif method == "mcmc_hmc":
                 state = blackjax.mcmc.hmc.init(init_flat_i, ld)
             elif method == "mcmc_dynamic_hmc":
