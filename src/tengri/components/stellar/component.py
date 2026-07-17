@@ -68,13 +68,14 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_alpha_only,
     interpolate_mass_remaining,
 )
+from tengri.parameters.translate import LOG10_ZSUN
+from tengri.utils.scale import apply_log10_scale
 
 # Default time bins for ``metallicity_model="bins"`` /
 # ``"bins_continuity"`` — log-spaced from 1 Myr to 13.7 Gyr,
 # 7 edges → 6 bins, matching ``MET_REGISTRY``'s
 # ``_N_MET_BINS_DEFAULT``.
 _DEFAULT_MET_BIN_EDGES_LOG_YR = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
-from tengri.parameters.translate import LOG10_ZSUN
 
 
 def _sfh_bin_edges_yr(fn, sfh_kwargs):
@@ -1727,6 +1728,10 @@ class StellarSEDComponent:
         # float32 SSP grid (bc03_*, pgny_*) cannot poison the nebular backends
         # through the ionizing SED (#1099).
         mass_scale_erg = total_mass.astype(jnp.result_type(float)) * LSUN_ERG_PER_S
+        # Log10 of the mass scale, for use in apply_log10_scale (ionizing SED only).
+        log10_mass_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
+            LSUN_ERG_PER_S
+        )
 
         # ── 8. Mass quantities ──────────────────────────────────────────
         #
@@ -1792,9 +1797,13 @@ class StellarSEDComponent:
         # back to the full integral when the static bound was not precomputed.
         _n_ion = self._state.n_ion_bins if self._state is not None else None
         if _n_ion is not None:
-            _sed_ion = mass_scale_erg * jnp.tensordot(
+            # Apply log10 scale to the ionizing SED to avoid float32 overflow.
+            # The tensordot result is O(1); the scale is folded in via apply_log10_scale
+            # so the peak never overflows (#1186).
+            _tensordot_result = jnp.tensordot(
                 joint_weights, ssp_flux_for_csp[:, :, :_n_ion], axes=([0, 1], [0, 1])
             )
+            _sed_ion = apply_log10_scale(_tensordot_result, log10_mass_scale)
             nion = _integrate_nion(_sed_ion, wave[:_n_ion])
         else:
             nion = _integrate_nion(sed_intrinsic, wave)
