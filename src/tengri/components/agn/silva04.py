@@ -138,7 +138,7 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
 
     def silva04_grid(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 44.0,
+        agn_log_lbol: float = 10.0,
         agn_log_nh_silva: float = 23.0,
         agn_torus_frac: float = 0.5,
         **_kwargs,
@@ -150,7 +150,7 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
         wavelength : array_like, shape (n_wave,)
             Rest-frame wavelength grid. [Å]
         agn_log_lbol : float, optional
-            Bolometric luminosity, ``log10(L_bol / L_sun)``. Default 44.0.
+            Bolometric luminosity, ``log10(L_bol / L_sun)``. Default 10.0.
         agn_log_nh_silva : float, optional
             Hydrogen column density, ``log10(N_H / cm^-2)``. Valid over the
             grid extent (Silva+04 bins typically 22–25). Default 23.0.
@@ -231,7 +231,7 @@ def silva04_sed(*args, **kwargs) -> jnp.ndarray:
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid. [Å]
     agn_log_lbol : float, optional
-        ``log10(L_bol / L_sun)``. Default 44.0.
+        ``log10(L_bol / L_sun)``. Default 10.0.
     agn_log_nh_silva : float, optional
         ``log10(N_H / cm^-2)``. Default 23.0.
     agn_torus_frac : float, optional

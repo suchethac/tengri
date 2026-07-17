@@ -140,20 +140,28 @@ def test_every_tab_completion_name_resolves():
         assert hasattr(tengri, name), f"dir(tengri) advertises {name!r} but it does not resolve"
 
 
-# ── list_sfh_models() hides unbuildable types by default ────────────────────
+# ── list_sfh_models() marks unbuildable types instead of advertising them ────
 
 
-def test_list_sfh_models_excludes_unvalidated():
-    listed = set(tengri.list_sfh_models().names())
-    assert UNVALIDATED_SFH_TYPES.isdisjoint(listed), (
-        "list_sfh_models() must not advertise SFH types the builder refuses; "
-        f"leaked: {sorted(UNVALIDATED_SFH_TYPES & listed)}"
+def test_list_sfh_models_marks_unvalidated():
+    """Unvalidated SFH types (which the builder refuses) must not be presented
+    as ``production``: they carry ``status='unvalidated'`` so a fresh user is
+    not sent into a build-time ValueError by picking one off the menu."""
+    rows = {r["name"]: r for r in tengri.list_sfh_models()}
+    for name in UNVALIDATED_SFH_TYPES:
+        assert name in rows, f"{name} missing from list_sfh_models()"
+        assert rows[name]["status"] == "unvalidated", (
+            f"{name} must be flagged 'unvalidated', got {rows[name]['status']!r}"
+        )
+
+
+def test_list_sfh_models_production_filter_excludes_unvalidated():
+    """Filtering to the buildable set drops every unvalidated type."""
+    production = set(tengri.list_sfh_models(status="production").names())
+    assert UNVALIDATED_SFH_TYPES.isdisjoint(production), (
+        f"production filter leaked unbuildable types: "
+        f"{sorted(UNVALIDATED_SFH_TYPES & production)}"
     )
-
-
-def test_list_sfh_models_include_unvalidated_flag():
-    with_unval = set(tengri.list_sfh_models(include_unvalidated=True).names())
-    assert UNVALIDATED_SFH_TYPES.issubset(with_unval)
 
 
 # ── usage hints teach the current SEDModel.build grammar ────────────────────

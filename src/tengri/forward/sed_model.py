@@ -1540,9 +1540,7 @@ class SEDModel:
 
         if observation is not None:
             if not isinstance(observation, Observation):
-                raise TypeError(
-                    f"observation must be an Observation instance, got {type(observation)}"
-                )
+                observation = SEDModel._wrap_as_observation(observation)
             obs_params = observation.get_all_params()
             if obs_params:
                 spec = spec.with_params(**obs_params)
@@ -1552,6 +1550,64 @@ class SEDModel:
             observation = Observation(photometry=Photometry.from_filter_set(filters))
 
         return observation, spec
+
+    @staticmethod
+    def _wrap_as_observation(observation):
+        """Wrap a lone observation component in an :class:`Observation`.
+
+        ``observation=`` expects an :class:`Observation`, but a fresh user
+        naturally reaches for the component constructors the discovery API
+        advertises — e.g. ``list_filters()`` suggests
+        ``Photometry.from_names([...])``. A bare ``Photometry`` (or
+        ``Spectroscopy``/``LineFluxData``/``SpectralIndexData``/``LineRatioData``)
+        maps unambiguously onto a single :class:`Observation` slot, so wrap it
+        rather than reject it. The ``filters=`` path already auto-wraps the
+        same way.
+
+        Parameters
+        ----------
+        observation : object
+            The value passed as ``observation=``. Expected to be one of the
+            single-slot observation component types.
+
+        Returns
+        -------
+        Observation
+            ``Observation(<slot>=observation)`` for the matching slot.
+
+        Raises
+        ------
+        TypeError
+            If ``observation`` is not an :class:`Observation` and not one of
+            the wrappable component types. The message names the accepted
+            types and the explicit wrap.
+        """
+        from tengri.observation.line_flux_data import LineFluxData
+        from tengri.observation.line_ratio_data import LineRatioData
+        from tengri.observation.observation import Observation
+        from tengri.observation.photometry_config import Photometry
+        from tengri.observation.spectral_indices import SpectralIndexData
+        from tengri.observation.spectroscopy import Spectroscopy
+
+        # type -> Observation constructor keyword for the single-slot map.
+        wrap_slots = (
+            (Photometry, "photometry"),
+            (Spectroscopy, "spectroscopy"),
+            (LineFluxData, "line_fluxes"),
+            (SpectralIndexData, "spectral_indices"),
+            (LineRatioData, "line_ratios"),
+        )
+        for component_type, slot in wrap_slots:
+            if isinstance(observation, component_type):
+                return Observation(**{slot: observation})
+
+        accepted = ", ".join(t.__name__ for t, _ in wrap_slots)
+        raise TypeError(
+            f"observation= must be an Observation (or a single component of type "
+            f"{accepted}), got {type(observation).__name__}. Wrap it explicitly, "
+            f"e.g. observation=Observation(photometry=my_photometry), or pass "
+            f"filters=[...] for a photometry-only model."
+        )
 
     def _init_ssp(self, spec, ssp_data, csp_integration):
         """Set up SSP grid, CSP integration, and log-age grid."""

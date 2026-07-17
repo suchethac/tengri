@@ -485,6 +485,7 @@ __all__ = [  # noqa: RUF022
     # ========== Tier 3: TOOLKIT (analysis, batching, construction) ==========
     # Model builders
     "builders",
+    "recipes",
     "register_component",
     # Utilities
     "measure",
@@ -684,16 +685,21 @@ _CURATED_DIR = (
     "examples",
     "explain",
     # 2.  Build a fit
+    "load_ssp",
     "load_ssp_data",
+    "download_ssp",
+    "list_known_ssps",
     "SSPData",
-    "recipes",
-    "builders",
     "Parameters",
     "parse_groups",
     "SEDModel",
+    "ForwardModel",
+    "builders",
+    "recipes",
     "FeaturePrecomp",
     "WavePrecomp",
     "Fitter",
+    "fit_batch",
     "Observation",
     "Photometry",
     "Spectroscopy",
@@ -701,7 +707,7 @@ _CURATED_DIR = (
     "LineList",
     "Instrument",
     "list_instruments",
-    # 3.  Grammar sentinels + priors / distributions
+    # 3.  Priors / distributions (+ the FREE/FIXED build sentinels)
     "FREE",
     "FIXED",
     "Uniform",
@@ -710,10 +716,12 @@ _CURATED_DIR = (
     "LogNormal",
     "Fixed",
     "StudentT",
-    # 4.  Result types
+    # 4.  Result types (+ hierarchical / spatial model classes)
     "Posterior",
+    "PopulationSEDModel",
     "PopulationFitter",
     "PopulationPosterior",
+    "SpatialSEDModel",
     # 5.  Convenience
     "generate_mock",
     "doctor",

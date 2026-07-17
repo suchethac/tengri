@@ -41,10 +41,34 @@ def _reset_emission_caches():
     )
 
 
+def _reset_skirtor_caches():
+    """Clear skirtor.py's ``@functools.cache`` grid loaders + the legacy global.
+
+    The #1198/#1199 refactor threads the SKIRTOR grid as arrays through JIT and
+    memoizes the loader with ``@functools.cache`` (``_load_skirtor_default_grid``
+    and friends). A prior test in the shard that loads the committed grid leaves
+    that cache warm, so resetting only ``_skirtor_default`` is no longer enough:
+    ``skirtor_analytic`` returns the cached grid and the ``Path.is_file`` patch
+    never forces the missing-templates path. Clearing the functools caches (as
+    :func:`_reset_emission_caches` already does for emission.py) restores the
+    intended isolation. Repopulated lazily on the next real load, so no leakage.
+    """
+    _skirtor_mod._skirtor_default = None
+    for _name in dir(_skirtor_mod):
+        _obj = getattr(_skirtor_mod, _name)
+        if callable(_obj) and hasattr(_obj, "cache_clear"):
+            _obj.cache_clear()
+
+
 def _reset_skirtor_cache():
     _skirtor_mod._skirtor_default = None
     # Clear functools.cache on default loaders so monkeypatched paths take effect.
-    for attr in ("_load_skirtor_default", "_load_skirtor_components", "_load_raw_disk_dust_grid"):
+    for attr in (
+        "_load_skirtor_default",
+        "_load_skirtor_default_grid",
+        "_load_skirtor_components",
+        "_load_raw_disk_dust_grid",
+    ):
         fn = getattr(_skirtor_mod, attr, None)
         if fn is not None and hasattr(fn, "cache_clear"):
             fn.cache_clear()
@@ -158,7 +182,7 @@ class TestSKIRTORNoFallback:
         """skirtor_analytic must raise FileNotFoundError when templates are missing."""
         # Patch Path.is_file to always return False so no candidate is found
         monkeypatch.setattr("pathlib.Path.is_file", lambda self: False)
-        _skirtor_mod._skirtor_default = None
+        _reset_skirtor_caches()
         import jax.numpy as jnp
 
         wave = jnp.linspace(1e3, 1e6, 100)
@@ -167,7 +191,7 @@ class TestSKIRTORNoFallback:
 
     def test_error_message_contains_download_hint(self, monkeypatch):
         monkeypatch.setattr("pathlib.Path.is_file", lambda self: False)
-        _skirtor_mod._skirtor_default = None
+        _reset_skirtor_caches()
         import jax.numpy as jnp
 
         wave = jnp.linspace(1e3, 1e6, 100)
