@@ -108,12 +108,20 @@ def _warn_if_exact_forward_path(model, backend_name: str) -> None:
     the model thousands of times can take minutes where WavePrecomp takes
     seconds. Recipes (``tengri.recipes.*``) enable it; a hand-built model may
     not, so nudge the user rather than let the fit silently crawl.
+
+    Ask ``model.approx`` — the accessor both SEDModel and ForwardModel
+    implement — never an inner attribute. This guard previously probed
+    ``getattr(model, "_approx", None) or {}``; ``_approx`` is a lowered flag
+    dict that lives on SEDModel, so on the canonical ``Fitter(forward, ...)``
+    path the probe found nothing, read that as "exact", and warned on every
+    photometry fit — including the default ``approx="auto"`` fits this same
+    class had just routed *onto* the LUT.
     """
     if backend_name not in _MANY_EVAL_SAMPLERS:
         return
-    approx = getattr(model, "_approx", None) or {}
+    approx = model.approx
     has_phot = getattr(getattr(model, "observation", None), "photometry", None) is not None
-    if has_phot and not approx.get("wave_precomp", False):
+    if has_phot and not approx.wave_precomp:
         import warnings
 
         warnings.warn(
