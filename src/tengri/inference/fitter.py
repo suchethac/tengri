@@ -2845,62 +2845,61 @@ class Fitter:
         n_dim = init_flats.shape[1]
         use_dense = dense_mass_matrix and n_dim <= 30
 
-        # Run adaptation on first galaxy (shared across all)
+        # Adaptation on the first galaxy, shared across the batch. Wrapped in a
+        # memoized jax.jit that takes the galaxy data as a *traced* argument so the
+        # compiled warmup is reused across fit_batch calls. The eager form built a
+        # fresh ``window_adaptation`` (with a fresh log-density closure) every call
+        # — a fresh function identity that JAX's in-memory compile cache never
+        # reused, so it retained one warmup executable per call (~20 MB/call leak on
+        # a long-lived Fitter). Data enters traced, so the adaptation still runs on
+        # the current galaxy each call and the numbers are unchanged; this mirrors
+        # the single-galaxy path's module-level ``_hmc_full_scan`` jit.
         first_data_args = jax.tree.map(lambda x: x[0], batch_data_args)
 
-        def ld_first(pos):
-            """Log-density for the first galaxy (used in warmup adaptation).
-
-            Parameters
-            ----------
-            pos : ndarray, shape (n_dim,)
-                Flattened unbounded parameters for first galaxy.
-
-            Returns
-            -------
-            float
-                Log posterior density.
-
-            Notes
-            -----
-            Inner closure for warmup adaptation in batch MCMC. Not part of
-            public API.
-            """
-            return logdensity_flat_2arg(pos, first_data_args)
-
-        if method in ("mcmc_nuts", "mcmc_hmc"):
-            bj_algo = blackjax.nuts if method == "mcmc_nuts" else blackjax.hmc
-            adapt_kwargs = {}
-            if method == "mcmc_hmc":
-                adapt_kwargs["num_integration_steps"] = n_leapfrog_steps
-            warmup = blackjax.window_adaptation(
-                bj_algo,
-                ld_first,
-                is_mass_matrix_diagonal=not use_dense,
-                target_acceptance_rate=target_accept_rate,
-                **adapt_kwargs,
-            )
-            (_, adapt_params), _ = warmup.run(adapt_key, init_flats[0], num_steps=n_warmup)
+        if method == "mcmc_hmc":
+            _adapt_algo, _adapt_kwargs = blackjax.hmc, {"num_integration_steps": n_leapfrog_steps}
         elif method == "mcmc_dynamic_hmc":
-            warmup = blackjax.window_adaptation(
-                blackjax.hmc,
-                ld_first,
-                is_mass_matrix_diagonal=not use_dense,
-                target_acceptance_rate=target_accept_rate,
-                num_integration_steps=10,
-            )
-            (_, adapt_params), _ = warmup.run(adapt_key, init_flats[0], num_steps=n_warmup)
-        elif method == "mcmc_ghmc":
-            warmup = blackjax.window_adaptation(
-                blackjax.nuts,
-                ld_first,
-                is_mass_matrix_diagonal=not use_dense,
-                target_acceptance_rate=target_accept_rate,
-            )
-            (_, adapt_params), _ = warmup.run(adapt_key, init_flats[0], num_steps=n_warmup)
+            _adapt_algo, _adapt_kwargs = blackjax.hmc, {"num_integration_steps": 10}
+        else:  # mcmc_nuts, mcmc_ghmc — both tune with the NUTS window
+            _adapt_algo, _adapt_kwargs = blackjax.nuts, {}
 
-        step_size = adapt_params["step_size"]
-        inv_mass_matrix = adapt_params["inverse_mass_matrix"]
+        def _run_window_adaptation(adapt_key, init_flat, data_args_first):
+            """Window-adapt step size / mass matrix on the first galaxy.
+
+            ``data_args_first`` is a *traced* argument, so this compiles once and
+            is reused across ``fit_batch`` calls (memoized below). Not public API.
+            """
+
+            def _ld(pos):
+                """Single-galaxy log-density closing over the traced data."""
+                return logdensity_flat_2arg(pos, data_args_first)
+
+            warmup = blackjax.window_adaptation(
+                _adapt_algo,
+                _ld,
+                is_mass_matrix_diagonal=not use_dense,
+                target_acceptance_rate=target_accept_rate,
+                **_adapt_kwargs,
+            )
+            (_, adapt_params), _ = warmup.run(adapt_key, init_flat, num_steps=n_warmup)
+            return adapt_params["step_size"], adapt_params["inverse_mass_matrix"]
+
+        _adapt_kernel_key = (
+            "vmap_mcmc_adapt",
+            self.compile_signature(),
+            method,
+            int(n_warmup),
+            bool(use_dense),
+            float(target_accept_rate),
+            int(n_leapfrog_steps),
+            int(n_dim),
+        )
+        _run_adapt = self._memo_batch_kernel(
+            "_batch_adapt_kernel_cache",
+            _adapt_kernel_key,
+            lambda: jax.jit(_run_window_adaptation),
+        )
+        step_size, inv_mass_matrix = _run_adapt(adapt_key, init_flats[0], first_data_args)
 
         if verbose:
             logger.info(
@@ -3283,12 +3282,20 @@ class Fitter:
         """
         return self._memo_batch_kernel("_batch_mcmc_kernel_cache", key, builder)
 
+    #: Max compiled batch kernels retained per cache. A cached kernel can bake the
+    #: SSP grid (~tens of MB), so an unbounded cache on a long-lived Fitter that
+    #: sees many distinct configs would pin them all. The common case (one config,
+    #: reused across a same-shape catalog) stays well under this.
+    _BATCH_KERNEL_CACHE_MAX = 16
+
     def _memo_batch_kernel(self, cache_attr, key, builder):
-        """Instance-scoped memo for a compiled batch kernel (shared MAP/MCMC core).
+        """Instance-scoped LRU memo for a compiled batch kernel (shared MAP/MCMC core).
 
         Returns ``builder()`` uncached when ``key`` is ``None``; otherwise caches
         the built wrapper in ``self.__dict__[cache_attr]`` keyed by ``key`` so
         ``jax.jit`` can reuse the compiled executable across ``fit_batch`` calls.
+        The cache is bounded at :attr:`_BATCH_KERNEL_CACHE_MAX` (LRU eviction) so
+        varying-config workloads cannot grow retention without limit.
         """
         if key is None:
             return builder()
@@ -3296,6 +3303,13 @@ class Fitter:
         fn = cache.get(key)
         if fn is None:
             fn = builder()
+            cache[key] = fn
+            if len(cache) > self._BATCH_KERNEL_CACHE_MAX:
+                # dicts preserve insertion order — drop the oldest (least recent).
+                cache.pop(next(iter(cache)))
+        else:
+            # LRU touch: reinsert so a hit becomes the most-recently-used entry.
+            del cache[key]
             cache[key] = fn
         return fn
 
