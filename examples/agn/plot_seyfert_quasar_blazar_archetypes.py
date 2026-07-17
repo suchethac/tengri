@@ -74,7 +74,7 @@ def build_agn_archetype(log_lbol, agn_frac, agn_blocks, sfr_log, dust_config):
     agn_dict = {
         "log_lbol": log_lbol,
         "frac": agn_frac,
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
     }
     agn_dict.update(agn_blocks)
     # ``sfh.type=const`` is parametrized by total stellar mass over the default
@@ -84,7 +84,7 @@ def build_agn_archetype(log_lbol, agn_frac, agn_blocks, sfr_log, dust_config):
     log_total_mass = sfr_log + 10.14
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": log_total_mass},
+        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": log_total_mass},
         dust=dust_config,
         agn=agn_dict,
         **COMMON,
@@ -106,18 +106,18 @@ wave_sy2, sed_sy2 = build_agn_archetype(
     log_lbol=11.5,
     agn_frac=1.0,
     agn_blocks=dict(
-        disc={"type": "multicolor", "*": tengri.FIXED},
-        torus={"type": "skirtor", "*": tengri.FIXED},
-        nlr={"type": "analytic", "*": tengri.FIXED},
-        blr={"type": "none", "*": tengri.FIXED},
+        disc={"type": "multicolor", "all_params": tengri.FIXED},
+        torus={"type": "skirtor", "all_params": tengri.FIXED},
+        nlr={"type": "analytic", "all_params": tengri.FIXED},
+        blr={"type": "none", "all_params": tengri.FIXED},
     ),
     sfr_log=-10.0,  # Pure AGN, negligible starburst
     dust_config={
         "type": "two_component",
         "tau_diff": 0.1,  # Minimal diffuse dust
         "tau_bc": 3.0,  # Heavy birth-cloud attenuation in front of AGN
-        "*": tengri.FIXED,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "all_params": tengri.FIXED,
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
 )
 nu_l_nu_sy2 = C_AA_PER_S / wave_sy2 * sed_sy2
@@ -132,18 +132,18 @@ wave_q, sed_q = build_agn_archetype(
     log_lbol=13.5,
     agn_frac=1.0,
     agn_blocks=dict(
-        disc={"type": "multicolor", "*": tengri.FIXED},
-        torus={"type": "skirtor", "*": tengri.FIXED},
-        nlr={"type": "none", "*": tengri.FIXED},
-        blr={"type": "analytic", "*": tengri.FIXED},  # BLR instead of NLR
+        disc={"type": "multicolor", "all_params": tengri.FIXED},
+        torus={"type": "skirtor", "all_params": tengri.FIXED},
+        nlr={"type": "none", "all_params": tengri.FIXED},
+        blr={"type": "analytic", "all_params": tengri.FIXED},  # BLR instead of NLR
     ),
     sfr_log=-10.0,  # Pure AGN
     dust_config={
         "type": "two_component",
         "tau_diff": 0.0,  # No diffuse dust
         "tau_bc": 0.0,  # No birth-cloud attenuation
-        "*": tengri.FIXED,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "all_params": tengri.FIXED,
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
 )
 nu_l_nu_q = C_AA_PER_S / wave_q * sed_q
@@ -158,18 +158,18 @@ wave_lirg, sed_lirg = build_agn_archetype(
     log_lbol=12.5,
     agn_frac=0.6,  # Significant starburst contribution
     agn_blocks=dict(
-        disc={"type": "multicolor", "*": tengri.FIXED},
-        torus={"type": "skirtor", "*": tengri.FIXED},
-        nlr={"type": "analytic", "*": tengri.FIXED},
-        blr={"type": "none", "*": tengri.FIXED},
+        disc={"type": "multicolor", "all_params": tengri.FIXED},
+        torus={"type": "skirtor", "all_params": tengri.FIXED},
+        nlr={"type": "analytic", "all_params": tengri.FIXED},
+        blr={"type": "none", "all_params": tengri.FIXED},
     ),
     sfr_log=2.0,  # ~100 M_sun / yr ongoing starburst
     dust_config={
         "type": "two_component",
         "tau_diff": 1.5,  # Moderate diffuse dust from starburst
         "tau_bc": 1.0,  # Moderate birth-cloud attenuation
-        "*": tengri.FIXED,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "all_params": tengri.FIXED,
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
 )
 nu_l_nu_lirg = C_AA_PER_S / wave_lirg * sed_lirg

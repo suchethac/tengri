@@ -98,7 +98,7 @@ model_dust_sweep = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 0.5,  # young starburst -> strong UV
@@ -106,11 +106,11 @@ model_dust_sweep = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": tengri.Uniform(0.0, 4.0),
         "tau_bc": 0.5,
         "slope": -0.7,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
     redshift=tengri.Fixed(0.0),
 )
@@ -149,14 +149,14 @@ model_age_dust = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 0.5,  # Fixed default; we'll override later
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 1.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.01),
 )
 

@@ -72,7 +72,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.05,  # Burst timescale 50 Myr
         "log_total_mass": 10.0,  # Peak SFR ~ 9 Msun/yr
         "alpha": 2.0,  # Sharp initial rise (young burst)
@@ -80,12 +80,12 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 1.5,  # Diffuse ISM: tau_V ~ 1.5 mag
         "tau_bc": 2.0,  # Birth cloud: tau_V ~ 2.0 mag (star-forming regions)
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
-    radio={"type": "condon92", "*": tengri.FIXED},
+    radio={"type": "condon92", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.0),  # z=0 rest-frame (nearby galaxy)
 )
 
@@ -101,7 +101,7 @@ model_intrinsic = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.05,
         "log_total_mass": 10.0,
         "alpha": 2.0,
@@ -109,10 +109,10 @@ model_intrinsic = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.0,
         "tau_bc": 0.0,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
     redshift=tengri.Fixed(0.0),
 )

@@ -33,42 +33,42 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 C_AA_PER_S = 2.998e18
 LOG_LBOL = 12.5
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
 
 TIERS = [
     (
         "bare multicolor disc",
-        {"disc": {"type": "multicolor", "*": tengri.FIXED}},
+        {"disc": {"type": "multicolor", "all_params": tengri.FIXED}},
     ),
     (
         "disc + SKIRTOR torus",
         {
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
         },
     ),
     (
         "disc + torus + NLR lines",
         {
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "nlr": {"type": "analytic", "*": tengri.FIXED},
-            "blr": {"type": "none", "*": tengri.FIXED},
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+            "blr": {"type": "none", "all_params": tengri.FIXED},
         },
     ),
     (
         "empirical QSOgen template",
-        {"disc": {"type": "qsogen", "*": tengri.FIXED}},
+        {"disc": {"type": "qsogen", "all_params": tengri.FIXED}},
     ),
 ]
 colors = plt.cm.viridis(np.linspace(0.05, 0.9, len(TIERS)))
 
 fig, ax = plt.subplots(figsize=(7.5, 4.8))
 for (label, blocks), color in zip(TIERS, colors):
-    agn = {"*": tengri.FIXED, "log_lbol": LOG_LBOL, "frac": 1.0, **blocks}
+    agn = {"all_params": tengri.FIXED, "log_lbol": LOG_LBOL, "frac": 1.0, **blocks}
     model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict(p)

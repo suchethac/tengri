@@ -37,13 +37,13 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.05,
         "log_total_mass": 10.0,
         "alpha": 2.8,
         "beta": 1.5,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.01, "tau_bc": 0.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.01, "tau_bc": 0.0},
     redshift=tengri.Fixed(5.0),
 )
 out = model.predict(dict(model.spec.sample(jax.random.PRNGKey(0))))

@@ -37,8 +37,8 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 C_AA_PER_S = 2.998e18
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
 
@@ -47,34 +47,34 @@ RECIPES = [
         "all-GRAHSP",
         "tab:blue",
         {
-            "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
-            "nlr": {"type": "grahsp", "*": tengri.FIXED},
-            "blr": {"type": "grahsp", "*": tengri.FIXED},
-            "feii": {"type": "grahsp", "*": tengri.FIXED},
-            "torus": {"type": "grahsp", "*": tengri.FIXED},
-            "atten": {"type": "grahsp_biatten", "*": tengri.FIXED},
+            "disc": {"type": "grahsp_sbpl", "all_params": tengri.FIXED},
+            "nlr": {"type": "grahsp", "all_params": tengri.FIXED},
+            "blr": {"type": "grahsp", "all_params": tengri.FIXED},
+            "feii": {"type": "grahsp", "all_params": tengri.FIXED},
+            "torus": {"type": "grahsp", "all_params": tengri.FIXED},
+            "atten": {"type": "grahsp_biatten", "all_params": tengri.FIXED},
         },
     ),
     (
         "multicolor disc + SKIRTOR torus + NLR",
         "tab:green",
         {
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "nlr": {"type": "analytic", "*": tengri.FIXED},
-            "blr": {"type": "none", "*": tengri.FIXED},
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+            "blr": {"type": "none", "all_params": tengri.FIXED},
         },
     ),
     (
         "QSOgen monolithic",
         "tab:orange",
-        {"disc": {"type": "qsogen", "*": tengri.FIXED}},
+        {"disc": {"type": "qsogen", "all_params": tengri.FIXED}},
     ),
 ]
 
 fig, ax = plt.subplots(figsize=(8.0, 5.0))
 for label, color, blocks in RECIPES:
-    agn = {"*": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **blocks}
+    agn = {"all_params": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **blocks}
     model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict(p)

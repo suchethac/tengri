@@ -42,27 +42,27 @@ ssp_wne = tengri.load_ssp()  # wNE: BakedIn needs wNE SSP
 common_config = {
     "sfh": {
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 1.0,
         "beta": 2.5,
         "tau_gyr": 0.5,
         "log_total_mass": 10.0,
     },
-    "dust": {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    "dust": {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     "redshift": tengri.Fixed(0.0),
 }
 
 # Build Cue (bare-stellar SSP)
 model_cue = tengri.SEDModel.build(
     ssp_bare,
-    neb={"type": "cue", "*": tengri.FIXED, "neb_logU": tengri.Fixed(-3.0)},
+    neb={"type": "cue", "all_params": tengri.FIXED, "neb_logU": tengri.Fixed(-3.0)},
     **common_config,
 )
 
 # Build BakedIn (wNE SSP with nebular lines embedded)
 model_baked = tengri.SEDModel.build(
     ssp_wne,
-    neb={"type": "ssp", "*": tengri.FIXED},
+    neb={"type": "ssp", "all_params": tengri.FIXED},
     **common_config,
 )
 

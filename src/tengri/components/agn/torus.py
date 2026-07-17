@@ -327,7 +327,7 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
 
     def nenkova_grid(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 44.0,
+        agn_log_lbol: float = 10.0,
         agn_tau: float = 30.0,
         agn_torus_frac: float = 0.5,
         **_kwargs,
@@ -339,7 +339,7 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
         wavelength : array_like, shape (n_wave,)
             Rest-frame wavelength grid. [Å]
         agn_log_lbol : float, optional
-            Bolometric luminosity, ``log10(L_bol / L_sun)``. Default 44.0.
+            Bolometric luminosity, ``log10(L_bol / L_sun)``. Default 10.0.
         agn_tau : float, optional
             Equatorial optical depth of the clumpy torus. Valid over the grid
             extent (5–150). Default 30.0. [dimensionless]
@@ -405,7 +405,7 @@ def nenkova_torus(*args, **kwargs) -> jnp.ndarray:
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float, optional
-        ``log10(L_bol / L_sun)``. AGN bolometric luminosity. Default 44.0.
+        ``log10(L_bol / L_sun)``. AGN bolometric luminosity. Default 10.0.
     agn_tau : float, optional
         Equatorial optical depth of the clumpy torus. Valid range 5–150.
         Default 30.0. [dimensionless]

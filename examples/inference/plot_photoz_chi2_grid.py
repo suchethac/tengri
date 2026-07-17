@@ -61,7 +61,7 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 3.0,
         "width_gyr": 2.0,
         "log_total_mass": tengri.Uniform(LOGM_MIN, LOGM_MAX),  # free: the grid's mass axis
@@ -70,12 +70,12 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.3,
         "tau_bc": 0.1,
         "slope": -0.7,
     },
-    neb={"type": "cue", "*": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Uniform(Z_MIN, Z_MAX),
 )
 

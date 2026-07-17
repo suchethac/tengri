@@ -33,10 +33,12 @@ Modern galaxy SED inference needs speed, differentiability, and
 modularity at once; most codes give you one or two. Tengri is an
 attempt at all three.
 
-JIT compilation gets the full physical model down to tens of
-microseconds per call on a single CPU core, fast enough for
-catalog-scale inference without putting a neural emulator in the
-loop. Exact gradients make HMC, variational inference, and Laplace
+JIT compilation gets the core forward model down to tens of
+microseconds per galaxy in batched (`vmap`) evaluation on a single
+CPU core, fast enough for catalog-scale inference without putting a
+neural emulator in the loop. (A full panchromatic model with dust IR
+re-emission and nebular emission is heavier — of order a millisecond
+per galaxy.) Exact gradients make HMC, variational inference, and Laplace
 approximation work in the 100+ parameter spaces where bursty
 star formation histories and hierarchical population fits live. And
 the physics and the instrument models are separate, swappable pieces,
@@ -84,7 +86,11 @@ pip install -e ".[dev]"
 
 ### Verify your install
 
+The smoke gate uses `pytest`, which ships in the `[dev]` extra (it is **not**
+included in `[all]`), so install that first:
+
 ```bash
+pip install -e ".[dev]"
 pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
 ```
 
@@ -116,7 +122,10 @@ from tengri import (
     Observation, Photometry, load_ssp_data, recipes,
 )
 
-ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+# download_ssp() fetches the default bare-stellar grid on first run and
+# skips (returns the same path) on every run after — so this block is
+# copy-paste-safe. See "SSP grids" above for other grids / a shell setup.
+ssp = load_ssp_data(tengri.download_ssp())
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
@@ -142,10 +151,23 @@ print(result.summary_table())
 For real data, pass your own `(flux, noise)` to `Fitter`. The full
 walkthrough is in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
 
-If you want more control than a recipe gives you, build the model
-with the nested-dict grammar (`SEDModel.build(..., sfh={'type': 'dpl',
-'*': FREE, 'beta': Uniform(1, 3)}, dust={...}, neb={...})`). See
-[`notebooks/04_building_models.py`](notebooks/04_building_models.py)
+If you want more control than a recipe gives you, build the model with
+the nested-dict grammar. Import the sentinels and priors it uses first
+(`FREE`/`FIXED` are singletons, distinct from the `Fixed(...)` prior
+above):
+
+```python
+from tengri import FREE, FIXED, Uniform
+
+sed = SEDModel.build(
+    ssp_data=ssp, observation=obs,
+    sfh={'type': 'dpl', '*': FREE, 'beta': Uniform(1, 3)},
+    dust={'type': 'two_component', '*': FIXED},
+    neb={'type': 'cue', '*': FIXED},
+)
+```
+
+See [`notebooks/04_building_models.py`](notebooks/04_building_models.py)
 for the grammar; `tengri.recipes` shows the curated starting points.
 
 ## Tutorials
@@ -259,10 +281,11 @@ While Paper I is in preparation, the shortest correct in-text citation is:
 See [CITATION.cff](CITATION.cff) for the machine-readable form and the
 [Citing tengri](https://suchethacooray.com/tengri/citation.html) page
 for the BibTeX + acknowledgement block. For automatic, fit-specific
-BibTeX (every SSP grid, model, and sampler that actually ran):
+citations (every SSP grid, model, and sampler that actually ran) —
+pass the fit to `cite`, which prints the component table and BibTeX:
 
 ```python
-tengri.print_components_bibtex(result)
+tengri.cite(result)
 ```
 
 ## License

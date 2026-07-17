@@ -81,7 +81,7 @@ def composite_photometry(ssp, agn_frac, redshift):
         observation=tengri.Observation(photometry=obs_irac.photometry),
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "tau_gyr": 1.5,
             "alpha": 2.0,
@@ -89,19 +89,19 @@ def composite_photometry(ssp, agn_frac, redshift):
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.4,
             "tau_diff": 0.2,
         },
         agn={
             "type": "composable",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "agn_frac": agn_frac,  # 0 = pure host, 1 = AGN-dominated
             "agn_log_lbol": 12.5,
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "nlr": {"type": "analytic", "*": tengri.FIXED},
-            "blr": {"type": "none", "*": tengri.FIXED},
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+            "blr": {"type": "none", "all_params": tengri.FIXED},
         },
         redshift=tengri.Fixed(redshift),
     )

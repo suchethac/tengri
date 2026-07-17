@@ -57,16 +57,16 @@ ssp = tengri.load_ssp()
 
 # Shared model components (minimal star formation, no dust).
 COMMON = dict(
-    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0},
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.05),
 )
 
 # Base AGN: multicolor disc + SKIRTOR torus (common to both Type 1 and 2).
 BASE_AGN = {
-    "disc": {"type": "multicolor", "*": tengri.FIXED},
-    "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": 7.0},
-    "*": tengri.FIXED,
+    "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+    "torus": {"type": "skirtor", "all_params": tengri.FIXED, "tau_skirtor": 7.0},
+    "all_params": tengri.FIXED,
     "log_lbol": 12.0,
     "frac": 1.0,
 }
@@ -75,8 +75,8 @@ BASE_AGN = {
 print("Building Type 1 (face-on, BLR) model...")
 agn_type1 = {
     **BASE_AGN,
-    "nlr": {"type": "none", "*": tengri.FIXED},
-    "blr": {"type": "analytic", "*": tengri.FIXED},
+    "nlr": {"type": "none", "all_params": tengri.FIXED},
+    "blr": {"type": "analytic", "all_params": tengri.FIXED},
 }
 model_type1 = tengri.SEDModel.build(ssp, agn=agn_type1, **COMMON)
 params_type1 = dict(model_type1.spec.sample(jax.random.PRNGKey(42)))
@@ -90,8 +90,8 @@ sed_type1 = np.asarray(out_type1.rest_sed())
 print("Building Type 2 (edge-on, NLR) model...")
 agn_type2 = {
     **BASE_AGN,
-    "nlr": {"type": "analytic", "*": tengri.FIXED},
-    "blr": {"type": "none", "*": tengri.FIXED},
+    "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+    "blr": {"type": "none", "all_params": tengri.FIXED},
 }
 model_type2 = tengri.SEDModel.build(ssp, agn=agn_type2, **COMMON)
 params_type2 = dict(model_type2.spec.sample(jax.random.PRNGKey(42)))
@@ -152,8 +152,8 @@ INCLINATIONS = (
     ("Intermediate (45°)", 0.50, "#ff7f0e"),
     ("Type 2 (edge-on)", 0.10, "#d62728"),
 )
-SFH_TRANS = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST_TRANS = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH_TRANS = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST_TRANS = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 # Create a second figure for the transition narrative
 fig2, ax_trans = plt.subplots(figsize=(7.5, 4.8))
@@ -164,14 +164,14 @@ for label, cos_inc, color in INCLINATIONS:
         sfh=SFH_TRANS,
         dust=DUST_TRANS,
         agn={
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_lbol": 12.5,
             "frac": 1.0,
             "cos_inc": cos_inc,
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "nlr": {"type": "none", "*": tengri.FIXED},
-            "blr": {"type": "analytic", "*": tengri.FIXED},
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "nlr": {"type": "none", "all_params": tengri.FIXED},
+            "blr": {"type": "analytic", "all_params": tengri.FIXED},
         },
         redshift=tengri.Fixed(0.0),
     )

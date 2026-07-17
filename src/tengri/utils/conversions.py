@@ -33,6 +33,7 @@ from tengri.utils.physics_constants import (
     L_SUN,
     MAGGIES_ZP_CGS,
 )
+from tengri.utils.scale import LOG10_4PI, apply_log10_scale
 
 __all__ = [
     "air_to_vacuum",
@@ -432,11 +433,16 @@ def lnu_to_fnu(
     The 1/(4π d_L²) is the inverse-square dilution over luminosity distance.
 
     Reference: Hogg et al. (1999), AJ, 118, 1407.
+
+    Notes
+    -----
+    The flux-scale factor is computed via log-offset arithmetic (apply_log10_scale)
+    to avoid float32 underflow. See issue #1186.
     """
     redshift = jnp.asarray(redshift)
     dl_cm = jnp.asarray(dl_cm)
-    factor = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
-    return lnu * factor
+    log10_factor = jnp.log10(1.0 + redshift) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+    return apply_log10_scale(lnu, log10_factor)
 
 
 @jit
@@ -465,12 +471,13 @@ def fnu_to_lnu(
 
     Notes
     -----
-    Inverse of lnu_to_fnu().
+    Inverse of lnu_to_fnu(). The flux-scale factor is computed via log-offset
+    arithmetic to avoid float32 overflow. See issue #1186.
     """
     redshift = jnp.asarray(redshift)
     dl_cm = jnp.asarray(dl_cm)
-    factor = 4.0 * jnp.pi * dl_cm**2 / (1.0 + redshift)
-    return fnu * factor
+    log10_inv = 2.0 * jnp.log10(dl_cm) + LOG10_4PI - jnp.log10(1.0 + redshift)
+    return apply_log10_scale(fnu, log10_inv)
 
 
 # ── Optical Depth & Attenuation ───────────────────────────────────

@@ -24,10 +24,10 @@ Examples
 >>> from tengri import builders, FREE, Uniform
 >>> # Plain Inoue+14 (no extras)
 >>> builders.igm.inoue14()
-{'type': 'inoue14', '*': FIXED}
+{'type': 'inoue14', 'all_params': FIXED}
 >>> # Toggle patchy reionization, override the bubble size prior
 >>> builders.igm.inoue14(defaults=FREE, patchy=True, bubble_mpc=Uniform(5, 50))  # doctest: +SKIP
-{'type': 'inoue14', '*': FREE, 'patchy': True, 'bubble_mpc': Uniform(...)}
+{'type': 'inoue14', 'all_params': FREE, 'patchy': True, 'bubble_mpc': Uniform(...)}
 """
 
 from __future__ import annotations

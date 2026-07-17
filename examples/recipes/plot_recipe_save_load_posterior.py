@@ -34,8 +34,8 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FREE},
-    dust={"type": "two_component", "*": tengri.FREE},
+    sfh={"type": "tsnorm", "all_params": tengri.FREE},
+    dust={"type": "two_component", "all_params": tengri.FREE},
     redshift=tengri.Fixed(0.08),
 )
 

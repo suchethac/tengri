@@ -95,6 +95,7 @@ from tengri.utils.grid import (
     log_age_to_age_yr,
     make_log_age_grid,
 )
+from tengri.utils.scale import LOG10_4PI, apply_log10_scale
 
 #: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
 #: :meth:`SEDModel._dust_emission_band_response`. A physically plausible L_IR
@@ -578,15 +579,19 @@ class SEDModel:
         Affects both fused (photometry + precomputation) and exact paths:
 
         - **Fused path**: captured arrays (SSP grid, dust weights, effective
-          wavelengths) cast to ``forward_dtype`` at kernel build; outputs
-          always cast back to float64 for cosmological distance scaling.
+          wavelengths) cast to ``forward_dtype`` at kernel build.
         - **Exact path** (spectroscopy, non-precomputed AGN): three largest intermediates
           — metallicity-interpolated SSP ``(n_age, n_wave)``, dust attenuation
           ``(n_age, n_wave)``, dust age weights ``(n_age,)`` — computed in
           ``forward_dtype``, halving the 4.5 MB memory traffic that dominates
           exact-path dust cost.
 
-        Cosmological distances always use float64 (float32 overflows at z > 0.01).
+        Mixed-precision support: Multiplicative flux/distance seams (photometry,
+        spectrum, line flux projections) apply cosmological factors as range-safe
+        log offsets (see :mod:`tengri.utils.scale`), allowing float32 arrays without
+        out-of-range intermediates. Full pure-float32 output additionally requires
+        Tier B reduction reformulations (ionizing photon integral, energy-balance
+        cascades, AGN SKIRTOR table resolution) and is not yet supported.
     approx : dict or bool, optional
         Control which approximations enter the component chain. Default True enables
         all approximations (fastest). False disables all (forces exact path
@@ -1540,9 +1545,7 @@ class SEDModel:
 
         if observation is not None:
             if not isinstance(observation, Observation):
-                raise TypeError(
-                    f"observation must be an Observation instance, got {type(observation)}"
-                )
+                observation = SEDModel._wrap_as_observation(observation)
             obs_params = observation.get_all_params()
             if obs_params:
                 spec = spec.with_params(**obs_params)
@@ -1552,6 +1555,64 @@ class SEDModel:
             observation = Observation(photometry=Photometry.from_filter_set(filters))
 
         return observation, spec
+
+    @staticmethod
+    def _wrap_as_observation(observation):
+        """Wrap a lone observation component in an :class:`Observation`.
+
+        ``observation=`` expects an :class:`Observation`, but a fresh user
+        naturally reaches for the component constructors the discovery API
+        advertises — e.g. ``list_filters()`` suggests
+        ``Photometry.from_names([...])``. A bare ``Photometry`` (or
+        ``Spectroscopy``/``LineFluxData``/``SpectralIndexData``/``LineRatioData``)
+        maps unambiguously onto a single :class:`Observation` slot, so wrap it
+        rather than reject it. The ``filters=`` path already auto-wraps the
+        same way.
+
+        Parameters
+        ----------
+        observation : object
+            The value passed as ``observation=``. Expected to be one of the
+            single-slot observation component types.
+
+        Returns
+        -------
+        Observation
+            ``Observation(<slot>=observation)`` for the matching slot.
+
+        Raises
+        ------
+        TypeError
+            If ``observation`` is not an :class:`Observation` and not one of
+            the wrappable component types. The message names the accepted
+            types and the explicit wrap.
+        """
+        from tengri.observation.line_flux_data import LineFluxData
+        from tengri.observation.line_ratio_data import LineRatioData
+        from tengri.observation.observation import Observation
+        from tengri.observation.photometry_config import Photometry
+        from tengri.observation.spectral_indices import SpectralIndexData
+        from tengri.observation.spectroscopy import Spectroscopy
+
+        # type -> Observation constructor keyword for the single-slot map.
+        wrap_slots = (
+            (Photometry, "photometry"),
+            (Spectroscopy, "spectroscopy"),
+            (LineFluxData, "line_fluxes"),
+            (SpectralIndexData, "spectral_indices"),
+            (LineRatioData, "line_ratios"),
+        )
+        for component_type, slot in wrap_slots:
+            if isinstance(observation, component_type):
+                return Observation(**{slot: observation})
+
+        accepted = ", ".join(t.__name__ for t, _ in wrap_slots)
+        raise TypeError(
+            f"observation= must be an Observation (or a single component of type "
+            f"{accepted}), got {type(observation).__name__}. Wrap it explicitly, "
+            f"e.g. observation=Observation(photometry=my_photometry), or pass "
+            f"filters=[...] for a photometry-only model."
+        )
 
     def _init_ssp(self, spec, ssp_data, csp_integration):
         """Set up SSP grid, CSP integration, and log-age grid."""
@@ -4065,7 +4126,8 @@ class SEDModel:
         # NebularSEDComponent) — no L_sun conversion here. Multiplying by
         # L_SUN was a 33.6-dex unit error that made every joint
         # photometry+line-flux fit unusable against real data.
-        flux = selected_lums / (4.0 * jnp.pi * dl_cm**2)
+        log10_scale = -LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        flux = apply_log10_scale(selected_lums, log10_scale)
         return flux
 
     def enable_fast_nebular(self, target_wavelengths, *, n_grid=16, ranges=None):
@@ -4254,13 +4316,13 @@ class SEDModel:
         # ``line_lums`` are erg/s (DerivedKey contract) — same fix as
         # ``predict_line_fluxes``. The scale cancels in every ratio, so
         # this is unit hygiene, not a behavior change.
-        scale = 1.0 / (4.0 * jnp.pi * dl_cm**2)
+        log10_scale = -LOG10_4PI - 2.0 * jnp.log10(dl_cm)
 
         def _match(targets):
             targets = jnp.asarray(targets)
             deltas = jnp.abs(all_waves[None, :] - targets[:, None])
             idx = jnp.argmin(deltas, axis=1)
-            return all_lums[idx] * scale
+            return apply_log10_scale(all_lums[idx], log10_scale)
 
         num_flux = _match(line_ratio_data.numerator_waves)
         den_flux = _match(line_ratio_data.denominator_waves)
@@ -5632,7 +5694,7 @@ class SEDModel:
                 "nebular backend: emission is baked into the SSP grid and "
                 "no discrete line catalog is published. To predict line "
                 "luminosities, build the model with a photoionization "
-                "backend, e.g. neb={'type': 'cue', '*': FIXED} (requires "
+                "backend, e.g. neb={'type': 'cue', 'all_params': FIXED} (requires "
                 "a bare-stellar SSP) or neb={'type': 'cloudy_grid', ...}. "
                 "For a quick narrow-band measurement on the BakedIn SED, "
                 "integrate model._predict_rest_sed(params).sed across the "
@@ -6146,8 +6208,21 @@ class SEDModel:
             if not isinstance(component, AGNSEDComponent):
                 continue
             agn_templates = {}
-            if component._state is not None and component._state.skirtor_templates is not None:
-                agn_templates["skirtor"] = component._state.skirtor_templates
+            skirtor = component._state.skirtor_templates if component._state is not None else None
+            # The exact path does not run AGN precompute, so ``_state`` carries
+            # no template. Load the SKIRTOR grid arrays here so the data always
+            # threads through jit (small compile) rather than baking into the
+            # trace as a constant (#1198). Guarded to the monolithic SKIRTOR
+            # model — composable torus blocks carry their own grid.
+            if skirtor is None and getattr(component.config, "model", None) == "skirtor":
+                try:
+                    from tengri.components.agn.skirtor import _load_skirtor_default_grid
+
+                    skirtor = _load_skirtor_default_grid()
+                except Exception:
+                    skirtor = None
+            if skirtor is not None:
+                agn_templates["skirtor"] = skirtor
             if agn_templates:
                 result["agn"] = agn_templates
             break
@@ -7090,8 +7165,9 @@ class SEDModel:
         ssp_data : SSPData
             Pre-loaded SSP grid (from :func:`load_ssp_data`).
         sfh, dust, neb, agn, igm, radio, xray : dict, optional
-            Per-component nested dicts. Each may carry ``'type'``, ``'*'``
-            (wildcard set to :data:`~tengri.FREE` or :data:`~tengri.FIXED`),
+            Per-component nested dicts. Each may carry ``'type'``,
+            ``'all_params'`` (wildcard set to :data:`~tengri.FREE` or
+            :data:`~tengri.FIXED`; the ``'*'`` synonym is also accepted),
             and per-parameter overrides. See
             :func:`tengri.parameters.parse_groups` for the full grammar.
         redshift, apply_igm : scalar, Distribution, or sentinel, optional
@@ -7122,9 +7198,14 @@ class SEDModel:
         >>> from tengri import SEDModel, FREE, FIXED, Uniform, Fixed
         >>> model = SEDModel.build(
         ...     ssp_data=ssp,
-        ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
-        ...     dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
-        ...     neb={"type": "cue", "*": FIXED},
+        ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
+        ...     dust={
+        ...         "type": "two_component",
+        ...         "law_bc": "calzetti",
+        ...         "all_params": FIXED,
+        ...         "tau_bc": 0.5,
+        ...     },
+        ...     neb={"type": "cue", "all_params": FIXED},
         ...     redshift=Fixed(0.05),
         ...     filters=["sdss_u", "sdss_g", "sdss_r"],
         ... )

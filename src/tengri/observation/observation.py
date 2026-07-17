@@ -23,6 +23,7 @@ from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectral_indices import SpectralIndexData
 from tengri.observation.spectroscopy import Spectroscopy
 from tengri.parameters.priors import Distribution
+from tengri.utils.scale import LOG10_4PI, apply_log10_scale
 
 
 def _restband_lnu(state) -> jnp.ndarray:
@@ -1134,8 +1135,8 @@ class Observation:
 
         z = jnp.asarray(params.get("redshift", 0.0))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        cosmology = (1.0 + z) / (4.0 * jnp.pi * dl_cm**2)
-        phot_fnu = total_lnu * cosmology
+        log10_cos = jnp.log10(1.0 + z) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        phot_fnu = apply_log10_scale(total_lnu, log10_cos)
 
         # phot_rest_fnu: the SED reprojected at z=0, d_L=10 pc — the galaxy as it is.
         from tengri.utils.physics_constants import TEN_PC_CM
@@ -1200,7 +1201,9 @@ class Observation:
                 # before; the stellar continuum dominates the broadband and is now
                 # the accurate term.
                 other_lnu = total_lnu - stellar_attenuated
-                phot_fnu = (other_lnu * igm_factor + stellar_attenuated_igm) * cosmology
+                phot_fnu = apply_log10_scale(
+                    other_lnu * igm_factor + stellar_attenuated_igm, log10_cos
+                )
             else:
                 phot_fnu = phot_fnu * igm_factor
 
@@ -1306,8 +1309,8 @@ class Observation:
         # Apply cosmology: observed F_ν = L_ν / (4π·d_L²) × (1 + z)
         z = jnp.asarray(params.get("redshift", 0.0))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        cosmology = (1.0 + z) / (4.0 * jnp.pi * dl_cm**2)
-        spec_fnu = total_spec_lnu * cosmology
+        log10_cos = jnp.log10(1.0 + z) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        spec_fnu = apply_log10_scale(total_spec_lnu, log10_cos)
 
         # spec_rest_fnu: same LUT sum projected at z=0, d_L=10pc.
         from tengri.utils.physics_constants import TEN_PC_CM

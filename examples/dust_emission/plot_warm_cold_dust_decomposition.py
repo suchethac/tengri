@@ -86,12 +86,12 @@ def _build_model(u_min: float) -> tuple:
     """
     dust_config = {
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 1.0,
         "tau_bc": 0.3,
         "emission": {
             "type": "draine_li2007",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "qpah": 2.5,  # Fixed PAH mass fraction
             "umin": tengri.Uniform(0.5, 8.0),  # Promote to FREE: varies across regimes
         },
@@ -99,7 +99,7 @@ def _build_model(u_min: float) -> tuple:
 
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0},
+        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
         dust=dust_config,
         redshift=tengri.Fixed(0.05),
     )

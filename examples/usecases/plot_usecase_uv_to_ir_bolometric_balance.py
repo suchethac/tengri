@@ -115,9 +115,9 @@ for tau_v in tau_v_grid:
         ssp_data=ssp,
         observation=obs,
         redshift=Fixed(z),
-        sfh={"type": "tsnorm", "*": FIXED, "peak_lbt_gyr": 0.3},
-        dust={"type": "single_component", "law_bc": "calzetti", "*": FIXED, "tau_v": 0.0},
-        neb={"type": "cue", "*": FIXED},
+        sfh={"type": "tsnorm", "all_params": FIXED, "peak_lbt_gyr": 0.3},
+        dust={"type": "single_component", "law_bc": "calzetti", "all_params": FIXED, "tau_v": 0.0},
+        neb={"type": "cue", "all_params": FIXED},
     )
 
     # Generate intrinsic SED on rest-frame wavelength grid
@@ -141,15 +141,15 @@ for tau_v in tau_v_grid:
         ssp_data=ssp,
         observation=obs,
         redshift=Fixed(z),
-        sfh={"type": "tsnorm", "*": FIXED, "peak_lbt_gyr": 0.3},
+        sfh={"type": "tsnorm", "all_params": FIXED, "peak_lbt_gyr": 0.3},
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": tau_v,
-            "emission": {"type": "dale2014", "*": FIXED},
+            "emission": {"type": "dale2014", "all_params": FIXED},
         },
-        neb={"type": "cue", "*": FIXED},
+        neb={"type": "cue", "all_params": FIXED},
     )
 
     # Generate attenuated SED

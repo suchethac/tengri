@@ -34,13 +34,19 @@ model = tengri.SEDModel.build(
     tengri.load_ssp("fsps_prsc_miles_chabrier"),
     sfh={
         "type": "const",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "start_gyr": 0.01,  # constant SFR over the last 10 Myr (what Ha traces)
         "end_gyr": 0.0,
         "log_total_mass": tengri.FREE,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-    neb={"type": "cue", "*": tengri.FIXED, "neb_logU": -2.5, "neb_fesc": 0.0, "neb_fesc_lya": 0.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    neb={
+        "type": "cue",
+        "all_params": tengri.FIXED,
+        "neb_logU": -2.5,
+        "neb_fesc": 0.0,
+        "neb_fesc_lya": 0.0,
+    },
     redshift=tengri.Fixed(0.0),
 )
 

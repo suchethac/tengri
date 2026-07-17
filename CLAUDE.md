@@ -150,13 +150,13 @@ model = SEDModel.build(ssp_data=ssp, observation=obs,
 # Or hand-rolled with the nested-dict grammar
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
-    sfh={'type': 'dpl', '*': FREE, 'beta': Uniform(1, 3)},
-    dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FIXED,
-          'tau_bc': 0.5, 'emission': {'type': 'dale2014', '*': FIXED}},
-    neb={'type': 'cue', '*': FIXED},
+    sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)},
+    dust={'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FIXED,
+          'tau_bc': 0.5, 'emission': {'type': 'dale2014', 'all_params': FIXED}},
+    neb={'type': 'cue', 'all_params': FIXED},
     redshift=Fixed(0.05),
 )
-model.spec.summary()    # provenance-tagged: [user] / [* FREE] / [* FIXED] / [default]
+model.spec.summary()    # provenance-tagged: [user] / [all_params FREE] / [all_params FIXED] / [default]
 groups = model.spec.to_groups()    # round-trip for inspection/editing
 
 # Or with builder factories (autocomplete-friendly; SFH only as of Phase II-3.3)
@@ -164,18 +164,19 @@ from tengri import builders
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_total_mass
-    dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FIXED},
-    neb={'type': 'cue', '*': FIXED},
+    dust={'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FIXED},
+    neb={'type': 'cue', 'all_params': FIXED},
 )
 ```
 
-- Grammar: each group dict accepts `'type'` (structural choice), `'*'`
-  wildcard (`FREE`/`FIXED`; default `FIXED`), and per-parameter short-form
-  overrides (e.g. `'beta'` inside the sfh group resolves to `sfh_dpl_beta`).
+- Grammar: each group dict accepts `'type'` (structural choice), `'all_params'`
+  wildcard (`FREE`/`FIXED`; default `FIXED`; the `'*'` synonym is still accepted
+  but slated for deprecation), and per-parameter short-form overrides (e.g.
+  `'beta'` inside the sfh group resolves to `sfh_dpl_beta`).
 - Sub-blocks: `dust.emission`, plus the six AGN composable selectors —
   `agn.disc`, `agn.torus`, `agn.nlr`, `agn.blr`, `agn.feii`, `agn.atten`
   (the deprecated `agn.lines` alias expands to an nlr/blr pair). Each nests
-  as a dict with its own `'type'`, `'*'`, and per-param keys.
+  as a dict with its own `'type'`, `'all_params'`, and per-param keys.
 - Composable shock (#851): the top-level `shock={...}` group adds MAPPINGS V
   shock emission as a **separate additive** component that composes with any
   photoionized `neb` backend (both on at once). `shock={'norm': 'frac' |
@@ -183,7 +184,7 @@ model = SEDModel.build(
   'velocity'/...: prior}`. `'frac'` (default) scales the galaxy Hα (bit-exact
   with the legacy `shock_emission`); `'lhalpha'` sets an absolute
   `shock_log_lhalpha` (decoupled from the SFR — for AGN NLR/outflow shocks).
-  `shock={'type':'none'}` disables. Like radio, `'*':FREE` is a no-op for the
+  `shock={'type':'none'}` disables. Like radio, `'all_params':FREE` is a no-op for the
   Fixed-default shock bucket — use explicit priors (`shock={'frac':
   Uniform(0,1)}`). Canonical component: `ShockNebular` (`_REGISTRY['shock']`);
   the older `mappings` implementation is a superseded no-op.

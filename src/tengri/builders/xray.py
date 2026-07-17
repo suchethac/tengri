@@ -19,7 +19,7 @@ Examples
 --------
 >>> from tengri import builders, Uniform
 >>> builders.xray.simple(alpha_ox=Uniform(-2.0, -1.0))  # doctest: +SKIP
-{'type': 'simple', '*': FIXED, 'alpha_ox': Uniform(...)}
+{'type': 'simple', 'all_params': FIXED, 'alpha_ox': Uniform(...)}
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from collections.abc import Callable
 from tengri.builders._factory import make_factory, short_form
 from tengri.parameters.groups import _valid_xray_types
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FREE
+from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS
 
 _PREFIXES = ("xray_",)
 
@@ -39,7 +39,7 @@ def _discover_params(variant: str) -> list[str]:
         return []
     recipe = {
         "sfh": {"type": "dpl"},
-        "xray": {"type": variant, "*": FREE},
+        "xray": {"type": variant, WILDCARD_ALIAS: FREE},
     }
     records = recipe_parameters(recipe, free_only=False)
     return [

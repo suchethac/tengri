@@ -27,20 +27,20 @@ obs = tengri.Observation(
 
 dust_cfg = {
     "type": "two_component",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "tau_diff": tengri.Uniform(0.0, 1.5),
     "law_bc": "calzetti",
     "law_diff": "calzetti",
-    "emission": {"type": "dale2014", "*": tengri.FIXED},
+    "emission": {"type": "dale2014", "all_params": tengri.FIXED},
 }
-sfh_cfg = {"type": "tsnorm", "*": tengri.FREE}
+sfh_cfg = {"type": "tsnorm", "all_params": tengri.FREE}
 
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
     sfh=sfh_cfg,
     dust=dust_cfg,
-    neb={"type": "cue", "*": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.05),
 )
 

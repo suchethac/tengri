@@ -38,13 +38,13 @@ ssp = tengri.load_ssp()
 
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0},
+    sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 1.0,
         "tau_bc": 0.3,
-        "emission": {"type": "themis", "*": tengri.FIXED, "dust_gamma_dl": 0.1},
+        "emission": {"type": "themis", "all_params": tengri.FIXED, "dust_gamma_dl": 0.1},
     },
     redshift=tengri.Fixed(0.05),
 )

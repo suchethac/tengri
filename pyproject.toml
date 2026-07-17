@@ -72,6 +72,9 @@ metal = ["jax-metal>=0.1.0"]
 all = [
     "blackjax>=1.0",
     "optax>=0.2",
+    # Grain-model attenuation laws (wd01_*, d03_*, hd23_*) need this; without
+    # it those laws raise ImportError at predict time, so "[all]" must ship it.
+    "dust-extinction>=1.0",
 ]
 dev = [
     "pytest>=7.0",

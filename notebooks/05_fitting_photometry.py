@@ -142,8 +142,8 @@ key_truth, key_mock, key_fit = jax.random.split(key, 3)
 
 truth = sed_model.spec.sample(key_truth)
 mock = generate_mock(sed_model, truth, key=key_mock, snr=20.0)
-flux_obs = np.asarray(mock.flux_obs)
-noise = np.asarray(mock.noise)
+flux_obs = np.asarray(mock["flux_obs"])
+noise = np.asarray(mock["noise"])
 
 phot = obs.photometry
 wave_eff_um = (

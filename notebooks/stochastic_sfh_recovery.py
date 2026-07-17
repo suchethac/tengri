@@ -195,7 +195,7 @@ def build(observation):
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=observation,
-        sfh={"type": ["dpl", "field"], "*": FREE},
+        sfh={"type": ["dpl", "field"], "all_params": FREE},
         stellar={"met_logzsol": Fixed(-0.3)},
         dust=builders.dust.two_component(defaults=FREE, law_bc="calzetti"),
         neb=builders.neb.ssp(),

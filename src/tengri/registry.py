@@ -283,15 +283,15 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "filter":
         return f'Photometry.from_names(["{name}"])'
     if kind == "agn_model":
-        return f'Parameters(..., agn_model="{name}")'
+        return f"SEDModel.build(..., agn={{'type': '{name}'}})"
     if kind == "dust_attenuation":
-        return f'Parameters(..., dust_law="{name}")'
+        return f"SEDModel.build(..., dust={{'type': 'single_component', 'law_bc': '{name}'}})"
     if kind == "dust_emission":
-        return f'Parameters(..., dust_emission="{name}")'
+        return f"SEDModel.build(..., dust={{'emission': {{'type': '{name}'}}}})"
     if kind == "sfh_model":
-        return f'Parameters(..., mean_sfh_type="{name}")'
+        return f"SEDModel.build(..., sfh={{'type': '{name}'}})"
     if kind == "nebular_backend":
-        return f'Parameters(..., nebular_backend="{name}")'
+        return f"SEDModel.build(..., neb={{'type': '{name}'}})"
     if kind == "inference_method":
         return f'fitter.run("{name}")'
     if kind == "xray_model":
@@ -415,8 +415,9 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
 
     Blocks are the fine-grained components of AGN SEDs: disc, nlr, blr,
     feii, torus, and attenuation. Users compose an AGN by selecting one
-    block per category via ``SEDModel.build(..., agn_disc_block="multicolor",
-    agn_nlr_block="analytic", ...)``.
+    block per category inside the ``agn`` group dict, e.g.
+    ``SEDModel.build(..., agn={"disc": {"type": "multicolor"},
+    "nlr": {"type": "analytic"}})``.
 
     This coexists with monolithic AGN models (:func:`list_agn_models`) —
     blocks offer mix-and-match flexibility while monolithic models bundle
@@ -445,10 +446,17 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     """
     from tengri.components.agn.blocks._protocol import AGN_BLOCK_META, AGN_BLOCKS
 
+    # AGN_BLOCKS categories are the human-readable labels; the ``agn`` group
+    # grammar keys match them except for 'attenuation', whose structural key is
+    # the terser 'atten' (see parameters.groups._AGN_SUBBLOCK_KEYS). Map so the
+    # advertised ``use:`` string names the exact key SEDModel.build accepts.
+    category_to_group_key = {"attenuation": "atten"}
+
     out: list[dict] = []
     for cat in AGN_BLOCKS:
         if category is not None and cat != category:
             continue
+        group_key = category_to_group_key.get(cat, cat)
         for name in AGN_BLOCKS[cat]:
             meta = AGN_BLOCK_META.get((cat, name), {})
             entry_dict = {
@@ -458,7 +466,7 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
                 "status": meta.get("status", "production"),
                 "citation": meta.get("citation", ""),
                 "short_doc": meta.get("short_doc", ""),
-                "use": f"SEDModel.build(..., agn_{cat}_block='{name}')",
+                "use": f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}})",
             }
             out.append(entry_dict)
 
@@ -617,10 +625,28 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
 
 
 def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
-    """List all registered star formation history models."""
-    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+    """List all registered star formation history models.
+
+    SFH types that are registered but not yet wired into the DSPS forward
+    path (:data:`~tengri.components.stellar.sfh.registry.UNVALIDATED_SFH_TYPES`)
+    are reported with ``status='unvalidated'`` rather than the registry's
+    default ``'production'``: ``SEDModel.build(sfh={'type': ...})`` rejects
+    them, so advertising them as production would send a fresh user into a
+    build-time ``ValueError``. Filter to the buildable set with
+    ``list_sfh_models(status='production')``.
+    """
+    from tengri.components.stellar.sfh.registry import (
+        SFH_REGISTRY,
+        UNVALIDATED_SFH_TYPES,
+    )
 
     out = [_entry_to_dict(n, e, kind="sfh_model") for n, e in SFH_REGISTRY.items()]
+    for m in out:
+        if m["name"] in UNVALIDATED_SFH_TYPES:
+            m["status"] = "unvalidated"
+            if "not builder-available" not in m["short_doc"]:
+                suffix = " [not builder-available — registered, not yet DSPS-validated]"
+                m["short_doc"] = f"{m['short_doc']}{suffix}"
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
@@ -709,12 +735,12 @@ _COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
     (
         "dust",
         "tengri.components.dust.component",
-        "Two-component attenuation (BC + diffuse) — 21 laws available",
+        "Two-component attenuation (BC + diffuse); see list_dust_laws()",
     ),
     (
         "agn",
         "tengri.components.agn.component",
-        "Disc + torus + polar dust + BLR/NLR — 12 models available",
+        "Disc + torus + polar dust + BLR/NLR; see list_agn_models / list_agn_blocks",
     ),
     (
         "nebular",
@@ -904,8 +930,36 @@ def cite_components(obj=None) -> _RegistryTable:
         for sfh in sfh_types:
             _add("sfh", sfh, list_sfh_models)
 
-    # AGN
-    _add("agn", getattr(spec, "agn_model", None), list_agn_models)
+    # AGN — composable models fan out into their six block slots (disc, torus,
+    # nlr, blr, feii, attenuation), each carrying its own citation. Citing the
+    # bare ``agn_model`` would report only the "composable" wrapper, whose entry
+    # has no paper — silently dropping every real AGN citation (Stalevski for
+    # SKIRTOR, Fritz, Nenkova, Kubota & Done, …) that the model actually uses.
+    # Block names are not unique across categories (``skirtor`` is both a disc
+    # and a torus), so each slot is resolved within its own category.
+    _AGN_BLOCK_SLOTS = (
+        ("agn_disc_block", "disc"),
+        ("agn_torus_block", "torus"),
+        ("agn_nlr_block", "nlr"),
+        ("agn_blr_block", "blr"),
+        ("agn_feii_block", "feii"),
+        ("agn_attenuation_block", "attenuation"),
+    )
+    active_agn_blocks = [
+        (getattr(spec, attr, None), category)
+        for attr, category in _AGN_BLOCK_SLOTS
+        if getattr(spec, attr, None) not in (None, "none")
+    ]
+    agn_model = getattr(spec, "agn_model", None)
+    if active_agn_blocks:
+        for block_name, category in active_agn_blocks:
+            _add(
+                f"agn_{category}",
+                block_name,
+                lambda c=category: list_agn_blocks(category=c),
+            )
+    elif agn_model and agn_model != "composable":
+        _add("agn", agn_model, list_agn_models)
 
     # Dust attenuation — bc + diff (skip plain "power_law" default if both equal it)
     for attr in ("dust_law_bc", "dust_law_diff", "dust_law"):
@@ -976,6 +1030,20 @@ def print_components_bibtex(obj=None) -> None:
         "multicolor_agn": "kubota_done2018",
         "adaf": "mahadevan1997",
         "qsogen": "temple2021_qsogen",
+        # AGN composable blocks — bibkeys verified against each block's
+        # registered ``citation=`` string (never guessed). Blocks whose paper
+        # has no bundled BibTeX (fritz, cat3d_wind, feltre, richards2006,
+        # boroson_green, …) fall through to the free-form citation note.
+        "grahsp": "buchner2024",
+        "grahsp_sbpl": "buchner2024",
+        "grahsp_biatten": "buchner2024",
+        "nenkova": "clumpy_nenkova2008",
+        "nenkova_agnfitter": "clumpy_nenkova2008",
+        "multicolor": "shakura_sunyaev1973",
+        "synthesizer": "synthesizer",
+        "synthesizer_spectra": "synthesizer",
+        "qsogen_smc": "temple2021_qsogen",
+        "qsogen_balmer": "temple2021_qsogen",
         # Dust attenuation
         "calzetti": "calzetti2000",
         "cardelli": "cardelli1989",
@@ -1215,6 +1283,31 @@ def list_inference_methods(
 # ──────────────────────────────────────────────────────────────────
 
 
+def _menu_listers() -> tuple:
+    """The canonical set of per-menu ``list_*`` functions.
+
+    :func:`describe`, :func:`search`, and :func:`list_all` all walk this one
+    tuple, so adding a new physics group (a new ``list_*`` menu) can't
+    silently leave one of them behind. That drift is exactly what once made
+    ``describe()`` and ``search()`` blind to the xray / radio / igm menus and
+    to the composable AGN blocks — the models auto-register into their own
+    registries, but these aggregators re-listed which registries to consult by
+    hand and fell out of sync.
+    """
+    return (
+        list_inference_methods,
+        list_agn_models,
+        list_agn_blocks,
+        list_dust_laws,
+        list_dust_emission_models,
+        list_sfh_models,
+        list_nebular_backends,
+        list_xray_models,
+        list_radio_models,
+        list_igm_models,
+    )
+
+
 def describe(name: str) -> _DescribeRecord:
     """Universal lookup across every menu.
 
@@ -1237,22 +1330,33 @@ def describe(name: str) -> _DescribeRecord:
     if name in _CORE_CLASSES:
         return _DescribeRecord(_CORE_CLASSES[name])
 
-    for fn in (
-        list_inference_methods,
-        list_agn_models,
-        list_agn_blocks,
-        list_dust_laws,
-        list_dust_emission_models,
-        list_sfh_models,
-        list_nebular_backends,
-        list_components,
-        list_filters,
-        list_plots,
-        list_recipes,
-    ):
-        for entry in fn():
-            if entry["name"] == name:
-                return _DescribeRecord(entry)
+    matches = [
+        entry
+        for fn in (*_menu_listers(), list_components, list_filters, list_plots, list_recipes)
+        for entry in fn()
+        if entry["name"] == name
+    ]
+    if matches:
+        record = dict(matches[0])
+        # Some names are registered in more than one menu or AGN category —
+        # e.g. 'skirtor' is both a disc and a torus, 'simple' is both a torus
+        # block and an X-ray model, 'cue' is both an NLR block and a nebular
+        # backend. Returning the first match silently would describe the wrong
+        # component; disclose every place the name lives so the user can pick.
+        if len(matches) > 1:
+
+            def _where(entry: dict) -> str:
+                category = entry.get("category")
+                kind = entry.get("kind", "?")
+                return f"{kind} ({category})" if category else kind
+
+            record["also_registered_as"] = (
+                f"'{name}' is registered in {len(matches)} places "
+                f"[{'; '.join(_where(m) for m in matches)}] — showing the first. "
+                "Use the category-specific list (e.g. describe_agn_block"
+                "(name, category=...)) to select another."
+            )
+        return _DescribeRecord(record)
     raise KeyError(
         f"Unknown name '{name}'.  Try tengri.summary() for a menu of every "
         "core class, AGN model, dust law, SFH variant, nebular backend, "
@@ -1660,6 +1764,29 @@ def search(query: str) -> _RegistryTable:
         _display(f"  '{query}' is a menu name — redirecting to tengri.{call}\n")
         return fn()
 
+    # Concept synonyms: natural-language terms a beginner types that do not
+    # substring-match the terse model short_docs. "star formation" would
+    # otherwise return only an AGN model whose citation title happens to
+    # contain the phrase (and none of the 26 SFH models), and "dust emission"
+    # nothing at all — so point the user at the menu that actually holds those
+    # models. Same replace-with-menu behavior as the kind-name shortcut above.
+    _CONCEPT_ALIAS: dict[str, tuple[str, callable]] = {
+        "star formation": ("list_sfh_models()", list_sfh_models),
+        "star formation history": ("list_sfh_models()", list_sfh_models),
+        "star-forming": ("list_sfh_models()", list_sfh_models),
+        "star forming": ("list_sfh_models()", list_sfh_models),
+        "dust emission": ("list_dust_emission_models()", list_dust_emission_models),
+        "infrared emission": ("list_dust_emission_models()", list_dust_emission_models),
+        "extinction": ("list_dust_laws()", list_dust_laws),
+        "reddening": ("list_dust_laws()", list_dust_laws),
+        "emission line": ("list_nebular_backends()", list_nebular_backends),
+        "emission lines": ("list_nebular_backends()", list_nebular_backends),
+    }
+    if q in _CONCEPT_ALIAS:
+        call, fn = _CONCEPT_ALIAS[q]
+        _display(f"  '{query}' → tengri.{call} (the menu these models live in)\n")
+        return fn()
+
     # ``kind`` and ``use`` are structural/internal — searching them gives
     # spurious 100%-of-table hits (e.g. "filter" matching every filter
     # row's kind, or "fitter" matching every inference method's "use"
@@ -1668,17 +1795,7 @@ def search(query: str) -> _RegistryTable:
     # band — i.e. everything except kind/use.
     _SKIP_FIELDS = {"kind", "use"}
     hits: list[dict] = []
-    for fn in (
-        list_components,
-        list_inference_methods,
-        list_agn_models,
-        list_dust_laws,
-        list_dust_emission_models,
-        list_sfh_models,
-        list_nebular_backends,
-        list_filters,
-        list_plots,
-    ):
+    for fn in (*_menu_listers(), list_components, list_filters, list_plots):
         for entry in fn():
             haystack = " ".join(
                 str(v) for k, v in entry.items() if k not in _SKIP_FIELDS and isinstance(v, str)

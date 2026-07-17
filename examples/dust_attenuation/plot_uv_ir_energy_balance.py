@@ -42,17 +42,17 @@ def _build(tau_diff):
         ssp,
         sfh={
             "type": "const",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 11.11,
             "start_gyr": 13.0,
             "end_gyr": 0.0,
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tau_diff,
             "tau_bc": 1.5 * tau_diff,
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
         redshift=tengri.Fixed(0.05),
     )

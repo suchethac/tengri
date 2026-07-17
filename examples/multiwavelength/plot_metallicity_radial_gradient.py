@@ -42,7 +42,7 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 base_model_config = dict(
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 1.5,
@@ -50,7 +50,7 @@ base_model_config = dict(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.3,
         "tau_diff": 0.2,
     },
