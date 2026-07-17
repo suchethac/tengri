@@ -22,6 +22,7 @@ References
 from __future__ import annotations
 
 import dataclasses
+import numbers
 from collections.abc import Sequence
 
 import jax.numpy as jnp
@@ -495,6 +496,21 @@ class LineList:
             hydrogen = cat.select(species=["H1"])
 
         """
+        # Guard the positional numeric args. The primary discovery use of this
+        # method — pick lines by name — sits behind two positional wavelength
+        # bounds, so ``select(["Halpha", "Hbeta"])`` (the natural analogy to
+        # ``Photometry.from_names([...])``) silently binds the list to
+        # ``wave_min`` and later crashes deep in ``wave_min <= w`` with an
+        # opaque ``'>' not supported between 'list' and 'float'``. Name the fix.
+        for _arg, _val in (("wave_min", wave_min), ("wave_max", wave_max)):
+            if not isinstance(_val, numbers.Real):
+                raise TypeError(
+                    f"LineList.select() {_arg} must be a wavelength [Angstrom], got "
+                    f"{type(_val).__name__}. To keep specific lines, pass them by "
+                    f"keyword: select(names=[...]) or select(species=[...]); to keep "
+                    f"a wavelength window, use select(wave_min=..., wave_max=...)."
+                )
+
         waves_np = [float(w) for w in self.wavelengths]
 
         # Start with all indices
