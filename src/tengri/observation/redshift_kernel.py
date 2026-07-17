@@ -86,8 +86,7 @@ def shift_to_obs_frame(
        arXiv:astro-ph/9905116.
     """
     dl_cm = luminosity_distance(z, cosmo=cosmo)
-    L_on_obs_grid = jnp.interp(
-        wave_obs, wave_rest * (1.0 + z), L_nu_rest, left=0.0, right=0.0)
+    L_on_obs_grid = jnp.interp(wave_obs, wave_rest * (1.0 + z), L_nu_rest, left=0.0, right=0.0)
     # (1+z)/(4π d_L²) as a log10 offset — never form d_L² (overflow) or
     # flux_scale (underflow) as standalone float32 values.
     log10_flux_scale = jnp.log10(1.0 + z) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)

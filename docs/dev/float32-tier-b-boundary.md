@@ -56,7 +56,7 @@ The stellar ionizing-photon array `_sed_ion` in `src/tengri/components/stellar/c
 **Current behavior:** Reduction operations (trapz_freq) in `src/tengri/utils/` and dust-emission logic in `src/tengri/components/dust/` perform uncompensated summation, overflowing in pure float32.
 
 **Fix:** For integrals that are O(1e47) or larger, either:
-- Factor the peak as a log offset and integrate the O(1) residual (analogue of `apply_log10_scale` for reductions).
+- Factor the peak as a log offset and integrate the O(1) residual (analog of `apply_log10_scale` for reductions).
 - Use compensated summation (Kahan / pairwise) to maintain precision in float32 without materializing the full range.
 
 **Impact:** Dust energy balance (`src/tengri/components/dust/energy_balance.py`), emission libraries, and validation against observations.
