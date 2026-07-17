@@ -144,39 +144,34 @@ class TestXiIonLogDomain:
             compute_xi_ion_from_log_qh,
         )
 
-        # Synthetic f32 SED in the 1000-1700 Å range
-        wave_f32 = jnp.asarray(
-            [500.0, 700.0, 1000.0, 1200.0, 1500.0, 1700.0, 2500.0], dtype=jnp.float32
-        )
-        sed_f32 = jnp.asarray([1e27, 1e27, 1e28, 1e28, 1e28, 1e28, 1e27], dtype=jnp.float32)
+        wave_vals = [500.0, 700.0, 1000.0, 1200.0, 1500.0, 1700.0, 2500.0]
+        sed_vals = [1e27, 1e27, 1e28, 1e28, 1e28, 1e28, 1e27]
 
-        log_q_h_f32 = jnp.asarray(56.0, dtype=jnp.float32)
+        # f64 reference — computed OUTSIDE the x64=False context, so it is genuinely
+        # float64. Building it inside the context would silently truncate the inputs
+        # to float32 (JAX drops float64 requests when x64 is disabled), making the
+        # parity assertion below f32-vs-f32 and therefore vacuous.
+        xi_ion_f64_ref = float(
+            compute_xi_ion_from_log_qh(
+                jnp.asarray(56.0, dtype=jnp.float64),
+                jnp.asarray(sed_vals, dtype=jnp.float64),
+                jnp.asarray(wave_vals, dtype=jnp.float64),
+            )
+        )
 
         with jax.enable_x64(False):
-            # Log-domain must stay finite
+            wave_f32 = jnp.asarray(wave_vals, dtype=jnp.float32)
+            sed_f32 = jnp.asarray(sed_vals, dtype=jnp.float32)
+            log_q_h_f32 = jnp.asarray(56.0, dtype=jnp.float32)
+            assert log_q_h_f32.dtype == jnp.float32  # precondition: genuinely pure f32
+
+            # In pure float32 both Q_H ~1e56 and nu*L_nu ~1e43 overflow; the
+            # log-domain form must stay finite and track the f64 reference.
             xi_ion_log = compute_xi_ion_from_log_qh(log_q_h_f32, sed_f32, wave_f32)
             assert jnp.isfinite(xi_ion_log), f"log-domain xi_ion is non-finite: {xi_ion_log}"
-
-            # Verify magnitude is reasonable (Hz/erg, in reasonable range)
-            # In pure f32, the magnitude may be somewhat different due to
-            # reduced precision, but should not be pathological
             assert xi_ion_log > 1e10, f"xi_ion magnitude too small: {xi_ion_log}"
 
-            # Verify f64 reference for comparison (we expect rtol≈5e-3 in pure f32)
-            # Compute the f64 reference using the same inputs (but accessed as f64)
-            xi_ion_f64_ref = float(
-                compute_xi_ion_from_log_qh(
-                    jnp.asarray(56.0, dtype=jnp.float64),
-                    jnp.asarray([1e27, 1e27, 1e28, 1e28, 1e28, 1e28, 1e27], dtype=jnp.float64),
-                    jnp.asarray(
-                        [500.0, 700.0, 1000.0, 1200.0, 1500.0, 1700.0, 2500.0],
-                        dtype=jnp.float64,
-                    ),
-                )
-            )
-
-            # Parity within f32 precision
-            assert_allclose(xi_ion_log, xi_ion_f64_ref, rtol=5e-3)
+        assert_allclose(float(xi_ion_log), xi_ion_f64_ref, rtol=5e-3)
 
 
 class TestXiIonPropertyFactoryBitEquality:
