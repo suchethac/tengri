@@ -521,6 +521,17 @@ class Fitter:
         self.model = self._resolve_fit_approx(model, approx)
         self.spec = self.model.spec
 
+        # Re-apply the fitted-mode emission-line amplitude merge. The
+        # reassignment above replaces self.spec with the approx-resolved
+        # model's spec, which does not carry the ``eline_amp_*`` priors that
+        # _init_emission_lines merged into the pre-approx spec. Without this,
+        # the amplitudes silently drop out of ``free_params`` (and thus
+        # ``_free_names``) while ``_eline_amplitude_names`` still lists them —
+        # the sampler never varies parameters the fitter believes it is
+        # fitting. See tests/inference/test_eline_fitting.py::TestFittedMode.
+        if getattr(self, "_eline_amp_priors", None):
+            self.spec = self.spec.merge_observation_params(**self._eline_amp_priors)
+
         # ── Auto-precompute photometry (legacy fused path) ──────────
         # Only on the exact path — a modern ``approx=`` LUT supersedes it,
         # and running both would double-precompute.
@@ -807,9 +818,14 @@ class Fitter:
             _amp_priors = {
                 nm: Uniform(-_amp_bound, _amp_bound) for nm in self._eline_amplitude_names
             }
+            # Retained so the merge can be re-applied after the fit-time
+            # approx policy reassigns ``self.spec`` (see __init__): that
+            # reassignment drops params merged here otherwise.
+            self._eline_amp_priors = _amp_priors
             self.spec = self.spec.merge_observation_params(**_amp_priors)
         else:
             self._eline_amplitude_names = []
+            self._eline_amp_priors = {}
 
     def _build_data_args(self, model: Any) -> dict:
         """Build the data-dependent argument dict passed to JIT'd loss functions.
