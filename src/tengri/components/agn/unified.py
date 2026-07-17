@@ -145,7 +145,7 @@ from tengri.components.radio.radio import radio_total
 from tengri.components.xray.xray import (
     _xray_agn_corona_bolometric as _xray_agn_corona_legacy,
 )
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
+from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _LSUN_ERG
 
 
 @functools.cache
@@ -1256,8 +1256,7 @@ def relagn_agn(
     l_disc = l_disc_full * (1.0 - agn_torus_frac)
 
     # Derive disc L_bol by integrating L_ν over ν (trapezoid in JAX)
-    _c_aa = 2.99792458e18  # Å/s
-    nu = _c_aa / wavelength  # decreasing
+    nu = _C_AA / wavelength  # decreasing
     # Sort ascending for trapezoid
     lbol_disc_erg = jnp.trapezoid(jnp.flip(l_disc_full), jnp.flip(nu))
     log_lbol_lsun = jnp.log10(jnp.maximum(lbol_disc_erg, 1e30)) - jnp.log10(_LSUN_ERG)

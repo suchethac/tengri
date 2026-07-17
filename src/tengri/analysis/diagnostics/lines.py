@@ -20,7 +20,7 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
-_C_KMS: float = 2.99792458e5  # speed of light [km/s]
+from tengri.utils.physics_constants import C_KM_S as _C_KMS
 
 
 @jax.jit
