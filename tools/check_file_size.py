@@ -11,14 +11,22 @@ file_size_allowlist.json at their baseline line count. This guard enforces:
 
 Usage
 -----
-    python tools/check_file_size.py
+    python tools/check_file_size.py                    # gate (CI mode)
+    python tools/check_file_size.py --fix              # update pins in place
+    python tools/check_file_size.py --fix --allow-new  # also add NEW >800 files
 
 Exit code 0 if all checks pass; non-zero with violations listed otherwise.
 
-The allowlist is managed by humans; this script is a compliance gate only.
-Violations can be fixed by:
-- Refactoring large files into smaller modules.
-- Adding new files to the allowlist (temporarily) with a tracking note.
+``--fix`` mechanically applies the bookkeeping fixes (like ``ruff --fix``):
+grown pins update to the measured size, shrunk/orphaned entries are removed.
+It deliberately does NOT add new >800-line files unless ``--allow-new`` is
+passed — a brand-new oversized module is a design decision, not bookkeeping.
+Run it before committing any change that grows an allowlisted file; three
+merges shipped with red pins in one week because this was manual (#1167,
+#1204, #1188).
+
+Violations can also be fixed by refactoring large files into smaller modules
+— the allowlist is a burn-down list, not a quota.
 """
 
 import json
@@ -39,14 +47,26 @@ def count_lines(path: Path) -> int:
         return 0
 
 
-def main() -> int:
+def main(argv=None) -> int:
     """Run the file size guard.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        CLI args (default ``sys.argv[1:]``): ``--fix`` and ``--allow-new``.
 
     Returns
     -------
     int
-        0 if all checks pass; 1 if violations found.
+        0 if all checks pass (or ``--fix`` repaired everything); 1 otherwise.
     """
+    args = list(sys.argv[1:] if argv is None else argv)
+    fix = "--fix" in args
+    allow_new = "--allow-new" in args
+    unknown = [a for a in args if a not in ("--fix", "--allow-new")]
+    if unknown:
+        print(f"ERROR: unknown argument(s): {unknown}", file=sys.stderr)
+        return 2
     # Load allowlist
     try:
         with open(ALLOWLIST_PATH) as f:
@@ -108,6 +128,36 @@ def main() -> int:
                     allowlisted_path,
                     "file no longer exists; remove from allowlist",
                 )
+            )
+
+    # ``--fix``: apply the mechanical bookkeeping and re-report what remains.
+    if fix and violations:
+        fixed, remaining = [], []
+        for vtype, path, msg in violations:
+            if vtype == "grew":
+                allowlist[path] = count_lines(REPO_ROOT / path)
+                fixed.append(f"pin updated: {path} -> {allowlist[path]}")
+            elif vtype in ("shrunk", "orphaned"):
+                del allowlist[path]
+                fixed.append(f"entry removed: {path} ({vtype})")
+            elif vtype == "new_violation" and allow_new:
+                allowlist[path] = count_lines(REPO_ROOT / path)
+                fixed.append(f"entry ADDED (--allow-new): {path} at {allowlist[path]}")
+            else:
+                remaining.append((vtype, path, msg))
+        if fixed:
+            with open(ALLOWLIST_PATH, "w") as f:
+                json.dump(allowlist, f, indent=2)
+                f.write("\n")
+            print(f"FIXED {len(fixed)} allowlist entr{'y' if len(fixed) == 1 else 'ies'}:")
+            for line in fixed:
+                print(f"  {line}")
+            print("Commit tools/file_size_allowlist.json with your change.\n")
+        violations = remaining
+        if remaining and not allow_new:
+            print(
+                "NOT fixed (new >800-line files need a deliberate decision; "
+                "re-run with --fix --allow-new to add them):"
             )
 
     # Report findings
