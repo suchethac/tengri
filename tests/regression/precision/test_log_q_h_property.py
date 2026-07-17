@@ -54,9 +54,7 @@ def test_log_q_h_property(ssp_bare):
         q_h_f32 = np.asarray(pred_f32.q_h, dtype=np.float32)
 
         # log_q_h must be finite
-        assert np.isfinite(log_q_h_f32), (
-            "log_q_h must be finite in pure float32 (the whole point)"
-        )
+        assert np.isfinite(log_q_h_f32), "log_q_h must be finite in pure float32 (the whole point)"
 
         # q_h overflows to inf (the problem we're solving)
         assert not np.isfinite(q_h_f32), (
