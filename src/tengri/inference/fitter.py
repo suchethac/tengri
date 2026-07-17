@@ -2916,8 +2916,13 @@ class Fitter:
         if method == "mcmc_nuts":
             kernel = _get_nuts_kernel()
 
-            def _sample_scan(state, keys, data_args_i):
-                """Scan over MCMC steps for a single galaxy (NUTS variant)."""
+            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
+                """Scan over MCMC steps for a single galaxy (NUTS variant).
+
+                ``step_size`` / ``inv_mass_matrix`` are threaded in (not closed
+                over) so the compiled kernel is independent of the adapted
+                values — see :meth:`_fit_batch_vmap_mcmc`.
+                """
 
                 def ld(pos):
                     """Log-density for this galaxy.
@@ -2955,8 +2960,12 @@ class Fitter:
         elif method == "mcmc_hmc":
             kernel = _get_hmc_kernel()
 
-            def _sample_scan(state, keys, data_args_i):
-                """Scan over MCMC steps for a single galaxy (HMC variant)."""
+            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
+                """Scan over MCMC steps for a single galaxy (HMC variant).
+
+                Adaptation (``step_size`` / ``inv_mass_matrix``) is threaded in,
+                not closed over — see :meth:`_fit_batch_vmap_mcmc`.
+                """
 
                 def ld(pos):
                     """Log-density for this galaxy.
@@ -2994,8 +3003,12 @@ class Fitter:
         elif method == "mcmc_dynamic_hmc":
             kernel = _get_dynamic_hmc_kernel()
 
-            def _sample_scan(state, keys, data_args_i):
-                """Scan over MCMC steps for a single galaxy (dynamic HMC variant)."""
+            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
+                """Scan over MCMC steps for a single galaxy (dynamic HMC variant).
+
+                Adaptation (``step_size`` / ``inv_mass_matrix``) is threaded in,
+                not closed over — see :meth:`_fit_batch_vmap_mcmc`.
+                """
 
                 def ld(pos):
                     """Log-density for this galaxy.
@@ -3025,13 +3038,18 @@ class Fitter:
 
         elif method == "mcmc_ghmc":
             kernel = _get_ghmc_kernel()
-            if inv_mass_matrix.ndim == 2:
-                momentum_inv_scale = jnp.sqrt(jnp.diag(inv_mass_matrix))
-            else:
-                momentum_inv_scale = jnp.sqrt(inv_mass_matrix)
 
-            def _sample_scan(state, keys, data_args_i):
-                """Scan over MCMC steps for a single galaxy (GHMC variant)."""
+            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
+                """Scan over MCMC steps for a single galaxy (GHMC variant).
+
+                Adaptation is threaded in, not closed over — see
+                :meth:`_fit_batch_vmap_mcmc`. The GHMC momentum scale is derived
+                from the passed ``inv_mass_matrix``.
+                """
+                if inv_mass_matrix.ndim == 2:
+                    momentum_inv_scale = jnp.sqrt(jnp.diag(inv_mass_matrix))
+                else:
+                    momentum_inv_scale = jnp.sqrt(inv_mass_matrix)
 
                 def ld(pos):
                     """Log-density for this galaxy.
@@ -3068,7 +3086,7 @@ class Fitter:
                 return jax.lax.scan(_step, state, keys)
 
         # Single-galaxy function to vmap
-        def single_galaxy(gal_key, init_flat_i, data_args_i):
+        def single_galaxy(gal_key, init_flat_i, data_args_i, step_size, inv_mass_matrix):
             """Run inference (warmup + sampling) for a single galaxy.
 
             Parameters
@@ -3088,8 +3106,10 @@ class Fitter:
             Notes
             -----
             Designed for use with ``jax.vmap`` in batch MCMC. Captures
-            ``kernel``, ``_sample_scan`` from outer scope. Not part of
-            public API.
+            ``kernel``, ``_sample_scan`` from outer scope; the adapted
+            ``step_size`` / ``inv_mass_matrix`` are passed as arguments
+            (broadcast via the vmap ``in_axes``) so the compiled kernel is
+            reusable across ``fit_batch`` calls. Not part of public API.
             """
 
             def ld(pos):
@@ -3125,19 +3145,46 @@ class Fitter:
             # Burn-in (discarded)
             if n_burnin > 0:
                 burnin_keys = jax.random.split(burn_key, n_burnin)
-                state, _ = _sample_scan(state, burnin_keys, data_args_i)
+                state, _ = _sample_scan(
+                    state, burnin_keys, data_args_i, step_size, inv_mass_matrix
+                )
 
             # Sampling
             sample_keys = jax.random.split(sample_key, n_samples)
-            _, (positions, divergent) = _sample_scan(state, sample_keys, data_args_i)
+            _, (positions, divergent) = _sample_scan(
+                state, sample_keys, data_args_i, step_size, inv_mass_matrix
+            )
             return positions, divergent
 
-        # vmap + jit: one XLA kernel for all galaxies
+        # vmap + jit: one XLA kernel for all galaxies. The adapted step_size /
+        # inv_mass_matrix are broadcast (in_axes None) so they enter as
+        # Parameter ops, not baked Constants — which lets the memo below reuse
+        # the compiled sampler across repeated same-config fit_batch calls
+        # (a fresh closure would otherwise miss jax.jit's cache and recompile).
         gal_keys = jax.random.split(key, n_gal)
-        all_positions, all_divergent = jax.jit(jax.vmap(single_galaxy))(
+        _mcmc_kernel_key = (
+            "vmap_mcmc",
+            self.compile_signature(),
+            method,
+            int(n_burnin),
+            int(n_samples),
+            int(max_num_doublings),
+            int(n_leapfrog_steps),
+            float(alpha),
+            float(delta),
+            bool(use_dense),
+            int(n_dim),
+        )
+        _run_batch = self._memo_batch_mcmc_kernel(
+            _mcmc_kernel_key,
+            lambda: jax.jit(jax.vmap(single_galaxy, in_axes=(0, 0, 0, None, None))),
+        )
+        all_positions, all_divergent = _run_batch(
             gal_keys,
             init_flats,
             batch_data_args,
+            step_size,
+            inv_mass_matrix,
         )
 
         t_sample = time.time() - t0
@@ -3214,9 +3261,32 @@ class Fitter:
         callable
             The (possibly cached) compiled batch kernel.
         """
+        return self._memo_batch_kernel("_batch_map_kernel_cache", key, builder)
+
+    def _memo_batch_mcmc_kernel(self, key, builder):
+        """Cache the ``jax.jit(jax.vmap(single_galaxy))`` batch-MCMC sampler.
+
+        Sibling of :meth:`_memo_batch_map_kernel` for the vmapped MCMC path
+        (:meth:`_fit_batch_vmap_mcmc`). Same rationale and safety argument: the
+        per-galaxy data AND the adapted ``step_size`` / ``inv_mass_matrix`` are
+        threaded as arguments (the latter via ``jax.vmap(..., in_axes=(0, 0, 0,
+        None, None))``), so the compiled sampler does not depend on their values
+        and the memo key need only carry the structural sampler configuration
+        (method, burn-in / sample counts, tree/leapfrog limits, GHMC α/δ, mass-
+        matrix shape). ``key=None`` disables the memo.
+        """
+        return self._memo_batch_kernel("_batch_mcmc_kernel_cache", key, builder)
+
+    def _memo_batch_kernel(self, cache_attr, key, builder):
+        """Instance-scoped memo for a compiled batch kernel (shared MAP/MCMC core).
+
+        Returns ``builder()`` uncached when ``key`` is ``None``; otherwise caches
+        the built wrapper in ``self.__dict__[cache_attr]`` keyed by ``key`` so
+        ``jax.jit`` can reuse the compiled executable across ``fit_batch`` calls.
+        """
         if key is None:
             return builder()
-        cache = self.__dict__.setdefault("_batch_map_kernel_cache", {})
+        cache = self.__dict__.setdefault(cache_attr, {})
         fn = cache.get(key)
         if fn is None:
             fn = builder()

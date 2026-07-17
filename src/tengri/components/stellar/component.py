@@ -1826,7 +1826,7 @@ class StellarSEDComponent:
         # backend (#950). Bit-exact — sed_ion == sed_intrinsic[:n_ion]. Falls
         # back to the full integral when the static bound was not precomputed.
         _n_ion = self._state.n_ion_bins if self._state is not None else None
-        if _n_ion is not None:
+        if _n_ion is not None and _n_ion > 0:
             # Apply log10 scale to the ionizing SED to avoid float32 overflow.
             # The tensordot result is O(1); the scale is folded in via apply_log10_scale
             # so the peak never overflows (#1186).
@@ -1835,6 +1835,11 @@ class StellarSEDComponent:
             )
             _sed_ion = apply_log10_scale(_tensordot_result, log10_mass_scale)
             nion = _integrate_nion(_sed_ion, wave[:_n_ion])
+        elif _n_ion is not None:
+            # n_ion_bins == 0 (static): no grid bins below the Lyman limit
+            # (IR-focused configs) -> Q_H is identically zero. Skips the slice
+            # machinery: max/argmax over zero-size arrays raise (#1193 fallout).
+            nion = jnp.zeros(())
         else:
             nion = _integrate_nion(sed_intrinsic, wave)
 

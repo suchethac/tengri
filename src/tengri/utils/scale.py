@@ -63,7 +63,10 @@ def apply_log10_scale(arr, log10_scale):
     JIT/grad/vmap-safe. Factors ``arr`` by its peak so the exponentiated scale
     is applied to an O(1) array; the peak's decades are folded into the exponent.
     """
-    peak = jnp.max(jnp.abs(arr))
+    # initial=0.0 makes the peak of a zero-size array 0 (max over empty has no
+    # identity and raises); the where() below then maps it to 1, so an empty
+    # arr passes through as an empty result instead of a trace-time error.
+    peak = jnp.max(jnp.abs(arr), initial=0.0)
     peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
     net = log10_scale + jnp.log10(peak)
     return (arr / peak) * pow10(net)
