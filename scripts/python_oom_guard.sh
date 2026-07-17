@@ -29,7 +29,7 @@ echo "[guard $(date +%H:%M:%S)] start pid=$SELF_PID limit=${LIMIT_GB}GB interval
 trap 'echo "[guard $(date +%H:%M:%S)] stop pid=$SELF_PID" | tee -a "$LOG"; exit 0' INT TERM
 
 while true; do
-    # ps columns: pid, rss(KB), comm, args
+    # ps columns: pid, rss(KB), args
     while IFS= read -r line; do
         # Strip leading whitespace ps adds for right-justified pid/rss.
         line="${line#"${line%%[![:space:]]*}"}"
@@ -38,12 +38,15 @@ while true; do
         rest="${rest#"${rest%%[![:space:]]*}"}"
         rss_kb="${rest%% *}"
         rest="${rest#* }"
-        comm="${rest%% *}"
-        args="${rest#* }"
+        args="${rest#"${rest%%[![:space:]]*}"}"
 
         # Filter to python interpreters (matches python, python3, python3.12,
-        # .venv/bin/python, etc.) by basename of comm.
-        base="${comm##*/}"
+        # .venv/bin/python, etc.) by basename of argv[0]. Do NOT filter on the
+        # ps `comm` column: macOS truncates comm to 16 chars unless it is the
+        # last column, so `.venv/bin/python` under a long user path becomes
+        # `/Users/<user>` and silently never matches.
+        exe="${args%% *}"
+        base="${exe##*/}"
         case "$base" in
             python|python[0-9]*|pypy|pypy[0-9]*) ;;
             *) continue ;;
@@ -60,7 +63,7 @@ while true; do
             echo "[guard $(date +%H:%M:%S)] SIGKILL pid=$pid rss=${rss_gb}GB cmd=${args:0:140}" | tee -a "$LOG" >&2
             kill -KILL "$pid" 2>/dev/null
         fi
-    done < <(ps -axo pid=,rss=,comm=,args=)
+    done < <(ps -axo pid=,rss=,args=)
 
     sleep "$INTERVAL_SEC"
 done
