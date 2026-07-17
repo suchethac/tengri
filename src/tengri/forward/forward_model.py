@@ -238,23 +238,6 @@ class ForwardModel:
         """Delegate to :meth:`SEDModel.xi_to_params` on the inner SED."""
         return self._inner_sed_for_delegation().xi_to_params(xi)
 
-    def ensure_photometry_precomputed(self) -> bool:
-        """Lazily precompute photometry on the inner SED if not yet done.
-
-        Delegates to :meth:`SEDModel.ensure_photometry_precomputed` on
-        the first population's inner SED. Returns the inner method's
-        result (``True`` if precomputation ran on this call). Multi-
-        population galaxy decompositions iterate across populations.
-        """
-        ran = False
-        for pop in self.populations:
-            sub = pop.sed
-            inner = getattr(sub, "sed", sub)
-            fn = getattr(inner, "ensure_photometry_precomputed", None)
-            if fn is not None:
-                ran = bool(fn()) or ran
-        return ran
-
     def predict_photometry(self, params):
         """Channel-specific prediction: ``phot_fnu`` extracted from :meth:`predict_observables`.
 

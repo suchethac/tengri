@@ -521,13 +521,6 @@ class Fitter:
         self.model = self._resolve_fit_approx(model, approx)
         self.spec = self.model.spec
 
-        # ── Auto-precompute photometry (legacy fused path) ──────────
-        # Only on the exact path — a modern ``approx=`` LUT supersedes it,
-        # and running both would double-precompute.
-        _has_approx = getattr(self.model, "_has_modern_approx", None)
-        if not (callable(_has_approx) and _has_approx()):
-            self._auto_precompute_photometry(self.model)
-
         # ── Parameters ─────────────────────────────────────────────
         self._free_names = self.spec.free_params
         self._fixed_values = self.spec.get_fixed_values()
@@ -687,28 +680,6 @@ class Fitter:
             cfg = self._auto_approx_config()
             return model if cfg is None else with_approx(cfg)
         return with_approx(approx)
-
-    def _auto_precompute_photometry(self, model: Any) -> None:
-        """Auto-trigger photometry precomputation if conditions are met.
-
-        Fires when: photometry / joint data_type + the model declares an
-        :meth:`ensure_photometry_precomputed` method. Lets users build a
-        Model without ``precompute=True`` and still get the fast fused
-        path when they construct a Fitter.
-
-        The actual gate (fixed redshift + filters + not-yet-precomputed)
-        lives inside :meth:`SEDModel.ensure_photometry_precomputed` so
-        Fitter doesn't reach into model internals. Migration 2 step 3:
-        prior open-coded version touched ``model._precomputed``,
-        ``model._z_fixed``, ``model._dl_cm_fixed`` and a no-op
-        ``model._build_hybrid_kernels()`` call (the method has been
-        absent for a long time and the result was silently dropped).
-        """
-        if self.data_type not in ("photometry", "joint"):
-            return
-        ensure = getattr(model, "ensure_photometry_precomputed", None)
-        if ensure is not None:
-            ensure()
 
     def _init_emission_lines(self, model, eline_marginalize, eline_prior_type):
         """Configure emission line marginalization and fitted-amplitude modes."""
