@@ -159,8 +159,7 @@ def test_list_sfh_models_production_filter_excludes_unvalidated():
     """Filtering to the buildable set drops every unvalidated type."""
     production = set(tengri.list_sfh_models(status="production").names())
     assert UNVALIDATED_SFH_TYPES.isdisjoint(production), (
-        f"production filter leaked unbuildable types: "
-        f"{sorted(UNVALIDATED_SFH_TYPES & production)}"
+        f"production filter leaked unbuildable types: {sorted(UNVALIDATED_SFH_TYPES & production)}"
     )
 
 
