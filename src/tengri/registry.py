@@ -283,15 +283,15 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "filter":
         return f'Photometry.from_names(["{name}"])'
     if kind == "agn_model":
-        return f'Parameters(..., agn_model="{name}")'
+        return f"SEDModel.build(..., agn={{'type': '{name}'}})"
     if kind == "dust_attenuation":
-        return f'Parameters(..., dust_law="{name}")'
+        return f"SEDModel.build(..., dust={{'type': 'single_component', 'law_bc': '{name}'}})"
     if kind == "dust_emission":
-        return f'Parameters(..., dust_emission="{name}")'
+        return f"SEDModel.build(..., dust={{'emission': {{'type': '{name}'}}}})"
     if kind == "sfh_model":
-        return f'Parameters(..., mean_sfh_type="{name}")'
+        return f"SEDModel.build(..., sfh={{'type': '{name}'}})"
     if kind == "nebular_backend":
-        return f'Parameters(..., nebular_backend="{name}")'
+        return f"SEDModel.build(..., neb={{'type': '{name}'}})"
     if kind == "inference_method":
         return f'fitter.run("{name}")'
     if kind == "xray_model":
@@ -415,8 +415,9 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
 
     Blocks are the fine-grained components of AGN SEDs: disc, nlr, blr,
     feii, torus, and attenuation. Users compose an AGN by selecting one
-    block per category via ``SEDModel.build(..., agn_disc_block="multicolor",
-    agn_nlr_block="analytic", ...)``.
+    block per category inside the ``agn`` group dict, e.g.
+    ``SEDModel.build(..., agn={"disc": {"type": "multicolor"},
+    "nlr": {"type": "analytic"}})``.
 
     This coexists with monolithic AGN models (:func:`list_agn_models`) —
     blocks offer mix-and-match flexibility while monolithic models bundle
@@ -445,10 +446,17 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     """
     from tengri.components.agn.blocks._protocol import AGN_BLOCK_META, AGN_BLOCKS
 
+    # AGN_BLOCKS categories are the human-readable labels; the ``agn`` group
+    # grammar keys match them except for 'attenuation', whose structural key is
+    # the terser 'atten' (see parameters.groups._AGN_SUBBLOCK_KEYS). Map so the
+    # advertised ``use:`` string names the exact key SEDModel.build accepts.
+    category_to_group_key = {"attenuation": "atten"}
+
     out: list[dict] = []
     for cat in AGN_BLOCKS:
         if category is not None and cat != category:
             continue
+        group_key = category_to_group_key.get(cat, cat)
         for name in AGN_BLOCKS[cat]:
             meta = AGN_BLOCK_META.get((cat, name), {})
             entry_dict = {
@@ -458,7 +466,7 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
                 "status": meta.get("status", "production"),
                 "citation": meta.get("citation", ""),
                 "short_doc": meta.get("short_doc", ""),
-                "use": f"SEDModel.build(..., agn_{cat}_block='{name}')",
+                "use": f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}})",
             }
             out.append(entry_dict)
 
@@ -617,10 +625,28 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
 
 
 def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
-    """List all registered star formation history models."""
-    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+    """List all registered star formation history models.
+
+    SFH types that are registered but not yet wired into the DSPS forward
+    path (:data:`~tengri.components.stellar.sfh.registry.UNVALIDATED_SFH_TYPES`)
+    are reported with ``status='unvalidated'`` rather than the registry's
+    default ``'production'``: ``SEDModel.build(sfh={'type': ...})`` rejects
+    them, so advertising them as production would send a fresh user into a
+    build-time ``ValueError``. Filter to the buildable set with
+    ``list_sfh_models(status='production')``.
+    """
+    from tengri.components.stellar.sfh.registry import (
+        SFH_REGISTRY,
+        UNVALIDATED_SFH_TYPES,
+    )
 
     out = [_entry_to_dict(n, e, kind="sfh_model") for n, e in SFH_REGISTRY.items()]
+    for m in out:
+        if m["name"] in UNVALIDATED_SFH_TYPES:
+            m["status"] = "unvalidated"
+            if "not builder-available" not in m["short_doc"]:
+                suffix = " [not builder-available — registered, not yet DSPS-validated]"
+                m["short_doc"] = f"{m['short_doc']}{suffix}"
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))

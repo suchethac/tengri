@@ -181,6 +181,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "preprocessing",
         "presets",
         "radio",
+        "recipes",
         "results",
         "sfh",
         "sps",

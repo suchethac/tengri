@@ -93,9 +93,14 @@ class TestSKIRTORAnalytic:
         assert jnp.all(sed >= 0), "SKIRTOR SED should be non-negative"
         assert float(jnp.max(sed)) > 0, "SKIRTOR SED should have positive values"
 
-        # Frozen golden values at indices [0, n//3, 2n//3, -1]
+        # Frozen golden values at indices [0, n//3, 2n//3, -1].
+        # Re-frozen after the standalone default agn_log_lbol was corrected from
+        # the non-physical 44.0 (old log10 erg/s value) to 10.0 (log10 L_bol/Lsun,
+        # matching the canonical param default) — a pure 1e-34 rescale of the SED
+        # (l_scale is linear in 10**agn_log_lbol). The values are now physical
+        # (~1e29 erg/s/Hz for a 1e10 Lsun AGN).
         indices = [0, len(wave) // 3, 2 * len(wave) // 3, -1]
-        golden_values = [0.0, 6.380747e58, 3.525502e63, 3.607845e58]
+        golden_values = [0.0, 6.380747e24, 3.525502e29, 3.607845e24]
         for idx, golden in zip(indices, golden_values):
             np.testing.assert_allclose(
                 float(sed[idx]),
