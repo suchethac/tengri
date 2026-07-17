@@ -73,6 +73,10 @@ BENCHMARK_SCRIPTS: dict[str, tuple[str, str]] = {
         "benchmark_population_native.py",
         "Hierarchical PopulationFitter: per-iteration cost vs N galaxies.",
     ),
+    "catalog_throughput": (
+        "benchmark_catalog_throughput.py",
+        "Vectorized catalog NUTS sampling: galaxies/s vs forward_chunk_size and devices.",
+    ),
     "adam_vs_lbfgs": (
         "benchmark_adam_vs_lbfgs.py",
         "MAP optimizers head-to-head: Adam vs L-BFGS.",

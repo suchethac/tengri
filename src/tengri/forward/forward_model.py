@@ -466,6 +466,30 @@ class ForwardModel:
         mapping of str -> array
             Prediction dict, keyed by observation channel.
         """
+        # Fast path (issue #281, predict-half): a single-population,
+        # photometry-only model built with a WavePrecomp LUT can serve its
+        # photometry straight from the inner SEDModel's LUT-aware orchestrator
+        # (``predict_observables_jit``), skipping the full-resolution component
+        # cube that the general per-population path below builds. That cube —
+        # not the LUT projection — is the ~11-16x cost on plain photometry, so
+        # without this the LUT never helps ``predict_observables`` (the fit path
+        # already routes through ``predict_photometry`` and was unaffected).
+        # Tightly guarded: multi-population, spatial, spectroscopy/joint,
+        # hierarchical (PopulationSEDModel), and exact (non-LUT) models all fall
+        # through to the unchanged orchestration.
+        if len(self.populations) == 1 and self.populations[0].spatial is None:
+            only = self.populations[0].sed
+            obs = self.observation
+            if (
+                obs is not None
+                and getattr(obs, "can_do_photometry", False)
+                and not getattr(obs, "can_do_spectroscopy", False)
+                and not hasattr(only, "sed")  # plain SEDModel, not a PopulationSEDModel
+                and hasattr(only, "predict_observables_jit")
+                and bool(getattr(only, "_approx", {}).get("wave_precomp"))
+            ):
+                return dict(only.predict_observables_jit(params)._asdict())
+
         is_multipop = len(self.populations) > 1
 
         # ── Pass 1: run each population's SED + Spatial, collect states.

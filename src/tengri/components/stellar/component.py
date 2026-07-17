@@ -105,6 +105,55 @@ def _nonparametric_sfh_fns():
 _NONPARAMETRIC_SFH_FNS = _nonparametric_sfh_fns()
 
 
+def _apply_gp_field(sfr_history, params, n_grid, log_age_grid):
+    """Apply the multiplicative GP-field modulation to a smooth SFR history.
+
+    :math:`\\mathrm{SFR}(t) = \\mathrm{SFR}_{\\rm mean}(t)\\,\\exp(x(t) - K_0/2)`,
+    where :math:`x(t)` is the PSD-governed Gaussian process and :math:`K_0/2` is
+    the log-normal bias correction (so the ensemble mean is preserved). The single
+    source of the field modulation — shared by :meth:`StellarSEDComponent.apply`
+    (exact SED) and :meth:`StellarSEDComponent.compute_joint_weights` (fast
+    line/nebular window LUT) so the two paths cannot diverge.
+
+    Parameters
+    ----------
+    sfr_history : ndarray, shape (n_grid,)
+        Smooth (mean) SFR on the lookback grid [Msun/yr].
+    params : Mapping
+        Free-parameter dict carrying ``sfh_field_psd_sigma`` [dex],
+        ``sfh_field_psd_tau_myr`` [Myr], and the latent ``sfh_field_xi``.
+    n_grid : int
+        SFH grid resolution (the field latent dimension).
+    log_age_grid : ndarray, shape (n_grid,)
+        ``log10(age/yr)`` grid the field lives on.
+
+    Returns
+    -------
+    ndarray, shape (n_grid,)
+        Field-modulated SFR history [Msun/yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — ``log_age_grid_step`` recomputes the step from the
+    static ``n_grid`` (a traced ``log_age_grid`` cannot be indexed under jit).
+    """
+    from tengri.components.stellar.sfh.registry import compute_field_gp
+
+    psd_sigma = jnp.asarray(params["sfh_field_psd_sigma"])
+    psd_tau_yr = jnp.asarray(params["sfh_field_psd_tau_myr"]) * 1e6
+    xi = jnp.asarray(params.get("sfh_field_xi", jnp.zeros(n_grid)))
+    gp_x, k0_half = compute_field_gp(
+        xi,
+        psd_sigma,
+        psd_tau_yr,
+        n_grid,
+        log_age_grid_step(n_grid),
+        field_model="drw",
+        log_age_grid=log_age_grid,
+    )
+    return sfr_history * jnp.exp(gp_x - k0_half)
+
+
 def _refine_sfh_table_ages(ssp_ages_yr, factor: int = 16):
     """Dense log-spaced age grid spanning the SSP template ages [yr] (#758).
 
@@ -1199,26 +1248,7 @@ class StellarSEDComponent:
         # ensemble mean equals SFR_mean. ``compute_field_gp`` lives in
         # the SFH registry next to the prior on ``sfh_field_xi``.
         if self.config.field:
-            from tengri.components.stellar.sfh.registry import compute_field_gp
-
-            psd_sigma = jnp.asarray(params["sfh_field_psd_sigma"])
-            psd_tau_myr = jnp.asarray(params["sfh_field_psd_tau_myr"])
-            xi = jnp.asarray(params.get("sfh_field_xi", jnp.zeros(n_grid)))
-            psd_tau_yr = psd_tau_myr * 1e6
-            # JIT-safe: ``log_age_grid`` is traced under jit so indexing +
-            # float() would raise ConcretizationTypeError. ``log_age_grid_step``
-            # recomputes the step from static ``n_grid`` and module constants.
-            d_log_age = log_age_grid_step(n_grid)
-            gp_x, k0_half = compute_field_gp(
-                xi,
-                psd_sigma,
-                psd_tau_yr,
-                n_grid,
-                d_log_age,
-                field_model="drw",
-                log_age_grid=log_age_grid,
-            )
-            sfr_history = sfr_history * jnp.exp(gp_x - k0_half)
+            sfr_history = _apply_gp_field(sfr_history, params, n_grid, log_age_grid)
 
         # ── 3. Resample to SSP age grid for CSP integration ─────────────
         # For deterministic (non-GP) parametric SFHs, evaluate the analytic
@@ -1796,7 +1826,7 @@ class StellarSEDComponent:
         # backend (#950). Bit-exact — sed_ion == sed_intrinsic[:n_ion]. Falls
         # back to the full integral when the static bound was not precomputed.
         _n_ion = self._state.n_ion_bins if self._state is not None else None
-        if _n_ion is not None:
+        if _n_ion is not None and _n_ion > 0:
             # Apply log10 scale to the ionizing SED to avoid float32 overflow.
             # The tensordot result is O(1); the scale is folded in via apply_log10_scale
             # so the peak never overflows (#1186).
@@ -1805,6 +1835,11 @@ class StellarSEDComponent:
             )
             _sed_ion = apply_log10_scale(_tensordot_result, log10_mass_scale)
             nion = _integrate_nion(_sed_ion, wave[:_n_ion])
+        elif _n_ion is not None:
+            # n_ion_bins == 0 (static): no grid bins below the Lyman limit
+            # (IR-focused configs) -> Q_H is identically zero. Skips the slice
+            # machinery: max/argmax over zero-size arrays raise (#1193 fallout).
+            nion = jnp.zeros(())
         else:
             nion = _integrate_nion(sed_intrinsic, wave)
 
@@ -2189,11 +2224,11 @@ class StellarSEDComponent:
         sfh_spec = SFH_REGISTRY[self.config.sfh_model]
 
         # ── supported-configuration guards (loud, never silent) ──
-        if self.config.field:
-            raise ValueError(
-                "compute_joint_weights supports non-field SFH only; the GP-field "
-                "path modulates the SFR on the lookback grid — use the exact forward."
-            )
+        # The GP field is supported (delta metallicity, parametric backbone): it
+        # modulates the SFR on the lookback grid and is handled in the field
+        # branch below via the shared ``_apply_gp_field`` + the same DSPS weight
+        # function apply uses. The remaining guards still fall back to the exact
+        # forward.
         if self.config.metallicity_model != "delta":
             raise ValueError(
                 f"compute_joint_weights supports metallicity_model='delta' only "
@@ -2236,6 +2271,43 @@ class StellarSEDComponent:
             effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe) + LOG10_ZSUN
         )
         lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
+
+        # GP-field CSP weights — mirrors apply's field delta path EXACTLY. The
+        # field modulates the SFR on the lookback grid (``_apply_gp_field``, the
+        # single source shared with :meth:`apply`), which is interpolated to the
+        # SSP ages; the (met, age) weights then come from the SAME DSPS function
+        # (``calc_ssp_weights_sfh_table_lognormal_mdf``) that apply's SED call uses
+        # internally — so the fast and exact line paths cannot diverge. ``total_mass``
+        # is the conserved coarse value (no young knot), matching apply §3.
+        if self.config.field:
+            from dsps.sed.ssp_weights import calc_ssp_weights_sfh_table_lognormal_mdf
+
+            n_grid = self.config.n_grid
+            log_age_grid = make_log_age_grid(n_grid)
+            sfh_lbt_grid = 10.0**log_age_grid
+            sfr_history = sfh_spec.fn(sfh_lbt_grid, **sfh_kwargs)
+            sfr_history = _apply_gp_field(sfr_history, params, n_grid, log_age_grid)
+            sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+            _, _, total_mass = _build_dsps_sfh_table(ssp_ages_yr, sfr_on_ssp, t_obs_gyr)
+            gal_t, gal_sfr, _ = _build_dsps_sfh_table(
+                ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
+            )
+            weights, _, _ = calc_ssp_weights_sfh_table_lognormal_mdf(
+                gal_t,
+                gal_sfr,
+                log_z_abs_scalar,
+                lgmet_scatter,
+                ssp.ssp_lgmet,
+                ssp.ssp_lg_age_gyr,
+                t_obs_gyr,
+            )
+            # #821 youngest-bin edge-clip correction — apply applies this for ALL
+            # DSPS-histogram-kernel paths (field / per-age metallicity); without it
+            # the youngest bin (which carries the ionizing, line-emitting stars) is
+            # clipped ~10% low. The CIC path (below) bakes it in instead.
+            weights = weights * _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr)[None, :]
+            joint_weights = weights / jnp.maximum(weights.sum(), 1e-300)
+            return joint_weights, total_mass, ssp_ages_yr
 
         # Delta + non-field CSP weights — mirrors apply's delta path EXACTLY
         # (#982): a cloud-in-cell age marginal on a dense integrand (#758/#964,

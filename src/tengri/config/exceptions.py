@@ -152,3 +152,21 @@ class AGNDustDoubleCountWarning(UserWarning):
     double-counts AGN mid/far-IR (ADR-0018 §5, issue #721). Pick one surface;
     filter this category if the overlap is deliberate.
     """
+
+
+class LineDataWithoutLineModelWarning(UserWarning):
+    """The likelihood scores discrete emission lines but the model cannot predict them.
+
+    The observation configures discrete emission-line data — line fluxes
+    (``observation.has_line_fluxes``) or line ratios
+    (``observation.has_line_ratios``) — but the model's nebular backend is the
+    baked-in / SSP-embedded kind (``BakedInBackend``) or nebular is off. That
+    backend publishes no discrete line catalog — ``SEDModel.predict_emission_lines``
+    raises for it (#302) and its line-flux/ratio paths reduce to empty line
+    luminosities — so the line terms in the likelihood contribute no signal (a
+    silent mis-fit). Fit lines with a photoionization backend
+    (``neb={'type': 'cue'}`` or ``neb={'type': 'cloudy'}``) on a bare-stellar
+    SSP. Filter this category if the omission is deliberate (e.g. fitting the
+    continuum only). Spectral indices and spectroscopy do not trip this guard —
+    they are measured on the SED, which a baked-in SSP does carry.
+    """
