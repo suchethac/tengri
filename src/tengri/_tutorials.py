@@ -555,8 +555,7 @@ _USE_CASES = _Tutorial(
         Use case 1  ──  ONE GALAXY, broadband photometry
         ─────────────────────────────────────────────────
         DPL SFH + two-component dust + Charlot-Fall attenuation.
-        MAP gives a point estimate quickly; NUTS costs more and gives
-        the full posterior.
+        MAP gives a quick point estimate; NUTS costs more, gives the posterior.
 
             tengri.tutorial("first_fit")
 
@@ -882,9 +881,8 @@ _FAST_VS_EXACT = _Tutorial(
         #
         # FAST — lookup table (WavePrecomp)
         #   Precomputed at build time on the model's filters + z grid.
-        #   Cheaper per call, but valid only for build-time filters +
-        #   grid; arbitrary filters always use EXACT. Measure on your
-        #   own model before relying on the speedup.
+        #   Cheaper per call, but valid only for build-time filters + grid;
+        #   arbitrary filters always use EXACT. Measure before relying on it.
 
         import jax
         import tengri
