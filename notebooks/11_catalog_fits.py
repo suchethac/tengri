@@ -461,11 +461,13 @@ plt.show()
 #   posterior — the vectorization is bit-exact (covered by the chunk-invariance
 #   tests in `tests/inference/test_catalog_mcmc_vmap.py`).
 # - **The per-posterior cost is the sampler, not the dimensionality.** Each fit is
-#   ~240 HMC iterations x 20 leapfrog steps ~ 5k forward-model gradient evaluations;
-#   the 3 free parameters are cheap, the ~5k SED evaluations are the cost. Batching
-#   `K` chains amortizes the per-step dispatch overhead, so the **measured time per
-#   galaxy falls as `K` grows even on one CPU** (the sweep above): a 3-D fit is tiny
-#   and underfills the cores serially, and batching feeds the vector units.
+#   ~220 HMC iterations x 20 leapfrog steps ~ 4400 forward-model gradient
+#   evaluations; the 3 free parameters are cheap, the ~4400 SED evaluations are the
+#   cost. Batching `K` chains amortizes the per-step overhead, so the **measured
+#   time per galaxy falls as `K` grows even on one CPU**: the sweep above drops from
+#   31.6 s/posterior at `K=1` (serial) to 6.6 s at `K=12` — a **4.8x speedup from
+#   batching alone, no GPU** (a 3-D fit is tiny and underfills the cores serially;
+#   batching feeds the vector units). A GPU extends this much further.
 # - **Free redshift rides `WavePrecomp`** — the LUT is tabulated over redshift, so
 #   a photo-z fit interpolates the table (nebular emission lines and all) instead
 #   of re-integrating the forward model per step. Baking the nebular emission into
