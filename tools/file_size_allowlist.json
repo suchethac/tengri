@@ -24,7 +24,7 @@
   "src/tengri/components/stellar/sfh/mean_sfh.py": 2036,
   "src/tengri/components/stellar/sfh/nonparametric.py": 859,
   "src/tengri/components/stellar/sfh/registry.py": 1954,
-  "src/tengri/components/stellar/sps/dsps_wrapper.py": 2205,
+  "src/tengri/components/stellar/sps/dsps_wrapper.py": 2210,
   "src/tengri/components/stellar/sps/precompute.py": 1326,
   "src/tengri/components/xray/xray.py": 1949,
   "src/tengri/facade.py": 829,

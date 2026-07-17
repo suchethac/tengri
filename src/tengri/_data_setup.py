@@ -1,28 +1,118 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Convenience helpers for downloading pre-computed SSP grids."""
+"""Convenience helpers for downloading pre-computed SSP grids.
+
+Every "where is my data?" question in tengri resolves through :func:`data_dirs`
+(reads) and :func:`download_dir` (writes), so a user who sets one environment
+variable is found by the loaders, the downloaders, and ``tengri.doctor()``
+alike.
+"""
 
 import os
 import urllib.error
 import urllib.request
+import warnings
 from pathlib import Path
 
 __all__ = [
     "KNOWN_SSP_FILENAMES",
+    "TENGRI_DATA_ENV",
+    "data_dirs",
     "data_path",
+    "download_dir",
     "download_ssp",
+    "find_ssp_files",
     "list_available_ssps",
     "list_known_ssps",
 ]
 
+#: Environment variable naming tengri's data directory. Governs both where
+#: downloads are written and where loaders look, so pointing it at a scratch
+#: filesystem moves the whole data story at once.
+TENGRI_DATA_ENV = "TENGRI_DATA_DIR"
+
+#: Deprecated spelling. Honored with a warning so existing setups keep working.
+_TENGRI_DATA_ENV_LEGACY = "TENGRI_DATA"
+
+
+def _env_data_dir() -> Path | None:
+    """The user's configured data directory, or ``None`` if unset.
+
+    Prefers ``$TENGRI_DATA_DIR``; falls back to the deprecated ``$TENGRI_DATA``
+    with a warning. The two spellings previously governed *different* halves of
+    the data story — ``TENGRI_DATA_DIR`` where downloads were written,
+    ``TENGRI_DATA`` where ``doctor()`` looked — so setting either one alone left
+    the other half pointed somewhere else.
+    """
+    value = os.environ.get(TENGRI_DATA_ENV)
+    if value:
+        return Path(value).expanduser()
+    legacy = os.environ.get(_TENGRI_DATA_ENV_LEGACY)
+    if legacy:
+        warnings.warn(
+            f"${_TENGRI_DATA_ENV_LEGACY} is deprecated and will stop being read; "
+            f"use ${TENGRI_DATA_ENV} instead. It is now honored for both reads "
+            f"and writes, so the single variable is enough.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return Path(legacy).expanduser()
+    return None
+
+
+def data_dirs() -> list[Path]:
+    """Every directory tengri looks in for data files, most specific first.
+
+    Returns
+    -------
+    list of pathlib.Path
+        In order: ``$TENGRI_DATA_DIR`` (or the deprecated ``$TENGRI_DATA``) if
+        set; each ancestor of the working directory with a ``data/``
+        subdirectory; and ``~/tengri/data``. Directories are returned whether or
+        not they exist — callers test the file they want.
+
+    Notes
+    -----
+    The ancestor walk exists because sphinx-gallery ``chdir``s into each
+    script's directory before exec, so a hand-written ``"data/foo.h5"`` would
+    otherwise resolve under ``examples/<section>/``.
+    """
+    out: list[Path] = []
+    env = _env_data_dir()
+    if env is not None:
+        out.append(env)
+    out.extend(parent / "data" for parent in [Path.cwd(), *Path.cwd().parents])
+    out.append(Path.home() / "tengri" / "data")
+    return out
+
+
+def download_dir() -> Path:
+    """The directory :func:`download_ssp` and :func:`download_template` write to.
+
+    Returns
+    -------
+    pathlib.Path
+        ``$TENGRI_DATA_DIR`` (or the deprecated ``$TENGRI_DATA``) if set, else
+        ``<cwd>/data``. Always identical to ``data_dirs()[0]``, so a downloaded
+        file is always found by the loaders afterwards.
+
+    Notes
+    -----
+    Returns an absolute path so it compares equal to the corresponding
+    :func:`data_dirs` entry. A bare relative ``Path("data")`` names the same
+    directory but is a different value, which is exactly the kind of drift that
+    let the write path and the read path disagree in the first place.
+    """
+    return _env_data_dir() or (Path.cwd() / "data")
+
 
 def data_path(filename: str) -> Path:
-    """Locate a bundled data file by walking parent dirs for ``data/<filename>``.
+    """Locate a bundled data file in any directory tengri reads data from.
 
-    Sphinx-gallery ``chdir``s into each script's directory before exec, so
-    hand-coded relative paths like ``"data/foo.h5"`` resolve to
-    ``examples/<section>/data/foo.h5`` — which does not exist. This helper
-    walks from ``Path.cwd()`` upward until it finds a sibling ``data/``
-    directory containing the requested file.
+    Searches :func:`data_dirs`: ``$TENGRI_DATA_DIR`` first if set, then each
+    ancestor of the working directory with a ``data/`` subdirectory, then
+    ``~/tengri/data``. The ancestor walk matters because sphinx-gallery
+    ``chdir``s into each script's directory before exec, so a hand-coded
+    ``"data/foo.h5"`` would otherwise resolve under ``examples/<section>/``.
 
     Parameters
     ----------
@@ -32,12 +122,13 @@ def data_path(filename: str) -> Path:
     Returns
     -------
     pathlib.Path
-        Absolute path to the file.
+        Path to the file.
 
     Raises
     ------
     FileNotFoundError
-        If no ``data/<filename>`` exists in any ancestor directory.
+        If ``filename`` exists in none of :func:`data_dirs`. The message names
+        the directories searched.
 
     Examples
     --------
@@ -47,13 +138,15 @@ def data_path(filename: str) -> Path:
     ...
     ... h5py.File(templates).keys()
     """
-    for parent in [Path.cwd(), *Path.cwd().parents]:
-        candidate = parent / "data" / filename
+    for directory in data_dirs():
+        candidate = directory / filename
         if candidate.exists():
             return candidate
     raise FileNotFoundError(
-        f"Data file 'data/{filename}' not found in any ancestor of {Path.cwd()}. "
-        f"Place it under <project_root>/data/."
+        f"Data file {filename!r} not found. Looked in: "
+        f"{', '.join(str(d) for d in data_dirs()[:4])} (and further ancestors). "
+        f"Place it under <project_root>/data/, or set ${TENGRI_DATA_ENV} to the "
+        f"directory holding it."
     )
 
 
@@ -91,6 +184,38 @@ _KNOWN_SSPS = {
 # Reverse lookup used by ``load_ssp_data`` to auto-fetch a missing local
 # file when the basename matches a known catalog entry.
 KNOWN_SSP_FILENAMES = frozenset(_KNOWN_SSPS.values())
+
+
+def find_ssp_files() -> list[Path]:
+    """Every SSP grid visible to tengri, across :func:`data_dirs`.
+
+    Returns
+    -------
+    list of pathlib.Path
+        Paths to SSP grids, in :func:`data_dirs` order. Empty if none are
+        installed.
+
+    Notes
+    -----
+    Recognizes a grid two ways: a basename in :data:`KNOWN_SSP_FILENAMES` (what
+    :func:`download_ssp` writes, e.g. ``fsps_prsc_miles_chabrier.h5``), or an
+    ``ssp_``-prefixed filename (locally generated grids, including the ``_wNE_``
+    nebular-baked variants the catalog does not ship).
+
+    Matching on ``*.h5`` alone would report ``dl07_templates.h5`` and other
+    component libraries as SSP grids; matching only ``ssp_*.h5`` — as the
+    callers previously did — cannot see a single file ``download_ssp()``
+    produces. Both callers share this one answer so they cannot disagree about
+    whether an install has data.
+    """
+    out: list[Path] = []
+    for directory in data_dirs():
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.glob("*.h5")):
+            if path.name in KNOWN_SSP_FILENAMES or path.name.startswith("ssp_"):
+                out.append(path)
+    return out
 
 
 def list_known_ssps() -> dict[str, str]:
@@ -192,24 +317,67 @@ def _ssp_file_present(filename: str) -> bool:
     return False
 
 
+def _resolve_ssp_filename(name: str) -> str:
+    """Map a short SSP identifier or a catalog filename to a catalog filename.
+
+    Accepts either spelling so that one function serves both the curated
+    ``list_known_ssps()`` names and a filename read off the live catalog via
+    ``tengri.data.list_remote_ssps()``.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` is neither a known identifier nor a ``.h5`` filename. A bare
+        unknown word is a typo, not a catalog entry, so it fails loudly rather
+        than becoming an HTTP 404 later.
+    ValueError
+        If ``name`` is a path rather than a bare filename.
+    """
+    if "/" in name or "\\" in name or name.startswith("."):
+        raise ValueError(
+            f"download_ssp(name={name!r}): name must be a bare filename or a "
+            f"short identifier (see tengri.list_known_ssps()), not a path — so "
+            f"it cannot write outside the destination directory."
+        )
+    if name in _KNOWN_SSPS:
+        return _KNOWN_SSPS[name]
+    if name.endswith(".h5"):
+        # A filename the curated table does not carry may still be live in the
+        # catalog (tengri.data.list_remote_ssps reads it directly); let the HTTP
+        # layer decide rather than refusing something that exists.
+        return name
+    raise KeyError(
+        f"Unknown SSP name: {name!r}. Known names: {list(list_known_ssps().keys())}. "
+        f"Pass a bare catalog filename ending in '.h5' to fetch something the "
+        f"curated table does not list."
+    )
+
+
 def download_ssp(
     name: str = "fsps_prsc_miles_chabrier",
     dest: str | os.PathLike | None = None,
     force: bool = False,
+    progress: bool = True,
 ) -> Path:
     """Download a pre-formatted SSP HDF5 file used by tengri's stellar component.
 
     Parameters
     ----------
     name : str, optional
-        Short SSP identifier. See ``list_known_ssps()``. Defaults to
-        ``"fsps_prsc_miles_chabrier"`` (FSPS PARSEC tracks + MILES library,
-        Chabrier IMF — bare-stellar, Cue/CloudyGrid-compatible).
+        Short SSP identifier (see ``list_known_ssps()``) or a bare catalog
+        filename ending in ``.h5``. Defaults to ``"fsps_prsc_miles_chabrier"``
+        (FSPS PARSEC tracks + MILES library, Chabrier IMF — bare-stellar,
+        Cue/CloudyGrid-compatible).
     dest : path-like, optional
-        Target directory. Defaults to ``$TENGRI_DATA_DIR`` if set, else ``data/``
-        relative to the current working directory.
+        Target directory. Defaults to :func:`download_dir` — ``$TENGRI_DATA_DIR``
+        if set, else ``data/`` relative to the working directory. Either way it
+        is a directory :func:`data_dirs` searches, so the loaders find the file
+        afterwards.
     force : bool, optional
         Re-download even if the file already exists. Default ``False``.
+    progress : bool, optional
+        Print download progress. Default ``True``; pass ``False`` for clean log
+        output.
 
     Returns
     -------
@@ -219,7 +387,7 @@ def download_ssp(
     Raises
     ------
     KeyError
-        If ``name`` is not in ``list_known_ssps()``.
+        If ``name`` is neither in ``list_known_ssps()`` nor a ``.h5`` filename.
     RuntimeError
         If the HTTP download fails (network error or non-200 status).
 
@@ -231,16 +399,11 @@ def download_ssp(
     """
     # Resolve target directory
     if dest is None:
-        dest = os.environ.get("TENGRI_DATA_DIR", "data")
+        dest = download_dir()
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
 
-    # Resolve filename
-    if name not in _KNOWN_SSPS:
-        raise KeyError(
-            f"Unknown SSP name: {name!r}. Known names: {list(list_known_ssps().keys())}"
-        )
-    filename = _KNOWN_SSPS[name]
+    filename = _resolve_ssp_filename(name)
     filepath = dest / filename
 
     # Skip if already exists and force=False
@@ -255,7 +418,7 @@ def download_ssp(
     partial_filepath = filepath.with_suffix(filepath.suffix + ".partial")
 
     try:
-        _download_file(url, partial_filepath)
+        _download_file(url, partial_filepath, progress=progress)
     except (urllib.error.HTTPError, urllib.error.URLError) as e:
         # Clean up partial file on error
         if partial_filepath.exists():
@@ -317,7 +480,7 @@ def download_template(
         If the HTTP download fails (network error or non-200 status).
     """
     if dest is None:
-        dest = os.environ.get("TENGRI_DATA_DIR", "data")
+        dest = download_dir()
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -348,7 +511,7 @@ def download_template(
     return filepath
 
 
-def _download_file(url: str, dest: Path, chunk_size: int = 8192) -> None:
+def _download_file(url: str, dest: Path, chunk_size: int = 8192, progress: bool = True) -> None:
     """Download a file from a URL to a destination path with simple progress.
 
     Parameters
@@ -359,6 +522,9 @@ def _download_file(url: str, dest: Path, chunk_size: int = 8192) -> None:
         Destination file path (should end with .partial for atomic write).
     chunk_size : int, optional
         Size of each download chunk in bytes. Default 8192.
+    progress : bool, optional
+        Show a progress bar when ``tqdm`` is installed. Default ``True``;
+        ``False`` downloads silently.
 
     Raises
     ------
@@ -371,7 +537,7 @@ def _download_file(url: str, dest: Path, chunk_size: int = 8192) -> None:
     try:
         import tqdm
 
-        use_progress = True
+        use_progress = progress
     except ImportError:
         use_progress = False
 
