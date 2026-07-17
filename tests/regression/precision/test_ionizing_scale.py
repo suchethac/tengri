@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Test ionizing-SED mass-scale float32 safety (Balmer decrement guard).
 
 Validates that reparametrizing the ionizing-SED scale as a log offset
