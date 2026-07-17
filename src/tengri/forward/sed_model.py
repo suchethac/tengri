@@ -3190,8 +3190,21 @@ class SEDModel:
         predict_line_luminosities : JIT-compatible emission lines for batch.
         predict_rest_sed : Full rest-frame SED for custom analysis.
         """
+        from collections.abc import Mapping
+
         from tengri.forward.prediction import Prediction
 
+        if not isinstance(params, Mapping):
+            raise TypeError(
+                f"model.predict() expects a params dict (e.g. from "
+                f"spec.sample(key)), got {type(params).__name__}."
+            )
+        # Validate eagerly — matching predict_photometry — so a typo'd or
+        # missing free parameter raises a helpful error here instead of a bare
+        # KeyError deferred to the first accessor of the lazy Prediction. Both
+        # asymmetries were flagged as silent-wrong footguns in a fresh-user audit.
+        check_unknown_params(params, self._param_map)
+        check_missing_free_params(params, self.spec, self._param_map)
         return Prediction(self, params)
 
     def compile_signature(self) -> tuple:
