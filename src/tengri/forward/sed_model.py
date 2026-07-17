@@ -6146,8 +6146,21 @@ class SEDModel:
             if not isinstance(component, AGNSEDComponent):
                 continue
             agn_templates = {}
-            if component._state is not None and component._state.skirtor_templates is not None:
-                agn_templates["skirtor"] = component._state.skirtor_templates
+            skirtor = component._state.skirtor_templates if component._state is not None else None
+            # The exact path does not run AGN precompute, so ``_state`` carries
+            # no template. Load the SKIRTOR grid arrays here so the data always
+            # threads through jit (small compile) rather than baking into the
+            # trace as a constant (#1198). Guarded to the monolithic SKIRTOR
+            # model — composable torus blocks carry their own grid.
+            if skirtor is None and getattr(component.config, "model", None) == "skirtor":
+                try:
+                    from tengri.components.agn.skirtor import _load_skirtor_default_grid
+
+                    skirtor = _load_skirtor_default_grid()
+                except Exception:
+                    skirtor = None
+            if skirtor is not None:
+                agn_templates["skirtor"] = skirtor
             if agn_templates:
                 result["agn"] = agn_templates
             break
