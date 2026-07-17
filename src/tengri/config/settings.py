@@ -211,17 +211,10 @@ class DustConfig:
         IR dust emission model.  ``None`` disables IR emission (default).
         Options: ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
         ``"draine_li2007"``, ``"draine_li2014"``.
-    approx : bool
-        Deprecated and unused — has no effect on the forward pass. The
-        precompute/LUT path is selected at model build time via
-        ``SEDModel.build(..., approx=WavePrecomp())``, not through
-        ``DustConfig``. Retained as a no-op for backward compatibility;
-        scheduled for removal (see the precompute-naming cleanup issue).
-        Default: ``True``.
 
     Attributes
     ----------
-    model, law_bc, law_diff, emission, approx
+    model, law_bc, law_diff, emission
         All constructor parameters are read-only frozen attributes.
 
     Notes
@@ -243,7 +236,6 @@ class DustConfig:
     law_bc: str = "power_law"
     law_diff: str | None = None
     emission: str | None = None
-    approx: bool = True
 
     def __post_init__(self) -> None:
         valid_laws = {

@@ -176,7 +176,7 @@ The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 
 | #  | Notebook                       | Topic                                                       |
 |----|--------------------------------|-------------------------------------------------------------|
-| 00 | `00_quickstart.py`             | mock galaxy → posterior in ~30 s                            |
+| 00 | `00_quickstart.py`             | mock galaxy → posterior, end to end                         |
 | 01 | `01_why_jax.py`                | JIT, `vmap`, `grad` in the context of galaxy SED inference  |
 | 02 | `02_sed_anatomy.py`            | the panchromatic SED, component by component                |
 | 03 | `03_discovering_the_menu.py`   | discovery API (`list_*`, `describe`, `search`)              |
