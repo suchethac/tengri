@@ -261,19 +261,21 @@ print(
 # %% [markdown]
 # ## The timing, in detail
 #
-# The whole catalog is one compiled program, so there is **no per-galaxy compile
-# tax**: the wall grows linearly in `N`, and the compile (a small, one-time cost
-# the persistent JAX cache elides on re-runs) is amortized over the catalog.
+# The whole catalog is one compiled program, `O(1)` in the catalog size `N`: the
+# compile is paid **once** (and the persistent JAX cache elides it on re-runs),
+# not once per galaxy.
 #
-# **Read it with the hardware in mind.** On a CPU the `K` galaxy-chains contend for
-# a handful of cores, so the wall is set by the *total* sampling work — the
-# per-galaxy number below is the honest CPU cost. The architecture is the point:
-# because the graph is `O(1)` in `N`, the *identical* call on a **GPU** runs those
-# `K` chains concurrently instead of contending, so throughput scales with the
-# device width — `K` chains at once — and the same call fits thousands. The
-# measured GPU numbers live in the throughput benchmark
+# **Batching speeds up the per-galaxy cost — even on a single CPU.** A 3-D fit with
+# nine bands is a *tiny* problem: run one galaxy at a time and the CPU's vector
+# units and BLAS threads sit mostly idle, with the wall dominated by per-step
+# dispatch overhead. Advancing `K` galaxy-chains *together* makes every array `K`
+# times larger, which actually feeds those units and amortizes the overhead — so
+# the time *per galaxy* falls as `K` grows. The [chunk-size sweep](#The-parallel-speedup:-a-chunk-size-sweep)
+# below measures exactly this. A **GPU** extends the same effect much further —
+# `K` chains across thousands of lanes at once — which is where the largest
+# catalogs are fit; see the throughput benchmark
 # (`bench/scripts/benchmark_catalog_throughput.py`) and the SLURM scripts
-# (`scripts/slurm/`); this notebook proves the mechanism and the recovery.
+# (`scripts/slurm/`).
 
 # %%
 backend = jax.devices()[0].platform.upper()
@@ -290,11 +292,75 @@ print(f"{'  time per posterior (CPU)':<42}{per_gal:>13.2f} s")
 print(f"{'  throughput (posteriors / s)':<42}{N_GAL / fit_wall:>15.2f}")
 print("-" * 57)
 print(
-    f"On {backend} the {N_GAL} chains share the cores, so the wall is the total sampling\n"
-    f"work ({per_gal:.1f} s/galaxy here). On a GPU the chains run concurrently instead of\n"
-    "contending, so throughput scales with the device width (K chains at once) — the same\n"
-    "call fits thousands. Measured GPU numbers: the benchmark and scripts/slurm/."
+    f"Each posterior is ~{FIT_KW['n_warmup'] + FIT_KW['n_samples']} HMC iterations x "
+    f"{FIT_KW['n_leapfrog_steps']} leapfrog steps ~ "
+    f"{(FIT_KW['n_warmup'] + FIT_KW['n_samples']) * FIT_KW['n_leapfrog_steps']} gradient\n"
+    f"evaluations of the forward model ({fwd_ms:.2f} ms each) — that, not the 3 free\n"
+    "parameters, is the cost. Batching K chains amortizes the per-step overhead: the\n"
+    "K-sweep below shows the per-galaxy time falling as K grows, even on this CPU."
 )
+
+# %% [markdown]
+# ## The parallel speedup: a chunk-size sweep
+#
+# `forward_chunk_size=K` sets how many galaxy-chains advance *together* per sampler
+# step: `K=1` runs them one at a time (the serial baseline), `K=N` batches the whole
+# catalog. `K` changes *only* the throughput, never the posterior (the vectorization
+# is bit-exact). We re-fit the same catalog at a few `K` — **same sampler settings
+# as above**, so the `K=N` row *is* the headline number — and time each. The wall
+# includes the one-time compile a first run pays; at this sampler depth the ~4400
+# gradient evaluations dwarf it, so a single wall is a stable measure.
+
+# %%
+K_VALUES = [1, 4, N_GAL]
+
+
+def _time_catalog(K):
+    """Wall time (s) to fit the whole catalog with chunk size K."""
+    t = time.perf_counter()
+    cp = CatalogFitter(model, galaxies, data_type="photometry").run(
+        key=jax.random.PRNGKey(0), forward_chunk_size=K, **FIT_KW
+    )
+    jax.block_until_ready(cp.posteriors[0].samples["redshift"])
+    return time.perf_counter() - t
+
+
+# Reuse the K=N fit already run above (fit_wall) as the K=N point; time the smaller
+# chunks at the identical config.
+sweep_wall = [_time_catalog(1), _time_catalog(4), fit_wall]
+sweep_per_gal = [w / N_GAL for w in sweep_wall]
+_serial = sweep_per_gal[0]
+
+print(f"{'chunk K':>8}{'wall (s)':>11}{'s / galaxy':>13}{'speedup':>10}")
+print("-" * 42)
+for K, w, pg in zip(K_VALUES, sweep_wall, sweep_per_gal):
+    tag = "  serial" if K == 1 else ("  batched" if K == N_GAL else "")
+    print(f"{K:>8d}{w:>11.1f}{pg:>13.2f}{_serial / pg:>8.1f}x{tag}")
+print(
+    f"\nBatching all {N_GAL} chains is {_serial / sweep_per_gal[-1]:.1f}x faster per galaxy "
+    f"than K=1 — on one {backend}, no GPU."
+)
+
+# %%
+fig, ax = plt.subplots(figsize=(5.4, 4.1))
+ax.plot(K_VALUES, sweep_per_gal, "o-", color=C_POST, mec="white", mew=0.9, ms=9, lw=1.8)
+for K, pg in zip(K_VALUES, sweep_per_gal):
+    ax.annotate(
+        f"{_serial / pg:.1f}x",
+        (K, pg),
+        textcoords="offset points",
+        xytext=(6, 6),
+        fontsize=9,
+        color=C_TRUTH,
+    )
+ax.set_xticks(K_VALUES)
+ax.set_xlabel("chunk size K  (galaxy-chains batched together)")
+ax.set_ylabel("wall time per galaxy (s)")
+ax.set_ylim(bottom=0)
+ax.set_title(f"Per-galaxy cost falls as K grows ({backend}, {N_GAL} galaxies)")
+fig.tight_layout()
+fig.savefig(FIG_DIR / "11_catalog_ksweep.png", dpi=300, bbox_inches="tight")
+plt.show()
 
 # %% [markdown]
 # ## Did the parallel fit recover the truth?
@@ -394,6 +460,12 @@ plt.show()
 #   fully vectorized. Changing `K` changes only the throughput, never the
 #   posterior — the vectorization is bit-exact (covered by the chunk-invariance
 #   tests in `tests/inference/test_catalog_mcmc_vmap.py`).
+# - **The per-posterior cost is the sampler, not the dimensionality.** Each fit is
+#   ~240 HMC iterations x 20 leapfrog steps ~ 5k forward-model gradient evaluations;
+#   the 3 free parameters are cheap, the ~5k SED evaluations are the cost. Batching
+#   `K` chains amortizes the per-step dispatch overhead, so the **measured time per
+#   galaxy falls as `K` grows even on one CPU** (the sweep above): a 3-D fit is tiny
+#   and underfills the cores serially, and batching feeds the vector units.
 # - **Free redshift rides `WavePrecomp`** — the LUT is tabulated over redshift, so
 #   a photo-z fit interpolates the table (nebular emission lines and all) instead
 #   of re-integrating the forward model per step. Baking the nebular emission into
@@ -402,8 +474,9 @@ plt.show()
 # - The vectorized fit **recovers photo-z, stellar mass, and dust** across the
 #   catalog — the throughput does not come at the cost of the science, even with
 #   the dust–redshift degeneracy left in.
-# - On a **GPU** the `K` chains run concurrently across the device — the same call
-#   scales to thousands of galaxies. For the measured GPU throughput see
+# - A **GPU** extends the same batching effect much further — the `K` chains run
+#   across thousands of lanes at once, so the same call scales to thousands of
+#   galaxies. For the measured GPU throughput see
 #   `bench/scripts/benchmark_catalog_throughput.py`; for cluster-scale catalogs
 #   (one GPU per slice, array jobs) see `scripts/slurm/`; and to shard *one* very
 #   high-dimensional hierarchical fit across devices, see
