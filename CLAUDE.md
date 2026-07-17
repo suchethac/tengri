@@ -186,8 +186,9 @@ model = SEDModel.build(
   `shock_log_lhalpha` (decoupled from the SFR — for AGN NLR/outflow shocks).
   `shock={'type':'none'}` disables. Like radio, `'all_params':FREE` is a no-op for the
   Fixed-default shock bucket — use explicit priors (`shock={'frac':
-  Uniform(0,1)}`). Canonical component: `ShockNebular` (`_REGISTRY['shock']`);
-  the older `mappings` implementation is a superseded no-op.
+  Uniform(0,1)}`). Canonical component: `ShockNebular` (`_REGISTRY['shock']`).
+  `'mappings'` is the shock group's default `type` and selects `ShockNebular`;
+  the older standalone `mappings` component is gone, not merely superseded.
 - AGN cross-block normalisation policy: `agn={'type': 'composable', ...,
   'norm': 'cigale_joint' | 'independent'}` (#556). `'cigale_joint'` (default)
   ties disc/torus/polar to CIGALE's single `agn_power` reference (energy-
