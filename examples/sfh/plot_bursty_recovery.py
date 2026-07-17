@@ -31,15 +31,15 @@ ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
     sfh=[
-        {"type": "const", "*": tengri.FIXED, "log_total_mass": 10.5},
+        {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.5},
         {
             "type": "field",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "psd_sigma": tengri.Uniform(0.1, 4.0),
             "psd_tau_myr": tengri.Uniform(1.0, 300.0),
         },
     ],
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.0),
 )
 

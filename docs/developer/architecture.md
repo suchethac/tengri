@@ -252,11 +252,11 @@ balance (e.g. high-z sources) — analogous to AGNfitter's *optional* energy-
 balance prior. Free it under a soft prior to allow controlled deviation:
 
 ```python
-dust={'type': 'two_component', '*': 'fixed',
+dust={'type': 'two_component', 'all_params': 'fixed',
       'emission': {'type': 'dale2014',
                    'eta_balance': LogNormal(mu=0.0, sigma=0.2)}}   # median η=1
 # or, equivalently:
-dust={'type': 'two_component', '*': 'fixed',
+dust={'type': 'two_component', 'all_params': 'fixed',
       'emission': builders.dust.emission.relaxed_energy_balance('dale2014')}
 ```
 
@@ -331,14 +331,14 @@ parameter groups into the flat `Parameters` object:
 ```python
 # User specifies nested dict
 groups = {
-    "sfh": {"type": "dpl", "*": FREE},
+    "sfh": {"type": "dpl", "all_params": FREE},
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FREE,
-        "emission": {"type": "dale2014", "*": FIXED},
+        "all_params": FREE,
+        "emission": {"type": "dale2014", "all_params": FIXED},
     },
-    "neb": {"type": "cue", "*": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Uniform(0.01, 6.0),
 }
 
@@ -352,7 +352,7 @@ spec = parse_groups(**groups)
 
 The translator is the single source of truth for:
 - **Group name → config key mapping** (sfh → mean_sfh_type, etc.)
-- **Wildcard semantics** ('*': FREE/FIXED applies to undeclared params)
+- **Wildcard semantics** ('all_params': FREE/FIXED applies to undeclared params)
 - **Parameter declaration lookups** (what params does each SFH family declare?)
 
 The `parse_groups()` function is not JAX-traced and runs at model-build

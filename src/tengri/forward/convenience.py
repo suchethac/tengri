@@ -401,6 +401,7 @@ def fit_batch(
     verbose: bool = True,
     output_dir: str | None = None,
     id_col: str | None = None,
+    approx="auto",
     **kwargs,
 ) -> list:
     """Fit a batch of galaxies from a catalog, one row at a time.
@@ -512,9 +513,9 @@ def fit_batch(
             row_model = ModelClass.__new__(ModelClass)
             row_model.__dict__.update(model.__dict__)
             row_model.spec = row_spec
-            fitter_i = Fitter(row_model, flux_i, noise_i)
+            fitter_i = Fitter(row_model, flux_i, noise_i, approx=approx)
         else:
-            fitter_i = Fitter(model, flux_i, noise_i)
+            fitter_i = Fitter(model, flux_i, noise_i, approx=approx)
 
         result_i = fitter_i.run(method, **kwargs)
 
@@ -945,6 +946,7 @@ def fit_model(
     photometry: tuple | None = None,
     spectrum: tuple | None = None,
     init: str | None = None,
+    approx="auto",
     **kwargs,
 ):
     """Fit observed data using specified inference method.
@@ -1025,7 +1027,7 @@ def fit_model(
             data_type = "photometry"
 
     # --- Build fitter ---
-    fitter = Fitter(model, data, noise, data_type=data_type)
+    fitter = Fitter(model, data, noise, data_type=data_type, approx=approx)
     model.fitter_ = fitter
 
     # --- Optional MAP warm start ---

@@ -32,7 +32,7 @@ C_AA_PER_S = 2.998e18
 ssp = tengri.load_ssp()
 SFH = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": 0.05,
     "width_gyr": 0.05,
     "log_total_mass": 10.0,
@@ -47,7 +47,7 @@ def _model(rv):
         sfh=SFH,
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 1.0,
             "tau_bc": 0.0,
             "law_diff": "cardelli",

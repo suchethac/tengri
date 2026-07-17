@@ -113,9 +113,9 @@ for i, tau_v in enumerate(tau_v_values):
             "law_bc": "calzetti",
             "tau_bc": Fixed(tau_bc),
             "tau_diff": Fixed(tau_diff),
-            "emission": {"type": "dale2014", "*": FIXED},
+            "emission": {"type": "dale2014", "all_params": FIXED},
         },
-        "neb": {"type": "cue", "*": FIXED},
+        "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(0.01),
         "apply_igm": False,
     }

@@ -37,13 +37,13 @@ LOGU_GRID = np.linspace(-3.8, -1.5, 22)
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 SFH = {
     "type": "dpl",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "tau_gyr": 0.3,
     "log_total_mass": 10.0,
     "alpha": 3.0,
     "beta": 2.0,
 }
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1}
 
 model = tengri.SEDModel.build(
     ssp,
@@ -51,7 +51,7 @@ model = tengri.SEDModel.build(
     dust=DUST,
     neb={
         "type": "cue",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "fesc": tengri.Uniform(0.0, 1.0),
         "logU": tengri.Uniform(-4.0, -1.0),
     },

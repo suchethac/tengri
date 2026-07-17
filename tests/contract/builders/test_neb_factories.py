@@ -50,8 +50,8 @@ def test_cloudy_borrows_cue_signature() -> None:
 
 
 def test_default_call_returns_canonical_shape() -> None:
-    assert builders.neb.cue() == {"type": "cue", "*": FIXED}
-    assert builders.neb.none() == {"type": "none", "*": FIXED}
+    assert builders.neb.cue() == {"type": "cue", "all_params": FIXED}
+    assert builders.neb.none() == {"type": "none", "all_params": FIXED}
 
 
 def test_per_param_override_round_trips_to_free() -> None:

@@ -56,8 +56,8 @@ fig, ax = plt.subplots(figsize=(7.0, 4.6))
 for (form, label), color in zip(FORMS, COLORS):
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": form, "*": tengri.FIXED},
-        dust={"type": "two_component", "*": tengri.FIXED},
+        sfh={"type": form, "all_params": tengri.FIXED},
+        dust={"type": "two_component", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.0),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))

@@ -31,8 +31,18 @@ def _build_template(peak_lbt, width, tau_diff):
     return tengri.SEDModel.build(
         tengri.load_ssp("fsps_prsc_miles_chabrier"),
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": peak_lbt, "width_gyr": width},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": tau_diff, "tau_bc": 0.3},
+        sfh={
+            "type": "tsnorm",
+            "all_params": tengri.FIXED,
+            "peak_lbt_gyr": peak_lbt,
+            "width_gyr": width,
+        },
+        dust={
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": tau_diff,
+            "tau_bc": 0.3,
+        },
         redshift=tengri.Uniform(0.01, 3.5),
     )
 

@@ -44,7 +44,7 @@ for i, age_gyr in enumerate(age_gyr_grid):
             ssp,
             sfh={
                 "type": "dpl",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "alpha": 2.0,
                 "beta": 2.5,
                 "tau_gyr": age_gyr,
@@ -52,7 +52,7 @@ for i, age_gyr in enumerate(age_gyr_grid):
             },
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_bc": 0.0,
                 "tau_diff": 0.0,
             },

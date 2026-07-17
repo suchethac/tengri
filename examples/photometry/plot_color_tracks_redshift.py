@@ -50,7 +50,7 @@ def _build_population(peak_lbt, width, tau_diff):
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": peak_lbt,
             "width_gyr": width,
             "log_total_mass": 10.0,
@@ -59,7 +59,7 @@ def _build_population(peak_lbt, width, tau_diff):
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tau_diff,
             "tau_bc": 0.3,
             "slope": -0.7,

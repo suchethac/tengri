@@ -147,8 +147,8 @@ print(
         model = tengri.SEDModel.build(
             ssp,
             observation=obs,
-            sfh={"type": "tsnorm", "*": tengri.FREE},
-            agn={"model": "my_toy_torus", "*": tengri.FREE},
+            sfh={"type": "tsnorm", "all_params": tengri.FREE},
+            agn={"model": "my_toy_torus", "all_params": tengri.FREE},
             redshift=tengri.Fixed(0.05),
         )
 

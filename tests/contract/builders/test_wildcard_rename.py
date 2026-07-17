@@ -43,14 +43,14 @@ def test_wildcard_kwarg_works(label, factory):
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
         result = factory(defaults=FREE)
-    assert result["*"] is FREE, label
+    assert result["all_params"] is FREE, label
 
 
 @pytest.mark.parametrize(("label", "factory"), _FACTORIES.items())
 def test_wildcard_default_is_fixed(label, factory):
     """Calling with no kwargs gives ``*: FIXED``."""
     result = factory()
-    assert result["*"] is FIXED, label
+    assert result["all_params"] is FIXED, label
 
 
 # ── Legacy _= alias: still works, emits DeprecationWarning ──────────

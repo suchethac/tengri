@@ -73,7 +73,7 @@ universal AGN luminosity knob for **every** disc block.
   parameter for backward compatibility but has **no effect** on the physical
   discs; setting or freeing it raises a build-time `UserWarning`
   (`Parameters.__init__`, Python-side / JIT-safe). It is removed from those
-  blocks' `AGN_BLOCK_CONSUMES`, so a scoped `'*': FREE` no longer frees it.
+  blocks' `AGN_BLOCK_CONSUMES`, so a scoped `'all_params': FREE` no longer frees it.
 - **`adaf`** is exempt (deprecated, #898); it still reads `agn_log_ledd` pending
   its rewrite.
 

@@ -58,7 +58,7 @@ for ssp_name, label in LIBRARIES:
         continue
     sfh = {
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 3.0,
         "width_gyr": 2.0,
         "log_total_mass": 10.0,
@@ -67,7 +67,7 @@ for ssp_name, label in LIBRARIES:
     }
     dust = {
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.2,
         "tau_bc": 0.3,
         "slope": -0.7,

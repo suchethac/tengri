@@ -73,6 +73,7 @@ from tengri.parameters.priors import (
     Fixed,
     resolve_shorthand,
 )
+from tengri.parameters.sentinels import WILDCARD_ALIAS
 
 __all__ = ["SETTINGS_KEYS", "Parameters"]
 
@@ -1177,8 +1178,9 @@ class Parameters:
         -----
         **Provenance-aware collapsing**: If this Parameters was built via
         ``parse_groups``, provenance tags are used to collapse parameters that
-        shared the same wildcard marker (``'*': FREE`` or ``'*': FIXED``) back
-        into that wildcard, with explicit overrides listed separately.
+        shared the same wildcard marker (``'all_params': FREE`` or
+        ``'all_params': FIXED``) back into that wildcard, with explicit
+        overrides listed separately.
 
         **Flat-built fallback**: If this Parameters was built via flat-kwarg
         ``Parameters(...)``, all parameters are listed explicitly (no wildcard).
@@ -1191,10 +1193,11 @@ class Parameters:
         --------
         >>> from tengri import parse_groups, FREE, FIXED, Uniform, Fixed
         >>> spec = parse_groups(
-        ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
+        ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
         ...     redshift=Fixed(0.05),
         ... )
         >>> groups = spec.to_groups()
+        >>> assert "all_params" in groups["sfh"]  # preferred spelling on output
         >>> roundtripped = parse_groups(**groups)
         >>> spec.free_params == roundtripped.free_params
         True
@@ -1816,8 +1819,8 @@ class Parameters:
             "user_prior": "[user]",
             "user_fixed": "[user]",
             "user_free": "[user FREE]",
-            "wildcard_free": "[* FREE]",
-            "wildcard_fixed": "[* FIXED]",
+            "wildcard_free": f"[{WILDCARD_ALIAS} FREE]",
+            "wildcard_fixed": f"[{WILDCARD_ALIAS} FIXED]",
             "registry_default": "[default]",
         }
 

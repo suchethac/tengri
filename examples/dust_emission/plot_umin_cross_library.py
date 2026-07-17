@@ -105,7 +105,7 @@ LINESTYLES = {
 }
 COLORS_SWEEP = plt.cm.viridis(np.linspace(0.1, 0.9, len(UMIN_VALUES)))
 
-recipe = {"sfh": {"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0}}
+recipe = {"sfh": {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0}}
 ssp = tengri.load_ssp()
 
 fig_sweep = plt.figure(figsize=(8, 5))
@@ -118,12 +118,12 @@ for lib_type in LIB_TYPES:
             **recipe,
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 1.0,
                 "tau_bc": 1.5,
                 "emission": {
                     "type": lib_type,
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "umin": umin,
                     "gamma_dl": 0.01,
                     "qpah": 2.5,

@@ -37,7 +37,7 @@ LAWS = [(entry["name"], entry["short_doc"]) for entry in laws_table]
 # Fixed SFH and stellar population
 SFH = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": 2.0,
     "width_gyr": 1.0,
     "log_total_mass": 10.0,
@@ -57,7 +57,7 @@ ref_model = tengri.SEDModel.build(
     dust={
         "type": "two_component",
         "law_diff": "calzetti",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     },
@@ -82,7 +82,7 @@ for (law, label), color in zip(LAWS, colors):
         dust={
             "type": "two_component",
             "law_diff": law,
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 1.0,
             "tau_bc": 0.0,
         },
