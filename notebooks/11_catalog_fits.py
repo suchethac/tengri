@@ -32,9 +32,10 @@
 # GPU those `K` chains fill the card's lanes at once — that is the throughput win.
 #
 # This notebook builds a **Rubin-LSST-style** scenario — LSST *ugrizy* plus the
-# Euclid near-IR that a real LSST-era catalog carries — with **free redshift**
-# (a photometric-redshift fit), fits a mock catalog in parallel, and **prints the
-# timing in detail**, because the whole point is how fast a catalog goes through.
+# Euclid near-IR that a real LSST-era catalog carries — with **free redshift and
+# dust** (a photometric-redshift fit) over an SSP that carries nebular emission,
+# fits a mock catalog in parallel, and **prints the timing in detail**, because
+# the whole point is how fast a catalog goes through.
 
 # %%
 import os
@@ -49,6 +50,9 @@ import warnings
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
 warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
+warnings.filterwarnings(
+    "ignore", message=".*wNE.*"
+)  # we pair the wNE SSP with baked-in neb, as intended
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 import time
@@ -68,7 +72,6 @@ from tengri import (
     SEDModel,
     Uniform,
     WavePrecomp,
-    load_ssp_data,
     plot,
 )
 from tengri.inference.catalog_fitter import CatalogFitter
@@ -94,11 +97,14 @@ print(
 # catalog. Nine bands total; the same machinery takes any set your survey has.
 
 # %%
-SSP_NAME = "fsps_prsc_miles_chabrier"  # bare-stellar SSP; continuum-only model below
-ssp_path = Path("../data") / f"{SSP_NAME}.h5"
-if not ssp_path.exists():
-    ssp_path = Path(tengri.download_ssp(SSP_NAME))
-ssp = load_ssp_data(str(ssp_path))
+# A "wNE" SSP: nebular emission (lines + continuum) is baked into the templates
+# at a fixed ionization parameter and escape fraction, so a broadband fit gets the
+# emission-line boost in its colors with *no* per-step nebular emulator. `load_ssp`
+# walks up to the repo `data/` directory to find the grid by its short alias.
+ssp = tengri.load_ssp("prsc_miles_chabrier_wNE")
+print(
+    f"SSP: {ssp.source}\n  nebular provenance: {ssp.nebular!r}  (emission baked into the templates)"
+)
 
 LSST = ["lsst_u", "lsst_g", "lsst_r", "lsst_i", "lsst_z", "lsst_y"]  # Rubin LSST optical
 EUCLID = ["euclid_y", "euclid_j", "euclid_h"]  # Euclid NISP near-IR
@@ -107,26 +113,30 @@ phot_obs = Photometry.from_names(FILTERS)
 print(f"{phot_obs.n_filters} bands: {', '.join(phot_obs.names)}")
 
 # %% [markdown]
-# ## A simple free-redshift photometry model
+# ## A free-redshift photometry model with dust and nebular emission
 #
-# The point here is throughput, so the model is deliberately small: a
-# **stellar + dust continuum** (no nebular backend — broadband photo-z does not
-# need line predictions) with **two free parameters** — the redshift and the
-# stellar mass — and the dust, star-formation-history shape, and metallicity held
-# fixed. That is the canonical photo-*z*-plus-mass posterior a broadband catalog
-# actually constrains: the redshift sets the colors, the mass sets the amplitude,
-# and the two are cleanly separated by nine bands from the u-band to the near-IR.
-# It is also exactly the regime where per-galaxy sampling (not VI) is cheap and
-# correct — a low-dimensional, well-conditioned posterior. Richer fits (free
-# dust, a flexible SFH) are in notebooks [`05`](05_fitting_photometry.py) and
+# The model has **three free parameters** — the redshift, the stellar mass, and
+# the diffuse dust optical depth — over a **stellar + nebular + dust** continuum.
+# The nebular emission is not a fitted backend: it is *baked into the SSP* at a
+# fixed ionization parameter and escape fraction (the wNE grid loaded above), so
+# the emission lines shift through the LSST/Euclid bands with redshift and boost
+# the broadband colors at **zero per-step cost** — no nebular emulator runs inside
+# the sampler. Only the SFH *shape*, the metallicity, and the nebular
+# logU/escape-fraction are held fixed.
+#
+# This is a more honest photo-*z* posterior than a dust-fixed fit: dust reddening
+# and redshift both move the optical/near-IR colors, so leaving dust free lets the
+# fit **marginalize the dust–redshift degeneracy** instead of pretending the dust
+# is known. It is still low-dimensional enough that per-galaxy sampling (not VI)
+# is cheap and correct. A flexible SFH and a fitted nebular backend are in
+# notebooks [`05`](05_fitting_photometry.py) and
 # [`10`](10_fastspecfit_joint_fit.py); here we keep the forward model light,
 # because a catalog of thousands rewards a cheap gradient.
 #
 # We build on the **`WavePrecomp` fast path**. Its lookup table is tabulated over
-# a redshift grid, so a *free*-redshift fit just interpolates the table instead of
-# re-integrating the SSP × filter product on every sampler step — the natural
-# fast path for catalog photo-z. One `WavePrecomp()` build is shared by every
-# galaxy in the catalog.
+# a redshift grid, so a *free*-redshift fit just interpolates the table — nebular
+# lines and all — instead of re-integrating the SSP × filter product on every
+# sampler step. One `WavePrecomp()` build is shared by every galaxy in the catalog.
 
 # %%
 Z_PRIOR = (0.05, 1.5)
@@ -140,8 +150,14 @@ def build_model():
         redshift=Uniform(*Z_PRIOR),  # <-- free redshift: a photo-z fit
         sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
         stellar={"met_logzsol": Fixed(0.0)},
-        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_diff": Fixed(0.3)},
-        neb={"type": "none"},  # continuum-only: a broadband photo-z model
+        # Free diffuse dust optical depth: marginalize the dust-redshift degeneracy.
+        dust={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "*": FIXED,
+            "tau_diff": Uniform(0.0, 2.0),
+        },
+        neb={"type": "ssp"},  # nebular emission is baked into the wNE SSP (fixed logU/fesc)
         approx=WavePrecomp(n_z=120, z_min=0.0, z_max=1.6),
     )
 
@@ -167,14 +183,16 @@ PHOT_SNR = 20.0
 
 z_true = _rng.uniform(0.2, 1.0, N_GAL)
 logm_true = _rng.uniform(9.5, 11.0, N_GAL)
+tau_true = _rng.uniform(0.05, 1.0, N_GAL)  # per-galaxy diffuse dust optical depth
 
 _fixed = model.spec.get_fixed_values()
 galaxies = []
-for z, lm in zip(z_true, logm_true):
+for z, lm, tau in zip(z_true, logm_true, tau_true):
     truth = {
         **_fixed,
         "redshift": jnp.asarray(z),
         "sfh_dpl_log_total_mass": jnp.asarray(lm),
+        "dust_tau_diff": jnp.asarray(tau),
     }
     p = np.asarray(model.predict_photometry(truth))
     n = np.abs(p) / PHOT_SNR
@@ -183,8 +201,9 @@ for z, lm in zip(z_true, logm_true):
 
 print(
     f"Mock catalog: {N_GAL} galaxies, {phot_obs.n_filters} bands, SNR {PHOT_SNR:.0f}\n"
-    f"  z    in [{z_true.min():.2f}, {z_true.max():.2f}]\n"
-    f"  logM in [{logm_true.min():.2f}, {logm_true.max():.2f}]"
+    f"  z      in [{z_true.min():.2f}, {z_true.max():.2f}]\n"
+    f"  logM   in [{logm_true.min():.2f}, {logm_true.max():.2f}]\n"
+    f"  tau_d  in [{tau_true.min():.2f}, {tau_true.max():.2f}]"
 )
 
 # %% [markdown]
@@ -208,14 +227,19 @@ FIT_KW = dict(
     n_warmup=100,
     n_samples=120,
     n_burnin=20,
-    n_leapfrog_steps=10,
+    n_leapfrog_steps=20,  # longer trajectories mix the dust-redshift degeneracy
     target_accept_rate=0.85,
     dense_mass_matrix=False,
     verbose=False,
 )
 
 # One forward photometry evaluation — the inner cost the sampler pays per leapfrog.
-_probe = {**_fixed, "redshift": jnp.asarray(0.5), "sfh_dpl_log_total_mass": jnp.asarray(10.0)}
+_probe = {
+    **_fixed,
+    "redshift": jnp.asarray(0.5),
+    "sfh_dpl_log_total_mass": jnp.asarray(10.0),
+    "dust_tau_diff": jnp.asarray(0.3),
+}
 jax.block_until_ready(model.predict_photometry(_probe))  # warm the trace
 t0 = time.perf_counter()
 for _ in range(100):
@@ -277,19 +301,22 @@ print(
 #
 # Speed is worthless if the posteriors are wrong. Every galaxy in the
 # `CatalogPosterior` is a full `Posterior` (`catalog.posteriors[i]`), carrying its
-# own chain in `.samples`. We stack the two free parameters over the galaxy axis,
+# own chain in `.samples`. We stack the three free parameters over the galaxy axis,
 # take the 16/50/84 percentiles per galaxy, and compare to the injected truth. The
-# two quantities a broadband catalog most wants — the **photometric redshift** and
-# the **stellar mass** — land on the 1:1 line: the standard photo-z scatter
-# `sigma_NMAD` of `dz/(1+z)` and the mass offset are both small.
+# **photometric redshift**, the **stellar mass**, and the **dust optical depth**
+# all track the 1:1 line — the standard photo-z scatter `sigma_NMAD` of `dz/(1+z)`,
+# the mass offset, and the dust offset are all small.
 #
-# A caveat worth stating plainly: the *widths* here are tight because this
-# deliberately simple model **fixes** the dust, SFH shape, and metallicity. It
-# therefore reports the uncertainty *conditional on knowing* those — so the 68%
-# intervals under-cover the truth (a real fit marginalizes the nuisances and
-# widens them; see notebooks [`05`](05_fitting_photometry.py) and
-# [`10`](10_fastspecfit_joint_fit.py)). The point of this notebook is the parallel
-# machinery and the throughput, not a calibrated photo-z pipeline.
+# Because dust is *fit* here (not fixed), the fit marginalizes the strongest
+# nuisance–redshift degeneracy, so the intervals are more honest than a dust-fixed
+# model would report — but they are still *conditional* on the fixed SFH shape,
+# metallicity, and the SSP's baked-in nebular logU/escape-fraction, so they can
+# under-cover somewhat. The dust–redshift degeneracy also widens the photo-z
+# posterior relative to a dust-fixed fit: that extra scatter is the honest cost of
+# not knowing the dust. A fully flexible SFH and a *fitted* nebular backend are in
+# notebooks [`05`](05_fitting_photometry.py) and
+# [`10`](10_fastspecfit_joint_fit.py); the point of this notebook is the parallel
+# machinery and the throughput.
 
 
 # %%
@@ -300,35 +327,28 @@ def stack_samples(name):
 
 z_samp = stack_samples("redshift")  # (N, n_samples)
 m_samp = stack_samples("sfh_dpl_log_total_mass")  # (N, n_samples)
+t_samp = stack_samples("dust_tau_diff")  # (N, n_samples)
 z_lo, z_med, z_hi = np.percentile(z_samp, [16, 50, 84], axis=1)
 m_lo, m_med, m_hi = np.percentile(m_samp, [16, 50, 84], axis=1)
+t_lo, t_med, t_hi = np.percentile(t_samp, [16, 50, 84], axis=1)
 
 z_cov = int(np.sum((z_lo <= z_true) & (z_true <= z_hi)))
 m_cov = int(np.sum((m_lo <= logm_true) & (logm_true <= m_hi)))
+t_cov = int(np.sum((t_lo <= tau_true) & (tau_true <= t_hi)))
 dz = (z_med - z_true) / (1.0 + z_true)  # standard photo-z residual
 sig_nmad = 1.4826 * np.median(np.abs(dz - np.median(dz)))
 dlogm = float(np.median(np.abs(m_med - logm_true)))
-print(
-    f"Photo-z:  sigma_NMAD(dz/(1+z)) = {sig_nmad:.3f}   (68% interval covers {z_cov}/{N_GAL} — tight; see note)"
-)
-print(f"log M*:   median |Δ| = {dlogm:.3f} dex           (68% interval covers {m_cov}/{N_GAL})")
+dtau = float(np.median(np.abs(t_med - tau_true)))
+print(f"Photo-z:   sigma_NMAD(dz/(1+z)) = {sig_nmad:.3f}   (68% interval covers {z_cov}/{N_GAL})")
+print(f"log M*:    median |Δ| = {dlogm:.3f} dex             (68% interval covers {m_cov}/{N_GAL})")
+print(f"dust tau:  median |Δ| = {dtau:.3f}                 (68% interval covers {t_cov}/{N_GAL})")
 
 # %%
-fig, (axz, axm) = plt.subplots(1, 2, figsize=(9.2, 4.6))
+fig, (axz, axm, axt) = plt.subplots(1, 3, figsize=(13.5, 4.6))
 
-axz.errorbar(
-    z_true,
-    z_med,
-    yerr=[z_med - z_lo, z_hi - z_med],
-    fmt="o",
-    ms=5,
-    color=C_POST,
-    mec="white",
-    mew=0.6,
-    elinewidth=1.0,
-    capsize=2,
-    label="posterior 16/50/84",
-)
+_ebar = dict(fmt="o", ms=5, color=C_POST, mec="white", mew=0.6, elinewidth=1.0, capsize=2)
+
+axz.errorbar(z_true, z_med, yerr=[z_med - z_lo, z_hi - z_med], label="posterior 16/50/84", **_ebar)
 _zline = np.array(Z_PRIOR)
 axz.plot(_zline, _zline, color=C_TRUTH, lw=1.0, ls="--", label="1:1")
 axz.set_xlim(0.15, 1.05)
@@ -338,23 +358,21 @@ axz.set_ylabel("recovered redshift (photo-z)")
 axz.set_title(rf"Photo-z recovery  ($\sigma_{{\rm NMAD}}$ = {sig_nmad:.3f})")
 axz.legend(frameon=False, fontsize=8.5, loc="upper left")
 
-axm.errorbar(
-    logm_true,
-    m_med,
-    yerr=[m_med - m_lo, m_hi - m_med],
-    fmt="o",
-    ms=5,
-    color=C_POST,
-    mec="white",
-    mew=0.6,
-    elinewidth=1.0,
-    capsize=2,
-)
+axm.errorbar(logm_true, m_med, yerr=[m_med - m_lo, m_hi - m_med], **_ebar)
 _mline = np.array([9.3, 11.2])
 axm.plot(_mline, _mline, color=C_TRUTH, lw=1.0, ls="--")
 axm.set_xlabel(r"true $\log M_\star$")
 axm.set_ylabel(r"recovered $\log M_\star$")
 axm.set_title(rf"Stellar-mass recovery  ($|\Delta|$ = {dlogm:.3f} dex)")
+
+axt.errorbar(tau_true, t_med, yerr=[t_med - t_lo, t_hi - t_med], **_ebar)
+_tline = np.array([0.0, 1.05])
+axt.plot(_tline, _tline, color=C_TRUTH, lw=1.0, ls="--")
+axt.set_xlim(0.0, 1.05)
+axt.set_ylim(0.0, 1.6)
+axt.set_xlabel(r"true dust $\tau_{\rm diff}$")
+axt.set_ylabel(r"recovered dust $\tau_{\rm diff}$")
+axt.set_title(rf"Dust recovery  ($|\Delta|$ = {dtau:.3f})")
 
 fig.suptitle(f"Catalog of {N_GAL} galaxies fit in parallel (K={N_GAL})", fontsize=11)
 fig.tight_layout()
@@ -377,10 +395,13 @@ plt.show()
 #   posterior — the vectorization is bit-exact (covered by the chunk-invariance
 #   tests in `tests/inference/test_catalog_mcmc_vmap.py`).
 # - **Free redshift rides `WavePrecomp`** — the LUT is tabulated over redshift, so
-#   a photo-z fit interpolates the table instead of re-integrating the forward
-#   model per step.
-# - The vectorized fit **recovers photo-z and stellar mass** across the catalog —
-#   the throughput does not come at the cost of the science.
+#   a photo-z fit interpolates the table (nebular emission lines and all) instead
+#   of re-integrating the forward model per step. Baking the nebular emission into
+#   the SSP (the wNE grid) keeps the line-boosted colors while adding **zero**
+#   per-step cost — no nebular emulator runs inside the sampler.
+# - The vectorized fit **recovers photo-z, stellar mass, and dust** across the
+#   catalog — the throughput does not come at the cost of the science, even with
+#   the dust–redshift degeneracy left in.
 # - On a **GPU** the `K` chains run concurrently across the device — the same call
 #   scales to thousands of galaxies. For the measured GPU throughput see
 #   `bench/scripts/benchmark_catalog_throughput.py`; for cluster-scale catalogs
