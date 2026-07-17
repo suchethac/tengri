@@ -101,23 +101,6 @@ _MANY_EVAL_SAMPLERS = frozenset(
 )
 
 
-def _effective_approx(model) -> dict:
-    """The ``approx`` dict of the model that actually evaluates the fit.
-
-    ``Fitter.model`` is the *resolved* fit model and may be a ``ForwardModel``
-    wrapper, which does not carry ``_approx`` itself — the flag lives on the SED
-    it wraps. Reading ``_approx`` straight off the wrapper silently yields ``{}``
-    and makes every wrapped model look like the exact path, so delegate to the
-    inner SED the same way :meth:`ForwardModel._has_modern_approx` does.
-    """
-    approx = getattr(model, "_approx", None)
-    if approx is None:
-        inner_fn = getattr(model, "_inner_sed_for_delegation", None)
-        if callable(inner_fn):
-            approx = getattr(inner_fn(), "_approx", None)
-    return approx or {}
-
-
 def _warn_if_exact_forward_path(model, backend_name: str) -> None:
     """Warn when a many-evaluation sampler runs on the exact photometry path.
 
@@ -129,12 +112,18 @@ def _warn_if_exact_forward_path(model, backend_name: str) -> None:
     :meth:`Fitter._resolve_fit_approx`. Under the default ``approx="auto"`` the
     fit is already routed through the LUT and this stays silent; it fires only
     when the exact path is genuinely in use (e.g. ``Fitter(..., approx=None)``).
+
+    Ask ``model.approx`` — the public accessor both SEDModel and ForwardModel
+    implement — never an inner attribute. ``Fitter.model`` is a ForwardModel,
+    which does not carry the lowered ``_approx`` dict itself; reading it off the
+    wrapper silently yields "exact" and would warn on every wrapped model. The
+    accessor delegates to the inner SED, so the question has one spelling and
+    one answer. (Supersedes the private ``_effective_approx`` probe.)
     """
     if backend_name not in _MANY_EVAL_SAMPLERS:
         return
-    approx = _effective_approx(model)
     has_phot = getattr(getattr(model, "observation", None), "photometry", None) is not None
-    if has_phot and not approx.get("wave_precomp", False):
+    if has_phot and not model.approx.wave_precomp:
         import warnings
 
         warnings.warn(

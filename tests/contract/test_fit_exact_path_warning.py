@@ -29,7 +29,7 @@ import warnings
 import pytest
 
 from tengri import FIXED, Fixed, ForwardModel, SEDModel, WavePrecomp
-from tengri.inference.fitter import _effective_approx, _warn_if_exact_forward_path
+from tengri.inference.fitter import _warn_if_exact_forward_path
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
@@ -53,20 +53,25 @@ def _warnings_from(model, backend="mcmc_nuts"):
     return [w for w in caught if _MESSAGE_KEY in str(w.message)]
 
 
-def test_effective_approx_sees_through_forward_model_wrapper(
+def test_approx_accessor_sees_through_forward_model_wrapper(
     synthetic_ssp_wide, synthetic_tophat_obs
 ):
-    """The wrapper does not carry ``_approx``; the helper must delegate inward."""
+    """The wrapper does not carry ``_approx``; the public accessor delegates inward.
+
+    The warning now reads ``model.approx`` — the accessor SEDModel and
+    ForwardModel both implement — instead of the private ``_effective_approx``
+    probe that #1218 introduced. Same fix, one public spelling.
+    """
     sed = _build(synthetic_ssp_wide, synthetic_tophat_obs, WavePrecomp())
     fwd = ForwardModel.build(sed=sed, observation=synthetic_tophat_obs)
 
     assert sed._approx.get("wave_precomp") is True, "SED should carry the LUT flag"
     # the bug: a raw getattr on the wrapper finds nothing
     assert getattr(fwd, "_approx", None) is None
-    # the fix: delegate to the wrapped SED
-    assert _effective_approx(fwd).get("wave_precomp") is True
+    # the fix: the accessor delegates to the wrapped SED
+    assert fwd.approx.wave_precomp is True
     # and it must still work on a bare SEDModel
-    assert _effective_approx(sed).get("wave_precomp") is True
+    assert sed.approx.wave_precomp is True
 
 
 def test_no_false_warning_when_lut_active_behind_wrapper(synthetic_ssp_wide, synthetic_tophat_obs):
