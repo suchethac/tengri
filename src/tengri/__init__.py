@@ -696,6 +696,7 @@ _CURATED_DIR = (
     "FeaturePrecomp",
     "WavePrecomp",
     "Fitter",
+    "fit_batch",
     "Observation",
     "Photometry",
     "Spectroscopy",

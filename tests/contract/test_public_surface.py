@@ -255,6 +255,7 @@ _FIRST_SESSION_SYMBOLS = (
     "ForwardModel",
     "builders",
     "recipes",
+    "fit_batch",
     "FREE",
     "FIXED",
     "Fixed",
