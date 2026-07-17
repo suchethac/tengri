@@ -172,18 +172,16 @@ def test_gradient_identity_with_total_mass():
     The stellar component's compute_log_nion should have gradient=1.0 w.r.t.
     sfh_dpl_log_total_mass because the CSP weights exclude total mass.
     """
+    from tengri import FIXED, Fixed, SEDModel
     from tengri.components.stellar.component import StellarSEDComponent
+    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+    from tengri.observation import Observation, Photometry
 
     # Build minimal model to get the stellar component
     ssp_path = "data/fsps_prsc_miles_chabrier.h5"
-    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-
     ssp = load_ssp_data(ssp_path)
 
     # Construct stellar component directly
-    from tengri import FIXED, Fixed, SEDModel
-    from tengri.observation import Observation, Photometry
-
     obs = Observation(photometry=Photometry.from_names(["sdss_r", "sdss_i"]))
     model = SEDModel.build(
         ssp_data=ssp,
@@ -197,12 +195,8 @@ def test_gradient_identity_with_total_mass():
 
     # Get the stellar component from the model's internals
     # Mirror the accessor used in tests/components/spectroscopy/test_wne_window_lut_parity.py
-    stellar = None
-    for comp in model._components:
-        if hasattr(comp, "name") and comp.name == "stellar":
-            stellar = comp
-            break
-    assert stellar is not None, "Could not find stellar component in model"
+    chain = model._build_component_chain() if hasattr(model, "_build_component_chain") else None
+    stellar = next(c for c in chain if isinstance(c, StellarSEDComponent))
 
     # Sample and get params, override log_total_mass
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))

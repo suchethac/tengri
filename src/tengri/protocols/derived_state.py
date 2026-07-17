@@ -100,6 +100,7 @@ class DerivedState:
     ssp_ages_yr: jnp.ndarray | None = None
     age_weights: jnp.ndarray | None = None
     nion: jnp.ndarray | None = None
+    log_nion: jnp.ndarray | None = None
 
     # Stellar — SFH grid + chemistry history (diagnostic)
     sfh_grid_lbt_yr: jnp.ndarray | None = None
