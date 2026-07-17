@@ -3141,10 +3141,13 @@ class Fitter:
         Safety: the observed data threads through as a *traced argument*
         (never the closure), and ``loss_fn`` is already structurally cached
         (:meth:`_get_or_build_loss_fn`), so the only closure-defining state is
-        the optimizer configuration carried in ``key``. The cache is
-        instance-scoped, so it never leaks across models or data. ``key=None``
-        (e.g. a caller-supplied custom optimizer we cannot fingerprint)
-        disables the memo — always build fresh rather than risk a stale kernel.
+        the optimizer configuration carried in ``key``. The cache lives on the
+        Fitter instance, whose model structure is fixed at construction, so a
+        cached kernel is only ever reused for the same model structure and the
+        same optimizer config — per-galaxy data still flows in fresh through the
+        traced ``batch_data_args``. ``key=None`` (e.g. a caller-supplied custom
+        optimizer we cannot fingerprint) disables the memo — always build fresh
+        rather than risk a stale kernel.
 
         Parameters
         ----------
