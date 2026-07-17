@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.utils.blackbody import planck_bnu_nu as _planck_bnu_nu
 from tengri.utils.physics_constants import (
     AA_TO_CM as ANGSTROM_CM,
     C_CGS as C_LIGHT,
@@ -47,9 +48,8 @@ def planck_lnu(
     """Compute the Planck blackbody spectral radiance.
 
     Evaluate the Planck function B_nu(T) at a given frequency and temperature.
-    Uses logarithmic arithmetic to avoid overflow at low temperatures or high
-    frequencies. This is the unique Planck function used throughout the AGN
-    module; do not duplicate this implementation.
+    Thin AGN-facing spelling of :func:`tengri.utils.blackbody.planck_bnu_nu`,
+    which is the single implementation for the whole tree; do not duplicate it.
 
     Parameters
     ----------
@@ -89,17 +89,7 @@ def planck_lnu(
        Normalspektrum," Verhandlungen der Deutschen Physikalischen Gesellschaft,
        Vol. 2, pp. 237-245 (1900).
     """
-    # Cast to float64 to prevent nu**3 overflow.  At λ ~ 100 Å,
-    # ν ≈ 3×10¹⁷ Hz so ν³ ≈ 2.7×10⁵² — fine in float64 but far
-    # beyond float32 max (~3.4×10³⁸).
-    nu64 = jnp.asarray(nu, dtype=jnp.float64)
-    t_safe = jnp.maximum(jnp.asarray(temperature, dtype=jnp.float64), 1.0)
-
-    # Clamp x = hν/kT to [1e-10, 500].  At x=500, expm1 ≈ 1.4e217
-    # (finite in float64).  The clamp avoids both expm1 overflow and
-    # division-by-zero, and keeps gradients finite everywhere.
-    x = jnp.clip(H_PLANCK * nu64 / (K_BOLTZ * t_safe), 1e-10, 500.0)
-    return 2.0 * H_PLANCK * nu64**3 / C_LIGHT**2 / jnp.expm1(x)
+    return _planck_bnu_nu(nu, temperature)
 
 
 # ── Wavelength ↔ frequency conversion ─────────────────────────────
