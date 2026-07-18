@@ -42,7 +42,7 @@ def test_available_is_registry_minus_unvalidated():
 
 
 def test_list_sfh_models_marks_the_unvalidated_ones():
-    """Every type absent from ``available()`` is labelled, not silently listed.
+    """Every type absent from ``available()`` is labeled, not silently listed.
 
     This is what keeps the larger count honest: a user scanning the table sees
     ``unvalidated`` beside the name rather than assuming all 34 are usable.
@@ -58,7 +58,7 @@ def test_list_sfh_models_marks_the_unvalidated_ones():
 def test_buildable_models_are_not_marked_unvalidated():
     """The complement: nothing buildable is scared off with a false label."""
     rows = {row["name"]: row for row in list_sfh_models()}
-    mislabelled = [
+    mislabeled = [
         n for n in builders.sfh.available() if rows.get(n, {}).get("status") == "unvalidated"
     ]
-    assert not mislabelled, f"buildable models labelled unvalidated: {mislabelled}"
+    assert not mislabeled, f"buildable models labeled unvalidated: {mislabeled}"
