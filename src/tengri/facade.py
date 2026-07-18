@@ -794,26 +794,24 @@ def doctor() -> str:
 
     lines.append("")
 
-    # SSP data availability
+    # SSP data availability. Search exactly where the loaders search
+    # (data_dirs), and glob what download_ssp actually writes: the old
+    # "ssp_*.h5" pattern could not match "fsps_prsc_miles_chabrier.h5", so
+    # doctor reported "no SSP data" for a correctly populated install.
     lines.append("SSP Data:")
-    # Search every grid family download_ssp can write, not just the locally
-    # generated ``ssp_*`` prefix, and honor the same environment variable the
-    # download path writes to — otherwise doctor reports "none found" directly
-    # after a successful download.
-    from tengri._data_setup import data_dir, find_ssp_files
+    from tengri._data_setup import TENGRI_DATA_ENV, find_ssp_files
 
     found = find_ssp_files()
-    found_ssp = bool(found)
-    if found_ssp:
+    if found:
         lines.append(f"  ✓ Found: {found[0]}")
         if len(found) > 1:
-            lines.append(f"    ({len(found)} grids visible; {found[0].parent} searched first)")
-    else:
+            lines.append(f"    ({len(found)} SSP grids visible)")
+
+    if not found:
         lines.append("  WARNING: No SSP data found in common locations.")
-        lines.append(f"    Searched: {data_dir()}, ./data, and parent directories.")
         lines.append("    Run tengri.download_ssp() to fetch the default grid")
         lines.append("    (tengri.list_known_ssps() shows alternatives), or point")
-        lines.append("    TENGRI_DATA_DIR at an existing SSP directory.")
+        lines.append(f"    ${TENGRI_DATA_ENV} at an existing SSP directory.")
 
     lines.append("")
 

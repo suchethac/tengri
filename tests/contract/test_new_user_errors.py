@@ -65,6 +65,78 @@ def test_full_params_still_predict(dustless_model):
     assert np.isfinite(flux).all()
 
 
+def test_predict_validates_eagerly_like_predict_photometry(dustless_model):
+    """``model.predict`` must reject bad params up front, not defer to accessor.
+
+    The lean ``predict_photometry({})`` raised a helpful ``MissingParameterError``,
+    but the rich ``predict({})`` returned a lazy ``Prediction`` that only crashed
+    with a bare ``KeyError`` when the first quantity was accessed — and a typo'd
+    key was silently dropped the same way. Both paths now validate at the call
+    site with the same checks.
+    """
+    import jax
+
+    from tengri.config.exceptions import UnknownParameterError
+
+    good = dustless_model.spec.sample(jax.random.PRNGKey(0))
+
+    # A valid full params dict still returns a (lazy) Prediction.
+    assert dustless_model.predict(good) is not None
+
+    # Missing free params → eager MissingParameterError (not a deferred KeyError).
+    with pytest.raises(MissingParameterError, match="dust_tau_bc"):
+        dustless_model.predict({})
+
+    # A typo'd key is caught (was silently dropped, then KeyError on accessor).
+    typo = dict(good)
+    a_key = next(iter(dustless_model.spec.free_params))
+    typo[f"{a_key}_typo"] = typo.pop(a_key)
+    with pytest.raises(UnknownParameterError):
+        dustless_model.predict(typo)
+
+    # A non-dict (e.g. a bare array) names the expected type instead of an
+    # opaque "cannot convert dictionary update sequence" error.
+    import numpy as np
+
+    with pytest.raises(TypeError, match="expects a params dict"):
+        dustless_model.predict(np.array([0.1, 0.2, 0.3]))
+
+
+def test_no_observation_model_accessors_name_the_fix(synthetic_ssp_wide):
+    """A rest-frame-only model must fail *helpfully* on observable accessors.
+
+    Building without ``observation=`` is a valid mode — ``predict``,
+    ``rest_sed()`` and ``stellar_mass`` all work. But ``pred.photometry()`` /
+    ``.magnitudes()`` / ``.spectrum()`` used to crash with a bare
+    ``'NoneType' object has no attribute 'photometry'`` because the accessor
+    dereferenced ``model.observation`` (None) directly — while the lean
+    ``model.predict_photometry`` already raised a helpful ValueError. The rich
+    accessors now match.
+    """
+    import jax
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            sfh={"type": "delayed", "*": FIXED},
+            neb={"type": "none"},
+            redshift=Fixed(0.1),
+        )
+    assert model.observation is None
+    pred = model.predict(model.spec.sample(jax.random.PRNGKey(0)))
+
+    # Rest-frame quantities still work without an observation.
+    assert pred.rest_sed().shape[0] > 0
+
+    with pytest.raises(ValueError, match="No observation is configured"):
+        pred.photometry()
+    with pytest.raises(ValueError, match="No observation is configured"):
+        pred.magnitudes()
+    with pytest.raises(ValueError, match="No spectroscopy is configured"):
+        pred.spectrum()
+
+
 def test_unknown_filter_did_you_mean():
     with pytest.raises(KeyError, match="sdss_u"):
         Photometry.from_names(["sdss_q"])
@@ -292,3 +364,106 @@ def test_model_menu_use_strings_teach_sedmodel_build():
         if not row["use"].startswith("SEDModel.build(")
     ]
     assert not offenders, offenders
+
+
+def test_list_components_use_hints_reference_real_functions():
+    """``list_components()`` may only point at ``list_*`` functions that exist.
+
+    The component ``use:`` hint was built by formula —
+    ``f"list_{name}_models / list_{name}_laws"`` — but the real menus are
+    irregular (``list_sfh_models``, ``list_dust_laws``,
+    ``list_nebular_backends``, ...). So every component row advertised
+    ``list_stellar_models`` / ``list_dust_models`` / ``list_agn_laws`` and
+    other functions that raise ``AttributeError``. Now a lookup, not a formula.
+    """
+    import re
+
+    import tengri
+
+    referenced = set()
+    for row in tengri.list_components():
+        referenced.update(re.findall(r"list_[a-z_]+", row["use"]))
+    missing = sorted(fn for fn in referenced if not hasattr(tengri, fn))
+    assert not missing, f"list_components() points at non-existent functions: {missing}"
+    # And it should still be pointing at *something* useful (regression against
+    # dropping the hint entirely).
+    assert referenced, "list_components() hints reference no discovery menus at all"
+
+
+def test_sfh_mixture_modulator_use_strings_build(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Non-additive SFH ``use:`` hints must be a call the builder accepts.
+
+    ``burst`` (composition_type ``mixture``) and ``field`` (``modulator``)
+    cannot stand alone — ``sfh={'type': 'burst'}`` raises "At least one
+    additive (smooth) SFH component required". Both are ``status='production'``,
+    so their advertised ``use:`` string used to send a fresh user straight into
+    that ``ValueError``. The hint now shows the composed list form, which builds.
+    """
+    import tengri
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    rows = {r["name"]: r for r in tengri.list_sfh_models()}
+    non_additive = [
+        n
+        for n, e in SFH_REGISTRY.items()
+        if getattr(e, "composition_type", "additive") in ("mixture", "modulator")
+    ]
+    assert non_additive, "expected at least burst/field to be non-additive"
+    for name in non_additive:
+        use = rows[name]["use"]
+        # The advertised composed form must actually build.
+        assert "['const', " in use, f"{name} use hint not composed: {use!r}"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            model = SEDModel.build(
+                ssp_data=synthetic_ssp_wide,
+                observation=synthetic_tophat_obs,
+                sfh={"type": ["const", name], "*": FIXED},
+                neb={"type": "none"},
+                redshift=Fixed(0.1),
+            )
+        assert model is not None
+
+
+def test_cloudy_nebular_use_string_names_the_gridfile():
+    """The generic CLOUDY backend hint must name its required ``gridfile``.
+
+    ``neb={'type': 'cloudy'}`` raises "The CLOUDY nebular backend needs a grid
+    file"; the ``use:`` hint used to omit it. ``cb19`` ships its own grid and
+    keeps the bare form.
+    """
+    import tengri
+
+    rows = {r["name"]: r for r in tengri.list_nebular_backends()}
+    assert "gridfile" in rows["cloudy"]["use"], rows["cloudy"]["use"]
+    assert "gridfile" not in rows["cb19"]["use"], rows["cb19"]["use"]
+
+
+def test_line_list_select_positional_list_names_the_fix():
+    """``LineList.select(["Halpha", ...])`` must name the keyword fix.
+
+    ``select``'s primary discovery use — keep specific lines by name — sits
+    behind two positional wavelength bounds (``wave_min``, ``wave_max``). A
+    fresh user reasoning by analogy with ``Photometry.from_names([...])``
+    writes ``cat.select(["Halpha", "Hbeta"])``; the list bound to ``wave_min``
+    used to crash 70 lines later with an opaque ``'>' not supported between
+    instances of 'list' and 'float'``. It now raises ``TypeError`` pointing at
+    the ``names=`` / ``species=`` keyword form.
+    """
+    from tengri import LineList
+
+    cat = LineList.default_optical()
+    with pytest.raises(TypeError, match=r"select\(names="):
+        cat.select(["Halpha", "Hbeta"])
+    # A string in wave_max is caught the same way.
+    with pytest.raises(TypeError, match="wave_max must be a wavelength"):
+        cat.select(0.0, "7000")
+
+    # The correct calls are untouched — keyword names, and numeric windows
+    # (Python int/float and numpy floats) all still filter.
+    import numpy as np
+
+    assert cat.select(names=["Halpha", "Hbeta"]).n_lines == 2
+    assert cat.select(wave_min=3700.0, wave_max=7000.0).n_lines > 0
+    assert cat.select(np.float32(3700), np.float32(7000)).n_lines > 0
+    assert cat.select(species=["H1"]).n_lines > 0

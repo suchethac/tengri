@@ -396,6 +396,72 @@ class FeaturePrecomp:
     ranges: dict | None = None
 
 
+@dataclasses.dataclass(frozen=True)
+class ApproxState:
+    """The effective approximation state of a built model.
+
+    A read-only summary of which build-time look-up tables resolved and
+    activated. Read it off any model — :class:`SEDModel` or
+    :class:`~tengri.forward.forward_model.ForwardModel` — via the ``approx``
+    property, which answers the same question on both:
+
+    >>> model.approx.wave_precomp  # doctest: +SKIP
+    True
+    >>> print(model.approx)  # doctest: +SKIP
+    ApproxState(wave_precomp=True, n_subbands=5)
+
+    This reports what the model *resolved*, not what was requested: a
+    :class:`SpectrumPrecomp` that fell back to the exact path because the
+    spectral resolution was too high reports ``spectrum_precomp=False``.
+
+    Attributes
+    ----------
+    wave_precomp : bool
+        The SSP x filter photometry LUT is active.
+    spectrum_precomp : bool
+        The spectrum LUT is active.
+    feature_precomp : bool
+        The emission-line LUT is active.
+    ztable : bool
+        Photometry is interpolated through a redshift table (free redshift, or
+        a ``catalog_z_range`` reuse window).
+    n_subbands : int
+        Sub-band samples per filter used by the photometry LUT; ``0`` when the
+        LUT is off or unsampled.
+
+    Notes
+    -----
+    Truthiness reports whether *any* LUT is active, so ``if model.approx:``
+    distinguishes an approximated model from an exact one::
+
+        if not model.approx:
+            ...  # exact wave-grid model
+
+    Not JIT-relevant: this is Python-side introspection, never traced.
+    """
+
+    wave_precomp: bool = False
+    spectrum_precomp: bool = False
+    feature_precomp: bool = False
+    ztable: bool = False
+    n_subbands: int = 0
+
+    def __bool__(self) -> bool:
+        """Whether any build-time LUT is active."""
+        return self.wave_precomp or self.spectrum_precomp or self.feature_precomp
+
+    def __repr__(self) -> str:
+        """Show only the active flags — the exact model prints as ``exact``."""
+        on = [
+            f"{name}={getattr(self, name)!r}"
+            for name in ("wave_precomp", "spectrum_precomp", "feature_precomp", "ztable")
+            if getattr(self, name)
+        ]
+        if self.n_subbands:
+            on.append(f"n_subbands={self.n_subbands}")
+        return f"ApproxState({', '.join(on)})" if on else "ApproxState(exact)"
+
+
 def _warn_agn_dust_double_count(spec) -> None:
     """Warn when composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
 
@@ -2714,6 +2780,46 @@ class SEDModel:
 
     # ── Clone with a different approximation policy ────────────────────
 
+    @property
+    def approx(self) -> ApproxState:
+        """The effective approximation state of this model.
+
+        Answers "is a build-time look-up table live on this model?" — the same
+        question, spelled the same way, on
+        :class:`~tengri.forward.forward_model.ForwardModel`.
+
+        Returns
+        -------
+        ApproxState
+            Frozen summary of the LUTs that resolved and activated. Falsy for an
+            exact wave-grid model.
+
+        Examples
+        --------
+        >>> model.approx.wave_precomp  # doctest: +SKIP
+        True
+        >>> if not model.approx:  # doctest: +SKIP
+        ...     ...  # exact path
+
+        Notes
+        -----
+        Reads the same lowered ``_approx`` flags the forward pipeline itself
+        consumes, so it reports what the code *does*, not what was requested —
+        a ``SpectrumPrecomp`` that fell back to the exact path reports
+        ``spectrum_precomp=False``. Deriving it from any other source would
+        make this a third spelling of the question and free it to drift.
+
+        Not JIT-relevant: Python-side introspection, never traced.
+        """
+        flags = self._approx or {}
+        return ApproxState(
+            wave_precomp=bool(flags.get("wave_precomp")),
+            spectrum_precomp=bool(flags.get("spectrum_precomp")),
+            feature_precomp=self._approx_config_feature is not None,
+            ztable=bool(flags.get("ztable")),
+            n_subbands=int(flags.get("n_subbands", 0) or 0),
+        )
+
     def _has_modern_approx(self) -> bool:
         """Whether a build-time ``approx=`` LUT is active on this model.
 
@@ -3190,8 +3296,21 @@ class SEDModel:
         predict_line_luminosities : JIT-compatible emission lines for batch.
         predict_rest_sed : Full rest-frame SED for custom analysis.
         """
+        from collections.abc import Mapping
+
         from tengri.forward.prediction import Prediction
 
+        if not isinstance(params, Mapping):
+            raise TypeError(
+                f"model.predict() expects a params dict (e.g. from "
+                f"spec.sample(key)), got {type(params).__name__}."
+            )
+        # Validate eagerly — matching predict_photometry — so a typo'd or
+        # missing free parameter raises a helpful error here instead of a bare
+        # KeyError deferred to the first accessor of the lazy Prediction. Both
+        # asymmetries were flagged as silent-wrong footguns in a fresh-user audit.
+        check_unknown_params(params, self._param_map)
+        check_missing_free_params(params, self.spec, self._param_map)
         return Prediction(self, params)
 
     def compile_signature(self) -> tuple:

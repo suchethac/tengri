@@ -200,35 +200,19 @@ def load_ssp(name: str | None = None) -> "SSPData":
             return load_ssp_data(str(as_path))
         filename = name if name.endswith(".h5") else name + ".h5"
 
-    import os
+    from tengri._data_setup import TENGRI_DATA_ENV, data_dirs
 
-    from tengri._data_setup import KNOWN_SSP_FILENAMES, data_dir
-
-    # $TENGRI_DATA_DIR is where download_ssp writes, so look there before the
-    # ancestor walk — otherwise relocating grids with the documented variable
-    # downloads successfully and then fails to load.
-    search_dirs = [Path(os.path.expanduser(os.path.expandvars(data_dir())))]
-    search_dirs += [parent / "data" for parent in [Path.cwd(), *Path.cwd().parents]]
-    for directory in search_dirs:
+    for directory in data_dirs():
         candidate = directory / filename
         if candidate.exists():
             return load_ssp_data(str(candidate))
-
-    if filename in KNOWN_SSP_FILENAMES:
-        # In the public catalog: load_ssp_data auto-fetches it.
-        return load_ssp_data(str(Path(data_dir()) / filename))
-
-    # Not downloadable: the wNE grids are post-processed locally (FSPS+nebular),
-    # so pointing the user at download_ssp('<this file>') would send them after
-    # something the catalog does not have.
     raise FileNotFoundError(
-        f"SSP file {filename!r} not found in {data_dir()!r} or any ancestor "
-        f"'data/' directory of {Path.cwd()}. This grid is not in the public "
-        f"catalog (it is generated locally). For a catalog grid, call "
-        f"tengri.download_ssp() and load the path it returns:\n"
-        f"    ssp = tengri.load_ssp_data(tengri.download_ssp())\n"
-        f"tengri.list_known_ssps() shows the alternatives; set $TENGRI_DATA_DIR "
-        f"to keep grids outside the working directory."
+        f"SSP file {filename!r} not found. Looked in: "
+        f"{', '.join(str(d) for d in data_dirs()[:4])} (and further ancestors). "
+        f"Call tengri.download_ssp('<short_name>') to fetch a bundled SSP "
+        f"(tengri.list_known_ssps() lists them), place the file under "
+        f"<project_root>/data/, or set ${TENGRI_DATA_ENV} to the directory "
+        f"holding it."
     )
 
 
