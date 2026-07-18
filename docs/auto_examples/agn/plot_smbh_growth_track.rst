@@ -47,19 +47,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -91,17 +80,17 @@ References:
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_gyr": 2.0,
             "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
         agn={
             "type": "composable",
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "agn_frac": 1.0,  # turn the composable AGN on (default 0.0 zeros it)
             "agn_log_ledd": -1.0,
             "agn_log_mbh": tengri.Uniform(5.0, 10.0),
@@ -233,10 +222,10 @@ References:
                 "agn_log_mbh": jnp.float64(log_mbh),
                 "agn_log_lbol": jnp.float64(log_lbol),
             }
-            out = model.predict_rest_sed(params)
-            wave = np.asarray(out.wavelength)
+            out = model.predict(params)
+            wave = np.asarray(model.wavelengths)
             nu = C_AA_PER_S / wave  # frequency in Hz
-            nu_l_nu = nu * np.asarray(out.sed)
+            nu_l_nu = nu * np.asarray(out.rest_sed())
 
             ax.loglog(wave, nu_l_nu, color=color, lw=1.5, label=label)
 
@@ -248,11 +237,6 @@ References:
         ax.grid(True, alpha=0.2, which="both")
 
     plt.savefig("plot_smbh_growth_track.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.869 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_smbh_growth_track.py:

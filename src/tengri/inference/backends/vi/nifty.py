@@ -736,7 +736,7 @@ def run_nifty_vi(
     faster than MCMC for high-dimensional problems.
 
     .. warning::
-       The NIFTy ``vi`` path and ``vi_native`` target the same KL
+       The NIFTy ``vi`` path and ``native_vi_nonlinear`` target the same KL
        objective but are **not posterior-equivalent**: the SFH PSD
        timescale ``sfh_field_psd_tau_myr`` has been observed to differ
        by ~10× between the two paths (e.g. 82 Myr vs 6 Myr on a 137-D

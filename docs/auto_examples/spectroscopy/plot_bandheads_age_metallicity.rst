@@ -51,7 +51,7 @@ References
    and Population Diagnostics," ApJS 94, 687.
    https://doi.org/10.1086/192220
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-270
+.. GENERATED FROM PYTHON SOURCE LINES 35-275
 
 
 
@@ -179,14 +179,14 @@ References
         ssp,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
             "width_gyr": 0.05,
             "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=Fixed(REDSHIFT),
         observation=obs,
     )
@@ -196,9 +196,9 @@ References
     for i, age in enumerate(ages_gyr):
         params = {**baseline_solar, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
 
-        pred = model_solar.predict_rest_sed(params)
-        wave_rest = np.asarray(pred.wavelength)
-        l_nu = np.asarray(pred.sed)
+        pred = model_solar.predict(params)
+        wave_rest = np.asarray(model_solar.wavelengths)
+        l_nu = np.asarray(pred.rest_sed())
         f_lambda = l_nu * C_AA_PER_S / (wave_rest**2)
 
         mgb_at_age[i] = mgb_pseudo_ew(wave_rest, f_lambda)
@@ -222,14 +222,19 @@ References
                 ssp,
                 sfh={
                     "type": "tsnorm",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "peak_lbt_gyr": age,
                     "width_gyr": 0.05,
                     "log_total_mass": 10.0,
                     "skew": 0.0,
                     "trunc": 13.0,
                 },
-                dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+                dust={
+                    "type": "two_component",
+                    "all_params": tengri.FIXED,
+                    "tau_diff": 0.0,
+                    "tau_bc": 0.0,
+                },
                 redshift=Fixed(REDSHIFT),
                 observation=obs,
             )
@@ -238,9 +243,9 @@ References
             # Set metallicity
             params_met = {**baseline_met, "met_logzsol": jnp.float64(met)}
 
-            pred = model_met.predict_rest_sed(params_met)
-            wave_rest = np.asarray(pred.wavelength)
-            l_nu = np.asarray(pred.sed)
+            pred = model_met.predict(params_met)
+            wave_rest = np.asarray(model_met.wavelengths)
+            l_nu = np.asarray(pred.rest_sed())
             f_lambda = l_nu * C_AA_PER_S / (wave_rest**2)
 
             mgb_grid[j, k] = mgb_pseudo_ew(wave_rest, f_lambda)
@@ -271,7 +276,7 @@ References
     ax_age.grid(True, alpha=0.3, linestyle="--")
 
     # Right: metallicity at multiple fixed ages
-    cmap = plt.cm.get_cmap("coolwarm")
+    cmap = plt.get_cmap("coolwarm")
     norm = plt.Normalize(vmin=ages_multimet.min(), vmax=ages_multimet.max())
 
     for j, age in enumerate(ages_multimet):
@@ -301,11 +306,6 @@ References
     ax_met.grid(True, alpha=0.3, linestyle="--")
 
     plt.savefig("plot_bandheads_age_metallicity.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.810 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_bandheads_age_metallicity.py:

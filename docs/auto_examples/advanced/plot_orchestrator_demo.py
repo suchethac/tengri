@@ -36,7 +36,12 @@ try:
         sfh_model="tsnorm",
         metallicity_model="ramp",
         nebular_backend="baked_in",
-        agn_model="multicolor_agn",
+        # `multicolor_agn` is deprecated: it was always a composable chain in
+        # disguise (disc=multicolor + torus=silva04). Spell it out.
+        agn_model="composable",
+        agn_disc_block="multicolor",
+        agn_torus_block="silva04",
+        agn_norm="conserving",
         dust_law_bc="calzetti",
         dust_emission_model="modified_blackbody",
         use_radio=True,

@@ -474,27 +474,27 @@
    "name": "SEDModel"
   }
  ],
- "model.predict_rest_sed": [
+ "model.predict": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward.sed_model",
    "module_short": "tengri.forward.sed_model",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward",
    "module_short": "tengri.forward",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   }
  ],
  "model.spec.sample": [
@@ -673,27 +673,27 @@
    "name": "SEDModel"
   }
  ],
- "ref_model.predict_rest_sed": [
+ "ref_model.predict": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward.sed_model",
    "module_short": "tengri.forward.sed_model",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward",
    "module_short": "tengri.forward",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   }
  ],
  "ref_model.spec.sample": [
@@ -717,6 +717,29 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "Parameters.sample"
+  }
+ ],
+ "ref_model.wavelengths": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward.sed_model",
+   "module_short": "tengri.forward.sed_model",
+   "name": "SEDModel.wavelengths"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward",
+   "module_short": "tengri.forward",
+   "name": "SEDModel.wavelengths"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "SEDModel.wavelengths"
   }
  ],
  "sed": [

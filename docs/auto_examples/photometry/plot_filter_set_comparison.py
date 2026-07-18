@@ -46,7 +46,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 1.5,
@@ -55,7 +55,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.4,
         "tau_diff": 0.2,
         "slope": -0.7,
@@ -64,9 +64,9 @@ model = tengri.SEDModel.build(
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-pred = model.predict_rest_sed(baseline)
-wave = np.asarray(pred.wavelength)
-sed = np.asarray(pred.sed)
+pred = model.predict(baseline)
+wave = np.asarray(model.wavelengths)
+sed = np.asarray(pred.rest_sed())
 # Smooth the emission-line spikes for display only — the photometry path
 # still integrates the spiky SED through the filters.
 sed_smooth = median_filter(sed, size=51)

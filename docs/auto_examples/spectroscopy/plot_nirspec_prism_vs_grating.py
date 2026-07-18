@@ -53,14 +53,14 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.3,
         "log_total_mass": 10.0,
         "alpha": 2.5,
         "beta": 1.8,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.06, "tau_bc": 0.10},
-    neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -0.5, "logU": -1.5},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.06, "tau_bc": 0.10},
+    neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": -0.5, "logU": -1.5},
     redshift=tengri.Fixed(5.0),
 )
 
@@ -72,9 +72,9 @@ p = dict(model.spec.sample(jax.random.PRNGKey(42)))
 z = 5.0
 rest_to_obs = 1.0 + z
 
-out = model.predict_rest_sed(p)
-wave_rest = np.asarray(out.wavelength)  # Rest-frame Å
-sed_rest = np.asarray(out.sed)  # erg/s/Hz
+out = model.predict(p)
+wave_rest = np.asarray(model.wavelengths)  # Rest-frame Å
+sed_rest = np.asarray(out.rest_sed())  # erg/s/Hz
 
 # Hα region in rest frame: 6400–6700 Å
 mask_rest = (wave_rest >= 6400.0) & (wave_rest <= 6700.0)

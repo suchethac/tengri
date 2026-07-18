@@ -3,11 +3,11 @@
 ## TL;DR
 
 - **First-time JIT**: 10-60s (one-time cost, then cached)
-- **MAP inference**: 0.3-2s typical (but 50× variance from OS scheduling)
-- **MCMC (NUTS)**: 30-120s for D≤10 (warmup + sampling)
-- **VI (geoVI)**: 40-90s for D≤10 (parameter expansion overhead)
-- **VI (native)**: 2-10s for D≤10 (faster but different posteriors)
-- **NSS**: 15-60s for D≤30 (nested sampling)
+- **MAP inference**: ~4s typical on D=8 photometry (but 50× variance from OS scheduling)
+- **MCMC (NUTS)**: cold ~90s at D=6 DPL; warmup blows past 5 min on D=7+ dense_basis SFH
+- **VI (geoVI)**: cold ~100s at D=6–7, ~20 GB RSS peak (memory-heavy)
+- **MCMC (HMC)**: cold ~21s at D=6–7 (faster than NUTS on high-D, recommended for D≥7)
+- **NSS**: cold ~240s at D=6, timeout >600s at D=7 (nested sampling; experimental)
 
 ## JIT Compilation (One-Time Cost)
 
@@ -74,7 +74,8 @@ Full breakdown by emitter family, gradient timings across SFH types, and the cov
 
 ## MAP Optimization
 
-**Typical runtime**: 0.3-2s for D≤15 parameters (1000 ADAM steps).
+**Warm runtime**: ~0.3–2s for D≤15 parameters (1000 ADAM steps, cached JIT).
+**Cold runtime**: ~3–5s on D=8 photometry (first call, includes ~1-2s JIT compilation).
 
 ### High variance (expected!)
 
@@ -92,24 +93,28 @@ If a single MAP run takes >5s:
 
 ### NUTS (No-U-Turn Sampler)
 
-**Recommended for D ≤ 10 parameters.**
+**Recommended for D ≤ 6 photometric parameters (parametric SFH).**
 
-- **Warmup**: 10–30s (500 steps)
-- **Sampling**: 20–90s (500 samples)
-- **Total**: 30–120s
+- **Cold (D=6 DPL)**: ~90s total
+- **Cold (D=7 dense_basis)**: warmup blows past 5 min; consider `mcmc_hmc` instead
 
-For D > 10, switch to `mcmc_raytrace` or `vi`.
+For D ≥ 7, prefer `mcmc_hmc` (fixed-length HMC) or `mcmc_raytrace`.
+
+### Hamiltonian Monte Carlo (HMC)
+
+**Recommended for D ≈ 6–20 parameters.**
+
+- **Cold (D=6–7)**: ~21s (compile + warmup + sampling, ~5 GB peak)
+- **Convergence validated** only with `dense_mass_matrix=True`, `n_warmup≥1000`, `n_leapfrog_steps≥20`
+- Default `n_warmup=300` with dense mass gives poor mixing (R-hat ≫ 1) — do not lower the warmup for science
 
 ### Ray Tracing
 
-**Recommended for 10 < D ≤ 30 parameters.**
+**Recommended for D ≥ 20 parameters (stochastic field SFH).**
 
-- **Warmup**: 20–60s
-- **Sampling**: 60–180s (1000 samples)
-- **Total**: 80–240s
-
-Ray tracing has a sharp viability cliff around step_size ~ 0.06 for D~137.
-If acceptance rates drop below 50%, reduce step_size to 0.04–0.05.
+- High-D ensemble sampler with O(1) gradient cost per step
+- Sharp viability cliff around step_size ~ 0.06 for D~137
+- If acceptance rates drop below 50%, reduce step_size to 0.04–0.05
 
 ## Variational Inference
 
@@ -117,33 +122,31 @@ If acceptance rates drop below 50%, reduce step_size to 0.04–0.05.
 
 **Recommended for D ≤ 30 parameters.**
 
-- **Compilation**: 10–20s (first run only)
-- **Runtime**: 40–90s for D~7–10
+- **Cold (D=6–7)**: ~100s (includes ~10–20s first-run compilation)
+- **Memory**: ~20 GB RSS peak on D=6–7 (memory-heavy; consider `mcmc_hmc` for faster turnaround on D<10)
 
 geoVI expands parameters internally (9 free → 73 internal params in some
 cases). This is expected overhead. NIFTy's trust-region optimizer with line
-searches costs ~5–10s per KL iteration × 10 iterations = 50–100s for D~10.
+searches is computationally intensive but captures non-Gaussian geometry well.
 
-### vi_native (native JAX VI)
+### Native JAX VI (Experimental)
 
-**Experimental alternative to geoVI.**
+**NOT recommended — unstable on photometry models.**
 
-- **Compilation**: 10–20s (first run only)
-- **Runtime**: 2–10s for D~7–10 (18× faster than geoVI)
-
-vi_native is much faster but produces different posteriors (up to 2.3σ
-disagreement on some parameters). Use only for fast exploration; verify with
-MCMC or geoVI before science results.
+Two pure-JAX alternatives exist (`native_vi_linear`, `native_vi_nonlinear`) but
+both carry `[UNSTABLE]` flags: they segfault on DPL/dense_basis photometry
+mocks (validated 2026-05-22). Use `vi` (NIFTy geoVI) for science instead.
 
 ## Nested Sampling (NSS)
 
-**Recommended for D ≤ 30 parameters.**
+**Experimental — slow; use for evidence or model comparison only.**
 
-- **Compilation**: 10–20s (first run only)
-- **Runtime**: 15–60s for D~7–10 (n_live=200–500)
+- **Cold (D=6)**: ~240s
+- **Cold (D=7)**: timeout >600s (not recommended)
 
 NSS computes log-evidence (Bayesian model comparison) alongside posteriors.
-Use MCMC or VI if you don't need evidence.
+The long runtime and experimental tier make it unsuitable for exploratory fits.
+Use `map`, `mcmc_nuts`, or `vi` for point estimates or credible regions instead.
 
 ## Performance Tuning
 
@@ -156,23 +159,21 @@ Use MCMC or VI if you don't need evidence.
 
 ### Reduce inference time
 
-1. **Use MAP for quick fits**: 0.3-2s typical, good for exploration.
-2. **Use Laplace for uncertainties**: Gaussian approximation from Hessian at MAP (5-15s).
-3. **Use Pathfinder for fast approximate posteriors**: 10-30s, good for
-   initialization or diagnostics.
-4. **MCMC only for final results**: 30-240s depending on D and method.
+1. **Use MAP for quick fits**: ~4s cold, 0.3–2s warm on D=8, good for exploration.
+2. **Use Laplace for uncertainties**: Gaussian approximation from Hessian at MAP (~5–9s cold, ~1–2s warm).
+3. **Use HMC for moderate-D fits**: `mcmc_hmc` (D≤20) beats NUTS on D≥7 without the memory overhead of geoVI.
+4. **MCMC only for final results**: D≤6 NUTS (~90s), D≥7 HMC (~21s), or high-D raytrace.
 
 ### When to use which method?
 
 | Goal | Method | D range | Runtime |
 |------|--------|---------|---------|
-| Quick point estimate | MAP | ≤30 | 0.3-2s |
-| Uncertainties (Gaussian) | Laplace | ≤20 | 5-15s |
-| Fast approximate posterior | Pathfinder | ≤30 | 10-30s |
-| Full posterior, low-D | NUTS | ≤10 | 30-120s |
-| Full posterior, mid-D | Ray Tracing | 10-30 | 80-240s |
-| Full posterior, high-D | VI (geoVI) | ≤30 | 40-90s |
-| Model comparison | NSS | ≤30 | 15-60s |
+| Quick point estimate | MAP | ≤30 | ~4s cold, 0.3–2s warm |
+| Uncertainties (Gaussian) | Laplace | ≤20 | ~5–9s cold, ~1–2s warm |
+| Full posterior, low-D | NUTS | ≤6 | ~90s cold (D=6 DPL) |
+| Full posterior, mid-D | HMC | 6–20 | ~21s cold (D=6–7) |
+| Full posterior, high-D | geoVI or raytrace | ≥20 | ~100s (geoVI), O(1) steps (raytrace) |
+| Model comparison / evidence | NSS | ≤6 | ~240s cold (experimental) |
 
 ## Known Performance Issues
 
@@ -190,9 +191,10 @@ A: The first call triggers JIT compilation (10-60s). Subsequent calls use cached
 A: OS-level variance (CPU throttling, GC, background processes). Just re-run
 — slowdowns are random.
 
-**Q: Why does VI take 90s? I thought JAX was fast!**
-A: geoVI parameter expansion (9 free → 73 internal params) is intentional.
-Use vi_native (2–10s) for speed; verify results with geoVI/MCMC.
+**Q: Why does geoVI take 100s? I thought JAX was fast!**
+A: geoVI parameter expansion (9 free → 73 internal params) and trust-region
+optimization are intentional. For faster fits on D≤20, try `mcmc_hmc` (~21s).
+Do not use experimental native VI backends — they segfault on photometry models.
 
 **Q: When should I clear the JAX cache?**
 A: Only when benchmarking JIT time. For normal usage, never clear it —

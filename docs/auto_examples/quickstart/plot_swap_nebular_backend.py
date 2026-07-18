@@ -35,13 +35,13 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 # A young starburst: peak ~30 Myr ago, still ionizing
 sfh = {
     "type": "dpl",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "alpha": 3.0,
     "beta": 0.3,
     "tau_gyr": 0.03,
     "log_total_mass": 10.0,
 }
-dust = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.0}
+dust = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.0}
 
 model_cue = tengri.SEDModel.build(
     ssp,
@@ -49,7 +49,7 @@ model_cue = tengri.SEDModel.build(
     dust=dust,
     neb={
         "type": "cue",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "neb_logU": tengri.Fixed(-2.5),
         "neb_logZ_gas": tengri.Fixed(-0.3),
         "neb_fesc": tengri.Fixed(0.0),
@@ -62,19 +62,19 @@ model_none = tengri.SEDModel.build(
     ssp,
     sfh=sfh,
     dust=dust,
-    neb={"type": "none", "*": tengri.FIXED},
+    neb={"type": "none", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.01),
 )
 
 p_cue = dict(model_cue.spec.sample(jax.random.PRNGKey(0)))
 p_none = {k: v for k, v in p_cue.items() if not k.startswith("neb_")}
-out_cue = model_cue.predict_rest_sed(p_cue)
-out_none = model_none.predict_rest_sed(p_none)
-wave = np.asarray(out_cue.wavelength)
-sed_cue = np.asarray(out_cue.sed)
+out_cue = model_cue.predict(p_cue)
+out_none = model_none.predict(p_none)
+wave = np.asarray(model_cue.wavelengths)
+sed_cue = np.asarray(out_cue.rest_sed())
 # neb='none' yields a shorter rest-frame grid (no Cue emission-line wavelengths),
 # so interpolate it onto the Cue grid to share the wavelength masks below.
-sed_none = np.interp(wave, np.asarray(out_none.wavelength), np.asarray(out_none.sed))
+sed_none = np.asarray(out_none.rest_sed(wave))
 
 fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), sharey=False)
 

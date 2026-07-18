@@ -50,14 +50,14 @@ ssp = tengri.load_ssp()
 # pinned to the paper's L5100 normalization.
 model = SEDModel.build(
     ssp_data=ssp,
-    sfh={"type": "dpl", "*": FIXED, "log_total_mass": 12.3},
+    sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 12.3},
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": FIXED,
+        "all_params": FIXED,
         "tau_bc": 1.0,
         "tau_diff": 0.3,
-        "emission": {"type": "dale2014", "*": FIXED},
+        "emission": {"type": "dale2014", "all_params": FIXED},
     },
     redshift=Fixed(0.01),
 )

@@ -52,8 +52,21 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.0612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=0.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.0612 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -113,7 +126,7 @@ References:
         mask = (wave_aa >= 8.0e4) & (wave_aa <= 1.0e7)
         nu = C_AA_PER_S / wave_aa[mask]
         order = np.argsort(nu)
-        return float(np.trapz(l_nu[mask][order], nu[order]))
+        return float(np.trapezoid(l_nu[mask][order], nu[order]))
 
 
     def _lfuv(wave_aa: np.ndarray, l_nu: np.ndarray) -> float:
@@ -132,7 +145,7 @@ References:
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 0.5,  # young starburst -> strong UV
@@ -140,11 +153,11 @@ References:
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tengri.Uniform(0.0, 4.0),
             "tau_bc": 0.5,
             "slope": -0.7,
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
         redshift=tengri.Fixed(0.0),
     )
@@ -155,11 +168,9 @@ References:
     irx_arr = np.empty_like(tau_grid)
 
     for i, tau in enumerate(tau_grid):
-        out = model_dust_sweep.predict_rest_sed(
-            {**baseline_dust_sweep, "dust_tau_diff": jnp.float64(tau)}
-        )
-        wave = np.asarray(out.wavelength)
-        l_nu = np.asarray(out.sed)
+        out = model_dust_sweep.predict({**baseline_dust_sweep, "dust_tau_diff": jnp.float64(tau)})
+        wave = np.asarray(model_dust_sweep.wavelengths)
+        l_nu = np.asarray(out.rest_sed())
         beta_arr[i] = _measure_beta(wave, l_nu)
         irx_arr[i] = _bolometric_lir(wave, l_nu) / _lfuv(wave, l_nu)
 
@@ -185,14 +196,14 @@ References:
         ssp,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": 0.5,  # Fixed default; we'll override later
             "width_gyr": 0.05,
             "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 1.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.01),
     )
 
@@ -211,8 +222,10 @@ References:
                 "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age),
                 "dust_tau_diff": jnp.float64(tau),
             }
-            out = model_age_dust.predict_rest_sed(p)
-            beta_2d[age_idx, tau_idx] = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
+            out = model_age_dust.predict(p)
+            beta_2d[age_idx, tau_idx] = _beta_uv(
+                np.asarray(model_age_dust.wavelengths), np.asarray(out.rest_sed())
+            )
 
     # ==============================================================================
     # Create two-panel figure
@@ -279,7 +292,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.358 seconds)
+   **Total running time of the script:** (0 minutes 4.476 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_slope_beta.py:

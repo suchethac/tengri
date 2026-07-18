@@ -31,7 +31,7 @@ varies the SFR value across a grid, and compares the implied Hα→SFR coefficie
 to the canonical Kennicutt+Chabrier value. A few-percent agreement validates that
 tengri's Cue nebular emulator correctly maps ionizing photon rates to Hα luminosity.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-100
+.. GENERATED FROM PYTHON SOURCE LINES 15-105
 
 
 
@@ -68,13 +68,19 @@ tengri's Cue nebular emulator correctly maps ionizing photon rates to Hα lumino
         tengri.load_ssp("fsps_prsc_miles_chabrier"),
         sfh={
             "type": "const",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "start_gyr": 0.01,  # constant SFR over the last 10 Myr (what Ha traces)
             "end_gyr": 0.0,
             "log_total_mass": tengri.FREE,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED, "neb_logU": -2.5, "neb_fesc": 0.0, "neb_fesc_lya": 0.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={
+            "type": "cue",
+            "all_params": tengri.FIXED,
+            "neb_logU": -2.5,
+            "neb_fesc": 0.0,
+            "neb_fesc_lya": 0.0,
+        },
         redshift=tengri.Fixed(0.0),
     )
 
@@ -92,12 +98,11 @@ tengri's Cue nebular emulator correctly maps ionizing photon rates to Hα lumino
         params = {**baseline, "sfh_const_log_total_mass": jnp.float64(log_total_mass)}
 
         # Get the actual 10 Myr SFR (what Hα traces)
-        sfh_q = model.predict_sfh_quantities(params)
-        sfr_10myr = float(sfh_q.sfr_10myr)
+        sfh_q = model.predict_properties(params, names=("sfr_10myr",))
+        sfr_10myr = float(sfh_q["sfr_10myr"])
 
         # Get Hα luminosity from nebular component
-        lines = model.predict_emission_lines(params)
-        halpha_lum = float(lines.halpha)
+        halpha_lum = float(model.predict(params).halpha)
 
         # Implied coefficient: SFR / L_Ha
         if halpha_lum > 0:
@@ -135,7 +140,7 @@ tengri's Cue nebular emulator correctly maps ionizing photon rates to Hα lumino
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.822 seconds)
+   **Total running time of the script:** (0 minutes 40.368 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_kennicutt_halpha_sfr.py:

@@ -48,8 +48,21 @@ emission (green).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/examples/agn/plot_grahsp_paper_fig1_overview.py:123: RuntimeWarning: divide by zero encountered in divide
+      "top", functions=(lambda x: C_AA_HZ / 1e4 / x, lambda nu: C_AA_HZ / 1e4 / nu)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -84,14 +97,14 @@ emission (green).
     # pinned to the paper's L5100 normalization.
     model = SEDModel.build(
         ssp_data=ssp,
-        sfh={"type": "dpl", "*": FIXED, "log_total_mass": 12.3},
+        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 12.3},
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": 1.0,
             "tau_diff": 0.3,
-            "emission": {"type": "dale2014", "*": FIXED},
+            "emission": {"type": "dale2014", "all_params": FIXED},
         },
         redshift=Fixed(0.01),
     )
@@ -160,6 +173,11 @@ emission (green).
 
     fig.tight_layout()
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.020 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_grahsp_paper_fig1_overview.py:

@@ -664,7 +664,9 @@ consistency or perf improvements, not correctness bugs.
   quickstart notebook comments called the inference "native_geovi" but the
   actual call was `fitter.run("vi", ..., n_seeds=5)` — which raises
   `TypeError` because NIFTy's driver has no `n_seeds` parameter. Fixed by
-  switching the calls to `"vi_native"`.
+  switching the calls to `"vi_native"`. (That backend has since been
+  renamed — today the name is `"native_vi_nonlinear"`; `"vi_native"` no
+  longer resolves.)
 
 - **CONS-03 — `n_samples` effective-count mismatch.** `VIConfig.n_samples=3`
   doubles to 6 effective samples via NIFTy's `mirror_samples=True`. Users

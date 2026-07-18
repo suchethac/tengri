@@ -114,9 +114,12 @@ stochastic-SFH prior — wrap them in a ``PopulationSEDModel`` and pass it
 to ``ForwardModel.build(population=...)``:
 
 ```python
-from tengri import ForwardModel, PopulationSEDModel, SEDModel
+from tengri import ForwardModel, PopulationSEDModel, SEDModel, recipes
 
-template = SEDModel.build(ssp_data=ssp, observation=obs, ...)
+# The template needs a stochastic (field) SFH — that is where the shared
+# PSD hyperparameters live. A DPL-only template has none to share.
+template = SEDModel.build(ssp_data=ssp, observation=obs,
+                          **recipes.stochastic_sfh_jwst())
 
 pop = PopulationSEDModel(
     sed=template,

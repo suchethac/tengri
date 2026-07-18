@@ -39,8 +39,19 @@ the torus too. The intrinsic torus component is overplotted dashed black.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/examples/agn/plot_grahsp_paper_fig9_agn_attenuation.py:86: RuntimeWarning: divide by zero encountered in divide
+      "top", functions=(lambda x: 2.99792458e14 / x, lambda nu: 2.99792458e14 / nu)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -71,7 +82,7 @@ the torus too. The intrinsic torus component is overplotted dashed black.
 
     # Diverging blue->white->red color map on log E(B-V), matching the paper.
     norm = colors.LogNorm(vmin=0.01, vmax=1.0)
-    cmap = cm.get_cmap("RdBu_r")
+    cmap = plt.get_cmap("RdBu_r")
 
     fig, ax = plt.subplots(figsize=(6.4, 7.8))
 
@@ -130,6 +141,11 @@ the torus too. The intrinsic torus component is overplotted dashed black.
 
     fig.tight_layout()
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.330 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_grahsp_paper_fig9_agn_attenuation.py:

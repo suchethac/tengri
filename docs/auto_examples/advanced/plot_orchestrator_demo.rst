@@ -31,7 +31,7 @@ See plot_joint_fit.py and plot_radio_xray.py for the public-API path.
 The orchestrator layer may change; forward-compatible SED building goes
 through the SEDModel.build() nested-dict grammar and recipes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-132
+.. GENERATED FROM PYTHON SOURCE LINES 15-137
 
 
 
@@ -84,7 +84,12 @@ through the SEDModel.build() nested-dict grammar and recipes.
             sfh_model="tsnorm",
             metallicity_model="ramp",
             nebular_backend="baked_in",
-            agn_model="multicolor_agn",
+            # `multicolor_agn` is deprecated: it was always a composable chain in
+            # disguise (disc=multicolor + torus=silva04). Spell it out.
+            agn_model="composable",
+            agn_disc_block="multicolor",
+            agn_torus_block="silva04",
+            agn_norm="conserving",
             dust_law_bc="calzetti",
             dust_emission_model="modified_blackbody",
             use_radio=True,

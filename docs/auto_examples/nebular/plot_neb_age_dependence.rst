@@ -65,14 +65,14 @@ to old (5 Gyr) populations.
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": tengri.Uniform(0.05, 5.0),
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
-        neb={"type": "cue", "*": tengri.FIXED},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+        neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -87,10 +87,10 @@ to old (5 Gyr) populations.
     all_curve_data = []
     for age in age_values:
         params = {**baseline, "sfh_dpl_tau_gyr": jnp.float64(age)}
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
         nu = 2.998e18 / wave
-        nu_l_nu = nu * np.asarray(out.sed)
+        nu_l_nu = nu * np.asarray(out.rest_sed())
         ax.semilogy(wave, nu_l_nu, color=cmap(norm(age)), lw=1.4)
 
         # Track values in the plotted window for ylim

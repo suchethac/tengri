@@ -35,7 +35,7 @@ Silva) vs phenomenological graybodies.
 this panel isolates the smooth-vs-clumpy silicate-feature behavior
 near 9.7 and 18 micron.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-91
+.. GENERATED FROM PYTHON SOURCE LINES 19-99
 
 
 
@@ -45,19 +45,8 @@ near 9.7 and 18 micron.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -94,11 +83,19 @@ near 9.7 and 18 micron.
     COLORS = plt.cm.tab10(np.linspace(0, 1, 10))[: len(TORI)]
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     ssp = tengri.load_ssp()
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
+
+    # `simple` and `two_temperature` are phenomenological graybodies, and tengri
+    # deprecates them for science fits (use SKIRTOR or Silva+04 for that). They are
+    # on this panel ON PURPOSE — the whole point is to show what a graybody gives up
+    # against a real radiative-transfer torus. So the DeprecationWarning they raise
+    # is expected here, and only here; suppressing it narrowly keeps the gallery gate
+    # (#1146) meaningful everywhere else.
+    warnings.filterwarnings("ignore", message=".*is a toy AGN torus model.*")
 
     for (torus, label), color in zip(TORI, COLORS):
         model = tengri.SEDModel.build(
@@ -106,18 +103,18 @@ near 9.7 and 18 micron.
             sfh=SFH,
             dust=DUST,
             agn={
-                "disc": {"type": "multicolor", "*": tengri.FIXED},
-                "torus": {"type": torus, "*": tengri.FIXED},
-                "*": tengri.FIXED,
+                "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+                "torus": {"type": torus, "all_params": tengri.FIXED},
+                "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
                 "frac": 1.0,
             },
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
     ax.set(
@@ -137,7 +134,7 @@ near 9.7 and 18 micron.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.936 seconds)
+   **Total running time of the script:** (0 minutes 2.861 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_torus_compare.py:

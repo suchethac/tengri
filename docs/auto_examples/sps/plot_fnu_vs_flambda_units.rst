@@ -59,8 +59,19 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -89,7 +100,7 @@ References:
         tengri.load_ssp(),
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": 2.0,
             "width_gyr": 0.5,
         },
@@ -98,11 +109,11 @@ References:
 
     # Sample from the model (all parameters are fixed, so deterministic)
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    pred = model.predict_rest_sed(params)
+    pred = model.predict(params)
 
     # Extract rest-frame wavelength [Angstrom] and SED [erg/s/Hz]
-    lambda_rest = np.asarray(pred.wavelength)
-    sed_fnu = np.asarray(pred.sed)
+    lambda_rest = np.asarray(model.wavelengths)
+    sed_fnu = np.asarray(pred.rest_sed())
 
     # Compute the three representations
     # 1. F_λ = F_ν * (c/λ²) [normalized for comparison]
@@ -169,6 +180,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_fnu_vs_flambda_units.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 7.891 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_fnu_vs_flambda_units.py:

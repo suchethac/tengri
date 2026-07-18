@@ -222,7 +222,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Verifies that JIT-compiled predictions are bit-identical to eager-mode evaluations. For predict_photometry and predict_emission_lines, we sample random parameter sets and compare max relative difference between eager and JIT outputs. A value &lt; 1e-10 confirms no spurious numerical divergence; &gt; 1e-10 suggests platform-dependent floating-point behavior.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Verifies that JIT-compiled predictions are bit-identical to eager-mode evaluations. For predict_photometry and predict(params).lines, we sample random parameter sets and compare max relative difference between eager and JIT outputs. A value &lt; 1e-10 confirms no spurious numerical divergence; &gt; 1e-10 suggests platform-dependent floating-point behavior.">
 
 .. only:: html
 
@@ -273,7 +273,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Internal consistency check: the cumulative SFR integral ∫₀ᵗ SFR(t) dt should equal the stellar mass returned by predict_sfh_quantities(). This diagnostic varies the DPL SFH parameters and verifies that the two pathways (manual trapz of the trajectory vs library integration) agree to ~0.1%. Discrepancies &gt; 5% trigger a warning and would indicate a bug in either the SFH trajectory or the mass integration kernel.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Internal consistency check: the cumulative SFR integral ∫₀ᵗ SFR(t) dt should equal the stellar mass returned by predict_properties(). This diagnostic varies the DPL SFH parameters and verifies that the two pathways (manual trapz of the trajectory vs library integration) agree to ~0.1%. Discrepancies &gt; 5% trigger a warning and would indicate a bug in either the SFH trajectory or the mass integration kernel.">
 
 .. only:: html
 
@@ -284,7 +284,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Mass conservation in SFH: manual integration vs predict_sfh_quantities</div>
+      <div class="sphx-glr-thumbnail-title">Mass conservation in SFH: manual integration vs predict_properties</div>
     </div>
 
 
@@ -307,7 +307,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The rest-frame SED depends only on intrinsic galaxy properties (SFH, dust, metallicity, nebular, AGN) and is independent of redshift. Redshift only enters via the observation (wavelength shift, distance dimming, IGM attenuation). This diagnostic verifies that predict_rest_sed returns bit-identical SEDs across a range of redshifts for identical intrinsic parameters. Age-of-the-Universe constraints at high-z may truncate the SFH legitimately, producing smooth variation; any non-smooth jump signals a coupling bug.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The rest-frame SED depends only on intrinsic galaxy properties (SFH, dust, metallicity, nebular, AGN) and is independent of redshift. Redshift only enters via the observation (wavelength shift, distance dimming, IGM attenuation). This diagnostic verifies that Prediction.rest_sed returns bit-identical SEDs across a range of redshifts for identical intrinsic parameters. Age-of-the-Universe constraints at high-z may truncate the SFH legitimately, producing smooth variation; any non-smooth jump signals a coupling bug.">
 
 .. only:: html
 
@@ -324,7 +324,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Verifies the SED chain is additive by comparing the full predict_rest_sed output against a manual sum of per-component SEDs. The forward model chains stellar continuum through dust attenuation, dust emission, and nebular processing; if modular, the sum should reconstruct the total.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Verifies the SED chain is additive by comparing the full pred.rest_sed() output against a manual sum of per-component SEDs. The forward model chains stellar continuum through dust attenuation, dust emission, and nebular processing; if modular, the sum should reconstruct the total.">
 
 .. only:: html
 

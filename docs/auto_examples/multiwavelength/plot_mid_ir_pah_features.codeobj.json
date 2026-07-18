@@ -456,27 +456,27 @@
    "name": "SEDModel"
   }
  ],
- "model_agn.predict_rest_sed": [
+ "model_agn.predict": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward.sed_model",
    "module_short": "tengri.forward.sed_model",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward",
    "module_short": "tengri.forward",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   }
  ],
  "model_agn.spec.sample": [
@@ -502,6 +502,29 @@
    "name": "Parameters.sample"
   }
  ],
+ "model_agn.wavelengths": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward.sed_model",
+   "module_short": "tengri.forward.sed_model",
+   "name": "SEDModel.wavelengths"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward",
+   "module_short": "tengri.forward",
+   "name": "SEDModel.wavelengths"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "SEDModel.wavelengths"
+  }
+ ],
  "model_composite": [
   {
    "is_class": false,
@@ -525,27 +548,27 @@
    "name": "SEDModel"
   }
  ],
- "model_composite.predict_rest_sed": [
+ "model_composite.predict": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward.sed_model",
    "module_short": "tengri.forward.sed_model",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward",
    "module_short": "tengri.forward",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   }
  ],
  "model_composite.spec.sample": [
@@ -571,6 +594,29 @@
    "name": "Parameters.sample"
   }
  ],
+ "model_composite.wavelengths": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward.sed_model",
+   "module_short": "tengri.forward.sed_model",
+   "name": "SEDModel.wavelengths"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward",
+   "module_short": "tengri.forward",
+   "name": "SEDModel.wavelengths"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "SEDModel.wavelengths"
+  }
+ ],
  "model_sf": [
   {
    "is_class": false,
@@ -594,27 +640,27 @@
    "name": "SEDModel"
   }
  ],
- "model_sf.predict_rest_sed": [
+ "model_sf.predict": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward.sed_model",
    "module_short": "tengri.forward.sed_model",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward",
    "module_short": "tengri.forward",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDModel.predict_rest_sed"
+   "name": "SEDModel.predict"
   }
  ],
  "model_sf.spec.sample": [
@@ -638,6 +684,29 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "Parameters.sample"
+  }
+ ],
+ "model_sf.wavelengths": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward.sed_model",
+   "module_short": "tengri.forward.sed_model",
+   "name": "SEDModel.wavelengths"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward",
+   "module_short": "tengri.forward",
+   "name": "SEDModel.wavelengths"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "SEDModel.wavelengths"
   }
  ],
  "np.asarray": [
@@ -703,165 +772,138 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.forward.result",
-   "module_short": "tengri",
-   "name": "SEDResult"
+   "module": "tengri.forward.prediction",
+   "module_short": "tengri.forward.prediction",
+   "name": "Prediction"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward",
-   "module_short": "tengri",
-   "name": "SEDResult"
+   "module_short": "tengri.forward",
+   "name": "Prediction"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDResult"
+   "name": "Prediction"
   }
  ],
- "out_agn.sed": [
+ "out_agn.rest_sed": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl"
+   "module": "tengri.forward.prediction",
+   "module_short": "tengri.forward.prediction",
+   "name": "Prediction.rest_sed"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl"
-  }
- ],
- "out_agn.wavelength": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl"
+   "module": "tengri.forward",
+   "module_short": "tengri.forward",
+   "name": "Prediction.rest_sed"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl"
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Prediction.rest_sed"
   }
  ],
  "out_composite": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.forward.result",
-   "module_short": "tengri",
-   "name": "SEDResult"
+   "module": "tengri.forward.prediction",
+   "module_short": "tengri.forward.prediction",
+   "name": "Prediction"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward",
-   "module_short": "tengri",
-   "name": "SEDResult"
+   "module_short": "tengri.forward",
+   "name": "Prediction"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDResult"
+   "name": "Prediction"
   }
  ],
- "out_composite.sed": [
+ "out_composite.rest_sed": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl"
+   "module": "tengri.forward.prediction",
+   "module_short": "tengri.forward.prediction",
+   "name": "Prediction.rest_sed"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl"
-  }
- ],
- "out_composite.wavelength": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl"
+   "module": "tengri.forward",
+   "module_short": "tengri.forward",
+   "name": "Prediction.rest_sed"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl"
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Prediction.rest_sed"
   }
  ],
  "out_sf": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.forward.result",
-   "module_short": "tengri",
-   "name": "SEDResult"
+   "module": "tengri.forward.prediction",
+   "module_short": "tengri.forward.prediction",
+   "name": "Prediction"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward",
-   "module_short": "tengri",
-   "name": "SEDResult"
+   "module_short": "tengri.forward",
+   "name": "Prediction"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDResult"
+   "name": "Prediction"
   }
  ],
- "out_sf.sed": [
+ "out_sf.rest_sed": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl"
+   "module": "tengri.forward.prediction",
+   "module_short": "tengri.forward.prediction",
+   "name": "Prediction.rest_sed"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl"
-  }
- ],
- "out_sf.wavelength": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl"
+   "module": "tengri.forward",
+   "module_short": "tengri.forward",
+   "name": "Prediction.rest_sed"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl"
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Prediction.rest_sed"
   }
  ],
  "p_agn": [

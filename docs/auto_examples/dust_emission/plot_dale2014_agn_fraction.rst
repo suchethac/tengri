@@ -50,8 +50,19 @@ the Wyoming-source star-forming-only release.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -79,13 +90,13 @@ the Wyoming-source star-forming-only release.
 
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0},
+        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 1.0,
             "tau_bc": 0.3,
-            "emission": {"type": "dale2014_cigale", "*": tengri.FIXED},
+            "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -97,9 +108,9 @@ the Wyoming-source star-forming-only release.
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
     for f, c in zip(frac_agn_values, colors):
-        out = model.predict_rest_sed({**p0, "dust_frac_agn": jnp.float64(f)})
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        out = model.predict({**p0, "dust_frac_agn": jnp.float64(f)})
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=c, lw=2.0, label=rf"$f_{{\rm AGN}}={f:.1f}$")
 
     ax.axvline(8e4, color="0.85", lw=0.5, linestyle=":")
@@ -117,6 +128,11 @@ the Wyoming-source star-forming-only release.
 
     fig.tight_layout()
     plt.savefig("plot_dale2014_agn_fraction.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.156 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_dale2014_agn_fraction.py:

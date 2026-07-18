@@ -42,8 +42,8 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 ssp = tengri.load_ssp()
 
 # Fixed host galaxy: minimal stellar component suppressed
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 # Grid: black-hole mass vs Eddington ratio
 log_mbh_values = np.array([6.0, 7.5, 9.0])
@@ -73,8 +73,8 @@ for i_mbh, log_mbh in enumerate(log_mbh_values):
             sfh=SFH,
             dust=DUST,
             agn={
-                "disc": {"type": "kubota_done", "*": tengri.FIXED},
-                "*": tengri.FIXED,
+                "disc": {"type": "kubota_done", "all_params": tengri.FIXED},
+                "all_params": tengri.FIXED,
                 "log_lbol": log_lbol,
                 "log_mbh": log_mbh,
                 "log_ledd": log_ledd,
@@ -83,11 +83,11 @@ for i_mbh, log_mbh in enumerate(log_mbh_values):
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
+        out = model.predict(p)
 
-        wave = np.asarray(out.wavelength)
+        wave = np.asarray(model.wavelengths)
         c_aa_s = 2.998e18
-        nu_l_nu = c_aa_s / wave * np.asarray(out.sed)
+        nu_l_nu = c_aa_s / wave * np.asarray(out.rest_sed())
         all_nu_l_nu.append(nu_l_nu)
 
         color = cmap_mbh(norm_mbh(log_mbh))

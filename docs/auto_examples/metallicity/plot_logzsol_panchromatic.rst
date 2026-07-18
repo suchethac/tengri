@@ -30,7 +30,7 @@ attenuation and thermal emission from warm dust.
 
 Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-81
+.. GENERATED FROM PYTHON SOURCE LINES 14-86
 
 
 
@@ -40,8 +40,21 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 43% of its stellar mass before the Big Bang at z=0.20 (cosmic age 11.30 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -69,7 +82,7 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 1.0,
@@ -77,10 +90,15 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 1.0,
             "tau_diff": 0.5,
-            "emission": {"type": "modified_blackbody", "*": tengri.FIXED, "T": 30.0, "beta_ir": 1.8},
+            "emission": {
+                "type": "modified_blackbody",
+                "all_params": tengri.FIXED,
+                "T": 30.0,
+                "beta_ir": 1.8,
+            },
         },
         redshift=tengri.Fixed(0.2),
     )
@@ -93,10 +111,10 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
     for met_logzsol in met_logzsol_values:
         params = {**baseline, "met_logzsol": jnp.float64(met_logzsol)}
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
         nu = 2.998e18 / wave  # Å/s -> Hz
-        nu_l_nu = nu * np.asarray(out.sed)
+        nu_l_nu = nu * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=cmap(norm(met_logzsol)), lw=1.4)
 
     ax.set_xlim(900, 3e5)

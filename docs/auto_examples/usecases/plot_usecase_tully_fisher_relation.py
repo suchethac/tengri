@@ -108,9 +108,9 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"]))
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "dpl", "*": tengri.FIXED, "log_total_mass": 10.0},
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05},
-    neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -0.5},
+    sfh={"type": "dpl", "all_params": tengri.FIXED, "log_total_mass": 10.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05},
+    neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": -0.5},
     redshift=tengri.Fixed(0.0),
 )
 

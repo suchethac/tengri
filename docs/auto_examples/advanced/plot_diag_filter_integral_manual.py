@@ -36,8 +36,8 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(band_names))
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FIXED},
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.25, "tau_bc": 0.15},
+    sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.25, "tau_bc": 0.15},
     redshift=tengri.Fixed(0.05),
 )
 
@@ -53,8 +53,8 @@ params = {
 
 z = params["redshift"]
 wave_rest = np.logspace(np.log10(1000), np.log10(25000), 4000)
-result = model.predict_rest_sed(params, wave_rest)
-sed_rest = np.array(result.sed)
+result = model.predict(params)
+sed_rest = np.asarray(result.rest_sed(wave_rest))
 
 d_L = tengri.cosmology.luminosity_distance(z)
 flux_scale = (1.0 + z) / (4.0 * np.pi * d_L**2)

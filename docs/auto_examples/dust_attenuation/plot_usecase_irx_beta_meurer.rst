@@ -52,6 +52,8 @@ reddening and star formation rate indicators in galaxies. Here we:
 
  .. code-block:: none
 
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
     Loaded SSP: 5994 wavelength points
 
     Building 25 models with τ_diff ∈ [0, 4]...
@@ -252,7 +254,7 @@ reddening and star formation rate indicators in galaxies. Here we:
     # Fixed SFH: tsnorm with 50 Myr peak (young starburst)
     SFH_BASE = {
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 0.05,  # 50 Myr lookback
         "width_gyr": 0.05,  # 50 Myr width
         "log_total_mass": 10.0,  # SFR peak = 10 M☉/yr (arbitrary; scales L_IR/L_UV ratio)
@@ -282,12 +284,12 @@ reddening and star formation rate indicators in galaxies. Here we:
         # Birth cloud τ_bc = 0 since we're sweeping τ_diff to cover full range
         dust_config = {
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.0,  # birth cloud attenuation (fixed to zero)
             "tau_diff": tau_diff,  # sweep diffuse attenuation
             "slope": -0.7,  # typical Calzetti slope
             "law_bc": "calzetti",  # Calzetti+2000 law
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         }
 
         try:
@@ -307,9 +309,9 @@ reddening and star formation rate indicators in galaxies. Here we:
 
         # Predict rest-frame SED
         try:
-            sed_rest = model.predict_rest_sed(params_dict)
-            wave_rest = np.asarray(sed_rest.wavelength)
-            l_nu_rest = np.asarray(sed_rest.sed)
+            sed_rest = model.predict(params_dict)
+            wave_rest = np.asarray(model.wavelengths)
+            l_nu_rest = np.asarray(sed_rest.rest_sed())
         except Exception as e:
             print(f"  τ_diff={tau_diff:.2f}: predict failed ({str(e)[:50]}...)")
             continue

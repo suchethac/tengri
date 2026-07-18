@@ -567,6 +567,22 @@
    "name": "asarray"
   }
  ],
+ "np.interp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "_ArrayFunctionDispatcher"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "interp"
+  }
+ ],
  "np.nan": [
   {
    "is_class": false,

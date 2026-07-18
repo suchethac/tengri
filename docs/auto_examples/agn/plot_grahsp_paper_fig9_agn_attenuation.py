@@ -37,7 +37,7 @@ ebv_grid = np.logspace(np.log10(0.01), np.log10(1.0), 11)
 
 # Diverging blue->white->red color map on log E(B-V), matching the paper.
 norm = colors.LogNorm(vmin=0.01, vmax=1.0)
-cmap = cm.get_cmap("RdBu_r")
+cmap = plt.get_cmap("RdBu_r")
 
 fig, ax = plt.subplots(figsize=(6.4, 7.8))
 

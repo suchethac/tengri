@@ -39,14 +39,14 @@ ssp = tengri.load_ssp()
 def _build(t_dust=None, beta=None):
     dust = {
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.5,
         "tau_bc": 1.0,
-        "emission": {"type": "modified_blackbody", "*": tengri.FIXED},
+        "emission": {"type": "modified_blackbody", "all_params": tengri.FIXED},
     }
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.13},
+        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.13},
         dust=dust,
         redshift=tengri.Fixed(0.05),
     )
@@ -79,17 +79,19 @@ fig, (ax_T, ax_b) = plt.subplots(
 norm_T = mpl.colors.Normalize(vmin=T_grid.min(), vmax=T_grid.max())
 for T in T_grid:
     model, p = _build(t_dust=float(T), beta=1.8)
-    out = model.predict_rest_sed(p)
-    w = np.asarray(out.wavelength)
-    ax_T.loglog(w, C_AA_PER_S / w * np.asarray(out.sed), color=plt.cm.viridis(norm_T(T)), lw=1.4)
+    out = model.predict(p)
+    w = np.asarray(model.wavelengths)
+    ax_T.loglog(
+        w, C_AA_PER_S / w * np.asarray(out.rest_sed()), color=plt.cm.viridis(norm_T(T)), lw=1.4
+    )
 
 norm_b = mpl.colors.Normalize(vmin=beta_grid.min(), vmax=beta_grid.max())
 for beta in beta_grid:
     model, p = _build(t_dust=30.0, beta=float(beta))
-    out = model.predict_rest_sed(p)
-    w = np.asarray(out.wavelength)
+    out = model.predict(p)
+    w = np.asarray(model.wavelengths)
     ax_b.loglog(
-        w, C_AA_PER_S / w * np.asarray(out.sed), color=plt.cm.viridis(norm_b(beta)), lw=1.4
+        w, C_AA_PER_S / w * np.asarray(out.rest_sed()), color=plt.cm.viridis(norm_b(beta)), lw=1.4
     )
 
 for ax in (ax_T, ax_b):

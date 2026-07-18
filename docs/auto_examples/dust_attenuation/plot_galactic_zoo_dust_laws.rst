@@ -43,8 +43,19 @@ span both regimes via adjustable parameters.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -71,7 +82,7 @@ span both regimes via adjustable parameters.
     # Fixed SFH and stellar population
     SFH = {
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 1.0,
         "log_total_mass": 10.0,
@@ -91,15 +102,15 @@ span both regimes via adjustable parameters.
         dust={
             "type": "two_component",
             "law_diff": "calzetti",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
         redshift=tengri.Fixed(0.05),
     )
     p_ref = dict(ref_model.spec.sample(jax.random.PRNGKey(0)))
-    sed_ref = np.asarray(ref_model.predict_rest_sed(p_ref).sed)
-    wave = np.asarray(ref_model.predict_rest_sed(p_ref).wavelength)
+    sed_ref = np.asarray(ref_model.predict(p_ref).rest_sed())
+    wave = np.asarray(ref_model.wavelengths)
     C_AA_PER_S = 2.998e18
     nu = C_AA_PER_S / wave
     ax.loglog(wave, nu * sed_ref, color="0.05", lw=2.0, label="intrinsic", zorder=10, ls="--")
@@ -116,14 +127,14 @@ span both regimes via adjustable parameters.
             dust={
                 "type": "two_component",
                 "law_diff": law,
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 1.0,
                 "tau_bc": 0.0,
             },
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        sed = np.asarray(model.predict_rest_sed(p).sed)
+        sed = np.asarray(model.predict(p).rest_sed())
         ax.loglog(wave, nu * sed, color=color, lw=1.4, label=label.split("(")[0].strip(), alpha=0.8)
 
     ax.axvline(2175, color="0.55", lw=0.5, ls=":", alpha=0.7)
@@ -139,6 +150,11 @@ span both regimes via adjustable parameters.
 
     fig.tight_layout()
     plt.savefig("plot_galactic_zoo_dust_laws.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 13.395 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_galactic_zoo_dust_laws.py:
