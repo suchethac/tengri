@@ -152,6 +152,17 @@ def data_path(filename: str) -> Path:
 
 SSP_BASE_URL = "https://halos.as.arizona.edu/suchethacooray/ssp-spectra/"
 
+#: The default SSP identifier — one constant consumed by BOTH
+#: :func:`download_ssp` and :func:`~tengri.load_ssp`, so a fresh user's
+#: ``tengri.download_ssp()`` fetches exactly what a subsequent
+#: ``tengri.load_ssp()`` loads. It is *bare-stellar* (no baked-in nebular
+#: emission): it is present in the hosted catalog, in :data:`_KNOWN_SSPS`, and
+#: is the grid the Cue/CloudyGrid nebular backends — and every
+#: ``tengri.recipes.*`` config — require. The ``_wNE_*`` (with-Nebular-Emission)
+#: grids are produced locally, are not shipped from the catalog, and must be
+#: named explicitly (``load_ssp("prsc_miles_chabrier_wNE")``).
+DEFAULT_SSP = "fsps_prsc_miles_chabrier"
+
 # Short alias → filename, matches the live public catalog. The catalog
 # only ships *bare-stellar* SSPs; the ``_wNE_*`` variants in local ``data/``
 # trees are post-processed (FSPS+nebular). Cue / CloudyGrid backends require
@@ -354,7 +365,7 @@ def _resolve_ssp_filename(name: str) -> str:
 
 
 def download_ssp(
-    name: str = "fsps_prsc_miles_chabrier",
+    name: str = DEFAULT_SSP,
     dest: str | os.PathLike | None = None,
     force: bool = False,
     progress: bool = True,
