@@ -30,7 +30,7 @@ power of mid-infrared colors for AGN identification.
 References: Lacy et al. (2007) ApJ 669, 54–64; Donley et al. (2012)
 ApJ 748, 142.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-214
+.. GENERATED FROM PYTHON SOURCE LINES 14-215
 
 
 
@@ -115,7 +115,7 @@ ApJ 748, 142.
             observation=tengri.Observation(photometry=obs_irac.photometry),
             sfh={
                 "type": "dpl",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_total_mass": 10.0,
                 "tau_gyr": 1.5,
                 "alpha": 2.0,
@@ -123,18 +123,19 @@ ApJ 748, 142.
             },
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_bc": 0.4,
                 "tau_diff": 0.2,
             },
             agn={
                 "type": "composable",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "agn_frac": agn_frac,  # 0 = pure host, 1 = AGN-dominated
                 "agn_log_lbol": 12.5,
-                "disc": {"type": "multicolor", "*": tengri.FIXED},
-                "torus": {"type": "skirtor", "*": tengri.FIXED},
-                "lines": {"type": "nlr", "*": tengri.FIXED},
+                "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+                "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+                "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+                "blr": {"type": "none", "all_params": tengri.FIXED},
             },
             redshift=tengri.Fixed(redshift),
         )
@@ -249,7 +250,7 @@ ApJ 748, 142.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 12.706 seconds)
+   **Total running time of the script:** (1 minutes 5.337 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_spitzer_irac_agn_wedge.py:

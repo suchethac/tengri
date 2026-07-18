@@ -49,12 +49,12 @@ model_template = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         **{k: v for k, v in true_params.items() if k.startswith("sfh_")},
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         **{k: v for k, v in true_params.items() if k.startswith("dust_")},
     },
     redshift=tengri.Fixed(TRUE_REDSHIFT),
@@ -65,8 +65,8 @@ mock = model_template.mock(true_params, snr=25.0, key=key)
 model_fixed = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FREE},
-    dust={"type": "two_component", "*": tengri.FREE},
+    sfh={"type": "tsnorm", "all_params": tengri.FREE},
+    dust={"type": "two_component", "all_params": tengri.FREE},
     redshift=tengri.Fixed(TRUE_REDSHIFT),
 )
 forward_fixed = tengri.ForwardModel.build(sed=model_fixed, observation=obs)
@@ -78,8 +78,8 @@ posterior_fixed = forward_fixed.fit(
 model_free = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FREE},
-    dust={"type": "two_component", "*": tengri.FREE},
+    sfh={"type": "tsnorm", "all_params": tengri.FREE},
+    dust={"type": "two_component", "all_params": tengri.FREE},
     redshift=tengri.Uniform(0.0, 0.5),
 )
 forward_free = tengri.ForwardModel.build(sed=model_free, observation=obs)

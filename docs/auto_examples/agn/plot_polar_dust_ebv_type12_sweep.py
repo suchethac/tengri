@@ -45,19 +45,20 @@ ssp = tengri.load_ssp()
 
 # Suppress stellar/nebular component so the AGN SED is unambiguous.
 COMMON = dict(
-    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": -30.0},
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -30.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.05),
 )
 
 # AGN: multicolor disc + SKIRTOR torus + polar-dust attenuation.
 # Make agn_polar_ebv and agn_cos_inc FREE so we can sweep them at predict time.
 AGN = {
-    "disc": {"type": "multicolor", "*": tengri.FIXED},
-    "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": 7.0},
-    "lines": {"type": "none", "*": tengri.FIXED},
-    "atten": {"type": "polar_dust", "*": tengri.FIXED},
-    "*": tengri.FIXED,
+    "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+    "torus": {"type": "skirtor", "all_params": tengri.FIXED, "tau_skirtor": 7.0},
+    "nlr": {"type": "none", "all_params": tengri.FIXED},
+    "blr": {"type": "none", "all_params": tengri.FIXED},
+    "atten": {"type": "polar_dust", "all_params": tengri.FIXED},
+    "all_params": tengri.FIXED,
     "log_lbol": 12.0,
     "frac": 1.0,  # without this the AGN is multiplied by 0 (default)
     # A Distribution at per-param level overrides the wildcard and makes the
@@ -85,9 +86,9 @@ for ebv in ebv_values:
         "agn_polar_ebv": jnp.float64(ebv),
         "agn_cos_inc": jnp.float64(1.0),
     }
-    out_t1 = model.predict_rest_sed(params_t1)
-    wave_t1 = np.asarray(out_t1.wavelength)
-    sed_t1 = np.asarray(out_t1.sed)
+    out_t1 = model.predict(params_t1)
+    wave_t1 = np.asarray(model.wavelengths)
+    sed_t1 = np.asarray(out_t1.rest_sed())
     nu_t1 = C_AA_PER_S / wave_t1
     nu_lnu_t1 = nu_t1 * sed_t1
     ax1.loglog(wave_t1, nu_lnu_t1, color=cmap(norm(ebv)), lw=1.4)
@@ -106,9 +107,9 @@ for ebv in ebv_values:
         "agn_polar_ebv": jnp.float64(ebv),
         "agn_cos_inc": jnp.float64(0.0),
     }
-    out_t2 = model.predict_rest_sed(params_t2)
-    wave_t2 = np.asarray(out_t2.wavelength)
-    sed_t2 = np.asarray(out_t2.sed)
+    out_t2 = model.predict(params_t2)
+    wave_t2 = np.asarray(model.wavelengths)
+    sed_t2 = np.asarray(out_t2.rest_sed())
     nu_t2 = C_AA_PER_S / wave_t2
     nu_lnu_t2 = nu_t2 * sed_t2
     ax2.loglog(wave_t2, nu_lnu_t2, color=cmap(norm(ebv)), lw=1.4)

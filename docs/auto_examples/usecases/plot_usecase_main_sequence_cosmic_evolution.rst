@@ -177,9 +177,9 @@ References:
     # Use dpl (double-power-law) SFH with free log_total_mass (normalization)
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED, "log_total_mass": 10.0},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED},
+        sfh={"type": "dpl", "all_params": tengri.FIXED, "log_total_mass": 10.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={"type": "cue", "all_params": tengri.FIXED},
     )
 
     # Sample baseline parameters (all fixed except log_total_mass)

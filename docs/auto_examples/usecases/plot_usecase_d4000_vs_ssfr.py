@@ -45,14 +45,14 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -63,9 +63,9 @@ ssfr = np.empty_like(ages)
 
 for i, age in enumerate(ages):
     p = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    l_nu = np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    l_nu = np.asarray(out.rest_sed())
     d4000[i] = _d4000(wave, l_nu)
     sfh = model.predict_sfh(p)
     t = np.asarray(sfh["t_gyr"])

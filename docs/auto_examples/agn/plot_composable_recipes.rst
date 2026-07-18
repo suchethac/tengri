@@ -38,7 +38,7 @@ through ``SEDModel.build`` with the nested-dict grammar.
 References: Buchner et al. 2024 (GRAHSP); Kubota & Done 2018;
 Stalevski et al. 2016 (SKIRTOR); Temple, Hewett & Banerji 2021.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-92
+.. GENERATED FROM PYTHON SOURCE LINES 22-94
 
 
 
@@ -48,8 +48,19 @@ Stalevski et al. 2016 (SKIRTOR); Temple, Hewett & Banerji 2021.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -71,8 +82,8 @@ Stalevski et al. 2016 (SKIRTOR); Temple, Hewett & Banerji 2021.
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     ssp = tengri.load_ssp()
 
@@ -81,37 +92,39 @@ Stalevski et al. 2016 (SKIRTOR); Temple, Hewett & Banerji 2021.
             "all-GRAHSP",
             "tab:blue",
             {
-                "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
-                "lines": {"type": "grahsp", "*": tengri.FIXED},
-                "feii": {"type": "grahsp", "*": tengri.FIXED},
-                "torus": {"type": "grahsp", "*": tengri.FIXED},
-                "atten": {"type": "grahsp_biatten", "*": tengri.FIXED},
+                "disc": {"type": "grahsp_sbpl", "all_params": tengri.FIXED},
+                "nlr": {"type": "grahsp", "all_params": tengri.FIXED},
+                "blr": {"type": "grahsp", "all_params": tengri.FIXED},
+                "feii": {"type": "grahsp", "all_params": tengri.FIXED},
+                "torus": {"type": "grahsp", "all_params": tengri.FIXED},
+                "atten": {"type": "grahsp_biatten", "all_params": tengri.FIXED},
             },
         ),
         (
             "multicolor disc + SKIRTOR torus + NLR",
             "tab:green",
             {
-                "disc": {"type": "multicolor", "*": tengri.FIXED},
-                "torus": {"type": "skirtor", "*": tengri.FIXED},
-                "lines": {"type": "nlr", "*": tengri.FIXED},
+                "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+                "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+                "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+                "blr": {"type": "none", "all_params": tengri.FIXED},
             },
         ),
         (
             "QSOgen monolithic",
             "tab:orange",
-            {"disc": {"type": "qsogen", "*": tengri.FIXED}},
+            {"disc": {"type": "qsogen", "all_params": tengri.FIXED}},
         ),
     ]
 
     fig, ax = plt.subplots(figsize=(8.0, 5.0))
     for label, color, blocks in RECIPES:
-        agn = {"*": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **blocks}
+        agn = {"all_params": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **blocks}
         model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave_um = np.asarray(out.wavelength) * 1.0e-4
-        nu_lnu = C_AA_PER_S / np.asarray(out.wavelength) * np.asarray(out.sed)
+        out = model.predict(p)
+        wave_um = np.asarray(model.wavelengths) * 1.0e-4
+        nu_lnu = C_AA_PER_S / np.asarray(model.wavelengths) * np.asarray(out.rest_sed())
         ax.loglog(wave_um, np.where(nu_lnu > 0, nu_lnu, np.nan), lw=1.6, color=color, label=label)
 
     ax.set(
@@ -123,6 +136,11 @@ Stalevski et al. 2016 (SKIRTOR); Temple, Hewett & Banerji 2021.
     ax.legend(loc="lower center", fontsize=9, frameon=False)
     fig.tight_layout()
     plt.savefig("plot_composable_recipes.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 11.621 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_composable_recipes.py:

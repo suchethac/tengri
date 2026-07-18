@@ -86,7 +86,7 @@ Reference: Draine & Li 2007, ApJ 657, 810 (Eq. 23, U distribution).
         # L_IR = ∫L_ν dν over 8-1000 μm (integrate over frequency, decreasing in λ)
         mask = (wave_um >= 8.0) & (wave_um <= 1000.0)
         order = np.argsort(nu[mask])
-        L_IR.append(float(np.trapz(L_nu[mask][order], nu[mask][order])))
+        L_IR.append(float(np.trapezoid(L_nu[mask][order], nu[mask][order])))
 
     T_peak = np.array(T_peak)
     L_IR = np.array(L_IR)

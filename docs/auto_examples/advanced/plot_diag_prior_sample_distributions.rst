@@ -63,8 +63,8 @@ any significant deviation (KS > 0.05 suggests a bug in the sampler).
 
     model = tengri.SEDModel.build(
         tengri.load_ssp("fsps_prsc_miles_chabrier"),
-        sfh={"type": "dpl", "alpha": tengri.FREE, "beta": tengri.FREE, "*": tengri.FIXED},
-        dust={"type": "two_component", "*": tengri.FIXED},
+        sfh={"type": "dpl", "alpha": tengri.FREE, "beta": tengri.FREE, "all_params": tengri.FIXED},
+        dust={"type": "two_component", "all_params": tengri.FIXED},
     )
     spec = model.spec
     free_params = spec.free_params
@@ -142,7 +142,7 @@ any significant deviation (KS > 0.05 suggests a bug in the sampler).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 29.673 seconds)
+   **Total running time of the script:** (3 minutes 1.416 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_prior_sample_distributions.py:

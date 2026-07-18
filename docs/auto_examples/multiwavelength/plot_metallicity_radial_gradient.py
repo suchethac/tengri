@@ -42,7 +42,7 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 base_model_config = dict(
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 1.5,
@@ -50,7 +50,7 @@ base_model_config = dict(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.3,
         "tau_diff": 0.2,
     },
@@ -117,9 +117,9 @@ def compute_integrated_sed(scenario):
         params = dict(model.spec.sample(jax.random.PRNGKey(i)))
         params["met_logzsol"] = jnp.float64(met_logzsol)
 
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
-        sed = np.asarray(out.sed)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
+        sed = np.asarray(out.rest_sed())
 
         if wave_ref is None:
             wave_ref = wave

@@ -47,7 +47,7 @@ ssp = tengri.load_ssp()
 COMMON = dict(
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 2.0,
         "log_total_mass": 10.0,
         "alpha": 1.5,
@@ -55,30 +55,30 @@ COMMON = dict(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "law_bc": "calzetti",
         "tau_diff": 0.2,
         "tau_bc": 0.5,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
     redshift=tengri.Fixed(0.05),
 )
 
 # Base AGN configuration: Seyfert II with log_lbol = 11.5 (L_bol ~ 3e11 L_sun)
 BASE_AGN = dict(
-    disc={"type": "multicolor", "*": tengri.FIXED},
-    torus={"type": "skirtor", "*": tengri.FIXED},
+    disc={"type": "multicolor", "all_params": tengri.FIXED},
+    torus={"type": "skirtor", "all_params": tengri.FIXED},
     log_lbol=11.5,
 )
 
 
 def _build_model(agn_frac):
     """Build a model with specified AGN fraction."""
-    agn_config = {**BASE_AGN, "*": tengri.FIXED, "frac": agn_frac}
+    agn_config = {**BASE_AGN, "all_params": tengri.FIXED, "frac": agn_frac}
     model = tengri.SEDModel.build(ssp, agn=agn_config, **COMMON)
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    return np.asarray(out.wavelength), np.asarray(out.sed)
+    out = model.predict(p)
+    return np.asarray(model.wavelengths), np.asarray(out.rest_sed())
 
 
 # Compute three traces: host-only, AGN-only, composite

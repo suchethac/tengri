@@ -41,8 +41,19 @@ breaks (young stars are bluer).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -78,7 +89,7 @@ breaks (young stars are bluer).
                 ssp,
                 sfh={
                     "type": "dpl",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "alpha": 2.0,
                     "beta": 2.5,
                     "tau_gyr": age_gyr,
@@ -86,7 +97,7 @@ breaks (young stars are bluer).
                 },
                 dust={
                     "type": "two_component",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "tau_bc": 0.0,
                     "tau_diff": 0.0,
                 },
@@ -95,9 +106,9 @@ breaks (young stars are bluer).
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))
             params["met_logzsol"] = jnp.float64(logz)
 
-            pred = model.predict_rest_sed(params)
-            wave = np.asarray(pred.wavelength)
-            sed = np.asarray(pred.sed)
+            pred = model.predict(params)
+            wave = np.asarray(model.wavelengths)
+            sed = np.asarray(pred.rest_sed())
 
             # Normalize at 5500 Å
             i_norm = int(np.argmin(np.abs(wave - 5500.0)))
@@ -142,6 +153,11 @@ breaks (young stars are bluer).
 
     fig.tight_layout()
     plt.savefig("plot_metallicity_age_grid.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.474 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_metallicity_age_grid.py:

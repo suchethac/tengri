@@ -50,7 +50,7 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 1.5,
@@ -59,7 +59,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.1,
         "tau_diff": 0.2,
         "slope": -0.7,
@@ -69,7 +69,7 @@ model = tengri.SEDModel.build(
 
 # Predict SED and photometry
 params = dict(model.spec.sample(tengri.jax.random.PRNGKey(0)))
-sed_result = model.predict_rest_sed(params)
+sed_result = model.predict(params)
 phot_flux = np.array(model.predict_photometry(params))
 phot_wave = np.array([float(jnp.mean(w)) for w in phot.filter_waves])
 
@@ -79,8 +79,8 @@ fig, (ax_sed, ax_filters) = plt.subplots(
 )
 
 # Top: SED + photometric points
-wave_rest = np.asarray(sed_result.wavelength)
-sed_rest = np.asarray(sed_result.sed)
+wave_rest = np.asarray(model.wavelengths)
+sed_rest = np.asarray(sed_result.rest_sed())
 ax_sed.loglog(wave_rest, sed_rest, color="C0", lw=1.4, label="Model SED (rest-frame)")
 ax_sed.plot(phot_wave, phot_flux, "o", color="C3", ms=7, label="Photometry", zorder=10)
 ax_sed.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")

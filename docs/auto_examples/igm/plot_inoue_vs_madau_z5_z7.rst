@@ -71,18 +71,18 @@ Reference: Inoue, Shimizu, Iwata, Tanaka 2014 MNRAS 442 1805.
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_gyr": 0.05,
             "log_total_mass": 10.0,
             "alpha": 2.8,
             "beta": 1.5,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.01, "tau_bc": 0.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.01, "tau_bc": 0.0},
         redshift=tengri.Fixed(5.0),
     )
-    out = model.predict_rest_sed(dict(model.spec.sample(jax.random.PRNGKey(0))))
+    out = model.predict(dict(model.spec.sample(jax.random.PRNGKey(0))))
     L_nu_rest = np.interp(
-        wave_rest, np.asarray(out.wavelength), np.asarray(out.sed), left=0.0, right=0.0
+        wave_rest, np.asarray(model.wavelengths), np.asarray(out.rest_sed()), left=0.0, right=0.0
     )
     L_nu_norm = L_nu_rest / L_nu_rest[np.argmin(np.abs(wave_rest - 1400.0))]
 
@@ -122,6 +122,11 @@ Reference: Inoue, Shimizu, Iwata, Tanaka 2014 MNRAS 442 1805.
 
     fig.tight_layout()
     plt.savefig("plot_inoue_vs_madau_z5_z7.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.375 seconds)
 
 
 .. _sphx_glr_download_auto_examples_igm_plot_inoue_vs_madau_z5_z7.py:

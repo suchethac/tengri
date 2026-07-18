@@ -62,14 +62,14 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": tengri.Uniform(0.01, 8.0),
         "width_gyr": 0.05,  # narrow truncation: an explicit quench
         "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -83,9 +83,9 @@ for i, t in enumerate(t_q):
     params = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(t)}
     flux = np.asarray(model.predict_photometry(params))
     nuv_r[i] = -2.5 * np.log10(flux[0] / flux[1])
-    sed = model.predict_rest_sed(params)
-    wave = np.asarray(sed.wavelength)
-    l_nu = np.asarray(sed.sed)
+    sed = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    l_nu = np.asarray(sed.rest_sed())
     d4000[i] = _d4000(wave, l_nu)
     ha_ew[i] = _halpha_ew(wave, l_nu)
 

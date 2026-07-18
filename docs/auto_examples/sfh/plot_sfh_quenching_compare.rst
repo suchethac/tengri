@@ -36,25 +36,8 @@ young stars atop an old population. The SED reveals the full assembly history.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 6% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 42% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -82,13 +65,13 @@ young stars atop an old population. The SED reveals the full assembly history.
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 0.1,
             "beta": 0.1,
             "tau_gyr": 3.0,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.1),
     )
 
@@ -97,13 +80,13 @@ young stars atop an old population. The SED reveals the full assembly history.
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 1.0,
             "beta": 2.0,
             "tau_gyr": 2.0,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.1),
     )
 
@@ -112,13 +95,13 @@ young stars atop an old population. The SED reveals the full assembly history.
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 3.0,
             "beta": 3.0,
             "tau_gyr": 1.5,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.1),
     )
 
@@ -127,14 +110,14 @@ young stars atop an old population. The SED reveals the full assembly history.
         ssp,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": 0.2,
             "width_gyr": 0.5,
             "skew": 0.3,
             "trunc": 2.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.1),
     )
 
@@ -144,16 +127,16 @@ young stars atop an old population. The SED reveals the full assembly history.
     baseline3 = dict(model3.spec.sample(jax.random.PRNGKey(2)))
     baseline4 = dict(model4.spec.sample(jax.random.PRNGKey(3)))
 
-    out1 = model1.predict_rest_sed(baseline1)
-    out2 = model2.predict_rest_sed(baseline2)
-    out3 = model3.predict_rest_sed(baseline3)
-    out4 = model4.predict_rest_sed(baseline4)
+    out1 = model1.predict(baseline1)
+    out2 = model2.predict(baseline2)
+    out3 = model3.predict(baseline3)
+    out4 = model4.predict(baseline4)
 
-    wave = np.asarray(out1.wavelength)
-    sed1 = np.asarray(out1.sed)
-    sed2 = np.asarray(out2.sed)
-    sed3 = np.asarray(out3.sed)
-    sed4 = np.asarray(out4.sed)
+    wave = np.asarray(model1.wavelengths)
+    sed1 = np.asarray(out1.rest_sed())
+    sed2 = np.asarray(out2.rest_sed())
+    sed3 = np.asarray(out3.rest_sed())
+    sed4 = np.asarray(out4.rest_sed())
 
     fig, ax = plt.subplots(figsize=(10, 6))
 

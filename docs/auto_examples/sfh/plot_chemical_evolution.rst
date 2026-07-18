@@ -52,8 +52,19 @@ the Z(t) history and observable photometry.
          :class: sphx-glr-multi-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -205,16 +216,16 @@ the Z(t) history and observable photometry.
     p_twostep["met_logzsol_young"] = 0.0
     p_twostep["met_step_age_gyr"] = 8.0
 
-    pred_delta = model_delta.predict_rest_sed(p_delta)
-    pred_ramp = model_ramp.predict_rest_sed(p_ramp)
-    pred_twostep = model_twostep.predict_rest_sed(p_twostep)
+    pred_delta = model_delta.predict(p_delta)
+    pred_ramp = model_ramp.predict(p_ramp)
+    pred_twostep = model_twostep.predict(p_twostep)
 
-    wave_delta = np.asarray(pred_delta.wavelength)
-    sed_delta = np.asarray(pred_delta.sed)
-    wave_ramp = np.asarray(pred_ramp.wavelength)
-    sed_ramp = np.asarray(pred_ramp.sed)
-    wave_twostep = np.asarray(pred_twostep.wavelength)
-    sed_twostep = np.asarray(pred_twostep.sed)
+    wave_delta = np.asarray(model_delta.wavelengths)
+    sed_delta = np.asarray(pred_delta.rest_sed())
+    wave_ramp = np.asarray(model_ramp.wavelengths)
+    sed_ramp = np.asarray(pred_ramp.rest_sed())
+    wave_twostep = np.asarray(model_twostep.wavelengths)
+    sed_twostep = np.asarray(pred_twostep.rest_sed())
 
     # Z(t) extraction
     ssp_lg_ages_gyr = np.asarray(ssp.ssp_lg_age_gyr)
@@ -275,6 +286,11 @@ the Z(t) history and observable photometry.
 
     fig_met.tight_layout()
     plt.savefig("plot_chemical_evolution.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.172 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_chemical_evolution.py:

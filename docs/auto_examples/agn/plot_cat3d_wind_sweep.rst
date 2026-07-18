@@ -57,7 +57,7 @@ References
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
       return load_ssp_data(str(candidate))
 
 
@@ -91,16 +91,16 @@ References
 
     ssp = tengri.load_ssp()
 
-    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     # CAT3D-Wind grid: fwd in [1.0, 2.25]. Two viewing angles (near face-on / edge-on).
     FWD_VALUES = np.linspace(1.0, 2.25, 7)
     COS_INC = {"face-on (cos i = 0.85)": 0.85, "edge-on (cos i = 0.2)": 0.2}
 
     BASE_AGN = {
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "*": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "all_params": tengri.FIXED,
         "log_lbol": 12.0,
         "frac": 1.0,
     }
@@ -112,8 +112,8 @@ References
             agn["torus"] = torus
         model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.05))
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        return np.asarray(out.wavelength), np.asarray(out.sed)
+        out = model.predict(p)
+        return np.asarray(model.wavelengths), np.asarray(out.rest_sed())
 
 
     WAVE, DISC_ONLY = _build_sed(None)
@@ -122,7 +122,7 @@ References
     def torus_sed(cos_inc: float, fwd: float) -> tuple[np.ndarray, np.ndarray]:
         """Return (wavelength [AA], nu*L_nu [erg/s]) for the CAT3D-Wind torus alone."""
         wave, total = _build_sed(
-            {"type": "cat3d_wind", "*": tengri.FIXED, "cos_inc": cos_inc, "fwd_cat3d": fwd}
+            {"type": "cat3d_wind", "all_params": tengri.FIXED, "cos_inc": cos_inc, "fwd_cat3d": fwd}
         )
         disc = np.interp(wave, WAVE, DISC_ONLY)
         return wave, C_AA / wave * np.clip(total - disc, 0.0, None)
@@ -153,6 +153,11 @@ References
         weight="bold",
     )
     plt.savefig("plot_cat3d_wind_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 11.567 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_cat3d_wind_sweep.py:

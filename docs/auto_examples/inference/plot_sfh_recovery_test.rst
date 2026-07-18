@@ -21,6 +21,11 @@
 SFH recovery with MAP: double power-law against mock photometry
 ===============================================================
 
+.. image:: images/sphx_glr_plot_sfh_recovery_test_001.png
+   :alt: plot sfh recovery test
+   :class: sphx-glr-single-img
+
+
 Simulate a galaxy with a double-power-law (dpl) star formation history, mock
 SDSS photometry at S/N=20, and recover the SFH using MAP optimization. The
 figure compares the true and recovered SFH as a function of time, with the
@@ -31,17 +36,6 @@ degeneracies with dust and metallicity.
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-118
-
-
-
-.. image-sg:: /auto_examples/inference/images/sphx_glr_plot_sfh_recovery_test_001.png
-   :alt: plot sfh recovery test
-   :srcset: /auto_examples/inference/images/sphx_glr_plot_sfh_recovery_test_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -71,10 +65,10 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": tengri.FREE},
+        sfh={"type": "dpl", "all_params": tengri.FREE},
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tengri.Uniform(0.0, 1.5),
             "slope": -0.7,
         },
@@ -149,11 +143,6 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     ax_res.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
 
     plt.savefig("plot_sfh_recovery_test.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 5.249 seconds)
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_sfh_recovery_test.py:

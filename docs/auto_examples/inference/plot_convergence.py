@@ -34,10 +34,10 @@ obs = tengri.Observation(
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FREE},
+    sfh={"type": "tsnorm", "all_params": tengri.FREE},
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": tengri.Uniform(0.0, 1.5),
         "slope": -0.7,
     },

@@ -81,16 +81,16 @@ References:
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 1.2,
             "beta": 2.0,
             "tau_gyr": 0.5,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
         neb={
             "type": "cue",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             # NB: short-form keys inside the `neb` group (full `neb_*` is silently ignored)
             "logU": -2.0,
             "logZ_gas": tengri.Uniform(-2.0, 0.5),
@@ -113,9 +113,9 @@ References:
     seds = []
     for logz in logz_values:
         params = {**baseline, "neb_logZ_gas": jnp.float64(logz)}
-        pred = model.predict_rest_sed(params)
-        seds.append(np.asarray(pred.sed))
-    wave = np.asarray(pred.wavelength)
+        pred = model.predict(params)
+        seds.append(np.asarray(pred.rest_sed()))
+    wave = np.asarray(model.wavelengths)
     ref = seds[0]  # logz = -1.5 baseline
 
     mask = (wave >= 1000) & (wave <= 1e4)
@@ -145,6 +145,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_gas_z_continuum_effect.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.660 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_gas_z_continuum_effect.py:

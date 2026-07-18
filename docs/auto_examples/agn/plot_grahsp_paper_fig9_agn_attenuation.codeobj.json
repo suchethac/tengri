@@ -698,22 +698,6 @@
    "name": "ScalarMappable"
   }
  ],
- "cm.get_cmap": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.cm",
-   "module_short": "matplotlib.cm",
-   "name": "get_cmap"
-  }
- ],
  "cmap": [
   {
    "is_class": false,
@@ -1040,6 +1024,22 @@
    "module": "os",
    "module_short": "os",
    "name": "environ"
+  }
+ ],
+ "plt.get_cmap": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "get_cmap"
   }
  ],
  "plt.show": [

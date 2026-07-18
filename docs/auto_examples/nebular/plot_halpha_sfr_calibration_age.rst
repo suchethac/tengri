@@ -29,7 +29,7 @@ show the calibration validity range is weakly sensitive to Z: higher Z
 reduces ionizing photon production, compressing the valid age window slightly
 toward older ages.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-81
+.. GENERATED FROM PYTHON SOURCE LINES 13-86
 
 
 
@@ -82,17 +82,22 @@ toward older ages.
                 ssp,
                 sfh={
                     "type": "const",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "log_total_mass": log_total_mass_true,
                     "start_gyr": age_myr / 1e3,
                     "end_gyr": 0.0,
                 },
-                dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-                neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": met},
+                dust={
+                    "type": "two_component",
+                    "all_params": tengri.FIXED,
+                    "tau_diff": 0.0,
+                    "tau_bc": 0.0,
+                },
+                neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": met},
                 redshift=tengri.Fixed(0.0),
             )
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-            l_halpha = float(model.predict_emission_lines(params).halpha)
+            l_halpha = float(model.predict(params).lines.halpha)
             sfr_inferred.append(murphy_const * l_halpha)
             ages_valid.append(age_myr)
 
@@ -116,7 +121,7 @@ toward older ages.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.566 seconds)
+   **Total running time of the script:** (0 minutes 12.139 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_halpha_sfr_calibration_age.py:

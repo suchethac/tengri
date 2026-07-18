@@ -5,7 +5,7 @@ Rest-frame SED Redshift Invariance
 The rest-frame SED depends only on intrinsic galaxy properties (SFH, dust,
 metallicity, nebular, AGN) and is independent of redshift. Redshift only
 enters via the observation (wavelength shift, distance dimming, IGM
-attenuation). This diagnostic verifies that :meth:`predict_rest_sed` returns
+attenuation). This diagnostic verifies that :meth:`Prediction.rest_sed` returns
 bit-identical SEDs across a range of redshifts for identical intrinsic
 parameters. Age-of-the-Universe constraints at high-z may truncate the SFH
 legitimately, producing smooth variation; any non-smooth jump signals a
@@ -31,9 +31,9 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_g"]))
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 2.0, "beta": 1.5, "tau_gyr": 5.0},
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.3},
-    neb={"type": "cue", "*": tengri.FIXED},
+    sfh={"type": "dpl", "all_params": tengri.FIXED, "alpha": 2.0, "beta": 1.5, "tau_gyr": 5.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.3},
+    neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Uniform(0.0, 5.0),
 )
 
@@ -48,15 +48,15 @@ z_vals = np.array([0.0, 0.5, 1.0, 2.0, 3.0, 5.0])
 max_rel_diffs = []
 for z in z_vals:
     params_z = {**baseline, "redshift": float(z)}
-    sed_z = model.predict_rest_sed(params_z)
+    sed_z = model.predict(params_z)
 
     # Compare to z=0 baseline
     if z == 0.0:
-        sed_0 = sed_z.sed
+        sed_0 = sed_z.rest_sed()
     else:
         # Max relative difference (exclude zeros)
         with np.errstate(divide="ignore", invalid="ignore"):
-            rel_diff = np.abs(sed_z.sed - sed_0) / np.abs(sed_0)
+            rel_diff = np.abs(sed_z.rest_sed() - sed_0) / np.abs(sed_0)
             rel_diff = rel_diff[np.isfinite(rel_diff)]
             max_rel_diff = np.max(rel_diff) if len(rel_diff) > 0 else 0.0
             max_rel_diffs.append(max_rel_diff)

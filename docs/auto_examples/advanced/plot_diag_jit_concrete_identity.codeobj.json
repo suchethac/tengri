@@ -8,6 +8,15 @@
    "name": "int"
   }
  ],
+ "_LINE_NAMES": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "tuple"
+  }
+ ],
  "ax": [
   {
    "is_class": false,
@@ -383,23 +392,9 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "matplotlib.axes._axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Axes"
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
   }
  ],
  "axes_list": [
@@ -471,7 +466,7 @@
    "is_explicit": false,
    "module": "builtins",
    "module_short": "builtins",
-   "name": "method"
+   "name": "function"
   }
  ],
  "f_lines_jit": [
@@ -573,6 +568,38 @@
    "module": "matplotlib",
    "module_short": "matplotlib",
    "name": "Artist.tight_layout"
+  }
+ ],
+ "fluxes_eager": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jaxlib._jax",
+   "module_short": "jaxlib._jax",
+   "name": "ArrayImpl"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jaxlib",
+   "module_short": "jaxlib",
+   "name": "ArrayImpl"
+  }
+ ],
+ "fluxes_jit": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jaxlib._jax",
+   "module_short": "jaxlib._jax",
+   "name": "ArrayImpl"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jaxlib",
+   "module_short": "jaxlib",
+   "name": "ArrayImpl"
   }
  ],
  "free_names": [
@@ -712,6 +739,22 @@
    "name": "max"
   }
  ],
+ "jnp.stack": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.numpy",
+   "module_short": "jax.numpy",
+   "name": "stack"
+  }
+ ],
  "jnp.where": [
   {
    "is_class": false,
@@ -748,46 +791,32 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.forward.prediction",
-   "module_short": "tengri.forward.prediction",
-   "name": "EmissionLines"
+   "module": "jaxlib._jax",
+   "module_short": "jaxlib._jax",
+   "name": "ArrayImpl"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.forward",
-   "module_short": "tengri.forward",
-   "name": "EmissionLines"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "EmissionLines"
+   "module": "jaxlib",
+   "module_short": "jaxlib",
+   "name": "ArrayImpl"
   }
  ],
  "lines_jit": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.forward.prediction",
-   "module_short": "tengri.forward.prediction",
-   "name": "EmissionLines"
+   "module": "jaxlib._jax",
+   "module_short": "jaxlib._jax",
+   "name": "ArrayImpl"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.forward",
-   "module_short": "tengri.forward",
-   "name": "EmissionLines"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "EmissionLines"
+   "module": "jaxlib",
+   "module_short": "jaxlib",
+   "name": "ArrayImpl"
   }
  ],
  "max_rel_diff": [
@@ -822,27 +851,27 @@
    "name": "SEDModel"
   }
  ],
- "model.predict_emission_lines": [
+ "model.available_properties": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward.sed_model",
    "module_short": "tengri.forward.sed_model",
-   "name": "SEDModel.predict_emission_lines"
+   "name": "SEDModel.available_properties"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward",
    "module_short": "tengri.forward",
-   "name": "SEDModel.predict_emission_lines"
+   "name": "SEDModel.available_properties"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDModel.predict_emission_lines"
+   "name": "SEDModel.available_properties"
   }
  ],
  "model.predict_photometry": [
@@ -866,6 +895,29 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "SEDModel.predict_photometry"
+  }
+ ],
+ "model.predict_properties": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward.sed_model",
+   "module_short": "tengri.forward.sed_model",
+   "name": "SEDModel.predict_properties"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward",
+   "module_short": "tengri.forward",
+   "name": "SEDModel.predict_properties"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "SEDModel.predict_properties"
   }
  ],
  "model.spec.free_params": [
