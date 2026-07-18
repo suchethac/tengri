@@ -43,7 +43,7 @@
 # steady few-fold (the fixed per-fit overhead dilutes it); the fast path's real
 # payoff is at catalog scale, where the look-up is shared work across galaxies
 # and the exact wave-grid forward would be prohibitive — see
-# [advanced/batch_fitting](../advanced/batch_fitting) for `fit_batch`.
+# [notebook 11](11_catalog_fits.py) for `fit_batch` at catalog scale.
 
 # %%
 import os

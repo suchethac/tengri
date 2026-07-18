@@ -79,6 +79,32 @@ def _demote_extra_h1_lines(text: str) -> str:
     return "\n".join(fixed)
 
 
+def normalize_spine_links(ipynb_path: Path) -> int:
+    """Retarget sibling-notebook links from the ``.py`` source to the rendered ``.ipynb``.
+
+    In ``notebooks/`` a link like ``[quickstart](00_quickstart.py)`` is correct --
+    the sibling really is a ``.py`` file, and it resolves on GitHub. In ``docs/``
+    only the rendered ``.ipynb`` exists, and nbsphinx resolves link targets as
+    local FILES (it does not accept the extensionless MyST doc form inside a
+    notebook), so the ``.py`` target 404s and nbsphinx warns ``localfile``.
+    Rewriting at sync time keeps each context correct instead of forcing one to
+    carry the other's spelling.
+
+    Only ``SPINE_SLUGS`` targets are touched, so links to genuine ``.py`` files
+    (scripts, benchmarks) are left alone.
+    """
+    text = ipynb_path.read_text(encoding="utf-8")
+    n = 0
+    for slug in SPINE_SLUGS:
+        # JSON-encoded cell sources, so match the literal "](<slug>.py)".
+        target, replacement = f"]({slug}.py)", f"]({slug}.ipynb)"
+        n += text.count(target)
+        text = text.replace(target, replacement)
+    if n:
+        ipynb_path.write_text(text, encoding="utf-8")
+    return n
+
+
 def normalize_markdown_headings(ipynb_path: Path, slug: str) -> None:
     """One H1 title in the first cell; demote other top-level ``#`` lines to ``##``."""
     nb = json.loads(ipynb_path.read_text(encoding="utf-8"))
@@ -184,8 +210,10 @@ def main() -> int:
         _merge_source_preserve_outputs(py_path, out_ipynb)
 
         normalize_markdown_headings(out_ipynb, slug)
+        n_links = normalize_spine_links(out_ipynb)
 
-        print(f"synced {slug} -> {out_ipynb.relative_to(root)}")
+        suffix = f" ({n_links} link(s) retargeted to .ipynb)" if n_links else ""
+        print(f"synced {slug} -> {out_ipynb.relative_to(root)}{suffix}")
 
     return 0
 
