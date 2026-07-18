@@ -222,8 +222,8 @@ The `.spectrum()` method returns an **instrument-ready** spectrum — convolved 
 
 ```python
 # Spectrum at specific observer-frame wavelengths
-obs_wave_rest = jnp.linspace(4000, 7000, 200)  # Å, rest-frame wavelengths
-obs_wave = obs_wave_rest * (1 + model.redshift)
+obs_wave = jnp.linspace(4000, 7000, 200)  # Å, OBSERVED-frame — the frame
+                                          # pred.spectrum() takes directly
 
 spec = pred.spectrum(wave_obs=obs_wave)
 # spec.flux — F_ν at observed wavelengths [erg/s/cm²/Å]
@@ -335,9 +335,9 @@ catalog.to_csv("mock_catalog.csv", index=False)
 
 This workflow is pure JAX — no loop, fully differentiable, and trivial to parallelize.
 
-## Error handling: KeyError on unknown properties
+## Error handling: unknown property names
 
-If you request a property that doesn't exist or isn't active in the model, you get a clear error:
+If you request a property that doesn't exist or isn't active in the model, you get a clear error. Which exception you catch follows the access style: attribute access (`pred.name`) raises `AttributeError`, dict access (`pred.properties["name"]`) raises `KeyError`.
 
 ```python
 pred = model.predict(params)
