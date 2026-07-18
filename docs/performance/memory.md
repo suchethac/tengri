@@ -79,28 +79,32 @@ See [compilation_cache.md](https://github.com/suchethac/tengri/blob/main/docs/in
 
 ## A safety-net watchdog
 
-If you batch-author notebooks on a < 32 GB machine, running a simple
-watchdog as a background process is cheap insurance. The default
-threshold is 20 GB — comfortable headroom above the worst-case
-single-NUTS-fit peak, low enough to catch a runaway:
+If you batch-author notebooks or run several sessions in parallel,
+running a watchdog daemon in the background is cheap insurance. Two
+ship in `scripts/`:
+
+- `scripts/python_oom_guard.sh` — SIGKILLs any **single** python
+  process whose RSS exceeds `LIMIT_GB` (default 10). Catches one
+  runaway JIT compile or fit.
+- `scripts/python_total_oom_guard.sh` — watches the **machine-wide
+  total** RSS of all python processes and, when the sum exceeds
+  `TOTAL_LIMIT_GB` (default 75% of physical RAM), SIGKILLs the most
+  memory-hungry processes first until the total is back under the
+  limit. This catches what the per-process guard cannot: many
+  individually-modest workers (pytest-xdist, parallel sessions,
+  orphaned kernels) that together sum past physical RAM.
 
 ```bash
-THRESHOLD_KB=20971520  # 20 GB; lower to 10 GB if your machine is tight
-while true; do
-  ps -axo pid=,rss=,comm= \
-    | awk -v t=$THRESHOLD_KB '$2>t && $3 ~ /python/ {print $1, $2, $3}' \
-    | while read pid rss cmd; do
-        echo "$(date) KILL $pid rss=${rss}KB cmd=$cmd" >> /tmp/oom_killer.log
-        kill -9 $pid 2>/dev/null
-      done
-  sleep 5
-done
+scripts/python_oom_guard.sh &                            # per-process limit
+TOTAL_LIMIT_GB=30 scripts/python_total_oom_guard.sh &    # machine-wide budget
 ```
 
-Logs go to `/tmp/oom_killer.log` so you can see what got killed. Drop
-the threshold only if your heaviest legitimate fit stays under it —
-NUTS on a model with template dust emission can briefly cross 10 GB
-during compile.
+Both log kills to `/tmp` (`python_oom_guard.log`,
+`python_total_oom_guard.log`). The total guard also appends the global
+RSS every poll, so after an incident you can see the ramp, and supports
+`DRY_RUN=1` to preview which processes a limit would shed. Set limits
+so your heaviest legitimate fit stays under them — NUTS on a model with
+template dust emission can briefly cross 10 GB during compile.
 
 ## When to file a bug
 

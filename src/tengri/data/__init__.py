@@ -97,93 +97,68 @@ def _format_bytes(n: int) -> str:
 
 def download_ssp(
     name: str,
-    dest_dir: str | os.PathLike = "data",
+    dest_dir: str | os.PathLike | None = None,
     *,
     overwrite: bool = False,
     progress: bool = True,
 ) -> Path:
     """Download a single SSP file from :data:`SSP_CATALOG_URL`.
 
+    .. deprecated::
+        Use :func:`tengri.download_ssp`, which this now delegates to. The two
+        were separate implementations of one job, reachable under the same name
+        with incompatible signatures (``dest_dir``/``overwrite`` here versus
+        ``dest``/``force`` there) — and only the other honored
+        ``$TENGRI_DATA_DIR``, so a file fetched through this one could land
+        somewhere the loaders never looked.
+
     Parameters
     ----------
     name : str
-        Filename in the catalog (e.g. ``"fsps_prsc_miles_chabrier.h5"``).
-        Use :func:`list_remote_ssps` to discover valid names.
+        Filename in the catalog (e.g. ``"fsps_prsc_miles_chabrier.h5"``), or a
+        short identifier from ``tengri.list_known_ssps()``. Use
+        :func:`list_remote_ssps` to discover catalog filenames.
     dest_dir : str or os.PathLike, optional
-        Directory to write into. Created if missing. Default: ``"data"``
-        (matches the layout the SSP loaders expect by default).
+        Directory to write into. Created if missing. Default ``None`` →
+        ``$TENGRI_DATA_DIR`` if set, else ``data/``.
     overwrite : bool, optional
-        If False (default), an existing file at the target path is kept
-        and its path is returned without re-downloading. If True, any
-        existing file is replaced.
+        If False (default), an existing file at the target path is kept and its
+        path is returned without re-downloading.
     progress : bool, optional
-        If True (default), print a one-line progress update to stderr
-        every ~5%. Set to False for clean log output.
+        If True (default), report download progress. False for clean logs.
 
     Returns
     -------
     pathlib.Path
-        Absolute path to the downloaded (or pre-existing) file.
+        Path to the downloaded (or pre-existing) file.
 
     Raises
     ------
-    urllib.error.URLError
-        If the catalog or specific file is unreachable.
+    KeyError
+        If ``name`` is neither a known identifier nor a ``.h5`` filename.
     ValueError
-        If ``name`` contains a path separator (defensive against
-        accidental traversal).
+        If ``name`` is a path rather than a bare filename.
+    RuntimeError
+        If the HTTP download fails.
 
     Examples
     --------
-    >>> from tengri.data import download_ssp  # doctest: +SKIP
-    >>> path = download_ssp("fsps_prsc_miles_chabrier.h5")  # doctest: +SKIP
-    >>> from tengri import load_ssp_data, recipes, SEDModel  # doctest: +SKIP
-    >>> ssp = load_ssp_data(str(path))  # doctest: +SKIP
-    >>> model = SEDModel.build(ssp_data=ssp, **recipes.star_forming_photometry())  # doctest: +SKIP
+    >>> import tengri  # doctest: +SKIP
+    >>> path = tengri.download_ssp("fsps_prsc_miles_chabrier")  # doctest: +SKIP
     """
-    if "/" in name or "\\" in name or name.startswith("."):
-        raise ValueError(
-            f"download_ssp(name={name!r}): name must be a bare filename, "
-            f"not a path. Use list_remote_ssps() to discover valid names."
-        )
+    import warnings
 
-    target = local_ssp_path(name, dest_dir).resolve()
-    target.parent.mkdir(parents=True, exist_ok=True)
+    from tengri._data_setup import download_ssp as _download_ssp
 
-    if target.exists() and not overwrite:
-        return target
-
-    url = SSP_CATALOG_URL.rstrip("/") + "/" + name
-    tmp = target.with_suffix(target.suffix + ".part")
-    with urllib.request.urlopen(url, timeout=60) as resp:
-        total = int(resp.headers.get("Content-Length", 0))
-        # Stream to a side file so an interrupted download never leaves a
-        # half-written SSP that load_ssp_data would happily try to read.
-        with tmp.open("wb") as fh:
-            if progress and total > 0:
-                downloaded = 0
-                next_pct = 5
-                while True:
-                    chunk = resp.read(1 << 20)  # 1 MiB
-                    if not chunk:
-                        break
-                    fh.write(chunk)
-                    downloaded += len(chunk)
-                    pct = downloaded * 100 // total
-                    if pct >= next_pct:
-                        sys.stderr.write(
-                            f"\r  download {name}: "
-                            f"{_format_bytes(downloaded)} / {_format_bytes(total)} "
-                            f"({pct:>3d}%)"
-                        )
-                        sys.stderr.flush()
-                        next_pct = pct + 5
-                sys.stderr.write("\n")
-            else:
-                shutil.copyfileobj(resp, fh)
-
-    tmp.replace(target)
-    return target
+    warnings.warn(
+        "tengri.data.download_ssp is deprecated; use tengri.download_ssp "
+        "instead. It accepts the same catalog filenames plus the short names "
+        "from tengri.list_known_ssps(), and honors $TENGRI_DATA_DIR for both "
+        "reads and writes.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return _download_ssp(name, dest=dest_dir, force=overwrite, progress=progress)
 
 
 def download_ssps(

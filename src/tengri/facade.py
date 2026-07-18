@@ -7,7 +7,6 @@ into a single object so users don't have to construct each by hand.
 
 from __future__ import annotations
 
-import glob
 import os
 import platform
 import sys
@@ -795,27 +794,24 @@ def doctor() -> str:
 
     lines.append("")
 
-    # SSP data availability
+    # SSP data availability. Search exactly where the loaders search
+    # (data_dirs), and glob what download_ssp actually writes: the old
+    # "ssp_*.h5" pattern could not match "fsps_prsc_miles_chabrier.h5", so
+    # doctor reported "no SSP data" for a correctly populated install.
     lines.append("SSP Data:")
-    ssp_locations = [
-        "./data/ssp_*.h5",
-        "~/tengri/data/ssp_*.h5",
-        os.path.expandvars("$TENGRI_DATA/ssp_*.h5"),
-    ]
-    found_ssp = False
-    for pattern in ssp_locations:
-        expanded = os.path.expanduser(pattern)
-        matches = glob.glob(expanded)
-        if matches:
-            lines.append(f"  ✓ Found: {matches[0]}")
-            found_ssp = True
-            break
+    from tengri._data_setup import TENGRI_DATA_ENV, find_ssp_files
 
-    if not found_ssp:
+    found = find_ssp_files()
+    if found:
+        lines.append(f"  ✓ Found: {found[0]}")
+        if len(found) > 1:
+            lines.append(f"    ({len(found)} SSP grids visible)")
+
+    if not found:
         lines.append("  WARNING: No SSP data found in common locations.")
         lines.append("    Run tengri.download_ssp() to fetch the default grid")
         lines.append("    (tengri.list_known_ssps() shows alternatives), or point")
-        lines.append("    TENGRI_DATA at an existing SSP directory.")
+        lines.append(f"    ${TENGRI_DATA_ENV} at an existing SSP directory.")
 
     lines.append("")
 
