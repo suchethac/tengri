@@ -382,8 +382,15 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
     """
     from tengri.parameters.groups import parse_groups
 
-    # Translate recipe to Parameters (no SSP data needed)
-    params = parse_groups(**recipe_dict)
+    # Translate recipe to Parameters (no SSP data needed).
+    #
+    # ``_allow_empty_wildcard``: this is a *discovery* call, not a model the
+    # caller intends to fit. Introspection recipes use ``all_params: FREE`` to
+    # mean "surface every parameter of this variant" and then read
+    # ``all_params`` regardless of free/fixed, so a wildcard that frees nothing
+    # is harmless here — unlike in user model construction, where it silently
+    # pins the physics being fitted.
+    params = parse_groups(**recipe_dict, _allow_empty_wildcard=True)
 
     # Get the list of parameter names to introspect
     if free_only:

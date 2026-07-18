@@ -145,7 +145,9 @@ class TestToGroupsRoundtrip:
                 "law_bc": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
-                "emission": {"type": "dale2014", "*": FREE},
+                # FIXED, not FREE: FREE frees nothing on dale2014 and is now
+                # refused. The round-trip property under test is unaffected.
+                "emission": {"type": "dale2014", "*": FIXED},
             },
             redshift=Fixed(0.1),
         )
