@@ -925,8 +925,22 @@ def cite_components(obj=None) -> _RegistryTable:
         )
         return _RegistryTable(rows)
 
-    # SEDModel / Posterior expose .spec
-    spec = getattr(obj, "spec", obj)
+    # Resolve the spec through the delegation chain. A ``SEDModel`` exposes
+    # ``.spec`` directly, but a ``Posterior`` does not — it holds the fitted
+    # model under ``_model``, which may itself be a ``ForwardModel`` wrapping
+    # the SED. A bare ``getattr(obj, "spec", obj)`` fell back to the Posterior
+    # itself, which has no structural fields, so citing a *fit result* emitted
+    # only the core dependencies.
+    from tengri.citations.collect import _citable_chain
+
+    spec = next(
+        (
+            s
+            for s in (getattr(node, "spec", None) for node in _citable_chain(obj))
+            if s is not None
+        ),
+        obj,
+    )
 
     # Always-present dependencies
     rows.append(

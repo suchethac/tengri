@@ -2234,6 +2234,11 @@ class Fitter:
         # Attach back-reference so Posterior.refine() works
         with contextlib.suppress(AttributeError):
             result._fitter = self
+        # Record the canonical registry key for citation collection.
+        # ``Posterior.method`` is a display string ("NUTS (BlackJAX)"), not a
+        # key, so the sampler citation cannot be recovered from it later.
+        with contextlib.suppress(AttributeError):
+            result._backend_key = entry.name
         return result
 
     def summary(self) -> str:
