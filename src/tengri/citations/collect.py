@@ -262,13 +262,34 @@ def _collect_keys(obj: Any, *, include_backend: bool = True) -> list[str]:
     core keys reachable from the result object itself.
     """
     keys: list[str] = []
-    for node in _citable_chain(obj):
-        keys.extend(_collect_keys_for_one(node, include_backend=include_backend))
+    for depth, node in enumerate(_citable_chain(obj)):
+        # The ``@cites`` sweep below reads *every* public attribute of its
+        # target. That is safe on the object the caller handed us, but forcing
+        # it on delegated nodes would touch every property of the wrapped
+        # SEDModel — including ones that compile or allocate — purely to look
+        # for citation annotations. Restrict it to the root; the delegated
+        # nodes contribute through the targeted extractors, which is where the
+        # component, SSP and backend keys come from anyway.
+        keys.extend(
+            _collect_keys_for_one(
+                node, include_backend=include_backend, scan_attributes=depth == 0
+            )
+        )
     return _dedup(keys)
 
 
-def _collect_keys_for_one(obj: Any, *, include_backend: bool = True) -> list[str]:
-    """Return the registry keys contributed by ``obj`` alone (no delegation)."""
+def _collect_keys_for_one(
+    obj: Any, *, include_backend: bool = True, scan_attributes: bool = True
+) -> list[str]:
+    """Return the registry keys contributed by ``obj`` alone (no delegation).
+
+    Parameters
+    ----------
+    scan_attributes : bool, optional
+        Sweep every public attribute for ``@cites`` annotations. Default
+        ``True``. Callers set it ``False`` for delegated nodes so the sweep
+        never forces attribute evaluation on an object the user did not pass.
+    """
     keys: list[str] = list(CORE_CITATIONS)
 
     mc = _find_model_config(obj)
@@ -340,7 +361,7 @@ def _collect_keys_for_one(obj: Any, *, include_backend: bool = True) -> list[str
 
     # Function-level annotations attached via @cites decorator, if any
     # function objects are exposed on obj (e.g. obj.run or obj.forward).
-    for attr_name in dir(obj):
+    for attr_name in dir(obj) if scan_attributes else ():
         if attr_name.startswith("_"):
             continue
         try:
