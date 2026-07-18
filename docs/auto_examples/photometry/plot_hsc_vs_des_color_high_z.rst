@@ -74,7 +74,7 @@ divergence in the high-redshift regime.
         base_spec = {
             "sfh": {
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "peak_lbt_gyr": peak_lbt_gyr,
                 "width_gyr": 1.0,
                 "log_total_mass": 10.0,
@@ -83,7 +83,7 @@ divergence in the high-redshift regime.
             },
             "dust": {
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_bc": tau_bc,
                 "tau_diff": 0.1,
                 "slope": -0.7,
@@ -141,7 +141,7 @@ divergence in the high-redshift regime.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.157 seconds)
+   **Total running time of the script:** (0 minutes 20.752 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_hsc_vs_des_color_high_z.py:

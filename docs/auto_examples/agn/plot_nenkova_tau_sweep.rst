@@ -84,12 +84,12 @@ Johnson, B. D. et al. 2021, ApJS, 254, 22 (Prospector).
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         agn={
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "nenkova", "*": tengri.FIXED, "tau": tengri.Uniform(5, 150)},
-            "*": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "nenkova", "all_params": tengri.FIXED, "tau": tengri.Uniform(5, 150)},
+            "all_params": tengri.FIXED,
             "log_lbol": 12.5,
             "frac": 1.0,
         },
@@ -103,9 +103,9 @@ Johnson, B. D. et al. 2021, ApJS, 254, 22 (Prospector).
 
     fig, ax = plt.subplots(figsize=(6.6, 4.3))
     for tau in tau_values:
-        out = model.predict_rest_sed({**baseline, "agn_tau": jnp.float64(tau)})
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        out = model.predict({**baseline, "agn_tau": jnp.float64(tau)})
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=cmap(norm(tau)), lw=1.5)
 
     # Silicate feature marker.
@@ -126,6 +126,11 @@ Johnson, B. D. et al. 2021, ApJS, 254, 22 (Prospector).
 
     plt.tight_layout()
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (6 minutes 0.055 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_nenkova_tau_sweep.py:

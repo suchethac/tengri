@@ -43,7 +43,7 @@ model = tengri.SEDModel.build(
     tengri.load_ssp(),
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 1.5,
@@ -52,7 +52,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.3,
         "tau_diff": 0.2,
         "slope": -0.7,
@@ -61,9 +61,9 @@ model = tengri.SEDModel.build(
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 wave_grid = jnp.logspace(jnp.log10(1000.0), jnp.log10(3.0e5), 500)
-pred = model.predict_rest_sed(baseline, wave=wave_grid)
-wave_rest_um = np.asarray(pred.wavelength) / 1.0e4
-sed_rest = np.asarray(pred.sed)
+pred = model.predict(baseline)
+wave_rest_um = np.asarray(wave_grid) / 1.0e4
+sed_rest = np.asarray(pred.rest_sed(np.asarray(wave_grid)))
 
 _, _, filter_curves = tengri.load_filter_set(BANDS)
 

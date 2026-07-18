@@ -69,14 +69,14 @@ Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": 0.3,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": tengri.Uniform(-1.5, 0.3)},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": tengri.Uniform(-1.5, 0.3)},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -91,10 +91,10 @@ Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
     all_curve_data = []
     for logz in logz_values:
         params = {**baseline, "neb_logZ_gas": jnp.float64(logz)}
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
         nu = 2.998e18 / wave
-        nu_l_nu = nu * np.asarray(out.sed)
+        nu_l_nu = nu * np.asarray(out.rest_sed())
         ax.semilogy(wave, nu_l_nu, color=cmap(norm(logz)), lw=1.4)
 
         # Track values in the plotted window for ylim
@@ -118,11 +118,6 @@ Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
 
     fig.tight_layout()
     plt.savefig("plot_logz_gas_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.634 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_logz_gas_sweep.py:

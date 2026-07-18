@@ -52,7 +52,7 @@ def _beta_uv(wave, l_nu):
 
 SFH = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": 0.05,
     "width_gyr": 0.05,
     "log_total_mass": 8.7,
@@ -68,7 +68,7 @@ def _model(av, rv):
         sfh=SFH,
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.0,
             "tau_diff": av / 1.086,
             "law_diff": "cardelli",
@@ -86,8 +86,8 @@ for i, av in enumerate(av_grid):
     for j, rv in enumerate(rv_grid):
         model = _model(float(av), float(rv))
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        BETA_GRID[j, i] = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
+        out = model.predict(p)
+        BETA_GRID[j, i] = _beta_uv(np.asarray(model.wavelengths), np.asarray(out.rest_sed()))
 REFS = [(1.0, 2.8, "SMC"), (1.0, 3.16, "LMC"), (1.0, 3.1, "MW (diffuse)"), (1.0, 4.05, "Calzetti")]
 
 fig, ax = plt.subplots(figsize=(7.5, 5.0))

@@ -48,7 +48,7 @@ References
 .. [2] Antonucci, R. 1993, ARA&A, 31, 473
    "Unified Models for Active Galactic Nuclei and Quasars"
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-215
+.. GENERATED FROM PYTHON SOURCE LINES 32-220
 
 
 
@@ -74,6 +74,8 @@ References
 
  .. code-block:: none
 
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
     Building Type 1 (face-on, BLR) model...
     Building Type 2 (edge-on, NLR) model...
     Saved: plot_type1_type2_unified_model.png
@@ -116,16 +118,16 @@ References
 
     # Shared model components (minimal star formation, no dust).
     COMMON = dict(
-        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.05),
     )
 
     # Base AGN: multicolor disc + SKIRTOR torus (common to both Type 1 and 2).
     BASE_AGN = {
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": 7.0},
-        "*": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "torus": {"type": "skirtor", "all_params": tengri.FIXED, "tau_skirtor": 7.0},
+        "all_params": tengri.FIXED,
         "log_lbol": 12.0,
         "frac": 1.0,
     }
@@ -134,29 +136,31 @@ References
     print("Building Type 1 (face-on, BLR) model...")
     agn_type1 = {
         **BASE_AGN,
-        "lines": {"type": "blr", "*": tengri.FIXED},
+        "nlr": {"type": "none", "all_params": tengri.FIXED},
+        "blr": {"type": "analytic", "all_params": tengri.FIXED},
     }
     model_type1 = tengri.SEDModel.build(ssp, agn=agn_type1, **COMMON)
     params_type1 = dict(model_type1.spec.sample(jax.random.PRNGKey(42)))
     # Override inclination: cos(θ) = 1 (face-on)
     params_type1["agn_cos_inc"] = jnp.float64(1.0)
-    out_type1 = model_type1.predict_rest_sed(params_type1)
-    wave_type1 = np.asarray(out_type1.wavelength)
-    sed_type1 = np.asarray(out_type1.sed)
+    out_type1 = model_type1.predict(params_type1)
+    wave_type1 = np.asarray(model_type1.wavelengths)
+    sed_type1 = np.asarray(out_type1.rest_sed())
 
     # Type 2: edge-on, torus-obscured disc → narrow lines only
     print("Building Type 2 (edge-on, NLR) model...")
     agn_type2 = {
         **BASE_AGN,
-        "lines": {"type": "nlr", "*": tengri.FIXED},
+        "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+        "blr": {"type": "none", "all_params": tengri.FIXED},
     }
     model_type2 = tengri.SEDModel.build(ssp, agn=agn_type2, **COMMON)
     params_type2 = dict(model_type2.spec.sample(jax.random.PRNGKey(42)))
     # Override inclination: cos(θ) = 0 (edge-on)
     params_type2["agn_cos_inc"] = jnp.float64(0.0)
-    out_type2 = model_type2.predict_rest_sed(params_type2)
-    wave_type2 = np.asarray(out_type2.wavelength)
-    sed_type2 = np.asarray(out_type2.sed)
+    out_type2 = model_type2.predict(params_type2)
+    wave_type2 = np.asarray(model_type2.wavelengths)
+    sed_type2 = np.asarray(out_type2.rest_sed())
 
     # Convert to νL_ν for plotting (rest-frame)
     nu_type1 = C_AA_PER_S / wave_type1
@@ -209,8 +213,8 @@ References
         ("Intermediate (45°)", 0.50, "#ff7f0e"),
         ("Type 2 (edge-on)", 0.10, "#d62728"),
     )
-    SFH_TRANS = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST_TRANS = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    SFH_TRANS = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST_TRANS = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     # Create a second figure for the transition narrative
     fig2, ax_trans = plt.subplots(figsize=(7.5, 4.8))
@@ -221,20 +225,23 @@ References
             sfh=SFH_TRANS,
             dust=DUST_TRANS,
             agn={
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
                 "frac": 1.0,
                 "cos_inc": cos_inc,
-                "disc": {"type": "multicolor", "*": tengri.FIXED},
-                "torus": {"type": "skirtor", "*": tengri.FIXED},
-                "lines": {"type": "blr", "*": tengri.FIXED},
+                "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+                "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+                "nlr": {"type": "none", "all_params": tengri.FIXED},
+                "blr": {"type": "analytic", "all_params": tengri.FIXED},
             },
             redshift=tengri.Fixed(0.0),
         )
         p_trans = dict(model_trans.spec.sample(jax.random.PRNGKey(0)))
-        out_trans = model_trans.predict_rest_sed(p_trans)
-        wave_um = np.asarray(out_trans.wavelength) * 1.0e-4
-        nu_l_nu_trans = C_AA_PER_S / np.asarray(out_trans.wavelength) * np.asarray(out_trans.sed)
+        out_trans = model_trans.predict(p_trans)
+        wave_um = np.asarray(model_trans.wavelengths) * 1.0e-4
+        nu_l_nu_trans = (
+            C_AA_PER_S / np.asarray(model_trans.wavelengths) * np.asarray(out_trans.rest_sed())
+        )
         ax_trans.loglog(wave_um, nu_l_nu_trans, color=color, lw=1.8, label=label)
 
     for wl_um, name in [(0.1216, r"Ly$\alpha$"), (0.6563, r"H$\alpha$"), (9.7, "silicate")]:
@@ -275,7 +282,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.657 seconds)
+   **Total running time of the script:** (0 minutes 3.591 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_type1_type2_unified_model.py:

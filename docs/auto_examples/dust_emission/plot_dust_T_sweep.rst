@@ -35,8 +35,19 @@ redward toward the submillimeter.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -59,7 +70,7 @@ redward toward the submillimeter.
     recipe = recipes.dust_demo()
     recipe["dust"]["emission"] = {
         "type": "modified_blackbody",
-        "*": FIXED,
+        "all_params": FIXED,
         "T": 35.0,
         "beta_ir": 1.6,
     }
@@ -84,6 +95,11 @@ redward toward the submillimeter.
     )
     fig.tight_layout()
     plt.savefig("plot_dust_T_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 6.115 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_dust_T_sweep.py:

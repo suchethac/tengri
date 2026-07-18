@@ -28,7 +28,7 @@ log-normal transitions; field produces controlled burstiness governed by σ_fiel
 Twenty samples from each prior, overlaid translucently with median shown in bold.
 Visual width difference reveals each prior's implicit stochastic assumptions.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-90
+.. GENERATED FROM PYTHON SOURCE LINES 12-93
 
 
 
@@ -59,11 +59,14 @@ Visual width difference reveals each prior's implicit stochastic assumptions.
     ssp = load_ssp("fsps_prsc_miles_chabrier")
 
     model_cont = SEDModel.build(
-        ssp_data=ssp, sfh={"type": "continuity", "*": FREE}, redshift=Fixed(0.0)
+        ssp_data=ssp, sfh={"type": "continuity", "all_params": FREE}, redshift=Fixed(0.0)
     )
     model_field = SEDModel.build(
         ssp_data=ssp,
-        sfh=[{"type": "tsnorm", "*": FREE}, {"type": "field", "psd_sigma": 0.6, "psd_tau_myr": 100}],
+        sfh=[
+            {"type": "tsnorm", "all_params": FREE},
+            {"type": "field", "psd_sigma": 0.6, "psd_tau_myr": 100},
+        ],
         redshift=Fixed(0.0),
     )
 
@@ -121,6 +124,11 @@ Visual width difference reveals each prior's implicit stochastic assumptions.
     fig.legend(["Mean SFH"], loc="upper center", bbox_to_anchor=(0.5, 1.02), fontsize=10)
     fig.tight_layout()
     plt.savefig("plot_continuity_vs_bursty_psd.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 5.332 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_continuity_vs_bursty_psd.py:

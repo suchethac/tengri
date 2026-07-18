@@ -46,8 +46,19 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/examples/nebular/plot_fesc_sweep.py:105: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+      fig.tight_layout()
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -77,14 +88,14 @@ References:
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": 0.3,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED, "fesc": tengri.Uniform(0.0, 1.0)},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={"type": "cue", "all_params": tengri.FIXED, "fesc": tengri.Uniform(0.0, 1.0)},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -97,9 +108,9 @@ References:
     seds_by_fesc = {}
     for fesc in fesc_values:
         params = {**baseline, "neb_fesc": jnp.float64(fesc)}
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
-        sed = np.asarray(out.sed)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
+        sed = np.asarray(out.rest_sed())
         seds_by_fesc[fesc] = (wave, sed)
 
     # Main plot with full SED
@@ -138,6 +149,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_fesc_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.954 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_fesc_sweep.py:

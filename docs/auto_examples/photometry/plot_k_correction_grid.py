@@ -52,7 +52,7 @@ GALAXY_TYPES = [
         "Young star-forming",
         {
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,  # 10 Msun/yr
             "peak_lbt_gyr": 0.2,  # age ≈ 0.2 Gyr
             "width_gyr": 0.15,
@@ -61,7 +61,7 @@ GALAXY_TYPES = [
         },
         {
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.4,  # moderate dust
             "tau_bc": 0.5,
             "slope": -0.7,
@@ -72,7 +72,7 @@ GALAXY_TYPES = [
         "Old star-forming",
         {
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": 5.0,  # age ≈ 5 Gyr
             "width_gyr": 1.0,
@@ -81,7 +81,7 @@ GALAXY_TYPES = [
         },
         {
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.15,  # lighter dust
             "tau_bc": 0.2,
             "slope": -0.7,
@@ -92,7 +92,7 @@ GALAXY_TYPES = [
         "Red-sequence elliptical",
         {
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,  # 100 Msun/yr
             "peak_lbt_gyr": 10.0,  # age ≈ 10 Gyr (old starburst)
             "width_gyr": 0.5,
@@ -101,7 +101,7 @@ GALAXY_TYPES = [
         },
         {
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.05,  # minimal dust
             "tau_bc": 0.0,
             "slope": -0.7,
@@ -112,7 +112,7 @@ GALAXY_TYPES = [
         "Post-starburst",
         {
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": 1.5,  # intermediate age
             "width_gyr": 0.3,
@@ -121,7 +121,7 @@ GALAXY_TYPES = [
         },
         {
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.2,
             "tau_bc": 0.3,
             "slope": -0.7,

@@ -61,7 +61,7 @@ COLORS = plt.cm.viridis(np.linspace(0.1, 0.85, len(REDSHIFTS)))
 # (typical in star-forming galaxies at z > 2)
 SFH = {
     "type": "dpl",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "tau_gyr": 0.2,  # Young starburst timescale
     "log_total_mass": 10.0,  # Moderately intense star formation
     "alpha": 3.0,  # Rising SFR at early times
@@ -69,7 +69,7 @@ SFH = {
 }
 
 # Minimal dust to preserve continuum strength
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05}
 
 # Build model with IGM absorption enabled
 ssp = tengri.load_ssp()
@@ -96,9 +96,9 @@ for z, color in zip(REDSHIFTS, COLORS):
     params = {**p_base, "redshift": float(z)}
 
     # Get rest-frame SED
-    out = model.predict_rest_sed(params)
-    wave_rest_out = np.asarray(out.wavelength)
-    sed_rest = np.asarray(out.sed)
+    out = model.predict(params)
+    wave_rest_out = np.asarray(model.wavelengths)
+    sed_rest = np.asarray(out.rest_sed())
 
     # Interpolate to our wavelength grid for cleaner visualization
     sed_interp = np.interp(wave_rest, wave_rest_out, sed_rest, left=0, right=0)

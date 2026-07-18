@@ -48,8 +48,6 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
     α_OX values: min=-0.453, max=0.180
     Log L_2500: min=28.08, max=30.71
 
@@ -85,12 +83,12 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_total_mass": 10.0},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05},
+        sfh={"type": "dpl", "all_params": tengri.FIXED, "tau_gyr": 3.0, "log_total_mass": 10.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05},
         agn={
             "type": "composable",
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "frac": 1.0,  # Full AGN contribution
         },
         redshift=tengri.Fixed(0.0),  # Rest-frame only
@@ -123,10 +121,10 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154
 
     for log_lbol in log_lbol_values:
         params = {**baseline, "agn_log_lbol": jnp.float64(log_lbol)}
-        out = model.predict_rest_sed(params)
+        out = model.predict(params)
 
-        wave = np.asarray(out.wavelength)
-        sed = np.asarray(out.sed)  # erg/s/Hz
+        wave = np.asarray(model.wavelengths)
+        sed = np.asarray(out.rest_sed())  # erg/s/Hz
 
         # Linear interpolation to get L_ν at reference wavelengths
         # sed is L_ν(λ) in erg/s/Hz
@@ -176,11 +174,6 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154
 
     print(f"α_OX values: min={alpha_ox_values.min():.3f}, max={alpha_ox_values.max():.3f}")
     print(f"Log L_2500: min={log_l_2500_values.min():.2f}, max={log_l_2500_values.max():.2f}")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.532 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py:

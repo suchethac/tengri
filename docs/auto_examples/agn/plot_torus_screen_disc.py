@@ -48,8 +48,8 @@ C_AA_PER_S = 2.998e18
 COS_INC = [1.0, 0.7, 0.5, 0.3, 0.05]
 COLORS = plt.cm.RdYlBu(np.linspace(0.92, 0.05, len(COS_INC)))
 
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
 fig, ax = plt.subplots(figsize=(7.2, 4.6))
@@ -64,9 +64,9 @@ for cos_inc, color in zip(COS_INC, COLORS):
         sfh=SFH,
         dust=DUST,
         agn={
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "log_lbol": 12.5,
             "frac": 1.0,
             "cos_inc": cos_inc,
@@ -76,9 +76,9 @@ for cos_inc, color in zip(COS_INC, COLORS):
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     if cos_inc_boundary is None:
         cos_inc_boundary = float(np.sin(np.radians(float(p["agn_oa_skirtor"]))))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     incl_deg = np.degrees(np.arccos(cos_inc))
     kind = "Type 1" if cos_inc > cos_inc_boundary else "Type 2"
     ax.loglog(wave, nu_l_nu, color=color, lw=1.5, label=rf"$i={incl_deg:.0f}^\circ$ ({kind})")

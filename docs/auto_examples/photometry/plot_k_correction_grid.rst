@@ -44,8 +44,21 @@ on SDSS template K-corrections.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.5 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=10 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -86,7 +99,7 @@ on SDSS template K-corrections.
             "Young star-forming",
             {
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_total_mass": 10.0,  # 10 Msun/yr
                 "peak_lbt_gyr": 0.2,  # age ≈ 0.2 Gyr
                 "width_gyr": 0.15,
@@ -95,7 +108,7 @@ on SDSS template K-corrections.
             },
             {
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 0.4,  # moderate dust
                 "tau_bc": 0.5,
                 "slope": -0.7,
@@ -106,7 +119,7 @@ on SDSS template K-corrections.
             "Old star-forming",
             {
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_total_mass": 10.0,
                 "peak_lbt_gyr": 5.0,  # age ≈ 5 Gyr
                 "width_gyr": 1.0,
@@ -115,7 +128,7 @@ on SDSS template K-corrections.
             },
             {
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 0.15,  # lighter dust
                 "tau_bc": 0.2,
                 "slope": -0.7,
@@ -126,7 +139,7 @@ on SDSS template K-corrections.
             "Red-sequence elliptical",
             {
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_total_mass": 10.0,  # 100 Msun/yr
                 "peak_lbt_gyr": 10.0,  # age ≈ 10 Gyr (old starburst)
                 "width_gyr": 0.5,
@@ -135,7 +148,7 @@ on SDSS template K-corrections.
             },
             {
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 0.05,  # minimal dust
                 "tau_bc": 0.0,
                 "slope": -0.7,
@@ -146,7 +159,7 @@ on SDSS template K-corrections.
             "Post-starburst",
             {
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_total_mass": 10.0,
                 "peak_lbt_gyr": 1.5,  # intermediate age
                 "width_gyr": 0.3,
@@ -155,7 +168,7 @@ on SDSS template K-corrections.
             },
             {
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 0.2,
                 "tau_bc": 0.3,
                 "slope": -0.7,
@@ -212,7 +225,7 @@ on SDSS template K-corrections.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 33.004 seconds)
+   **Total running time of the script:** (0 minutes 34.337 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_k_correction_grid.py:

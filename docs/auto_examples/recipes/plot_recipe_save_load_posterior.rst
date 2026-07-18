@@ -21,23 +21,17 @@
 Save and load a posterior to disk
 ==================================
 
+.. image:: images/sphx_glr_plot_recipe_save_load_posterior_001.png
+   :alt: plot recipe save load posterior
+   :class: sphx-glr-single-img
+
+
 How do I persist a posterior between sessions? This recipe runs a MAP fit,
 saves the result to HDF5, reloads it, and demonstrates basic analysis.
 Posterior objects can be checkpointed for long-running fits or multi-stage
 analysis pipelines.
 
 .. GENERATED FROM PYTHON SOURCE LINES 10-77
-
-
-
-.. image-sg:: /auto_examples/recipes/images/sphx_glr_plot_recipe_save_load_posterior_001.png
-   :alt: plot recipe save load posterior
-   :srcset: /auto_examples/recipes/images/sphx_glr_plot_recipe_save_load_posterior_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -68,8 +62,8 @@ analysis pipelines.
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FREE},
-        dust={"type": "two_component", "*": tengri.FREE},
+        sfh={"type": "tsnorm", "all_params": tengri.FREE},
+        dust={"type": "two_component", "all_params": tengri.FREE},
         redshift=tengri.Fixed(0.08),
     )
 
@@ -108,11 +102,6 @@ analysis pipelines.
 
         fig.tight_layout()
         plt.savefig("plot_recipe_save_load_posterior.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.923 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_save_load_posterior.py:

@@ -95,14 +95,14 @@ parameter combinations observations can break.
     model = tengri.SEDModel.build(
         ssp_data=BARE,
         observation=observation,
-        sfh={"type": "dpl", "*": tengri.FREE},
+        sfh={"type": "dpl", "all_params": tengri.FREE},
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
-            "*": tengri.FREE,
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "all_params": tengri.FREE,
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
-        neb={"type": "cue", "*": tengri.FIXED},
+        neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.1),
     )
 
@@ -235,7 +235,7 @@ parameter combinations observations can break.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.174 seconds)
+   **Total running time of the script:** (0 minutes 2.236 seconds)
 
 
 .. _sphx_glr_download_auto_examples_showcase_plot_gradient_degeneracy_direction.py:

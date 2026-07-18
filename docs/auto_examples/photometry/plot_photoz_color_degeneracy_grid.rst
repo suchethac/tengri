@@ -28,7 +28,7 @@ follow nearly identical (u-g, g-r) tracks and intersect at a single point.
 This shows why intermediate-wavelength photometry is essential for robust
 photo-z classification.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-109
+.. GENERATED FROM PYTHON SOURCE LINES 12-119
 
 
 
@@ -65,8 +65,18 @@ photo-z classification.
         return tengri.SEDModel.build(
             tengri.load_ssp("fsps_prsc_miles_chabrier"),
             observation=obs,
-            sfh={"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": peak_lbt, "width_gyr": width},
-            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": tau_diff, "tau_bc": 0.3},
+            sfh={
+                "type": "tsnorm",
+                "all_params": tengri.FIXED,
+                "peak_lbt_gyr": peak_lbt,
+                "width_gyr": width,
+            },
+            dust={
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+                "tau_diff": tau_diff,
+                "tau_bc": 0.3,
+            },
             redshift=tengri.Uniform(0.01, 3.5),
         )
 
@@ -144,7 +154,7 @@ photo-z classification.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.586 seconds)
+   **Total running time of the script:** (0 minutes 2.166 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_photoz_color_degeneracy_grid.py:

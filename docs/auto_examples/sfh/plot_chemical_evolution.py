@@ -159,16 +159,16 @@ p_twostep["met_logzsol_old"] = -0.5
 p_twostep["met_logzsol_young"] = 0.0
 p_twostep["met_step_age_gyr"] = 8.0
 
-pred_delta = model_delta.predict_rest_sed(p_delta)
-pred_ramp = model_ramp.predict_rest_sed(p_ramp)
-pred_twostep = model_twostep.predict_rest_sed(p_twostep)
+pred_delta = model_delta.predict(p_delta)
+pred_ramp = model_ramp.predict(p_ramp)
+pred_twostep = model_twostep.predict(p_twostep)
 
-wave_delta = np.asarray(pred_delta.wavelength)
-sed_delta = np.asarray(pred_delta.sed)
-wave_ramp = np.asarray(pred_ramp.wavelength)
-sed_ramp = np.asarray(pred_ramp.sed)
-wave_twostep = np.asarray(pred_twostep.wavelength)
-sed_twostep = np.asarray(pred_twostep.sed)
+wave_delta = np.asarray(model_delta.wavelengths)
+sed_delta = np.asarray(pred_delta.rest_sed())
+wave_ramp = np.asarray(model_ramp.wavelengths)
+sed_ramp = np.asarray(pred_ramp.rest_sed())
+wave_twostep = np.asarray(model_twostep.wavelengths)
+sed_twostep = np.asarray(pred_twostep.rest_sed())
 
 # Z(t) extraction
 ssp_lg_ages_gyr = np.asarray(ssp.ssp_lg_age_gyr)

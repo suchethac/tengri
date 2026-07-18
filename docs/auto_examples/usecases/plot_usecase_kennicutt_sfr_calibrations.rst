@@ -46,7 +46,7 @@ References:
 - Kennicutt 1998, ARA&A, 36, 189 (baseline calibrations)
 - Conroy 2013, ARA&A, 51, 393 (SED fitting; SFR diagnostics)
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-214
+.. GENERATED FROM PYTHON SOURCE LINES 30-218
 
 
 
@@ -56,8 +56,19 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -92,20 +103,24 @@ References:
     def _measure(log_sfr):
         model = tengri.SEDModel.build(
             SSP,
-            sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": float(log_sfr + 10.13)},
+            sfh={
+                "type": "const",
+                "all_params": tengri.FIXED,
+                "log_total_mass": float(log_sfr + 10.13),
+            },
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 0.0,
                 "tau_bc": 0.0,
-                "emission": {"type": "dale2014", "*": tengri.FIXED},
+                "emission": {"type": "dale2014", "all_params": tengri.FIXED},
             },
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
-        l_nu = np.asarray(out.sed)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
+        l_nu = np.asarray(out.rest_sed())
         i1500 = int(np.argmin(np.abs(wave - 1500)))
         L_uv = float(l_nu[i1500])
         ir = (wave > 8e4) & (wave < 1e7)
@@ -161,7 +176,7 @@ References:
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.3,
             "tau_diff": 0.2,
             "slope": -0.7,
@@ -245,11 +260,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_usecase_kennicutt_sfr_calibrations.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.756 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_kennicutt_sfr_calibrations.py:

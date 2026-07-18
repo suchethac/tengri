@@ -110,7 +110,7 @@ Physical insight made obvious:
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "peak_lbt_gyr": peak_lbt,
                 "width_gyr": width,
                 "log_total_mass": 10.0,  # stellar mass knob
@@ -119,7 +119,7 @@ Physical insight made obvious:
             },
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": tau_diff,
                 "tau_bc": tau_bc,
                 "slope": -0.7,

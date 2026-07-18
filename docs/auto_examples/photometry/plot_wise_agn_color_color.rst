@@ -66,8 +66,19 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -121,7 +132,7 @@ References
         # Build model with variable dust and age, fixed SFH shape
         sfh_config = {
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "alpha": 1.0,  # Fixed power-law slope (rising)
             "beta": 1.0,  # Fixed power-law slope (declining)
@@ -130,14 +141,14 @@ References
 
         dust_config = {
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "law_bc": "calzetti",
             "tau_diff": tau_diff_samples[i],
             "tau_bc": tau_bc_samples[i],
             "slope": -0.7,
             "emission": {
                 "type": "modified_blackbody",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "T": 35.0,  # Fixed dust temperature (reasonable for star-forming)
                 "beta_ir": 1.8,  # Fixed emissivity index
             },
@@ -203,7 +214,7 @@ References
         # Mimics AGN-heated torus without explicit AGN component
         sfh_config = {
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,  # Very suppressed SFR (~0.01 M_sun/yr; minimal stellar)
             "alpha": 1.0,
             "beta": 1.0,
@@ -212,14 +223,14 @@ References
 
         dust_config = {
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "law_bc": "calzetti",
             "tau_diff": 0.5 + 0.1 * i,  # Variable dust opacity (AGN-heated)
             "tau_bc": 0.3 + 0.05 * i,
             "slope": -0.7,
             "emission": {
                 "type": "modified_blackbody",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "T": 60.0 + 5.0 * i,  # Higher temperatures for AGN (60-100 K, hotter than SF)
                 "beta_ir": 1.8,
             },

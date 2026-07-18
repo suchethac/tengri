@@ -21,7 +21,7 @@
 SED additivity: stellar, dust attenuation, emission, and nebular components
 ===========================================================================
 
-Verifies the SED chain is additive by comparing the full ``predict_rest_sed``
+Verifies the SED chain is additive by comparing the full ``pred.rest_sed()``
 output against a manual sum of per-component SEDs. The forward model chains
 stellar continuum through dust attenuation, dust emission, and nebular
 processing; if modular, the sum should reconstruct the total.
@@ -61,20 +61,20 @@ processing; if modular, the sum should reconstruct the total.
 
     dust_cfg = {
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": tengri.Uniform(0.0, 1.5),
         "law_bc": "calzetti",
         "law_diff": "calzetti",
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     }
-    sfh_cfg = {"type": "tsnorm", "*": tengri.FREE}
+    sfh_cfg = {"type": "tsnorm", "all_params": tengri.FREE}
 
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
         sfh=sfh_cfg,
         dust=dust_cfg,
-        neb={"type": "cue", "*": tengri.FIXED},
+        neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.05),
     )
 
@@ -89,22 +89,22 @@ processing; if modular, the sum should reconstruct the total.
         dust_tau_diff=0.5,
     )
 
-    sed_total = model.predict_rest_sed(params)
-    wave = np.asarray(sed_total.wavelength)
-    lnu_total = np.asarray(sed_total.sed)
+    sed_total = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    lnu_total = np.asarray(sed_total.rest_sed())
 
     model_stellar = tengri.SEDModel.build(ssp, sfh=sfh_cfg, redshift=tengri.Fixed(0.05))
-    _sed_stellar = model_stellar.predict_rest_sed(params)
+    _sed_stellar = model_stellar.predict(params)
 
     model_dust = tengri.SEDModel.build(ssp, sfh=sfh_cfg, dust=dust_cfg, redshift=tengri.Fixed(0.05))
-    _sed_dust = model_dust.predict_rest_sed(params)
+    _sed_dust = model_dust.predict(params)
 
     # The sub-models omit nebular (and dust), so their rest-frame wavelength grids
     # are shorter than the full model's — Cue injects emission-line wavelengths the
     # bare-stellar grid lacks. Interpolate each component onto the full model's grid
     # before differencing so the additivity reconstruction lines up.
-    lnu_stellar = np.interp(wave, np.asarray(_sed_stellar.wavelength), np.asarray(_sed_stellar.sed))
-    lnu_dust = np.interp(wave, np.asarray(_sed_dust.wavelength), np.asarray(_sed_dust.sed))
+    lnu_stellar = np.asarray(_sed_stellar.rest_sed(wave))
+    lnu_dust = np.asarray(_sed_dust.rest_sed(wave))
 
     lnu_dust_emission = lnu_dust - lnu_stellar
     lnu_nebular = lnu_total - lnu_dust
@@ -140,6 +140,11 @@ processing; if modular, the sum should reconstruct the total.
     ax.grid(True, alpha=0.3, which="both", linestyle=":", linewidth=0.5)
 
     plt.savefig("plot_diag_sed_additivity.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 9.061 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_sed_additivity.py:

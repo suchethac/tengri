@@ -53,9 +53,9 @@ References
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
       return load_ssp_data(str(candidate))
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/parameters/groups.py:743: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/parameters/groups.py:813: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
       final_params = Parameters(**resolved_kwargs)
 
 
@@ -89,8 +89,8 @@ References
     ssp = tengri.load_ssp()
 
     # Fixed host galaxy: minimal stellar component suppressed
-    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     # Grid: black-hole mass vs Eddington ratio
     log_mbh_values = np.array([6.0, 7.5, 9.0])
@@ -120,8 +120,8 @@ References
                 sfh=SFH,
                 dust=DUST,
                 agn={
-                    "disc": {"type": "kubota_done", "*": tengri.FIXED},
-                    "*": tengri.FIXED,
+                    "disc": {"type": "kubota_done", "all_params": tengri.FIXED},
+                    "all_params": tengri.FIXED,
                     "log_lbol": log_lbol,
                     "log_mbh": log_mbh,
                     "log_ledd": log_ledd,
@@ -130,11 +130,11 @@ References
                 redshift=tengri.Fixed(0.05),
             )
             p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-            out = model.predict_rest_sed(p)
+            out = model.predict(p)
 
-            wave = np.asarray(out.wavelength)
+            wave = np.asarray(model.wavelengths)
             c_aa_s = 2.998e18
-            nu_l_nu = c_aa_s / wave * np.asarray(out.sed)
+            nu_l_nu = c_aa_s / wave * np.asarray(out.rest_sed())
             all_nu_l_nu.append(nu_l_nu)
 
             color = cmap_mbh(norm_mbh(log_mbh))
@@ -180,7 +180,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.518 seconds)
+   **Total running time of the script:** (0 minutes 3.298 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_kd18_disc_sweep.py:

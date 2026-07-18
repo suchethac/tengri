@@ -40,7 +40,7 @@ for pop_name, peak_lbt_gyr, tau_bc in [
     base_spec = {
         "sfh": {
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": peak_lbt_gyr,
             "width_gyr": 1.0,
             "log_total_mass": 10.0,
@@ -49,7 +49,7 @@ for pop_name, peak_lbt_gyr, tau_bc in [
         },
         "dust": {
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": tau_bc,
             "tau_diff": 0.1,
             "slope": -0.7,

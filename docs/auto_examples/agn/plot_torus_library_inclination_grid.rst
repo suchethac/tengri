@@ -52,21 +52,8 @@ References
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/examples/agn/plot_torus_library_inclination_grid.py:107: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
-      fig.tight_layout(rect=[0, 0, 0.90, 1])
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -92,8 +79,8 @@ References
     C_AA_PER_S = 2.998e18
     LOG_LBOL = 12.0
 
-    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     ssp = tengri.load_ssp()
 
@@ -103,9 +90,9 @@ References
     cmap = plt.get_cmap("viridis")
 
     torus_configs = [
-        ("SKIRTOR", {"type": "skirtor", "*": tengri.FIXED}),
-        ("CAT3D-WIND", {"type": "cat3d_wind", "*": tengri.FIXED}),
-        ("CLUMPY (Nenkova)", {"type": "nenkova", "*": tengri.FIXED}),
+        ("SKIRTOR", {"type": "skirtor", "all_params": tengri.FIXED}),
+        ("CAT3D-WIND", {"type": "cat3d_wind", "all_params": tengri.FIXED}),
+        ("CLUMPY (Nenkova)", {"type": "nenkova", "all_params": tengri.FIXED}),
     ]
 
     fig, axes = plt.subplots(1, len(torus_configs), figsize=(14, 4.5), sharey=True)
@@ -119,9 +106,9 @@ References
                 sfh=SFH,
                 dust=DUST,
                 agn={
-                    "disc": {"type": "multicolor", "*": tengri.FIXED},
+                    "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                     "torus": torus_block,
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "log_lbol": LOG_LBOL,
                     "frac": 1.0,
                     "cos_inc": cos_inc,
@@ -129,9 +116,9 @@ References
                 redshift=tengri.Fixed(0.0),
             )
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-            out = model.predict_rest_sed(params)
-            wave = np.asarray(out.wavelength)
-            nu_lnu = (C_AA_PER_S / wave) * np.asarray(out.sed)
+            out = model.predict(params)
+            wave = np.asarray(model.wavelengths)
+            nu_lnu = (C_AA_PER_S / wave) * np.asarray(out.rest_sed())
             inc_deg = np.degrees(np.arccos(cos_inc))
             ax.loglog(wave, nu_lnu, color=cmap(norm(inc_deg)), lw=1.2)
 
@@ -157,7 +144,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 11.008 seconds)
+   **Total running time of the script:** (0 minutes 3.552 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_torus_library_inclination_grid.py:

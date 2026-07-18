@@ -48,8 +48,19 @@ Useful intuition this figure makes obvious:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -84,7 +95,7 @@ Useful intuition this figure makes obvious:
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "peak_lbt_gyr": peak_lbt,
                 "width_gyr": width,
                 "log_total_mass": 10.0,
@@ -93,7 +104,7 @@ Useful intuition this figure makes obvious:
             },
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": tau_diff,
                 "tau_bc": 0.3,
                 "slope": -0.7,
@@ -144,7 +155,7 @@ Useful intuition this figure makes obvious:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.168 seconds)
+   **Total running time of the script:** (0 minutes 8.103 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_color_tracks_redshift.py:

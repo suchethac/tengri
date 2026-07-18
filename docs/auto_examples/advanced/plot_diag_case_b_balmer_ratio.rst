@@ -69,16 +69,16 @@ of logU ∈ [−4, −2] and logZ_gas ∈ [−2, 0.5].
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 5.0,  # steep early assembly
             "beta": 2.0,
             "tau_gyr": 1.0,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         neb={
             "type": "cue",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "neb_logU": tengri.Uniform(-4.0, -2.0),
             "neb_logZ_gas": tengri.Uniform(-2.0, 0.5),
             "neb_fesc": 0.0,
@@ -102,7 +102,7 @@ of logU ∈ [−4, −2] and logZ_gas ∈ [−2, 0.5].
                 "neb_logU": jnp.float64(log_u),
                 "neb_logZ_gas": jnp.float64(log_z),
             }
-            lines = model.predict_emission_lines(params)
+            lines = model.predict(params).lines
             h_alpha = float(lines.halpha)
             h_beta = float(lines.hbeta)
             ratio_grid[i, j] = h_alpha / h_beta if h_beta > 0 else np.nan
@@ -138,7 +138,7 @@ of logU ∈ [−4, −2] and logZ_gas ∈ [−2, 0.5].
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.837 seconds)
+   **Total running time of the script:** (0 minutes 36.569 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_case_b_balmer_ratio.py:

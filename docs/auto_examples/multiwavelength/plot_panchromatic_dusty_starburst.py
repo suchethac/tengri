@@ -38,88 +38,88 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "const",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,  # 100 Msun/yr over 100 Myr → 1e10 Msun
         "start_gyr": 0.1,
         "end_gyr": 0.0,  # 100 Myr ongoing burst
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 3.0,  # diffuse dust: tau_V = 3 mag
         "tau_bc": 2.5,  # birth cloud opacity: tau_V = 2.5 mag
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
-    radio={"type": "condon92", "*": tengri.FIXED},
+    radio={"type": "condon92", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.018),  # Arp 220 redshift
 )
 
 # Sample parameters and compute rest-frame SED
 p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-out = model.predict_rest_sed(p)
-wave = np.asarray(out.wavelength)
-nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+out = model.predict(p)
+wave = np.asarray(model.wavelengths)
+nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
 
 # Compute additional components for illustration: intrinsic stellar SED (no dust)
 model_intrinsic = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "const",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,
         "start_gyr": 0.1,
         "end_gyr": 0.0,
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.0,
         "tau_bc": 0.0,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
     redshift=tengri.Fixed(0.018),
 )
 p_intrinsic = dict(model_intrinsic.spec.sample(jax.random.PRNGKey(0)))
-out_intrinsic = model_intrinsic.predict_rest_sed(p_intrinsic)
-wave_int = np.asarray(out_intrinsic.wavelength)
-nu_l_nu_intrinsic = C_AA_PER_S / wave_int * np.asarray(out_intrinsic.sed)
+out_intrinsic = model_intrinsic.predict(p_intrinsic)
+wave_int = np.asarray(model_intrinsic.wavelengths)
+nu_l_nu_intrinsic = C_AA_PER_S / wave_int * np.asarray(out_intrinsic.rest_sed())
 
 # Attenuated but dust-free version (to isolate stellar attenuation)
 model_attenuated = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "const",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,
         "start_gyr": 0.1,
         "end_gyr": 0.0,
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 3.0,
         "tau_bc": 2.5,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
-    radio={"type": "condon92", "*": tengri.FIXED},
+    radio={"type": "condon92", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.018),
 )
 p_att = dict(model_attenuated.spec.sample(jax.random.PRNGKey(0)))
-out_att = model_attenuated.predict_rest_sed(p_att)
-wave_att = np.asarray(out_att.wavelength)
-nu_l_nu_att = C_AA_PER_S / wave_att * np.asarray(out_att.sed)
+out_att = model_attenuated.predict(p_att)
+wave_att = np.asarray(model_attenuated.wavelengths)
+nu_l_nu_att = C_AA_PER_S / wave_att * np.asarray(out_att.rest_sed())
 
 # Main plot: one panel showing composite SED with annotations
 fig, ax = plt.subplots(figsize=(7.6, 4.6))
 
 # Plot the main panchromatic SED (stellar attenuated + dust re-emission + radio)
-mask = np.asarray(out.sed) > 0
+mask = np.asarray(out.rest_sed()) > 0
 ax.loglog(
     wave[mask], nu_l_nu[mask], color="0.15", lw=1.4, label="Full SED (attenuated + dust + radio)"
 )
 
 # Overplot intrinsic stellar for reference (fainter gray)
-mask_int = np.asarray(out_intrinsic.sed) > 0
+mask_int = np.asarray(out_intrinsic.rest_sed()) > 0
 ax.loglog(
     wave_int[mask_int],
     nu_l_nu_intrinsic[mask_int],
@@ -155,7 +155,7 @@ ax.set(
 ir_mask = (wave > 8e4) & (wave < 1e7)
 nu_ir = C_AA_PER_S / wave[ir_mask]
 order_ir = np.argsort(nu_ir)
-L_ir = np.trapezoid(np.asarray(out.sed)[ir_mask][order_ir], nu_ir[order_ir])
+L_ir = np.trapezoid(np.asarray(out.rest_sed())[ir_mask][order_ir], nu_ir[order_ir])
 l_sun_cgs = 3.839e33
 
 l_ir_exp = np.log10(L_ir / l_sun_cgs)
