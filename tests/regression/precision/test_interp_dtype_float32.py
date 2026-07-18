@@ -6,7 +6,7 @@ so their axes are float64 arrays. Inside ``jax.enable_x64(False)`` those f64
 arrays survive, but ``jnp.argmin`` builds its initial value from the *current*
 default float (float32) -- the operand and initial dtypes then disagree and the
 reduction raises, taking the whole panchromatic forward down before any
-float32 behaviour can be observed.
+float32 behavior can be observed.
 
 Canonicalizing the inputs at function entry fixes it, and is a no-op under
 ``x64=True`` (the canonical float is float64 there), so float64 results are
