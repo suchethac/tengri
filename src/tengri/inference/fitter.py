@@ -3420,18 +3420,20 @@ class Fitter:
             results = []
             for g_idx in range(n_gal):
                 params_i = jax.tree.map(lambda x, idx=g_idx: x[idx], batch_result.params)
-                bounded_i = self._bounded_from_unbounded(params_i)
+                bounded_i = self._to_physical(params_i)
                 result_i = Posterior(
-                    samples=bounded_i,
-                    log_weights=None,
-                    fitter=self,
+                    samples=None,
+                    params=bounded_i,
                     method=f"map ({opt_name})",
+                    wall_time_s=t_total,
                     diagnostics={
                         "loss": float(batch_result.state.value[g_idx]),
                         "n_steps": int(batch_result.state.iter_num[g_idx]),
                         "optimizer": opt_name,
                         "converged": bool(batch_result.state.error[g_idx] < tol),
                     },
+                    _model=self.model,
+                    _fitter=self,
                 )
                 results.append(result_i)
 
@@ -3517,13 +3519,15 @@ class Fitter:
         results = []
         for g_idx in range(n_gal):
             params_i = jax.tree.map(lambda x, idx=g_idx: x[idx], params)
-            bounded_i = self._bounded_from_unbounded(params_i)
+            bounded_i = self._to_physical(params_i)
             result_i = Posterior(
-                samples=bounded_i,
-                log_weights=None,
-                fitter=self,
+                samples=None,
+                params=bounded_i,
                 method="map",
+                wall_time_s=t_total,
                 diagnostics={"loss": float(losses[g_idx]), "n_steps": n_steps},
+                _model=self.model,
+                _fitter=self,
             )
             results.append(result_i)
 

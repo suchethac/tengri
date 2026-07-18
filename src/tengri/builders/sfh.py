@@ -214,10 +214,32 @@ globals().update(_FACTORIES)
 
 
 def available() -> list[str]:
-    """Return the list of variant names exposed by this module.
+    """Return the SFH variant names that can actually be built.
 
-    Mirrors the canonical keys of :data:`SFH_REGISTRY`. Aliases are not
-    surfaced — call them via the canonical name.
+    The canonical keys of :data:`SFH_REGISTRY` **minus**
+    :data:`~tengri.components.stellar.sfh.registry.UNVALIDATED_SFH_TYPES` —
+    types that are registered but not yet wired into the DSPS forward path, so
+    ``SEDModel.build`` raises on them. Aliases are not surfaced; call them via
+    the canonical name.
+
+    Returns
+    -------
+    list of str
+        Buildable variant names, sorted.
+
+    Notes
+    -----
+    This is deliberately shorter than :func:`tengri.list_sfh_models`, which
+    reports every *registered* type — including the unvalidated ones, marked
+    ``status='unvalidated'`` — so the two answer different questions: "what can
+    I build?" versus "what exists?". The counts differ by exactly the
+    unvalidated set.
+
+    Examples
+    --------
+    >>> from tengri import builders
+    >>> "dpl" in builders.sfh.available()
+    True
     """
     return sorted(_FACTORIES)
 
