@@ -133,6 +133,7 @@ class DustAttenuationSEDComponent:
         return (
             DerivedKey("L_ir", "erg/s", "Integrated dust-absorbed luminosity"),
             DerivedKey("L_absorbed", "erg/s", "Alias for L_ir (energy balance)"),
+            DerivedKey("log_L_ir", "dex", "log10(L_ir / (erg/s)); float32-safe form"),
             DerivedKey(
                 "dust_attenuation_factor",
                 "",
@@ -254,13 +255,18 @@ class DustAttenuationSEDComponent:
         # amplitude via the FIR-radio correlation). LyC photons ionize H
         # rather than heat dust, so the canonical integral masks λ < 912 Å
         # (#922).
-        from tengri.forward.energy_balance import bolometric_absorbed
+        from tengri.forward.energy_balance import bolometric_absorbed_log10
         from tengri.utils.physics_constants import C_AA
+        from tengri.utils.scale import pow10
 
         nu = C_AA / state.wave  # Hz
-        l_ir = jnp.abs(
-            bolometric_absorbed(state.sed_intrinsic, attenuated, nu, wave=state.wave)
-        )  # erg/s
+        # Absorbed luminosities are ~1e43 erg/s — outside float32 — so the
+        # integral is done in log space and the linear form derived from it
+        # (#1206). The sign only tracks grid orientation; the energy is |L|.
+        log_l_ir, _ = bolometric_absorbed_log10(
+            state.sed_intrinsic, attenuated, nu, wave=state.wave
+        )
+        l_ir = pow10(log_l_ir)  # erg/s
 
         # Filter-level A(λ_eff) and A'(λ_eff) LUTs.
         # Published only when an upstream component (stellar) has put
@@ -270,6 +276,7 @@ class DustAttenuationSEDComponent:
             dust_attenuation_factor=attenuation,
             L_ir=l_ir,
             L_absorbed=l_ir,
+            log_L_ir=log_l_ir,
             sed_dust_attenuated=attenuated,
         )
         filter_eff = state.derived.get("filter_eff_waves")

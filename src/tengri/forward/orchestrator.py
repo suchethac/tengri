@@ -136,6 +136,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Dust attenuation / emission outputs
     "L_ir": "erg/s",
     "L_absorbed": "erg/s",
+    "log_L_ir": "dex",
     "dust_attenuation_factor": "",
     "sed_dust_attenuated": "erg/s/Hz",
     "sed_dust_ir": "erg/s/Hz",

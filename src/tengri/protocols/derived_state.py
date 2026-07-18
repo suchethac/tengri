@@ -211,6 +211,9 @@ class DerivedState:
     # Dust attenuation / emission
     L_ir: jnp.ndarray | None = None
     L_absorbed: jnp.ndarray | None = None
+    #: log10(L_ir / (erg/s)) [dex] — the float32-safe form of ``L_ir``, which
+    #: is ~1e43 and therefore outside the float32 range entirely (#1206).
+    log_L_ir: jnp.ndarray | None = None
     dust_attenuation_factor: jnp.ndarray | None = None
     sed_dust_attenuated: jnp.ndarray | None = None
     sed_dust_ir: jnp.ndarray | None = None

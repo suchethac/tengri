@@ -70,3 +70,43 @@ def apply_log10_scale(arr, log10_scale):
     peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
     net = log10_scale + jnp.log10(peak)
     return (arr / peak) * pow10(net)
+
+
+def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
+    """Return ``log10|s_a·10**log_a + s_b·10**log_b|`` without leaving log space.
+
+    A signed base-10 ``logaddexp``. Log-domain contracts (``log_nion``,
+    ``log_L_ir``) are exact under multiplication but not under addition, so a
+    seam that sums two such quantities would otherwise have to exponentiate
+    both — reintroducing the very out-of-range intermediate the log form
+    exists to avoid.
+
+    Parameters
+    ----------
+    log_a, log_b : array_like
+        Base-10 log magnitudes [dex]. ``-inf`` denotes an exactly zero term.
+    sign_a, sign_b : array_like, optional
+        Signs of the two terms (+1.0 or -1.0). Default +1.0. Cancellation
+        between opposite signs is resolved at the precision of the larger
+        term, as in any signed sum.
+
+    Returns
+    -------
+    ndarray
+        ``log10`` of the magnitude of the sum [dex]; ``-inf`` when the terms
+        are both zero or cancel exactly.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe. Factors out the larger exponent so the exponentiated
+    terms are O(1); the where-dummy keeps the backward pass free of NaN when
+    the sum vanishes.
+    """
+    larger = jnp.maximum(log_a, log_b)
+    usable = jnp.isfinite(larger)
+    offset = jnp.where(usable, larger, 0.0)
+    total = sign_a * pow10(log_a - offset) + sign_b * pow10(log_b - offset)
+    magnitude = jnp.abs(total)
+    positive = usable & (magnitude > 0)
+    safe = jnp.where(positive, magnitude, 1.0)
+    return jnp.where(positive, offset + jnp.log10(safe), -jnp.inf)

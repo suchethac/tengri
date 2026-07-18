@@ -18,6 +18,122 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 
+def _absorbed_integrand(
+    sed_intrinsic: jnp.ndarray,
+    sed_attenuated: jnp.ndarray,
+    wave: jnp.ndarray,
+    lyman_cutoff_aa: float | None,
+) -> jnp.ndarray:
+    """LyC-masked absorbed integrand :math:`L_\\nu^{\\rm intr} - L_\\nu^{\\rm att}`."""
+    absorbed_lnu = sed_intrinsic - sed_attenuated
+    if lyman_cutoff_aa is not None:
+        absorbed_lnu = jnp.where(wave >= lyman_cutoff_aa, absorbed_lnu, 0.0)
+    return absorbed_lnu
+
+
+def _peak_factored_trapezoid(
+    integrand: jnp.ndarray, nu: jnp.ndarray
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Integrate ``integrand/peak`` over ``nu``, returning the factored pieces.
+
+    The absorbed luminosity is a product of two individually representable
+    factors — an integrand of ~1e28 erg/s/Hz and a frequency span of ~1e15 Hz —
+    whose product (~1e43 erg/s) exceeds the float32 ceiling of 3.4e38. Dividing
+    the integrand by its own peak makes the reduction O(1e15), so no
+    intermediate leaves float32 range; the caller re-applies ``peak``, in log
+    space where it must.
+
+    Returns
+    -------
+    signed_norm : ndarray, shape ()
+        ``trapezoid(integrand / peak, nu)`` — signed, follows grid orientation.
+    peak : ndarray, shape ()
+        The factored-out scale (1.0 when the integrand is zero or non-finite).
+    ok : ndarray, shape (), bool
+        False when the integrand is all-zero or genuinely non-finite; callers
+        map it to the zero/``-inf`` result rather than propagating NaN.
+    """
+    peak = jnp.max(jnp.abs(integrand), initial=0.0)
+    usable = jnp.isfinite(peak) & (peak > 0)
+    safe_peak = jnp.where(usable, peak, 1.0)
+    signed_norm = jnp.trapezoid(integrand / safe_peak, nu)
+    return signed_norm, safe_peak, usable & jnp.isfinite(signed_norm)
+
+
+def bolometric_absorbed_log10(
+    sed_intrinsic: jnp.ndarray,
+    sed_attenuated: jnp.ndarray,
+    nu: jnp.ndarray,
+    *,
+    wave: jnp.ndarray,
+    lyman_cutoff_aa: float | None = 912.0,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""log10 of the absorbed bolometric luminosity — the float32-safe contract.
+
+    .. math::
+
+        \log_{10} L_{\rm abs} = \log_{10} \left| \int_{\lambda \ge
+            \lambda_{\rm LyC}} \left[ L_\nu^{\rm intr}(\lambda) -
+            L_\nu^{\rm att}(\lambda) \right] d\nu \right|
+
+    where :math:`L_\nu^{\rm intr}` is the intrinsic (unattenuated) SED
+    [erg/s/Hz], :math:`L_\nu^{\rm att}` the dust-attenuated SED [erg/s/Hz],
+    and :math:`\lambda_{\rm LyC}` the Lyman-continuum cutoff [Angstrom].
+
+    Same integral, same LyC convention, and the same guard semantics as
+    :func:`bolometric_absorbed` — only the output representation differs.
+    Magnitude and sign are returned separately because that *is* what a
+    signed quantity looks like in log space; callers that only need the
+    energy (nearly all of them — the linear form's sign merely tracks grid
+    orientation) discard the sign, while callers combining two absorbed
+    terms need it to reproduce ``|a + b|`` rather than ``|a| + |b|``.
+
+    Parameters
+    ----------
+    sed_intrinsic : array_like, shape (n_wave,)
+        Intrinsic SED before dust attenuation [erg/s/Hz].
+    sed_attenuated : array_like, shape (n_wave,)
+        Dust-attenuated SED [erg/s/Hz].
+    nu : array_like, shape (n_wave,)
+        Frequency grid corresponding to ``wave`` [Hz].
+    wave : array_like, shape (n_wave,)
+        Wavelength grid [Angstrom]; used only for the Lyman-continuum mask.
+    lyman_cutoff_aa : float or None, optional
+        Lyman-continuum cutoff [Angstrom]. ``None`` disables the mask.
+        Default 912.0.
+
+    Returns
+    -------
+    log_magnitude : ndarray, shape ()
+        :math:`\log_{10}(|L_{\rm abs}| / (\mathrm{erg/s}))` [dex], or
+        ``-inf`` when nothing is absorbed (which powers back to exactly 0.0)
+        or when the inputs are genuinely non-finite.
+    sign : ndarray, shape ()
+        Sign of the signed integral, for combining terms via
+        :func:`tengri.utils.scale.log10_add`. 0.0 when nothing is absorbed.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp``; ``lyman_cutoff_aa`` is a static
+    Python value. Safe under ``grad`` and ``vmap``: the zero case takes the
+    where-dummy path, so no NaN reaches the backward pass.
+
+    The ``peak`` factored out of the integrand cancels analytically between
+    the two log terms, so the gradient is that of the unfactored integral.
+
+    Absorbed luminosities are ~1e43 erg/s — six decades past the float32
+    ceiling — so this log form, not :func:`bolometric_absorbed`, is what a
+    pure-float32 (JAX-Metal) forward pass must consume (#1206).
+    """
+    integrand = _absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
+    signed_norm, peak, ok = _peak_factored_trapezoid(integrand, nu)
+    magnitude = jnp.abs(signed_norm)
+    positive = ok & (magnitude > 0)
+    safe = jnp.where(positive, magnitude, 1.0)
+    log_magnitude = jnp.where(positive, jnp.log10(safe) + jnp.log10(peak), -jnp.inf)
+    return log_magnitude, jnp.where(positive, jnp.sign(signed_norm), 0.0)
+
+
 def bolometric_absorbed(
     sed_intrinsic: jnp.ndarray,
     sed_attenuated: jnp.ndarray,
@@ -63,7 +179,7 @@ def bolometric_absorbed(
         Signed absorbed bolometric luminosity [erg/s]. Callers apply
         ``jnp.abs`` (sign robustness against grid orientation) and any
         energy-balance relaxation factor (``dust_eta_balance``) themselves.
-        Non-finite integrals (e.g. Inf·0 artifacts from extreme-metallicity
+        Non-finite *inputs* (e.g. Inf·0 artifacts from extreme-metallicity
         SSP fluxes, BUG-NSS-02 era) are clamped to 0.0 — the guard the
         retired compositional kernel carried; identity for finite inputs.
 
@@ -72,6 +188,15 @@ def bolometric_absorbed(
     **JIT-compatible**: yes — pure ``jnp``; ``lyman_cutoff_aa`` is a static
     Python value, so the mask branch resolves at trace time. Safe under
     ``grad`` and ``vmap``.
+
+    **Not float32-representable.** Absorbed luminosities are ~1e43 erg/s,
+    six decades past the float32 ceiling, so this returns ``inf`` under pure
+    float32 no matter how the reduction is arranged. Use
+    :func:`bolometric_absorbed_log10` there (#1206). The integrand is
+    peak-factored so that overflow is confined to that final re-scaling:
+    previously the reduction itself overflowed and the non-finite guard
+    turned the ``inf`` into **0.0**, silently switching dust IR emission off
+    rather than failing loudly.
 
     The fast-path LUT (:func:`tengri.components.dust.
     energy_balance_precompute.lut_l_absorbed_stellar`) is the precomputed
@@ -92,8 +217,6 @@ def bolometric_absorbed(
            https://doi.org/10.1051/0004-6361/201834156
 
     """
-    absorbed_lnu = sed_intrinsic - sed_attenuated
-    if lyman_cutoff_aa is not None:
-        absorbed_lnu = jnp.where(wave >= lyman_cutoff_aa, absorbed_lnu, 0.0)
-    signed = jnp.trapezoid(absorbed_lnu, nu)
-    return jnp.where(jnp.isfinite(signed), signed, 0.0)
+    integrand = _absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
+    signed_norm, peak, ok = _peak_factored_trapezoid(integrand, nu)
+    return jnp.where(ok, signed_norm * peak, 0.0)
