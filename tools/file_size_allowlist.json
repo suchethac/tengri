@@ -20,7 +20,7 @@
   "src/tengri/components/nebular/mappings_photo.py": 1023,
   "src/tengri/components/radio/radio.py": 1221,
   "src/tengri/components/sed_model_component.py": 856,
-  "src/tengri/components/stellar/component.py": 3058,
+  "src/tengri/components/stellar/component.py": 3066,
   "src/tengri/components/stellar/sfh/mean_sfh.py": 2036,
   "src/tengri/components/stellar/sfh/nonparametric.py": 859,
   "src/tengri/components/stellar/sfh/registry.py": 1954,
@@ -53,5 +53,5 @@
   "src/tengri/parameters/priors.py": 1820,
   "src/tengri/registry.py": 2243,
   "src/tengri/utils/grid_interp.py": 1019,
-  "src/tengri/utils/sed_quantities.py": 837
+  "src/tengri/utils/sed_quantities.py": 909
 }
