@@ -36,8 +36,6 @@ import jax.numpy as jnp
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
-    bolometric_integral_nu as _bolometric_integral_nu,
-    wavelength_to_nu as _wavelength_to_nu,
 )
 from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight
 from tengri.utils.interpolation import edges_for_grid
@@ -235,63 +233,6 @@ def _interpolate_and_normalize(
     sed_lam = jnp.interp(wavelength, wave_grid, template_lam, left=0.0, right=0.0)
     # L_λ → L_ν: L_ν = L_λ × λ²/c (c in Å/s).
     return sed_lam * wavelength**2 / _C_AA_PER_S
-
-
-def _compute_intrinsic_30deg_luminosity(
-    disk_template: jnp.ndarray,
-    wave_grid: jnp.ndarray,
-    norm: float,
-) -> tuple[float, float]:
-    """Compute intrinsic disc luminosity and L_2500A at θ=30° (CIGALE §2.2.1).
-
-    Parameters
-    ----------
-    disk_template : ndarray, shape (n_wave,)
-        De-reddened intrinsic disc spectrum (AGN1 at θ=0°) [erg s^-1 Hz^-1].
-    wave_grid : ndarray, shape (n_wave,)
-        Wavelength grid [Angstrom].
-    norm : float
-        Overall normalization factor from SKIRTOR template.
-
-    Returns
-    -------
-    lumin_intrin_disk : float
-        Intrinsic disc bolometric luminosity at θ=30° [erg/s].
-    l_agn_2500A : float
-        Specific luminosity at 2500 Å, θ=30°, in [erg s^-1 Hz^-1].
-
-    Notes
-    -----
-    **Citation**: Stalevski et al. 2016, §2.2.1; CIGALE skirtor2016.py lines 413–419.
-
-    The anisotropic disc emission varies as L(θ, λ) ∝ cos(θ) × (1 + 2cos(θ)).
-    At θ=30°, this gives the relative anisotropy factor:
-
-    .. math::
-
-        f_{aniso}(θ=30°) = \\frac{cos(30°) × (1 + 2cos(30°))}{3}
-
-    The factor of 3 normalizes the θ=0° (face-on) case.
-
-    **JIT-compatible**: yes.
-    """
-    cos_30 = jnp.cos(jnp.radians(30.0))
-    aniso_factor = cos_30 * (2.0 * cos_30 + 1.0) / 3.0
-
-    # Bolometric intrinsic disc luminosity at 30°
-    nu = _wavelength_to_nu(wave_grid)
-    integral_disk = _bolometric_integral_nu(disk_template, nu)
-    norm_fac = aniso_factor * norm
-    lumin_intrin_disk = integral_disk * norm_fac
-
-    # L_ν(2500 Å) at 30°, convert from L_λ to L_ν (skirtor2016.py:410–411)
-    # Wavelength grid is in Å (not nm as in CIGALE skirtor2016.py:410),
-    # so interpolate at 2500.0 Å (= 250 nm).
-    l_lam_2500 = jnp.interp(2500.0, wave_grid, disk_template)
-    # L_ν = L_λ × (λ²/c) where c is in Å/s and λ in Å.
-    l_nu_2500 = l_lam_2500 * (2500.0**2 / _C_AA_PER_S) * norm_fac
-
-    return lumin_intrin_disk, l_nu_2500
 
 
 class SKIRTORGrid(NamedTuple):
