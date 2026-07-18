@@ -221,9 +221,10 @@ Integrating `obs_sed()` as if it were a flux is wrong by ~57 orders of magnitude
 The `.spectrum()` method returns an **instrument-ready** spectrum — convolved with the line-spread function, rebinned to a specific wavelength grid, and calibrated. It requires the model to have a spectroscopy channel: build with `observation=Observation(spectroscopy=...)`, otherwise `pred.spectrum(...)` raises `ValueError` (a photometry-only model has no LSF or calibration to apply). For a bare model SED with no instrument convolution, use `pred.obs_sed(wave_obs)` instead.
 
 ```python
-# Spectrum at specific observer-frame wavelengths
-obs_wave = jnp.linspace(4000, 7000, 200)  # Å, OBSERVED-frame — the frame
-                                          # pred.spectrum() takes directly
+# Spectrum at specific observer-frame wavelengths.
+# Give the grid you actually observed on — do not build it from a rest-frame
+# grid times (1 + z). `wave_obs` is already in the observer frame.
+obs_wave = jnp.linspace(4000, 7000, 200)  # Å, observer-frame
 
 spec = pred.spectrum(wave_obs=obs_wave)
 # spec.flux — F_ν at observed wavelengths [erg/s/cm²/Å]
@@ -268,7 +269,7 @@ spectrum_fast = pred.spectrum(wave_obs=..., fast=True)  # interpolates precomput
 
 ### When to use fast
 
-- **During inference**: Fitting uses the approximation that was baked in at build time (configurable via `model.approx`).
+- **During inference**: Fitting uses the approximation that was baked in at build time. Set it with `approx=` at build (or `model.with_approx(...)`, which returns a clone); read it back with `model.approx`, which reports the LUTs that actually resolved.
 - **Post-fit inspection**: Use `fast=True` to match inference exactly.
 - **Speed-critical analysis**: e.g., generating a mock catalog of 1 million galaxies.
 
@@ -335,19 +336,30 @@ catalog.to_csv("mock_catalog.csv", index=False)
 
 This workflow is pure JAX — no loop, fully differentiable, and trivial to parallelize.
 
-## Error handling: unknown property names
+## Error handling: unknown properties raise, never return NaN
 
-If you request a property that doesn't exist or isn't active in the model, you get a clear error. Which exception you catch follows the access style: attribute access (`pred.name`) raises `AttributeError`, dict access (`pred.properties["name"]`) raises `KeyError`.
+If you request a property the model doesn't provide, you get a clear error naming the
+available ones — never a silent `NaN` or `None`. Which exception you catch depends on how
+you asked:
+
+| Access style | Raises |
+|---|---|
+| `pred.nonexistent_property` (attribute sugar) | `AttributeError` |
+| `pred.properties["nonexistent"]` (catalog) | `KeyError` |
 
 ```python
 pred = model.predict(params)
 
 try:
-    print(pred.nonexistent_property)
+    print(pred.nonexistent_property)        # attribute sugar
 except AttributeError as e:
     print(f"Error: {e}")
-    # Suggestion: list available properties
     print("Available properties:", list(pred.properties.keys()))
+
+try:
+    print(pred.properties["nonexistent"])   # catalog access
+except KeyError as e:
+    print(f"Error: {e}")
 ```
 
 The model always knows which properties are available. Never silently return NaN for an unknown name.
