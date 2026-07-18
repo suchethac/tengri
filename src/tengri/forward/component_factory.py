@@ -707,9 +707,10 @@ def state_to_sed_quantities(state: Any):
     legacy NamedTuple convention).
     """
     from tengri.forward.prediction import SEDQuantities
-    from tengri.utils.physics_constants import C_AA, L_SUN
+    from tengri.utils.physics_constants import L_SUN
     from tengri.utils.sed_quantities import (
         compute_balmer_break,
+        compute_bolometric_luminosity,
         compute_dn4000,
         compute_fuv_flux,
         compute_irx,
@@ -723,13 +724,13 @@ def state_to_sed_quantities(state: Any):
 
     sed = state.sed_intrinsic
     wave = state.wave
-    nu = C_AA / wave
 
-    # Bolometric luminosity in Lsun. Wave is ascending, so nu is
-    # descending; ``trapezoid(L_nu, nu)`` returns a negative signed
-    # area. ``abs(...)`` recovers the positive luminosity.
-    l_bol_erg = jnp.abs(jnp.trapezoid(sed, nu))
-    l_bol = l_bol_erg / L_SUN
+    # Bolometric luminosity in Lsun. Wave is ascending, so nu is descending and
+    # the signed area is negative; ``abs(...)`` recovers the positive luminosity.
+    # Delegating to the canonical reduction keeps this bit-identical to the
+    # ``l_bol`` property and folds 1/L_sun into the integral, so the ~1e43 erg/s
+    # value is never formed (float32-safe, #1206).
+    l_bol = jnp.abs(compute_bolometric_luminosity(sed, wave))
 
     # Dust-absorbed luminosity from the orchestrator's energy-balance
     # bookkeeping — exact match for legacy ``compute_l_dust_absorbed``.

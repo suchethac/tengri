@@ -2629,13 +2629,13 @@ def _mass_weighted_metallicity_fn(state, params):
 
 def _l_bol_fn(state, params):
     """Bolometric luminosity [Lsun]."""
-    from tengri.utils.physics_constants import C_AA, L_SUN
+    from tengri.utils.sed_quantities import compute_bolometric_luminosity
 
-    sed = state.sed_intrinsic
-    wave = state.wave
-    nu = C_AA / wave
-    l_bol_erg = jnp.abs(jnp.trapezoid(sed, nu))
-    return l_bol_erg / L_SUN
+    # Delegate to the canonical reduction rather than re-inlining it: that helper
+    # folds 1/L_sun into the integral so the ~1e43 erg/s value is never formed
+    # (float32-safe, #1206). ``abs`` preserves the original sign convention —
+    # wave ascends, so nu descends and the signed area is negative.
+    return jnp.abs(compute_bolometric_luminosity(state.sed_intrinsic, state.wave))
 
 
 def _l_tir_fn(state, params):

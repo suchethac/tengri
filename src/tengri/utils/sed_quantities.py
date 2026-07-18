@@ -38,9 +38,11 @@ References
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.utils.magnitudes import fnu_to_ab_mag, lnu_to_absolute_ab_mag
 from tengri.utils.physics_constants import C_AA, L_SUN, PC_CM
+from tengri.utils.scale import pow10
 
 # Re-export for convenience
 __all__ = [
@@ -154,6 +156,49 @@ def compute_mass_weighted_metallicity(
 
 # ── SED-based quantities ──────────────────────────────────────────
 
+#: log10 of the solar luminosity [dex re erg/s]. Folded into the bolometric
+#: reductions so the erg/s value is never materialized (see _trapz_to_lsun).
+LOG10_L_SUN: float = float(np.log10(L_SUN))
+
+
+def _trapz_to_lsun(integrand: jnp.ndarray, nu: jnp.ndarray) -> jnp.ndarray:
+    r"""``-∫ integrand dν`` expressed in :math:`L_\odot`, range-safe in float32.
+
+    .. math::
+
+        L = \frac{-\int L_\nu\,d\nu}{L_\odot}
+
+    where :math:`L_\nu` is the integrand [erg/s/Hz] and :math:`\nu` the frequency
+    grid [Hz]. Computing that literally forms the erg/s value first (~1e43 for a
+    1e10 Msun galaxy), which exceeds the float32 ceiling of 3.4e38 and returns
+    ``inf`` — even though the :math:`L_\odot` answer (~1e9) is perfectly
+    representable. Factoring the integrand by its peak and folding
+    :math:`1/L_\odot` into the same exponent keeps every intermediate in range
+    (issue #1206).
+
+    Parameters
+    ----------
+    integrand : array_like, shape (n_wave,)
+        Rest-frame :math:`L_\nu` [erg/s/Hz]; may be signed.
+    nu : array_like, shape (n_wave,)
+        Frequency grid [Hz], descending when wavelength ascends.
+
+    Returns
+    -------
+    ndarray, shape ()
+        The integral in :math:`L_\odot`. Exactly ``0.0`` for an all-zero
+        integrand.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes. Equal to the naive form to ~1e-14 relative
+    in float64; finite in float32 whenever the :math:`L_\odot` result is.
+    """
+    peak = jnp.max(jnp.abs(integrand), initial=0.0)
+    peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
+    norm = -jnp.trapezoid(integrand / peak, nu)
+    return norm * pow10(jnp.log10(peak) - LOG10_L_SUN)
+
 
 def compute_bolometric_luminosity(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     """Bolometric luminosity from the full SED.
@@ -178,9 +223,7 @@ def compute_bolometric_luminosity(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.nd
     float
         Bolometric luminosity in Lsun.
     """
-    nu = C_AA / wave
-    l_bol_erg = -jnp.trapezoid(sed, nu)
-    return l_bol_erg / L_SUN
+    return _trapz_to_lsun(sed, C_AA / wave)
 
 
 def compute_l_tir(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -200,11 +243,9 @@ def compute_l_tir(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     float
         L_TIR in Lsun. Zero if no flux in the 8–1000 μm range.
     """
-    nu = C_AA / wave
     mask = (wave >= 8.0e4) & (wave <= 1.0e7)  # 8-1000 μm in Angstrom
     sed_ir = jnp.where(mask, sed, 0.0)
-    l_ir_erg = -jnp.trapezoid(sed_ir, nu)
-    return jnp.maximum(l_ir_erg, 0.0) / L_SUN
+    return jnp.maximum(_trapz_to_lsun(sed_ir, C_AA / wave), 0.0)
 
 
 def compute_l_dust_absorbed(
@@ -236,9 +277,8 @@ def compute_l_dust_absorbed(
     float
         Dust-absorbed luminosity in Lsun.
     """
-    nu = C_AA / wave
-    l_abs_erg = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu)
-    return jnp.maximum(l_abs_erg, 0.0) / L_SUN
+    absorbed = sed_intrinsic - sed_attenuated
+    return jnp.maximum(_trapz_to_lsun(absorbed, C_AA / wave), 0.0)
 
 
 def _mean_flux_in_band(sed, wave, lam_lo, lam_hi):
@@ -543,6 +583,45 @@ def compute_per_bin_luminosity(
     return jax.vmap(_lbol_one_bin)(weights, ssp_flux_at_z)
 
 
+def _per_bin_luminosity_relative(
+    weights: jnp.ndarray, ssp_flux_at_z: jnp.ndarray, wave: jnp.ndarray
+) -> jnp.ndarray:
+    """Per-age-bin bolometric luminosity up to one common positive factor.
+
+    Same as :func:`compute_per_bin_luminosity` with the ``L_sun`` conversion and
+    the overall peak dropped. Every consumer of this helper forms a
+    luminosity-weighted *average* (``sum(l * x) / sum(l)``), where any common
+    positive factor cancels exactly — so the erg/s value (~1e41 per bin, above
+    the float32 ceiling) is never needed and never formed (issue #1206).
+
+    Parameters
+    ----------
+    weights : array_like, shape (n_age,)
+        CSP mass weights [Msun per bin].
+    ssp_flux_at_z : array_like, shape (n_age, n_wave)
+        Metallicity-interpolated SSP flux [Lsun/Hz/Msun].
+    wave : array_like, shape (n_wave,)
+        Wavelength grid [Angstrom].
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Per-bin luminosity in arbitrary (shared) units — ratios only.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes.
+    """
+    nu = C_AA / wave
+    peak = jnp.max(jnp.abs(ssp_flux_at_z), initial=0.0)
+    peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
+
+    def _lbol_one_bin(w_i, flux_i):
+        return -jnp.trapezoid(w_i * (flux_i / peak), nu)
+
+    return jax.vmap(_lbol_one_bin)(weights, ssp_flux_at_z)
+
+
 def compute_luminosity_weighted_age(
     weights: jnp.ndarray,
     ssp_flux_at_z: jnp.ndarray,
@@ -571,7 +650,7 @@ def compute_luminosity_weighted_age(
     float
         Luminosity-weighted age in Gyr.
     """
-    l_per_bin = compute_per_bin_luminosity(weights, ssp_flux_at_z, wave)
+    l_per_bin = _per_bin_luminosity_relative(weights, ssp_flux_at_z, wave)
     l_total = jnp.sum(l_per_bin)
     return jnp.sum(l_per_bin * ssp_ages_yr) / jnp.maximum(l_total, 1e-30) / 1e9
 
@@ -610,7 +689,7 @@ def compute_luminosity_weighted_metallicity(
     if log_z_initial is None or log_z_final is None:
         return log_z
 
-    l_per_bin = compute_per_bin_luminosity(weights, ssp_flux_at_z, wave)
+    l_per_bin = _per_bin_luminosity_relative(weights, ssp_flux_at_z, wave)
     l_total = jnp.sum(l_per_bin)
 
     t_max = jnp.max(ssp_ages_yr)
