@@ -48,6 +48,7 @@ import numpy as np
 from tengri.components.nebular.line_precompute import _four_pi_dl2
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.utils.grid_interp import interp_nd_pchip
+from tengri.utils.scale import pow10
 
 #: Parameters that may become grid axes when free. ``met_logzsol`` sets the
 #: ionizing-spectrum shape; ``neb_logU`` / ``neb_logZ_gas`` are the gas
@@ -520,7 +521,7 @@ def reconstruct_nebular_line_lums(nion, params, table) -> jnp.ndarray:
     return jnp.asarray(nion) * (10.0**log_lpq)  # node-exact geometric interp
 
 
-def reconstruct_nebular_phot(nion, params, table) -> jnp.ndarray:
+def reconstruct_nebular_phot(log_nion, params, table) -> jnp.ndarray:
     r"""Reconstruct the intrinsic nebular photometry precompute — no Cue forward.
 
     The broadband analog of :func:`reconstruct_nebular_lines`. Returns the
@@ -529,8 +530,7 @@ def reconstruct_nebular_phot(nion, params, table) -> jnp.ndarray:
 
     .. math::
 
-        L_\nu^{\rm neb}(b) = n_{\rm ion}\,
-            \mathrm{interp}\bigl(\ell_b;\,Z_\star,\log U,\log Z_{\rm gas}\bigr)
+        L_\nu^{\rm neb}(b) = 10^{\log_{10} n_{\rm ion} + \log_{10}\ell_b}
 
     **No cosmology or dust here** — unlike the line channel, this matches the
     intrinsic precompute contract: :meth:`Observation.predict_via_precomp`
@@ -540,8 +540,9 @@ def reconstruct_nebular_phot(nion, params, table) -> jnp.ndarray:
 
     Parameters
     ----------
-    nion : float
-        Ionizing photon rate for this evaluation (stellar-published; == q_h).
+    log_nion : float
+        log10 ionizing photon rate for this evaluation [dex re photons/s]
+        (stellar-published; == log10(q_h)).
     params : Mapping
         Parameter dict — the free-axis values locate the query point.
     table : NebularGridTable
@@ -561,7 +562,10 @@ def reconstruct_nebular_phot(nion, params, table) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible / gradient-safe**: yes — node-exact PCHIP + a scalar multiply.
+    **JIT-compatible / gradient-safe**: yes — node-exact PCHIP + log-domain add.
+    The sibling :func:`reconstruct_nebular_line_lums` and
+    :func:`reconstruct_nebular_lines` still take linear ``nion`` (their erg/s
+    output is deferred to #1206 items 2/3).
     """
     if table.log_phot_per_qh is None:
         raise ValueError(
@@ -574,4 +578,4 @@ def reconstruct_nebular_phot(nion, params, table) -> jnp.ndarray:
     else:
         point = tuple(jnp.asarray(params[name]).reshape(()) for name in table.axis_names)
         log_ppq = interp_nd_pchip(table.log_phot_per_qh, table.axes, point, _kinds(table))
-    return jnp.asarray(nion) * (10.0**log_ppq)  # rest-frame L_nu; consumer applies dust + z
+    return pow10(jnp.asarray(log_nion) + log_ppq)  # rest-frame L_nu; consumer applies dust + z

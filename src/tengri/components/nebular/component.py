@@ -10,9 +10,9 @@ know whether emission lines need adding separately or are already
 present in the stellar templates.
 
 CueBackend and CloudyGridBackend become free-parameter components: they
-read ``state.derived["nion"]`` (the ionizing photon production rate
-from the stellar block) and add the resulting line + continuum SED to
-``sed_intrinsic``.
+read the stellar-published ionizing rate — ``log_nion`` for the log-domain
+consumers (grid path and Cue fallback), ``nion`` for the deferred erg/s
+line paths — and add the resulting line + continuum SED to ``sed_intrinsic``.
 """
 
 from __future__ import annotations
@@ -543,9 +543,9 @@ class NebularSEDComponent:
                 common_kwargs["ssp_weights"] = jnp.asarray(age_weights)
                 common_kwargs["ssp_log_ages_yr"] = jnp.log10(jnp.asarray(ssp_ages_yr))
             else:
-                nion = state.derived.get("nion")
-                if nion is not None:
-                    common_kwargs["gas_logqion"] = jnp.log10(jnp.maximum(nion, 1.0))
+                log_nion = state.derived.get("log_nion")
+                if log_nion is not None:
+                    common_kwargs["gas_logqion"] = jnp.maximum(log_nion, 0.0)
             nebular_sed = self.backend.predict_nebular_sed(
                 **common_kwargs, **cue_extras, template_data=template_data
             )
@@ -720,22 +720,21 @@ class NebularSEDComponent:
         grid = self.grid_table
         if grid is not None and getattr(grid, "log_phot_per_qh", None) is not None:
             # FAST path (#950): reconstruct the intrinsic nebular photometry from
-            # the per-Q_H grid, ``L_nu = Q_H x interp(grid)``, instead of the
+            # the per-Q_H grid, ``L_nu = 10^{log_nion + interp(grid)}``, instead of the
             # per-eval filter integration below. The downstream contract is
             # identical — ``predict_via_precomp`` applies the young-limit dust
             # screen (at the filter level) and the cosmology dimming to this same
             # ``nebular_phot_lnu_precomp`` key, so only the intrinsic-L_nu source
             # changes. ``nebular_sed`` (the Cue continuum) is now unread by the
             # photometry channel, so XLA prunes the Cue forward from
-            # ``predict_photometry``. Q_H is the stellar-published ``nion``.
+            # ``predict_photometry``. log10(Q_H) is the stellar-published ``log_nion``.
             from tengri.components.nebular.nebular_grid_precompute import (
                 reconstruct_nebular_phot,
             )
 
-            nion = state.derived["nion"]
-            nion = jnp.sum(nion) if jnp.ndim(nion) else nion
+            log_nion = state.derived["log_nion"]
             derived_overrides["nebular_phot_lnu_precomp"] = reconstruct_nebular_phot(
-                nion, self._grid_interp_point(grid, params, state), grid
+                log_nion, self._grid_interp_point(grid, params, state), grid
             )
         elif (
             self._state is not None
