@@ -1666,10 +1666,10 @@ def _short_names_for_registered_type(type_name: str | None) -> set[str]:
     """
     if not type_name:
         return set()
-    try:
-        from tengri.components.sed_model_component import _REGISTRY
-    except Exception:
-        return set()
+    # First-party import: swallowing a failure here would return an empty set and
+    # reject the user's custom-component params as "unknown keys" with no hint why.
+    from tengri.components.sed_model_component import _REGISTRY
+
     cls = _REGISTRY.get(type_name)
     if cls is None:
         return set()

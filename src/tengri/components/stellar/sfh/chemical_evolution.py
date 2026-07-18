@@ -27,9 +27,10 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-# Solar metallicity (mass fraction) from Asplund et al. (2009)
-Z_SUN = 0.0142
-LOG10_ZSUN = -1.8477116556169435
+from tengri.utils.physics_constants import (
+    LOG10_ZSUN,
+    Z_SUN,
+)
 
 
 def closed_box_metallicity(

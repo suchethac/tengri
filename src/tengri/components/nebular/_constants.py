@@ -18,15 +18,13 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,  # noqa: F401
     H_PLANCK as _H_PLANCK,  # noqa: F401
     L_SUN as _LSUN_ERG,  # noqa: F401
+    LOG10_ZSUN as _LOG10_ZSUN,
 )
 
 # ── Nebular-specific constants ────────────────────────────────────
 
 # Hydrogen Lyman limit [Angstrom]
 _LYMAN_LIMIT: float = 911.76
-
-# log10(Z_sun) — Asplund+2009, used by DSPS convention
-_LOG10_ZSUN: float = -1.8477116556169435
 
 # Oxygen abundance offset for CB19 CLOUDY c17.01 solar scale
 # Derived as: log10(O/H)_solar − log10(Z_sun)

@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 
-_C_KMS = 2.99792458e5  # speed of light [km/s]
+from tengri.utils.physics_constants import C_KM_S as _C_KMS
 
 
 def build_line_mask(
