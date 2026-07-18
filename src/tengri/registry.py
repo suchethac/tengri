@@ -2108,6 +2108,11 @@ def help(topic: str | None = None) -> None:
     n_atte = len(list_dust_laws())
     n_emis = len(list_dust_emission_models())
     n_sfh = len(list_sfh_models())
+    # Registered != buildable: the raw registry carries SFH types that are not
+    # yet wired into the DSPS forward path, and ``SEDModel.build`` rejects them.
+    # ``summary()`` already reports the pair; this cheatsheet is aimed squarely
+    # at first-time users, so it must not headline a count they cannot build.
+    n_sfh_ok = len(list_sfh_models(status="production"))
     n_neb = len(list_nebular_backends())
     n_inf = len(list_inference_methods(tier="primary"))
     try:
@@ -2127,7 +2132,7 @@ tengri — differentiable galaxy SED fitting in JAX
     tengri.list_agn_models()              {n_agn} AGN models
     tengri.list_dust_laws()               {n_atte} attenuation curves (UV/optical)
     tengri.list_dust_emission_models()    {n_emis} IR emission templates
-    tengri.list_sfh_models()              {n_sfh} SFH variants
+    tengri.list_sfh_models()              {n_sfh_ok} buildable SFH variants ({n_sfh} registered)
     tengri.list_nebular_backends()        {n_neb} nebular backends
     tengri.list_inference_methods(tier="primary")  {n_inf} primary methods
     tengri.list_filters()                 {n_filt} filter curves

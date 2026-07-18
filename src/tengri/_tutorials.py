@@ -436,11 +436,16 @@ _PHILOSOPHY = _Tutorial(
 
             Every block has a registry of alternatives — see:
 
-                tengri.list_agn_models()        # 12 AGN models
-                tengri.list_dust_laws()         # 21 attenuation curves
-                tengri.list_dust_emission_models()  # 7 IR templates
-                tengri.list_sfh_models()        # 34 SFH variants
-                tengri.list_nebular_backends()  # 4 backends
+                tengri.list_agn_models()        # AGN model families
+                tengri.list_agn_blocks()        # composable AGN blocks
+                tengri.list_dust_laws()         # attenuation curves
+                tengri.list_dust_emission_models()  # IR emission templates
+                tengri.list_sfh_models()        # SFH variants
+                tengri.list_nebular_backends()  # nebular backends
+
+            Counts live in tengri.summary() — this page does not repeat
+            them, because a hand-written number goes stale the next time
+            someone registers a model.
 
             Adding your own:  tengri.tutorial("register_a_model")
 
