@@ -14,24 +14,27 @@ how to work around it.
 ## Quick start
 
 ```python
-from tengri import ParamSpec, Fixed
-from tengri.components.nebular import CB19Backend
+from tengri import SEDModel, Fixed
 
-# Default: SSP ionizing spectrum, Kroupa IMF, radiation-bounded
-backend = CB19Backend()            # requires data/cb19_templates.h5
-
-spec = ParamSpec(
-    ssp="data/ssp.h5",
-    nebular="cb19",
-    priors={
-        "neb_logU":      Fixed(-3.0),
-        "neb_logZ_gas":  Fixed(-1.848),   # log10(Z), Zsun = −1.848
-        "neb_log_nH":    Fixed(2.0),      # log10 cm⁻³
-        "neb_co":        Fixed(-0.36),    # log10(C/O), solar
-        "neb_dno":       Fixed(0.0),      # ΔN/O offset (log dex)
+# Default: SSP ionizing spectrum, Kroupa IMF, radiation-bounded.
+# Requires data/cb19_templates.h5 (built once — see below).
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs,
+    neb={
+        'type': 'cb19',
+        'logU':     Fixed(-3.0),
+        'logZ_gas': Fixed(0.0),      # log10(Z_gas/Zsun); 0.0 = solar
+        'log_nH':   Fixed(2.0),      # log10 cm⁻³
+        'co':       Fixed(-0.36),    # log10(C/O), solar
+        'dno':      Fixed(0.0),      # ΔN/O offset (log dex)
     },
 )
 ```
+
+Short keys inside the ``neb`` group resolve to the full parameter names
+(``logU`` → ``neb_logU``); passing the full names works too. Note
+``logZ_gas`` is **log10(Z/Zsun)** — relative to solar, so ``0.0`` means
+solar gas metallicity.
 
 Build the template file once before first use:
 
@@ -115,9 +118,9 @@ contribution is negligible and `CB19Backend` alone is sufficient.
 The 6D interpolation grid (all axes interpolated linearly via
 `jax.scipy.ndimage.map_coordinates`):
 
-| Parameter | ParamSpec key | Grid range | Default |
+| Parameter | Parameter name | Grid range | Default |
 |-----------|--------------|------------|---------|
-| log(O/H) | `neb_logZ_gas` (converted) | −5.06 → −2.58 | −1.848 (Zsun) |
+| log(O/H) | `neb_logZ_gas` (converted) | −5.06 → −2.58 | 0.0 (solar; log Z/Zsun) |
 | log age / yr | (SSP age bins) | 6.0 → 10.6 | — |
 | log U | `neb_logU` | −4.0 → −1.0 | −3.0 |
 | log n_H / cm⁻³ | `neb_log_nH` | 1 → 4 | 2.0 |
@@ -132,8 +135,11 @@ init — not interpolated. Grid points: [0.0, 0.1, 0.25, 0.5, 0.75, 1.0].
 ### Metallicity axis detail
 
 CB_19 uses the CLOUDY c17.01 solar oxygen abundance
-12 + log(O/H)_⊙ = 8.93 (log(O/H)_⊙ ≈ −3.07), whereas tengri uses
-absolute log₁₀(Z) with log₁₀(Z_⊙) = −1.848 (Asplund et al. 2009).
+12 + log(O/H)_⊙ = 8.93 (log(O/H)_⊙ ≈ −3.07). Internally tengri carries
+absolute log₁₀(Z) with log₁₀(Z_⊙) = −1.848 (Asplund et al. 2009); the
+user-facing ``neb_logZ_gas`` is log₁₀(Z/Z_⊙), and the translation layer
+adds the −1.848 offset before the value reaches the backend — so the
+``neb_logZ_gas`` in the conversion below is the internal absolute value.
 
 The internal conversion is:
 

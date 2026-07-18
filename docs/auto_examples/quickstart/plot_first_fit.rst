@@ -21,6 +21,11 @@
 Recovering a star-forming galaxy from 5-band SDSS photometry
 ============================================================
 
+.. image:: images/sphx_glr_plot_first_fit_001.png
+   :alt: plot first fit
+   :class: sphx-glr-single-img
+
+
 The simplest end-to-end tengri workflow. We build a model with a
 truncated-skew-normal SFH and a two-component Calzetti dust attenuation,
 mock SDSS *ugriz* photometry at S/N = 20, then run a MAP fit to recover the
@@ -31,28 +36,6 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview); Calzetti
 et al. 2000, ApJ, 533, 682 (attenuation law).
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-132
-
-
-
-.. image-sg:: /auto_examples/quickstart/images/sphx_glr_plot_first_fit_001.png
-   :alt: plot first fit
-   :srcset: /auto_examples/quickstart/images/sphx_glr_plot_first_fit_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -80,10 +63,10 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
     model = tengri.SEDModel.build(
         tengri.load_ssp(),
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FREE},
+        sfh={"type": "tsnorm", "all_params": tengri.FREE},
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tengri.Uniform(0.0, 1.5),
             "slope": -0.7,
         },
@@ -119,9 +102,9 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
     noise = np.asarray(mock.noise)
     wave_eff = np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
 
-    sed_truth = model.predict_rest_sed(truth)
-    sed_fit = model.predict_rest_sed(fit_params)
-    wave_rest = np.asarray(sed_truth.wavelength)
+    sed_truth = model.predict(truth)
+    sed_fit = model.predict(fit_params)
+    wave_rest = np.asarray(model.wavelengths)
     z = 0.05
     wave_obs = wave_rest * (1.0 + z)
 
@@ -134,9 +117,9 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
         return sed[idx]
 
 
-    scale_truth = flux_truth[2] / _band_anchor(np.asarray(sed_truth.sed))
-    fnu_truth = scale_truth * np.asarray(sed_truth.sed)
-    fnu_fit = scale_truth * np.asarray(sed_fit.sed)
+    scale_truth = flux_truth[2] / _band_anchor(np.asarray(sed_truth.rest_sed()))
+    fnu_truth = scale_truth * np.asarray(sed_truth.rest_sed())
+    fnu_fit = scale_truth * np.asarray(sed_fit.rest_sed())
 
     fig, (ax_sed, ax_res) = plt.subplots(
         2,
@@ -174,11 +157,6 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
     ax_res.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
 
     plt.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.289 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_first_fit.py:

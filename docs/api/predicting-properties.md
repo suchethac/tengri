@@ -34,12 +34,12 @@ For inference loops and likelihood evaluation, use the **lean methods** directly
 
 ```python
 # These methods are called by the inference loop
-photometry = model.predict_photometry(params, filters=filter_list)
+photometry = model.predict_photometry(params)   # the filters built into the model
 spectrum = model.predict_spectrum(params, wave_obs)
 lines = model.predict_emission_lines(params)
 ```
 
-These bypass the lazy `Prediction` wrapper and return only what you request, with no caching overhead. They are **JIT-compatible** and safe to call from inside an inference loop.
+These bypass the lazy `Prediction` wrapper and return only what you request, with no caching overhead. They are **JIT-compatible** and safe to call from inside an inference loop. The lean `predict_photometry` uses the filters the model was built with; to evaluate a *different* filter set at runtime, use the rich accessor `pred.photometry(filters=[...])` instead (see [Exact vs fast photometry](#exact-vs-fast-photometry)).
 
 **When to use:** Likelihood evaluation, fitting, parameter sweeps.
 
@@ -218,7 +218,7 @@ Integrating `obs_sed()` as if it were a flux is wrong by ~57 orders of magnitude
 
 ### Spectrum: instrument-specific, LSF-convolved, calibrated
 
-The `.spectrum()` method returns an **instrument-ready** spectrum — convolved with the line-spread function, rebinned to a specific wavelength grid, and calibrated:
+The `.spectrum()` method returns an **instrument-ready** spectrum — convolved with the line-spread function, rebinned to a specific wavelength grid, and calibrated. It requires the model to have a spectroscopy channel: build with `observation=Observation(spectroscopy=...)`, otherwise `pred.spectrum(...)` raises `ValueError` (a photometry-only model has no LSF or calibration to apply). For a bare model SED with no instrument convolution, use `pred.obs_sed(wave_obs)` instead.
 
 ```python
 # Spectrum at specific observer-frame wavelengths

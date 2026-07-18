@@ -25,7 +25,7 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 recipe = recipes.dust_demo()
 recipe["dust"]["emission"] = {
     "type": "modified_blackbody",
-    "*": FIXED,
+    "all_params": FIXED,
     "T": 35.0,
     "beta_ir": 1.6,
 }

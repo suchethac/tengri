@@ -272,7 +272,7 @@ def test_fast_lines_match_the_exact_path_baked_in():
     against ~zero is a ratio of two noise floors — the same trap as quoting a huge
     percentage on a sub-Lyman band whose flux is 1e-7 of the optical.
     """
-    ssp = load_ssp()  # wNE: lines baked into the templates
+    ssp = load_ssp("prsc_miles_chabrier_wNE")  # wNE: nebular lines baked in
     defs = default_line_defs(np.asarray(_line_waves()))
     m_ex = _build(ssp, cue=False, approx=None)
     ref = np.asarray(m_ex.measure_line_fluxes(_params(m_ex), defs))
@@ -293,7 +293,7 @@ def test_the_dust_ir_term_does_not_change_the_measured_lines():
     If admitting dust IR into the window LUT ever starts biasing the measured line
     fluxes, this fails — rather than the bias quietly propagating into a catalog.
     """
-    ssp = load_ssp()
+    ssp = load_ssp("prsc_miles_chabrier_wNE")  # wNE: measures baked nebular lines
     defs = default_line_defs(np.asarray(_line_waves()))
     m_on = _build(ssp, cue=False, approx=None, emission=True)
     m_off = _build(ssp, cue=False, approx=None, emission=False)

@@ -41,17 +41,17 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 3.0,
         "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
     agn={
         "type": "composable",
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "*": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "all_params": tengri.FIXED,
         "frac": 1.0,
         "log_ledd": -1.0,
     },
@@ -81,10 +81,10 @@ for log_mbh in log_mbh_values:
         "agn_log_mbh": jnp.float64(log_mbh),
         "agn_log_lbol": jnp.float64(log_lbol),
     }
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave  # frequency in Hz
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=cmap(norm(log_mbh)), lw=1.4)
 
 ax.set_xlim(100, 1e4)

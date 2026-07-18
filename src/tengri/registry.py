@@ -301,8 +301,26 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "igm_model":
         return f"SEDModel.build(..., igm={{'type': '{name}'}})"
     if kind == "component":
-        return f"tengri.{name}  (see list_{name}_models / list_{name}_laws for alternatives)"
+        menus = _COMPONENT_MENUS.get(name)
+        return f"tengri.{name}  (see {menus} for alternatives)" if menus else f"tengri.{name}"
     return ""
+
+
+# Each SEDComponent maps to its real discovery menu(s). The menu names are
+# irregular (``list_sfh_models`` vs ``list_dust_laws`` vs
+# ``list_nebular_backends``), so this must be a lookup, not an
+# ``f"list_{name}_models"`` formula — the formula advertised
+# ``list_stellar_models`` / ``list_dust_models`` / ``list_agn_laws`` and other
+# functions that do not exist, sending a fresh user into an ``AttributeError``.
+_COMPONENT_MENUS: dict[str, str] = {
+    "stellar": "list_sfh_models()",
+    "dust": "list_dust_laws() / list_dust_emission_models()",
+    "agn": "list_agn_models() / list_agn_blocks()",
+    "nebular": "list_nebular_backends()",
+    "radio": "list_radio_models()",
+    "igm": "list_igm_models()",
+    "xray": "list_xray_models()",
+}
 
 
 def _extract_param_details(entry: Any, kind: str) -> list[dict]:
@@ -647,6 +665,13 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
             if "not builder-available" not in m["short_doc"]:
                 suffix = " [not builder-available — registered, not yet DSPS-validated]"
                 m["short_doc"] = f"{m['short_doc']}{suffix}"
+        # ``mixture`` (burst) and ``modulator`` (field) SFH components cannot
+        # stand alone — ``sfh={'type': 'burst'}`` raises "At least one additive
+        # (smooth) SFH component required". Advertise the composed list form so
+        # the ``use:`` hint is something the builder actually accepts.
+        ctype = getattr(SFH_REGISTRY[m["name"]], "composition_type", "additive")
+        if ctype in ("mixture", "modulator"):
+            m["use"] = f"SEDModel.build(..., sfh={{'type': ['const', '{m['name']}']}})"
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
@@ -664,6 +689,13 @@ def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
     from tengri.components.nebular import NEBULAR_MODELS
 
     out = [_entry_to_dict(n, e, kind="nebular_backend") for n, e in NEBULAR_MODELS.items()]
+    for m in out:
+        # The generic CLOUDY backend needs a user-supplied grid file:
+        # ``neb={'type': 'cloudy'}`` raises "The CLOUDY nebular backend needs a
+        # grid file." Advertise the required ``gridfile`` key so the hint builds.
+        # (``cb19`` ships its own grid and stands alone.)
+        if m["name"] == "cloudy":
+            m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'gridfile': 'grid.h5'})"
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
@@ -1634,7 +1666,9 @@ def suggest_parameters(
         IR emission template family from
         ``tengri.list_dust_emission_models()``.
     nebular_backend : str, optional
-        ``"baked_in"``, ``"cue"``, ``"cloudy_grid"``, or ``"cb19"``.
+        Nebular emission backend from ``tengri.list_nebular_backends()``:
+        ``"ssp"`` (emission baked into the SSP grid), ``"cue"``,
+        ``"cloudy"``, or ``"cb19"``.
     radio, xray, shock, chem_evol, evolving_metallicity : bool
         Toggle the corresponding physics module.
     eline_mode : str, default "off"
@@ -1989,7 +2023,16 @@ def summary() -> None:
             "dust emission templates",
             "list_dust_emission_models()",
         ),
-        (len(list_sfh_models()), "SFH models", "list_sfh_models()"),
+        # Two rows, mirroring the inference pair below: the raw registry holds
+        # SFH types that are registered but not yet wired into the DSPS forward
+        # path, and ``SEDModel.build`` rejects those. A single total would send
+        # a fresh user shopping among models that cannot build.
+        (
+            len(list_sfh_models(status="production")),
+            "buildable SFH models",
+            "list_sfh_models(status='production')",
+        ),
+        (len(list_sfh_models()), "total SFH models", "list_sfh_models()"),
         (len(list_nebular_backends()), "nebular backends", "list_nebular_backends()"),
         (len(list_filters()), "photometric filters", "list_filters()"),
         (len(list_plots()), "plotting helpers", "list_plots()"),
@@ -2065,6 +2108,11 @@ def help(topic: str | None = None) -> None:
     n_atte = len(list_dust_laws())
     n_emis = len(list_dust_emission_models())
     n_sfh = len(list_sfh_models())
+    # Registered != buildable: the raw registry carries SFH types that are not
+    # yet wired into the DSPS forward path, and ``SEDModel.build`` rejects them.
+    # ``summary()`` already reports the pair; this cheatsheet is aimed squarely
+    # at first-time users, so it must not headline a count they cannot build.
+    n_sfh_ok = len(list_sfh_models(status="production"))
     n_neb = len(list_nebular_backends())
     n_inf = len(list_inference_methods(tier="primary"))
     try:
@@ -2084,7 +2132,7 @@ tengri — differentiable galaxy SED fitting in JAX
     tengri.list_agn_models()              {n_agn} AGN models
     tengri.list_dust_laws()               {n_atte} attenuation curves (UV/optical)
     tengri.list_dust_emission_models()    {n_emis} IR emission templates
-    tengri.list_sfh_models()              {n_sfh} SFH variants
+    tengri.list_sfh_models()              {n_sfh_ok} buildable SFH variants ({n_sfh} registered)
     tengri.list_nebular_backends()        {n_neb} nebular backends
     tengri.list_inference_methods(tier="primary")  {n_inf} primary methods
     tengri.list_filters()                 {n_filt} filter curves

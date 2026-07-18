@@ -115,16 +115,16 @@ for tau_v in tau_v_grid:
         ssp_data=ssp,
         observation=obs,
         redshift=Fixed(z),
-        sfh={"type": "tsnorm", "*": FIXED, "peak_lbt_gyr": 0.3},
-        dust={"type": "single_component", "law_bc": "calzetti", "*": FIXED, "tau_v": 0.0},
-        neb={"type": "cue", "*": FIXED},
+        sfh={"type": "tsnorm", "all_params": FIXED, "peak_lbt_gyr": 0.3},
+        dust={"type": "single_component", "law_bc": "calzetti", "all_params": FIXED, "tau_v": 0.0},
+        neb={"type": "cue", "all_params": FIXED},
     )
 
     # Generate intrinsic SED on rest-frame wavelength grid
     # Sample params and use all fixed values
     params_intrinsic = model_intrinsic.spec.sample(key)
-    result_intrinsic = model_intrinsic.predict_rest_sed(params_intrinsic, wave=wave_rest)
-    sed_intrinsic_np = np.array(result_intrinsic.sed)
+    result_intrinsic = model_intrinsic.predict(params_intrinsic)
+    sed_intrinsic_np = np.asarray(result_intrinsic.rest_sed(wave_rest))
 
     # Integrate UV: 912–3000 Å
     # Convert L_nu to luminosity: ∫ L_nu dν = ∫ L_nu * (c/λ²) dλ
@@ -132,7 +132,7 @@ for tau_v in tau_v_grid:
     mask_uv = (wave_rest >= wave_uv_min) & (wave_rest <= wave_uv_max)
     c_cgs = 2.99792458e10  # cm/s
     integrand_uv_intrinsic = sed_intrinsic_np[mask_uv] * c_cgs / (wave_rest[mask_uv] ** 2)
-    luv_intrinsic = float(np.trapz(integrand_uv_intrinsic, wave_rest[mask_uv]))
+    luv_intrinsic = float(np.trapezoid(integrand_uv_intrinsic, wave_rest[mask_uv]))
 
     # ========================================================================
     # Build the dust model with current tau_v
@@ -141,25 +141,25 @@ for tau_v in tau_v_grid:
         ssp_data=ssp,
         observation=obs,
         redshift=Fixed(z),
-        sfh={"type": "tsnorm", "*": FIXED, "peak_lbt_gyr": 0.3},
+        sfh={"type": "tsnorm", "all_params": FIXED, "peak_lbt_gyr": 0.3},
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": tau_v,
-            "emission": {"type": "dale2014", "*": FIXED},
+            "emission": {"type": "dale2014", "all_params": FIXED},
         },
-        neb={"type": "cue", "*": FIXED},
+        neb={"type": "cue", "all_params": FIXED},
     )
 
     # Generate attenuated SED
     params_dust = model_dust.spec.sample(key)
-    result_attenuated = model_dust.predict_rest_sed(params_dust, wave=wave_rest)
-    sed_attenuated_np = np.array(result_attenuated.sed)
+    result_attenuated = model_dust.predict(params_dust)
+    sed_attenuated_np = np.asarray(result_attenuated.rest_sed(wave_rest))
 
     # Integrate UV from attenuated SED
     integrand_uv_attenuated = sed_attenuated_np[mask_uv] * c_cgs / (wave_rest[mask_uv] ** 2)
-    luv_attenuated = float(np.trapz(integrand_uv_attenuated, wave_rest[mask_uv]))
+    luv_attenuated = float(np.trapezoid(integrand_uv_attenuated, wave_rest[mask_uv]))
 
     # Absorbed UV = intrinsic − attenuated
     luv_absorbed = luv_intrinsic - luv_attenuated
@@ -188,7 +188,7 @@ for tau_v in tau_v_grid:
 
     # Integrate IR: 8–1000 μm
     integrand_ir = sed_ir_dust * c_cgs / (wave_rest[mask_ir] ** 2)
-    lir = float(np.trapz(integrand_ir, wave_rest[mask_ir]))
+    lir = float(np.trapezoid(integrand_ir, wave_rest[mask_ir]))
 
     lir_grid.append(lir)
     luv_absorbed_grid.append(luv_absorbed)

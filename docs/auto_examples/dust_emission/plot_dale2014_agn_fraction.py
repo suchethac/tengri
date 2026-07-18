@@ -45,13 +45,13 @@ ssp = tengri.load_ssp()
 
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0},
+    sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 1.0,
         "tau_bc": 0.3,
-        "emission": {"type": "dale2014_cigale", "*": tengri.FIXED},
+        "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
     },
     redshift=tengri.Fixed(0.05),
 )
@@ -63,9 +63,9 @@ colors = plt.cm.viridis(np.linspace(0.1, 0.85, len(frac_agn_values)))
 fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
 for f, c in zip(frac_agn_values, colors):
-    out = model.predict_rest_sed({**p0, "dust_frac_agn": jnp.float64(f)})
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict({**p0, "dust_frac_agn": jnp.float64(f)})
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=c, lw=2.0, label=rf"$f_{{\rm AGN}}={f:.1f}$")
 
 ax.axvline(8e4, color="0.85", lw=0.5, linestyle=":")

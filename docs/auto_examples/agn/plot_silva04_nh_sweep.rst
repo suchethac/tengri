@@ -44,7 +44,7 @@ References
    spectral energy distributions of AGNs," A&A 688, A46 (2024).
    arXiv:2405.12111. https://doi.org/10.1051/0004-6361/202449329
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-125
+.. GENERATED FROM PYTHON SOURCE LINES 28-127
 
 
 
@@ -82,8 +82,8 @@ References
     ssp = tengri.load_ssp()
 
     # Minimal host: stellar light suppressed so the torus stands alone.
-    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     # Silva+04 grid: log N_H in [22, 25]. Sweep the full obscuration range.
     LOG_NH_VALUES = np.linspace(22.0, 25.0, 7)
@@ -91,8 +91,8 @@ References
     # A torus block normalizes to the disc luminosity, so a disc must be present;
     # the torus contribution is then isolated by subtracting the disc-only SED.
     BASE_AGN = {
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "*": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "all_params": tengri.FIXED,
         "log_lbol": 12.0,
         "frac": 1.0,
     }
@@ -104,8 +104,8 @@ References
             agn["torus"] = torus
         model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.05))
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        return np.asarray(out.wavelength), np.asarray(out.sed)
+        out = model.predict(p)
+        return np.asarray(model.wavelengths), np.asarray(out.rest_sed())
 
 
     WAVE, DISC_ONLY = _build_sed(None)  # disc-only baseline (subtracted off)
@@ -113,7 +113,9 @@ References
 
     def torus_sed(log_nh: float) -> tuple[np.ndarray, np.ndarray]:
         """Return (wavelength [AA], nu*L_nu [erg/s]) for the Silva+04 torus alone."""
-        wave, total = _build_sed({"type": "silva04", "*": tengri.FIXED, "log_nh_silva": log_nh})
+        wave, total = _build_sed(
+            {"type": "silva04", "all_params": tengri.FIXED, "log_nh_silva": log_nh}
+        )
         disc = np.interp(wave, WAVE, DISC_ONLY)  # disc build uses a different grid
         return wave, C_AA / wave * np.clip(total - disc, 0.0, None)
 
@@ -156,6 +158,11 @@ References
         weight="bold",
     )
     plt.savefig("plot_silva04_nh_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.260 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_silva04_nh_sweep.py:

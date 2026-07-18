@@ -39,8 +39,21 @@ shows the corresponding star-formation histories.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/examples/sfh/plot_grahsp_paper_sfh_tau_sweep.py:106: RuntimeWarning: divide by zero encountered in divide
+      "top", functions=(lambda x: C_NM_HZ / 1e3 / x, lambda nu: C_NM_HZ / 1e3 / nu)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -75,21 +88,21 @@ shows the corresponding star-formation histories.
     AGE_GYR = 4.0
     tau_grid_myr = np.array([100.0, 300.0, 1000.0, 3000.0, 10000.0])
     norm = colors.LogNorm(vmin=100.0, vmax=10000.0)
-    cmap = cm.get_cmap("cividis_r")
+    cmap = plt.get_cmap("cividis_r")
 
     fig, ax = plt.subplots(figsize=(7.4, 6.0))
     axin = ax.inset_axes([0.13, 0.13, 0.40, 0.30])
 
     # Build the model ONCE; the delayed-tau SFH timescale ``sfh_delayed_tau_gyr``
     # is a parameter, so the sweep just overrides that key per iteration and re-runs
-    # the (already-compiled) forward pass — both predict_rest_sed and predict_sfh
+    # the (already-compiled) forward pass — both the SED and the SFH come off one
     # read it from the params dict. Rebuilding inside the loop would recompile the
     # SSP pipeline every iteration and accumulate XLA buffers (gallery-OOM).
     model = SEDModel.build(
         ssp_data=ssp,
         sfh={
             "type": "delayed",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_gyr": tau_grid_myr[0] / 1e3,  # baseline; overridden per tau below
             "age_gyr": AGE_GYR,
             "log_total_mass": 10.5,
@@ -97,10 +110,10 @@ shows the corresponding star-formation histories.
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": 0.03,
             "tau_diff": 0.01,
-            "emission": {"type": "dale2014", "*": FIXED},
+            "emission": {"type": "dale2014", "all_params": FIXED},
         },
         redshift=Fixed(0.01),
     )
@@ -108,8 +121,8 @@ shows the corresponding star-formation histories.
 
     for tau_myr in tau_grid_myr:
         params = {**base_params, "sfh_delayed_tau_gyr": tau_myr / 1e3}
-        rest = model.predict_rest_sed(params, wave_aa)  # (wave, L_nu) erg/s/Hz
-        lnu = np.asarray(rest[1] if isinstance(rest, tuple) or np.ndim(rest) == 2 else rest)
+        rest = model.predict(params)  # L_nu on the model grid [erg/s/Hz]
+        lnu = np.asarray(rest.rest_sed(np.asarray(wave_aa)))
         lam_Llam_W = lnu * (C_NM_HZ / (np.asarray(wave_aa) * 0.1)) * ERG_TO_W
         ax.plot(wave_um, lam_Llam_W, color=cmap(norm(tau_myr)), lw=1.3, zorder=3)
 
@@ -147,6 +160,11 @@ shows the corresponding star-formation histories.
 
     fig.tight_layout()
     plt.savefig("plot_grahsp_paper_sfh_tau_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.493 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_grahsp_paper_sfh_tau_sweep.py:

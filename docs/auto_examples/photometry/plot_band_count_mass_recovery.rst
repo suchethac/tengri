@@ -21,6 +21,11 @@
 Stellar mass recovery with increasing photometric band count
 ===========================================================
 
+.. image:: images/sphx_glr_plot_band_count_mass_recovery_001.png
+   :alt: plot band count mass recovery
+   :class: sphx-glr-single-img
+
+
 How many photometric bands are needed to recover stellar mass accurately?
 We mock a single galaxy with fixed parameters at different signal-to-noise
 levels using progressively larger filter sets, then MAP-fit to measure the
@@ -32,17 +37,6 @@ tightens the mass estimate by an order of magnitude or more.
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting fundamentals).
 
 .. GENERATED FROM PYTHON SOURCE LINES 15-236
-
-
-
-.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_band_count_mass_recovery_001.png
-   :alt: plot band count mass recovery
-   :srcset: /auto_examples/photometry/images/sphx_glr_plot_band_count_mass_recovery_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -111,7 +105,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting fundamentals).
         observation=truth_obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": 2.5,
             "width_gyr": 1.5,
             "log_total_mass": 10.5,  # Truth: log M* = 10.5
@@ -120,7 +114,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting fundamentals).
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.4,
             "tau_diff": 0.25,
             "slope": -0.7,
@@ -137,7 +131,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting fundamentals).
 
     # Generate truth photometry at full resolution once
     truth_flux_full = np.asarray(truth_model.predict_photometry(truth_params))
-    truth_sed_full = truth_model.predict_rest_sed(truth_params)
+    truth_sed_full = truth_model.predict(truth_params)
 
     # Store results: (n_bands, recovered_mass, mass_uncertainty)
     results_mass = []
@@ -150,10 +144,10 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting fundamentals).
         model = tengri.SEDModel.build(
             ssp,
             observation=obs,
-            sfh={"type": "tsnorm", "*": tengri.FREE},
+            sfh={"type": "tsnorm", "all_params": tengri.FREE},
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_bc": tengri.Uniform(0.0, 1.5),
                 "tau_diff": tengri.Uniform(0.0, 1.5),
                 "slope": -0.7,
@@ -197,10 +191,10 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting fundamentals).
         model = tengri.SEDModel.build(
             ssp,
             observation=obs,
-            sfh={"type": "tsnorm", "*": tengri.FREE},
+            sfh={"type": "tsnorm", "all_params": tengri.FREE},
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_bc": tengri.Uniform(0.0, 1.5),
                 "tau_diff": tengri.Uniform(0.0, 1.5),
                 "slope": -0.7,
@@ -267,11 +261,6 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting fundamentals).
 
     fig.tight_layout()
     plt.savefig("plot_band_count_mass_recovery.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (1 minutes 9.086 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_band_count_mass_recovery.py:

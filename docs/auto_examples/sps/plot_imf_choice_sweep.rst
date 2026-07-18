@@ -21,6 +21,11 @@
 Initial Mass Function choice and stellar mass-to-light ratio
 ============================================================
 
+.. image:: images/sphx_glr_plot_imf_choice_sweep_001.png
+   :alt: plot imf choice sweep
+   :class: sphx-glr-single-img
+
+
 The Initial Mass Function (IMF) parameterizes the fraction of massive versus
 low-mass stars born during star formation. Chabrier, Kroupa, and Salpeter IMFs
 differ most in the high-mass end: Salpeter has more massive stars, producing
@@ -29,17 +34,6 @@ IMF while fixing SFH, age, and metallicity, overlaying rest-frame νL_ν to
 reveal the IMF signature in the SED continuum shape and M/L.
 
 .. GENERATED FROM PYTHON SOURCE LINES 12-73
-
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_imf_choice_sweep_001.png
-   :alt: plot imf choice sweep
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_imf_choice_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -79,20 +73,20 @@ reveal the IMF signature in the SED continuum shape and M/L.
             ssp,
             sfh={
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "peak_lbt_gyr": 3.0,
                 "width_gyr": 0.2,
                 "log_total_mass": 10.0,
                 "skew": 0.0,
                 "trunc": 13.0,
             },
-            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+            dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
             redshift=tengri.Fixed(0.01),
         )
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_S / wave * np.asarray(out.sed)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_S / wave * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=imf_label)
 
     ax.set_xlim(1000, 3e4)

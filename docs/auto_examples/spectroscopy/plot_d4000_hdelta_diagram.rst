@@ -36,7 +36,7 @@ References
 .. [3] Balogh, M. L., Morris, S. L., Yee, H. K. C., et al. 1999,
        ApJ, 527, 54 (D_n(4000) break strength)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-243
+.. GENERATED FROM PYTHON SOURCE LINES 20-248
 
 
 
@@ -46,8 +46,35 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.0612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=0.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.0612 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.273 Gyr at peak sfh_tsnorm_peak_lbt_gyr=2 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.273 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.545 Gyr at peak sfh_tsnorm_peak_lbt_gyr=4 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.545 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.686 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.686 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.5 Gyr is narrower than the SSP grid spacing 0.545 Gyr at peak sfh_tsnorm_peak_lbt_gyr=4 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.545 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.5 Gyr is narrower than the SSP grid spacing 0.686 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.686 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.3 Gyr is narrower than the SSP grid spacing 0.545 Gyr at peak sfh_tsnorm_peak_lbt_gyr=4 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.545 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.3 Gyr is narrower than the SSP grid spacing 0.686 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.686 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -179,8 +206,13 @@ References
                     **sfh_dict,
                     "peak_lbt_gyr": age,  # Lookback time to burst
                 }
-                dust = {"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0}
-                neb = {"type": "cue", "*": tengri.FIXED}
+                dust = {
+                    "type": "two_component",
+                    "all_params": tengri.FIXED,
+                    "tau_bc": 0.0,
+                    "tau_diff": 0.0,
+                }
+                neb = {"type": "cue", "all_params": tengri.FIXED}
 
                 model = tengri.SEDModel.build(
                     ssp,
@@ -203,9 +235,9 @@ References
                 wave_rest = np.linspace(3800, 4200, 320)  # ~1.25 Å resolution ≈ 95 km/s
 
                 # Get rest-frame SED
-                pred = model.predict_rest_sed(baseline)
-                wave = np.asarray(pred.wavelength)
-                l_nu = np.asarray(pred.sed)
+                pred = model.predict(baseline)
+                wave = np.asarray(model.wavelengths)
+                l_nu = np.asarray(pred.rest_sed())
 
                 # Extract D4000 and Hδ_A
                 d4000[idx] = _compute_d4000(wave, l_nu)
@@ -278,7 +310,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 13.042 seconds)
+   **Total running time of the script:** (0 minutes 41.036 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_d4000_hdelta_diagram.py:

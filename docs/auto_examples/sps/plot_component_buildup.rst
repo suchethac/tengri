@@ -43,7 +43,7 @@ config differs. Use the figure to remember what each block does in the
 absence of the others, and to compare visual budgets before deciding
 which blocks a particular dataset can constrain.
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-149
+.. GENERATED FROM PYTHON SOURCE LINES 27-156
 
 
 
@@ -53,8 +53,19 @@ which blocks a particular dataset can constrain.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -77,7 +88,7 @@ which blocks a particular dataset can constrain.
     # Common base: tsnorm SFH, no AGN, no IGM, no dust, no nebular.
     BASE_SFH = {
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.63,
         "peak_lbt_gyr": 3.0,
         "width_gyr": 2.0,
@@ -100,34 +111,40 @@ which blocks a particular dataset can constrain.
         ),
         build(
             "3. + dust attenuation",
-            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.35, "tau_bc": 0.4},
+            dust={
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+                "tau_diff": 0.35,
+                "tau_bc": 0.4,
+            },
         ),
         build(
             "4. + dust IR emission",
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 0.35,
                 "tau_bc": 0.4,
-                "emission": {"type": "dale2014", "*": tengri.FIXED},
+                "emission": {"type": "dale2014", "all_params": tengri.FIXED},
             },
         ),
         build(
             "5. + AGN",
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 0.35,
                 "tau_bc": 0.4,
-                "emission": {"type": "dale2014", "*": tengri.FIXED},
+                "emission": {"type": "dale2014", "all_params": tengri.FIXED},
             },
             agn={
                 "type": "composable",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_lbol": 11.5,
-                "disc": {"type": "multicolor", "*": tengri.FIXED},
+                "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": {"type": "none"},
-                "lines": {"type": "none"},
+                "nlr": {"type": "none"},
+                "blr": {"type": "none"},
                 "feii": {"type": "none"},
                 "atten": {"type": "none"},
             },
@@ -136,18 +153,19 @@ which blocks a particular dataset can constrain.
             "6. + IGM",
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 0.35,
                 "tau_bc": 0.4,
-                "emission": {"type": "dale2014", "*": tengri.FIXED},
+                "emission": {"type": "dale2014", "all_params": tengri.FIXED},
             },
             agn={
                 "type": "composable",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_lbol": 11.5,
-                "disc": {"type": "multicolor", "*": tengri.FIXED},
+                "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": {"type": "none"},
-                "lines": {"type": "none"},
+                "nlr": {"type": "none"},
+                "blr": {"type": "none"},
                 "feii": {"type": "none"},
                 "atten": {"type": "none"},
             },
@@ -160,9 +178,9 @@ which blocks a particular dataset can constrain.
 
     for i, (label, model) in enumerate(STAGES):
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        sed = model.predict_rest_sed(params)
-        wave = np.asarray(sed.wavelength)
-        L_nu = np.asarray(sed.sed)
+        sed = model.predict(params)
+        wave = np.asarray(model.wavelengths)
+        L_nu = np.asarray(sed.rest_sed())
         # rest-frame nu L_nu in erg/s
         nu_L_nu = (2.998e18 / wave) * L_nu
         color = cmap(i / (len(STAGES) - 1))
@@ -184,7 +202,7 @@ which blocks a particular dataset can constrain.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.075 seconds)
+   **Total running time of the script:** (0 minutes 43.711 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_component_buildup.py:

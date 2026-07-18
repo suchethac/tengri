@@ -21,6 +21,7 @@
 | `l_x_agn` | erg/s | xray | xray | X-ray luminosity from AGN |
 | `l_x_total` | erg/s | xray | xray | Total X-ray luminosity (XRB + AGN) |
 | `l_x_xrb` | erg/s | xray | xray | X-ray luminosity from X-ray binaries |
+| `log_q_h` | dex | ionizing | stellar | log10(ionizing photon production rate / (photons/s)) — float32-safe form of q_h |
 | `luminosity_weighted_age_gyr` | Gyr | sfh | stellar | Luminosity-weighted mean age of stellar population |
 | `luminosity_weighted_metallicity` | dex | sfh | stellar | Luminosity-weighted mean metallicity (log10 Z/Zsun) |
 | `lya` | erg/s | lines | nebular | Lyman alpha line luminosity |

@@ -35,7 +35,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 8.0,
@@ -43,7 +43,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.0,
         "tau_diff": 0.1,
     },
@@ -58,10 +58,10 @@ cmap = plt.get_cmap("magma")
 fig, ax = plt.subplots(figsize=(6.5, 4.2))
 for met_alpha_fe in met_alpha_fe_values:
     params = {**baseline, "met_alpha_fe": jnp.float64(met_alpha_fe)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave  # Å/s -> Hz
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=cmap(norm(met_alpha_fe)), lw=1.4)
 
 ax.set_xlim(3000, 1e4)

@@ -22,9 +22,9 @@ def test_bakedin_predict_emission_lines_raises():
     import tengri
 
     try:
-        ssp = tengri.load_ssp()  # default wNE → BakedInBackend
+        ssp = tengri.load_ssp()  # default grid → BakedInBackend (the default neb)
     except FileNotFoundError:
-        pytest.skip("default wNE SSP not available")
+        pytest.skip("default SSP not available")
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         model = tengri.SEDModel.build(

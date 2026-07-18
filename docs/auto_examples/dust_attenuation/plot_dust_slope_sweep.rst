@@ -38,8 +38,21 @@ Reference: Conroy et al. 2009, ApJ, 699, 626 (power-law attenuation model).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 24% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -67,7 +80,7 @@ Reference: Conroy et al. 2009, ApJ, 699, 626 (power-law attenuation model).
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 1.5,
@@ -75,7 +88,7 @@ Reference: Conroy et al. 2009, ApJ, 699, 626 (power-law attenuation model).
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 1.0,
             "tau_diff": 0.5,
             "slope": tengri.Uniform(-1.5, 0.5),
@@ -91,10 +104,10 @@ Reference: Conroy et al. 2009, ApJ, 699, 626 (power-law attenuation model).
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
     for slope in slope_values:
         params = {**baseline, "dust_slope": jnp.float64(slope)}
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
         nu = 2.998e18 / wave  # Å/s -> Hz
-        nu_l_nu = nu * np.asarray(out.sed)
+        nu_l_nu = nu * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=cmap(norm(slope)), lw=1.4)
 
     ax.set_xlim(800, 3e4)

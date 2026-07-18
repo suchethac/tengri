@@ -48,8 +48,8 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 ssp = tengri.load_ssp()
 
 # Minimal host: suppress stellar emission, focus on AGN continuum
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 # Fe II strength sweep: 0 (none) → 1.5 (strong)
 fe2_strength_values = np.linspace(0.0, 1.5, 6)
@@ -61,9 +61,9 @@ model = tengri.SEDModel.build(
     dust=DUST,
     agn={
         "type": "composable",
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "blr": {"type": "analytic", "*": tengri.FIXED, "agn_blr_cf": 0.1},
-        "*": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "blr": {"type": "analytic", "all_params": tengri.FIXED, "agn_blr_cf": 0.1},
+        "all_params": tengri.FIXED,
         "log_lbol": 12.0,
         "log_ledd": -1.0,
         "frac": 1.0,
@@ -88,10 +88,10 @@ c_aa_s = 2.998e18
 seds = []
 for fe2_strength in fe2_strength_values:
     params = {**baseline, "agn_fe2_strength": jnp.float64(fe2_strength)}
-    out = model.predict_rest_sed(params)
+    out = model.predict(params)
 
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = c_aa_s / wave * np.asarray(out.sed)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = c_aa_s / wave * np.asarray(out.rest_sed())
     seds.append(nu_l_nu)
 
     color = cmap(norm(fe2_strength))

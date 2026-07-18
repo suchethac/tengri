@@ -161,7 +161,7 @@ print(f"Loaded SSP: {ssp.ssp_wave.shape[0]} wavelength points")
 # Fixed SFH: tsnorm with 50 Myr peak (young starburst)
 SFH_BASE = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": 0.05,  # 50 Myr lookback
     "width_gyr": 0.05,  # 50 Myr width
     "log_total_mass": 10.0,  # SFR peak = 10 M☉/yr (arbitrary; scales L_IR/L_UV ratio)
@@ -191,12 +191,12 @@ for tau_diff in TAU_DIFF_VALUES:
     # Birth cloud τ_bc = 0 since we're sweeping τ_diff to cover full range
     dust_config = {
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.0,  # birth cloud attenuation (fixed to zero)
         "tau_diff": tau_diff,  # sweep diffuse attenuation
         "slope": -0.7,  # typical Calzetti slope
         "law_bc": "calzetti",  # Calzetti+2000 law
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     }
 
     try:
@@ -216,9 +216,9 @@ for tau_diff in TAU_DIFF_VALUES:
 
     # Predict rest-frame SED
     try:
-        sed_rest = model.predict_rest_sed(params_dict)
-        wave_rest = np.asarray(sed_rest.wavelength)
-        l_nu_rest = np.asarray(sed_rest.sed)
+        sed_rest = model.predict(params_dict)
+        wave_rest = np.asarray(model.wavelengths)
+        l_nu_rest = np.asarray(sed_rest.rest_sed())
     except Exception as e:
         print(f"  τ_diff={tau_diff:.2f}: predict failed ({str(e)[:50]}...)")
         continue

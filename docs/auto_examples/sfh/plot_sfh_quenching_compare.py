@@ -31,13 +31,13 @@ model1 = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 0.1,
         "beta": 0.1,
         "tau_gyr": 3.0,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 
@@ -46,13 +46,13 @@ model2 = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 1.0,
         "beta": 2.0,
         "tau_gyr": 2.0,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 
@@ -61,13 +61,13 @@ model3 = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 3.0,
         "beta": 3.0,
         "tau_gyr": 1.5,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 
@@ -76,14 +76,14 @@ model4 = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,
         "peak_lbt_gyr": 0.2,
         "width_gyr": 0.5,
         "skew": 0.3,
         "trunc": 2.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 
@@ -93,16 +93,16 @@ baseline2 = dict(model2.spec.sample(jax.random.PRNGKey(1)))
 baseline3 = dict(model3.spec.sample(jax.random.PRNGKey(2)))
 baseline4 = dict(model4.spec.sample(jax.random.PRNGKey(3)))
 
-out1 = model1.predict_rest_sed(baseline1)
-out2 = model2.predict_rest_sed(baseline2)
-out3 = model3.predict_rest_sed(baseline3)
-out4 = model4.predict_rest_sed(baseline4)
+out1 = model1.predict(baseline1)
+out2 = model2.predict(baseline2)
+out3 = model3.predict(baseline3)
+out4 = model4.predict(baseline4)
 
-wave = np.asarray(out1.wavelength)
-sed1 = np.asarray(out1.sed)
-sed2 = np.asarray(out2.sed)
-sed3 = np.asarray(out3.sed)
-sed4 = np.asarray(out4.sed)
+wave = np.asarray(model1.wavelengths)
+sed1 = np.asarray(out1.rest_sed())
+sed2 = np.asarray(out2.rest_sed())
+sed3 = np.asarray(out3.rest_sed())
+sed4 = np.asarray(out4.rest_sed())
 
 fig, ax = plt.subplots(figsize=(10, 6))
 

@@ -45,8 +45,19 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -97,7 +108,7 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
             ssp,
             sfh={
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_total_mass": 10.0,
                 "peak_lbt_gyr": 2.0,
                 "width_gyr": 1.0,
@@ -107,16 +118,16 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
             },
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_bc": 0.1,
                 "tau_diff": 0.1,
                 "slope": -0.7,
             },
         )
 
-        pred = model.predict_rest_sed({"redshift": 0.1})
-        wave = np.asarray(pred.wavelength)
-        sed = np.asarray(pred.sed)
+        pred = model.predict({"redshift": 0.1})
+        wave = np.asarray(model.wavelengths)
+        sed = np.asarray(pred.rest_sed())
         fluxes = {name: boxcar_line_flux(wave, sed, lam) for name, lam in LINES.items()}
         log_n2_ha.append(np.log10(max(fluxes["nii_6584"] / fluxes["halpha"], 1e-3)))
         log_o3_hb.append(np.log10(max(fluxes["oiii_5007"] / fluxes["hbeta"], 1e-3)))
@@ -171,6 +182,11 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
 
     fig.tight_layout()
     plt.savefig("plot_workflow_bpt_classification.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.062 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_bpt_classification.py:

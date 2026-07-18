@@ -65,15 +65,15 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
     model = tengri.SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": tengri.FREE},
+        sfh={"type": "dpl", "all_params": tengri.FREE},
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",
-            "*": tengri.FREE,
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "all_params": tengri.FREE,
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
-        neb={"type": "cue", "*": tengri.FREE},
+        neb={"type": "cue", "all_params": tengri.FREE},
         redshift=tengri.FREE,
     )
 
@@ -139,7 +139,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.129 seconds)
+   **Total running time of the script:** (0 minutes 9.630 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_gradient_finite_difference.py:

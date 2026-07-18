@@ -42,8 +42,19 @@ similar to Arp 220's bolometric output.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -70,25 +81,25 @@ similar to Arp 220's bolometric output.
         tengri.load_ssp(),
         sfh={
             "type": "const",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.3,  # ~200 Msun/yr over 100 Myr → 2e10 Msun
             "start_gyr": 0.1,
             "end_gyr": 0.0,
         },  # 100 Myr burst
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 2.0,
             "tau_bc": 1.0,
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
-        radio={"type": "condon92", "*": tengri.FIXED},
+        radio={"type": "condon92", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.018),  # Arp 220 redshift
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
 
     fig, ax = plt.subplots(figsize=(7.6, 4.6))
     ax.loglog(wave, nu_l_nu, color="0.15", lw=1.2)
@@ -115,7 +126,7 @@ similar to Arp 220's bolometric output.
     ir = (wave > 8e4) & (wave < 1e7)
     nu_ir = C_AA_PER_S / wave[ir]
     order = np.argsort(nu_ir)
-    L_ir = np.trapezoid(np.asarray(out.sed)[ir][order], nu_ir[order])
+    L_ir = np.trapezoid(np.asarray(out.rest_sed())[ir][order], nu_ir[order])
     l_ir_exp = np.log10(L_ir / 3.84e33)
     ir_label = rf"$L_{{IR}}^{{8-1000\mu m}} \approx 10^{{{l_ir_exp:.1f}}}\,L_\odot$"
     ax.text(

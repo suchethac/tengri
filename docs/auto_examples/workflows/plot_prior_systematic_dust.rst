@@ -77,7 +77,7 @@ References:
         observation=obs,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 1.5,
             "beta": 2.5,
             "tau_gyr": 0.5,
@@ -85,7 +85,7 @@ References:
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tengri.Uniform(0.0, 2.0),
             "tau_bc": 0.2,
         },
@@ -143,7 +143,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.014 seconds)
+   **Total running time of the script:** (0 minutes 2.383 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_prior_systematic_dust.py:

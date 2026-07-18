@@ -31,15 +31,15 @@ obs = tengri.Observation(
 model = tengri.SEDModel.build(
     ssp_data=ssp,
     observation=obs,
-    sfh={"type": "dpl", "*": tengri.FREE},
+    sfh={"type": "dpl", "all_params": tengri.FREE},
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
         "law_diff": "calzetti",
-        "*": tengri.FREE,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "all_params": tengri.FREE,
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
-    neb={"type": "cue", "*": tengri.FREE},
+    neb={"type": "cue", "all_params": tengri.FREE},
     redshift=tengri.FREE,
 )
 

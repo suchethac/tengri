@@ -91,3 +91,39 @@ def test_none_key_disables_the_memo(fitter):
     e = fitter._memo_batch_map_kernel(None, builder)
     assert d is not e, "key=None must always build fresh (never serve a cached kernel)"
     assert calls["n"] == 2
+
+
+def test_cache_is_bounded_lru(fitter):
+    """More distinct configs than the cap evict the oldest — retention stays bounded.
+
+    A cached kernel can bake the SSP grid (~tens of MB); an unbounded cache on a
+    long-lived Fitter that sees many distinct configs would pin them all. The cache
+    is an LRU capped at ``_BATCH_KERNEL_CACHE_MAX``.
+    """
+    fitter.__dict__.pop("_cap_probe_cache", None)
+    cap = fitter._BATCH_KERNEL_CACHE_MAX
+
+    # Insert cap + 5 distinct keys; the cache must never exceed the cap.
+    for i in range(cap + 5):
+        fitter._memo_batch_kernel("_cap_probe_cache", ("k", i), object)
+        assert len(fitter._cap_probe_cache) <= cap
+    assert len(fitter._cap_probe_cache) == cap, "cache must fill exactly to the cap"
+
+    # The oldest keys were evicted; the most-recent cap keys survive.
+    surviving = set(fitter._cap_probe_cache)
+    assert ("k", cap + 4) in surviving, "the newest key must be retained"
+    assert ("k", 0) not in surviving, "the oldest key must have been evicted"
+
+
+def test_lru_touch_protects_recently_used(fitter):
+    """A cache hit refreshes recency, so a hot key is not evicted by newcomers."""
+    fitter.__dict__.pop("_cap_probe_cache", None)
+    cap = fitter._BATCH_KERNEL_CACHE_MAX
+
+    # Fill to the cap, then keep touching key 0 while adding new keys.
+    for i in range(cap):
+        fitter._memo_batch_kernel("_cap_probe_cache", ("k", i), object)
+    for i in range(cap, cap + 3):
+        fitter._memo_batch_kernel("_cap_probe_cache", ("k", 0), object)  # touch (hit)
+        fitter._memo_batch_kernel("_cap_probe_cache", ("k", i), object)  # add (evicts oldest)
+    assert ("k", 0) in fitter._cap_probe_cache, "a repeatedly-hit key must survive eviction"

@@ -162,8 +162,11 @@ def load_ssp(name: str | None = None) -> "SSPData":
     name : str or None, optional
         Short alias from ``_LOAD_SSP_PRESETS``, a key from
         ``tengri.list_known_ssps()``, or a literal filename (with or
-        without ``.h5``). ``None`` (default) loads the wNE PRSC/MILES
-        Chabrier grid used by the dust/nebular demo scripts.
+        without ``.h5``). ``None`` (default) loads :data:`~tengri._data_setup.DEFAULT_SSP`
+        — the bare-stellar PRSC/MILES Chabrier grid, the same one
+        ``tengri.download_ssp()`` fetches and the one the Cue/CloudyGrid nebular
+        backends require. For the nebular-baked demo grid pass the alias
+        explicitly: ``load_ssp("prsc_miles_chabrier_wNE")``.
 
     Returns
     -------
@@ -178,15 +181,15 @@ def load_ssp(name: str | None = None) -> "SSPData":
     Examples
     --------
     >>> from tengri import load_ssp
-    >>> ssp = load_ssp()  # default wNE SSP
-    >>> ssp = load_ssp("prsc_miles_chabrier")  # bare-stellar (for Cue)
+    >>> ssp = load_ssp()  # default bare-stellar grid (== download_ssp())
+    >>> ssp = load_ssp("prsc_miles_chabrier_wNE")  # nebular-baked demo grid
     """
     from pathlib import Path
 
-    from tengri._data_setup import _KNOWN_SSPS
+    from tengri._data_setup import _KNOWN_SSPS, DEFAULT_SSP
 
     if name is None:
-        filename = _LOAD_SSP_PRESETS["prsc_miles_chabrier_wNE"]
+        filename = _KNOWN_SSPS[DEFAULT_SSP]
     elif name in _LOAD_SSP_PRESETS:
         filename = _LOAD_SSP_PRESETS[name]
     elif name in _KNOWN_SSPS:
@@ -200,14 +203,19 @@ def load_ssp(name: str | None = None) -> "SSPData":
             return load_ssp_data(str(as_path))
         filename = name if name.endswith(".h5") else name + ".h5"
 
-    for parent in [Path.cwd(), *Path.cwd().parents]:
-        candidate = parent / "data" / filename
+    from tengri._data_setup import TENGRI_DATA_ENV, data_dirs
+
+    for directory in data_dirs():
+        candidate = directory / filename
         if candidate.exists():
             return load_ssp_data(str(candidate))
     raise FileNotFoundError(
-        f"SSP file 'data/{filename}' not found in any ancestor of {Path.cwd()}. "
-        f"Place the file under <project_root>/data/ or call "
-        f"tengri.download_ssp('<short_name>') to fetch a bundled SSP."
+        f"SSP file {filename!r} not found. Looked in: "
+        f"{', '.join(str(d) for d in data_dirs()[:4])} (and further ancestors). "
+        f"Call tengri.download_ssp('<short_name>') to fetch a bundled SSP "
+        f"(tengri.list_known_ssps() lists them), place the file under "
+        f"<project_root>/data/, or set ${TENGRI_DATA_ENV} to the directory "
+        f"holding it."
     )
 
 
@@ -294,7 +302,7 @@ def load_ssp_data(filepath: str) -> SSPData:
             "call away: tengri.download_ssp() fetches the default FSPS grid "
             "to data/, and tengri.list_known_ssps() shows the alternatives "
             "(BC03, BPASS, ProGeny, ...). Already have grids elsewhere? "
-            "Point TENGRI_DATA at that directory."
+            "Point TENGRI_DATA_DIR at that directory."
         )
 
     with h5py.File(filepath, "r") as f:

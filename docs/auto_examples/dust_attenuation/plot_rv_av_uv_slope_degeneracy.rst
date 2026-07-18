@@ -86,7 +86,7 @@ illustrating why dust-law assumptions strongly bias inferred properties.
 
     SFH = {
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 0.05,
         "width_gyr": 0.05,
         "log_total_mass": 8.7,
@@ -102,7 +102,7 @@ illustrating why dust-law assumptions strongly bias inferred properties.
             sfh=SFH,
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_bc": 0.0,
                 "tau_diff": av / 1.086,
                 "law_diff": "cardelli",
@@ -120,8 +120,8 @@ illustrating why dust-law assumptions strongly bias inferred properties.
         for j, rv in enumerate(rv_grid):
             model = _model(float(av), float(rv))
             p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-            out = model.predict_rest_sed(p)
-            BETA_GRID[j, i] = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
+            out = model.predict(p)
+            BETA_GRID[j, i] = _beta_uv(np.asarray(model.wavelengths), np.asarray(out.rest_sed()))
     REFS = [(1.0, 2.8, "SMC"), (1.0, 3.16, "LMC"), (1.0, 3.1, "MW (diffuse)"), (1.0, 4.05, "Calzetti")]
 
     fig, ax = plt.subplots(figsize=(7.5, 5.0))
@@ -172,7 +172,7 @@ illustrating why dust-law assumptions strongly bias inferred properties.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.597 seconds)
+   **Total running time of the script:** (0 minutes 8.292 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_rv_av_uv_slope_degeneracy.py:

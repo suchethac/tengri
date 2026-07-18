@@ -35,16 +35,16 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 5.0,  # steep early assembly
         "beta": 2.0,
         "tau_gyr": 1.0,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     neb={
         "type": "cue",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "neb_logU": tengri.Uniform(-4.0, -2.0),
         "neb_logZ_gas": tengri.Uniform(-2.0, 0.5),
         "neb_fesc": 0.0,
@@ -68,7 +68,7 @@ for i, log_u in enumerate(log_u_vals):
             "neb_logU": jnp.float64(log_u),
             "neb_logZ_gas": jnp.float64(log_z),
         }
-        lines = model.predict_emission_lines(params)
+        lines = model.predict(params).lines
         h_alpha = float(lines.halpha)
         h_beta = float(lines.hbeta)
         ratio_grid[i, j] = h_alpha / h_beta if h_beta > 0 else np.nan

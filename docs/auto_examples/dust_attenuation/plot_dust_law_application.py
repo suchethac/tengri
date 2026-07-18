@@ -49,7 +49,7 @@ COLORS = plt.cm.tab10(np.linspace(0.0, 0.9, len(LAWS)))
 C_AA_PER_S = 2.998e18
 SFH = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": 2.0,
     "width_gyr": 1.0,
     "log_total_mass": 10.0,
@@ -66,15 +66,15 @@ ref_model = tengri.SEDModel.build(
     dust={
         "type": "two_component",
         "law_diff": "calzetti",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     },
     redshift=tengri.Fixed(0.05),
 )
 p_ref = dict(ref_model.spec.sample(jax.random.PRNGKey(0)))
-sed_ref = np.asarray(ref_model.predict_rest_sed(p_ref).sed)
-wave = np.asarray(ref_model.predict_rest_sed(p_ref).wavelength)
+sed_ref = np.asarray(ref_model.predict(p_ref).rest_sed())
+wave = np.asarray(ref_model.wavelengths)
 nu = C_AA_PER_S / wave
 ax.loglog(wave, nu * sed_ref, color="0.05", lw=2.0, label="intrinsic", zorder=10, ls="--")
 
@@ -86,7 +86,7 @@ for (law, label), color in zip(LAWS, COLORS):
             dust={
                 "type": "two_component",
                 "law_diff": law,
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 1.0,
                 "tau_bc": 0.3,
             },
@@ -95,7 +95,7 @@ for (law, label), color in zip(LAWS, COLORS):
     except Exception:
         continue
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    sed = np.asarray(model.predict_rest_sed(p).sed)
+    sed = np.asarray(model.predict(p).rest_sed())
     ax.loglog(wave, nu * sed, color=color, lw=1.4, label=label)
 
 ax.set(

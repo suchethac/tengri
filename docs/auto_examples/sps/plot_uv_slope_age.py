@@ -61,14 +61,14 @@ model = tengri.SEDModel.build(
     tengri.load_ssp(),
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": tengri.Uniform(0.01, 13.0),
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.01),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -77,8 +77,8 @@ ages = np.geomspace(0.01, 1.0, 24)
 beta = np.empty_like(ages)
 for i, age in enumerate(ages):
     p = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
-    out = model.predict_rest_sed(p)
-    beta[i] = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
+    out = model.predict(p)
+    beta[i] = _beta_uv(np.asarray(model.wavelengths), np.asarray(out.rest_sed()))
 
 fig, ax = plt.subplots(figsize=(6.4, 4.4))
 ax.plot(ages * 1.0e3, beta, color="C0", lw=1.6)

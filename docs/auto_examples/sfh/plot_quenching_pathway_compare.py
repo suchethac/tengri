@@ -36,7 +36,7 @@ scenarios = [
         "name": "Star-forming (no quench)",
         "sfh": {
             "type": "const",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.64,
             "start_gyr": 0.1,
             "end_gyr": 13.8,
@@ -45,14 +45,19 @@ scenarios = [
     },
     {
         "name": "Slow quench (τ=4 Gyr)",
-        "sfh": {"type": "dexp", "*": tengri.FIXED, "tau_gyr": 4.0, "log_total_mass": 10.0},
+        "sfh": {
+            "type": "dexp",
+            "all_params": tengri.FIXED,
+            "tau_gyr": 4.0,
+            "log_total_mass": 10.0,
+        },
         "color": "#ff7f0e",
     },
     {
         "name": "Fast post-starburst (t_sb=2 Gyr)",
         "sfh": {
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": 2.0,
             "width_gyr": 0.3,
@@ -70,7 +75,12 @@ for scenario in scenarios:
     model = tengri.SEDModel.build(
         ssp,
         sfh=scenario["sfh"],
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.15, "tau_bc": 0.3},
+        dust={
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.15,
+            "tau_bc": 0.3,
+        },
         redshift=tengri.Fixed(0.05),
     )
     models[scenario["name"]] = model
@@ -95,10 +105,10 @@ for scenario in scenarios:
     }
 
     # Rest-frame SED predictions
-    sed_out = model.predict_rest_sed(params)
-    wave = np.asarray(sed_out.wavelength)
+    sed_out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave  # c in A/s -> frequency in Hz
-    nu_l_nu = nu * np.asarray(sed_out.sed)
+    nu_l_nu = nu * np.asarray(sed_out.rest_sed())
     sed_data[name] = {"wave": wave, "nu_l_nu": nu_l_nu}
 
 # --- Create two-panel figure ---

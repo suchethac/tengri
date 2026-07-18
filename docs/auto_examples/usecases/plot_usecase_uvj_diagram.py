@@ -62,7 +62,7 @@ sf_model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,
         "peak_lbt_gyr": tengri.Uniform(0.5, 4.0),
         "width_gyr": tengri.Uniform(1.0, 4.0),
@@ -72,7 +72,7 @@ sf_model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": tengri.Uniform(0.1, 1.5),
         "tau_diff": tengri.Uniform(0.1, 1.0),
         "slope": -0.7,
@@ -86,7 +86,7 @@ passive_model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,
         "peak_lbt_gyr": tengri.Uniform(7.0, 11.0),
         "width_gyr": tengri.Uniform(0.5, 1.5),
@@ -96,7 +96,7 @@ passive_model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": tengri.Uniform(0.0, 0.15),
         "tau_diff": tengri.Uniform(0.0, 0.1),
         "slope": -0.7,

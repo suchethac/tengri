@@ -40,8 +40,25 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/examples/usecases/plot_usecase_jwst_color_color.py:109: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/examples/usecases/plot_usecase_jwst_color_color.py:110: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -128,7 +145,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
             },
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_bc": 0.05,
                 "tau_diff": 0.02,
                 "slope": -0.7,
@@ -213,7 +230,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 29.941 seconds)
+   **Total running time of the script:** (0 minutes 30.150 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_jwst_color_color.py:

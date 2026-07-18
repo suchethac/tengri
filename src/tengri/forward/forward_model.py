@@ -529,6 +529,28 @@ class ForwardModel:
         }
         return _linear_flux_sum(per_pop_pred)
 
+    @property
+    def approx(self):
+        """The effective approximation state of the wrapped SED.
+
+        Delegates to :attr:`SEDModel.approx`, so the question "is a LUT live?"
+        has one spelling and one answer whether it is asked of a
+        :class:`~tengri.forward.sed_model.SEDModel` or of the
+        :class:`ForwardModel` wrapping it. Reaching past this for an inner
+        attribute (``model._approx``) reads a detail the wrapper does not carry
+        and silently reports "exact".
+
+        Returns
+        -------
+        ApproxState
+            Frozen summary of the active LUTs; falsy for an exact model.
+        """
+        from tengri.forward.sed_model import ApproxState
+
+        inner = self._inner_sed_for_delegation()
+        state = getattr(inner, "approx", None)
+        return state if isinstance(state, ApproxState) else ApproxState()
+
     def _has_modern_approx(self) -> bool:
         """Whether the wrapped SED carries a build-time ``approx=`` LUT."""
         inner = self._inner_sed_for_delegation()

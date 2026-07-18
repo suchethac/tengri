@@ -11,13 +11,15 @@ workflow with figures; this page is the reference for the API.
 A joint fit is declared by putting both channels in a single `Observation`:
 
 ```python
-from tengri import Observation, Photometry, Spectroscopy
+from tengri import SEDModel, Observation, Photometry, Spectroscopy, load_ssp_data
 
+# Set up the model as shown in the notebook 07_joint_photo_spec.py
+ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
     spectroscopy=Spectroscopy(wave_obs=wave_obs, resolution=2000),
 )
-model = SEDModel(spec, ssp, observation=obs)
+model = SEDModel.build(ssp_data=ssp, observation=obs)
 ```
 
 `model.observation.data_type` now reports `"joint"`, and the spectroscopy grid
@@ -32,13 +34,14 @@ and flag `data_type="joint"` so the loss splits them back into channels:
 
 ```python
 import numpy as np
-from tengri import Fitter
+from tengri import Fitter, ForwardModel
 
 data  = np.concatenate([phot_flux,  spec_flux])
 noise = np.concatenate([phot_noise, spec_noise])
 
+forward = ForwardModel.build(sed=model, observation=obs)
 fitter = Fitter(
-    model, data, noise,
+    forward, data, noise,
     data_type="joint",
     calibration_marginalize=True,   # analytic flux-calibration marginalization
     cal_n_poly=2,
@@ -46,6 +49,8 @@ fitter = Fitter(
 posterior = fitter.run("mcmc_hmc", n_warmup=300, n_samples=600,
                        dense_mass_matrix=False)
 ```
+
+**Prerequisites:** `phot_flux`, `spec_flux`, `phot_noise`, `spec_noise` are your joint photometry and spectroscopy observations. See [notebook 07 (joint_photo_spec)](spine/07_joint_photo_spec.ipynb) for a complete runnable example.
 
 `calibration_marginalize=True` analytically integrates out a low-order
 Chebyshev flux-calibration polynomial on the spectroscopy channel at every
@@ -74,7 +79,7 @@ model = SEDModel.build(
     ssp_data=ssp,
     observation=Observation(photometry=phot, spectroscopy=spec),
     approx=WavePrecomp(),   # joint → both photometry + spectrum LUTs
-    ...,
+    # ... plus your sfh / dust / neb groups
 )
 ```
 

@@ -43,8 +43,21 @@ law-dependent in the literature.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/examples/dust_attenuation/plot_dust_law_uv_slope_response.py:123: UserWarning: set_ticklabels() should only be used with a fixed number of ticks, i.e. after set_ticks() or using a FixedLocator.
+      ax.set_xticklabels([lbl for _, lbl, _ in LAWS], rotation=20, ha="right", fontsize=8.5)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -101,7 +114,7 @@ law-dependent in the literature.
     ]
     SFH = {
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 0.05,
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
@@ -117,7 +130,7 @@ law-dependent in the literature.
             sfh=SFH,
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": tau,
                 "tau_bc": 0.0,
                 "law_diff": law or "calzetti",
@@ -129,8 +142,8 @@ law-dependent in the literature.
     # Intrinsic slope reference
     m0 = _model(tau=0.0)
     p0 = dict(m0.spec.sample(jax.random.PRNGKey(0)))
-    out0 = m0.predict_rest_sed(p0)
-    beta_intrinsic = _beta_uv(np.asarray(out0.wavelength), np.asarray(out0.sed))
+    out0 = m0.predict(p0)
+    beta_intrinsic = _beta_uv(np.asarray(m0.wavelengths), np.asarray(out0.rest_sed()))
 
     fig, ax = plt.subplots(figsize=(7.0, 4.6))
     ax.axhline(
@@ -144,8 +157,8 @@ law-dependent in the literature.
     for law_key, label, color in LAWS:
         m = _model(law=law_key, tau=1.0)
         p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-        out = m.predict_rest_sed(p)
-        beta = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
+        out = m.predict(p)
+        beta = _beta_uv(np.asarray(m.wavelengths), np.asarray(out.rest_sed()))
         ax.bar(label, beta - beta_intrinsic, color=color, edgecolor="0.15", lw=0.5)
         ax.text(
             label, beta - beta_intrinsic + 0.05, f"{beta:+.2f}", ha="center", fontsize=8, color="0.2"
@@ -169,6 +182,11 @@ law-dependent in the literature.
 
     fig.tight_layout()
     plt.savefig("plot_dust_law_uv_slope_response.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.202 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_dust_law_uv_slope_response.py:

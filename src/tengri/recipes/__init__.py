@@ -515,9 +515,10 @@ def dust_demo() -> dict:
     that :func:`~tengri.analysis.plotting.sweep_parameter` can override
     one knob at a time without touching the rest.
 
-    **SSP requirement:** wNE (with-nebular-emission), e.g.
-    ``load_ssp()`` default. Uses the BakedIn nebular path bundled with
-    the SSP, so optical emission lines render in the SED plots.
+    **SSP requirement:** wNE (with-nebular-emission), i.e.
+    ``load_ssp("prsc_miles_chabrier_wNE")``. Uses the BakedIn nebular path
+    bundled with the SSP, so optical emission lines render in the SED plots.
+    (The bare-stellar ``load_ssp()`` default carries no baked nebular lines.)
 
     **Configuration:**
     - **SFH**: Truncated skew-normal peaked at ~0.5 Gyr (young SF)
@@ -539,7 +540,7 @@ def dust_demo() -> dict:
         from tengri import SEDModel, load_ssp, recipes
         from tengri.analysis.plotting import sweep_parameter, SWEEP_CMAPS
 
-        model = SEDModel.build(ssp_data=load_ssp(), **recipes.dust_demo())
+        model = SEDModel.build(ssp_data=load_ssp("prsc_miles_chabrier_wNE"), **recipes.dust_demo())
         sweep_parameter(
             model,
             "dust_tau_bc",

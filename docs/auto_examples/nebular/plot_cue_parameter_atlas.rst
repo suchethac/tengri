@@ -89,16 +89,16 @@ References:
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_gyr": 0.3,
             "log_total_mass": 10.0,
             "alpha": 3.0,
             "beta": 2.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
         neb={
             "type": "cue",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "logU": tengri.Uniform(-4.0, -1.0),
             "logZ_gas": tengri.Uniform(-2.0, 0.5),
         },
@@ -116,7 +116,7 @@ References:
     for i, logu in enumerate(LOGU_GRID):
         for j, logz in enumerate(LOGZ_GRID):
             p = {**baseline, "neb_logU": jnp.float64(logu), "neb_logZ_gas": jnp.float64(logz)}
-            lines = model.predict_emission_lines(p)
+            lines = model.predict(p).lines
             o3_hb[i, j] = float(lines.oiii_5007 / lines.hbeta)
             n2_ha[i, j] = float(lines.nii_6584 / lines.halpha)
             o32[i, j] = float(lines.oiii_5007 / lines.oii)
@@ -173,7 +173,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 54.283 seconds)
+   **Total running time of the script:** (6 minutes 25.850 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_parameter_atlas.py:

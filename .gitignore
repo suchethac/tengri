@@ -137,6 +137,17 @@ _galrun/
 
 # Superpowers subagent-driven-development scratch ledger (session-local)
 .superpowers/
+
+# Audit/scratch scripts must live in tests/ — never the repo root. Tests are
+# collected from tests/ only (pyproject testpaths=["tests"]), so a root-level
+# test_*.py is unreachable dead weight. Ignoring them here stops a `git add -A`
+# from re-leaking audit scratch, as happened in #1165 (see #1232).
+/test_*.py
+/*_test.py
+/audit_*.py
+/*_audit.py
+/quick_test*.py
+/final_audit*.py
 !data/grahsp/grahsp_templates.h5
 !data/qsogen_emline_template.h5
 !data/qsogen_detailed_reference.npz
