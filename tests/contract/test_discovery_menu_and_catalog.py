@@ -21,6 +21,8 @@ guard against the aggregator drift recurring when a new menu is added.
 
 from __future__ import annotations
 
+import re
+
 import jax
 import pytest
 
@@ -161,6 +163,97 @@ def test_list_sfh_models_production_filter_excludes_unvalidated():
     assert UNVALIDATED_SFH_TYPES.isdisjoint(production), (
         f"production filter leaked unbuildable types: {sorted(UNVALIDATED_SFH_TYPES & production)}"
     )
+
+
+def _sfh_counts_in(text):
+    """Every integer printed on the ``list_sfh_models()`` line of a cheatsheet."""
+    line = next(ln for ln in text.splitlines() if "list_sfh_models()" in ln)
+    return [int(tok) for tok in re.findall(r"\d+", line)], line
+
+
+def test_help_headlines_the_buildable_sfh_count_not_the_raw_registry(capsys):
+    """``tengri.help()`` must not advertise a count the builder rejects.
+
+    ``summary()`` reports the buildable/total pair, but ``help()`` — the
+    surface ``summary()`` itself signposts as the "curated cheatsheet for new
+    users" — headlined the raw registry total. A newcomer read "34 SFH
+    variants", picked one of the eight :data:`UNVALIDATED_SFH_TYPES`, and hit a
+    build-time ``ValueError``. The *first* number on that line is what a reader
+    takes as the menu size, so it must be the buildable one.
+    """
+    n_ok = len(tengri.list_sfh_models(status="production"))
+    n_all = len(tengri.list_sfh_models())
+    assert n_ok < n_all, (
+        "precondition gone: no unvalidated SFH types remain, so this guard "
+        "can no longer distinguish the buildable count from the raw total"
+    )
+
+    tengri.help()
+    numbers, line = _sfh_counts_in(capsys.readouterr().out)
+
+    assert numbers, f"no count on the list_sfh_models line: {line!r}"
+    assert numbers[0] == n_ok, (
+        f"help() headlines {numbers[0]} SFH models but only {n_ok} build "
+        f"(registry holds {n_all}). Line: {line!r}"
+    )
+
+
+def test_summary_and_help_agree_on_the_sfh_counts(capsys):
+    """The two front-page surfaces must not contradict each other."""
+    tengri.summary()
+    summary_out = capsys.readouterr().out
+    tengri.help()
+    help_numbers, help_line = _sfh_counts_in(capsys.readouterr().out)
+
+    buildable = next(ln for ln in summary_out.splitlines() if "buildable SFH models" in ln)
+    total = next(ln for ln in summary_out.splitlines() if "total SFH models" in ln)
+    summary_pair = (
+        int(re.search(r"\d+", buildable).group()),
+        int(re.search(r"\d+", total).group()),
+    )
+
+    assert set(summary_pair) <= set(help_numbers), (
+        f"summary() reports {summary_pair} for (buildable, total) SFH models but "
+        f"help() shows {help_numbers}. Line: {help_line!r}"
+    )
+
+
+def _tutorial_texts():
+    """(name, text) for every registered tutorial page."""
+    from tengri._tutorials import _TUTORIALS
+
+    assert _TUTORIALS, "no tutorials registered — this guard would vacuously pass"
+    return [(name, tut.code) for name, tut in _TUTORIALS.items()]
+
+
+@pytest.mark.parametrize("name, text", _tutorial_texts())
+def test_tutorials_do_not_hardcode_menu_counts(name, text):
+    """A hand-written menu size goes stale the moment a model is registered.
+
+    ``design_philosophy`` advertised "12 AGN models / 21 attenuation curves /
+    7 IR templates / 4 backends" when the live registries held 1 / 22 / 18 / 5
+    — four of five wrong. Counts belong in :func:`tengri.summary`, which
+    computes them, never in prose.
+    """
+    stale = re.findall(r"(tengri\.list_\w+\(\))\s*#\s*(\d+)", text)
+    assert not stale, (
+        f"tutorial {name!r} hardcodes menu counts {stale}; these rot silently. "
+        f"Describe the menu instead and point at tengri.summary() for counts."
+    )
+
+
+@pytest.mark.parametrize("name, text", _tutorial_texts())
+def test_tutorials_only_advertise_real_list_functions(name, text):
+    """Every ``tengri.list_*()`` a tutorial names must actually exist.
+
+    Same class as the ``list_components()`` hint that advertised
+    ``list_stellar_models`` (#1179): a tutorial is a promise the public
+    namespace has to keep.
+    """
+    for call in sorted(set(re.findall(r"tengri\.(list_\w+)\(", text))):
+        assert callable(getattr(tengri, call, None)), (
+            f"tutorial {name!r} advertises tengri.{call}(), which does not exist"
+        )
 
 
 # ── usage hints teach the current SEDModel.build grammar ────────────────────
