@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 
 import tengri
+from tengri import SEDModel
 from tengri.components.nebular import NEBULAR_MODELS
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, UNVALIDATED_SFH_TYPES
 from tengri.parameters.groups import _NEBULAR_TYPE_HINTS
@@ -155,3 +156,45 @@ def test_stale_inference_map_points_at_real_methods() -> None:
         assert stale not in live, (
             f"{stale!r} is a real method again — its stale-map entry is wrong"
         )
+
+
+# ── docs must not reference attributes SEDModel does not have ───────────────
+
+_PREDICTION_PAGE = "docs/api/predicting-properties.md"
+
+
+def _model_attrs_referenced(text: str) -> set[str]:
+    """Every ``model.<attr>`` named inside a python fenced block on a page."""
+    blocks = re.findall(r"```(?:python|py)\n(.*?)```", text, flags=re.DOTALL)
+    assert blocks, "no python blocks found — the extraction regex has rotted"
+    joined = "\n".join(blocks)
+    return set(re.findall(r"\bmodel\.([A-Za-z_][A-Za-z0-9_]*)", joined))
+
+
+def test_prediction_page_only_references_real_model_attributes(
+    synthetic_ssp, simple_observation
+) -> None:
+    """``docs/api/predicting-properties.md`` must not teach a nonexistent attribute.
+
+    The page told readers to build an observed axis with
+    ``obs_wave_rest * (1 + model.redshift)``. ``SEDModel`` has no ``.redshift``
+    (``AttributeError`` on copy-paste), and the same page warns 40 lines earlier
+    never to reconstruct the observed axis by hand — so the snippet contradicted
+    its own page and could not run. Attribute drift is the general failure here:
+    ``model.approx`` was *also* fictional when this page was written and only
+    became real later, so a spot-fix would not have held.
+    """
+    path = _REPO_ROOT / _PREDICTION_PAGE
+    assert path.is_file(), (
+        f"{_PREDICTION_PAGE} is missing — this guard must not silently vanish "
+        "with the page it protects"
+    )
+
+    model = SEDModel.build(ssp_data=synthetic_ssp, observation=simple_observation)
+    missing = sorted(
+        a for a in _model_attrs_referenced(path.read_text("utf-8")) if not hasattr(model, a)
+    )
+    assert not missing, (
+        f"{_PREDICTION_PAGE} references SEDModel attribute(s) that do not exist: "
+        f"{missing}. A reader copying that snippet gets an AttributeError."
+    )
