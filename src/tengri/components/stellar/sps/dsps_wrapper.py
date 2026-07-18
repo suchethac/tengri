@@ -162,8 +162,11 @@ def load_ssp(name: str | None = None) -> "SSPData":
     name : str or None, optional
         Short alias from ``_LOAD_SSP_PRESETS``, a key from
         ``tengri.list_known_ssps()``, or a literal filename (with or
-        without ``.h5``). ``None`` (default) loads the wNE PRSC/MILES
-        Chabrier grid used by the dust/nebular demo scripts.
+        without ``.h5``). ``None`` (default) loads :data:`~tengri._data_setup.DEFAULT_SSP`
+        — the bare-stellar PRSC/MILES Chabrier grid, the same one
+        ``tengri.download_ssp()`` fetches and the one the Cue/CloudyGrid nebular
+        backends require. For the nebular-baked demo grid pass the alias
+        explicitly: ``load_ssp("prsc_miles_chabrier_wNE")``.
 
     Returns
     -------
@@ -178,15 +181,15 @@ def load_ssp(name: str | None = None) -> "SSPData":
     Examples
     --------
     >>> from tengri import load_ssp
-    >>> ssp = load_ssp()  # default wNE SSP
-    >>> ssp = load_ssp("prsc_miles_chabrier")  # bare-stellar (for Cue)
+    >>> ssp = load_ssp()  # default bare-stellar grid (== download_ssp())
+    >>> ssp = load_ssp("prsc_miles_chabrier_wNE")  # nebular-baked demo grid
     """
     from pathlib import Path
 
-    from tengri._data_setup import _KNOWN_SSPS
+    from tengri._data_setup import _KNOWN_SSPS, DEFAULT_SSP
 
     if name is None:
-        filename = _LOAD_SSP_PRESETS["prsc_miles_chabrier_wNE"]
+        filename = _KNOWN_SSPS[DEFAULT_SSP]
     elif name in _LOAD_SSP_PRESETS:
         filename = _LOAD_SSP_PRESETS[name]
     elif name in _KNOWN_SSPS:

@@ -13,9 +13,11 @@ answers to "where is my data?" had drifted apart:
   the ``fsps_*.h5`` files ``download_ssp()`` actually writes, so a correctly
   populated install reported "no SSP data found".
 
-These pin the invariants that make those states unrepresentable. The
-``DEFAULT_SSP`` half of #1209 (one default name shared by download and load) is
-a separate change.
+* ``download_ssp()`` and ``load_ssp()`` each hardcoded their own default
+  filename, so nothing forced agreement — the fetched grid and the loaded grid
+  were different files, and the loaded one was not obtainable at all.
+
+These pin the invariants that make those states unrepresentable.
 
 Design: docs/superpowers/specs/2026-07-17-consolidate-approx-and-bootstrap-design.md
 """
@@ -229,3 +231,70 @@ def test_download_ssp_rejects_typos_and_paths():
         _resolve_ssp_filename("fsps_prsc_miles_chabier")  # typo, no .h5
     with pytest.raises(ValueError, match="not a path"):
         _resolve_ssp_filename("../../etc/passwd.h5")
+
+
+# ── one default SSP: download and load cannot drift apart ────────────────
+
+
+def test_download_and_load_share_one_default():
+    """THE bug: ``download_ssp()`` wrote one grid and ``load_ssp()`` read another.
+
+    Each hardcoded its own filename, so nothing forced agreement and they drifted:
+    a fresh user fetched ``fsps_prsc_miles_chabrier.h5`` and the loader then looked
+    for ``ssp_prsc_miles_chabrier_wNE_...h5`` — a file absent from both
+    ``list_known_ssps()`` and the hosted catalog. One constant makes that
+    unrepresentable.
+    """
+    import inspect
+
+    from tengri._data_setup import _KNOWN_SSPS, DEFAULT_SSP, download_ssp
+    from tengri.components.stellar.sps import dsps_wrapper
+
+    assert inspect.signature(download_ssp).parameters["name"].default == DEFAULT_SSP, (
+        "download_ssp no longer defaults to DEFAULT_SSP — the two can drift again"
+    )
+    source = inspect.getsource(dsps_wrapper.load_ssp)
+    assert "DEFAULT_SSP" in source, (
+        "load_ssp resolves its no-argument default from something other than "
+        "DEFAULT_SSP — the two defaults can drift apart again"
+    )
+    assert DEFAULT_SSP in _KNOWN_SSPS, "the default must be fetchable by download_ssp()"
+
+
+def test_default_ssp_is_bare_stellar():
+    """The default must be bare-stellar: the catalog ships nothing else.
+
+    A wNE (nebular-baked) default is unobtainable via ``download_ssp()`` *and*
+    rejected by the Cue backend, which is what half the recipe catalog uses.
+    """
+    from tengri._data_setup import DEFAULT_SSP
+
+    assert "wNE" not in DEFAULT_SSP, "the default SSP must not be a nebular-baked grid"
+
+
+@pytest.mark.parametrize(
+    "recipe_name",
+    ["star_forming_photometry", "quiescent_z0", "stochastic_sfh_jwst", "agn_panchromatic"],
+)
+def test_default_ssp_builds_the_cue_recipes(recipe_name):
+    """The documented ``load_ssp()`` + ``recipes.*`` pattern must actually build.
+
+    These four recipes use the Cue nebular backend, which *rejects* wNE grids
+    (``CueWNESSPError``). Under the old wNE default this exact pattern — the one
+    ``docs/recipes/jwst_nirspec_spectroscopy.md`` prints — raised on the first
+    line a new user would type. Five of ten recipes were unbuildable that way.
+    """
+    tengri = pytest.importorskip("tengri")
+    from tengri.observation.observation import Observation
+    from tengri.observation.photometry_config import Photometry
+
+    try:
+        ssp = tengri.load_ssp()
+    except FileNotFoundError:
+        pytest.skip("default SSP not available")
+
+    obs = Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"]))
+    cfg = getattr(tengri.recipes, recipe_name)()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        tengri.SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
