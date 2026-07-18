@@ -41,7 +41,7 @@ no edits to anything else.
 | SFH | parametric (about 15 families), non-parametric (Leja+ continuity, Dirichlet), and stochastic (IFT correlated fields with PSD-governed burstiness) |
 | Dust attenuation | Calzetti, Cardelli, Charlot & Fall two-component, Salim, Kriek & Conroy, others |
 | Dust emission | Draine & Li, Dale, THEMIS |
-| Nebular | `baked_in`, `cue` (emulator), `cloudy_grid`, `cb19` |
+| Nebular | `ssp` (baked into the SSP grid), `cue` (emulator), `cloudy`, `cb19` |
 | AGN | accretion disc, SKIRTOR torus, BLR/NLR through Cue, optional X-ray and radio |
 | IGM | Madau, Inoue |
 | Inference | optimizers from `optax`, samplers from `BlackJAX`, variational inference from `NIFTy.re`, plus hierarchical / population extensions on top |

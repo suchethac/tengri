@@ -845,3 +845,52 @@ class TestAllParamsAlias:
         """A non-sentinel ``all_params`` value raises the same error as ``'*'``."""
         with pytest.raises(ValueError, match="all_params"):
             parse_groups(sfh={"type": "dpl", "all_params": bad}, redshift=Fixed(0.1))
+
+
+@pytest.mark.regression_bug
+class TestRoundTripGroupTypes:
+    """Active radio / IGM selections must survive ``to_groups()``.
+
+    ``_extract_group_type`` probed ``spec.radio_model`` — an attribute the
+    parse side never sets (it stores ``radio`` + ``radio_sfr_mode`` +
+    ``radio_agn_model``) — so the round-trip emitted a radio group with no
+    type anywhere. IGM was worse: an active selection has no parameters of
+    its own, and the no-params emission path only handled ``"none"``, so
+    ``igm={'type': 'madau'}`` vanished and silently rebuilt as the default
+    Inoue+2014 model. Same failure class as the ``ForwardModel._approx``
+    migration miss: a hasattr probe for a never-set attribute fails open.
+    """
+
+    def _roundtrip(self, **kw):
+        spec = parse_groups(redshift=Fixed(0.05), **kw)
+        groups = spec.to_groups()
+        return spec, groups, parse_groups(**groups)
+
+    def test_radio_types_ride_on_the_sub_blocks(self):
+        _, groups, rebuilt = self._roundtrip(radio={"type": "condon92"})
+        radio = groups["radio"]
+        assert radio["sf"]["type"] == "bell2003"
+        assert radio["agn"]["type"] == "powerlaw"
+        # parse_groups raises on a top-level 'type' mixed with sub-blocks
+        assert "type" not in radio
+        assert rebuilt.radio is True
+
+    def test_radio_composable_variant_survives(self):
+        _, groups, rebuilt = self._roundtrip(radio={"sf": {"type": "delvecchio2021"}})
+        assert groups["radio"]["sf"]["type"] == "delvecchio2021"
+        assert rebuilt.radio_sfr_mode == "delvecchio2021"
+
+    def test_igm_madau_is_not_silently_swapped_for_the_default(self):
+        _, groups, rebuilt = self._roundtrip(igm={"type": "madau"})
+        assert groups["igm"] == {"type": "madau"}
+        assert rebuilt.igm_model == "madau"
+
+    def test_igm_default_omitted_but_rebuild_matches(self):
+        """The default model may be elided — as long as the rebuild agrees."""
+        spec, _, rebuilt = self._roundtrip(igm={"type": "inoue14"})
+        assert rebuilt.apply_igm is True
+        assert rebuilt.igm_model == spec.igm_model
+
+    def test_igm_none_round_trips_off(self):
+        _, _, rebuilt = self._roundtrip(igm={"type": "none"})
+        assert rebuilt.apply_igm is False

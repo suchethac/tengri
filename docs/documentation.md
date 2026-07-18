@@ -54,27 +54,32 @@ Tutorial pages in the sidebar are those **`.ipynb`** files rendered as HTML. Opt
 ## Quick start
 
 ```python
-from tengri import SEDModel, Parameters, Fitter, Uniform, Gaussian
-from tengri import Observation, Photometry, load_ssp_data
+from tengri import SEDModel, Fitter, Uniform, Fixed
+from tengri import Observation, Photometry, ForwardModel, load_ssp_data
+import numpy as np
 
 ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
 
-spec = Parameters(
-    sfh_tsnorm_log_total_mass=Uniform(-1, 2),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
-    sfh_tsnorm_width_gyr=Uniform(0.5, 5),
-    sfh_field_psd_sigma=Uniform(0.01, 1.0),
-    sfh_field_psd_tau_myr=Uniform(10, 500),
-    met_logzsol=Gaussian(-0.3, 0.2),
-    dust_tau_bc=Uniform(0, 4),
-    redshift=0.1,
+model = SEDModel.build(
+    ssp_data=ssp,
+    observation=obs,
+    sfh={'type': 'tsnorm', 'log_total_mass': Uniform(-1, 2), 'peak_lbt_gyr': Uniform(1, 12),
+         'width_gyr': Uniform(0.5, 5)},
+    stellar={'met_logzsol': Uniform(-1, 0.5)},
+    dust={'type': 'two_component', 'tau_bc': Uniform(0, 4)},
+    redshift=Fixed(0.1),
 )
 
-model = SEDModel(spec, ssp, observation=obs)
-fitter = Fitter(model, obs_flux, obs_noise)
+forward = ForwardModel.build(sed=model, observation=obs)
+
+# Mock photometry: 5 bands with SNR=20
+obs_flux = np.ones(5) * 1e-29  # erg/s/cm2/Hz
+obs_noise = obs_flux / 20.0
+
+fitter = Fitter(forward, obs_flux, obs_noise)
 result = fitter.run("vi")
 print(result.summary_table())
 ```

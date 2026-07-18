@@ -1,9 +1,9 @@
 # Hierarchical Inference
 
 Population-level inference with shared PSD parameters. Instead of fitting each
-galaxy independently, `PopulationFitter` constrains the burstiness prior
-(PSD amplitude and timescale) jointly across a population, returning a
-`PopulationPosterior`.
+galaxy independently, a `PopulationSEDModel` ties the burstiness prior (PSD
+amplitude and timescale) across a population and constrains it jointly,
+returning a `PopulationPosterior`.
 
 ## What is hierarchical PSD inference?
 
@@ -23,40 +23,68 @@ Constraint improves as sqrt(N).
 
 ## Usage
 
-```python
-from tengri import Model, Parameters, PopulationFitter, Observation, Photometry
-import jax
+The template must carry a stochastic `field` SFH — the PSD parameters this page
+is about only exist on that family. `recipes.stochastic_sfh_jwst()` supplies one.
 
+```python
+import jax
+import numpy as np
+
+import tengri
+from tengri import (
+    Fitter,
+    ForwardModel,
+    Observation,
+    Photometry,
+    PopulationSEDModel,
+    SEDModel,
+    load_ssp_data,
+    recipes,
+)
+
+ssp = load_ssp_data(tengri.download_ssp())
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
 
-spec = Parameters(
-    redshift=0.1,
-    sfh="field",
-    dust=True,
+# One template: its physics (SFH family, dust law, nebular backend) is shared
+# across the population. The `field` SFH carries the PSD hyperparameters.
+template = SEDModel.build(
+    ssp_data=ssp,
+    observation=obs,
+    **recipes.stochastic_sfh_jwst(),
 )
 
-ssp = ...  # load SSP data
+# Per-galaxy data: each dict needs `flux_obs` and `noise`. Substitute your own
+# catalog here; mock galaxies drawn from the template stand in for it.
+key = jax.random.PRNGKey(0)
+galaxies = []
+for i in range(3):
+    k = jax.random.fold_in(key, i)
+    mock = template.mock(template.spec.sample(k), key=k)
+    galaxies.append({
+        "flux_obs": np.asarray(mock.flux_obs),
+        "noise": np.asarray(mock.noise),
+    })
 
-hfitter = PopulationFitter(
-    model_factory=lambda sigma, tau: Model(
-        Parameters(redshift=0.1, sfh="field", dust=True),
-        ssp,
-        observation=obs,
-        psd_sigma=sigma,
-        psd_tau_myr=tau,
-    ),
-    galaxies=[
-        {"flux_obs": flux_i, "noise": noise_i}
-        for flux_i, noise_i in zip(catalog_flux, catalog_noise)
-    ],
-    psd_sigma_prior=(0.1, 4.0),   # uniform prior bounds
-    psd_tau_prior=(1.0, 300.0),   # Myr
+# Tie the two PSD hyperparameters across the population; everything else
+# (dust, metallicity, each galaxy's own SFH realization) stays per-galaxy.
+pop = PopulationSEDModel(
+    sed=template,
+    galaxies=galaxies,
+    shared=("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"),
 )
 
-result = hfitter.run("vi", key=jax.random.PRNGKey(0), n_iterations=25)
+forward = ForwardModel.build(population=pop, observation=obs)
+result = Fitter(forward).run("vi", key=key)
 ```
+
+`shared=` defaults to exactly those two PSD names, so it can be omitted; it is
+spelled out here to show what the population ties together.
+
+Inference on a population is expensive: geoVI is cold ~100 s and memory-heavy
+(~20 GB RSS at D = 6–7) for a single galaxy, and a population fit scales from
+there. Start with a handful of galaxies.
 
 ### Available methods
 
@@ -124,28 +152,27 @@ A key validation test: generate two populations with distinct PSD parameters
 (e.g., quiescent vs. star-forming) and verify that the hierarchical fitter
 recovers both sets of PSD parameters when run on each population separately.
 
+Build one `PopulationSEDModel` per population over the same `template`, and give
+each the same prior bounds so the comparison is like-for-like. `priors=` maps
+each shared name to its `(lo, hi)` bounds.
+
 ```python
-# Population A: quiescent (low sigma, long tau)
-hfitter_a = PopulationFitter(
-    model_factory=factory,
-    galaxies=quiescent_galaxies,
-    psd_sigma_prior=(0.1, 4.0),
-    psd_tau_prior=(1.0, 300.0),
-)
-result_a = hfitter_a.run("vi", n_iterations=25)
+PSD_PRIORS = {
+    "sfh_field_psd_sigma": (0.1, 4.0),
+    "sfh_field_psd_tau_myr": (1.0, 300.0),
+}
 
-# Population B: bursty (high sigma, short tau)
-hfitter_b = PopulationFitter(
-    model_factory=factory,
-    galaxies=bursty_galaxies,
-    psd_sigma_prior=(0.1, 4.0),
-    psd_tau_prior=(1.0, 300.0),
-)
-result_b = hfitter_b.run("vi", n_iterations=25)
+def fit_population(galaxies):
+    pop = PopulationSEDModel(sed=template, galaxies=galaxies, priors=PSD_PRIORS)
+    forward = ForwardModel.build(population=pop, observation=obs)
+    return Fitter(forward).run("vi", key=key)
 
-# Compare recovered PSD parameters
-print(f"Pop A: sigma={result_a.psd_sigma:.2f}, tau={result_a.psd_tau_myr:.1f} Myr")
-print(f"Pop B: sigma={result_b.psd_sigma:.2f}, tau={result_b.psd_tau_myr:.1f} Myr")
+result_a = fit_population(quiescent_galaxies)   # low sigma, long tau
+result_b = fit_population(bursty_galaxies)      # high sigma, short tau
+
+# Each result carries the shared PSD hyperparameters it recovered.
+print(result_a.summary)
+print(result_b.summary)
 ```
 
 ## When to use hierarchical vs. individual fitting
@@ -186,4 +213,7 @@ minutes. The XLA cache at `~/.cache/tengri_jax_cache` persists this across sessi
 - Edenhofer, G. et al. (2024). "Re-envisioning Numerical Information Field Theory
   (NIFTy.re)." arXiv:2402.16683
 
-See [`11_population.py`](https://github.com/suchethac/tengri/blob/main/notebooks/11_population.py) for `PopulationFitter` with convergence checks and population recovery plots.
+For more details on hierarchical inference, see:
+- `docs/dev/model-construction.md` — how to build models for hierarchical fits
+- `docs/adr/0010-inference-backend-protocol.md` — InferenceContext and backend design
+- Example notebook: `notebooks/11_catalog_fits.py` demonstrates parallel catalog fitting

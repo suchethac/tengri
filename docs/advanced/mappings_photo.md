@@ -171,33 +171,51 @@ Unlike the CB_19 grid, the N/O and C/O offsets are **not free parameters**
 here — they are fixed to the Nicholls+2017 pattern at each ζ_O. If you
 need free N/O, use `CB19Backend` instead.
 
-## Integration with ParamSpec
+## Using the backends
+
+:::{warning}
+The MAPPINGS photoionization backends are **not yet wired into the
+`SEDModel.build` grammar** — `neb={'type': ...}` accepts only
+`ssp`, `cloudy`, `cue`, `cb19`, and `none` today. The backend classes
+are implemented, exported, and usable directly; grammar wiring is
+tracked as a follow-up.
+:::
+
+The classes load the Flury et al. (2024) grids
+(`data/flury2024_grids.h5`, built once by
+`python scripts/build_flury2024_grids.py`):
 
 ```python
-from tengri import ParamSpec, Uniform, Fixed, Model
+from tengri.components.nebular import (
+    MappingsPhotoStellarBackend,
+    MappingsPhotoAGNBackend,
+)
 
-spec = ParamSpec(
-    ssp="data/ssp.h5",
-    nebular="mappings_bpass",       # or "mappings_sb99", "mappings_agn"
-    priors={
-        "neb_logU":     Uniform(-4.0, -0.5),
-        "neb_logZ_gas": Uniform(-3.0, 0.3),
-        "neb_logn":     Fixed(2.0),
-        "neb_fesc":     Fixed(0.0),
-    },
+# Stellar photoionization: BPASS or SB99 ionizing spectra
+backend = MappingsPhotoStellarBackend(
+    "data/flury2024_grids.h5", model="bpass", density="cpr"
+)
+
+# AGN narrow-line-region photoionization
+agn_backend = MappingsPhotoAGNBackend(
+    "data/flury2024_grids.h5", density="cpr"
 )
 ```
 
 ## Comparison with other nebular backends
 
-| Backend | Lines | Continuum | Free N/O | SFH-weighted | AGN |
-|---------|-------|-----------|----------|-------------|-----|
-| `BakedInBackend` | yes (fixed logU) | yes | no | no | no |
-| `CloudyGridBackend` | yes | yes | no | yes | no |
-| `CueBackend` | yes | yes | yes (12 params) | yes | no |
-| `CB19Backend` | yes | **no** | yes | yes | no |
-| `MappingsPhotoStellarBackend` | yes | **no** | no (Nicholls+2017) | yes | no |
-| `MappingsPhotoAGNBackend` | yes | **no** | no | — | yes |
+| Backend | `neb={'type': ...}` | Lines | Continuum | Free N/O | SFH-weighted | AGN |
+|---------|---------------------|-------|-----------|----------|-------------|-----|
+| `BakedInBackend` | `'ssp'` | yes (fixed logU) | yes | no | no | no |
+| `CloudyGridBackend` | `'cloudy'` | yes | yes | no | yes | no |
+| `CueBackend` | `'cue'` | yes | yes | yes (12 params) | yes | no |
+| `CB19Backend` | `'cb19'` | yes | **no** | yes | yes | no |
+| `MappingsPhotoStellarBackend` | — (not wired) | yes | **no** | no (Nicholls+2017) | yes | no |
+| `MappingsPhotoAGNBackend` | — (not wired) | yes | **no** | no | — | yes |
+
+The second column is the name the build grammar accepts — the *class*
+names (`BakedInBackend`, `CloudyGridBackend`, …) are not valid `'type'`
+values.
 
 ## References
 
