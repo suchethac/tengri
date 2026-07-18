@@ -390,20 +390,26 @@ class Fitter:
 
     Examples
     --------
-    Fit a single galaxy with geoVI (default):
+    Fit a single galaxy with geoVI (default). The fitter takes a
+    :class:`~tengri.ForwardModel`, so wrap the SED chain first:
 
-    >>> from tengri import SEDModel, Fitter, Parameters
-    >>> model = SEDModel(Parameters())
+    >>> from tengri import Fitter, ForwardModel, SEDModel  # doctest: +SKIP
+    >>> sed = SEDModel.build(ssp_data=ssp, observation=obs, **config)  # doctest: +SKIP
+    >>> forward = ForwardModel.build(sed=sed, observation=obs)  # doctest: +SKIP
     >>> data = jnp.array([1.2, 0.8, 0.5])  # photometric fluxes
     >>> noise = jnp.array([0.1, 0.08, 0.06])
-    >>> fitter = Fitter(model, data, noise)
-    >>> result = fitter.run("vi", n_samples=100)
-    >>> print(result.params)
+    >>> fitter = Fitter(forward, data, noise)  # doctest: +SKIP
+    >>> result = fitter.run("vi", n_samples=100)  # doctest: +SKIP
+    >>> print(result.params)  # doctest: +SKIP
 
-    Fit with warm-start from MAP:
+    ``forward.fit(data, noise, method="vi", n_samples=100)`` is the same fit in
+    one line. Build the ``Fitter`` yourself when you want to keep it — warm
+    starts, a reused compilation cache, or several backends over one model:
 
-    >>> result_map = fitter.run("map", n_steps=1000)
-    >>> result_mcmc = fitter.run("mcmc_nuts", init_from=result_map, n_warmup=500)
+    >>> result_map = fitter.run("map", n_steps=1000)  # doctest: +SKIP
+    >>> result_mcmc = fitter.run(  # doctest: +SKIP
+    ...     "mcmc_nuts", init_from=result_map, n_warmup=500
+    ... )
 
     See the docstring of :meth:`run` for all available methods and their options.
     """

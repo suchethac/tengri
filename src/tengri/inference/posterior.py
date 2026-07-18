@@ -317,11 +317,11 @@ class Posterior:
     >>> params_phys = result.params
     >>> samples = result.samples
 
-    **Derived quantities:**
+    **Physical properties:**
 
-    >>> derived = result.derived
-    >>> stellar_masses = derived["stellar_mass"]  # Shape (n_samples,)
-    >>> med, lo, hi = np.percentile(stellar_masses, [50, 16, 84])
+    >>> stellar_masses = result.properties["stellar_mass"]  # Shape (n_samples,)
+    >>> lo, med, hi = result.properties.ci("stellar_mass")
+    >>> stellar_masses = result.stellar_mass  # attribute sugar, same array
 
     **Emission line diagnostics:**
 
@@ -2052,7 +2052,7 @@ class Posterior:
         --------
         >>> result = Posterior.load("posterior_result.h5", model=model)
         >>> print(result.summary_table())
-        >>> derived = result.derived  # If model is provided
+        >>> result.properties["stellar_mass"]  # requires ``model``
         """
         import h5py
 
