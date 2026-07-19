@@ -132,3 +132,109 @@ def test_unstandardize_publishes_both_field_spellings():
         "missing — publishing only psd_xi pins the GP field to zero"
     )
     np.testing.assert_array_equal(np.asarray(out["psd_xi"]), np.asarray(out["sfh_field_xi"]))
+
+
+@pytest.mark.skipif(not _SSP.exists(), reason="wNE SSP grid not available")
+def test_posterior_params_evaluate_to_the_fitted_model():
+    """``model.predict_*(posterior.params)`` must reproduce the fit, not the smooth model.
+
+    The user-facing half of the same bug: ``Fitter._to_physical`` published the
+    GP latents only as ``psd_xi``, so every prediction made from a returned
+    ``Posterior`` hit the ``sfh_field_xi`` lookup, got zeros, and silently
+    evaluated the SMOOTH SFH. Measured on one realization, a MAP fit whose true
+    photometric chi2/N was 0.34 read back as 9.00 -- good enough to look like an
+    ordinary bad fit, which is why it survived.
+
+    The invariant asserted here is public and cheap: predicting from the
+    returned posterior must differ from predicting with the field switched off.
+    """
+    ssp = load_ssp_data(str(_SSP))
+    phot = Photometry.from_names(["galex_fuv", "galex_nuv", "sdss_g", "sdss_r", "2mass_ks"])
+    observation = Observation(
+        photometry=phot, noise=NoiseModel(calibration_floor=0.01, student_t_dof=None)
+    )
+    model = _model(ssp, observation)
+
+    params = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
+    mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
+    flux, err = np.asarray(mock.flux_obs), np.asarray(mock.noise)
+
+    fitter = Fitter(_model(ssp, observation), flux, err, approx=None)
+    res = fitter.run(
+        method="map", n_steps=200, n_restarts=1, key=jax.random.PRNGKey(2), verbose=False
+    )
+
+    assert "sfh_field_xi" in res.params, (
+        "Posterior.params must carry the spelling the forward model reads; "
+        "publishing only psd_xi makes every predict_* call score the smooth model"
+    )
+    xi = np.asarray(res.params["psd_xi"])
+    assert np.linalg.norm(xi) > 1e-8, "fit returned a degenerate all-zero field; test is vacuous"
+
+    fixed = model.spec.get_fixed_values()
+    with_field = np.asarray(model.predict_photometry({**fixed, **res.params}))
+    off = {**fixed, **res.params}
+    off["sfh_field_xi"] = jnp.zeros_like(jnp.asarray(xi))
+    off["psd_xi"] = jnp.zeros_like(jnp.asarray(xi))
+    without_field = np.asarray(model.predict_photometry(off))
+
+    assert np.all(np.isfinite(with_field))
+    rel = float(np.max(np.abs(with_field - without_field) / np.abs(without_field)))
+    assert rel > 1e-6, (
+        "predicting from Posterior.params gives the SAME fluxes as predicting with the "
+        f"GP field zeroed (max rel. diff {rel:.2e}): the returned latents are not reaching "
+        "the forward model"
+    )
+
+
+@pytest.mark.skipif(not _SSP.exists(), reason="wNE SSP grid not available")
+def test_sampler_spelling_alone_does_not_reach_the_flux_path():
+    """Pin the asymmetry that makes publishing ``sfh_field_xi`` mandatory.
+
+    A dict carrying only the sampler's ``psd_xi`` produces the CORRECT SFH --
+    ``_get_internal_params`` accepts both spellings -- but the forward pipeline
+    filters params down to declared names, so the latents never reach
+    ``_apply_gp_field`` and the photometry is computed from the smooth history.
+    Right SFH, wrong flux: strictly worse than being uniformly wrong, because
+    the SFH plot looks right while the fluxes silently do not match it.
+
+    This is why the fix lives at the PRODUCERS (``_to_physical``,
+    ``_unstandardize_parameters``), which publish both spellings, rather than at
+    the consumer. The test documents the asymmetry so that anyone who later
+    makes ``psd_xi`` work end-to-end sees this fail and removes it deliberately.
+    """
+    ssp = load_ssp_data(str(_SSP))
+    phot = Photometry.from_names(["galex_fuv", "sdss_g", "sdss_r", "2mass_ks"])
+    observation = Observation(
+        photometry=phot, noise=NoiseModel(calibration_floor=0.01, student_t_dof=None)
+    )
+    model = _model(ssp, observation)
+
+    base = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(5))}
+    xi = np.asarray(base["sfh_field_xi"])
+    assert np.linalg.norm(xi) > 1e-8, "sampled field is degenerate; test would be vacuous"
+
+    renamed = {k: v for k, v in base.items() if k != "sfh_field_xi"}
+    renamed["psd_xi"] = jnp.asarray(xi)
+    off = {**base, "sfh_field_xi": jnp.zeros_like(jnp.asarray(xi))}
+
+    sfh_canonical = np.asarray(model.predict_sfh(base)["sfr_full"])
+    sfh_renamed = np.asarray(model.predict_sfh(renamed)["sfr_full"])
+    np.testing.assert_allclose(
+        sfh_canonical,
+        sfh_renamed,
+        rtol=1e-12,
+        err_msg="predict_sfh accepts both spellings via _get_internal_params",
+    )
+
+    f_renamed = np.asarray(model.predict_photometry(renamed))
+    f_off = np.asarray(model.predict_photometry(off))
+    np.testing.assert_allclose(
+        f_renamed,
+        f_off,
+        rtol=1e-12,
+        err_msg=(
+            "psd_xi alone now reaches the flux path. That is an improvement — "
+            "delete this test and the producer-side duplication it justifies."
+        ),
+    )
