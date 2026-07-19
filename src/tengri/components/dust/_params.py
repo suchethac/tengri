@@ -254,7 +254,14 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "Fraction of unobscured sightlines (Lower 2022)",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
-        free_prior=Uniform(0.0, 1.0, "Unobscured sightline fraction", default=0.0),
+        # Deliberately NO free_prior, despite a clean [0, 1] domain. The test is
+        # not "does this have a valid range?" but "is freeing it what a caller
+        # means by `dust: all_params: FREE`?" — and here that is empirically no:
+        # all 11 call sites in this repo (4 recipes, 7 gallery examples) want
+        # that wildcard to mean {tau_bc, tau_diff}. f_obscuration is a
+        # two-population geometry knob whose default 0.0 is a modeling stance,
+        # and it is strongly degenerate with tau_diff. Freeing it stays explicit:
+        # pass f_obscuration=Uniform(0, 1).
     ),
     ParamDeclaration(
         "dust_bump_strength",

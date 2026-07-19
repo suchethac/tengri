@@ -88,11 +88,6 @@ def star_forming_photometry() -> dict:
         dust=builders.dust.two_component(
             defaults=FREE,
             law_bc="calzetti",
-            # Pinned, not freed: ``f_obscuration`` (Lower+2022 unobscured
-            # sightline fraction) is strongly degenerate with tau_diff, and this
-            # recipe is a starting point. Freeing it is a deliberate modeling
-            # choice — pass f_obscuration=Uniform(0, 1) to make it.
-            f_obscuration=FIXED,
             emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
         neb=builders.neb.cue(defaults=FIXED),
@@ -324,9 +319,6 @@ def agn_panchromatic() -> dict:
         sfh=builders.sfh.dpl(defaults=FREE),
         dust=builders.dust.two_component(
             defaults=FREE,
-            # See star_forming_photometry: degenerate with tau_diff, pinned so
-            # the recipe's free-parameter set stays deliberate.
-            f_obscuration=FIXED,
             # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
             # choice, not something a wildcard should open by default.
             emission=builders.dust.emission.dale2014(defaults=FIXED),
@@ -399,9 +391,6 @@ def composable_agn() -> dict:
         sfh=builders.sfh.dpl(defaults=FREE),
         dust=builders.dust.two_component(
             defaults=FREE,
-            # See star_forming_photometry: degenerate with tau_diff, pinned so
-            # the recipe's free-parameter set stays deliberate.
-            f_obscuration=FIXED,
             # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
             # choice, not something a wildcard should open by default.
             emission=builders.dust.emission.dale2014(defaults=FIXED),
@@ -470,9 +459,6 @@ def stochastic_sfh_jwst() -> dict:
         sfh={"type": ["dpl", "field"], WILDCARD_ALIAS: FREE},
         dust=builders.dust.two_component(
             defaults=FREE,
-            # See star_forming_photometry: degenerate with tau_diff, pinned so
-            # the recipe's free-parameter set stays deliberate.
-            f_obscuration=FIXED,
             emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
         neb=builders.neb.cue(defaults=FIXED),

@@ -79,6 +79,21 @@ def _units_from_name(name: str) -> str:
     return ""
 
 
+#: Registries that own their parameters' *translation* as well as their
+#: declaration, via a per-model ``internal_param_map``. Their parameters belong
+#: in the introspection registry (so ``describe_parameter`` can find them) but
+#: must NOT contribute identity entries to :func:`as_param_map`: the real
+#: mapping is model-dependent and often non-identity — ``met_logzsol_0`` maps to
+#: ``log_z_abs_initial`` with a ``-LOG10_ZSUN`` offset, and an identity entry
+#: alongside it raises ``ParameterMapError`` for conflicting mappings.
+_TRANSLATION_OWNED_ELSEWHERE: frozenset[str] = frozenset(
+    {
+        "tengri.components.stellar.sfh.registry",
+        "tengri.components.stellar.sfh.met_registry",
+    }
+)
+
+
 def _register_model_registry_params(
     out: dict[str, ParameterRecord],
     model_registry: dict[str, object],
@@ -358,6 +373,12 @@ def as_param_map() -> dict[str, tuple[str, float, float, str]]:
     reg = registry()
     result: dict[str, tuple[str, float, float, str]] = {}
     for name, record in reg.items():
+        # SFH / metallicity parameters are declared in their own model
+        # registries, which also own the translation via ``internal_param_map``.
+        # Emitting an identity entry here would collide with it — see
+        # ``_TRANSLATION_OWNED_ELSEWHERE``.
+        if record.owner in _TRANSLATION_OWNED_ELSEWHERE:
+            continue
         # Default identity mapping: internal == public, scale=1.0, offset=0.0
         # The translate module will override specific entries with unit conversions.
         result[name] = (name, 1.0, 0.0, record.units)
