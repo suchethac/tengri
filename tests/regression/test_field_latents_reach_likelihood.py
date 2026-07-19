@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """The GP field latents must reach the likelihood, not just the predict path.
 
 Regression for a silent-failure bug: the sampler keys the stochastic-SFH latents
