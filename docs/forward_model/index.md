@@ -75,10 +75,11 @@ posterior.summary()
 
 The SED chain ("the physics") and the surface that inference consumes
 ("the prediction dict") have always been two different responsibilities.
-Before the split, `SEDModel.predict_photometry`, `SEDModel.predict_spectrum`,
-`SEDModel.predict_joint`, etc. encoded "which channels exist" inside the
-method *name*. Inference backends therefore had to know whether they were
-fitting photometry, spectroscopy, or both, and pick the right method.
+Before the split, `SEDModel` carried one method per channel combination —
+`predict_photometry`, `predict_spectrum`, `predict_joint` and friends —
+encoding "which channels exist" inside the method *name*. Inference backends
+therefore had to know whether they were fitting photometry, spectroscopy, or
+both, and pick the right method. (`predict_joint` is gone; the others remain.)
 
 After the split:
 
