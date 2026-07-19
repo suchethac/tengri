@@ -1,0 +1,133 @@
+"""The GP field latents must reach the likelihood, not just the predict path.
+
+Regression for a silent-failure bug: the sampler keys the stochastic-SFH latents
+``psd_xi``, but :class:`StellarSEDComponent` reads ``sfh_field_xi`` and falls back
+to ``jnp.zeros(n_grid)`` when that key is absent
+(``components/stellar/component.py``). ``_unstandardize_parameters`` published only
+``psd_xi``, so every non-hierarchical field fit ran with the GP field pinned to
+zero -- ``exp(0 - K0/2)`` is a constant, so the burstiness degrees of freedom were
+sampled from their prior and never touched the SED.
+
+It failed open: no exception, no warning, a physically plausible SED, and a
+posterior whose SFH bands looked wide-and-covering because ``predict_sfh`` reads
+the latents through a *different* path (``get_internal_params``, which accepts
+both spellings). The only visible signature was the likelihood gradient w.r.t.
+the latents being exactly zero.
+
+The existing field tests all drive ``predict_*`` with ``sfh_field_xi`` directly,
+so none of them could see it. This one drives the inference path.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import jax
+
+jax.config.update("jax_enable_x64", True)
+import jax.numpy as jnp
+import numpy as np
+import pytest
+
+pytestmark = pytest.mark.regression_bug
+
+from tengri import (
+    FREE,
+    Fitter,
+    Fixed,
+    NoiseModel,
+    Observation,
+    Photometry,
+    SEDModel,
+    builders,
+    load_ssp_data,
+)
+
+_SSP = (
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+)
+
+
+def _model(ssp_data, observation):
+    return SEDModel.build(
+        ssp_data=ssp_data,
+        observation=observation,
+        sfh={"type": ["dpl", "field"], "*": FREE},
+        stellar={"met_logzsol": Fixed(-0.3)},
+        dust=builders.dust.two_component(defaults=FREE, law_bc="calzetti"),
+        neb=builders.neb.ssp(),
+        redshift=Fixed(0.1),
+        apply_igm=False,
+        n_grid=16,
+        approx=None,
+    )
+
+
+@pytest.mark.skipif(not _SSP.exists(), reason="wNE SSP grid not available")
+def test_field_latents_receive_likelihood_gradient():
+    """d(neg_log_posterior)/d(psd_xi) must have a nonzero LIKELIHOOD component.
+
+    Measured by subtracting the prior-only gradient (obtained by inflating the
+    data errors) rather than by eyeballing the total, because the latents carry
+    an N(0, I) prior whose gradient is large enough to hide a dead likelihood.
+    """
+    from tengri.inference.context import InferenceContext
+
+    ssp = load_ssp_data(str(_SSP))
+    phot = Photometry.from_names(["galex_fuv", "galex_nuv", "sdss_g", "sdss_r", "2mass_ks"])
+    noise_model = NoiseModel(calibration_floor=0.01, student_t_dof=None)
+    observation = Observation(photometry=phot, noise=noise_model)
+    model = _model(ssp, observation)
+
+    params = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
+    mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
+    flux, err = np.asarray(mock.flux_obs), np.asarray(mock.noise)
+
+    def grad_psd_xi(noise_scale):
+        fitter = Fitter(_model(ssp, observation), flux, err * noise_scale, approx=None)
+        ctx = InferenceContext.from_target(fitter)
+        x0 = ctx.initial_params(jax.random.PRNGKey(2))
+        _, grad = ctx.grad_fn(x0, ctx.data_args)
+        return np.asarray(grad["psd_xi"])
+
+    g_full = grad_psd_xi(1.0)
+    g_prior = grad_psd_xi(1e8)  # likelihood switched off, prior untouched
+    g_like = float(np.linalg.norm(g_full - g_prior))
+
+    assert np.all(np.isfinite(g_full)), "field-latent gradient must be finite"
+    assert g_like > 1e-6, (
+        "likelihood gradient w.r.t. psd_xi is zero: the GP field latents are not "
+        "reaching the forward model, so burstiness is pinned at its prior "
+        f"(|g_like| = {g_like:.3e})"
+    )
+
+
+def test_unstandardize_publishes_both_field_spellings():
+    """``_unstandardize_parameters`` must publish the latents under both names.
+
+    ``psd_xi`` is what the sampler and the prior term use; ``sfh_field_xi`` is what
+    the stellar component reads. Publishing only one silently zeroes the field.
+    """
+    from tengri.inference.loss_functions import _unstandardize_parameters
+
+    class _Spec:
+        stochastic = True
+
+        def get_distribution(self, name):  # pragma: no cover - not reached
+            raise AssertionError("no free scalars in this stub")
+
+        def resolve_mirrors(self, params):
+            return params
+
+    xi = jnp.arange(4.0)
+    out = _unstandardize_parameters(
+        {"psd_xi": xi}, _Spec(), free_names=(), fixed_values={}, stochastic=True
+    )
+    assert "psd_xi" in out, "sampler/prior key must be published"
+    assert "sfh_field_xi" in out, (
+        "StellarSEDComponent reads sfh_field_xi and defaults to zeros when it is "
+        "missing — publishing only psd_xi pins the GP field to zero"
+    )
+    np.testing.assert_array_equal(np.asarray(out["psd_xi"]), np.asarray(out["sfh_field_xi"]))
