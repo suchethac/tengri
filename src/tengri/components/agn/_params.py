@@ -559,14 +559,6 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be in [0, 2.0]",
     ),
     ParamDeclaration(
-        "agn_feltre_cf",
-        Uniform(0.0, 1.0, default=0.1),
-        "Feltre NLR covering fraction — fraction of disc luminosity intercepted by NLR. "
-        "Physical bound [0, 1]; typical values 0.05-0.2.",
-        lambda lo, hi: lo >= 0 and hi <= 1.0,
-        "must be in [0, 1]",
-    ),
-    ParamDeclaration(
         "agn_alpha_ion",
         Uniform(-2.0, -1.2, default=-1.7),
         "AGN EUV power-law slope (f_nu ~ nu^alpha) for Feltre NLR backend. "
