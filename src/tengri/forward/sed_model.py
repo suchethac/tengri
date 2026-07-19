@@ -517,59 +517,6 @@ def _warn_agn_dust_double_count(spec) -> None:
     )
 
 
-def _warn_line_data_without_line_model(model, observation) -> None:
-    """Warn when the likelihood scores discrete emission lines but the nebular
-    model cannot predict a line catalog.
-
-    Fires when the observation configures discrete emission-line data — line
-    fluxes (``observation.has_line_fluxes``) or line ratios
-    (``observation.has_line_ratios``) — while the model's nebular backend is the
-    baked-in / SSP-embedded kind (:class:`BakedInBackend`) or nebular is off.
-    Those backends publish no discrete line catalog — ``predict_emission_lines``
-    raises for them (#302) and the line-flux/ratio paths reduce to empty line
-    luminosities — so the line terms in the likelihood contribute no signal (a
-    silent mis-fit). Only the photoionization backends (Cue, CloudyGrid, CB19)
-    publish discrete lines, so the guard keys on
-    ``isinstance(backend, BakedInBackend)`` — the exact condition that makes line
-    prediction fail — not on "is any nebular present".
-
-    Emits a filterable :class:`LineDataWithoutLineModelWarning`. Spectral indices
-    and spectroscopy are intentionally not triggers: those are measured on the
-    SED, which a baked-in SSP does carry (continuum + baked-in lines together).
-    """
-    if observation is None:
-        return
-    has_line_components = getattr(observation, "has_line_fluxes", False) or getattr(
-        observation, "has_line_ratios", False
-    )
-    if not has_line_components:
-        return
-
-    from tengri.components.nebular import BakedInBackend
-
-    backend = getattr(model, "_nebular_backend", None)
-    if backend is not None and not isinstance(backend, BakedInBackend):
-        return  # cue / cloudy / cb19 publish a discrete line catalog
-
-    from tengri.config.exceptions import LineDataWithoutLineModelWarning
-
-    backend_name = getattr(backend, "name", "none")
-    warnings.warn(
-        "The observation includes discrete emission-line data (line fluxes or "
-        f"ratios), but the model's nebular backend ('{backend_name}') does not "
-        "publish a discrete emission-line catalog. Predicted line fluxes will be "
-        "empty, so the emission-line terms in the likelihood contribute no signal "
-        "— a silent mis-fit. To fit emission lines, build with a photoionization "
-        "backend on a bare-stellar SSP, e.g. neb={'type': 'cue'} or "
-        "neb={'type': 'cloudy', ...}. A wNE (baked-in) SSP carries nebular "
-        "emission in its continuum but cannot separate discrete lines. Filter "
-        "LineDataWithoutLineModelWarning if this is intentional (e.g. fitting the "
-        "continuum only).",
-        LineDataWithoutLineModelWarning,
-        stacklevel=3,
-    )
-
-
 def _fold_igm_into_subbands(igm_comp, stellar_state):
     r"""Fold the IGM transmission into the stellar sub-band quadrature weights.
 
@@ -7421,15 +7368,13 @@ class SEDModel:
 
         spec = parse_groups(**groups)
         _warn_agn_dust_double_count(spec)
-        model = cls(
+        return cls(
             spec,
             ssp_data,
             filters=filters,
             observation=observation,
             **model_kwargs,
         )
-        _warn_line_data_without_line_model(model, observation)
-        return model
 
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
         """Sample from the prior and evaluate forward model on each draw.

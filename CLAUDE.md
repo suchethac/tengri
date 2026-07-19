@@ -466,9 +466,10 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 - `docs/dev/history/handoff-2026-04.md` — frozen project-status snapshot (pre Phase II-3 closure)
 - `docs/dev/design_philosophy.md` — architecture decisions
 - `docs/dev/NAMING_CONTRACT.md` — naming conventions (read before any rename/refactor)
-- `docs/dev/REFACTOR.md` — refactor plan
+- `docs/dev/20260404-refactor.md` — refactor plan
 - `docs/dev/api_migration_v0.x.md` — public-API migration table (Phase 1→6 + Part II scaffold)
 - `docs/known_bugs.md` — bug tracking (all currently fixed)
 - `docs/dev/notebook_orchestration_oom.md` — operational rules for OOM-safe notebook authoring (multi-fit, subagent zombies, watchdog)
 - `tools/check_param_prefixes.py` — CI guard for free-parameter prefix rule (NAMING_CONTRACT §3.2)
 - `tools/check_british_spelling.py` — CI guard for American-English spelling (NAMING_CONTRACT §10); `--fix` to auto-rewrite
+- `tools/check_doc_examples.py` — CI guard that every symbol named in a `src/` docstring or published doc actually exists (`docs/api/*.rst` are autodoc stubs, so docstrings *are* the API reference, and no doctest runner executes them). Runs in the `smoke` job. `docs/dev/` is out of scope by design: design notes and parity audits legitimately name removed or not-yet-built API

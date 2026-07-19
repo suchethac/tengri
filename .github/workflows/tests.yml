@@ -187,6 +187,14 @@ jobs:
       # plus a checked-in output. This gate is what keeps it from going stale.
       # It needs the package importable, which is why it is here and not in `lint`.
       - run: python tools/gen_property_table.py --check
+      # Docstrings in src/ ARE the published API reference (docs/api/*.rst are
+      # autodoc stubs), and nothing executes their examples — there is no
+      # doctest runner. That is how `ForwardModel.predict_properties()` and
+      # `Observation.predict_photometry()` shipped in the docs while raising
+      # AttributeError (#1268). This gate resolves every documented reference
+      # against the real package. Like the generator above, it needs tengri
+      # importable, so it lives here rather than in `lint`.
+      - run: python tools/check_doc_examples.py
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
       # The `benchmark` tier: five tests that assert a wall-clock RATIO (fast path
       # vs exact path, cached vs cold). They are real regression guards — they catch

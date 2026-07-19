@@ -1583,7 +1583,7 @@ def unified_nlr_blr(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri import unified_nlr_blr
+    >>> from tengri.components.agn.unified import unified_nlr_blr
     >>> wave = jnp.linspace(1000.0, 30000.0, 512)
     >>> sed = unified_nlr_blr(wave, agn_log_lbol=45.0, agn_cos_inc=0.8)
     >>> sed.shape
