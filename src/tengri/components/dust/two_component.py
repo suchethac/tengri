@@ -617,12 +617,16 @@ class DustSEDComponent:
             if isinstance(_dir, dict):
                 eb_lut = _dir.get("energy_balance_lut")
         jw = state.derived.get("joint_weights")
-        mass_scale = state.derived.get("stellar_mass_scale")
+        # The log10 offset, not the linear ~1e43 scale: the latter is ``inf``
+        # in pure float32 for any galaxy above ~9e4 Msun, and logging it here
+        # would recover ``inf`` rather than the finite value the producer
+        # already has (#1206). Stellar publishes both keys together.
+        log_mass_scale = state.derived.get("log_stellar_mass_scale")
         # FSPS-parity toggle (#961): None disables the canonical LyC mask so
         # all absorbed energy heats dust. The fast-path LUT bakes the same
         # choice at build time (sed_model passes config.eb_include_lyc).
         _eb_cutoff = None if self.config.eb_include_lyc else 912.0
-        if eb_lut is not None and jw is not None and mass_scale is not None:
+        if eb_lut is not None and jw is not None and log_mass_scale is not None:
             # Fast path (WavePrecomp): the stellar bolometric absorption comes
             # from a precomputed (tau_bc, tau_diff) LUT contracted with the
             # runtime DSPS weights — no full-wavelength stellar cube. The
@@ -635,12 +639,6 @@ class DustSEDComponent:
             from tengri.forward.energy_balance import bolometric_absorbed_log10
             from tengri.utils.scale import log10_add
 
-            # ``mass_scale`` is ~1e43 — outside float32. Prefer the published
-            # log10 offset; fall back to logging the linear value so this path
-            # keeps working for producers that have not been migrated (#1206).
-            log_mass_scale = state.derived.get("log_stellar_mass_scale")
-            if log_mass_scale is None:
-                log_mass_scale = jnp.log10(jnp.asarray(mass_scale))
             log_stellar, sign_stellar = lut_l_absorbed_stellar_log10(
                 eb_lut,
                 jnp.asarray(jw),

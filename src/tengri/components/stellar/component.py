@@ -869,6 +869,12 @@ class StellarSEDComponent:
                 "erg/s/Hz",
                 "total_mass x L_sun: scales SSP per-Msun luminosities to erg/s/Hz",
             ),
+            DerivedKey(
+                "log_stellar_mass_scale",
+                "dex",
+                "log10(total_mass x L_sun): the float32-safe form of "
+                "stellar_mass_scale, which is ~1e43 and so overflows float32",
+            ),
             DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
             DerivedKey("age_weights", "Msun", "CSP mass weights per SSP age bin"),
             DerivedKey("nion", "photons/s", "Ionizing photon rate (lambda < 911.76 A)"),
@@ -1940,6 +1946,11 @@ class StellarSEDComponent:
             # of the full-wavelength stellar cube (WavePrecomp speed path).
             joint_weights=joint_weights,
             stellar_mass_scale=mass_scale_erg,
+            # The float32-safe form of the same scale. ``mass_scale_erg`` is
+            # ~1e43 for a 1e10 Msun galaxy and so is ``inf`` in pure float32
+            # for any galaxy above ~9e4 Msun — it is total_mass times a
+            # constant, with no SSP flux factor to keep it in range (#1206).
+            log_stellar_mass_scale=log10_mass_scale,
             # CSP mass weights (Msun per SSP age bin), summed
             # over the metallicity axis. Published so downstream
             # nebular backends (Cue, CloudyGrid) can call their
