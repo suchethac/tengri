@@ -370,5 +370,6 @@ The model always knows which properties are available. Never silently return NaN
 - `tengri.describe_property()` — get detailed info on one
 - `Prediction` — lazy exploration object
 - `Posterior` — fitting results with credible intervals
-- `ForwardModel.predict_properties()` — the underlying JIT-safe method
-- `Observation.predict_photometry()` — likelihood evaluation
+- `SEDModel.predict_properties()` — the underlying JIT/vmap-safe method
+- `Observation.predict()` — likelihood evaluation (`predict_via_precomp()` on
+  the precompute path)

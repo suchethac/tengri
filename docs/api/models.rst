@@ -70,8 +70,6 @@ and a latent vector.
 
 .. autofunction:: tengri.gp_from_xi
 
-.. autofunction:: tengri.make_log_age_grid
-
 Dust Attenuation
 -----------------
 
