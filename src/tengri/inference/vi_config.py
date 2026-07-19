@@ -219,8 +219,8 @@ class BlockSchedule:
 
         Examples
         --------
-        >>> from tengri import VIConfig
-        >>> sched = VIConfig.hierarchical()
+        >>> from tengri.inference.vi_config import BlockSchedule
+        >>> sched = BlockSchedule.hierarchical()
         >>> len(sched.blocks)
         3
         """
