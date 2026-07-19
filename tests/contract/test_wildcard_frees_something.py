@@ -1,19 +1,26 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """``all_params: FREE`` must free something, or say so.
 
-``FREE`` resolves to each parameter's *registry default*, and most registry
-defaults are ``Fixed`` scalars. A wildcard could therefore resolve cleanly while
-leaving every parameter in the group pinned — the fit then ran to completion
+``FREE`` used to resolve to each parameter's *registry default*, and most
+registry defaults are ``Fixed`` scalars. A wildcard therefore resolved cleanly
+while leaving every parameter in the group pinned — the fit ran to completion
 with that physics frozen, indistinguishable from success at the call site.
 
-Measured before the guard landed: ``all_params: FREE`` freed 6 params in ``sfh``
-and 2 in top-level ``agn``, but **zero** in ``neb``, ``xray``, ``radio``,
-``shock``, ``igm`` and in the AGN sub-blocks. The bug survived because every
-worked example in the docs uses ``sfh={'all_params': FREE}`` — the one group
-whose registry defaults are already free.
+Measured before the fix: ``all_params: FREE`` freed 6 params in ``sfh`` and 2 in
+top-level ``agn``, but **zero** in ``neb``, ``xray``, ``radio``, ``shock``,
+``igm`` and in the AGN sub-blocks. It survived because every worked example in
+the docs uses ``sfh={'all_params': FREE}`` — the one group whose registry
+defaults were already free.
 
-These tests pin the contract: a wildcard that frees nothing raises rather than
-passing silently.
+Two halves, both pinned here:
+
+* **The guard** — a wildcard that frees nothing raises instead of passing
+  silently. Asserted against the resolver's decision function directly, so the
+  test does not go stale as blocks gain declared ranges.
+* **The fix** — a parameter may declare ``free_prior``, the admissible range
+  ``FREE`` opens up (normally the range its own ``bound_check`` enforces, which
+  a drift test cross-checks). Where no range is declared, the guard still fires
+  and the documented workaround is an explicit prior.
 """
 
 from __future__ import annotations
@@ -34,34 +41,61 @@ def _free(**groups) -> set[str]:
 # ── Groups whose wildcard frees nothing must raise ────────────────────
 
 
-@pytest.mark.parametrize(
-    "group,spec",
-    [
-        ("neb", {"type": "cue"}),
-        ("xray", {"type": "simple"}),
-    ],
-)
-def test_wildcard_free_that_frees_nothing_raises(group, spec):
-    """A FREE that cannot free anything is refused, not silently ignored."""
-    with pytest.raises(ParameterError, match=r"freed 0 of \d+ parameters"):
-        tengri.parse_groups(sfh={"type": "dpl"}, **{group: {**spec, "all_params": FREE}})
+# The guard's *logic* is asserted directly. An integration test that pinned a
+# named group ("neb frees nothing") would be asserting a physics fact that this
+# very PR is in the business of changing — it would go stale the moment another
+# group gains declared ranges, which is the intended direction of travel.
 
 
-def test_nested_subblock_wildcard_is_guarded():
-    """Sub-blocks are checked at their own nesting level.
+def test_guard_rejects_an_outcome_that_freed_nothing():
+    from tengri.parameters.groups import _check_wildcard_freed_something
 
-    ``dust.emission`` is the widest no-op found (22 Dale+2014 params, none
-    freeable), and it sits under a ``dust`` wildcard that *does* free two —
-    so the check cannot be per-top-level-group.
+    with pytest.raises(ParameterError, match=r"freed 0 of 2 parameters"):
+        _check_wildcard_freed_something({"neb": [("neb_logU", False), ("neb_fesc", False)]})
+
+
+def test_guard_accepts_an_outcome_that_freed_even_one():
+    """Outcome-based, not intent-based: freeing 1 of N is still freeing."""
+    from tengri.parameters.groups import _check_wildcard_freed_something
+
+    _check_wildcard_freed_something({"neb": [("neb_logU", True), ("neb_fesc", False)]})
+
+
+def test_guard_is_per_nesting_level():
+    """A sub-block that frees nothing is caught even when its parent frees.
+
+    ``dust`` frees ``tau_bc``/``tau_diff`` while ``dust.emission`` may free
+    nothing, so the check cannot be per-top-level-group.
     """
+    from tengri.parameters.groups import _check_wildcard_freed_something
+
     with pytest.raises(ParameterError, match=r"'dust\.emission'"):
-        tengri.parse_groups(
-            sfh={"type": "dpl"},
-            dust={
-                "type": "two_component",
-                "emission": {"type": "dale2014", "all_params": FREE},
-            },
+        _check_wildcard_freed_something(
+            {
+                "dust": [("dust_tau_bc", True)],
+                "dust.emission": [("dust_qpah", False)],
+            }
         )
+
+
+def test_a_group_with_no_declared_ranges_still_raises_end_to_end():
+    """At least one real group must still exercise the guard through parse_groups.
+
+    Found dynamically rather than hard-coded: as blocks gain ``free_prior``
+    declarations the set shrinks, and this test should follow rather than break.
+    """
+    candidates = [
+        ("radio", {}),
+        ("xray", {"type": "simple"}),
+        ("neb", {"type": "cue"}),
+    ]
+    for group, spec in candidates:
+        try:
+            tengri.parse_groups(sfh={"type": "dpl"}, **{group: {**spec, "all_params": FREE}})
+        except ParameterError as exc:
+            assert "freed 0 of" in str(exc)
+            return
+    pytest.skip("every candidate group now declares free ranges — guard covered by unit tests")
 
 
 def test_dla_wildcard_raises_once_the_only_freeable_param_is_overridden():
@@ -95,24 +129,29 @@ def test_dla_bare_wildcard_is_allowed_because_it_frees_one():
 
 def test_error_names_the_group_and_the_stuck_params():
     """The message must be actionable: which group, which params, what to do."""
+    from tengri.parameters.groups import _check_wildcard_freed_something
+
     with pytest.raises(ParameterError) as exc:
-        tengri.parse_groups(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE})
+        _check_wildcard_freed_something({"neb": [("neb_logU", False), ("neb_fesc", False)]})
     msg = str(exc.value)
     assert "'neb'" in msg
     assert "neb_logU" in msg
     assert "Uniform(lo, hi)" in msg
 
 
-def test_star_synonym_is_guarded_identically():
-    """``'*'`` is a synonym for ``all_params`` and must not bypass the guard."""
-    with pytest.raises(ParameterError, match=r"freed 0 of \d+ parameters"):
-        tengri.parse_groups(sfh={"type": "dpl"}, neb={"type": "cue", "*": FREE})
+def test_star_synonym_resolves_identically_to_all_params():
+    """``'*'`` is a synonym: it must reach the same resolution, not a bypass."""
+    star = _free(sfh={"type": "dpl"}, neb={"type": "cue", "*": FREE})
+    alias = _free(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE})
+    assert star == alias
+    assert any(p.startswith("neb_") for p in star)
 
 
-def test_builders_path_is_guarded_identically():
+def test_builders_path_resolves_identically_to_the_dict_form():
     """``builders.*(defaults=FREE)`` lowers to the same wildcard key."""
-    with pytest.raises(ParameterError, match=r"freed 0 of \d+ parameters"):
-        tengri.parse_groups(sfh={"type": "dpl"}, neb=tengri.builders.neb.cue(defaults=FREE))
+    built = _free(sfh={"type": "dpl"}, neb=tengri.builders.neb.cue(defaults=FREE))
+    dictform = _free(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE})
+    assert built == dictform
 
 
 # ── Everything that legitimately works must keep working ──────────────
@@ -166,6 +205,71 @@ def test_every_shipped_recipe_parses(name):
     groups = getattr(tengri.recipes, name)()
     groups.pop("approx", None)
     tengri.parse_groups(**groups)
+
+
+# ── FREE must actually free where a range is declared ─────────────────
+
+
+@pytest.mark.parametrize(
+    "group,spec,prefix",
+    [
+        ("neb", {"type": "cue"}, "neb_"),
+        ("shock", {}, "shock_"),
+    ],
+)
+def test_wildcard_free_now_frees_declared_params(group, spec, prefix):
+    """The point of ``free_prior``: FREE opens the declared admissible range.
+
+    Before it existed these groups freed exactly zero parameters and said
+    nothing about it.
+    """
+    freed = _free(sfh={"type": "dpl"}, **{group: {**spec, "all_params": FREE}})
+    assert [p for p in freed if p.startswith(prefix)]
+
+
+def test_free_uses_the_declared_range_not_the_fixed_default():
+    freed = tengri.parse_groups(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE})
+    logu = freed.get_distribution("neb_logU")
+    assert not logu.is_fixed
+    assert logu.bounds == (-5.0, 0.0)  # the range neb_logU's bound_check enforces
+
+
+def test_free_prior_never_contradicts_its_own_bound_check():
+    """Drift guard: a declared range must satisfy the bound the same
+    declaration enforces, or the two have diverged."""
+    import importlib
+    import pkgutil
+
+    import tengri.components as components_pkg
+    from tengri.protocols.component import ParamDeclaration
+
+    modules = [
+        mi.name
+        for mi in pkgutil.walk_packages(
+            components_pkg.__path__, prefix=components_pkg.__name__ + "."
+        )
+        if mi.name.endswith("._params")
+    ]
+    modules += ["tengri.observation._params", "tengri.parameters._shared"]
+
+    violations = []
+    for module_name in modules:
+        module = importlib.import_module(module_name)
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if not isinstance(attr, tuple) or not attr:
+                continue
+            if not all(isinstance(x, ParamDeclaration) for x in attr):
+                continue
+            for decl in attr:
+                if decl.free_prior is None or decl.bound_check is None:
+                    continue
+                lo, hi = decl.free_prior.bounds
+                if not decl.bound_check(lo, hi):
+                    violations.append(
+                        f"{decl.name}: free_prior {(lo, hi)} vs {decl.bound_error!r}"
+                    )
+    assert not violations, "free_prior contradicts bound_check for: " + "; ".join(violations)
 
 
 def test_introspection_path_is_exempt():

@@ -49,6 +49,79 @@ class ParameterRecord(NamedTuple):
     units: str
     owner: str  # fully-qualified module path of the ``_params.py`` that exports it
     group: str  # tuple attribute on ``owner``, e.g. "PARAMS" or "ATTENUATION_PARAMS"
+    # The distribution ``FREE`` expands to. ``prior`` is the registry *default*
+    # (usually Fixed); ``free_prior`` is the admissible range. None means the
+    # parameter declares no defensible range, and FREE refuses rather than
+    # silently leaving it pinned (#1264). Last field, so positional
+    # construction of the historical 6-tuple keeps working.
+    free_prior: object = None
+
+
+#: Units implied by a parameter-name suffix. The naming contract
+#: (NAMING_CONTRACT §3) requires a unit-bearing SFH parameter to state its unit
+#: in its own name, so reading the suffix is transcription, not inference.
+#: ``ParamDef`` carries no units field, so this is the only source available
+#: for SFH parameters.
+_SUFFIX_UNITS: tuple[tuple[str, str], ...] = (
+    ("_gyr", "Gyr"),
+    ("_myr", "Myr"),
+    ("_kms", "km/s"),
+    ("_km_s", "km/s"),
+    ("_yr", "yr"),
+)
+
+
+def _units_from_name(name: str) -> str:
+    """Units implied by a parameter name's suffix, or ``""`` if none applies."""
+    for suffix, units in _SUFFIX_UNITS:
+        if name.endswith(suffix):
+            return units
+    return ""
+
+
+def _register_model_registry_params(
+    out: dict[str, ParameterRecord],
+    model_registry: dict[str, object],
+    *,
+    owner: str,
+    label: str,
+) -> None:
+    """Add a model registry's per-model parameter declarations, in place.
+
+    Both the SFH and metallicity registries map a model name to a spec whose
+    ``params`` attribute is a ``{param_name: ParamDef}`` dict. ``ParamDef``
+    stores the *distribution* under ``.default``, which is this registry's
+    ``prior``.
+
+    First-wins on name collisions, matching the component walk: a parameter
+    several models declare (composition variants share names) is recorded once,
+    against the first model that declares it.
+
+    Parameters
+    ----------
+    out : dict
+        Registry map being built. Mutated in place.
+    model_registry : dict
+        Name -> model spec carrying a ``params`` mapping.
+    owner : str
+        Fully-qualified module path recorded on each record.
+    label : str
+        Registry name used to build the record's ``group`` field, e.g.
+        ``"SFH_REGISTRY"``.
+    """
+    for model_name in sorted(model_registry):
+        spec = model_registry[model_name]
+        for pname, pdef in (getattr(spec, "params", None) or {}).items():
+            if pname in out:
+                continue
+            out[pname] = ParameterRecord(
+                name=pname,
+                prior=getattr(pdef, "default", None),
+                description=getattr(pdef, "description", ""),
+                units=_units_from_name(pname),
+                owner=owner,
+                group=f"{label}[{model_name!r}].params",
+            )
 
 
 def _walk_param_modules() -> dict[str, ParameterRecord]:
@@ -101,6 +174,7 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
                     units=decl.units,
                     owner=module_info.name,
                     group=attr_name,
+                    free_prior=decl.free_prior,
                 )
 
     # Observation _params.py module (noise model parameters).
@@ -129,6 +203,7 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
                 units=decl.units,
                 owner="tengri.observation._params",
                 group=attr_name,
+                free_prior=decl.free_prior,
             )
 
     # Shared parameters: redshift, met_logzsol, sigma_v_kms.
@@ -154,7 +229,37 @@ def _walk_param_modules() -> dict[str, ParameterRecord]:
                 units=decl.units,
                 owner="tengri.parameters._shared",
                 group=attr_name,
+                free_prior=decl.free_prior,
             )
+
+    # Star-formation-history and metallicity parameters.
+    #
+    # Neither owns a ``_params.py``: their parameters are declared per model in
+    # ``SFH_REGISTRY[<type>].params`` / ``MET_REGISTRY[<type>].params``, a
+    # different mechanism that the walk above cannot see. The result was that
+    # *every* SFH parameter was missing from introspection —
+    # ``list_parameters()`` returned 189 names with no ``sfh_*`` at all, and
+    # ``describe_parameter("sfh_dpl_alpha")`` raised ``KeyError`` for the very
+    # identifier the naming contract uses as its worked example (#1264).
+    #
+    # Walk the registries rather than hand-listing names here: models arrive by
+    # registration, and a hand-kept copy would go stale exactly the way this
+    # gap appeared in the first place.
+    from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    _register_model_registry_params(
+        out,
+        SFH_REGISTRY,
+        owner="tengri.components.stellar.sfh.registry",
+        label="SFH_REGISTRY",
+    )
+    _register_model_registry_params(
+        out,
+        MET_REGISTRY,
+        owner="tengri.components.stellar.sfh.met_registry",
+        label="MET_REGISTRY",
+    )
 
     # Legacy ``_NON_SFH_PARAMS`` bucket: provides ``noise_frac_cal`` and
     # ``noise_dof`` which aren't yet declared via the ParamDeclaration

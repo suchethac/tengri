@@ -125,6 +125,46 @@ _CANONICAL_FIXED_DEFAULTS: dict[str, float] = {
 }
 
 
+def _expand_free(param_name: str, registry_default: Distribution) -> Distribution:
+    """Resolve ``FREE`` for one parameter: its declared range, else the default.
+
+    ``FREE`` used to resolve straight to ``registry_default``. For the ~half of
+    the registry whose default is a ``Fixed`` scalar that silently freed
+    nothing — the fit then ran with that physics pinned while the caller
+    believed it was being sampled (#1264).
+
+    Now a parameter may declare ``free_prior``: the admissible range to open up
+    when asked to be free, normally the same range ``bound_check`` enforces.
+    When it does, ``FREE`` genuinely frees. When it does not, this returns the
+    Fixed default unchanged and
+    :func:`_check_wildcard_freed_something` refuses the request loudly rather
+    than pretending it worked.
+
+    Parameters
+    ----------
+    param_name : str
+        Canonical (fully-prefixed) parameter name, e.g. ``"neb_logU"``.
+    registry_default : Distribution
+        The parameter's registry default.
+
+    Returns
+    -------
+    Distribution
+        ``free_prior`` when one is declared and the default is Fixed;
+        otherwise ``registry_default`` unchanged.
+    """
+    if not registry_default.is_fixed:
+        # Already free — FREE means "leave the registry's range alone".
+        return registry_default
+    # Local import: registry imports parse_groups (for recipe introspection),
+    # so a module-level import here would close the cycle.
+    from tengri.parameters.registry import registry
+
+    record = registry().get(param_name)
+    free_prior = getattr(record, "free_prior", None) if record is not None else None
+    return free_prior if free_prior is not None else registry_default
+
+
 def _default_fixed_value(param_name: str, registry_default: Distribution) -> float:
     """Pick the fixed value used when wildcard-FIXED collapses a free param.
 
@@ -2371,8 +2411,7 @@ def _resolve_value(
             return registry_default, "registry_default"
 
         if val is FREE:
-            # FREE: use registry default (which may be Fixed; that's ok)
-            return registry_default, "user_free"
+            return _expand_free(param_name, registry_default), "user_free"
         elif val is FIXED:
             # FIXED: convert registry default to Fixed at its center
             if registry_default.is_fixed:
@@ -2395,7 +2434,7 @@ def _resolve_value(
         wildcard = group_dict["*"]
         if wildcard is FREE:
             if wildcard_active:
-                return registry_default, "wildcard_free"
+                return _expand_free(param_name, registry_default), "wildcard_free"
             # Param is not consumed by the active block selection. A wildcard
             # FREE here would create an unconstrained no-op nuisance dimension,
             # so collapse it to its fixed default instead (block-scoped

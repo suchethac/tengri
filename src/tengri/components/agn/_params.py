@@ -331,6 +331,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "90=face-on (type 1) (grid: 0.001 ... 89.99)",
         lambda lo, hi: lo >= 0 and hi <= 90,
         "must be in [0, 90]",
+        # Grid endpoints, not the [0, 90] bound: the Fritz2006 tabulation stops
+        # at 0.001/89.99 and the exact endpoints extrapolate.
+        free_prior=Uniform(0.001, 89.99, "Fritz2006 viewing angle", units="deg", default=0.001),
     ),
     # BH spin + two-temperature torus (kubota_done_full, multicolor_agn)
     ParamDeclaration(
