@@ -8,6 +8,7 @@ configuration*. Users only cite what they actually use.
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from tengri.citations.associations import (
@@ -109,6 +110,13 @@ def _find_model_config(obj: Any) -> Any:
 
 def _backend_from(obj: Any) -> str | None:
     """Extract the inference backend name from ``obj``, if known."""
+    # ``Fitter.run`` stamps the canonical registry key on the result. Prefer it:
+    # ``Posterior.method`` is a human-readable display string ("NUTS (BlackJAX)",
+    # "MAP (ADAM, 5 restarts)") built with an f-string, so it never matches a
+    # ``BACKEND_CITATIONS`` key and must not be parsed back into one.
+    bk = getattr(obj, "_backend_key", None)
+    if bk:
+        return str(bk)
     # Galaxy sets _last_backend after fit().
     bk = getattr(obj, "_last_backend", None)
     if bk:
@@ -194,8 +202,94 @@ def _ssp_provenance_keys(ssp: Any) -> list[str]:
     return out
 
 
+def _citable_chain(obj: Any) -> list[Any]:
+    """Return ``obj`` followed by every object it delegates its configuration to.
+
+    The documented per-fit surface is ``print_components_bibtex(result)``, but a
+    :class:`~tengri.inference.posterior.Posterior` stores its model under
+    ``_model`` (not ``model``), and a
+    :class:`~tengri.forward.forward_model.ForwardModel` hides the SED behind
+    ``_inner_sed_for_delegation()``. Neither hop is reachable through the plain
+    ``getattr(obj, "model", None)`` probe the collectors use, so citing a *result*
+    silently degraded to the three core keys while citing the *model* returned the
+    full set.
+
+    The configuration is spread across the chain rather than concentrated at
+    either end — the sampler is known only to the result, the photometry only to
+    the forward model, the physics components only to the SED — so callers union
+    over the whole chain instead of resolving to a single root.
+
+    Parameters
+    ----------
+    obj : Any
+        Any citable object (``Posterior``, ``ForwardModel``, ``SEDModel``, ...).
+
+    Returns
+    -------
+    list
+        ``obj`` first, then each delegation target reachable from it, visited
+        once. Cycles and repeated references are collapsed by identity.
+
+    Notes
+    -----
+    **JIT-compatible**: no — pure Python attribute introspection.
+    """
+    seen: set[int] = set()
+    chain: list[Any] = []
+    queue: list[Any] = [obj]
+    while queue:
+        cur = queue.pop(0)
+        if cur is None or id(cur) in seen:
+            continue
+        seen.add(id(cur))
+        chain.append(cur)
+        # Posterior -> _model; Fitter/others -> model; wrappers -> sed.
+        for attr in ("_model", "model", "sed", "_sed"):
+            queue.append(getattr(cur, attr, None))
+        # ForwardModel exposes its wrapped SED only through this accessor.
+        inner = getattr(cur, "_inner_sed_for_delegation", None)
+        if callable(inner):
+            with contextlib.suppress(Exception):
+                queue.append(inner())
+    return chain
+
+
 def _collect_keys(obj: Any, *, include_backend: bool = True) -> list[str]:
-    """Return the flat, ordered, deduplicated list of registry keys for ``obj``."""
+    """Return the flat, ordered, deduplicated registry keys for ``obj``.
+
+    Unions :func:`_collect_keys_for_one` over :func:`_citable_chain` so that
+    citing a fit result reports everything that actually ran, not just the
+    core keys reachable from the result object itself.
+    """
+    keys: list[str] = []
+    for depth, node in enumerate(_citable_chain(obj)):
+        # The ``@cites`` sweep below reads *every* public attribute of its
+        # target. That is safe on the object the caller handed us, but forcing
+        # it on delegated nodes would touch every property of the wrapped
+        # SEDModel — including ones that compile or allocate — purely to look
+        # for citation annotations. Restrict it to the root; the delegated
+        # nodes contribute through the targeted extractors, which is where the
+        # component, SSP and backend keys come from anyway.
+        keys.extend(
+            _collect_keys_for_one(
+                node, include_backend=include_backend, scan_attributes=depth == 0
+            )
+        )
+    return _dedup(keys)
+
+
+def _collect_keys_for_one(
+    obj: Any, *, include_backend: bool = True, scan_attributes: bool = True
+) -> list[str]:
+    """Return the registry keys contributed by ``obj`` alone (no delegation).
+
+    Parameters
+    ----------
+    scan_attributes : bool, optional
+        Sweep every public attribute for ``@cites`` annotations. Default
+        ``True``. Callers set it ``False`` for delegated nodes so the sweep
+        never forces attribute evaluation on an object the user did not pass.
+    """
     keys: list[str] = list(CORE_CITATIONS)
 
     mc = _find_model_config(obj)
@@ -267,7 +361,7 @@ def _collect_keys(obj: Any, *, include_backend: bool = True) -> list[str]:
 
     # Function-level annotations attached via @cites decorator, if any
     # function objects are exposed on obj (e.g. obj.run or obj.forward).
-    for attr_name in dir(obj):
+    for attr_name in dir(obj) if scan_attributes else ():
         if attr_name.startswith("_"):
             continue
         try:
