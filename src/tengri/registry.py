@@ -284,6 +284,8 @@ def _usage_hint(name: str, kind: str) -> str:
         return f'Photometry.from_names(["{name}"])'
     if kind == "agn_model":
         return f"SEDModel.build(..., agn={{'type': '{name}'}})"
+    if kind == "dust_model":
+        return f"SEDModel.build(..., dust={{'type': '{name}'}})"
     if kind == "dust_attenuation":
         return f"SEDModel.build(..., dust={{'type': 'single_component', 'law_bc': '{name}'}})"
     if kind == "dust_emission":
@@ -310,11 +312,13 @@ def _usage_hint(name: str, kind: str) -> str:
 # irregular (``list_sfh_models`` vs ``list_dust_laws`` vs
 # ``list_nebular_backends``), so this must be a lookup, not an
 # ``f"list_{name}_models"`` formula — the formula advertised
-# ``list_stellar_models`` / ``list_dust_models`` / ``list_agn_laws`` and other
-# functions that do not exist, sending a fresh user into an ``AttributeError``.
+# ``list_stellar_models`` / ``list_agn_laws`` and other functions that do not
+# exist, sending a fresh user into an ``AttributeError``. (``list_dust_models``
+# was another of that formula's phantoms; it is real now, but it names the
+# structural axis only — the formula still guesses wrong for every other group.)
 _COMPONENT_MENUS: dict[str, str] = {
     "stellar": "list_sfh_models()",
-    "dust": "list_dust_laws() / list_dust_emission_models()",
+    "dust": "list_dust_models() / list_dust_laws() / list_dust_emission_models()",
     "agn": "list_agn_models() / list_agn_blocks()",
     "nebular": "list_nebular_backends()",
     "radio": "list_radio_models()",
@@ -493,13 +497,76 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
 
 
+# Dust *structural* models — the ``dust={'type': ...}`` axis. Keyed by the
+# names in ``_VALID_DUST_TYPES``, which is what the build validator accepts;
+# the listing derives its names from that same set (see
+# :func:`list_dust_models`) so the menu and the validator cannot drift.
+_DUST_MODEL_METADATA: dict[str, dict[str, str]] = {
+    "single_component": {
+        "status": "production",
+        "citation": "Calzetti et al. 2000 (ApJ 533, 682)",
+        "short_doc": "One screen over all stars; `law_bc` sets the curve",
+    },
+    "two_component": {
+        "status": "production",
+        "citation": "Charlot & Fall 2000 (ApJ 539, 718)",
+        "short_doc": "Birth-cloud + diffuse screens; young stars see both",
+    },
+    "wg00": {
+        "status": "production",
+        "citation": "Witt & Gordon 2000 (ApJ 528, 799)",
+        "short_doc": "Radiative-transfer grid (geometry/structure/curve selectors)",
+    },
+}
+
+
+def list_dust_models(*, status: str | None = None) -> _RegistryTable:
+    """List the dust **structural** models — the ``dust={'type': ...}`` choice.
+
+    Dust is selected along three independent axes, and this is the first one:
+    how the dust is *arranged* relative to the stars. The attenuation
+    **curve** is a separate choice (:func:`list_dust_laws`, via ``law_bc`` /
+    ``law_diff``), and the IR **emission** template a third
+    (:func:`list_dust_emission_models`, via ``dust={'emission': ...}``).
+
+    The other two axes had menus; this one did not, so the structural
+    names — including ``two_component``, the type the recipes themselves
+    build with — were absent from every discovery surface: no ``list_*``
+    named them, ``describe('two_component')`` raised ``KeyError`` and
+    ``search('two_component')`` returned nothing.
+
+    Names are derived from :data:`tengri.parameters.groups._VALID_DUST_TYPES`,
+    the same set ``SEDModel.build`` validates against, so this menu cannot
+    advertise a type the builder rejects (nor omit one it accepts).
+    """
+    from tengri.parameters.groups import _VALID_DUST_TYPES
+
+    out = []
+    for name in _VALID_DUST_TYPES:
+        meta = _DUST_MODEL_METADATA.get(name, {})
+        out.append(
+            {
+                "name": name,
+                "kind": "dust_model",
+                "status": meta.get("status", "production"),
+                "citation": meta.get("citation", ""),
+                "short_doc": meta.get("short_doc", ""),
+                "use": _usage_hint(name, "dust_model"),
+            }
+        )
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
 def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
     """List all registered dust **attenuation** laws.
 
     Attenuation describes how UV/optical photons are absorbed/scattered
     by dust along the line of sight (Calzetti, Cardelli, Charlot-Fall, …).
     For dust **emission** templates (DL07, Dale, MBB, …), see
-    :func:`list_dust_emission_models`.
+    :func:`list_dust_emission_models`. For how the dust is *arranged*
+    (one screen vs birth-cloud + diffuse), see :func:`list_dust_models`.
     """
     from tengri.components.dust.attenuation import DUST_LAWS
 
@@ -1330,6 +1397,7 @@ def _menu_listers() -> tuple:
         list_inference_methods,
         list_agn_models,
         list_agn_blocks,
+        list_dust_models,
         list_dust_laws,
         list_dust_emission_models,
         list_sfh_models,

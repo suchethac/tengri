@@ -146,6 +146,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_components",
         "list_dust_emission_models",
         "list_dust_laws",
+        "list_dust_models",
         "list_filter_conventions",
         "list_filters",
         "list_igm_models",
