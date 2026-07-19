@@ -112,6 +112,88 @@ jobs:
         run: pip-audit --disable-pip
         continue-on-error: true
 
+  # Decide whether the gallery below has to run for this change.
+  #
+  # The gallery is four shards of ~8-10 min each, and it used to run on every
+  # pull request: its only `if:` was the `labeled` no-op guard, which is not a
+  # path filter. A prose-only pull request therefore spent ~35 minutes of runner
+  # time re-executing 264 examples that nothing in the diff could reach. The
+  # inputs that CAN change what an example does are enumerated below; a diff
+  # touching none of them cannot change the gallery's verdict.
+  #
+  # This job costs seconds: it asks the API for the changed paths and never
+  # checks the repository out. Resolving the diff locally would need
+  # `fetch-depth: 0`, and a full-history clone of this repository is a large
+  # part of the saving it is trying to book.
+  #
+  # It fails TOWARD running. Any error listing the diff, and any event that is
+  # not a pull request, runs the gallery. The two mistakes are not symmetric: a
+  # gallery that runs when it did not need to wastes runner minutes, while a
+  # gallery that is skipped when it was needed ships a broken example. That is
+  # not hypothetical -- the gallery exists because five examples were "migrated"
+  # to `model.predict(p, wave=...)`, a kwarg that does not exist, and shipped
+  # green past py_compile, ruff, and a docs build that never executed them
+  # (#1146). A skip must never be able to hide that.
+  gallery-changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      needed: ${{ steps.decide.outputs.needed }}
+    steps:
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+
+          # push:[main], schedule and workflow_dispatch always run it. Those are
+          # the runs whose green anyone actually relies on, and the nightly is
+          # the backstop that catches drift a per-PR filter cannot see.
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "event=${{ github.event_name }} -> running the gallery"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! files=$(gh api --paginate \
+                 "repos/$REPO/pulls/$PR/files" --jq '.[].filename'); then
+            echo "could not list changed files -> running the gallery"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$files" ]; then
+            echo "empty file list -> running the gallery"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "changed files:"
+          echo "$files" | sed 's/^/  /'
+
+          # What an example's behaviour actually depends on:
+          #   examples/                     the example sources themselves
+          #   src/tengri/                   the library they exercise (the #1146 case)
+          #   data/                         the grids they load at run time
+          #   tools/run_gallery_examples.py the runner
+          #   pyproject.toml                the dependency set
+          #   .github/workflows/tests.yml   this job
+          # docs/, notebooks/ and the spine generator are deliberately absent:
+          # sphinx-gallery reads `examples/`, so no edit under docs/ can change
+          # what an example does. `docs/auto_examples/` is generated OUTPUT.
+          if echo "$files" | grep -qE '^(examples/|src/tengri/|data/|tools/run_gallery_examples\.py$|pyproject\.toml$|\.github/workflows/tests\.yml$)'; then
+            echo "-> gallery inputs touched, running it"
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "-> no gallery input touched, skipping it"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Execute every sphinx-gallery example (#1146).
   #
   # Nothing else does. `docs/conf.py` builds its skip-list FROM DISK — sphinx-
@@ -129,9 +211,12 @@ jobs:
   # split would hand one shard every expensive one and time out while the others
   # idle).
   gallery:
+    needs: gallery-changes
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    # `gallery-changes` carries the `labeled` guard too: when it skips, this job
+    # sees an empty output and skips with it, so a label add stays a no-op.
+    if: ${{ needs.gallery-changes.outputs.needed == 'true' }}
     strategy:
       fail-fast: false
       matrix:
