@@ -31,12 +31,17 @@ __all__ = ["ForwardModel"]
 
 @dataclass(frozen=True)
 class ForwardModel:
-    """The outer shell of the forward model.
+    """The outer shell of the forward model, and the surface inference consumes.
 
-    Holds populations + observation; exposes ``.predict(params)`` as
-    the sole API inference consumes. Supports both single-population
-    (the common case) and multi-population galaxy decompositions
-    (AGN + bulge + disc, ADR-0012).
+    Holds one or more populations plus an observation, and exposes
+    ``.predict(params)`` as the single API every inference backend talks to.
+    A backend never has to ask which channels exist — the returned dict says
+    so — which is what lets one ``Fitter`` drive photometry, spectroscopy,
+    joint, and hierarchical fits without branching.
+
+    Build the SED chain, wrap it, fit it. :meth:`fit` is the canonical entry
+    point for inference (issue #211); it is exactly
+    ``Fitter(self, data, noise).run(method)``.
 
     Parameters
     ----------
@@ -44,9 +49,55 @@ class ForwardModel:
         One or more populations. Each carries an SED ``SubModel`` and
         optionally a spatial ``SubModel``. Names must be distinct.
     observation : object
-        Observation model exposing ``predict(state, params) → dict``
+        Observation model exposing ``predict(state, params) -> dict``
         (single-population) and ``predict_summed(per_pop_states, params)``
         (multi-population).
+
+    Notes
+    -----
+    **Construction.** Prefer :meth:`build` over the raw constructor — it
+    accepts the ``sed=`` / ``population=`` / ``populations=`` forms and wraps
+    them into the uniform ``populations`` tuple for you.
+
+    **Parameter names.** Single-population fits use flat names
+    (``sfh_dpl_alpha``, ``dust_tau_v``). Multi-population decompositions
+    namespace by population, ``<population>.<component_prefix>_<param>`` —
+    ``disc.sfh_dpl_alpha``, ``bulge.dust_tau_v`` — so three stellar components
+    in three populations no longer collide (ADR-0012).
+
+    **JIT.** ``predict`` and the channel-specific ``predict_photometry`` /
+    ``predict_spectrum`` are traced by the inference backends under
+    ``jax.jit``. Prefer :meth:`predict_photometry` on the fitting hot path;
+    :meth:`predict_observables` returns the full dict and bypasses the
+    photometry lookup table.
+
+    See Also
+    --------
+    build : construct one — the recommended path.
+    fit : run inference; the canonical entry point.
+    tengri.SEDModel : the SED physics chain that goes inside a population.
+    tengri.Fitter : the inference engine :meth:`fit` delegates to.
+
+    Examples
+    --------
+    Wrap an SED chain and fit photometry:
+
+    >>> from tengri import ForwardModel, SEDModel  # doctest: +SKIP
+    >>> sed = SEDModel.build(ssp_data=ssp, observation=obs, **config)  # doctest: +SKIP
+    >>> forward = ForwardModel.build(sed=sed, observation=obs)  # doctest: +SKIP
+    >>> result = forward.fit(flux, noise, method="mcmc_nuts")  # doctest: +SKIP
+    >>> result.properties["stellar_mass"].shape  # doctest: +SKIP
+    (4000,)
+
+    Hierarchical fit over a population sharing PSD hyperparameters:
+
+    >>> pop = PopulationSEDModel(  # doctest: +SKIP
+    ...     sed=sed,
+    ...     galaxies=galaxies,
+    ...     shared=("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"),
+    ... )
+    >>> forward = ForwardModel.build(population=pop, observation=obs)  # doctest: +SKIP
+    >>> result = forward.fit(method="vi")  # doctest: +SKIP
     """
 
     populations: tuple[Population, ...]
@@ -237,23 +288,6 @@ class ForwardModel:
     def xi_to_params(self, xi):
         """Delegate to :meth:`SEDModel.xi_to_params` on the inner SED."""
         return self._inner_sed_for_delegation().xi_to_params(xi)
-
-    def ensure_photometry_precomputed(self) -> bool:
-        """Lazily precompute photometry on the inner SED if not yet done.
-
-        Delegates to :meth:`SEDModel.ensure_photometry_precomputed` on
-        the first population's inner SED. Returns the inner method's
-        result (``True`` if precomputation ran on this call). Multi-
-        population galaxy decompositions iterate across populations.
-        """
-        ran = False
-        for pop in self.populations:
-            sub = pop.sed
-            inner = getattr(sub, "sed", sub)
-            fn = getattr(inner, "ensure_photometry_precomputed", None)
-            if fn is not None:
-                ran = bool(fn()) or ran
-        return ran
 
     def predict_photometry(self, params):
         """Channel-specific prediction: ``phot_fnu`` extracted from :meth:`predict_observables`.

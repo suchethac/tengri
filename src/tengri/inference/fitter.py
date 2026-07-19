@@ -390,20 +390,26 @@ class Fitter:
 
     Examples
     --------
-    Fit a single galaxy with geoVI (default):
+    Fit a single galaxy with geoVI (default). The fitter takes a
+    :class:`~tengri.ForwardModel`, so wrap the SED chain first:
 
-    >>> from tengri import SEDModel, Fitter, Parameters
-    >>> model = SEDModel(Parameters())
+    >>> from tengri import Fitter, ForwardModel, SEDModel  # doctest: +SKIP
+    >>> sed = SEDModel.build(ssp_data=ssp, observation=obs, **config)  # doctest: +SKIP
+    >>> forward = ForwardModel.build(sed=sed, observation=obs)  # doctest: +SKIP
     >>> data = jnp.array([1.2, 0.8, 0.5])  # photometric fluxes
     >>> noise = jnp.array([0.1, 0.08, 0.06])
-    >>> fitter = Fitter(model, data, noise)
-    >>> result = fitter.run("vi", n_samples=100)
-    >>> print(result.params)
+    >>> fitter = Fitter(forward, data, noise)  # doctest: +SKIP
+    >>> result = fitter.run("vi", n_samples=100)  # doctest: +SKIP
+    >>> print(result.params)  # doctest: +SKIP
 
-    Fit with warm-start from MAP:
+    ``forward.fit(data, noise, method="vi", n_samples=100)`` is the same fit in
+    one line. Build the ``Fitter`` yourself when you want to keep it — warm
+    starts, a reused compilation cache, or several backends over one model:
 
-    >>> result_map = fitter.run("map", n_steps=1000)
-    >>> result_mcmc = fitter.run("mcmc_nuts", init_from=result_map, n_warmup=500)
+    >>> result_map = fitter.run("map", n_steps=1000)  # doctest: +SKIP
+    >>> result_mcmc = fitter.run(  # doctest: +SKIP
+    ...     "mcmc_nuts", init_from=result_map, n_warmup=500
+    ... )
 
     See the docstring of :meth:`run` for all available methods and their options.
     """
@@ -541,13 +547,6 @@ class Fitter:
         # fitting. See tests/inference/test_eline_fitting.py::TestFittedMode.
         if getattr(self, "_eline_amp_priors", None):
             self.spec = self.spec.merge_observation_params(**self._eline_amp_priors)
-
-        # ── Auto-precompute photometry (legacy fused path) ──────────
-        # Only on the exact path — a modern ``approx=`` LUT supersedes it,
-        # and running both would double-precompute.
-        _has_approx = getattr(self.model, "_has_modern_approx", None)
-        if not (callable(_has_approx) and _has_approx()):
-            self._auto_precompute_photometry(self.model)
 
         # ── Parameters ─────────────────────────────────────────────
         self._free_names = self.spec.free_params
@@ -708,28 +707,6 @@ class Fitter:
             cfg = self._auto_approx_config()
             return model if cfg is None else with_approx(cfg)
         return with_approx(approx)
-
-    def _auto_precompute_photometry(self, model: Any) -> None:
-        """Auto-trigger photometry precomputation if conditions are met.
-
-        Fires when: photometry / joint data_type + the model declares an
-        :meth:`ensure_photometry_precomputed` method. Lets users build a
-        Model without ``precompute=True`` and still get the fast fused
-        path when they construct a Fitter.
-
-        The actual gate (fixed redshift + filters + not-yet-precomputed)
-        lives inside :meth:`SEDModel.ensure_photometry_precomputed` so
-        Fitter doesn't reach into model internals. Migration 2 step 3:
-        prior open-coded version touched ``model._precomputed``,
-        ``model._z_fixed``, ``model._dl_cm_fixed`` and a no-op
-        ``model._build_hybrid_kernels()`` call (the method has been
-        absent for a long time and the result was silently dropped).
-        """
-        if self.data_type not in ("photometry", "joint"):
-            return
-        ensure = getattr(model, "ensure_photometry_precomputed", None)
-        if ensure is not None:
-            ensure()
 
     def _init_emission_lines(self, model, eline_marginalize, eline_prior_type):
         """Configure emission line marginalization and fitted-amplitude modes."""
@@ -2516,95 +2493,82 @@ class Fitter:
         if verbose:
             logger.info("  Drawing %d posterior samples via BlackJAX NUTS...", n_samples)
 
-        if likelihood is not None:
-
-            @jax.jit
-            def logdensity_fn(x):
-                """Evaluate negative log density from custom likelihood and standard prior.
-
-                Parameters
-                ----------
-                x : dict
-                    Parameter dict in unbounded space.
-
-                Returns
-                -------
-                float
-                    Log posterior (likelihood + Gaussian prior).
-
-                Notes
-                -----
-                Inner closure used by BlackJAX NUTS when a custom likelihood
-                is provided. Not part of public API.
-                """
-                lh_val = likelihood(x)
-                prior = 0.5 * sum(jnp.sum(v**2) for v in x.values())
-                return -lh_val - prior
-
-        else:
-            _logdensity_2arg = self._get_or_build_logdensity_fn()
-            _da = self._data_args
-
-            @jax.jit
-            def logdensity_fn(x):
-                """Evaluate log density with data_args bound from the enclosing scope.
-
-                Parameters
-                ----------
-                x : dict
-                    Parameter dict in unbounded space.
-
-                Returns
-                -------
-                float
-                    Log posterior (likelihood + priors).
-
-                Notes
-                -----
-                Inner closure used by BlackJAX NUTS when no custom likelihood
-                is provided. Captures ``_data_args`` from outer scope.
-                Not part of public API.
-                """
-                return _logdensity_2arg(x, _da)
-
         warmup_key, sample_key = jax.random.split(key)
         n_warmup = min(200, n_samples)
-        warmup = blackjax.window_adaptation(blackjax.nuts, logdensity_fn)
-        (state, parameters), _ = warmup.run(warmup_key, pos_dict, num_steps=n_warmup)
+
+        # Warmup and sampling run inside ONE memoized ``jax.jit`` that takes the data as
+        # a *traced* argument. The eager form rebuilt a fresh ``@jax.jit logdensity_fn``
+        # (closing over ``self._data_args``, which carries the SSP grid), a fresh
+        # ``window_adaptation``, a fresh NUTS kernel and a fresh ``one_step`` on every
+        # call. Fresh function identities miss JAX's compilation cache, so each call
+        # compiled and *retained* another set of executables — a measured ~72 MB/call
+        # leak (#1249), accrued per galaxy by a catalog VI run drawing samples with
+        # ``posterior_method="blackjax"``.
+        #
+        # Memoizing only the log-density is not enough (measured: 72 -> 55 MB/call);
+        # the adaptation-dependent kernel has to be inside the cached program too, and
+        # it cannot be cached separately because it is built from the *runtime* warmup
+        # output — caching that would bake one call's step size, the bug fixed in #1234.
+        def _build_draw(ld_from):
+            """Compile (window adaptation -> sampling scan) once, data traced."""
+
+            def _run(wk, sk, pos, data_args):
+                """Window-adapt, then scan the NUTS kernel; returns stacked positions."""
+                ld = ld_from(data_args)
+                warmup = blackjax.window_adaptation(blackjax.nuts, ld)
+                (state, parameters), _ = warmup.run(wk, pos, num_steps=n_warmup)
+                kernel = blackjax.nuts(ld, **parameters).step
+
+                def one_step(s, rng_key):
+                    """One NUTS step, shaped for ``jax.lax.scan``."""
+                    s, _ = kernel(rng_key, s)
+                    return s, s
+
+                _, states = jax.lax.scan(one_step, state, jax.random.split(sk, n_samples))
+                return states.position
+
+            return jax.jit(_run)
+
+        if likelihood is not None:
+            # A caller-supplied likelihood is an arbitrary callable we cannot
+            # fingerprint, so the memo is disabled (``key=None`` builds fresh) rather
+            # than risk serving a kernel compiled around a different likelihood.
+            def _ld_from(_data_args):
+                """Custom-likelihood log posterior (likelihood + standard normal prior)."""
+
+                def _ld(x):
+                    prior = 0.5 * sum(jnp.sum(v**2) for v in x.values())
+                    return -likelihood(x) - prior
+
+                return _ld
+
+            memo_key = None
+        else:
+            _logdensity_2arg = self._get_or_build_logdensity_fn()
+
+            def _ld_from(data_args):
+                """Default log posterior, reading the traced ``data_args``."""
+
+                def _ld(x):
+                    return _logdensity_2arg(x, data_args)
+
+                return _ld
+
+            memo_key = (
+                "blackjax_draw",
+                self.compile_signature(),
+                int(n_samples),
+                int(n_warmup),
+            )
+
+        _run_draw = self._memo_batch_kernel(
+            "_blackjax_draw_kernel_cache", memo_key, lambda: _build_draw(_ld_from)
+        )
+        sample_positions = _run_draw(warmup_key, sample_key, pos_dict, self._data_args)
 
         if verbose:
-            logger.info("  Warmup done (%d steps). Sampling...", n_warmup)
+            logger.info("  Warmup done (%d steps). Sampled %d draws.", n_warmup, n_samples)
 
-        kernel = blackjax.nuts(logdensity_fn, **parameters).step
-
-        @jax.jit
-        def one_step(state, rng_key):
-            """Execute one NUTS sampling step and return updated state.
-
-            Parameters
-            ----------
-            state : blackjax.SamplerState
-                Current MCMC sampler state.
-            rng_key : jax.random.PRNGKey
-                Random seed for this step.
-
-            Returns
-            -------
-            tuple of (blackjax.SamplerState, blackjax.SamplerState)
-                Updated state twice (for jax.lax.scan compatibility).
-
-            Notes
-            -----
-            Inner closure for NUTS kernel. Designed for use with ``jax.lax.scan``
-            in batch sampling. Not part of public API.
-            """
-            state, _ = kernel(rng_key, state)
-            return state, state
-
-        keys = jax.random.split(sample_key, n_samples)
-        _, states = jax.lax.scan(one_step, state, keys)
-
-        sample_positions = states.position
         for i in range(n_samples):
             sd = jax.tree.map(lambda x, _i=i: x[_i], sample_positions)
             existing_samples.append(sd)

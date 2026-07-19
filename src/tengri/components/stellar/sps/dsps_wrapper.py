@@ -546,63 +546,6 @@ def _synthesize_mass_remaining(
     return jnp.broadcast_to(f_surv_age, (ssp_lgmet.shape[0], lg_age_yr.shape[0]))
 
 
-def load_ssp_data_dsps(filepath: str) -> SSPData:
-    """Load SSP templates using DSPS native loader.
-
-    Falls back to load_ssp_data() if DSPS is not installed.
-
-    Parameters
-    ----------
-    filepath : str
-        Path to HDF5 file in DSPS format.
-
-    Returns
-    -------
-    SSPData
-        Loaded SSP template data.
-
-    Notes
-    -----
-    **JIT-compatible**: yes — only file I/O occurs outside JAX traced code.
-    Falls back gracefully to load_ssp_data() if dsps is not available.
-
-    """
-    try:
-        from dsps import load_ssp_templates
-
-        ssp_data = load_ssp_templates(fn=filepath)
-        return SSPData(
-            ssp_wave=jnp.array(ssp_data.ssp_wave),
-            ssp_flux=_rescale_flux_to_iau_lsun(jnp.array(ssp_data.ssp_flux), filepath),
-            ssp_lg_age_gyr=jnp.array(ssp_data.ssp_lg_age_gyr),
-            ssp_lgmet=jnp.array(ssp_data.ssp_lgmet),
-        )
-    except ImportError:
-        return load_ssp_data(filepath)
-
-
-def _rescale_flux_to_iau_lsun(ssp_flux: jnp.ndarray, filepath: str) -> jnp.ndarray:
-    """Apply the #969 native-Lsun rescale on the DSPS-native loader path."""
-    from pathlib import Path
-
-    try:
-        import h5py
-
-        with h5py.File(filepath, "r") as f:
-            native = _detect_native_lsun(f, Path(filepath).name)
-    except OSError:
-        # Unreadable as HDF5 — fall back to the filename heuristic alone.
-        name = Path(filepath).name
-        native = _FSPS_LSUN_ERG_PER_S if name.startswith("fsps_") else None
-    if native is None:
-        return ssp_flux
-    from tengri.utils.physics_constants import L_SUN
-
-    if abs(native / L_SUN - 1.0) <= 1e-12:
-        return ssp_flux
-    return ssp_flux * (native / L_SUN)
-
-
 def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
     """Compute CSP quadrature bin widths for a given integration method.
 

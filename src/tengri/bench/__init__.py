@@ -7,7 +7,7 @@ Two modes:
    Prints tengri / JAX versions, default device, persistent compile-cache
    status, a 1-galaxy forward photometry timing, a 100-galaxy
    ``predict_photometry_batch`` timing, and the speedup of vmap over the
-   equivalent Python loop. ~30 s on CPU after a warm cache.
+   equivalent Python loop.
 
 2. **Benchmark dispatch** (``python -m tengri.bench <name>``):
    Runs one of the comprehensive benchmark scripts that ship under

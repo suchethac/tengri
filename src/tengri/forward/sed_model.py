@@ -462,6 +462,17 @@ class ApproxState:
         return f"ApproxState({', '.join(on)})" if on else "ApproxState(exact)"
 
 
+def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
+    """Warn that a grid cache could not be warmed, naming the failure it invites."""
+    warnings.warn(
+        f"tengri: could not pre-load the {label} grid ({exc}). It will be loaded "
+        f"lazily instead, which raises UnexpectedTracerError if the first load "
+        f"happens inside a JIT trace.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
 def _warn_agn_dust_double_count(spec) -> None:
     """Warn when composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
 
@@ -2467,8 +2478,10 @@ class SEDModel:
         permanently leak into downstream code. This method calls each loader once
         OUTSIDE a JIT context so the cache stores concrete arrays instead.
 
-        Wrapped in try/except because grid files are optional — missing files
-        should not block SEDModel construction.
+        A grid file may legitimately be absent, so a failed warm degrades to the
+        lazy path rather than blocking construction — but it warns, because the
+        lazy path is precisely what raises ``UnexpectedTracerError`` later, far
+        from this cause.
         """
         # MAPPINGS shock emission grids (nebular/shock.py:_load_mappings_grids)
         if self._uses_shock:
@@ -2476,8 +2489,8 @@ class SEDModel:
                 from tengri.components.nebular.shock import _load_mappings_grids
 
                 _load_mappings_grids()
-            except Exception:
-                pass
+            except (OSError, ImportError) as exc:
+                _warn_grid_warm_failed("MAPPINGS shock emission", exc)
 
         # CAT3D-Wind AGN torus grids (agn/cat3d_wind.py:_load_cat3d_default)
         if self._agn_model == "cat3d_wind":
@@ -2485,38 +2498,23 @@ class SEDModel:
                 from tengri.components.agn.cat3d_wind import _load_cat3d_default
 
                 _load_cat3d_default()
-            except Exception:
-                pass
+            except (OSError, ImportError) as exc:
+                _warn_grid_warm_failed("CAT3D-Wind AGN torus", exc)
 
         # Astrodust+PAH emission grid (dust/emission/templates/astrodust.py).
         # The faithful HD23 implementation self-loads its grid in load()/predict();
         # warm the process cache OUTSIDE any trace so an in-trace lazy load hits
         # concrete arrays rather than leaking a tracer (UnexpectedTracerError).
         # The grammar builds the component with the default template path (None).
-        if getattr(self, "_dust_emission_model", None) == "astrodust":
+        if self._dust_emission_model == "astrodust":
             try:
                 from tengri.components.dust.emission.templates.astrodust import (
                     _cached_astrodust_grid,
                 )
 
                 _cached_astrodust_grid(None)
-            except Exception:
-                pass
-
-    def ensure_photometry_precomputed(self) -> bool:
-        """Deprecated no-op (the legacy ``PrecomputedData`` container was retired, #620).
-
-        The photometry fast path is now opt-in at build time via
-        ``approx=WavePrecomp()`` and is built through the component chain, not
-        lazily here. Retained as a no-op so existing callers (e.g. the Fitter,
-        whose return value was already discarded) keep working.
-
-        Returns
-        -------
-        bool
-            Always ``False`` (nothing is built lazily).
-        """
-        return False
+            except (OSError, ImportError) as exc:
+                _warn_grid_warm_failed("Astrodust+PAH emission", exc)
 
     def _get_internal_params(self, params):
         """Translate public param dict to internal names with unit conversion.

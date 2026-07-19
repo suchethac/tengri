@@ -474,7 +474,6 @@ exclude_patterns = [
     "_notebooks/**",
     # Not part of the published sidebar (content folded into index.md or omitted)
     "changelog.md",
-    "documentation.md",
     # Spine notebooks not currently in the published sidebar (08 emission
     # lines + 09 parameter sweeps were the "physics deep dives" section,
     # dropped from the index in the 2026-05 polish pass).

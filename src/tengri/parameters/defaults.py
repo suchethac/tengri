@@ -178,14 +178,3 @@ def get_inference_defaults(method: str | None = None) -> dict[str, Any]:
     if method is None:
         return section
     return section.get(method, {})
-
-
-def defaults_path() -> Path:
-    """Return the path of the currently active defaults file.
-
-    Returns
-    -------
-    Path
-        Absolute path to the active ``defaults.toml``.
-    """
-    return _active_path()
