@@ -256,6 +256,50 @@ def test_tutorials_only_advertise_real_list_functions(name, text):
         )
 
 
+# ── the structural dust axis is discoverable at all ─────────────────────────
+
+
+def _valid_dust_types():
+    from tengri.parameters.groups import _VALID_DUST_TYPES
+
+    assert _VALID_DUST_TYPES, "no dust types registered — this guard would pass vacuously"
+    return sorted(_VALID_DUST_TYPES)
+
+
+@pytest.mark.parametrize("dust_type", _valid_dust_types())
+def test_structural_dust_types_are_discoverable(dust_type):
+    """``dust={'type': ...}`` must be reachable from the discovery API.
+
+    Dust is chosen along three axes: structure (``dust={'type': ...}``),
+    attenuation curve (``law_bc`` / ``law_diff``), and IR emission
+    (``dust={'emission': ...}``). The latter two had menus; the structural
+    axis had none — so ``two_component``, the type the shipped recipes
+    build with, was named by no ``list_*`` menu, ``describe('two_component')``
+    raised ``KeyError`` and ``search('two_component')`` returned nothing. A
+    user following the documented discovery path could not find the single
+    most consequential dust choice.
+    """
+    from tengri.registry import _menu_listers
+
+    homes = [ln.__name__ for ln in _menu_listers() if dust_type in set(ln().names())]
+    assert homes, f"{dust_type!r} is accepted by the builder but named by no list_* menu"
+
+    assert dict(tengri.describe(dust_type))["name"] == dust_type
+    assert dust_type in set(tengri.search(dust_type).names())
+
+
+def test_dust_model_menu_cannot_drift_from_the_builder():
+    """The menu is derived from the validator's own set, both directions.
+
+    Hard-coding the names here later would let the menu advertise a type
+    ``SEDModel.build`` rejects (the #1179 failure mode) or hide one it
+    accepts (what this test was written for).
+    """
+    from tengri.parameters.groups import _VALID_DUST_TYPES
+
+    assert set(tengri.list_dust_models().names()) == set(_VALID_DUST_TYPES)
+
+
 # ── usage hints teach the current SEDModel.build grammar ────────────────────
 
 
@@ -263,6 +307,7 @@ def test_tutorials_only_advertise_real_list_functions(name, text):
     "lister",
     [
         tengri.list_sfh_models,
+        tengri.list_dust_models,
         tengri.list_dust_laws,
         tengri.list_dust_emission_models,
         tengri.list_nebular_backends,
