@@ -5,7 +5,8 @@ Tengri's forward model is split into two clearly separated layers.
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Inference (Fitter / MAP / NUTS / VI / …)               │
-│  Talks only to ForwardModel.predict_observables(params).            │
+│  Entry point: ForwardModel.fit(data, noise, method).    │
+│  Talks to the model only through .predict(params).      │
 └────────────────────────┬────────────────────────────────┘
                          ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -39,7 +40,8 @@ Tengri's forward model is split into two clearly separated layers.
 
 The outer-shell signature stays uniform across all SubModel variants —
 construction is always ``ForwardModel.build(<slot>=..., observation=obs)``
-and inference is always through the standard ``Fitter`` pipeline.
+and inference is always through ``forward.fit(...)`` — which is the
+standard ``Fitter`` pipeline underneath.
 
 ## The minimum usable fit
 
@@ -102,9 +104,12 @@ ForwardModel.build(
 ```
 
 Pick exactly one of `sed=`, `population=`, or `populations=`. Returns
-a frozen dataclass. The only API users typically call afterwards is
-`forward.predict_observables(params) → dict`. Everything else is via `Fitter` or
-posterior helpers.
+a frozen dataclass. What you call afterwards is
+`forward.fit(data, noise, method=...)`; everything else is posterior
+helpers. To inspect a prediction rather than fit one, use
+`forward.predict(params)`. On a fitting hot path prefer
+`forward.predict_photometry(params)` — `predict_observables` returns the
+full channel dict and bypasses the photometry lookup table.
 
 ## Hierarchical population fits
 
