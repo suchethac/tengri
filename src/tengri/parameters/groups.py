@@ -473,7 +473,6 @@ _AGN_PARTITION = {
     # Narrow-line region
     "agn_nlr_cf": "agn.nlr",
     "agn_alpha_ion": "agn.nlr",  # NLR photoionization knob
-    "agn_feltre_cf": "agn.nlr",  # Feltre calibration for NLR
     "neb_xid": "agn.nlr",  # Nebular ionization for NLR
     # Broad-line region
     "agn_blr_cf": "agn.blr",
