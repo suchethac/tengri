@@ -135,34 +135,6 @@ def get_line_wavelengths(group: str | list[str]) -> jnp.ndarray:
     return jnp.array([EMISSION_LINES[n][0] for n in names])
 
 
-def get_line_names(group: str) -> tuple[str, ...]:
-    """Return emission line names for a named group.
-
-    Parameters
-    ----------
-    group : str
-        Named line group (e.g. ``"bpt"``, ``"optical_narrow"``,
-        ``"uv_narrow"``, ``"flury_niii_ciii"``).
-
-    Returns
-    -------
-    tuple[str, ...]
-        Line names in the group, in catalog order.
-
-    Raises
-    ------
-    KeyError
-        If ``group`` is not found in ``LINE_GROUPS``.
-
-    Notes
-    -----
-    Not JIT-compatible (uses Python control flow on input group).
-    See ``LINE_GROUPS`` dict for all available group names.
-
-    """
-    return tuple(LINE_GROUPS[group])
-
-
 # ── Backward-compatibility arrays ─────────────────────────────────
 # (Match the old DEFAULT_LINE_* and CLOUDY_LINE_* arrays so existing code
 #  importing from eline_marginalization/eline_priors still works unchanged.)

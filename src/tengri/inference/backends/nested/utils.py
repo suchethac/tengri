@@ -224,11 +224,6 @@ def sample(rng_key: PRNGKey, dead: NSInfo, shape: int = 1000) -> ArrayTree:
     return jax.tree.map(lambda leaf: leaf[indices], dead.particles)
 
 
-def get_first_row(x: ArrayTree) -> ArrayTree:
-    """Extract the first element along the leading axis of each leaf."""
-    return jax.tree.map(lambda x: x[0], x)
-
-
 def uniform_prior(
     rng_key: PRNGKey, num_live: int, bounds: dict[str, tuple[float, float]]
 ) -> tuple[ArrayTree, Callable]:

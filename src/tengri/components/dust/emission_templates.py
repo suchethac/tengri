@@ -1565,35 +1565,6 @@ def load_dh02_ce01_lnu_grid(grid_path: str) -> dict:
     }
 
 
-def register_dh02_ce01_tabulated(grid_path: str, name: str = "dh02_ce01") -> None:
-    r"""Load and register the tabulated DH02_CE01 model in the emission registry.
-
-    After calling this, the model is available via
-    ``DUST_EMISSION_MODELS["dh02_ce01"]`` and can be used as the
-    ``dust_emission_model`` in ``SEDModel()``.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``dh02_ce01_grid.h5``.
-    name : str
-        Registry name. Default: "dh02_ce01".
-
-    Returns
-    -------
-    None
-        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
-
-    Notes
-    -----
-    **JIT-compatible**: no — registration happens at factory time before JIT.
-    """
-    from . import emission
-
-    model_fn = create_dh02_ce01_from_grid(grid_path)
-    emission.DUST_EMISSION_MODELS[name] = model_fn
-
-
 # Normalize BOSA grid helper
 def _normalize_bosa_grid(raw: dict) -> dict:
     r"""Convert a raw BOSA grid dict to the processed format.
