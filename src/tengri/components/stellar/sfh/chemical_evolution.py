@@ -41,7 +41,7 @@ def closed_box_metallicity(
     f_gas_init: float = 0.9,
     return_frac: float = 0.4,
 ) -> jnp.ndarray:
-    """Compute metallicity history Z(t) from SFH using closed/leaky box model.
+    r"""Compute metallicity history Z(t) from SFH using closed/leaky box model.
 
     Self-consistently derives gas-phase metallicity at each age from the star
     formation history using analytic chemical evolution. Supports both closed-box
@@ -63,7 +63,7 @@ def closed_box_metallicity(
         Typical range: 0.5-3 for dwarf galaxies, 0-0.5 for massive galaxies.
         [dimensionless]
     f_gas_init : float, optional
-        Initial gas fraction :math:`M_{\\rm gas} / (M_{\\rm gas} + M_{\\star})` at
+        Initial gas fraction :math:`M_{\rm gas} / (M_{\rm gas} + M_{\star})` at
         earliest cosmic time. Default: 0.9 (galaxy starts gas-dominated).
         [dimensionless, in (0,1)]
     return_frac : float, optional
@@ -85,26 +85,26 @@ def closed_box_metallicity(
 
     .. math::
 
-        Z(t) = \\frac{y_{\rm eff}}{1} \\ln\\left( \\frac{1}{f_{\rm gas}(t)} \\right)
+        Z(t) = \frac{y_{\rm eff}}{1} \ln\left( \frac{1}{f_{\rm gas}(t)} \right)
 
-    where :math:`y_{\rm eff} = y / (1 + \\eta)` is the effective yield and
+    where :math:`y_{\rm eff} = y / (1 + \eta)` is the effective yield and
     :math:`f_{\rm gas}(t)` is the gas fraction at time t.
 
     Gas mass evolution:
 
     .. math::
 
-        M_{\\rm gas}(t) = M_{\\rm gas,0} - (1 - R) M_{\\star,{\\rm formed}}(t)
-        - \\eta M_{\\star,{\\rm formed}}(t)
+        M_{\rm gas}(t) = M_{\rm gas,0} - (1 - R) M_{\star,{\rm formed}}(t)
+        - \eta M_{\star,{\rm formed}}(t)
 
-    where :math:`M_{\\star,{\\rm formed}}` is the cumulative integral of SFR,
-    :math:`R` is the return fraction, and :math:`\\eta` is the mass loading factor.
+    where :math:`M_{\star,{\rm formed}}` is the cumulative integral of SFR,
+    :math:`R` is the return fraction, and :math:`\eta` is the mass loading factor.
 
     **Computation order**: The input grid is in lookback time (youngest first).
     Internally, the code reverses to cosmic time order (oldest first) to integrate
     the SFR and track cumulative stellar mass and gas depletion.
 
-    With :math:`\\eta = 0` (eta_outflow=0), this reduces to the standard closed-box model.
+    With :math:`\eta = 0` (eta_outflow=0), this reduces to the standard closed-box model.
 
     References
     ----------

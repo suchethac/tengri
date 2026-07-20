@@ -1,6 +1,6 @@
 """
 Strong-lensing magnification: EoR galaxy SEDs at μ = 1, 5, 20, 100
-=========================================================
+==================================================================
 
 Demonstrates how strong gravitational lensing elevates intrinsically-faint
 high-redshift (z=7) galaxies above the JWST NIRCam 5σ detection threshold.

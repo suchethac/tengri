@@ -118,7 +118,7 @@ def drw_acf(delta_t: jnp.ndarray, psd_sigma: float, psd_tau_yr: float) -> jnp.nd
 
 
 def drw_variance(psd_sigma: float) -> float:
-    """Stationary variance of DRW.
+    r"""Stationary variance of DRW.
 
     Parameters
     ----------
@@ -138,9 +138,9 @@ def drw_variance(psd_sigma: float) -> float:
 
     .. math::
 
-        \\sigma_x^2 = \\frac{\\sigma_{\rm PS}^2}{2}
+        \sigma_x^2 = \frac{\sigma_{\rm PS}^2}{2}
 
-    where :math:`\\sigma_{\rm PS}` is the PSD amplitude.
+    where :math:`\sigma_{\rm PS}` is the PSD amplitude.
 
     Examples
     --------
@@ -154,11 +154,11 @@ def drw_variance(psd_sigma: float) -> float:
 
 
 def psd_to_sqrt_power(psd_values: jnp.ndarray, d_grid: float) -> jnp.ndarray:
-    """Convert PSD to amplitude operator for GP generation.
+    r"""Convert PSD to amplitude operator for GP generation.
 
     Computes the factor that multiplies the standardized latent vector in
     Fourier space to produce a GP realization:
-    :math:`s = \\mathrm{IFFT}(\\sqrt{P/d} \\cdot \\hat{\\xi})`.
+    :math:`s = \mathrm{IFFT}(\sqrt{P/d} \cdot \hat{\xi})`.
 
     Parameters
     ----------
@@ -170,7 +170,7 @@ def psd_to_sqrt_power(psd_values: jnp.ndarray, d_grid: float) -> jnp.ndarray:
     Returns
     -------
     ndarray, shape (n_freq,)
-        Amplitude operator :math:`\\sqrt{P(\\omega) / d_{\rm grid}}` [dimensionless].
+        Amplitude operator :math:`\sqrt{P(\omega) / d_{\rm grid}}` [dimensionless].
 
     Notes
     -----
@@ -180,11 +180,11 @@ def psd_to_sqrt_power(psd_values: jnp.ndarray, d_grid: float) -> jnp.ndarray:
 
     .. math::
 
-        A(\\omega) = \\sqrt{\\frac{P(\\omega)}{d_{\rm grid}}}
+        A(\omega) = \sqrt{\frac{P(\omega)}{d_{\rm grid}}}
 
-    where :math:`P(\\omega)` is the power spectral density and :math:`d_{\rm grid}`
+    where :math:`P(\omega)` is the power spectral density and :math:`d_{\rm grid}`
     is the grid spacing. This normalization ensures that the GP realization
-    has the correct variance: :math:`\\mathrm{Var}[s] = \\int P(f) \\, df`.
+    has the correct variance: :math:`\mathrm{Var}[s] = \int P(f) \, df`.
 
     A floor of :math:`10^{-30}` is applied to avoid division by zero.
     """

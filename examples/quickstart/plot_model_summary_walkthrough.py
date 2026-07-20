@@ -1,6 +1,6 @@
 """
 Understanding model structure through parameter provenance tags
-==============================================================
+===============================================================
 
 The ``model.spec.summary()`` method displays each parameter's source
 through provenance tags: ``[user]`` for explicit overrides, ``[all_params FREE]``

@@ -932,7 +932,7 @@ def triweight_burst(
     log_tpeak_myr: float,
     log_tmax_myr: float,
 ) -> jnp.ndarray:
-    """Triweight burst kernel in log-age space (Zacharegkas+2025).
+    r"""Triweight burst kernel in log-age space (Zacharegkas+2025).
 
     A compact-support kernel for modeling starburst episodes. The kernel
     is smooth, has finite support in log-age space, and is designed for
@@ -946,7 +946,7 @@ def triweight_burst(
         log10 of burst peak time [Myr]. Center of the kernel in log-age space.
     log_tmax_myr : float
         log10 of burst duration [Myr]. Controls the kernel half-width.
-        The kernel has support roughly ±:math:`3 \times 10^{\\log_{\\mathrm{tmax}}}` Myr.
+        The kernel has support roughly ±:math:`3 \times 10^{\log_{\mathrm{tmax}}}` Myr.
 
     Returns
     -------
@@ -964,12 +964,12 @@ def triweight_burst(
 
     .. math::
 
-        K(u) = \\frac{35}{96} (1 - u^2)^3, \\quad |u| < 1
+        K(u) = \frac{35}{96} (1 - u^2)^3, \quad |u| < 1
 
     where :math:`x` is the normalized time offset from peak, defined as  # noqa: E501
-    :math:`(\\log_{10}(t/\\mathrm{Myr}) - \\log_{10}(t_{\\rm peak}/\\mathrm{Myr})) / \\log_{10}(t_{\\rm max}/\\mathrm{Myr})`.
+    :math:`(\log_{10}(t/\mathrm{Myr}) - \log_{10}(t_{\rm peak}/\mathrm{Myr})) / \log_{10}(t_{\rm max}/\mathrm{Myr})`.
 
-    The kernel has compact support (finite extent) and is :math:`C^{\\infty}` smooth.
+    The kernel has compact support (finite extent) and is :math:`C^{\infty}` smooth.
     It is superior to Gaussian kernels for burst modeling because it avoids
     the extended low-level wings that affect neighboring age bins.
 

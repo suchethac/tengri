@@ -1,6 +1,6 @@
 """
 Nebular backends: Cue, CloudyGrid, SSP-embedded, and BakedIn
-===========================================================
+============================================================
 
 Compare four nebular emission backends on identical star-forming spectra:
 
