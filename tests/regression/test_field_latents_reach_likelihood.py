@@ -302,3 +302,52 @@ def test_sampler_spelling_alone_does_not_reach_the_flux_path():
             "delete this test and the producer-side duplication it justifies."
         ),
     )
+
+
+@pytest.mark.skipif(not _SSP.exists(), reason="wNE SSP grid not available")
+def test_forward_model_supports_line_flux_fits():
+    """A line-flux fit must work through the CANONICAL ForwardModel surface.
+
+    ``loss_functions`` calls ``model._has_line_catalog()`` whenever the
+    observation carries line fluxes, to decide between predicting lines (Cue /
+    CloudyGrid) and measuring them off the spectrum (wNE / shock).
+    ``ForwardModel`` has no ``__getattr__`` fall-through and the method was never
+    added to its explicit delegation list, so this raised ``AttributeError`` --
+    while the *deprecated* ``Fitter(sed_model, ...)`` path worked fine.
+
+    The recommended API being the broken one is the failure mode worth guarding:
+    every existing line-flux test drove the deprecated surface, so nothing caught
+    it, and the notebook that exercised this path silenced the deprecation
+    warning that would have pointed at the mismatch.
+    """
+    from tengri.observation import LineFluxData
+
+    ssp = load_ssp_data(str(_SSP))
+    phot = Photometry.from_names(["galex_fuv", "sdss_g", "sdss_r", "2mass_ks"])
+    names = ("Halpha", "Hbeta", "OIII_5007")
+    lines = LineFluxData.from_dict({n: (1e-16, 1e-17) for n in names})
+    observation = Observation(
+        photometry=phot,
+        line_fluxes=lines,
+        noise=NoiseModel(calibration_floor=0.01, student_t_dof=None),
+    )
+    model = _model(ssp, observation)
+    forward = ForwardModel.build(sed=model, observation=observation)
+
+    assert forward._has_line_catalog() == model._has_line_catalog(), (
+        "ForwardModel must delegate _has_line_catalog to the inner SED"
+    )
+
+    params = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
+    mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
+    res = forward.fit(
+        np.asarray(mock.flux_obs),
+        np.asarray(mock.noise),
+        method="map",
+        approx=None,
+        n_steps=50,
+        n_restarts=1,
+        key=jax.random.PRNGKey(2),
+        verbose=False,
+    )
+    assert res.params, "line-flux fit through ForwardModel returned no parameters"

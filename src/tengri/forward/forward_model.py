@@ -161,6 +161,68 @@ class ForwardModel:
             getattr(self._inner_sed_for_delegation(), "has_fixedz_photometry_precompute", False)
         )
 
+    # ── Inner-SED delegation (#1300) ─────────────────────────────────
+    #
+    # ForwardModel is the canonical inference surface (#211) but has no
+    # ``__getattr__`` fall-through — it forwards through an explicit list. The
+    # inference stack does ``model = fitter.model`` and then calls SEDModel
+    # methods on it, so anything absent from that list raised AttributeError:
+    # the DEPRECATED ``Fitter(sed_model, ...)`` path worked and the recommended
+    # one did not. A sweep of ``src/tengri/inference`` for ``model.<attr>``
+    # found twelve such methods, reached from loss_functions, jit_engine,
+    # fitter, posterior and _sample_utils.
+    #
+    # Forwarding is semantically correct for a SINGLE population: the JIT cache
+    # is keyed on ``compile_signature()`` rather than object identity, and the
+    # ``*_via_state`` pair runs the component chain against the SED's own
+    # observation. It is NOT correct for a multi-population forward, where
+    # ``populations[0]`` is an arbitrary pick — those raise instead.
+
+    _DELEGATED_TO_INNER_SED = (
+        "_has_line_catalog",
+        "measure_line_fluxes",
+        "_get_or_build_predict_observables_jit",
+        "_photometry_via_state",
+        "_spectrum_via_state",
+        "_predict_derived",
+        "_predict_rest_sed",
+        "_predict_sfh_quantities",
+        "_template_data_for_jit",
+        "mock",
+        "name",
+        "predict_observables_jit",
+        "predict_properties",
+    )
+
+    def _single_inner_sed(self, what: str):
+        """Inner SED for a delegation that only makes sense for one population.
+
+        Raises rather than silently answering for ``populations[0]``: picking an
+        arbitrary population would fail open, which is the shape of #1271.
+        """
+        if len(self.populations) != 1:
+            raise NotImplementedError(
+                f"{type(self).__name__}.{what} delegates to a single inner SED, but this "
+                f"ForwardModel holds {len(self.populations)} populations. Call it on the "
+                f"population you mean (e.g. forward.populations[i].sed.{what})."
+            )
+        return self._inner_sed_for_delegation()
+
+    def _has_line_catalog(self) -> bool:
+        """Whether the nebular backend publishes a discrete line catalog.
+
+        ``loss_functions`` calls this whenever the observation carries line
+        fluxes, to choose between *predicting* lines (photoionization backends)
+        and *measuring* them off the spectrum (wNE / shock).
+        """
+        fn = getattr(self._single_inner_sed("_has_line_catalog"), "_has_line_catalog", None)
+        return bool(fn()) if callable(fn) else False
+
+    @property
+    def available_properties(self):
+        """Derived-property catalog of the inner SED. Delegated (#1300)."""
+        return self._single_inner_sed("available_properties").available_properties
+
     @property
     def hybrid(self):
         """Hybrid kernel container delegated from the inner SED."""
@@ -806,3 +868,37 @@ def _linear_flux_sum(
             total = total + c
         summed[key] = total
     return summed
+
+
+def _install_inner_sed_delegations() -> None:
+    """Attach the method delegations named in ``ForwardModel._DELEGATED_TO_INNER_SED``.
+
+    Generated from the tuple rather than written out thirteen times, so the
+    declared list and the installed methods cannot drift apart — that drift is
+    what produced #1300 in the first place. ``_has_line_catalog`` and
+    ``available_properties`` are defined explicitly on the class (one coerces to
+    bool, the other is a property) and are skipped here.
+    """
+    explicit = {"_has_line_catalog", "available_properties"}
+
+    def _make(name: str):
+        def _delegated(self, *args, **kwargs):
+            return getattr(self._single_inner_sed(name), name)(*args, **kwargs)
+
+        _delegated.__name__ = name
+        _delegated.__qualname__ = f"ForwardModel.{name}"
+        _delegated.__doc__ = (
+            f"Delegated to the inner SEDModel's ``{name}`` (#1300).\n\n"
+            "The inference stack calls this on ``fitter.model``, which is a\n"
+            "ForwardModel on the canonical path. Raises for multi-population\n"
+            "forwards rather than answering for an arbitrary population."
+        )
+        return _delegated
+
+    for name in ForwardModel._DELEGATED_TO_INNER_SED:
+        if name in explicit or name in vars(ForwardModel):
+            continue
+        setattr(ForwardModel, name, _make(name))
+
+
+_install_inner_sed_delegations()
