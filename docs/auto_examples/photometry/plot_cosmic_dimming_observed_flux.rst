@@ -53,8 +53,19 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -115,7 +126,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
         observation=obs,
         sfh={
             "type": "tsnorm",  # Truncated normal SFH (analytic burst)
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,  # peak SFR = 10 Msun/yr
             "peak_lbt_gyr": 0.5,  # peak at age = 0.5 Gyr lookback time
             "width_gyr": 0.2,  # narrow gaussian → bursty
@@ -124,7 +135,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
         },
         dust={
             "type": "two_component",  # Adopted dust attenuation
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.3,  # diffuse attenuation optical depth
             "tau_bc": 0.5,  # birth-cloud attenuation
             "slope": -0.7,  # Calzetti-like slope
@@ -151,7 +162,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_total_mass": 10.0,
                 "peak_lbt_gyr": 0.5,
                 "width_gyr": 0.2,
@@ -160,7 +171,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
             },
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 0.3,
                 "tau_bc": 0.5,
                 "slope": -0.7,
@@ -212,7 +223,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.095 seconds)
+   **Total running time of the script:** (0 minutes 26.864 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py:

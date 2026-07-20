@@ -20,8 +20,10 @@ cannot distinguish whether a red continuum is young+dusty or old+dustless.
 Iso-β contours reveal the degenerate directions.
 
 References:
+
 - Meurer, Heckman & Calzetti 1999, ApJ, 521, 64 (starburst IRX–β relation)
 - Calzetti, Kinney & Storchi-Bergmann 1994, ApJ, 429, 582 (UV slope fitting windows)
+
 """
 
 import os
@@ -79,7 +81,7 @@ def _bolometric_lir(wave_aa: np.ndarray, l_nu: np.ndarray) -> float:
     mask = (wave_aa >= 8.0e4) & (wave_aa <= 1.0e7)
     nu = C_AA_PER_S / wave_aa[mask]
     order = np.argsort(nu)
-    return float(np.trapz(l_nu[mask][order], nu[order]))
+    return float(np.trapezoid(l_nu[mask][order], nu[order]))
 
 
 def _lfuv(wave_aa: np.ndarray, l_nu: np.ndarray) -> float:
@@ -98,7 +100,7 @@ model_dust_sweep = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 0.5,  # young starburst -> strong UV
@@ -106,11 +108,11 @@ model_dust_sweep = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": tengri.Uniform(0.0, 4.0),
         "tau_bc": 0.5,
         "slope": -0.7,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
     redshift=tengri.Fixed(0.0),
 )
@@ -121,11 +123,9 @@ beta_arr = np.empty_like(tau_grid)
 irx_arr = np.empty_like(tau_grid)
 
 for i, tau in enumerate(tau_grid):
-    out = model_dust_sweep.predict_rest_sed(
-        {**baseline_dust_sweep, "dust_tau_diff": jnp.float64(tau)}
-    )
-    wave = np.asarray(out.wavelength)
-    l_nu = np.asarray(out.sed)
+    out = model_dust_sweep.predict({**baseline_dust_sweep, "dust_tau_diff": jnp.float64(tau)})
+    wave = np.asarray(model_dust_sweep.wavelengths)
+    l_nu = np.asarray(out.rest_sed())
     beta_arr[i] = _measure_beta(wave, l_nu)
     irx_arr[i] = _bolometric_lir(wave, l_nu) / _lfuv(wave, l_nu)
 
@@ -151,14 +151,14 @@ model_age_dust = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 0.5,  # Fixed default; we'll override later
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 1.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.01),
 )
 
@@ -177,8 +177,10 @@ for age_idx, age in enumerate(age_values):
             "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age),
             "dust_tau_diff": jnp.float64(tau),
         }
-        out = model_age_dust.predict_rest_sed(p)
-        beta_2d[age_idx, tau_idx] = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
+        out = model_age_dust.predict(p)
+        beta_2d[age_idx, tau_idx] = _beta_uv(
+            np.asarray(model_age_dust.wavelengths), np.asarray(out.rest_sed())
+        )
 
 # ==============================================================================
 # Create two-panel figure

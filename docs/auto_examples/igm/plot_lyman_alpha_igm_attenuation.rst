@@ -33,8 +33,10 @@ are:
 
 - Rest-frame Lyα sits at 1216 Å; in the observer frame it moves to
   (1+z) × 1216 Å
+
 - Wavelengths shortward of Lyα (the Lyman forest) become progressively
   absorbed at higher redshift due to neutral hydrogen absorption
+
 - The red side (Lyα + a few hundred Ångströms) remains mostly unaffected
   by IGM
 
@@ -45,11 +47,12 @@ This is the foundational principle behind Lyα-dropout selection and the
 growing difficulty in detecting Lyα emission at the Epoch of Reionization.
 
 References:
+
 - Madau, P. 1995, ApJ, 441, 18 (foundational IGM absorption model)
 - Inoue, A. T., Iwata, I., Deharveng, J. M., et al. 2014, MNRAS, 442, 1805
   (modern IGM prescription used here)
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-170
+.. GENERATED FROM PYTHON SOURCE LINES 37-174
 
 
 
@@ -95,7 +98,7 @@ References:
     # (typical in star-forming galaxies at z > 2)
     SFH = {
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.2,  # Young starburst timescale
         "log_total_mass": 10.0,  # Moderately intense star formation
         "alpha": 3.0,  # Rising SFR at early times
@@ -103,7 +106,7 @@ References:
     }
 
     # Minimal dust to preserve continuum strength
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05}
 
     # Build model with IGM absorption enabled
     ssp = tengri.load_ssp()
@@ -130,9 +133,9 @@ References:
         params = {**p_base, "redshift": float(z)}
 
         # Get rest-frame SED
-        out = model.predict_rest_sed(params)
-        wave_rest_out = np.asarray(out.wavelength)
-        sed_rest = np.asarray(out.sed)
+        out = model.predict(params)
+        wave_rest_out = np.asarray(model.wavelengths)
+        sed_rest = np.asarray(out.rest_sed())
 
         # Interpolate to our wavelength grid for cleaner visualization
         sed_interp = np.interp(wave_rest, wave_rest_out, sed_rest, left=0, right=0)

@@ -288,7 +288,7 @@ def test_unified_agn_recipe_structure():
     # Parametric luminosity mode: the two scaling knobs are pinned fixed.
     assert isinstance(agn["frac"], Fixed)
     assert isinstance(agn["fracAGN"], Fixed)
-    assert agn["*"] is FREE
+    assert agn["all_params"] is FREE
 
 
 def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):

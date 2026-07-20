@@ -46,10 +46,11 @@ width = 0.5 Gyr. Default DSPS SSP (no metallicity variation or dust).
 z = 0.05 (rest-frame SED only; no cosmological redshift applied).
 
 References:
+
 - Hogg, D. W., Blanton, M. R., et al. 2002, AJ, 123, 1147 (K-corrections
   and SED unit conventions)
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-138
+.. GENERATED FROM PYTHON SOURCE LINES 35-140
 
 
 
@@ -89,7 +90,7 @@ References:
         tengri.load_ssp(),
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": 2.0,
             "width_gyr": 0.5,
         },
@@ -98,11 +99,11 @@ References:
 
     # Sample from the model (all parameters are fixed, so deterministic)
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    pred = model.predict_rest_sed(params)
+    pred = model.predict(params)
 
     # Extract rest-frame wavelength [Angstrom] and SED [erg/s/Hz]
-    lambda_rest = np.asarray(pred.wavelength)
-    sed_fnu = np.asarray(pred.sed)
+    lambda_rest = np.asarray(model.wavelengths)
+    sed_fnu = np.asarray(pred.rest_sed())
 
     # Compute the three representations
     # 1. F_λ = F_ν * (c/λ²) [normalized for comparison]

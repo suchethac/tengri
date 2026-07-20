@@ -1,0 +1,151 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""Test ionizing-SED mass-scale float32 safety (Balmer decrement guard).
+
+Validates that reparametrizing the ionizing-SED scale as a log offset
+prevents float32 overflow in the Cue nebular ionizing flux.
+Balmer decrement H-alpha/H-beta ≈ 2.86 (Case B, independent of total mass scale).
+
+TIER A GUARANTEE (mixed-precision, forward_dtype="float32" under x64=True):
+  - test A (test_balmer_decrement_mixed_precision_f32): PASSES.
+    Ionizing SED computed in f32; scalars remain f64. The log-offset
+    reparametrization keeps the Balmer decrement finite and correct.
+
+TIER B STEP 1 DELIVERED (pure-float32, jax.enable_x64(False)) — the log_nion contract (#1206):
+  - test C1 (test_log_q_h_pure_float32_cue_only): PASSES.
+    The log_nion reparametrization makes log_q_h (= log10 Q_H) and the nebular continuum
+    rest_sed() (L_nu ~1e29, float32-representable) finite and float64-accurate. This is the
+    usable pure-float32 ionizing diagnostic the contract provides.
+  - test C2 (test_linear_observables_pure_float32_cue_only): XFAIL(strict) — #1206 item 3.
+    The linear q_h property (~1e56 photons/s) and the erg/s line_lums (~1e41, hence
+    balmer_decrement) still exceed float32 max. Returning them in L_sun/log10 is a breaking
+    unit change (#1206 item 3), not yet done. log_q_h is the finite replacement.
+"""
+
+import jax
+import numpy as np
+import pytest
+from numpy.testing import assert_allclose
+
+from .conftest import build_model
+
+pytestmark = pytest.mark.regression_bug
+
+
+def test_balmer_decrement_mixed_precision_f32(ssp_bare):
+    """(A) Mixed-precision: forward_dtype=float32 under x64=True (Tier A guarantee).
+
+    Build the model with forward_dtype="float32" while JAX x64 is enabled (default).
+    The ionizing SED is computed in float32, but scalars like stellar_mass_scale
+    remain f64. This tests that the log-offset reparametrization keeps the
+    Balmer decrement finite and correct.
+    """
+    # Build f64 reference (x64=True, forward_dtype="float64")
+    m64 = build_model(ssp_bare, "float64")
+    p = dict(m64.spec.sample(jax.random.PRNGKey(0)))
+    p["redshift"] = 1.0
+    dec64 = float(m64.predict(p).properties["balmer_decrement"])
+
+    # Build f32 with x64=True (mixed precision)
+    m32 = build_model(ssp_bare, "float32")
+    dec32 = float(m32.predict(p).properties["balmer_decrement"])
+
+    # Decrement should be finite and close to the f64 reference
+    assert np.isfinite(dec32), f"f32 Balmer decrement is non-finite: {dec32}"
+    assert 2.7 < dec32 < 3.1, f"f32 Balmer decrement {dec32} off Case B range"
+    assert_allclose(dec32, dec64, rtol=5e-3)
+
+
+@pytest.mark.xfail(
+    reason="Pure-f32 fails in AGN SKIRTOR interpolation (dtype mismatch in interp_nd_triweight),"
+    " not due to the ionizing-SED scale. The Tier A guarantee (mixed-precision) is test A."
+    " Tier B: published stellar_mass_scale scalar (~1e42) is f32-unrepresentable;"
+    " consumers (dust energy balance, nebular backends) must use log-scaled variants.",
+    strict=False,
+)
+def test_balmer_decrement_pure_float32(ssp_bare):
+    """(B) Pure-float32: forward_dtype=float32 under jax.enable_x64(False).
+
+    Disable JAX x64 globally, forcing all scalars and arrays to float32.
+    If the published stellar_mass_scale (~1e42) still causes issues, mark this
+    test as xfail and trace the consumer chain.
+
+    Current failure: dtype mismatch in AGN SKIRTOR interpolation (triweight grid
+    weights, reduce operands float64 vs initial float32) — separate from the
+    ionizing-SED mass scale fix. The Tier A guarantee is test A (mixed-precision).
+    """
+    # Build f64 reference
+    m64 = build_model(ssp_bare, "float64")
+    p = dict(m64.spec.sample(jax.random.PRNGKey(0)))
+    p["redshift"] = 1.0
+    dec64 = float(m64.predict(p).properties["balmer_decrement"])
+
+    # Build and predict under pure float32
+    with jax.enable_x64(False):
+        m32 = build_model(ssp_bare, "float32")
+        dec32 = float(m32.predict(p).properties["balmer_decrement"])
+
+    # In pure f32, if balmer_decrement is still non-finite / wrong, the
+    # published stellar_mass_scale scalar (~1e42) is the culprit (Tier B fix).
+    # For now, just check it's finite and in range.
+    assert np.isfinite(dec32), f"pure-f32 Balmer decrement is non-finite: {dec32}"
+    assert 2.7 < dec32 < 3.1, f"pure-f32 Balmer decrement {dec32} off Case B range"
+    assert_allclose(dec32, dec64, rtol=5e-3)
+
+
+def test_log_q_h_pure_float32_cue_only(ssp_bare):
+    """(C1) Pure-float32 stellar+Cue: the log_nion contract makes the ionizing
+    readout and the nebular continuum SED finite (issue #1206 step 1).
+
+    log_q_h (= log10 Q_H) and rest_sed() (L_nu ~1e29, float32-representable) stay
+    finite and track the float64 reference. This is what the log_nion
+    reparametrization (the log-domain Q_H contract) delivers: a usable pure-float32
+    ionizing diagnostic where the linear q_h property overflows (see the companion
+    strict-xfail test). The gas_logqion Cue seam is exercised transitively — a broken
+    seam would poison the nebular continuum, so rest_sed finiteness is the end-to-end
+    check. Isolated stellar+Cue avoids the AGN SKIRTOR dtype blocker of test B.
+    """
+    from .conftest import build_minimal_cue_model
+
+    m64 = build_minimal_cue_model(ssp_bare, "float64")
+    p = dict(m64.spec.sample(jax.random.PRNGKey(0)))
+    pred64 = m64.predict(p)
+    log_q_h_64 = float(pred64.properties["log_q_h"])
+
+    with jax.enable_x64(False):
+        m32 = build_minimal_cue_model(ssp_bare, "float32")
+        pred32 = m32.predict(p)
+        log_q_h_32 = float(pred32.properties["log_q_h"])
+        rest_sed_32 = np.asarray(pred32.rest_sed())
+
+    assert np.isfinite(log_q_h_32), f"pure-f32 log_q_h non-finite: {log_q_h_32}"
+    assert np.all(np.isfinite(rest_sed_32)), "pure-f32 rest_sed has non-finite entries"
+    assert_allclose(log_q_h_32, log_q_h_64, atol=5e-3)  # dex
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Tier B item 3 (breaking unit change, not yet done): the linear q_h property "
+        "(~1e56 photons/s) and the erg/s line_lums (~1e41, hence balmer_decrement) exceed "
+        "float32 max. The log_nion contract (#1206 step 1) gives a finite log_q_h instead — "
+        "see test_log_q_h_pure_float32_cue_only. Returning these in L_sun/log10 is #1206 item 3."
+    ),
+    strict=True,
+)
+def test_linear_observables_pure_float32_cue_only(ssp_bare):
+    """(C2) The linear-erg/s observables that Tier B item 3 must still fix.
+
+    In pure float32 the linear ``q_h`` overflows to inf and ``balmer_decrement``
+    (a ratio of erg/s ``line_lums`` ~1e41) is nan. This test is expected to fail
+    until item 3 rescales these to L_sun/log10; if it ever XPASSES, promote it.
+    """
+    from .conftest import build_minimal_cue_model
+
+    with jax.enable_x64(False):
+        m32 = build_minimal_cue_model(ssp_bare, "float32")
+        p = dict(m32.spec.sample(jax.random.PRNGKey(0)))
+        pred32 = m32.predict(p)
+        q_h_32 = float(pred32.properties["q_h"])
+        dec_32 = float(pred32.properties["balmer_decrement"])
+
+    assert np.isfinite(q_h_32), f"linear q_h overflows float32: {q_h_32}"
+    assert np.isfinite(dec_32), f"balmer_decrement is nan in float32: {dec_32}"

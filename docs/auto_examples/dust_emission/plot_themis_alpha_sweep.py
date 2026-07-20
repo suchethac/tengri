@@ -38,13 +38,13 @@ ssp = tengri.load_ssp()
 
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0},
+    sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 1.0,
         "tau_bc": 0.3,
-        "emission": {"type": "themis", "*": tengri.FIXED, "dust_gamma_dl": 0.1},
+        "emission": {"type": "themis", "all_params": tengri.FIXED, "dust_gamma_dl": 0.1},
     },
     redshift=tengri.Fixed(0.05),
 )
@@ -56,9 +56,9 @@ colors = plt.cm.inferno(np.linspace(0.15, 0.8, len(alpha_values)))
 fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
 for a, c in zip(alpha_values, colors):
-    out = model.predict_rest_sed({**p0, "dust_alpha": jnp.float64(a)})
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict({**p0, "dust_alpha": jnp.float64(a)})
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     lw = 2.6 if a == 2.0 else 1.8
     ax.loglog(
         wave, nu_l_nu, color=c, lw=lw, label=rf"$\alpha={a:.1f}$" + (" (FSPS)" if a == 2.0 else "")

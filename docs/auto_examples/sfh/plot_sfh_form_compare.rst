@@ -28,6 +28,7 @@ total stellar mass, so the differences are entirely in the *shape* —
 not the normalization.
 
 Forms shown:
+
 - ``const``, ``exp``, ``dexp``, ``tau``           — single-parameter classics
 - ``lnorm``, ``snorm``, ``tsnorm``                — peaked smooth families
 - ``dpl``                                          — Carnall+2018 double power-law
@@ -39,7 +40,7 @@ Pick a form by matching the data you have: ``tau`` for a single color,
 non-parametric forms (``continuity``, ``dirichlet``, ``dense_basis``)
 when the data resolve > 5 SFR-bins.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-83
+.. GENERATED FROM PYTHON SOURCE LINES 24-84
 
 
 
@@ -90,8 +91,8 @@ when the data resolve > 5 SFR-bins.
     for (form, label), color in zip(FORMS, COLORS):
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": form, "*": tengri.FIXED},
-            dust={"type": "two_component", "*": tengri.FIXED},
+            sfh={"type": form, "all_params": tengri.FIXED},
+            dust={"type": "two_component", "all_params": tengri.FIXED},
             redshift=tengri.Fixed(0.0),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))

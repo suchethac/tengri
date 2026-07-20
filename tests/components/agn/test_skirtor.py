@@ -93,9 +93,14 @@ class TestSKIRTORAnalytic:
         assert jnp.all(sed >= 0), "SKIRTOR SED should be non-negative"
         assert float(jnp.max(sed)) > 0, "SKIRTOR SED should have positive values"
 
-        # Frozen golden values at indices [0, n//3, 2n//3, -1]
+        # Frozen golden values at indices [0, n//3, 2n//3, -1].
+        # Re-frozen after the standalone default agn_log_lbol was corrected from
+        # the non-physical 44.0 (old log10 erg/s value) to 10.0 (log10 L_bol/Lsun,
+        # matching the canonical param default) — a pure 1e-34 rescale of the SED
+        # (l_scale is linear in 10**agn_log_lbol). The values are now physical
+        # (~1e29 erg/s/Hz for a 1e10 Lsun AGN).
         indices = [0, len(wave) // 3, 2 * len(wave) // 3, -1]
-        golden_values = [0.0, 6.380747e58, 3.525502e63, 3.607845e58]
+        golden_values = [0.0, 6.380747e24, 3.525502e29, 3.607845e24]
         for idx, golden in zip(indices, golden_values):
             np.testing.assert_allclose(
                 float(sed[idx]),
@@ -480,7 +485,16 @@ class TestSKIRTORJIT:
             fn_jit = jax.jit(test_fn)
             sed_jit = fn_jit(7.0, 0.5)
             chex.assert_equal_shape([sed_jit, wave])
-            chex.assert_trees_all_close(sed_eager, sed_jit, rtol=1e-6)
+            # JIT parity to 1 ppm of the SED's own scale. This is a torus-only
+            # template: the SED is ~0 across the UV/optical (dust emits nothing
+            # there) and peaks in the IR. A bare rtol=1e-6, atol=0 would demand
+            # bit-exact eager/jit agreement on that near-zero noise floor —
+            # values ~40 dex below the IR peak where XLA legitimately reorders
+            # sub-ULP terms differently across platforms (a false failure seen
+            # only on CI-Linux, #1195). Scaling atol to the peak asserts the
+            # physically meaningful statement: JIT preserves the SED.
+            atol = 1e-6 * float(jnp.max(jnp.abs(sed_eager)))
+            chex.assert_trees_all_close(sed_eager, sed_jit, rtol=1e-6, atol=atol)
 
     def test_jit_parity_registered_model(self, wave):
         """JIT parity for registered 'skirtor' model with all 5 parameters."""
@@ -507,7 +521,12 @@ class TestSKIRTORJIT:
             fn_jit = jax.jit(test_fn)
             sed_jit = fn_jit(7.0, 1.0, 1.0, 40.0, 0.5)
             chex.assert_equal_shape([sed_jit, wave])
-            chex.assert_trees_all_close(sed_eager, sed_jit, rtol=1e-6)
+            # JIT parity to 1 ppm of the SED's own scale (see the note in
+            # test_jit_parity_analytic): atol=0 would demand bit-exact agreement
+            # on the near-zero noise floor, which XLA does not guarantee across
+            # platforms for fused float ops (#1195).
+            atol = 1e-6 * float(jnp.max(jnp.abs(sed_eager)))
+            chex.assert_trees_all_close(sed_eager, sed_jit, rtol=1e-6, atol=atol)
 
     def test_jit_grad_combined(self, wave):
         """JIT of grad agrees with FD for agn_tau_skirtor."""
@@ -749,8 +768,11 @@ class TestSkirtorAnalyticErrorPaths:
         """skirtor_analytic must raise FileNotFoundError when no template file exists."""
         import tengri.components.agn.skirtor as _mod
 
-        # Clear functools.cache so the loader re-runs on next call
+        # Clear functools.cache so the loaders re-run on next call. skirtor_sed
+        # loads the threadable grid via _load_skirtor_default_grid (#1178); the
+        # legacy closure loader _load_skirtor_default is also cleared.
         _mod._load_skirtor_default.cache_clear()
+        _mod._load_skirtor_default_grid.cache_clear()
         from pathlib import Path
 
         def fake_is_file(self):
@@ -763,3 +785,4 @@ class TestSkirtorAnalyticErrorPaths:
         finally:
             # Clear again so the error result is not cached for subsequent tests
             _mod._load_skirtor_default.cache_clear()
+            _mod._load_skirtor_default_grid.cache_clear()

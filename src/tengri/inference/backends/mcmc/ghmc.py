@@ -126,7 +126,9 @@ def run_ghmc(
         if n_chains > 1:
 
             def _init(p, init_key):
-                return blackjax.mcmc.ghmc.init(p, init_key, ld_1arg)
+                # Keyword args: blackjax reordered ghmc.init's (rng_key,
+                # logdensity_fn) between 1.3 and 1.6 — keywords work on both.
+                return blackjax.mcmc.ghmc.init(position=p, logdensity_fn=ld_1arg, rng_key=init_key)
 
             def _scan(s, ks):
                 return _ghmc_chain_scan(
@@ -154,7 +156,9 @@ def run_ghmc(
             _multichain_burnin_done = True
         else:
             key, ghmc_init_key = jax.random.split(chain_key)
-            state = blackjax.mcmc.ghmc.init(init_flat, ghmc_init_key, ld_1arg)
+            state = blackjax.mcmc.ghmc.init(
+                position=init_flat, logdensity_fn=ld_1arg, rng_key=ghmc_init_key
+            )
             chain_keys = jax.random.split(key, n_burnin + n_samples)
             positions, divergent = _ghmc_chain_scan(
                 state,

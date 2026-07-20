@@ -20,8 +20,10 @@ See Papovich et al. 2001 (AJ, 122, 1) for the seminal discussion of this
 degeneracy in the context of Hubble Deep Field galaxies.
 
 References:
+
 - Papovich et al. 2001, AJ, 122, 1
 - Poggianti & Barbaro 1997, A&A, 325, 1025
+
 """
 
 import os
@@ -53,19 +55,19 @@ model_a = SEDModel.build(
     observation=observation,
     sfh={
         "type": "dexp",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.3,
         "log_total_mass": 10.0,  # Will be tuned for magnitude match
     },
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 2.0,
         "tau_diff": 0.8,
         "slope": -0.7,
     },
-    neb={"type": "cue", "*": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.5),
     apply_igm=True,
 )
@@ -82,19 +84,19 @@ model_b = SEDModel.build(
     observation=observation,
     sfh={
         "type": "dexp",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 8.0,
         "log_total_mass": 10.0,  # Will be tuned
     },
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.1,
         "tau_diff": 0.05,
         "slope": -0.7,
     },
-    neb={"type": "cue", "*": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(1.0),
     apply_igm=True,
 )
@@ -111,7 +113,7 @@ model_c = SEDModel.build(
     observation=observation,
     sfh={
         "type": "lnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_gyr": 1.0,
         "width_gyr": 0.5,
         "log_total_mass": 10.0,  # Will be tuned
@@ -119,12 +121,12 @@ model_c = SEDModel.build(
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.7,
         "tau_diff": 0.3,
         "slope": -0.7,
     },
-    neb={"type": "cue", "*": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(1.5),
     apply_igm=True,
 )
@@ -192,17 +194,17 @@ mag_b = -2.5 * np.log10(flux_b) - 48.6
 mag_c = -2.5 * np.log10(flux_c) - 48.6
 
 # Predict rest-frame SEDs for display
-sed_a = model_a.predict_rest_sed(params_a)
-sed_b = model_b.predict_rest_sed(params_b)
-sed_c = model_c.predict_rest_sed(params_c)
+sed_a = model_a.predict(params_a)
+sed_b = model_b.predict(params_b)
+sed_c = model_c.predict(params_c)
 
-wave_a = np.asarray(sed_a.wavelength)
-wave_b = np.asarray(sed_b.wavelength)
-wave_c = np.asarray(sed_c.wavelength)
+wave_a = np.asarray(model_a.wavelengths)
+wave_b = np.asarray(model_b.wavelengths)
+wave_c = np.asarray(model_c.wavelengths)
 
-sed_a_lnu = np.asarray(sed_a.sed)
-sed_b_lnu = np.asarray(sed_b.sed)
-sed_c_lnu = np.asarray(sed_c.sed)
+sed_a_lnu = np.asarray(sed_a.rest_sed())
+sed_b_lnu = np.asarray(sed_b.rest_sed())
+sed_c_lnu = np.asarray(sed_c.rest_sed())
 
 # Create figure
 fig, axes = plt.subplots(2, 1, figsize=(10, 8))

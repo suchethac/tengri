@@ -853,6 +853,29 @@
    "name": "SEDModel"
   }
  ],
+ "model.predict_properties": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward.sed_model",
+   "module_short": "tengri.forward.sed_model",
+   "name": "SEDModel.predict_properties"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward",
+   "module_short": "tengri.forward",
+   "name": "SEDModel.predict_properties"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "SEDModel.predict_properties"
+  }
+ ],
  "model.predict_sfh": [
   {
    "is_class": false,
@@ -874,29 +897,6 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "SEDModel.predict_sfh"
-  }
- ],
- "model.predict_sfh_quantities": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.forward.sed_model",
-   "module_short": "tengri.forward.sed_model",
-   "name": "SEDModel.predict_sfh_quantities"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.forward",
-   "module_short": "tengri.forward",
-   "name": "SEDModel.predict_sfh_quantities"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "SEDModel.predict_sfh_quantities"
   }
  ],
  "norm": [
@@ -979,20 +979,20 @@
    "name": "maximum"
   }
  ],
- "np.trapz": [
+ "np.trapezoid": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "_ArrayFunctionDispatcher"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "trapz"
+   "name": "trapezoid"
   }
  ],
  "np.where": [
@@ -1148,39 +1148,9 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.forward.prediction",
-   "module_short": "tengri.forward.prediction",
-   "name": "SFHQuantities"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.forward",
-   "module_short": "tengri.forward",
-   "name": "SFHQuantities"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "SFHQuantities"
-  }
- ],
- "q.stellar_mass": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl"
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
   }
  ],
  "rel_error": [

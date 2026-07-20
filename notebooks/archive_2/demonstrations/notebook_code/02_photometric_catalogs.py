@@ -43,7 +43,7 @@ from tengri import (
     load_ssp_data,
 )
 
-import sys, os  # noqa: E401, E402
+import sys, os  # noqa: E401
 
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
@@ -65,7 +65,7 @@ elif os.path.exists(os.path.join("..", "..", "..", "data")):
 FIGDIR = os.path.join("demonstrations", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-from _plot_style import COLORS, convergence_table, setup_style  # noqa: E402
+from _plot_style import COLORS, convergence_table, setup_style
 
 setup_style()
 

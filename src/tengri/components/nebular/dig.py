@@ -105,6 +105,7 @@ def mix_dig_emission(
         same metallicity, escape fraction, and stellar population weights.
 
     **Physical picture**:
+
         - **HII regions**: dense, photoionized by young (< 1 Myr) OB stars.
           Log U ~ −2.5 to −3. Dominated by recombination lines ([OIII], [SIII],
           etc.).

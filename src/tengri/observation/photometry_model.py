@@ -8,6 +8,7 @@ apparent AB magnitudes or f_nu fluxes.
 
 Scope
 -----
+
 - Reads ``state.sed_attenuated`` (post-dust rest-frame L_nu) if
   present, else falls back to ``state.sed_intrinsic``.
 - Reads ``redshift`` from params (bare-name allowlist).
@@ -18,6 +19,7 @@ Scope
 
 What this is NOT
 ----------------
+
 - Not the spectroscopic observation model. ``SpectroscopyObservationModel``
   lands as the second adapter (the "two-adapter rule" graduates this
   protocol seam from hypothetical to real).
@@ -25,6 +27,7 @@ What this is NOT
   adapter once spectroscopy is migrated.
 - Not the noise model — :class:`Likelihood` consumes the prediction
   + a separate :class:`tengri.NoiseModel`.
+
 """
 
 from __future__ import annotations

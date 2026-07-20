@@ -23,6 +23,100 @@ from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectral_indices import SpectralIndexData
 from tengri.observation.spectroscopy import Spectroscopy
 from tengri.parameters.priors import Distribution
+from tengri.utils.scale import LOG10_4PI, apply_log10_scale
+
+
+def _restband_lnu(state) -> jnp.ndarray:
+    r"""Total rest-frame band luminosity for ``phot_rest_fnu`` (#1148).
+
+    ``phot_rest_fnu`` — and so ``Observables.mag_absolute`` — is the SED reprojected
+    at :math:`z=0`, :math:`d_L=10\,{\rm pc}`: *the galaxy as it is*. The filter
+    therefore sits in the **rest** frame and samples the rest SED at its own pivot.
+
+    The LUT used to reuse ``total_lnu``, the **observed**-band sum, which samples
+    rest :math:`\lambda_{\rm eff}/(1+z)`. Those are different physical quantities:
+    against the exact path the LUT ran 769 % out in ``des_g`` at z=0.5 and orders of
+    magnitude out in the blue, so an object's *absolute* magnitude depended on its
+    redshift and on which ``approx`` was passed.
+
+    Assembled from the ``*_restband_lnu_precomp`` family, **auto-discovered** exactly
+    as ``predict_via_precomp`` discovers the observed ``*_phot_lnu_precomp`` family —
+    so a new emitter gets rest-frame photometry for free and cannot silently drop out
+    of it, which is how the fast path lost AGN and nebular emission once already
+    (#737/#740).
+
+    The galaxy's own dust stays (it is part of the SED); the IGM does not (it is a
+    line-of-sight absorber between us and the source — #1115).
+
+    Parameters
+    ----------
+    state : PipelineState
+        Carrying the ``*_restband_lnu_precomp`` family and the rest-band dust screens.
+
+    Returns
+    -------
+    ndarray, shape (n_filters,)
+        Rest-frame band luminosity [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX.
+
+    Falls back to the observed-band sum when no emitter published a rest-band tensor
+    (a model built without ``WavePrecomp``, whose ``phot_rest_fnu`` the exact
+    projector computes instead).
+    """
+    keys = [k for k in state.derived.field_names() if k.endswith("_restband_lnu_precomp")]
+    contribs = [state.derived.get(k) for k in keys]
+    contribs = [c for c in contribs if c is not None]
+    if not contribs:
+        # No rest-band LUT (e.g. n_subbands / WavePrecomp off). The caller's
+        # observed-band sum is the pre-#1148 behavior; keep it rather than return
+        # zeros, so this can never silently blank out a channel.
+        return state.derived.get("stellar_phot_lnu_precomp")
+
+    total = contribs[0]
+    for c in contribs[1:]:
+        total = total + c
+
+    # Dust reddens the stellar + nebular bucket, exactly as in the observed band.
+    # Everything else (AGN, radio, X-ray) carries its own attenuation already.
+    stellar = state.derived.get("stellar_restband_lnu_precomp")
+    nebular = state.derived.get("nebular_restband_lnu_precomp")
+    stellar = stellar if stellar is not None else jnp.zeros_like(total)
+    nebular = nebular if nebular is not None else jnp.zeros_like(total)
+    unattenuated = total - stellar - nebular
+
+    a_bc = state.derived.get("dust_bc_restband_attenuation_precomp")
+    a_diff = state.derived.get("dust_diff_restband_attenuation_precomp")
+    a_single = state.derived.get("dust_restband_attenuation_precomp")
+    sub_per_age = state.derived.get("stellar_restband_lnu_per_age_subband_precomp")
+    y_age = state.derived.get("dust_young_indicator")
+
+    if a_bc is not None and a_diff is not None:
+        # Two-component (Charlot & Fall): T(a, λ) = T_diff(λ)·T_bc(λ)^y(a).
+        a_bc_sub = state.derived.get("dust_bc_restband_attenuation_subband_precomp")
+        a_diff_sub = state.derived.get("dust_diff_restband_attenuation_subband_precomp")
+        if a_bc_sub is not None and sub_per_age is not None and y_age is not None:
+            # K-point quadrature across the rest band — the screen is EVALUATED at
+            # each node, not extrapolated from the pivot (#1122).
+            t_sub = a_diff_sub * a_bc_sub ** y_age[:, None, None]
+            stellar_att = jnp.sum(sub_per_age * t_sub, axis=(0, 2))
+        else:
+            stellar_att = a_diff * a_bc * stellar
+        # Nebular arises in the HII regions around the youngest stars, so it sees the
+        # full young-limit screen (y=1), matching the exact path.
+        return stellar_att + a_diff * a_bc * nebular + unattenuated
+
+    if a_single is not None:
+        a_sub = state.derived.get("dust_restband_attenuation_subband_precomp")
+        if a_sub is not None and sub_per_age is not None:
+            stellar_att = jnp.sum(sub_per_age * a_sub, axis=(0, 2))
+        else:
+            stellar_att = a_single * stellar
+        return stellar_att + a_single * nebular + unattenuated
+
+    return total
 
 
 @dataclasses.dataclass(frozen=True)
@@ -545,6 +639,7 @@ class Observation:
 
         wave_rest = sed_result.wavelength / (1.0 + z)
         wave_obs = self.spectroscopy.wave_obs
+        conserving = self.spectroscopy.resolve_conserving(sed_result.wavelength)
         flux = project_spectrum(
             sed_result.sed,
             wave_rest,
@@ -556,6 +651,8 @@ class Observation:
             sigma_v_kms=sigma_v_kms,
             cal_coeffs=cal_coeffs,
             cal_wave_range=self.spectroscopy.calibration_wave_range,
+            conserving=conserving,
+            resolution_matrix=self.spectroscopy.resolution_matrix,
         )
         return flux
 
@@ -664,13 +761,17 @@ class Observation:
         # absent (structural no-op) when IGM is disabled, so low-z / IGM-off
         # models are bit-unchanged.
         #
-        # ``sed_atten`` feeds the spectroscopy and rest-frame-photometry blocks.
-        # The observed-photometry block does NOT use it: ``project_photometry``
-        # reads ``state.sed_intrinsic`` and applies the same transmission itself,
-        # so that arbitrary post-build filters (``Prediction.photometry
-        # (filters=...)``) go through the identical kernel instead of a copy that
-        # could silently omit the IGM factor. Handing it ``sed_atten`` would
-        # square the transmission.
+        # ``sed_atten`` feeds the spectroscopy block ONLY — that is an observed-frame
+        # channel, where the absorber belongs.
+        #
+        # The observed-photometry block does NOT use it: ``project_photometry`` reads
+        # ``state.sed_intrinsic`` and applies the same transmission itself, so that
+        # arbitrary post-build filters (``Prediction.photometry(filters=...)``) go
+        # through the identical kernel instead of a copy that could silently omit the
+        # IGM factor. Handing it ``sed_atten`` would square the transmission.
+        #
+        # The rest-frame-photometry block does NOT use it either (#1115): the IGM is a
+        # line-of-sight absorber, not part of the galaxy's rest-frame SED. See there.
         igm_trans = (
             state.derived.get("igm_transmission", None) if state.derived is not None else None
         )
@@ -700,6 +801,7 @@ class Observation:
                 else self.spectroscopy.sigma_lib_kms
             )
             n_bins = lsf_n_bins if lsf_n_bins is not None else self.spectroscopy.lsf_n_bins
+            conserving = self.spectroscopy.resolve_conserving(state.wave)
             flux = project_spectrum(
                 sed_spec,
                 wave_rest,
@@ -712,6 +814,8 @@ class Observation:
                 sigma_v_kms=sigma_v_kms,
                 cal_coeffs=self.spectroscopy.calibration_coeffs(params),
                 cal_wave_range=self.spectroscopy.calibration_wave_range,
+                conserving=conserving,
+                resolution_matrix=self.spectroscopy.resolution_matrix,
             )
             out["spec_fnu"] = flux
 
@@ -729,14 +833,29 @@ class Observation:
 
                 dl_rest = TEN_PC_CM  # 10 pc in cm
                 n_real = self.photometry.n_filters
-                # ``sed_atten``, not ``sed_rest``: this block consumed the
-                # IGM-attenuated SED before the projector extraction, and this
-                # method's contract is bit-identical output. Whether rest-frame
-                # absolute photometry *should* carry an observed-frame absorption
-                # is a separate physics question — not one to settle silently
-                # inside a refactor.
+                # ``sed_rest``, NOT ``sed_atten`` (#1115). ``phot_rest_fnu`` is the
+                # SED reprojected at z=0, d_L=10 pc — the galaxy as it is. The IGM is
+                # a line-of-sight absorber *between us and the source*; it is not part
+                # of the galaxy's rest-frame SED. Feeding the attenuated SED here made
+                # an object's absolute magnitude depend on how far away it happens to
+                # be. (The galaxy's own LyC absorption — ``neb_fesc``, dust — already
+                # lives in ``sed_rest`` and correctly stays.)
+                #
+                # This projects at z=0, so the filter's OWN wavelengths are read as
+                # REST wavelengths, and T is stored on the rest grid as
+                # T(λ_rest·(1+z)). The corruption was therefore confined to filters
+                # with support at rest λ < 1216 Å — blueward of Lyα, where Madau/Inoue
+                # absorption begins — and the (1+z) cancels, so that boundary is
+                # redshift-invariant while its depth is not. Measured on a rest-900 Å
+                # band: −5.2 % at z=1, −30.0 % at z=3, −95.9 % (≈ −3.5 mag) at z=6.
+                #
+                # Zero-diff for every shipped filter (the bluest, GALEX FUV, starts at
+                # 1341 Å and has no throughput below Lyα) — which is exactly why it
+                # lands now, before a Lyman-continuum band added for escape-fraction
+                # work quietly returns an answer that scales with source redshift.
+                # ``predict_via_precomp`` already did this; the two paths now agree.
                 phot_rest = compute_flux_density_batch(
-                    sed_atten,
+                    sed_rest,
                     wave_rest,
                     self.photometry._fw_padded,
                     self.photometry._ft_padded,
@@ -1016,14 +1135,14 @@ class Observation:
 
         z = jnp.asarray(params.get("redshift", 0.0))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        cosmology = (1.0 + z) / (4.0 * jnp.pi * dl_cm**2)
-        phot_fnu = total_lnu * cosmology
+        log10_cos = jnp.log10(1.0 + z) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        phot_fnu = apply_log10_scale(total_lnu, log10_cos)
 
-        # phot_rest_fnu: same LUT sum projected at z=0, d_L=10pc.
+        # phot_rest_fnu: the SED reprojected at z=0, d_L=10 pc — the galaxy as it is.
         from tengri.utils.physics_constants import TEN_PC_CM
 
         cosmology_rest = 1.0 / (4.0 * jnp.pi * TEN_PC_CM**2)
-        phot_rest_fnu = total_lnu * cosmology_rest
+        phot_rest_fnu = _restband_lnu(state) * cosmology_rest
 
         # IGM / DLA attenuation. The IGM component publishes its full
         # transmission curve on the dense rest grid even under WavePrecomp, so
@@ -1082,7 +1201,9 @@ class Observation:
                 # before; the stellar continuum dominates the broadband and is now
                 # the accurate term.
                 other_lnu = total_lnu - stellar_attenuated
-                phot_fnu = (other_lnu * igm_factor + stellar_attenuated_igm) * cosmology
+                phot_fnu = apply_log10_scale(
+                    other_lnu * igm_factor + stellar_attenuated_igm, log10_cos
+                )
             else:
                 phot_fnu = phot_fnu * igm_factor
 
@@ -1188,8 +1309,8 @@ class Observation:
         # Apply cosmology: observed F_ν = L_ν / (4π·d_L²) × (1 + z)
         z = jnp.asarray(params.get("redshift", 0.0))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        cosmology = (1.0 + z) / (4.0 * jnp.pi * dl_cm**2)
-        spec_fnu = total_spec_lnu * cosmology
+        log10_cos = jnp.log10(1.0 + z) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        spec_fnu = apply_log10_scale(total_spec_lnu, log10_cos)
 
         # spec_rest_fnu: same LUT sum projected at z=0, d_L=10pc.
         from tengri.utils.physics_constants import TEN_PC_CM

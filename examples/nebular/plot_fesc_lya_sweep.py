@@ -29,19 +29,19 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 SFH = {
     "type": "dpl",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "alpha": 3.0,
     "beta": 2.0,
     "tau_gyr": 0.3,
     "log_total_mass": 10.0,
 }
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1}
 
 model = tengri.SEDModel.build(
     ssp,
     sfh=SFH,
     dust=DUST,
-    neb={"type": "cue", "*": tengri.FIXED, "fesc_lya": tengri.Uniform(0.0, 1.0)},
+    neb={"type": "cue", "all_params": tengri.FIXED, "fesc_lya": tengri.Uniform(0.0, 1.0)},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -55,10 +55,10 @@ ymax = 0.0
 ymin = np.inf
 for fesc_lya in fesc_lya_values:
     params = {**baseline, "neb_fesc_lya": jnp.float64(fesc_lya)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     vis = (wave > 1100) & (wave < 1300)
     ymax = max(ymax, float(np.max(nu_l_nu[vis])))
     pos = nu_l_nu[vis][nu_l_nu[vis] > 0]

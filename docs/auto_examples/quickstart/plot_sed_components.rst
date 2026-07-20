@@ -19,7 +19,7 @@
 
 
 Dust attenuation across the SED: intrinsic, attenuated, and absorbed
-===================================================================
+====================================================================
 
 Build a model with both stellar and dust components. Predict the full SED
 with attenuation, then predict without dust absorption to isolate the
@@ -36,19 +36,8 @@ removes from the intrinsic stellar continuum.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -79,7 +68,7 @@ removes from the intrinsic stellar continuum.
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": 5.0,
             "width_gyr": 2.0,
@@ -89,7 +78,7 @@ removes from the intrinsic stellar continuum.
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 1.0,
             "tau_diff": 0.5,
             "slope": -0.7,
@@ -98,11 +87,11 @@ removes from the intrinsic stellar continuum.
     )
 
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    sed_total = np.array(model.predict_rest_sed(params).sed)
+    sed_total = np.array(model.predict(params).rest_sed())
     sed_intrinsic = np.array(
-        model.predict_rest_sed(
+        model.predict(
             {**params, "dust_tau_bc": jnp.array(0.0), "dust_tau_diff": jnp.array(0.0)}
-        ).sed
+        ).rest_sed()
     )
 
     wave_um = np.array(model.ssp_data.ssp_wave) / 1e4

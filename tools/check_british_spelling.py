@@ -69,12 +69,18 @@ ALLOWED_TOKENS = frozenset(
     {
         "ionisation_parameter",  # Synthesizer grid HDF5 axis key
         "log10_specific_ionising_luminosity",  # Synthesizer grid HDF5 dataset key
+        "Modelling",  # verbatim paper title — Temple, Hewett & Banerji 2021, MNRAS 508, 737
     }
 )
 
 # ---- American-invariant words the rules would otherwise mangle ----
 INVARIANT = frozenset(
     {
+        # -ise words that are American English, not British variants. The -ise
+        # -> -ize rule mangles them: it "corrects" disguise -> disguize.
+        "disguise",
+        "disguised",
+        "disguises",
         "noise",
         "noised",
         "noises",

@@ -14,54 +14,63 @@
 # ---
 
 # %% [markdown]
-# # Recovering a bursty star-formation history from joint UV–NIR photometry + an optical spectrum
+# # Recovering a bursty star-formation history from emission-line fluxes + photometry
 #
-# > ⚠️ **Experimental.** This notebook is a research demonstration. It
-# > explores experimental features and may use APIs that change between
-# > releases; it sits outside the supported tutorial sequence.
+# > ⚠️ **Experimental.** A research demonstration that explores experimental
+# > features and may use APIs that change between releases; it sits outside the
+# > supported tutorial sequence.
 #
-# A star-forming galaxy observed two ways at once: **10 broadband fluxes**
-# (GALEX FUV/NUV + SDSS *ugriz* + 2MASS *JHKs*) and an **800-pixel optical
-# spectrum** (rest 3000–8636 Å, R≈2000). Fitted jointly with a **stochastic**
-# SFH model and geometric variational inference (geoVI) on a differentiable
-# JAX forward model.
+# **The question.** tengri models a galaxy's star-formation history (SFH) as a
+# smooth backbone times a stochastic **Gaussian-process "field"** — coherent
+# bursts drawn from a damped-random-walk power spectrum. Does that field SFH
+# actually *recover* when we inject a known one and fit it back? And how do the
+# cheap approximate samplers behave as we grow the SFH dimension?
 #
-# The mean SFH is a **mass-normalized double power law** (Carnall et al. 2018)
-# — here a **rising** history still forming stars at the present day —
-# modulated by a **Gaussian-process "field"** whose power spectral density is
-# a damped random walk:
+# **The model.** A **rising, still-star-forming double power law** (Carnall et al.
+# 2018) — *not* a quiescent galaxy — modulated by the GP field:
 #
 # $$
 # \mathrm{SFR}(t) = \mathrm{SFR}_{\mathrm{DPL}}(t)\,\bigl[\log M_\star\bigr]
-#                   \times \exp\!\bigl(\mathrm{GP}(t)\bigr),
+#                   \times \exp\!\bigl(\mathrm{GP}(t) - \tfrac12 K_0\bigr),
 # \qquad
 # P(\omega) = \frac{\sigma_{\mathrm{PSD}}^2\,\tau_{\mathrm{PSD}}}
 #                  {1 + (\tau_{\mathrm{PSD}}\,\omega)^2}.
 # $$
 #
-# **Why joint?** An optical spectrum alone leaves a strong **dust ↔ SFR
-# degeneracy** ("more dust + more star formation" mimics "less dust + less").
-# The **GALEX UV** points pin the attenuation slope and break it — so the
-# stellar mass, dust, and the SFH are all recovered, not just the SFH shape.
+# The field lives on a log-age grid of `n_grid` points, so **the SFH dimension is
+# `n_grid`**: the latent vector `sfh_field_xi ∈ ℝ^{n_grid}` is what inference must
+# pin down, on top of ~9 physical parameters.
 #
-# Nebular emission is **baked into the SSP** (a wNE library — cheap, no Cue
-# emulator), dust is Calzetti **attenuation only**, no IGM, redshift fixed at
-# z = 0.1. The SSP × wavelength integrals are precomputed via
-# `approx=SpectrumPrecomp()`, so each forward evaluation is a cached weighted
-# sum. The GP field adds 128 latent dimensions on top of the physical ones.
+# **The observable: emission-line fluxes + broadband photometry.** A single
+# galaxy's broadband SED alone cannot recover a *recent, bursty* SFH — the young
+# light is degenerate with dust and drowned by the older population (Wang et al.
+# 2025). The **Balmer and forbidden lines** trace the last few Myr of star
+# formation directly, so we fit **measured line fluxes** (Hα, Hβ, [OIII], [SII],
+# [OII]) jointly with 10 broadband bands. Nebular emission is **baked into the
+# SSP** (a wNE library), so the lines are *measured off the model spectrum* the
+# way a pipeline measures data — no separate emission model.
 #
-# **Outline:**
+# **Staged, simplest-first.** We start small and only escalate once each rung
+# holds:
 #
-# 1. Library, joint observation (photometry + spectroscopy), precompute
-# 2. Build the stochastic model
-# 3. A star-forming mock: matched photometry + spectrum
-# 4. MAP + geoVI inference on the joint data
-# 5. SFH recovery (the money figure) + last-200-Myr zoom
-# 6. Fit quality — photometry and spectrum
-# 7. Posteriors for the non-SFH parameters (dust corner) + recovery table
+# 1. **Stage 0** — one galaxy at a *small* dimension (`n_grid=16`, D=25): a **MAP**
+#    fit (does the mode land on the truth?) then a **dense-mass HMC** posterior
+#    (long trajectory; full NUTS confirms the same recovery, ~8× slower). The bar
+#    is binary — the injected SFH sits inside the credible bands, so the field
+#    prior is *not broken*.
+# 2. **Stage 1** — a few catalog galaxies at a modestly higher dimension.
+# 3. **Stage 2** — the full 16-galaxy catalog × {NUTS, geoVI, raytracer} × the
+#    `n_grid` ladder — a companion script,
+#    `scripts/stochastic_sfh_dimension_scaling.py` (one fit per process, OOM-guarded).
+#
+# **Speed knob.** `approx=WavePrecomp()` puts the photometry on a lookup table.
+# The lines are measured on the **exact** field forward — `FeaturePrecomp`'s fast
+# line path assumes a non-field SFH and does not apply to the GP field.
 
 # %%
 import contextlib
+import os
+import sys
 import time
 import warnings
 
@@ -70,21 +79,13 @@ import jax.numpy as jnp
 
 jax.config.update("jax_enable_x64", True)
 
-import os
-import sys
-
 import matplotlib.pyplot as plt
 import numpy as np
 
 
 @contextlib.contextmanager
 def silence():
-    """Mute NIFTy's per-iteration geoVI solver log.
-
-    NIFTy writes its OPTIMIZE_KL / SN / MCG progress straight to the stderr
-    file descriptor (not via Python logging or the backend's ``verbose``
-    flag), so we redirect fds 1/2 to ``/dev/null`` for the duration of the fit.
-    """
+    """Mute NIFTy's per-iteration geoVI solver log (writes straight to fd 1/2)."""
     dn = os.open(os.devnull, os.O_WRONLY)
     o1, o2 = os.dup(1), os.dup(2)
     try:
@@ -100,17 +101,19 @@ def silence():
 
 
 warnings.filterwarnings("ignore", message=r".*Fitter\(sed_model.*deprecated.*")
+# age_gyr=12 at z=0.1 forms ~1% of mass just before the Big Bang (truncated); benign here.
+warnings.filterwarnings("ignore", message=r".*before the Big Bang.*")
 
 sys.path.insert(0, ".")
-from _plot_style import COLORS, setup_style  # noqa: E402
+from _plot_style import setup_style
 
 setup_style()
 os.makedirs("figures", exist_ok=True)
 
-from pathlib import Path  # noqa: E402
+from pathlib import Path
 
-import tengri  # noqa: E402
-from tengri import (  # noqa: E402
+import tengri
+from tengri import (
     FREE,
     Fitter,
     Fixed,
@@ -118,22 +121,32 @@ from tengri import (  # noqa: E402
     Observation,
     Photometry,
     SEDModel,
-    Spectroscopy,
-    SpectrumPrecomp,
+    WavePrecomp,
     builders,
     load_ssp_data,
 )
+from tengri.analysis.plotting import plot_sfh
+from tengri.observation import LineFluxData
+from tengri.observation.line_measurement import default_line_defs
 
 C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 
+# ── Experiment knobs ──────────────────────────────────────────────────────
+Z_SPEC = 0.1  # fixed redshift for the mock catalog
+N_GRID = 16  # Stage-0 SFH dimension (D = n_grid + 9 physical)
+N_CAT = 218  # size of the prior-drawn mock catalog
+N_FIT = 16  # the first-N slice we materialize data for / fit
+PHOT_SNR = 20.0  # per-band photometric SNR
+LINE_SNR = 10.0  # per-line flux SNR
+
 # %% [markdown]
-# ## Section 1: Library, joint observation, precompute
+# ## Section 1: Library, observation (photometry + line fluxes), model
 #
-# A **wNE** SSP grid bakes nebular emission in, so the Balmer/forbidden lines
-# that trace recent star formation are modeled for free. The observation is
-# **joint**: 10 broadband filters (GALEX UV → 2MASS NIR) plus an 800-pixel
-# R≈2000 optical spectrum. `approx=SpectrumPrecomp()` precomputes the SSP ×
-# wavelength integrals once.
+# A **wNE** SSP grid bakes nebular emission in, so the Balmer/forbidden lines that
+# trace recent star formation are modeled for free. The observation is **10
+# broadband bands** (GALEX UV → 2MASS NIR) plus **measured emission-line fluxes**.
+# `approx=WavePrecomp()` puts the photometry on a lookup table; the lines ride on
+# the exact field forward.
 
 # %%
 SSP_NAME = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0"
@@ -145,8 +158,6 @@ print(
     f"SSP: {ssp_data.ssp_flux.shape[0]} Z x {ssp_data.ssp_flux.shape[1]} ages "
     f"x {ssp_data.ssp_flux.shape[-1]} lambda  (nebular baked in)"
 )
-
-Z_SPEC = 0.1
 
 # Photometry: GALEX UV (dust!) + SDSS optical + 2MASS NIR.
 PHOT_BANDS = [
@@ -163,455 +174,429 @@ PHOT_BANDS = [
 ]
 phot = Photometry.from_names(PHOT_BANDS)
 
-# Spectroscopy: rest 3000-8636 A at z=0.1, 800 pixels, R=2000.
-N_PIX = 800
-wave_rest = jnp.logspace(np.log10(3000.0), np.log10(8636.0), N_PIX)
-wave_obs = wave_rest * (1.0 + Z_SPEC)
-spec_config = Spectroscopy(
-    wave_obs=wave_obs,
-    resolution=2000.0,
-    sigma_lib_kms=70.0,
-    lsf_n_bins=16,
-    calibration_order=0,
-    eline_mode="off",  # lines come from the baked-in SSP
-)
+# Strong star-forming optical lines. We drop Hγ / [NII], which sit atop stellar
+# Balmer absorption and measure near zero for these SFHs (their SNR-scaled errors
+# would then dominate the χ² with pure noise).
+LINE_NAMES = [
+    "Halpha",
+    "Hbeta",
+    "OIII_5007",
+    "OIII_4959",
+    "SII_6717",
+    "SII_6731",
+    "OII_3726",
+    "OII_3729",
+]
+# A template LineFluxData fixes the line identities/wavelengths the model is fit
+# against; the observed values are overwritten per galaxy below.
+line_template = LineFluxData.from_dict({nm: (1e-16, 1e-17) for nm in LINE_NAMES})
+line_defs = default_line_defs(np.asarray(line_template.wavelengths), tuple(line_template.names))
+
 noise_model = NoiseModel(calibration_floor=0.01, student_t_dof=None)
 
-obs_joint = Observation(photometry=phot, spectroscopy=spec_config, noise=noise_model)
-print(f"Joint observation: {phot.n_filters} photometry bands + {N_PIX} spectral pixels")
 
-# %% [markdown]
-# ## Section 2: The stochastic model
-#
-# `sfh={"type": ["dpl", "field"]}` — a mass-normalized DPL backbone plus the GP
-# field. Metallicity is held fixed (an independent prior); the 128-D field
-# would otherwise soak up the age-sensitive features and reopen the age/Z/dust
-# degeneracy. We build a joint model for the fit, plus photometry-only and
-# spectroscopy-only models to synthesize the matched mock.
+def build(line_fluxes, n_grid=N_GRID):
+    """Build the joint phot + line-flux stochastic SFH model.
 
-
-# %%
-def build(observation):
+    Rising DPL backbone + GP field (all free), fixed metallicity, two-component
+    Calzetti dust, baked-in (wNE) nebular, fixed z. Photometry on the WavePrecomp
+    LUT; lines measured on the exact field forward.
+    """
     return SEDModel.build(
         ssp_data=ssp_data,
-        observation=observation,
+        observation=Observation(photometry=phot, line_fluxes=line_fluxes, noise=noise_model),
         sfh={"type": ["dpl", "field"], "*": FREE},
         stellar={"met_logzsol": Fixed(-0.3)},
         dust=builders.dust.two_component(defaults=FREE, law_bc="calzetti"),
         neb=builders.neb.ssp(),
         redshift=Fixed(Z_SPEC),
         apply_igm=False,
-        n_grid=128,
-        approx=SpectrumPrecomp(),
+        n_grid=n_grid,
+        approx=WavePrecomp(),
     )
 
 
-model = build(obs_joint)
-model_phot = build(Observation(photometry=phot, noise=noise_model))
-model_spec = build(Observation(spectroscopy=spec_config, noise=noise_model))
-
+model = build(line_template)
 spec = model.spec
 fixed_values = spec.get_fixed_values()
-print(f"Free physical parameters: {spec.n_free}")
-print(f"GP latent dimensions:     {spec.n_grid}")
-print(f"Free parameters: {spec.free_params}")
+print(f"Observation: {phot.n_filters} bands + {len(LINE_NAMES)} line fluxes")
+print(
+    f"SFH dimension D = {spec.n_free} physical + {spec.n_grid} field = {spec.n_free + spec.n_grid}"
+)
+print(f"Free physical parameters: {spec.free_params}")
 
 # %% [markdown]
-# ## Section 3: A star-forming mock — matched photometry + spectrum
+# ## Section 2: A star-forming truth template
 #
-# Truth: a **rising**, still star-forming galaxy. The DPL backbone peaks near
-# the present epoch ($\tau = 13$ Gyr, so we sit on the rising $\beta$ branch at
-# $z=0.1$); its **mean** rate is anchored to **20 M⊙/yr at lookback 0**, with a
-# bursty GP field ($\sigma_{\mathrm{PSD}}=0.3$ dex, $\tau_{\mathrm{PSD}}=200$ Myr
-# — the molecular-cloud decorrelation time of Tacchella, Forbes & Caplar 2020)
-# modulating that mean; near-solar metallicity, modest dust. The same truth
-# synthesizes both the photometry and the spectrum.
+# The backbone is a **rising** DPL still forming stars at the present day (age =
+# 12 Gyr, τ = 13 Gyr just past the present, so we sit on the rising β branch at
+# z = 0.1). The GP field (σ_PSD = 0.3 dex, τ_PSD = 200 Myr — the molecular-cloud
+# decorrelation time of Tacchella, Forbes & Caplar 2020) rides on top. We anchor
+# the *mean* rate to a target present-day SFR by rescaling the mass-normalized
+# DPL, which leaves the rising shape intact.
 
 # %%
-truth = spec.sample(jax.random.PRNGKey(2026))
-truth = {
-    **truth,
-    "sfh_dpl_alpha": jnp.array(2.0),
-    "sfh_dpl_beta": jnp.array(1.5),
-    # Carnall+2018 DPL in cosmic-time-since-formation (tengri #549): SFR peaks at
-    # T = tau, present day is T = age_gyr. Galaxy forms early (age = 12 Gyr, ~0.5
-    # Gyr after the Big Bang at z=0.1) and the peak (tau = 13 Gyr) lies just past
-    # the present, so the mean SFH is still rising at lookback 0.
-    "sfh_dpl_age_gyr": jnp.array(12.0),
-    "sfh_dpl_tau_gyr": jnp.array(13.0),
-    "sfh_dpl_log_total_mass": jnp.array(11.0),
-    "sfh_field_psd_sigma": jnp.array(0.3),
-    "sfh_field_psd_tau_myr": jnp.array(200.0),
-    "met_logzsol": jnp.array(-0.3),
+DPL_TEMPLATE = {
+    "sfh_dpl_alpha": 2.0,
+    "sfh_dpl_beta": 1.5,
+    "sfh_dpl_age_gyr": 12.0,
+    "sfh_dpl_tau_gyr": 13.0,
+}
+MET_FIXED = -0.3
+
+# Star-forming population prior for the mock truths. Physically-typical *modest*
+# dust and *moderate* burstiness: the wide fitting prior can draw heavily-dusty
+# galaxies whose phot+line SEDs are genuinely age/dust/SFR-degenerate, so a
+# recovery test injects a realistic population and fits it with the model's wider
+# prior. (The dimension sweep uses the same population.)
+DUST_BC_RANGE = (0.1, 0.5)
+DUST_DIFF_RANGE = (0.05, 0.35)
+SIGMA_RANGE = (0.1, 0.5)
+TAU_MYR_RANGE = (50.0, 400.0)
+SFR0_RANGE = (3.0, 40.0)
+
+
+def _present_index(t_gyr):
+    """Present epoch = smallest lookback time (convention-robust, tengri #549)."""
+    return int(np.argmin(np.asarray(t_gyr)))
+
+
+def anchor_mass_to_sfr(base_truth, target_sfr0):
+    """Return log_total_mass that sets the mean (backbone) present-day SFR to target.
+
+    ``sfr_mean`` is the field-independent DPL backbone, so one rescale hits the
+    target exactly while leaving the rising shape and the field bursts intact.
+    """
+    sfh = model.predict_sfh({**fixed_values, **base_truth})
+    p = _present_index(sfh["t_gyr"])
+    sfr0 = float(np.asarray(sfh["sfr_mean"])[p])
+    if not np.isfinite(sfr0) or sfr0 <= 0.0:
+        raise ValueError(f"backbone present-day SFR = {sfr0}; cannot anchor a rising DPL.")
+    return float(base_truth["sfh_dpl_log_total_mass"]) + float(np.log10(target_sfr0 / sfr0))
+
+
+# %% [markdown]
+# ## Section 3: A mock catalog drawn from the population prior
+#
+# We draw `N_CAT` star-forming galaxies: each gets a **fresh field realization**
+# (`sfh_field_xi ~ N(0, I)`) and population-prior draws of burstiness (σ_PSD,
+# τ_PSD), dust, and mean SFR, with the DPL backbone **fixed star-forming**. The
+# data are the *same* observable the fit sees — photometry at SNR ≈ 20 and line
+# fluxes measured off the model spectrum at SNR ≈ 10. We materialize (and save)
+# the first `N_FIT` line-emitting galaxies as the shared input for the dimension
+# sweep.
+
+
+# %%
+def draw_truth(seed):
+    """Draw one star-forming mock truth from the population prior."""
+    k_xi, k_bc, k_diff, k_sig, k_tau, k_sfr = jax.random.split(jax.random.PRNGKey(seed), 6)
+    drawn = spec.sample(k_xi)  # fresh field xi ~ N(0, I)
+
+    def _u(k, lo, hi):
+        return float(jax.random.uniform(k, minval=lo, maxval=hi))
+
+    truth = {
+        **drawn,
+        **{k: jnp.array(v) for k, v in DPL_TEMPLATE.items()},  # fixed SF backbone
+        "sfh_dpl_log_total_mass": jnp.array(11.0),
+        "met_logzsol": jnp.array(MET_FIXED),
+        "dust_tau_bc": jnp.array(_u(k_bc, *DUST_BC_RANGE)),
+        "dust_tau_diff": jnp.array(_u(k_diff, *DUST_DIFF_RANGE)),
+        "sfh_field_psd_sigma": jnp.array(_u(k_sig, *SIGMA_RANGE)),
+        "sfh_field_psd_tau_myr": jnp.array(_u(k_tau, *TAU_MYR_RANGE)),
+    }
+    target_sfr0 = float(10.0 ** _u(k_sfr, np.log10(SFR0_RANGE[0]), np.log10(SFR0_RANGE[1])))
+    truth["sfh_dpl_log_total_mass"] = jnp.array(anchor_mass_to_sfr(truth, target_sfr0))
+    return truth
+
+
+def synthesize(truth, seed):
+    """Photometry (SNR 20) + measured line fluxes (SNR 10) for one truth."""
+    truth_full = {**fixed_values, **truth}
+    mp = model.mock(truth_full, snr=PHOT_SNR, key=jax.random.PRNGKey(seed + 10_000))
+    flux_phot, noise_phot = np.asarray(mp.flux_obs), np.asarray(mp.noise)
+    lf_true = np.asarray(model.measure_line_fluxes(truth_full, line_defs, fast=False))
+    lf_err = np.abs(lf_true) / LINE_SNR
+    rng = np.random.default_rng(seed + 20_000)
+    lf_obs = lf_true + lf_err * rng.standard_normal(lf_true.shape)
+    return flux_phot, noise_phot, lf_obs, lf_err, lf_true
+
+
+prior_truths = [draw_truth(s) for s in range(N_CAT)]
+print(f"Drew {len(prior_truths)} star-forming mock truths from the prior.")
+
+# Keep the first N_FIT prior-drawn galaxies whose Hα is in *emission*. A down-burst
+# in the field can suppress recent SF into net Balmer absorption; a star-forming,
+# line-emitting catalog filters those rare cases out (the #1152 near-zero-line trap).
+catalog, truths, skipped = [], [], 0
+for i in range(N_CAT):
+    fp, npn, lo, le, lt = synthesize(prior_truths[i], i)
+    if lt[LINE_NAMES.index("Halpha")] <= 0:
+        skipped += 1
+        continue
+    catalog.append(dict(flux_phot=fp, noise_phot=npn, line_obs=lo, line_err=le, line_true=lt))
+    truths.append(prior_truths[i])
+    if len(catalog) == N_FIT:
+        break
+print(
+    f"Kept {len(catalog)} line-emitting galaxies "
+    f"(skipped {skipped} with Hα in net absorption) — phot + {len(LINE_NAMES)} lines."
+)
+
+# Persist the fitted slice (truths + data) so the sweep script can reuse it.
+np.savez(
+    "figures/stochastic_catalog.npz",
+    line_names=np.array(LINE_NAMES),
+    line_waves=np.asarray(line_template.wavelengths),
+    **{f"g{i}_{k}": np.asarray(v) for i, g in enumerate(catalog) for k, v in g.items()},
+    **{
+        f"g{i}_truth_{k}": np.asarray(v)
+        for i in range(len(catalog))
+        for k, v in {kk: truths[i][kk] for kk in spec.free_params}.items()
+    },
+)
+print("Saved figures/stochastic_catalog.npz")
+
+# %% [markdown]
+# ## Section 4: Stage 0 — does it recover? (one galaxy, n_grid=16)
+#
+# **Does the field SFH recover *at all*?** We answer with a **controlled fiducial**
+# — a modest-dust (τ_diff = 0.2), moderate-burstiness (σ_PSD = 0.3) star-forming
+# galaxy — where per-galaxy recovery is clean and *validated* (the same truth
+# recovers with both a full NUTS run and the HMC below). Recovery is **not uniform
+# across the population**: heavy dust or strong bursts let the free field + dust
+# soak up an old-vs-young backbone ambiguity — a young+dusty galaxy mimics an
+# old+rising one at χ² ≈ 1 — so the detailed SFH *shape* degrades even while the
+# mean SFR and burst amplitude stay robust. That per-galaxy fragility, and how it
+# scales with dust, burstiness, and dimension D, is what the Section 6 sweep and
+# hierarchical inference address.
+#
+# **MAP** first (multi-start ADAM — does the mode land on the truth?), then a
+# **dense-mass HMC** posterior. With only ~18 data points constraining a 25-D
+# model, the honest posterior is **wide and correlated** (mass ↔ SFR, τ_BC ↔ recent
+# SFR), so exploring it needs a **long trajectory**: `n_leapfrog_steps=100`
+# reproduces the full-NUTS result (the injected SFH inside the bands) at a fraction
+# of the cost — adaptive NUTS confirms the same recovery but builds very deep trees
+# and runs ~8× slower — while a *short* trajectory (L ≈ 25) gets stuck near the mode
+# and returns deceptively tight, overconfident bands. The bar is binary: the
+# injected SFH inside the credible bands, σ_PSD not railed.
+
+# %%
+# Controlled fiducial (see the note above): modest dust, moderate burstiness, mean
+# SFR anchored to 20 M⊙/yr, validated to recover cleanly. The prior catalog above
+# spans harder cases; the Section 6 sweep quantifies how recovery degrades.
+fiducial = {
+    **spec.sample(jax.random.PRNGKey(2026)),  # a field realization
+    **{k: jnp.array(v) for k, v in DPL_TEMPLATE.items()},
+    "met_logzsol": jnp.array(MET_FIXED),
     "dust_tau_bc": jnp.array(0.3),
     "dust_tau_diff": jnp.array(0.2),
+    "sfh_field_psd_sigma": jnp.array(0.3),
+    "sfh_field_psd_tau_myr": jnp.array(200.0),
+    "sfh_dpl_log_total_mass": jnp.array(11.0),
 }
+fiducial["sfh_dpl_log_total_mass"] = jnp.array(anchor_mass_to_sfr(fiducial, 20.0))
+truth = fiducial
 truth_full = {**fixed_values, **truth}
 
-# Anchor the *mean* SFH to a target present-day rate. The DPL is mass-normalized,
-# so the backbone SFR at lookback 0 scales linearly with total mass — one rescale
-# of log_total_mass hits the target exactly while leaving the rising shape intact.
-# We measure the backbone with the GP field switched off (psd_sigma -> 0 makes the
-# multiplicative field flat), because the field is a zero-mean log-perturbation
-# that adds bursts *on top* of the mean. Anchoring the mean — not a single
-# field-perturbed draw — is what keeps the demo galaxy genuinely star-forming.
-TARGET_SFR0 = 20.0  # Msun/yr at lookback 0 (the mean/backbone rate)
-# Index by the TIME AXIS, not a hard-coded array position: the present epoch is
-# always the smallest lookback time (t_gyr.argmin()), regardless of whether
-# predict_sfh returns cosmic-time or lookback order (the #549 convention fix
-# flipped that ordering). This keeps the anchor correct across conventions.
-_backbone = {**truth_full, "sfh_field_psd_sigma": jnp.array(1e-4)}
-_bb_sfh = model.predict_sfh(_backbone)
-_present = int(np.argmin(np.asarray(_bb_sfh["t_gyr"])))
-_sfr0 = float(np.asarray(_bb_sfh["sfr_full"])[_present])
-if not np.isfinite(_sfr0) or _sfr0 <= 0.0:
-    raise ValueError(
-        f"Backbone present-day SFR is {_sfr0} — cannot anchor. The DPL is "
-        "cosmic-time-since-formation (#549): present-day SFR is nonzero only if "
-        "sfh_dpl_age_gyr > 0 and the turnover (tau_gyr) places SF at lookback 0."
-    )
-truth["sfh_dpl_log_total_mass"] = truth["sfh_dpl_log_total_mass"] + jnp.log10(TARGET_SFR0 / _sfr0)
-truth_full = {**fixed_values, **truth}
+fp, npn, lo, le, lt = synthesize(truth, 2026)
+assert lt[LINE_NAMES.index("Halpha")] > 0, "fiducial Halpha not in emission"
+g = dict(flux_phot=fp, noise_phot=npn, line_obs=lo, line_err=le, line_true=lt)
+print(
+    f"Fiducial galaxy: sigma_PSD={float(truth['sfh_field_psd_sigma']):.2f}, "
+    f"tau_diff={float(truth['dust_tau_diff']):.2f}, mean SFR anchored to 20 Msun/yr"
+)
 
-mock_phot = model_phot.mock(truth_full, snr=20.0, key=jax.random.PRNGKey(1))
-mock_spec = model_spec.mock_spectrum(truth_full, wave_obs, snr=20.0, key=jax.random.PRNGKey(2))
+lfd = LineFluxData(
+    names=tuple(LINE_NAMES),
+    fluxes=jnp.asarray(g["line_obs"]),
+    errors=jnp.asarray(g["line_err"]),
+    wavelengths=line_template.wavelengths,
+)
+model_fit = build(lfd, n_grid=N_GRID)
+fitter = Fitter(model_fit, g["flux_phot"], g["noise_phot"])
 
-flux_phot = np.asarray(mock_phot.flux_obs)
-noise_phot = np.asarray(mock_phot.noise)
-flux_spec = np.asarray(mock_spec.flux_obs)
-noise_spec = np.asarray(mock_spec.noise)
-wave_obs_np = np.asarray(wave_obs)
+t0 = time.perf_counter()
+result_map = fitter.run(
+    method="map", n_steps=2000, n_restarts=6, key=jax.random.PRNGKey(0), verbose=False
+)
+t_map = time.perf_counter() - t0
 
-# Joint data vector: photometry first, then spectrum (matches the joint model).
-data_joint = np.concatenate([flux_phot, flux_spec])
-noise_joint = np.concatenate([noise_phot, noise_spec])
-n_phot = phot.n_filters
+t0 = time.perf_counter()
+result_hmc = fitter.run(
+    method="mcmc_hmc",
+    init_from=result_map,
+    n_warmup=400,
+    n_samples=300,
+    n_leapfrog_steps=100,
+    dense_mass_matrix=True,
+    key=jax.random.PRNGKey(1),
+    verbose=False,
+)
+t_hmc = time.perf_counter() - t0
+samples = result_hmc.samples
+n_total = int(next(iter(samples.values())).shape[0])
+print(f"MAP: {t_map:.1f}s")
+print(f"HMC: {t_hmc:.1f}s, {n_total} samples")
 
-# Photometric effective wavelengths (for plotting).
-wave_eff = np.array(
+# Fit quality at MAP (photometry + lines).
+map_full = {**fixed_values, **result_map.params}
+best_phot = np.asarray(model_fit.predict_photometry(map_full))
+best_lf = np.asarray(model_fit.measure_line_fluxes(map_full, line_defs, fast=False))
+resid = np.concatenate(
     [
-        np.trapezoid(w * t, w) / np.trapezoid(t, w)
-        for w, t in zip(phot.filter_waves, phot.filter_trans)
+        (g["flux_phot"] - best_phot) / g["noise_phot"],
+        (g["line_obs"] - best_lf) / g["line_err"],
     ]
 )
-
-sfh_true = model.predict_sfh(truth_full)
-_p = int(np.argmin(np.asarray(sfh_true["t_gyr"])))  # present = min lookback
-print(f"truth recent SFR: {float(np.asarray(sfh_true['sfr_full'])[_p]):.2f} Msun/yr")
-print(f"joint data: {data_joint.shape[0]} points ({n_phot} phot + {N_PIX} spec)")
-
-# %%
-fig, (axp, axs) = plt.subplots(1, 2, figsize=(13, 4.3), gridspec_kw=dict(width_ratios=[1, 1.6]))
-# Photometry (UV -> NIR), log-log.
-axp.errorbar(
-    wave_eff / 1e4,
-    flux_phot,
-    yerr=noise_phot,
-    fmt="o",
-    ms=6,
-    color=C_DATA,
-    capsize=2,
-    label="photometry (SNR≈20)",
-)
-axp.scatter(
-    wave_eff / 1e4,
-    np.asarray(mock_phot.flux_true),
-    marker="D",
-    s=28,
-    facecolors="none",
-    edgecolors="k",
-    linewidths=1.0,
-    label="truth",
-    zorder=5,
-)
-axp.set_xscale("log")
-axp.set_yscale("log")
-axp.set_xlabel(r"observed wavelength [$\mu$m]")
-axp.set_ylabel(r"$f_\nu$ [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
-axp.set_title("Broadband (GALEX → 2MASS)")
-axp.legend(fontsize=8)
-# Spectrum.
-axs.errorbar(
-    wave_obs_np,
-    flux_spec,
-    yerr=noise_spec,
-    fmt=".",
-    ms=2,
-    color=C_DATA,
-    alpha=0.6,
-    elinewidth=0.5,
-    label="spectrum (SNR≈20)",
-)
-axs.set_xlabel(r"observed wavelength [$\mathrm{\AA}$]")
-axs.set_title(f"Optical spectrum ({N_PIX} pix, R=2000)")
-axs.legend(fontsize=8)
-fig.tight_layout()
-fig.savefig("figures/sfh_spec_input.png", dpi=150, bbox_inches="tight")
-plt.show()
-
-# %% [markdown]
-# ## Section 4: MAP + geoVI on the joint data
-#
-# MAP (ADAM) finds the mode; geoVI (`method="vi"`, NIFTy geometric VI — a
-# non-Gaussian, coordinate-transformed approximation) does the full posterior.
-# The fit runs inside `silence()` so NIFTy's per-iteration solver log doesn't
-# flood the output.
-
-# %%
-fitter = Fitter(model, data_joint, noise_joint)
-
-with silence():
-    t0 = time.perf_counter()
-    result_map = fitter.run(method="map", n_steps=600, key=jax.random.PRNGKey(0), verbose=False)
-    t_map = time.perf_counter() - t0
-
-    t0 = time.perf_counter()
-    # vi_nonlinear_fast: identical geoVI math to method="vi", but the fast path
-    # skips NIFTy's logging/pickling and uses the JIT-engine posterior sampler
-    # (~35% faster). 20 iterations is where this posterior has converged —
-    # 35 gave the same recovery at ~2x the wall-time.
-    result_vi = fitter.run(
-        method="vi_nonlinear_fast",
-        init_from=result_map,
-        n_iterations=20,
-        n_samples=3,
-        n_posterior_samples=1500,
-        key=jax.random.PRNGKey(1),
-        verbose=False,
-    )
-    t_vi = time.perf_counter() - t0
-
-samples = result_vi.samples
-n_total = next(iter(samples.values())).shape[0]
-print(f"MAP:   {t_map:.1f}s")
-print(f"geoVI: {t_vi:.1f}s, {n_total} posterior samples")
+chi2_n = float(np.sum(resid**2) / resid.size)
+print(f"chi2/N (MAP, phot+lines) = {chi2_n:.2f}")
 
 np.savez(
-    "figures/sfh_spec_samples.npz",
+    "figures/stochastic_samples.npz",
     **{k: np.asarray(v) for k, v in samples.items() if v.ndim == 1},
 )
 
 # %% [markdown]
-# ## Section 5: SFH recovery (the money figure)
-#
-# Posterior SFH draws through `predict_sfh`. The thick black line is the **mean**
-# SFH (DPL backbone); the thin red line is the **actual** SFH with the GP field
-# riding on top — coherent ~200 Myr bursts (Tacchella+2020 molecular-cloud
-# decorrelation time). Posterior median + 68/95 % bands in blue. Right panel
-# zooms the last 200 Myr.
-
+# ### Parameter recovery
 
 # %%
-def draw_params(i):
-    drawn = {k: (float(v[i]) if v.ndim == 1 else np.asarray(v[i])) for k, v in samples.items()}
-    return {**fixed_values, **drawn}
-
-
-sfh_draws = np.array(
-    [np.asarray(model.predict_sfh(draw_params(i))["sfr_full"]) for i in range(n_total)]
-)
-t_gyr = np.asarray(model.predict_sfh(draw_params(0))["t_gyr"])
-median_sfh = np.median(sfh_draws, axis=0)
-lo_68, hi_68 = np.percentile(sfh_draws, [16, 84], axis=0)
-lo_95, hi_95 = np.percentile(sfh_draws, [2.5, 97.5], axis=0)
-t_true = np.asarray(sfh_true["t_gyr"])
-sfr_true = np.asarray(sfh_true["sfr_full"])
-sfr_mean_true = np.asarray(sfh_true["sfr_mean"])
-
-# %%
-fig, (ax, ax_zoom) = plt.subplots(
-    1, 2, figsize=(12, 5), gridspec_kw=dict(width_ratios=[2.6, 1], wspace=0.05)
-)
-
-
-def _draw(a):
-    a.fill_between(t_gyr, lo_95, hi_95, color=C_POST, alpha=0.12, lw=0, label="95% CI")
-    a.fill_between(t_gyr, lo_68, hi_68, color=C_POST, alpha=0.28, lw=0, label="68% CI")
-    a.plot(t_gyr, median_sfh, color=C_POST, lw=1.8, label="posterior median")
-    # Thick mean SFH (DPL backbone) with the thin actual (field-on) truth riding on it.
-    a.plot(t_true, sfr_mean_true, color="k", lw=3.0, alpha=0.85, label="mean SFH (DPL)", zorder=9)
-    a.plot(t_true, sfr_true, color=C_DATA, lw=1.0, label="truth (field on top)", zorder=10)
-    a.set_ylim(bottom=0)
-
-
-_draw(ax)
-ax.set_xlim(0, 13.5)
-ax.set_xlabel("lookback time [Gyr]")
-ax.set_ylabel(r"SFR [$M_\odot\,\mathrm{yr}^{-1}$]")
-ax.set_title("Stochastic SFH recovery (geoVI, joint phot + spec)")
-ax.legend(fontsize=9, loc="upper right")
-txt = "\n".join(
-    [
-        r"rising DPL,  $\log M_\star^{\rm true}=11.0$",
-        r"$\sigma_{\rm PSD}^{\rm true} = 0.3$ dex",
-        r"$\tau_{\rm PSD}^{\rm true} = 200$ Myr (Tacchella+20)",
-        f"geoVI: {t_vi:.0f}s",
-    ]
-)
-ax.text(
-    0.55,
-    0.97,
-    txt,
-    transform=ax.transAxes,
-    fontsize=9,
-    va="top",
-    ha="left",
-    bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.5),
-)
-
-_draw(ax_zoom)
-ax_zoom.set_xlim(0, 0.2)
-zmask = t_gyr <= 0.2
-ax_zoom.set_ylim(0, 1.25 * float(np.max(hi_95[zmask])))
-ax_zoom.set_xlabel("lookback time [Gyr]")
-ax_zoom.set_title("last 200 Myr", fontsize=11)
-ax_zoom.yaxis.tick_right()
-ax_zoom.set_xticks([0.0, 0.1, 0.2])
-fig.tight_layout()
-fig.savefig("figures/sfh_spec_recovery.png", dpi=150, bbox_inches="tight")
-plt.show()
-
-# %% [markdown]
-# ## Section 6: Fit quality — photometry and spectrum
-#
-# Best-fit (MAP) model over both modalities, with standardized residuals.
-
-# %%
-map_full = {**fixed_values, **result_map.params}
-best_phot = np.asarray(model.predict_photometry(map_full))
-best_spec = np.asarray(model.predict_spectrum(map_full, wave_obs=wave_obs))
-resid_phot = (flux_phot - best_phot) / noise_phot
-resid_spec = (flux_spec - best_spec) / noise_spec
-chi2_n = float((np.sum(resid_phot**2) + np.sum(resid_spec**2)) / data_joint.shape[0])
-
-fig = plt.figure(figsize=(13, 5.5))
-gs = fig.add_gridspec(2, 2, width_ratios=[1, 1.6], height_ratios=[3, 1], hspace=0.05, wspace=0.22)
-axp, axs = fig.add_subplot(gs[0, 0]), fig.add_subplot(gs[0, 1])
-axpr, axsr = fig.add_subplot(gs[1, 0], sharex=axp), fig.add_subplot(gs[1, 1], sharex=axs)
-
-axp.errorbar(
-    wave_eff / 1e4,
-    flux_phot,
-    yerr=noise_phot,
-    fmt="o",
-    ms=5,
-    color=C_DATA,
-    capsize=2,
-    label="data",
-)
-axp.plot(wave_eff / 1e4, best_phot, "s", ms=6, color=C_POST, label="best fit", zorder=5)
-axp.set_xscale("log")
-axp.set_yscale("log")
-axp.set_ylabel(r"$f_\nu$")
-axp.set_title("Photometry")
-axp.legend(fontsize=8)
-plt.setp(axp.get_xticklabels(), visible=False)
-axpr.axhspan(-1, 1, alpha=0.08, color="0.5")
-axpr.axhline(0, color="0.4", lw=0.8)
-axpr.plot(wave_eff / 1e4, resid_phot, "o", ms=4, color=C_DATA)
-axpr.set_xscale("log")
-axpr.set_ylim(-3.5, 3.5)
-axpr.set_xlabel(r"obs. wavelength [$\mu$m]")
-axpr.set_ylabel(r"$(d-m)/\sigma$")
-
-axs.plot(wave_obs_np, flux_spec, ".", ms=2, color=C_DATA, alpha=0.6, label="data")
-axs.plot(wave_obs_np, best_spec, "-", color=C_POST, lw=1.0, label="best fit")
-axs.set_title(rf"Spectrum  ($\chi^2/N = {chi2_n:.2f}$, joint)")
-axs.legend(fontsize=8)
-plt.setp(axs.get_xticklabels(), visible=False)
-axsr.axhspan(-1, 1, alpha=0.08, color="0.5")
-axsr.axhline(0, color="0.4", lw=0.8)
-axsr.plot(wave_obs_np, resid_spec, ".", ms=2, color=C_DATA, alpha=0.6)
-axsr.set_ylim(-3.5, 3.5)
-axsr.set_xlabel(r"obs. wavelength [$\mathrm{\AA}$]")
-fig.savefig("figures/sfh_spec_fit.png", dpi=150, bbox_inches="tight")
-plt.show()
-print(f"chi2 / N (joint best fit) = {chi2_n:.2f}")
-
-# %% [markdown]
-# ## Section 7: Posteriors for the non-SFH parameters
-#
-# The SFH is summarized by the recovery figure (Section 5); here the joint
-# posterior over the **non-SFH** parameters — the two dust optical depths —
-# with truth markers in red. Adding the GALEX UV tightens the diffuse-screen
-# optical depth, but the **birth-cloud** component ($\tau_{\rm BC}$) remains
-# only weakly identified and biased high: with a strongly rising SFH there is
-# abundant young, dust-embedded light, and $\tau_{\rm BC}$ trades against the
-# recent SFR. This residual dust ↔ SFR degeneracy is exactly the kind of
-# nuisance a population-level (hierarchical) prior is meant to absorb.
-
-# %%
-# Lightweight manual corner over the parameter *samples* (no model calls /
-# KDE) — bounded memory. Free-param samples are saved to
-# figures/sfh_spec_samples.npz, so this can be regenerated for any subset.
-phys_params = ["dust_tau_bc", "dust_tau_diff"]
-labels = [p.replace("dust_", "") for p in phys_params]
-S = {p: np.asarray(samples[p]) for p in phys_params}
-npar = len(phys_params)
-fig_c, axc = plt.subplots(npar, npar, figsize=(2.2 * npar, 2.2 * npar))
-for i in range(npar):
-    xi, ti = S[phys_params[i]], float(truth[phys_params[i]])
-    for j in range(npar):
-        ax2 = axc[i, j]
-        if j > i:
-            ax2.set_visible(False)
-            continue
-        if i == j:
-            ax2.hist(xi, bins=30, color=C_POST, alpha=0.8, edgecolor="none")
-            ax2.axvline(ti, color=C_DATA, lw=1.4)
-            ax2.set_yticks([])
-        else:
-            xj, tj = S[phys_params[j]], float(truth[phys_params[j]])
-            ax2.hist2d(xj, xi, bins=30, cmap="Blues", cmin=1)
-            ax2.plot(tj, ti, "*", ms=13, color=C_DATA, mec="k", mew=0.4)
-            ax2.set_ylabel(labels[i], fontsize=10)
-        if i == npar - 1:
-            ax2.set_xlabel(labels[j], fontsize=10)
-        ax2.tick_params(labelsize=7)
-fig_c.suptitle(
-    "Posteriors — dust optical depths (truth in red; "
-    r"$\tau_{\rm BC}$ stays degenerate with recent SFR)",
-    y=1.0,
-    fontsize=11,
-)
-fig_c.tight_layout()
-fig_c.savefig("figures/sfh_spec_corner.png", dpi=150, bbox_inches="tight")
-plt.show()
-
-# %%
-print(f"{'parameter':24s} {'truth':>9s} {'p50':>9s} {'offset':>8s} {'68% CI':>20s}")
+print(f"{'parameter':26s} {'truth':>9s} {'p50':>9s} {'68% CI':>20s}  in?")
 print("-" * 74)
 for name in spec.free_params:
     if name in samples and samples[name].ndim == 1:
         a = np.asarray(samples[name])
         lo, med, hi = np.percentile(a, [16, 50, 84])
         tr = float(truth[name])
-        offset = f"{100 * (med - tr) / tr:+.0f}%" if tr != 0 else "—"
-        print(f"{name:24s} {tr:9.3f} {med:9.3f} {offset:>8s}  [{lo:8.3f}, {hi:8.3f}]")
+        inside = "IN" if lo <= tr <= hi else "OUT"
+        print(f"{name:26s} {tr:9.3f} {med:9.3f}  [{lo:8.3f},{hi:8.3f}]  {inside}")
+
+# %% [markdown]
+# ## Section 5: SFH recovery — linear and log-time (the money figure)
+#
+# Posterior SFH draws through `predict_sfh`. The thick black line is the **mean**
+# SFH (DPL backbone); the thin red line is the **actual** SFH with the GP field on
+# top. The **log-time** panel is what a linear axis hides: it gives the recent,
+# bursty history the resolution to be seen and judged.
+
+
+# %%
+def draw_params(i):
+    d = {k: (float(v[i]) if v.ndim == 1 else np.asarray(v[i])) for k, v in samples.items()}
+    return {**fixed_values, **d}
+
+
+sfh_draws = np.array(
+    [np.asarray(model_fit.predict_sfh(draw_params(i))["sfr_full"]) for i in range(n_total)]
+)
+t_gyr = np.asarray(model_fit.predict_sfh(draw_params(0))["t_gyr"])
+median_sfh = np.median(sfh_draws, axis=0)
+lo68, hi68 = np.percentile(sfh_draws, [16, 84], axis=0)
+lo95, hi95 = np.percentile(sfh_draws, [2.5, 97.5], axis=0)
+sfh_true = model_fit.predict_sfh(truth_full)
+t_true = np.asarray(sfh_true["t_gyr"])
+sfr_true = np.asarray(sfh_true["sfr_full"])
+sfr_mean_true = np.asarray(sfh_true["sfr_mean"])
+
+# Coverage diagnostics.
+cov68 = float(np.mean((sfr_true >= lo68) & (sfr_true <= hi68)))
+cov95 = float(np.mean((sfr_true >= lo95) & (sfr_true <= hi95)))
+print(f"SFH coverage: 68% band {cov68:.2f},  95% band {cov95:.2f}")
+
+# %%
+fig, (axl, axlog) = plt.subplots(1, 2, figsize=(13, 5))
+
+
+def _bands(a, xs):
+    a.fill_between(xs, lo95, hi95, color=C_POST, alpha=0.12, lw=0, label="95% CI")
+    a.fill_between(xs, lo68, hi68, color=C_POST, alpha=0.28, lw=0, label="68% CI")
+    a.plot(xs, median_sfh, color=C_POST, lw=1.8, label="posterior median")
+    a.plot(xs, sfr_mean_true, color="k", lw=3.0, alpha=0.85, label="mean SFH (DPL)", zorder=9)
+    a.plot(xs, sfr_true, color=C_DATA, lw=1.0, label="truth (field on top)", zorder=10)
+    a.set_ylim(bottom=0)
+    a.set_ylabel(r"SFR [$M_\odot\,\mathrm{yr}^{-1}$]")
+
+
+_bands(axl, t_gyr)
+axl.set_xlim(0, 13.5)
+axl.set_xlabel("lookback time [Gyr]")
+axl.set_title("Linear time")
+axl.legend(fontsize=9, loc="upper right")
+
+_bands(axlog, t_gyr)
+axlog.set_xscale("log")
+axlog.set_xlim(1e-3, 13.5)  # 1 Myr → 13.5 Gyr; present at left, resolves recent bursts
+axlog.set_xlabel("lookback time [Gyr] (log)")
+axlog.set_title("Log time — the recent, bursty history")
+axlog.text(
+    0.03,
+    0.03,
+    f"$n_{{\\rm grid}}={N_GRID}$ (D={spec.n_free + spec.n_grid})\n"
+    f"$\\sigma_{{\\rm PSD}}^{{\\rm true}}=0.3$\nHMC L=100: {t_hmc:.0f}s\n"
+    f"95% cov: {cov95:.2f}",
+    transform=axlog.transAxes,
+    fontsize=9,
+    va="bottom",
+    ha="left",
+    bbox=dict(boxstyle="round,pad=0.4", facecolor="wheat", alpha=0.5),
+)
+
+fig.suptitle("Stochastic field-SFH recovery (HMC L=100; phot + line fluxes)", y=1.02)
+fig.tight_layout()
+fig.savefig("figures/sfh_recovery_logt.png", dpi=150, bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# The same posterior via the reusable library helper on a **log** axis — one call,
+# `plot_sfh(..., xscale="log")`:
+
+# %%
+ax = plot_sfh(model_fit, result_hmc, true_params=truth_full, method="HMC", xscale="log")
+ax.figure.savefig("figures/sfh_recovery_plot_sfh_log.png", dpi=150, bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ## Section 6: Scaling up — Stage 1, methods, and dimension
+#
+# Stage 0 shows the field SFH recovers at `n_grid=16`. The harder questions —
+# does recovery hold as the dimension grows, and can the cheap approximate
+# samplers (**geoVI**, the **raytracer**) match NUTS — are a sweep that must run
+# **one fit per process** (NUTS warmup at high `n_grid` is memory-heavy). That is
+# `scripts/stochastic_sfh_dimension_scaling.py`:
+#
+# ```bash
+# LIMIT_GB=20 scripts/run_with_oom_monitor.sh -- \
+#     .venv/bin/python scripts/stochastic_sfh_dimension_scaling.py \
+#         --n-grid 16 32 64 128 --n-fit 4 --methods mcmc_hmc vi_nonlinear_fast mcmc_raytrace
+# ```
+#
+# It reuses `figures/stochastic_catalog.npz`, fits each galaxy across the `n_grid`
+# ladder and each backend, calls `tengri.clear_cache()` between fits, and writes a
+# table of SFH-band coverage, σ_PSD bias, and wall time versus dimension D per
+# method. The expectation from prior work: NUTS recovers and calibrates; geoVI is
+# fast but its bands narrow (under-cover) as the burstiness rises; the raytracer
+# is the intended high-D sampler (`step_size ≈ 0.05` near D ~ 137).
 
 # %% [markdown]
 # ## Summary
 #
-# | Quantity | Result |
+# | Quantity | Stage-0 result (n_grid=16, D=25) |
 # |---|---|
-# | **Stellar mass** (`log_total_mass`) | Recovered tightly — set by the continuum normalization |
-# | **Dust** ($\tau_{\rm diff}$) | Diffuse screen recovered; the GALEX UV anchors it |
-# | **Dust** ($\tau_{\rm BC}$) | Biased high & broad — birth-cloud dust stays degenerate with the recent SFR even with UV |
-# | **SFH** | Posterior 68/95 % bands contain the rising truth across all lookback times, incl. the last-200-Myr zoom |
-# | **Burst amplitude** $\sigma_{\rm PSD}$ | Recovered — a modest, separable burstiness is constrained |
-# | **Burst timescale** $\tau_{\rm PSD}$ | Prior-dominated — the data don't constrain it per-galaxy (motivates hierarchical inference) |
-# | **Speed** | MAP ~15 s, geoVI ~10 min on a laptop CPU; warm forward ~15 ms |
+# | **Fit quality** | reproduces the data within the noise (χ²/N < 1 — the field prior regularizes the under-determined 25-D fit) |
+# | **SFH shape** | truth inside the **95 % band at all lookback times**; the rising shape (`age`, `α`, `β`) recovered into the 68 % CI |
+# | **Burst amplitude** σ_PSD | recovered — truth inside the 68 % CI (median biased mildly high, the outshining floor) |
+# | **Burst timescale** τ_PSD | recovered into the 68 % CI here, but broad and prior-influenced per galaxy (motivates hierarchical inference) |
+# | **Mass / diffuse dust** | anti-correlated (mass ↔ τ_diff); marginals can sit just outside 68 % — the classic degeneracy, not a field failure |
+# | **Method** | MAP lands the mode; dense-mass HMC (L=100) gives calibrated wide bands — full NUTS agrees, ~8× slower |
 #
-# **Key takeaway.** A joint UV–NIR + optical-spectrum fit recovers the stellar
-# mass and the full rising SFH of a star-forming galaxy — the truth sits inside
-# calibrated 68/95 % bands at every lookback time, including the last-200-Myr
-# zoom. The GALEX UV anchors the diffuse dust screen, but two nuisances stay
-# per-galaxy degenerate: the **birth-cloud** optical depth $\tau_{\rm BC}$
-# (trades against recent SFR) and the burst **timescale** $\tau_{\rm PSD}$
-# (prior-dominated). Both are exactly what **hierarchical population inference**
-# is designed to pin down.
-#
-# *Note on geoVI:* geometric VI is **not** a Gaussian/Laplace approximation —
-# it fits a standard normal in a nonlinearly transformed coordinate, so the
-# posterior is non-Gaussian in parameter space. For a fully independent
-# cross-check, re-run with `method="mcmc_raytrace"`.
+# **Takeaway.** For a **fiducial** star-forming galaxy with modest dust, the
+# stochastic field SFH is recovered, not broken — the injected history sits inside
+# calibrated bands (NUTS and HMC L=100 agree), and the **log-time** view makes the
+# recent bursts legible. Recovery is *not* uniform across the prior population:
+# heavy dust or strong bursts make an old+rising and a young+dusty SFH degenerate at
+# χ² ≈ 1, so the per-galaxy *shape* is pinned only when the diffuse dust is low — the
+# **mean SFR and burst amplitude** are the robust quantities. Quantifying that
+# degradation across dust, burstiness, and dimension D, and testing whether geoVI /
+# the raytracer match NUTS, is the job of the companion sweep — and breaking the
+# per-galaxy degeneracy is what **hierarchical (population) inference** is for.

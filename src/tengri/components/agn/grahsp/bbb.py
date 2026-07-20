@@ -26,10 +26,47 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
-__all__ = ["LAMBDA_5100_NM", "sbpl_bbb"]
+__all__ = ["LAMBDA_5100_NM", "XRAY_FLOOR_NM", "floor_disc_xray", "sbpl_bbb"]
 
 LAMBDA_5100_NM: float = 510.0
 """Reference wavelength :math:`\\lambda_0 = 5100\\,\\mathrm{\\AA} = 510\\,\\mathrm{nm}`."""
+
+XRAY_FLOOR_NM: float = 12.4
+"""Short-wavelength floor of the assembled GRAHSP disc [nm].
+
+124 Angstrom = 0.1 keV is the blue edge of the alpha_ox corona (the exact
+``wavelength < 124.0`` band in ``components/xray/xray.py``). GRAHSP has no
+X-ray physics, so its disc must not emit below this edge; left free, the smooth
+bending power law extrapolates unbounded into the X-ray and double-counts with
+the separately-added corona (#1168). Applied in tengri's assembly layer only —
+:func:`sbpl_bbb` stays upstream-faithful for the bit-exact parity fixtures.
+"""
+
+
+def floor_disc_xray(wave_nm: Array, l_lambda: Array) -> Array:
+    r"""Zero the assembled GRAHSP disc below the alpha_ox corona's blue edge.
+
+    Parameters
+    ----------
+    wave_nm : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [nm]
+    l_lambda : array_like, shape (n_wave,)
+        Assembled disc spectrum on ``wave_nm`` [erg/s/nm or erg/s/Å].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        ``l_lambda`` with every sample at ``wave_nm < XRAY_FLOOR_NM`` set to
+        zero; unchanged at and above the floor.
+
+    Notes
+    -----
+    JIT/grad-safe: a hard cut at a fixed grid wavelength (not a free
+    parameter), mirroring the corona's own ``jnp.where`` band mask. The
+    gradient w.r.t. the disc's shape parameters flows unchanged for
+    ``wave_nm >= XRAY_FLOOR_NM``. See issue #1168.
+    """
+    return jnp.where(wave_nm >= XRAY_FLOOR_NM, l_lambda, 0.0)
 
 
 def sbpl_bbb(

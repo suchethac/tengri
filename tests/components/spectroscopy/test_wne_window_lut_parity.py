@@ -371,12 +371,15 @@ def test_fast_path_is_faster_than_full_grid(real_ssp_only):
     )
 
 
-def test_compute_joint_weights_guards_unsupported_configs():
-    """Unsupported configs must RAISE, never silently return wrong weights.
+def test_compute_joint_weights_supports_field_sfh():
+    """The GP-field SFH is supported by the SED-free weight extract (#1204).
 
-    The GP-field SFH modulates the SFR on the lookback grid, which the SED-free
-    extract does not reproduce — it must raise rather than return weights that
-    silently omit the field modulation.
+    The field modulates the SFR on the lookback grid; its only effect on the
+    SED-free weights is a modulation of the (met, age) distribution — which the
+    window LUT consumes — so ``compute_joint_weights`` returns valid, normalized
+    weights (field-aware, via the shared ``_apply_gp_field`` + the same DSPS weight
+    function ``apply()`` uses, incl. the #821 youngest-bin correction) rather than
+    raising. This is what lets the fast line/nebular/index path serve the field.
     """
     import warnings
 
@@ -394,8 +397,10 @@ def test_compute_joint_weights_guards_unsupported_configs():
         )
     stellar = _stellar_of(m)
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    with pytest.raises(ValueError, match=r"non-field SFH only"):
-        stellar.compute_joint_weights(p)
+    jw, tm, _ages = stellar.compute_joint_weights(p)
+    assert jnp.all(jnp.isfinite(jw)), "field weights must be finite"
+    assert abs(float(jw.sum()) - 1.0) < 1e-6, "joint weights must sum to 1"
+    assert float(tm) > 0.0, "total formed mass must be positive"
 
 
 # ── public routing: predict_spectral_indices(fast=True) ────────────
@@ -490,8 +495,13 @@ def test_predict_spectral_indices_fast_fills_slope_from_exact(real_ssp_only):
     assert abs(fast[0] - exact[0]) / max(abs(exact[0]), 1e-9) < 1e-3
 
 
-def test_predict_spectral_indices_fast_raises_on_field_sfh():
-    """fast=True on a GP-field SFH raises (via the weight extract) — never silent."""
+def test_predict_spectral_indices_fast_matches_exact_field_sfh():
+    """fast=True on a GP-field SFH now MATCHES the exact path (field-aware weights, #1204).
+
+    The field only reweights the (met, age) SSP distribution, so the window-LUT index
+    measurement reconstructs the same continuum as the full-grid path (bit-exact with no
+    dust). Previously this raised because ``compute_joint_weights`` refused the field.
+    """
     import warnings
 
     ssp = _wne_ssp()
@@ -507,8 +517,10 @@ def test_predict_spectral_indices_fast_raises_on_field_sfh():
             redshift=Fixed(0.05),
         )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    with pytest.raises(ValueError, match=r"non-field SFH only"):
-        m.predict_spectral_indices(p, _INDEX_SET, fast=True)
+    fast = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, fast=True))
+    exact = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, fast=False))
+    assert np.all(np.isfinite(fast)), "field index fast path returned NaN"
+    np.testing.assert_allclose(fast, exact, rtol=1e-3, atol=0.0)
 
 
 def test_predict_spectral_indices_fast_raises_on_additive_nebular():

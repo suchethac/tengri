@@ -108,10 +108,14 @@ sed_model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     approx=SpectrumPrecomp(),
-    sfh=builders.sfh.tsnorm(defaults=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE),
+    sfh=builders.sfh.tsnorm(
+        defaults=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
+    ),
     dust=builders.dust.two_component(
-        defaults=FIXED, law_bc="calzetti",
-        tau_bc=Uniform(0.0, 1.0), tau_diff=Uniform(0.0, 1.0),
+        defaults=FIXED,
+        law_bc="calzetti",
+        tau_bc=Uniform(0.0, 1.0),
+        tau_diff=Uniform(0.0, 1.0),
     ),
     neb=builders.neb.none(),
     stellar={"met_logzsol": Uniform(-1.5, 0.3)},
@@ -154,12 +158,21 @@ print(f"Mock: {len(flux)}-pixel R=2000 spectrum, SNR = 30/pixel")
 # %%
 t0 = time.perf_counter()
 fitter = Fitter(sed_model, flux, noise, data_type="spectroscopy")
-posterior = fitter.run("mcmc_hmc", n_warmup=1000, n_samples=600, n_leapfrog_steps=20,
-                       dense_mass_matrix=True, target_accept_rate=0.9, key=jax.random.PRNGKey(1))
+posterior = fitter.run(
+    "mcmc_hmc",
+    n_warmup=1000,
+    n_samples=600,
+    n_leapfrog_steps=20,
+    dense_mass_matrix=True,
+    target_accept_rate=0.9,
+    key=jax.random.PRNGKey(1),
+)
 rhat = posterior.rhat()
-print(f"HMC: {time.perf_counter() - t0:.0f}s   "
-      f"max R-hat {max(float(v) for v in rhat.values()):.3f}   "
-      f"divergences {posterior.diagnostics.get('n_divergent', 'n/a')}")
+print(
+    f"HMC: {time.perf_counter() - t0:.0f}s   "
+    f"max R-hat {max(float(v) for v in rhat.values()):.3f}   "
+    f"divergences {posterior.diagnostics.get('n_divergent', 'n/a')}"
+)
 
 # %% [markdown]
 # ## Recovery — what a spectrum alone pins
@@ -191,7 +204,9 @@ N_DRAW = 60
 idx = np.linspace(0, len(next(iter(posterior.samples.values()))) - 1, N_DRAW).astype(int)
 fixed = sed_model.spec.get_fixed_values()
 draws = [{**fixed, **{k: float(v[i]) for k, v in posterior.samples.items()}} for i in idx]
-spec_draws = np.stack([np.asarray(sed_model.predict_spectrum(p, wave_obs=WAVE_OBS)) for p in draws])
+spec_draws = np.stack(
+    [np.asarray(sed_model.predict_spectrum(p, wave_obs=WAVE_OBS)) for p in draws]
+)
 sp_lo, sp_med, sp_hi = np.percentile(spec_draws, [16, 50, 84], axis=0)
 resid = (flux - sp_med) / noise
 chi2_dof = float(np.sum(resid**2) / len(resid))

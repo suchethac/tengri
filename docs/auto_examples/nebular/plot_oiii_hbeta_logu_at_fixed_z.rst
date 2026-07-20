@@ -77,16 +77,16 @@ Reference: Kewley & Dopita 2002 ApJS 142 35; Li et al. 2024
             ssp,
             sfh={
                 "type": "dpl",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "alpha": 1.0,
                 "beta": 2.5,
                 "tau_gyr": 0.03,
                 "log_total_mass": 10.0,
             },
-            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+            dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
             neb={
                 "type": "cue",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "logZ_gas": tengri.Fixed(logz),
                 "logU": tengri.Uniform(-3.0, -1.0),
                 "fesc": tengri.Fixed(0.0),
@@ -97,7 +97,7 @@ Reference: Kewley & Dopita 2002 ApJS 142 35; Li et al. 2024
         ratio = []
         for u in logu_grid:
             p = {**baseline, "neb_logU": np.float64(u)}
-            lines = model.predict_emission_lines(p)
+            lines = model.predict(p).lines
             o3 = float(lines.oiii_5007)
             hb = float(lines.hbeta)
             ratio.append(o3 / hb if hb > 0 else np.nan)
@@ -125,7 +125,7 @@ Reference: Kewley & Dopita 2002 ApJS 142 35; Li et al. 2024
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.779 seconds)
+   **Total running time of the script:** (0 minutes 5.104 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_oiii_hbeta_logu_at_fixed_z.py:

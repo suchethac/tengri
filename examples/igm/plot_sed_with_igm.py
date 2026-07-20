@@ -16,6 +16,7 @@ the u-band drops out entirely, at z ≥ 6 g goes dark, at z ≥ 8 r
 goes dark.
 
 References:
+
 - Inoue et al. 2014, MNRAS, 442, 1805
 - Steidel et al. 1996, AJ, 112, 352 (LBG dropout origins)
 
@@ -43,13 +44,13 @@ COLORS = plt.cm.viridis(np.linspace(0.1, 0.85, len(REDSHIFTS)))
 C_AA_PER_S = 2.998e18
 SFH = {
     "type": "dpl",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "tau_gyr": 0.3,
     "log_total_mass": 10.0,
     "alpha": 3.0,
     "beta": 2.0,
 }
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1}
 
 fig, ax = plt.subplots(figsize=(7.4, 4.8))
 
@@ -62,11 +63,11 @@ for z, color in zip(REDSHIFTS, COLORS):
         redshift=tengri.Fixed(z),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave_rest = np.asarray(out.wavelength)
+    out = model.predict(p)
+    wave_rest = np.asarray(model.wavelengths)
     wave_obs = wave_rest * (1.0 + z)
     nu = C_AA_PER_S / wave_obs
-    nu_f_nu = nu * np.asarray(out.sed)
+    nu_f_nu = nu * np.asarray(out.rest_sed())
     ax.loglog(wave_obs, nu_f_nu, color=color, lw=1.5, label=f"$z={z:g}$")
 
 for z, color in zip(REDSHIFTS, COLORS):

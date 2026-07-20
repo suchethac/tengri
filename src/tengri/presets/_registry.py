@@ -106,6 +106,7 @@ def list_presets() -> dict[str, dict]:
     -------
     dict[str, dict]
         Maps preset name to metadata dict with keys:
+
         - name: str
         - short_doc: str
         - citations: list[str]

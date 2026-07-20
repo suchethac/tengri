@@ -11,11 +11,11 @@ References
 """
 
 import importlib
+
 import numpy as np
 from pcigale.sed import SED
 
 from . import units as U
-
 
 # Module name → class name mapping for pcigale.sed_modules.*
 # (CamelCase conversion is attempted first; this map overrides)
@@ -150,9 +150,16 @@ def attenuation_curve(law_name, **params):
     # avoid the empty-burst-array crash in pcigale.
     sed_intrinsic = SED()
     sfh_cls = _get_module_class("sfhdelayed")
-    sfh = sfh_cls(name="sfhdelayed", tau_main=1000, age_main=5000,
-                  tau_burst=50, age_burst=20, f_burst=0.0,
-                  sfr_A=1.0, normalise=True)
+    sfh = sfh_cls(
+        name="sfhdelayed",
+        tau_main=1000,
+        age_main=5000,
+        tau_burst=50,
+        age_burst=20,
+        f_burst=0.0,
+        sfr_A=1.0,
+        normalise=True,
+    )
     sfh.process(sed_intrinsic)
 
     ssp_cls = _get_module_class("bc03")

@@ -8,6 +8,7 @@ visualize which rest-frame stellar and dust features each photometric system
 samples across the spectrum.
 
 Filters displayed:
+
   - **HST ACS/WFC**: F606W, F814W, F125W, F160W (optical/NIR imaging)
   - **JWST NIRCam**: F150W, F200W, F277W, F356W, F444W (short-wavelength)
   - **JWST MIRI**: F770W, F1500W (mid-infrared)
@@ -44,7 +45,7 @@ C_AA_PER_S = 2.998e18
 z = 1.0
 sfh_config = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": 0.1,  # Peak 100 Myr ago (recent burst)
     "width_gyr": 0.1,  # Duration 100 Myr
     "log_total_mass": 10.0,  # SFR ≈ 30 M_sun/yr
@@ -54,11 +55,11 @@ sfh_config = {
 
 dust_config = {
     "type": "two_component",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "tau_diff": 0.3,  # Diffuse attenuation
     "tau_bc": 0.5,  # Dust clouds
     "law_bc": "calzetti",  # Starburst attenuation law
-    "emission": {"type": "dale2014", "*": tengri.FIXED},
+    "emission": {"type": "dale2014", "all_params": tengri.FIXED},
 }
 
 # Build the model using bare-stellar SSP with Cue nebular backend
@@ -66,15 +67,15 @@ model = tengri.SEDModel.build(
     ssp_data=tengri.load_ssp("fsps_prsc_miles_chabrier"),
     sfh=sfh_config,
     dust=dust_config,
-    neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -0.5, "logU": -2.0},
+    neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": -0.5, "logU": -2.0},
     redshift=tengri.Fixed(z),
 )
 
 # Sample parameters and compute rest-frame SED
 p = dict(model.spec.sample(jax.random.PRNGKey(42)))
-out_rest = model.predict_rest_sed(p)
-wave_rest = np.asarray(out_rest.wavelength)
-sed_rest = np.asarray(out_rest.sed)
+out_rest = model.predict(p)
+wave_rest = np.asarray(model.wavelengths)
+sed_rest = np.asarray(out_rest.rest_sed())
 
 # Apply IGM attenuation and shift to observer frame
 igm_trans = igm_transmission(wave_rest * (1 + z), z)

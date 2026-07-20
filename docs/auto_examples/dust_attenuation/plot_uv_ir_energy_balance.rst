@@ -44,8 +44,19 @@ integration error.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -76,17 +87,17 @@ integration error.
             ssp,
             sfh={
                 "type": "const",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_total_mass": 11.11,
                 "start_gyr": 13.0,
                 "end_gyr": 0.0,
             },
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": tau_diff,
                 "tau_bc": 1.5 * tau_diff,
-                "emission": {"type": "dale2014", "*": tengri.FIXED},
+                "emission": {"type": "dale2014", "all_params": tengri.FIXED},
             },
             redshift=tengri.Fixed(0.05),
         )
@@ -94,10 +105,10 @@ integration error.
 
     ref_model = _build(0.0)
     p_ref = dict(ref_model.spec.sample(jax.random.PRNGKey(0)))
-    out_ref = ref_model.predict_rest_sed(p_ref)
-    wave = np.asarray(out_ref.wavelength)
+    out_ref = ref_model.predict(p_ref)
+    wave = np.asarray(ref_model.wavelengths)
     nu = C_AA_PER_S / wave
-    sed_ref = np.asarray(out_ref.sed)
+    sed_ref = np.asarray(out_ref.rest_sed())
     uv_band = (wave > 912) & (wave < 3000)
     ir_band = (wave > 8e4) & (wave < 1e7)
 
@@ -116,8 +127,8 @@ integration error.
     for i, tau in enumerate(tau_grid):
         model = _build(float(tau))
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        sed = np.asarray(out.sed)
+        out = model.predict(p)
+        sed = np.asarray(out.rest_sed())
         L_abs[i] = L_uv_ref - _power_in_band(sed, uv_band)
         L_ir[i] = _power_in_band(sed, ir_band)
 

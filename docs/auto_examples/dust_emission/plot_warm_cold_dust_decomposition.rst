@@ -64,8 +64,19 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -120,12 +131,12 @@ References
         """
         dust_config = {
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 1.0,
             "tau_bc": 0.3,
             "emission": {
                 "type": "draine_li2007",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "qpah": 2.5,  # Fixed PAH mass fraction
                 "umin": tengri.Uniform(0.5, 8.0),  # Promote to FREE: varies across regimes
             },
@@ -133,7 +144,7 @@ References
 
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0},
+            sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
             dust=dust_config,
             redshift=tengri.Fixed(0.05),
         )
@@ -192,11 +203,11 @@ References
     for regime_name, params_dict in regimes.items():
         # Build model and predict
         model, params = _build_model(u_min=params_dict["u_min"])
-        prediction = model.predict_rest_sed(params)
+        prediction = model.predict(params)
 
         # Extract and convert to νL_ν
-        wave_aa = np.asarray(prediction.wavelength)
-        l_nu = np.asarray(prediction.sed)
+        wave_aa = np.asarray(model.wavelengths)
+        l_nu = np.asarray(prediction.rest_sed())
         nu_l_nu = _compute_νlν(wave_aa, l_nu)
 
         # Convert to microns for diagnostic lines

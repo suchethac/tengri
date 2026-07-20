@@ -115,8 +115,7 @@ from tengri import (
     WavePrecomp,
     load_ssp_data,
 )
-from tengri.cosmology import luminosity_distance
-from tengri.units import ab_mag_to_fnu, lnu_to_fnu
+from tengri.units import ab_mag_to_fnu
 
 
 # %% [markdown]
@@ -299,7 +298,7 @@ print(f"4 SSP libraries loaded in {time.time() - t0:.1f}s")
 # %% [markdown]
 # ## 4. The four model configurations (`SEDModel.build`)
 #
-# Each config is built with the nested-dict grammar. We set `'*': FIXED` and
+# Each config is built with the nested-dict grammar. We set `'all_params': FIXED` and
 # free **only** the parameters we want via explicit `Uniform` priors — this
 # reproduces the classic "free iff you give it a distribution" semantics and
 # keeps the four inference problems comparable. `approx=WavePrecomp()` turns on
@@ -346,15 +345,25 @@ def build_configs(z, obs):
 
     model_a = SEDModel.build(
         ssp_data=SSP["mist"],
-        sfh={"type": "continuity", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **CONT_SFH},
-        dust={"type": "two_component", "law_bc": "salim_sbl18", "*": FIXED, **DUST},
+        sfh={
+            "type": "continuity",
+            "all_params": FIXED,
+            "met_logzsol": Uniform(-2.0, 0.3),
+            **CONT_SFH,
+        },
+        dust={"type": "two_component", "law_bc": "salim_sbl18", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
     model_b = SEDModel.build(
         ssp_data=SSP["padova"],
-        sfh={"type": "dirichlet", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **DIR_SFH},
-        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, **DUST},
+        sfh={
+            "type": "dirichlet",
+            "all_params": FIXED,
+            "met_logzsol": Uniform(-2.0, 0.3),
+            **DIR_SFH,
+        },
+        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
@@ -362,7 +371,7 @@ def build_configs(z, obs):
         ssp_data=SSP["pdva"],
         sfh={
             "type": "tsnorm",
-            "*": FIXED,
+            "all_params": FIXED,
             "met_logzsol": Uniform(-2.0, 0.3),
             "log_total_mass": Uniform(8.0, 12.0),
             "peak_lbt_gyr": Uniform(0.5, 12.0),
@@ -370,7 +379,7 @@ def build_configs(z, obs):
             "skew": Uniform(-1.0, 1.0),
             "trunc": Uniform(1.0, 10.0),
         },
-        dust={"type": "two_component", "law_bc": "kriek_conroy", "*": FIXED, **DUST},
+        dust={"type": "two_component", "law_bc": "kriek_conroy", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
@@ -378,14 +387,14 @@ def build_configs(z, obs):
         ssp_data=SSP["basti"],
         sfh={
             "type": "dpl",
-            "*": FIXED,
+            "all_params": FIXED,
             "met_logzsol": Fixed(-0.3),
             "alpha": Uniform(0.5, 5.0),
             "beta": Uniform(0.3, 3.0),
             "tau_gyr": Uniform(0.5, 13.0),
             "log_total_mass": Uniform(8.0, 12.0),
         },
-        dust={"type": "two_component", "law_bc": "power_law", "*": FIXED, **DUST},
+        dust={"type": "two_component", "law_bc": "power_law", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
@@ -533,8 +542,8 @@ def _filter_eff_and_halfwidth(names):
         t = np.asarray(phot.filter_trans[i], dtype=float)
         good = t > 0
         w, t = w[good], t[good]
-        eff[nm] = float(np.trapz(w * t, w) / np.trapz(t, w))
-        half[nm] = float(0.5 * np.trapz(t, w) / t.max())
+        eff[nm] = float(np.trapezoid(w * t, w) / np.trapezoid(t, w))
+        half[nm] = float(0.5 * np.trapezoid(t, w) / t.max())
     return eff, half
 
 
@@ -584,23 +593,23 @@ def vmap_chunked(fn, batch, n, chunk=16):
 def collect_predictions(g):
     """Per-config posterior draws of spectrum, SFH, and (logM*, logSFR).
 
-    The continuous SED is the observed-frame model spectrum. ``predict_obs_sed``
-    gives the rest-frame :math:`L_\\nu` on each SSP's native (line-resolved)
-    grid; we convert it to observed :math:`f_\\nu` with the exact public relation
-    ``lnu_to_fnu`` — the same :math:`f_\\nu = L_\\nu (1+z) / (4\\pi d_L^2)` that
-    ``predict_spectrum`` applies internally (suchethac/tengri#707) — then bin
-    every config onto the common ``WAVE_SPEC`` grid so the four can be pooled for
-    the BMA predictive. Binning the native grid (rather than point-sampling
-    ``predict_spectrum`` on the coarse plot grid) keeps narrow nebular lines as
-    modest, area-correct bumps instead of aliased spikes.
+    The continuous SED is the observed-frame model spectrum: ``predict_spectrum``
+    evaluated on each SSP's native (line-resolved) grid, which returns observed
+    :math:`f_\\nu = L_\\nu (1+z) / (4\\pi d_L^2)` directly (suchethac/tengri#707),
+    then binned onto the common ``WAVE_SPEC`` grid so the four configs can be
+    pooled for the BMA predictive. Binning the native grid (rather than
+    point-sampling on the coarse plot grid) keeps narrow nebular lines as modest,
+    area-correct bumps instead of aliased spikes.
 
     SED and derived (M*, SFR) draws use chunked ``jax.jit(jax.vmap)`` (~7x vs a
-    Python loop). ``predict_sfh`` is not jittable (``ConcretizationTypeError``),
-    so the SFH curve stays an eager loop.
+    Python loop) over ``predict_spectrum`` / ``predict_properties`` — the
+    JIT/vmap-safe surfaces (NAMING_CONTRACT §4b). The rich ``predict`` object and
+    its ``properties`` are deliberately *not* pytrees, so they cannot cross a
+    ``vmap``; only the single eager call for the wavelength grid may use them.
+    ``predict_sfh`` is not jittable (``ConcretizationTypeError``), so the SFH
+    curve stays an eager loop.
     """
     spec, sfh, props = {}, {}, {}
-    # Exact rest-frame L_nu -> observed f_nu factor (k-correction + distance).
-    flux_factor = float(lnu_to_fnu(1.0, luminosity_distance(g["z"]), g["z"]))
     for cfg in CONFIG_ORDER:
         model = g["models"][cfg]
         samples = g["posteriors"][cfg].samples
@@ -610,17 +619,27 @@ def collect_predictions(g):
 
         # Observed-frame wavelength grid (config-fixed, so a single eager call).
         s0 = {k: v[0] for k, v in samples.items()}
-        wave_nat = np.asarray(model.predict_obs_sed(s0).wavelength)
+        wave_nat = np.asarray(model.predict(s0).wave_obs)
 
-        # SED + derived quantities: chunked jit(vmap) over the draw batch.
-        lnu_b = np.asarray(vmap_chunked(model.predict_obs_sed, batch, n_use).sed)
-        spec[cfg] = np.array(
-            [bin_to_grid(wave_nat, lnu_b[i] * flux_factor, WAVE_SPEC) for i in range(n_use)]
+        # SED: chunked jit(vmap) over predict_spectrum on that native grid, which
+        # already returns observed f_nu -- no manual L_nu -> f_nu conversion.
+        # Default args bind the loop variables into the lambdas (ruff B023).
+        fnu_b = np.asarray(
+            vmap_chunked(
+                lambda p, m=model, w=wave_nat: m.predict_spectrum(p, wave_obs=w), batch, n_use
+            )
         )
-        q = vmap_chunked(model.predict_sfh_quantities, batch, n_use)
+        spec[cfg] = np.array([bin_to_grid(wave_nat, fnu_b[i], WAVE_SPEC) for i in range(n_use)])
+
+        # Derived quantities: predict_properties is the single JIT/vmap surface.
+        q = vmap_chunked(
+            lambda p, m=model: m.predict_properties(p, names=("stellar_mass", "sfr_100myr")),
+            batch,
+            n_use,
+        )
         props[cfg] = {
-            "log_mass": np.log10(np.maximum(np.asarray(q.stellar_mass) * RETURN_FRAC, 1e-30)),
-            "log_sfr": np.log10(np.maximum(np.asarray(q.sfr_100myr), 1e-30)),
+            "log_mass": np.log10(np.maximum(np.asarray(q["stellar_mass"]) * RETURN_FRAC, 1e-30)),
+            "log_sfr": np.log10(np.maximum(np.asarray(q["sfr_100myr"]), 1e-30)),
         }
 
         # SFH curve: eager loop (predict_sfh is not jittable).

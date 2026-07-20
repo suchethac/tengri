@@ -2,6 +2,7 @@
 """Pure JAX, JIT-compatible spectral unit conversion utilities.
 
 All functions take and return bare jnp arrays (no unit objects) in CGS units:
+
 - Luminosity: erg/s
 - Flux: erg/s/cm²/Hz or erg/s/cm²/Å
 - Wavelength: Ångström (Å)
@@ -13,12 +14,14 @@ The conversion formulae use fundamental physical constants from
 
 References
 ----------
+
 - Spectral density formula: L_λ = L_ν × c / λ²
   (e.g., Rybicki & Lightman 1979, Radiative Processes in Astrophysics)
 - Cosmological flux-luminosity: f_ν = L_ν × (1+z) / (4π d_L²)
   (e.g., Hogg et al. 1999, AJ, 118, 1407)
 - Morton (1991) vacuum-air conversion: ApJS, 77, 119
 - Edlén (1953) air-vacuum conversion: JOSA, 43(5), 339
+
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from tengri.utils.physics_constants import (
     L_SUN,
     MAGGIES_ZP_CGS,
 )
+from tengri.utils.scale import LOG10_4PI, apply_log10_scale
 
 __all__ = [
     "air_to_vacuum",
@@ -432,11 +436,16 @@ def lnu_to_fnu(
     The 1/(4π d_L²) is the inverse-square dilution over luminosity distance.
 
     Reference: Hogg et al. (1999), AJ, 118, 1407.
+
+    Notes
+    -----
+    The flux-scale factor is computed via log-offset arithmetic (apply_log10_scale)
+    to avoid float32 underflow. See issue #1186.
     """
     redshift = jnp.asarray(redshift)
     dl_cm = jnp.asarray(dl_cm)
-    factor = (1.0 + redshift) / (4.0 * jnp.pi * dl_cm**2)
-    return lnu * factor
+    log10_factor = jnp.log10(1.0 + redshift) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+    return apply_log10_scale(lnu, log10_factor)
 
 
 @jit
@@ -465,12 +474,13 @@ def fnu_to_lnu(
 
     Notes
     -----
-    Inverse of lnu_to_fnu().
+    Inverse of lnu_to_fnu(). The flux-scale factor is computed via log-offset
+    arithmetic to avoid float32 overflow. See issue #1186.
     """
     redshift = jnp.asarray(redshift)
     dl_cm = jnp.asarray(dl_cm)
-    factor = 4.0 * jnp.pi * dl_cm**2 / (1.0 + redshift)
-    return fnu * factor
+    log10_inv = 2.0 * jnp.log10(dl_cm) + LOG10_4PI - jnp.log10(1.0 + redshift)
+    return apply_log10_scale(fnu, log10_inv)
 
 
 # ── Optical Depth & Attenuation ───────────────────────────────────

@@ -36,11 +36,12 @@ A_λ/A_V.
 
 References
 ----------
+
 - Calzetti et al. 2000, ApJ, 533, 682 (starburst geometry)
 - Witt & Gordon 2000, ApJ, 528, 799 (dust geometry effects)
 - Kramer et al. 2003, ApJS, 144, 1 (mixed geometry approximation)
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-171
+.. GENERATED FROM PYTHON SOURCE LINES 26-173
 
 
 
@@ -84,7 +85,7 @@ References
     # Build an intrinsic (no-dust) model at z=0.05
     SFH = {
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 1.0,
         "beta": 2.0,
         "tau_gyr": 4.0,
@@ -95,13 +96,13 @@ References
     intrinsic_model = tengri.SEDModel.build(
         ssp,
         sfh=SFH,
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0},
         redshift=tengri.Fixed(0.05),
     )
     p_intrinsic = dict(intrinsic_model.spec.sample(jax.random.PRNGKey(0)))
-    pred_intrinsic = intrinsic_model.predict_rest_sed(p_intrinsic)
-    sed_intrinsic = np.asarray(pred_intrinsic.sed)
-    wave = np.asarray(pred_intrinsic.wavelength)
+    pred_intrinsic = intrinsic_model.predict(p_intrinsic)
+    sed_intrinsic = np.asarray(pred_intrinsic.rest_sed())
+    wave = np.asarray(intrinsic_model.wavelengths)
     nu = C_AA_PER_S / wave
 
     # Compute Calzetti k_lambda curve and normalize

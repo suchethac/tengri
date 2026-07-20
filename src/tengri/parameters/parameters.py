@@ -73,6 +73,7 @@ from tengri.parameters.priors import (
     Fixed,
     resolve_shorthand,
 )
+from tengri.parameters.sentinels import WILDCARD_ALIAS
 
 __all__ = ["SETTINGS_KEYS", "Parameters"]
 
@@ -184,8 +185,8 @@ class Parameters:
     stochastic : bool
         **DEPRECATED**. Use mean_sfh_type with/without 'field' instead.
 
-    Dust Attenuation Settings
-    ~~~~~~~~~~~~~~~~~~~~~~~~~
+    **Dust Attenuation Settings**
+
     dust_law_bc : str
         Attenuation curve for birth cloud.  Default: ``"power_law"``.
         Options: ``power_law``, ``calzetti``, ``kriek_conroy``, ``smc``,
@@ -200,8 +201,8 @@ class Parameters:
         HII-region emission its own birth-cloud curve while still sharing the
         diffuse ISM screen (``dust_law_diff``) with the stars.
 
-    Dust Emission Settings
-    ~~~~~~~~~~~~~~~~~~~~~~
+    **Dust Emission Settings**
+
     dust_emission : str or None
         IR emission model.  Default: ``None`` (disabled).
         Options: ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
@@ -210,8 +211,8 @@ class Parameters:
     dl07_grid_path : str
         Path to DL07 HDF5 template grid (for ``"dl07_tabulated"``).
 
-    Nebular Emission Settings
-    ~~~~~~~~~~~~~~~~~~~~~~~~~
+    **Nebular Emission Settings**
+
     nebular_ssp : bool
         Use SSP files with pre-included nebular emission (wNE files).
         No free nebular parameters.  Default: ``False``.
@@ -229,8 +230,8 @@ class Parameters:
         Ionization source for Cue: ``"ssp"`` (default), ``"agn"`` (future),
         ``"ssp+agn"`` (future).
 
-    AGN Settings
-    ~~~~~~~~~~~~
+    **AGN Settings**
+
     agn_model : str or None
         AGN SED model.  Default: ``None`` (disabled).
         Options: ``"simple"`` (3 params), ``"standard"`` (SS73 disc + 2T torus),
@@ -238,29 +239,31 @@ class Parameters:
         geometric masking), ``"qsogen"`` (empirical quasar, Temple+2021),
         ``"skirtor"`` (clumpy torus RT templates, Stalevski+2016).
 
-    Multi-wavelength Settings
-    ~~~~~~~~~~~~~~~~~~~~~~~~~
+    **Multi-wavelength Settings**
+
     radio : bool
         Enable radio synchrotron + AGN jet emission.  Default: ``False``.
     xray : bool
         Enable X-ray (XRB + AGN corona) emission.  Default: ``False``.
 
-    IGM Settings
-    ~~~~~~~~~~~~
+    **IGM Settings**
+
     apply_igm : bool
         Apply Inoue+2014 IGM absorption.  Default: ``True``.
 
-    Metallicity Settings
-    ~~~~~~~~~~~~~~~~~~~~
+    **Metallicity Settings**
+
     evolving_metallicity : bool
         Replace ``met_logzsol`` with ``met_logzsol_0`` (old stars) and
         ``met_logzsol_final`` (young stars) for a linear-in-log Z(t) ramp.
         Default: ``False``.
     met_interp : str
         Metallicity interpolation method.  Default: ``"smooth"``.
+
         - ``"smooth"``: Triweight kernel (same as DSPS, Hearin+2023).
           8.5x smoother gradients at <1% speed overhead. Recommended.
         - ``"linear"``: 2-point linear in log(Z) (same as FSPS/Prospector).
+
     lgmet_scatter : float
         Triweight kernel bandwidth in dex for ``met_interp="smooth"``.
         Default: 0.1 (DSPS default). Physically: intrinsic Z scatter.
@@ -800,10 +803,14 @@ class Parameters:
     def _init_dust_config(self, kwargs):
         """Resolve dust model, attenuation law, and emission from kwargs."""
         self.dust_model = kwargs.pop("dust_model", "two_component")
-        if self.dust_model not in ("two_component", "single_component", "wg00"):
+        # 'none' is the user-facing spelling; 'off' is the internal sentinel the
+        # forward model reads as use_dust=False (a dust-free model).
+        if self.dust_model == "none":
+            self.dust_model = "off"
+        if self.dust_model not in ("two_component", "single_component", "wg00", "off"):
             raise ValueError(
-                f"dust_model must be 'two_component', 'single_component', or 'wg00', "
-                f"got '{self.dust_model}'"
+                f"dust_model must be 'two_component', 'single_component', 'wg00', "
+                f"or 'off'/'none' (no dust), got '{self.dust_model}'"
             )
 
         # Witt & Gordon (2000) screen (dust_model='wg00', FSPS dust_type=3):
@@ -1173,8 +1180,9 @@ class Parameters:
         -----
         **Provenance-aware collapsing**: If this Parameters was built via
         ``parse_groups``, provenance tags are used to collapse parameters that
-        shared the same wildcard marker (``'*': FREE`` or ``'*': FIXED``) back
-        into that wildcard, with explicit overrides listed separately.
+        shared the same wildcard marker (``'all_params': FREE`` or
+        ``'all_params': FIXED``) back into that wildcard, with explicit
+        overrides listed separately.
 
         **Flat-built fallback**: If this Parameters was built via flat-kwarg
         ``Parameters(...)``, all parameters are listed explicitly (no wildcard).
@@ -1187,10 +1195,11 @@ class Parameters:
         --------
         >>> from tengri import parse_groups, FREE, FIXED, Uniform, Fixed
         >>> spec = parse_groups(
-        ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
+        ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
         ...     redshift=Fixed(0.05),
         ... )
         >>> groups = spec.to_groups()
+        >>> assert "all_params" in groups["sfh"]  # preferred spelling on output
         >>> roundtripped = parse_groups(**groups)
         >>> spec.free_params == roundtripped.free_params
         True
@@ -1617,6 +1626,7 @@ class Parameters:
         -------
         dict[str, ndarray]
             Parameter name → array of samples. Each entry has shape:
+
             - ``(n,)`` for scalar parameters
             - ``(n, n_grid)`` for ``sfh_field_xi`` (stochastic SFH only)
 
@@ -1716,6 +1726,7 @@ class Parameters:
         Notes
         -----
         Output includes:
+
         - SFH type and composition
         - Dimensions (n free, latent ξ, mirrored, fixed)
         - Enabled optional modules (nebular, dust_emission, AGN, etc.)
@@ -1812,8 +1823,8 @@ class Parameters:
             "user_prior": "[user]",
             "user_fixed": "[user]",
             "user_free": "[user FREE]",
-            "wildcard_free": "[* FREE]",
-            "wildcard_fixed": "[* FIXED]",
+            "wildcard_free": f"[{WILDCARD_ALIAS} FREE]",
+            "wildcard_fixed": f"[{WILDCARD_ALIAS} FIXED]",
             "registry_default": "[default]",
         }
 

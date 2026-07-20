@@ -30,6 +30,7 @@ Metal-poor stellar populations and active star formation drive the
 starburst signature visible from UV through optical.
 
 **References:**
+
  - Östlin et al. (2014) [1]_ for dwarf starburst SED archetypes
  - Chabrier (2003) [2]_ for young, metal-poor IMF
  - Cue (2009) [3]_ for nebular emission at low metallicity
@@ -46,7 +47,7 @@ starburst signature visible from UV through optical.
    *Astrophys. J. Suppl. Ser.* **183**, 1–39.
    https://doi.org/10.1088/0067-0049/183/1/1
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-126
+.. GENERATED FROM PYTHON SOURCE LINES 31-127
 
 
 
@@ -82,35 +83,35 @@ starburst signature visible from UV through optical.
         SSP,
         sfh={
             "type": "const",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 7.20,  # SFR ~ 0.3 Msun/yr (high sSFR for 1e8 Msun)
             "start_gyr": 0.05,  # Recent burst: last 50 Myr
             "end_gyr": 0.0,
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.05,  # Minimal dust: tau_V ~ 0.05 (almost no attenuation)
             "tau_bc": 0.05,
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
         neb={
             "type": "cue",
-            "*": tengri.FIXED,  # Fixed Cue line emission (low-Z)
+            "all_params": tengri.FIXED,  # Fixed Cue line emission (low-Z)
         },
         redshift=tengri.Fixed(0.001),  # Nearby for high signal-to-noise
     )
 
     # Sample and predict rest-frame SED
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = 2.998e18 / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = 2.998e18 / wave * np.asarray(out.rest_sed())
 
     fig, ax = plt.subplots(figsize=(8.0, 5.0))
 
     # Plot full panchromatic SED (mask zeros for clean loglog)
-    mask = np.asarray(out.sed) > 0
+    mask = np.asarray(out.rest_sed()) > 0
     ax.loglog(
         wave[mask],
         nu_l_nu[mask],

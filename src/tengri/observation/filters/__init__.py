@@ -107,11 +107,14 @@ def _unknown_filter_msg(name: str) -> str:
     """Did-you-mean error message for an unrecognized filter name."""
     import difflib
 
-    close = difflib.get_close_matches(name, sorted(FILTER_REGISTRY), n=3, cutoff=0.6)
+    pool = sorted(set(FILTER_REGISTRY) | set(_svo_name_to_key()))
+    close = difflib.get_close_matches(name, pool, n=3, cutoff=0.6)
     hint = f" Did you mean {close}?" if close else ""
     return (
-        f"Unknown filter '{name}'.{hint} tengri.list_filters() shows every "
-        "registered name; load_custom_filter() loads arbitrary curve files."
+        f"Unknown filter '{name}'.{hint} tengri.list_filters() lists every "
+        "available name — both the SVO-style names it displays (e.g. "
+        "'SLOAN_SDSS_g') and their short aliases (e.g. 'sdss_g') load; "
+        "load_custom_filter() loads arbitrary curve files."
     )
 
 
@@ -259,6 +262,36 @@ def filter_info(name: str, *, cache_dir: str | None = None) -> dict:
 def _svo_id_to_filename(svo_id: str) -> str:
     """Convert SVO filter ID to a safe filename."""
     return svo_id.replace("/", "_").replace(".", "_") + ".dat"
+
+
+_SVO_NAME_TO_KEY_CACHE: dict[str, str] | None = None
+
+
+def _svo_name_to_key() -> dict[str, str]:
+    """Map SVO-style display names to their canonical short registry key.
+
+    ``tengri.list_filters()`` shows filters by their curve-file stem (the
+    SVO convention ``Telescope_Instrument_Band``, e.g. ``2MASS_2MASS_H``),
+    but :data:`FILTER_REGISTRY` — and therefore :func:`load_filter` and
+    :meth:`Photometry.from_names` — is keyed by short aliases (``2mass_h``).
+    This reverse map lets the loader accept *either* form, so every name the
+    discovery menu advertises round-trips.
+
+    Returns
+    -------
+    dict[str, str]
+        ``{svo_stem: short_key}``. On the rare stem collision (two aliases
+        resolve to the same curve file), the first alias in registry order
+        wins — both load the identical curve, so the choice is cosmetic.
+    """
+    global _SVO_NAME_TO_KEY_CACHE
+    if _SVO_NAME_TO_KEY_CACHE is None:
+        mapping: dict[str, str] = {}
+        for key, svo_id in FILTER_REGISTRY.items():
+            stem = _svo_id_to_filename(svo_id)[:-4]  # drop the ".dat" suffix
+            mapping.setdefault(stem, key)
+        _SVO_NAME_TO_KEY_CACHE = mapping
+    return _SVO_NAME_TO_KEY_CACHE
 
 
 def _save_filter(filepath: Path, wave: np.ndarray, trans: np.ndarray) -> None:
@@ -432,7 +465,9 @@ def load_filter(
     Parameters
     ----------
     name : str
-        Short name from ``FILTER_REGISTRY`` (e.g. ``"jwst_f200w"``).
+        Either a short ``FILTER_REGISTRY`` alias (e.g. ``"jwst_f200w"``) or
+        the SVO-style display name shown by :func:`tengri.list_filters`
+        (e.g. ``"JWST_NIRCam_F200W"``); both resolve to the same curve.
     cache_dir : str
         Directory for cached filter files.
 
@@ -447,7 +482,8 @@ def load_filter(
     Raises
     ------
     KeyError
-        If *name* is not in ``FILTER_REGISTRY``.
+        If *name* matches neither a ``FILTER_REGISTRY`` alias nor an SVO
+        display name.
 
     Notes
     -----
@@ -457,7 +493,13 @@ def load_filter(
 
     """
     if name not in FILTER_REGISTRY:
-        raise KeyError(_unknown_filter_msg(name))
+        # Accept the SVO-style display names that tengri.list_filters() shows
+        # (e.g. "SLOAN_SDSS_g") by resolving them to their short alias, so the
+        # discovery menu round-trips through the loader.
+        alias = _svo_name_to_key().get(name)
+        if alias is None:
+            raise KeyError(_unknown_filter_msg(name))
+        name = alias
 
     svo_id = FILTER_REGISTRY[name]
     wave, trans = download_filter(svo_id, cache_dir=cache_dir)
@@ -891,6 +933,7 @@ def suggest(
         Redshift of the source (z >= 0).
     coverage : str
         Rest-frame wavelength coverage preset. Options:
+
         - "visible": 3500–9000 Å (optical)
         - "visible_to_nir": 3500–25000 Å (optical + near-IR) [default]
         - "uv_to_ir": 1200–50000 Å (UV + optical + IR)

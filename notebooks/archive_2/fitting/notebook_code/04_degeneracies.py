@@ -194,9 +194,7 @@ if HAS_DATA:
     t_compile = time.perf_counter() - t0_compile
 
     t0_run = time.perf_counter()
-    result_sdss = fitter.run(
-        "vi", n_iterations=10, n_samples=6, n_seeds=3, verbose=False
-    )
+    result_sdss = fitter.run("vi", n_iterations=10, n_samples=6, n_seeds=3, verbose=False)
     t_run = time.perf_counter() - t0_run
 
     print(f"XLA compile: {t_compile:.1f}s | runtime: {t_run:.1f}s")
@@ -436,7 +434,13 @@ if HAS_DATA:
         ax_top.plot(wave_eff, draw, "-", color=COLORS["geovi"], alpha=0.08, lw=0.8)
     median_pred = np.median(posterior_phot, axis=0)
     ax_top.plot(
-        wave_eff, median_pred, "s", ms=5, color=COLORS["geovi"], zorder=4, label="SEDModel (median)"
+        wave_eff,
+        median_pred,
+        "s",
+        ms=5,
+        color=COLORS["geovi"],
+        zorder=4,
+        label="SEDModel (median)",
     )
     ax_top.errorbar(
         wave_eff,

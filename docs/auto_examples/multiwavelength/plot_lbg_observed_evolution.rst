@@ -23,7 +23,7 @@ Observed SED of a Lyman-break galaxy at z = 2, 4, 6, 8
 
 A single intrinsic LBG (young dust-poor star-forming galaxy) shown in
 the observer frame at four redshifts. The Lyman break sweeps redward
-into the *u-* and then *g-* and *r-*band dropout regimes, the
+into the *u*-, then *g*- and *r*-band dropout regimes, the
 Inoue+2014 IGM transmission removes more and more flux blueward of
 Lyα, and the apparent magnitude faint-end falls by ~2.5 mag from
 ``z = 2 → 8`` due to luminosity distance alone.
@@ -70,13 +70,13 @@ each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
     C_AA_PER_S = 2.998e18
     SFH = {
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.2,
         "log_total_mass": 10.0,
         "alpha": 3.0,
         "beta": 2.0,
     }
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1}
 
     ssp = tengri.load_ssp()
     fig, ax = plt.subplots(figsize=(7.6, 4.8))
@@ -91,11 +91,11 @@ each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
             redshift=tengri.Fixed(z),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave_rest = np.asarray(out.wavelength)
+        out = model.predict(p)
+        wave_rest = np.asarray(model.wavelengths)
         wave_obs = wave_rest * (1.0 + z)
         nu_obs = C_AA_PER_S / wave_obs
-        nu_f_nu = nu_obs * np.asarray(out.sed)
+        nu_f_nu = nu_obs * np.asarray(out.rest_sed())
         i_a = int(np.argmin(np.abs(wave_obs - ANCHOR_OBS_AA)))
         nu_f_nu = nu_f_nu / nu_f_nu[i_a]
         ax.loglog(wave_obs, nu_f_nu, color=color, lw=1.5, label=f"$z = {z:g}$")

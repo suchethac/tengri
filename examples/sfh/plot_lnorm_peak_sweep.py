@@ -33,12 +33,12 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "lnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_gyr": tengri.Uniform(1.0, 11.0),
         "log_total_mass": 10.0,
         "width_gyr": 0.3,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -50,10 +50,10 @@ cmap = plt.get_cmap("viridis")
 fig, ax = plt.subplots(figsize=(6.5, 4.2))
 for peak in peak_values:
     params = {**baseline, "sfh_lnorm_peak_gyr": jnp.float64(peak)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave  # Å/s -> Hz
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=cmap(norm(peak)), lw=1.4)
 
 ax.set_xlim(800, 3e4)

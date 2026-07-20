@@ -32,7 +32,7 @@ C_AA_PER_S = 2.998e18
 ssp = tengri.load_ssp()
 SFH = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": 0.05,
     "width_gyr": 0.05,
     "log_total_mass": 10.0,
@@ -47,7 +47,7 @@ def _model(rv):
         sfh=SFH,
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 1.0,
             "tau_bc": 0.0,
             "law_diff": "cardelli",
@@ -65,9 +65,9 @@ fig, ax = plt.subplots(figsize=(6.6, 4.4))
 for rv in rv_grid:
     model = _model(float(rv))
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=cmap(norm(rv)), lw=1.4)
 
 ax.axvline(2175, color="0.55", lw=0.4, ls=":")

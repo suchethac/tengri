@@ -68,13 +68,14 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_alpha_only,
     interpolate_mass_remaining,
 )
+from tengri.parameters.translate import LOG10_ZSUN
+from tengri.utils.scale import pow10
 
 # Default time bins for ``metallicity_model="bins"`` /
 # ``"bins_continuity"`` — log-spaced from 1 Myr to 13.7 Gyr,
 # 7 edges → 6 bins, matching ``MET_REGISTRY``'s
 # ``_N_MET_BINS_DEFAULT``.
 _DEFAULT_MET_BIN_EDGES_LOG_YR = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
-from tengri.parameters.translate import LOG10_ZSUN
 
 
 def _sfh_bin_edges_yr(fn, sfh_kwargs):
@@ -102,6 +103,55 @@ def _nonparametric_sfh_fns():
 
 
 _NONPARAMETRIC_SFH_FNS = _nonparametric_sfh_fns()
+
+
+def _apply_gp_field(sfr_history, params, n_grid, log_age_grid):
+    """Apply the multiplicative GP-field modulation to a smooth SFR history.
+
+    :math:`\\mathrm{SFR}(t) = \\mathrm{SFR}_{\\rm mean}(t)\\,\\exp(x(t) - K_0/2)`,
+    where :math:`x(t)` is the PSD-governed Gaussian process and :math:`K_0/2` is
+    the log-normal bias correction (so the ensemble mean is preserved). The single
+    source of the field modulation — shared by :meth:`StellarSEDComponent.apply`
+    (exact SED) and :meth:`StellarSEDComponent.compute_joint_weights` (fast
+    line/nebular window LUT) so the two paths cannot diverge.
+
+    Parameters
+    ----------
+    sfr_history : ndarray, shape (n_grid,)
+        Smooth (mean) SFR on the lookback grid [Msun/yr].
+    params : Mapping
+        Free-parameter dict carrying ``sfh_field_psd_sigma`` [dex],
+        ``sfh_field_psd_tau_myr`` [Myr], and the latent ``sfh_field_xi``.
+    n_grid : int
+        SFH grid resolution (the field latent dimension).
+    log_age_grid : ndarray, shape (n_grid,)
+        ``log10(age/yr)`` grid the field lives on.
+
+    Returns
+    -------
+    ndarray, shape (n_grid,)
+        Field-modulated SFR history [Msun/yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — ``log_age_grid_step`` recomputes the step from the
+    static ``n_grid`` (a traced ``log_age_grid`` cannot be indexed under jit).
+    """
+    from tengri.components.stellar.sfh.registry import compute_field_gp
+
+    psd_sigma = jnp.asarray(params["sfh_field_psd_sigma"])
+    psd_tau_yr = jnp.asarray(params["sfh_field_psd_tau_myr"]) * 1e6
+    xi = jnp.asarray(params.get("sfh_field_xi", jnp.zeros(n_grid)))
+    gp_x, k0_half = compute_field_gp(
+        xi,
+        psd_sigma,
+        psd_tau_yr,
+        n_grid,
+        log_age_grid_step(n_grid),
+        field_model="drw",
+        log_age_grid=log_age_grid,
+    )
+    return sfr_history * jnp.exp(gp_x - k0_half)
 
 
 def _refine_sfh_table_ages(ssp_ages_yr, factor: int = 16):
@@ -490,16 +540,73 @@ __all__ = [
 _HI_LIMIT_AA: float = 911.76
 
 
+def _integrate_nion_log10(
+    sed_lnu: jnp.ndarray, wave: jnp.ndarray, log10_scale: float = 0.0
+) -> jnp.ndarray:
+    r"""Log-domain ionizing photon rate (core Q_H integral for float32 safety).
+
+    THE single source of the Q_H integral — log-domain computation to prevent
+    float32 overflow (Q_H ~ 1e56 exceeds float32 max ~3.4e38). Integrates
+    :math:`Q_H = \int_{\nu>\nu_{912}} L_\nu/(h\nu)\,d\nu` with the partial-bin
+    Lyman-limit correction (#537): the boundary bin's contribution is a rectangle
+    from ``nu_edge`` to the last ionizing grid point, not the trapezoid triangle
+    a hard mask would give.
+
+    The computation normalizes the SED by its peak, defers the Planck constant
+    division, and performs the trapezoid integral in linear-normalized space,
+    keeping all intermediates within float32 range (issue #1206).
+
+    Parameters
+    ----------
+    sed_lnu : ndarray, shape (n_wave,)
+        Rest-frame stellar :math:`L_\nu` [erg/s/Hz] (pre-dust intrinsic SED).
+    wave : ndarray, shape (n_wave,)
+        Wavelength grid [Angstrom]; must span the Lyman limit (a few points
+        above 911.76 A suffice — the boundary bin needs the first non-ionizing
+        point).
+    log10_scale : float, optional
+        Log10-scale offset [dex] to apply to the result. Default 0.0 (no scaling).
+        Used for mass-scaling: ``log10_scale = log10(total_mass * LSUN_ERG_PER_S)``.
+
+    Returns
+    -------
+    ndarray, shape ()
+        Log10 ionizing photon rate [dex relative to photons/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. Bit-exact whether given the full SSP grid or an
+    ionizing-only slice. Peak normalization and deferred 1/h keep all
+    intermediates within float32 range.
+    """
+    peak = jnp.max(jnp.abs(sed_lnu), initial=0.0)  # #1207 hardening pattern
+    peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
+    ell = sed_lnu / peak  # O(1) normalized L_nu
+    nu = C_AA / wave
+    nu_edge = C_AA / _HI_LIMIT_AA
+    integrand = ell / nu  # NO H_PLANCK division — that's deferred to avoid f32 overflow
+    ionizing_mask = wave < _HI_LIMIT_AA
+    integrand_masked = jnp.where(ionizing_mask, integrand, 0.0)
+    idx_below = jnp.argmax(jnp.where(ionizing_mask, jnp.arange(wave.shape[0]), -1))
+    idx_above = idx_below + 1
+    integrand_below = integrand[idx_below]
+    # Boundary bin: subtract the trapezoid triangle, add the true rectangle.
+    triangle_overcount = 0.5 * integrand_below * jnp.abs(nu[idx_below] - nu[idx_above])
+    rectangle_correct = integrand_below * jnp.abs(nu[idx_below] - nu_edge)
+    nion_bulk = jnp.abs(jnp.trapezoid(integrand_masked, nu))
+    norm = nion_bulk - triangle_overcount + rectangle_correct  # #537 correction BEFORE the log
+    pos = norm > 0
+    safe = jnp.where(pos, norm, 1.0)  # where-dummy: grad-safe log at zero flux
+    log10_norm = jnp.where(pos, jnp.log10(safe), -jnp.inf)
+    return log10_norm + jnp.log10(peak) - jnp.log10(H_PLANCK) + log10_scale
+
+
 def _integrate_nion(sed_lnu: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     r"""Ionizing photon rate :math:`Q_H` [photons/s] from a rest-frame L_nu SED.
 
-    THE single source of the Q_H integral — used by
-    :meth:`StellarSEDComponent.apply` (full SED) and by
-    :meth:`StellarSEDComponent.compute_nion` (SED-free, ionizing slice only), so
-    the two can never drift. Integrates :math:`\int_{\nu>c/\lambda_{\rm HI}}
-    L_\nu/(h\nu)\,d\nu` with the partial-bin Lyman-limit correction (#537): the
-    boundary bin's contribution is a rectangle from ``nu_edge`` to the last
-    ionizing grid point, not the trapezoid triangle a hard mask would give.
+    Thin wrapper around :func:`_integrate_nion_log10` that exponentiates the
+    log-domain result. Linear photons/s contract for user-facing APIs. Zero
+    ionizing flux returns exactly 0.0 (exp(-inf) == 0.0).
 
     Parameters
     ----------
@@ -520,19 +627,7 @@ def _integrate_nion(sed_lnu: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     **JIT-compatible**: yes. Bit-exact whether given the full SSP grid or an
     ionizing-only slice (the non-ionizing region contributes zero to the mask).
     """
-    nu = C_AA / wave
-    nu_edge = C_AA / _HI_LIMIT_AA
-    integrand = sed_lnu / (H_PLANCK * nu)
-    ionizing_mask = wave < _HI_LIMIT_AA
-    integrand_masked = jnp.where(ionizing_mask, integrand, 0.0)
-    idx_below = jnp.argmax(jnp.where(ionizing_mask, jnp.arange(wave.shape[0]), -1))
-    idx_above = idx_below + 1
-    integrand_below = integrand[idx_below]
-    # Boundary bin: subtract the trapezoid triangle, add the true rectangle.
-    triangle_overcount = 0.5 * integrand_below * jnp.abs(nu[idx_below] - nu[idx_above])
-    rectangle_correct = integrand_below * jnp.abs(nu[idx_below] - nu_edge)
-    nion_bulk = jnp.abs(jnp.trapezoid(integrand_masked, nu))
-    return nion_bulk - triangle_overcount + rectangle_correct
+    return pow10(_integrate_nion_log10(sed_lnu, wave))
 
 
 @dataclass(frozen=True)
@@ -611,6 +706,11 @@ class StellarSEDComponentState(SEDComponentState):
     name: str = "stellar"
     ssp_phot_lut: Any | None = None
     ssp_phot_ztable: Any | None = None
+    # The SSP grid preintegrated through each filter placed in the REST frame
+    # (a :class:`RestBandPrecomputation`), i.e. at z=0 — what ``phot_rest_fnu``
+    # actually needs (#1148). Redshift-independent, so ONE constant serves the
+    # fixed-z LUT and the free-z z-table alike.
+    restband_lut: Any | None = None
     # SpectrumPrecomp: SSP flux pre-rebinned to spectrum pixel
     # centers in the galaxy rest frame. ``ssp_spec_lut`` is a
     # :class:`SpectroscopicPrecomputation` (fixed-z); ``ssp_spec_ztable``
@@ -684,6 +784,7 @@ class StellarSEDComponent:
     - ``stellar_phot_lnu_precomp`` (ndarray, shape ``(n_filter,)``, erg/s/Hz) —
       stellar contribution to photometry from the LUT. Published only when
       ``approx=WavePrecomp()`` is set at model construction.
+
     """
 
     config: StellarSEDComponentConfig = field(default_factory=StellarSEDComponentConfig)
@@ -772,6 +873,11 @@ class StellarSEDComponent:
             DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
             DerivedKey("age_weights", "Msun", "CSP mass weights per SSP age bin"),
             DerivedKey("nion", "photons/s", "Ionizing photon rate (lambda < 911.76 A)"),
+            DerivedKey(
+                "log_nion",
+                "dex",
+                "log10(ionizing photon rate / (photons/s)); lambda < 911.76 A",
+            ),
             DerivedKey("sfh_grid_lbt_yr", "yr", "SFH lookback-time grid"),
             DerivedKey("sfr_history", "Msun/yr", "SFR on SFH grid"),
             DerivedKey("log_metallicity_history", "dex", "log10(Z) per SFH time bin"),
@@ -815,9 +921,11 @@ class StellarSEDComponent:
         redshift_spec : dict[str, Any] | None
             Redshift specification for precomputation. If None or
             mode="fixed", builds a fixed-z LUT.
+
             - mode="fixed", value=float: builds LUT at that fixed z.
             - mode="free", z_min=float, z_max=float, n_z=int: builds
               ztable via precompute_photometry_ztable with the given grid.
+
         spec_wave_obs : array_like, shape (n_pix,), optional
             Observed-frame spectrum pixel wavelengths [Angstrom]. Required
             when ``spectrum_precomp=True``.
@@ -910,6 +1018,30 @@ class StellarSEDComponent:
                     n_subbands=int(approx.get("n_subbands", 0)),
                 )
                 state = _replace_state(state, ssp_phot_ztable=ztable)
+
+            # The REST-frame band (#1148), built ONCE for both dispatches above.
+            # ``phot_rest_fnu`` is the SED reprojected at z=0, d_L=10 pc, so the
+            # filter sits in the REST frame and samples the rest SED at its own
+            # pivot — a different integral from ``ssp_phot``, which places the
+            # filter in the observed frame and samples rest λ_eff/(1+z). Reusing
+            # the observed-band tensor for the rest-frame flux is #1148: it put the
+            # LUT 769 % from the exact path in des_g at z=0.5.
+            #
+            # Redshift does not enter, so this is one constant for fixed-z AND
+            # free-z — no z-table, no interpolation, no runtime cost.
+            from tengri.components.stellar.sps.precompute import (
+                precompute_restband_photometry,
+            )
+
+            state = _replace_state(
+                state,
+                restband_lut=precompute_restband_photometry(
+                    ssp_data=self.ssp_data,
+                    filter_waves=filter_list,
+                    filter_trans=filter_trans_list,
+                    n_subbands=int(approx.get("n_subbands", 0)),
+                ),
+            )
 
         return state
 
@@ -1169,26 +1301,7 @@ class StellarSEDComponent:
         # ensemble mean equals SFR_mean. ``compute_field_gp`` lives in
         # the SFH registry next to the prior on ``sfh_field_xi``.
         if self.config.field:
-            from tengri.components.stellar.sfh.registry import compute_field_gp
-
-            psd_sigma = jnp.asarray(params["sfh_field_psd_sigma"])
-            psd_tau_myr = jnp.asarray(params["sfh_field_psd_tau_myr"])
-            xi = jnp.asarray(params.get("sfh_field_xi", jnp.zeros(n_grid)))
-            psd_tau_yr = psd_tau_myr * 1e6
-            # JIT-safe: ``log_age_grid`` is traced under jit so indexing +
-            # float() would raise ConcretizationTypeError. ``log_age_grid_step``
-            # recomputes the step from static ``n_grid`` and module constants.
-            d_log_age = log_age_grid_step(n_grid)
-            gp_x, k0_half = compute_field_gp(
-                xi,
-                psd_sigma,
-                psd_tau_yr,
-                n_grid,
-                d_log_age,
-                field_model="drw",
-                log_age_grid=log_age_grid,
-            )
-            sfr_history = sfr_history * jnp.exp(gp_x - k0_half)
+            sfr_history = _apply_gp_field(sfr_history, params, n_grid, log_age_grid)
 
         # ── 3. Resample to SSP age grid for CSP integration ─────────────
         # For deterministic (non-GP) parametric SFHs, evaluate the analytic
@@ -1689,6 +1802,21 @@ class StellarSEDComponent:
         lnu_age = total_mass * ssp_flux_at_age * LSUN_ERG_PER_S
         sed_intrinsic = lnu_age.sum(axis=0)
 
+        # The bare erg/s scale ``total_mass x L_sun``. Written out on its own it
+        # is ~1e42 for a 1e9 Msun galaxy, which overflows float32 (max 3.4e38)
+        # to ``inf`` — silently, since JAX neither warns nor NaNs. The SED above
+        # never trips this because ``total_mass x ssp_flux_at_age`` lands first
+        # and keeps the magnitude small; the two consumers below have no such
+        # small factor to hide behind. Pin the scale at working precision so a
+        # float32 SSP grid (bc03_*, pgny_*) cannot poison the nebular backends
+        # through the ionizing SED (#1099).
+        mass_scale_erg = total_mass.astype(jnp.result_type(float)) * LSUN_ERG_PER_S
+        # Log10 of the mass scale, folded into the log-domain Q_H integral
+        # (_integrate_nion_log10 log10_scale) so no ~1e42 intermediate is materialized.
+        log10_mass_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
+            LSUN_ERG_PER_S
+        )
+
         # ── 8. Mass quantities ──────────────────────────────────────────
         #
         # Two keys, on purpose. ``log_mstar`` keeps its documented fallback to the
@@ -1752,13 +1880,23 @@ class StellarSEDComponent:
         # backend (#950). Bit-exact — sed_ion == sed_intrinsic[:n_ion]. Falls
         # back to the full integral when the static bound was not precomputed.
         _n_ion = self._state.n_ion_bins if self._state is not None else None
-        if _n_ion is not None:
-            _sed_ion = (total_mass * LSUN_ERG_PER_S) * jnp.tensordot(
+        if _n_ion is not None and _n_ion > 0:
+            # Compute Q_H in log-domain to avoid float32 overflow (#1206).
+            # The tensordot result is O(1); the scale rides the log integral.
+            _tensordot_result = jnp.tensordot(
                 joint_weights, ssp_flux_for_csp[:, :, :_n_ion], axes=([0, 1], [0, 1])
             )
-            nion = _integrate_nion(_sed_ion, wave[:_n_ion])
+            log_nion = _integrate_nion_log10(
+                _tensordot_result, wave[:_n_ion], log10_scale=log10_mass_scale
+            )
+        elif _n_ion is not None:
+            # n_ion_bins == 0 (static): no grid bins below the Lyman limit
+            # (IR-focused configs) -> Q_H is identically zero. Skips the slice
+            # machinery: max/argmax over zero-size arrays raise (#1193 fallout).
+            log_nion = jnp.full((), -jnp.inf)
         else:
-            nion = _integrate_nion(sed_intrinsic, wave)
+            log_nion = _integrate_nion_log10(sed_intrinsic, wave)
+        nion = pow10(log_nion)  # linear transition surface; exp(-inf) == 0.0
 
         # ── 11b. Project to pipeline wavelength grid ────────────────
         # When the pipeline runs on a panchromatic grid (radio/X-ray
@@ -1804,7 +1942,7 @@ class StellarSEDComponent:
             # L_ir from a precomputed bolometric (tau_bc, tau_diff) LUT instead
             # of the full-wavelength stellar cube (WavePrecomp speed path).
             joint_weights=joint_weights,
-            stellar_mass_scale=total_mass * LSUN_ERG_PER_S,
+            stellar_mass_scale=mass_scale_erg,
             # CSP mass weights (Msun per SSP age bin), summed
             # over the metallicity axis. Published so downstream
             # nebular backends (Cue, CloudyGrid) can call their
@@ -1812,6 +1950,7 @@ class StellarSEDComponent:
             # entry points and derive Q_H + ionizing spectrum
             # from the SSP, matching legacy parity.
             age_weights=age_weights,
+            log_nion=log_nion,
             nion=nion,
             sfh_grid_lbt_yr=sfh_lbt_grid,
             sfr_history=sfr_history,
@@ -1993,6 +2132,44 @@ class StellarSEDComponent:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
 
+        # ── 12b-rest. The REST-frame band (#1148) ───────────────────────────
+        # ``phot_rest_fnu`` is the SED reprojected at z=0, d_L=10 pc — the galaxy
+        # as it is — so the filter sits in the REST frame and samples the rest SED
+        # at its own pivot. That is a different integral from the observed-band
+        # tensors above, which sample rest λ_eff/(1+z). The LUT used to reuse those
+        # for the rest-frame flux, which put it 769 % from the exact path in des_g
+        # at z=0.5 and orders of magnitude out in the blue.
+        #
+        # Published for the fixed-z and free-z paths alike, from ONE constant: the
+        # rest band does not move with redshift, so there is nothing to interpolate.
+        if self._state is not None and self._state.restband_lut is not None:
+            rb = self._state.restband_lut
+            derived_overrides["stellar_restband_lnu_precomp"] = (
+                total_mass
+                * jnp.einsum("ma,maf->f", joint_weights, rb.ssp_restband_phot)
+                * LSUN_ERG_PER_S
+            )
+            derived_overrides["filter_restband_eff_waves"] = jnp.asarray(rb.restband_eff_waves)
+            if rb.ssp_restband_subband_phot is not None:
+                rb_phi = jnp.einsum("ma,mafk->afk", joint_weights, rb.ssp_restband_subband_phot)
+                rb_num = jnp.einsum(
+                    "ma,mafk->afk",
+                    joint_weights,
+                    rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot,
+                )
+                derived_overrides["stellar_restband_lnu_per_age_subband_precomp"] = (
+                    total_mass * rb_phi * LSUN_ERG_PER_S
+                )
+                # The node is a RATIO, so mass and L_sun cancel — take it from the
+                # unscaled sums. Zero-weight sub-bands keep a finite, positive node:
+                # a zero would go to inf through the 1/λ dust law.
+                rb_live = rb_phi != 0.0
+                derived_overrides["stellar_restband_subband_waves_precomp"] = jnp.where(
+                    rb_live,
+                    rb_num / jnp.where(rb_live, rb_phi, 1.0),
+                    jnp.asarray(rb.restband_eff_waves)[:, None],
+                )
+
         # ── 12c. Stellar spectrum LUT (SpectrumPrecomp) ─────────────────
         # Pre-rebinned SSP × pixel LUT: the continuum at the spectrum pixel
         # centers in the galaxy rest frame. Publishes:
@@ -2103,11 +2280,11 @@ class StellarSEDComponent:
         sfh_spec = SFH_REGISTRY[self.config.sfh_model]
 
         # ── supported-configuration guards (loud, never silent) ──
-        if self.config.field:
-            raise ValueError(
-                "compute_joint_weights supports non-field SFH only; the GP-field "
-                "path modulates the SFR on the lookback grid — use the exact forward."
-            )
+        # The GP field is supported (delta metallicity, parametric backbone): it
+        # modulates the SFR on the lookback grid and is handled in the field
+        # branch below via the shared ``_apply_gp_field`` + the same DSPS weight
+        # function apply uses. The remaining guards still fall back to the exact
+        # forward.
         if self.config.metallicity_model != "delta":
             raise ValueError(
                 f"compute_joint_weights supports metallicity_model='delta' only "
@@ -2151,6 +2328,43 @@ class StellarSEDComponent:
         )
         lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
 
+        # GP-field CSP weights — mirrors apply's field delta path EXACTLY. The
+        # field modulates the SFR on the lookback grid (``_apply_gp_field``, the
+        # single source shared with :meth:`apply`), which is interpolated to the
+        # SSP ages; the (met, age) weights then come from the SAME DSPS function
+        # (``calc_ssp_weights_sfh_table_lognormal_mdf``) that apply's SED call uses
+        # internally — so the fast and exact line paths cannot diverge. ``total_mass``
+        # is the conserved coarse value (no young knot), matching apply §3.
+        if self.config.field:
+            from dsps.sed.ssp_weights import calc_ssp_weights_sfh_table_lognormal_mdf
+
+            n_grid = self.config.n_grid
+            log_age_grid = make_log_age_grid(n_grid)
+            sfh_lbt_grid = 10.0**log_age_grid
+            sfr_history = sfh_spec.fn(sfh_lbt_grid, **sfh_kwargs)
+            sfr_history = _apply_gp_field(sfr_history, params, n_grid, log_age_grid)
+            sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+            _, _, total_mass = _build_dsps_sfh_table(ssp_ages_yr, sfr_on_ssp, t_obs_gyr)
+            gal_t, gal_sfr, _ = _build_dsps_sfh_table(
+                ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
+            )
+            weights, _, _ = calc_ssp_weights_sfh_table_lognormal_mdf(
+                gal_t,
+                gal_sfr,
+                log_z_abs_scalar,
+                lgmet_scatter,
+                ssp.ssp_lgmet,
+                ssp.ssp_lg_age_gyr,
+                t_obs_gyr,
+            )
+            # #821 youngest-bin edge-clip correction — apply applies this for ALL
+            # DSPS-histogram-kernel paths (field / per-age metallicity); without it
+            # the youngest bin (which carries the ionizing, line-emitting stars) is
+            # clipped ~10% low. The CIC path (below) bakes it in instead.
+            weights = weights * _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr)[None, :]
+            joint_weights = weights / jnp.maximum(weights.sum(), 1e-300)
+            return joint_weights, total_mass, ssp_ages_yr
+
         # Delta + non-field CSP weights — mirrors apply's delta path EXACTLY
         # (#982): a cloud-in-cell age marginal on a dense integrand (#758/#964,
         # with the SFH's exact bin-edge knots injected for binned families) times
@@ -2175,17 +2389,15 @@ class StellarSEDComponent:
         joint_weights = joint_weights / jnp.maximum(joint_weights.sum(), 1e-300)
         return joint_weights, total_mass, ssp_ages_yr
 
-    def compute_nion(self, params, ssp_data=None):
-        r"""SED-free ionizing photon rate :math:`Q_H` — no full-wavelength SED.
+    def compute_log_nion(self, params, ssp_data=None):
+        r"""SED-free log-domain ionizing photon rate — no full-wavelength SED.
 
-        Reconstructs the stellar intrinsic SED on the **ionizing slice only**
-        (:math:`\lambda` below ~2x the Lyman limit — enough to include the
-        boundary bin) from the SED-free CSP weights (:meth:`compute_joint_weights`)
-        and integrates via the shared :func:`_integrate_nion`. Matches the
-        ``nion`` that :meth:`apply` publishes (both use the same integral and the
-        same reconstruction identity, ``sed = total_mass * L_sun * sum_ma
-        jw*ssp_flux``) without the ~6000-wavelength einsum — the FeaturePrecomp
-        entry for the Q_H-scaled nebular grid.
+        Log-domain variant of :meth:`compute_nion` that returns log10(Q_H) instead
+        of Q_H. Reconstructs the stellar intrinsic SED on the **ionizing slice only**
+        (:math:`\lambda` below ~2x the Lyman limit) from the SED-free CSP weights
+        (:meth:`compute_joint_weights`) and integrates via the shared
+        :func:`_integrate_nion_log10`. Matches the ``log_nion`` that :meth:`apply`
+        publishes (both use the same log-domain integral).
 
         Parameters
         ----------
@@ -2197,7 +2409,7 @@ class StellarSEDComponent:
         Returns
         -------
         ndarray, shape ()
-            Ionizing photon rate [photons/s]. Raises (via
+            Log10 ionizing photon rate [dex relative to photons/s]. Raises (via
             :meth:`compute_joint_weights`) for unsupported SFH / metallicity.
 
         Notes
@@ -2225,10 +2437,48 @@ class StellarSEDComponent:
             n_ion = self._state.n_ion_bins
         else:
             n_ion = int(jnp.sum(wave < (2.0 * _HI_LIMIT_AA)))
-        sed_ion = (total_mass * LSUN_ERG_PER_S) * jnp.tensordot(
-            joint_weights, ssp.ssp_flux[:, :, :n_ion], axes=([0, 1], [0, 1])
+
+        if n_ion == 0:
+            # No grid bins below the Lyman limit (IR-focused configs)
+            # → Q_H is identically zero. Skips the slice machinery to avoid
+            # max/argmax over zero-size arrays (#1193 fallout, #1207 fix).
+            return jnp.full((), -jnp.inf)
+
+        sed_ion = jnp.tensordot(joint_weights, ssp.ssp_flux[:, :, :n_ion], axes=([0, 1], [0, 1]))
+        log10_scale = jnp.log10(total_mass.astype(jnp.result_type(float))) + jnp.log10(
+            LSUN_ERG_PER_S
         )
-        return _integrate_nion(sed_ion, wave[:n_ion])
+        return _integrate_nion_log10(sed_ion, wave[:n_ion], log10_scale=log10_scale)
+
+    def compute_nion(self, params, ssp_data=None):
+        r"""SED-free ionizing photon rate :math:`Q_H` — no full-wavelength SED.
+
+        Thin wrapper around :meth:`compute_log_nion` that exponentiates the
+        log-domain result. Reconstructs the stellar intrinsic SED on the
+        **ionizing slice only** (:math:`\lambda` below ~2x the Lyman limit)
+        from the SED-free CSP weights (:meth:`compute_joint_weights`) and
+        integrates via the log-domain core. Matches the ``nion`` that
+        :meth:`apply` publishes without the ~6000-wavelength einsum.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict (same shape as :meth:`apply`).
+        ssp_data : SSPData, optional
+            Override for the model's SSP grid.
+
+        Returns
+        -------
+        ndarray, shape ()
+            Ionizing photon rate [photons/s]. Raises (via
+            :meth:`compute_joint_weights`) for unsupported SFH / metallicity.
+
+        Notes
+        -----
+        **JIT-compatible**: yes. The ionizing-slice mask is static (SSP wave grid
+        is concrete), so the slice shape is fixed under jit.
+        """
+        return pow10(self.compute_log_nion(params, ssp_data=ssp_data))
 
 
 def _time_weighted_sfr(
@@ -2617,23 +2867,25 @@ def _q_h_fn(state, params):
     return jnp.asarray(derived.get("nion", nan_scalar))
 
 
+def _log_q_h_fn(state, params):
+    """log10 ionizing photon production rate [dex re photons/s] — float32-safe."""
+    derived = state.derived
+    log_nion = derived.get("log_nion")
+    return jnp.asarray(log_nion) if log_nion is not None else jnp.asarray(jnp.nan)
+
+
 def _xi_ion_fn(state, params):
     """Ionizing photon efficiency [Hz/erg]."""
-    from tengri.utils.physics_constants import C_AA
-    from tengri.utils.sed_quantities import compute_fuv_flux
+    from tengri.utils.sed_quantities import compute_xi_ion_from_log_qh
 
     derived = state.derived
     nan_scalar = jnp.asarray(jnp.nan)
-    q_h = jnp.asarray(derived.get("nion", nan_scalar))
-
     sed = state.sed_intrinsic
     if sed is None:
         return nan_scalar
     else:
-        fuv = compute_fuv_flux(sed, state.wave)
-        nu_uv = C_AA / 1500.0
-        nu_l_uv = fuv * nu_uv
-        return q_h / jnp.maximum(nu_l_uv, _TINY)
+        log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+        return compute_xi_ion_from_log_qh(log_nion, sed, state.wave)
 
 
 # Register properties in the global registry
@@ -2789,6 +3041,12 @@ _IONIZING_PROPERTIES = {
         group="ionizing",
         doc="Ionizing photon production rate",
         fn=_q_h_fn,
+    ),
+    "log_q_h": Property(
+        units="dex",
+        group="ionizing",
+        doc="log10(ionizing photon production rate / (photons/s)) — float32-safe form of q_h",
+        fn=_log_q_h_fn,
     ),
     "xi_ion": Property(
         units="Hz/erg",

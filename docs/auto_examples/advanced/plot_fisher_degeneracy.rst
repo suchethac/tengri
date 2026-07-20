@@ -132,8 +132,8 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
             mdl = tengri.SEDModel.build(
                 ssp,
                 observation=obs,
-                sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust={"type": "two_component", "*": tengri.FIXED},
+                sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+                dust={"type": "two_component", "all_params": tengri.FIXED},
                 redshift=tengri.Fixed(0.1),
             )
             phot = jnp.abs(mdl.predict_photometry(true_params))
@@ -168,7 +168,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.595 seconds)
+   **Total running time of the script:** (0 minutes 11.130 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_fisher_degeneracy.py:

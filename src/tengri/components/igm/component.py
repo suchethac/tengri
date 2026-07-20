@@ -18,6 +18,7 @@ Design choices (mirrored in :mod:`tengri.components.radio.component`):
 - :meth:`precompute` is a no-op (Inoue's piecewise-power-law fit is
   evaluated lazily inside :func:`igm_transmission`; no redshift-dependent
   grid needs caching).
+
 """
 
 from __future__ import annotations
@@ -565,8 +566,65 @@ class IGMSEDComponent:
             derived = derived.with_(igm_phot_factor=band_factor)
         if spec_factor is not None:
             derived = derived.with_(igm_spec_factor=spec_factor)
+        derived = self._fold_transmission_into_subbands(derived, params, z, dla_z)
 
         return state.with_(sed_observed=state.sed_observed * T, derived=derived)
+
+    def _fold_transmission_into_subbands(self, derived, params, z, dla_z):
+        r"""Fold :math:`T` at the photometry sub-band nodes at runtime (#1149).
+
+        The WavePrecomp photometry path integrates the stellar continuum as a
+        K-point sub-band quadrature (#1122) and consumes
+        ``stellar_phot_lnu_per_age_subband_igm_precomp`` — the same tensor with
+        :math:`T` folded in at each node — so the projection captures
+        :math:`\langle S T \rangle` rather than :math:`\langle S \rangle
+        \langle T \rangle`. For a mean-IGM model that tensor is a build-time
+        constant (:func:`~tengri.forward.sed_model._fold_igm_into_subbands`,
+        #1135). Patchy reionization and DLAs read free parameters, so it is not,
+        and the tensor is absent — leaving the projector to band-average
+        :math:`\langle T \rangle` over the whole flux. Across a Lyman-break band
+        at :math:`z = 7` that covariance gap reached +281 %.
+
+        Here :math:`T` is evaluated at the published nodes on **every call** and
+        folded onto the stellar sub-band tensor, so the parametric IGM gets the
+        same quadrature the mean IGM does. The nodes and the sub-band flux are
+        small ``(n_age, n_filter, n_subbands)`` tensors, so this does not pin the
+        dense SED grid the way the ``igm_transmission`` fallback does.
+
+        No-op unless the mean-IGM fold is *absent* (``igm_patchy`` / ``use_dla``)
+        and the stellar sub-band tensors were published (WavePrecomp): the exact
+        path and every mean-IGM model are untouched.
+
+        Notes
+        -----
+        The node is metallicity-*contracted* (the flux-weighted centroid across
+        the SSP metallicity grid), so folding here carries the ~1 % met-node
+        residual #1135 avoids by folding before the contraction — negligible next
+        to the +281 % it removes.
+
+        **JIT-compatible**: yes — pure array ops on published derived tensors.
+        """
+        if derived.get("stellar_phot_lnu_per_age_subband_igm_precomp") is not None:
+            return derived  # mean-IGM build-time fold already present (#1135)
+        sub_per_age = derived.get("stellar_phot_lnu_per_age_subband_precomp")
+        node_waves = derived.get("stellar_subband_waves_rest_precomp")
+        if sub_per_age is None or node_waves is None:
+            return derived  # exact path publishes no sub-band tensors
+
+        t_nodes = igm_absorption(
+            node_waves.reshape(-1) * (1.0 + z),
+            z,
+            igm_x_HI=params.get("igm_x_HI", 0.0),
+            igm_bubble_mpc=params.get("igm_bubble_mpc", 10.0),
+            igm_patchy=self.config.igm_patchy,
+            igm_model=self.config.igm_model,
+            use_dla=self.config.use_dla,
+            dla_z=dla_z,
+            dla_log_n_hi=params.get("dla_log_n_hi", 20.0),
+            dla_temp=params.get("dla_temp", 1e4),
+            dla_b_turb=params.get("dla_b_turb", 0.0),
+        ).reshape(node_waves.shape)
+        return derived.with_(stellar_phot_lnu_per_age_subband_igm_precomp=sub_per_age * t_nodes)
 
 
 # Register in the unified component dispatch table so build_components resolves

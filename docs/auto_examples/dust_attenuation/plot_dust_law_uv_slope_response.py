@@ -67,7 +67,7 @@ LAWS = [
 ]
 SFH = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": 0.05,
     "width_gyr": 0.05,
     "log_total_mass": 10.0,
@@ -83,7 +83,7 @@ def _model(law=None, tau=0.0):
         sfh=SFH,
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tau,
             "tau_bc": 0.0,
             "law_diff": law or "calzetti",
@@ -95,8 +95,8 @@ def _model(law=None, tau=0.0):
 # Intrinsic slope reference
 m0 = _model(tau=0.0)
 p0 = dict(m0.spec.sample(jax.random.PRNGKey(0)))
-out0 = m0.predict_rest_sed(p0)
-beta_intrinsic = _beta_uv(np.asarray(out0.wavelength), np.asarray(out0.sed))
+out0 = m0.predict(p0)
+beta_intrinsic = _beta_uv(np.asarray(m0.wavelengths), np.asarray(out0.rest_sed()))
 
 fig, ax = plt.subplots(figsize=(7.0, 4.6))
 ax.axhline(
@@ -110,8 +110,8 @@ ax.axhline(
 for law_key, label, color in LAWS:
     m = _model(law=law_key, tau=1.0)
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    out = m.predict_rest_sed(p)
-    beta = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
+    out = m.predict(p)
+    beta = _beta_uv(np.asarray(m.wavelengths), np.asarray(out.rest_sed()))
     ax.bar(label, beta - beta_intrinsic, color=color, edgecolor="0.15", lw=0.5)
     ax.text(
         label, beta - beta_intrinsic + 0.05, f"{beta:+.2f}", ha="center", fontsize=8, color="0.2"

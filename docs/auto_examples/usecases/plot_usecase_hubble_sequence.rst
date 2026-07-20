@@ -33,10 +33,11 @@ emerging atlas shows the same chromatic ordering as Coleman+1980:
 ellipticals are reddest at all wavelengths, irregulars dominate the UV.
 
 References:
+
 - Coleman, Wu & Weedman 1980, ApJS, 43, 393
 - Kennicutt 1992, ApJS, 79, 255 (modern revision of the atlas)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-100
+.. GENERATED FROM PYTHON SOURCE LINES 22-102
 
 
 
@@ -83,7 +84,7 @@ References:
         ssp,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": tengri.Uniform(0.1, 13.0),
             "width_gyr": tengri.Uniform(0.1, 5.0),
             "log_total_mass": 10.0,
@@ -92,7 +93,7 @@ References:
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tengri.Uniform(0.0, 2.0),
             "tau_bc": 0.3,
             "slope": -0.7,
@@ -110,10 +111,10 @@ References:
             "sfh_tsnorm_width_gyr": jnp.float64(width),
             "dust_tau_diff": jnp.float64(tau),
         }
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
         nu = C_AA_PER_S / wave
-        nu_l_nu = nu * np.asarray(out.sed)
+        nu_l_nu = nu * np.asarray(out.rest_sed())
         # Normalize each spectrum to its 5500 Å value so the chromatic
         # ordering — not the absolute luminosity — reads cleanly.
         norm = nu_l_nu[np.argmin(np.abs(wave - 5500.0))]

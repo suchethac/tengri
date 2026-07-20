@@ -56,6 +56,7 @@ def synthesizer_default(
         model = tengri.SEDModel(params, ssp_data=ssp)
 
     Reproduces the default assumptions of synthesizer-project/synthesizer:
+
     - SPS: BC03 via DSPS
     - SFH: parametric DPL (delayed-tau power law)
     - Dust geometry: Charlot & Fall 2000 two-component (BC + ISM)
@@ -81,6 +82,7 @@ def synthesizer_default(
     Notes
     -----
     This preset does NOT include:
+
     - Radio (disabled)
     - X-ray (disabled)
     - Shock (disabled)

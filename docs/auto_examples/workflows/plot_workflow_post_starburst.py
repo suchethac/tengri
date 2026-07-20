@@ -1,6 +1,6 @@
 """
 Model misspecification: post-starburst galaxies reveal wrong SFH
-==============================================================
+================================================================
 
 A post-starburst galaxy shows a recent burst followed by quenching.
 When fit with smooth tau-model (incorrect), the fit biases the recovered
@@ -48,8 +48,8 @@ truth_params = {
 model_truth = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FIXED},
-    dust={"type": "two_component", "*": tengri.FIXED},
+    sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+    dust={"type": "two_component", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.1),
 )
 mock = model_truth.mock(truth_params, snr=20.0, key=key)
@@ -68,7 +68,7 @@ model_correct = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.2,
         "tau_diff": 0.1,
         "slope": -0.7,
@@ -98,7 +98,7 @@ model_wrong = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.2,
         "tau_diff": 0.1,
         "slope": -0.7,

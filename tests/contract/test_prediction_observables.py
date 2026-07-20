@@ -9,7 +9,7 @@ observables as uniform callables with defaults:
     pred.photometry(fast=True)              # explicit opt-in to the WavePrecomp LUT
     pred.magnitudes(...)                    # AB mags, same signature
     pred.spectrum()                         # instrument grid, LSF-convolved, calibrated
-    pred.rest_sed / pred.obs_sed            # panchromatic model-grid arrays
+    pred.rest_sed() / pred.obs_sed()            # panchromatic model-grid arrays
 
 Two rules carry real risk and are pinned hard below.
 
@@ -266,8 +266,8 @@ def test_rest_and_obs_sed_are_the_panchromatic_arrays(exact):
     model, params = exact
     pred = model.predict(params)
 
-    rest = np.asarray(pred.rest_sed)
-    obs = np.asarray(pred.obs_sed)
+    rest = np.asarray(pred.rest_sed())
+    obs = np.asarray(pred.obs_sed())
     assert rest.shape == obs.shape
     assert np.all(np.isfinite(rest)) and np.all(np.isfinite(obs))
     np.testing.assert_allclose(obs, np.asarray(model.predict_obs_sed(params).sed), rtol=0.0)

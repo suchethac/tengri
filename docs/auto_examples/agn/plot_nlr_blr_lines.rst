@@ -35,7 +35,7 @@ fingerprint at fixed library.
 Reference: Osterbrock & Ferland 2006, *Astrophysics of Gaseous Nebulae
 and Active Galactic Nuclei* (line classification by FWHM).
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-86
+.. GENERATED FROM PYTHON SOURCE LINES 19-98
 
 
 
@@ -68,31 +68,43 @@ and Active Galactic Nuclei* (line classification by FWHM).
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     ssp = tengri.load_ssp()
 
 
+    # Mapping of deprecated lines.type to new nlr/blr types
+    _LINES_EXPANSION = {
+        "nlr": {"nlr_type": "analytic", "blr_type": "none"},
+        "blr": {"nlr_type": "none", "blr_type": "analytic"},
+    }
+
+
     def _build(lines_type):
+        mapping = _LINES_EXPANSION.get(lines_type)
+        if not mapping:
+            raise ValueError(f"Unknown lines type: {lines_type}")
+
         model = tengri.SEDModel.build(
             ssp,
             sfh=SFH,
             dust=DUST,
             agn={
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
                 "frac": 1.0,
-                "disc": {"type": "multicolor", "*": tengri.FIXED},
-                "torus": {"type": "skirtor", "*": tengri.FIXED},
-                "lines": {"type": lines_type, "*": tengri.FIXED},
+                "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+                "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+                "nlr": {"type": mapping["nlr_type"], "all_params": tengri.FIXED},
+                "blr": {"type": mapping["blr_type"], "all_params": tengri.FIXED},
             },
             redshift=tengri.Fixed(0.0),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
-        return wave, C_AA_PER_S / wave * np.asarray(out.sed)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
+        return wave, C_AA_PER_S / wave * np.asarray(out.rest_sed())
 
 
     wave_nlr, nl_nlr = _build("nlr")
@@ -117,6 +129,11 @@ and Active Galactic Nuclei* (line classification by FWHM).
 
     fig.tight_layout()
     plt.savefig("plot_nlr_blr_lines.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.887 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_nlr_blr_lines.py:

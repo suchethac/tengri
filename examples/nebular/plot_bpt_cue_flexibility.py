@@ -48,23 +48,28 @@ for ax, (_label, (param_name, param_values)) in zip(axes, sweeps.items()):
         spec_dict = {
             "sfh": {
                 "type": "dpl",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "alpha": 1.0,
                 "beta": 2.5,
                 "tau_gyr": 0.05,
                 "log_total_mass": 10.0,
             },
-            "dust": {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+            "dust": {
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+                "tau_diff": 0.0,
+                "tau_bc": 0.0,
+            },
             "neb": {
                 "type": "cue",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 param_name: tengri.Fixed(pval),
             },
             "redshift": tengri.Fixed(0.05),
         }
         model = tengri.SEDModel.build(ssp, **spec_dict)
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        lines = model.predict_emission_lines(params)
+        lines = model.predict(params).lines
         ha = float(lines.halpha)
         hb = float(lines.hbeta)
         nii = float(lines.nii_6584)

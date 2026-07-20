@@ -9,6 +9,7 @@ from HDF5/NPZ files. They are NOT on the hot JAX path and do not participate
 in differentiation or JIT compilation.
 
 Template-based models:
+
 - ``load_draine_li_templates`` / ``create_dl07_from_grid`` — Draine & Li 2007
 - ``load_dl14_templates`` / ``create_dl14_from_grid`` — Draine & Li 2014 update
 - ``load_astrodust_templates`` / ``create_astrodust_from_grid`` — Astrodust+PAH
@@ -16,11 +17,14 @@ Template-based models:
 - ``load_themis_templates`` / ``create_themis_from_grid`` — THEMIS (Jones et al. 2017)
 
 Lazy loaders (auto-load templates on first call):
+
 - ``_make_lazy_loader`` — factory for lazy-loading wrappers
 - ``_find_dl07_templates``, ``_dl07_lazy_wrapper``, ``_dl14_lazy_wrapper``
 
 Re-exported here from emission.py:
+
 - Import from ``tengri.components.dust.emission`` (re-exports from this module)
+
 """
 
 from collections.abc import Callable
@@ -260,6 +264,7 @@ def load_draine_li_templates(filepath: str) -> dict:
     r"""Load DL07 template grid from HDF5 or NPZ.
 
     Supports two formats:
+
     - HDF5 with keys: wavelength, umin_grid, qpah_grid, single_u, powerlaw
     - NPZ with keys: wavelength, umin_grid, qpah_grid,
       templates_umin_only, templates_umin_umax
@@ -1563,35 +1568,6 @@ def load_dh02_ce01_lnu_grid(grid_path: str) -> dict:
         "irlum_axis": jnp.array(irlum_axis, dtype=jnp.float64),
         "templates": jnp.array(templates, dtype=jnp.float64),
     }
-
-
-def register_dh02_ce01_tabulated(grid_path: str, name: str = "dh02_ce01") -> None:
-    r"""Load and register the tabulated DH02_CE01 model in the emission registry.
-
-    After calling this, the model is available via
-    ``DUST_EMISSION_MODELS["dh02_ce01"]`` and can be used as the
-    ``dust_emission_model`` in ``SEDModel()``.
-
-    Parameters
-    ----------
-    grid_path : str
-        Path to ``dh02_ce01_grid.h5``.
-    name : str
-        Registry name. Default: "dh02_ce01".
-
-    Returns
-    -------
-    None
-        Model is registered in ``DUST_EMISSION_MODELS`` dict as a side effect.
-
-    Notes
-    -----
-    **JIT-compatible**: no — registration happens at factory time before JIT.
-    """
-    from . import emission
-
-    model_fn = create_dh02_ce01_from_grid(grid_path)
-    emission.DUST_EMISSION_MODELS[name] = model_fn
 
 
 # Normalize BOSA grid helper

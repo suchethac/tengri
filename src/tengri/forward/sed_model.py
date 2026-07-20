@@ -2,6 +2,7 @@
 """SEDModel: high-level forward model wrapping the tengri SED pipeline.
 
 SEDModel provides a clean API for:
+
 - Forward predictions (SED, photometry, spectrum, SFH, derived quantities)
 - Mock galaxy generation (single and batch)
 - Convenience fitting (delegates to Fitter)
@@ -49,6 +50,7 @@ marker lines to jump. In order:
   - ``Batch operations``
   - ``Private prediction dispatch``
   - ``Utilities``
+
 """
 
 from __future__ import annotations
@@ -95,6 +97,7 @@ from tengri.utils.grid import (
     log_age_to_age_yr,
     make_log_age_grid,
 )
+from tengri.utils.scale import LOG10_4PI, apply_log10_scale
 
 #: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
 #: :meth:`SEDModel._dust_emission_band_response`. A physically plausible L_IR
@@ -315,6 +318,163 @@ class SpectrumPrecomp:
     flag does not change the spectroscopy result."""
 
 
+@dataclasses.dataclass(frozen=True)
+class FeaturePrecomp:
+    r"""Configuration for the emission-line precompute (the *feature* LUT path).
+
+    Pass this to :class:`SEDModel` via ``approx=`` to serve emission-line fluxes
+    from a build-time lookup instead of the per-evaluation forward. It is the
+    line-channel sibling of :class:`WavePrecomp` (photometry) and
+    :class:`SpectrumPrecomp` (spectroscopy), and composes with either.
+
+    The line wavelengths default to those of ``Observation.line_fluxes`` — the
+    model already knows which lines it is being fitted against — so the common
+    case needs no arguments at all.
+
+    Which machinery is built depends on the nebular backend, because the two
+    backends put their lines in physically different places:
+
+    * **Cue** (and any backend publishing discrete line luminosities). Lines are
+      linear in the ionizing photon rate, :math:`L_{\rm line} = Q_H \times
+      \ell(\theta)`, with :math:`\ell` independent of the SFH *shape*. A grid of
+      :math:`\ell` over the free ionization axes is built once (one Cue forward
+      per node), and each evaluation reduces to :math:`Q_H \times
+      \mathrm{interp}(\text{grid})`. Nothing downstream needs the full-wavelength
+      SED, so XLA prunes the stellar einsum entirely.
+    * **Baked-in / wNE.** The lines are *inside* the SSP templates, so they must
+      be measured off the spectrum. A per-line window LUT of SSP integrals is
+      built instead, and the measurement contracts it with SED-free SFH weights
+      and the dust screen at the window centers.
+
+    Parameters
+    ----------
+    n_grid : int, default 16
+        Grid points per free ionization axis (Cue backend only; ignored for
+        baked-in, whose window LUT has no ionization axes). Denser is tighter.
+    lines : array_like or None, optional
+        Rest-frame vacuum line wavelengths [Angstrom] to tabulate. ``None``
+        (default) takes them from ``Observation.line_fluxes``.
+    ranges : dict, optional
+        Override ``{param: (lo, hi)}`` grid bounds (Cue only). Defaults to each
+        free parameter's prior support.
+
+    Notes
+    -----
+    **Explicit opt-in, by design.** This is a lossy approximation, so it never
+    activates on its own — a model acquires it only because the user asked for
+    it. An observation that merely *contains* lines does not switch it on.
+
+    **Accuracy (Cue).** Reconstruction is exact at grid nodes and node-exact
+    between them. Balmer lines are recombination lines (:math:`\propto Q_H`) and
+    converge quickly. Collisionally excited lines ([OIII], [NII], [SII]) depend
+    on the *shape* of the ionizing spectrum, which varies along the metallicity
+    axis; validate with a dense sweep strictly inside the grid range, never with
+    random draws (they under-sample the structure and report bounds that are
+    optimistic by orders of magnitude).
+
+    **Accuracy (baked-in).** The window LUT reconstructs the stellar + dust-screen
+    spectrum only, so any component adding rest-frame flux is excluded — with one
+    measured exception. A dust-IR component contributes a *smooth* continuum that
+    is common to the line window and its sidebands, and so cancels in the
+    continuum subtraction: the bias on the measured line flux is :math:`< 10^{-7}`
+    even at :math:`\tau_{\rm bc}=4,\ \tau_{\rm diff}=3`, against a 3% contamination
+    of the continuum level itself. Dust IR is therefore allowed for lines. It is
+    *not* allowed for spectral indices, where a break is a flux **ratio** and a
+    smooth additive offset does not cancel.
+
+    **JIT-compatible**: the resulting line prediction is JIT- and gradient-safe;
+    the one-time build is eager.
+
+    Examples
+    --------
+    >>> from tengri import FeaturePrecomp, SEDModel, WavePrecomp
+    >>> # lines from the observation, photometry on the LUT path too:
+    >>> SEDModel.build(..., approx=(WavePrecomp(), FeaturePrecomp()))
+    >>> SEDModel.build(..., approx=FeaturePrecomp(n_grid=24))  # denser Cue grid
+    """
+
+    n_grid: int = 16
+    lines: tuple[float, ...] | None = None
+    ranges: dict | None = None
+
+
+@dataclasses.dataclass(frozen=True)
+class ApproxState:
+    """The effective approximation state of a built model.
+
+    A read-only summary of which build-time look-up tables resolved and
+    activated. Read it off any model — :class:`SEDModel` or
+    :class:`~tengri.forward.forward_model.ForwardModel` — via the ``approx``
+    property, which answers the same question on both:
+
+    >>> model.approx.wave_precomp  # doctest: +SKIP
+    True
+    >>> print(model.approx)  # doctest: +SKIP
+    ApproxState(wave_precomp=True, n_subbands=5)
+
+    This reports what the model *resolved*, not what was requested: a
+    :class:`SpectrumPrecomp` that fell back to the exact path because the
+    spectral resolution was too high reports ``spectrum_precomp=False``.
+
+    Attributes
+    ----------
+    wave_precomp : bool
+        The SSP x filter photometry LUT is active.
+    spectrum_precomp : bool
+        The spectrum LUT is active.
+    feature_precomp : bool
+        The emission-line LUT is active.
+    ztable : bool
+        Photometry is interpolated through a redshift table (free redshift, or
+        a ``catalog_z_range`` reuse window).
+    n_subbands : int
+        Sub-band samples per filter used by the photometry LUT; ``0`` when the
+        LUT is off or unsampled.
+
+    Notes
+    -----
+    Truthiness reports whether *any* LUT is active, so ``if model.approx:``
+    distinguishes an approximated model from an exact one::
+
+        if not model.approx:
+            ...  # exact wave-grid model
+
+    Not JIT-relevant: this is Python-side introspection, never traced.
+    """
+
+    wave_precomp: bool = False
+    spectrum_precomp: bool = False
+    feature_precomp: bool = False
+    ztable: bool = False
+    n_subbands: int = 0
+
+    def __bool__(self) -> bool:
+        """Whether any build-time LUT is active."""
+        return self.wave_precomp or self.spectrum_precomp or self.feature_precomp
+
+    def __repr__(self) -> str:
+        """Show only the active flags — the exact model prints as ``exact``."""
+        on = [
+            f"{name}={getattr(self, name)!r}"
+            for name in ("wave_precomp", "spectrum_precomp", "feature_precomp", "ztable")
+            if getattr(self, name)
+        ]
+        if self.n_subbands:
+            on.append(f"n_subbands={self.n_subbands}")
+        return f"ApproxState({', '.join(on)})" if on else "ApproxState(exact)"
+
+
+def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
+    """Warn that a grid cache could not be warmed, naming the failure it invites."""
+    warnings.warn(
+        f"tengri: could not pre-load the {label} grid ({exc}). It will be loaded "
+        f"lazily instead, which raises UnexpectedTracerError if the first load "
+        f"happens inside a JIT trace.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
 def _warn_agn_dust_double_count(spec) -> None:
     """Warn when composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
 
@@ -498,15 +658,19 @@ class SEDModel:
         Affects both fused (photometry + precomputation) and exact paths:
 
         - **Fused path**: captured arrays (SSP grid, dust weights, effective
-          wavelengths) cast to ``forward_dtype`` at kernel build; outputs
-          always cast back to float64 for cosmological distance scaling.
+          wavelengths) cast to ``forward_dtype`` at kernel build.
         - **Exact path** (spectroscopy, non-precomputed AGN): three largest intermediates
           — metallicity-interpolated SSP ``(n_age, n_wave)``, dust attenuation
           ``(n_age, n_wave)``, dust age weights ``(n_age,)`` — computed in
           ``forward_dtype``, halving the 4.5 MB memory traffic that dominates
           exact-path dust cost.
 
-        Cosmological distances always use float64 (float32 overflows at z > 0.01).
+        Mixed-precision support: Multiplicative flux/distance seams (photometry,
+        spectrum, line flux projections) apply cosmological factors as range-safe
+        log offsets (see :mod:`tengri.utils.scale`), allowing float32 arrays without
+        out-of-range intermediates. Full pure-float32 output additionally requires
+        Tier B reduction reformulations (ionizing photon integral, energy-balance
+        cascades, AGN SKIRTOR table resolution) and is not yet supported.
     approx : dict or bool, optional
         Control which approximations enter the component chain. Default True enables
         all approximations (fastest). False disables all (forces exact path
@@ -698,6 +862,24 @@ class SEDModel:
         else:
             self._approx["spectrum_precomp"] = True
             self._approx_config_spec = cfg
+            # #1166: the SpectrumPrecomp LUT point-interpolates the SSP onto the
+            # pixel grid at build time, so it does NOT honor a flux-conserving
+            # resample. Warn rather than silently ignore the request — the exact
+            # path (approx=None) carries the conserving low-resolution fix.
+            spectro = getattr(observation, "spectroscopy", None)
+            if spectro is not None and getattr(spectro, "resample", "point") != "point":
+                import numpy as _np
+
+                if spectro.resolve_conserving(_np.asarray(self.ssp_data.ssp_wave)):
+                    import warnings
+
+                    warnings.warn(
+                        f"resample={spectro.resample!r} requests a flux-conserving "
+                        f"resample, but approx=SpectrumPrecomp() point-interpolates the "
+                        f"SSP onto the pixel grid and does not apply it. Use approx=None "
+                        f"for the flux-conserving low-resolution spectrum (#1166).",
+                        stacklevel=3,
+                    )
 
     # ── Construction ──────────────────────────────────────────────────
 
@@ -761,27 +943,37 @@ class SEDModel:
         self._approx_config: WavePrecomp | SpectrumPrecomp | None = None
         self._approx_config_spec: SpectrumPrecomp | None = None
         self._approx_config_wave: WavePrecomp | None = None
+        self._approx_config_feature: FeaturePrecomp | None = None
         if approx is None:
             self._approx = dict(self._DEFAULT_APPROX)
             self._approx["wave_precomp"] = False
             self._approx["ztable"] = False
         else:
-            # Accept a single config or a composite ``(WavePrecomp, SpectrumPrecomp)``
-            # sequence (order-independent, at most one of each).
+            # Accept a single config or a composite ``(WavePrecomp, SpectrumPrecomp,
+            # FeaturePrecomp)`` sequence (order-independent, at most one of each).
             configs = list(approx) if isinstance(approx, (tuple, list)) else [approx]
             wave_cfgs = [c for c in configs if isinstance(c, WavePrecomp)]
             spec_cfgs = [c for c in configs if isinstance(c, SpectrumPrecomp)]
-            unknown = [c for c in configs if not isinstance(c, (WavePrecomp, SpectrumPrecomp))]
-            if unknown or len(wave_cfgs) > 1 or len(spec_cfgs) > 1 or not configs:
+            feat_cfgs = [c for c in configs if isinstance(c, FeaturePrecomp)]
+            known = (WavePrecomp, SpectrumPrecomp, FeaturePrecomp)
+            unknown = [c for c in configs if not isinstance(c, known)]
+            if (
+                unknown
+                or len(wave_cfgs) > 1
+                or len(spec_cfgs) > 1
+                or len(feat_cfgs) > 1
+                or not configs
+            ):
                 raise TypeError(
                     f"approx={approx!r} is not a legal value. Legal forms: "
                     "None (default — exact wave-grid), "
                     "WavePrecomp() for the SSP × filter LUT path, "
-                    "SpectrumPrecomp() for the spectrum LUT path, or a composite "
-                    "(WavePrecomp(...), SpectrumPrecomp()) tuple for a joint fit "
-                    "(at most one of each). The pre-3d dict / bool / string forms "
-                    "(e.g. approx={'wave_precomp': True}, approx=True, "
-                    "approx='wave_precomp') were removed."
+                    "SpectrumPrecomp() for the spectrum LUT path, "
+                    "FeaturePrecomp() for the emission-line LUT path, or a composite "
+                    "tuple such as (WavePrecomp(...), FeaturePrecomp()) for a joint "
+                    "photometry + line fit (at most one of each). The pre-3d dict / "
+                    "bool / string forms (e.g. approx={'wave_precomp': True}, "
+                    "approx=True, approx='wave_precomp') were removed."
                 )
             self._approx = dict(self._DEFAULT_APPROX)
             if wave_cfgs:
@@ -789,6 +981,7 @@ class SEDModel:
             if spec_cfgs:
                 self._resolve_spectrum_precomp(spec_cfgs[0], observation)
             self._approx_config_wave = wave_cfgs[0] if wave_cfgs else None
+            self._approx_config_feature = feat_cfgs[0] if feat_cfgs else None
             # Primary config: WavePrecomp drives the shared z-table / catalog
             # knobs when present (back-compat); else the SpectrumPrecomp (but only
             # when it actually activated — an R-fallback leaves it None).
@@ -1041,6 +1234,72 @@ class SEDModel:
         # so no fit is biased without the astronomer knowing. Cheap: no SED
         # evaluation, so it is safe on every build.
         self._warn_if_wave_precomp_dust_blue_bias()
+
+        # The emission-line precompute, if the astronomer asked for one. Last,
+        # because it needs the nebular backend (``_init_nebular``) and the
+        # component chain both to exist.
+        self._fast_line_measurement = False
+        if self._approx_config_feature is not None:
+            self._resolve_feature_precomp(self._approx_config_feature, observation)
+
+    def _resolve_feature_precomp(self, cfg, observation) -> None:
+        """Build the emission-line precompute selected by ``approx=FeaturePrecomp()``.
+
+        Dispatches on where the backend keeps its lines. Cue publishes a discrete
+        catalog that is linear in Q_H, so a per-Q_H grid over the free ionization
+        axes replaces the forward. The baked-in backend has no catalog — its lines
+        are inside the SSP templates — so the lines must be *measured* off the
+        spectrum, and it gets the window LUT instead (plus the flag that lets the
+        likelihood reach it).
+
+        Parameters
+        ----------
+        cfg : FeaturePrecomp
+            The requested configuration.
+        observation : Observation
+            Source of the line wavelengths when ``cfg.lines`` is None.
+
+        Raises
+        ------
+        ValueError
+            If no lines can be resolved, or the backend supports neither path.
+        """
+        from tengri.observation.line_measurement import default_line_defs
+
+        lines = cfg.lines
+        if lines is None:
+            line_fluxes = getattr(observation, "line_fluxes", None) if observation else None
+            if line_fluxes is None:
+                raise ValueError(
+                    "approx=FeaturePrecomp() has no emission lines to tabulate: the "
+                    "Observation carries no line_fluxes and FeaturePrecomp(lines=...) "
+                    "was not given. Either fit lines — Observation(..., "
+                    "line_fluxes=LineFluxData(...)) — or name them explicitly."
+                )
+            lines = line_fluxes.wavelengths
+        lines = jnp.asarray(lines)
+
+        backend = self._nebular_backend
+        if backend is not None and hasattr(backend, "predict_nebular_line_luminosities"):
+            # Cue-like: L_line = Q_H x l(theta), l independent of the SFH shape.
+            self.enable_fast_nebular(lines, n_grid=cfg.n_grid, ranges=cfg.ranges)
+            return
+
+        if self._has_line_catalog():
+            raise ValueError(
+                f"approx=FeaturePrecomp() does not support the "
+                f"{type(backend).__name__} nebular backend: it publishes a discrete "
+                "line catalog but is not linear in Q_H, so neither the per-Q_H grid "
+                "nor the SSP window LUT reconstructs it. Use approx=None for the "
+                "lines, or switch to the Cue or baked-in backend."
+            )
+
+        # Baked-in / wNE: the lines are inside the SSP templates, so they are
+        # measured off the spectrum through the window LUT. Build it eagerly (the
+        # SSP grid is concrete at construction) and tell the likelihood to use it.
+        self._feature_precomp_lines = lines
+        self._line_window_precomp(tuple(default_line_defs(np.asarray(lines))))
+        self._fast_line_measurement = True
 
     def _max_plausible_tau(self, name: str) -> float:
         """Representative upper optical depth for a dust τ parameter.
@@ -1365,9 +1624,7 @@ class SEDModel:
 
         if observation is not None:
             if not isinstance(observation, Observation):
-                raise TypeError(
-                    f"observation must be an Observation instance, got {type(observation)}"
-                )
+                observation = SEDModel._wrap_as_observation(observation)
             obs_params = observation.get_all_params()
             if obs_params:
                 spec = spec.with_params(**obs_params)
@@ -1377,6 +1634,64 @@ class SEDModel:
             observation = Observation(photometry=Photometry.from_filter_set(filters))
 
         return observation, spec
+
+    @staticmethod
+    def _wrap_as_observation(observation):
+        """Wrap a lone observation component in an :class:`Observation`.
+
+        ``observation=`` expects an :class:`Observation`, but a fresh user
+        naturally reaches for the component constructors the discovery API
+        advertises — e.g. ``list_filters()`` suggests
+        ``Photometry.from_names([...])``. A bare ``Photometry`` (or
+        ``Spectroscopy``/``LineFluxData``/``SpectralIndexData``/``LineRatioData``)
+        maps unambiguously onto a single :class:`Observation` slot, so wrap it
+        rather than reject it. The ``filters=`` path already auto-wraps the
+        same way.
+
+        Parameters
+        ----------
+        observation : object
+            The value passed as ``observation=``. Expected to be one of the
+            single-slot observation component types.
+
+        Returns
+        -------
+        Observation
+            ``Observation(<slot>=observation)`` for the matching slot.
+
+        Raises
+        ------
+        TypeError
+            If ``observation`` is not an :class:`Observation` and not one of
+            the wrappable component types. The message names the accepted
+            types and the explicit wrap.
+        """
+        from tengri.observation.line_flux_data import LineFluxData
+        from tengri.observation.line_ratio_data import LineRatioData
+        from tengri.observation.observation import Observation
+        from tengri.observation.photometry_config import Photometry
+        from tengri.observation.spectral_indices import SpectralIndexData
+        from tengri.observation.spectroscopy import Spectroscopy
+
+        # type -> Observation constructor keyword for the single-slot map.
+        wrap_slots = (
+            (Photometry, "photometry"),
+            (Spectroscopy, "spectroscopy"),
+            (LineFluxData, "line_fluxes"),
+            (SpectralIndexData, "spectral_indices"),
+            (LineRatioData, "line_ratios"),
+        )
+        for component_type, slot in wrap_slots:
+            if isinstance(observation, component_type):
+                return Observation(**{slot: observation})
+
+        accepted = ", ".join(t.__name__ for t, _ in wrap_slots)
+        raise TypeError(
+            f"observation= must be an Observation (or a single component of type "
+            f"{accepted}), got {type(observation).__name__}. Wrap it explicitly, "
+            f"e.g. observation=Observation(photometry=my_photometry), or pass "
+            f"filters=[...] for a photometry-only model."
+        )
 
     def _init_ssp(self, spec, ssp_data, csp_integration):
         """Set up SSP grid, CSP integration, and log-age grid."""
@@ -2165,8 +2480,10 @@ class SEDModel:
         permanently leak into downstream code. This method calls each loader once
         OUTSIDE a JIT context so the cache stores concrete arrays instead.
 
-        Wrapped in try/except because grid files are optional — missing files
-        should not block SEDModel construction.
+        A grid file may legitimately be absent, so a failed warm degrades to the
+        lazy path rather than blocking construction — but it warns, because the
+        lazy path is precisely what raises ``UnexpectedTracerError`` later, far
+        from this cause.
         """
         # MAPPINGS shock emission grids (nebular/shock.py:_load_mappings_grids)
         if self._uses_shock:
@@ -2174,8 +2491,8 @@ class SEDModel:
                 from tengri.components.nebular.shock import _load_mappings_grids
 
                 _load_mappings_grids()
-            except Exception:
-                pass
+            except (OSError, ImportError) as exc:
+                _warn_grid_warm_failed("MAPPINGS shock emission", exc)
 
         # CAT3D-Wind AGN torus grids (agn/cat3d_wind.py:_load_cat3d_default)
         if self._agn_model == "cat3d_wind":
@@ -2183,38 +2500,23 @@ class SEDModel:
                 from tengri.components.agn.cat3d_wind import _load_cat3d_default
 
                 _load_cat3d_default()
-            except Exception:
-                pass
+            except (OSError, ImportError) as exc:
+                _warn_grid_warm_failed("CAT3D-Wind AGN torus", exc)
 
         # Astrodust+PAH emission grid (dust/emission/templates/astrodust.py).
         # The faithful HD23 implementation self-loads its grid in load()/predict();
         # warm the process cache OUTSIDE any trace so an in-trace lazy load hits
         # concrete arrays rather than leaking a tracer (UnexpectedTracerError).
         # The grammar builds the component with the default template path (None).
-        if getattr(self, "_dust_emission_model", None) == "astrodust":
+        if self._dust_emission_model == "astrodust":
             try:
                 from tengri.components.dust.emission.templates.astrodust import (
                     _cached_astrodust_grid,
                 )
 
                 _cached_astrodust_grid(None)
-            except Exception:
-                pass
-
-    def ensure_photometry_precomputed(self) -> bool:
-        """Deprecated no-op (the legacy ``PrecomputedData`` container was retired, #620).
-
-        The photometry fast path is now opt-in at build time via
-        ``approx=WavePrecomp()`` and is built through the component chain, not
-        lazily here. Retained as a no-op so existing callers (e.g. the Fitter,
-        whose return value was already discarded) keep working.
-
-        Returns
-        -------
-        bool
-            Always ``False`` (nothing is built lazily).
-        """
-        return False
+            except (OSError, ImportError) as exc:
+                _warn_grid_warm_failed("Astrodust+PAH emission", exc)
 
     def _get_internal_params(self, params):
         """Translate public param dict to internal names with unit conversion.
@@ -2423,6 +2725,103 @@ class SEDModel:
             kw["log_mstar"] = jnp.log10(jnp.maximum(p.get("mstar", 1e10), 1e-10))
         return kw
 
+    # ── Clone with a different approximation policy ────────────────────
+
+    @property
+    def approx(self) -> ApproxState:
+        """The effective approximation state of this model.
+
+        Answers "is a build-time look-up table live on this model?" — the same
+        question, spelled the same way, on
+        :class:`~tengri.forward.forward_model.ForwardModel`.
+
+        Returns
+        -------
+        ApproxState
+            Frozen summary of the LUTs that resolved and activated. Falsy for an
+            exact wave-grid model.
+
+        Examples
+        --------
+        >>> model.approx.wave_precomp  # doctest: +SKIP
+        True
+        >>> if not model.approx:  # doctest: +SKIP
+        ...     ...  # exact path
+
+        Notes
+        -----
+        Reads the same lowered ``_approx`` flags the forward pipeline itself
+        consumes, so it reports what the code *does*, not what was requested —
+        a ``SpectrumPrecomp`` that fell back to the exact path reports
+        ``spectrum_precomp=False``. Deriving it from any other source would
+        make this a third spelling of the question and free it to drift.
+
+        Not JIT-relevant: Python-side introspection, never traced.
+        """
+        flags = self._approx or {}
+        return ApproxState(
+            wave_precomp=bool(flags.get("wave_precomp")),
+            spectrum_precomp=bool(flags.get("spectrum_precomp")),
+            feature_precomp=self._approx_config_feature is not None,
+            ztable=bool(flags.get("ztable")),
+            n_subbands=int(flags.get("n_subbands", 0) or 0),
+        )
+
+    def _has_modern_approx(self) -> bool:
+        """Whether a build-time ``approx=`` LUT is active on this model.
+
+        ``True`` when any of the WavePrecomp / SpectrumPrecomp / FeaturePrecomp
+        precompute paths resolved and activated at construction; ``False`` for
+        the exact wave-grid model (including a SpectrumPrecomp that fell back to
+        the exact path because the spectral resolution was too high).
+        """
+        return (
+            self._approx_config is not None
+            or self._approx_config_spec is not None
+            or self._approx_config_feature is not None
+        )
+
+    def with_approx(self, approx):
+        """Return a copy of this model built with a different ``approx`` policy.
+
+        Parameters
+        ----------
+        approx : WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple or None
+            Approximation policy for the clone, with the same grammar as the
+            ``approx=`` constructor argument: ``None`` for the exact wave-grid
+            path, a single precompute config for one LUT family, or a composite
+            tuple (at most one of each) such as ``(WavePrecomp(), FeaturePrecomp())``.
+
+        Returns
+        -------
+        SEDModel
+            A new model sharing this model's ``spec``, ``ssp_data``,
+            ``observation`` and build settings, differing only in ``approx``.
+            Returns ``self`` unchanged when ``approx=None`` is requested on a
+            model that is already exact (a no-op).
+
+        Notes
+        -----
+        Building the clone only rebuilds the approximation LUT, which the
+        ``tengri_precomp`` cache persists (content-hashed on SSP grid, filters,
+        and z-grid), so repeat clones of the same combination are cheap. The
+        inference layer uses this to fit on the fast LUT path while leaving the
+        user's (exact) model untouched. **JIT-compatible**: build-time only.
+        """
+        if approx is None and not self._has_modern_approx():
+            return self
+        return SEDModel(
+            self.spec,
+            self.ssp_data,
+            observation=self.observation,
+            forward_dtype=str(self._forward_dtype),
+            csp_integration=str(self._csp_integration),
+            wave_chunk_size=self._wave_chunk_size,
+            agn_config=self._agn_config,
+            compile=str(self._compile_mode),
+            approx=approx,
+        )
+
     # ── Predictions (public API) ──────────────────────────────────────
 
     def predict_sfh(self, params, n_linear=1000):
@@ -2506,7 +2905,7 @@ class SEDModel:
         }
 
     def predict_rest_sed(self, params, wave=None):
-        """Deprecated. Use ``model.predict(params).rest_sed``.
+        """Deprecated. Use ``model.predict(params).rest_sed()``.
 
         .. deprecated:: 2026-07
            Superseded by the property catalog and the ``Prediction`` surface
@@ -2519,7 +2918,7 @@ class SEDModel:
         Same as :meth:`_predict_rest_sed`.
         """
         warnings.warn(
-            "predict_rest_sed() is deprecated — use model.predict(params).rest_sed "
+            "predict_rest_sed() is deprecated — use model.predict(params).rest_sed() "
             "instead (cached, one forward pass). Will be removed in tengri v1.0.",
             DeprecationWarning,
             stacklevel=2,
@@ -2619,7 +3018,7 @@ class SEDModel:
         return SEDResult(wavelength=wave_target, sed=sed_interp)
 
     def predict_obs_sed(self, params, wave=None):
-        """Deprecated. Use ``model.predict(params).obs_sed``.
+        """Deprecated. Use ``model.predict(params).obs_sed()``.
 
         .. deprecated:: 2026-07
            Superseded by the property catalog and the ``Prediction`` surface
@@ -2632,7 +3031,7 @@ class SEDModel:
         Same as :meth:`_predict_obs_sed`.
         """
         warnings.warn(
-            "predict_obs_sed() is deprecated — use model.predict(params).obs_sed "
+            "predict_obs_sed() is deprecated — use model.predict(params).obs_sed() "
             "instead (cached, one forward pass). Will be removed in tengri v1.0.",
             DeprecationWarning,
             stacklevel=2,
@@ -2844,8 +3243,21 @@ class SEDModel:
         predict_line_luminosities : JIT-compatible emission lines for batch.
         predict_rest_sed : Full rest-frame SED for custom analysis.
         """
+        from collections.abc import Mapping
+
         from tengri.forward.prediction import Prediction
 
+        if not isinstance(params, Mapping):
+            raise TypeError(
+                f"model.predict() expects a params dict (e.g. from "
+                f"spec.sample(key)), got {type(params).__name__}."
+            )
+        # Validate eagerly — matching predict_photometry — so a typo'd or
+        # missing free parameter raises a helpful error here instead of a bare
+        # KeyError deferred to the first accessor of the lazy Prediction. Both
+        # asymmetries were flagged as silent-wrong footguns in a fresh-user audit.
+        check_unknown_params(params, self._param_map)
+        check_missing_free_params(params, self.spec, self._param_map)
         return Prediction(self, params)
 
     def compile_signature(self) -> tuple:
@@ -3024,11 +3436,36 @@ class SEDModel:
             # coefficient lookup and either apply a calibration it was never given
             # or raise ``KeyError: 'cal_c1'`` on a dict that rightly has no such key.
             calibration_order = int(self.observation.spectroscopy.calibration_order)
+            # The RESOLVED resample decision (#1166): the spectrum projector closes
+            # over whether it point-samples or flux-conservingly integrates the
+            # model onto the pixels. Two models differing only in ``resample`` (or
+            # in an ``"auto"`` decision that lands differently for their grids) must
+            # NOT share a compiled kernel — otherwise the second silently inherits
+            # the first's resampler. Keyed on the resolved bool, not the mode
+            # string, so ``"auto"`` collides only with an explicit mode that
+            # actually resamples the same way.
+            spec_resample_conserving = bool(
+                self.observation.spectroscopy.resolve_conserving(self.wavelengths)
+            )
+            # The banded resolution matrix (#1163) is structural: the spectrum
+            # projector closes over whether it applies ``R @ model`` or the
+            # Gaussian ``apply_lsf``. Two models differing only in
+            # ``resolution_matrix`` must NOT share a compiled kernel — else the
+            # second silently inherits the first's projector and drops (or
+            # wrongly reuses) the matrix. Keyed on presence + band shape, which
+            # is all the structural cache needs. Same cache-collision class as
+            # #1135/#1149/#1166.
+            _rm = self.observation.spectroscopy.resolution_matrix
+            spec_resolution_matrix = (
+                tuple(jnp.asarray(_rm.data).shape) if _rm is not None else None
+            )
         else:
             spec_wave_shape = ()
             sigma_lib_kms = 0.0
             lsf_resolution = None
             calibration_order = 0
+            spec_resample_conserving = False
+            spec_resolution_matrix = None
 
         # CSP integration method
         csp_integration = str(self._csp_integration)
@@ -3193,6 +3630,8 @@ class SEDModel:
             sigma_lib_kms,
             lsf_resolution,
             calibration_order,
+            spec_resample_conserving,
+            spec_resolution_matrix,
             csp_integration,
             forward_dtype,
             met_interp,
@@ -3481,6 +3920,17 @@ class SEDModel:
         )
         cal_coeffs = spectroscopy.calibration_coeffs(params) if spectroscopy is not None else None
         cal_wave_range = spectroscopy.calibration_wave_range if spectroscopy is not None else None
+        # Static (pre-trace) resolution of the resample mode (#1166): the model
+        # grid is fixed, so this is a Python bool baked into the trace, not a
+        # branch on the sampled redshift.
+        conserving = (
+            spectroscopy.resolve_conserving(self.wavelengths)
+            if spectroscopy is not None
+            else False
+        )
+        resolution_matrix = (
+            getattr(spectroscopy, "resolution_matrix", None) if spectroscopy is not None else None
+        )
 
         flux = project_spectrum(
             sed_obs.sed,
@@ -3493,6 +3943,8 @@ class SEDModel:
             sigma_v_kms=params.get("sigma_v_kms", 0.0),
             cal_coeffs=cal_coeffs,
             cal_wave_range=cal_wave_range,
+            conserving=conserving,
+            resolution_matrix=resolution_matrix,
         )
         return flux
 
@@ -3793,7 +4245,8 @@ class SEDModel:
         # NebularSEDComponent) — no L_sun conversion here. Multiplying by
         # L_SUN was a 33.6-dex unit error that made every joint
         # photometry+line-flux fit unusable against real data.
-        flux = selected_lums / (4.0 * jnp.pi * dl_cm**2)
+        log10_scale = -LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        flux = apply_log10_scale(selected_lums, log10_scale)
         return flux
 
     def enable_fast_nebular(self, target_wavelengths, *, n_grid=16, ranges=None):
@@ -3843,17 +4296,38 @@ class SEDModel:
 
         * **Gas axes** (``logU`` + ``neb_logZ_gas``) drive smooth per-Q_H line
           changes and converge with ``n_grid``.
-        * **Free ``met_logzsol``** does **NOT** converge for the collisionally
-          excited lines, at any ``n_grid``. The exact Cue forward is *discontinuous*
-          in metallicity — it selects the ionizing-spectrum shape from a single
-          ``argmax``-chosen age bin, so [OIII] steps ~33 % whenever the dominant bin
-          flips. No interpolant crosses a jump: a dense systematic sweep gives
-          [OIII] worst-case ~10-23 % irrespective of resolution. Balmer lines
-          (recombination, ∝ Q_H) are shape-insensitive and do converge.
+        * **Free ``met_logzsol``** used to be the pathological case, and is no
+          longer. The old text here (retained in spirit because the reasoning is
+          still worth knowing) said the exact Cue forward was *discontinuous* in
+          metallicity — it took the ionizing-spectrum shape from a single
+          ``argmax``-chosen age bin, so [OIII] stepped ~33 % whenever the dominant
+          bin flipped, and no interpolant crosses a jump: a dense sweep gave [OIII]
+          worst-case ~10-23 % at any ``n_grid``. **#1019 removed that argmax.** The
+          shape is now a luminosity-additive mix over every ionizing age bin
+          (``cue.py``), so the forward is smooth in metallicity and the grid
+          converges. Measured on the shipped bare SSP: 0.42 % between nodes, 0.21 %
+          at a node, identical on linux/x86 and macOS/arm64.
+
+        .. warning::
+
+           That stale ~10-23 % figure is a **trap**. It happens to bracket both the
+           20.9 % photometry and 14.7 % line-flux drifts reported in #1154, so it
+           offers a ready-made — and wrong — explanation for them. It cost a full
+           debugging session. When a number in a docstring matches your bug
+           suspiciously well, check that the mechanism behind it still exists before
+           you believe it: this one was removed by #1019.
+
+        **Caveat that #1019 introduced.** Making the shape a luminosity-weighted mix
+        also made it depend on the **SFH** — the old ``argmax`` forced
+        ``d(shape)/d(SFH) = 0``, and removing it was the point. But the SFH is *not*
+        a grid axis here (only ``met_logzsol`` / ``logU`` / ``neb_logZ_gas`` are), so
+        ``L = Q_H * l(...)`` assumes a shape-independence the exact forward no longer
+        has. Q_H carries the *number* of ionizing photons, not their *hardness*. In
+        practice the residual is small (the 0.42 % above is measured across free-SFH
+        draws), but it is an approximation, not an identity.
 
         Validate accuracy with a **dense sweep strictly inside the grid range** —
-        random parameter draws under-sample the discontinuity and report bounds
-        that are ~100x optimistic.
+        random parameter draws under-sample structure and report optimistic bounds.
 
         For the photometry channel the model must be built with
         ``approx=WavePrecomp()`` (so the grid can capture the intrinsic
@@ -3961,13 +4435,13 @@ class SEDModel:
         # ``line_lums`` are erg/s (DerivedKey contract) — same fix as
         # ``predict_line_fluxes``. The scale cancels in every ratio, so
         # this is unit hygiene, not a behavior change.
-        scale = 1.0 / (4.0 * jnp.pi * dl_cm**2)
+        log10_scale = -LOG10_4PI - 2.0 * jnp.log10(dl_cm)
 
         def _match(targets):
             targets = jnp.asarray(targets)
             deltas = jnp.abs(all_waves[None, :] - targets[:, None])
             idx = jnp.argmin(deltas, axis=1)
-            return all_lums[idx] * scale
+            return apply_log10_scale(all_lums[idx], log10_scale)
 
         num_flux = _match(line_ratio_data.numerator_waves)
         den_flux = _match(line_ratio_data.denominator_waves)
@@ -4117,35 +4591,64 @@ class SEDModel:
             cache[key] = pc
         return pc
 
-    def _require_feature_fast_eligible(self, chain):
-        """Return the stellar component, or raise if the chain is unsupported.
+    def _require_feature_fast_eligible(self, chain, *, caller="predict_spectral_indices"):
+        r"""Return the stellar component, or raise if the chain is unsupported.
 
-        The window LUT reconstructs indices from ``scale * sum(jw * SSP * T)`` —
-        the baked-in stellar+dust SED only. Any component that adds rest-frame
-        flux the LUT does not model (additive nebular, AGN, radio, …) would make
-        the fast indices silently wrong, so those raise. IGM is rest-frame-
-        neutral (observer-frame, applied after redshifting) and is allowed.
+        The window LUT reconstructs the measurement from ``scale * sum(jw * SSP * T)``
+        — the baked-in stellar+dust-screen SED only. Any component that adds
+        rest-frame flux the LUT does not model (additive nebular, AGN, radio, …)
+        would make the fast measurement silently wrong, so those raise. IGM is
+        rest-frame-neutral (observer-frame, applied after redshifting) and is
+        allowed.
+
+        Dust *emission* is admitted for line fluxes but not for indices, and the
+        asymmetry is physical rather than a concession. A line flux is measured as
+        the window integral minus a continuum fitted from the sidebands. Dust IR
+        emission contributes a smooth continuum that is common to the window and
+        its sidebands, so it cancels in that subtraction: measured bias on the ten
+        DESI optical lines stays below :math:`10^{-7}` even at
+        :math:`\tau_{\rm bc}=4,\ \tau_{\rm diff}=3`, where the IR term is already
+        3% of the continuum *level*. A break index is a flux **ratio** of two
+        bands, with no such subtraction, so the same smooth offset does not cancel
+        and the exclusion stands.
+
+        Parameters
+        ----------
+        chain : list
+            The component chain to validate.
+        caller : str, default "predict_spectral_indices"
+            Name used in the error messages, and the switch for the dust-emission
+            rule: ``"measure_line_fluxes"`` admits a dust-IR component.
+
+        Returns
+        -------
+        StellarSEDComponent
+            The chain's stellar component.
         """
+        from tengri.components.dust.emission._component_base import EmissionComponent
         from tengri.components.dust.two_component import DustSEDComponent
         from tengri.components.igm.component import IGMSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
         from tengri.components.stellar.component import StellarSEDComponent
 
-        allowed = (StellarSEDComponent, DustSEDComponent, NebularSEDComponent, IGMSEDComponent)
+        allowed = [StellarSEDComponent, DustSEDComponent, NebularSEDComponent, IGMSEDComponent]
+        if caller == "measure_line_fluxes":
+            allowed.append(EmissionComponent)
+        allowed = tuple(allowed)
         stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
         if stellar is None:
-            raise ValueError("predict_spectral_indices(fast=True) requires a stellar component.")
+            raise ValueError(f"{caller}(fast=True) requires a stellar component.")
         for c in chain:
             if not isinstance(c, allowed):
                 raise ValueError(
-                    f"predict_spectral_indices(fast=True) does not support a "
+                    f"{caller}(fast=True) does not support a "
                     f"{type(c).__name__} in the chain: it adds rest-frame flux the window "
                     f"LUT does not model. Use fast=False for this model."
                 )
         neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
         if neb is not None and getattr(neb.config, "backend", None) != "baked_in":
             raise ValueError(
-                f"predict_spectral_indices(fast=True) supports baked-in nebular only "
+                f"{caller}(fast=True) supports baked-in nebular only "
                 f"(chain has backend={getattr(neb.config, 'backend', None)!r}); an additive "
                 f"backend's emission is not in the SSP window integrals. Use fast=False."
             )
@@ -4273,7 +4776,7 @@ class SEDModel:
             from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 
             chain = self._feature_chain()
-            stellar = self._require_feature_fast_eligible(chain)
+            stellar = self._require_feature_fast_eligible(chain, caller="measure_line_fluxes")
             joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(params)
             scale = total_mass * LSUN_ERG_PER_S
             pc = self._line_window_precomp(line_defs)
@@ -5310,7 +5813,7 @@ class SEDModel:
                 "nebular backend: emission is baked into the SSP grid and "
                 "no discrete line catalog is published. To predict line "
                 "luminosities, build the model with a photoionization "
-                "backend, e.g. neb={'type': 'cue', '*': FIXED} (requires "
+                "backend, e.g. neb={'type': 'cue', 'all_params': FIXED} (requires "
                 "a bare-stellar SSP) or neb={'type': 'cloudy_grid', ...}. "
                 "For a quick narrow-band measurement on the BakedIn SED, "
                 "integrate model._predict_rest_sed(params).sed across the "
@@ -5824,8 +6327,21 @@ class SEDModel:
             if not isinstance(component, AGNSEDComponent):
                 continue
             agn_templates = {}
-            if component._state is not None and component._state.skirtor_templates is not None:
-                agn_templates["skirtor"] = component._state.skirtor_templates
+            skirtor = component._state.skirtor_templates if component._state is not None else None
+            # The exact path does not run AGN precompute, so ``_state`` carries
+            # no template. Load the SKIRTOR grid arrays here so the data always
+            # threads through jit (small compile) rather than baking into the
+            # trace as a constant (#1198). Guarded to the monolithic SKIRTOR
+            # model — composable torus blocks carry their own grid.
+            if skirtor is None and getattr(component.config, "model", None) == "skirtor":
+                try:
+                    from tengri.components.agn.skirtor import _load_skirtor_default_grid
+
+                    skirtor = _load_skirtor_default_grid()
+                except Exception:
+                    skirtor = None
+            if skirtor is not None:
+                agn_templates["skirtor"] = skirtor
             if agn_templates:
                 result["agn"] = agn_templates
             break
@@ -6205,11 +6721,19 @@ class SEDModel:
         and produces a list of :class:`SEDComponent` adapters in the
         canonical pipeline order.
         """
+        from tengri.components.stellar.sfh.registry import apply_compositor_swap
         from tengri.forward.component_factory import build_components
 
         # Mean SFH: first entry of mean_sfh_type, with "field" flag if
         # the GP modulator is composed in.
-        mean_types = list(getattr(self.spec, "mean_sfh_type", ["tsnorm"]))
+        #
+        # The compositor swap must be applied HERE too, not just in
+        # ``resolve_sfh`` (#1074). Composing dense_basis with field renames its
+        # public parameters ``sfh_db_*`` → ``sfh_dbp_*``; handing the component
+        # the pre-swap name made it resolve the wrong spec, miss every
+        # ``sfh_dbp_*`` the user set, and silently fall back to registry
+        # defaults — so tx_frac_* moved predict_sfh but never the photometry.
+        mean_types = apply_compositor_swap(list(getattr(self.spec, "mean_sfh_type", ["tsnorm"])))
         mean_model = next((m for m in mean_types if m != "field"), "tsnorm")
         field_on = "field" in mean_types
 
@@ -6760,8 +7284,9 @@ class SEDModel:
         ssp_data : SSPData
             Pre-loaded SSP grid (from :func:`load_ssp_data`).
         sfh, dust, neb, agn, igm, radio, xray : dict, optional
-            Per-component nested dicts. Each may carry ``'type'``, ``'*'``
-            (wildcard set to :data:`~tengri.FREE` or :data:`~tengri.FIXED`),
+            Per-component nested dicts. Each may carry ``'type'``,
+            ``'all_params'`` (wildcard set to :data:`~tengri.FREE` or
+            :data:`~tengri.FIXED`; the ``'*'`` synonym is also accepted),
             and per-parameter overrides. See
             :func:`tengri.parameters.parse_groups` for the full grammar.
         redshift, apply_igm : scalar, Distribution, or sentinel, optional
@@ -6792,9 +7317,14 @@ class SEDModel:
         >>> from tengri import SEDModel, FREE, FIXED, Uniform, Fixed
         >>> model = SEDModel.build(
         ...     ssp_data=ssp,
-        ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
-        ...     dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
-        ...     neb={"type": "cue", "*": FIXED},
+        ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
+        ...     dust={
+        ...         "type": "two_component",
+        ...         "law_bc": "calzetti",
+        ...         "all_params": FIXED,
+        ...         "tau_bc": 0.5,
+        ...     },
+        ...     neb={"type": "cue", "all_params": FIXED},
         ...     redshift=Fixed(0.05),
         ...     filters=["sdss_u", "sdss_g", "sdss_r"],
         ... )

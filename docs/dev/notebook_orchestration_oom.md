@@ -72,7 +72,7 @@ the compile cost.
   arg — the JIT cache *does* survive different data values for the
   same observation type.
 - When that's not possible, drop dense mass matrix:
-  `fitter.run("mcmc_nuts", dense_mass=False, ...)` cuts compile peak
+  `fitter.run("mcmc_nuts", dense_mass_matrix=False, ...)` cuts compile peak
   by ~3× at the cost of ~2× sample autocorrelation.
 - Or use `mcmc_hmc` (plain HMC) instead of NUTS — same posterior, much
   smaller JIT graph (no doubling-binary-tree expansion).
@@ -138,24 +138,29 @@ tengri.clear_cache()  # nuke stale entries
 
 ## Pattern: the watchdog itself
 
-We use a 5-second-poll bash loop:
+Three scripts cover the three failure shapes:
 
-```bash
-THRESHOLD_KB=20971520  # 20 GB
-while true; do
-  ps -axo pid=,rss=,comm= \
-    | awk -v t=$THRESHOLD_KB '$2>t && $3 ~ /python/ {print $1, $2, $3}' \
-    | while read pid rss cmd; do
-        echo "$(date) KILL $pid rss=${rss}KB cmd=$cmd" >> /tmp/oom_killer.log
-        kill -9 $pid 2>/dev/null
-      done
-  sleep 5
-done
-```
+- `scripts/run_with_oom_monitor.sh` — wraps **one command** and
+  SIGKILLs its whole process tree if the tree's summed RSS exceeds
+  `LIMIT_GB`. Use for every heavy launch (notebook renders, full
+  pytest tiers, NUTS/geoVI fits).
+- `scripts/python_oom_guard.sh` — daemon; SIGKILLs any **single**
+  python process over `LIMIT_GB` (default 10), whichever session
+  spawned it.
+- `scripts/python_total_oom_guard.sh` — daemon; watches the
+  **machine-wide total** python RSS and sheds the most memory-hungry
+  processes first once the sum crosses `TOTAL_LIMIT_GB` (default 75%
+  of RAM). This is the only guard that survives the multi-session
+  case: N parallel worktrees each under their own per-tree limit can
+  still jointly exceed physical RAM, and no per-tree monitor can see
+  the others.
 
-20 GB is comfortable; 10 GB cuts into legitimate single-NUTS-fit
-workloads on the dale2014 pipeline. If your machine has < 32 GB total,
-consider running this watchdog whenever you batch-author notebooks.
+For a single-fit limit, 20 GB is comfortable; 10 GB cuts into
+legitimate single-NUTS-fit workloads on the dale2014 pipeline. If your
+machine has < 32 GB total, run the guards whenever you batch-author
+notebooks. Both daemons honor `EXCLUDE_RE` to protect processes you
+never want shot; the total guard additionally supports `DRY_RUN=1` to
+preview the kill plan a given limit would produce.
 
 ## When to escalate
 

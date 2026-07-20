@@ -37,6 +37,7 @@ marker lines to jump. In order:
 
 - ``Backend Registry Initialization`` — imports that populate the
   registry at module load
+
 """
 
 from __future__ import annotations
@@ -78,6 +79,64 @@ _AUTO_D_THRESHOLD = 20
 
 # D threshold for "mcmc": D <= this → NUTS, D > this → Ray Tracing
 _MCMC_AUTO_D_THRESHOLD = 20
+
+# Samplers that evaluate the forward model thousands of times per fit. On the
+# exact wave-grid photometry path (no WavePrecomp LUT) each evaluation costs
+# several times more (~2-6x measured, depending on which components are active),
+# and the sampler pays that factor on the whole fit. Used to steer users to the
+# fast path (see run()).
+_MANY_EVAL_SAMPLERS = frozenset(
+    {
+        "mcmc",
+        "mcmc_nuts",
+        "mcmc_hmc",
+        "mcmc_dynamic_hmc",
+        "mcmc_ess",
+        "mcmc_ghmc",
+        "mcmc_mclmc",
+        "mcmc_adjusted_mclmc",
+        "nss",
+        "native_vi_linear",
+        "native_vi_nonlinear",
+    }
+)
+
+
+def _warn_if_exact_forward_path(model, backend_name: str) -> None:
+    """Warn when a many-evaluation sampler runs on the exact photometry path.
+
+    The WavePrecomp SSP x filter look-up table makes each forward evaluation
+    several times cheaper, so an MCMC/nested sampler that calls the model
+    thousands of times pays that factor on the whole fit.
+
+    ``model`` is ``Fitter.model``, i.e. the model *after*
+    :meth:`Fitter._resolve_fit_approx`. Under the default ``approx="auto"`` the
+    fit is already routed through the LUT and this stays silent; it fires only
+    when the exact path is genuinely in use (e.g. ``Fitter(..., approx=None)``).
+
+    Ask ``model.approx`` — the public accessor both SEDModel and ForwardModel
+    implement — never an inner attribute. ``Fitter.model`` is a ForwardModel,
+    which does not carry the lowered ``_approx`` dict itself; reading it off the
+    wrapper silently yields "exact" and would warn on every wrapped model. The
+    accessor delegates to the inner SED, so the question has one spelling and
+    one answer. (Supersedes the private ``_effective_approx`` probe.)
+    """
+    if backend_name not in _MANY_EVAL_SAMPLERS:
+        return
+    has_phot = getattr(getattr(model, "observation", None), "photometry", None) is not None
+    if has_phot and not model.approx.wave_precomp:
+        import warnings
+
+        warnings.warn(
+            f"Fitting with '{backend_name}' on the exact forward path: this "
+            f"sampler evaluates the model thousands of times, and photometry on "
+            f"the exact path costs several times more per evaluation than the "
+            f"WavePrecomp look-up table (~2-6x, depending on which components "
+            f"are active). Drop 'approx=None' to use the default 'auto' policy, "
+            f"or pass approx=WavePrecomp(), for much faster sampling.",
+            stacklevel=3,
+        )
+
 
 # Canonical method names (public API)
 _CANONICAL_METHODS = {
@@ -332,20 +391,26 @@ class Fitter:
 
     Examples
     --------
-    Fit a single galaxy with geoVI (default):
+    Fit a single galaxy with geoVI (default). The fitter takes a
+    :class:`~tengri.ForwardModel`, so wrap the SED chain first:
 
-    >>> from tengri import SEDModel, Fitter, Parameters
-    >>> model = SEDModel(Parameters())
+    >>> from tengri import Fitter, ForwardModel, SEDModel  # doctest: +SKIP
+    >>> sed = SEDModel.build(ssp_data=ssp, observation=obs, **config)  # doctest: +SKIP
+    >>> forward = ForwardModel.build(sed=sed, observation=obs)  # doctest: +SKIP
     >>> data = jnp.array([1.2, 0.8, 0.5])  # photometric fluxes
     >>> noise = jnp.array([0.1, 0.08, 0.06])
-    >>> fitter = Fitter(model, data, noise)
-    >>> result = fitter.run("vi", n_samples=100)
-    >>> print(result.params)
+    >>> fitter = Fitter(forward, data, noise)  # doctest: +SKIP
+    >>> result = fitter.run("vi", n_samples=100)  # doctest: +SKIP
+    >>> print(result.params)  # doctest: +SKIP
 
-    Fit with warm-start from MAP:
+    ``forward.fit(data, noise, method="vi", n_samples=100)`` is the same fit in
+    one line. Build the ``Fitter`` yourself when you want to keep it — warm
+    starts, a reused compilation cache, or several backends over one model:
 
-    >>> result_map = fitter.run("map", n_steps=1000)
-    >>> result_mcmc = fitter.run("mcmc_nuts", init_from=result_map, n_warmup=500)
+    >>> result_map = fitter.run("map", n_steps=1000)  # doctest: +SKIP
+    >>> result_mcmc = fitter.run(  # doctest: +SKIP
+    ...     "mcmc_nuts", init_from=result_map, n_warmup=500
+    ... )
 
     See the docstring of :meth:`run` for all available methods and their options.
     """
@@ -369,6 +434,7 @@ class Fitter:
         use_components=False,
         compile_modes=None,
         cache=None,
+        approx="auto",
     ):
         # ── Auto-extract batched data for hierarchical ForwardModels ─
         # When ``model`` is a ForwardModel whose SubModel publishes
@@ -451,9 +517,6 @@ class Fitter:
                 f"data_type in (photometry, spectroscopy, joint); got {self.data_type!r}."
             )
 
-        # ── Auto-precompute photometry ─────────────────────────────
-        self._auto_precompute_photometry(model)
-
         # ── Calibration ────────────────────────────────────────────
         self._calibration_marginalize = calibration_marginalize
         self._cal_n_poly = cal_n_poly
@@ -461,7 +524,30 @@ class Fitter:
         self._has_spectroscopy = self.data_type in ("spectroscopy", "joint")
 
         # ── Emission lines ─────────────────────────────────────────
+        # Resolved before the approx policy below: the "auto" precompute
+        # config appends FeaturePrecomp when emission lines are fit.
         self._init_emission_lines(model, eline_marginalize, eline_prior_type)
+
+        # ── Fit-time approximation policy (2026-07) ─────────────────
+        # Fits default to the fast precompute LUT (approx="auto"); model
+        # *prediction* stays exact. ``with_approx`` returns a clone, so the
+        # user's original model is untouched and the returned posterior
+        # references this fit model. ``approx=None`` forces the exact
+        # wave-grid path; an explicit config (or tuple) overrides. Spec:
+        # docs/superpowers/specs/2026-07-15-fit-precomp-default-design.md.
+        self.model = self._resolve_fit_approx(model, approx)
+        self.spec = self.model.spec
+
+        # Re-apply the fitted-mode emission-line amplitude merge. The
+        # reassignment above replaces self.spec with the approx-resolved
+        # model's spec, which does not carry the ``eline_amp_*`` priors that
+        # _init_emission_lines merged into the pre-approx spec. Without this,
+        # the amplitudes silently drop out of ``free_params`` (and thus
+        # ``_free_names``) while ``_eline_amplitude_names`` still lists them —
+        # the sampler never varies parameters the fitter believes it is
+        # fitting. See tests/inference/test_eline_fitting.py::TestFittedMode.
+        if getattr(self, "_eline_amp_priors", None):
+            self.spec = self.spec.merge_observation_params(**self._eline_amp_priors)
 
         # ── Parameters ─────────────────────────────────────────────
         self._free_names = self.spec.free_params
@@ -568,27 +654,60 @@ class Fitter:
             return obs.data_type
         return "photometry"
 
-    def _auto_precompute_photometry(self, model: Any) -> None:
-        """Auto-trigger photometry precomputation if conditions are met.
+    def _auto_approx_config(self):
+        """Precompute config auto-selected for this fit's data type.
 
-        Fires when: photometry / joint data_type + the model declares an
-        :meth:`ensure_photometry_precomputed` method. Lets users build a
-        Model without ``precompute=True`` and still get the fast fused
-        path when they construct a Fitter.
-
-        The actual gate (fixed redshift + filters + not-yet-precomputed)
-        lives inside :meth:`SEDModel.ensure_photometry_precomputed` so
-        Fitter doesn't reach into model internals. Migration 2 step 3:
-        prior open-coded version touched ``model._precomputed``,
-        ``model._z_fixed``, ``model._dl_cm_fixed`` and a no-op
-        ``model._build_hybrid_kernels()`` call (the method has been
-        absent for a long time and the result was silently dropped).
+        Photometry -> ``WavePrecomp``; spectroscopy/joint -> ``SpectrumPrecomp``;
+        ``FeaturePrecomp`` is appended when emission lines are fit
+        (``_eline_marginalize`` / ``_eline_fitted``). Returns ``None`` for data
+        types with no LUT mapping (the fit then stays on the exact path).
         """
-        if self.data_type not in ("photometry", "joint"):
-            return
-        ensure = getattr(model, "ensure_photometry_precomputed", None)
-        if ensure is not None:
-            ensure()
+        from tengri.forward.sed_model import (
+            FeaturePrecomp,
+            SpectrumPrecomp,
+            WavePrecomp,
+        )
+
+        if self.data_type in ("spectroscopy", "joint"):
+            base = SpectrumPrecomp()
+        elif self.data_type == "photometry":
+            base = WavePrecomp()
+        else:
+            return None
+        lines = bool(
+            getattr(self, "_eline_marginalize", False) or getattr(self, "_eline_fitted", False)
+        )
+        return (base, FeaturePrecomp()) if lines else base
+
+    def _resolve_fit_approx(self, model: Any, approx):
+        """Select the fit-time forward model per the ``approx`` policy.
+
+        - ``"auto"`` (default): route the fit through the precompute LUT chosen
+          by data type (see :meth:`_auto_approx_config`), unless ``model`` was
+          already built with a modern ``approx=`` — then it is respected as-is.
+        - ``None``: force the exact wave-grid path (overrides a build-time approx).
+        - an explicit config / tuple: use exactly that.
+
+        ``model.with_approx`` returns a clone (or ``self`` for a no-op), so the
+        user's original model object is never mutated. Models that cannot clone
+        (no ``with_approx``) are returned unchanged.
+        """
+        if isinstance(approx, str) and approx != "auto":
+            raise ValueError(
+                f"approx={approx!r} not understood; use 'auto' (default), None "
+                "(exact), or a precompute config (WavePrecomp/SpectrumPrecomp/"
+                "FeaturePrecomp, or a tuple)."
+            )
+        with_approx = getattr(model, "with_approx", None)
+        if not callable(with_approx):
+            return model
+        if isinstance(approx, str):  # "auto"
+            has = getattr(model, "_has_modern_approx", None)
+            if callable(has) and has():
+                return model  # respect the build-time approx
+            cfg = self._auto_approx_config()
+            return model if cfg is None else with_approx(cfg)
+        return with_approx(approx)
 
     def _init_emission_lines(self, model, eline_marginalize, eline_prior_type):
         """Configure emission line marginalization and fitted-amplitude modes."""
@@ -687,9 +806,14 @@ class Fitter:
             _amp_priors = {
                 nm: Uniform(-_amp_bound, _amp_bound) for nm in self._eline_amplitude_names
             }
+            # Retained so the merge can be re-applied after the fit-time
+            # approx policy reassigns ``self.spec`` (see __init__): that
+            # reassignment drops params merged here otherwise.
+            self._eline_amp_priors = _amp_priors
             self.spec = self.spec.merge_observation_params(**_amp_priors)
         else:
             self._eline_amplitude_names = []
+            self._eline_amp_priors = {}
 
     def _build_data_args(self, model: Any) -> dict:
         """Build the data-dependent argument dict passed to JIT'd loss functions.
@@ -782,10 +906,12 @@ class Fitter:
 
         Notes
         -----
+
         - ``None`` → ``()`` (no background compile)
         - ``"auto"`` → infer from ``spec.stochastic`` and ``data_type``
         - ``str`` → wrap as ``(str,)``
         - ``tuple`` → return as-is
+
         """
         if compile_modes is None:
             return ()
@@ -1552,7 +1678,9 @@ class Fitter:
         sample_kwarg = "n_steps" if method in ("mcmc_raytrace", "raytrace") else "n_samples"
         warmup_kw = {sample_kwarg: 10}
         try:
-            self.run(method=method, key=key, verbose=False, **warmup_kw)
+            # prewarm=False: this throwaway run must not re-enter auto-prewarm
+            # (run -> _auto_prewarm -> prewarm -> run would recurse).
+            self.run(method=method, key=key, verbose=False, prewarm=False, **warmup_kw)
         except Exception:
             return
         if n_chains is not None and n_chains > 1:
@@ -1560,7 +1688,45 @@ class Fitter:
             import contextlib
 
             with contextlib.suppress(Exception):
-                self.run(method=method, key=key, verbose=False, **warmup_kw)
+                self.run(method=method, key=key, verbose=False, prewarm=False, **warmup_kw)
+
+    def _auto_prewarm(self, key) -> None:
+        """JIT-compile the shared loss/grad + predict surface before the fit loop.
+
+        Called by :meth:`run` when ``prewarm=True`` (the default). Compiles the
+        two forward-model-heavy pieces every fit needs — the negative-log-
+        posterior **gradient** (which every backend evaluates and which subsumes
+        the loss compile) and the post-fit predict surface (``predict_photometry``
+        + ``predict_properties`` on the fit model) — by building and evaluating
+        each once, blocked. This populates the persistent JAX cache so the fit
+        loop and immediate posterior-predictive / derived-quantity exploration
+        run warm.
+
+        Deliberately does **not** run a throwaway sampler fit: for optimizer
+        backends (MAP) a throwaway ``run`` would repeat the full optimization,
+        and the method-specific sampler-loop kernel is compiled once on the real
+        run and persisted anyway. Use :meth:`prewarm` for explicit sampler AOT
+        (e.g. per-``n_chains`` NUTS warmup).
+
+        Best-effort: every step is wrapped so a failure here never masks the
+        genuine error the real :meth:`run` would raise.
+        """
+        import contextlib
+
+        import jax as _jax
+
+        if key is None:
+            key = _jax.random.PRNGKey(0)
+        # Loss + gradient: the forward-heavy compile shared by every backend.
+        with contextlib.suppress(Exception):
+            grad_fn = self._get_or_build_grad_fn()
+            init = self._initialize_unbounded(key)
+            _jax.block_until_ready(grad_fn(init, self._data_args))
+        # Post-fit predict surface on the fit model (LUT-honoring accessors).
+        with contextlib.suppress(Exception):
+            warm_p = self.spec.sample(key)
+            _jax.block_until_ready(_jax.jit(self.model.predict_photometry)(warm_p))
+            _jax.block_until_ready(_jax.jit(self.model.predict_properties)(warm_p))
 
     def save_cache(self, path) -> None:
         """Persist this model's adaptation cache (step size + mass matrix) to disk.
@@ -1727,6 +1893,16 @@ class Fitter:
             JAX random key. Default ``PRNGKey(42)`` for reproducibility.
             Ignored for deterministic methods (``"map"``, ``"laplace"``).
 
+        prewarm : bool, optional
+            JIT-compile the loss/gradient and the predict surface
+            (``predict_photometry`` / ``predict_properties``) before the fit
+            loop, populating the persistent cache so the fit runs warm and
+            post-fit posterior-predictive / derived-quantity exploration is
+            already compiled. Default ``True``; pass ``False`` for the previous
+            lazy compile-on-first-call behavior. (The fit-time approximation
+            policy is set with ``approx=`` on the :class:`Fitter` constructor /
+            :meth:`ForwardModel.fit`, not here.)
+
         **kwargs
             Method-specific keyword arguments passed to the underlying backend:
 
@@ -1784,7 +1960,8 @@ class Fitter:
           The native version is ~19× faster but produces different posterior shapes
           on some problems (e.g., PSD timescale can differ by order of magnitude).
           Validate before swapping methods. See
-          :doc:`bench/reports/2026-04-17_native_vs_nifty.md`.
+          ``bench/reports/2026-04-17_native_vs_nifty.md`` in the repository
+          (outside the docs tree, so it is not a linkable document).
 
         - **VIConfig.n_samples doubling**: In geoVI, when ``mirror_samples=True``
           (default), ``n_samples=3`` produces 6 effective samples (3 + 3 mirrors).
@@ -1958,6 +2135,10 @@ class Fitter:
             self._jit_sampler = None
         self._memory_mode = memory_mode
         self._posterior_chunk_size = kwargs.pop("posterior_chunk_size", None)
+        # Auto-prewarm the JIT (loss/grad + sampler + predict surface) before the
+        # fit loop unless opted out. Default True; internal throwaway runs from
+        # prewarm() pass prewarm=False to avoid re-entry.
+        prewarm = kwargs.pop("prewarm", True)
 
         # --- "auto" method: dimensionality-based selection ---
         if method == "auto":
@@ -2007,9 +2188,18 @@ class Fitter:
         else:
             entry = get_backend(method)
 
+        # Pre-flight speed guard: steer many-evaluation samplers off the slow
+        # exact forward path onto the WavePrecomp LUT (see helper above).
+        _warn_if_exact_forward_path(self.model, entry.name)
+
         # Friendly error if the backend's optional dependency is missing,
         # before we descend into a deep third-party traceback.
         check_requires(entry)
+
+        # Compile the loss/grad + predict surface up front so the fit loop runs
+        # warm and the persistent JAX cache is populated.
+        if prewarm:
+            self._auto_prewarm(key)
 
         # Build the Python-level InferenceContext once. Backends marked
         # ``legacy_fitter=True`` continue to receive the full Fitter
@@ -2025,6 +2215,11 @@ class Fitter:
         # Attach back-reference so Posterior.refine() works
         with contextlib.suppress(AttributeError):
             result._fitter = self
+        # Record the canonical registry key for citation collection.
+        # ``Posterior.method`` is a display string ("NUTS (BlackJAX)"), not a
+        # key, so the sampler citation cannot be recovered from it later.
+        with contextlib.suppress(AttributeError):
+            result._backend_key = entry.name
         return result
 
     def summary(self) -> str:
@@ -2039,6 +2234,7 @@ class Fitter:
         Notes
         -----
         The summary includes:
+
         - Data dimensionality and median signal-to-noise ratio
         - Free parameters and latent grid points (ξ) if stochastic SFH
         - Parameter names, prior distributions, and bounds
@@ -2307,95 +2503,82 @@ class Fitter:
         if verbose:
             logger.info("  Drawing %d posterior samples via BlackJAX NUTS...", n_samples)
 
-        if likelihood is not None:
-
-            @jax.jit
-            def logdensity_fn(x):
-                """Evaluate negative log density from custom likelihood and standard prior.
-
-                Parameters
-                ----------
-                x : dict
-                    Parameter dict in unbounded space.
-
-                Returns
-                -------
-                float
-                    Log posterior (likelihood + Gaussian prior).
-
-                Notes
-                -----
-                Inner closure used by BlackJAX NUTS when a custom likelihood
-                is provided. Not part of public API.
-                """
-                lh_val = likelihood(x)
-                prior = 0.5 * sum(jnp.sum(v**2) for v in x.values())
-                return -lh_val - prior
-
-        else:
-            _logdensity_2arg = self._get_or_build_logdensity_fn()
-            _da = self._data_args
-
-            @jax.jit
-            def logdensity_fn(x):
-                """Evaluate log density with data_args bound from the enclosing scope.
-
-                Parameters
-                ----------
-                x : dict
-                    Parameter dict in unbounded space.
-
-                Returns
-                -------
-                float
-                    Log posterior (likelihood + priors).
-
-                Notes
-                -----
-                Inner closure used by BlackJAX NUTS when no custom likelihood
-                is provided. Captures ``_data_args`` from outer scope.
-                Not part of public API.
-                """
-                return _logdensity_2arg(x, _da)
-
         warmup_key, sample_key = jax.random.split(key)
         n_warmup = min(200, n_samples)
-        warmup = blackjax.window_adaptation(blackjax.nuts, logdensity_fn)
-        (state, parameters), _ = warmup.run(warmup_key, pos_dict, num_steps=n_warmup)
+
+        # Warmup and sampling run inside ONE memoized ``jax.jit`` that takes the data as
+        # a *traced* argument. The eager form rebuilt a fresh ``@jax.jit logdensity_fn``
+        # (closing over ``self._data_args``, which carries the SSP grid), a fresh
+        # ``window_adaptation``, a fresh NUTS kernel and a fresh ``one_step`` on every
+        # call. Fresh function identities miss JAX's compilation cache, so each call
+        # compiled and *retained* another set of executables — a measured ~72 MB/call
+        # leak (#1249), accrued per galaxy by a catalog VI run drawing samples with
+        # ``posterior_method="blackjax"``.
+        #
+        # Memoizing only the log-density is not enough (measured: 72 -> 55 MB/call);
+        # the adaptation-dependent kernel has to be inside the cached program too, and
+        # it cannot be cached separately because it is built from the *runtime* warmup
+        # output — caching that would bake one call's step size, the bug fixed in #1234.
+        def _build_draw(ld_from):
+            """Compile (window adaptation -> sampling scan) once, data traced."""
+
+            def _run(wk, sk, pos, data_args):
+                """Window-adapt, then scan the NUTS kernel; returns stacked positions."""
+                ld = ld_from(data_args)
+                warmup = blackjax.window_adaptation(blackjax.nuts, ld)
+                (state, parameters), _ = warmup.run(wk, pos, num_steps=n_warmup)
+                kernel = blackjax.nuts(ld, **parameters).step
+
+                def one_step(s, rng_key):
+                    """One NUTS step, shaped for ``jax.lax.scan``."""
+                    s, _ = kernel(rng_key, s)
+                    return s, s
+
+                _, states = jax.lax.scan(one_step, state, jax.random.split(sk, n_samples))
+                return states.position
+
+            return jax.jit(_run)
+
+        if likelihood is not None:
+            # A caller-supplied likelihood is an arbitrary callable we cannot
+            # fingerprint, so the memo is disabled (``key=None`` builds fresh) rather
+            # than risk serving a kernel compiled around a different likelihood.
+            def _ld_from(_data_args):
+                """Custom-likelihood log posterior (likelihood + standard normal prior)."""
+
+                def _ld(x):
+                    prior = 0.5 * sum(jnp.sum(v**2) for v in x.values())
+                    return -likelihood(x) - prior
+
+                return _ld
+
+            memo_key = None
+        else:
+            _logdensity_2arg = self._get_or_build_logdensity_fn()
+
+            def _ld_from(data_args):
+                """Default log posterior, reading the traced ``data_args``."""
+
+                def _ld(x):
+                    return _logdensity_2arg(x, data_args)
+
+                return _ld
+
+            memo_key = (
+                "blackjax_draw",
+                self.compile_signature(),
+                int(n_samples),
+                int(n_warmup),
+            )
+
+        _run_draw = self._memo_batch_kernel(
+            "_blackjax_draw_kernel_cache", memo_key, lambda: _build_draw(_ld_from)
+        )
+        sample_positions = _run_draw(warmup_key, sample_key, pos_dict, self._data_args)
 
         if verbose:
-            logger.info("  Warmup done (%d steps). Sampling...", n_warmup)
+            logger.info("  Warmup done (%d steps). Sampled %d draws.", n_warmup, n_samples)
 
-        kernel = blackjax.nuts(logdensity_fn, **parameters).step
-
-        @jax.jit
-        def one_step(state, rng_key):
-            """Execute one NUTS sampling step and return updated state.
-
-            Parameters
-            ----------
-            state : blackjax.SamplerState
-                Current MCMC sampler state.
-            rng_key : jax.random.PRNGKey
-                Random seed for this step.
-
-            Returns
-            -------
-            tuple of (blackjax.SamplerState, blackjax.SamplerState)
-                Updated state twice (for jax.lax.scan compatibility).
-
-            Notes
-            -----
-            Inner closure for NUTS kernel. Designed for use with ``jax.lax.scan``
-            in batch sampling. Not part of public API.
-            """
-            state, _ = kernel(rng_key, state)
-            return state, state
-
-        keys = jax.random.split(sample_key, n_samples)
-        _, states = jax.lax.scan(one_step, state, keys)
-
-        sample_positions = states.position
         for i in range(n_samples):
             sd = jax.tree.map(lambda x, _i=i: x[_i], sample_positions)
             existing_samples.append(sd)
@@ -2479,6 +2662,7 @@ class Fitter:
         Notes
         -----
         **Parallelization strategy**:
+
         - For ``method="map"`` with precomputed photometry: uses ``jax.vmap``
           to fit all galaxies in a single JIT call (1-2s total).
         - For MCMC methods with fixed SFH: uses ``jax.vmap`` + shared adaptation.
@@ -2662,62 +2846,61 @@ class Fitter:
         n_dim = init_flats.shape[1]
         use_dense = dense_mass_matrix and n_dim <= 30
 
-        # Run adaptation on first galaxy (shared across all)
+        # Adaptation on the first galaxy, shared across the batch. Wrapped in a
+        # memoized jax.jit that takes the galaxy data as a *traced* argument so the
+        # compiled warmup is reused across fit_batch calls. The eager form built a
+        # fresh ``window_adaptation`` (with a fresh log-density closure) every call
+        # — a fresh function identity that JAX's in-memory compile cache never
+        # reused, so it retained one warmup executable per call (~20 MB/call leak on
+        # a long-lived Fitter). Data enters traced, so the adaptation still runs on
+        # the current galaxy each call and the numbers are unchanged; this mirrors
+        # the single-galaxy path's module-level ``_hmc_full_scan`` jit.
         first_data_args = jax.tree.map(lambda x: x[0], batch_data_args)
 
-        def ld_first(pos):
-            """Log-density for the first galaxy (used in warmup adaptation).
-
-            Parameters
-            ----------
-            pos : ndarray, shape (n_dim,)
-                Flattened unbounded parameters for first galaxy.
-
-            Returns
-            -------
-            float
-                Log posterior density.
-
-            Notes
-            -----
-            Inner closure for warmup adaptation in batch MCMC. Not part of
-            public API.
-            """
-            return logdensity_flat_2arg(pos, first_data_args)
-
-        if method in ("mcmc_nuts", "mcmc_hmc"):
-            bj_algo = blackjax.nuts if method == "mcmc_nuts" else blackjax.hmc
-            adapt_kwargs = {}
-            if method == "mcmc_hmc":
-                adapt_kwargs["num_integration_steps"] = n_leapfrog_steps
-            warmup = blackjax.window_adaptation(
-                bj_algo,
-                ld_first,
-                is_mass_matrix_diagonal=not use_dense,
-                target_acceptance_rate=target_accept_rate,
-                **adapt_kwargs,
-            )
-            (_, adapt_params), _ = warmup.run(adapt_key, init_flats[0], num_steps=n_warmup)
+        if method == "mcmc_hmc":
+            _adapt_algo, _adapt_kwargs = blackjax.hmc, {"num_integration_steps": n_leapfrog_steps}
         elif method == "mcmc_dynamic_hmc":
-            warmup = blackjax.window_adaptation(
-                blackjax.hmc,
-                ld_first,
-                is_mass_matrix_diagonal=not use_dense,
-                target_acceptance_rate=target_accept_rate,
-                num_integration_steps=10,
-            )
-            (_, adapt_params), _ = warmup.run(adapt_key, init_flats[0], num_steps=n_warmup)
-        elif method == "mcmc_ghmc":
-            warmup = blackjax.window_adaptation(
-                blackjax.nuts,
-                ld_first,
-                is_mass_matrix_diagonal=not use_dense,
-                target_acceptance_rate=target_accept_rate,
-            )
-            (_, adapt_params), _ = warmup.run(adapt_key, init_flats[0], num_steps=n_warmup)
+            _adapt_algo, _adapt_kwargs = blackjax.hmc, {"num_integration_steps": 10}
+        else:  # mcmc_nuts, mcmc_ghmc — both tune with the NUTS window
+            _adapt_algo, _adapt_kwargs = blackjax.nuts, {}
 
-        step_size = adapt_params["step_size"]
-        inv_mass_matrix = adapt_params["inverse_mass_matrix"]
+        def _run_window_adaptation(adapt_key, init_flat, data_args_first):
+            """Window-adapt step size / mass matrix on the first galaxy.
+
+            ``data_args_first`` is a *traced* argument, so this compiles once and
+            is reused across ``fit_batch`` calls (memoized below). Not public API.
+            """
+
+            def _ld(pos):
+                """Single-galaxy log-density closing over the traced data."""
+                return logdensity_flat_2arg(pos, data_args_first)
+
+            warmup = blackjax.window_adaptation(
+                _adapt_algo,
+                _ld,
+                is_mass_matrix_diagonal=not use_dense,
+                target_acceptance_rate=target_accept_rate,
+                **_adapt_kwargs,
+            )
+            (_, adapt_params), _ = warmup.run(adapt_key, init_flat, num_steps=n_warmup)
+            return adapt_params["step_size"], adapt_params["inverse_mass_matrix"]
+
+        _adapt_kernel_key = (
+            "vmap_mcmc_adapt",
+            self.compile_signature(),
+            method,
+            int(n_warmup),
+            bool(use_dense),
+            float(target_accept_rate),
+            int(n_leapfrog_steps),
+            int(n_dim),
+        )
+        _run_adapt = self._memo_batch_kernel(
+            "_batch_adapt_kernel_cache",
+            _adapt_kernel_key,
+            lambda: jax.jit(_run_window_adaptation),
+        )
+        step_size, inv_mass_matrix = _run_adapt(adapt_key, init_flats[0], first_data_args)
 
         if verbose:
             logger.info(
@@ -2733,8 +2916,13 @@ class Fitter:
         if method == "mcmc_nuts":
             kernel = _get_nuts_kernel()
 
-            def _sample_scan(state, keys, data_args_i):
-                """Scan over MCMC steps for a single galaxy (NUTS variant)."""
+            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
+                """Scan over MCMC steps for a single galaxy (NUTS variant).
+
+                ``step_size`` / ``inv_mass_matrix`` are threaded in (not closed
+                over) so the compiled kernel is independent of the adapted
+                values — see :meth:`_fit_batch_vmap_mcmc`.
+                """
 
                 def ld(pos):
                     """Log-density for this galaxy.
@@ -2772,8 +2960,12 @@ class Fitter:
         elif method == "mcmc_hmc":
             kernel = _get_hmc_kernel()
 
-            def _sample_scan(state, keys, data_args_i):
-                """Scan over MCMC steps for a single galaxy (HMC variant)."""
+            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
+                """Scan over MCMC steps for a single galaxy (HMC variant).
+
+                Adaptation (``step_size`` / ``inv_mass_matrix``) is threaded in,
+                not closed over — see :meth:`_fit_batch_vmap_mcmc`.
+                """
 
                 def ld(pos):
                     """Log-density for this galaxy.
@@ -2811,8 +3003,12 @@ class Fitter:
         elif method == "mcmc_dynamic_hmc":
             kernel = _get_dynamic_hmc_kernel()
 
-            def _sample_scan(state, keys, data_args_i):
-                """Scan over MCMC steps for a single galaxy (dynamic HMC variant)."""
+            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
+                """Scan over MCMC steps for a single galaxy (dynamic HMC variant).
+
+                Adaptation (``step_size`` / ``inv_mass_matrix``) is threaded in,
+                not closed over — see :meth:`_fit_batch_vmap_mcmc`.
+                """
 
                 def ld(pos):
                     """Log-density for this galaxy.
@@ -2842,13 +3038,18 @@ class Fitter:
 
         elif method == "mcmc_ghmc":
             kernel = _get_ghmc_kernel()
-            if inv_mass_matrix.ndim == 2:
-                momentum_inv_scale = jnp.sqrt(jnp.diag(inv_mass_matrix))
-            else:
-                momentum_inv_scale = jnp.sqrt(inv_mass_matrix)
 
-            def _sample_scan(state, keys, data_args_i):
-                """Scan over MCMC steps for a single galaxy (GHMC variant)."""
+            def _sample_scan(state, keys, data_args_i, step_size, inv_mass_matrix):
+                """Scan over MCMC steps for a single galaxy (GHMC variant).
+
+                Adaptation is threaded in, not closed over — see
+                :meth:`_fit_batch_vmap_mcmc`. The GHMC momentum scale is derived
+                from the passed ``inv_mass_matrix``.
+                """
+                if inv_mass_matrix.ndim == 2:
+                    momentum_inv_scale = jnp.sqrt(jnp.diag(inv_mass_matrix))
+                else:
+                    momentum_inv_scale = jnp.sqrt(inv_mass_matrix)
 
                 def ld(pos):
                     """Log-density for this galaxy.
@@ -2885,7 +3086,7 @@ class Fitter:
                 return jax.lax.scan(_step, state, keys)
 
         # Single-galaxy function to vmap
-        def single_galaxy(gal_key, init_flat_i, data_args_i):
+        def single_galaxy(gal_key, init_flat_i, data_args_i, step_size, inv_mass_matrix):
             """Run inference (warmup + sampling) for a single galaxy.
 
             Parameters
@@ -2905,8 +3106,10 @@ class Fitter:
             Notes
             -----
             Designed for use with ``jax.vmap`` in batch MCMC. Captures
-            ``kernel``, ``_sample_scan`` from outer scope. Not part of
-            public API.
+            ``kernel``, ``_sample_scan`` from outer scope; the adapted
+            ``step_size`` / ``inv_mass_matrix`` are passed as arguments
+            (broadcast via the vmap ``in_axes``) so the compiled kernel is
+            reusable across ``fit_batch`` calls. Not part of public API.
             """
 
             def ld(pos):
@@ -2931,7 +3134,13 @@ class Fitter:
             init_key, burn_key, sample_key = jax.random.split(gal_key, 3)
 
             if method == "mcmc_ghmc":
-                state = blackjax.mcmc.ghmc.init(init_flat_i, init_key, ld)
+                # Keyword args: blackjax reordered ghmc.init's (rng_key, logdensity_fn)
+                # between 1.3 and 1.6 — keywords are correct on both. (The single-galaxy
+                # GHMC paths were already fixed this way; this batch path was missed
+                # because it had no test.)
+                state = blackjax.mcmc.ghmc.init(
+                    position=init_flat_i, logdensity_fn=ld, rng_key=init_key
+                )
             elif method == "mcmc_hmc":
                 state = blackjax.mcmc.hmc.init(init_flat_i, ld)
             elif method == "mcmc_dynamic_hmc":
@@ -2942,19 +3151,46 @@ class Fitter:
             # Burn-in (discarded)
             if n_burnin > 0:
                 burnin_keys = jax.random.split(burn_key, n_burnin)
-                state, _ = _sample_scan(state, burnin_keys, data_args_i)
+                state, _ = _sample_scan(
+                    state, burnin_keys, data_args_i, step_size, inv_mass_matrix
+                )
 
             # Sampling
             sample_keys = jax.random.split(sample_key, n_samples)
-            _, (positions, divergent) = _sample_scan(state, sample_keys, data_args_i)
+            _, (positions, divergent) = _sample_scan(
+                state, sample_keys, data_args_i, step_size, inv_mass_matrix
+            )
             return positions, divergent
 
-        # vmap + jit: one XLA kernel for all galaxies
+        # vmap + jit: one XLA kernel for all galaxies. The adapted step_size /
+        # inv_mass_matrix are broadcast (in_axes None) so they enter as
+        # Parameter ops, not baked Constants — which lets the memo below reuse
+        # the compiled sampler across repeated same-config fit_batch calls
+        # (a fresh closure would otherwise miss jax.jit's cache and recompile).
         gal_keys = jax.random.split(key, n_gal)
-        all_positions, all_divergent = jax.jit(jax.vmap(single_galaxy))(
+        _mcmc_kernel_key = (
+            "vmap_mcmc",
+            self.compile_signature(),
+            method,
+            int(n_burnin),
+            int(n_samples),
+            int(max_num_doublings),
+            int(n_leapfrog_steps),
+            float(alpha),
+            float(delta),
+            bool(use_dense),
+            int(n_dim),
+        )
+        _run_batch = self._memo_batch_mcmc_kernel(
+            _mcmc_kernel_key,
+            lambda: jax.jit(jax.vmap(single_galaxy, in_axes=(0, 0, 0, None, None))),
+        )
+        all_positions, all_divergent = _run_batch(
             gal_keys,
             init_flats,
             batch_data_args,
+            step_size,
+            inv_mass_matrix,
         )
 
         t_sample = time.time() - t0
@@ -2995,6 +3231,88 @@ class Fitter:
             results.append(result_i)
 
         return results
+
+    def _memo_batch_map_kernel(self, key, builder):
+        """Cache a ``jax.jit(jax.vmap(...))`` batch-MAP kernel on this Fitter.
+
+        The vmapped optimizer kernel is a *fresh* closure on every
+        :meth:`fit_batch` call, and a fresh function object misses
+        ``jax.jit``'s compilation cache — so a catalog processed in repeated
+        same-shape ``fit_batch("map")`` calls recompiles the (expensive)
+        vmapped loss each time. Memoizing the wrapper object under a key that
+        fully determines the closure lets ``jax.jit`` reuse the compiled
+        executable across calls.
+
+        Safety: the observed data threads through as a *traced argument*
+        (never the closure), and ``loss_fn`` is already structurally cached
+        (:meth:`_get_or_build_loss_fn`), so the only closure-defining state is
+        the optimizer configuration carried in ``key``. The cache lives on the
+        Fitter instance, whose model structure is fixed at construction, so a
+        cached kernel is only ever reused for the same model structure and the
+        same optimizer config — per-galaxy data still flows in fresh through the
+        traced ``batch_data_args``. ``key=None`` (e.g. a caller-supplied custom
+        optimizer we cannot fingerprint) disables the memo — always build fresh
+        rather than risk a stale kernel.
+
+        Parameters
+        ----------
+        key : hashable or None
+            Signature that fully determines the built kernel, or ``None`` to
+            skip caching.
+        builder : callable
+            Zero-arg factory returning the ``jax.jit(jax.vmap(...))`` wrapper.
+
+        Returns
+        -------
+        callable
+            The (possibly cached) compiled batch kernel.
+        """
+        return self._memo_batch_kernel("_batch_map_kernel_cache", key, builder)
+
+    def _memo_batch_mcmc_kernel(self, key, builder):
+        """Cache the ``jax.jit(jax.vmap(single_galaxy))`` batch-MCMC sampler.
+
+        Sibling of :meth:`_memo_batch_map_kernel` for the vmapped MCMC path
+        (:meth:`_fit_batch_vmap_mcmc`). Same rationale and safety argument: the
+        per-galaxy data AND the adapted ``step_size`` / ``inv_mass_matrix`` are
+        threaded as arguments (the latter via ``jax.vmap(..., in_axes=(0, 0, 0,
+        None, None))``), so the compiled sampler does not depend on their values
+        and the memo key need only carry the structural sampler configuration
+        (method, burn-in / sample counts, tree/leapfrog limits, GHMC α/δ, mass-
+        matrix shape). ``key=None`` disables the memo.
+        """
+        return self._memo_batch_kernel("_batch_mcmc_kernel_cache", key, builder)
+
+    #: Max compiled batch kernels retained per cache. A cached kernel can bake the
+    #: SSP grid (~tens of MB), so an unbounded cache on a long-lived Fitter that
+    #: sees many distinct configs would pin them all. The common case (one config,
+    #: reused across a same-shape catalog) stays well under this.
+    _BATCH_KERNEL_CACHE_MAX = 16
+
+    def _memo_batch_kernel(self, cache_attr, key, builder):
+        """Instance-scoped LRU memo for a compiled batch kernel (shared MAP/MCMC core).
+
+        Returns ``builder()`` uncached when ``key`` is ``None``; otherwise caches
+        the built wrapper in ``self.__dict__[cache_attr]`` keyed by ``key`` so
+        ``jax.jit`` can reuse the compiled executable across ``fit_batch`` calls.
+        The cache is bounded at :attr:`_BATCH_KERNEL_CACHE_MAX` (LRU eviction) so
+        varying-config workloads cannot grow retention without limit.
+        """
+        if key is None:
+            return builder()
+        cache = self.__dict__.setdefault(cache_attr, {})
+        fn = cache.get(key)
+        if fn is None:
+            fn = builder()
+            cache[key] = fn
+            if len(cache) > self._BATCH_KERNEL_CACHE_MAX:
+                # dicts preserve insertion order — drop the oldest (least recent).
+                cache.pop(next(iter(cache)))
+        else:
+            # LRU touch: reinsert so a hit becomes the most-recently-used entry.
+            del cache[key]
+            cache[key] = fn
+        return fn
 
     def _fit_batch_vmap_map(self, batch, *, key, verbose=True, **kwargs):
         """Vectorized MAP optimization over a batch using jax.vmap.
@@ -3054,7 +3372,11 @@ class Fitter:
                     n_steps,
                 )
 
-            batch_result = jax.jit(jax.vmap(solver.run))(params_batch, batch_data_args)
+            run_kernel = self._memo_batch_map_kernel(
+                ("jaxopt", optimizer, int(n_steps), float(tol)),
+                lambda: jax.jit(jax.vmap(solver.run)),
+            )
+            batch_result = run_kernel(params_batch, batch_data_args)
 
             t_total = time.time() - t0
             if verbose:
@@ -3068,18 +3390,20 @@ class Fitter:
             results = []
             for g_idx in range(n_gal):
                 params_i = jax.tree.map(lambda x, idx=g_idx: x[idx], batch_result.params)
-                bounded_i = self._bounded_from_unbounded(params_i)
+                bounded_i = self._to_physical(params_i)
                 result_i = Posterior(
-                    samples=bounded_i,
-                    log_weights=None,
-                    fitter=self,
+                    samples=None,
+                    params=bounded_i,
                     method=f"map ({opt_name})",
+                    wall_time_s=t_total,
                     diagnostics={
                         "loss": float(batch_result.state.value[g_idx]),
                         "n_steps": int(batch_result.state.iter_num[g_idx]),
                         "optimizer": opt_name,
                         "converged": bool(batch_result.state.error[g_idx] < tol),
                     },
+                    _model=self.model,
+                    _fitter=self,
                 )
                 results.append(result_i)
 
@@ -3130,7 +3454,16 @@ class Fitter:
             new_params = optax.apply_updates(params, updates)
             return new_params, new_opt_state, loss
 
-        batch_step = jax.jit(jax.vmap(single_step))
+        # Memoize the vmapped step so repeated same-config fit_batch("map")
+        # calls reuse the compiled kernel (a fresh closure would miss jax.jit's
+        # cache). Only string optimizers are fingerprintable; a caller-supplied
+        # custom optax object disables the memo (build fresh).
+        _opt_memo_key = (
+            ("optax", optimizer, float(learning_rate)) if isinstance(optimizer, str) else None
+        )
+        batch_step = self._memo_batch_map_kernel(
+            _opt_memo_key, lambda: jax.jit(jax.vmap(single_step))
+        )
 
         params = params_batch
         opt_states = opt_states_batch
@@ -3156,13 +3489,15 @@ class Fitter:
         results = []
         for g_idx in range(n_gal):
             params_i = jax.tree.map(lambda x, idx=g_idx: x[idx], params)
-            bounded_i = self._bounded_from_unbounded(params_i)
+            bounded_i = self._to_physical(params_i)
             result_i = Posterior(
-                samples=bounded_i,
-                log_weights=None,
-                fitter=self,
+                samples=None,
+                params=bounded_i,
                 method="map",
+                wall_time_s=t_total,
                 diagnostics={"loss": float(losses[g_idx]), "n_steps": n_steps},
+                _model=self.model,
+                _fitter=self,
             )
             results.append(result_i)
 

@@ -16,6 +16,7 @@ parameter family:
   Registered when ``dla=True``. Backs ``_DLA_PARAMS``. The ``dla_*``
   prefix is owned here because the DLA absorber is conceptually an
   IGM/line-of-sight phenomenon.
+
 """
 
 from __future__ import annotations
@@ -49,6 +50,7 @@ PATCHY_PARAMS: tuple[ParamDeclaration, ...] = (
         "(Miralda-Escude 1998; 0 = fully ionized, 1 = fully neutral)",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
+        free_prior=Uniform(0.0, 1.0, "Volume-averaged neutral hydrogen fraction", default=0.0),
     ),
     ParamDeclaration(
         "igm_bubble_mpc",

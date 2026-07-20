@@ -7,6 +7,7 @@ This module provides the computational primitives used by both the lazy
 population-level batch computation via ``jax.vmap``).
 
 All functions are:
+
 - **Pure**: no side effects, no mutation, no caching
 - **JIT-compatible**: can be wrapped in ``jax.jit``
 - **Differentiable**: gradients flow through all computations
@@ -15,6 +16,7 @@ All functions are:
 
 Physical conventions
 --------------------
+
 - SED units: erg/s/Hz (rest-frame luminosity L_ν)
 - Wavelength: Angstrom (ascending order in ``ssp_wave``)
 - Frequency: Hz (``ν = c / λ``, descending when λ is ascending)
@@ -26,6 +28,7 @@ Physical conventions
 
 References
 ----------
+
 - Balogh et al. 1999, ApJ, 527, 54 — Dn4000 definition
 - Wang et al. 2024, ApJ — modified Balmer break
 - Bell 2003, ApJ, 586, 794 — FIR-radio correlation
@@ -34,6 +37,7 @@ References
 - Lehmer et al. 2016, ApJ, 825, 7 — updated XRB scaling
 - Duras et al. 2020, A&A, 636, A73 — AGN bolometric corrections
 - Condon 1992, ARA&A, 30, 575 — thermal radio emission
+
 """
 
 import jax
@@ -710,6 +714,78 @@ def compute_l_radio_thermal(q_h: jnp.ndarray) -> jnp.ndarray:
         Thermal radio luminosity at 1.4 GHz in erg/s/Hz.
     """
     return 5.5e-28 * q_h
+
+
+def compute_l_radio_thermal_from_log_qh(log_q_h: jnp.ndarray) -> jnp.ndarray:
+    r"""Thermal (free-free) radio luminosity at 1.4 GHz from :math:`\log_{10} Q_H`.
+
+    Log-domain form of :func:`compute_l_radio_thermal` — folds the ~1e56 Q_H into the
+    exponent so no float32-overflowing intermediate is materialized (#1206).
+
+    .. math::
+
+        \log_{10} L_{\rm th} = \log_{10} Q_H + \log_{10}(5.5\times10^{-28})
+
+    Parameters
+    ----------
+    log_q_h : array_like, scalar
+        log10 of the ionizing photon rate [dex re photons/s]; -inf for zero flux.
+
+    Returns
+    -------
+    ndarray, shape ()
+        Thermal 1.4 GHz luminosity [erg/s/Hz]; 0.0 when ``log_q_h`` is -inf.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe. Equals ``compute_l_radio_thermal(10**log_q_h)`` to ~1e-12 in
+    float64 and stays finite in float32.
+    """
+    from tengri.utils.scale import pow10
+
+    return pow10(log_q_h + jnp.log10(5.5e-28))
+
+
+_TINY = 1e-30  # Floor for safe division (shared with radio/stellar components)
+
+
+def compute_xi_ion_from_log_qh(
+    log_q_h: jnp.ndarray, sed: jnp.ndarray, wave: jnp.ndarray
+) -> jnp.ndarray:
+    r"""Ionizing photon production efficiency :math:`\xi_{\rm ion}` [Hz/erg] from log10(Q_H).
+
+    Computed in the log domain so the FUV energy density :math:`\nu L_\nu \sim 10^{43}` erg/s
+    never materializes in float32 (#1206).
+
+    .. math::
+
+        \xi_{\rm ion} = \frac{Q_H}{\nu_{1500}\, L_{\nu,\rm FUV}}
+
+    Parameters
+    ----------
+    log_q_h : array_like, scalar
+        log10 ionizing photon rate [dex re photons/s].
+    sed : array_like, shape (n_wave,)
+        Rest-frame :math:`L_\nu` [erg/s/Hz] used to measure the FUV.
+    wave : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom].
+
+    Returns
+    -------
+    ndarray, shape ()
+        :math:`\xi_{\rm ion}` [Hz/erg]; float32-finite.
+    """
+    from tengri.utils.physics_constants import C_AA
+    from tengri.utils.scale import pow10
+
+    fuv = compute_fuv_flux(sed, wave)
+    nu_uv = C_AA / 1500.0
+    fuv_pos = fuv > 0
+    log_nu_l_uv = jnp.where(
+        fuv_pos, jnp.log10(jnp.where(fuv_pos, fuv, 1.0)) + jnp.log10(nu_uv), jnp.log10(_TINY)
+    )
+    log_nu_l_uv = jnp.maximum(log_nu_l_uv, jnp.log10(_TINY))
+    return pow10(log_q_h - log_nu_l_uv)
 
 
 def compute_q_ir(l_tir_lsun: jnp.ndarray, l_1p4ghz: jnp.ndarray) -> jnp.ndarray:

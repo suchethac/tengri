@@ -19,7 +19,7 @@
 
 
 IMF choice revealed in SED continuum shape: Chabrier vs Kroupa vs Salpeter
-=========================================================================
+==========================================================================
 
 Different Initial Mass Functions produce different continuum shapes at fixed
 age and metallicity. Salpeter (top-heavy) produces harder UV and near-IR

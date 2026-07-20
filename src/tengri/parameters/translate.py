@@ -62,6 +62,7 @@ from tengri.parameters._aliases import (
     find_short_param,
 )
 from tengri.parameters._builders import _resolve_lazy_bucket
+from tengri.utils.physics_constants import LOG10_ZSUN
 
 # ── Constants ─────────────────────────────────────────────────────
 
@@ -70,7 +71,8 @@ from tengri.parameters._builders import _resolve_lazy_bucket
 # family. SSP libraries built on Padova (BC03, default CIGALE), PARSEC, or
 # BASTI use different Zsun — see module docstring for the table. Reason in
 # absolute ``log_z_abs`` (not solar-normalized) for cross-code comparisons.
-LOG10_ZSUN = -1.8477116556169435
+# ``LOG10_ZSUN`` is imported from physics_constants above and re-exported
+# here: this remains the canonical import path for the rest of the tree.
 
 # Per-SSP-library solar Z values (kept as a reference dict so downstream
 # code or audits can look up the right Zsun if they need to translate
@@ -631,7 +633,7 @@ def check_missing_free_params(params, spec, param_map=None):
             f"Missing values for free parameters: {missing}. Every non-Fixed "
             "parameter needs a value at predict time. Draw a complete set with "
             "``params = model.spec.sample(jax.random.PRNGKey(0))``, or fix "
-            "parameters at build time (``'*': FIXED`` in the group dict, or "
+            "parameters at build time (``'all_params': FIXED`` in the group dict, or "
             "``param=Fixed(value)``). ``model.spec.summary()`` shows which "
             "parameters are free."
         )

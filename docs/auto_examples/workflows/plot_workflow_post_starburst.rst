@@ -19,7 +19,12 @@
 
 
 Model misspecification: post-starburst galaxies reveal wrong SFH
-==============================================================
+================================================================
+
+.. image:: images/sphx_glr_plot_workflow_post_starburst_001.png
+   :alt: plot workflow post starburst
+   :class: sphx-glr-single-img
+
 
 A post-starburst galaxy shows a recent burst followed by quenching.
 When fit with smooth tau-model (incorrect), the fit biases the recovered
@@ -30,17 +35,6 @@ Reference: Cid Fernandes et al. 2005, MNRAS, 358, 363 (post-starburst
 classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-167
-
-
-
-.. image-sg:: /auto_examples/workflows/images/sphx_glr_plot_workflow_post_starburst_001.png
-   :alt: plot workflow post starburst
-   :srcset: /auto_examples/workflows/images/sphx_glr_plot_workflow_post_starburst_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -82,8 +76,8 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
     model_truth = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust={"type": "two_component", "*": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+        dust={"type": "two_component", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.1),
     )
     mock = model_truth.mock(truth_params, snr=20.0, key=key)
@@ -102,7 +96,7 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.2,
             "tau_diff": 0.1,
             "slope": -0.7,
@@ -132,7 +126,7 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.2,
             "tau_diff": 0.1,
             "slope": -0.7,
@@ -198,11 +192,6 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
     fig.tight_layout()
     plt.savefig("plot_workflow_post_starburst.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 5.275 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_post_starburst.py:

@@ -33,10 +33,12 @@ Modern galaxy SED inference needs speed, differentiability, and
 modularity at once; most codes give you one or two. Tengri is an
 attempt at all three.
 
-JIT compilation gets the full physical model down to tens of
-microseconds per call on a single CPU core, fast enough for
-catalog-scale inference without putting a neural emulator in the
-loop. Exact gradients make HMC, variational inference, and Laplace
+JIT compilation gets the core forward model down to tens of
+microseconds per galaxy in batched (`vmap`) evaluation on a single
+CPU core, fast enough for catalog-scale inference without putting a
+neural emulator in the loop. (A full panchromatic model with dust IR
+re-emission and nebular emission is heavier — of order a millisecond
+per galaxy.) Exact gradients make HMC, variational inference, and Laplace
 approximation work in the 100+ parameter spaces where bursty
 star formation histories and hierarchical population fits live. And
 the physics and the instrument models are separate, swappable pieces,
@@ -51,7 +53,7 @@ The full philosophy and an architecture flow chart are on the
 Most of tengri was built in about six months by a human author
 working closely with AI agents. That is a deliberate part of the
 design philosophy, and the development trail is kept open (see
-[`AGENTS.md`](AGENTS.md)). Trust has to be earned the usual way:
+[`docs/dev/agents.md`](docs/dev/agents.md)). Trust has to be earned the usual way:
 every piece gets checked against established codes, and the status
 of each one is tracked at
 [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md).
@@ -84,7 +86,11 @@ pip install -e ".[dev]"
 
 ### Verify your install
 
+The smoke gate uses `pytest`, which ships in the `[dev]` extra (it is **not**
+included in `[all]`), so install that first:
+
 ```bash
+pip install -e ".[dev]"
 pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
 ```
 
@@ -116,7 +122,10 @@ from tengri import (
     Observation, Photometry, load_ssp_data, recipes,
 )
 
-ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+# download_ssp() fetches the default bare-stellar grid on first run and
+# skips (returns the same path) on every run after — so this block is
+# copy-paste-safe. See "SSP grids" above for other grids / a shell setup.
+ssp = load_ssp_data(tengri.download_ssp())
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
@@ -134,18 +143,43 @@ forward = ForwardModel.build(sed=sed, observation=obs)
 key = jax.random.PRNGKey(0)
 mock = sed.mock(sed.spec.sample(key), key=key)
 
+# This recipe has 8 free parameters. Past D ~ 6, NUTS spends most of its
+# time in warmup, so use fixed-length HMC — see docs/method_selection.md
+# for the full decision table.
 fitter = Fitter(forward, mock.flux_obs, mock.noise)
-result = fitter.run("mcmc_nuts")
+result = fitter.run("mcmc_hmc")
 print(result.summary_table())
 ```
+
+Building the model takes a few seconds and the fit about 40 s on a laptop
+CPU; the first run also pays a one-off JAX compile. Swap in `"map"` for a
+point estimate in ~4 s, or `"laplace"` for credible intervals in ~5 s.
+`"mcmc_nuts"` is the gold standard below D ≈ 6, but on this 8-parameter
+model its warmup pushes the fit past 8 minutes.
 
 For real data, pass your own `(flux, noise)` to `Fitter`. The full
 walkthrough is in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
 
-If you want more control than a recipe gives you, build the model
-with the nested-dict grammar (`SEDModel.build(..., sfh={'type': 'dpl',
-'*': FREE, 'beta': Uniform(1, 3)}, dust={...}, neb={...})`). See
-[`notebooks/04_building_models.py`](notebooks/04_building_models.py)
+If you want more control than a recipe gives you, build the model with
+the nested-dict grammar. Import the sentinels and priors it uses first
+(`FREE`/`FIXED` are singletons, distinct from the `Fixed(...)` prior
+above):
+
+```python
+from tengri import FREE, FIXED, Uniform
+
+sed = SEDModel.build(
+    ssp_data=ssp, observation=obs,
+    sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)},
+    dust={'type': 'two_component', 'all_params': FIXED},
+    neb={'type': 'cue', 'all_params': FIXED},
+)
+```
+
+`all_params` sets every parameter in the group at once; per-parameter keys
+(like `beta` above) override it. `'*'` is an accepted synonym.
+
+See [`notebooks/04_building_models.py`](notebooks/04_building_models.py)
 for the grammar; `tengri.recipes` shows the curated starting points.
 
 ## Tutorials
@@ -154,7 +188,7 @@ The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 
 | #  | Notebook                       | Topic                                                       |
 |----|--------------------------------|-------------------------------------------------------------|
-| 00 | `00_quickstart.py`             | mock galaxy → posterior in ~30 s                            |
+| 00 | `00_quickstart.py`             | mock galaxy → posterior, end to end                         |
 | 01 | `01_why_jax.py`                | JIT, `vmap`, `grad` in the context of galaxy SED inference  |
 | 02 | `02_sed_anatomy.py`            | the panchromatic SED, component by component                |
 | 03 | `03_discovering_the_menu.py`   | discovery API (`list_*`, `describe`, `search`)              |
@@ -164,6 +198,8 @@ The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 | 06 | `06_fitting_spectroscopy.py`   | spectroscopy with calibration nuisance parameters           |
 | 07 | `07_joint_photo_spec.py`       | joint photo + spec to break degeneracies                    |
 | 08 | `08_emission_lines.py`         | BPT diagnostics, line ratios, Hα-based SFR                  |
+| 10 | `10_fastspecfit_joint_fit.py`  | joint DESI photometry + emission-line fluxes, timed        |
+| 11 | `11_catalog_fits.py`           | a catalog fit in parallel: LSST+Euclid photo-z, timed      |
 
 For single-figure recipes, see the [examples gallery](https://suchethacooray.com/tengri/auto_examples/index.html).
 
@@ -203,14 +239,16 @@ The SFH layer covers parametric families (15+, registry-driven),
 non-parametric reconstructions (Leja+ continuity, Dirichlet), and
 stochastic fields (IFT correlated fields with PSD-governed
 burstiness). Dust is swappable on both the attenuation and emission
-sides. Nebular emission has four backends (`baked_in`, `cue`,
-`cloudy_grid`, `cb19`). AGN spans disc, torus, BLR/NLR, and IR
+sides. Nebular emission has four backends: `ssp` (emission baked into
+the SSP grid), `cue` (emulator), `cloudy`, and `cb19`. AGN spans disc,
+torus, BLR/NLR, and IR
 re-emission, unified across optical, IR, and X-ray. IGM, radio, and
 X-ray sit alongside as components, not afterthoughts.
 
 Every physics component is a pure JAX function, so `jit`, `vmap`, and
-`grad` compose through the whole forward model. `tengri.cite_all()`
-returns BibTeX for every SSP, model, and code used in a fit.
+`grad` compose through the whole forward model.
+`tengri.print_components_bibtex(result)` prints BibTeX for every SSP,
+model, and code used in a fit.
 
 ## Community
 
@@ -258,10 +296,11 @@ While Paper I is in preparation, the shortest correct in-text citation is:
 See [CITATION.cff](CITATION.cff) for the machine-readable form and the
 [Citing tengri](https://suchethacooray.com/tengri/citation.html) page
 for the BibTeX + acknowledgement block. For automatic, fit-specific
-BibTeX (every SSP grid, model, and sampler that actually ran):
+citations (every SSP grid, model, and sampler that actually ran) —
+pass the fit to `cite`, which prints the component table and BibTeX:
 
 ```python
-print(tengri.cite_all(result))
+tengri.cite(result)
 ```
 
 ## License

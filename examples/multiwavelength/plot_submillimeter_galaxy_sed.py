@@ -16,6 +16,7 @@ left, observer-frame windows on the right.
 
 References
 ----------
+
 - Blain et al. 2002, PhR, 369, 111 (SMG demographics and K-corrections)
 - Casey et al. 2014, PhR, 541, 45 (SMG surveys and model comparison)
 
@@ -48,7 +49,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 1.5,  # Shallow decay → high SFR at young ages
         "beta": 2.0,  # Steep early-time turnover
         "tau_gyr": 0.8,  # Recent starburst epoch
@@ -56,12 +57,12 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 2.0,  # Birth cloud (young stars)
         "tau_diff": 3.0,  # Diffuse ISM (extended attenuation)
         "emission": {
             "type": "dale2014",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "qpah": 3.5,  # Neutral PAH fraction → warmer dust
         },
     },
@@ -72,9 +73,9 @@ model = tengri.SEDModel.build(
 p = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
 # Predict rest-frame and observed-frame spectra
-out_rest = model.predict_rest_sed(p)
-wave_rest = np.asarray(out_rest.wavelength)
-sed_rest = np.asarray(out_rest.sed)
+out_rest = model.predict(p)
+wave_rest = np.asarray(model.wavelengths)
+sed_rest = np.asarray(out_rest.rest_sed())
 
 # Observed frame: frequency conversion for plotting in nuLnu (SED frame)
 wave_obs = wave_rest * (1.0 + Z_SMG)

@@ -25,12 +25,18 @@ Stochastic-Field benchmark sections of #925); in the plain photometry path it is
 silent, which is worse — a sampler explores three free parameters that change
 nothing and reports a confident, meaningless posterior.
 
-**The xfail below is the acceptance test for any fix.** Re-keying
-``_compute_sfr``'s kwargs to public names makes the ValueError disappear and the
-model predict happily, while leaving the photometry no-op fully intact — a fix
-that only stops the exception has not fixed anything. ``_compute_sfr`` is not
-the only place the SFH kwargs are assembled; the forward path has its own, and
-the values must be carried all the way to ``predict_photometry``.
+**Fixed (#1074).** Composing ``dense_basis`` with ``field`` auto-swaps in
+``dense_basis_pure``, whose public parameters are prefixed ``sfh_dbp_*`` rather
+than ``sfh_db_*``. ``resolve_sfh`` applied that swap; the component-chain seam
+that configures ``StellarSEDComponent`` did not, so the forward model resolved
+the *pre-swap* spec, found none of the user's ``sfh_dbp_*`` parameters, and fell
+back to registry defaults — silently, since a missing parameter is a default,
+not an error. Both seams now go through ``apply_compositor_swap``.
+
+``test_tx_frac_reaches_the_forward_model_in_composite`` is the acceptance test:
+re-keying ``_compute_sfr``'s kwargs would make the ValueError disappear and the
+model predict happily while leaving the photometry no-op fully intact — a fix
+that only stops the exception has not fixed anything.
 """
 
 from __future__ import annotations
@@ -97,15 +103,6 @@ def test_dense_basis_alone_is_not_a_no_op(synthetic_ssp_wide, synthetic_tophat_o
     assert _moves(fluxes), f"{tx} should move the photometry for a bare dense_basis SFH"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#1031: composite dense_basis+field drops tx_frac in the forward model. "
-        "Photometry is bit-identical across the full tx_frac range while "
-        "predict_sfh responds — a silent no-op, not a crash. Any fix must turn "
-        "THIS green, not merely stop the ValueError seen in the fit path."
-    ),
-)
 def test_tx_frac_reaches_the_forward_model_in_composite(synthetic_ssp_wide, synthetic_tophat_obs):
     """Acceptance test for #1031: tx_frac must move the *observable*.
 

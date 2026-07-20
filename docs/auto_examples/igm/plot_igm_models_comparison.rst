@@ -58,8 +58,21 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=7.00 (cosmic age 0.76 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -96,7 +109,7 @@ References:
     # Star-forming galaxy SED (young, minimal dust)
     SFH = {
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.1,
         "log_total_mass": 10.0,
         "alpha": 2.5,
@@ -105,7 +118,7 @@ References:
 
     DUST = {
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.02,
         "tau_bc": 0.02,
     }
@@ -131,9 +144,9 @@ References:
     wave_rest = np.linspace(WAVE_REST_MIN, WAVE_REST_MAX, N_WAVE)
 
     # Intrinsic (no IGM) SED
-    out_intrinsic = model.predict_rest_sed(params)
-    wave_rest_out = np.asarray(out_intrinsic.wavelength)
-    sed_intrinsic_full = np.asarray(out_intrinsic.sed)
+    out_intrinsic = model.predict(params)
+    wave_rest_out = np.asarray(model.wavelengths)
+    sed_intrinsic_full = np.asarray(out_intrinsic.rest_sed())
 
     # Interpolate to diagnostic wavelength grid
     sed_intrinsic = np.interp(wave_rest, wave_rest_out, sed_intrinsic_full, left=0, right=0)

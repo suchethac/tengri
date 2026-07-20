@@ -56,8 +56,8 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 ssp = tengri.load_ssp()
 
 # Minimal host
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 # Matched AGN parameters
 log_lbol = 12.0
@@ -80,9 +80,9 @@ try:
         dust=DUST,
         agn={
             "type": "composable",
-            "disc": {"type": "powerlaw", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "powerlaw", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "log_lbol": log_lbol,
             "frac": agn_frac,
             "oa_skirtor": 30.0,  # half-opening angle [deg]
@@ -102,9 +102,9 @@ try:
         dust=DUST,
         agn={
             "type": "composable",
-            "disc": {"type": "powerlaw", "*": tengri.FIXED},
-            "torus": {"type": "skirtor_agnfitter", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "powerlaw", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor_agnfitter", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "log_lbol": log_lbol,
             "frac": agn_frac,
             "oa_skirtor": 30.0,
@@ -120,10 +120,10 @@ except Exception as e:
 # Plot each model
 for label, model, color in torus_models:
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
+    out = model.predict(p)
 
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = c_aa_s / wave * np.asarray(out.sed)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = c_aa_s / wave * np.asarray(out.rest_sed())
 
     ax.loglog(wave, nu_l_nu, color=color, lw=2.0, label=label, alpha=0.8)
 

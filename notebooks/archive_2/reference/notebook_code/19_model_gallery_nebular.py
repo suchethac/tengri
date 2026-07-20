@@ -218,10 +218,22 @@ names = list(cloudy_ratios.keys())
 x_pos = np.arange(len(names))
 bar_w = 0.35
 
-bars1 = ax.bar(x_pos - bar_w / 2, [cloudy_ratios[n] for n in names],
-               bar_w, color=COLORS["rt"], alpha=0.7, label="CLOUDY grid")
-bars2 = ax.bar(x_pos + bar_w / 2, [cue_ratios[n] for n in names],
-               bar_w, color=COLORS["geovi"], alpha=0.7, label="Cue emulator")
+bars1 = ax.bar(
+    x_pos - bar_w / 2,
+    [cloudy_ratios[n] for n in names],
+    bar_w,
+    color=COLORS["rt"],
+    alpha=0.7,
+    label="CLOUDY grid",
+)
+bars2 = ax.bar(
+    x_pos + bar_w / 2,
+    [cue_ratios[n] for n in names],
+    bar_w,
+    color=COLORS["geovi"],
+    alpha=0.7,
+    label="Cue emulator",
+)
 
 ax.set_xticks(x_pos)
 ax.set_xticklabels(names, fontsize=8)
@@ -265,16 +277,30 @@ ax = axes[1]
 # Shock track
 nii_ha_shock = np.array(_R_NII) / np.array(_R_HA)
 oiii_hb_shock = np.array(_R_OIII)
-ax.plot(np.log10(nii_ha_shock), np.log10(oiii_hb_shock), "s-",
-        color=COLORS["model"], lw=1.5, ms=5, label="Shocks (Allen+2008)")
+ax.plot(
+    np.log10(nii_ha_shock),
+    np.log10(oiii_hb_shock),
+    "s-",
+    color=COLORS["model"],
+    lw=1.5,
+    ms=5,
+    label="Shocks (Allen+2008)",
+)
 
 # HII region track (varying logU)
 logU_hii = np.linspace(-3.5, -2.0, 20)
 nii_ha_hii = 0.4 + 0.05 * (logU_hii + 3.0)
 oiii_hb_hii = 10.0 ** (1.5 * (logU_hii + 3.0) - 0.3)
 oiii_hb_hii = np.clip(oiii_hb_hii, 0.01, 20.0)
-ax.plot(np.log10(nii_ha_hii), np.log10(oiii_hb_hii), "o-",
-        color=COLORS["rt"], lw=1.5, ms=3, label="HII regions (vary logU)")
+ax.plot(
+    np.log10(nii_ha_hii),
+    np.log10(oiii_hb_hii),
+    "o-",
+    color=COLORS["rt"],
+    lw=1.5,
+    ms=3,
+    label="HII regions (vary logU)",
+)
 
 # Kauffmann+2003 demarcation line
 x_dem = np.linspace(-1.5, 0.0, 50)
@@ -340,8 +366,7 @@ for f_d, marker in [(0.0, "o"), (0.2, "s"), (0.4, "D"), (0.6, "^")]:
     nii_mix = (1.0 - f_d) * 0.30 + f_d * 0.80
     # [OIII]/Hb decreases slightly with DIG mixing
     oiii_mix = (1.0 - f_d) * 1.5 + f_d * 0.3
-    ax.plot(np.log10(nii_mix), np.log10(oiii_mix), marker,
-            ms=8, label=rf"$f_{{\rm DIG}} = {f_d}$")
+    ax.plot(np.log10(nii_mix), np.log10(oiii_mix), marker, ms=8, label=rf"$f_{{\rm DIG}} = {f_d}$")
 
 # Kauffmann line
 ax.plot(x_dem[mask], y_dem[mask], "k--", lw=1, label="Kauffmann+03")
@@ -427,8 +452,7 @@ colors_z2 = plt.cm.cool(np.linspace(0.1, 0.9, len(z_values)))
 wave_obs_wide = jnp.linspace(5000.0, 25000.0, 3000)
 for z_i, col in zip(z_values, colors_z2):
     T = igm_transmission_patchy(wave_obs_wide, z=z_i, x_HI=xhi)
-    ax.plot(np.array(wave_obs_wide), np.array(T), lw=1.5, color=col,
-            label=f"z = {z_i}")
+    ax.plot(np.array(wave_obs_wide), np.array(T), lw=1.5, color=col, label=f"z = {z_i}")
 
 ax.set_xlabel(r"Observed wavelength [$\AA$]")
 ax.set_ylabel(r"$T_{\rm IGM}$")
@@ -454,11 +478,10 @@ fig, ax = plt.subplots(figsize=(9, 3.5))
 # Schematic rest-frame galaxy SED (simple power-law + emission lines)
 wave_sed = np.linspace(1000, 50000, 5000)
 # Rough SED shape: UV slope + 4000A break + NIR
-sed_shape = 0.3 * (wave_sed / 5000) ** (-0.5) * np.exp(-((wave_sed - 4000) / 800) ** 2 / 2.0)
+sed_shape = 0.3 * (wave_sed / 5000) ** (-0.5) * np.exp(-(((wave_sed - 4000) / 800) ** 2) / 2.0)
 sed_shape += 0.5 * (wave_sed / 5000) ** (-1.5) * (wave_sed > 4000)
-sed_shape += 0.2 * np.exp(-((wave_sed - 1500) / 200) ** 2 / 2.0)  # UV
-ax.plot(wave_sed, sed_shape / np.max(sed_shape), color="k", lw=1, alpha=0.5,
-        label="Schematic SED")
+sed_shape += 0.2 * np.exp(-(((wave_sed - 1500) / 200) ** 2) / 2.0)  # UV
+ax.plot(wave_sed, sed_shape / np.max(sed_shape), color="k", lw=1, alpha=0.5, label="Schematic SED")
 
 # SDSS filter approximate transmission curves
 sdss_filters = {
@@ -518,17 +541,24 @@ wave_demo = np.linspace(6400, 6700, 500)
 lam0 = 6563.0  # Halpha
 c_kms = 299792.458
 
-for R, col, ls in [(100, COLORS["seq"][0], "-"),
-                    (500, COLORS["seq"][2], "--"),
-                    (2000, COLORS["seq"][3], "-."),
-                    (10000, COLORS["seq"][4], ":")]:
+for R, col, ls in [
+    (100, COLORS["seq"][0], "-"),
+    (500, COLORS["seq"][2], "--"),
+    (2000, COLORS["seq"][3], "-."),
+    (10000, COLORS["seq"][4], ":"),
+]:
     sigma_aa = lam0 / (2.355 * R)
-    profile = np.exp(-0.5 * ((wave_demo - lam0) / sigma_aa) ** 2) / (
-        np.sqrt(2 * np.pi) * sigma_aa)
+    profile = np.exp(-0.5 * ((wave_demo - lam0) / sigma_aa) ** 2) / (np.sqrt(2 * np.pi) * sigma_aa)
     profile = profile / np.max(profile)
     sigma_kms = c_kms / R / 2.355
-    ax.plot(wave_demo, profile, lw=1.5, color=col, ls=ls,
-            label=rf"R = {R} ($\sigma = {sigma_kms:.0f}$ km/s)")
+    ax.plot(
+        wave_demo,
+        profile,
+        lw=1.5,
+        color=col,
+        ls=ls,
+        label=rf"R = {R} ($\sigma = {sigma_kms:.0f}$ km/s)",
+    )
 
 ax.set_xlabel(r"Wavelength [$\AA$]")
 ax.set_ylabel("Normalised profile")
@@ -564,8 +594,9 @@ fig, axes = plt.subplots(1, 2, figsize=(9, 3.5))
 
 # Panel A: Individual Chebyshev basis functions
 ax = axes[0]
-basis = np.array(chebyshev_basis(jnp.array(wave_cal), order=5,
-                                  wave_min=wave_min, wave_max=wave_max))
+basis = np.array(
+    chebyshev_basis(jnp.array(wave_cal), order=5, wave_min=wave_min, wave_max=wave_max)
+)
 for n in range(6):
     ax.plot(wave_cal, basis[n], lw=1.5, label=rf"$T_{n}(x)$")
 ax.set_xlabel(r"Wavelength [$\AA$]")
@@ -636,11 +667,22 @@ line_colors = plt.cm.tab10(np.linspace(0, 1, len(DEFAULT_LINE_NAMES)))
 for i, (name, col) in enumerate(zip(DEFAULT_LINE_NAMES, line_colors)):
     profile = G_np[:, i]
     if np.max(profile) > 1e-10:
-        ax.plot(np.array(wave_eline), profile / np.max(profile) * 0.9 + i * 0.02,
-                lw=0.8, color=col, alpha=0.7)
+        ax.plot(
+            np.array(wave_eline),
+            profile / np.max(profile) * 0.9 + i * 0.02,
+            lw=0.8,
+            color=col,
+            alpha=0.7,
+        )
         peak_idx = np.argmax(profile)
-        ax.text(float(wave_eline[peak_idx]), float(profile[peak_idx] / np.max(profile) * 0.9
-                + i * 0.02 + 0.05), name, fontsize=5, ha="center", color=col)
+        ax.text(
+            float(wave_eline[peak_idx]),
+            float(profile[peak_idx] / np.max(profile) * 0.9 + i * 0.02 + 0.05),
+            name,
+            fontsize=5,
+            ha="center",
+            color=col,
+        )
 
 ax.set_xlabel(r"Wavelength [$\AA$]")
 ax.set_ylabel("Normalised profile")
@@ -655,15 +697,29 @@ flat_prior_sigma = np.ones(len(DEFAULT_LINE_NAMES)) * 100.0
 
 # CLOUDY prior: centred on model predictions with 0.3 dex scatter
 # Representative ratios at solar Z, logU = -3
-cloudy_means = np.array([2.86, 0.26, 0.47, 1.0, 0.35, 1.05, 0.11, 2.86, 0.33, 0.73, 0.53, 0.22, 0.16])
+cloudy_means = np.array(
+    [2.86, 0.26, 0.47, 1.0, 0.35, 1.05, 0.11, 2.86, 0.33, 0.73, 0.53, 0.22, 0.16]
+)
 cloudy_sigma = 0.3 * cloudy_means  # 0.3 dex scatter
 
 # Bar chart of prior widths
 x_lines = np.arange(len(DEFAULT_LINE_NAMES))
-bars1 = ax.bar(x_lines - 0.2, np.clip(flat_prior_sigma, 0, 5), 0.35,
-               color=COLORS["map"], alpha=0.6, label="Flat prior (truncated)")
-bars2 = ax.bar(x_lines + 0.2, cloudy_sigma, 0.35,
-               color=COLORS["geovi"], alpha=0.7, label="CLOUDY prior (0.3 dex)")
+bars1 = ax.bar(
+    x_lines - 0.2,
+    np.clip(flat_prior_sigma, 0, 5),
+    0.35,
+    color=COLORS["map"],
+    alpha=0.6,
+    label="Flat prior (truncated)",
+)
+bars2 = ax.bar(
+    x_lines + 0.2,
+    cloudy_sigma,
+    0.35,
+    color=COLORS["geovi"],
+    alpha=0.7,
+    label="CLOUDY prior (0.3 dex)",
+)
 
 ax.set_xticks(x_lines)
 ax.set_xticklabels(DEFAULT_LINE_NAMES, rotation=45, ha="right", fontsize=5.5)

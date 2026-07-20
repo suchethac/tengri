@@ -46,6 +46,7 @@ EXPECTED_ALL = frozenset(
         "SpatialSEDModel",
         "WavePrecomp",
         "SpectrumPrecomp",
+        "FeaturePrecomp",
         # Component-extension surface — demoted to `tengri.protocols.*`,
         # no longer advertised at top level (importable for back-compat).
         # Physics modules
@@ -72,6 +73,7 @@ EXPECTED_ALL = frozenset(
         "plot",
         "preprocessing",
         "presets",
+        "recipes",
         "results",
         "units",
         "vmap_chunked",
@@ -96,6 +98,7 @@ EXPECTED_ALL = frozenset(
         "list_components",
         "list_dust_emission_models",
         "list_dust_laws",
+        "list_dust_models",
         "list_filter_conventions",
         "list_filters",
         "list_igm_models",
@@ -104,9 +107,11 @@ EXPECTED_ALL = frozenset(
         "list_parameters",
         "list_plots",
         "list_properties",
+        "list_radio_blocks",
         "list_radio_models",
         "list_recipes",
         "list_sfh_models",
+        "list_shock_models",
         "list_xray_models",
         "ParameterRecord",
         "print_components_bibtex",
@@ -236,3 +241,40 @@ def test_unknown_attribute_raises_attribute_error() -> None:
     """The shim must not silently swallow typos."""
     with pytest.raises(AttributeError, match="has no attribute 'NotARealName'"):
         tengri.NotARealName  # noqa: B018
+
+
+# The curated tab-completion surface (``tengri.__dir__``) is intentionally
+# smaller than ``__all__``, but it must still expose the symbols a fresh user
+# reaches for in the first ten lines of the quickstart — otherwise
+# ``tengri.<TAB>`` and ``dir(tengri)`` hide the SSP loaders, the FREE/FIXED
+# build sentinels, and the construction helpers. (Fresh-user audit 2026-07.)
+_FIRST_SESSION_SYMBOLS = (
+    "load_ssp",
+    "load_ssp_data",
+    "download_ssp",
+    "list_known_ssps",
+    "SSPData",
+    "SEDModel",
+    "ForwardModel",
+    "builders",
+    "recipes",
+    "fit_batch",
+    "FREE",
+    "FIXED",
+    "Fixed",
+    "Uniform",
+    "PopulationSEDModel",
+    "SpatialSEDModel",
+)
+
+
+@pytest.mark.parametrize("name", _FIRST_SESSION_SYMBOLS)
+def test_first_session_symbols_are_tab_completable(name: str) -> None:
+    """Every first-session entry point must appear in ``dir(tengri)``."""
+    assert name in dir(tengri), f"{name} is public but hidden from tab-completion"
+
+
+def test_every_curated_dir_name_resolves() -> None:
+    """No curated tab-completion name may 404 on attribute access."""
+    for name in dir(tengri):
+        assert hasattr(tengri, name), f"curated name {name!r} does not resolve"

@@ -35,7 +35,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 1.0,
@@ -43,10 +43,15 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 1.0,
         "tau_diff": 0.5,
-        "emission": {"type": "modified_blackbody", "*": tengri.FIXED, "T": 30.0, "beta_ir": 1.8},
+        "emission": {
+            "type": "modified_blackbody",
+            "all_params": tengri.FIXED,
+            "T": 30.0,
+            "beta_ir": 1.8,
+        },
     },
     redshift=tengri.Fixed(0.2),
 )
@@ -59,10 +64,10 @@ cmap = plt.get_cmap("viridis")
 fig, ax = plt.subplots(figsize=(6.5, 4.2))
 for met_logzsol in met_logzsol_values:
     params = {**baseline, "met_logzsol": jnp.float64(met_logzsol)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave  # Å/s -> Hz
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=cmap(norm(met_logzsol)), lw=1.4)
 
 ax.set_xlim(900, 3e5)

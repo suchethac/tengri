@@ -30,6 +30,7 @@ Examples
 
 Scope
 -----
+
 - :mod:`tengri.builders.sfh` — one factory per canonical SFH variant
   in :data:`SFH_REGISTRY` (PR #79).
 - :mod:`tengri.builders.igm` / :mod:`~tengri.builders.radio` /

@@ -372,9 +372,11 @@ def radio_freefree(
 
     References
     ----------
+
     - Murphy et al. 2011, ApJ, 737, 67 (Eq. 11)
     - Condon 1992, ARA&A, 30, 575
     - Kennicutt 1998, ARA&A, 36, 189
+
     """
     nu = _C_AA / wavelength  # Hz
     nu_ghz = nu / 1.0e9  # GHz
@@ -696,9 +698,11 @@ def radio_total_terms(
         AGN radio spectral index [dimensionless]. Default 0.7.
     sfr_mode : str
         Star formation radio physics model. One of:
+
         - ``"bell2003"`` (default): fixed q_IR, no mass/z dependence.
         - ``"delvecchio2021"``: mass+z dependent FIRRC at 1.4 GHz.
         - ``"mccheyne2022"``: mass+z dependent FIRRC at 150 MHz.
+
     log_mstar : float
         log10(M★ / M⊙). Used by delvecchio2021 and mccheyne2022 modes.
         Default 10.0.
@@ -731,6 +735,7 @@ def radio_total_terms(
     -------
     dict[str, ndarray]
         Dictionary with three keys:
+
         - ``"sf"`` : array, shape (n_wave,) — star-forming synchrotron [erg/s/Hz]
         - ``"ff"`` : array, shape (n_wave,) — thermal free-free [erg/s/Hz]
         - ``"agn"`` : array, shape (n_wave,) — AGN radio [erg/s/Hz]
@@ -813,9 +818,11 @@ def radio_total(
         AGN radio spectral index.
     sfr_mode : str
         Which SFR physics model to use. One of:
+
         - ``"bell2003"`` (default): fixed q_IR, no mass/z dependence.
         - ``"delvecchio2021"``: mass+z dependent FIRRC at 1.4 GHz.
         - ``"mccheyne2022"``: mass+z dependent FIRRC at 150 MHz.
+
     log_mstar : float
         log10(M★/M⊙). Used by delvecchio2021 and mccheyne2022 modes.
     redshift : float
@@ -934,9 +941,11 @@ def radio_total_dpl_terms(
         Default 13.0.
     sfr_mode : str
         Star formation radio physics model. One of:
+
         - ``"bell2003"`` (default): fixed q_IR, no mass/z dependence.
         - ``"delvecchio2021"``: mass+z dependent FIRRC at 1.4 GHz.
         - ``"mccheyne2022"``: mass+z dependent FIRRC at 150 MHz.
+
     log_mstar : float
         log10(M★ / M⊙). Used by delvecchio2021 and mccheyne2022 modes.
         Default 10.0.
@@ -969,6 +978,7 @@ def radio_total_dpl_terms(
     -------
     dict[str, ndarray]
         Dictionary with three keys:
+
         - ``"sf"`` : array, shape (n_wave,) — star-forming synchrotron [erg/s/Hz]
         - ``"ff"`` : array, shape (n_wave,) — thermal free-free [erg/s/Hz]
         - ``"agn"`` : array, shape (n_wave,) — AGN double power-law [erg/s/Hz]

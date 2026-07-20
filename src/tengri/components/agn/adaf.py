@@ -15,6 +15,7 @@ Nemmen (2014) model (#898 Phase 2) and the AGNNES emulator (#952).
 
 Conventions (Mahadevan 1997)
 ----------------------------
+
 - Mass ``m = M / M_sun``; accretion rate ``mdot = Mdot / Mdot_Edd`` with
   ``Mdot_Edd = L_Edd / (eta_eff c^2)`` and ``eta_eff = 0.1`` (Eq. 4).
 - ``beta = P_gas / P_total`` (magnetic fraction is ``1 - beta``; Eq. 1).

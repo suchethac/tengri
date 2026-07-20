@@ -22,7 +22,7 @@ JAX JIT Compilation: Eager vs Compiled Numerical Equivalence
 =============================================================
 
 Verifies that JIT-compiled predictions are bit-identical to eager-mode evaluations.
-For ``predict_photometry`` and ``predict_emission_lines``, we sample random parameter
+For ``predict_photometry`` and ``predict(params).lines``, we sample random parameter
 sets and compare max relative difference between eager and JIT outputs. A value < 1e-10
 confirms no spurious numerical divergence; > 1e-10 suggests platform-dependent
 floating-point behavior.
@@ -30,7 +30,7 @@ floating-point behavior.
 Reference: JAX JIT compilation is semantically transparent and should not alter
 floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-174
+.. GENERATED FROM PYTHON SOURCE LINES 14-182
 
 
 
@@ -40,8 +40,25 @@ floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 8% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 4% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 2% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 1% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -68,9 +85,9 @@ floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FREE},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.5, "tau_bc": 0.3},
-        neb={"type": "cue", "*": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.FREE},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.5, "tau_bc": 0.3},
+        neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.1),
     )
 
@@ -126,9 +143,17 @@ floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
     # Predict and compare emission lines (Cue model)
     # ============================================================================
     diffs_lines = []
-    has_cue = hasattr(model, "predict_emission_lines") and callable(model.predict_emission_lines)
+    # The emission lines are catalog properties, and ``predict_properties`` is the
+    # single JIT/vmap-safe surface for them (NAMING_CONTRACT §4b.5). Stack them into
+    # one array so the eager-vs-jit comparison below is a plain elementwise diff.
+    _LINE_NAMES = ("halpha", "hbeta", "oiii_5007", "nii_6584")
+    has_cue = all(name in model.available_properties for name in _LINE_NAMES)
     if has_cue:
-        f_lines = model.predict_emission_lines
+
+        def f_lines(p):
+            q = model.predict_properties(p, names=_LINE_NAMES)
+            return jnp.stack([jnp.asarray(q[n]) for n in _LINE_NAMES])
+
         f_lines_jit = jax.jit(f_lines)
 
         for _ in range(n_samples):
@@ -209,7 +234,7 @@ floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.150 seconds)
+   **Total running time of the script:** (0 minutes 16.839 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_jit_concrete_identity.py:

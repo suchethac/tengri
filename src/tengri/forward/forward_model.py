@@ -31,12 +31,17 @@ __all__ = ["ForwardModel"]
 
 @dataclass(frozen=True)
 class ForwardModel:
-    """The outer shell of the forward model.
+    """The outer shell of the forward model, and the surface inference consumes.
 
-    Holds populations + observation; exposes ``.predict(params)`` as
-    the sole API inference consumes. Supports both single-population
-    (the common case) and multi-population galaxy decompositions
-    (AGN + bulge + disc, ADR-0012).
+    Holds one or more populations plus an observation, and exposes
+    ``.predict(params)`` as the single API every inference backend talks to.
+    A backend never has to ask which channels exist — the returned dict says
+    so — which is what lets one ``Fitter`` drive photometry, spectroscopy,
+    joint, and hierarchical fits without branching.
+
+    Build the SED chain, wrap it, fit it. :meth:`fit` is the canonical entry
+    point for inference (issue #211); it is exactly
+    ``Fitter(self, data, noise).run(method)``.
 
     Parameters
     ----------
@@ -44,9 +49,55 @@ class ForwardModel:
         One or more populations. Each carries an SED ``SubModel`` and
         optionally a spatial ``SubModel``. Names must be distinct.
     observation : object
-        Observation model exposing ``predict(state, params) → dict``
+        Observation model exposing ``predict(state, params) -> dict``
         (single-population) and ``predict_summed(per_pop_states, params)``
         (multi-population).
+
+    Notes
+    -----
+    **Construction.** Prefer :meth:`build` over the raw constructor — it
+    accepts the ``sed=`` / ``population=`` / ``populations=`` forms and wraps
+    them into the uniform ``populations`` tuple for you.
+
+    **Parameter names.** Single-population fits use flat names
+    (``sfh_dpl_alpha``, ``dust_tau_v``). Multi-population decompositions
+    namespace by population, ``<population>.<component_prefix>_<param>`` —
+    ``disc.sfh_dpl_alpha``, ``bulge.dust_tau_v`` — so three stellar components
+    in three populations no longer collide (ADR-0012).
+
+    **JIT.** ``predict`` and the channel-specific ``predict_photometry`` /
+    ``predict_spectrum`` are traced by the inference backends under
+    ``jax.jit``. Prefer :meth:`predict_photometry` on the fitting hot path;
+    :meth:`predict_observables` returns the full dict and bypasses the
+    photometry lookup table.
+
+    See Also
+    --------
+    build : construct one — the recommended path.
+    fit : run inference; the canonical entry point.
+    tengri.SEDModel : the SED physics chain that goes inside a population.
+    tengri.Fitter : the inference engine :meth:`fit` delegates to.
+
+    Examples
+    --------
+    Wrap an SED chain and fit photometry:
+
+    >>> from tengri import ForwardModel, SEDModel  # doctest: +SKIP
+    >>> sed = SEDModel.build(ssp_data=ssp, observation=obs, **config)  # doctest: +SKIP
+    >>> forward = ForwardModel.build(sed=sed, observation=obs)  # doctest: +SKIP
+    >>> result = forward.fit(flux, noise, method="mcmc_nuts")  # doctest: +SKIP
+    >>> result.properties["stellar_mass"].shape  # doctest: +SKIP
+    (4000,)
+
+    Hierarchical fit over a population sharing PSD hyperparameters:
+
+    >>> pop = PopulationSEDModel(  # doctest: +SKIP
+    ...     sed=sed,
+    ...     galaxies=galaxies,
+    ...     shared=("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"),
+    ... )
+    >>> forward = ForwardModel.build(population=pop, observation=obs)  # doctest: +SKIP
+    >>> result = forward.fit(method="vi")  # doctest: +SKIP
     """
 
     populations: tuple[Population, ...]
@@ -237,23 +288,6 @@ class ForwardModel:
     def xi_to_params(self, xi):
         """Delegate to :meth:`SEDModel.xi_to_params` on the inner SED."""
         return self._inner_sed_for_delegation().xi_to_params(xi)
-
-    def ensure_photometry_precomputed(self) -> bool:
-        """Lazily precompute photometry on the inner SED if not yet done.
-
-        Delegates to :meth:`SEDModel.ensure_photometry_precomputed` on
-        the first population's inner SED. Returns the inner method's
-        result (``True`` if precomputation ran on this call). Multi-
-        population galaxy decompositions iterate across populations.
-        """
-        ran = False
-        for pop in self.populations:
-            sub = pop.sed
-            inner = getattr(sub, "sed", sub)
-            fn = getattr(inner, "ensure_photometry_precomputed", None)
-            if fn is not None:
-                ran = bool(fn()) or ran
-        return ran
 
     def predict_photometry(self, params):
         """Channel-specific prediction: ``phot_fnu`` extracted from :meth:`predict_observables`.
@@ -466,6 +500,30 @@ class ForwardModel:
         mapping of str -> array
             Prediction dict, keyed by observation channel.
         """
+        # Fast path (issue #281, predict-half): a single-population,
+        # photometry-only model built with a WavePrecomp LUT can serve its
+        # photometry straight from the inner SEDModel's LUT-aware orchestrator
+        # (``predict_observables_jit``), skipping the full-resolution component
+        # cube that the general per-population path below builds. That cube —
+        # not the LUT projection — is the ~11-16x cost on plain photometry, so
+        # without this the LUT never helps ``predict_observables`` (the fit path
+        # already routes through ``predict_photometry`` and was unaffected).
+        # Tightly guarded: multi-population, spatial, spectroscopy/joint,
+        # hierarchical (PopulationSEDModel), and exact (non-LUT) models all fall
+        # through to the unchanged orchestration.
+        if len(self.populations) == 1 and self.populations[0].spatial is None:
+            only = self.populations[0].sed
+            obs = self.observation
+            if (
+                obs is not None
+                and getattr(obs, "can_do_photometry", False)
+                and not getattr(obs, "can_do_spectroscopy", False)
+                and not hasattr(only, "sed")  # plain SEDModel, not a PopulationSEDModel
+                and hasattr(only, "predict_observables_jit")
+                and bool(getattr(only, "_approx", {}).get("wave_precomp"))
+            ):
+                return dict(only.predict_observables_jit(params)._asdict())
+
         is_multipop = len(self.populations) > 1
 
         # ── Pass 1: run each population's SED + Spatial, collect states.
@@ -522,22 +580,86 @@ class ForwardModel:
         }
         return _linear_flux_sum(per_pop_pred)
 
+    @property
+    def approx(self):
+        """The effective approximation state of the wrapped SED.
+
+        Delegates to :attr:`SEDModel.approx`, so the question "is a LUT live?"
+        has one spelling and one answer whether it is asked of a
+        :class:`~tengri.forward.sed_model.SEDModel` or of the
+        :class:`ForwardModel` wrapping it. Reaching past this for an inner
+        attribute (``model._approx``) reads a detail the wrapper does not carry
+        and silently reports "exact".
+
+        Returns
+        -------
+        ApproxState
+            Frozen summary of the active LUTs; falsy for an exact model.
+        """
+        from tengri.forward.sed_model import ApproxState
+
+        inner = self._inner_sed_for_delegation()
+        state = getattr(inner, "approx", None)
+        return state if isinstance(state, ApproxState) else ApproxState()
+
+    def _has_modern_approx(self) -> bool:
+        """Whether the wrapped SED carries a build-time ``approx=`` LUT."""
+        inner = self._inner_sed_for_delegation()
+        fn = getattr(inner, "_has_modern_approx", None)
+        return bool(fn()) if callable(fn) else False
+
+    def with_approx(self, approx):
+        """Return a copy of this forward model with a different ``approx`` policy.
+
+        Clones the wrapped SED via :meth:`SEDModel.with_approx` and re-wraps it,
+        preserving the observation. Only the common single-population, SED-only
+        forward is cloned; multi-population, spatial, and hierarchical
+        (PopulationSEDModel) forwards are returned unchanged, as is any request
+        that resolves to a no-op.
+
+        Parameters
+        ----------
+        approx : WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple or None
+            Approximation policy for the clone (same grammar as ``approx=`` on
+            :class:`SEDModel`).
+
+        Returns
+        -------
+        ForwardModel
+            A new forward model on the requested approximation path, or ``self``
+            when the request is a no-op or the topology is not a plain
+            single-population SED forward.
+        """
+        if len(self.populations) != 1 or self.populations[0].spatial is not None:
+            return self
+        sub = self.populations[0].sed
+        inner = getattr(sub, "sed", sub)
+        if inner is not sub:
+            # PopulationSEDModel-wrapped (hierarchical) — leave unchanged.
+            return self
+        if not hasattr(inner, "with_approx"):
+            return self
+        new_inner = inner.with_approx(approx)
+        if new_inner is inner:
+            return self
+        return ForwardModel.build(sed=new_inner, observation=self.observation)
+
     def fit(
         self,
         data: Any = None,
         noise: Any = None,
         method: str = "vi",
         *,
+        approx: Any = "auto",
         key: Any = None,
         **kwargs: Any,
     ):
         """Run inference. Canonical convenience entry point.
 
-        Equivalent to ``Fitter(self, data, noise).run(method, **kwargs)``
-        — wires the standard inference pipeline through the
-        :class:`ForwardModel` exactly as the architecture spec
-        prescribes ('inference is always through ForwardModel',
-        issue #211).
+        Equivalent to ``Fitter(self, data, noise, approx=approx).run(method,
+        **kwargs)`` — wires the standard inference pipeline through the
+        :class:`ForwardModel` exactly as the architecture spec prescribes
+        ('inference is always through ForwardModel', issue #211).
 
         Parameters
         ----------
@@ -551,10 +673,20 @@ class ForwardModel:
             Inference method. Any value accepted by
             :meth:`Fitter.run` (``"vi"``, ``"mcmc_nuts"``, ``"map"``,
             …).
+        approx : {"auto", None} or WavePrecomp or SpectrumPrecomp or tuple, default ``"auto"``
+            Approximation policy for the fit. ``"auto"`` (default) routes the
+            fit through the fast precompute LUT selected by data type
+            (``WavePrecomp`` for photometry, ``SpectrumPrecomp`` for
+            spectroscopy/joint, plus ``FeaturePrecomp`` when emission lines are
+            fit); ``None`` forces the exact wave-grid path; an explicit config
+            (or tuple) overrides. Model **prediction** stays exact regardless —
+            only the fit is accelerated. The user's model object is left
+            unchanged; the returned posterior references the fit clone.
         key : jax.random.PRNGKey, optional
             Inference seed.
         **kwargs : Any
-            Forwarded to :meth:`Fitter.run`.
+            Forwarded to :meth:`Fitter.run` (e.g. ``prewarm=`` — JIT-compile the
+            loss/sampler/predict surface before the fit loop, default ``True``).
 
         Returns
         -------
@@ -569,7 +701,7 @@ class ForwardModel:
         """
         from tengri.inference.fitter import Fitter
 
-        fitter = Fitter(self, data=data, noise=noise)
+        fitter = Fitter(self, data=data, noise=noise, approx=approx)
         return fitter.run(method, key=key, **kwargs)
 
     def _params_for_population(

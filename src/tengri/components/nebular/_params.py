@@ -47,6 +47,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Ionization parameter log10(U)",
         lambda lo, hi: lo >= -5 and hi <= 0,
         "must be in [-5, 0]",
+        free_prior=Uniform(-5.0, 0.0, "Ionization parameter log10(U)", default=-3.0),
     ),
     ParamDeclaration(
         "neb_logZ_gas",
@@ -59,6 +60,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Ionizing photon escape fraction",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
+        free_prior=Uniform(0.0, 1.0, "Ionizing photon escape fraction", default=0.0),
     ),
     ParamDeclaration(
         "neb_fesc_lya",
@@ -66,6 +68,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Ly-alpha escape fraction (resonant scattering)",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
+        free_prior=Uniform(0.0, 1.0, "Ly-alpha escape fraction", default=0.0),
     ),
     ParamDeclaration(
         "neb_fdust",
@@ -73,6 +76,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Dust-absorption fraction of ionizing photons in HII regions",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
+        free_prior=Uniform(0.0, 1.0, "Ionizing-photon dust-absorption fraction", default=0.0),
     ),
     ParamDeclaration(
         "neb_dig_frac",
@@ -80,6 +84,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "DIG fraction of nebular emission (Tacchella+2022)",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
+        free_prior=Uniform(0.0, 1.0, "DIG fraction of nebular emission", default=0.0),
     ),
     ParamDeclaration(
         "neb_dig_delta_logU",
@@ -87,6 +92,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "DIG ionization parameter offset (dex, negative)",
         lambda lo, hi: lo >= -4 and hi <= 0,
         "must be in [-4, 0]",
+        free_prior=Uniform(-4.0, 0.0, "DIG log10(U) offset", units="dex", default=-1.0),
     ),
     ParamDeclaration(
         "neb_eline_sigma_kms",
@@ -96,6 +102,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "sigma_v_kms (stellar LOSVD) and eline_sigma_kms (line-fitting template).",
         lambda lo, hi: lo >= 0 and hi <= 2000,
         "must be in [0, 2000] km/s",
+        free_prior=Uniform(
+            0.0, 2000.0, "Nebular line velocity dispersion", units="km/s", default=100.0
+        ),
     ),
 )
 
@@ -104,12 +113,19 @@ PARAMS: tuple[ParamDeclaration, ...] = (
 # L_sun/Q_H using L_Hβ/Q_H = 4.78e-13 erg/photon (Case B, T_e=10^4 K;
 # Osterbrock & Ferland 2006, Table 4.4).
 CB19_PARAMS: tuple[ParamDeclaration, ...] = (
+    # ``free_prior`` on the three grid axes below spans the **CB_19 grid**, not
+    # the wider admissible bound. The bound is what the interpolator tolerates
+    # (it extrapolates outside the grid); the grid is where the templates carry
+    # information. Freeing over the bound would spend most of the prior mass on
+    # extrapolated values, so FREE opens the grid and a caller who genuinely
+    # wants to extrapolate passes an explicit wider prior.
     ParamDeclaration(
         "neb_log_nH",
         Fixed(2.0),  # n_H = 100 cm⁻³, typical HII region
         "Log hydrogen density log10(n_H / cm⁻³) for CB_19 grid [grid range: 1–4]",
         lambda lo, hi: lo >= 0 and hi <= 6,
         "must be in [0, 6] (CB_19 grid: 1–4; extrapolated outside)",
+        free_prior=Uniform(1.0, 4.0, "Log hydrogen density", units="log10(cm^-3)", default=2.0),
     ),
     ParamDeclaration(
         "neb_co",
@@ -117,6 +133,7 @@ CB19_PARAMS: tuple[ParamDeclaration, ...] = (
         "Log C/O abundance ratio log10(C/O) for CB_19 grid [grid range: −1 to 0.15]",
         lambda lo, hi: lo >= -3 and hi <= 2,
         "must be in [−3, 2]",
+        free_prior=Uniform(-1.0, 0.15, "Log C/O abundance ratio", default=-0.36),
     ),
     ParamDeclaration(
         "neb_dno",
@@ -124,6 +141,7 @@ CB19_PARAMS: tuple[ParamDeclaration, ...] = (
         "ΔN/O offset (log10) from default N/O–O/H scaling [grid range: −0.25 to 0.25]",
         lambda lo, hi: lo >= -1 and hi <= 1,
         "must be in [−1, 1]",
+        free_prior=Uniform(-0.25, 0.25, "Delta N/O offset", units="dex", default=0.0),
     ),
     ParamDeclaration(
         "neb_hbfrac",
@@ -132,6 +150,7 @@ CB19_PARAMS: tuple[ParamDeclaration, ...] = (
         "HbFrac=1 = fully radiation-bounded; escape fraction ≈ 1 − HbFrac",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
+        free_prior=Uniform(0.0, 1.0, "HbFrac matter-bounded fraction", default=1.0),
     ),
 )
 
@@ -274,6 +293,7 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
         "(used when shock norm='frac')",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
+        free_prior=Uniform(0.0, 1.0, "Shock fraction of Halpha", default=0.0),
     ),
     ParamDeclaration(
         "shock_log_lhalpha",
@@ -282,6 +302,9 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
         "(used when shock norm='lhalpha')",
         lambda lo, hi: lo >= 30 and hi <= 46,
         "must be in [30, 46]",
+        free_prior=Uniform(
+            30.0, 46.0, "log10 shock Halpha luminosity", units="log10(erg/s)", default=41.0
+        ),
     ),
     ParamDeclaration(
         "shock_velocity",
@@ -289,6 +312,9 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
         "Shock velocity in km/s (100-1000 for MAPPINGS III; 200-1000 for MAPPINGS V)",
         lambda lo, hi: lo >= 100 and hi <= 1000,
         "must be in [100, 1000]",
+        # MAPPINGS III tabulation spans 100-1000 km/s; V starts at 200. Use the
+        # union bound so the prior is valid for either backend.
+        free_prior=Uniform(100.0, 1000.0, "Shock velocity", units="km/s", default=300.0),
     ),
     ParamDeclaration(
         "shock_log_density",

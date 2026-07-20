@@ -21,10 +21,13 @@ class TestDLABuilderBlock:
             sfh={"type": "dpl", "*": FIXED},
             igm={
                 "type": "inoue14",
+                # FIXED, not FREE: both DLA params carry Fixed registry
+                # defaults, so FREE frees nothing and is now refused. This test
+                # asserts activation and per-param override routing.
                 "dla": {
                     "log_n_hi": Uniform(19, 22),
                     "b_turb": Fixed(10.0),
-                    "*": FREE,
+                    "*": FIXED,
                 },
             },
             redshift=Fixed(2.0),

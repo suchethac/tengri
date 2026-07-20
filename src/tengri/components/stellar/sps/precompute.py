@@ -38,6 +38,7 @@ import numpy as np
 
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.grid_interp import preintegrate_grid, subband_quadrature
+from tengri.utils.physics_constants import TEN_PC_CM
 
 # SSP precompute grid axes: (lgmet, lg_age_gyr). The age axis is never user-fixed
 # (ages are determined by the SFH). Only metallicity may be Fixed.
@@ -132,6 +133,9 @@ class PhotometricPrecomputation(NamedTuple):
         — on the metallicity axis, before the SSP contraction — because the
         runtime node is a met-weighted average whose weights move with the free
         ``met_logzsol``.
+        The REST-frame band lives in :class:`RestBandPrecomputation`, built once by
+        :func:`precompute_restband_photometry` and carried on the stellar component's
+        state — one builder for the fixed-z and free-z paths alike (#1148).
 
     Notes
     -----
@@ -238,7 +242,9 @@ def precompute_photometry(
         and is cheaper at runtime than the Taylor moment it replaces.
     fixed : dict[int, float], optional
         Mapping of axis index → fixed value. Axes are numbered from 0:
+
         - 0: lgmet (metallicity in log10(Z/Zsun))
+
         If provided, these axes are collapsed at init time via triweight
         interpolation. Default None.
 
@@ -288,6 +294,116 @@ def precompute_photometry(
         n_filters=preint.n_filters,
         ssp_subband_phot=preint.subband_phot,
         ssp_subband_waves_rest=preint.subband_waves_rest,
+    )
+
+
+class RestBandPrecomputation(NamedTuple):
+    r"""SSP templates preintegrated through each filter placed in the REST frame.
+
+    Attributes
+    ----------
+    ssp_restband_phot : array, shape (n_met, n_age, n_filters)
+        Filter integral at z=0 [erg/s/Hz/Msun].
+    ssp_restband_subband_phot : array or None, shape (n_met, n_age, n_filters, n_subbands)
+        Sub-band quadrature weights for the rest band. None unless ``n_subbands > 0``.
+    ssp_restband_subband_waves : array or None, shape (n_met, n_age, n_filters, n_subbands)
+        Quadrature nodes of the rest band [Angstrom].
+    restband_eff_waves : array, shape (n_filters,)
+        The wavelength the rest band samples — the filter's own pivot [Angstrom].
+
+    Notes
+    -----
+    **JIT-compatible**: no — build-time data container.
+    """
+
+    ssp_restband_phot: jnp.ndarray
+    ssp_restband_subband_phot: "jnp.ndarray | None"
+    ssp_restband_subband_waves: "jnp.ndarray | None"
+    restband_eff_waves: jnp.ndarray
+
+
+def precompute_restband_photometry(
+    ssp_data,
+    filter_waves,
+    filter_trans,
+    n_subbands: int = 0,
+    fixed: dict[int, float] | None = None,
+) -> RestBandPrecomputation:
+    r"""Preintegrate the SSP grid through each filter placed in the **rest** frame.
+
+    ``phot_rest_fnu`` (and so ``Observables.mag_absolute``) is the SED reprojected
+    at :math:`z=0`, :math:`d_L=10\,{\rm pc}` — *the galaxy as it is*. The filter
+    therefore sits in the rest frame and samples the rest SED at its **own** pivot
+    wavelength:
+
+    .. math::
+
+        \Phi^{\rm rest}_{ijb} =
+        \frac{\int S_{ij}(\lambda)\, R_b(\lambda)\, w(\lambda)\,{\rm d}\lambda}
+             {\int R_b(\lambda)\, w(\lambda)\,{\rm d}\lambda}
+
+    with :math:`S_{ij}` the SSP [erg/s/Hz/Msun], :math:`R_b` the filter response and
+    :math:`w` the convention weight (ADR-0017).
+
+    This is a **different quantity** from :func:`precompute_photometry`'s
+    ``ssp_phot``, which places the filter in the *observed* frame and so samples
+    rest :math:`\lambda_{\rm eff}/(1+z)`. Conflating them is #1148: the LUT path
+    reused the observed-band integral for ``phot_rest_fnu`` and disagreed with the
+    exact path by 769 % in ``des_g`` at z=0.5, growing to orders of magnitude in the
+    blue — an *absolute* magnitude that depended on the source's redshift.
+
+    **Redshift does not appear.** At z=0 the filter always samples the same rest
+    wavelengths, so this is one build-time constant that serves fixed-z *and* free-z
+    models: no z-table, no interpolation, no runtime cost.
+
+    Parameters
+    ----------
+    ssp_data : SSPData
+        SSP templates.
+    filter_waves : list of array
+        Wavelength grid per filter [Angstrom].
+    filter_trans : list of array
+        Transmission curve per filter [dimensionless].
+    n_subbands : int
+        Sub-band quadrature order K for the dust screen across the rest band
+        (#1122). 0 disables it, leaving the screen evaluated at the pivot.
+    fixed : dict[int, float], optional
+        Axis index → fixed value, collapsed at build time (axis 0 = lgmet).
+
+    Returns
+    -------
+    RestBandPrecomputation
+
+    Notes
+    -----
+    **JIT-compatible**: no — runs once at build time.
+    """
+    from tengri.utils.grid_interp import slice_fixed_axes
+
+    preint = preintegrate_grid(
+        templates=np.asarray(ssp_data.ssp_flux),
+        wave_rest=np.asarray(ssp_data.ssp_wave),
+        filter_waves=[np.asarray(fw) for fw in filter_waves],
+        filter_trans=[np.asarray(ft) for ft in filter_trans],
+        redshift=0.0,
+        dl_cm=TEN_PC_CM,
+        axes=(
+            np.asarray(ssp_data.ssp_lgmet),
+            np.asarray(ssp_data.ssp_lg_age_gyr),
+        ),
+        taylor=False,  # the rest band uses the quadrature, never the Taylor form
+        n_subbands=n_subbands,
+    )
+    if fixed:
+        preint = slice_fixed_axes(preint, fixed)
+
+    return RestBandPrecomputation(
+        ssp_restband_phot=preint.phot,
+        ssp_restband_subband_phot=preint.subband_phot,
+        ssp_restband_subband_waves=preint.subband_waves_rest,
+        # At z=0 the rest and observed effective wavelengths coincide — this is the
+        # filter's own pivot, and it is what the rest band samples.
+        restband_eff_waves=preint.effective_wavelengths_rest,
     )
 
 

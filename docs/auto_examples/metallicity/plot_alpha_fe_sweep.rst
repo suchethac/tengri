@@ -40,19 +40,8 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -80,7 +69,7 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 8.0,
@@ -88,7 +77,7 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.0,
             "tau_diff": 0.1,
         },
@@ -103,10 +92,10 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
     for met_alpha_fe in met_alpha_fe_values:
         params = {**baseline, "met_alpha_fe": jnp.float64(met_alpha_fe)}
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
         nu = 2.998e18 / wave  # Å/s -> Hz
-        nu_l_nu = nu * np.asarray(out.sed)
+        nu_l_nu = nu * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=cmap(norm(met_alpha_fe)), lw=1.4)
 
     ax.set_xlim(3000, 1e4)

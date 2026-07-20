@@ -58,6 +58,8 @@ def _build_prediction(
     use_components=False,
     has_line_ratios=False,
     measured_line_defs=None,
+    jit_inputs=None,
+    threaded_impl=None,
 ):
     """Forward-model prediction in one place.
 
@@ -67,21 +69,52 @@ def _build_prediction(
       ``line_fluxes`` / ``indices`` — fed to user / auto-built Likelihood adapters.
     - ``predicted``: concatenated array (legacy χ² fall-through still uses this).
     - ``pred_phot`` / ``pred_spec``: split components or ``None``.
+
+    **JIT data threading.** When ``jit_inputs`` (the ``data_args["_jit_inputs"]``
+    bundle of ``ssp_data`` / ``template_data`` / ``fixed_values``) and
+    ``threaded_impl`` (``model._get_or_build_predict_observables_jit()``) are
+    supplied, the photometry / spectroscopy / joint channels route through the
+    threaded orchestrator and the feature channels thread ``predict_state``. This
+    keeps the SSP grid and template arrays as XLA ``Parameter`` ops in the outer
+    inference trace instead of closure-captured ``Constant`` ops — see
+    :func:`_build_data_neg_log_likelihood_fn`. ``use_components`` keeps its own
+    component-split path (not threaded here).
     """
+    # Single threaded forward for phot/spec/joint: one orchestrator call
+    # returns an Observables carrying every configured channel. ``_obs`` is
+    # None when threading is unavailable (dummy models, ``use_components``) or
+    # when ``jit_inputs`` was not built — then we fall back to the eager
+    # ``model.predict_*`` accessors (which closure-capture the SSP grid, so
+    # this path bakes it; acceptable for the non-inference / dummy-model uses).
+    _obs = None
+    if threaded_impl is not None and jit_inputs is not None and not use_components:
+        _obs = threaded_impl(
+            params,
+            jit_inputs["fixed_values"],
+            jit_inputs["ssp_data"],
+            jit_inputs["template_data"],
+        )
+
     if data_type == "photometry":
-        if use_components:
+        if _obs is not None:
+            predicted = _obs.phot_fnu
+        elif use_components:
             predicted = model._photometry_via_state(params)
         else:
             predicted = model.predict_photometry(params)
         pred_phot, pred_spec = predicted, None
     elif data_type == "spectroscopy":
-        if use_components:
+        if _obs is not None:
+            predicted = _obs.spec_fnu
+        elif use_components:
             predicted = model._spectrum_via_state(params)
         else:
             predicted = model.predict_spectrum(params)
         pred_phot, pred_spec = None, predicted
     elif data_type == "joint":
-        if use_components:
+        if _obs is not None:
+            pred_phot, pred_spec = _obs.phot_fnu, _obs.spec_fnu
+        elif use_components:
             pred_phot = model._photometry_via_state(params)
             pred_spec = model._spectrum_via_state(params)
         else:
@@ -97,20 +130,42 @@ def _build_prediction(
     if pred_spec is not None:
         prediction["spec_fnu"] = pred_spec
 
-    # Fast path (2026-07-05): line fluxes, line ratios, and spectral indices
-    # all derive from the SAME orchestrator forward. Compute ``predict_state``
-    # ONCE when any feature channel is active and thread it into each
-    # predictor, so a joint fit with lines + ratios + indices runs the
-    # full-grid forward once per loss eval instead of two or three times.
-    feature_state = None
-    if has_line_fluxes or has_line_ratios or has_indices:
+    # Line fluxes, line ratios, and spectral indices all derive from the SAME
+    # orchestrator forward, so ``predict_state`` is computed ONCE when a feature
+    # channel needs it and threaded into each predictor — a joint fit with lines +
+    # ratios + indices runs the full-grid forward once per loss eval, not three
+    # times.
+    #
+    # But ``predict_state`` *is* the full-grid forward, and that is exactly what
+    # the emission-line precompute (``approx=FeaturePrecomp()``) exists to skip:
+    # the window LUT reconstructs the lines from SED-free SFH weights. Calling
+    # predict_state anyway would leave the LUT wrapped around the cost it was
+    # meant to avoid — a fast path that is a no-op. So when lines are the only
+    # feature channel and the model carries the precompute, the full-grid forward
+    # is not built at all.
+    fast_lines = bool(getattr(model, "_fast_line_measurement", False))
+    needs_state = has_line_ratios or has_indices or (has_line_fluxes and not fast_lines)
+    if not needs_state:
+        feature_state = None
+    elif jit_inputs is not None:
+        # Thread the SSP grid + template arrays so the feature forward
+        # (line fluxes / ratios / indices) does not bake them into the outer
+        # inference trace either.
+        feature_state = model.predict_state(
+            params,
+            fixed_values=jit_inputs["fixed_values"],
+            ssp_data=jit_inputs["ssp_data"],
+            template_data=jit_inputs["template_data"],
+        )
+    else:
         feature_state = model.predict_state(params)
     if has_line_fluxes:
         if measured_line_defs is not None:
             # No discrete line catalog (BakedIn) → measure the fluxes off the
-            # model spectrum the way a pipeline does (measure_line_fluxes).
+            # model spectrum the way a pipeline does (measure_line_fluxes). With
+            # FeaturePrecomp the measurement runs against the SSP window LUT.
             prediction["line_fluxes"] = model.measure_line_fluxes(
-                params, measured_line_defs, state=feature_state
+                params, measured_line_defs, fast=fast_lines, state=feature_state
             )
         else:
             prediction["line_fluxes"] = model.predict_line_fluxes(
@@ -198,24 +253,21 @@ def _build_data_neg_log_likelihood_fn(fitter):
     else:
         _likelihood_takes_data_args = False
 
-    # Template threading (#250 follow-up): photometry-only fits use the
-    # threaded ``_impl`` directly so the outer JIT trace (HMC/NUTS
-    # loss_fn) sees ssp_data + template_data + fixed_values as
-    # outer-level Parameters. Without this, the outer JIT inlines
-    # ``model.predict_photometry`` → ``predict_observables_jit`` and
-    # bakes the SSP grid (15×93×5994 floats) into the HLO as a
-    # constant — ballooning HMC cold compile to 40 s. Threaded path:
-    # HMC cold ≈ 3-5 s.
-    _photometry_only_threaded = (
-        data_type == "photometry"
-        and not use_components
-        and not has_line_fluxes
-        and not has_line_ratios
-        and not has_indices
-        and hasattr(model, "_get_or_build_predict_observables_jit")
-    )
+    # Template threading (#250 follow-up, generalized): route every channel
+    # through the threaded orchestrator ``_impl`` so the outer JIT trace
+    # (HMC/NUTS/VI/MAP loss_fn) sees ssp_data + template_data + fixed_values as
+    # outer-level Parameters. Without threading, the outer JIT inlines
+    # ``model.predict_photometry`` / ``predict_spectrum`` / ``predict_state`` →
+    # ``predict_observables_jit`` and bakes the SSP grid (15×93×5994 floats) into
+    # the HLO as a constant — ballooning cold compile to ~40 s. Threaded path:
+    # cold ≈ 3-5 s. Originally photometry-only; now covers spectroscopy, joint,
+    # and the feature channels too (the SSP bake was identical on those paths —
+    # the fast path just never reached them). ``_build_prediction`` reads the
+    # threaded arrays out of ``data_args["_jit_inputs"]`` at call time.
     _threaded_impl = (
-        model._get_or_build_predict_observables_jit() if _photometry_only_threaded else None
+        model._get_or_build_predict_observables_jit()
+        if not use_components and hasattr(model, "_get_or_build_predict_observables_jit")
+        else None
     )
 
     def neg_log_lik(params, data_args):
@@ -223,29 +275,20 @@ def _build_data_neg_log_likelihood_fn(fitter):
         data = data_args["data"]
         noise = data_args["noise"]
 
-        if _threaded_impl is not None and "_jit_inputs" in data_args:
-            jit_in = data_args["_jit_inputs"]
-            predicted = _threaded_impl(
-                params,
-                jit_in["fixed_values"],
-                jit_in["ssp_data"],
-                jit_in["template_data"],
-            ).phot_fnu
-            prediction = {"phot_fnu": predicted}
-            _pred_phot, _pred_spec = predicted, None
-        else:
-            prediction, predicted, _pred_phot, _pred_spec = _build_prediction(
-                model,
-                params,
-                data_type,
-                has_line_fluxes=has_line_fluxes,
-                has_indices=has_indices,
-                index_defs=index_defs,
-                data_args=data_args,
-                use_components=use_components,
-                has_line_ratios=has_line_ratios,
-                measured_line_defs=measured_line_defs,
-            )
+        prediction, predicted, _pred_phot, _pred_spec = _build_prediction(
+            model,
+            params,
+            data_type,
+            has_line_fluxes=has_line_fluxes,
+            has_indices=has_indices,
+            index_defs=index_defs,
+            data_args=data_args,
+            use_components=use_components,
+            has_line_ratios=has_line_ratios,
+            measured_line_defs=measured_line_defs,
+            jit_inputs=data_args.get("_jit_inputs"),
+            threaded_impl=_threaded_impl,
+        )
 
         # Auto-built / user-supplied Likelihood adapter handles the data
         # term (and any extras composed via CompositeLikelihood).

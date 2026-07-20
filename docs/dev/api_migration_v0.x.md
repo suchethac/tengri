@@ -413,14 +413,14 @@ model = SEDModel.build(
 model = SEDModel.build(
     ssp_data=ssp,
     filters=['sdss_u', 'sdss_g'],
-    sfh={'type': 'dpl', '*': FREE},
+    sfh={'type': 'dpl', 'all_params': FREE},
     dust={
         'type': 'two_component',
         'law_bc': 'calzetti',
-        '*': FREE,
-        'emission': {'type': 'dale2014', '*': FIXED},
+        'all_params': FREE,
+        'emission': {'type': 'dale2014', 'all_params': FIXED},
     },
-    neb={'type': 'cue', '*': FIXED},
+    neb={'type': 'cue', 'all_params': FIXED},
     redshift=Uniform(0.01, 6.0),
     apply_igm=True,
 )
@@ -438,21 +438,22 @@ Every parameter is tagged with its source:
 ```python
 spec.summary_str()
 
-# Output shows [user], [* FREE], [* FIXED], or [default]
+# Output shows [user], [all_params FREE], [all_params FIXED], or [default]
 # indicating whether the value came from explicit specification,
 # wildcard matching, or registry defaults.
 ```
 
 ### Wildcard semantics
 
-The `'*'` key in a sub-dict sets a default (`FREE` or `FIXED`) for all
-parameters in that group not explicitly overridden:
+The `'all_params'` key in a sub-dict sets a default (`FREE` or `FIXED`) for all
+parameters in that group not explicitly overridden. (`'*'` is an accepted
+synonym, kept for back-compat and slated for deprecation — prefer `'all_params'`.)
 
 ```python
 dust={
     'type': 'two_component',
     'law_bc': 'calzetti',
-    '*': FIXED,  # All dust params are [* FIXED]
+    'all_params': FIXED,  # All dust params are [all_params FIXED]
     'tau_bc': Uniform(0, 1),  # Override: explicitly free
 }
 ```
@@ -467,7 +468,7 @@ values:
 from tengri.parameters.sentinels import FREE, FIXED
 
 # In group dicts
-groups = {'sfh': {'type': 'dpl', '*': FREE}}
+groups = {'sfh': {'type': 'dpl', 'all_params': FREE}}
 
 # As explicit values
 groups = {'redshift': FIXED, 'met': {'logzsol': FREE}}
@@ -513,8 +514,8 @@ spec = Parameters(
 
 # New (recommended)
 spec = parse_groups(
-    sfh={'type': 'dpl', '*': FREE},
-    dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FREE},
+    sfh={'type': 'dpl', 'all_params': FREE},
+    dust={'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FREE},
 )
 ```
 
@@ -583,17 +584,17 @@ flux = model.predict_photometry(model.spec.sample(key))
 
 **4. Bad wildcard sentinel values now raise instead of falling through.**
 
-As of fe2e69f, the `'*'` slot must be the ``FREE`` or ``FIXED`` sentinel —
-strings, ``None``, and bools all raise ``ValueError`` with a clear hint.
-Previously these silently fell through to "fixed at registry default" with
-no warning.
+As of fe2e69f, the `'all_params'` slot (or its `'*'` synonym) must be the
+``FREE`` or ``FIXED`` sentinel — strings, ``None``, and bools all raise
+``ValueError`` with a clear hint. Previously these silently fell through to
+"fixed at registry default" with no warning.
 
 ```python
 # Wrong: silently misbehaved before fe2e69f; raises now
-parse_groups(sfh={"type": "dpl", "*": "free"})  # ValueError
+parse_groups(sfh={"type": "dpl", "all_params": "free"})  # ValueError
 
 # Right
-parse_groups(sfh={"type": "dpl", "*": FREE})
+parse_groups(sfh={"type": "dpl", "all_params": FREE})
 ```
 
 ---
@@ -860,6 +861,42 @@ their older siblings `list_agn_models()` / `describe_agn_model()`;
 | importable, absent from `__all__`     | `tengri.describe_agn_block`       | Advertised                     |
 | importable, absent from `__all__`     | `tengri.suggest_parameters`       | Advertised                     |
 | importable, absent from `__all__`     | `tengri.print_components_bibtex`  | Advertised                     |
+
+---
+
+## `FeaturePrecomp` — the emission-line precompute (2026-07)
+
+`approx=` gains a third member, alongside `WavePrecomp` (photometry) and
+`SpectrumPrecomp` (spectroscopy). `FeaturePrecomp` serves **emission-line
+fluxes** from a build-time lookup instead of re-running the forward on every
+likelihood evaluation, and composes with the other two:
+
+```python
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs,          # obs carries line_fluxes
+    neb={'type': 'cue', 'logU': Uniform(-4, -1)},
+    approx=(WavePrecomp(), FeaturePrecomp()),
+)
+```
+
+The line wavelengths default to `Observation.line_fluxes`, so the common case
+takes no arguments. What gets built depends on the nebular backend, because the
+two keep their lines in physically different places: **Cue** publishes a discrete
+catalog that is linear in the ionizing photon rate, so a grid over the free
+ionization axes replaces the forward; the **baked-in / wNE** backend has no
+catalog — its lines are inside the SSP templates — so it gets a per-line window
+LUT and the fluxes are *measured* off the reconstructed spectrum.
+
+This is an **opt-in approximation**. It never activates on its own, and an
+observation that merely contains lines does not switch it on.
+
+The imperative `SEDModel.enable_fast_nebular(...)` still works and is unchanged;
+it is now what `FeaturePrecomp` calls for the Cue backend.
+
+| Old path                                    | New path                                      | Status (v0.x) |
+| ------------------------------------------- | --------------------------------------------- | ------------- |
+| `model.enable_fast_nebular(waves, n_grid=…)` | `approx=FeaturePrecomp(n_grid=…)` at build     | Both supported |
+| (no build-time surface for baked-in lines)   | `approx=FeaturePrecomp()`                      | New            |
 
 ---
 

@@ -96,8 +96,10 @@ def logX(rng_key: PRNGKey, dead_info: NSInfo, shape: int = 100) -> tuple[Array, 
     Returns
     -------
     tuple[Array, Array]
+
         - logX_cumulative: shape (n_dead, shape)
         - log_dX_elements: shape (n_dead, shape)
+
     """
     rng_key, subkey = jax.random.split(rng_key)
     u = jax.random.uniform(
@@ -222,11 +224,6 @@ def sample(rng_key: PRNGKey, dead: NSInfo, shape: int = 1000) -> ArrayTree:
         replace=True,
     )
     return jax.tree.map(lambda leaf: leaf[indices], dead.particles)
-
-
-def get_first_row(x: ArrayTree) -> ArrayTree:
-    """Extract the first element along the leading axis of each leaf."""
-    return jax.tree.map(lambda x: x[0], x)
 
 
 def uniform_prior(

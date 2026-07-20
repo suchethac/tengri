@@ -27,6 +27,7 @@ bends rays toward high-likelihood regions, naturally producing fair
 posterior samples.
 
 Key advantages over HMC/NUTS:
+
 - Orders of magnitude more resilient to stochastic/noisy gradients
 - No energy conservation issues (constant speed propagation)
 - Can cross arbitrary likelihood barriers

@@ -52,7 +52,7 @@ emission to absorption across the inclination range.
 .. [3] Hao, L., Strauss, M. A., Fan, X., et al. (2007).
    Mid-Infrared Properties of Dust-Obscured Quasars. ApJ, 655, L77.
 
-.. GENERATED FROM PYTHON SOURCE LINES 36-236
+.. GENERATED FROM PYTHON SOURCE LINES 36-237
 
 
 
@@ -107,8 +107,8 @@ emission to absorption across the inclination range.
     # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
     # ``const`` SFH parametrizes by total mass over [start_gyr, end_gyr]
     # instead.
-    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     ssp = tengri.load_ssp()
 
@@ -118,9 +118,9 @@ emission to absorption across the inclination range.
         sfh=SFH,
         dust=DUST,
         agn={
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "log_lbol": 12.0,
             "frac": 1.0,
         },
@@ -131,19 +131,20 @@ emission to absorption across the inclination range.
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_gyr": 3.0,
             "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
         agn={
             "type": "composable",
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": 7.0},
-            "lines": {"type": "nlr", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED, "tau_skirtor": 7.0},
+            "nlr": {"type": "analytic", "all_params": tengri.FIXED},
+            "blr": {"type": "none", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "log_lbol": 12.5,
             "frac": 1.0,
         },
@@ -161,9 +162,9 @@ emission to absorption across the inclination range.
     # Panel (a): Full-spectrum inclination sweep (7 angles)
     for cos_inc, inc_deg, color in zip(cos_inc_values, inclination_deg, colors):
         params = {**baseline_agn, "agn_cos_inc": np.float64(cos_inc)}
-        out = model_agn_only.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
-        sed = np.asarray(out.sed)
+        out = model_agn_only.predict(params)
+        wave = np.asarray(model_agn_only.wavelengths)
+        sed = np.asarray(out.rest_sed())
         nu_l_nu = C_AA_PER_S / wave * sed
 
         ax1.loglog(
@@ -206,10 +207,10 @@ emission to absorption across the inclination range.
 
     for cos_inc, color, label in zip(cos_inc_silicate, colors_silicate, labels_silicate):
         params = {**baseline_dust, "agn_cos_inc": jnp.float64(cos_inc)}
-        out = model_with_dust.predict_rest_sed(params)
+        out = model_with_dust.predict(params)
 
-        wave_rest = np.asarray(out.wavelength)
-        sed_rest = np.asarray(out.sed)
+        wave_rest = np.asarray(model_with_dust.wavelengths)
+        sed_rest = np.asarray(out.rest_sed())
 
         # Select 3–30 μm rest-frame window
         mask = (wave_rest >= 3e4) & (wave_rest <= 3e5)
@@ -257,10 +258,10 @@ emission to absorption across the inclination range.
 
     for cos_inc in cos_inc_obscuration:
         params = {**baseline_dust, "agn_cos_inc": jnp.float64(cos_inc)}
-        out = model_with_dust.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
+        out = model_with_dust.predict(params)
+        wave = np.asarray(model_with_dust.wavelengths)
         nu = C_AA_PER_S / wave
-        nu_l_nu = nu * np.asarray(out.sed)
+        nu_l_nu = nu * np.asarray(out.rest_sed())
         ax3.loglog(wave, nu_l_nu, color=cmap_osc(norm_osc(cos_inc)), lw=1.4, alpha=0.85)
 
     ax3.set_xlim(100, 1e6)
@@ -281,7 +282,7 @@ emission to absorption across the inclination range.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.763 seconds)
+   **Total running time of the script:** (0 minutes 5.365 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_inclination_sweep.py:

@@ -34,12 +34,13 @@ converting line ratios to a 12 + log(O/H) on a sample. The plot spans
 (Kewley & Dopita 2002) and the famous double-valued R23 behavior.
 
 References:
+
 - Pagel et al. 1979, MNRAS, 189, 95 (R23 ratio)
 - Kewley & Dopita 2002, ApJS, 142, 35 (strong-line calibrations)
 - Marino et al. 2013, ApJ, 768, 171 (N2 metallicity diagnostic)
 - Pettini & Pagel 2004, MNRAS, 348, L59 (O3N2 diagnostic)
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-120
+.. GENERATED FROM PYTHON SOURCE LINES 25-122
 
 
 
@@ -77,14 +78,14 @@ References:
         SSP,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_gyr": 0.05,
             "log_total_mass": 10.0,
             "alpha": 4.0,
             "beta": 2.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": tengri.Uniform(-2.0, 0.5)},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": tengri.Uniform(-2.0, 0.5)},
         redshift=tengri.Fixed(0.0),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -94,7 +95,7 @@ References:
 
     for i, z in enumerate(z_grid):
         p = {**baseline, "neb_logZ_gas": jnp.float64(z)}
-        L = model.predict_emission_lines(p)
+        L = model.predict(p).lines
         o3[i] = float(L.oiii_5007)
         n2_ha[i] = float(L.nii_6584 / L.halpha)
         hb[i] = float(L.hbeta)
@@ -155,7 +156,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.433 seconds)
+   **Total running time of the script:** (0 minutes 2.360 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_strong_line_metallicity_diagnostics.py:

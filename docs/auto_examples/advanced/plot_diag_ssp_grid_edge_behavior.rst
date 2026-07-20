@@ -67,14 +67,14 @@ Reference: SSP boundary handling is governed by DSPS interpolation (Hearin+ 2023
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 2.0,
             "beta": 2.0,
             "tau_gyr": 2.0,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.15, "tau_bc": 0.25},
-        neb={"type": "cue", "*": tengri.FIXED},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.15, "tau_bc": 0.25},
+        neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.0),
     )
 
@@ -100,9 +100,9 @@ Reference: SSP boundary handling is governed by DSPS interpolation (Hearin+ 2023
         params = {**baseline, "met_logzsol": jnp.float64(met)}
 
         try:
-            out = model.predict_rest_sed(params)
-            wave = np.asarray(out.wavelength)
-            sed = np.asarray(out.sed)
+            out = model.predict(params)
+            wave = np.asarray(model.wavelengths)
+            sed = np.asarray(out.rest_sed())
             ok = np.isfinite(sed)
 
             if not ok.any():
@@ -140,6 +140,11 @@ Reference: SSP boundary handling is governed by DSPS interpolation (Hearin+ 2023
 
     plt.tight_layout()
     plt.savefig("plot_diag_ssp_grid_edge_behavior.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.996 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_ssp_grid_edge_behavior.py:

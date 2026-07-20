@@ -25,7 +25,7 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 recipe = recipes.dust_demo()
 recipe["dust"]["emission"] = {
     "type": "draine_li2007",
-    "*": FIXED,
+    "all_params": FIXED,
     "umin": 1.0,
     "gamma_dl": 0.01,
     "qpah": 2.5,

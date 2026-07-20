@@ -163,6 +163,7 @@ def fesc_chisholm2022(
         [yr^{-1}], and the pivot point (β = −2) is chosen by calibration.
 
     **Physical interpretation**:
+
         - Bluer UV (more negative β) → higher f_esc (younger stars, less dust)
         - Higher sSFR (when a2 > 0) → higher f_esc (more ionizing photons,
           less dust shielding)

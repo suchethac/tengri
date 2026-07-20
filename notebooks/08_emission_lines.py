@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.1
+#       jupytext_version: 1.19.4
 #   kernelspec:
 #     display_name: .venv
 #     language: python
@@ -86,8 +86,14 @@ tg.print_logo()
 print(f"tengri {tg.__version__}\n")
 
 from tengri import (
-    Fixed, SEDModel, Parameters, Uniform, Observation,
-    load_ssp_data, list_nebular_backends, describe
+    Fixed,
+    SEDModel,
+    Parameters,
+    Uniform,
+    Observation,
+    load_ssp_data,
+    list_nebular_backends,
+    describe,
 )
 from tengri.observation import Photometry
 
@@ -95,7 +101,9 @@ from tengri.observation import Photometry
 # The wNE variants (with-Nebular-Emission baked in) silently under-predict
 # line luminosities by 4–7 dex when fed to Cue — see CueWNESSPWarning.
 ssp_data = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
-print(f"SSP: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ")
+print(
+    f"SSP: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ"
+)
 
 # List available nebular backends
 backends = list_nebular_backends().names()
@@ -103,9 +111,18 @@ print(f"Available nebular backends: {backends}")
 
 # Load filters for photometry
 _candidate_filters = [
-    "galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r",
-    "sdss_i", "sdss_z", "twomass_j", "twomass_h", "twomass_ks",
-    "wise_w1", "wise_w2",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+    "wise_w1",
+    "wise_w2",
 ]
 phot_bands_list = []
 for band in _candidate_filters:
@@ -116,7 +133,7 @@ for band in _candidate_filters:
         pass
 
 if not phot_bands_list:
-    phot_bands_list = ["twomass_j", "twomass_h", "twomass_ks"]
+    phot_bands_list = ["2mass_j", "2mass_h", "2mass_ks"]
 
 phot_obs = Photometry.from_names(phot_bands_list, cache_dir="data/filters")
 obs = Observation(photometry=phot_obs)
@@ -213,16 +230,20 @@ print(f"  Dust (birth cloud): τ={float(params_old['dust_tau_bc']):.2f}")
 
 # %%
 # Compute integrated SFR quantities
-sfh_sf = model_sf.predict_sfh_quantities(params_sf)
-sfh_comp = model_comp.predict_sfh_quantities(params_comp)
-sfh_old = model_old.predict_sfh_quantities(params_old)
+sfh_sf = model_sf.predict_properties(params_sf, names=("sfr_10myr", "sfr_100myr"))
+sfh_comp = model_comp.predict_properties(params_comp, names=("sfr_10myr", "sfr_100myr"))
+sfh_old = model_old.predict_properties(params_old, names=("sfr_10myr", "sfr_100myr"))
 
 print("\nStar Formation Rates from SFH [Msun/yr]:")
 print(f"{'Variant':<25} {'SFR_10Myr':>15} {'SFR_100Myr':>15}")
 print("-" * 57)
-print(f"{'Star-forming':<25} {float(sfh_sf.sfr_10myr):>15.3f} {float(sfh_sf.sfr_100myr):>15.3f}")
-print(f"{'Composite':<25} {float(sfh_comp.sfr_10myr):>15.3f} {float(sfh_comp.sfr_100myr):>15.3f}")
-print(f"{'Older':<25} {float(sfh_old.sfr_10myr):>15.3f} {float(sfh_old.sfr_100myr):>15.3f}")
+print(
+    f"{'Star-forming':<25} {float(sfh_sf['sfr_10myr']):>15.3f} {float(sfh_sf['sfr_100myr']):>15.3f}"
+)
+print(
+    f"{'Composite':<25} {float(sfh_comp['sfr_10myr']):>15.3f} {float(sfh_comp['sfr_100myr']):>15.3f}"
+)
+print(f"{'Older':<25} {float(sfh_old['sfr_10myr']):>15.3f} {float(sfh_old['sfr_100myr']):>15.3f}")
 
 # Extract line fluxes at specific rest-frame wavelengths (vacuum Å):
 # Hα 6564.61, Hβ 4861.33, [OIII] 5007.24, [NII] 6584.47
@@ -234,9 +255,11 @@ for name, wave in zip(line_names, target_waves):
     print(f"  {name:12s}: {wave:.2f}")
 
 fluxes_dict = {}
-for galaxy_type, model, params in [("SF", model_sf, params_sf),
-                                     ("Composite", model_comp, params_comp),
-                                     ("Older", model_old, params_old)]:
+for galaxy_type, model, params in [
+    ("SF", model_sf, params_sf),
+    ("Composite", model_comp, params_comp),
+    ("Older", model_old, params_old),
+]:
     try:
         fluxes = model.predict_line_fluxes(params, target_wavelengths=target_waves)
         fluxes_dict[galaxy_type] = np.array(fluxes)
@@ -262,7 +285,9 @@ for galaxy_type, flux_arr in fluxes_dict.items():
             log_nii_ha = np.log10(float(nii) / float(ha))
             log_oiii_hb = np.log10(float(oiii) / float(hb))
             bpt_ratios[galaxy_type] = (log_nii_ha, log_oiii_hb)
-            print(f"{galaxy_type:12s}: log([NII]/Hα) = {log_nii_ha:+.2f}, log([OIII]/Hβ) = {log_oiii_hb:+.2f}")
+            print(
+                f"{galaxy_type:12s}: log([NII]/Hα) = {log_nii_ha:+.2f}, log([OIII]/Hβ) = {log_oiii_hb:+.2f}"
+            )
 
 # %%
 # Plot BPT diagram with demarcation curves
@@ -286,11 +311,16 @@ for galaxy_type in ["SF", "Composite", "Older"]:
     if galaxy_type in bpt_ratios:
         x, y = bpt_ratios[galaxy_type]
         ax.scatter(
-            x, y,
-            marker=markers[galaxy_type], s=90,
+            x,
+            y,
+            marker=markers[galaxy_type],
+            s=90,
             color=GALAXY_COLORS[galaxy_type],
-            edgecolor="white", linewidth=0.8,
-            alpha=0.95, label=galaxy_type, zorder=10,
+            edgecolor="white",
+            linewidth=0.8,
+            alpha=0.95,
+            label=galaxy_type,
+            zorder=10,
         )
 
 ax.set_xlim(-1.5, 0.5)
@@ -298,9 +328,16 @@ ax.set_ylim(-1.0, 1.5)
 ax.set_xlabel(r"$\log_{10}([\mathrm{NII}]\,6584 / \mathrm{H}\alpha)$")
 ax.set_ylabel(r"$\log_{10}([\mathrm{OIII}]\,5007 / \mathrm{H}\beta)$")
 ax.legend(loc="lower right", frameon=False, fontsize=9)
-ax.text(0.02, 0.96, "BPT-NII diagnostic",
-        transform=ax.transAxes, ha="left", va="top",
-        fontsize=9, color="0.3")
+ax.text(
+    0.02,
+    0.96,
+    "BPT-NII diagnostic",
+    transform=ax.transAxes,
+    ha="left",
+    va="top",
+    fontsize=9,
+    color="0.3",
+)
 fig.savefig(FIG_DIR / "08_bpt_diagram.png", dpi=300, bbox_inches="tight")
 fig.savefig(FIG_DIR / "08_bpt_diagram.pdf", bbox_inches="tight")
 
@@ -316,9 +353,11 @@ wave_rest = np.linspace(6400, 6800, 1600)  # rest-frame Å (6400-6480 is line-fr
 
 params_dict = {"SF": params_sf, "Composite": params_comp, "Older": params_old}
 spec_dict = {}
-for galaxy_type, model, params in [("SF", model_sf, params_sf),
-                                     ("Composite", model_comp, params_comp),
-                                     ("Older", model_old, params_old)]:
+for galaxy_type, model, params in [
+    ("SF", model_sf, params_sf),
+    ("Composite", model_comp, params_comp),
+    ("Older", model_old, params_old),
+]:
     z = float(params["redshift"])
     wave_obs = wave_rest * (1.0 + z)
     try:
@@ -346,34 +385,55 @@ for galaxy_type in ["SF", "Composite", "Older"]:
     valid = np.isfinite(sed_norm) & (sed_norm > 0)
     if valid.sum() > 0:
         ax.semilogy(
-            wave_obs_plot[valid], sed_norm[valid],
-            lw=1.4, label=galaxy_type, color=GALAXY_COLORS[galaxy_type],
+            wave_obs_plot[valid],
+            sed_norm[valid],
+            lw=1.4,
+            label=galaxy_type,
+            color=GALAXY_COLORS[galaxy_type],
         )
 
 # Annotate key emission lines (rest-frame vacuum λ, displayed at z=0.1)
 lines_annotate = [
-    (6549.86, "[NII]"), (6564.61, r"H$\alpha$"), (6584.47, "[NII]"),
-    (6717.04, "[SII]"), (6731.47, "[SII]"),
+    (6549.86, "[NII]"),
+    (6564.61, r"H$\alpha$"),
+    (6584.47, "[NII]"),
+    (6717.04, "[SII]"),
+    (6731.47, "[SII]"),
 ]
 z_ref_display = 0.1
-for lam, label in lines_annotate:
+for lam, label in lines_annotate:  # noqa: B007
     lam_obs = lam * (1.0 + z_ref_display)
     ax.axvline(lam_obs, color="0.6", ls=":", lw=0.5, alpha=0.6)
 
 # After axes are scaled, place line labels just above the data
 for lam, label in lines_annotate:
     lam_obs = lam * (1.0 + z_ref_display)
-    ax.text(lam_obs, ax.get_ylim()[1] * 0.65, label,
-            fontsize=8, rotation=90, va="top", ha="right",
-            color="0.4", alpha=0.85)
+    ax.text(
+        lam_obs,
+        ax.get_ylim()[1] * 0.65,
+        label,
+        fontsize=8,
+        rotation=90,
+        va="top",
+        ha="right",
+        color="0.4",
+        alpha=0.85,
+    )
 
 ax.set_xlim(6450 * (1 + z_ref_display), 6850 * (1 + z_ref_display))
 ax.set_xlabel(rf"observed wavelength  [$\mathrm{{\AA}}$]   (z = {z_ref_display:.1f})")
 ax.set_ylabel(r"$F_\nu / F_\nu^{\rm cont}$  (normalized at 6460 Å rest)")
 ax.legend(loc="upper left", frameon=False, fontsize=9)
-ax.text(0.99, 0.96, r"H$\alpha$ + [NII] + [SII] complex",
-        transform=ax.transAxes, ha="right", va="top",
-        fontsize=9, color="0.3")
+ax.text(
+    0.99,
+    0.96,
+    r"H$\alpha$ + [NII] + [SII] complex",
+    transform=ax.transAxes,
+    ha="right",
+    va="top",
+    fontsize=9,
+    color="0.3",
+)
 fig.savefig(FIG_DIR / "08_line_spectrum.png", dpi=300, bbox_inches="tight")
 fig.savefig(FIG_DIR / "08_line_spectrum.pdf", bbox_inches="tight")
 
@@ -406,15 +466,16 @@ for k in keys:
 
         # Convert to luminosity
         from tengri import cosmology
-        dl_cm = cosmology.luminosity_distance(z_ref).to_value("cm")
+
+        dl_cm = cosmology.luminosity_distance(z_ref)  # already in cm
         l_ha_ergs = ha_flux * 4.0 * np.pi * dl_cm**2
 
         # SFR from Hα
         sfr_ha = K98_COEFF * l_ha_ergs
 
         # SFR from SFH
-        sfh_q = model_sf.predict_sfh_quantities(params_sample)
-        sfr_10myr = float(sfh_q.sfr_10myr)
+        sfh_q = model_sf.predict_properties(params_sample, names=("sfr_10myr",))
+        sfr_10myr = float(sfh_q["sfr_10myr"])
 
         if sfr_ha > 0 and sfr_10myr > 0:
             sfr_halpha_list.append(np.log10(sfr_ha))
@@ -436,17 +497,26 @@ fig, ax = plt.subplots(figsize=(5.4, 5.4))
 
 x_range = np.array([sfr_halpha_arr.min() - 0.5, sfr_halpha_arr.max() + 0.5])
 ax.fill_between(
-    x_range, x_range - 0.2, x_range + 0.2,
-    alpha=0.12, color="0.5", lw=0,
-    label=r"$\pm$0.2 dex band", zorder=0,
+    x_range,
+    x_range - 0.2,
+    x_range + 0.2,
+    alpha=0.12,
+    color="0.5",
+    lw=0,
+    label=r"$\pm$0.2 dex band",
+    zorder=0,
 )
-ax.plot(x_range, x_range, color=C_TRUTH, lw=1.0, ls="--",
-        label="1 : 1", zorder=1)
+ax.plot(x_range, x_range, color=C_TRUTH, lw=1.0, ls="--", label="1 : 1", zorder=1)
 ax.scatter(
-    sfr_halpha_arr, sfr_10myr_arr,
-    s=22, color=C_POST, alpha=0.85,
-    edgecolor="white", linewidth=0.5,
-    label="posterior samples", zorder=3,
+    sfr_halpha_arr,
+    sfr_10myr_arr,
+    s=22,
+    color=C_POST,
+    alpha=0.85,
+    edgecolor="white",
+    linewidth=0.5,
+    label="posterior samples",
+    zorder=3,
 )
 
 ax.set_xlabel(r"$\log_{10}\,{\rm SFR}_{\rm H\alpha}\ [M_\odot\,{\rm yr}^{-1}]$")
@@ -455,9 +525,16 @@ ax.set_xlim(x_range)
 ax.set_ylim(x_range)
 ax.set_aspect("equal")
 ax.legend(loc="upper left", frameon=False, fontsize=9)
-ax.text(0.99, 0.05, r"H$\alpha$ vs SFH consistency",
-        transform=ax.transAxes, ha="right", va="bottom",
-        fontsize=9, color="0.3")
+ax.text(
+    0.99,
+    0.05,
+    r"H$\alpha$ vs SFH consistency",
+    transform=ax.transAxes,
+    ha="right",
+    va="bottom",
+    fontsize=9,
+    color="0.3",
+)
 fig.savefig(FIG_DIR / "08_sfr_validation.png", dpi=300, bbox_inches="tight")
 fig.savefig(FIG_DIR / "08_sfr_validation.pdf", bbox_inches="tight")
 
@@ -482,7 +559,7 @@ print("  - 08_sfr_validation.png: Hα SFR vs SFH consistency validation")
 print("\nKey APIs demonstrated:")
 print("  - model.predict_line_fluxes(params, target_wavelengths)")
 print("  - model.predict_spectrum(params, wave_obs) for continuous profile")
-print("  - model.predict_sfh_quantities(params).sfr_10myr")
+print("  - model.predict_properties(params, names=('sfr_10myr',))['sfr_10myr']")
 print("  - Parameters.sample_batch(key, n) for batch prior samples")
 
 # %%

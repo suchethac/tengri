@@ -6,6 +6,7 @@ every numerical value can be audited against the primary reference.
 
 Sources
 -------
+
 - **CODATA 2018** (NIST): https://physics.nist.gov/cuu/Constants/
   h, k_B, c, G, σ_T, m_p, m_e are exact or CODATA-2018 recommended.
   Note: h, k_B, and c are *exact* in SI since the 2019 SI redefinition.
@@ -24,6 +25,7 @@ each line shows::
 
 Naming conventions
 ------------------
+
 - ``H_PLANCK``   — Planck's constant h
 - ``K_BOLTZ``    — Boltzmann constant k_B
 - ``C_CGS``      — speed of light c in cm/s
@@ -59,6 +61,8 @@ Notes
 """
 
 from __future__ import annotations
+
+import math
 
 # ── Speed of light ────────────────────────────────────────────────
 
@@ -224,6 +228,34 @@ CUE neural-net training set).
 
 **Only use this constant in nebular/cue.py.**  See module-level Note [1].
 Do NOT use as a general-purpose solar luminosity.
+"""
+
+Z_SUN: float = 0.0142
+"""Solar metallicity Z_⊙ [dimensionless mass fraction].
+
+Reference: Asplund et al. (2009), ARA&A 47, 481, "The Chemical Composition of
+the Sun", https://doi.org/10.1146/annurev.astro.46.060407.145222
+
+This is the photospheric present-day value, and matches the MIST/DSPS
+convention.  Other SSP libraries adopt different solar scales — BC03/Padova
+= 0.0190, PARSEC = 0.0152, BASTI = 0.0200.  Per-library values live in
+``LOG10_ZSUN_BY_LIBRARY`` (:mod:`tengri.parameters.translate`); use those,
+not this constant, when reproducing another code bit-exactly.
+"""
+
+LOG10_ZSUN: float = math.log10(Z_SUN)
+"""log₁₀ of the solar metallicity, log₁₀(Z_⊙) [dex] = -1.8477116556169435.
+
+Derivation: log₁₀(Z_⊙) = log₁₀(0.0142) = -1.8477116556169435  (exact in
+            IEEE-754 double; round-trips back to Z_SUN exactly).
+
+Computed from :data:`Z_SUN` rather than hardcoded so the two cannot drift
+apart.  The SSP grids are tabulated in **absolute** log₁₀(Z), while the
+user-facing ``met_logzsol`` and ``neb_logZ_gas`` are log₁₀(Z/Z_⊙); this
+constant is the offset between them (``param_map`` adds it).
+
+Reference: Asplund et al. (2009), ARA&A 47, 481,
+https://doi.org/10.1146/annurev.astro.46.060407.145222
 """
 
 # ── Distances ─────────────────────────────────────────────────────

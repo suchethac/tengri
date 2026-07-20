@@ -105,7 +105,7 @@ LINESTYLES = {
 }
 COLORS_SWEEP = plt.cm.viridis(np.linspace(0.1, 0.9, len(UMIN_VALUES)))
 
-recipe = {"sfh": {"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0}}
+recipe = {"sfh": {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0}}
 ssp = tengri.load_ssp()
 
 fig_sweep = plt.figure(figsize=(8, 5))
@@ -118,12 +118,12 @@ for lib_type in LIB_TYPES:
             **recipe,
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 1.0,
                 "tau_bc": 1.5,
                 "emission": {
                     "type": lib_type,
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "umin": umin,
                     "gamma_dl": 0.01,
                     "qpah": 2.5,
@@ -132,15 +132,15 @@ for lib_type in LIB_TYPES:
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
         ir = (wave > 8e4) & (wave < 1e7)
         if ir.sum() < 5:
             continue
         nu_ir = C_AA_PER_S / wave[ir]
         order = np.argsort(nu_ir)
-        l_ir = np.trapezoid(np.asarray(out.sed)[ir][order], nu_ir[order])
+        l_ir = np.trapezoid(np.asarray(out.rest_sed())[ir][order], nu_ir[order])
         if l_ir > 0:
             nu_l_nu = nu_l_nu / l_ir
         label = rf"$U_{{\min}}$ = {umin:.1f} ({lib_type.replace('_', ' ')})"

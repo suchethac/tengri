@@ -13,6 +13,7 @@ The grid is built on a young SF galaxy with bare-stellar SSP (Cue
 requires bare-stellar input — see Cue documentation).
 
 Diagnostics shown (read all from the rest-frame line list):
+
 - ``[O III] 5007 / H_β``  — ionization-state proxy (BPT y-axis)
 - ``[N II] 6583 / H_α``    — N-abundance + ionization (BPT x-axis)
 - ``[O III] 5007 / [O II] 3727``  — ``O32`` (ionization parameter)
@@ -24,9 +25,11 @@ evolution). See the heatmap contours for guidance on how the diagnostics
 respond along each axis.
 
 References:
+
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue)
 - Kewley & Dolphin 2002, ApJ, 549, 716 (logU diagnostics)
 - Kewley+2019, ARA&A, 57, 511 (modern line-diagnostics review)
+
 """
 
 import os
@@ -55,16 +58,16 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.3,
         "log_total_mass": 10.0,
         "alpha": 3.0,
         "beta": 2.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
     neb={
         "type": "cue",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "logU": tengri.Uniform(-4.0, -1.0),
         "logZ_gas": tengri.Uniform(-2.0, 0.5),
     },
@@ -82,7 +85,7 @@ n2o2 = np.empty(SHAPE)
 for i, logu in enumerate(LOGU_GRID):
     for j, logz in enumerate(LOGZ_GRID):
         p = {**baseline, "neb_logU": jnp.float64(logu), "neb_logZ_gas": jnp.float64(logz)}
-        lines = model.predict_emission_lines(p)
+        lines = model.predict(p).lines
         o3_hb[i, j] = float(lines.oiii_5007 / lines.hbeta)
         n2_ha[i, j] = float(lines.nii_6584 / lines.halpha)
         o32[i, j] = float(lines.oiii_5007 / lines.oii)

@@ -21,6 +21,11 @@
 MAP fit recovery: star-formation history from mock photometry
 =============================================================
 
+.. image:: images/sphx_glr_plot_convergence_001.png
+   :alt: plot convergence
+   :class: sphx-glr-single-img
+
+
 We fit mock SDSS photometry using MAP (maximum a posteriori) optimization
 with Adam and recover the input star-formation history. The figure overlays
 the MAP-recovered SFH against the ground truth, demonstrating convergence
@@ -29,17 +34,6 @@ on the morphology despite the nonconvex likelihood landscape.
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
 .. GENERATED FROM PYTHON SOURCE LINES 12-85
-
-
-
-.. image-sg:: /auto_examples/inference/images/sphx_glr_plot_convergence_001.png
-   :alt: plot convergence
-   :srcset: /auto_examples/inference/images/sphx_glr_plot_convergence_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -68,10 +62,10 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FREE},
+        sfh={"type": "tsnorm", "all_params": tengri.FREE},
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tengri.Uniform(0.0, 1.5),
             "slope": -0.7,
         },
@@ -116,11 +110,6 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
     fig.tight_layout()
     plt.savefig("plot_convergence.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 8.021 seconds)
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_convergence.py:

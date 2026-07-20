@@ -14,136 +14,16 @@ tracking, wavelength interpolation) stays in the caller.
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 
-from tengri.utils.physics_constants import C_AA, L_SUN
-
-# Q_H per SFR — Leitherer+1999, Chabrier IMF [phot/s per Msun/yr]
-_QH_PER_SFR: float = 4.2e53
+from tengri.utils.physics_constants import C_AA
 
 # Module-level aliases (kept for terse local use)
 _C_AA: float = C_AA
-_LSUN: float = L_SUN
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 1. Nebular emission
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-def nebular_emission(
-    backend,
-    weights: jnp.ndarray,
-    ssp_wave: jnp.ndarray,
-    ssp_log_ages_yr: jnp.ndarray,
-    log_z_abs: float,
-    sfr_current: float,
-    *,
-    neb_logU: float = -3.0,
-    neb_logZ_gas: float | None = None,
-    neb_fesc: float = 0.0,
-    neb_fesc_lya: float = 0.0,
-    line_sigma_kms: float = 0.0,
-) -> jnp.ndarray:
-    """Synthesize nebular emission (lines + continuum) with automatic Q_H mode selection.
-
-    Parameters
-    ----------
-    backend : nebular backend instance
-        Nebular emission backend (CueBackend, CloudyGridBackend, etc.).
-    weights : ndarray, shape (n_age,)
-        CSP mass weights [Msun].
-    ssp_wave : ndarray, shape (n_wave,)
-        SSP wavelength grid [Angstrom].
-    ssp_log_ages_yr : ndarray, shape (n_age,)
-        SSP age bin centers log10(age/yr) [dimensionless].
-    log_z_abs : float
-        Stellar metallicity log10(Z) absolute [dimensionless].
-    sfr_current : float
-        Current star formation rate [Msun/yr].
-    neb_logU : float, optional
-        Ionization parameter log10(U). Default -3.0.
-    neb_logZ_gas : float, optional
-        Gas-phase metallicity log10(Z/Zsun). If None, inferred from stellar.
-    neb_fesc : float, optional
-        Escape fraction of LyC photons (0-1). Default 0.0.
-    neb_fesc_lya : float, optional
-        Lyman-alpha escape fraction (0-1). Default 0.0.
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        Nebular SED [erg/s/Hz] before dust attenuation.
-
-    Notes
-    -----
-    **JIT-compatible**: yes — uses ``jax.lax.cond`` for Q_H mode branching.
-    """
-    # SFR-based Q_H
-    qh_from_sfr = _QH_PER_SFR * sfr_current
-    gas_logqion_sfr = jnp.log10(jnp.maximum(qh_from_sfr, 1.0))
-
-    # Detect wNE SSPs: if SSP-derived Q_H < 1% of SFR-based Q_H,
-    # the ionizing spectrum is pre-absorbed → use low-level mode
-    # (default ionspec).  Use jax.lax.cond for JIT-safe branching.
-    if hasattr(backend, "_compute_weighted_cue_params"):
-        derived = backend._compute_weighted_cue_params(
-            weights,
-            ssp_log_ages_yr,
-            log_z_abs,
-            neb_logU=neb_logU,
-        )
-        ssp_logqion = derived.get("gas_logqion", jnp.float64(0.0))
-        ssp_qh_ok = ssp_logqion > gas_logqion_sfr - 2.0  # within 1%
-
-        def _ssp_path(_):
-            """Use SSP-derived ionizing photon spectrum."""
-            return backend.predict_nebular_sed(
-                ssp_weights=weights,
-                ssp_wave=ssp_wave,
-                ssp_log_ages_yr=ssp_log_ages_yr,
-                log_z=log_z_abs,
-                neb_logU=neb_logU,
-                neb_logZ_gas=neb_logZ_gas,
-                neb_fesc=neb_fesc,
-                neb_fesc_lya=neb_fesc_lya,
-                gas_logqion=gas_logqion_sfr,
-                line_sigma_kms=line_sigma_kms,
-            )
-
-        def _fallback_path(_):
-            """Use SFR-derived ionizing photon spectrum."""
-            return backend.predict_nebular_sed(
-                ssp_wave=ssp_wave,
-                log_z=log_z_abs,
-                neb_logU=neb_logU,
-                neb_logZ_gas=neb_logZ_gas,
-                neb_fesc=neb_fesc,
-                neb_fesc_lya=neb_fesc_lya,
-                gas_logqion=gas_logqion_sfr,
-                line_sigma_kms=line_sigma_kms,
-            )
-
-        return jax.lax.cond(ssp_qh_ok, _ssp_path, _fallback_path, None)
-
-    # Non-Cue backends: always pass ssp_weights
-    return backend.predict_nebular_sed(
-        ssp_weights=weights,
-        ssp_wave=ssp_wave,
-        ssp_log_ages_yr=ssp_log_ages_yr,
-        log_z=log_z_abs,
-        neb_logU=neb_logU,
-        neb_logZ_gas=neb_logZ_gas,
-        neb_fesc=neb_fesc,
-        neb_fesc_lya=neb_fesc_lya,
-        gas_logqion=gas_logqion_sfr,
-        line_sigma_kms=line_sigma_kms,
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 2. Dust attenuation of emission components (nebular / shock)
+# 1. Dust attenuation of emission components (nebular / shock)
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -224,7 +104,7 @@ def attenuate_emission(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 3. Shock emission
+# 2. Shock emission
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -294,282 +174,26 @@ def shock_emission(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 4. AGN emission
+# 3. Component emission (nebular / AGN / dust-IR / radio / X-ray)
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def agn_emission(
-    agn_fn,
-    wave: jnp.ndarray,
-    agn_log_lbol: float,
-    agn_frac: float,
-    *,
-    agn_polar_ebv: float = 0.0,
-    agn_cos_inc: float = 0.5,
-    agn_polar_oa: float = 45.0,
-    **agn_params,
-) -> jnp.ndarray:
-    """Synthesize AGN emission with optional polar dust reddening.
-
-    Parameters
-    ----------
-    agn_fn : callable
-        Resolved AGN model function (e.g., ``kubota_done_full_agn``).
-    wave : ndarray, shape (n_wave,)
-        Wavelength grid [Angstrom].
-    agn_log_lbol : float
-        log10(L_bol / Lsun) bolometric luminosity [dimensionless].
-    agn_frac : float
-        AGN SED fraction (1.0 for parametric mode) [dimensionless].
-    agn_polar_ebv : float, optional
-        Polar dust reddening E(B-V) [mag]. Default 0.0 (no polar dust).
-    agn_cos_inc : float, optional
-        cos(inclination angle) for viewing geometry [dimensionless]. Default 0.5.
-    agn_polar_oa : float, optional
-        Polar opening angle [degrees]. Default 45.0.
-    **agn_params
-        Additional AGN parameters forwarded to ``agn_fn``.
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        AGN SED [erg/s/Hz].
-
-    Notes
-    -----
-    **JIT-compatible**: yes — uses ``jax.lax.cond`` for polar dust branching.
-    """
-    agn_sed = agn_fn(
-        wave,
-        agn_log_lbol=agn_log_lbol,
-        agn_frac=agn_frac,
-        agn_cos_inc=agn_cos_inc,
-        **agn_params,
-    )
-
-    # Polar dust: use jax.lax.cond for JIT compatibility (agn_polar_ebv
-    # is a traced value inside @jit, so Python `if` would fail).
-    from tengri.components.agn.polar_dust import polar_dust_total
-
-    def _apply_polar_dust(sed):
-        """Attenuate and re-emit through polar dust."""
-        agn_lsun = sed / _LSUN
-        att_lsun, reemit_lsun = polar_dust_total(
-            agn_lsun,
-            wave,
-            cos_inc=agn_cos_inc,
-            opening_angle_deg=agn_polar_oa,
-            ebv=agn_polar_ebv,
-        )
-        return (att_lsun + reemit_lsun) * _LSUN
-
-    agn_sed = jax.lax.cond(
-        jnp.asarray(agn_polar_ebv) > 0.0,
-        _apply_polar_dust,
-        lambda sed: sed,
-        agn_sed,
-    )
-
-    return agn_sed
-
+# These five helpers -- ``nebular_emission``, ``agn_emission``,
+# ``dust_ir_emission``, ``radio_emission`` and ``xray_emission`` -- were removed.
+# Each was a second implementation of a component that the ``components/``
+# packages already own (``components.nebular``, ``.agn``, ``.dust``, ``.radio``,
+# ``.xray``), and nothing had called them since the component refactor. Two of
+# them had already drifted from the live physics: the AGN copy still guarded
+# polar dust with a branch (``agn_polar_ebv > 0``) that the live SMC formulation
+# does not need -- ``exp(-0.921 * ebv * ...)`` is the identity at ``ebv = 0`` and
+# stays JIT-friendly -- and the dust-IR copy forwarded ``dust_alpha_dl14`` under
+# the old prefixed spelling. A source-text wiring test matched those dead copies
+# rather than the live components, so the drift stayed invisible. Import from
+# ``components/`` instead; do not reintroduce a wrapper here (same lesson as the
+# IGM shim below).
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 5. Dust IR emission (energy-balanced)
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-def dust_ir_emission(
-    emission_fn,
-    wave: jnp.ndarray,
-    L_ir: float,
-    **dust_params,
-) -> jnp.ndarray:
-    """Synthesize dust IR re-emission from absorbed luminosity.
-
-    Parameters
-    ----------
-    emission_fn : callable
-        Resolved dust emission function (e.g., DL07 grid).
-    wave : ndarray, shape (n_wave,)
-        Wavelength grid [Angstrom].
-    L_ir : float
-        Total absorbed luminosity from dust attenuation [erg/s].
-    **dust_params
-        Dust emission parameters (T, beta_ir, alpha_mir, etc.).
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        Dust IR SED [erg/s/Hz].
-
-    Notes
-    -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-    """
-    # Guard against NaN/Inf L_ir (can occur with pure SSPs)
-    L_ir_safe = jnp.where(jnp.isfinite(L_ir), L_ir, 0.0)
-
-    return emission_fn(
-        wave,
-        L_ir_safe,
-        dust_T=dust_params.get("dust_T", 35.0),
-        dust_beta_ir=dust_params.get("dust_beta_ir", 1.6),
-        dust_alpha_mir=dust_params.get("dust_alpha_mir", 2.0),
-        dust_alpha_dale=dust_params.get("dust_alpha_dale", 2.0),
-        dust_umin=dust_params.get("dust_umin", 1.0),
-        dust_gamma_dl=dust_params.get("dust_gamma_dl", 0.01),
-        dust_qpah=dust_params.get("dust_qpah", 2.5),
-        dust_alpha_dl14=dust_params.get("dust_alpha_dl14", 2.0),
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 6. Radio emission
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-def radio_emission(
-    wave: jnp.ndarray,
-    L_ir: float,
-    L_agn_bol: float,
-    *,
-    q_ir: float = 2.64,
-    alpha_sf: float = 0.8,
-    radio_loudness: float = 0.0,
-    alpha_agn: float = 0.7,
-    sfr_mode: str = "bell2003",
-    log_mstar: float = 10.0,
-    redshift: float = 0.0,
-    include_freefree: bool = False,
-    T_e: float = 1e4,
-    alpha_ff: float = -0.1,
-) -> jnp.ndarray:
-    """Synthesize radio emission SED from SF synchrotron and AGN jets.
-
-    Parameters
-    ----------
-    wave : ndarray, shape (n_wave,)
-        Wavelength grid [Angstrom].
-    L_ir : float
-        Infrared luminosity [erg/s].
-    L_agn_bol : float
-        AGN bolometric luminosity [erg/s].
-    q_ir : float, optional
-        q-parameter for IR-radio correlation. Default 2.64.
-    alpha_sf : float, optional
-        Star formation synchrotron spectral index. Default 0.8.
-    radio_loudness : float, optional
-        AGN radio loudness offset. Default 0.0.
-    alpha_agn : float, optional
-        AGN radio spectral index. Default 0.7.
-    sfr_mode : str, optional
-        SFR→radio conversion model. Default "bell2003".
-    log_mstar : float, optional
-        log10(stellar mass / Msun). Default 10.0.
-    redshift : float, optional
-        Redshift for K-correction. Default 0.0.
-    include_freefree : bool, optional
-        Include free-free contribution. Default False.
-    T_e : float, optional
-        Electron temperature [K]. Default 1e4.
-    alpha_ff : float, optional
-        Free-free spectral index. Default -0.1.
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        Radio SED [erg/s/Hz].
-
-    Notes
-    -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-    """
-    from tengri.components.radio import radio_total
-
-    return radio_total(
-        wave,
-        L_ir=L_ir,
-        L_agn_bol=L_agn_bol,
-        q_ir=q_ir,
-        alpha_sf=alpha_sf,
-        radio_loudness=radio_loudness,
-        alpha_agn=alpha_agn,
-        sfr_mode=sfr_mode,
-        log_mstar=log_mstar,
-        redshift=redshift,
-        include_freefree=include_freefree,
-        T_e=T_e,
-        alpha_ff=alpha_ff,
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 7. X-ray emission
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-def xray_emission(
-    wave: jnp.ndarray,
-    sfr: float,
-    stellar_mass: float,
-    L_agn_bol: float,
-    *,
-    gamma_agn: float = 1.8,
-    delta_alpha_ox: float = 0.0,
-    gamma_hmxb: float = 2.0,
-    gamma_lmxb: float = 1.6,
-    E_cut: float = 300.0,
-) -> jnp.ndarray:
-    """Synthesize X-ray emission SED from XRBs and AGN corona.
-
-    Parameters
-    ----------
-    wave : ndarray, shape (n_wave,)
-        Wavelength grid [Angstrom].
-    sfr : float
-        Star formation rate [Msun/yr].
-    stellar_mass : float
-        Stellar mass [Msun].
-    L_agn_bol : float
-        AGN bolometric luminosity [erg/s].
-    gamma_agn : float, optional
-        AGN photon index. Default 1.8.
-    delta_alpha_ox : float, optional
-        Offset [dex] to empirical alpha_ox from bolometric luminosity.
-        Default 0.0.
-    gamma_hmxb : float, optional
-        HMXB photon index. Default 2.0.
-    gamma_lmxb : float, optional
-        LMXB photon index. Default 1.6.
-    E_cut : float, optional
-        X-ray cutoff energy [keV]. Default 300.0.
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        X-ray SED [erg/s/Hz].
-
-    Notes
-    -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-    """
-    from tengri.components.xray import xray_total
-
-    return xray_total(
-        wave,
-        sfr=sfr,
-        stellar_mass=stellar_mass,
-        L_agn_bol=L_agn_bol,
-        gamma_agn=gamma_agn,
-        delta_alpha_ox=delta_alpha_ox,
-        gamma_hmxb=gamma_hmxb,
-        gamma_lmxb=gamma_lmxb,
-        E_cut=E_cut,
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 8. IGM absorption
+# 4. IGM absorption
 # ═══════════════════════════════════════════════════════════════════════════
 
 

@@ -1396,6 +1396,7 @@ def xray_total_terms(
     four values from this dict.
 
     **Components**:
+
     - HMXB: Lehmer+2016 metallicity quartic, scaling with SFR
     - LMXB: Lehmer+2016 age quartic, scaling with M_star
     - Hot gas: Yang+2020, scaling with SFR
@@ -1534,6 +1535,7 @@ def xray_total(
     precomputation.
 
     **Components**:
+
     - HMXB: Lehmer+2016 metallicity quartic, scaling with SFR
     - LMXB: Lehmer+2016 age quartic, scaling with M_star
     - Hot gas: Yang+2020, scaling with SFR

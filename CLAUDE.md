@@ -150,13 +150,13 @@ model = SEDModel.build(ssp_data=ssp, observation=obs,
 # Or hand-rolled with the nested-dict grammar
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
-    sfh={'type': 'dpl', '*': FREE, 'beta': Uniform(1, 3)},
-    dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FIXED,
-          'tau_bc': 0.5, 'emission': {'type': 'dale2014', '*': FIXED}},
-    neb={'type': 'cue', '*': FIXED},
+    sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)},
+    dust={'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FIXED,
+          'tau_bc': 0.5, 'emission': {'type': 'dale2014', 'all_params': FIXED}},
+    neb={'type': 'cue', 'all_params': FIXED},
     redshift=Fixed(0.05),
 )
-model.spec.summary()    # provenance-tagged: [user] / [* FREE] / [* FIXED] / [default]
+model.spec.summary()    # provenance-tagged: [user] / [all_params FREE] / [all_params FIXED] / [default]
 groups = model.spec.to_groups()    # round-trip for inspection/editing
 
 # Or with builder factories (autocomplete-friendly; SFH only as of Phase II-3.3)
@@ -164,18 +164,19 @@ from tengri import builders
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_total_mass
-    dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FIXED},
-    neb={'type': 'cue', '*': FIXED},
+    dust={'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FIXED},
+    neb={'type': 'cue', 'all_params': FIXED},
 )
 ```
 
-- Grammar: each group dict accepts `'type'` (structural choice), `'*'`
-  wildcard (`FREE`/`FIXED`; default `FIXED`), and per-parameter short-form
-  overrides (e.g. `'beta'` inside the sfh group resolves to `sfh_dpl_beta`).
+- Grammar: each group dict accepts `'type'` (structural choice), `'all_params'`
+  wildcard (`FREE`/`FIXED`; default `FIXED`; the `'*'` synonym is still accepted
+  but slated for deprecation), and per-parameter short-form overrides (e.g.
+  `'beta'` inside the sfh group resolves to `sfh_dpl_beta`).
 - Sub-blocks: `dust.emission`, plus the six AGN composable selectors —
   `agn.disc`, `agn.torus`, `agn.nlr`, `agn.blr`, `agn.feii`, `agn.atten`
   (the deprecated `agn.lines` alias expands to an nlr/blr pair). Each nests
-  as a dict with its own `'type'`, `'*'`, and per-param keys.
+  as a dict with its own `'type'`, `'all_params'`, and per-param keys.
 - Composable shock (#851): the top-level `shock={...}` group adds MAPPINGS V
   shock emission as a **separate additive** component that composes with any
   photoionized `neb` backend (both on at once). `shock={'norm': 'frac' |
@@ -183,10 +184,11 @@ model = SEDModel.build(
   'velocity'/...: prior}`. `'frac'` (default) scales the galaxy Hα (bit-exact
   with the legacy `shock_emission`); `'lhalpha'` sets an absolute
   `shock_log_lhalpha` (decoupled from the SFR — for AGN NLR/outflow shocks).
-  `shock={'type':'none'}` disables. Like radio, `'*':FREE` is a no-op for the
+  `shock={'type':'none'}` disables. Like radio, `'all_params':FREE` is a no-op for the
   Fixed-default shock bucket — use explicit priors (`shock={'frac':
-  Uniform(0,1)}`). Canonical component: `ShockNebular` (`_REGISTRY['shock']`);
-  the older `mappings` implementation is a superseded no-op.
+  Uniform(0,1)}`). Canonical component: `ShockNebular` (`_REGISTRY['shock']`).
+  `'mappings'` is the shock group's default `type` and selects `ShockNebular`;
+  the older standalone `mappings` component is gone, not merely superseded.
 - AGN cross-block normalisation policy: `agn={'type': 'composable', ...,
   'norm': 'cigale_joint' | 'independent'}` (#556). `'cigale_joint'` (default)
   ties disc/torus/polar to CIGALE's single `agn_power` reference (energy-
@@ -206,6 +208,63 @@ See `docs/dev/api_migration_v0.x.md` for the full grammar reference and
 `notebooks/04_building_models.py` for a worked example covering recipe usage,
 variant swapping, and round-trip editing. Design plan:
 `~/.claude/plans/i-feel-like-its-serene-emerson.md`.
+
+## Prediction API (MANDATORY — read before writing ANY prediction code)
+
+**Canonical: `docs/dev/NAMING_CONTRACT.md` §4b.** Binding on all code, docs,
+notebooks, examples and agents. Violations are bugs, not style.
+
+**Two surfaces, nothing else public:**
+
+```python
+pred = model.predict(params)          # rich + cached; ONE forward pass. Exploration.
+model.predict_photometry(params)      # lean, JIT/vmap-safe. The inference hot path.
+model.predict_properties(params, names=(...))   # the ONE jit/vmap surface for derived quantities
+```
+
+**Observables are uniform callables with defaults** (no `_at`/`_for`/`_on` coinages):
+
+```python
+pred.rest_sed()          # L_nu [erg/s/Hz], rest axis    | axis: pred.wave_rest
+pred.rest_sed(wave)      # resampled onto YOUR rest-frame grid [Angstrom]
+pred.obs_sed()           # L_nu [erg/s/Hz] STILL — obs axis + IGM | axis: pred.wave_obs
+pred.obs_sed(wave_obs)   # resampled — OBSERVED-frame grid (its own frame!)
+pred.photometry(filters=None, fast=False)   # F_nu [erg/s/cm2/Hz]
+pred.spectrum(wave_obs=None)                # F_nu [erg/s/cm2/Hz]
+pred.properties["stellar_mass"]      # or the sugar: pred.stellar_mass
+```
+
+**UNITS (§4b.3b) — `obs_sed` is NOT a flux.** "Observed" names the *frame*, not a
+flux conversion. `rest_sed()` and `obs_sed()` are BOTH L_nu [erg/s/Hz]; they
+differ only by the wavelength axis and IGM absorption. The cosmological dimming
+`(1+z)/(4*pi*d_L^2)` is applied at the **projection** step
+(`observation/redshift_kernel.py`), so only `photometry()` / `magnitudes()` /
+`spectrum()` return a flux. Integrating `obs_sed()` as a flux is wrong by ~57
+orders of magnitude. (The docstring claimed the opposite for a long time — it was
+false. Measure, do not trust the prose.)
+
+**Five rules that have each already caused a shipped bug:**
+
+1. **`model.predict()` takes `params` and NOTHING else.** No `wave=`. Resampling
+   lives on the accessor (`pred.rest_sed(wave)`). `model.predict(p, wave=...)`
+   raises `TypeError` — and `py_compile` will not catch it.
+2. **Never `params.get("redshift", 0.0)`.** A `Fixed` redshift is legitimately
+   absent from `params`; the `0.0` default puts the galaxy at 10 pc — a silent
+   1e17 flux error. Use `model._get_redshift(params)`. (Not `_get_dl_cm`: it
+   discards an explicit override.)
+3. **`state.derived[...]` is NOT `posterior.derived`.** The former is
+   `ForwardState.derived`, the internal pipeline dict — **not deprecated, leave
+   it alone**. Only `Posterior.derived` is deprecated (→ `posterior.properties`).
+   Never grep-and-migrate a bare `.derived`.
+4. **The SED arrays do not carry their axis** — use `pred.wave_rest` /
+   `pred.wave_obs`. Never hand-roll `wave * (1 + z)`.
+5. **`pred.rest_sed` without `()` raises.** Deliberately: a bound method coerces
+   to a `dtype=object` array and would otherwise plot garbage. A public accessor
+   that can be misused must fail loudly, never fail open.
+
+Deprecated (warn + delegate; do not use, do not teach):
+`predict_rest_sed`, `predict_obs_sed`, `predict_derived`, `predict_magnitudes`,
+`predict_sfh_quantities`, `predict_sed_quantities`, `Posterior.derived`.
 
 ## Key conventions
 
@@ -325,7 +384,7 @@ context *before* entering JAX transforms. The context's
 - Ray Tracing: step_size=0.05 for D~137; sharp viability cliff at ~0.06 (acceptance drops to 0%)
 - NIFTy geoVI: use 4-12 samples per KL iteration, not 80
 - `VIConfig.n_samples=3` doubles to 6 effective samples via `mirror_samples=True` — when tuning, think in effective samples
-- `"vi"` (NIFTy) and `"vi_native"` (pure-JAX) target the same objective but are NOT posterior-equivalent. Native is ~19× faster warm on 7-D and ~25× on 137-D stochastic (2.8s vs 71s), but PSD timescale `sfh_field_psd_tau_myr` differs by an order of magnitude between paths (82 vs 6 Myr). Validate per-problem before swapping. See `bench/reports/2026-04-17_native_vs_nifty.md`
+- `"vi"` (NIFTy) and the pure-JAX `"native_vi_nonlinear"` / `"native_vi_linear"` target the same objective but are NOT posterior-equivalent. Native is ~19× faster warm on 7-D and ~25× on 137-D stochastic (2.8s vs 71s), but PSD timescale `sfh_field_psd_tau_myr` differs by an order of magnitude between paths (82 vs 6 Myr). Both native backends are `tier=experimental` and registry-flagged `[UNSTABLE]` (segfault on DPL/dense_basis photometry mocks) — validate per-problem before swapping. There is no `"vi_native"`; that name raises `KeyError`. See `bench/reports/2026-04-17_native_vs_nifty.md`
 - Use `.shape[0]` instead of `len()` on JAX arrays to avoid `ConcretizationTypeError` under JIT
 - Use tolerance comparison (`abs(x - default) < 1e-6`) not `==` for float equality on traced values
 - IGM `igm_transmission(wave_obs, z)` takes **observed-frame** wavelengths (not rest-frame)
@@ -334,7 +393,7 @@ context *before* entering JAX transforms. The context's
 - `agn_torus_frac`: do NOT auto-derive from `cos(theta_torus)` in forward pass (gradient discontinuity)
 - Inference internals use `mode="_traceable"` (safe inside JIT). User-facing defaults to `mode="auto"`
 - **Build-time `approx=WavePrecomp(...)` is the speed knob** (2026-05-20). Opting in publishes the SSP × filter LUT and routes `predict_photometry` through `observation.predict_via_precomp`. Default `approx=None` uses the exact wave-grid path. The dict / bool / string forms (e.g. `approx={'wave_precomp': True}`, `approx=True`, `approx='wave_precomp'`) were removed — `TypeError` at construction. Override ztable sampling via `WavePrecomp(n_z=200, z_min=0.0, z_max=3.0)`.
-- **One NUTS fit per notebook process.** Each warmup peaks at 3–6 GB on small models (D ≤ 7 photometry) but can hit 20+ GB on D ≈ 8 with `mean_sfh_type="dense_basis"` — observed 22.78 GB peak on nb00 with default `dense_mass=True`. Multi-fit notebooks (and any single fit on D ≥ 8) need `dense_mass=False` or `mcmc_hmc`. See `docs/dev/notebook_orchestration_oom.md`
+- **One NUTS fit per notebook process.** Each warmup peaks at 3–6 GB on small models (D ≤ 7 photometry) but can hit 20+ GB on D ≈ 8 with `mean_sfh_type="dense_basis"` — observed 22.78 GB peak on nb00 with default `dense_mass_matrix=True`. Multi-fit notebooks (and any single fit on D ≥ 8) need `dense_mass_matrix=False` or `mcmc_hmc`. See `docs/dev/notebook_orchestration_oom.md`
 - **Subagent rejection ≠ child kill.** A rejected subagent's `python notebook.py` keeps running. After rejecting, run `ps -axo pid,rss,comm | grep python` and `kill -9` zombies
 
 ## Testing
@@ -407,9 +466,10 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 - `docs/dev/history/handoff-2026-04.md` — frozen project-status snapshot (pre Phase II-3 closure)
 - `docs/dev/design_philosophy.md` — architecture decisions
 - `docs/dev/NAMING_CONTRACT.md` — naming conventions (read before any rename/refactor)
-- `docs/dev/REFACTOR.md` — refactor plan
+- `docs/dev/20260404-refactor.md` — refactor plan
 - `docs/dev/api_migration_v0.x.md` — public-API migration table (Phase 1→6 + Part II scaffold)
 - `docs/known_bugs.md` — bug tracking (all currently fixed)
 - `docs/dev/notebook_orchestration_oom.md` — operational rules for OOM-safe notebook authoring (multi-fit, subagent zombies, watchdog)
 - `tools/check_param_prefixes.py` — CI guard for free-parameter prefix rule (NAMING_CONTRACT §3.2)
 - `tools/check_british_spelling.py` — CI guard for American-English spelling (NAMING_CONTRACT §10); `--fix` to auto-rewrite
+- `tools/check_doc_examples.py` — CI guard that every symbol named in a `src/` docstring or published doc actually exists (`docs/api/*.rst` are autodoc stubs, so docstrings *are* the API reference, and no doctest runner executes them). Runs in the `smoke` job. `docs/dev/` is out of scope by design: design notes and parity audits legitimately name removed or not-yet-built API

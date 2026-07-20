@@ -135,6 +135,7 @@ The Synthesizer test grids (2-point per axis, 19 MB each) are at
 
 References
 ----------
+
 - Feltre, Charlot & Gutkin 2016, MNRAS, 456, 3354 (arXiv:1511.08217)
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
 - Li et al. 2024, ApJ, 969, 28 (Cue v1)
@@ -442,9 +443,14 @@ def agn_nlr_cue(
 
     # Cue predicts the line luminosity for the full Q_H; the NLR
     # intercepts only a fraction of those ionizing photons.
-    line_lum = line_lum * covering_fraction
+    line_lum_erg = line_lum * covering_fraction
 
-    return line_wav, line_lum
+    # ``predict_nebular_line_luminosities`` returns erg/s, but this function's
+    # contract — shared with the Feltre and Synthesizer backends behind
+    # :func:`agn_nlr_emission` — is L_sun (#1073). Every consumer multiplies by
+    # L_SUN on the way out, so returning erg/s here scaled the NLR lines by an
+    # extra L_SUN (~3.8e33).
+    return line_wav, line_lum_erg / _LSUN_ERG
 
 
 # ── Synthesizer NLR backend ───────────────────────────────────────
@@ -646,6 +652,7 @@ class SynthesizerNLRBackend:
     ----------------------
     All 6 axes use C²-continuous triweight interpolation via
     ``interp_nd_triweight``:
+
     - Internal storage in log10 (except cosine_inclination, which is linear)
     - All axes interpolated independently
 
@@ -1134,6 +1141,7 @@ class FeltreNLRBackend:
 
     Interpolation strategy
     ----------------------
+
     - **Continuous axes** (log U_S, log Z, log n_H): C²-continuous triweight
       interpolation via ``interp_nd_triweight`` — compatible with VI/MAP.
     - **Discrete axes** (α, ξ_d): nearest-neighbor index lookup.
@@ -1369,6 +1377,7 @@ def agn_nlr_emission(
     Returns
     -------
     tuple
+
         - line_wavelengths : ndarray, shape (n_lines,) — emission line vacuum
           wavelengths [Angstrom]
         - line_luminosities : ndarray, shape (n_lines,) — emission line

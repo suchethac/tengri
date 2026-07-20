@@ -63,7 +63,7 @@ for logz in logzsol_grid:
         ssp,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": 2.0,
             "width_gyr": 1.0,
@@ -73,16 +73,16 @@ for logz in logzsol_grid:
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.1,
             "tau_diff": 0.1,
             "slope": -0.7,
         },
     )
 
-    pred = model.predict_rest_sed({"redshift": 0.1})
-    wave = np.asarray(pred.wavelength)
-    sed = np.asarray(pred.sed)
+    pred = model.predict({"redshift": 0.1})
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(pred.rest_sed())
     fluxes = {name: boxcar_line_flux(wave, sed, lam) for name, lam in LINES.items()}
     log_n2_ha.append(np.log10(max(fluxes["nii_6584"] / fluxes["halpha"], 1e-3)))
     log_o3_hb.append(np.log10(max(fluxes["oiii_5007"] / fluxes["hbeta"], 1e-3)))

@@ -18,19 +18,19 @@ class TestWildcardValidation:
     """The '*' wildcard slot must be FREE or FIXED — strings/None/bools error."""
 
     def test_string_free_raises(self):
-        with pytest.raises(ValueError, match="Wildcard"):
+        with pytest.raises(ValueError, match="all_params"):
             parse_groups(sfh={"type": "dpl", "*": "free"}, redshift=Fixed(0.1))
 
     def test_string_fixed_raises(self):
-        with pytest.raises(ValueError, match="Wildcard"):
+        with pytest.raises(ValueError, match="all_params"):
             parse_groups(sfh={"type": "dpl", "*": "fixed"}, redshift=Fixed(0.1))
 
     def test_none_raises(self):
-        with pytest.raises(ValueError, match="Wildcard"):
+        with pytest.raises(ValueError, match="all_params"):
             parse_groups(sfh={"type": "dpl", "*": None}, redshift=Fixed(0.1))
 
     def test_bool_raises(self):
-        with pytest.raises(ValueError, match="Wildcard"):
+        with pytest.raises(ValueError, match="all_params"):
             parse_groups(sfh={"type": "dpl", "*": True}, redshift=Fixed(0.1))
 
 
@@ -190,9 +190,12 @@ class TestNesting:
             dust={
                 "type": "two_component",
                 "*": FIXED,
+                # FIXED, not FREE: every Dale+2014 param has a Fixed registry
+                # default, so FREE here frees nothing and is now refused. This
+                # test is about sub-block *declaration*, not freeing.
                 "emission": {
                     "type": "dale2014",
-                    "*": FREE,
+                    "*": FIXED,
                     "alpha_dale": Uniform(0.5, 4.0),
                 },
             },
@@ -695,3 +698,204 @@ class TestElineModeExposure:
             redshift=Fixed(0.05),
         )
         assert "eline_sigma_kms" not in params.all_params
+
+
+class TestAllParamsAlias:
+    """The preferred ``all_params`` key is an exact synonym for the ``'*'``
+    wildcard: it parses identically, works in sub-blocks, errors on the same
+    bad values, and cannot coexist with ``'*'`` in the same dict.
+    """
+
+    @pytest.mark.parametrize("wildcard_key", ["*", "all_params"])
+    def test_free_frees_all_params(self, wildcard_key):
+        """``all_params: FREE`` frees every declared param, same as ``'*': FREE``."""
+        params = parse_groups(
+            sfh={"type": "dpl", wildcard_key: FREE},
+            redshift=Fixed(0.1),
+        )
+        for p in ("sfh_dpl_alpha", "sfh_dpl_beta", "sfh_dpl_tau_gyr", "sfh_dpl_log_total_mass"):
+            assert p in params.free_params
+
+    @pytest.mark.parametrize("wildcard_key", ["*", "all_params"])
+    def test_fixed_fixes_all_params(self, wildcard_key):
+        """``all_params: FIXED`` fixes every declared param, same as ``'*': FIXED``."""
+        params = parse_groups(
+            sfh={"type": "dpl", wildcard_key: FIXED},
+            redshift=Fixed(0.1),
+        )
+        for p in ("sfh_dpl_alpha", "sfh_dpl_beta", "sfh_dpl_tau_gyr", "sfh_dpl_log_total_mass"):
+            assert p in params.fixed_params
+
+    def test_alias_equivalent_to_star(self):
+        """``all_params`` and ``'*'`` produce bit-identical free/fixed partitions."""
+        common = dict(
+            dust={"type": "two_component", "law_bc": "calzetti"},
+            neb={"type": "cue"},
+            redshift=Uniform(0.01, 5.0),
+        )
+        star = parse_groups(
+            sfh={"type": "dpl", "*": FREE, "beta": Fixed(1.5)},
+            **{
+                **common,
+                "dust": {**common["dust"], "*": FIXED},
+                "neb": {**common["neb"], "*": FIXED},
+            },
+        )
+        alias = parse_groups(
+            sfh={"type": "dpl", "all_params": FREE, "beta": Fixed(1.5)},
+            **{
+                **common,
+                "dust": {**common["dust"], "all_params": FIXED},
+                "neb": {**common["neb"], "all_params": FIXED},
+            },
+        )
+        assert star.free_params == alias.free_params
+        assert star.fixed_params == alias.fixed_params
+
+    def test_per_param_override_beats_alias(self):
+        """A per-parameter override still wins over ``all_params: FREE``."""
+        params = parse_groups(
+            sfh={"type": "dpl", "all_params": FREE, "beta": Fixed(2.0)},
+            redshift=Fixed(0.1),
+        )
+        assert "sfh_dpl_beta" in params.fixed_params
+        assert params.get_distribution("sfh_dpl_beta").value == 2.0
+        assert "sfh_dpl_alpha" in params.free_params
+
+    def test_alias_in_dust_emission_subblock(self):
+        """``all_params`` resolves inside a nested sub-block (dust.emission),
+        identically to ``'*'``."""
+
+        def build(wk):
+            return parse_groups(
+                sfh={"type": "dpl", wk: FIXED},
+                dust={
+                    "type": "two_component",
+                    wk: FIXED,
+                    # FIXED, not FREE: this test is about the alias resolving
+                    # identically to '*', not about what the wildcard frees.
+                    "emission": {
+                        "type": "dale2014",
+                        wk: FIXED,
+                        "alpha_dale": Uniform(0.5, 4.0),
+                    },
+                },
+                redshift=Fixed(0.1),
+            )
+
+        star, alias = build("*"), build("all_params")
+        assert star.free_params == alias.free_params
+        assert "dust_alpha_dale" in alias.free_params
+
+    def test_alias_block_scoped_in_agn(self):
+        """A top-level ``agn={'all_params': FREE}`` is block-scoped just like ``'*'``."""
+        star = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            agn={"type": "simple", "*": FREE},
+            redshift=Fixed(0.1),
+        )
+        alias = parse_groups(
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn={"type": "simple", "all_params": FREE},
+            redshift=Fixed(0.1),
+        )
+        assert star.free_params == alias.free_params
+
+    def test_alias_in_agn_composable_subblock(self):
+        """``all_params`` resolves inside a composable AGN sub-block (agn.disc),
+        identically to ``'*'``."""
+
+        def build(wk):
+            return parse_groups(
+                sfh={"type": "dpl", wk: FIXED},
+                agn={
+                    "type": "composable",
+                    "disc": {"type": "multicolor", wk: FREE},
+                    "torus": {"type": "skirtor"},
+                    "nlr": {"type": "none"},
+                    "blr": {"type": "none"},
+                },
+                redshift=Fixed(0.1),
+            )
+
+        # Equivalence through the AGN sub-block merge/inheritance path
+        # (_make_group_view) is the contract: all_params must be handled
+        # identically to '*' at every nesting depth.
+        star, alias = build("*"), build("all_params")
+        assert star.free_params == alias.free_params
+        assert star.fixed_params == alias.fixed_params
+
+    def test_both_keys_present_raises(self):
+        """Setting both ``'*'`` and ``all_params`` in one dict is ambiguous."""
+        with pytest.raises(ValueError, match="wildcard once"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FREE, "all_params": FIXED},
+                redshift=Fixed(0.1),
+            )
+
+    def test_both_keys_present_raises_in_subblock(self):
+        """The both-present guard also fires inside a nested sub-block."""
+        with pytest.raises(ValueError, match="wildcard once"):
+            parse_groups(
+                sfh={"type": "dpl", "all_params": FIXED},
+                dust={
+                    "type": "two_component",
+                    "emission": {"type": "dale2014", "*": FREE, "all_params": FIXED},
+                },
+                redshift=Fixed(0.1),
+            )
+
+    @pytest.mark.parametrize("bad", ["free", "fixed", None, True])
+    def test_invalid_alias_value_raises(self, bad):
+        """A non-sentinel ``all_params`` value raises the same error as ``'*'``."""
+        with pytest.raises(ValueError, match="all_params"):
+            parse_groups(sfh={"type": "dpl", "all_params": bad}, redshift=Fixed(0.1))
+
+
+@pytest.mark.regression_bug
+class TestRoundTripGroupTypes:
+    """Active radio / IGM selections must survive ``to_groups()``.
+
+    ``_extract_group_type`` probed ``spec.radio_model`` — an attribute the
+    parse side never sets (it stores ``radio`` + ``radio_sfr_mode`` +
+    ``radio_agn_model``) — so the round-trip emitted a radio group with no
+    type anywhere. IGM was worse: an active selection has no parameters of
+    its own, and the no-params emission path only handled ``"none"``, so
+    ``igm={'type': 'madau'}`` vanished and silently rebuilt as the default
+    Inoue+2014 model. Same failure class as the ``ForwardModel._approx``
+    migration miss: a hasattr probe for a never-set attribute fails open.
+    """
+
+    def _roundtrip(self, **kw):
+        spec = parse_groups(redshift=Fixed(0.05), **kw)
+        groups = spec.to_groups()
+        return spec, groups, parse_groups(**groups)
+
+    def test_radio_types_ride_on_the_sub_blocks(self):
+        _, groups, rebuilt = self._roundtrip(radio={"type": "condon92"})
+        radio = groups["radio"]
+        assert radio["sf"]["type"] == "bell2003"
+        assert radio["agn"]["type"] == "powerlaw"
+        # parse_groups raises on a top-level 'type' mixed with sub-blocks
+        assert "type" not in radio
+        assert rebuilt.radio is True
+
+    def test_radio_composable_variant_survives(self):
+        _, groups, rebuilt = self._roundtrip(radio={"sf": {"type": "delvecchio2021"}})
+        assert groups["radio"]["sf"]["type"] == "delvecchio2021"
+        assert rebuilt.radio_sfr_mode == "delvecchio2021"
+
+    def test_igm_madau_is_not_silently_swapped_for_the_default(self):
+        _, groups, rebuilt = self._roundtrip(igm={"type": "madau"})
+        assert groups["igm"] == {"type": "madau"}
+        assert rebuilt.igm_model == "madau"
+
+    def test_igm_default_omitted_but_rebuild_matches(self):
+        """The default model may be elided — as long as the rebuild agrees."""
+        spec, _, rebuilt = self._roundtrip(igm={"type": "inoue14"})
+        assert rebuilt.apply_igm is True
+        assert rebuilt.igm_model == spec.igm_model
+
+    def test_igm_none_round_trips_off(self):
+        _, _, rebuilt = self._roundtrip(igm={"type": "none"})
+        assert rebuilt.apply_igm is False

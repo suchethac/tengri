@@ -10,8 +10,8 @@ Architecture overview
 The component tree and geometric masking design in this module is inspired
 by the ``UnifiedAGN`` class in the Synthesizer package
 (Lovell et al. 2025, Open J. Astrophys. 8, doi:10.33232/001c.145766;
- Roper et al. 2026, JOSS 11, 9436, doi:10.21105/joss.09436;
- https://github.com/synthesizer-project/synthesizer).
+Roper et al. 2026, JOSS 11, 9436, doi:10.21105/joss.09436;
+https://github.com/synthesizer-project/synthesizer).
 Per the Synthesizer citation policy, BOTH papers must be cited together.
 
 Synthesizer's model defines:
@@ -62,6 +62,7 @@ for compatibility with gradient-based inference (VI, HMC):
 
 Pre-registered configurations
 ------------------------------
+
 - **multicolor_agn** (= deprecated alias ``kubota_done``): multi-color disc with
   BH physics + 2-T torus (8+ params).
 - **kubota_done_full**: full Kubota & Done 3-zone disc + 2-T torus (13+ params).
@@ -145,7 +146,7 @@ from tengri.components.radio.radio import radio_total
 from tengri.components.xray.xray import (
     _xray_agn_corona_bolometric as _xray_agn_corona_legacy,
 )
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
+from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _LSUN_ERG
 
 
 @functools.cache
@@ -290,7 +291,8 @@ def register_agn_model(
     -----
     **JIT-compatible**: no — registers at module load time (not JIT-compilable).
 
-    The registered function must have signature:
+    The registered function must have signature::
+
         fn(wavelength, agn_log_lbol, **kwargs) -> L_nu [erg/s/Hz]
 
     Metadata is stored in an AGNRegistryEntry for introspection via the
@@ -836,7 +838,7 @@ def skirtor_agn(
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float, optional
-        log10 of bolometric luminosity [Lsun]. Default 44.0.
+        log10 of bolometric luminosity [Lsun]. Default 11.0.
     agn_frac : float, optional
         AGN luminosity fraction [dimensionless]. Default 0.1.
     agn_tau_skirtor : float, optional
@@ -934,8 +936,8 @@ def skirtor_stalevski_agn(
     Returns
     -------
     ndarray, shape (n_wave,)
-        L_nu [erg/s/Hz], total SKIRTOR SED scaled to ``10**agn_log_lbol * L_sun
-        * agn_frac``.
+        L_nu [erg/s/Hz], total SKIRTOR SED scaled to
+        ``10**agn_log_lbol * L_sun * agn_frac``.
 
     Notes
     -----
@@ -982,7 +984,7 @@ def silva04_agn(
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
     agn_log_lbol : float, optional
-        ``log10(L_bol / L_sun)``. Default 44.0.
+        ``log10(L_bol / L_sun)``. Default 11.0.
     agn_frac : float, optional
         Overall AGN luminosity fraction applied on top of the
         disc-plus-torus sum. Default 0.1.
@@ -1039,7 +1041,7 @@ def cat3d_wind_agn(
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength. [Å]
     agn_log_lbol : float, optional
-        ``log10(L_bol / L_sun)``. Default 44.0.
+        ``log10(L_bol / L_sun)``. Default 11.0.
     agn_frac : float, optional
         Overall AGN luminosity fraction applied on top of the
         disc-plus-torus sum. Default 0.1.
@@ -1256,8 +1258,7 @@ def relagn_agn(
     l_disc = l_disc_full * (1.0 - agn_torus_frac)
 
     # Derive disc L_bol by integrating L_ν over ν (trapezoid in JAX)
-    _c_aa = 2.99792458e18  # Å/s
-    nu = _c_aa / wavelength  # decreasing
+    nu = _C_AA / wavelength  # decreasing
     # Sort ascending for trapezoid
     lbol_disc_erg = jnp.trapezoid(jnp.flip(l_disc_full), jnp.flip(nu))
     log_lbol_lsun = jnp.log10(jnp.maximum(lbol_disc_erg, 1e30)) - jnp.log10(_LSUN_ERG)
@@ -1456,7 +1457,7 @@ def unified_nlr_blr(
         i.e. subtract :math:`\\approx 33.58`. Typical bright Seyfert: 10.5;
         bright quasar: 12.5. The default ``44.0`` is a legacy test fixture
         that is **not a physical AGN luminosity** — set this parameter
-        explicitly. See module-level "Convention" note. Default 44.0.
+        explicitly. See module-level "Convention" note. Default 11.0.
     agn_cos_inc : float
         Cosine of inclination angle (0 = edge-on/Type 2,
         1 = face-on/Type 1). Synthesizer uses inclination in degrees;
@@ -1584,7 +1585,7 @@ def unified_nlr_blr(
     Examples
     --------
     >>> import jax.numpy as jnp
-    >>> from tengri import unified_nlr_blr
+    >>> from tengri.components.agn.unified import unified_nlr_blr
     >>> wave = jnp.linspace(1000.0, 30000.0, 512)
     >>> sed = unified_nlr_blr(wave, agn_log_lbol=45.0, agn_cos_inc=0.8)
     >>> sed.shape
@@ -1711,130 +1712,3 @@ def unified_nlr_blr(
 
 
 # ── Pluggable NLR/BLR backend factories ──────────────────────────
-
-
-def make_cue_nlr_fn(
-    weights,
-    gas_logU: float = -2.0,
-    gas_logZ: float = 0.0,
-    gas_log_nH: float = 2.0,
-    gas_xi_d: float = 0.3,
-    ionspec_index1: float = 1.7,
-    ionspec_logLratio1: float = 0.0,
-    ionspec_index2: float = -0.5,
-    ionspec_logLratio2: float = 0.0,
-    ionspec_index3: float = -1.5,
-    ionspec_logLratio3: float = 0.0,
-    ionspec_index4: float = -3.0,
-    gas_logqion: float = 49.1,
-):
-    """Create a Cue-backed NLR emission callable for ``unified_nlr_blr``.
-
-    Returns a closure that uses the Cue neural-net emulator (Li et al. 2024
-    [1]_) to predict NLR emission lines and continuum as a function of
-    ionizing spectrum shape and gas properties. The closure matches the
-    standard NLR backend interface expected by :func:`unified_nlr_blr`.
-
-    The Cue weights are closed over as static pytree leaves, so the returned
-    callable is JIT-compatible.
-
-    Parameters
-    ----------
-    weights : CueWeights
-        Pre-loaded Cue network weights from
-        :func:`~tengri.components.nebular.cue.load_cue_weights`.
-    gas_logU : float
-        log10(ionization parameter U). Default -2.0.
-    gas_logZ : float
-        log10(Z/Zsun) of the NLR gas. Default 0.0 (solar).
-    gas_log_nH : float
-        log10(hydrogen number density [cm^-3]). Default 2.0.
-    gas_xi_d : float
-        Dust-to-metal ratio. Default 0.3.
-    ionspec_index1..4 : float
-        Power-law indices of the ionizing spectrum piecewise approximation.
-        Defaults correspond to a typical Seyfert 1 AGN spectrum.
-    ionspec_logLratio1..3 : float
-        log10(L) ratios between power-law segments. Default 0.0.
-    gas_logqion : float
-        log10(Q_H) — total ionizing photon rate [photons/s]. Used for
-        normalization. Default 49.1 (typical AGN at log L_bol ~ 44).
-
-    Returns
-    -------
-    callable
-        NLR emission function with signature::
-
-            fn(wavelength, l_disc_bol_erg, covering_fraction,
-               fwhm_kms=500.0, **kwargs) -> ndarray, shape (n_wave,)
-
-        The returned L_nu is in [erg/s/Hz].
-
-    Notes
-    -----
-    JIT/grad compatible when Cue weights are registered as JAX pytrees.
-    The weights must first be loaded via
-    ``tengri.components.nebular.cue.load_cue_weights``.
-
-    The Cue emulator was trained for AGN-illuminated gas (not stellar HII
-    regions). It is appropriate for NLR emission; it does NOT model the BLR
-    (which requires a separate, denser photoionization model with
-    n_H ~ 10^10 cm^-3 and no dust).
-
-    References
-    ----------
-    .. [1] Li Z. et al. 2024, ApJ, 969, 28,
-           "Cue: An Emulator for AGN-Dominated Emission",
-           https://doi.org/10.3847/1538-4357/ad44a8
-    """
-    from tengri.components.agn._phys import gaussian_line_profile as _glp
-    from tengri.components.nebular.cue import _prepare_nn_params, predict_all_lines
-    from tengri.utils.physics_constants import L_SUN as _LSUN
-
-    # Build the fixed 12-element NN parameter vector once.
-    # These are the gas/ionspec parameters that do NOT change per call.
-    # l_disc_bol_erg rescales logqion per call below.
-    _nn_params_base = _prepare_nn_params(
-        gas_logU=gas_logU,
-        gas_logZ=gas_logZ,
-        gas_log_nH=gas_log_nH,
-        gas_xi_d=gas_xi_d,
-        ionspec_index1=ionspec_index1,
-        ionspec_logLratio1=ionspec_logLratio1,
-        ionspec_index2=ionspec_index2,
-        ionspec_logLratio2=ionspec_logLratio2,
-        ionspec_index3=ionspec_index3,
-        ionspec_logLratio3=ionspec_logLratio3,
-        ionspec_index4=ionspec_index4,
-    )
-
-    def _cue_nlr(
-        wavelength: jnp.ndarray,
-        l_disc_bol_erg: float,
-        covering_fraction: float = 0.1,
-        fwhm_kms: float = 500.0,
-        **kw,
-    ) -> jnp.ndarray:
-        """Predict narrow-line region emission lines from disc ionizing photon rate."""
-        # Infer log10(Q_H) from l_disc_bol_erg if provided.
-        # Approximate: log10(Q_H) ~ log10(L_bol_erg) - log10(13.6 eV)
-        # For a power-law spectrum with <E> ~ 13.6 eV (1 Ryd).
-        _logqion = jnp.log10(jnp.maximum(l_disc_bol_erg, 1e30)) - jnp.log10(2.18e-11)
-
-        # Predict line wavelengths [Angstrom] and luminosities [Lsun]
-        wav_lines, lum_lsun = predict_all_lines(
-            _nn_params_base, weights, gas_logU + jnp.log10(4.0), _logqion
-        )
-
-        # Convert Lsun → erg/s and apply covering fraction
-        lum_erg = lum_lsun * _LSUN * covering_fraction
-
-        # Place each line on the wavelength grid via Gaussian broadening
-        l_nu = jnp.zeros_like(wavelength)
-        for i in range(wav_lines.shape[0]):
-            profile = _glp(wavelength, wav_lines[i], fwhm_kms)
-            l_nu = l_nu + lum_erg[i] * profile
-
-        return l_nu
-
-    return _cue_nlr

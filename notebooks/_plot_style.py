@@ -108,6 +108,7 @@ def setup_style():
     Call once at the start of a notebook::
 
         from _plot_style import setup_style
+
         setup_style()
 
     See Also

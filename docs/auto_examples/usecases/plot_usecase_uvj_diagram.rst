@@ -19,7 +19,7 @@
 
 
 UVJ diagram: rest-frame colors separate star-forming from quiescent
-==================================================================
+===================================================================
 
 Generates a mock star-forming and quiescent galaxy population and plots
 each on the rest-frame UVJ color-color plane (U-V vs V-J). The Williams+2009
@@ -96,7 +96,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": tengri.Uniform(0.5, 4.0),
             "width_gyr": tengri.Uniform(1.0, 4.0),
@@ -106,7 +106,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": tengri.Uniform(0.1, 1.5),
             "tau_diff": tengri.Uniform(0.1, 1.0),
             "slope": -0.7,
@@ -120,7 +120,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": tengri.Uniform(7.0, 11.0),
             "width_gyr": tengri.Uniform(0.5, 1.5),
@@ -130,7 +130,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": tengri.Uniform(0.0, 0.15),
             "tau_diff": tengri.Uniform(0.0, 0.1),
             "slope": -0.7,
@@ -195,7 +195,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.373 seconds)
+   **Total running time of the script:** (0 minutes 2.499 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uvj_diagram.py:

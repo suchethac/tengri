@@ -91,8 +91,8 @@ def demo_graybody_torus(
 # Negligible host SFH: total mass ~1e-10 Msun, completely subdominant
 # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
 # ``const`` SFH parametrizes by total mass over [start_gyr, end_gyr].
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 LOG_LBOL = 12.0
 ssp = tengri.load_ssp()
 
@@ -101,30 +101,32 @@ model_skirtor = tengri.SEDModel.build(
     sfh=SFH,
     dust=DUST,
     agn={
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_lbol": LOG_LBOL,
         "frac": 1.0,
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "torus": {"type": "skirtor", "*": tengri.FIXED},
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "torus": {"type": "skirtor", "all_params": tengri.FIXED},
     },
     redshift=tengri.Fixed(0.0),
 )
 p_skirtor = dict(model_skirtor.spec.sample(jax.random.PRNGKey(0)))
-out_skirtor = model_skirtor.predict_rest_sed(p_skirtor)
+out_skirtor = model_skirtor.predict(p_skirtor)
 
-wave_um = np.asarray(out_skirtor.wavelength) * 1.0e-4
-nu_lnu_skirtor = C_AA_PER_S / np.asarray(out_skirtor.wavelength) * np.asarray(out_skirtor.sed)
+wave_um = np.asarray(model_skirtor.wavelengths) * 1.0e-4
+nu_lnu_skirtor = (
+    C_AA_PER_S / np.asarray(model_skirtor.wavelengths) * np.asarray(out_skirtor.rest_sed())
+)
 
 L_nu_toy = np.asarray(
     demo_graybody_torus(
-        jnp.asarray(out_skirtor.wavelength),
+        jnp.asarray(model_skirtor.wavelengths),
         agn_log_lbol=LOG_LBOL,
         agn_frac=1.0,
         agn_T_torus=300.0,
         agn_torus_frac=0.5,
     )
 )
-nu_lnu_toy = C_AA_PER_S / np.asarray(out_skirtor.wavelength) * L_nu_toy
+nu_lnu_toy = C_AA_PER_S / np.asarray(model_skirtor.wavelengths) * L_nu_toy
 
 fig, ax = plt.subplots(figsize=(7.5, 4.6))
 ax.loglog(wave_um, nu_lnu_skirtor, color="C0", lw=1.6, label="SKIRTOR (production)")

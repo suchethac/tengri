@@ -6,12 +6,14 @@
 Radio physics is decomposed into two independent axes:
 
 **SF synchrotron** (FIR–radio correlation):
+
 - ``none`` — SF radio turned off (AGN only)
 - ``bell2003`` — fixed q_IR (default)
 - ``delvecchio2021`` — mass + redshift dependent at 1.4 GHz
 - ``mccheyne2022`` — mass + redshift dependent at 150 MHz
 
 **AGN radio** (jets + lobes):
+
 - ``none`` — AGN radio turned off (SF only)
 - ``powerlaw`` — single power-law (default)
 - ``dpl`` — double power-law with aging cutoff (AGNfitter-rx)
@@ -45,7 +47,7 @@ from collections.abc import Callable
 from tengri.builders._factory import make_factory, short_form
 from tengri.components.radio.component import AGN_RADIO_MODELS
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FREE
+from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS
 
 # ── SF synchrotron axis ────────────────────────────────────────────────────
 
@@ -58,10 +60,10 @@ def _discover_sf_params(variant: str) -> list[str]:
         return []
     recipe = {
         "sfh": {"type": "dpl"},
-        "radio": {"sf": {"type": variant, "*": "FREE_PLACEHOLDER"}},
+        "radio": {"sf": {"type": variant, WILDCARD_ALIAS: "FREE_PLACEHOLDER"}},
     }
 
-    recipe["radio"]["sf"]["*"] = FREE
+    recipe["radio"]["sf"][WILDCARD_ALIAS] = FREE
     records = recipe_parameters(recipe, free_only=False)
     return [
         short_form(rec.name, prefixes=("radio_",))
@@ -112,10 +114,10 @@ def _discover_agn_params(variant: str) -> list[str]:
         return []
     recipe = {
         "sfh": {"type": "dpl"},
-        "radio": {"agn": {"type": variant, "*": "FREE_PLACEHOLDER"}},
+        "radio": {"agn": {"type": variant, WILDCARD_ALIAS: "FREE_PLACEHOLDER"}},
     }
 
-    recipe["radio"]["agn"]["*"] = FREE
+    recipe["radio"]["agn"][WILDCARD_ALIAS] = FREE
     records = recipe_parameters(recipe, free_only=False)
     return [
         short_form(rec.name, prefixes=("radio_",))
@@ -182,7 +184,7 @@ def axes() -> dict[str, list[str]]:
 def _discover_legacy_params(variant: str) -> list[str]:
     if variant == "none":
         return []
-    recipe = {"sfh": {"type": "dpl"}, "radio": {"type": variant, "*": FREE}}
+    recipe = {"sfh": {"type": "dpl"}, "radio": {"type": variant, WILDCARD_ALIAS: FREE}}
     records = recipe_parameters(recipe, free_only=False)
     return [
         short_form(rec.name, prefixes=("radio_",))

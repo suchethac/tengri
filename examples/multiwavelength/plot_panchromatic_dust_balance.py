@@ -30,7 +30,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 1.0,
@@ -38,10 +38,10 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.5,
         "tau_diff": tengri.Uniform(0.0, 3.0),
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
     redshift=tengri.Fixed(0.05),
 )
@@ -57,9 +57,9 @@ fig, ax = plt.subplots(figsize=(10, 5.2))
 
 for tau_diff in tau_diffs:
     params = {**baseline, "dust_tau_diff": jnp.float64(tau_diff)}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
-    sed = np.asarray(out.sed)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(out.rest_sed())
     nu = 2.998e18 / wave
     nu_l_nu = nu * sed
 

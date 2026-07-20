@@ -3,6 +3,7 @@
 
 All backends must satisfy the NebularBackend Protocol to be usable in
 the tengri forward model. The Protocol defines the minimal interface:
+
 - has_continuum: class-level bool, True if backend provides nebular continuum
 - predict_nebular_sed: SED on the SSP wavelength grid (existing interface)
 

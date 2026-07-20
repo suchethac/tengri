@@ -296,9 +296,13 @@ def fit_individual_galaxies(galaxies, model, data_type="spectroscopy", n_gal_fit
     results = []
     print(f"Fitting {n_gal_fit} galaxies individually (PSD free)...")
     for i in range(min(n_gal_fit, len(galaxies))):
-        fitter_i = Fitter(model, galaxies[i]["flux_obs"], galaxies[i]["noise"], data_type=data_type)
+        fitter_i = Fitter(
+            model, galaxies[i]["flux_obs"], galaxies[i]["noise"], data_type=data_type
+        )
         t0 = time.perf_counter()
-        res_i = fitter_i.run("vi", n_iterations=8, n_samples=6, n_posterior_samples=500, verbose=False)
+        res_i = fitter_i.run(
+            "vi", n_iterations=8, n_samples=6, n_posterior_samples=500, verbose=False
+        )
         dt = time.perf_counter() - t0
         results.append(res_i)
         sig_med = float(jnp.median(res_i.samples["sfh_field_psd_sigma"]))
@@ -322,7 +326,8 @@ spec_free = Parameters(
     dust_tau_diff=Uniform(0.0, 1.5),
     dust_slope=Fixed(-0.7),
     redshift=Fixed(0.1),
-    mean_sfh_type=["tsnorm", "field"], n_grid=64,
+    mean_sfh_type=["tsnorm", "field"],
+    n_grid=64,
 )
 model_free = SEDModel(spec_free, ssp_data, observation=obs)
 
@@ -350,6 +355,7 @@ ax_sig.set_title("Individual: σ roughly constrained")
 ax_tau.set_title("Individual: τ nearly unconstrained")
 fig.tight_layout()
 plt.show()
+
 
 # %%
 def _pop_posterior_sigma_tau(pop_posterior):
@@ -385,16 +391,28 @@ if RUN_EXPENSIVE:
     print(f"\nHierarchical fit: {N_GAL} galaxies (spectroscopy)...")
     t0 = time.perf_counter()
     hfitter_spec = PopulationFitter(
-        model_factory, galaxies_spec,
-        psd_sigma_prior=(0.1, 4.0), psd_tau_prior=(1.0, 300.0), data_type="spectroscopy",
+        model_factory,
+        galaxies_spec,
+        psd_sigma_prior=(0.1, 4.0),
+        psd_tau_prior=(1.0, 300.0),
+        data_type="spectroscopy",
     )
     result_hier_spec = hfitter_spec.run(
-        "mgvi", n_iterations=N_HIER_ITERS, n_samples=4, n_posterior_samples=200, verbose=False, key=jax.random.PRNGKey(0),
+        "mgvi",
+        n_iterations=N_HIER_ITERS,
+        n_samples=4,
+        n_posterior_samples=200,
+        verbose=False,
+        key=jax.random.PRNGKey(0),
     )
     t_hier_spec = time.perf_counter() - t0
     sig_spec, tau_spec, tau_spec_is_myr = _pop_posterior_sigma_tau(result_hier_spec)
-    print(f"  σ_PS = {np.median(sig_spec):.2f} [{np.percentile(sig_spec, 16):.2f}, {np.percentile(sig_spec, 84):.2f}]")
-    print(f"  τ_PS = {np.median(tau_spec):.0f} [{np.percentile(tau_spec, 16):.0f}, {np.percentile(tau_spec, 84):.0f}] Myr")
+    print(
+        f"  σ_PS = {np.median(sig_spec):.2f} [{np.percentile(sig_spec, 16):.2f}, {np.percentile(sig_spec, 84):.2f}]"
+    )
+    print(
+        f"  τ_PS = {np.median(tau_spec):.0f} [{np.percentile(tau_spec, 16):.0f}, {np.percentile(tau_spec, 84):.0f}] Myr"
+    )
     print(f"  Wall time: {t_hier_spec:.1f}s")
 else:
     print("Spectroscopic hierarchical fit gated (RUN_EXPENSIVE=False).")
@@ -433,8 +451,7 @@ if result_hier_spec is not None:
     ax_tau.legend(fontsize=10)
     ax_sig.set_title(f"Individual (N=1) vs Hierarchical (N={N_GAL}): σ")
     ax_tau.set_title(
-        f"Individual (N=1) vs Hierarchical (N={N_GAL}): "
-        + ("τ" if tau_spec_is_myr else "slope")
+        f"Individual (N=1) vs Hierarchical (N={N_GAL}): " + ("τ" if tau_spec_is_myr else "slope")
     )
     fig.tight_layout()
     plt.show()
@@ -506,17 +523,29 @@ if result_hier_spec is not None:
 print(f"\nHierarchical fit: {N_GAL} galaxies (photometry)...")
 t0 = time.perf_counter()
 hfitter_phot = PopulationFitter(
-    model_factory, galaxies_phot,
-    psd_sigma_prior=(0.1, 4.0), psd_tau_prior=(1.0, 300.0), data_type="photometry",
+    model_factory,
+    galaxies_phot,
+    psd_sigma_prior=(0.1, 4.0),
+    psd_tau_prior=(1.0, 300.0),
+    data_type="photometry",
 )
 result_hier_phot = hfitter_phot.run(
-    "mgvi", n_iterations=N_HIER_ITERS, n_samples=4, n_posterior_samples=200, verbose=False, key=jax.random.PRNGKey(1),
+    "mgvi",
+    n_iterations=N_HIER_ITERS,
+    n_samples=4,
+    n_posterior_samples=200,
+    verbose=False,
+    key=jax.random.PRNGKey(1),
 )
 t_hier_phot = time.perf_counter() - t0
 sig_phot, tau_phot, tau_phot_is_myr = _pop_posterior_sigma_tau(result_hier_phot)
 _tau_label = "τ_PS [Myr]" if tau_phot_is_myr else "PSD slope (CFM)"
-print(f"  σ_PS = {np.median(sig_phot):.2f} [{np.percentile(sig_phot, 16):.2f}, {np.percentile(sig_phot, 84):.2f}]")
-print(f"  {_tau_label} = {np.median(tau_phot):.2f} [{np.percentile(tau_phot, 16):.2f}, {np.percentile(tau_phot, 84):.2f}]")
+print(
+    f"  σ_PS = {np.median(sig_phot):.2f} [{np.percentile(sig_phot, 16):.2f}, {np.percentile(sig_phot, 84):.2f}]"
+)
+print(
+    f"  {_tau_label} = {np.median(tau_phot):.2f} [{np.percentile(tau_phot, 16):.2f}, {np.percentile(tau_phot, 84):.2f}]"
+)
 print(f"  Wall time: {t_hier_phot:.1f}s")
 
 # %%
@@ -653,7 +682,9 @@ for i, ax in enumerate(axes.flat):
         sfr_arr = np.array(sfr_draws)
         lo, hi = np.percentile(sfr_arr, [16, 84], axis=0)
         ax.fill_between(t_gyr, lo, hi, alpha=0.25, color=COLORS["vi"], label="68% CI")
-        ax.plot(t_gyr, np.median(sfr_arr, axis=0), color=COLORS["vi"], lw=1.2, ls="--", label="Median")
+        ax.plot(
+            t_gyr, np.median(sfr_arr, axis=0), color=COLORS["vi"], lw=1.2, ls="--", label="Median"
+        )
     ax.plot(t_gyr, sfr_true, color=COLORS["truth"], lw=1.5, label="Truth")
     ax.plot(t_gyr, sfr_mean_true, color=COLORS["sfh_mean"], lw=0.8, ls=":", alpha=0.4)
     ax.set_xlim(0, 13.5)
@@ -663,7 +694,10 @@ for i, ax in enumerate(axes.flat):
     ax.set_title(f"Galaxy {i}", fontsize=10)
     if i == 0:
         ax.legend(fontsize=10)
-fig.suptitle("SFH recovery from hierarchical fit (photometry by default; spectroscopy if RUN_EXPENSIVE)", fontsize=11)
+fig.suptitle(
+    "SFH recovery from hierarchical fit (photometry by default; spectroscopy if RUN_EXPENSIVE)",
+    fontsize=11,
+)
 fig.tight_layout()
 plt.show()
 
@@ -680,9 +714,22 @@ if RUN_EXPENSIVE:
     print("-" * 50)
     for n_sub in N_VALUES:
         gals_sub = galaxies_spec[:n_sub]
-        hf_sub = PopulationFitter(model_factory, gals_sub, psd_sigma_prior=(0.1, 4.0), psd_tau_prior=(1.0, 300.0), data_type="spectroscopy")
+        hf_sub = PopulationFitter(
+            model_factory,
+            gals_sub,
+            psd_sigma_prior=(0.1, 4.0),
+            psd_tau_prior=(1.0, 300.0),
+            data_type="spectroscopy",
+        )
         t0 = time.perf_counter()
-        res_sub = hf_sub.run("mgvi", n_iterations=10, n_samples=6, n_posterior_samples=500, verbose=False, key=jax.random.PRNGKey(n_sub))
+        res_sub = hf_sub.run(
+            "mgvi",
+            n_iterations=10,
+            n_samples=6,
+            n_posterior_samples=500,
+            verbose=False,
+            key=jax.random.PRNGKey(n_sub),
+        )
         dt = time.perf_counter() - t0
         sig_s, _, _ = _pop_posterior_sigma_tau(res_sub)
         sw = np.percentile(sig_s, 84) - np.percentile(sig_s, 16)
@@ -691,7 +738,9 @@ if RUN_EXPENSIVE:
     ns = np.array(N_VALUES, dtype=float)
     sigma_widths = np.array(sigma_widths)
     fig, ax = plt.subplots(figsize=(6, 4))
-    ax.scatter(ns, sigma_widths, s=60, color=COLORS["vi"], zorder=3, label=r"$\sigma_{\rm PS}$ 68% width")
+    ax.scatter(
+        ns, sigma_widths, s=60, color=COLORS["vi"], zorder=3, label=r"$\sigma_{\rm PS}$ 68% width"
+    )
     n_ref = np.linspace(1.5, 12, 50)
     scale = sigma_widths[0] * np.sqrt(ns[0])
     ax.plot(n_ref, scale / np.sqrt(n_ref), ls="--", color="grey", label=r"$\propto 1/\sqrt{N}$")
@@ -715,7 +764,10 @@ else:
 
 # %%
 if RUN_EXPENSIVE:
-    POP_CONFIGS = {"Bursty dwarfs": {"sigma": 2.5, "tau": 10.0}, "Smooth disks": {"sigma": 0.5, "tau": 100.0}}
+    POP_CONFIGS = {
+        "Bursty dwarfs": {"sigma": 2.5, "tau": 10.0},
+        "Smooth disks": {"sigma": 0.5, "tau": 100.0},
+    }
     N_PER_POP = 8
     pop_results = {}
     for pop_name, cfg in POP_CONFIGS.items():
@@ -723,16 +775,36 @@ if RUN_EXPENSIVE:
         model_pop = model_factory(psd_sigma=cfg["sigma"], psd_tau_myr=cfg["tau"])
         gals = []
         for i in range(N_PER_POP):
-            k = jax.random.fold_in(jax.random.PRNGKey(int(hashlib.sha256(pop_name.encode()).hexdigest(), 16) % 2**31), i)
+            k = jax.random.fold_in(
+                jax.random.PRNGKey(int(hashlib.sha256(pop_name.encode()).hexdigest(), 16) % 2**31),
+                i,
+            )
             p = model_pop.spec.sample(k)
             mock = model_pop.mock_spectrum(p, WAVE_OBS, snr=SPEC_SNR, key=jax.random.fold_in(k, 1))
             gals.append({"flux_obs": mock.flux_obs, "noise": mock.noise})
-        hf = PopulationFitter(model_factory, gals, psd_sigma_prior=(0.1, 4.0), psd_tau_prior=(1.0, 300.0), data_type="spectroscopy")
-        res = hf.run("mgvi", n_iterations=10, n_samples=6, n_posterior_samples=500, verbose=False, key=jax.random.PRNGKey(int(hashlib.sha256(pop_name.encode()).hexdigest(), 16) % 2**31))
+        hf = PopulationFitter(
+            model_factory,
+            gals,
+            psd_sigma_prior=(0.1, 4.0),
+            psd_tau_prior=(1.0, 300.0),
+            data_type="spectroscopy",
+        )
+        res = hf.run(
+            "mgvi",
+            n_iterations=10,
+            n_samples=6,
+            n_posterior_samples=500,
+            verbose=False,
+            key=jax.random.PRNGKey(int(hashlib.sha256(pop_name.encode()).hexdigest(), 16) % 2**31),
+        )
         pop_results[pop_name] = res
         sig_s, tau_s, _ = _pop_posterior_sigma_tau(res)
-        print(f"  Recovered: σ = {np.median(sig_s):.2f} [{np.percentile(sig_s, 16):.2f}, {np.percentile(sig_s, 84):.2f}]")
-        print(f"             τ-proxy = {np.median(tau_s):.2f} [{np.percentile(tau_s, 16):.2f}, {np.percentile(tau_s, 84):.2f}]")
+        print(
+            f"  Recovered: σ = {np.median(sig_s):.2f} [{np.percentile(sig_s, 16):.2f}, {np.percentile(sig_s, 84):.2f}]"
+        )
+        print(
+            f"             τ-proxy = {np.median(tau_s):.2f} [{np.percentile(tau_s, 16):.2f}, {np.percentile(tau_s, 84):.2f}]"
+        )
     fig, ax = plt.subplots(figsize=(7, 5))
     pop_colors = {"Bursty dwarfs": COLORS["vi"], "Smooth disks": COLORS["rt"]}
     for pop_name, res in pop_results.items():
@@ -741,8 +813,16 @@ if RUN_EXPENSIVE:
         sig_lo, sig_hi = np.percentile(sig_s, [16, 84])
         tau_lo, tau_hi = np.percentile(tau_s, [16, 84])
         from matplotlib.patches import Ellipse
-        ell = Ellipse((np.median(tau_s), np.median(sig_s)), width=(tau_hi - tau_lo), height=(sig_hi - sig_lo),
-                      edgecolor=pop_colors[pop_name], facecolor="none", linewidth=2, label=pop_name)
+
+        ell = Ellipse(
+            (np.median(tau_s), np.median(sig_s)),
+            width=(tau_hi - tau_lo),
+            height=(sig_hi - sig_lo),
+            edgecolor=pop_colors[pop_name],
+            facecolor="none",
+            linewidth=2,
+            label=pop_name,
+        )
         ax.add_patch(ell)
     ax.set_xlabel(r"$\tau_{\rm PS}$ [Myr]", fontsize=12)
     ax.set_ylabel(r"$\sigma_{\rm PS}$", fontsize=12)

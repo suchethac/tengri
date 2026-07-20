@@ -90,6 +90,7 @@ def precompute(
     -------
     dict
         Keys:
+
         - ``line_lum_grid``: line-luminosity grid after projecting through
           filters, shape (collapsed_dims, n_filters). Per-unit Q_H.
         - ``line_weight_matrix``: (n_lines, n_filters) projection matrix.
@@ -151,12 +152,17 @@ def precompute(
     )
 
     # Feltre has no continuum; use a dummy zero grid
-    continuum_grid = np.zeros((*axes_np[:-1], n_filt), dtype=np.float64)
+    continuum_grid = np.zeros((*[ax.shape[0] for ax in axes_np[:-1]], n_filt), dtype=np.float64)
 
     preint = PreintegratedGrid(
         phot=continuum_grid,  # Dummy continuum (zeros)
+        moment=None,
         axes=tuple(jnp.asarray(ax) for ax in axes_np),
         edges=tuple(edges_for_grid(np.asarray(ax)) for ax in axes_np),
+        effective_wavelengths=jnp.zeros(n_filt),
+        effective_wavelengths_rest=jnp.zeros(n_filt),
+        flux_scale=1.0,
+        n_filters=n_filt,
     )
 
     # Auto-collapse: identify Fixed axes
@@ -202,6 +208,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     -------
     dict
         Keys:
+
         - ``predict_lines``: JIT-compiled callable returning
           (wavelengths, luminosities).
         - ``line_wavelengths``: line vacuum wavelengths [Angstrom].

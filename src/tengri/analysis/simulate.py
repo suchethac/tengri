@@ -37,7 +37,9 @@ All functions are pure JAX and JIT-compilable.
 
 References
 ----------
+
 - Hearin et al. 2023, MNRAS, 521, 1741 (DSPS)
+
 """
 
 import jax.numpy as jnp
@@ -113,8 +115,10 @@ def sed_from_sfh(
         SSP templates from ``load_ssp_data()``.
     log_z : float or ndarray, optional
         Stellar metallicity log10(Z/Zsun).
+
         - float: constant metallicity for all stars. Default: -0.3.
         - ndarray shape (n_t,): metallicity history Z(t).
+
     lgmet_scatter : float, optional
         Lognormal scatter in metallicity [dex]. Used only when log_z is
         scalar. Default: 0 (delta function).
@@ -136,6 +140,7 @@ def sed_from_sfh(
     -------
     dict
         Rest-frame SED with keys:
+
         - "wavelength" : ndarray shape (n_wave,) — wavelength [Angstrom]
         - "sed" : ndarray shape (n_wave,) — luminosity density [erg/s/Hz]
         - "stellar_mass" : float — total stellar mass formed [Msun]

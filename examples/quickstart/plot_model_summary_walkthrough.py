@@ -1,10 +1,10 @@
 """
 Understanding model structure through parameter provenance tags
-==============================================================
+===============================================================
 
 The ``model.spec.summary()`` method displays each parameter's source
-through provenance tags: ``[user]`` for explicit overrides, ``[* FREE]``
-and ``[* FIXED]`` for wildcard expansions, and ``[default]`` for
+through provenance tags: ``[user]`` for explicit overrides, ``[all_params FREE]``
+and ``[all_params FIXED]`` for wildcard expansions, and ``[default]`` for
 registry defaults. We build a model with mixed constraints, display the
 annotated summary as a figure caption, and show the predicted SED.
 """
@@ -38,13 +38,13 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FREE,
+        "all_params": tengri.FREE,
         "logzsol": tengri.Fixed(-0.1),  # [user] override on a FREE wildcard
     },
     dust={
         "type": "two_component",
         "law_bc": "calzetti",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.5,  # [user] override on a FIXED wildcard
     },
     neb={"type": "cue"},  # All defaults
@@ -63,10 +63,10 @@ params["sfh_tsnorm_peak_lbt_gyr"] = jnp.float64(3.0)
 params["sfh_tsnorm_skew"] = jnp.float64(-0.2)
 
 # Predict rest-frame SED
-sed = model.predict_rest_sed(params)
-wave = np.asarray(sed.wavelength)
+sed = model.predict(params)
+wave = np.asarray(model.wavelengths)
 nu = 2.998e18 / wave  # Å/s -> Hz
-nu_l_nu = nu * np.asarray(sed.sed)
+nu_l_nu = nu * np.asarray(sed.rest_sed())
 
 # Create a 2-panel figure:
 # LEFT: text rendering of summary (monospace, annotated)

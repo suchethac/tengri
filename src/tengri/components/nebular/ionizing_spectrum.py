@@ -51,12 +51,51 @@ _IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
 
 
 def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.ndarray) -> tuple:
-    """Cheap, stable fingerprint for an SSP grid."""
+    """Content fingerprint for an SSP grid — including the flux VALUES.
+
+    Parameters
+    ----------
+    ssp_wave : array_like, shape (n_wave,)
+        SSP wavelength grid [Angstrom].
+    ssp_flux : array_like, shape (n_met, n_age, n_wave)
+        SSP flux grid [Lsun/Hz/Msun].
+    ssp_lgmet : array_like, shape (n_met,)
+        SSP metallicity grid, log10(Z) absolute.
+
+    Returns
+    -------
+    tuple
+        Hashable key. Two SSP grids share it only if they are the same grid.
+
+    Notes
+    -----
+    The flux is digested, not merely shaped. It used to enter the key as nothing
+    but ``(shape, dtype)`` while ``ssp_wave`` and ``ssp_lgmet`` were hashed
+    byte-for-byte — which made this a *shape* cache wearing a *content* cache's
+    clothes. A bare-stellar grid and its with-nebular-emission twin share a
+    wavelength axis, a metallicity axis, a shape and a dtype, and differ only in
+    the flux (by a factor ~100 in the Lyman continuum, which is precisely the part
+    this table integrates). They therefore collided, and whichever grid was loaded
+    first in a process silently supplied the ionizing spectrum for the other — in
+    memory, and then on disk under the colliding hash, outliving the process.
+
+    That is the same wound the ``inf``-rejection guard in :func:`_load_ionspec_disk`
+    was dressing (#458): it rejected a *symptom* of a bad table while leaving the
+    key that produced one intact. Hashing the flux closes it at the source. Old
+    entries are not deleted — they simply stop being addressable, because the key
+    they were written under no longer hashes to the same name.
+
+    The digest costs one SHA-256 pass over the flux array per fingerprint, which is
+    a fraction of the SSP's own load time and is dwarfed by the scipy curve-fits it
+    guards.
+    """
+    flux = np.ascontiguousarray(np.asarray(ssp_flux))
     return (
-        tuple(ssp_flux.shape),
-        str(ssp_flux.dtype),
+        tuple(flux.shape),
+        str(flux.dtype),
         bytes(np.asarray(ssp_wave).tobytes()),
         bytes(np.asarray(ssp_lgmet).tobytes()),
+        _hashlib.sha256(flux.tobytes()).hexdigest(),
     )
 
 
@@ -66,6 +105,7 @@ def _fingerprint_hash(key: tuple) -> str:
     h.update(repr(key[:2]).encode())  # shape + dtype
     h.update(key[2])  # raw wave bytes
     h.update(key[3])  # raw lgmet bytes
+    h.update(key[4].encode())  # flux content digest — without it, see _ssp_fingerprint
     return h.hexdigest()
 
 
@@ -412,6 +452,7 @@ def fit_ionizing_spectrum(
         the spectral shape.
 
     **Ionization regimes**:
+
         - **Segment 1** [1, 227.84 Å]: HeII ionization (E > 54.4 eV)
         - **Segment 2** [227.84, 353.07 Å]: OII→HeII (40.8–54.4 eV)
         - **Segment 3** [353.07, 504.26 Å]: HeI→OII (24.6–40.8 eV)

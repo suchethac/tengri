@@ -343,37 +343,3 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         return l_scale * phot
 
     return skirtor_agnfitter_phot_collapsed
-
-
-def get_skirtor_agnfitter_precompute_config(
-    fixed_params: dict[str, Any],
-) -> dict[str, Any] | None:
-    """Determine which SKIRTOR_mean_3p axes to collapse (fixed parameters).
-
-    Parameters
-    ----------
-    fixed_params : dict
-        Frozen parameters passed from the user model.
-
-    Returns
-    -------
-    dict or None
-        Configuration dict with keys ``to_collapse`` (list of axis indices),
-        or None if no axes are fixed.
-
-    Notes
-    -----
-    If all three parameters (oa, incl, tv) are fixed, returns the grid point
-    directly without triweight interpolation. If some are fixed, the
-    precomputation automatically collapses those axes via
-    :func:`~tengri.utils.grid_interp.slice_fixed_axes`.
-    """
-    to_collapse = []
-    for i, param_key in enumerate(AXIS_PARAMS):
-        if param_key in fixed_params:
-            to_collapse.append(i)
-
-    if not to_collapse:
-        return None
-
-    return {"to_collapse": to_collapse}

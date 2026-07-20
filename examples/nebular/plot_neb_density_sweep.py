@@ -31,14 +31,14 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 1.0,
         "beta": 2.5,
         "tau_gyr": 0.3,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
-    neb={"type": "cue", "*": tengri.FIXED, "gas_logn": tengri.Uniform(0.0, 3.0)},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+    neb={"type": "cue", "all_params": tengri.FIXED, "gas_logn": tengri.Uniform(0.0, 3.0)},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -53,10 +53,10 @@ fig, ax = plt.subplots(figsize=(6.5, 4.2))
 all_curve_data = []
 for nh in nh_values:
     params = {**baseline, "gas_logn": jnp.float64(np.log10(nh))}
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
     nu = 2.998e18 / wave
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax.semilogy(wave, nu_l_nu, color=cmap(norm(nh)), lw=1.4)
 
     # Track values in the plotted window for ylim

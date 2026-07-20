@@ -21,6 +21,11 @@
 SSP library comparison at a fixed age and metallicity
 ======================================================
 
+.. image:: images/sphx_glr_plot_sps_library_compare_001.png
+   :alt: plot sps library compare
+   :class: sphx-glr-single-img
+
+
 Different stellar population synthesis codes use different stellar
 spectral libraries, isochrone families, and binary treatments. The
 SED of a ~1 Gyr-old, solar-metallicity simple stellar population
@@ -37,17 +42,6 @@ bare-stellar wherever available so the differences trace stellar
 physics, not nebular treatment.
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-96
-
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_sps_library_compare_001.png
-   :alt: plot sps library compare
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_sps_library_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -82,14 +76,14 @@ physics, not nebular treatment.
     C_AA_PER_S = 2.998e18
     SFH = {
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 1.0,
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     }
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
@@ -105,9 +99,9 @@ physics, not nebular treatment.
             redshift=tengri.Fixed(0.01),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
         norm = nu_l_nu[np.argmin(np.abs(wave - 5500.0))]
         if norm > 0:
             nu_l_nu = nu_l_nu / norm
@@ -127,11 +121,6 @@ physics, not nebular treatment.
 
     fig.tight_layout()
     plt.savefig("plot_sps_library_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 7.848 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_sps_library_compare.py:

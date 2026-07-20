@@ -45,6 +45,7 @@ class SpatialModelComponent:
     """Astronomer-facing base for spatial physics blocks.
 
     Subclasses declare:
+
       * ``name`` (str) and ``parameter_prefix`` (always ``"spatial_"``)
       * Class-level :class:`Distribution` attributes — free parameters
       * Optional ``reads`` (dict of name -> units) and ``publishes``
@@ -52,10 +53,12 @@ class SpatialModelComponent:
       * A ``predict(p, profile_in, grid_kpc, **reads_kwargs)`` method
 
     Mirror of :class:`SEDModelComponent`. Behavior is identical except:
+
       * Default :attr:`parameter_prefix` is ``"spatial_"``
       * The default :meth:`apply` updates
         ``state.derived["spatial_profile_2d"]`` (not ``state.sed_intrinsic``)
       * :meth:`predict` is called with ``grid_kpc`` (not ``wave``)
+
     """
 
     name: str = "spatial_component"

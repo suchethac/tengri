@@ -15,8 +15,10 @@ how the big blue bump temperature evolves with the SMBH mass along each
 stage.
 
 References:
+
 - Soltan, A. 1982, MNRAS, 200, 115 — AGN mass density evolution
 - King, A. 2003, ApJ, 596, L27 — AGN feedback on galaxy growth
+
 """
 
 import os
@@ -46,17 +48,17 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 2.0,
         "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
     agn={
         "type": "composable",
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "*": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "all_params": tengri.FIXED,
         "agn_frac": 1.0,  # turn the composable AGN on (default 0.0 zeros it)
         "agn_log_ledd": -1.0,
         "agn_log_mbh": tengri.Uniform(5.0, 10.0),
@@ -188,10 +190,10 @@ for ax_idx, stages_pair in enumerate([(STAGES[0], STAGES[1]), (STAGES[2], STAGES
             "agn_log_mbh": jnp.float64(log_mbh),
             "agn_log_lbol": jnp.float64(log_lbol),
         }
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
         nu = C_AA_PER_S / wave  # frequency in Hz
-        nu_l_nu = nu * np.asarray(out.sed)
+        nu_l_nu = nu * np.asarray(out.rest_sed())
 
         ax.loglog(wave, nu_l_nu, color=color, lw=1.5, label=label)
 

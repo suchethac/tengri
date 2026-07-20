@@ -33,12 +33,14 @@ Physical insight made obvious:
 
 - **Red sequence** (old, quiescent): no ongoing star formation, minimal dust,
   ``u − r ≈ 2.5`` due to 4000 Å Balmer break in the ``u`` band
+
 - **Blue cloud** (young, star-forming): hot O/B stars dominate UV, moderate
   dust extinction, ``u − r ≈ 1.0–1.5``
+
 - **Green valley** (intermediate): transitional populations; sparse in modern
   surveys due to fast quenching timescales
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-165
+.. GENERATED FROM PYTHON SOURCE LINES 25-168
 
 
 
@@ -110,7 +112,7 @@ Physical insight made obvious:
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "peak_lbt_gyr": peak_lbt,
                 "width_gyr": width,
                 "log_total_mass": 10.0,  # stellar mass knob
@@ -119,7 +121,7 @@ Physical insight made obvious:
             },
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": tau_diff,
                 "tau_bc": tau_bc,
                 "slope": -0.7,

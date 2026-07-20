@@ -226,8 +226,14 @@ color_ratio = -2.5 * np.log10(np.maximum(color_blue / np.maximum(color_red, 1e-3
 
 # Color by metallicity
 sc = ax.scatter(
-    np.log10(np.maximum(color_red, 1e-30)), color_ratio,
-    c=catalog_logz, cmap="viridis", s=20, alpha=0.8, edgecolors="k", lw=0.3,
+    np.log10(np.maximum(color_red, 1e-30)),
+    color_ratio,
+    c=catalog_logz,
+    cmap="viridis",
+    s=20,
+    alpha=0.8,
+    edgecolors="k",
+    lw=0.3,
 )
 plt.colorbar(sc, ax=ax, label=r"$\log(Z/Z_\odot)$")
 ax.set_xlabel(r"$\log L_\nu(6000\AA)$")

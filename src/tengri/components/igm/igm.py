@@ -2,6 +2,7 @@
 """Intergalactic medium absorption (Inoue et al. 2014).
 
 Computes the mean IGM transmission T_IGM(lambda_obs, z_source) accounting for:
+
 - Lyman-series line absorption from the Ly-alpha forest (LAF)
 - Lyman-series line absorption from Damped Ly-alpha systems (DLA)
 - Lyman-continuum absorption from the LAF
@@ -532,6 +533,7 @@ def igm_transmission(
     for z > 5 galaxies.
 
     **Approximations**:
+
     - **Mean transmission**: This is the mean IGM absorption averaged over cosmic variance.
         Individual sightlines have additional scatter from the Lyman-alpha forest (not included).
     - **Piecewise power laws**: The Inoue et al. (2014) model uses analytic fits to simulations
@@ -732,9 +734,11 @@ def igm_transmission_patchy(
 
     References
     ----------
+
     - Miralda-Escude 1998, ApJ, 501, 15
     - Mason et al. 2018, ApJ, 856, 2
     - Keating et al. 2025
+
     """
     # Standard Inoue+2014 transmission
     t_inoue = igm_transmission(wave_obs, z, **kwargs)
@@ -1041,13 +1045,23 @@ def igm_absorption(
     Notes
     -----
     **JIT-compatible**: yes. ``igm_patchy`` / ``use_dla`` are static structural
-    flags, so their branches resolve at trace time.
+    flags, so their branches resolve at trace time. The absorber knobs
+    (``igm_x_HI``, ``igm_bubble_mpc``, ``dla_*``) are runtime values that may be
+    traced free parameters — they must never gate a Python branch. At
+    ``igm_x_HI = 0`` the patchy path reduces bit-for-bit to the mean-IGM model.
     """
     if igm_model in ("none", None):
         # Mean IGM disabled (e.g. DLA-only, or a low-z fit with only a
         # foreground absorber): start from unit transmission.
         transmission = jnp.ones_like(wave_obs)
-    elif igm_patchy and igm_x_HI > 0.0:
+    elif igm_patchy:
+        # ``igm_patchy`` is a static structural flag, so this branch resolves at
+        # trace time. ``igm_x_HI`` is a (possibly free) param and therefore a
+        # tracer under jit — it must NOT gate the branch. Guarding on it with
+        # ``and igm_x_HI > 0.0`` raised TracerBoolConversionError on every path
+        # (#1149). The guard was also redundant: the damping-wing optical depth
+        # scales linearly with ``x_HI``, so ``igm_transmission_patchy`` reduces
+        # bit-for-bit to the mean model at ``x_HI = 0`` (``exp(-0) = 1``).
         transmission = igm_transmission_patchy(wave_obs, z, x_HI=igm_x_HI, R_bubble=igm_bubble_mpc)
     else:
         transmission = resolve_igm_model(igm_model)(wave_obs, z)

@@ -38,7 +38,7 @@ SED as young, hot stars fade and the older stellar population emerges.
 - the smooth evolution at older ages as the UV colors fade
 - the physical origin of color-color diagnostic diagrams used in photometric surveys
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-122
+.. GENERATED FROM PYTHON SOURCE LINES 23-123
 
 
 
@@ -98,14 +98,14 @@ SED as young, hot stars fade and the older stellar population emerges.
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": 0.1,  # Very young burst
             "width_gyr": 0.05,
             "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.05),
     )
 

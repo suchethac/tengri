@@ -8,7 +8,7 @@ The grammar nests the emission model inside the dust group:
 >>> dust = {
 ...     "type": "two_component",
 ...     "law_bc": "calzetti",
-...     "emission": {"type": "dale2014", "*": FIXED, "alpha_dale": Fixed(2.0)},
+...     "emission": {"type": "dale2014", "all_params": FIXED, "alpha_dale": Fixed(2.0)},
 ... }
 
 Each emission variant returned by
@@ -25,7 +25,7 @@ Examples
 --------
 >>> from tengri import builders, FIXED, Fixed
 >>> builders.dust.emission.dale2014(defaults=FIXED, alpha_dale=Fixed(2.0))  # doctest: +SKIP
-{'type': 'dale2014', '*': FIXED, 'alpha_dale': Fixed(2.0)}
+{'type': 'dale2014', 'all_params': FIXED, 'alpha_dale': Fixed(2.0)}
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ from collections.abc import Callable
 from tengri.builders._factory import make_factory, short_form
 from tengri.parameters.groups import _valid_dust_emission_types
 from tengri.parameters.registry import recipe_parameters
-from tengri.parameters.sentinels import FREE
+from tengri.parameters.sentinels import FREE, WILDCARD_ALIAS
 
 _PREFIXES = ("dust_",)
 # Param names that belong to dust *emission* rather than attenuation.
@@ -80,8 +80,8 @@ def _discover_params(variant: str) -> list[str]:
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",
-            "*": FREE,
-            "emission": {"type": variant, "*": FREE},
+            WILDCARD_ALIAS: FREE,
+            "emission": {"type": variant, WILDCARD_ALIAS: FREE},
         },
     }
     records = recipe_parameters(recipe, free_only=False)
@@ -139,7 +139,7 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
     Returns
     -------
     dict
-        An ``emission`` sub-block, e.g. ``{'type': 'dale2014', '*': FIXED,
+        An ``emission`` sub-block, e.g. ``{'type': 'dale2014', 'all_params': FIXED,
         'eta_balance': LogNormal(mu=0.0, sigma=0.2)}``.
 
     Examples
@@ -150,7 +150,7 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
     ...     observation=obs,
     ...     dust={
     ...         "type": "two_component",
-    ...         "*": "fixed",
+    ...         "all_params": "fixed",
     ...         "emission": builders.dust.emission.relaxed_energy_balance(),
     ...     },
     ... )
@@ -160,7 +160,7 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
 
     if model not in _FACTORIES:
         raise ValueError(f"Unknown dust emission model {model!r}. Available: {available()}")
-    return {"type": model, "*": FIXED, "eta_balance": LogNormal(mu=0.0, sigma=sigma)}
+    return {"type": model, WILDCARD_ALIAS: FIXED, "eta_balance": LogNormal(mu=0.0, sigma=sigma)}
 
 
 __all__ = ["available", "relaxed_energy_balance", *sorted(_FACTORIES)]

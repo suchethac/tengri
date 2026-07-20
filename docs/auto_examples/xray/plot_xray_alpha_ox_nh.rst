@@ -38,11 +38,12 @@ marked; above it the soft band is dominated by the scattered floor.
 
 References
 ----------
+
 - Just et al. 2007, ApJ 665, 1004 (alpha_OX-L_2500).
 - Ricci et al. 2017, Nature 549, 488 (X-ray spectral model).
 - Yang et al. 2020, MNRAS 491, 740 (X-CIGALE corona).
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-97
+.. GENERATED FROM PYTHON SOURCE LINES 28-99
 
 
 
@@ -128,11 +129,6 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_xray_alpha_ox_nh.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.216 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_alpha_ox_nh.py:

@@ -27,7 +27,7 @@ galaxy on the BPT-N plane ``log [OIII]/Hβ`` vs ``log [NII]/Hα``. Each
 panel sweeps one parameter while holding fiducial values fixed. Kewley+2001
 and Kauffmann+2003 demarcations shown for reference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-95
+.. GENERATED FROM PYTHON SOURCE LINES 11-100
 
 
 
@@ -82,23 +82,28 @@ and Kauffmann+2003 demarcations shown for reference.
             spec_dict = {
                 "sfh": {
                     "type": "dpl",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "alpha": 1.0,
                     "beta": 2.5,
                     "tau_gyr": 0.05,
                     "log_total_mass": 10.0,
                 },
-                "dust": {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+                "dust": {
+                    "type": "two_component",
+                    "all_params": tengri.FIXED,
+                    "tau_diff": 0.0,
+                    "tau_bc": 0.0,
+                },
                 "neb": {
                     "type": "cue",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     param_name: tengri.Fixed(pval),
                 },
                 "redshift": tengri.Fixed(0.05),
             }
             model = tengri.SEDModel.build(ssp, **spec_dict)
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-            lines = model.predict_emission_lines(params)
+            lines = model.predict(params).lines
             ha = float(lines.halpha)
             hb = float(lines.hbeta)
             nii = float(lines.nii_6584)
@@ -130,7 +135,7 @@ and Kauffmann+2003 demarcations shown for reference.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.811 seconds)
+   **Total running time of the script:** (0 minutes 5.505 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_cue_flexibility.py:

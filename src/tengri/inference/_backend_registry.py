@@ -18,8 +18,10 @@ class BackendEntry:
         Canonical method name (e.g., ``"map"``, ``"mcmc_nuts"``).
     runner : Callable
         Backend entry point. Signature depends on ``legacy_fitter``:
+
         - ``legacy_fitter=True``  → ``runner(fitter, *, key, **kwargs)``
         - ``legacy_fitter=False`` → ``runner(context, *, key, **kwargs)``
+
         where ``context`` is an :class:`InferenceContext`.
     tier : str
         ``"primary"`` for promoted methods, ``"experimental"`` otherwise.

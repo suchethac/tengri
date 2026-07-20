@@ -7,7 +7,7 @@ Two modes:
    Prints tengri / JAX versions, default device, persistent compile-cache
    status, a 1-galaxy forward photometry timing, a 100-galaxy
    ``predict_photometry_batch`` timing, and the speedup of vmap over the
-   equivalent Python loop. ~30 s on CPU after a warm cache.
+   equivalent Python loop.
 
 2. **Benchmark dispatch** (``python -m tengri.bench <name>``):
    Runs one of the comprehensive benchmark scripts that ship under
@@ -73,6 +73,10 @@ BENCHMARK_SCRIPTS: dict[str, tuple[str, str]] = {
         "benchmark_population_native.py",
         "Hierarchical PopulationFitter: per-iteration cost vs N galaxies.",
     ),
+    "catalog_throughput": (
+        "benchmark_catalog_throughput.py",
+        "Vectorized catalog NUTS sampling: galaxies/s vs forward_chunk_size and devices.",
+    ),
     "adam_vs_lbfgs": (
         "benchmark_adam_vs_lbfgs.py",
         "MAP optimizers head-to-head: Adam vs L-BFGS.",
@@ -113,17 +117,16 @@ def _human_bytes(n: int) -> str:
 
 
 def _find_ssp() -> Path | None:
-    """Locate any DSPS-format SSP file under ``data/`` or ``$TENGRI_DATA_DIR``."""
-    env = os.environ.get("TENGRI_DATA_DIR")
-    candidates: list[Path] = []
-    if env:
-        candidates.append(Path(env))
-    candidates.extend([Path("data"), Path("../data"), Path.cwd() / "data"])
-    for d in candidates:
-        if d.exists():
-            for f in sorted(d.glob("ssp_*.h5")):
-                return f
-    return None
+    """Locate any DSPS-format SSP grid tengri can see.
+
+    Shares :func:`tengri._data_setup.find_ssp_files` with ``tengri.doctor()``,
+    so the benchmark and the diagnostic never disagree about whether an install
+    has an SSP grid.
+    """
+    from tengri._data_setup import find_ssp_files
+
+    found = find_ssp_files()
+    return found[0] if found else None
 
 
 def _find_scripts_dir() -> Path | None:

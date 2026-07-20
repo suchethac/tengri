@@ -974,6 +974,23 @@ save_fig("bagpipes_06_dust_ir.png")
 # tengri uses Cue (Li et al. 2025), a neural emulator on Cloudy v17. The panel
 # reports integrated, continuum-subtracted line luminosity (width- and
 # grid-independent).
+#
+# On a young starburst — the regime Cue is trained for — the two agree closely.
+# The Balmer lines land within 2 % (Hα 0.98×, Hβ 0.98×), [O III] 5007 within
+# 1 %, and the free-free/free-bound continuum within 3 % in line-free windows.
+# [O II] 3727 is the outlier at 0.77×: a collisionally excited line, so it is
+# exponentially sensitive to electron temperature and to the O/H scaling each
+# code assumes, and it is the one place where the v17-vs-v25 Cloudy difference
+# is doing visible work.
+#
+# The **Balmer decrement** is the check that matters most, and it is not a
+# free parameter: Case B recombination pins Hα/Hβ near 2.86 whatever the
+# metallicity or ionization parameter. Both codes hit it (2.82 vs 2.83), which
+# is what certifies that the ionizing continuum driving Cue is the right one.
+# It read **0.41** for as long as a float32 SSP grid was silently overflowing
+# the erg/s mass scale into that ionizing SED (#1099) — a corruption worth
+# 50 orders of magnitude that left the stellar continuum, and therefore every
+# other panel in this notebook, looking perfect.
 
 # %%
 # Young 10 Myr constant-SFR fiducial — the regime where nebular
@@ -1059,11 +1076,8 @@ for ax in (ax_l, ax_r):
 # Cue broadens its lines (see §10) while BAGPIPES' grid places them at its
 # resolution, so a peak ratio is meaningless. §10 below addresses widths.
 _w_t_neb = np.asarray(s_neb_on.wave)
-print(
-    "§9 integrated line luminosity (tengri Cue v17 / BAGPIPES Cloudy v25; "
-    "residual = Cloudy v17→v25 + bare-stellar vs SFH-integrated path):"
-)
-for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
+print("§9 integrated line luminosity (tengri Cue v17 / BAGPIPES Cloudy v25):")
+for _c, _name in [(3727.0, "[O II]"), (4861.0, "Hβ"), (5007.0, "[O III]"), (6563.0, "Hα")]:
     _lb = U.line_lum(w_b_neb, L_b_neb_alone, _c)
     _lt = U.line_lum(_w_t_neb, L_t_neb_alone, _c)
     if _lb > 0:
@@ -1071,6 +1085,35 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
             f"    {_name} {_c:.0f} Å: BAGPIPES {_lb:.2e}, "
             f"tengri {_lt:.2e} erg/s → {_lt / _lb:.2f}×"
         )
+
+# Case B pins Hα/Hβ near 2.86 whatever the metallicity or ionization parameter,
+# so the decrement is the one number that cannot be faked by a mis-scaled SSP —
+# which makes it the check worth printing. It read 0.41 for as long as a float32
+# SSP grid was silently overflowing the erg/s mass scale into the ionizing SED
+# (#1099), a corruption the stellar continuum hid completely.
+_hb_b = U.line_lum(w_b_neb, L_b_neb_alone, 4861.0)
+_hb_t = U.line_lum(_w_t_neb, L_t_neb_alone, 4861.0)
+print(
+    f"    Balmer decrement Hα/Hβ: BAGPIPES "
+    f"{U.line_lum(w_b_neb, L_b_neb_alone, 6563.0) / _hb_b:.2f}, "
+    f"tengri {U.line_lum(_w_t_neb, L_t_neb_alone, 6563.0) / _hb_t:.2f}   (Case B ≈ 2.86)"
+)
+
+# Lines are not the whole nebular block: the free-free / free-bound / two-photon
+# continuum rides underneath, and being smooth it is what a broadband filter
+# integrates most of. Sample it in windows that are line-free in both codes, so
+# §13's photometric residual can be attributed rather than assumed.
+print("§9 nebular continuum (line-free windows), tengri / BAGPIPES:")
+for _lo, _hi in [(3000.0, 3600.0), (4000.0, 4300.0), (5500.0, 6300.0)]:
+    _mb = (w_b_neb >= _lo) & (w_b_neb <= _hi)
+    _mt = (_w_t_neb >= _lo) & (_w_t_neb <= _hi)
+    if _mb.sum() < 3 or _mt.sum() < 3:
+        continue
+    # The 20th percentile sits below the lines but on the continuum.
+    _cb = float(np.percentile(L_b_neb_alone[_mb], 20))
+    _ct = float(np.percentile(L_t_neb_alone[_mt], 20))
+    if _cb > 0:
+        print(f"    {_lo:.0f}–{_hi:.0f} Å: {_ct / _cb:.2f}×")
 fig.tight_layout()
 save_fig("bagpipes_08_nebular.png")
 
@@ -1377,13 +1420,20 @@ print(
 # band-averaged flux definition.
 #
 # Using the same SDSS filter set (tengri bundled), the §7 panchromatic SED
-# is convolved and placed at 10 pc. With the single-screen dust matching
-# BAGPIPES, tengri matches SDSS magnitudes to ≤0.02 mag in r/i/z but stays
-# −0.11 mag (u) and −0.15 mag (g) brighter. The u and g bands carry the
-# strongest nebular lines ([O II] 3727, Hβ + [O III] 4959/5007), where the
-# Cue-vs-Cloudy nebular difference manifests: §13b shows the gap collapses to
-# ≤0.02 mag when nebular is removed, confirming the residual is a nebular
-# line-strength difference, not dust or stellar color.
+# is convolved and placed at 10 pc. Differences trace back to that SED, not to
+# the integration — both codes use the same band-averaged flux definition.
+#
+# tengri agrees to **≤ 0.01 mag in r, i and z** and runs **0.07 mag (u) and
+# 0.05 mag (g) brighter**. The excess is nebular: §13b turns the nebular block
+# off and it collapses.
+#
+# Note the galaxy. §9 compared the two nebular backends on a 10 Myr starburst
+# and found them within a few percent — but §13's fiducial is a **5 Gyr
+# delayed-τ** population, whose ionizing output is feeble and whose ionizing
+# *spectrum* is soft. That is out toward the edge of what a Cue-style emulator
+# is trained on, and the two backends genuinely part company there. What keeps
+# the photometric consequence down to 0.05 mag is not agreement: it is that
+# nebular light is a small fraction of an old galaxy's broadband flux.
 
 # %%
 from tengri.filters import load_filter
@@ -1440,14 +1490,31 @@ for band, m_b, m_t in zip(_sdss_bands, bp_mags, tng_mags):
 
 
 # %% [markdown]
-# ### §13b Photometry without nebular — the residual is nebular lines
+# ### §13b Photometry without nebular — attributing the residual
 #
-# Removing the nebular block shows the residual is nebular line strength: the
-# band-averaged residual drops from ⟨Δ⟩ ≈ −0.06 mag (full) to ≈ −0.01 mag
-# (no nebular), and the u/g excess collapses. This confirms the gap is a
-# nebular line-strength difference (Cue vs Cloudy) in bands carrying [O II] 3727
-# (u) and Hβ + [O III] 4959/5007 (g). The remaining ≈0.01 mag residual is the
-# §4 stellar-color mismatch.
+# Rebuild both SEDs with the nebular block removed and re-run the same
+# convolution. The band-averaged residual drops from ⟨Δ⟩ = −0.023 mag to
+# −0.009 mag, so the nebular block is indeed carrying the gap — but the mean
+# over five bands hides the structure, so the cell prints each band.
+#
+# The **stellar + dust floor** (Δ with no nebular) is within ±0.04 mag and has
+# no systematic sign: it is the residual §4 stellar color plus the small
+# attenuation-curve difference, and it is what tengri would agree to if the
+# nebular backends were identical.
+#
+# The **nebular-driven** part is u −0.05, g −0.05, r +0.04, z −0.01. The last
+# column shows why: for this 5 Gyr galaxy the two codes' nebular light differs
+# by 1.4–1.9× in u/g/z and by 0.4× in r — not a normalization offset but a
+# different *shape*. Cue is an emulator over a young-starburst ionizing
+# spectrum, and a 5 Gyr delayed-τ population sits at the soft, feeble end of
+# that domain, where its extrapolation and CLOUDY v25's tabulated grid diverge.
+#
+# It moves the photometry by only ~0.05 mag because nebular emission is a few
+# percent of an old galaxy's broadband light. On a young galaxy the same
+# disagreement would be a first-order error — and on a young galaxy (§9) the
+# two backends agree to a few percent. The regime where they differ is the one
+# where it costs least, which is fortunate rather than by construction, and
+# worth knowing before trusting Cue on a quiescent SED.
 
 # %%
 comp_b_nonneb = dict(comp_b_full)
@@ -1533,6 +1600,36 @@ print(
     f"full ⟨Δ⟩ = {np.mean(np.array(tng_mags) - np.array(bp_mags)):+.3f} mag, "
     f"no-neb ⟨Δ⟩ = {np.mean(np.array(tng_mags_nn) - np.array(bp_mags_nn)):+.3f} mag"
 )
+
+# Per band, and with the nebular light itself weighed in each filter. A mean
+# over five bands hides which band moved, and the sign of the nebular term is
+# the whole argument: if tengri were simply putting *less* nebular light in u,
+# turning nebular on would drive it fainter, not brighter.
+_L_b_neb_only = L_b_full - np.interp(w_b_full, w_b_nonneb, L_b_nonneb)
+_L_t_neb_only = np.asarray(s_full.derived["sed_nebular"])
+_w_t_full = np.asarray(s_full.wave)
+
+
+def _band_avg(wave, L_nu, f):
+    """Filter-weighted mean L_nu [erg/s/Hz] — the photometric weighting."""
+    Li = np.interp(f.wave, wave, L_nu, left=0.0, right=0.0)
+    wgt = f.trans / f.wave
+    return float(np.trapezoid(Li * wgt, f.wave) / np.trapezoid(wgt, f.wave))
+
+
+print(f"{'band':8s} {'Δ full':>8s} {'Δ no-neb':>9s} {'neb-driven':>11s}  nebular L_nu (t/B)")
+for _b, _f, _mf, _mn, _mfn, _mnn in zip(
+    _sdss_bands, _filters, tng_mags, bp_mags, tng_mags_nn, bp_mags_nn
+):
+    _d_full = _mf - _mn
+    _d_nn = _mfn - _mnn
+    _nb = _band_avg(w_b_full, _L_b_neb_only, _f)
+    _nt = _band_avg(_w_t_full, _L_t_neb_only, _f)
+    print(
+        f"{_b:8s} {_d_full:+8.3f} {_d_nn:+9.3f} {_d_full - _d_nn:+11.3f}  {_nt / _nb:.2f}×"
+        if _nb > 0
+        else f"{_b:8s} {_d_full:+8.3f}"
+    )
 
 
 # %% [markdown]

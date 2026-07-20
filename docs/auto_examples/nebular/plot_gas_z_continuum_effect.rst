@@ -32,11 +32,13 @@ metallicity effect is strongest in the UV continuum (Lyα → HeII Balmer), wher
 metal opacity and recombination cooling compete.
 
 References:
+
 - Osterbrock & Ferland 2006, *Astrophysics of Gaseous Nebulae and Active
   Galactic Nuclei*, 2nd ed., University Science Books
+
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue nebular model)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-114
+.. GENERATED FROM PYTHON SOURCE LINES 23-117
 
 
 
@@ -81,16 +83,16 @@ References:
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 1.2,
             "beta": 2.0,
             "tau_gyr": 0.5,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
         neb={
             "type": "cue",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             # NB: short-form keys inside the `neb` group (full `neb_*` is silently ignored)
             "logU": -2.0,
             "logZ_gas": tengri.Uniform(-2.0, 0.5),
@@ -113,9 +115,9 @@ References:
     seds = []
     for logz in logz_values:
         params = {**baseline, "neb_logZ_gas": jnp.float64(logz)}
-        pred = model.predict_rest_sed(params)
-        seds.append(np.asarray(pred.sed))
-    wave = np.asarray(pred.wavelength)
+        pred = model.predict(params)
+        seds.append(np.asarray(pred.rest_sed()))
+    wave = np.asarray(model.wavelengths)
     ref = seds[0]  # logz = -1.5 baseline
 
     mask = (wave >= 1000) & (wave <= 1e4)

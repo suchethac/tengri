@@ -5,7 +5,8 @@ Tengri's forward model is split into two clearly separated layers.
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  Inference (Fitter / MAP / NUTS / VI / …)               │
-│  Talks only to ForwardModel.predict_observables(params).            │
+│  Entry point: ForwardModel.fit(data, noise, method).    │
+│  Talks to the model only through .predict(params).      │
 └────────────────────────┬────────────────────────────────┘
                          ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -39,7 +40,8 @@ Tengri's forward model is split into two clearly separated layers.
 
 The outer-shell signature stays uniform across all SubModel variants —
 construction is always ``ForwardModel.build(<slot>=..., observation=obs)``
-and inference is always through the standard ``Fitter`` pipeline.
+and inference is always through ``forward.fit(...)`` — which is the
+standard ``Fitter`` pipeline underneath.
 
 ## The minimum usable fit
 
@@ -54,8 +56,8 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u", "sds
 sed = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
-    sfh={"type": "dpl", "*": FIXED, "log_total_mass": 10.0},
-    dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+    sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
+    dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
     neb={"type": "none"},
     redshift=tengri.Fixed(0.05),
 )
@@ -73,10 +75,11 @@ posterior.summary()
 
 The SED chain ("the physics") and the surface that inference consumes
 ("the prediction dict") have always been two different responsibilities.
-Before the split, `SEDModel.predict_photometry`, `SEDModel.predict_spectrum`,
-`SEDModel.predict_joint`, etc. encoded "which channels exist" inside the
-method *name*. Inference backends therefore had to know whether they were
-fitting photometry, spectroscopy, or both, and pick the right method.
+Before the split, `SEDModel` carried one method per channel combination —
+`predict_photometry`, `predict_spectrum`, `predict_joint` and friends —
+encoding "which channels exist" inside the method *name*. Inference backends
+therefore had to know whether they were fitting photometry, spectroscopy, or
+both, and pick the right method. (`predict_joint` is gone; the others remain.)
 
 After the split:
 
@@ -102,9 +105,12 @@ ForwardModel.build(
 ```
 
 Pick exactly one of `sed=`, `population=`, or `populations=`. Returns
-a frozen dataclass. The only API users typically call afterwards is
-`forward.predict_observables(params) → dict`. Everything else is via `Fitter` or
-posterior helpers.
+a frozen dataclass. What you call afterwards is
+`forward.fit(data, noise, method=...)`; everything else is posterior
+helpers. To inspect a prediction rather than fit one, use
+`forward.predict(params)`. On a fitting hot path prefer
+`forward.predict_photometry(params)` — `predict_observables` returns the
+full channel dict and bypasses the photometry lookup table.
 
 ## Hierarchical population fits
 
@@ -114,9 +120,12 @@ stochastic-SFH prior — wrap them in a ``PopulationSEDModel`` and pass it
 to ``ForwardModel.build(population=...)``:
 
 ```python
-from tengri import ForwardModel, PopulationSEDModel, SEDModel
+from tengri import ForwardModel, PopulationSEDModel, SEDModel, recipes
 
-template = SEDModel.build(ssp_data=ssp, observation=obs, ...)
+# The template needs a stochastic (field) SFH — that is where the shared
+# PSD hyperparameters live. A DPL-only template has none to share.
+template = SEDModel.build(ssp_data=ssp, observation=obs,
+                          **recipes.stochastic_sfh_jwst())
 
 pop = PopulationSEDModel(
     sed=template,

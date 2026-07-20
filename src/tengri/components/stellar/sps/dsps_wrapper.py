@@ -162,8 +162,11 @@ def load_ssp(name: str | None = None) -> "SSPData":
     name : str or None, optional
         Short alias from ``_LOAD_SSP_PRESETS``, a key from
         ``tengri.list_known_ssps()``, or a literal filename (with or
-        without ``.h5``). ``None`` (default) loads the wNE PRSC/MILES
-        Chabrier grid used by the dust/nebular demo scripts.
+        without ``.h5``). ``None`` (default) loads :data:`~tengri._data_setup.DEFAULT_SSP`
+        — the bare-stellar PRSC/MILES Chabrier grid, the same one
+        ``tengri.download_ssp()`` fetches and the one the Cue/CloudyGrid nebular
+        backends require. For the nebular-baked demo grid pass the alias
+        explicitly: ``load_ssp("prsc_miles_chabrier_wNE")``.
 
     Returns
     -------
@@ -178,15 +181,15 @@ def load_ssp(name: str | None = None) -> "SSPData":
     Examples
     --------
     >>> from tengri import load_ssp
-    >>> ssp = load_ssp()  # default wNE SSP
-    >>> ssp = load_ssp("prsc_miles_chabrier")  # bare-stellar (for Cue)
+    >>> ssp = load_ssp()  # default bare-stellar grid (== download_ssp())
+    >>> ssp = load_ssp("prsc_miles_chabrier_wNE")  # nebular-baked demo grid
     """
     from pathlib import Path
 
-    from tengri._data_setup import _KNOWN_SSPS
+    from tengri._data_setup import _KNOWN_SSPS, DEFAULT_SSP
 
     if name is None:
-        filename = _LOAD_SSP_PRESETS["prsc_miles_chabrier_wNE"]
+        filename = _KNOWN_SSPS[DEFAULT_SSP]
     elif name in _LOAD_SSP_PRESETS:
         filename = _LOAD_SSP_PRESETS[name]
     elif name in _KNOWN_SSPS:
@@ -200,15 +203,32 @@ def load_ssp(name: str | None = None) -> "SSPData":
             return load_ssp_data(str(as_path))
         filename = name if name.endswith(".h5") else name + ".h5"
 
-    for parent in [Path.cwd(), *Path.cwd().parents]:
-        candidate = parent / "data" / filename
+    from tengri._data_setup import TENGRI_DATA_ENV, data_dirs
+
+    for directory in data_dirs():
+        candidate = directory / filename
         if candidate.exists():
             return load_ssp_data(str(candidate))
     raise FileNotFoundError(
-        f"SSP file 'data/{filename}' not found in any ancestor of {Path.cwd()}. "
-        f"Place the file under <project_root>/data/ or call "
-        f"tengri.download_ssp('<short_name>') to fetch a bundled SSP."
+        f"SSP file {filename!r} not found. Looked in: "
+        f"{', '.join(str(d) for d in data_dirs()[:4])} (and further ancestors). "
+        f"Call tengri.download_ssp('<short_name>') to fetch a bundled SSP "
+        f"(tengri.list_known_ssps() lists them), place the file under "
+        f"<project_root>/data/, or set ${TENGRI_DATA_ENV} to the directory "
+        f"holding it."
     )
+
+
+def _load_float(dataset) -> jnp.ndarray:
+    """Read an HDF5 float dataset at tengri's working precision (#1099).
+
+    Several repackaged grids store float32 (``bc03_*``, ``pgny_*``). Left as
+    float32, ``stellar_mass_scale = total_mass x L_sun`` ~ 1e42 overflows the
+    float32 ceiling of 3.4e38 to ``inf`` — silently — and poisons the ionizing
+    SED the nebular backends consume. The upcast is lossless: every float32 is
+    exactly a float64, so no stored value changes.
+    """
+    return jnp.asarray(dataset[:], dtype=jnp.result_type(float))
 
 
 def load_ssp_data(filepath: str) -> SSPData:
@@ -282,12 +302,12 @@ def load_ssp_data(filepath: str) -> SSPData:
             "call away: tengri.download_ssp() fetches the default FSPS grid "
             "to data/, and tengri.list_known_ssps() shows the alternatives "
             "(BC03, BPASS, ProGeny, ...). Already have grids elsewhere? "
-            "Point TENGRI_DATA at that directory."
+            "Point TENGRI_DATA_DIR at that directory."
         )
 
     with h5py.File(filepath, "r") as f:
-        ssp_lg_age_gyr = jnp.array(f["ssp_lg_age_gyr"][:])
-        ssp_lgmet = jnp.array(f["ssp_lgmet"][:])
+        ssp_lg_age_gyr = _load_float(f["ssp_lg_age_gyr"])
+        ssp_lgmet = _load_float(f["ssp_lgmet"])
 
         # IMF discovery (#307): HDF5 attribute wins, else parse filename
         # tail. Surfaced as ``ssp.imf`` so model spec / summary / gallery
@@ -322,7 +342,7 @@ def load_ssp_data(filepath: str) -> SSPData:
         # flat 0.29 % absolute-flux offset. Rescale on load so the
         # in-memory arrays are IAU-Lsun-normalized and every downstream
         # conversion is exact.
-        ssp_flux = jnp.array(f["ssp_flux"][:])
+        ssp_flux = _load_float(f["ssp_flux"])
         native_lsun = _detect_native_lsun(f, fp.name)
         if native_lsun is not None:
             from tengri.utils.physics_constants import L_SUN
@@ -331,7 +351,7 @@ def load_ssp_data(filepath: str) -> SSPData:
                 ssp_flux = ssp_flux * (native_lsun / L_SUN)
 
         if "ssp_mass_remaining" in f:
-            mass_remaining = jnp.array(f["ssp_mass_remaining"][:])
+            mass_remaining = _load_float(f["ssp_mass_remaining"])
         else:
             mass_remaining = _synthesize_mass_remaining(
                 filepath, ssp_lg_age_gyr, ssp_lgmet, imf_tag=imf
@@ -339,10 +359,10 @@ def load_ssp_data(filepath: str) -> SSPData:
 
         alpha_fe = None
         if "ssp_alpha_fe" in f:
-            alpha_fe = jnp.array(f["ssp_alpha_fe"][:])
+            alpha_fe = _load_float(f["ssp_alpha_fe"])
 
         return SSPData(
-            ssp_wave=jnp.array(f["ssp_wave"][:]),
+            ssp_wave=_load_float(f["ssp_wave"]),
             ssp_flux=ssp_flux,
             ssp_lg_age_gyr=ssp_lg_age_gyr,
             ssp_lgmet=ssp_lgmet,
@@ -526,63 +546,6 @@ def _synthesize_mass_remaining(
     return jnp.broadcast_to(f_surv_age, (ssp_lgmet.shape[0], lg_age_yr.shape[0]))
 
 
-def load_ssp_data_dsps(filepath: str) -> SSPData:
-    """Load SSP templates using DSPS native loader.
-
-    Falls back to load_ssp_data() if DSPS is not installed.
-
-    Parameters
-    ----------
-    filepath : str
-        Path to HDF5 file in DSPS format.
-
-    Returns
-    -------
-    SSPData
-        Loaded SSP template data.
-
-    Notes
-    -----
-    **JIT-compatible**: yes — only file I/O occurs outside JAX traced code.
-    Falls back gracefully to load_ssp_data() if dsps is not available.
-
-    """
-    try:
-        from dsps import load_ssp_templates
-
-        ssp_data = load_ssp_templates(fn=filepath)
-        return SSPData(
-            ssp_wave=jnp.array(ssp_data.ssp_wave),
-            ssp_flux=_rescale_flux_to_iau_lsun(jnp.array(ssp_data.ssp_flux), filepath),
-            ssp_lg_age_gyr=jnp.array(ssp_data.ssp_lg_age_gyr),
-            ssp_lgmet=jnp.array(ssp_data.ssp_lgmet),
-        )
-    except ImportError:
-        return load_ssp_data(filepath)
-
-
-def _rescale_flux_to_iau_lsun(ssp_flux: jnp.ndarray, filepath: str) -> jnp.ndarray:
-    """Apply the #969 native-Lsun rescale on the DSPS-native loader path."""
-    from pathlib import Path
-
-    try:
-        import h5py
-
-        with h5py.File(filepath, "r") as f:
-            native = _detect_native_lsun(f, Path(filepath).name)
-    except OSError:
-        # Unreadable as HDF5 — fall back to the filename heuristic alone.
-        name = Path(filepath).name
-        native = _FSPS_LSUN_ERG_PER_S if name.startswith("fsps_") else None
-    if native is None:
-        return ssp_flux
-    from tengri.utils.physics_constants import L_SUN
-
-    if abs(native / L_SUN - 1.0) <= 1e-12:
-        return ssp_flux
-    return ssp_flux * (native / L_SUN)
-
-
 def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
     """Compute CSP quadrature bin widths for a given integration method.
 
@@ -685,6 +648,7 @@ def csp_log_interp_matrix(ssp_ages_yr, n_gl: int = 5):
     interval, exact for polynomials up to degree 9.
 
     The returned matrix is symmetric tridiagonal:
+
     - A[j, j-1] = contribution from left interval via b_j
     - A[j, j]   = sum of right-interval a_j and left-interval b_j contributions
     - A[j, j+1] = contribution from right interval via a_j (symmetric)
@@ -1998,6 +1962,7 @@ def compute_log_z_evolving(
     The metallicity evolves linearly in log(Z/Zsun) space:
 
         log_z(t_lookback) = log_z_final + (log_z_initial - log_z_final)
+
                             * t_lookback / t_universe
 
     where t_lookback=0 is today (log_z_final) and t_lookback=t_universe

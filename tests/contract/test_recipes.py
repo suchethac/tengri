@@ -264,7 +264,7 @@ class TestRecipeStructure:
         assert r["agn"]["disc"]["type"] == "kubota_done"
         assert r["agn"]["torus"]["type"] == "simple"
         assert r["sfh"]["type"] == "delayed"
-        assert r["sfh"]["*"] == recipes.FIXED
+        assert r["sfh"]["all_params"] == recipes.FIXED
         assert r["dust"]["tau_bc"] == 0.0
         assert r["dust"]["tau_diff"] == 0.0
         assert r["redshift"] == recipes.Fixed(0.0)

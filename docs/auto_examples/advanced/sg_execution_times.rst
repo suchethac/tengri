@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.417** total execution time for 26 files **from auto_examples/advanced**:
+**00:01.561** total execution time for 26 files **from auto_examples/advanced**:
 
 .. container::
 
@@ -32,10 +32,10 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_custom_attenuation_component.py` (``plot_custom_attenuation_component.py``)
-     - 00:00.417
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_ab_mag_zero_point.py` (``plot_diag_ab_mag_zero_point.py``)
+     - 00:01.561
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_custom_attenuation_component.py` (``plot_custom_attenuation_component.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_calzetti_kv_norm.py` (``plot_diag_calzetti_kv_norm.py``)

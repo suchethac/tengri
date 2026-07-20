@@ -16,8 +16,10 @@ GALEX FUV/NUV and SDSS g, r, K to keep the demo independent of
 the full filter machinery.
 
 References:
+
 - Conroy, Gunn, White 2009 ApJ 699 486.
 - Bruzual & Charlot 2003 MNRAS 344 1000.
+
 """
 
 import warnings
@@ -54,14 +56,14 @@ bands = [
 nu = C_AA_S / wave
 # integrate -L_nu in frequency  (sign because freq decreases with lambda)
 ord_nu = np.argsort(nu)
-L_bol = np.trapz(L_nu[:, ord_nu], nu[ord_nu], axis=1)
+L_bol = np.trapezoid(L_nu[:, ord_nu], nu[ord_nu], axis=1)
 
 BC = {}
 for name, lo, hi in bands:
     mask = (wave >= lo) & (wave <= hi)
     nu_b = nu[mask]
     order = np.argsort(nu_b)
-    L_b = np.trapz(L_nu[:, mask][:, order], nu_b[order], axis=1)
+    L_b = np.trapezoid(L_nu[:, mask][:, order], nu_b[order], axis=1)
     BC[name] = 2.5 * np.log10(np.where(L_b > 0, L_bol / L_b, np.nan))
 
 fig, ax = plt.subplots(figsize=(7.0, 4.6))

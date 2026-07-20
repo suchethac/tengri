@@ -33,6 +33,7 @@ The panels sweep the two most consequential axes:
 
 - **Equatorial optical depth** ``tau`` (left): a thicker torus deepens the
   9.7 micron silicate absorption and redistributes the reprocessed power.
+
 - **Inclination** (right): edge-on lines of sight (low ``cos i``) graze the
   optically-thick equatorial dust (Type-2-like, deep silicate absorption);
   face-on sight lines look down the polar funnel (Type-1-like).
@@ -51,7 +52,7 @@ References
 .. [3] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy Emission,"
    A&A 622, A103 (2019). arXiv:1811.03094.
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-141
+.. GENERATED FROM PYTHON SOURCE LINES 36-142
 
 
 
@@ -88,8 +89,8 @@ References
 
     ssp = tengri.load_ssp()
 
-    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     # SKIRTOR grid (CIGALE subset): tau 3-11, oa 10-80, cos i in (0, 1].
     TAU_VALUES = np.linspace(3.0, 11.0, 7)
@@ -99,8 +100,8 @@ References
     TAU_REF = 7.0
 
     BASE_AGN = {
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "*": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "all_params": tengri.FIXED,
         "log_lbol": 12.0,
         "frac": 1.0,
     }
@@ -112,8 +113,8 @@ References
             agn["torus"] = torus
         model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.05))
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        return np.asarray(out.wavelength), np.asarray(out.sed)
+        out = model.predict(p)
+        return np.asarray(model.wavelengths), np.asarray(out.rest_sed())
 
 
     WAVE, DISC_ONLY = _build_sed(None)
@@ -124,7 +125,7 @@ References
         wave, total = _build_sed(
             {
                 "type": "skirtor",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "oa_skirtor": oa,
                 "cos_inc": cos_inc,
                 "tau_skirtor": tau,
@@ -176,7 +177,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.132 seconds)
+   **Total running time of the script:** (0 minutes 3.685 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_xcigale_sweep.py:

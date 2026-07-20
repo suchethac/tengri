@@ -32,7 +32,7 @@ data come from?" — broad-line decompositions need ``blr``, NLR
 fitters need ``nlr``, NIR/MIR color fitters need ``torus`` (and
 disc choice barely matters longward of 1 μm), etc.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-159
+.. GENERATED FROM PYTHON SOURCE LINES 16-166
 
 
 
@@ -68,15 +68,15 @@ disc choice barely matters longward of 1 μm), etc.
 
     ssp = tengri.load_ssp()
     COMMON = dict(
-        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.05),
     )
-    BASE_AGN = dict(disc={"type": "multicolor", "*": tengri.FIXED})
+    BASE_AGN = dict(disc={"type": "multicolor", "all_params": tengri.FIXED})
 
 
     def _agn(extra_blocks=(), wave=None):
-        agn = {"*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0, **BASE_AGN}
+        agn = {"all_params": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0, **BASE_AGN}
         for key, value in extra_blocks:
             agn[key] = value
         model = tengri.SEDModel.build(ssp, agn=agn, **COMMON)
@@ -85,35 +85,42 @@ disc choice barely matters longward of 1 μm), etc.
         # overplot SEDs: components such as the GRAHSP FeII template otherwise
         # inject their own wavelength nodes, giving each config a different-length
         # native grid (5994 vs 6127).
-        out = model.predict_rest_sed(p, wave=wave)
-        return np.asarray(out.wavelength), np.asarray(out.sed)
+        lnu = np.asarray(model.predict(p).rest_sed())
+        grid = np.asarray(model.wavelengths)
+        if wave is None:
+            return grid, lnu
+        return np.asarray(wave), np.interp(np.asarray(wave), grid, lnu)
 
 
     configs = [
         ("disc only", (), "#8b4513"),
-        ("+ torus (SKIRTOR)", (("torus", {"type": "skirtor", "*": tengri.FIXED}),), "#cc7733"),
+        (
+            "+ torus (SKIRTOR)",
+            (("torus", {"type": "skirtor", "all_params": tengri.FIXED}),),
+            "#cc7733",
+        ),
         (
             "+ NLR",
             (
-                ("torus", {"type": "skirtor", "*": tengri.FIXED}),
-                ("nlr", {"type": "analytic", "*": tengri.FIXED}),
+                ("torus", {"type": "skirtor", "all_params": tengri.FIXED}),
+                ("nlr", {"type": "analytic", "all_params": tengri.FIXED}),
             ),
             "#5588cc",
         ),
         (
             "+ BLR",
             (
-                ("torus", {"type": "skirtor", "*": tengri.FIXED}),
-                ("blr", {"type": "analytic", "*": tengri.FIXED}),
+                ("torus", {"type": "skirtor", "all_params": tengri.FIXED}),
+                ("blr", {"type": "analytic", "all_params": tengri.FIXED}),
             ),
             "#4477aa",
         ),
         (
             "+ FeII",
             (
-                ("torus", {"type": "skirtor", "*": tengri.FIXED}),
-                ("blr", {"type": "analytic", "*": tengri.FIXED}),
-                ("feii", {"type": "grahsp", "*": tengri.FIXED}),
+                ("torus", {"type": "skirtor", "all_params": tengri.FIXED}),
+                ("blr", {"type": "analytic", "all_params": tengri.FIXED}),
+                ("feii", {"type": "grahsp", "all_params": tengri.FIXED}),
             ),
             "#dd6699",
         ),
@@ -194,7 +201,7 @@ disc choice barely matters longward of 1 μm), etc.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.759 seconds)
+   **Total running time of the script:** (0 minutes 4.331 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_components_breakdown.py:

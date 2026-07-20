@@ -18,6 +18,7 @@ SED as young, hot stars fade and the older stellar population emerges.
 - the NUV−r color jump across the green valley (age ~ 1–2 Gyr)
 - the smooth evolution at older ages as the UV colors fade
 - the physical origin of color-color diagnostic diagrams used in photometric surveys
+
 """
 
 import os
@@ -64,14 +65,14 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 0.1,  # Very young burst
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.05),
 )
 

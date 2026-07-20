@@ -7,6 +7,7 @@ smooth inference (VI, MAP, NUTS).
 
 The Fritz2006 model provides a semi-empirical radiative-transfer grid of
 dust torus SEDs parameterized by six dimensions:
+
 - r_ratio: maximum-to-minimum dust torus radius ratio
 - tau: optical depth at 9.7 µm
 - beta: radial dust density power-law index
@@ -206,7 +207,7 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
 
     def fritz_grid(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 44.0,
+        agn_log_lbol: float = 10.0,
         agn_torus_frac: float = 0.5,
         agn_fritz_r_ratio: float = 60.0,
         agn_fritz_tau: float = 1.0,
@@ -313,7 +314,7 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
 
     def fritz_components(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 44.0,
+        agn_log_lbol: float = 10.0,
         agn_torus_frac: float = 0.5,
         agn_fritz_r_ratio: float = 60.0,
         agn_fritz_tau: float = 1.0,
@@ -429,7 +430,7 @@ def fritz_sed(*args, **kwargs):
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
     agn_log_lbol : float, optional
-        AGN bolometric luminosity [log10(L_sun)]. Default: 44.0.
+        AGN bolometric luminosity [log10(L_sun)]. Default: 10.0.
     agn_torus_frac : float, optional
         Fraction of bolometric luminosity in torus [dimensionless, 0–1].
         Default: 0.5.
@@ -489,7 +490,7 @@ def fritz_components(*args, **kwargs) -> FritzComponents:
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
     agn_log_lbol : float, optional
-        AGN bolometric luminosity [log10(L_sun)]. Default: 44.0.
+        AGN bolometric luminosity [log10(L_sun)]. Default: 10.0.
     agn_torus_frac : float, optional
         Covering factor [0, 1]. Default: 0.5.
     agn_fritz_r_ratio, agn_fritz_tau, agn_fritz_beta, agn_fritz_gamma,

@@ -75,7 +75,7 @@ Tengri's physics blocks (AGN models, dust attenuation laws, SFH variants, nebula
        status="production",   # or "experimental", "demo", "deprecated"
        short_doc="One-line description",
    )
-   def my_model(...): ...
+   def my_model(wavelength, agn_log_lbol, **params): ...
    ```
    `citation` and `short_doc` are recommended but not required — fill what you have.
 4. **Declare new free parameters via the component's `declared_parameters()` method.** Translation entries are auto-derived for identity (no-unit-conversion) cases — you typically don't need to edit `parameters/translate.py`.

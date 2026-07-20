@@ -6,6 +6,7 @@ astronomy. All functions are pure, immutable, and GPU-compatible.
 
 Conventions
 -----------
+
 - Magnitude system: AB (Oke & Gunn 1983) by default
 - Flux unit: erg s⁻¹ cm⁻² Hz⁻¹ (CGS)
 - Luminosity unit: erg s⁻¹ Hz⁻¹ (CGS)

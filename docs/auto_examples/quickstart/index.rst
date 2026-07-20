@@ -37,7 +37,7 @@ the physics and inference galleries below.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The model.spec.summary() method displays each parameter&#x27;s source through provenance tags: [user] for explicit overrides, [ FREE] and [ FIXED] for wildcard expansions, and [default] for registry defaults. We build a model with mixed constraints, display the annotated summary as a figure caption, and show the predicted SED.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The model.spec.summary() method displays each parameter&#x27;s source through provenance tags: [user] for explicit overrides, [all_params FREE] and [all_params FIXED] for wildcard expansions, and [default] for registry defaults. We build a model with mixed constraints, display the annotated summary as a figure caption, and show the predicted SED.">
 
 .. only:: html
 

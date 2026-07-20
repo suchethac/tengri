@@ -3,6 +3,42 @@
 
 A modular, fully differentiable JAX pipeline:
 PSD-governed GP → SFH → DSPS SED → photometry/spectroscopy.
+
+Module organization by tier
+===========================
+
+``__all__`` is organized into tiers reflecting common workflows. For a first fit,
+start with **Core** (classes + distributions). For more granularity, explore
+**Physics submodules** (component registries) and **Introspection** (discovery).
+
+**Core (user-facing classes for a first fit):**
+  ``SEDModel``, ``Parameters``, ``Observation``, ``Photometry``, ``Spectroscopy``,
+  ``NoiseModel``, ``Fitter``, ``Posterior``, ``Prediction``, ``FREE``, ``FIXED``,
+  ``Fixed``, ``Uniform``, ``Gaussian``, ``LogNormal``, ``LogUniform``, ``StudentT``,
+  ``Laplace``, ``load_ssp``, ``Galaxy``, ``VIConfig``.
+
+**Physics submodules (component namespaces):**
+  ``agn``, ``dust``, ``nebular``, ``stellar``, ``sfh``, ``sps``, ``igm``, ``radio``,
+  ``xray``, ``observation``, ``filters``, ``citations``, ``config``, ``cosmology``,
+  ``pipeline``, ``preprocessing``, ``presets``, ``results``, ``units``, ``io``.
+
+**Toolkit (analysis, batching, model construction):**
+  ``builders``, ``recipes``, ``measure``, ``vmap_chunked``, ``WavePrecomp``,
+  ``SpectrumPrecomp``, ``SSPData``, ``Population``, ``PopulationSEDModel``,
+  ``SpatialModel``, ``SpatialSEDModel``, ``ForwardModel``, ``Instrument``,
+  ``LineList``, ``plot``.
+
+**Introspection (discovery and diagnostics):**
+  ``help``, ``summary``, ``describe``, ``search``, ``explain``, ``examples``,
+  ``tutorial``, ``doctor``, all ``list_*``, ``describe_*``, ``cite_components``,
+  and ``suggest_parameters``.
+
+**Exceptions:**
+  ``TengriError``, ``ParameterError``, ``ConfigError``, ``BackendError``,
+  ``InferenceError``, ``TengriIOError``.
+
+Everything in ``__all__`` remains importable from ``tengri`` for backward
+compatibility. For more detail, see ``docs/dev/api_migration_v0.x.md``.
 """
 
 # Silence the JAX/absl/XLA C++ chatter that prints on first JAX touch:
@@ -238,7 +274,13 @@ from tengri.forward.prediction import (
     SFHQuantities,
 )
 from tengri.forward.result import SEDResult
-from tengri.forward.sed_model import PriorPredictive, SEDModel, SpectrumPrecomp, WavePrecomp
+from tengri.forward.sed_model import (
+    FeaturePrecomp,
+    PriorPredictive,
+    SEDModel,
+    SpectrumPrecomp,
+    WavePrecomp,
+)
 from tengri.forward.spatial_model import SpatialModel, SpatialSEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 from tengri.observation.filters import load_filter, load_filter_set
@@ -355,15 +397,18 @@ from tengri.registry import (
     list_components,
     list_dust_emission_models,
     list_dust_laws,
+    list_dust_models,
     list_filters,
     list_igm_models,
     list_inference_methods,
     list_nebular_backends,
     list_plots,
     list_properties,
+    list_radio_blocks,
     list_radio_models,
     list_recipes,
     list_sfh_models,
+    list_shock_models,
     list_xray_models,
     print_components_bibtex,
     search,
@@ -397,56 +442,131 @@ from tengri.registry import (
 # intentionally NOT advertised. The one entry point at the top level is
 # ``tengri.clear_cache()``; the rest live in ``tengri.utils.jax_cache``
 # and ``tengri.inference.jit_engine`` for callers who need them.
-__all__ = [
+# RUF022 (alphabetical __all__) is disabled on purpose: the list is grouped into
+# the tiers documented in the module docstring, and sorting it would destroy the
+# map. tests/contract/test_public_api_tiers.py enforces that the tiers partition
+# __all__ exactly, which is the invariant that actually matters here.
+__all__ = [  # noqa: RUF022
+    # ========== Tier 1: CORE (user-facing classes for a first fit) ==========
+    # Sentinels & distributions
     "FIXED",
     "FREE",
-    "STANDARD_COMPOSITE_INDICES",
-    "STANDARD_INDICES",
-    "BackendError",
-    "CompositeIndexDef",
-    "ConfigError",
-    "Exponential",
-    "FilterConvention",
     "Fixed",
-    "FlatSlab",
-    "ForwardModel",
-    "Galaxy",
     "Gaussian",
-    "InferenceError",
     "Laplace",
     "LogNormal",
     "LogUniform",
-    "ParameterError",
-    "ParameterRecord",
+    "StudentT",
+    "Uniform",
+    # Model construction & parameters
+    "SEDModel",
+    "PriorPredictive",
     "Parameters",
+    "ParameterRecord",
+    "parse_groups",
+    # Observations
+    # Inference
+    # Results
+    # High-level facade
+    "Galaxy",
+    "doctor",
+    # Core utilities
+    "load_ssp",
+    "SSPData",
+    # ========== Tier 2: PHYSICS SUBMODULES (namespaces) ==========
+    "agn",
+    "dust",
+    "nebular",
+    "stellar",
+    "sfh",
+    "sps",
+    "igm",
+    "radio",
+    "xray",
+    "observation",
+    "filters",
+    # ========== Tier 3: TOOLKIT (analysis, batching, construction) ==========
+    # Model builders
+    "builders",
+    "recipes",
+    "register_component",
+    # Utilities
+    "measure",
+    "vmap_chunked",
+    "FeaturePrecomp",
+    "WavePrecomp",
+    "SpectrumPrecomp",
+    # Population & spatial models
     "Population",
     "PopulationSEDModel",
-    "PriorPredictive",
-    "SEDModel",
-    "SEDResult",
-    "SSPData",
-    "Sersic",
     "SpatialModel",
     "SpatialSEDModel",
-    "SpectralIndexData",
-    "SpectralIndexDef",
-    "SpectrumPrecomp",
-    "StudentT",
-    "TengriError",
-    "TengriIOError",
-    "Uniform",
-    "WavePrecomp",
-    "agn",
-    "apply_lsf",
-    "builders",
-    "citations",
-    "cite_components",
-    "clear_cache",
-    "compute_mass_remaining_fraction",
-    "config",
-    "cosmology",
+    "ForwardModel",
+    "SEDResult",
+    # Spatial components
+    "Exponential",
+    "FlatSlab",
+    "Sersic",
+    # Data loading
+    "download_ssp",
+    "list_available_ssps",
+    "list_known_ssps",
+    "load_ssp_data",
     "data_path",
+    # Components & physics
+    "FilterConvention",
+    "CompositeIndexDef",
+    "SpectralIndexDef",
+    "SpectralIndexData",
+    # Specialized loaders
+    "load_astrodust_hd23",
+    "load_pahspec_draine2021",
+    "apply_lsf",
+    "velocity_broaden",
+    "igm_transmission",
+    "igm_transmission_madau",
+    # Spectral indices
+    "measure_index_jax",
+    "STANDARD_INDICES",
+    "STANDARD_COMPOSITE_INDICES",
+    # Noise kernels & utilities
+    "exp_squared_kernel",
+    "gp_noise_covariance",
+    "matern32_kernel",
+    "fit_batch",
+    "compute_mass_remaining_fraction",
+    "recipe_parameters",
+    # ========== Tier 4: INTROSPECTION (discovery & diagnostics) ==========
+    "help",
+    "summary",
     "describe",
+    "search",
+    "explain",
+    "examples",
+    "tutorial",
+    # Component discovery
+    "list_agn_blocks",
+    "list_agn_models",
+    "list_all",
+    "list_components",
+    "list_dust_emission_models",
+    "list_dust_laws",
+    "list_dust_models",
+    "list_filter_conventions",
+    "list_filters",
+    "list_igm_models",
+    "list_inference_methods",
+    "list_nebular_backends",
+    "list_parameters",
+    "list_plots",
+    "list_properties",
+    "list_radio_blocks",
+    "list_radio_models",
+    "list_recipes",
+    "list_sfh_models",
+    "list_shock_models",
+    "list_xray_models",
+    # Component description
     "describe_agn_block",
     "describe_agn_model",
     "describe_dust_emission_model",
@@ -457,71 +577,31 @@ __all__ = [
     "describe_property",
     "describe_recipe",
     "describe_sfh_model",
-    "doctor",
-    "download_ssp",
-    "dust",
-    "examples",
-    "exp_squared_kernel",
-    "explain",
-    "filters",
-    "fit_batch",
-    "gp_noise_covariance",
-    "help",
-    "igm",
-    "igm_transmission",
-    "igm_transmission_madau",
+    # Citations & help
+    "cite_components",
+    "print_components_bibtex",
+    "suggest_parameters",
+    # ========== Tier 5: EXCEPTIONS ==========
+    "TengriError",
+    "ParameterError",
+    "ConfigError",
+    "BackendError",
+    "InferenceError",
+    "TengriIOError",
+    # ========== Layer modules (optional imports, see docs) ==========
+    "citations",
+    "config",
+    "cosmology",
     "inference",
     "io",
-    "list_agn_blocks",
-    "list_agn_models",
-    "list_all",
-    "list_available_ssps",
-    "list_components",
-    "list_dust_emission_models",
-    "list_dust_laws",
-    "list_filter_conventions",
-    "list_filters",
-    "list_igm_models",
-    "list_inference_methods",
-    "list_known_ssps",
-    "list_nebular_backends",
-    "list_parameters",
-    "list_plots",
-    "list_properties",
-    "list_radio_models",
-    "list_recipes",
-    "list_sfh_models",
-    "list_xray_models",
-    "load_astrodust_hd23",
-    "load_pahspec_draine2021",
-    "load_ssp",
-    "load_ssp_data",
-    "matern32_kernel",
-    "measure",
-    "measure_index_jax",
-    "nebular",
-    "observation",
-    "parse_groups",
     "pipeline",
     "plot",
     "preprocessing",
     "presets",
-    "print_components_bibtex",
-    "radio",
-    "recipe_parameters",
-    "register_component",
     "results",
-    "search",
-    "sfh",
-    "sps",
-    "stellar",
-    "suggest_parameters",
-    "summary",
-    "tutorial",
     "units",
-    "velocity_broaden",
-    "vmap_chunked",
-    "xray",
+    # ========== Utilities (advanced / cache management) ==========
+    "clear_cache",
 ]
 
 
@@ -590,8 +670,11 @@ _CURATED_DIR = (
     "list_agn_models",
     "list_dust_emission_models",
     "list_dust_laws",
+    "list_dust_models",
     "list_igm_models",
     "list_radio_models",
+    "list_radio_blocks",
+    "list_shock_models",
     "list_sfh_models",
     "list_nebular_backends",
     "list_xray_models",
@@ -604,15 +687,28 @@ _CURATED_DIR = (
     "search",
     "suggest_parameters",
     "cite_components",
+    "print_components_bibtex",
+    "describe_agn_block",
+    "describe_recipe",
     "tutorial",
     "examples",
     "explain",
     # 2.  Build a fit
+    "load_ssp",
+    "load_ssp_data",
+    "download_ssp",
+    "list_known_ssps",
+    "SSPData",
     "Parameters",
     "parse_groups",
     "SEDModel",
+    "ForwardModel",
+    "builders",
+    "recipes",
+    "FeaturePrecomp",
     "WavePrecomp",
     "Fitter",
+    "fit_batch",
     "Observation",
     "Photometry",
     "Spectroscopy",
@@ -620,17 +716,21 @@ _CURATED_DIR = (
     "LineList",
     "Instrument",
     "list_instruments",
-    # 3.  Priors / distributions
+    # 3.  Priors / distributions (+ the FREE/FIXED build sentinels)
+    "FREE",
+    "FIXED",
     "Uniform",
     "Gaussian",
     "LogUniform",
     "LogNormal",
     "Fixed",
     "StudentT",
-    # 4.  Result types
+    # 4.  Result types (+ hierarchical / spatial model classes)
     "Posterior",
+    "PopulationSEDModel",
     "PopulationFitter",
     "PopulationPosterior",
+    "SpatialSEDModel",
     # 5.  Convenience
     "generate_mock",
     "doctor",
@@ -638,6 +738,9 @@ _CURATED_DIR = (
     "print_citations",
     "print_logo",
     "register_component",
+    "cosmology",
+    "units",
+    "plot",
     "__version__",
 )
 

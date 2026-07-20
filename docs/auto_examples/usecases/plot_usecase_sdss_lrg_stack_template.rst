@@ -31,16 +31,18 @@ composite that shows the D4000 break, Mg b 5170 Å absorption feature,
 and Ca II H+K lines characteristic of quiescent early-type galaxies.
 
 Key techniques:
+
 - Build tengri models with simple quiescent SFH (narrow tsnorm)
 - Use jax.vmap to batch-predict N spectra in parallel
 - Stack with simple median-flux combination
 - Label age-sensitive features (D4000, Mg b, Ca II H+K)
 
 References:
+
 - Eisenstein et al. 2001, AJ, 122, 2267 (SDSS LRG selection)
 - Thomas et al. 2005, ApJ, 621, 673 (red-sequence ages)
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-152
+.. GENERATED FROM PYTHON SOURCE LINES 27-155
 
 
 
@@ -114,14 +116,14 @@ References:
         # time → approximates a single-age stellar population
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": tengri.Uniform(AGE_GYR_MIN, AGE_GYR_MAX),
             "width_gyr": 0.10,  # 50 Myr / sqrt(2.355) = narrow burst
             "skew": 0.0,
             "trunc": 13.5,
             "log_total_mass": 10.0,  # ~ log M* = 11 when integrated
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(REDSHIFT),
     )
 
@@ -198,7 +200,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.607 seconds)
+   **Total running time of the script:** (0 minutes 3.887 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sdss_lrg_stack_template.py:

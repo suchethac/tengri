@@ -31,7 +31,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 1.5,
@@ -39,10 +39,10 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.3,
         "tau_bc": 0.5,
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
     redshift=tengri.Fixed(0.05),
 )
@@ -51,9 +51,9 @@ baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 params = {**baseline}
 
 # Predict stellar + dust SED (rest-frame, UV through IR)
-out = model.predict_rest_sed(params)
-wave_sed = np.asarray(out.wavelength)
-sed = np.asarray(out.sed)
+out = model.predict(params)
+wave_sed = np.asarray(model.wavelengths)
+sed = np.asarray(out.rest_sed())
 
 # Wavelength grid: UV through radio
 wave_full = jnp.logspace(jnp.log10(500.0), jnp.log10(1e10), 3000)

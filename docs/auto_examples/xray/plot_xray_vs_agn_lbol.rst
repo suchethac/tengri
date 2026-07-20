@@ -41,8 +41,19 @@ deep X-ray surveys (Lehmer+2010, 2016).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -73,12 +84,12 @@ deep X-ray surveys (Lehmer+2010, 2016).
 
     SFH = {
         "type": "const",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.61,
         "start_gyr": 13.0,
         "end_gyr": 0.0,
     }
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.5}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.5}
 
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
@@ -86,22 +97,22 @@ deep X-ray surveys (Lehmer+2010, 2016).
         sfh=SFH,
         dust=DUST,
         agn={
-            "disc": {"type": "qsogen", "*": tengri.FIXED},
-            "torus": {"type": "skirtor", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "qsogen", "all_params": tengri.FIXED},
+            "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "log_lbol": tengri.Uniform(8.0, 14.0),
             "frac": 1.0,
         },
-        xray={"type": "simple", "*": tengri.FIXED},
+        xray={"type": "simple", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
     fig, ax = plt.subplots(figsize=(7.0, 4.6))
     for log_lbol in log_lbol_grid:
-        out = model.predict_rest_sed({**baseline, "agn_log_lbol": jnp.float64(log_lbol)})
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        out = model.predict({**baseline, "agn_log_lbol": jnp.float64(log_lbol)})
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=cmap(norm(log_lbol)), lw=1.4)
 
     ax.set(
@@ -135,7 +146,7 @@ deep X-ray surveys (Lehmer+2010, 2016).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.769 seconds)
+   **Total running time of the script:** (0 minutes 6.590 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_vs_agn_lbol.py:

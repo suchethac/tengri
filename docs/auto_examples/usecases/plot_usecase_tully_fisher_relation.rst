@@ -38,11 +38,12 @@ slope). Verification: mock galaxies follow the expected TF scaling with scatter
 consistent with observational samples.
 
 References:
+
   - Tully & Fisher 1977, ApJ, 211, 31 (original relation)
   - McGaugh 2000, ApJ, 541, L33 (baryonic TF relation)
   - Verheijen 2001, ApJ, 563, 694 (optical TF calibration)
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-236
+.. GENERATED FROM PYTHON SOURCE LINES 28-238
 
 
 
@@ -52,21 +53,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/examples/usecases/plot_usecase_tully_fisher_relation.py:206: RankWarning: Polyfit may be poorly conditioned
-      z_fit = np.polyfit(log_v_circs, m_r_abs, 1)
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/examples/usecases/plot_usecase_tully_fisher_relation.py:217: UserWarning: Attempting to set identical low and high xlims makes transformation singular; automatically expanding.
-      ax.set_xlim(log_v_circs.min() - x_margin, log_v_circs.max() + x_margin)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -155,9 +143,9 @@ References:
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": tengri.FIXED, "log_total_mass": 10.0},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05},
-        neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -0.5},
+        sfh={"type": "dpl", "all_params": tengri.FIXED, "log_total_mass": 10.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05},
+        neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": -0.5},
         redshift=tengri.Fixed(0.0),
     )
 

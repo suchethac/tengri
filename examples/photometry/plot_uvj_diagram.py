@@ -55,10 +55,10 @@ obs = tengri.Observation(
 sf_model = tengri.SEDModel.build(
     tengri.load_ssp(),
     observation=obs,
-    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 10.63},
+    sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.63},
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.1,
         "tau_bc": 0.0,
         "slope": -0.7,
@@ -84,14 +84,14 @@ quiescent_model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 10.0,
         "width_gyr": 0.5,
         "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.02, "tau_bc": 0.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.02, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.05),
 )
 
@@ -107,14 +107,14 @@ psb_model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 1.0,
         "width_gyr": 0.2,
         "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.2},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.2},
     redshift=tengri.Fixed(0.05),
 )
 
@@ -128,10 +128,10 @@ psb_uv, psb_vj = _colors_from_flux(flux_psb[0], flux_psb[1], flux_psb[2])
 burst_model = tengri.SEDModel.build(
     tengri.load_ssp(),
     observation=obs,
-    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.63},
+    sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.63},
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.3,
         "tau_bc": 1.5,
         "slope": -0.7,

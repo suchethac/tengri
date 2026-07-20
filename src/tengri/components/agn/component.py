@@ -13,6 +13,7 @@ is read from :data:`BARE_NAME_ALLOWLIST`.
 
 Cross-component publications
 ----------------------------
+
 - ``state.derived["L_agn_bol"]`` (scalar, erg/s) — bolometric AGN
   luminosity. Consumed by
   :class:`tengri.components.xray.XRaySEDComponent` and
@@ -193,6 +194,7 @@ class AGNSEDComponent:
         r"""Cache filter passbands and SKIRTOR templates for precomputation.
 
         When ``approx=WavePrecomp()`` is set:
+
         - Stores filter passbands so :meth:`apply` can publish
           ``agn_phot_lnu_precomp`` (filter-integrated AGN photometry).
         - If the AGN model is "skirtor", pre-loads the template grids
@@ -231,9 +233,12 @@ class AGNSEDComponent:
         # they're available for JIT threading.
         if self.config.model == "skirtor":
             try:
-                from tengri.components.agn.skirtor import _load_skirtor_default
+                from tengri.components.agn.skirtor import _load_skirtor_default_grid
 
-                skirtor_templates = _load_skirtor_default()
+                # Store the template ARRAYS (a SKIRTORGrid pytree), not the
+                # interpolation closure — arrays thread through jax.jit as a
+                # runtime input; a closure cannot (#1198).
+                skirtor_templates = _load_skirtor_default_grid()
             except Exception:
                 # If SKIRTOR template loading fails (file not found),
                 # gracefully continue without threading. The apply() path
@@ -432,6 +437,21 @@ class AGNSEDComponent:
                 ]
             )
             derived_overrides["agn_phot_lnu_precomp"] = agn_phot_lnu_precomp
+            # The REST band (#1148). ``phot_rest_fnu`` is the SED reprojected at
+            # z=0, so the filter sits in the REST frame and samples the rest SED at
+            # its own pivot — the SAME integral with redshift=0, not the observed-band
+            # value reused. Reusing it is what made the LUT report a different
+            # physical quantity from the exact path (769 % in des_g at z=0.5).
+            derived_overrides["agn_restband_lnu_precomp"] = jnp.asarray(
+                [
+                    lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=0.0)
+                    for fw, ft in zip(
+                        self._state.filter_waves,
+                        self._state.filter_trans,
+                        strict=False,
+                    )
+                ]
+            )
 
         # Spectrum LUT family (SpectrumPrecomp): a spectrum pixel is a single
         # wavelength, so point-sampling the rest-frame AGN SED at the pixel

@@ -57,6 +57,22 @@ data/synthesizer_grids
 # again (a self-referential symlink slipped in via #1035).
 reproduction/cigale/_drivers/data
 data/*.h5
+# ── The two SSP grids the gallery needs, committed on purpose (#1146) ──
+# CI could not execute a single example without these, so a broken example
+# shipped next to a stale figure (see tools/run_gallery_examples.py). The wNE
+# default is what `tengri.load_ssp()` resolves to and is NOT downloadable
+# (404 on the SSP host), so it has to live here. The bare-stellar grid IS
+# downloadable, but at 64 MB it is committed by explicit decision rather than
+# fetched-and-cached: it makes a fresh clone — and CI — work with no network.
+# This is a deliberate exception to the "<10 MB gets committed" rule.
+!data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5
+!data/fsps_prsc_miles_chabrier.h5
+# RELAGN disc grid (26 MB). `examples/agn/plot_agn_disc_compare.py` plots it, and
+# it CANNOT be rebuilt in CI: scripts/build_relagn_disc_grid.py needs a conda env
+# with XSPEC. Without it that example raised FileNotFoundError for every user who
+# does not have XSPEC — which is everyone — while its committed figure showed the
+# curve anyway.
+!data/relagn_disc_grid.h5
 !data/skirtor_templates_v3.h5
 !data/nthcomp_templates.h5
 !data/nenkova08_torus_grid.h5
@@ -121,6 +137,17 @@ _galrun/
 
 # Superpowers subagent-driven-development scratch ledger (session-local)
 .superpowers/
+
+# Audit/scratch scripts must live in tests/ — never the repo root. Tests are
+# collected from tests/ only (pyproject testpaths=["tests"]), so a root-level
+# test_*.py is unreachable dead weight. Ignoring them here stops a `git add -A`
+# from re-leaking audit scratch, as happened in #1165 (see #1232).
+/test_*.py
+/*_test.py
+/audit_*.py
+/*_audit.py
+/quick_test*.py
+/final_audit*.py
 !data/grahsp/grahsp_templates.h5
 !data/qsogen_emline_template.h5
 !data/qsogen_detailed_reference.npz

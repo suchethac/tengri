@@ -12,6 +12,7 @@ Sibling to :class:`tengri.components.dust.DustAttenuationSEDComponent`
 
 Cross-component reads
 ---------------------
+
 - ``state.derived["lnu_age"]``  — (n_age, n_wave) per-age L_ν cube
   (erg/s/Hz) from :class:`StellarSEDComponent`.
 - ``state.derived["ssp_ages_yr"]`` — (n_age,) age axis (yr) from
@@ -19,6 +20,7 @@ Cross-component reads
 
 Cross-component publications
 ----------------------------
+
 - ``state.derived["L_ir"]`` (scalar, erg/s) — total IR luminosity
   re-radiated by dust, consumed by
   :class:`tengri.components.radio.RadioSEDComponent` (FIR-radio
@@ -234,6 +236,7 @@ class DustSEDComponent:
         """Dust attenuation-derived quantities: absorbed luminosity and spectra.
 
         Publishes:
+
         - L_ir: total absorbed UV/optical/NIR luminosity (erg/s), enabling
           downstream dust emission components to re-radiate.
         - L_absorbed: alias for L_ir (deprecated, use L_ir).
@@ -241,6 +244,7 @@ class DustSEDComponent:
         - sed_nebular: re-published after dust reddening (same name as nebular,
           not declared to avoid duplicate-publisher conflict; consumed by
           implementations that apply dust-reddened nebular).
+
         """
         return (
             DerivedKey("L_ir", "erg/s", "Total absorbed UV/optical/NIR luminosity"),
@@ -749,6 +753,28 @@ class DustSEDComponent:
                 a_diff_sub = jnp.exp(-tau_diff * law_diff_fn(sub_waves, n_slope=n_slope_diff))
                 derived_overrides["dust_bc_attenuation_subband_precomp"] = a_bc_sub
                 derived_overrides["dust_diff_attenuation_subband_precomp"] = a_diff_sub
+
+            # The same screen on the REST band (#1148). ``phot_rest_fnu`` projects at
+            # z=0, so its filter samples rest λ_pivot, not rest λ_pivot/(1+z) — a
+            # different set of wavelengths, and the galaxy's own dust must be
+            # evaluated THERE. The law is analytic, so this is the same expression on
+            # a different grid; τ, δ and the bump stay free.
+            rb_eff = state.derived.get("filter_restband_eff_waves")
+            if rb_eff is not None:
+                derived_overrides["dust_bc_restband_attenuation_precomp"] = jnp.exp(
+                    -tau_bc * law_bc_fn(rb_eff, n_slope=n_slope_bc)
+                )
+                derived_overrides["dust_diff_restband_attenuation_precomp"] = jnp.exp(
+                    -tau_diff * law_diff_fn(rb_eff, n_slope=n_slope_diff)
+                )
+            rb_sub_waves = state.derived.get("stellar_restband_subband_waves_precomp")
+            if rb_sub_waves is not None:
+                derived_overrides["dust_bc_restband_attenuation_subband_precomp"] = jnp.exp(
+                    -tau_bc * law_bc_fn(rb_sub_waves, n_slope=n_slope_bc)
+                )
+                derived_overrides["dust_diff_restband_attenuation_subband_precomp"] = jnp.exp(
+                    -tau_diff * law_diff_fn(rb_sub_waves, n_slope=n_slope_diff)
+                )
 
             # IR re-emission is now handled by separate dust emission components.
             # This component no longer computes or publishes photometric

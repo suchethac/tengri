@@ -42,21 +42,21 @@ def test_axis_factories_cover_every_variant(axis: str, expected_set: set[str]) -
 
 
 def test_disc_default_call() -> None:
-    assert builders.agn.disc.multicolor() == {"type": "multicolor", "*": FIXED}
+    assert builders.agn.disc.multicolor() == {"type": "multicolor", "all_params": FIXED}
 
 
 def test_torus_default_call() -> None:
     out = builders.agn.torus.skirtor()
     assert out["type"] == "skirtor"
-    assert out["*"] is FIXED
+    assert out["all_params"] is FIXED
 
 
 def test_nlr_none_default_call() -> None:
-    assert builders.agn.nlr.none() == {"type": "none", "*": FIXED}
+    assert builders.agn.nlr.none() == {"type": "none", "all_params": FIXED}
 
 
 def test_blr_none_default_call() -> None:
-    assert builders.agn.blr.none() == {"type": "none", "*": FIXED}
+    assert builders.agn.blr.none() == {"type": "none", "all_params": FIXED}
 
 
 # ── Sub-block signatures: variants within an axis share the same params ──
@@ -102,7 +102,7 @@ def test_composable_signature_includes_shared_short_params() -> None:
 
 
 def test_composable_default_call_is_minimal() -> None:
-    assert builders.agn.composable() == {"type": "composable", "*": FIXED}
+    assert builders.agn.composable() == {"type": "composable", "all_params": FIXED}
 
 
 def test_full_composition_produces_grammar_shape() -> None:
@@ -117,9 +117,9 @@ def test_full_composition_produces_grammar_shape() -> None:
         atten=builders.agn.atten.smc_prevot(),
     )
     assert out["type"] == "composable"
-    assert out["*"] is FREE
-    assert out["disc"] == {"type": "multicolor", "*": FREE}
-    assert out["torus"] == {"type": "skirtor", "*": FIXED}
+    assert out["all_params"] is FREE
+    assert out["disc"] == {"type": "multicolor", "all_params": FREE}
+    assert out["torus"] == {"type": "skirtor", "all_params": FIXED}
     assert out["log_lbol"] == Uniform(43.0, 47.0)
 
 
@@ -252,7 +252,7 @@ def test_skirtor_default_call_shape() -> None:
     """All top-level models return a dict with type and wildcard."""
     out = builders.agn.skirtor()
     assert out["type"] == "skirtor"
-    assert out["*"] is FIXED
+    assert out["all_params"] is FIXED
 
 
 def test_top_level_models_share_signature() -> None:

@@ -55,6 +55,8 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 
  .. code-block:: none
 
+      0%|          | 0.00/67.0M [00:00<?, ?B/s]      2%|▏         | 1.59M/67.0M [00:00<00:04, 15.7MB/s]      6%|▋         | 4.26M/67.0M [00:00<00:02, 22.1MB/s]     10%|█         | 6.96M/67.0M [00:00<00:02, 24.3MB/s]     15%|█▍        | 9.78M/67.0M [00:00<00:02, 25.8MB/s]     19%|█▉        | 12.9M/67.0M [00:00<00:01, 27.7MB/s]     24%|██▍       | 15.9M/67.0M [00:00<00:01, 28.7MB/s]     28%|██▊       | 18.8M/67.0M [00:00<00:01, 26.8MB/s]     32%|███▏      | 21.7M/67.0M [00:00<00:01, 27.4MB/s]     37%|███▋      | 24.5M/67.0M [00:00<00:01, 27.5MB/s]     41%|████      | 27.3M/67.0M [00:01<00:01, 27.4MB/s]     45%|████▌     | 30.1M/67.0M [00:01<00:01, 27.8MB/s]     49%|████▉     | 32.9M/67.0M [00:01<00:01, 27.9MB/s]     54%|█████▎    | 35.8M/67.0M [00:01<00:01, 28.1MB/s]     58%|█████▊    | 39.0M/67.0M [00:01<00:00, 29.1MB/s]     63%|██████▎   | 42.5M/67.0M [00:01<00:00, 30.6MB/s]     68%|██████▊   | 45.7M/67.0M [00:01<00:00, 31.1MB/s]     73%|███████▎  | 49.0M/67.0M [00:01<00:00, 31.5MB/s]     78%|███████▊  | 52.1M/67.0M [00:01<00:00, 30.8MB/s]     83%|████████▎ | 55.3M/67.0M [00:01<00:00, 31.0MB/s]     87%|████████▋ | 58.4M/67.0M [00:02<00:00, 30.8MB/s]     92%|█████████▏| 61.6M/67.0M [00:02<00:00, 31.2MB/s]     97%|█████████▋| 64.8M/67.0M [00:02<00:00, 25.6MB/s]    100%|██████████| 67.0M/67.0M [00:02<00:00, 28.6MB/s]
+    Downloaded SSP to /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/examples/usecases/data/fsps_prsc_miles_chabrier.h5
     τ_V =  0.00: L_UV_absorbed = 1.7764e+36 erg/s, L_IR = 2.0580e+36 erg/s, ratio = 1.159
     τ_V =  0.10: L_UV_absorbed = 2.0018e+36 erg/s, L_IR = 2.3013e+36 erg/s, ratio = 1.150
     τ_V =  0.30: L_UV_absorbed = 2.3204e+36 erg/s, L_IR = 2.6555e+36 erg/s, ratio = 1.144
@@ -184,16 +186,16 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
             ssp_data=ssp,
             observation=obs,
             redshift=Fixed(z),
-            sfh={"type": "tsnorm", "*": FIXED, "peak_lbt_gyr": 0.3},
-            dust={"type": "single_component", "law_bc": "calzetti", "*": FIXED, "tau_v": 0.0},
-            neb={"type": "cue", "*": FIXED},
+            sfh={"type": "tsnorm", "all_params": FIXED, "peak_lbt_gyr": 0.3},
+            dust={"type": "single_component", "law_bc": "calzetti", "all_params": FIXED, "tau_v": 0.0},
+            neb={"type": "cue", "all_params": FIXED},
         )
 
         # Generate intrinsic SED on rest-frame wavelength grid
         # Sample params and use all fixed values
         params_intrinsic = model_intrinsic.spec.sample(key)
-        result_intrinsic = model_intrinsic.predict_rest_sed(params_intrinsic, wave=wave_rest)
-        sed_intrinsic_np = np.array(result_intrinsic.sed)
+        result_intrinsic = model_intrinsic.predict(params_intrinsic)
+        sed_intrinsic_np = np.asarray(result_intrinsic.rest_sed(wave_rest))
 
         # Integrate UV: 912–3000 Å
         # Convert L_nu to luminosity: ∫ L_nu dν = ∫ L_nu * (c/λ²) dλ
@@ -201,7 +203,7 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
         mask_uv = (wave_rest >= wave_uv_min) & (wave_rest <= wave_uv_max)
         c_cgs = 2.99792458e10  # cm/s
         integrand_uv_intrinsic = sed_intrinsic_np[mask_uv] * c_cgs / (wave_rest[mask_uv] ** 2)
-        luv_intrinsic = float(np.trapz(integrand_uv_intrinsic, wave_rest[mask_uv]))
+        luv_intrinsic = float(np.trapezoid(integrand_uv_intrinsic, wave_rest[mask_uv]))
 
         # ========================================================================
         # Build the dust model with current tau_v
@@ -210,25 +212,25 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
             ssp_data=ssp,
             observation=obs,
             redshift=Fixed(z),
-            sfh={"type": "tsnorm", "*": FIXED, "peak_lbt_gyr": 0.3},
+            sfh={"type": "tsnorm", "all_params": FIXED, "peak_lbt_gyr": 0.3},
             dust={
                 "type": "two_component",
                 "law_bc": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_bc": tau_v,
-                "emission": {"type": "dale2014", "*": FIXED},
+                "emission": {"type": "dale2014", "all_params": FIXED},
             },
-            neb={"type": "cue", "*": FIXED},
+            neb={"type": "cue", "all_params": FIXED},
         )
 
         # Generate attenuated SED
         params_dust = model_dust.spec.sample(key)
-        result_attenuated = model_dust.predict_rest_sed(params_dust, wave=wave_rest)
-        sed_attenuated_np = np.array(result_attenuated.sed)
+        result_attenuated = model_dust.predict(params_dust)
+        sed_attenuated_np = np.asarray(result_attenuated.rest_sed(wave_rest))
 
         # Integrate UV from attenuated SED
         integrand_uv_attenuated = sed_attenuated_np[mask_uv] * c_cgs / (wave_rest[mask_uv] ** 2)
-        luv_attenuated = float(np.trapz(integrand_uv_attenuated, wave_rest[mask_uv]))
+        luv_attenuated = float(np.trapezoid(integrand_uv_attenuated, wave_rest[mask_uv]))
 
         # Absorbed UV = intrinsic − attenuated
         luv_absorbed = luv_intrinsic - luv_attenuated
@@ -257,7 +259,7 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 
         # Integrate IR: 8–1000 μm
         integrand_ir = sed_ir_dust * c_cgs / (wave_rest[mask_ir] ** 2)
-        lir = float(np.trapz(integrand_ir, wave_rest[mask_ir]))
+        lir = float(np.trapezoid(integrand_ir, wave_rest[mask_ir]))
 
         lir_grid.append(lir)
         luv_absorbed_grid.append(luv_absorbed)
@@ -340,7 +342,7 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.608 seconds)
+   **Total running time of the script:** (0 minutes 12.296 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_to_ir_bolometric_balance.py:

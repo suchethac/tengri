@@ -94,7 +94,7 @@ for _i in range(50):
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.05,
             "tau_diff": 0.02,
             "slope": -0.7,

@@ -7,9 +7,11 @@ resolution against :data:`~tengri.observation.filters.FILTER_REGISTRY`.
 
 Conventions for flagging censored data
 ---------------------------------------
+
 - Missing data: flux = -9999 **and** error = -9999 → masked out entirely
 - Upper limit (CIGALE convention): positive flux + negative error → ``UPPER_LIMIT``
 - Lower limit: negative flux + positive error → ``LOWER_LIMIT``
+
 """
 
 from __future__ import annotations

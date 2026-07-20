@@ -92,6 +92,7 @@ normalized, JAX-compatible; see ``cloudy_cb19.py``).
 
 References
 ----------
+
 - Byler et al. 2017, ApJ, 840, 44
 - Gutkin, Charlot & Bruzual 2016, MNRAS, 462, 1757
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
@@ -473,6 +474,7 @@ class CloudyGridBackend:
         are point-sampled through filters for exact line contributions.
 
         Results stored in:
+
         - self._preint_continuum: PreintegratedGrid (n_met, n_age, n_logU, n_filters)
         - self._preint_lines: PreintegratedLines (n_lines, n_filters)
 
@@ -491,9 +493,11 @@ class CloudyGridBackend:
             Luminosity distance (cm).
         fixed : dict[int, float], optional
             Mapping of axis index → fixed value. Axes are numbered from 0:
+
             - 0: log_met (metallicity)
             - 1: log_age (age in years)
             - 2: log_U (ionization parameter)
+
             If provided, these axes are collapsed at init time. Default None.
 
         """

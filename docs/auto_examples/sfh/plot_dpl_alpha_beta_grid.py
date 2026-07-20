@@ -1,6 +1,6 @@
 """
 Double power-law SFH parameter space: early growth α vs late quenching β
-=====================================================================
+========================================================================
 
 A 3×3 grid showing how the rising slope α (columns) and falling slope β (rows)
 together control the full SFH morphology. Early-time α determines assembly
@@ -49,22 +49,27 @@ for i, beta in enumerate(betas):
             ssp,
             sfh={
                 "type": "dpl",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "alpha": alpha,
                 "beta": beta,
                 "tau_gyr": baseline["tau_gyr"],
                 "log_total_mass": 10.0,
             },
-            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+            dust={
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+                "tau_diff": 0.2,
+                "tau_bc": 0.3,
+            },
             redshift=tengri.Fixed(0.1),
         )
 
         baseline_params = dict(model.spec.sample(jax.random.PRNGKey(0)))
         params_eval = {**baseline_params}
 
-        out = model.predict_rest_sed(params_eval)
-        wave = np.asarray(out.wavelength)
-        sed = np.asarray(out.sed)
+        out = model.predict(params_eval)
+        wave = np.asarray(model.wavelengths)
+        sed = np.asarray(out.rest_sed())
 
         # Optical region
         mask = (wave > 4000) & (wave < 8000)
@@ -90,13 +95,13 @@ model_alpha = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": tengri.Uniform(0.3, 6.0),
         "beta": 2.5,
         "tau_gyr": 1.5,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 baseline_alpha = dict(model_alpha.spec.sample(jax.random.PRNGKey(0)))
@@ -111,10 +116,10 @@ ax_beta = fig_bottom.add_subplot(122)
 
 for alpha in alpha_values:
     params = {**baseline_alpha, "sfh_dpl_alpha": jnp.float64(alpha)}
-    out = model_alpha.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model_alpha.predict(params)
+    wave = np.asarray(model_alpha.wavelengths)
     nu = C_AA_PER_S / wave
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax_alpha.loglog(wave, nu_l_nu, color=cmap(norm_alpha(alpha)), lw=1.4)
 
 ax_alpha.set_xlim(800, 3e4)
@@ -131,13 +136,13 @@ model_beta = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "beta": tengri.Uniform(0.3, 10.0),
         "alpha": 1.5,
         "tau_gyr": 3.0,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 baseline_beta = dict(model_beta.spec.sample(jax.random.PRNGKey(0)))
@@ -147,10 +152,10 @@ norm_beta = mpl.colors.Normalize(vmin=beta_values.min(), vmax=beta_values.max())
 
 for beta in beta_values:
     params = {**baseline_beta, "sfh_dpl_beta": jnp.float64(beta)}
-    out = model_beta.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
+    out = model_beta.predict(params)
+    wave = np.asarray(model_beta.wavelengths)
     nu = C_AA_PER_S / wave
-    nu_l_nu = nu * np.asarray(out.sed)
+    nu_l_nu = nu * np.asarray(out.rest_sed())
     ax_beta.loglog(wave, nu_l_nu, color=cmap(norm_beta(beta)), lw=1.4)
 
 ax_beta.set_xlim(800, 3e4)

@@ -3,8 +3,9 @@ AB Magnitude Zero-point Consistency Check
 ==========================================
 
 Validates that AB magnitude zero-point definitions are consistent across filters.
-Compares photometry converted to magnitude via the formula m_AB = -2.5 log10(F_ν)
-- 48.6 against tengri's built-in magnitude conversion. The AB magnitude system
+Compares photometry converted to magnitude via the formula
+``m_AB = -2.5 log10(F_ν) - 48.6`` against tengri's built-in magnitude
+conversion. The AB magnitude system
 requires this relationship to hold across all filters—any deviation signals a
 zero-point calibration issue.
 
@@ -43,8 +44,8 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(band_names))
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FIXED},
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.2},
+    sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.2},
     redshift=tengri.Fixed(0.05),
 )
 
@@ -67,7 +68,7 @@ phot_fluxes = np.asarray(model.predict_photometry(params))
 mag_manual = -2.5 * np.log10(np.maximum(phot_fluxes, 1e-30)) - 48.6
 
 # Method 2: Use tengri's built-in converter
-mag_tengri = np.asarray(model.predict_magnitudes(params))
+mag_tengri = np.asarray(model.predict(params).magnitudes())
 
 # Residuals: manual − tengri (should be near zero if zero-point is correct)
 residuals = mag_manual - mag_tengri

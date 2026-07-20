@@ -69,8 +69,8 @@ for SED model validation and Fisher analysis (Conroy 2013, ARA&A, 51, 393).
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FREE},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.5, "tau_bc": 0.3},
+        sfh={"type": "tsnorm", "all_params": tengri.FREE},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.5, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.1),
     )
 
@@ -114,6 +114,11 @@ for SED model validation and Fisher analysis (Conroy 2013, ARA&A, 51, 393).
     fig.colorbar(im, ax=ax, shrink=0.8, label="Normalized sensitivity")
     fig.tight_layout()
     plt.savefig("plot_gradient_sensitivity.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 6.524 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_gradient_sensitivity.py:

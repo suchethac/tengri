@@ -22,6 +22,7 @@ The returned ``fn`` is a pure JAX closure that can be JIT-compiled.
 
 References
 ----------
+
 - Bellstedt+2020 (arXiv:2005.11917): snorm, tsnorm.
 - Robotham+2020 (arXiv:2002.06980): snorm_burst, tsnorm_burst (ProSpect).
 - Carnall+2018: DPL.
@@ -188,6 +189,11 @@ class SFHModelSpec(NamedTuple):
 
 # ── Registries ────────────────────────────────────────────────────
 
+#: Every registered mean-SFH family, keyed by the ``sfh={'type': ...}`` name
+#: (``'dpl'``, ``'tsnorm'``, ``'delayed_tau'``, ``'field'``, …). Values are the
+#: :class:`SFHSpec` entries that :func:`resolve_sfh` dispatches on and that
+#: ``tengri.builders.sfh.*`` is generated from. Populated at import time by
+#: :func:`register_sfh`; treat it as read-only.
 SFH_REGISTRY: dict[str, Any] = {}
 
 #: SFH names present in :data:`SFH_REGISTRY` but NOT yet validated against the
@@ -216,7 +222,10 @@ UNVALIDATED_SFH_TYPES: frozenset[str] = frozenset(
     }
 )
 
-# Field sub-model registry: PSD model name -> sqrt_power function
+#: Stochastic-field PSD models, keyed by the ``sfh={'psd': ...}`` name. Values
+#: are the ``sqrt_power(omega, ...)`` callables the Gaussian-process field
+#: draws its amplitude operator from. ``'drw'`` (damped random walk) is the
+#: only entry today.
 FIELD_MODEL_REGISTRY: dict[str, object] = {
     "drw": compute_sqrt_power_drw,
 }
@@ -1649,6 +1658,40 @@ _register(
 
 # ── Composition: resolve_sfh() ────────────────────────────────────
 
+#: ``dense_basis`` carries SFR-constraint points that pin the recent SFH, which
+#: fights both the GP field modulator and the triweight burst kernel
+#: (Zacharegkas+2025). Composing with either swaps in the quantile-only variant.
+#: Its public parameters are prefixed ``sfh_dbp_*``, not ``sfh_db_*``.
+_DB_TO_PURE: dict[str, str] = {"dense_basis": "dense_basis_pure", "db": "dbp"}
+
+#: SFH names that compose with (rather than replace) the smooth model.
+_COMPOSITORS: frozenset[str] = frozenset({"field", "burst"})
+
+
+def apply_compositor_swap(names: list[str]) -> list[str]:
+    """Apply the ``dense_basis`` → ``dense_basis_pure`` auto-swap (#1074).
+
+    Every consumer that resolves an SFH name to a spec must apply this — the
+    swap renames the public parameters (``sfh_db_*`` → ``sfh_dbp_*``), so a
+    consumer that skips it looks up the wrong spec, fails to find the user's
+    parameters, and silently substitutes registry defaults. That is exactly how
+    ``tx_frac_*`` became a no-op in the composite forward model (#1074).
+
+    Parameters
+    ----------
+    names : list of str
+        Requested SFH model names, e.g. ``["dense_basis", "field"]``.
+
+    Returns
+    -------
+    list of str
+        The names with ``dense_basis`` swapped for its pure variant when a
+        compositor (``field`` or ``burst``) is present. Unchanged otherwise.
+    """
+    if not any(n in _COMPOSITORS for n in names):
+        return list(names)
+    return [_DB_TO_PURE.get(n, n) for n in names]
+
 
 def resolve_sfh(
     mean_sfh_type: str | list[str],
@@ -1669,7 +1712,8 @@ def resolve_sfh(
     Returns
     -------
     composed_fn : callable
-        Pure JAX function: fn(t_lookback, **all_internal_kwargs) -> SFR [Msun/yr].
+        Pure JAX function ``fn(t_lookback, **all_internal_kwargs) -> SFR``
+        [Msun/yr].
     merged_params : dict[str, ParamDef]
         All fittable parameters across selected models.
     merged_param_map : dict[str, tuple[str, float, float]]
@@ -1713,14 +1757,7 @@ def resolve_sfh(
     if isinstance(mean_sfh_type, str):
         mean_sfh_type = [mean_sfh_type]
 
-    # Auto-swap: dense_basis → dense_basis_pure when field or burst is present.
-    # The SFR constraint points in dense_basis pin recent SFH shape, which
-    # interferes with both the GP field modulator and the triweight burst
-    # kernel (Zacharegkas+2025) that also control recent SFR variability.
-    _DB_TO_PURE = {"dense_basis": "dense_basis_pure", "db": "dbp"}
-    has_compositor = any(n in ("field", "burst") for n in mean_sfh_type)
-    if has_compositor:
-        mean_sfh_type = [_DB_TO_PURE.get(n, n) for n in mean_sfh_type]
+    mean_sfh_type = apply_compositor_swap(mean_sfh_type)
 
     # Look up models
     specs = []

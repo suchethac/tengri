@@ -41,12 +41,17 @@ class RadioDPL(SEDModelComponent):
     Cross-component contract
     ------------------------
     Reads (opportunistic, with documented fallbacks):
+
       * ``L_ir`` — total IR luminosity (erg/s) for SF synchrotron; falls back to 0.
       * ``L_agn_bol`` — AGN bolometric luminosity (erg/s); falls back to 0.
       * ``log_mstar`` — stellar mass for mass-slope correction; falls back to 10.
+
     Reads:
+
       * ``redshift`` (from BARE_NAME_ALLOWLIST) — for redshift evolution of q_IR.
+
     Publishes:
+
       * ``sed_radio`` — full radio L_ν on the wave grid.
 
     References
