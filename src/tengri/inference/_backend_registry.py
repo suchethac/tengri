@@ -62,6 +62,25 @@ class BackendEntry:
 #: experimental tier, indistinguishable from ones that work (#1287).
 TIERS: frozenset[str] = frozenset({"primary", "experimental", "broken"})
 
+#: The one default inference method, shared by every surface that starts a fit.
+#:
+#: Five surfaces used to answer this question differently (#1289):
+#:
+#:     ForwardModel.fit   'vi'                  <- canonical
+#:     Fitter.run         'vi_nonlinear_fast'   <- the engine ForwardModel.fit calls
+#:     SEDModel.fit       'vi'                  <- deprecated
+#:     fit_batch          'vi'
+#:     Galaxy.fit         'map'                 <- and a different kwarg name
+#:
+#: So ``forward.fit(d, n)`` and ``Fitter(forward, d, n).run()`` -- same objects,
+#: same data -- ran different backends with no warning. ``'vi'`` and
+#: ``'vi_nonlinear_fast'`` are in fact the same geoVI algorithm (both pass
+#: ``sample_mode="nonlinear_resample"``); they differ only in Python logging,
+#: so aligning them is posterior-preserving.
+#:
+#: ``Galaxy.fit`` deliberately keeps ``"map"`` -- see the note in its docstring.
+DEFAULT_METHOD: str = "vi"
+
 _BACKENDS: dict[str, BackendEntry] = {}
 
 

@@ -49,6 +49,8 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from tengri.inference._backend_registry import DEFAULT_METHOD
+
 __all__ = ["Fitter", "resolve_method"]
 
 if TYPE_CHECKING:
@@ -1833,7 +1835,7 @@ class Fitter:
 
     def run(
         self,
-        method: str = "vi_nonlinear_fast",
+        method: str = DEFAULT_METHOD,
         *,
         init_from=None,
         key=None,

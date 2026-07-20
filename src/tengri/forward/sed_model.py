@@ -79,6 +79,7 @@ from tengri.forward.sed_model_types import (
     PriorPredictive,
     SEDModelState,
 )
+from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.observation.photometry import ab_mag_from_flux
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
@@ -7411,7 +7412,7 @@ class SEDModel:
         self,
         data=None,
         noise=None,
-        method: str = "vi",
+        method: str = DEFAULT_METHOD,
         data_type: str | None = None,
         *,
         photometry: tuple | None = None,

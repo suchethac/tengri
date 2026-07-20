@@ -83,7 +83,7 @@ register_backend(
     tier="primary",
     short_doc=(
         "NIFTy geoVI variational inference (cold ~100s, ~20 GB RSS at D=6-7 — "
-        "memory-heavy; consider mcmc_ghmc for faster turnaround on D<10)"
+        "memory-heavy; consider mcmc_hmc for faster turnaround on D<10)"
     ),
     aliases=("vi_nonlinear",),
     requires=("nifty8",),

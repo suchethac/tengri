@@ -2204,6 +2204,11 @@ def help(topic: str | None = None) -> None:
     n_sfh_ok = len(list_sfh_models(status="production"))
     n_neb = len(list_nebular_backends())
     n_inf = len(list_inference_methods(tier="primary"))
+    n_recipes = len(list_recipes())
+    # The one default, read from the registry rather than written down here —
+    # the whole point of #1289 was that hard-coded defaults drifted apart.
+    from tengri.inference._backend_registry import DEFAULT_METHOD as default_method
+
     try:
         from tengri import list_filters  # avoid circular import on cold load
 
@@ -2253,27 +2258,38 @@ tengri — differentiable galaxy SED fitting in JAX
 ────────────────────────────────────────────────────────────────────
 3.  Build a fit
 ────────────────────────────────────────────────────────────────────
-    obs        = tengri.Observation(photometry=tengri.Photometry.from_names([...]))
-    parameters = tengri.Parameters(...)        # priors + fixed values
-    sed        = tengri.SEDModel.build(ssp_data=..., observation=obs, ...)
-    forward    = tengri.ForwardModel.build(sed=sed, observation=obs)
-    fitter     = tengri.Fitter(forward, data, noise)
-    posterior  = fitter.run("map")             # or "nuts", "vi", …
+    from tengri.observation import Observation, Photometry   # canonical path
+
+    obs       = Observation(photometry=Photometry.from_names([...]))
+    sed       = tengri.SEDModel.build(ssp_data=ssp, observation=obs,
+                                      **tengri.recipes.star_forming_photometry())
+    forward   = tengri.ForwardModel.build(sed=sed, observation=obs)
+    posterior = forward.fit(flux, flux_err, method="{default_method}")
     posterior.summary()                        # median ± 68% CI per param
+
+    `forward.fit(...)` is the canonical entry point. It wraps
+    `Fitter(forward, data, noise).run(method)`; reach for the explicit
+    Fitter only when you need to hold the engine itself.
+
+    `tengri.list_recipes()` lists the {n_recipes} starting points. To hand-roll a
+    model instead, pass group dicts to SEDModel.build:
+      sfh={{'type': 'dpl', 'all_params': tengri.FREE}},
+      dust={{'type': 'two_component', 'law_bc': 'calzetti'}}, …
+      tengri.describe_recipe("star_forming_photometry")   # see what one sets
+
+    Pick a method:
+      tengri.list_inference_methods(tier="primary")   # {n_inf} that are validated
+      "map" is a point estimate — fast, but no uncertainties.
+      "{default_method}" and "mcmc_nuts" give you a posterior.
 
     Extract derived quantities:
       posterior.properties["stellar_mass"]     # array (n_samples,)
-      posterior.properties.ci("stellar_mass") # credible interval
-      tengri.list_properties()                # see all available names
+      posterior.properties.ci("stellar_mass")  # credible interval
+      tengri.list_properties()                 # see all available names
 
-    Pick the right kwargs:
-      tengri.suggest_parameters(mean_sfh_type="dpl", agn_model="skirtor")
-
-    The outer shell:
-      tengri.ForwardModel — thin shell inference talks to. Owns the SED
-        chain and the observation; exposes a single .predict(params)
-        method that returns a {{channel: array}} dict (phot_fnu, spec_fnu).
-        Inference doesn't need to know which prediction method to call.
+    Predict without fitting:
+      pred = sed.predict(params)               # rich + cached, one forward pass
+      sed.predict_photometry(params)           # lean, JIT/vmap-safe
 
 ────────────────────────────────────────────────────────────────────
 4.  Contribute a new physics alternative
