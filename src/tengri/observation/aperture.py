@@ -16,9 +16,11 @@ project.
 
 References
 ----------
+
 - Graham, A. W. & Driver, S. P., 2005, PASA, 22, 118 (Sersic-profile
   Petrosian → total-flux corrections).
 - Kron, R. G., 1980, ApJS, 43, 305 (Kron-aperture concept).
+
 """
 
 from __future__ import annotations

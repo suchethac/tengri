@@ -26,12 +26,15 @@ Prospector papers, all with the *published* prior on the SFR ratios:
 
 - ``continuity``        — Leja+2019 — StudentT(μ=0, σ=0.3, df=2) on log-SFR
   ratios between adjacent bins.
+
 - ``bursty_continuity`` — Tacchella+2022 — same shape, but the per-ratio σ
   switches between 1.0 dex (younger edge < 1 Gyr) and 0.3 dex (older). The
   prior is intentionally wider on recent ratios so the data can drive
   burstiness.
+
 - ``dirichlet``         — Leja+2017 — symmetric Dirichlet(1,…,1) on mass
   fractions via Beta(1, 1) stick-breaking auxiliaries.
+
 - ``psb_suess2022``     — Suess+2022 — post-starburst SFH that splits the
   recent past into a youngest [0, t_last] bin and a [t_last, t_flex] flex
   zone. ``t_last`` and ``t_flex`` are free, with uniform priors.
@@ -46,7 +49,7 @@ edges via :func:`~tengri.make_agebins_from_zred` requires passing
 ``bin_edges_gyr`` through the composer, which is a separate plumbing
 follow-up.
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-113
+.. GENERATED FROM PYTHON SOURCE LINES 33-116
 
 
 

@@ -19,7 +19,7 @@
 
 
 Lusso & Risaliti 2016: α_OX – L_UV relation for AGN discs
-========================================================
+=========================================================
 
 The ultraviolet-to-X-ray spectral slope α_OX encodes the fundamental
 physics of accretion discs. At higher bolometric luminosities, discs
@@ -48,7 +48,7 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154
 
  .. code-block:: none
 
-    α_OX values: min=-0.453, max=0.180
+    α_OX values: min=-0.435, max=0.180
     Log L_2500: min=28.08, max=30.71
 
 

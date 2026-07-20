@@ -7,6 +7,7 @@ the inner kernel with adaptive covariance tuning.
 
 Available modules
 -----------------
+
 - ``base``: Core NS types and generic kernel.
 - ``adaptive``: Adaptive NS with inner kernel parameter tuning.
 - ``nss``: Nested Slice Sampling top-level API.

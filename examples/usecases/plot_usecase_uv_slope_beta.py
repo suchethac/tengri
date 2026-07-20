@@ -20,8 +20,10 @@ cannot distinguish whether a red continuum is young+dusty or old+dustless.
 Iso-β contours reveal the degenerate directions.
 
 References:
+
 - Meurer, Heckman & Calzetti 1999, ApJ, 521, 64 (starburst IRX–β relation)
 - Calzetti, Kinney & Storchi-Bergmann 1994, ApJ, 429, 582 (UV slope fitting windows)
+
 """
 
 import os

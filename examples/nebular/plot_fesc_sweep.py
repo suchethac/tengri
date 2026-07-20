@@ -13,9 +13,11 @@ highlighting the Lyman continuum discontinuity (800–1350 Å). Contours
 trace how f_esc modulates the ionizing photon budget seen by the ISM.
 
 References:
+
 - Inoue et al. 2014, MNRAS, 442, 1805 (escape fraction formalism)
 - Steidel et al. 2018, ApJ, 869, 123 (Lyman continuum observations)
 - Li et al. 2024, ApJ, 969, 28 (Cue emulator)
+
 """
 
 import os

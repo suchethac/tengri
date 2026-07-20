@@ -1167,9 +1167,11 @@ class StudentT(Distribution):
         Scale parameter. Must be positive. Default: 1.0.
     df : float, optional
         Degrees of freedom. Controls tail weight:
+
         - df → ∞ gives Gaussian (heaviest concentration at center)
         - df = 3 gives a moderately heavy-tailed prior
         - df = 1 gives Cauchy (extremely heavy tails)
+
         Default: 3.0.
     lo : float, optional
         Lower truncation bound. Default: -∞ (no lower truncation).
@@ -1771,6 +1773,7 @@ def resolve_shorthand(val) -> Distribution:
     ----------
     val : float, int, tuple, or Distribution
         Parameter specification:
+
         - Scalar int/float → Fixed(value)
         - Tuple (lo, hi) → Uniform(lo, hi)
         - Distribution instance → returned unchanged

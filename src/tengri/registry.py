@@ -57,6 +57,7 @@ class _RegistryTable(list):
         - ``use`` (the call-site hint) is shown only on cross-menu /
           search tables — single-menu tables expose it via describe()
           to keep the row width readable.
+
         """
         kinds = {d.get("kind") for d in self}
         hidden = set(self._ALWAYS_HIDDEN)

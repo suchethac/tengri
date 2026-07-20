@@ -37,6 +37,7 @@ marker lines to jump. In order:
 
 - ``Backend Registry Initialization`` — imports that populate the
   registry at module load
+
 """
 
 from __future__ import annotations
@@ -905,10 +906,12 @@ class Fitter:
 
         Notes
         -----
+
         - ``None`` → ``()`` (no background compile)
         - ``"auto"`` → infer from ``spec.stochastic`` and ``data_type``
         - ``str`` → wrap as ``(str,)``
         - ``tuple`` → return as-is
+
         """
         if compile_modes is None:
             return ()
@@ -1957,7 +1960,8 @@ class Fitter:
           The native version is ~19× faster but produces different posterior shapes
           on some problems (e.g., PSD timescale can differ by order of magnitude).
           Validate before swapping methods. See
-          :doc:`bench/reports/2026-04-17_native_vs_nifty.md`.
+          ``bench/reports/2026-04-17_native_vs_nifty.md`` in the repository
+          (outside the docs tree, so it is not a linkable document).
 
         - **VIConfig.n_samples doubling**: In geoVI, when ``mirror_samples=True``
           (default), ``n_samples=3`` produces 6 effective samples (3 + 3 mirrors).
@@ -2230,6 +2234,7 @@ class Fitter:
         Notes
         -----
         The summary includes:
+
         - Data dimensionality and median signal-to-noise ratio
         - Free parameters and latent grid points (ξ) if stochastic SFH
         - Parameter names, prior distributions, and bounds
@@ -2657,6 +2662,7 @@ class Fitter:
         Notes
         -----
         **Parallelization strategy**:
+
         - For ``method="map"`` with precomputed photometry: uses ``jax.vmap``
           to fit all galaxies in a single JIT call (1-2s total).
         - For MCMC methods with fixed SFH: uses ``jax.vmap`` + shared adaptation.

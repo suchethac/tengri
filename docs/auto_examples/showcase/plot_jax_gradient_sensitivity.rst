@@ -36,13 +36,15 @@ and age has opposing effects across the spectrum (younger = brighter UV,
 older = redder continuum through dust absorption).
 
 References:
+
   - Bradbury et al. 2018 (JAX: composable transformations):
 
     arXiv:1811.02693
+
   - Hearin et al. 2023 (DSPS — differentiable stellar population synthesis):
     arXiv:2308.16742
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-182
+.. GENERATED FROM PYTHON SOURCE LINES 29-185
 
 
 
@@ -52,19 +54,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -224,11 +215,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_jax_gradient_sensitivity.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.013 seconds)
 
 
 .. _sphx_glr_download_auto_examples_showcase_plot_jax_gradient_sensitivity.py:

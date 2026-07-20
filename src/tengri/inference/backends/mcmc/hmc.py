@@ -39,6 +39,7 @@ def _resolve_chain_runner(chain_method, n_chains):
     - ``"parallel"``: one chain per device via ``jax.pmap`` (~one chain's wall
       with enough forced host devices); falls back to vmap with a warning when
       too few devices are visible, so a fit never fails for want of ``XLA_FLAGS``.
+
     """
     if chain_method == "sequential":
         return _sequential_chains
@@ -119,6 +120,7 @@ def run_hmc(
           ``XLA_FLAGS=--xla_force_host_platform_device_count=N`` set before
           importing jax; falls back to ``"vmap"`` with a warning if fewer than
           ``n_chains`` devices are visible.
+
     verbose : bool
         Print progress.
     """

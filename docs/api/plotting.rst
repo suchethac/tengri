@@ -39,8 +39,13 @@ Diagnostics
 Constants
 ---------
 
-.. autodata:: tengri.analysis.plotting.COLORS
+.. Document at the defining module (``styles``) rather than the package
+   re-export: autodoc resolves ``#:`` doc-comments against the module named in
+   the directive, and pointed at the package these rendered Python's builtin
+   ``dict.__doc__`` instead of the palette description.
 
-.. autodata:: tengri.analysis.plotting.SDSS_WAVE_EFF
+.. autodata:: tengri.analysis.plotting.styles.COLORS
 
-.. autodata:: tengri.analysis.plotting.SPECTRAL_FEATURES
+.. autodata:: tengri.analysis.plotting.styles.SDSS_WAVE_EFF
+
+.. autodata:: tengri.analysis.plotting.styles.SPECTRAL_FEATURES

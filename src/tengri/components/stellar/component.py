@@ -784,6 +784,7 @@ class StellarSEDComponent:
     - ``stellar_phot_lnu_precomp`` (ndarray, shape ``(n_filter,)``, erg/s/Hz) —
       stellar contribution to photometry from the LUT. Published only when
       ``approx=WavePrecomp()`` is set at model construction.
+
     """
 
     config: StellarSEDComponentConfig = field(default_factory=StellarSEDComponentConfig)
@@ -920,9 +921,11 @@ class StellarSEDComponent:
         redshift_spec : dict[str, Any] | None
             Redshift specification for precomputation. If None or
             mode="fixed", builds a fixed-z LUT.
+
             - mode="fixed", value=float: builds LUT at that fixed z.
             - mode="free", z_min=float, z_max=float, n_z=int: builds
               ztable via precompute_photometry_ztable with the given grid.
+
         spec_wave_obs : array_like, shape (n_pix,), optional
             Observed-frame spectrum pixel wavelengths [Angstrom]. Required
             when ``spectrum_precomp=True``.

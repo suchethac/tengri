@@ -842,6 +842,7 @@ class SEDModelComponent:
         -------
         tuple[ndarray, mapping[str, ndarray]]
             (sed_out, published) where:
+
             - sed_out: Updated rest-frame L_nu in erg/s/Hz.
             - published: Dict of keys declared in ``outputs``, e.g.,
               ``{"L_ir": 1e45}``.

@@ -27,8 +27,10 @@ width = 0.5 Gyr. Default DSPS SSP (no metallicity variation or dust).
 z = 0.05 (rest-frame SED only; no cosmological redshift applied).
 
 References:
+
 - Hogg, D. W., Blanton, M. R., et al. 2002, AJ, 123, 1147 (K-corrections
   and SED unit conventions)
+
 """
 
 import os

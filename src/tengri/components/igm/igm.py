@@ -2,6 +2,7 @@
 """Intergalactic medium absorption (Inoue et al. 2014).
 
 Computes the mean IGM transmission T_IGM(lambda_obs, z_source) accounting for:
+
 - Lyman-series line absorption from the Ly-alpha forest (LAF)
 - Lyman-series line absorption from Damped Ly-alpha systems (DLA)
 - Lyman-continuum absorption from the LAF
@@ -532,6 +533,7 @@ def igm_transmission(
     for z > 5 galaxies.
 
     **Approximations**:
+
     - **Mean transmission**: This is the mean IGM absorption averaged over cosmic variance.
         Individual sightlines have additional scatter from the Lyman-alpha forest (not included).
     - **Piecewise power laws**: The Inoue et al. (2014) model uses analytic fits to simulations
@@ -732,9 +734,11 @@ def igm_transmission_patchy(
 
     References
     ----------
+
     - Miralda-Escude 1998, ApJ, 501, 15
     - Mason et al. 2018, ApJ, 856, 2
     - Keating et al. 2025
+
     """
     # Standard Inoue+2014 transmission
     t_inoue = igm_transmission(wave_obs, z, **kwargs)

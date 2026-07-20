@@ -19,6 +19,7 @@ All functions are pure JAX and JIT-compilable.
 
 NLR module map (#897) — these are **distinct**, not duplicates
 ---------------------------------------------------------------
+
 * ``nlr.py`` (this module) — the single-source **analytic** NLR physics
   kernel (``compute_nlr_sed``, Richardson+2014 line ratios). Consumed by the
   composable block ``blocks/nlr_analytic.py`` (the canonical, grammar-reachable
@@ -33,8 +34,10 @@ NLR module map (#897) — these are **distinct**, not duplicates
 
 References
 ----------
+
 - Richardson et al. 2014, ApJ, 786, 87 (NLR emission-line template)
 - Feltre et al. 2016, MNRAS, 456, 3354 (NLR emission-line diagnostics)
+
 """
 
 import jax.numpy as jnp

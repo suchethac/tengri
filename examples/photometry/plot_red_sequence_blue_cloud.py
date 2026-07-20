@@ -14,10 +14,13 @@ Physical insight made obvious:
 
 - **Red sequence** (old, quiescent): no ongoing star formation, minimal dust,
   ``u − r ≈ 2.5`` due to 4000 Å Balmer break in the ``u`` band
+
 - **Blue cloud** (young, star-forming): hot O/B stars dominate UV, moderate
   dust extinction, ``u − r ≈ 1.0–1.5``
+
 - **Green valley** (intermediate): transitional populations; sparse in modern
   surveys due to fast quenching timescales
+
 """
 
 import os

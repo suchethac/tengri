@@ -34,12 +34,13 @@ converting line ratios to a 12 + log(O/H) on a sample. The plot spans
 (Kewley & Dopita 2002) and the famous double-valued R23 behavior.
 
 References:
+
 - Pagel et al. 1979, MNRAS, 189, 95 (R23 ratio)
 - Kewley & Dopita 2002, ApJS, 142, 35 (strong-line calibrations)
 - Marino et al. 2013, ApJ, 768, 171 (N2 metallicity diagnostic)
 - Pettini & Pagel 2004, MNRAS, 348, L59 (O3N2 diagnostic)
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-120
+.. GENERATED FROM PYTHON SOURCE LINES 25-122
 
 
 
@@ -155,7 +156,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.219 seconds)
+   **Total running time of the script:** (0 minutes 2.360 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_strong_line_metallicity_diagnostics.py:

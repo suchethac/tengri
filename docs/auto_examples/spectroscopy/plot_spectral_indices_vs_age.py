@@ -9,8 +9,10 @@ diagnostic responds on which timescale:
 
 - ``D_n(4000)``  Balogh+1999 break-strength — rises over Gyr,
   the slowest clock
+
 - ``Mg b``       5170 Å, EW computed in the Trager+1998 windows —
   rises over Gyr (sensitive to α-element abundance + age)
+
 - ``Hα``         narrow EW, rises briefly during the WR + nebular
   epoch (≲ 30 Myr) then drops over Myr as O stars die
 

@@ -238,6 +238,7 @@ class KD18Disc(SEDModelComponent):
         ----------
         p : mapping[str, ndarray]
             Parameters with prefix already stripped:
+
             - log_lbol: log₁₀(L_bol / L_sun)
             - log_mbh: log₁₀(M_BH / M_sun)
             - log_ledd: Eddington ratio
@@ -250,6 +251,7 @@ class KD18Disc(SEDModelComponent):
             - kt_hot: hot corona temperature (keV)
             - r_warm_ratio: R_warm / R_hot
             - frac: disc luminosity fraction
+
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
         wave : ndarray, shape (n_wave,)
@@ -261,8 +263,10 @@ class KD18Disc(SEDModelComponent):
         -------
         tuple[ndarray, dict]
             (sed_out, published) where:
+
             - sed_out: Updated SED (sed_in + disc contribution).
             - published: {"L_agn_disc": bolometric disc luminosity [erg/s]}.
+
         """
         # Call K&D18 disc model
         sed_disc = _kubota_done_disc_fn(

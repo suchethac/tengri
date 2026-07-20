@@ -34,11 +34,13 @@ star-forming galaxies cluster below this threshold.
 This gallery:
 
 1. Builds ~50 star-forming galaxy models with:
+
    - Variable dust opacity (tau_diff ∈ [0, 2], tau_bc ∈ [0.1, 1.5])
    - Fixed SFH shape (DPL) and redshift (z = 0.1)
    - Fixed dust temperature (35 K, cool)
 
 2. Builds ~10 hot-dust-emission models (AGN proxy) with:
+
    - Suppressed stellar emission (log_sfr = −2)
    - Variable dust temperature (60–100 K, hotter than SF)
    - Variable opacity to mimic AGN-heated torus
@@ -56,7 +58,7 @@ References
 .. [2] Wright, E. L., Eisenhardt, P. R. M., Mainzer, A. K., et al., 2010,
        AJ, 140, 1868. "The Wide-field Infrared Survey Explorer (WISE)"
 
-.. GENERATED FROM PYTHON SOURCE LINES 41-273
+.. GENERATED FROM PYTHON SOURCE LINES 43-275
 
 
 
@@ -66,19 +68,8 @@ References
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

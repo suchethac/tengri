@@ -23,6 +23,7 @@ where f_cal is a free parameter inferred from data (typically 1-15%).
 
 References
 ----------
+
 - Enßlin et al. (2009): Information field theory
 - Knollmüller & Enßlin (2019): Encoding prior knowledge in the structure of
   the likelihood
@@ -455,6 +456,7 @@ def variable_noise_metric_vec(
     """GGN metric-vector product for VariableCovarianceGaussian.
 
     Computes M @ v = J^T H_E J v + v, where:
+
     - J is the Jacobian of (f, τ) w.r.t. ξ
     - H_E is the Hessian of E w.r.t. (f, τ):
         d²E/df² = τ²
@@ -781,12 +783,13 @@ def apply_zp_floor(
 
 @dataclass(frozen=True)
 class PoissonNoiseLikelihood:
-    """Photon-limited Poisson likelihood with sky and read-noise terms.
+    r"""Photon-limited Poisson likelihood with sky and read-noise terms.
 
     Implements Gaussian approximation to Poisson counting noise, valid
     when observed count rates are ≥ ~5 photons (Newberry 1991).
 
     The variance combines:
+
     - Poisson shot noise: σ²_shot = F / g (counts → e⁻)
     - Sky background: σ²_sky = σ_sky² / g
     - Read noise: σ²_read = σ_read² / g²
@@ -829,8 +832,8 @@ class PoissonNoiseLikelihood:
 
     .. math::
 
-        \\sigma^2_{\rm eff} = \frac{F}{g} + \frac{\\sigma^2_{\rm sky}}{g}
-        + \frac{\\sigma^2_{\rm read}}{g^2} + \bigl(f_{\rm sys} \\cdot F\bigr)^2
+        \sigma^2_{\rm eff} = \frac{F}{g} + \frac{\sigma^2_{\rm sky}}{g}
+        + \frac{\sigma^2_{\rm read}}{g^2} + \bigl(f_{\rm sys} \cdot F\bigr)^2
 
     When all background terms are zero, reduces to σ² = F (pure Poisson).
     Handles predicted=0 safely by clamping to small positive value.
@@ -909,7 +912,7 @@ class PoissonNoiseLikelihood:
 
 @dataclass(frozen=True)
 class StudentTLikelihood:
-    """Heavy-tailed Student-t likelihood for outlier-robust SED fitting.
+    r"""Heavy-tailed Student-t likelihood for outlier-robust SED fitting.
 
     Implements the outlier-robust noise model of Hogg, Bovy & Lang (2010),
     using a Student-t distribution with ν degrees of freedom.
@@ -937,8 +940,8 @@ class StudentTLikelihood:
 
     .. math::
 
-        \\ln p(d | m, \\sigma, \nu) = \\ln T_\nu\\!\\left(\frac{d - m}{\\sigma}; \nu\right)
-        - \\ln \\sigma
+        \ln p(d | m, \sigma, \nu) = \ln T_\nu\!\left(\frac{d - m}{\sigma}; \nu\right)
+        - \ln \sigma
 
     where :math:`T_\nu` is the Student-t PDF with :math:`\nu` degrees of freedom.
 

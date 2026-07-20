@@ -38,7 +38,7 @@ SED as young, hot stars fade and the older stellar population emerges.
 - the smooth evolution at older ages as the UV colors fade
 - the physical origin of color-color diagnostic diagrams used in photometric surveys
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-122
+.. GENERATED FROM PYTHON SOURCE LINES 23-123
 
 
 

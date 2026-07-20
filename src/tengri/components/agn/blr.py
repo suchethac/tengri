@@ -18,6 +18,7 @@ All functions are pure JAX and JIT-compilable.
 
 References
 ----------
+
 - Vanden Berk et al. 2001, AJ, 122, 549 (SDSS composite quasar spectrum)
   https://doi.org/10.1086/321167
 - Netzer 1990, in Accretion Power in Astrophysics (Broad-line region models)
@@ -29,6 +30,7 @@ References
   https://doi.org/10.1086/506270
 - Kovacevic et al. 2010, ApJS, 189, 15 (optical Fe II model)
   https://doi.org/10.1088/0067-0049/189/1/15
+
 """
 
 from pathlib import Path
@@ -166,6 +168,7 @@ def _fe2_pseudo_continuum(
 
     Uses empirical Fe II templates from PyQSOFit (Temple, Hewett & Banerji 2021),
     which combine:
+
     - UV (1200–3500 Å): Vestergaard & Wilkes 2001 + Tsuzuki+2006
     - Optical (3500–7500 Å): Boroson & Green 1992
 
@@ -197,10 +200,12 @@ def _fe2_pseudo_continuum(
 
     References
     ----------
+
     - Temple, M. J., Hewett, P. C., & Banerji, M. 2021, MNRAS, 508, 737
     - Vestergaard, M., & Wilkes, B. J. 2001, ApJS, 134, 1 (UV Fe II)
     - Tsuzuki, Y., et al. 2006, ApJ, 650, 57 (UV/optical Fe II)
     - Boroson, T. A., & Green, R. F. 1992, ApJS, 80, 109 (optical Fe II)
+
     """
     if _FE2_UV_WAVE is None or _FE2_OPT_WAVE is None:
         raise RuntimeError(

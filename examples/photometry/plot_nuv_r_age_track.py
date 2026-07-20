@@ -18,6 +18,7 @@ SED as young, hot stars fade and the older stellar population emerges.
 - the NUV−r color jump across the green valley (age ~ 1–2 Gyr)
 - the smooth evolution at older ages as the UV colors fade
 - the physical origin of color-color diagnostic diagrams used in photometric surveys
+
 """
 
 import os

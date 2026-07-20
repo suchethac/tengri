@@ -37,9 +37,10 @@ The posterior shifts away from truth at low S/N when the prior is
 strong; at high S/N both priors give the same MAP.
 
 References:
+
 - Gelman et al. 2013 *Bayesian Data Analysis* (3rd ed.), §3.4.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-108
+.. GENERATED FROM PYTHON SOURCE LINES 25-110
 
 
 
@@ -139,11 +140,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_prior_systematic_dust.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.383 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_prior_systematic_dust.py:

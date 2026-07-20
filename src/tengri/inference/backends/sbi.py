@@ -30,8 +30,10 @@ Load a pre-trained posterior::
 
 References
 ----------
+
 - Cranmer, Brehmer & Louppe 2020, PNAS, 117, 30055
 - Alsing et al. 2019, MNRAS, 488, 4440 (DELFI for galaxy SEDs)
+
 """
 
 from __future__ import annotations

@@ -576,11 +576,13 @@ class Galaxy:
         Parameters
         ----------
         fmt : {"list", "short", "bibtex", "report", "bibliography"}
+
             - "list" (default): list of ``Citation`` records.
             - "short": newline-joined one-line forms.
             - "bibtex": BibTeX blocks separated by blank lines.
             - "report": grouped human-readable report.
             - "bibliography": the :class:`Bibliography` container itself.
+
         """
         if fmt == "bibliography":
             return self.bibliography
@@ -712,6 +714,7 @@ def doctor() -> str:
     """Run an environment health check and return a human-readable report.
 
     Checks:
+
     - JAX version and backend
     - 64-bit (x64) enabled
     - XLA compilation cache directory

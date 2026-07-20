@@ -22,14 +22,15 @@ AB Magnitude Zero-point Consistency Check
 ==========================================
 
 Validates that AB magnitude zero-point definitions are consistent across filters.
-Compares photometry converted to magnitude via the formula m_AB = -2.5 log10(F_ν)
-- 48.6 against tengri's built-in magnitude conversion. The AB magnitude system
+Compares photometry converted to magnitude via the formula
+``m_AB = -2.5 log10(F_ν) - 48.6`` against tengri's built-in magnitude
+conversion. The AB magnitude system
 requires this relationship to hold across all filters—any deviation signals a
 zero-point calibration issue.
 
 Reference: Fukugita et al. 1996, AJ, 111, 1748 (AB magnitude system).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-101
+.. GENERATED FROM PYTHON SOURCE LINES 14-102
 
 
 
@@ -132,11 +133,6 @@ Reference: Fukugita et al. 1996, AJ, 111, 1748 (AB magnitude system).
 
     fig.tight_layout()
     plt.savefig("plot_diag_ab_mag_zero_point.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.064 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_ab_mag_zero_point.py:

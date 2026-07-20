@@ -11,7 +11,9 @@ and should not be replaced.
 
 References
 ----------
+
 - Hearin et al. 2023, Open J. Astrophysics, 6, 1 (DSPS)
+
 """
 
 from __future__ import annotations

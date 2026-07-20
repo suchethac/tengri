@@ -8,6 +8,7 @@ Adds two BAGPIPES-parity helpers (closes #509):
 - :func:`plot_calibration` — plot the Chebyshev calibration polynomial
   :math:`C(\\lambda)` with its 16/84 band, useful for sanity-checking
   spectroscopy fits.
+
 """
 
 from __future__ import annotations

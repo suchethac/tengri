@@ -17,6 +17,7 @@ two-component dust model (diffuse + birth cloud) and Dale et al. (2014)
 infrared re-emission.
 
 **References:**
+
  - Förster Schreiber et al. (2003) [1]_ for M82 SED observations
 
  - Engelbracht et al. (2008) [2]_ for Spitzer MIR/FIR measurements

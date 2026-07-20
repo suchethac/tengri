@@ -28,6 +28,7 @@ intervals — useful when the data resolve more than ~5 SFR bins and you
 want a flexible prior that doesn't impose a strong shape.
 
 Three forms overlaid at their default priors:
+
 - ``continuity``       — Leja+2019 fixed-bin continuity prior
 - ``dirichlet``        — Leja+2017 Dirichlet over normalized bin weights
 - ``dense_basis``      — Iyer+2019 GP-regularized cumulative SFH
@@ -38,7 +39,7 @@ reference. The dispersion of each family is the visual prior — wide
 clouds mean the form is permissive, narrow clouds mean the form is
 restrictive.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-97
+.. GENERATED FROM PYTHON SOURCE LINES 23-98
 
 
 

@@ -19,7 +19,7 @@
 
 
 Model misspecification: post-starburst galaxies reveal wrong SFH
-==============================================================
+================================================================
 
 .. image:: images/sphx_glr_plot_workflow_post_starburst_001.png
    :alt: plot workflow post starburst

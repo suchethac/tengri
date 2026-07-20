@@ -2,6 +2,7 @@
 """Legacy parameter alias resolution and deprecation warnings.
 
 This module consolidates all legacy parameter name handling:
+
 - Alias tables (_LEGACY_PARAM_ALIASES, _LEGACY_SFH_TYPE_ALIASES)
 - Reverse alias map for lookup (_REVERSE_ALIASES)
 - Unified resolver functions with deprecation warnings

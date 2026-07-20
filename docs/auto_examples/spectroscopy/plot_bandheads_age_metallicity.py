@@ -12,6 +12,7 @@ This two-panel comparison shows:
 
 - **Left panel**: Mg b and Fe5270 equivalent widths (pseudo-EW in Ångströms)
   versus single-burst age at solar metallicity (Z/Zsun = 0.0 dex).
+
 - **Right panel**: same age range but across metallicities
   (Z/Zsun = -1.0, -0.5, 0.0, +0.3 dex), illustrating the strength of the
   age–metallicity degeneracy.

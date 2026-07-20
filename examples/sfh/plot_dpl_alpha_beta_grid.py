@@ -1,6 +1,6 @@
 """
 Double power-law SFH parameter space: early growth α vs late quenching β
-=====================================================================
+========================================================================
 
 A 3×3 grid showing how the rising slope α (columns) and falling slope β (rows)
 together control the full SFH morphology. Early-time α determines assembly

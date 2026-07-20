@@ -9,6 +9,7 @@ the ancient burst's optical/IR, rendering the ancient population invisible to
 broadband SED fitting.
 
 Shows three scenarios:
+
 - Ancient burst only: population born 10 Gyr ago
 - Young burst only: starburst 300 Myr ago
 - Both bursts: superposition reveals UV dominance of youth

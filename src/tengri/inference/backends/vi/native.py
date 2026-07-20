@@ -363,6 +363,7 @@ def run_native_vi(
     """Native JIT-compiled VI variants: ~500x faster than NIFTy's optimize_kl.
 
     Supports multiple sample modes:
+
     - ``"linear"`` (default): VI linear sampling (fastest, equivalent to MGVI).
     - ``"vi"``: Full geoVI with nonlinear coordinate curving.
     - ``"nonlinear_update"``: geoVI with sample reuse (best convergence).

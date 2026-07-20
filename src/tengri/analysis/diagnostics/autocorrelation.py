@@ -10,6 +10,7 @@ where K is determined by the condition k > 5τ (the window adapts to
 the actual correlation length).
 
 Two modes:
+
 - **Standard**: ρ(k) = Cor(x_i, x_{i+k}) — standard Pearson autocorrelation
 - **Absolute**: ρ(k) = Cor(|x_i - μ|, |x_{i+k} - μ|) — catches non-Gaussian
   correlations (e.g., skewed posteriors, multimodal chains)

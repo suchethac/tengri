@@ -10,8 +10,8 @@ Architecture overview
 The component tree and geometric masking design in this module is inspired
 by the ``UnifiedAGN`` class in the Synthesizer package
 (Lovell et al. 2025, Open J. Astrophys. 8, doi:10.33232/001c.145766;
- Roper et al. 2026, JOSS 11, 9436, doi:10.21105/joss.09436;
- https://github.com/synthesizer-project/synthesizer).
+Roper et al. 2026, JOSS 11, 9436, doi:10.21105/joss.09436;
+https://github.com/synthesizer-project/synthesizer).
 Per the Synthesizer citation policy, BOTH papers must be cited together.
 
 Synthesizer's model defines:
@@ -62,6 +62,7 @@ for compatibility with gradient-based inference (VI, HMC):
 
 Pre-registered configurations
 ------------------------------
+
 - **multicolor_agn** (= deprecated alias ``kubota_done``): multi-color disc with
   BH physics + 2-T torus (8+ params).
 - **kubota_done_full**: full Kubota & Done 3-zone disc + 2-T torus (13+ params).
@@ -290,7 +291,8 @@ def register_agn_model(
     -----
     **JIT-compatible**: no — registers at module load time (not JIT-compilable).
 
-    The registered function must have signature:
+    The registered function must have signature::
+
         fn(wavelength, agn_log_lbol, **kwargs) -> L_nu [erg/s/Hz]
 
     Metadata is stored in an AGNRegistryEntry for introspection via the
@@ -934,8 +936,8 @@ def skirtor_stalevski_agn(
     Returns
     -------
     ndarray, shape (n_wave,)
-        L_nu [erg/s/Hz], total SKIRTOR SED scaled to ``10**agn_log_lbol * L_sun
-        * agn_frac``.
+        L_nu [erg/s/Hz], total SKIRTOR SED scaled to
+        ``10**agn_log_lbol * L_sun * agn_frac``.
 
     Notes
     -----

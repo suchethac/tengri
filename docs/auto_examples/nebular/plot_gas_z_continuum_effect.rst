@@ -32,11 +32,13 @@ metallicity effect is strongest in the UV continuum (Lyα → HeII Balmer), wher
 metal opacity and recombination cooling compete.
 
 References:
+
 - Osterbrock & Ferland 2006, *Astrophysics of Gaseous Nebulae and Active
   Galactic Nuclei*, 2nd ed., University Science Books
+
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue nebular model)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-114
+.. GENERATED FROM PYTHON SOURCE LINES 23-117
 
 
 
@@ -145,11 +147,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_gas_z_continuum_effect.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.660 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_gas_z_continuum_effect.py:

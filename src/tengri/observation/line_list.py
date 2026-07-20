@@ -12,6 +12,7 @@ UV-to-IR coverage.
 
 References
 ----------
+
 - Moustakas+2023: FastSpecFit line list (DESI standard)
 - Byler+2017: CLOUDY-FSPS nebular emission line predictions
 - Storey & Zeippen 2000: [OIII] transition probabilities

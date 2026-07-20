@@ -452,6 +452,7 @@ def fit_ionizing_spectrum(
         the spectral shape.
 
     **Ionization regimes**:
+
         - **Segment 1** [1, 227.84 Å]: HeII ionization (E > 54.4 eV)
         - **Segment 2** [227.84, 353.07 Å]: OII→HeII (40.8–54.4 eV)
         - **Segment 3** [353.07, 504.26 Å]: HeI→OII (24.6–40.8 eV)

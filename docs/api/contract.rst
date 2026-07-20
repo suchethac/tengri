@@ -23,17 +23,23 @@ DerivedKey
    :members:
    :show-inheritance:
 
-DerivedBundle
-~~~~~~~~~~~~~
+DerivedState
+~~~~~~~~~~~~
 
-.. autoclass:: tengri.DerivedBundle
+.. Was ``tengri.DerivedBundle``, which is deprecated (removal in v1.0) and
+   emits a DeprecationWarning on access. Documenting the shim taught the name
+   we are trying to retire.
+
+.. autoclass:: tengri.protocols.DerivedState
    :members:
    :show-inheritance:
 
-PipelineContractError
-~~~~~~~~~~~~~~~~~~~~~
+ComponentIOError
+~~~~~~~~~~~~~~~~
 
-.. autoexception:: tengri.PipelineContractError
+.. Was ``tengri.PipelineContractError`` — same deprecation as above.
+
+.. autoexception:: tengri.protocols.ComponentIOError
    :members:
    :show-inheritance:
 
