@@ -39,6 +39,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "igm_log_nhi",
         Fixed(20.0),
         "CGM plateau log10(N_HI / cm^-2) [dimensionless]",
+        units="log10(cm^-2)",
     ),
 )
 
@@ -71,6 +72,7 @@ DLA_PARAMS: tuple[ParamDeclaration, ...] = (
         "log10(N_HI / cm^-2) for foreground DLA absorber (Voigt profile)",
         lambda lo, hi: lo >= 15 and hi <= 24,
         "must be in [15, 24]",
+        units="log10(cm^-2)",
     ),
     ParamDeclaration(
         "dla_z",
@@ -83,6 +85,7 @@ DLA_PARAMS: tuple[ParamDeclaration, ...] = (
         "Gas temperature of DLA absorber (K)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="K",
     ),
     ParamDeclaration(
         "dla_b_turb",
@@ -90,6 +93,7 @@ DLA_PARAMS: tuple[ParamDeclaration, ...] = (
         "Turbulent broadening of DLA absorber (km/s)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        units="km/s",
     ),
 )
 

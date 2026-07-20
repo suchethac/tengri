@@ -78,6 +78,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "AGN torus temperature (K)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="K",
     ),
     ParamDeclaration(
         "agn_tau_torus",
@@ -115,6 +116,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # log10(M_BH / Msun): ~1e6 (low-mass Seyfert) to ~1e10 (most massive QSO).
         Uniform(6.0, 10.0, default=7.0),
         "AGN black hole mass log10(M_BH/Msun)",
+        units="log10(Msun)",
     ),
     ParamDeclaration(
         "agn_log_ledd",
@@ -209,6 +211,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "SKIRTOR torus half-opening angle [degrees] (20-60)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="deg",
     ),
     ParamDeclaration(
         "agn_radius_ratio",
@@ -257,6 +260,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Silva+04 torus log10(N_H / cm^-2) (grid 22 to 25)",
         lambda lo, hi: lo >= 22.0 and hi <= 25.0,
         "must be within the Silva+04 grid extent [22, 25]",
+        units="log10(cm^-2)",
     ),
     # Stalevski+ 2016 SKIRTOR_mean_3p (AGNfitter-rX averaged) torus. Shares
     # agn_oa_skirtor with the X-CIGALE skirtor block; inclination here is in
@@ -268,6 +272,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "SKIRTOR_mean_3p inclination [degrees] (grid 0-90)",
         lambda lo, hi: lo >= 0 and hi <= 90,
         "must be in [0, 90]",
+        units="deg",
     ),
     ParamDeclaration(
         "agn_tv_skirtor",
@@ -287,6 +292,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination",
         lambda lo, hi: lo >= 0 and hi <= 90,
         "must be in [0, 90]",
+        units="deg",
     ),
     # Fritz et al. (2006) smooth-dust torus (CIGALE ``fritz2006``). Defaults
     # match the fritz_torus_block; allowed values are the SimpleDatabase grid
@@ -323,6 +329,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Fritz2006 torus half-opening angle [degrees], CIGALE database key (grid: 20, 40, 60)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="deg",
     ),
     ParamDeclaration(
         "agn_fritz_psy",
@@ -334,6 +341,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # Grid endpoints, not the [0, 90] bound: the Fritz2006 tabulation stops
         # at 0.001/89.99 and the exact endpoints extrapolate.
         free_prior=Uniform(0.001, 89.99, "Fritz2006 viewing angle", units="deg", default=0.001),
+        units="deg",
     ),
     # BH spin + two-temperature torus (kubota_done_full, multicolor_agn)
     ParamDeclaration(
@@ -349,6 +357,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Two-temperature torus: hot dust component temperature [K]",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="K",
     ),
     ParamDeclaration(
         "agn_T_warm",
@@ -356,6 +365,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Two-temperature torus: warm dust component temperature [K]",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="K",
     ),
     ParamDeclaration(
         "agn_frac_hot",
@@ -386,6 +396,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Warm Comptonization electron temperature [keV]",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="keV",
     ),
     ParamDeclaration(
         "agn_gamma_hard",
@@ -400,6 +411,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Hot corona electron temperature [keV]",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="keV",
     ),
     ParamDeclaration(
         "agn_r_warm_ratio",
@@ -428,6 +440,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Polar dust temperature [K] (CIGALE skirtor2016 default 100 K).",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="K",
     ),
     ParamDeclaration(
         "agn_polar_beta",
@@ -442,6 +455,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Polar dust half-opening angle [degrees] — sets covering fraction",
         lambda lo, hi: lo > 0 and hi <= 90,
         "must be in (0, 90]",
+        units="deg",
     ),
     # AGN-nebular emitters (BLR, NLR-Gaussian, Feltre). Covering fractions and
     # efficiencies use their physical [0, 1] extent (defaults sit in the
@@ -481,6 +495,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "grid lookup; typical narrow-line widths 300-1000 km/s.",
         lambda lo, hi: lo >= 0.0,
         "must be >= 0",
+        units="km/s",
     ),
     ParamDeclaration(
         "agn_nlr_alpha_pl",
@@ -503,6 +518,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "NLR gas density log10(n_H / cm^-3) (Feltre+2016 logn grid axis).",
         lambda lo, hi: lo >= 2.0 and hi <= 4.0,
         "must be within the Feltre grid density axis [2.0, 4.0]",
+        units="log10(cm^-3)",
     ),
     ParamDeclaration(
         "agn_nlr_logZ",
@@ -545,6 +561,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "BLR densities exceed the NLR range).",
         lambda lo, hi: lo >= 2.0 and hi <= 6.0,
         "must be in [2.0, 6.0]",
+        units="log10(cm^-3)",
     ),
     ParamDeclaration(
         "agn_blr_logZ",
@@ -578,6 +595,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Sets the AGN normalization; typical 1e42-1e47 for Sy1 to QSO.",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="erg/s",
     ),
     ParamDeclaration(
         "agn_grahsp_uvslope",
@@ -630,6 +648,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "GRAHSP emission-line FWHM [km/s] (paper Wline). Typical 100-30000.",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="km/s",
     ),
     ParamDeclaration(
         "agn_grahsp_fcov",
@@ -690,6 +709,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "tengri ``dust_*`` component (configure them consistently).",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        units="mag",
     ),
     ParamDeclaration(
         "agn_grahsp_ebv_agn",
@@ -698,6 +718,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Stacks with agn_grahsp_ebv to attenuate the AGN spectrum.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        units="mag",
     ),
     ParamDeclaration(
         "agn_grahsp_a_bc",
