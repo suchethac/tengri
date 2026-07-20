@@ -2825,8 +2825,8 @@ class SEDModel:
 
     # ── Predictions (public API) ──────────────────────────────────────
 
-    def predict_sfh(self, params, n_linear=1000):
-        """Compute SFH on uniform linear-time grid for visualization.
+    def predict_sfh(self, params, n_linear=1000, grid="linear"):
+        """Compute SFH on a uniform linear-time grid (plots) or the native log-age grid.
 
         Evaluates the SFH parameterization at ``n_linear`` evenly-spaced
         points in lookback time, returning both the smooth parametric
@@ -2844,17 +2844,23 @@ class SEDModel:
             Parameter values using public parameter names.
         n_linear : int, optional
             Number of output grid points, evenly spaced in lookback time.
-            Default 1000 (sufficient for smooth visualization).
+            Default 1000 (sufficient for smooth visualization). Ignored when
+            ``grid="native"``.
+        grid : {"linear", "native"}, optional
+            ``"linear"`` (default, backward compatible) resamples onto a uniform
+            lookback-time grid for plotting. ``"native"`` returns the SFH on the
+            model's own ``log_age_grid`` nodes, unresampled — use this for any
+            QUANTITATIVE work (residuals, coverage, chi2 against a truth).
 
         Returns
         -------
         dict with keys:
 
-            - ``"t_gyr"`` : array, shape (n_linear,).
+            - ``"t_gyr"`` : ndarray, shape (n_linear,) or (n_grid,).
               Lookback time [Gyr], from 0 (now) to ~13.8 (Big Bang).
-            - ``"sfr_mean"`` : array, shape (n_linear,).
+            - ``"sfr_mean"`` : ndarray, shape (n_linear,) or (n_grid,).
               Parametric mean SFR [M☉/yr] (no GP modulation).
-            - ``"sfr_full"`` : array, shape (n_linear,).
+            - ``"sfr_full"`` : ndarray, shape (n_linear,) or (n_grid,).
               Full SFH including GP field [M☉/yr]. Identical to ``sfr_mean``
               if stochastic SFH not enabled.
 
@@ -2864,9 +2870,22 @@ class SEDModel:
         JIT-compatible SFH evaluation, use :meth:`predict_sfh_quantities`
         to get integrated quantities (stellar mass, age, etc.).
 
-        **Time grid**: Output is on a uniform linear-time (lookback) grid,
-        not the internal log-age grid. This makes visualization cleaner
-        and suitable for plotting.
+        **Time grid**: with ``grid="linear"`` the output is resampled onto a
+        uniform linear-time (lookback) grid, not the internal log-age grid. This
+        makes visualization cleaner, but it is **lossy at young ages and must not
+        be used for quantitative scoring**. The step is
+        ``age_max / n_linear`` — at the default ``n_linear=1000`` and a 13.8 Gyr
+        span that is 13.8 Myr, so a 16-node log-age grid whose five youngest
+        nodes all lie below 15 Myr collapses into ~2 samples there. Resampling
+        also interpolates *linearly between log-age nodes*, so a log-axis plot
+        shows corners at the nodes; that is the interpolant, not the model.
+
+        Scoring an SFH residual on the linear grid silently reweights it: every
+        megayear counts equally, so 15-500 Myr swamps the <15 Myr bins where
+        emission lines carry nearly all of their information. Measured on the
+        field-SFH recovery study, that reweighting turned a real +54% improvement
+        from adding line fluxes into an apparent 0%. Pass ``grid="native"`` for
+        residuals, coverage, or any comparison against a known truth.
 
         **SFH mean vs. full**: When correlated-field (stochastic) SFH is enabled,
         ``sfr_mean`` shows the smooth parametric trend (e.g., exponential
@@ -2891,8 +2910,18 @@ class SEDModel:
         predict_sfh_quantities : Integrated SFH quantities (JIT-compatible).
         predict : Lazy access to SFH and all derived quantities.
         """
+        if grid not in ("linear", "native"):
+            raise ValueError(f"grid must be 'linear' or 'native', got {grid!r}")
+
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p)
+
+        if grid == "native":
+            return {
+                "t_gyr": jnp.asarray(10.0**self.log_age_grid) / 1e9,
+                "sfr_mean": sfr_mean,
+                "sfr_full": sfr_full,
+            }
 
         t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
             self.log_age_grid, sfr_mean, n_linear

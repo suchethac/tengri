@@ -1618,7 +1618,14 @@ class Fitter:
         for name, val in self._fixed_values.items():
             params[name] = jnp.array(val)
         if self.spec.stochastic and "psd_xi" in params_unbounded:
+            # Publish under both names so the returned ``Posterior.params``
+            # evaluates to the model that was actually fitted: ``psd_xi`` is the
+            # sampler's key, ``sfh_field_xi`` is the name the forward model and
+            # the docs use. Emitting only ``psd_xi`` made
+            # ``model.predict_photometry(posterior.params)`` silently score the
+            # SMOOTH model -- chi2/N 0.34 read back as 9.00 (#1271).
             params["psd_xi"] = params_unbounded["psd_xi"]
+            params["sfh_field_xi"] = params_unbounded["psd_xi"]
         return params
 
     # ── AOT pre-warm and adaptation persistence ──────────────────────
