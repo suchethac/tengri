@@ -444,8 +444,19 @@ result_hmc = forward.fit(
     g["noise_phot"],
     method="mcmc_hmc",
     init_from=result_map,
-    n_warmup=1500,
-    n_samples=1000,
+    # Budget: HMC cost is (n_warmup + n_samples) x n_leapfrog_steps x n_chains
+    # objective evaluations, ~2.7 ms each here -> 800+600 at L=100 is ~20 min on a
+    # laptop CPU, plus ~6 for the MAP above. The original 400/300 was too short to
+    # trust at D=25; 1500/1000 measured 39 min, more than a demonstration warrants.
+    # L=100 is deliberate — the default L=10 under-explores this posterior.
+    #
+    # Convergence here is limited by GEOMETRY, not budget: the non-centering
+    # gp_x = cholesky(cov(sigma, tau)) @ xi rotates with psd_tau, so the curvature
+    # is position-dependent and one global dense mass matrix cannot represent it.
+    # Expect R-hat ~1.1 and a nonzero divergence count however long this runs
+    # (#1301). Read the recovery values; do not quote the uncertainties.
+    n_warmup=800,
+    n_samples=600,
     n_leapfrog_steps=100,
     dense_mass_matrix=True,
     key=jax.random.PRNGKey(1),
