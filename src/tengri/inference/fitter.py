@@ -1082,7 +1082,7 @@ class Fitter:
         Two Fitters sharing the same Model will reuse the same compiled
         engine if their cache keys match (same data_type, stochastic
         flag, latent dimension, data length, free parameter names, noise
-        model presence, and observation feature channels).
+        model presence, observation feature channels, and device count).
 
         The feature-channel entries (line fluxes / line ratios / spectral
         indices / censoring mask) are load-bearing: the loss closure bakes

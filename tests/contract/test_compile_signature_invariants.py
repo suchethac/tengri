@@ -90,7 +90,7 @@ class TestCompileSignatureInvariants:
         # sig is a tuple of (model_sig, fitter_sig)
         _, fitter_sig = sig
 
-        # fitter_sig should have exactly 10 fields:
+        # fitter_sig should have exactly 15 fields:
         # 1. data_type
         # 2. stochastic
         # 3. n_grid
@@ -109,8 +109,13 @@ class TestCompileSignatureInvariants:
         # (11-14 added 2026-07: observation feature channels are baked into
         # the loss closure, so they must key the engine/loss cache — else a
         # joint phot+lines Fitter reuses a photometry-only compiled loss.)
-        assert len(fitter_sig) == 14, (
-            f"fitter_sig field count changed from 14 to {len(fitter_sig)}. "
+        # 15. device count
+        # (15 added 2026-07: run(devices=...) bakes sharding constraints into
+        # the traced engine, so a multi-device run must not be served the
+        # cached single-device one — that engine has no constraints and lets
+        # the galaxy sharding propagate into the optimizer state.)
+        assert len(fitter_sig) == 15, (
+            f"fitter_sig field count changed from 15 to {len(fitter_sig)}. "
             "If intentional, update this assertion and the docstring."
         )
 
@@ -136,6 +141,27 @@ class TestCompileSignatureInvariants:
         # _engine_cache_key returns the fitter_sig component (no model_sig prefix)
         assert engine_key == fitter_sig, (
             "engine_key and fitter_sig must be identical; smart-lean relies on this"
+        )
+
+    def test_device_count_changes_the_engine_cache_key(self, mock_ssp_data, photometry, spec_dpl):
+        """A multi-device run must not be served the cached single-device engine.
+
+        ``run(devices=...)`` bakes sharding constraints into the traced engine,
+        so two runs differing only in device count are different compiled
+        programs. If the count did not key the cache, a sharded fit would reuse
+        the constraint-free engine and let the galaxy sharding propagate into
+        optimizer state that has no galaxy axis.
+        """
+        model = SEDModel(spec_dpl, mock_ssp_data, observation=photometry)
+        fitter = Fitter(model, jnp.ones(3), jnp.ones(3) * 0.1, data_type="photometry")
+
+        key_single = fitter._engine_cache_key()
+        fitter._n_devices = 4  # what run(devices="all") sets
+        key_sharded = fitter._engine_cache_key()
+
+        assert key_single != key_sharded, (
+            "device count must key the engine cache; a sharded run would "
+            "otherwise reuse the single-device engine, which has no constraints"
         )
 
     def test_different_memory_modes_reuse_same_engine(self, mock_ssp_data, photometry, spec_dpl):
