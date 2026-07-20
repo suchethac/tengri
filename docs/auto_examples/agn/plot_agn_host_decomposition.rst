@@ -28,6 +28,7 @@ from the host galaxy using a single model and varying a structural
 parameter — useful for diagnosing photometric AGN contamination.
 
 Three traces shown:
+
 - **Host only** (``agn_frac=0``): Star-forming galaxy, SFH + dust
 - **AGN only** (``agn_frac=1.0``): Bolometric luminosity fixed
 - **Composite** (``agn_frac=0.5``): 50-50 mix, physical decomposition
@@ -41,7 +42,7 @@ References
 .. [1] Ciesla et al. 2015, A&A, 576, A10 — Host-AGN decomposition via SED fitting
 .. [2] Stalevski et al. 2017, MNRAS, 470, 3876 — IR torus models in composite SEDs
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-113
+.. GENERATED FROM PYTHON SOURCE LINES 26-114
 
 
 
@@ -144,6 +145,11 @@ References
     ax.grid(True, which="minor", alpha=0.2, linestyle=":")
 
     plt.savefig("plot_agn_host_decomposition.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.679 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_host_decomposition.py:

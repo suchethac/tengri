@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.utils.blackbody import planck_bnu_wave as _planck_bnu_wave
 from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
     C_AA as _C_AA_PER_S,
@@ -20,7 +21,6 @@ from tengri.utils.physics_constants import (
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZMANN,
 )
-from tengri.utils.scale import max_finite_exponent
 
 # ── Utility: frequency integral ───────────────────────────────────
 
@@ -102,26 +102,11 @@ def planck_bnu(
     where :math:`\nu = c / \lambda` is the frequency, :math:`h` is Planck's constant,
     :math:`k_B` is Boltzmann's constant, and :math:`c` is the speed of light.
 
+    Delegates to :func:`tengri.utils.blackbody.planck_bnu_wave`, the single
+    implementation shared with the AGN closures. See it for the numerical
+    stability contract.
     """
-    # Work at the session's working precision. JAX weak-type promotion keeps
-    # float32 arrays float32 even when combined with Python float scalars, so
-    # the cast must be explicit; ``result_type(float)`` is float64 under x64
-    # and float32 without it. A hard ``dtype=jnp.float64`` here would be
-    # silently truncated back to float32 under ``jax.enable_x64(False)`` — the
-    # very configuration it was protecting (#1206).
-    wavelength_cm = jnp.asarray(wavelength_aa, dtype=jnp.result_type(float)) * _AA_TO_CM
-    nu = _C_CGS / wavelength_cm
-
-    # Clamp x = hν/kT to [1e-10, x_max].  The clamp avoids both expm1
-    # overflow and division-by-zero, and keeps gradients finite everywhere.
-    x = jnp.clip(_H_PLANCK * nu / (_K_BOLTZMANN * temperature), 1e-10, max_finite_exponent())
-
-    # Algebraically 2h·nu³/c², but never forming nu³: on a 100 Å – 1 mm grid
-    # that intermediate reaches 2.7e49, eleven decades past the float32
-    # ceiling, while B_nu itself peaks at ~8e-12. Grouping as nu·(nu/c)²
-    # keeps the largest intermediate at ~1e12. Identical in float64 to
-    # 4e-16 relative (#1206).
-    return 2.0 * _H_PLANCK * nu * (nu / _C_CGS) ** 2 / jnp.expm1(x)
+    return _planck_bnu_wave(wavelength_aa, temperature)
 
 
 # ── CMB heating correction (da Cunha+2013) ────────────────────────

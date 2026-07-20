@@ -45,9 +45,11 @@ def agn_prior_energy_balance(
         Log10 of starburst IR emission luminosity [erg/s].
     tolerance : str, optional
         Prior type: "flexible" or "restrictive".
+
         - "flexible": soft Gaussian around equality (σ=0.1).
         - "restrictive": narrower Gaussian around equality (σ=0.1,
           returns -inf if emission < absorption).
+
         Default: "flexible".
 
     Returns

@@ -79,6 +79,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
     anisotropy), and Just et al. 2007 (α_OX–L_2500 relation).
 
     Free parameters (6):
+
     - xray_gamma_hmxb: HMXB spectral index
     - xray_gamma_lmxb: LMXB spectral index
     - xray_gamma_agn: AGN X-ray spectral index
@@ -108,10 +109,12 @@ class XRayAirdSEDComponent(SEDModelComponent):
     AGN/stellar inputs and defaults to XRB + hot gas only.
 
     **Models**:
+
     - HMXB: Lehmer+2016 metallicity quartic, scaling with SFR
     - LMXB: Lehmer+2016 age quartic, scaling with M_star
     - Hot gas: Yang+2020, scaling with SFR
     - AGN corona: Just+2007 / Yang+2020 α_OX, scaling with L_2500
+
     """
 
     def __init__(self) -> None:
@@ -215,6 +218,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
             Rest-frame wavelength grid in Angstrom.
         **inputs : ndarray
             Opportunistic cross-component reads:
+
             - sfr [Msun/yr] (default: 1.0)
             - log_mstar [log10(Msun)] (default: 10.0)
             - metallicity_z [mass fraction] (default: 0.02 = solar)
@@ -224,8 +228,10 @@ class XRayAirdSEDComponent(SEDModelComponent):
         Returns
         -------
         tuple[ndarray, mapping]
+
             - sed_out: sed_in + X-ray continuum.
             - published: Dict with "sed_xray".
+
         """
         # Read cross-component inputs with sensible defaults
         sfr = jnp.asarray(inputs.get("sfr", 1.0))

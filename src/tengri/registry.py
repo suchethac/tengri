@@ -57,6 +57,7 @@ class _RegistryTable(list):
         - ``use`` (the call-site hint) is shown only on cross-menu /
           search tables — single-menu tables expose it via describe()
           to keep the row width readable.
+
         """
         kinds = {d.get("kind") for d in self}
         hidden = set(self._ALWAYS_HIDDEN)
@@ -171,6 +172,36 @@ class _RegistryTable(list):
         """Just the list of names — convenient for ``Photometry.from_names``."""
         return [d["name"] for d in self]
 
+    def to_dict(self, value: str = "short_doc") -> dict[str, Any]:
+        """Collapse to ``{name: value}`` — the shape some ``list_*`` once returned.
+
+        ``list_known_ssps`` and ``list_filter_conventions`` returned plain
+        ``dict[str, str]`` while every other ``list_*`` returned a table
+        (#1285). They now return tables too; this is the mechanical migration
+        for callers that wanted the mapping.
+
+        Parameters
+        ----------
+        value : str, optional
+            Which column becomes the dict value. Defaults to ``"short_doc"``.
+
+        Returns
+        -------
+        dict
+            ``{row["name"]: row[value]}`` in table order.
+
+        Raises
+        ------
+        KeyError
+            If ``value`` is not a column. Silently returning ``None`` values
+            would look like an empty catalog rather than a wrong column name.
+        """
+        if self and value not in self[0]:
+            raise KeyError(
+                f"{value!r} is not a column of this table. Available: {sorted(self[0])}."
+            )
+        return {d["name"]: d[value] for d in self}
+
     def _repr_html_(self) -> str:
         """Jupyter HTML repr — renders as a real HTML table in notebooks."""
         if not self:
@@ -284,6 +315,8 @@ def _usage_hint(name: str, kind: str) -> str:
         return f'Photometry.from_names(["{name}"])'
     if kind == "agn_model":
         return f"SEDModel.build(..., agn={{'type': '{name}'}})"
+    if kind == "dust_model":
+        return f"SEDModel.build(..., dust={{'type': '{name}'}})"
     if kind == "dust_attenuation":
         return f"SEDModel.build(..., dust={{'type': 'single_component', 'law_bc': '{name}'}})"
     if kind == "dust_emission":
@@ -298,6 +331,8 @@ def _usage_hint(name: str, kind: str) -> str:
         return f"SEDModel.build(..., xray={{'type': '{name}'}})"
     if kind == "radio_model":
         return f"SEDModel.build(..., radio={{'type': '{name}'}})"
+    if kind == "shock_model":
+        return f"SEDModel.build(..., shock={{'type': '{name}'}})"
     if kind == "igm_model":
         return f"SEDModel.build(..., igm={{'type': '{name}'}})"
     if kind == "component":
@@ -310,16 +345,19 @@ def _usage_hint(name: str, kind: str) -> str:
 # irregular (``list_sfh_models`` vs ``list_dust_laws`` vs
 # ``list_nebular_backends``), so this must be a lookup, not an
 # ``f"list_{name}_models"`` formula — the formula advertised
-# ``list_stellar_models`` / ``list_dust_models`` / ``list_agn_laws`` and other
-# functions that do not exist, sending a fresh user into an ``AttributeError``.
+# ``list_stellar_models`` / ``list_agn_laws`` and other functions that do not
+# exist, sending a fresh user into an ``AttributeError``. (``list_dust_models``
+# was another of that formula's phantoms; it is real now, but it names the
+# structural axis only — the formula still guesses wrong for every other group.)
 _COMPONENT_MENUS: dict[str, str] = {
     "stellar": "list_sfh_models()",
-    "dust": "list_dust_laws() / list_dust_emission_models()",
+    "dust": "list_dust_models() / list_dust_laws() / list_dust_emission_models()",
     "agn": "list_agn_models() / list_agn_blocks()",
     "nebular": "list_nebular_backends()",
-    "radio": "list_radio_models()",
+    "radio": "list_radio_models() / list_radio_blocks()",
     "igm": "list_igm_models()",
     "xray": "list_xray_models()",
+    "shock": "list_shock_models()",
 }
 
 
@@ -493,13 +531,76 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
 
 
+# Dust *structural* models — the ``dust={'type': ...}`` axis. Keyed by the
+# names in ``_VALID_DUST_TYPES``, which is what the build validator accepts;
+# the listing derives its names from that same set (see
+# :func:`list_dust_models`) so the menu and the validator cannot drift.
+_DUST_MODEL_METADATA: dict[str, dict[str, str]] = {
+    "single_component": {
+        "status": "production",
+        "citation": "Calzetti et al. 2000 (ApJ 533, 682)",
+        "short_doc": "One screen over all stars; `law_bc` sets the curve",
+    },
+    "two_component": {
+        "status": "production",
+        "citation": "Charlot & Fall 2000 (ApJ 539, 718)",
+        "short_doc": "Birth-cloud + diffuse screens; young stars see both",
+    },
+    "wg00": {
+        "status": "production",
+        "citation": "Witt & Gordon 2000 (ApJ 528, 799)",
+        "short_doc": "Radiative-transfer grid (geometry/structure/curve selectors)",
+    },
+}
+
+
+def list_dust_models(*, status: str | None = None) -> _RegistryTable:
+    """List the dust **structural** models — the ``dust={'type': ...}`` choice.
+
+    Dust is selected along three independent axes, and this is the first one:
+    how the dust is *arranged* relative to the stars. The attenuation
+    **curve** is a separate choice (:func:`list_dust_laws`, via ``law_bc`` /
+    ``law_diff``), and the IR **emission** template a third
+    (:func:`list_dust_emission_models`, via ``dust={'emission': ...}``).
+
+    The other two axes had menus; this one did not, so the structural
+    names — including ``two_component``, the type the recipes themselves
+    build with — were absent from every discovery surface: no ``list_*``
+    named them, ``describe('two_component')`` raised ``KeyError`` and
+    ``search('two_component')`` returned nothing.
+
+    Names are derived from :data:`tengri.parameters.groups._VALID_DUST_TYPES`,
+    the same set ``SEDModel.build`` validates against, so this menu cannot
+    advertise a type the builder rejects (nor omit one it accepts).
+    """
+    from tengri.parameters.groups import _VALID_DUST_TYPES
+
+    out = []
+    for name in _VALID_DUST_TYPES:
+        meta = _DUST_MODEL_METADATA.get(name, {})
+        out.append(
+            {
+                "name": name,
+                "kind": "dust_model",
+                "status": meta.get("status", "production"),
+                "citation": meta.get("citation", ""),
+                "short_doc": meta.get("short_doc", ""),
+                "use": _usage_hint(name, "dust_model"),
+            }
+        )
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
 def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
     """List all registered dust **attenuation** laws.
 
     Attenuation describes how UV/optical photons are absorbed/scattered
     by dust along the line of sight (Calzetti, Cardelli, Charlot-Fall, …).
     For dust **emission** templates (DL07, Dale, MBB, …), see
-    :func:`list_dust_emission_models`.
+    :func:`list_dust_emission_models`. For how the dust is *arranged*
+    (one screen vs birth-cloud + diffuse), see :func:`list_dust_models`.
     """
     from tengri.components.dust.attenuation import DUST_LAWS
 
@@ -739,6 +840,156 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
+# Radio *sub-block* variants — the ``radio={'sf': ...}`` / ``radio={'agn': ...}``
+# axes, which are separate from the legacy ``radio={'type': ...}`` menu in
+# :func:`list_radio_models`. Keyed by ``(category, name)`` like AGN_BLOCK_META.
+# The names themselves are NOT listed here: they are derived from the tuples the
+# validator checks against (see :func:`list_radio_blocks`), so a variant added to
+# the physics can never be missing from the menu.
+_RADIO_BLOCK_METADATA: dict[tuple[str, str], dict[str, str]] = {
+    ("sf", "none"): {
+        "short_doc": "No star-forming synchrotron (AGN radio only)",
+    },
+    ("sf", "bell2003"): {
+        "citation": "Bell 2003 (ApJ 586, 794)",
+        "short_doc": "Fixed-q FIR-radio correlation",
+    },
+    ("sf", "delvecchio2021"): {
+        "citation": "Delvecchio+2021 FIRRC (SEMPER Eq. 4, arXiv:2503.20525)",
+        "short_doc": "Mass- and z-dependent q_IR at 1.4 GHz",
+    },
+    ("sf", "mccheyne2022"): {
+        "citation": "McCheyne+2022 FIRRC (SEMPER Eq. 5, arXiv:2503.20525)",
+        "short_doc": "Mass- and z-dependent q_IR at 150 MHz (LOFAR)",
+    },
+    ("agn", "none"): {
+        "short_doc": "No AGN radio (star-forming synchrotron only)",
+    },
+    ("agn", "powerlaw"): {
+        "short_doc": "Single power-law AGN radio scaled by radio-loudness",
+    },
+    ("agn", "dpl"): {
+        "citation": "Martinez-Ramirez+2024 (A&A 692, A85)",
+        "short_doc": "Broken double power-law with exp aging cutoff",
+    },
+}
+
+
+def list_radio_blocks(*, category: str | None = None, status: str | None = None) -> _RegistryTable:
+    """List the composable radio sub-block variants — ``sf`` and ``agn``.
+
+    Radio is selected along two independent axes: the star-forming
+    synchrotron model (``radio={'sf': {'type': ...}}``) and the AGN radio
+    model (``radio={'agn': {'type': ...}}``). Either may be ``'none'`` to
+    run the other alone.
+
+    This is a different axis from :func:`list_radio_models`, which lists the
+    **legacy** ``radio={'type': ...}`` key. That key predates the SF/AGN split
+    and cannot be combined with these sub-blocks; mixing the two raises.
+
+    Parameters
+    ----------
+    category : str, optional
+        Filter to ``"sf"`` or ``"agn"``. If ``None``, list both.
+    status : str, optional
+        Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
+        ``"deprecated"``.
+
+    Returns
+    -------
+    _RegistryTable
+        List of metadata dicts. Prints as a table in a notebook.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.list_radio_blocks(category="sf")
+    >>> tengri.list_radio_blocks()
+    """
+    from tengri.components.radio.component import AGN_RADIO_MODELS, SF_RADIO_MODELS
+
+    # Derived from the validator's own tuples, never from a hand-written list.
+    names_by_category = {"sf": SF_RADIO_MODELS, "agn": AGN_RADIO_MODELS}
+
+    out: list[dict] = []
+    for cat, names in names_by_category.items():
+        if category is not None and cat != category:
+            continue
+        for name in names:
+            meta = _RADIO_BLOCK_METADATA.get((cat, name), {})
+            out.append(
+                {
+                    "name": name,
+                    "category": cat,
+                    "kind": "radio_block",
+                    "status": meta.get("status", "production"),
+                    "citation": meta.get("citation", ""),
+                    "short_doc": meta.get("short_doc", ""),
+                    "use": f"SEDModel.build(..., radio={{'{cat}': {{'type': '{name}'}}}})",
+                }
+            )
+
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
+
+
+# Shock models — the ``shock={'type': ...}`` axis. Names derive from
+# ``_VALID_SHOCK_TYPES`` (see :func:`list_shock_models`).
+_SHOCK_MODEL_METADATA: dict[str, dict[str, str]] = {
+    "none": {
+        "short_doc": "No shock component",
+    },
+    "mappings": {
+        "citation": "Allen+2008 (ApJS 178, 20); Sutherland & Dopita 2017 (ApJS 229, 34)",
+        "short_doc": "MAPPINGS shock + precursor emission, additive to any neb backend",
+    },
+}
+
+
+def list_shock_models(*, status: str | None = None) -> _RegistryTable:
+    """List the shock emission models — the ``shock={'type': ...}`` choice.
+
+    The shock component is **additive**: it composes with whichever
+    photoionized nebular backend is active rather than replacing it, so both
+    can be on at once.
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
+        ``"deprecated"``.
+
+    Returns
+    -------
+    _RegistryTable
+        List of metadata dicts. Prints as a table in a notebook.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.list_shock_models()
+    """
+    from tengri.parameters.groups import _VALID_SHOCK_TYPES
+
+    out: list[dict] = []
+    for name in _VALID_SHOCK_TYPES:
+        meta = _SHOCK_MODEL_METADATA.get(name, {})
+        out.append(
+            {
+                "name": name,
+                "kind": "shock_model",
+                "status": meta.get("status", "production"),
+                "citation": meta.get("citation", ""),
+                "short_doc": meta.get("short_doc", ""),
+                "use": _usage_hint(name, "shock_model"),
+            }
+        )
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
 def list_igm_models(*, status: str | None = None) -> _RegistryTable:
     """List all registered IGM transmission models.
 
@@ -925,8 +1176,22 @@ def cite_components(obj=None) -> _RegistryTable:
         )
         return _RegistryTable(rows)
 
-    # SEDModel / Posterior expose .spec
-    spec = getattr(obj, "spec", obj)
+    # Resolve the spec through the delegation chain. A ``SEDModel`` exposes
+    # ``.spec`` directly, but a ``Posterior`` does not — it holds the fitted
+    # model under ``_model``, which may itself be a ``ForwardModel`` wrapping
+    # the SED. A bare ``getattr(obj, "spec", obj)`` fell back to the Posterior
+    # itself, which has no structural fields, so citing a *fit result* emitted
+    # only the core dependencies.
+    from tengri.citations.collect import _citable_chain
+
+    spec = next(
+        (
+            s
+            for s in (getattr(node, "spec", None) for node in _citable_chain(obj))
+            if s is not None
+        ),
+        obj,
+    )
 
     # Always-present dependencies
     rows.append(
@@ -1274,8 +1539,11 @@ def list_inference_methods(
     Parameters
     ----------
     tier : str, optional
-        Filter by ``"primary"`` (recommended for new users) or
-        ``"experimental"``.
+        Filter by ``"primary"`` (recommended for new users),
+        ``"experimental"``, or ``"broken"``. Backends registered as
+        ``"broken"`` — those whose own ``short_doc`` reports wrong answers or
+        crashes — are **excluded from the default listing** (#1287); pass
+        ``tier="broken"`` to see them.
     target : Fitter | InferenceContext, optional
         If supplied, each entry's ``status`` column reflects whether the
         backend's ``is_compatible`` predicate (if any) accepts the
@@ -1292,8 +1560,11 @@ def list_inference_methods(
     from tengri.inference._backend_registry import all_backends
     from tengri.inference._strategy import resolve_status
 
+    # Broken backends are listed only on explicit request. Offering a sampler
+    # that returns R-hat ~ 3 in the same table as one that works is what let
+    # users pick it on the strength of its speed (#1287).
     out = []
-    for entry in all_backends():
+    for entry in all_backends(include_broken=tier == "broken"):
         out.append(
             {
                 "name": entry.name,
@@ -1330,12 +1601,15 @@ def _menu_listers() -> tuple:
         list_inference_methods,
         list_agn_models,
         list_agn_blocks,
+        list_dust_models,
         list_dust_laws,
         list_dust_emission_models,
         list_sfh_models,
         list_nebular_backends,
         list_xray_models,
         list_radio_models,
+        list_radio_blocks,
+        list_shock_models,
         list_igm_models,
     )
 
@@ -1382,11 +1656,23 @@ def describe(name: str) -> _DescribeRecord:
                 kind = entry.get("kind", "?")
                 return f"{kind} ({category})" if category else kind
 
+            # Quote each alternative's own ``use:`` line rather than naming a
+            # lookup helper. The message used to recommend
+            # ``describe_agn_block(name, category=...)`` for every ambiguity,
+            # which was true only while AGN blocks were the sole categorized
+            # menu: once radio gained sf/agn categories the advice raised
+            # ("Unknown AGN block 'dpl' ... Known names: []") for exactly the
+            # user it was written to help. Each row already carries an exact,
+            # copy-pasteable build call, so quote that and it cannot go stale.
+            def _how(entry: dict) -> str:
+                use = entry.get("use", "")
+                return use or f"see {_where(entry)}"
+
+            others = "; ".join(_how(m) for m in matches[1:])
             record["also_registered_as"] = (
                 f"'{name}' is registered in {len(matches)} places "
-                f"[{'; '.join(_where(m) for m in matches)}] — showing the first. "
-                "Use the category-specific list (e.g. describe_agn_block"
-                "(name, category=...)) to select another."
+                f"[{'; '.join(_where(m) for m in matches)}] — showing the first "
+                f"({_how(matches[0])}). The others: {others}."
             )
         return _DescribeRecord(record)
     raise KeyError(
@@ -2115,6 +2401,11 @@ def help(topic: str | None = None) -> None:
     n_sfh_ok = len(list_sfh_models(status="production"))
     n_neb = len(list_nebular_backends())
     n_inf = len(list_inference_methods(tier="primary"))
+    n_recipes = len(list_recipes())
+    # The one default, read from the registry rather than written down here —
+    # the whole point of #1289 was that hard-coded defaults drifted apart.
+    from tengri.inference._backend_registry import DEFAULT_METHOD as default_method
+
     try:
         from tengri import list_filters  # avoid circular import on cold load
 
@@ -2164,27 +2455,38 @@ tengri — differentiable galaxy SED fitting in JAX
 ────────────────────────────────────────────────────────────────────
 3.  Build a fit
 ────────────────────────────────────────────────────────────────────
-    obs        = tengri.Observation(photometry=tengri.Photometry.from_names([...]))
-    parameters = tengri.Parameters(...)        # priors + fixed values
-    sed        = tengri.SEDModel.build(ssp_data=..., observation=obs, ...)
-    forward    = tengri.ForwardModel.build(sed=sed, observation=obs)
-    fitter     = tengri.Fitter(forward, data, noise)
-    posterior  = fitter.run("map")             # or "nuts", "vi", …
+    from tengri.observation import Observation, Photometry   # canonical path
+
+    obs       = Observation(photometry=Photometry.from_names([...]))
+    sed       = tengri.SEDModel.build(ssp_data=ssp, observation=obs,
+                                      **tengri.recipes.star_forming_photometry())
+    forward   = tengri.ForwardModel.build(sed=sed, observation=obs)
+    posterior = forward.fit(flux, flux_err, method="{default_method}")
     posterior.summary()                        # median ± 68% CI per param
+
+    `forward.fit(...)` is the canonical entry point. It wraps
+    `Fitter(forward, data, noise).run(method)`; reach for the explicit
+    Fitter only when you need to hold the engine itself.
+
+    `tengri.list_recipes()` lists the {n_recipes} starting points. To hand-roll a
+    model instead, pass group dicts to SEDModel.build:
+      sfh={{'type': 'dpl', 'all_params': tengri.FREE}},
+      dust={{'type': 'two_component', 'law_bc': 'calzetti'}}, …
+      tengri.describe_recipe("star_forming_photometry")   # see what one sets
+
+    Pick a method:
+      tengri.list_inference_methods(tier="primary")   # {n_inf} that are validated
+      "map" is a point estimate — fast, but no uncertainties.
+      "{default_method}" and "mcmc_nuts" give you a posterior.
 
     Extract derived quantities:
       posterior.properties["stellar_mass"]     # array (n_samples,)
-      posterior.properties.ci("stellar_mass") # credible interval
-      tengri.list_properties()                # see all available names
+      posterior.properties.ci("stellar_mass")  # credible interval
+      tengri.list_properties()                 # see all available names
 
-    Pick the right kwargs:
-      tengri.suggest_parameters(mean_sfh_type="dpl", agn_model="skirtor")
-
-    The outer shell:
-      tengri.ForwardModel — thin shell inference talks to. Owns the SED
-        chain and the observation; exposes a single .predict(params)
-        method that returns a {{channel: array}} dict (phot_fnu, spec_fnu).
-        Inference doesn't need to know which prediction method to call.
+    Predict without fitting:
+      pred = sed.predict(params)               # rich + cached, one forward pass
+      sed.predict_photometry(params)           # lean, JIT/vmap-safe
 
 ────────────────────────────────────────────────────────────────────
 4.  Contribute a new physics alternative

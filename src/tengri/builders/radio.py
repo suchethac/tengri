@@ -6,12 +6,14 @@
 Radio physics is decomposed into two independent axes:
 
 **SF synchrotron** (FIR–radio correlation):
+
 - ``none`` — SF radio turned off (AGN only)
 - ``bell2003`` — fixed q_IR (default)
 - ``delvecchio2021`` — mass + redshift dependent at 1.4 GHz
 - ``mccheyne2022`` — mass + redshift dependent at 150 MHz
 
 **AGN radio** (jets + lobes):
+
 - ``none`` — AGN radio turned off (SF only)
 - ``powerlaw`` — single power-law (default)
 - ``dpl`` — double power-law with aging cutoff (AGNfitter-rx)
@@ -221,3 +223,14 @@ def available() -> list[str]:
 
 
 __all__ = ["agn", "available", "axes", "sf", *sorted(_LEGACY_FACTORIES)]
+
+
+def __dir__() -> list[str]:
+    """Restrict tab-completion to the names this namespace actually offers.
+
+    ``__all__`` governs ``from ... import *`` but not ``dir()``, so without
+    this the module's own imports -- ``Any``, ``Callable``, the ``__future__``
+    ``annotations`` object, and internal helpers like ``make_factory`` --
+    showed up as completions beside the physics (#1288).
+    """
+    return sorted(__all__)

@@ -17,9 +17,11 @@ A_λ/A_V.
 
 References
 ----------
+
 - Calzetti et al. 2000, ApJ, 533, 682 (starburst geometry)
 - Witt & Gordon 2000, ApJ, 528, 799 (dust geometry effects)
 - Kramer et al. 2003, ApJS, 144, 1 (mixed geometry approximation)
+
 """
 
 import os

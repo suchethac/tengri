@@ -17,7 +17,9 @@ for bridging different parameterizations in AGN SED fitting.
 
 References
 ----------
+
 - Boquien et al. 2019, A&A, 622, A103 (CIGALE SED fitting)
+
 """
 
 from __future__ import annotations

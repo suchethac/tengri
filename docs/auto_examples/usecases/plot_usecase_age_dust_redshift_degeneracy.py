@@ -20,8 +20,10 @@ See Papovich et al. 2001 (AJ, 122, 1) for the seminal discussion of this
 degeneracy in the context of Hubble Deep Field galaxies.
 
 References:
+
 - Papovich et al. 2001, AJ, 122, 1
 - Poggianti & Barbaro 1997, A&A, 325, 1025
+
 """
 
 import os

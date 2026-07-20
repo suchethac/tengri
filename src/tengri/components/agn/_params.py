@@ -331,6 +331,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "90=face-on (type 1) (grid: 0.001 ... 89.99)",
         lambda lo, hi: lo >= 0 and hi <= 90,
         "must be in [0, 90]",
+        # Grid endpoints, not the [0, 90] bound: the Fritz2006 tabulation stops
+        # at 0.001/89.99 and the exact endpoints extrapolate.
+        free_prior=Uniform(0.001, 89.99, "Fritz2006 viewing angle", units="deg", default=0.001),
     ),
     # BH spin + two-temperature torus (kubota_done_full, multicolor_agn)
     ParamDeclaration(
@@ -557,14 +560,6 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Fe II to H-beta flux ratio R_Fe = F(Fe II 4434-4684)/F(H-beta)",
         lambda lo, hi: lo >= 0 and hi <= 2.0,
         "must be in [0, 2.0]",
-    ),
-    ParamDeclaration(
-        "agn_feltre_cf",
-        Uniform(0.0, 1.0, default=0.1),
-        "Feltre NLR covering fraction — fraction of disc luminosity intercepted by NLR. "
-        "Physical bound [0, 1]; typical values 0.05-0.2.",
-        lambda lo, hi: lo >= 0 and hi <= 1.0,
-        "must be in [0, 1]",
     ),
     ParamDeclaration(
         "agn_alpha_ion",

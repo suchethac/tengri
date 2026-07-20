@@ -151,6 +151,7 @@ class NebularSEDComponent:
           ``shock_b_over_sqrt_n``, ``shock_log_lhalpha``).
           The string-valued ``shock_abundance`` and ``shock_component``
           are configured on the backend instance, not free params.
+
         """
         if self.config.backend == "baked_in":
             return []
@@ -384,6 +385,7 @@ class NebularSEDComponent:
         called and the result is added to ``state.sed_intrinsic``.
 
         Cross-component reads (Cue/CloudyGrid):
+
         - ``state.derived["log_metallicity_history"]`` — falls back to
           ``params["met_logzsol"]`` if not published.
         - ``state.derived["lnu_age"]`` — for the SSP-weighted Q_H

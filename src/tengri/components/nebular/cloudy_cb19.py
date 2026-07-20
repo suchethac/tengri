@@ -136,6 +136,7 @@ grid).
 
 References
 ----------
+
 - Martinez-Paredes et al. 2023, MNRAS, arXiv:2308.05604
 - Osterbrock & Ferland 2006, "Astrophysics of Gaseous Nebulae", Table 4.4
 - Byler et al. 2017, ApJ, 840, 44 (Hβ conversion factor)

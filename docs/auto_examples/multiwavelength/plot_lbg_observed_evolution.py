@@ -4,7 +4,7 @@ Observed SED of a Lyman-break galaxy at z = 2, 4, 6, 8
 
 A single intrinsic LBG (young dust-poor star-forming galaxy) shown in
 the observer frame at four redshifts. The Lyman break sweeps redward
-into the *u-* and then *g-* and *r-*band dropout regimes, the
+into the *u*-, then *g*- and *r*-band dropout regimes, the
 Inoue+2014 IGM transmission removes more and more flux blueward of
 Lyα, and the apparent magnitude faint-end falls by ~2.5 mag from
 ``z = 2 → 8`` due to luminosity distance alone.

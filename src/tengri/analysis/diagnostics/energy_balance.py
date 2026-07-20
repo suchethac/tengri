@@ -17,8 +17,10 @@ produced the inputs.
 
 References
 ----------
+
 - Charlot, S. & Fall, S. M., 2000, ApJ, 539, 718 (energy balance ansatz).
 - da Cunha, E. et al., 2008, MNRAS, 388, 1595 (MAGPHYS).
+
 """
 
 from __future__ import annotations

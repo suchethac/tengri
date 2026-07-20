@@ -242,7 +242,9 @@ def precompute_photometry(
         and is cheaper at runtime than the Taylor moment it replaces.
     fixed : dict[int, float], optional
         Mapping of axis index → fixed value. Axes are numbered from 0:
+
         - 0: lgmet (metallicity in log10(Z/Zsun))
+
         If provided, these axes are collapsed at init time via triweight
         interpolation. Default None.
 

@@ -16,6 +16,7 @@ left, observer-frame windows on the right.
 
 References
 ----------
+
 - Blain et al. 2002, PhR, 369, 111 (SMG demographics and K-corrections)
 - Casey et al. 2014, PhR, 541, 45 (SMG surveys and model comparison)
 

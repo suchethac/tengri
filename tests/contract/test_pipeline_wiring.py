@@ -45,7 +45,6 @@ def _pipeline_src() -> str:
     from tengri.components.radio import component as radio_component
     from tengri.components.xray import component as xray_component
     from tengri.forward import (
-        emission_helpers as emission_helpers_mod,
         pipeline as sed_pipeline,
         sed_model as sed_model_mod,
     )
@@ -59,7 +58,6 @@ def _pipeline_src() -> str:
         inspect.getsource(dust_two),
         inspect.getsource(radio_component),
         inspect.getsource(xray_component),
-        inspect.getsource(emission_helpers_mod),
     ]
     return "\n".join(parts)
 
@@ -217,18 +215,29 @@ class TestPolarDustForwarding:
 
         assert "agn_polar_oa" in _AGN_PARAMS
 
-    def test_polar_dust_guard_present(self):
-        """Pipeline must guard polar dust application on agn_polar_ebv > 0.
+    def test_polar_dust_is_a_noop_at_zero_ebv(self):
+        """Polar dust must do nothing when ``agn_polar_ebv == 0``.
 
-        The guard lives in emission_helpers.agn_emission() which is called by
-        sed_pipeline.py.  We check the helpers module because the refactor
-        moved the polar-dust block there (sed_pipeline.py only forwards the
-        parameter value via agn_polar_ebv=p.get(...)).
+        Previously asserted by grepping ``emission_helpers.agn_emission`` for an
+        ``agn_polar_ebv > 0.0`` branch. That helper was a dead duplicate, so the
+        test passed on code nothing ran, and it pinned a design the live path had
+        abandoned: ``polar_dust_total`` is branchless because
+        ``exp(-0.921 * ebv * ...)`` is already the identity at ``ebv = 0`` (a
+        Python-level branch would not survive ``jax.jit``). Assert the invariant
+        the guard existed to protect instead of any particular implementation.
         """
-        src = _emission_helpers_src()
-        assert "agn_polar_ebv) > 0.0" in src, (
-            "emission_helpers.py must skip polar dust when agn_polar_ebv == 0"
+        import jax.numpy as jnp
+        import numpy as np
+
+        from tengri.components.agn.polar_dust import polar_dust_total
+
+        wave = jnp.linspace(1000.0, 30000.0, 128)
+        l_nu_disc = jnp.ones_like(wave)
+        atten, emis = polar_dust_total(
+            l_nu_disc, wave, cos_inc=0.9, opening_angle_deg=40.0, ebv=0.0
         )
+        np.testing.assert_allclose(np.asarray(atten), np.asarray(l_nu_disc), rtol=0, atol=0)
+        np.testing.assert_allclose(np.asarray(emis), 0.0, atol=0)
 
     def test_polar_dust_block_uses_cos_inc(self):
         src = _pipeline_src()
@@ -237,21 +246,34 @@ class TestPolarDustForwarding:
         )
 
     def test_polar_dust_block_uses_opening_angle(self):
-        """opening_angle_deg must be forwarded from agn_polar_oa.
+        """``agn_polar_oa`` must be read from params and actually change the result.
 
-        sed_pipeline.py passes agn_polar_oa=p.get("agn_polar_oa", ...) to
-        agn_emission(), which translates it to opening_angle_deg=agn_polar_oa
-        inside emission_helpers.py.  We verify both sides of the indirection.
+        The AGN component reads ``agn_polar_oa`` from params and passes it to
+        ``polar_dust_total(..., opening_angle_deg=...)`` in
+        ``components/agn/polar_dust.py``. (The old docstring described a
+        ``sed_pipeline.py`` -> ``emission_helpers.agn_emission`` chain; neither
+        exists any more — that module was deleted and that helper was a dead
+        duplicate.) Both sides are checked: the parameter is consumed, and
+        varying it moves the output.
         """
-        # sed_pipeline.py must forward the parameter to agn_emission()
         pipeline_src = _pipeline_src()
         assert _has_param_consumer(pipeline_src, "agn_polar_oa"), (
             "AGN component must read agn_polar_oa from params"
         )
-        # emission_helpers.py must pass it through as opening_angle_deg
-        helpers_src = _emission_helpers_src()
-        assert "opening_angle_deg=agn_polar_oa" in helpers_src, (
-            "emission_helpers.agn_emission must pass opening_angle_deg=agn_polar_oa"
+        # ...and the live polar-dust model must actually consume it. Asserting the
+        # text "opening_angle_deg=agn_polar_oa" only ever matched the dead
+        # emission_helpers copy; vary the angle and require the output to move.
+        import jax.numpy as jnp
+        import numpy as np
+
+        from tengri.components.agn.polar_dust import polar_dust_total
+
+        wave = jnp.linspace(1000.0, 30000.0, 128)
+        disc = jnp.ones_like(wave)
+        narrow, _ = polar_dust_total(disc, wave, cos_inc=0.5, opening_angle_deg=10.0, ebv=0.3)
+        wide, _ = polar_dust_total(disc, wave, cos_inc=0.5, opening_angle_deg=80.0, ebv=0.3)
+        assert not np.allclose(np.asarray(narrow), np.asarray(wide)), (
+            "opening_angle_deg must change the polar-dust result — it is being ignored"
         )
 
 
@@ -337,9 +359,21 @@ class TestDustAlphaDL14:
     """dust_alpha_dl14 must be forwarded to the dust emission call."""
 
     def test_dust_alpha_dl14_in_pipeline(self):
-        src = _pipeline_src()
-        assert _has_param_consumer(src, "dust_alpha_dl14"), (
-            "Dust component must read dust_alpha_dl14 from params and forward it"
+        """The live DL14 template must receive ``dust_alpha_dl14``.
+
+        This used to check ``_pipeline_src()`` for a ``params["dust_alpha_dl14"]``
+        style read, which only matched the dead ``emission_helpers.dust_ir_emission``
+        copy. The live path forwards it prefix-stripped
+        (``dust_alpha_dl14=p["alpha_dl14"]`` in ``dust/emission/templates/draine_li.py``),
+        so the old pattern never described live code at all.
+        """
+        import inspect
+
+        from tengri.components.dust.emission.templates import draine_li
+
+        src = inspect.getsource(draine_li)
+        assert "dust_alpha_dl14=" in src, (
+            "DL14 template must forward dust_alpha_dl14 to the emission call"
         )
 
     def test_dust_alpha_dl14_in_param_map(self):

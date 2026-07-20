@@ -417,8 +417,8 @@ class SEDModelComponent:
         result = []
         for name, prior in self._priors.items():
             full_name = self.parameter_prefix + name
-            description = getattr(prior, "description", "")
-            units = getattr(prior, "units", "")
+            description = prior.description
+            units = prior.units
             result.append(
                 ParamDeclaration(name=full_name, prior=prior, description=description, units=units)
             )
@@ -842,6 +842,7 @@ class SEDModelComponent:
         -------
         tuple[ndarray, mapping[str, ndarray]]
             (sed_out, published) where:
+
             - sed_out: Updated rest-frame L_nu in erg/s/Hz.
             - published: Dict of keys declared in ``outputs``, e.g.,
               ``{"L_ir": 1e45}``.

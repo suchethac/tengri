@@ -153,6 +153,29 @@ want to keep a stale L3 entry alive across phases (e.g. running MAP and
 HMC repeatedly in alternation and reusing both compiles). The default
 smart-lean path covers the catalog and multi-phase cases without it.
 
+### Tuning the in-memory caches
+
+The L1–L3 caches above are also tunable from the environment, which is
+useful when a process is memory-bound rather than compile-bound:
+
+```bash
+export TENGRI_ENGINE_CACHE_MAXSIZE=1   # default 2; L3 entries held before eviction
+export TENGRI_DISABLE_SHARED_CACHES=1  # never populate the shared caches at all
+export TENGRI_LEAN=1                   # force lean mode process-wide
+export TENGRI_PERSISTENT=1             # opt out of the lean default
+```
+
+Each L3 entry holds a compiled XLA executable, so lowering
+`TENGRI_ENGINE_CACHE_MAXSIZE` to 1 trades one extra compile for a
+smaller resident set. `TENGRI_DISABLE_SHARED_CACHES=1` is the strongest
+guarantee — every `Fitter` compiles fresh, and nothing is retained
+between fits — at the cost of paying the compile on every run.
+
+The in-process equivalents are `tengri.lean()` / `tengri.persistent()`
+(context managers) and `tengri.gc()` / `tengri.clear_shared_caches()`.
+All four are importable from the top-level package, though they are not
+listed in `tengri.__all__`.
+
 The disk cache underneath all three means even a full `tengri.gc()` on a
 warm process does not recompile from scratch on the next call: XLA reads
 the already-optimized binary from `~/.cache/tengri_jax_cache` (~3 s

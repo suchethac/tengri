@@ -2051,6 +2051,7 @@ class Prediction:
         - ``ssp_flux_at_z`` ← ``lnu_age / (age_weights * LSUN_ERG)``
           (safe-divided where ``age_weights`` is zero)
         - ``agn_bol_erg`` ← ``state.derived["L_agn_bol"]`` if present.
+
         """
         if "sed_total" in self._cache:
             return
@@ -2703,6 +2704,7 @@ class Prediction:
         not inside :func:`jax.jit`.
 
         The redshift value is resolved through the model's spec:
+
         - If ``redshift`` is a free parameter, it is taken from ``params``.
         - If ``redshift`` is fixed in the spec, the fixed value is used.
         - If ``redshift`` is not found in either place, raises ``KeyError``.

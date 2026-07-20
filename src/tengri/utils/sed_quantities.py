@@ -7,6 +7,7 @@ This module provides the computational primitives used by both the lazy
 population-level batch computation via ``jax.vmap``).
 
 All functions are:
+
 - **Pure**: no side effects, no mutation, no caching
 - **JIT-compatible**: can be wrapped in ``jax.jit``
 - **Differentiable**: gradients flow through all computations
@@ -15,6 +16,7 @@ All functions are:
 
 Physical conventions
 --------------------
+
 - SED units: erg/s/Hz (rest-frame luminosity L_ν)
 - Wavelength: Angstrom (ascending order in ``ssp_wave``)
 - Frequency: Hz (``ν = c / λ``, descending when λ is ascending)
@@ -26,6 +28,7 @@ Physical conventions
 
 References
 ----------
+
 - Balogh et al. 1999, ApJ, 527, 54 — Dn4000 definition
 - Wang et al. 2024, ApJ — modified Balmer break
 - Bell 2003, ApJ, 586, 794 — FIR-radio correlation
@@ -34,6 +37,7 @@ References
 - Lehmer et al. 2016, ApJ, 825, 7 — updated XRB scaling
 - Duras et al. 2020, A&A, 636, A73 — AGN bolometric corrections
 - Condon 1992, ARA&A, 30, 575 — thermal radio emission
+
 """
 
 import jax

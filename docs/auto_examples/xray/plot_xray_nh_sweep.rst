@@ -38,13 +38,16 @@ Figure 11 (hardness-ratio model tracks) for log N_H from 20 to 25.
 
 References
 ----------
+
 - Ricci et al. 2017, Nature 549, 488 (zphabs × cabs × cut-off PL +
   scattered component spectral model).
+
 - Matsumoto et al. 2026, Eq. B6 and §3.3 (X-ray properties of MIPS-
   selected obscured AGN at z > 3).
+
 - Morrison & McCammon 1983, ApJ 270, 119 (photoelectric cross-sections).
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-125
+.. GENERATED FROM PYTHON SOURCE LINES 32-129
 
 
 

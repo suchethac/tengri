@@ -7,6 +7,7 @@ of the SSP spectral library and can be computed on the fly for any
 age grid.
 
 The calculation uses:
+
 - Main-sequence lifetime: simplified Hurley, Pols & Tout (2000) formula
 - Initial-final mass relation: Kalirai et al. (2008) for CO white dwarfs
 - Remnant masses: NS = 1.4 Msun, BH = 0.4 * m_init (Fryer+2012 approx.)
@@ -51,12 +52,14 @@ across IMFs, but agrees with their formula to ~2% for Chabrier.
 
 References
 ----------
+
 - Hurley, Pols & Tout 2000, MNRAS, 315, 543 (MS lifetime)
 - Kalirai et al. 2008, ApJ, 676, 594 (WD IFMR)
 - Fryer et al. 2012, ApJ, 749, 91 (BH remnant masses)
 - Chabrier 2003, PASP, 115, 763 (IMF)
 - Kroupa 2001, MNRAS, 322, 231 (IMF)
 - Behroozi, Wechsler & Conroy 2013, ApJ, 770, 57 (fitting formula)
+
 """
 
 import jax

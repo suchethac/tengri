@@ -8,6 +8,7 @@ All functions are JIT-compatible and fully differentiable.
 
 Available Diagnostics
 ---------------------
+
 - **uv_slope_beta**: Calzetti et al. (1994) UV spectral slope
 - **dn4000**: Balogh et al. (1999) 4000-Å break index
 - **irx**: Infrared excess from dust and FUV luminosity
@@ -16,9 +17,11 @@ Available Diagnostics
 
 References
 ----------
+
 - Calzetti, D., Kinney, A. L., Storchi-Bergmann, T., 1994, ApJ, 429, 582
 - Balogh, M. L., Morris, S. L., Yee, H. K. C., Carlberg, R. G., Ellingson, E.,
   1999, ApJ, 527, 54
+
 """
 
 import jax

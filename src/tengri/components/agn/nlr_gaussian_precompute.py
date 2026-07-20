@@ -135,6 +135,7 @@ def build_lookup(preint: dict, **kwargs: Any):
     - ``sigma_nlr_kms``: Gaussian line width [km/s] (default
       ``_NLR_FWHM_KMS / 2.355``).
     - ``line_efficiency``: fraction of intercepted L converted to lines.
+
     """
     line_strengths = preint["line_strengths"]
     line_weight_matrix = preint["line_weight_matrix"]

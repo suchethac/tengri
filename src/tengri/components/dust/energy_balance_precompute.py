@@ -85,13 +85,6 @@ class EnergyBalanceLUT(NamedTuple):
     tau_diff_grid: jnp.ndarray
 
 
-def _axis_grid(lo: float, hi: float, n: int) -> jnp.ndarray:
-    """Grid nodes for one optical-depth axis; a single node when ``lo == hi``."""
-    if hi <= lo:
-        return jnp.asarray([lo])
-    return jnp.linspace(lo, hi, n)
-
-
 def build_energy_balance_lut(
     ssp_flux: jnp.ndarray,
     ssp_wave: jnp.ndarray,

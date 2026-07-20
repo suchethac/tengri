@@ -1,6 +1,6 @@
 """
 Dust attenuation: uncertainty in SED from dust parameter estimation
-==================================================================
+===================================================================
 
 Demonstrates dust attenuation effects and how fitting uncertainty propagates
 to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff)

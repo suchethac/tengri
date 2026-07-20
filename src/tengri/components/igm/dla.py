@@ -28,6 +28,7 @@ All functions are pure JAX (JIT-compilable, differentiable).
 
 Parameters
 ----------
+
 - ``dla_log_n_hi`` : log10(N_HI / cm⁻²), typically 19–22.
 - ``dla_z`` : redshift of the absorber.
 - ``dla_temp`` : gas temperature [K], typically fixed at 10⁴ K.
@@ -35,9 +36,11 @@ Parameters
 
 References
 ----------
+
 - Tepper-García 2006, MNRAS, 369, 2025 (Voigt approximation)
 - Lee 2013, ApJ, 773, 120 (asymmetry correction)
 - Dijkstra 2014, PASA, 31, e040 (Ly-alpha cross-section review)
+
 """
 
 from __future__ import annotations

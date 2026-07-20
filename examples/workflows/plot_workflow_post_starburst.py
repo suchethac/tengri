@@ -1,6 +1,6 @@
 """
 Model misspecification: post-starburst galaxies reveal wrong SFH
-==============================================================
+================================================================
 
 A post-starburst galaxy shows a recent burst followed by quenching.
 When fit with smooth tau-model (incorrect), the fit biases the recovered

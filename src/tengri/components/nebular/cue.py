@@ -89,6 +89,7 @@ require Synthesizer Box credentials (``synthesizer-download --agn-grids``).
 
 References
 ----------
+
 - Li et al. 2024, ApJ, 969, 28 (Cue v1)
 - Li et al. 2025, ApJ, 986, 9 (Cue v2, AGN extension)
 - Gutkin, Charlot & Bruzual 2016, MNRAS, 462, 1757 (BEAGLE HII grids)
@@ -642,49 +643,6 @@ def _prepare_nn_params(
             gas_logco,
         ],
         axis=-1,
-    )
-
-
-def prepare_nn_params_from_dict(params: dict) -> jnp.ndarray:
-    """Convert Cue parameter dictionary to neural network input vector.
-
-    Convenience wrapper around _prepare_nn_params that unpacks parameter keys.
-
-    Parameters
-    ----------
-    params : dict
-        Dictionary with keys: ionspec_index1..4, ionspec_logLratio1..3,
-        gas_logu, gas_logn, gas_logz, gas_logno, gas_logco.
-
-    Returns
-    -------
-    array, shape (12,)
-        NN-ready input vector.
-
-    Notes
-    -----
-    **JIT-compatible**: yes — delegates to _prepare_nn_params.
-
-    References
-    ----------
-    .. [1] Li et al. 2025, "Cue: A fast neural network emulator for nebular
-        emission line and continuum predictions", ApJ, 986, 9 (2025).
-        arXiv:2405.04598. https://doi.org/10.3847/1538-4357/ad7fe3
-
-    """
-    return _prepare_nn_params(
-        ionspec_index1=params["ionspec_index1"],
-        ionspec_index2=params["ionspec_index2"],
-        ionspec_index3=params["ionspec_index3"],
-        ionspec_index4=params["ionspec_index4"],
-        ionspec_logLratio1=params["ionspec_logLratio1"],
-        ionspec_logLratio2=params["ionspec_logLratio2"],
-        ionspec_logLratio3=params["ionspec_logLratio3"],
-        gas_logu=params["gas_logu"],
-        gas_logn=params["gas_logn"],
-        gas_logz=params["gas_logz"],
-        gas_logno=params["gas_logno"],
-        gas_logco=params["gas_logco"],
     )
 
 

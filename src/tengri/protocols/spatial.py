@@ -58,6 +58,7 @@ class SpatialComponent(Protocol):
     - ``declared_parameters()`` → list of :class:`ParamDeclaration`
     - ``precompute(...)`` → :class:`SpatialComponentState` (eager)
     - ``apply(state, params)`` → :class:`ForwardState` (pure JAX)
+
     """
 
     name: str

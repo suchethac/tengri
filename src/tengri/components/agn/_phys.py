@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.utils.blackbody import planck_bnu_nu as _planck_bnu_nu
 from tengri.utils.physics_constants import (
     AA_TO_CM as ANGSTROM_CM,
     C_CGS as C_LIGHT,
@@ -20,7 +21,6 @@ from tengri.utils.physics_constants import (
     K_BOLTZ,
     L_SUN,
 )
-from tengri.utils.scale import max_finite_exponent
 
 __all__ = [
     "ANGSTROM_CM",
@@ -48,11 +48,8 @@ def planck_lnu(
     """Compute the Planck blackbody spectral radiance.
 
     Evaluate the Planck function B_nu(T) at a given frequency and temperature.
-    Overflow is avoided by clamping the exponent and by grouping the prefactor
-    so ``nu**3`` is never formed (see the implementation comments) — *not* by
-    logarithmic arithmetic, which an earlier version of this docstring claimed.
-    This is the unique Planck function used throughout the AGN
-    module; do not duplicate this implementation.
+    Thin AGN-facing spelling of :func:`tengri.utils.blackbody.planck_bnu_nu`,
+    which is the single implementation for the whole tree; do not duplicate it.
 
     Parameters
     ----------
@@ -80,15 +77,11 @@ def planck_lnu(
     :math:`c` is the speed of light [cm/s], :math:`k_B` is Boltzmann's constant
     [erg/K], and :math:`T` is temperature [K].
 
-    **Numerical stability**: :math:`x = h\\nu/k_B T` is clamped to
-    ``[1e-10, max_finite_exponent()]`` — 500 under float64, ~88 under float32 —
-    to prevent ``expm1`` overflow while keeping gradients finite everywhere; a
-    saturated denominator gives the right forward limit but a NaN gradient.
-    Temperature is clamped to [1.0, ∞) K to avoid division by zero. The
-    prefactor is grouped as :math:`2h\\nu(\\nu/c)^2` so :math:`\\nu^3` (~2.7e52
-    at UV frequencies) is never formed; arithmetic follows the session's
-    working precision rather than being forced to float64, which under
-    ``jax.enable_x64(False)`` would silently truncate back to float32 (#1206).
+    **Numerical stability**: The implementation clamps :math:`x = h\\nu/k_B T` to
+    the interval [1e-10, 500] to prevent expm1 overflow while keeping gradients
+    finite everywhere. Temperature is clamped to [1.0, ∞) K to avoid division
+    by zero. Arithmetic is performed in float64 to handle :math:`\\nu^3` at
+    UV frequencies (~10^17 Hz) without overflow.
 
     References
     ----------
@@ -96,26 +89,7 @@ def planck_lnu(
        Normalspektrum," Verhandlungen der Deutschen Physikalischen Gesellschaft,
        Vol. 2, pp. 237-245 (1900).
     """
-    # Work at the session's working precision: ``result_type(float)`` is
-    # float64 under x64 and float32 without it. A hard ``dtype=jnp.float64``
-    # here was silently truncated back to float32 under
-    # ``jax.enable_x64(False)`` — the very configuration it was protecting.
-    dtype = jnp.result_type(float)
-    nu_w = jnp.asarray(nu, dtype=dtype)
-    t_safe = jnp.maximum(jnp.asarray(temperature, dtype=dtype), 1.0)
-
-    # Clamp x = hν/kT to [1e-10, x_max].  The clamp avoids both expm1
-    # overflow and division-by-zero, and keeps gradients finite everywhere:
-    # an ``inf`` denominator gives a correct forward value (B_nu -> 0) but a
-    # NaN gradient, so the cap follows the working dtype (500 under float64,
-    # which is what this used before; ~88 under float32).
-    x = jnp.clip(H_PLANCK * nu_w / (K_BOLTZ * t_safe), 1e-10, max_finite_exponent())
-
-    # Algebraically 2h·nu³/c², but never forming nu³: at λ ~ 100 Å that
-    # intermediate is ~2.7e52, far beyond float32's 3.4e38, while B_nu itself
-    # is representable. Grouping as nu·(nu/c)² keeps every intermediate in
-    # range and is identical in float64 to ~4e-16 relative (#1206).
-    return 2.0 * H_PLANCK * nu_w * (nu_w / C_LIGHT) ** 2 / jnp.expm1(x)
+    return _planck_bnu_nu(nu, temperature)
 
 
 # ── Wavelength ↔ frequency conversion ─────────────────────────────

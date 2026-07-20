@@ -36,8 +36,10 @@ arises from the σ_T / (σ_T + σ_phabs(E)) branching ratio: at low E
 the disc photoelectrically absorbs everything, at high E Compton
 wins and the photons are scattered back to the observer.
 
-Left panel: full Ricci+2017 / Matsumoto+26 Eq. B6 model
+Left panel: full Ricci+2017 / Matsumoto+26 Eq. B6 model::
+
     L_X = T_phabs × T_cabs × L_intr + L_refl + f_scat × L_intr
+
 swept through log N_H = 22 → 24.5. The Compton hump emerges as the
 primary continuum dims into Compton-thick obscuration.
 
@@ -46,11 +48,12 @@ covering fractions R, reproducing the MZ95 Fig. 1 shape.
 
 References
 ----------
+
 - Magdziarz & Zdziarski 1995, MNRAS 273, 837 (pexrav, XSPEC).
 - Ricci et al. 2017, Nature 549, 488 (R=0.5 obscured-AGN spectral model).
 - Matsumoto et al. 2026, Appendix B (Eq. B6 fits at z > 3).
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-139
+.. GENERATED FROM PYTHON SOURCE LINES 38-143
 
 
 

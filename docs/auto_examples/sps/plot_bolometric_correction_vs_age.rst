@@ -35,10 +35,11 @@ GALEX FUV/NUV and SDSS g, r, K to keep the demo independent of
 the full filter machinery.
 
 References:
+
 - Conroy, Gunn, White 2009 ApJ 699 486.
 - Bruzual & Charlot 2003 MNRAS 344 1000.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-82
+.. GENERATED FROM PYTHON SOURCE LINES 24-84
 
 
 

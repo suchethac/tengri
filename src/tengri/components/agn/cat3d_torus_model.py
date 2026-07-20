@@ -221,11 +221,13 @@ class CAT3DTorus(SEDModelComponent):
         ----------
         p : mapping[str, ndarray]
             Parameters with prefix already stripped:
+
             - log_lbol: log₁₀(L_bol / L_sun)
             - cos_inc: cosine of inclination
             - a_cat3d: radial power-law index
             - fwd_cat3d: polar-wind mass fraction
             - torus_frac: torus luminosity fraction
+
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
         wave : ndarray, shape (n_wave,)
@@ -237,8 +239,10 @@ class CAT3DTorus(SEDModelComponent):
         -------
         tuple[ndarray, dict]
             (sed_out, published) where:
+
             - sed_out: Updated SED (sed_in + torus contribution).
             - published: {"L_agn_torus": bolometric torus luminosity [erg/s]}.
+
         """
         # If templates are not loaded, return zero emission
         if not hasattr(self, "data") or self.data is None:

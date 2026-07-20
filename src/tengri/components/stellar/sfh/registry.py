@@ -22,6 +22,7 @@ The returned ``fn`` is a pure JAX closure that can be JIT-compiled.
 
 References
 ----------
+
 - Bellstedt+2020 (arXiv:2005.11917): snorm, tsnorm.
 - Robotham+2020 (arXiv:2002.06980): snorm_burst, tsnorm_burst (ProSpect).
 - Carnall+2018: DPL.
@@ -188,6 +189,11 @@ class SFHModelSpec(NamedTuple):
 
 # ── Registries ────────────────────────────────────────────────────
 
+#: Every registered mean-SFH family, keyed by the ``sfh={'type': ...}`` name
+#: (``'dpl'``, ``'tsnorm'``, ``'delayed_tau'``, ``'field'``, …). Values are the
+#: :class:`SFHSpec` entries that :func:`resolve_sfh` dispatches on and that
+#: ``tengri.builders.sfh.*`` is generated from. Populated at import time by
+#: :func:`register_sfh`; treat it as read-only.
 SFH_REGISTRY: dict[str, Any] = {}
 
 #: SFH names present in :data:`SFH_REGISTRY` but NOT yet validated against the
@@ -216,7 +222,10 @@ UNVALIDATED_SFH_TYPES: frozenset[str] = frozenset(
     }
 )
 
-# Field sub-model registry: PSD model name -> sqrt_power function
+#: Stochastic-field PSD models, keyed by the ``sfh={'psd': ...}`` name. Values
+#: are the ``sqrt_power(omega, ...)`` callables the Gaussian-process field
+#: draws its amplitude operator from. ``'drw'`` (damped random walk) is the
+#: only entry today.
 FIELD_MODEL_REGISTRY: dict[str, object] = {
     "drw": compute_sqrt_power_drw,
 }
@@ -1703,7 +1712,8 @@ def resolve_sfh(
     Returns
     -------
     composed_fn : callable
-        Pure JAX function: fn(t_lookback, **all_internal_kwargs) -> SFR [Msun/yr].
+        Pure JAX function ``fn(t_lookback, **all_internal_kwargs) -> SFR``
+        [Msun/yr].
     merged_params : dict[str, ParamDef]
         All fittable parameters across selected models.
     merged_param_map : dict[str, tuple[str, float, float]]

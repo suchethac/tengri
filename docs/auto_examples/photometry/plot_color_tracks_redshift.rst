@@ -32,13 +32,15 @@ Useful intuition this figure makes obvious:
 
 - the 4000 Å break sweeps from the *u-g* baseline at ``z = 0``
   into the *r-z* baseline by ``z ≳ 1.2``
+
 - the star-forming and quiescent tracks separate most at low z,
   then converge at high z as the break leaves all visible bands
+
 - the visible-band colors alone cannot distinguish a dusty
   z = 0.5 SF galaxy from an unobscured z = 3 LBG (the LBG dropout
   degeneracy demonstrated in workflows/plot_workflow_photoz_degeneracy)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-109
+.. GENERATED FROM PYTHON SOURCE LINES 25-112
 
 
 
@@ -48,19 +50,8 @@ Useful intuition this figure makes obvious:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -151,11 +142,6 @@ Useful intuition this figure makes obvious:
 
     fig.tight_layout()
     plt.savefig("plot_color_tracks_redshift.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 8.103 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_color_tracks_redshift.py:

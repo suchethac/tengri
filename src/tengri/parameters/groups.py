@@ -93,6 +93,7 @@ from __future__ import annotations
 import difflib
 import warnings
 
+from tengri.config.exceptions import ParameterError
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Distribution, Fixed
@@ -122,6 +123,46 @@ _CANONICAL_FIXED_DEFAULTS: dict[str, float] = {
     # byte-unchanged; free it to fit the MDF width.
     "met_logzsol_scatter": 0.1,
 }
+
+
+def _expand_free(param_name: str, registry_default: Distribution) -> Distribution:
+    """Resolve ``FREE`` for one parameter: its declared range, else the default.
+
+    ``FREE`` used to resolve straight to ``registry_default``. For the ~half of
+    the registry whose default is a ``Fixed`` scalar that silently freed
+    nothing — the fit then ran with that physics pinned while the caller
+    believed it was being sampled (#1264).
+
+    Now a parameter may declare ``free_prior``: the admissible range to open up
+    when asked to be free, normally the same range ``bound_check`` enforces.
+    When it does, ``FREE`` genuinely frees. When it does not, this returns the
+    Fixed default unchanged and
+    :func:`_check_wildcard_freed_something` refuses the request loudly rather
+    than pretending it worked.
+
+    Parameters
+    ----------
+    param_name : str
+        Canonical (fully-prefixed) parameter name, e.g. ``"neb_logU"``.
+    registry_default : Distribution
+        The parameter's registry default.
+
+    Returns
+    -------
+    Distribution
+        ``free_prior`` when one is declared and the default is Fixed;
+        otherwise ``registry_default`` unchanged.
+    """
+    if not registry_default.is_fixed:
+        # Already free — FREE means "leave the registry's range alone".
+        return registry_default
+    # Local import: registry imports parse_groups (for recipe introspection),
+    # so a module-level import here would close the cycle.
+    from tengri.parameters.registry import registry
+
+    record = registry().get(param_name)
+    free_prior = getattr(record, "free_prior", None) if record is not None else None
+    return free_prior if free_prior is not None else registry_default
 
 
 def _default_fixed_value(param_name: str, registry_default: Distribution) -> float:
@@ -246,6 +287,12 @@ _VALID_DUST_TYPES = {
     "single_component",
     "wg00",
 }
+
+#: Valid ``shock={'type': ...}`` values. Named here rather than built inline
+#: at the point of validation so :func:`tengri.list_shock_models` can derive
+#: its menu from the very set the builder checks against — the menu and the
+#: validator then cannot drift (the failure mode behind #1273 and #1276).
+_VALID_SHOCK_TYPES = frozenset({"none", "mappings"})
 
 #: Witt & Gordon (2000) structural selectors (dust_model="wg00", FSPS dust_type=3).
 _WG00_DUST_CURVES = ("mw", "smc")
@@ -473,7 +520,6 @@ _AGN_PARTITION = {
     # Narrow-line region
     "agn_nlr_cf": "agn.nlr",
     "agn_alpha_ion": "agn.nlr",  # NLR photoionization knob
-    "agn_feltre_cf": "agn.nlr",  # Feltre calibration for NLR
     "neb_xid": "agn.nlr",  # Nebular ionization for NLR
     # Broad-line region
     "agn_blr_cf": "agn.blr",
@@ -578,6 +624,12 @@ def parse_groups(**kwargs) -> Parameters:
     **kwargs : keyword arguments
         Model configuration. Keys are group names (sfh, dust, neb, igm,
         radio, xray, agn) or top-level settings (redshift, apply_igm, n_grid).
+    _allow_empty_wildcard : bool, optional
+        Private. When True, an ``all_params: FREE`` that frees nothing is
+        permitted instead of raising :class:`~tengri.config.exceptions.ParameterError`.
+        Reserved for introspection callers (:func:`~tengri.recipe_parameters`)
+        that read ``all_params`` and do not care whether a parameter is free.
+        Never set this when building a model to fit.
 
     Returns
     -------
@@ -609,6 +661,10 @@ def parse_groups(**kwargs) -> Parameters:
     ... )
     >>> assert "sfh_dpl_alpha" in params.free_params
     """
+    # Private introspection escape hatch — popped before group parsing so it is
+    # never mistaken for a group name.
+    allow_empty_wildcard = bool(kwargs.pop("_allow_empty_wildcard", False))
+
     # ── Pass 0a: Normalize the preferred ``all_params`` wildcard alias ──
     # Rewrite ``all_params`` -> ``'*'`` in every group dict (and nested
     # sub-block) so all downstream logic operates on the single canonical key.
@@ -664,6 +720,14 @@ def parse_groups(**kwargs) -> Parameters:
     radio_agn_active = _RADIO_AGN_PARAMS_BY_MODEL.get(
         structural_kwargs.get("radio_agn_model"), frozenset()
     )
+
+    # Outcome of every *active* ``all_params: FREE`` wildcard, keyed by the
+    # group it was written in. ``FREE`` resolves to the registry default, which
+    # for most parameters is a ``Fixed`` scalar — so a wildcard can legally
+    # resolve without freeing anything. That silently produces a model whose
+    # physics is pinned at defaults while the user believes it is being fitted.
+    # Collected here and adjudicated by ``_check_wildcard_freed_something``.
+    wildcard_free_outcome: dict[str, list[tuple[str, bool]]] = {}
 
     for param_name in structural_params.all_params:
         group = param_partition.get(param_name, None)
@@ -758,6 +822,14 @@ def parse_groups(**kwargs) -> Parameters:
             wildcard_active=wildcard_active,
         )
 
+        # Record whether an active wildcard-FREE actually freed this parameter.
+        # ``wildcard_fixed_inactive`` is deliberate block scoping, not a failure,
+        # so only the active branch is tracked.
+        if tag == "wildcard_free":
+            wildcard_free_outcome.setdefault(group, []).append(
+                (param_name, not final_dist.is_fixed)
+            )
+
         # Apply the resolved distribution when the user addressed this group
         # (a per-param override or wildcard), or for any AGN param whenever the
         # AGN group is configured. The AGN clause is essential: AGN parameters
@@ -808,6 +880,12 @@ def parse_groups(**kwargs) -> Parameters:
     # "Did you mean ...?" error on any unrecognized key.
     _validate_user_keys(kwargs, structural_params, param_partition)
 
+    # ── Validate every ``all_params: FREE`` actually freed something ───
+    # Runs after key validation so a typo is reported before this, which is
+    # the more fundamental error.
+    if not allow_empty_wildcard:
+        _check_wildcard_freed_something(wildcard_free_outcome)
+
     # ── Construct final Parameters ────────────────────────────────────
 
     final_params = Parameters(**resolved_kwargs)
@@ -819,6 +897,55 @@ def parse_groups(**kwargs) -> Parameters:
     _warn_firrc_slope_degeneracy(final_params)
 
     return final_params
+
+
+def _check_wildcard_freed_something(
+    outcome: dict[str, list[tuple[str, bool]]],
+) -> None:
+    """Raise if an ``all_params: FREE`` wildcard freed no parameter at all.
+
+    ``FREE`` means "use the registry default", and most registry defaults are
+    ``Fixed`` scalars — so the wildcard can resolve cleanly while leaving every
+    parameter in the group pinned. The fit then runs to completion with that
+    physics frozen, which is indistinguishable from success at the call site.
+    Freeing nothing is never what the caller asked for, so refuse it.
+
+    Parameters
+    ----------
+    outcome : dict
+        Group name -> list of ``(param_name, was_freed)`` for every parameter an
+        *active* wildcard-FREE touched. Blocks scoped out by an inactive model
+        selection are excluded by the caller and never reach here.
+
+    Raises
+    ------
+    ParameterError
+        If any group's wildcard freed zero of the parameters it covered.
+    """
+    for group, entries in sorted(outcome.items()):
+        if not entries or any(freed for _, freed in entries):
+            continue
+        stuck = [name for name, _ in entries]
+        # Show enough that the caller can see what they meant to free without
+        # scrolling; groups run to ~22 params at the widest (dust.emission).
+        _LIMIT = 12
+        shown = ", ".join(stuck[:_LIMIT]) + (
+            f", ... (+{len(stuck) - _LIMIT} more)" if len(stuck) > _LIMIT else ""
+        )
+        # Short form is what the caller writes inside the group dict.
+        prefix = f"{group.split('.')[0]}_"
+        example = stuck[0]
+        short = example[len(prefix) :] if example.startswith(prefix) else example
+        raise ParameterError(
+            f"'all_params: FREE' freed 0 of {len(stuck)} parameters in group "
+            f"{group!r}. These have no declared prior, only Fixed defaults:\n"
+            f"  {shown}\n"
+            f"FREE resolves to each parameter's registry default, and these "
+            f"default to Fixed — so the wildcard would leave every one of them "
+            f"pinned and the fit would silently not vary this physics.\n"
+            f"Pass explicit priors instead, e.g. "
+            f"{group.split('.')[0]}={{{short!r}: Uniform(lo, hi)}}."
+        )
 
 
 def _warn_firrc_slope_degeneracy(final_params: Parameters) -> None:
@@ -1333,7 +1460,7 @@ def _translate_shock(shock_dict: dict, result: dict) -> None:
     params in :func:`parse_groups`.
     """
     shock_type = shock_dict.get("type", "mappings")
-    valid_shock = frozenset({"none", "mappings"})
+    valid_shock = _VALID_SHOCK_TYPES
     if shock_type not in valid_shock:
         suggestions = difflib.get_close_matches(shock_type, valid_shock, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
@@ -1421,9 +1548,16 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     has_agn_block = "agn" in radio_dict
 
     if has_legacy_type and (has_sf_block or has_agn_block):
+        # The legacy example is derived from the live vocabulary, not written
+        # by hand: this message used to recommend ``radio={'type': 'bell2003'}``,
+        # which the validator below rejects ("Unknown radio type 'bell2003'") —
+        # ``bell2003`` is an ``sf`` variant, never a legacy ``type``. A reader
+        # following the recovery advice landed on a second error.
+        legacy_example = sorted(_valid_radio_types() - {"none"})
+        legacy_hint = legacy_example[0] if legacy_example else "none"
         raise ValueError(
             "radio: cannot mix legacy 'type' key with 'sf'/'agn' sub-blocks. "
-            "Use either: radio={'type': 'bell2003'} (legacy) "
+            f"Use either: radio={{'type': '{legacy_hint}'}} (legacy) "
             "or radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}} (new)."
         )
 
@@ -1451,7 +1585,9 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
         sf_dict = radio_dict["sf"]
         if isinstance(sf_dict, dict):
             sf_variant = sf_dict.get("type", "bell2003")
-            valid_sf = frozenset({"none", "bell2003", "delvecchio2021", "mccheyne2022"})
+            from tengri.components.radio.component import SF_RADIO_MODELS
+
+            valid_sf = frozenset(SF_RADIO_MODELS)
             if sf_variant not in valid_sf:
                 suggestions = difflib.get_close_matches(sf_variant, valid_sf, n=2, cutoff=0.6)
                 suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
@@ -1666,10 +1802,10 @@ def _short_names_for_registered_type(type_name: str | None) -> set[str]:
     """
     if not type_name:
         return set()
-    try:
-        from tengri.components.sed_model_component import _REGISTRY
-    except Exception:
-        return set()
+    # First-party import: swallowing a failure here would return an empty set and
+    # reject the user's custom-component params as "unknown keys" with no hint why.
+    from tengri.components.sed_model_component import _REGISTRY
+
     cls = _REGISTRY.get(type_name)
     if cls is None:
         return set()
@@ -2289,8 +2425,7 @@ def _resolve_value(
             return registry_default, "registry_default"
 
         if val is FREE:
-            # FREE: use registry default (which may be Fixed; that's ok)
-            return registry_default, "user_free"
+            return _expand_free(param_name, registry_default), "user_free"
         elif val is FIXED:
             # FIXED: convert registry default to Fixed at its center
             if registry_default.is_fixed:
@@ -2313,7 +2448,7 @@ def _resolve_value(
         wildcard = group_dict["*"]
         if wildcard is FREE:
             if wildcard_active:
-                return registry_default, "wildcard_free"
+                return _expand_free(param_name, registry_default), "wildcard_free"
             # Param is not consumed by the active block selection. A wildcard
             # FREE here would create an unconstrained no-op nuisance dimension,
             # so collapse it to its fixed default instead (block-scoped

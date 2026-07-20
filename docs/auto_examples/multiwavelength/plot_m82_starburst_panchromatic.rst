@@ -36,6 +36,7 @@ two-component dust model (diffuse + birth cloud) and Dale et al. (2014)
 infrared re-emission.
 
 **References:**
+
  - Förster Schreiber et al. (2003) [1]_ for M82 SED observations
 
  - Engelbracht et al. (2008) [2]_ for Spitzer MIR/FIR measurements
@@ -53,7 +54,7 @@ infrared re-emission.
    *Astrophys. J.* **784**, 83.
    https://doi.org/10.1088/0004-637X/784/1/83
 
-.. GENERATED FROM PYTHON SOURCE LINES 37-231
+.. GENERATED FROM PYTHON SOURCE LINES 38-232
 
 
 
@@ -63,19 +64,8 @@ infrared re-emission.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

@@ -141,6 +141,12 @@ def _apply_gp_field(sfr_history, params, n_grid, log_age_grid):
 
     psd_sigma = jnp.asarray(params["sfh_field_psd_sigma"])
     psd_tau_yr = jnp.asarray(params["sfh_field_psd_tau_myr"]) * 1e6
+    # ``sfh_field_xi`` is the ONLY spelling that reaches here: the forward
+    # pipeline filters params down to declared names, so a dict carrying the
+    # sampler's ``psd_xi`` arrives with no latents at all and this default fires.
+    # Producers must therefore publish ``sfh_field_xi`` -- see
+    # ``Fitter._to_physical`` and ``_unstandardize_parameters``, both of which
+    # emit both spellings for exactly this reason (#1271).
     xi = jnp.asarray(params.get("sfh_field_xi", jnp.zeros(n_grid)))
     gp_x, k0_half = compute_field_gp(
         xi,
@@ -784,6 +790,7 @@ class StellarSEDComponent:
     - ``stellar_phot_lnu_precomp`` (ndarray, shape ``(n_filter,)``, erg/s/Hz) —
       stellar contribution to photometry from the LUT. Published only when
       ``approx=WavePrecomp()`` is set at model construction.
+
     """
 
     config: StellarSEDComponentConfig = field(default_factory=StellarSEDComponentConfig)
@@ -926,9 +933,11 @@ class StellarSEDComponent:
         redshift_spec : dict[str, Any] | None
             Redshift specification for precomputation. If None or
             mode="fixed", builds a fixed-z LUT.
+
             - mode="fixed", value=float: builds LUT at that fixed z.
             - mode="free", z_min=float, z_max=float, n_z=int: builds
               ztable via precompute_photometry_ztable with the given grid.
+
         spec_wave_obs : array_like, shape (n_pix,), optional
             Observed-frame spectrum pixel wavelengths [Angstrom]. Required
             when ``spectrum_precomp=True``.

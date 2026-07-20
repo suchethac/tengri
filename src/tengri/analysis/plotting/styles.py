@@ -12,6 +12,11 @@ import numpy as np
 # Color palette — colorblind-safe, print-friendly
 # ═══════════════════════════════════════════════════════════════════
 
+#: The shared plotting palette — colorblind-safe and print-friendly. Keys are
+#: sampler names (``'map'``, ``'rt'``, ``'nuts'``, …) and photometric bands
+#: (``'u'``, ``'g'``, ``'r'``, ``'i'``, ``'z'``); values are hex colors. Use
+#: these rather than matplotlib's cycle so figures stay consistent across
+#: notebooks, the gallery, and the paper.
 COLORS = {
     # Sampler colors (consistent across all notebooks)
     "map": "#888888",  # gray — point estimate
@@ -55,8 +60,11 @@ SAMPLER_STYLE = {
     "MGVI": {"color": COLORS["mgvi"], "ls": "-", "lw": 2.0, "alpha": 1.0},
 }
 
-# SDSS effective wavelengths (Angstrom)
+#: SDSS effective wavelengths [Angstrom], keyed by band name.
 SDSS_BANDS = {"u": 3551, "g": 4686, "r": 6166, "i": 7480, "z": 8932}
+
+#: SDSS effective wavelengths [Angstrom] as an array in ``ugriz`` order — the
+#: x-axis for a five-band photometry plot.
 SDSS_WAVE_EFF = np.array([3551, 4686, 6166, 7480, 8932])
 SDSS_BAND_NAMES = ["u", "g", "r", "i", "z"]
 SDSS_BAND_COLORS = [COLORS["u"], COLORS["g"], COLORS["r"], COLORS["i"], COLORS["z"]]
@@ -172,6 +180,9 @@ def setup_style(style="tengri"):
 # Common spectral features for annotation
 # ═══════════════════════════════════════════════════════════════════
 
+#: Rest-frame wavelengths [Angstrom] of the spectral features worth annotating
+#: on an SED plot, keyed by a matplotlib-ready mathtext label. Vacuum
+#: wavelengths, matching the rest of the package.
 SPECTRAL_FEATURES = {
     r"Ly$\alpha$": 1216.0,
     "D4000": 4000.0,

@@ -6,7 +6,7 @@
 Variants from :data:`tengri.parameters.groups._VALID_AGN_BLR_TYPES`:
 ``none``, ``analytic``, ``synthesizer``, ``synthesizer_spectra``, ``grahsp``,
 ``qsogen``. Shared params under ``agn.blr`` partition include ``blr_cf``,
-``alpha_ion``, ``feltre_cf``.
+``alpha_ion``.
 """
 
 from __future__ import annotations

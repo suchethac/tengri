@@ -186,8 +186,9 @@ model = SEDModel.build(
   `shock_log_lhalpha` (decoupled from the SFR — for AGN NLR/outflow shocks).
   `shock={'type':'none'}` disables. Like radio, `'all_params':FREE` is a no-op for the
   Fixed-default shock bucket — use explicit priors (`shock={'frac':
-  Uniform(0,1)}`). Canonical component: `ShockNebular` (`_REGISTRY['shock']`);
-  the older `mappings` implementation is a superseded no-op.
+  Uniform(0,1)}`). Canonical component: `ShockNebular` (`_REGISTRY['shock']`).
+  `'mappings'` is the shock group's default `type` and selects `ShockNebular`;
+  the older standalone `mappings` component is gone, not merely superseded.
 - AGN cross-block normalisation policy: `agn={'type': 'composable', ...,
   'norm': 'cigale_joint' | 'independent'}` (#556). `'cigale_joint'` (default)
   ties disc/torus/polar to CIGALE's single `agn_power` reference (energy-
@@ -196,10 +197,13 @@ model = SEDModel.build(
   `agn_log_lbol`, torus on `agn_power`, polar via the legacy face-on proxy) —
   the GRAHSP/AGNfitter-style bookkeeping. See `AGNSEDComponentConfig.agn_norm`.
 - Sentinels (`FREE`, `FIXED`) are singletons exported from `tengri`.
-- Recipes: `tengri.recipes.*` — five curated starting points
-  (`star_forming_photometry`, `quiescent_z0`, `agn_panchromatic`,
-  `stochastic_sfh_jwst`, `mock_recovery_minimal`). Each docstring states its
-  SSP requirement (bare-stellar vs any).
+- Recipes: `tengri.recipes.*` — ten curated starting points. Five general
+  (`star_forming_photometry`, `quiescent_z0`, `stochastic_sfh_jwst`,
+  `high_z`, `photoz`), three AGN (`agn_panchromatic`, `composable_agn`,
+  `unified_agn`), and two for forward-only work (`mock_recovery_minimal`,
+  `dust_demo`). Each docstring states its SSP requirement (bare-stellar vs
+  any). `tengri.list_recipes()` is the live list — do not re-enumerate them
+  from memory.
 - The flat-kwarg `Parameters(...)` form is the **expert escape hatch** — still
   works, still used internally, but not the recommended user-facing path.
 
@@ -392,7 +396,7 @@ context *before* entering JAX transforms. The context's
 - `agn_torus_frac`: do NOT auto-derive from `cos(theta_torus)` in forward pass (gradient discontinuity)
 - Inference internals use `mode="_traceable"` (safe inside JIT). User-facing defaults to `mode="auto"`
 - **Build-time `approx=WavePrecomp(...)` is the speed knob** (2026-05-20). Opting in publishes the SSP × filter LUT and routes `predict_photometry` through `observation.predict_via_precomp`. Default `approx=None` uses the exact wave-grid path. The dict / bool / string forms (e.g. `approx={'wave_precomp': True}`, `approx=True`, `approx='wave_precomp'`) were removed — `TypeError` at construction. Override ztable sampling via `WavePrecomp(n_z=200, z_min=0.0, z_max=3.0)`.
-- **One NUTS fit per notebook process.** Each warmup peaks at 3–6 GB on small models (D ≤ 7 photometry) but can hit 20+ GB on D ≈ 8 with `mean_sfh_type="dense_basis"` — observed 22.78 GB peak on nb00 with default `dense_mass=True`. Multi-fit notebooks (and any single fit on D ≥ 8) need `dense_mass=False` or `mcmc_hmc`. See `docs/dev/notebook_orchestration_oom.md`
+- **One NUTS fit per notebook process.** Each warmup peaks at 3–6 GB on small models (D ≤ 7 photometry) but can hit 20+ GB on D ≈ 8 with `mean_sfh_type="dense_basis"` — observed 22.78 GB peak on nb00 with default `dense_mass_matrix=True`. Multi-fit notebooks (and any single fit on D ≥ 8) need `dense_mass_matrix=False` or `mcmc_hmc`. See `docs/dev/notebook_orchestration_oom.md`
 - **Subagent rejection ≠ child kill.** A rejected subagent's `python notebook.py` keeps running. After rejecting, run `ps -axo pid,rss,comm | grep python` and `kill -9` zombies
 
 ## Testing
@@ -465,9 +469,10 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 - `docs/dev/history/handoff-2026-04.md` — frozen project-status snapshot (pre Phase II-3 closure)
 - `docs/dev/design_philosophy.md` — architecture decisions
 - `docs/dev/NAMING_CONTRACT.md` — naming conventions (read before any rename/refactor)
-- `docs/dev/REFACTOR.md` — refactor plan
+- `docs/dev/20260404-refactor.md` — refactor plan
 - `docs/dev/api_migration_v0.x.md` — public-API migration table (Phase 1→6 + Part II scaffold)
 - `docs/known_bugs.md` — bug tracking (all currently fixed)
 - `docs/dev/notebook_orchestration_oom.md` — operational rules for OOM-safe notebook authoring (multi-fit, subagent zombies, watchdog)
 - `tools/check_param_prefixes.py` — CI guard for free-parameter prefix rule (NAMING_CONTRACT §3.2)
 - `tools/check_british_spelling.py` — CI guard for American-English spelling (NAMING_CONTRACT §10); `--fix` to auto-rewrite
+- `tools/check_doc_examples.py` — CI guard that every symbol named in a `src/` docstring or published doc actually exists (`docs/api/*.rst` are autodoc stubs, so docstrings *are* the API reference, and no doctest runner executes them). Runs in the `smoke` job. `docs/dev/` is out of scope by design: design notes and parity audits legitimately name removed or not-yet-built API

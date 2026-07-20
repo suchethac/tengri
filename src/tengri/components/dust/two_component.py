@@ -12,6 +12,7 @@ Sibling to :class:`tengri.components.dust.DustAttenuationSEDComponent`
 
 Cross-component reads
 ---------------------
+
 - ``state.derived["lnu_age"]``  — (n_age, n_wave) per-age L_ν cube
   (erg/s/Hz) from :class:`StellarSEDComponent`.
 - ``state.derived["ssp_ages_yr"]`` — (n_age,) age axis (yr) from
@@ -19,6 +20,7 @@ Cross-component reads
 
 Cross-component publications
 ----------------------------
+
 - ``state.derived["L_ir"]`` (scalar, erg/s) — total IR luminosity
   re-radiated by dust, consumed by
   :class:`tengri.components.radio.RadioSEDComponent` (FIR-radio
@@ -235,6 +237,7 @@ class DustSEDComponent:
         """Dust attenuation-derived quantities: absorbed luminosity and spectra.
 
         Publishes:
+
         - L_ir: total absorbed UV/optical/NIR luminosity (erg/s), enabling
           downstream dust emission components to re-radiate.
         - L_absorbed: alias for L_ir (deprecated, use L_ir).
@@ -242,6 +245,7 @@ class DustSEDComponent:
         - sed_nebular: re-published after dust reddening (same name as nebular,
           not declared to avoid duplicate-publisher conflict; consumed by
           implementations that apply dust-reddened nebular).
+
         """
         return (
             DerivedKey("L_ir", "erg/s", "Total absorbed UV/optical/NIR luminosity"),

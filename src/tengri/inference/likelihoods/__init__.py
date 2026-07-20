@@ -6,6 +6,7 @@ The submodules expose:
 - :mod:`tengri.inference.likelihoods.gaussian` — diagonal-Gaussian
   χ² used by both legacy ``build_loglikelihood_fn`` and the new
   :class:`tengri.pipeline.PhotometryLikelihood` Protocol adapter.
+
 """
 
 from __future__ import annotations

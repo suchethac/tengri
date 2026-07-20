@@ -17,9 +17,11 @@ to show how Δm = m_Riess - m_Planck grows with redshift.
 
 References
 ----------
+
 * Planck 2018: Planck Collaboration et al. 2020, A&A, 641, A6
 * Riess et al. 2022: ApJL, 934, L7 (local H0=73.04±1.04 km/s/Mpc)
 * Hubble tension review: Di Valentino et al. 2021, Nature Astron., 5, 629
+
 """
 
 import os

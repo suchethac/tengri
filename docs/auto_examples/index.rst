@@ -2987,12 +2987,12 @@ X-ray Emission
 Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB) and AGN coronae.
 
 Star-Forming Galaxies
-^^^^^^^^^^^^^^^^^^^^^
+---------------------
 
 - ``plot_xray_sf.py`` — X-ray binary scaling with SFR and stellar mass
 
 AGN Coronae
-^^^^^^^^^^^
+-----------
 
 - ``plot_xray_agn.py`` — AGN X-ray coronae: luminosity sequence and spectral hardness
 - ``plot_xray_gamma_sweep.py`` — Photon index γ controls power-law steepness
@@ -3999,7 +3999,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A single intrinsic LBG (young dust-poor star-forming galaxy) shown in the observer frame at four redshifts. The Lyman break sweeps redward into the u- and then g- and r-band dropout regimes, the Inoue+2014 IGM transmission removes more and more flux blueward of Lyα, and the apparent magnitude faint-end falls by ~2.5 mag from z = 2 → 8 due to luminosity distance alone.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A single intrinsic LBG (young dust-poor star-forming galaxy) shown in the observer frame at four redshifts. The Lyman break sweeps redward into the u-, then g- and r-band dropout regimes, the Inoue+2014 IGM transmission removes more and more flux blueward of Lyα, and the apparent magnitude faint-end falls by ~2.5 mag from z = 2 → 8 due to luminosity distance alone.">
 
 .. only:: html
 

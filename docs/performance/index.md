@@ -139,8 +139,8 @@ tracks which scripts are due for a re-run.
 - JAX Metal (Apple GPU) is experimental and causes test failures. CPU is the
   reference platform. Set `JAX_PLATFORMS=cpu` explicitly.
 - **Memory:** D = 7 smooth fits ~100 MB; D = 137 stochastic ~1.5 GB. NUTS
-  warmup with `dense_mass=True` peaks 3–6× steady state; can hit 20+ GB on D
-  ≥ 8 with `dense_basis` SFHs. Multi-fit notebooks need `dense_mass=False`.
+  warmup with `dense_mass_matrix=True` peaks 3–6× steady state; can hit 20+ GB on D
+  ≥ 8 with `dense_basis` SFHs. Multi-fit notebooks need `dense_mass_matrix=False`.
   See [Memory expectations](memory.md).
 
 ## When numbers look wrong

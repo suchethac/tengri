@@ -214,6 +214,7 @@ def run_nuts(
 
         - Zhang et al. 2022, "Pathfinder: Parallel quasi-Newton variational
           inference", JMLR 23, 306, arXiv:2108.03782.
+
     verbose : bool
         Print progress.
     """

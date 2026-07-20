@@ -85,10 +85,12 @@ Autodiff              No                                  Yes (JAX JIT-compatibl
 
 References
 ----------
+
 - Temple, Hewett & Banerji 2021, MNRAS, 508, 737
 - Vanden Berk et al. 2001, AJ, 122, 549 (emission line EWs)
 - Gordon et al. 2003, ApJ, 594, 279 (SMC extinction)
 - Stern et al. 2012, ApJ, 753, 30 (W1-W2 AGN selection)
+
 """
 
 from pathlib import Path
@@ -235,6 +237,7 @@ def _broken_powerlaw_continuum(
 
     Works in f_nu space: f_nu = const * wavelength^sl, where sl = -alpha_nu.
     Three segments with smooth sigmoid transitions (differentiable):
+
     - lambda > plbrk: sl2 = -plslp2 (red/optical)
     - plbrk3 < lambda < plbrk: sl1 = -plslp1 (blue/UV)
     - lambda < plbrk3: sl3 = sl1 - plstep (EUV, steepened)

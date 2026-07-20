@@ -27,6 +27,7 @@ a diffuse-ISM component (``τ_diff``) that attenuates all stellar light. The two
 are degenerate for an old population but separate cleanly for a young one.
 
 Panels:
+
 - Top-left: τ_bc sweep at fixed τ_diff = 0.2 (young burst; far-UV suppressed)
 - Top-right: τ_diff sweep at fixed τ_bc = 0.5 (young burst; full SED suppressed)
 - Bottom: age-dependent attenuation showing how single-age stellar populations
@@ -35,7 +36,7 @@ Panels:
 
 Reference: Charlot & Fall 2000, ApJ, 539, 718.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-199
+.. GENERATED FROM PYTHON SOURCE LINES 20-200
 
 
 

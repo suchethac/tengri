@@ -20,6 +20,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 - Sanders et al. (1988) ApJ 325, 74: ULIRG/QSO connection hypothesis
 
 - Veilleux et al. (2009) ARA&A 47, 63: ULIRG/QSO transition review
+
 """
 
 import os

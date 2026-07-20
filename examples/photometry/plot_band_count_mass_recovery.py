@@ -1,6 +1,6 @@
 """
 Stellar mass recovery with increasing photometric band count
-===========================================================
+============================================================
 
 How many photometric bands are needed to recover stellar mass accurately?
 We mock a single galaxy with fixed parameters at different signal-to-noise

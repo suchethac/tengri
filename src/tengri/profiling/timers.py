@@ -7,6 +7,7 @@ and JIT compilation model.
 
 Design notes
 ------------
+
 - All timing calls ``block_until_ready()`` on JAX arrays to measure
   true compute time, not just Python dispatch time.
 - First-call (compilation) time is tracked separately from steady-state

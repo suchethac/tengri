@@ -24,8 +24,10 @@ each indicator exhibits different scatter. Hα shows highest variance (most
 sensitive to recent star formation), while bolometric is most stable.
 
 References:
+
 - Kennicutt 1998, ARA&A, 36, 189 (baseline calibrations)
 - Conroy 2013, ARA&A, 51, 393 (SED fitting; SFR diagnostics)
+
 """
 
 import os

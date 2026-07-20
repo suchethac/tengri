@@ -608,9 +608,7 @@ def energy_balance_split(
     .. math::
 
         L_{\rm IR,total} = \eta_{\rm balance} L_{\rm absorbed,\star} + L_{\rm AGN,IR}
-
         L_{\rm warm} = (1 - f_{\rm cold}) L_{\rm IR,total}
-
         L_{\rm cold} = f_{\rm cold} L_{\rm IR,total}
 
     Each component is a modified blackbody (via ``modified_blackbody``).

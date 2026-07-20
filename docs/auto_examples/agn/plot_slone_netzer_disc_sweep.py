@@ -10,6 +10,7 @@ spectral peak walks across the UV/optical as those two knobs change:
 
 - **More massive black holes** have larger, cooler discs — the big blue bump
   shifts redward (toward the optical).
+
 - **Higher Eddington ratios** push more material through the inner disc —
   the peak moves blueward and the disc brightens.
 

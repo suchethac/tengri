@@ -2,6 +2,7 @@
 """SEDModel: high-level forward model wrapping the tengri SED pipeline.
 
 SEDModel provides a clean API for:
+
 - Forward predictions (SED, photometry, spectrum, SFH, derived quantities)
 - Mock galaxy generation (single and batch)
 - Convenience fitting (delegates to Fitter)
@@ -49,6 +50,7 @@ marker lines to jump. In order:
   - ``Batch operations``
   - ``Private prediction dispatch``
   - ``Utilities``
+
 """
 
 from __future__ import annotations
@@ -77,6 +79,7 @@ from tengri.forward.sed_model_types import (
     PriorPredictive,
     SEDModelState,
 )
+from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.observation.photometry import ab_mag_from_flux
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
@@ -462,6 +465,17 @@ class ApproxState:
         return f"ApproxState({', '.join(on)})" if on else "ApproxState(exact)"
 
 
+def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
+    """Warn that a grid cache could not be warmed, naming the failure it invites."""
+    warnings.warn(
+        f"tengri: could not pre-load the {label} grid ({exc}). It will be loaded "
+        f"lazily instead, which raises UnexpectedTracerError if the first load "
+        f"happens inside a JIT trace.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
 def _warn_agn_dust_double_count(spec) -> None:
     """Warn when composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
 
@@ -502,59 +516,6 @@ def _warn_agn_dust_double_count(spec) -> None:
         "quasar template alone. See ADR-0018 §5 / issue #721. Filter "
         "AGNDustDoubleCountWarning if the overlap is deliberate.",
         AGNDustDoubleCountWarning,
-        stacklevel=3,
-    )
-
-
-def _warn_line_data_without_line_model(model, observation) -> None:
-    """Warn when the likelihood scores discrete emission lines but the nebular
-    model cannot predict a line catalog.
-
-    Fires when the observation configures discrete emission-line data — line
-    fluxes (``observation.has_line_fluxes``) or line ratios
-    (``observation.has_line_ratios``) — while the model's nebular backend is the
-    baked-in / SSP-embedded kind (:class:`BakedInBackend`) or nebular is off.
-    Those backends publish no discrete line catalog — ``predict_emission_lines``
-    raises for them (#302) and the line-flux/ratio paths reduce to empty line
-    luminosities — so the line terms in the likelihood contribute no signal (a
-    silent mis-fit). Only the photoionization backends (Cue, CloudyGrid, CB19)
-    publish discrete lines, so the guard keys on
-    ``isinstance(backend, BakedInBackend)`` — the exact condition that makes line
-    prediction fail — not on "is any nebular present".
-
-    Emits a filterable :class:`LineDataWithoutLineModelWarning`. Spectral indices
-    and spectroscopy are intentionally not triggers: those are measured on the
-    SED, which a baked-in SSP does carry (continuum + baked-in lines together).
-    """
-    if observation is None:
-        return
-    has_line_components = getattr(observation, "has_line_fluxes", False) or getattr(
-        observation, "has_line_ratios", False
-    )
-    if not has_line_components:
-        return
-
-    from tengri.components.nebular import BakedInBackend
-
-    backend = getattr(model, "_nebular_backend", None)
-    if backend is not None and not isinstance(backend, BakedInBackend):
-        return  # cue / cloudy / cb19 publish a discrete line catalog
-
-    from tengri.config.exceptions import LineDataWithoutLineModelWarning
-
-    backend_name = getattr(backend, "name", "none")
-    warnings.warn(
-        "The observation includes discrete emission-line data (line fluxes or "
-        f"ratios), but the model's nebular backend ('{backend_name}') does not "
-        "publish a discrete emission-line catalog. Predicted line fluxes will be "
-        "empty, so the emission-line terms in the likelihood contribute no signal "
-        "— a silent mis-fit. To fit emission lines, build with a photoionization "
-        "backend on a bare-stellar SSP, e.g. neb={'type': 'cue'} or "
-        "neb={'type': 'cloudy', ...}. A wNE (baked-in) SSP carries nebular "
-        "emission in its continuum but cannot separate discrete lines. Filter "
-        "LineDataWithoutLineModelWarning if this is intentional (e.g. fitting the "
-        "continuum only).",
-        LineDataWithoutLineModelWarning,
         stacklevel=3,
     )
 
@@ -2520,8 +2481,10 @@ class SEDModel:
         permanently leak into downstream code. This method calls each loader once
         OUTSIDE a JIT context so the cache stores concrete arrays instead.
 
-        Wrapped in try/except because grid files are optional — missing files
-        should not block SEDModel construction.
+        A grid file may legitimately be absent, so a failed warm degrades to the
+        lazy path rather than blocking construction — but it warns, because the
+        lazy path is precisely what raises ``UnexpectedTracerError`` later, far
+        from this cause.
         """
         # MAPPINGS shock emission grids (nebular/shock.py:_load_mappings_grids)
         if self._uses_shock:
@@ -2529,8 +2492,8 @@ class SEDModel:
                 from tengri.components.nebular.shock import _load_mappings_grids
 
                 _load_mappings_grids()
-            except Exception:
-                pass
+            except (OSError, ImportError) as exc:
+                _warn_grid_warm_failed("MAPPINGS shock emission", exc)
 
         # CAT3D-Wind AGN torus grids (agn/cat3d_wind.py:_load_cat3d_default)
         if self._agn_model == "cat3d_wind":
@@ -2538,38 +2501,23 @@ class SEDModel:
                 from tengri.components.agn.cat3d_wind import _load_cat3d_default
 
                 _load_cat3d_default()
-            except Exception:
-                pass
+            except (OSError, ImportError) as exc:
+                _warn_grid_warm_failed("CAT3D-Wind AGN torus", exc)
 
         # Astrodust+PAH emission grid (dust/emission/templates/astrodust.py).
         # The faithful HD23 implementation self-loads its grid in load()/predict();
         # warm the process cache OUTSIDE any trace so an in-trace lazy load hits
         # concrete arrays rather than leaking a tracer (UnexpectedTracerError).
         # The grammar builds the component with the default template path (None).
-        if getattr(self, "_dust_emission_model", None) == "astrodust":
+        if self._dust_emission_model == "astrodust":
             try:
                 from tengri.components.dust.emission.templates.astrodust import (
                     _cached_astrodust_grid,
                 )
 
                 _cached_astrodust_grid(None)
-            except Exception:
-                pass
-
-    def ensure_photometry_precomputed(self) -> bool:
-        """Deprecated no-op (the legacy ``PrecomputedData`` container was retired, #620).
-
-        The photometry fast path is now opt-in at build time via
-        ``approx=WavePrecomp()`` and is built through the component chain, not
-        lazily here. Retained as a no-op so existing callers (e.g. the Fitter,
-        whose return value was already discarded) keep working.
-
-        Returns
-        -------
-        bool
-            Always ``False`` (nothing is built lazily).
-        """
-        return False
+            except (OSError, ImportError) as exc:
+                _warn_grid_warm_failed("Astrodust+PAH emission", exc)
 
     def _get_internal_params(self, params):
         """Translate public param dict to internal names with unit conversion.
@@ -2877,8 +2825,8 @@ class SEDModel:
 
     # ── Predictions (public API) ──────────────────────────────────────
 
-    def predict_sfh(self, params, n_linear=1000):
-        """Compute SFH on uniform linear-time grid for visualization.
+    def predict_sfh(self, params, n_linear=1000, grid="linear"):
+        """Compute SFH on a uniform linear-time grid (plots) or the native log-age grid.
 
         Evaluates the SFH parameterization at ``n_linear`` evenly-spaced
         points in lookback time, returning both the smooth parametric
@@ -2896,17 +2844,23 @@ class SEDModel:
             Parameter values using public parameter names.
         n_linear : int, optional
             Number of output grid points, evenly spaced in lookback time.
-            Default 1000 (sufficient for smooth visualization).
+            Default 1000 (sufficient for smooth visualization). Ignored when
+            ``grid="native"``.
+        grid : {"linear", "native"}, optional
+            ``"linear"`` (default, backward compatible) resamples onto a uniform
+            lookback-time grid for plotting. ``"native"`` returns the SFH on the
+            model's own ``log_age_grid`` nodes, unresampled — use this for any
+            QUANTITATIVE work (residuals, coverage, chi2 against a truth).
 
         Returns
         -------
         dict with keys:
 
-            - ``"t_gyr"`` : array, shape (n_linear,).
+            - ``"t_gyr"`` : ndarray, shape (n_linear,) or (n_grid,).
               Lookback time [Gyr], from 0 (now) to ~13.8 (Big Bang).
-            - ``"sfr_mean"`` : array, shape (n_linear,).
+            - ``"sfr_mean"`` : ndarray, shape (n_linear,) or (n_grid,).
               Parametric mean SFR [M☉/yr] (no GP modulation).
-            - ``"sfr_full"`` : array, shape (n_linear,).
+            - ``"sfr_full"`` : ndarray, shape (n_linear,) or (n_grid,).
               Full SFH including GP field [M☉/yr]. Identical to ``sfr_mean``
               if stochastic SFH not enabled.
 
@@ -2916,9 +2870,22 @@ class SEDModel:
         JIT-compatible SFH evaluation, use :meth:`predict_sfh_quantities`
         to get integrated quantities (stellar mass, age, etc.).
 
-        **Time grid**: Output is on a uniform linear-time (lookback) grid,
-        not the internal log-age grid. This makes visualization cleaner
-        and suitable for plotting.
+        **Time grid**: with ``grid="linear"`` the output is resampled onto a
+        uniform linear-time (lookback) grid, not the internal log-age grid. This
+        makes visualization cleaner, but it is **lossy at young ages and must not
+        be used for quantitative scoring**. The step is
+        ``age_max / n_linear`` — at the default ``n_linear=1000`` and a 13.8 Gyr
+        span that is 13.8 Myr, so a 16-node log-age grid whose five youngest
+        nodes all lie below 15 Myr collapses into ~2 samples there. Resampling
+        also interpolates *linearly between log-age nodes*, so a log-axis plot
+        shows corners at the nodes; that is the interpolant, not the model.
+
+        Scoring an SFH residual on the linear grid silently reweights it: every
+        megayear counts equally, so 15-500 Myr swamps the <15 Myr bins where
+        emission lines carry nearly all of their information. Measured on the
+        field-SFH recovery study, that reweighting turned a real +54% improvement
+        from adding line fluxes into an apparent 0%. Pass ``grid="native"`` for
+        residuals, coverage, or any comparison against a known truth.
 
         **SFH mean vs. full**: When correlated-field (stochastic) SFH is enabled,
         ``sfr_mean`` shows the smooth parametric trend (e.g., exponential
@@ -2943,8 +2910,18 @@ class SEDModel:
         predict_sfh_quantities : Integrated SFH quantities (JIT-compatible).
         predict : Lazy access to SFH and all derived quantities.
         """
+        if grid not in ("linear", "native"):
+            raise ValueError(f"grid must be 'linear' or 'native', got {grid!r}")
+
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p)
+
+        if grid == "native":
+            return {
+                "t_gyr": jnp.asarray(10.0**self.log_age_grid) / 1e9,
+                "sfr_mean": sfr_mean,
+                "sfr_full": sfr_full,
+            }
 
         t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
             self.log_age_grid, sfr_mean, n_linear
@@ -6111,6 +6088,15 @@ class SEDModel:
         an :class:`Observables` NamedTuple with one field per configured
         observation sub-block (``phot_fnu``, ``phot_rest_fnu``, ``spec_fnu``).
 
+        .. warning::
+
+           This is the **exact** wave-grid path: it bypasses the WavePrecomp
+           LUT even when the model was built with ``approx=WavePrecomp(...)``.
+           If you only need photometry, :meth:`predict_photometry` returns the
+           same ``phot_fnu`` through the LUT at roughly **16.5x** the speed.
+           Reach for this one when you need several channels from one pass, or
+           when you specifically want the exact path.
+
         Parameters
         ----------
         params : Mapping
@@ -7423,15 +7409,13 @@ class SEDModel:
 
         spec = parse_groups(**groups)
         _warn_agn_dust_double_count(spec)
-        model = cls(
+        return cls(
             spec,
             ssp_data,
             filters=filters,
             observation=observation,
             **model_kwargs,
         )
-        _warn_line_data_without_line_model(model, observation)
-        return model
 
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
         """Sample from the prior and evaluate forward model on each draw.
@@ -7466,7 +7450,7 @@ class SEDModel:
         self,
         data=None,
         noise=None,
-        method: str = "vi",
+        method: str = DEFAULT_METHOD,
         data_type: str | None = None,
         *,
         photometry: tuple | None = None,

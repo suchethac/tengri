@@ -41,6 +41,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "to the instrumental LSF when computing spectra",
         lambda lo, hi: lo >= 0 and hi <= 2000,
         "sigma_v_kms must be in [0, 2000]",
+        free_prior=Uniform(0.0, 2000.0, "Stellar velocity dispersion", units="km/s", default=0.0),
     ),
 )
 

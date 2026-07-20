@@ -14,8 +14,10 @@ are:
 
 - Rest-frame Lyα sits at 1216 Å; in the observer frame it moves to
   (1+z) × 1216 Å
+
 - Wavelengths shortward of Lyα (the Lyman forest) become progressively
   absorbed at higher redshift due to neutral hydrogen absorption
+
 - The red side (Lyα + a few hundred Ångströms) remains mostly unaffected
   by IGM
 
@@ -26,9 +28,11 @@ This is the foundational principle behind Lyα-dropout selection and the
 growing difficulty in detecting Lyα emission at the Epoch of Reionization.
 
 References:
+
 - Madau, P. 1995, ApJ, 441, 18 (foundational IGM absorption model)
 - Inoue, A. T., Iwata, I., Deharveng, J. M., et al. 2014, MNRAS, 442, 1805
   (modern IGM prescription used here)
+
 """
 
 import os

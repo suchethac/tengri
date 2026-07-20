@@ -88,6 +88,7 @@ def precompute(
     -------
     dict
         Keys:
+
         - ``line_wavelengths``: (n_lines,) array [Angstrom].
         - ``grid_axes``: tuple of full grid axes (jax arrays).
         - ``axes``: tuple of remaining (non-collapsed) grid axes.
@@ -172,6 +173,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     -------
     dict
         Keys:
+
         - ``predict_lines``: JIT-compiled callable.
         - ``line_wavelengths``: line vacuum wavelengths [Angstrom].
 

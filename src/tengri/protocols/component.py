@@ -120,6 +120,22 @@ class ParamDeclaration(NamedTuple):
         or not-yet-documented. Placed last in the NamedTuple so positional
         callsites — which historically use up to 5 args ending with
         ``bound_error`` — remain backwards-compatible.
+    free_prior : Any, optional
+        The distribution to use when the user asks for this parameter to be
+        **free** — i.e. ``all_params: FREE`` or a bare ``FREE`` sentinel.
+
+        :attr:`prior` is the *registry default*: what you get when you do not
+        mention the parameter, and for most parameters that is a ``Fixed``
+        scalar. Before this field existed, ``FREE`` resolved to :attr:`prior`,
+        so asking to free a Fixed-default parameter silently left it pinned
+        and the fit ran with that physics frozen (#1264).
+
+        Declare ``free_prior`` whenever the parameter has a defensible
+        admissible range — normally the same range :attr:`bound_check`
+        enforces, so the two cannot disagree (a contract test asserts
+        ``bound_check(free_prior.lo, free_prior.hi)`` holds). ``None`` means
+        "no defensible range declared"; ``FREE`` then refuses loudly rather
+        than pretending, and the caller passes an explicit prior instead.
     """
 
     name: str
@@ -128,6 +144,7 @@ class ParamDeclaration(NamedTuple):
     bound_check: Any = None
     bound_error: str = ""
     units: str = ""
+    free_prior: Any = None
 
 
 class DerivedKey(NamedTuple):

@@ -3,6 +3,7 @@
 
 Computes the sensitivity of each wavelength to each physical parameter.
 This tells you:
+
 - Which wavelength ranges are most informative for each parameter
 - How sensitivity changes with galaxy type or redshift
 - Which spectral features drive the constraints

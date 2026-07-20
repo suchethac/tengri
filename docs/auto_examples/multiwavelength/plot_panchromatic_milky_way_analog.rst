@@ -33,6 +33,7 @@ Reading order: stellar continuum (gray) → dust-attenuated stellar
 → X-ray (from accreting binaries).
 
 **References:**
+
  - Kennicutt & Evans (2012) [1]_ for MW analog SFR calibration
  - Bruzual & Charlot (2003) [2]_ for stellar population synthesis
  - Dale et al. (2014) [3]_ for dust emission model
@@ -49,7 +50,7 @@ Reading order: stellar continuum (gray) → dust-attenuated stellar
    *Astrophys. J.* **784**, 83.
    https://doi.org/10.1088/0004-637X/784/1/83
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-164
+.. GENERATED FROM PYTHON SOURCE LINES 34-165
 
 
 
@@ -199,7 +200,7 @@ Reading order: stellar continuum (gray) → dust-attenuated stellar
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.937 seconds)
+   **Total running time of the script:** (0 minutes 3.868 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_milky_way_analog.py:

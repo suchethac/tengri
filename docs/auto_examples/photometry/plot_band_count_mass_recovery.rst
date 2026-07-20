@@ -19,7 +19,7 @@
 
 
 Stellar mass recovery with increasing photometric band count
-===========================================================
+============================================================
 
 .. image:: images/sphx_glr_plot_band_count_mass_recovery_001.png
    :alt: plot band count mass recovery

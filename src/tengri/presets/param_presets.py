@@ -24,6 +24,7 @@ Usage
 
 Preset Gallery
 --------------
+
 - ``starforming()`` — Main sequence galaxies (z ~ 0–3): moderate dust, solar metallicity
 - ``quiescent()`` — Red/dead galaxies (z ~ 0–2): minimal dust, low metallicity spread
 - ``high_z()`` — Young galaxies (z > 4): strong nebular, younger ages, SMC-like dust
@@ -72,6 +73,7 @@ def starforming(redshift: float | None = None) -> tuple[Parameters, SEDModelConf
     """Star-forming galaxy preset (main sequence, z ~ 0–3).
 
     Star-forming galaxies typically have:
+
     - Delayed-exponential or double power-law SFH
     - Moderate dust attenuation (Calzetti 2000 [1]_)
     - Solar or near-solar metallicity
@@ -96,6 +98,7 @@ def starforming(redshift: float | None = None) -> tuple[Parameters, SEDModelConf
     **JIT-compatible**: no — returns configuration objects, not arrays.
 
     **Physics:**
+
     - SFH model: double power-law (``dpl``)
     - Dust: Calzetti (birth cloud) + power-law diffuse ISM (two-component,
       Charlot & Fall 2000 [2]_)
@@ -154,6 +157,7 @@ def quiescent(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
     """Quiescent / early-type galaxy preset (z ~ 0–2).
 
     Quiescent (red) galaxies typically have:
+
     - Very old stellar populations (age > 1–10 Gyr)
     - Minimal dust attenuation
     - Broad metallicity distribution (0.2–2 Zsun common)
@@ -177,6 +181,7 @@ def quiescent(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
     **JIT-compatible**: no — returns configuration objects, not arrays.
 
     **Physics:**
+
     - SFH model: delayed-exponential with short timescale (old ages)
     - Dust: power-law attenuation (two-component, minimal)
     - Attenuation: Av ~ Uniform(0, 0.5) mag (low dust)
@@ -232,6 +237,7 @@ def high_z(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """High-redshift galaxy preset (z > 4, young starburst).
 
     High-redshift galaxies typically have:
+
     - Young stellar populations (age < 0.5–1 Gyr)
     - Strong nebular emission (young massive stars → H II regions)
     - Dust-obscured (SMC-like or Calzetti attenuation)
@@ -255,6 +261,7 @@ def high_z(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     **JIT-compatible**: no — returns configuration objects, not arrays.
 
     **Physics:**
+
     - SFH model: truncated skew-normal (bursty, short timescales)
     - Dust: Calzetti attenuation (intermediate opacity; SMC alternative available)
     - Attenuation: Av ~ Uniform(0.1, 1.5) mag (dust-affected)
@@ -338,6 +345,7 @@ def photoz(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     **JIT-compatible**: no — returns configuration objects, not arrays.
 
     **Physics:**
+
     - SFH model: double power-law (flexible timescales for mixed populations)
     - Dust: Calzetti (birth cloud) + power-law (diffuse ISM, two-component)
     - Attenuation: Av ~ Uniform(0, 3) mag (wide range for photo-z degeneracies)
@@ -417,6 +425,7 @@ def jwst_spec(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
     **JIT-compatible**: no — returns configuration objects, not arrays.
 
     **Physics:**
+
     - SFH model: double power-law (same as starforming for consistency)
     - Dust: Calzetti (birth cloud) + power-law (diffuse ISM, two-component)
     - Attenuation: Av ~ Uniform(0, 3) mag (moderate-to-high for obscured sources)
@@ -504,6 +513,7 @@ def agn_host(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]
     **JIT-compatible**: no — returns configuration objects, not arrays.
 
     **Physics:**
+
     - SFH model: double power-law (inherits from starforming)
     - Dust: Calzetti (birth cloud) + power-law (diffuse ISM, two-component)
     - Attenuation: Av ~ Uniform(0, 4) mag (high dust for Type 2 AGN hosts)

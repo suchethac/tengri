@@ -27,6 +27,7 @@ visualize which rest-frame stellar and dust features each photometric system
 samples across the spectrum.
 
 Filters displayed:
+
   - **HST ACS/WFC**: F606W, F814W, F125W, F160W (optical/NIR imaging)
   - **JWST NIRCam**: F150W, F200W, F277W, F356W, F444W (short-wavelength)
   - **JWST MIRI**: F770W, F1500W (mid-infrared)
@@ -37,7 +38,7 @@ The SED uses a starburst history (τ = 100 Myr) with two-component dust and
 sfr-scaled nebular emission, rendered in the observer frame at z=1 with complete
 IGM attenuation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-145
+.. GENERATED FROM PYTHON SOURCE LINES 22-146
 
 
 
@@ -180,7 +181,7 @@ IGM attenuation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.316 seconds)
+   **Total running time of the script:** (0 minutes 8.133 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_throughput_overlay.py:

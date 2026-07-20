@@ -8,11 +8,13 @@ All dust IR-emission libraries shipped in tengri, shown on two scales:
 (analytic models and template-based libraries). The differences sit entirely in
 the SED *shape* — peak wavelength (T_dust proxy), PAH-feature amplitude in the
 3–20 μm window, and how steeply the sub-mm tail falls.
+
   - Analytic: modified blackbody, Casey 2012, energy-balance split
   - Templates: Draine & Li 2007, Draine+2014, Dale+2014
 
 (Bottom) Seven-library L_IR-normalized comparison via full SEDModel with
 constant SFH and dust parameters (tau_diff=1, tau_bc=1.5):
+
 - ``dale2014``  — Dale+2014 SFR-driven template family
 - ``dl07``      — Draine & Li 2007 grain mixture
 - ``dl14``      — Draine+2014 update (extended PAH/silicate)
