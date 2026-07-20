@@ -172,6 +172,36 @@ class _RegistryTable(list):
         """Just the list of names — convenient for ``Photometry.from_names``."""
         return [d["name"] for d in self]
 
+    def to_dict(self, value: str = "short_doc") -> dict[str, Any]:
+        """Collapse to ``{name: value}`` — the shape some ``list_*`` once returned.
+
+        ``list_known_ssps`` and ``list_filter_conventions`` returned plain
+        ``dict[str, str]`` while every other ``list_*`` returned a table
+        (#1285). They now return tables too; this is the mechanical migration
+        for callers that wanted the mapping.
+
+        Parameters
+        ----------
+        value : str, optional
+            Which column becomes the dict value. Defaults to ``"short_doc"``.
+
+        Returns
+        -------
+        dict
+            ``{row["name"]: row[value]}`` in table order.
+
+        Raises
+        ------
+        KeyError
+            If ``value`` is not a column. Silently returning ``None`` values
+            would look like an empty catalog rather than a wrong column name.
+        """
+        if self and value not in self[0]:
+            raise KeyError(
+                f"{value!r} is not a column of this table. Available: {sorted(self[0])}."
+            )
+        return {d["name"]: d[value] for d in self}
+
     def _repr_html_(self) -> str:
         """Jupyter HTML repr — renders as a real HTML table in notebooks."""
         if not self:
@@ -1509,8 +1539,11 @@ def list_inference_methods(
     Parameters
     ----------
     tier : str, optional
-        Filter by ``"primary"`` (recommended for new users) or
-        ``"experimental"``.
+        Filter by ``"primary"`` (recommended for new users),
+        ``"experimental"``, or ``"broken"``. Backends registered as
+        ``"broken"`` — those whose own ``short_doc`` reports wrong answers or
+        crashes — are **excluded from the default listing** (#1287); pass
+        ``tier="broken"`` to see them.
     target : Fitter | InferenceContext, optional
         If supplied, each entry's ``status`` column reflects whether the
         backend's ``is_compatible`` predicate (if any) accepts the
@@ -1527,8 +1560,11 @@ def list_inference_methods(
     from tengri.inference._backend_registry import all_backends
     from tengri.inference._strategy import resolve_status
 
+    # Broken backends are listed only on explicit request. Offering a sampler
+    # that returns R-hat ~ 3 in the same table as one that works is what let
+    # users pick it on the strength of its speed (#1287).
     out = []
-    for entry in all_backends():
+    for entry in all_backends(include_broken=tier == "broken"):
         out.append(
             {
                 "name": entry.name,
@@ -2365,6 +2401,11 @@ def help(topic: str | None = None) -> None:
     n_sfh_ok = len(list_sfh_models(status="production"))
     n_neb = len(list_nebular_backends())
     n_inf = len(list_inference_methods(tier="primary"))
+    n_recipes = len(list_recipes())
+    # The one default, read from the registry rather than written down here —
+    # the whole point of #1289 was that hard-coded defaults drifted apart.
+    from tengri.inference._backend_registry import DEFAULT_METHOD as default_method
+
     try:
         from tengri import list_filters  # avoid circular import on cold load
 
@@ -2414,27 +2455,38 @@ tengri — differentiable galaxy SED fitting in JAX
 ────────────────────────────────────────────────────────────────────
 3.  Build a fit
 ────────────────────────────────────────────────────────────────────
-    obs        = tengri.Observation(photometry=tengri.Photometry.from_names([...]))
-    parameters = tengri.Parameters(...)        # priors + fixed values
-    sed        = tengri.SEDModel.build(ssp_data=..., observation=obs, ...)
-    forward    = tengri.ForwardModel.build(sed=sed, observation=obs)
-    fitter     = tengri.Fitter(forward, data, noise)
-    posterior  = fitter.run("map")             # or "nuts", "vi", …
+    from tengri.observation import Observation, Photometry   # canonical path
+
+    obs       = Observation(photometry=Photometry.from_names([...]))
+    sed       = tengri.SEDModel.build(ssp_data=ssp, observation=obs,
+                                      **tengri.recipes.star_forming_photometry())
+    forward   = tengri.ForwardModel.build(sed=sed, observation=obs)
+    posterior = forward.fit(flux, flux_err, method="{default_method}")
     posterior.summary()                        # median ± 68% CI per param
+
+    `forward.fit(...)` is the canonical entry point. It wraps
+    `Fitter(forward, data, noise).run(method)`; reach for the explicit
+    Fitter only when you need to hold the engine itself.
+
+    `tengri.list_recipes()` lists the {n_recipes} starting points. To hand-roll a
+    model instead, pass group dicts to SEDModel.build:
+      sfh={{'type': 'dpl', 'all_params': tengri.FREE}},
+      dust={{'type': 'two_component', 'law_bc': 'calzetti'}}, …
+      tengri.describe_recipe("star_forming_photometry")   # see what one sets
+
+    Pick a method:
+      tengri.list_inference_methods(tier="primary")   # {n_inf} that are validated
+      "map" is a point estimate — fast, but no uncertainties.
+      "{default_method}" and "mcmc_nuts" give you a posterior.
 
     Extract derived quantities:
       posterior.properties["stellar_mass"]     # array (n_samples,)
-      posterior.properties.ci("stellar_mass") # credible interval
-      tengri.list_properties()                # see all available names
+      posterior.properties.ci("stellar_mass")  # credible interval
+      tengri.list_properties()                 # see all available names
 
-    Pick the right kwargs:
-      tengri.suggest_parameters(mean_sfh_type="dpl", agn_model="skirtor")
-
-    The outer shell:
-      tengri.ForwardModel — thin shell inference talks to. Owns the SED
-        chain and the observation; exposes a single .predict(params)
-        method that returns a {{channel: array}} dict (phot_fnu, spec_fnu).
-        Inference doesn't need to know which prediction method to call.
+    Predict without fitting:
+      pred = sed.predict(params)               # rich + cached, one forward pass
+      sed.predict_photometry(params)           # lean, JIT/vmap-safe
 
 ────────────────────────────────────────────────────────────────────
 4.  Contribute a new physics alternative

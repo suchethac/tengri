@@ -122,7 +122,11 @@ def test_hint_map_does_not_shadow_a_real_backend() -> None:
 # backtick-token regex keeps legitimate composites (the ``vi_native_vs_nifty``
 # benchmark suite, ``benchmark_vi_native_vs_nifty.py``) out of scope.
 
-_STALE_INFERENCE_NAMES = {"vi_native": "native_vi_nonlinear"}
+# The dead name `vi_native` used to be migrated to `native_vi_nonlinear`.
+# That backend is registered tier="broken" (#1287) — it segfaults on
+# DPL/dense_basis photometry mocks — so the migration was pointing users at a
+# crash. `vi` is the working NIFTy geoVI path and is what the name meant.
+_STALE_INFERENCE_NAMES = {"vi_native": "vi"}
 
 _METHOD_PAGES = (
     *_PUBLISHED_PAGES,
@@ -149,9 +153,20 @@ def test_pages_do_not_teach_stale_inference_methods(rel: str, stale: str) -> Non
 
 
 def test_stale_inference_map_points_at_real_methods() -> None:
-    """Every replacement the stale map prescribes must resolve in the registry."""
+    """Every replacement the stale map prescribes must be a method that works.
+
+    ``list_inference_methods()`` excludes ``tier="broken"`` (#1287), so
+    membership here asserts more than "registered": it asserts the migration
+    does not send a user to a backend that crashes or returns R-hat ~ 3. The
+    map previously prescribed ``native_vi_nonlinear``, which does exactly that.
+    """
     live = {row["name"] for row in tengri.list_inference_methods()}
+    broken = {row["name"] for row in tengri.list_inference_methods(tier="broken")}
     for stale, current in _STALE_INFERENCE_NAMES.items():
+        assert current not in broken, (
+            f"stale map sends {stale!r} to {current!r}, which is tier='broken'. "
+            "A migration hint must point at a backend that works."
+        )
         assert current in live, f"map prescribes {current!r} for {stale!r}, not in registry"
         assert stale not in live, (
             f"{stale!r} is a real method again — its stale-map entry is wrong"

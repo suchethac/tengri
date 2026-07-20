@@ -11,7 +11,8 @@ pytestmark = pytest.mark.contract
 @pytest.mark.unit
 def test_list_known_ssps_includes_default():
     """Verify the default FSPS PARSEC+MILES Chabrier SSP is in the known list."""
-    ssps = list_known_ssps()
+    # Returns a _RegistryTable since #1285; ``.to_dict()`` is the old shape.
+    ssps = list_known_ssps().to_dict("filename")
     assert "fsps_prsc_miles_chabrier" in ssps
     assert ssps["fsps_prsc_miles_chabrier"] == "fsps_prsc_miles_chabrier.h5"
 
@@ -22,7 +23,7 @@ def test_list_known_ssps_returns_copy():
     ssps1 = list_known_ssps()
     ssps2 = list_known_ssps()
     assert ssps1 == ssps2
-    assert ssps1 is not ssps2
+    assert ssps1 is not ssps2, "must not hand out the internal catalog"
 
 
 @pytest.mark.unit

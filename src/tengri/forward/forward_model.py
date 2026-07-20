@@ -23,6 +23,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.forward.population import Population
+from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.protocols.component import ForwardState
 from tengri.protocols.derived_state import DerivedState
 
@@ -648,7 +649,7 @@ class ForwardModel:
         self,
         data: Any = None,
         noise: Any = None,
-        method: str = "vi",
+        method: str = DEFAULT_METHOD,
         *,
         approx: Any = "auto",
         key: Any = None,

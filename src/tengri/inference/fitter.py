@@ -49,6 +49,8 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from tengri.inference._backend_registry import DEFAULT_METHOD
+
 __all__ = ["Fitter", "resolve_method"]
 
 if TYPE_CHECKING:
@@ -1831,7 +1833,15 @@ class Fitter:
 
     # ── Inference dispatch ────────────────────────────────────────────
 
-    def run(self, method: str = "vi_nonlinear_fast", *, init_from=None, key=None, **kwargs):
+    def run(
+        self,
+        method: str = DEFAULT_METHOD,
+        *,
+        init_from=None,
+        key=None,
+        allow_unvalidated: bool = False,
+        **kwargs,
+    ):
         """Run inference using the specified method.
 
         Dispatches to the underlying inference backend (variational, MCMC,
@@ -1855,8 +1865,9 @@ class Fitter:
             - ``"vi_linear"`` — MGVI via NIFTy (linearized Gaussian)
             - ``"vi_nonlinear_fast"`` — geoVI fast path (~35% faster, no logging)
             - ``"vi_linear_fast"`` — MGVI fast path (~35% faster, no logging)
-            - ``"native_vi_nonlinear"`` — Native JAX geoVI (experimental; ~19× faster than NIFTy)
-            - ``"native_vi_linear"`` — Native JAX MGVI (experimental)
+            - ``"native_vi_nonlinear"`` — Native JAX geoVI (**broken**: segfaults
+              on DPL/dense_basis photometry mocks, issue #231)
+            - ``"native_vi_linear"`` — Native JAX MGVI (**broken**: same segfault)
 
             **MCMC Sampling**
 
@@ -1865,8 +1876,9 @@ class Fitter:
             - ``"mcmc"`` — Auto: NUTS (D≤20) or Ray Tracing (D>20)
             - ``"mcmc_hmc"`` — Standard HMC (fixed trajectory length)
             - ``"mcmc_dynamic_hmc"`` — Dynamic HMC (adaptive trajectory)
-            - ``"mcmc_ghmc"`` — Generalized HMC (partial momentum refresh)
-            - ``"mcmc_mclmc"`` — MCLMC (O(1) grad/sample, biased)
+            - ``"mcmc_ghmc"`` — Generalized HMC (**broken**: R-hat ~ 2.5-3.1,
+              ESS ~ 1 on D=6-7 mocks)
+            - ``"mcmc_mclmc"`` — MCLMC (**broken**: R-hat ~ 1.7, ESS ~ 1)
             - ``"mcmc_adjusted_mclmc"`` — MCLMC + Metropolis correction
             - ``"mcmc_ess"`` — Elliptical Slice Sampling (gradient-free)
 
@@ -1892,6 +1904,13 @@ class Fitter:
         key : PRNGKey, optional
             JAX random key. Default ``PRNGKey(42)`` for reproducibility.
             Ignored for deterministic methods (``"map"``, ``"laplace"``).
+
+        allow_unvalidated : bool, optional
+            Run a backend registered at ``tier="broken"`` — one that reports
+            wrong answers or crashes in its own registry entry. Default
+            ``False``, which raises :class:`~tengri.BackendError` naming the
+            specific failure. Intended for benchmarking and backend
+            development, not for science (#1287).
 
         prewarm : bool, optional
             JIT-compile the loss/gradient and the predict surface
@@ -2153,7 +2172,11 @@ class Fitter:
             method = "mcmc_nuts" if d <= threshold else "vi_nonlinear_fast"
 
         # --- Dispatch to underlying _run_* methods via registry ---
-        from tengri.inference._backend_registry import check_requires, get_backend
+        from tengri.inference._backend_registry import (
+            check_requires,
+            check_usable,
+            get_backend,
+        )
 
         if method == "auto":
             # Pre-registry semantics: low-D → NUTS (exact), high-D → geoVI (scalable).
@@ -2191,6 +2214,12 @@ class Fitter:
         # Pre-flight speed guard: steer many-evaluation samplers off the slow
         # exact forward path onto the WavePrecomp LUT (see helper above).
         _warn_if_exact_forward_path(self.model, entry.name)
+
+        # Refuse backends that declare themselves unusable, unless the caller
+        # opts in explicitly (#1287). Before check_requires, because "this
+        # sampler returns R-hat ~ 3" is a more fundamental objection than
+        # "its optional dependency is missing".
+        check_usable(entry, allow_unvalidated=allow_unvalidated)
 
         # Friendly error if the backend's optional dependency is missing,
         # before we descend into a deep third-party traceback.

@@ -79,6 +79,7 @@ from tengri.forward.sed_model_types import (
     PriorPredictive,
     SEDModelState,
 )
+from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.observation.photometry import ab_mag_from_flux
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
@@ -6058,6 +6059,15 @@ class SEDModel:
         an :class:`Observables` NamedTuple with one field per configured
         observation sub-block (``phot_fnu``, ``phot_rest_fnu``, ``spec_fnu``).
 
+        .. warning::
+
+           This is the **exact** wave-grid path: it bypasses the WavePrecomp
+           LUT even when the model was built with ``approx=WavePrecomp(...)``.
+           If you only need photometry, :meth:`predict_photometry` returns the
+           same ``phot_fnu`` through the LUT at roughly **16.5x** the speed.
+           Reach for this one when you need several channels from one pass, or
+           when you specifically want the exact path.
+
         Parameters
         ----------
         params : Mapping
@@ -7411,7 +7421,7 @@ class SEDModel:
         self,
         data=None,
         noise=None,
-        method: str = "vi",
+        method: str = DEFAULT_METHOD,
         data_type: str | None = None,
         *,
         photometry: tuple | None = None,

@@ -197,10 +197,13 @@ model = SEDModel.build(
   `agn_log_lbol`, torus on `agn_power`, polar via the legacy face-on proxy) —
   the GRAHSP/AGNfitter-style bookkeeping. See `AGNSEDComponentConfig.agn_norm`.
 - Sentinels (`FREE`, `FIXED`) are singletons exported from `tengri`.
-- Recipes: `tengri.recipes.*` — five curated starting points
-  (`star_forming_photometry`, `quiescent_z0`, `agn_panchromatic`,
-  `stochastic_sfh_jwst`, `mock_recovery_minimal`). Each docstring states its
-  SSP requirement (bare-stellar vs any).
+- Recipes: `tengri.recipes.*` — ten curated starting points. Five general
+  (`star_forming_photometry`, `quiescent_z0`, `stochastic_sfh_jwst`,
+  `high_z`, `photoz`), three AGN (`agn_panchromatic`, `composable_agn`,
+  `unified_agn`), and two for forward-only work (`mock_recovery_minimal`,
+  `dust_demo`). Each docstring states its SSP requirement (bare-stellar vs
+  any). `tengri.list_recipes()` is the live list — do not re-enumerate them
+  from memory.
 - The flat-kwarg `Parameters(...)` form is the **expert escape hatch** — still
   works, still used internally, but not the recommended user-facing path.
 
