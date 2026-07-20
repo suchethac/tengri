@@ -192,7 +192,7 @@ two-component dust (τ_bc = 1.0, τ_diff = 0.7) with Dale 2014 emission.
 | `stellar_mass_scale` | 3.828e43 | `inf` | linear, use log form |
 | `nion` | 2.5547e49 | `inf` | linear, use `log_nion` |
 | `L_absorbed` / `L_ir` | 2.3562e43 | `inf` | linear, use `log_L_ir` |
-| `sed_dust_ir` | 4.4273e30 | `inf` | **blocker** (item 6) |
+| `sed_dust_ir` | 4.4273e30 | finite, all 11 template models | delivered (item 6) |
 
 The stellar SED is **not** the problem: `lnu_age` is entirely finite in float32 and matches float64 to
 five-plus digits. Only the scalar bolometric quantities leave the window, and each now has a log form.
@@ -222,10 +222,45 @@ the fixture are fine; magnitude conclusions are not.
 
 ---
 
-## Remaining work — dust IR emission (item 6)
+## Item 6 — dust IR emission: DELIVERED for the template models
 
-`sed_dust_ir` is `inf` in pure float32 because every dust emission model consumes the **linear**
-`L_ir`, which is `inf`, even though `log_L_ir` is published and finite.
+`sed_dust_ir` was `inf` in pure float32 because every dust emission model normalized its template to
+the **linear** `L_ir` (~2.4e43, `inf`), even though `log_L_ir` was published and finite.
+
+**What shipped.** `EmissionComponent.apply` evaluates `predict` at `L_ir = 1` and re-applies the true
+scale with `apply_log10_scale`, so the out-of-range value is never materialized. The emitted SED is
+~4e30 erg/s/Hz — comfortably in range — so only the *input* ever needed the log form.
+
+This works because the emission is exactly *proportional* to `L_ir`. That property is not assumed: it
+is pinned per model by `tests/contract/test_dust_emission_l_ir_linearity.py`, and
+`EmissionComponent.factors_l_ir` lets a non-proportional model opt out rather than return a silently
+wrong SED.
+
+Measured, all 11 template models now 100% finite in float32, float64 agreement within 2% of the SED
+peak (`astrodust` 1.6e-2, the rest ~1e-6): `dale2014`, `dale2014_cigale`, `dl07`, `dl07_tabulated`,
+`dl14`, `draine_li2007`, `draine_li2014`, `bosa`, `themis`, `schreiber2018`, `astrodust`,
+`pah_drude`. float64 cross-version parity over 288 configurations: 13728 fields bit-exact, 192 moved
+(only `sed_dust_ir`), worst 1.22e-14, zero NaN-status changes.
+
+**A latent bug this surfaced.** `apply_log10_scale(zeros, 43.17)` returned all-`NaN` in float32 while
+returning zeros in float64. With no peak to fold in, the exponent collapses to the raw scale, which
+overflows float32, and `0 * inf` is `NaN` — so an SED with no emission scaled to `NaN`. Fixed by
+zeroing the exponent when the peak is zero, preserving `0 * 10**s == 0` at every scale.
+
+### Still not float32-capable
+
+Two groups remain, neither blocked by the `L_ir` seam — both were already broken before it was fixed,
+at exactly the same finite fractions:
+
+| Model | Reason |
+|---|---|
+| `mbb`, `modified_blackbody`, `casey2012`, `schreiber2016` | The analytic Planck closures evaluate values down to ~7.5e-218 in float64 — far below float32's smallest denormal (~1.4e-45). Most of the grid underflows to zero and the normalization then yields 0 or `NaN`. The *shape* is unrepresentable, so factoring `L_ir` cannot help; these need their own log-domain treatment. |
+| `energy_balance_split` | Affine, not proportional: `L_ir_total = L_ir + dust_L_agn_ir`. Opted out via `factors_l_ir = False` so it keeps the linear path rather than returning a wrong SED. Needs the budget itself in log space (`log10_add` of the two terms). |
+
+Both are pinned by `test_known_non_float32_models_stay_documented`, which fails if one becomes clean
+— so this table cannot understate what float32 delivers.
+
+### Historical: the original analysis
 
 **Runtime seam — 8 sites**, all of the shape `(L / denom) × shape`:
 

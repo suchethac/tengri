@@ -52,6 +52,51 @@ class EmissionComponent(SEDModelComponent):
     optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s"}
     outputs: ClassVar[dict[str, str]] = {"sed_dust_ir": "erg/s/Hz"}
 
+    #: Whether ``apply`` may evaluate :meth:`predict` at ``L_ir = 1`` and
+    #: re-apply the true scale in log space (#1206). Valid only for a model
+    #: whose emission is exactly *proportional* to ``L_ir`` — see
+    #: ``tests/contract/test_dust_emission_l_ir_linearity.py``, which pins that
+    #: property for every registered model. A model with an additive term is
+    #: not proportional and must set this False, or factoring would return a
+    #: silently wrong SED rather than an obviously broken one.
+    factors_l_ir: ClassVar[bool] = True
+
+    def _factor_l_ir(
+        self, state: ForwardState, input_kwargs: dict[str, Any]
+    ) -> tuple[dict[str, Any], jnp.ndarray | None]:
+        """Swap ``L_ir`` for unity, returning the log10 offset to re-apply.
+
+        Returns ``(input_kwargs, None)`` — leaving the inputs untouched — when
+        the component is not proportional to ``L_ir`` or when the producer has
+        published no ``log_L_ir`` to factor with.
+        """
+        log_l_ir = state.derived.get("log_L_ir")
+        if not self.factors_l_ir or log_l_ir is None:
+            return input_kwargs, None
+        factored = dict(input_kwargs)
+        factored["L_ir"] = jnp.ones_like(jnp.asarray(log_l_ir))
+        return factored, jnp.asarray(log_l_ir)
+
+    def _restore_l_ir_scale(
+        self, sed: jnp.ndarray, published: Mapping[str, Any], offset: jnp.ndarray | None
+    ) -> tuple[jnp.ndarray, dict[str, Any]]:
+        """Re-apply the factored-out luminosity scale to a unit-``L_ir`` result.
+
+        Only luminosity-valued outputs are rescaled — a dimensionless
+        published quantity would be corrupted by the factor. ``offset`` of
+        ``-inf`` (nothing absorbed) maps to exactly zero emission.
+        """
+        if offset is None:
+            return sed, dict(published)
+        from tengri.utils.scale import apply_log10_scale
+
+        units = {key.name: key.units for key in self.outputs()}
+        rescaled = {
+            name: (apply_log10_scale(value, offset) if "erg/s" in units.get(name, "") else value)
+            for name, value in published.items()
+        }
+        return apply_log10_scale(sed, offset), rescaled
+
     def apply(
         self,
         state: ForwardState,
@@ -104,7 +149,18 @@ class EmissionComponent(SEDModelComponent):
             if key_name in state.derived:
                 input_kwargs[key_name] = state.derived[key_name]
             else:
-                input_kwargs[key_name] = jnp.asarray(0.0)
+                # An absent input means "no contribution". For a linear
+                # quantity that is 0.0; for a *log* quantity 0.0 would mean
+                # 1.0 linear, so the zero sentinel is -inf (#1206).
+                absent = -jnp.inf if opt_key.units == "dex" else 0.0
+                input_kwargs[key_name] = jnp.asarray(absent)
+
+        # ``L_ir`` is ~2.4e43 erg/s and therefore inf in pure float32, while the
+        # emitted SED it normalizes to (~4e30 erg/s/Hz) is comfortably in range.
+        # Evaluate the template at unit luminosity and re-apply the true scale
+        # in log space, so the out-of-range value is never materialized. Exact
+        # for a model proportional to L_ir; see :attr:`factors_l_ir`.
+        input_kwargs, log_l_ir_offset = self._factor_l_ir(state, input_kwargs)
 
         # Initialize SED if not yet done
         if state.sed_intrinsic is None:
@@ -125,6 +181,10 @@ class EmissionComponent(SEDModelComponent):
             )
 
             # LUT path: publish the precomp families the LUT projectors consume...
+            # These stay at the same (unit-L_ir) scale as ``sed_ir`` until the
+            # single rescale below: the band-response branch multiplies ``L_ir``
+            # directly while the others resample ``sed_ir``, so rescaling either
+            # one early would leave the branches inconsistent with each other.
             published: dict[str, Any] = {}
 
             if filter_eff_waves is not None:
@@ -140,6 +200,18 @@ class EmissionComponent(SEDModelComponent):
                         p_sliced, state, spec_eff_waves, sed_ir, **input_kwargs
                     )
                 )
+
+            # One rescale for every L_nu-valued family produced above.
+            if log_l_ir_offset is not None:
+                from tengri.utils.scale import apply_log10_scale
+
+                published = {
+                    name: apply_log10_scale(value, log_l_ir_offset)
+                    for name, value in published.items()
+                }
+            sed_ir, published_full = self._restore_l_ir_scale(
+                sed_ir, published_full, log_l_ir_offset
+            )
 
             # ...and STILL add to sed_intrinsic. This used to return without touching it,
             # which left the panchromatic model SED of every WavePrecomp model with NO
@@ -160,8 +232,17 @@ class EmissionComponent(SEDModelComponent):
             new_derived = self._merge_published(state.derived, {**published_full, **published})
             return state.with_(sed_intrinsic=sed_in + sed_ir, derived=new_derived)
         else:
-            # Exact full-wave path
-            sed_out, published = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
+            # Exact full-wave path. Under L_ir factoring the emission must be
+            # evaluated on its own (sed_in would otherwise be scaled with it),
+            # so pass zeros and add the upstream SED back after rescaling.
+            if log_l_ir_offset is None:
+                sed_out, published = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
+            else:
+                sed_ir, published = self.predict(
+                    p_sliced, jnp.zeros_like(state.wave), state.wave, **input_kwargs
+                )
+                sed_ir, published = self._restore_l_ir_scale(sed_ir, published, log_l_ir_offset)
+                sed_out = sed_in + sed_ir
             new_derived = self._merge_published(state.derived, published)
             return state.with_(sed_intrinsic=sed_out, derived=new_derived)
 

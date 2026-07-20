@@ -8,6 +8,8 @@ AGN-heated IR contribution.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 import jax.numpy as jnp
 
 from tengri.components.dust.emission._component_base import EmissionComponent
@@ -45,6 +47,16 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
     """
 
     name: str = "energy_balance_split"
+
+    #: Not proportional to ``L_ir``: the budget is
+    #: ``L_ir_total = L_ir + dust_L_agn_ir``, so the AGN term is an *additive*
+    #: offset and doubling ``L_ir`` does not double the emission (measured
+    #: ratio 2.0 -> 1.5 as ``L_agn_ir`` approaches the stellar term). Factoring
+    #: ``L_ir`` out at unit luminosity would therefore return a silently wrong
+    #: SED rather than an obviously broken one, so this model opts out and
+    #: keeps the linear path until the budget itself moves to log space
+    #: (``log10_add`` of the two terms) — see #1206 item 6.
+    factors_l_ir: ClassVar[bool] = False
 
     def predict(
         self,

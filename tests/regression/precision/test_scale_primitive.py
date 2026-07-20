@@ -83,3 +83,46 @@ def test_log10_add_gradient_is_finite():
         assert np.isfinite(float(grad_a(x))), f"grad non-finite at {x}"
     # exact cancellation takes the where-dummy branch
     assert np.isfinite(float(jax.grad(lambda x: log10_add(x, x, sign_b=-1.0))(43.0)))
+
+
+def test_apply_log10_scale_of_zeros_is_zero_not_nan():
+    r"""Scaling an all-zero array must give zeros, at any scale (#1206).
+
+    ``apply_log10_scale`` normalizes ``arr`` by its peak and folds the peak's
+    decades into the exponent. When ``arr`` is entirely zero the peak is zero,
+    the where-dummy replaces it with 1.0, and the exponent collapses to the raw
+    ``log10_scale`` — which for a dust-luminosity scale (~43 dex) overflows
+    float32, so the result is ``0 * inf = nan`` instead of ``0``.
+
+    Perfectly valid input (an SED with no emission) becoming NaN is the same
+    fail-open shape this tier exists to remove. In float64 the bug is invisible
+    because ``10**43`` is representable there.
+    """
+    scale = 43.17  # log10 of a dust IR luminosity, the scale that triggers it
+
+    f64 = np.asarray(apply_log10_scale(jnp.zeros(5), scale))
+    assert np.all(f64 == 0.0), f"float64 baseline already wrong: {f64}"
+
+    with jax.enable_x64(False):
+        zeros32 = jnp.zeros(5, dtype=jnp.float32)
+        assert zeros32.dtype == jnp.float32  # precondition: genuinely pure float32
+        got = np.asarray(apply_log10_scale(zeros32, jnp.float32(scale)))
+
+    assert not np.any(np.isnan(got)), f"zeros scaled to NaN in float32: {got}"
+    assert np.all(got == 0.0), f"zeros must scale to zeros, got {got}"
+
+
+def test_apply_log10_scale_partially_zero_array_in_float32():
+    """A mostly-underflowed array must keep its finite entries finite.
+
+    The all-zero case above is the extreme; the realistic one is a template
+    whose far-wing values underflow while the peak survives.
+    """
+    with jax.enable_x64(False):
+        arr = jnp.asarray([0.0, 0.0, 1.0e-20, 3.0e-20], dtype=jnp.float32)
+        got = np.asarray(apply_log10_scale(arr, jnp.float32(43.17)))
+
+    assert np.all(np.isfinite(got)), f"non-finite under float32: {got}"
+    # 3e-20 * 10**43.17 ~ 4.4e23 — comfortably representable.
+    assert got[3] > got[2] > 0.0, f"ordering lost: {got}"
+    assert got[0] == 0.0 and got[1] == 0.0

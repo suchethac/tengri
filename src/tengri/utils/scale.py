@@ -67,9 +67,16 @@ def apply_log10_scale(arr, log10_scale):
     # identity and raises); the where() below then maps it to 1, so an empty
     # arr passes through as an empty result instead of a trace-time error.
     peak = jnp.max(jnp.abs(arr), initial=0.0)
-    peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
-    net = log10_scale + jnp.log10(peak)
-    return (arr / peak) * pow10(net)
+    usable = peak > 0
+    safe_peak = jnp.where(usable, peak, jnp.ones_like(peak))
+    # With no peak to fold in, the exponent would collapse to the raw
+    # ``log10_scale``. That is fine in float64, but a dust-luminosity scale
+    # (~43 dex) overflows float32, and ``0 * inf`` is NaN — so an all-zero
+    # array would scale to NaN rather than to zero (#1206). Zeroing the
+    # exponent keeps the identity ``0 * 10**s == 0`` at every scale, and costs
+    # nothing when there is a peak.
+    net = jnp.where(usable, log10_scale + jnp.log10(safe_peak), jnp.zeros_like(peak))
+    return (arr / safe_peak) * pow10(net)
 
 
 def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
