@@ -1420,9 +1420,16 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     has_agn_block = "agn" in radio_dict
 
     if has_legacy_type and (has_sf_block or has_agn_block):
+        # The legacy example is derived from the live vocabulary, not written
+        # by hand: this message used to recommend ``radio={'type': 'bell2003'}``,
+        # which the validator below rejects ("Unknown radio type 'bell2003'") —
+        # ``bell2003`` is an ``sf`` variant, never a legacy ``type``. A reader
+        # following the recovery advice landed on a second error.
+        legacy_example = sorted(_valid_radio_types() - {"none"})
+        legacy_hint = legacy_example[0] if legacy_example else "none"
         raise ValueError(
             "radio: cannot mix legacy 'type' key with 'sf'/'agn' sub-blocks. "
-            "Use either: radio={'type': 'bell2003'} (legacy) "
+            f"Use either: radio={{'type': '{legacy_hint}'}} (legacy) "
             "or radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}} (new)."
         )
 
