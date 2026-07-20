@@ -122,8 +122,8 @@ def test_galaxy_bare_fit_still_defaults_to_map():
     assert not caught, "the ordinary path must be silent"
 
 
-def test_galaxy_backend_alias_warns_and_is_honoured():
-    """The alias must keep working, loudly — asserted by behaviour, not source."""
+def test_galaxy_backend_alias_warns_and_is_honored():
+    """The alias must keep working, loudly — asserted by behavior, not source."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         method, _ = _run_fit(backend="vi")

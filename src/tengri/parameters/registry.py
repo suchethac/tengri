@@ -386,8 +386,8 @@ def as_param_map() -> dict[str, tuple[str, float, float, str]]:
     return result
 
 
-def list_parameters(prefix: str | None = None) -> list[str]:
-    """List every free-parameter name in the registry, optionally filtered.
+def list_parameters(prefix: str | None = None):
+    """List every free parameter in the registry, optionally filtered.
 
     Parameters
     ----------
@@ -398,19 +398,42 @@ def list_parameters(prefix: str | None = None) -> list[str]:
 
     Returns
     -------
-    list of str
-        Parameter names, sorted alphabetically for stable output.
+    _RegistryTable
+        One row per parameter, sorted by name, with keys ``name``,
+        ``description``, ``units``, ``owner`` and ``group``. Renders as a
+        table in a notebook.
+
+        This used to return ``list[str]``, the only ``list_*`` that did
+        (#1285). Use ``.names()`` for the old shape — and note the bare names
+        were throwing away the description and units the registry stores.
 
     Examples
     --------
     >>> import tengri
-    >>> tengri.list_parameters(prefix="radio_")[:3]
-    ['radio_alpha_agn', 'radio_alpha_ff', 'radio_alpha_inj']
+    >>> tengri.list_parameters(prefix="radio_").names()[:3]
+    ['radio_T_e', 'radio_alpha_agn', 'radio_alpha_ff']
     """
-    names = registry().keys()
+    from tengri.registry import _RegistryTable
+
+    reg = registry()
+    names = sorted(reg.keys())
     if prefix is not None:
         names = [n for n in names if n.startswith(prefix)]
-    return sorted(names)
+
+    rows = []
+    for name in names:
+        rec = reg[name]
+        rows.append(
+            {
+                "name": name,
+                "kind": "parameter",
+                "description": getattr(rec, "description", "") or "",
+                "units": getattr(rec, "units", "") or "",
+                "owner": getattr(rec, "owner", "") or "",
+                "group": getattr(rec, "group", "") or "",
+            }
+        )
+    return _RegistryTable(rows)
 
 
 def describe_parameter(name: str) -> ParameterRecord:

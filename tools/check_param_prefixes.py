@@ -122,7 +122,7 @@ def collect_registered_params() -> set[str]:
     import tengri
     from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 
-    registered = set(tengri.list_parameters())
+    registered = set(tengri.list_parameters().names())
     for entry in SFH_REGISTRY.values():
         params = getattr(entry, "params", None)
         if params:

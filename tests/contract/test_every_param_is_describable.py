@@ -42,7 +42,7 @@ _RECIPES = (
 
 
 def _registry_names() -> set[str]:
-    return set(tengri.list_parameters())
+    return set(tengri.list_parameters().names())
 
 
 def test_sfh_parameters_are_in_the_registry():

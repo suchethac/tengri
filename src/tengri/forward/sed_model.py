@@ -6059,6 +6059,15 @@ class SEDModel:
         an :class:`Observables` NamedTuple with one field per configured
         observation sub-block (``phot_fnu``, ``phot_rest_fnu``, ``spec_fnu``).
 
+        .. warning::
+
+           This is the **exact** wave-grid path: it bypasses the WavePrecomp
+           LUT even when the model was built with ``approx=WavePrecomp(...)``.
+           If you only need photometry, :meth:`predict_photometry` returns the
+           same ``phot_fnu`` through the LUT at roughly **16.5x** the speed.
+           Reach for this one when you need several channels from one pass, or
+           when you specifically want the exact path.
+
         Parameters
         ----------
         params : Mapping

@@ -99,6 +99,6 @@ def test_it_teaches_the_canonical_fit_entry_point():
 def test_it_does_not_teach_a_deprecated_surface():
     """SEDModel.fit and the Galaxy facade are deprecated/demoted."""
     assert "sed.fit(" not in DOC and "model.fit(" not in DOC, (
-        "SEDModel.fit is deprecated in favour of ForwardModel.fit (#211)"
+        "SEDModel.fit is deprecated in favor of ForwardModel.fit (#211)"
     )
     assert "Galaxy" not in DOC, "Galaxy is demoted; the docstring should not teach it"

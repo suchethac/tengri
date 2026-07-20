@@ -229,23 +229,36 @@ def find_ssp_files() -> list[Path]:
     return out
 
 
-def list_known_ssps() -> dict[str, str]:
-    """Return a dict of known SSP names and their filenames.
+def list_known_ssps():
+    """Return the known SSP names and their filenames.
 
     Returns
     -------
-    dict[str, str]
-        Mapping of short SSP identifier (e.g., ``"fsps_prsc_miles_chabrier"``)
-        to filename (e.g., ``"fsps_prsc_miles_chabrier.h5"``).
+    _RegistryTable
+        One row per SSP: ``{"name": ..., "kind": "ssp", "filename": ...}``.
+        Renders as a table in a notebook.
+
+        This used to return ``dict[str, str]``, one of only two ``list_*``
+        that did (#1285). Use ``.to_dict("filename")`` for the old mapping,
+        or ``.names()`` for just the identifiers. Membership tests
+        (``"name" in ...``) still work, because a row's ``name`` is what
+        ``.names()`` reports — but ``in`` on the table itself checks rows,
+        so prefer ``in ....names()``.
 
     Examples
     --------
     >>> import tengri
-    >>> ssps = tengri.list_known_ssps()
-    >>> "fsps_prsc_miles_chabrier" in ssps
+    >>> "fsps_prsc_miles_chabrier" in tengri.list_known_ssps().names()
     True
     """
-    return _KNOWN_SSPS.copy()
+    from tengri.registry import _RegistryTable
+
+    return _RegistryTable(
+        [
+            {"name": name, "kind": "ssp", "filename": filename}
+            for name, filename in sorted(_KNOWN_SSPS.items())
+        ]
+    )
 
 
 def list_available_ssps() -> list[dict]:
@@ -306,7 +319,11 @@ def list_available_ssps() -> list[dict]:
                 "downloaded": _ssp_file_present(filename),
             }
         )
-    return sorted(out, key=lambda r: (r["family"], r["imf"]))
+    from tengri.registry import _RegistryTable
+
+    # Already list[dict]; wrapping only adds the table repr, so every existing
+    # caller keeps working unchanged (#1285).
+    return _RegistryTable(sorted(out, key=lambda r: (r["family"], r["imf"])))
 
 
 def _ssp_file_present(filename: str) -> bool:
@@ -358,7 +375,7 @@ def _resolve_ssp_filename(name: str) -> str:
         # layer decide rather than refusing something that exists.
         return name
     raise KeyError(
-        f"Unknown SSP name: {name!r}. Known names: {list(list_known_ssps().keys())}. "
+        f"Unknown SSP name: {name!r}. Known names: {list_known_ssps().names()}. "
         f"Pass a bare catalog filename ending in '.h5' to fetch something the "
         f"curated table does not list."
     )

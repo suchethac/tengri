@@ -172,6 +172,36 @@ class _RegistryTable(list):
         """Just the list of names — convenient for ``Photometry.from_names``."""
         return [d["name"] for d in self]
 
+    def to_dict(self, value: str = "short_doc") -> dict[str, Any]:
+        """Collapse to ``{name: value}`` — the shape some ``list_*`` once returned.
+
+        ``list_known_ssps`` and ``list_filter_conventions`` returned plain
+        ``dict[str, str]`` while every other ``list_*`` returned a table
+        (#1285). They now return tables too; this is the mechanical migration
+        for callers that wanted the mapping.
+
+        Parameters
+        ----------
+        value : str, optional
+            Which column becomes the dict value. Defaults to ``"short_doc"``.
+
+        Returns
+        -------
+        dict
+            ``{row["name"]: row[value]}`` in table order.
+
+        Raises
+        ------
+        KeyError
+            If ``value`` is not a column. Silently returning ``None`` values
+            would look like an empty catalog rather than a wrong column name.
+        """
+        if self and value not in self[0]:
+            raise KeyError(
+                f"{value!r} is not a column of this table. Available: {sorted(self[0])}."
+            )
+        return {d["name"]: d[value] for d in self}
+
     def _repr_html_(self) -> str:
         """Jupyter HTML repr — renders as a real HTML table in notebooks."""
         if not self:
