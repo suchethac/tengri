@@ -52,7 +52,7 @@ How it works
    prediction directly; the spec view publishes ``(N_gal,)`` shapes
    for per-galaxy latents; the prior penalty sums over all latent
    axes. **One information-Hamiltonian path** for every fit shape.
-   See ``docs/forward_model/index.md`` 'Hierarchical population fits'.
+   See ``docs/forward_model.md`` 'Hierarchical population fits'.
 
 The legacy ``PopulationFitter`` / ``HierarchicalFitter`` direct API
 remains importable but emits a one-shot ``DeprecationWarning``
