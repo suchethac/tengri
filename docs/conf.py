@@ -504,6 +504,11 @@ napoleon_use_ivar = True
 suppress_warnings = [
     "ref.citation",
     "ref.footnote",
+    # The landing page supplies its <h1> inside the styled hero div
+    # (``<h1 class="tg-hero__title">``) rather than as a markdown heading, so
+    # MyST reports "Document headings start at H2". The heading exists; it is
+    # just HTML so it can carry the hero styling.
+    "myst.header",
 ]
 
 # -- intersphinx mapping -----------------------------------------------------

@@ -8,6 +8,7 @@ visualize which rest-frame stellar and dust features each photometric system
 samples across the spectrum.
 
 Filters displayed:
+
   - **HST ACS/WFC**: F606W, F814W, F125W, F160W (optical/NIR imaging)
   - **JWST NIRCam**: F150W, F200W, F277W, F356W, F444W (short-wavelength)
   - **JWST MIRI**: F770W, F1500W (mid-infrared)

@@ -13,6 +13,7 @@ The grid is built on a young SF galaxy with bare-stellar SSP (Cue
 requires bare-stellar input — see Cue documentation).
 
 Diagnostics shown (read all from the rest-frame line list):
+
 - ``[O III] 5007 / H_β``  — ionization-state proxy (BPT y-axis)
 - ``[N II] 6583 / H_α``    — N-abundance + ionization (BPT x-axis)
 - ``[O III] 5007 / [O II] 3727``  — ``O32`` (ionization parameter)
@@ -24,6 +25,7 @@ evolution). See the heatmap contours for guidance on how the diagnostics
 respond along each axis.
 
 References:
+
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue)
 - Kewley & Dolphin 2002, ApJ, 549, 716 (logU diagnostics)
 - Kewley+2019, ARA&A, 57, 511 (modern line-diagnostics review)

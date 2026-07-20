@@ -33,15 +33,18 @@ class Photometry:
         >>> bandset = tengri.list_filters(survey="SDSS").names()
         >>> phot = tengri.Photometry.from_names(bandset)
 
-    Then the full fit pattern:
+    Then the full fit pattern::
 
         obs = tengri.Observation(photometry=phot)
-        spec = tengri.Parameters(redshift=0.1, ...)
-        model = tengri.SEDModel(spec, ssp_data, observation=obs)
-        fitter = tengri.Fitter(model,
-                               data=measured_fluxes,    # ← your fluxes go here
-                               noise=measured_errors)   # ← your sigma here
-        posterior = fitter.run("nuts")
+        sed = tengri.SEDModel.build(
+            ssp_data=ssp_data, observation=obs, redshift=tengri.Fixed(0.1)
+        )
+        forward = tengri.ForwardModel.build(sed=sed, observation=obs)
+
+        # Your measured fluxes and sigmas go in here, not into Photometry.
+        posterior = forward.fit(
+            measured_fluxes, measured_errors, method="mcmc_nuts"
+        )
 
     Parameters
     ----------

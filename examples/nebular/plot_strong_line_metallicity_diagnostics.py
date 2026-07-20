@@ -15,6 +15,7 @@ converting line ratios to a 12 + log(O/H) on a sample. The plot spans
 (Kewley & Dopita 2002) and the famous double-valued R23 behavior.
 
 References:
+
 - Pagel et al. 1979, MNRAS, 189, 95 (R23 ratio)
 - Kewley & Dopita 2002, ApJS, 142, 35 (strong-line calibrations)
 - Marino et al. 2013, ApJ, 768, 171 (N2 metallicity diagnostic)

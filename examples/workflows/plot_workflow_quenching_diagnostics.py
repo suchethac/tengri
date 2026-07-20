@@ -15,6 +15,7 @@ the same x-axis so the reader can see which observation is the right
 clock for a given quenching timescale.
 
 References:
+
 - Kauffmann+2003, MNRAS, 341, 33 (D_n(4000) vs Hα EW)
 - Martin+2007, ApJS, 173, 342 (NUV − r and the green valley)
 """

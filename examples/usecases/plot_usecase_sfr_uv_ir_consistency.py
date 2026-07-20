@@ -15,6 +15,7 @@ We compare three estimators:
 - **SFR(UV+IR)**: sum of both (hybrid; Hao et al. 2011)
 
 The plot demonstrates the key physics:
+
 - SFR(UV) drops sharply with dust optical depth (obscuration)
 - SFR(IR) rises with dust optical depth (more heating)
 - SFR(UV+IR) remains roughly constant (dust-insensitive)

@@ -185,8 +185,8 @@ class Parameters:
     stochastic : bool
         **DEPRECATED**. Use mean_sfh_type with/without 'field' instead.
 
-    Dust Attenuation Settings
-    ~~~~~~~~~~~~~~~~~~~~~~~~~
+    **Dust Attenuation Settings**
+
     dust_law_bc : str
         Attenuation curve for birth cloud.  Default: ``"power_law"``.
         Options: ``power_law``, ``calzetti``, ``kriek_conroy``, ``smc``,
@@ -201,8 +201,8 @@ class Parameters:
         HII-region emission its own birth-cloud curve while still sharing the
         diffuse ISM screen (``dust_law_diff``) with the stars.
 
-    Dust Emission Settings
-    ~~~~~~~~~~~~~~~~~~~~~~
+    **Dust Emission Settings**
+
     dust_emission : str or None
         IR emission model.  Default: ``None`` (disabled).
         Options: ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
@@ -211,8 +211,8 @@ class Parameters:
     dl07_grid_path : str
         Path to DL07 HDF5 template grid (for ``"dl07_tabulated"``).
 
-    Nebular Emission Settings
-    ~~~~~~~~~~~~~~~~~~~~~~~~~
+    **Nebular Emission Settings**
+
     nebular_ssp : bool
         Use SSP files with pre-included nebular emission (wNE files).
         No free nebular parameters.  Default: ``False``.
@@ -230,8 +230,8 @@ class Parameters:
         Ionization source for Cue: ``"ssp"`` (default), ``"agn"`` (future),
         ``"ssp+agn"`` (future).
 
-    AGN Settings
-    ~~~~~~~~~~~~
+    **AGN Settings**
+
     agn_model : str or None
         AGN SED model.  Default: ``None`` (disabled).
         Options: ``"simple"`` (3 params), ``"standard"`` (SS73 disc + 2T torus),
@@ -239,20 +239,20 @@ class Parameters:
         geometric masking), ``"qsogen"`` (empirical quasar, Temple+2021),
         ``"skirtor"`` (clumpy torus RT templates, Stalevski+2016).
 
-    Multi-wavelength Settings
-    ~~~~~~~~~~~~~~~~~~~~~~~~~
+    **Multi-wavelength Settings**
+
     radio : bool
         Enable radio synchrotron + AGN jet emission.  Default: ``False``.
     xray : bool
         Enable X-ray (XRB + AGN corona) emission.  Default: ``False``.
 
-    IGM Settings
-    ~~~~~~~~~~~~
+    **IGM Settings**
+
     apply_igm : bool
         Apply Inoue+2014 IGM absorption.  Default: ``True``.
 
-    Metallicity Settings
-    ~~~~~~~~~~~~~~~~~~~~
+    **Metallicity Settings**
+
     evolving_metallicity : bool
         Replace ``met_logzsol`` with ``met_logzsol_0`` (old stars) and
         ``met_logzsol_final`` (young stars) for a linear-in-log Z(t) ramp.

@@ -26,6 +26,7 @@ This is the foundational principle behind Lyα-dropout selection and the
 growing difficulty in detecting Lyα emission at the Epoch of Reionization.
 
 References:
+
 - Madau, P. 1995, ApJ, 441, 18 (foundational IGM absorption model)
 - Inoue, A. T., Iwata, I., Deharveng, J. M., et al. 2014, MNRAS, 442, 1805
   (modern IGM prescription used here)

@@ -188,6 +188,11 @@ class SFHModelSpec(NamedTuple):
 
 # ── Registries ────────────────────────────────────────────────────
 
+#: Every registered mean-SFH family, keyed by the ``sfh={'type': ...}`` name
+#: (``'dpl'``, ``'tsnorm'``, ``'delayed_tau'``, ``'field'``, …). Values are the
+#: :class:`SFHSpec` entries that :func:`resolve_sfh` dispatches on and that
+#: ``tengri.builders.sfh.*`` is generated from. Populated at import time by
+#: :func:`register_sfh`; treat it as read-only.
 SFH_REGISTRY: dict[str, Any] = {}
 
 #: SFH names present in :data:`SFH_REGISTRY` but NOT yet validated against the
@@ -216,7 +221,10 @@ UNVALIDATED_SFH_TYPES: frozenset[str] = frozenset(
     }
 )
 
-# Field sub-model registry: PSD model name -> sqrt_power function
+#: Stochastic-field PSD models, keyed by the ``sfh={'psd': ...}`` name. Values
+#: are the ``sqrt_power(omega, ...)`` callables the Gaussian-process field
+#: draws its amplitude operator from. ``'drw'`` (damped random walk) is the
+#: only entry today.
 FIELD_MODEL_REGISTRY: dict[str, object] = {
     "drw": compute_sqrt_power_drw,
 }

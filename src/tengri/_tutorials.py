@@ -1145,18 +1145,17 @@ def tutorial(name: str | None = None, *, run: bool = False) -> None:
 def explain(thing) -> None:
     """Print the architectural role of a built-in class or model.
 
+    For built-in classes this prints the layered-architecture context
+    (where the class fits in the Parameters → SEDModel → Fitter →
+    Posterior pipeline) plus a pointer to the relevant tutorial. For
+    registered names it delegates to :func:`tengri.describe`.
+
     Parameters
     ----------
     thing : type or str
         Either a tengri class (``tengri.Parameters``, ``tengri.SEDModel``,
         ``tengri.Fitter``, ``tengri.Posterior``, ``tengri.Observation``)
         or a registered name (``"skirtor"``, ``"calzetti"``, ``"dpl"``…).
-
-    For built-in classes this prints the layered-architecture context
-    (where the class fits in the Parameters → SEDModel → Fitter →
-    Posterior pipeline) plus a pointer to the relevant tutorial.
-
-    For registered names this delegates to :func:`tengri.describe`.
 
     Examples
     --------

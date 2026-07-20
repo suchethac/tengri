@@ -11,6 +11,7 @@ and overlays rest-frame SED predictions (νL_ν) on log-log axes to reveal
 template-dependent uncertainties and continuum shape differences.
 
 References:
+
   - Bruzual & Charlot 2003 (BC03): ApJ 405, 538
   - Conroy et al. 2009 (FSPS): ApJ 699, 486
   - Vazdekis et al. 2010 (MILES): MNRAS 404, 1639

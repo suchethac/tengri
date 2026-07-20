@@ -9,6 +9,7 @@ from the host galaxy using a single model and varying a structural
 parameter — useful for diagnosing photometric AGN contamination.
 
 Three traces shown:
+
 - **Host only** (``agn_frac=0``): Star-forming galaxy, SFH + dust
 - **AGN only** (``agn_frac=1.0``): Bolometric luminosity fixed
 - **Composite** (``agn_frac=0.5``): 50-50 mix, physical decomposition

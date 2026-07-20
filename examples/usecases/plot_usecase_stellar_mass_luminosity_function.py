@@ -25,6 +25,7 @@ the forward model: stellar mass → SED → rest-frame
 absolute magnitudes.
 
 References:
+
 - Schechter 1976, ApJ, 203, 297 (SMF parameterization)
 - Baldry et al. 2012, MNRAS, 421, 621 (Schechter fit z~0)
 - Blanton et al. 2003, ApJ, 592, 819 (SDSS luminosity function)

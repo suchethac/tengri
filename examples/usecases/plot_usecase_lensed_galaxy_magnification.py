@@ -16,6 +16,7 @@ how only μ ≥ 5 crosses the detection threshold, making strong lensing critica
 observing the faintest reionization-epoch objects.
 
 References:
+
 - Refsdal, S. 1964, MNRAS, 128, 295 (gravitational lensing magnification)
 - Schaerer, D. 2003, A&A, 397, 527 (z>6 Lya emitters)
 - Bouwens, R. J., et al. 2022, ApJ, 931, 160 (EoR LBGs)

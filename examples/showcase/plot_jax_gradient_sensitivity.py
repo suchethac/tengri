@@ -17,6 +17,7 @@ and age has opposing effects across the spectrum (younger = brighter UV,
 older = redder continuum through dust absorption).
 
 References:
+
   - Bradbury et al. 2018 (JAX: composable transformations):
 
     arXiv:1811.02693

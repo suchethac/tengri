@@ -16,6 +16,7 @@ mass-remaining curve is NOT currently exposed on the public surface
 (see filed library issue) — that part is omitted from the figure.
 
 References:
+
 - Chabrier 2003 PASP 115 763.
 """
 

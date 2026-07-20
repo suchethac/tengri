@@ -12,12 +12,14 @@ composite that shows the D4000 break, Mg b 5170 Å absorption feature,
 and Ca II H+K lines characteristic of quiescent early-type galaxies.
 
 Key techniques:
+
 - Build tengri models with simple quiescent SFH (narrow tsnorm)
 - Use jax.vmap to batch-predict N spectra in parallel
 - Stack with simple median-flux combination
 - Label age-sensitive features (D4000, Mg b, Ca II H+K)
 
 References:
+
 - Eisenstein et al. 2001, AJ, 122, 2267 (SDSS LRG selection)
 - Thomas et al. 2005, ApJ, 621, 673 (red-sequence ages)
 """

@@ -40,12 +40,15 @@ def compute_green_function(
 
     G(t_age) = flux contribution per unit stellar mass at age t_age.
 
-    For photometry: G = int L_SSP(lambda|t_age) * T(lambda) * w(lambda) dlambda
-                        / int T(lambda) * w(lambda) dlambda
+    For photometry::
+
+        G = int L_SSP(lambda|t_age) * T(lambda) * w(lambda) dlambda
+            / int T(lambda) * w(lambda) dlambda
+
     with ``w = 1/lambda`` (``BESSELL`` default, matches DSPS/FSPS) or
     ``w = 1/lambda**2`` (``ENERGY``, CIGALE).
 
-    For a single wavelength: G = L_SSP(wave_target | t_age)
+    For a single wavelength, ``G = L_SSP(wave_target | t_age)``.
 
     Parameters
     ----------
@@ -111,10 +114,11 @@ def compute_window_function(green_fn, mean_sfr_on_ages):
 def compute_window_function_fourier(window_fn, ssp_ages_yr):
     """Compute Fourier transform of window function.
 
-    |W_tilde(omega)|^2 tells you the PSD sensitivity: how much power
+    ``|W_tilde(omega)|^2`` tells you the PSD sensitivity: how much power
     at frequency omega contributes to the variance of this observable.
 
-    From Munoz+2026 Eq. 11:
+    From Munoz+2026 Eq. 11::
+
         sigma^2_L = int |W_tilde(omega)|^2 P(omega) d_omega / (2*pi)
 
     Parameters

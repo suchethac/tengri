@@ -14,6 +14,7 @@ follow-up (e.g. EUCLID *Y/J/H*) and medium-band surveys for high-z
 galaxy selection.
 
 References:
+
 - Steidel et al. 1996, AJ, 112, 352 (LBG dropout selection)
 - Massarotti, Iovino & Buzzoni 2001, A&A, 368, 74 (photo-z degeneracies)
 """

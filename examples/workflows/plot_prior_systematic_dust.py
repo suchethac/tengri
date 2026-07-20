@@ -18,6 +18,7 @@ The posterior shifts away from truth at low S/N when the prior is
 strong; at high S/N both priors give the same MAP.
 
 References:
+
 - Gelman et al. 2013 *Bayesian Data Analysis* (3rd ed.), §3.4.
 """
 
