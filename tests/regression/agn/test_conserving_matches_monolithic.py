@@ -42,18 +42,18 @@ def test_conserving_reproduces_monolithic_full_sed(name, mono_fn, blocks):
     # Type-1 viewing (i=30, theta_torus=30) the mask = 0.99999969, so the
     # max peak-relative residual is ~3e-7 — a documented superset (the
     # composable path adds inclination geometry), not a discrepancy. The 1e-6
-    # tolerance sits an order of magnitude above that floor. Both agn_frac axes
+    # tolerance sits an order of magnitude above that floor. Both agn_lum_ratio axes
     # are covered so the Phase-4 retirement gate holds at partial AGN fractions
-    # too (unified.py:581 scales the total by agn_frac).
-    for agn_frac in (0.5, 1.0):
+    # too (unified.py:581 scales the total by agn_lum_ratio).
+    for agn_lum_ratio in (0.5, 1.0):
         for tf in (0.3, 0.5, 0.7):
-            mono = np.asarray(mono_fn(_WAVE, 45.0, agn_frac=agn_frac, agn_torus_frac=tf))
+            mono = np.asarray(mono_fn(_WAVE, 45.0, agn_lum_ratio=agn_lum_ratio, agn_torus_frac=tf))
             comp = np.asarray(
                 composable(
                     _WAVE,
                     45.0,
                     agn_norm="conserving",
-                    agn_frac=agn_frac,
+                    agn_lum_ratio=agn_lum_ratio,
                     agn_torus_frac=tf,
                     **blocks,
                 )
@@ -65,6 +65,7 @@ def test_conserving_reproduces_monolithic_full_sed(name, mono_fn, blocks):
                 atol=1e-6,
                 rtol=0,
                 err_msg=(
-                    f"{name}: conserving != monolithic at agn_frac={agn_frac}, torus_frac={tf}"
+                    f"{name}: conserving != monolithic at "
+                    f"agn_lum_ratio={agn_lum_ratio}, torus_frac={tf}"
                 ),
             )

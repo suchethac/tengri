@@ -809,7 +809,7 @@ deprecated to consolidate the maintenance burden on one API.
 **production** status. Its Kerr ray-tracing grid has no committed composable block
 yet; migration is deferred to a follow-up when a composable disc block is added.
 
-**Double-counting guard (#721):** When both composable AGN (`agn_fracAGN > 0`) and
+**Double-counting guard (#721):** When both composable AGN (`agn_ir_frac > 0`) and
 Dale2014 dust emission with embedded quasar (`dust_frac_agn > 0`) are active in
 the same model, a `UserWarning` alerts users to the double-count risk. Recommend
 setting `dust_frac_agn=0` when using real AGN. See

@@ -48,9 +48,11 @@ from tengri.protocols.component import ParamDeclaration
 
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
-        "agn_frac",
+        "agn_lum_ratio",
         Uniform(0.0, 5.0, default=1.0),
-        "AGN luminosity fraction (L_AGN / L_stellar_bol) — used as a scalar "
+        "AGN-to-stellar luminosity ratio (L_AGN / L_stellar_bol). Ranges to "
+        "5.0, so it is a ratio and not a fraction — which is why it is no "
+        "longer called ``agn_frac`` (#1296). Used as a scalar "
         "multiplier on the composable runner output and as the AGN-to-stellar "
         "ratio in the non-parametric AGN path. Default 1.0 means 'use the "
         "configured AGN at full strength'; a wildcard ``'all_params': FIXED`` on an "
@@ -99,14 +101,16 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_torus_frac",
         Uniform(0.0, 1.0, default=0.5),
-        "AGN torus covering factor — DEPRECATED; use agn_frac_agn",
+        "AGN torus covering factor — DEPRECATED; use agn_band_frac",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
     ParamDeclaration(
-        "agn_frac_agn",
+        "agn_band_frac",
         Uniform(0.0, 1.0, default=0.5),
-        "AGN fraction (L_AGN / L_total in a configurable band, CIGALE convention)",
+        "AGN fraction of the total luminosity in a configurable band "
+        "(L_AGN / L_total, CIGALE convention). Distinct from ``agn_ir_frac``, "
+        "which is the AGN share of the dust *IR* specifically (#1296).",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
@@ -758,11 +762,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     # CIGALE skirtor2016 cross-component AGN power coupling
     ParamDeclaration(
-        "agn_fracAGN",
+        "agn_ir_frac",
         Uniform(0.0, 0.99, default=0.0),
         "CIGALE-faithful coupling: AGN dust IR fraction of the total "
-        "(stellar + AGN) dust IR. When > 0, the AGN component derives "
-        "``agn_power = L_absorbed_stellar × fracAGN/(1-fracAGN)`` from "
+        "(stellar + AGN) dust IR. This is CIGALE's ``fracAGN``; the tengri "
+        "name says *which* fraction, since three other AGN normalizations "
+        "used to wear near-identical names (#1296). When > 0, the AGN "
+        "component derives "
+        "``agn_power = L_absorbed_stellar × ir_frac/(1-ir_frac)`` from "
         '``state.derived["L_absorbed"]`` (matches CIGALE '
         "``skirtor2016.py:498`` with ``lambda_fracAGN=0/0``), and "
         "overrides ``agn_torus_frac`` so the torus block's "

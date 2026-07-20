@@ -76,11 +76,11 @@ class TestMulticolorAgn:
         chex.assert_tree_all_finite(sed_multicolor)
 
     def test_agn_frac_scales_linearly(self, wavelength):
-        """agn_frac multiplies the whole SED linearly."""
+        """agn_lum_ratio multiplies the whole SED linearly."""
         from tengri.components.agn.unified import multicolor_agn
 
-        l1 = multicolor_agn(wavelength, agn_log_lbol=44.0, agn_frac=0.1)
-        l2 = multicolor_agn(wavelength, agn_log_lbol=44.0, agn_frac=0.2)
+        l1 = multicolor_agn(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.1)
+        l2 = multicolor_agn(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.2)
         significant = l1 > 1e-50
         assert jnp.any(significant), "No significant SED values found"
         ratio = l2[significant] / l1[significant]

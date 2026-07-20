@@ -473,7 +473,7 @@ agn_torus_block, agn_attenuation_block : str
     # apply the disc renormalization after the torus block fixes agn_power.
     # Static dispatch on the torus name (JIT-safe); the fracAGN>0 gate is
     # applied branchlessly after the torus block (below).
-    _agn_fracAGN = jnp.asarray(params.get("agn_fracAGN", 0.0))
+    _agn_fracAGN = jnp.asarray(params.get("agn_ir_frac", 0.0))
     _disc_R = None
     _disc_incl = None
     # ``agn_norm`` policy: "cigale_joint" (current default) ties disc/torus/
@@ -510,7 +510,7 @@ agn_torus_block, agn_attenuation_block : str
         # the L_absorbed-coupled value the torus block normalizes to
         # (``agn_torus_frac × L_bol``), available *before* the torus runs so
         # there is no circular dependency on ∫torus. Branchless: fall back to
-        # the legacy proxy where ``agn_fracAGN == 0``.
+        # the legacy proxy where ``agn_ir_frac == 0``.
         _Lbol = 10.0**agn_log_lbol * L_SUN
         _agn_power_pre = _torus_frac * _Lbol
         # Face-on UN-reddened disc ∫AGN1.disk = agn_power × R_faceon (the
@@ -538,7 +538,7 @@ agn_torus_block, agn_attenuation_block : str
     # The disc carries the intrinsic L_bol; the torus reprocesses a fraction of
     # it. Debit the observed disc by (1 - agn_torus_frac) so that
     # disc(1-f) + torus(f) conserves L_bol for every torus — reproducing the
-    # monolithic models (e.g. silva04_agn passes agn_frac=1-agn_torus_frac to
+    # monolithic models (e.g. silva04_agn passes agn_lum_ratio=1-agn_torus_frac to
     # the disc). The torus block already normalizes its output to
     # agn_torus_frac * L_bol, so only the disc side changes.
     #
@@ -637,7 +637,7 @@ agn_torus_block, agn_attenuation_block : str
     # CIGALE single-reference disc normalization (#556), part 2. The SKIRTOR
     # torus block fixes ``agn_power = ∫L_lambda_torus`` (disc+torus+polar share
     # this budget). Two regimes, selected branchlessly by the *traced*
-    # ``agn_fracAGN`` (so this cannot join the static _conserve_via_debit gate):
+    # ``agn_ir_frac`` (so this cannot join the static _conserve_via_debit gate):
     #   * fracAGN > 0 (CIGALE-coupled): tie the disc to ``agn_power × R`` so
     #     disc/torus/polar share one reference — *allocation*-conserving (the
     #     components can't drift apart), CIGALE-faithful, inclination-correct via
@@ -723,7 +723,7 @@ agn_torus_block, agn_attenuation_block : str
 def composable_agn_l_nu(
     wavelength: Array,
     agn_log_lbol: float = 45.0,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_disc_block: str = "none",
     agn_nlr_block: str = "none",
     agn_blr_block: str = "none",
@@ -739,7 +739,7 @@ def composable_agn_l_nu(
     Thin wrapper around :func:`compose_l_nu` matching the AGN_MODELS
     registry signature::
 
-        fn(wavelength, agn_log_lbol, agn_frac, **kwargs) -> L_nu
+        fn(wavelength, agn_log_lbol, agn_lum_ratio, **kwargs) -> L_nu
 
     Parameters
     ----------
@@ -747,7 +747,7 @@ def composable_agn_l_nu(
         Rest-frame wavelength [Å].
     agn_log_lbol : float, optional
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`. Default ``45.0``.
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Overall AGN fraction scaling [dimensionless]. Default ``1.0``.
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
 agn_torus_block, agn_attenuation_block : str, optional
@@ -763,16 +763,16 @@ agn_torus_block, agn_attenuation_block : str, optional
     Returns
     -------
     L_nu : ndarray, shape (n_wave,)
-        Total AGN :math:`L_\nu` [erg/s/Hz], scaled by ``agn_frac``.
+        Total AGN :math:`L_\nu` [erg/s/Hz], scaled by ``agn_lum_ratio``.
     L_2500_intrinsic : float, optional
         When ``return_l2500=True``, the un-reddened intrinsic disc
         monochromatic luminosity at 2500 Å [erg/s/Hz]. NOT scaled by
-        ``agn_frac`` (maintains the unscaled-intrinsic convention of
+        ``agn_lum_ratio`` (maintains the unscaled-intrinsic convention of
         ``L_agn_bol``). Returned as second element of tuple when enabled.
     L_4400_intrinsic : float, optional
         When ``return_l2500=True``, the un-reddened intrinsic disc
         monochromatic luminosity at 4400 Å [erg/s/Hz]. NOT scaled by
-        ``agn_frac`` (maintains the unscaled-intrinsic convention of
+        ``agn_lum_ratio`` (maintains the unscaled-intrinsic convention of
         ``L_agn_bol``). Returned as third element of tuple when enabled.
 
     Notes
@@ -782,7 +782,7 @@ agn_torus_block, agn_attenuation_block : str, optional
     changes (which trigger a recompile anyway).
 
     The returned ``L_2500_intrinsic`` and ``L_4400_intrinsic`` (when
-    ``return_l2500=True``) are NOT scaled by ``agn_frac``, matching the
+    ``return_l2500=True``) are NOT scaled by ``agn_lum_ratio``, matching the
     normalization convention of ``L_agn_bol``. This allows downstream
     components (e.g. X-ray, radio) to scale the monochromatic luminosities
     independently.
@@ -809,6 +809,6 @@ agn_torus_block, agn_attenuation_block : str, optional
     )
     if return_l2500:
         L_nu, L_2500_intrinsic, L_4400_intrinsic = result
-        return (agn_frac * L_nu, L_2500_intrinsic, L_4400_intrinsic)
+        return (agn_lum_ratio * L_nu, L_2500_intrinsic, L_4400_intrinsic)
     else:
-        return agn_frac * result
+        return agn_lum_ratio * result

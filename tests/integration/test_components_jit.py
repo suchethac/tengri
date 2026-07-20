@@ -199,7 +199,7 @@ def full_chain_params(base_params):
         "dust_alpha_mir": jnp.asarray(2.0),
         # AGN
         "agn_log_lbol": jnp.asarray(11.0),
-        "agn_frac": jnp.asarray(0.1),
+        "agn_lum_ratio": jnp.asarray(0.1),
     }
 
 

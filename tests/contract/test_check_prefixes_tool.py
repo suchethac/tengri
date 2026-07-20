@@ -32,7 +32,7 @@ class TestParameterValidation:
         """Parameters with valid prefixes pass even without registry context."""
         assert is_valid_param_name("sfh_dpl_alpha")
         assert is_valid_param_name("dust_tau_bc")
-        assert is_valid_param_name("agn_frac")
+        assert is_valid_param_name("agn_lum_ratio")
         assert is_valid_param_name("redshift")
 
     def test_unknown_prefix_fails(self):

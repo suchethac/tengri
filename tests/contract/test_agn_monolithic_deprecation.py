@@ -124,17 +124,17 @@ class TestComposableAGNEquivalents:
         # Deprecated monolithic path
         with pytest.warns(DeprecationWarning):
             fn_monolithic = resolve_agn_model("multicolor_agn")
-        l_nu_mono = fn_monolithic(wavelength, agn_log_lbol=11.0, agn_frac=0.1)
+        l_nu_mono = fn_monolithic(wavelength, agn_log_lbol=11.0, agn_lum_ratio=0.1)
 
         # Composable path: disc + torus
         agn_log_lbol = 11.0
-        agn_frac = 0.1
+        agn_lum_ratio = 0.1
         agn_torus_frac = 0.5
 
         l_disc = multicolor_disc(
             wavelength,
             agn_log_lbol=agn_log_lbol,
-            agn_frac=1.0 - agn_torus_frac,
+            agn_lum_ratio=1.0 - agn_torus_frac,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_a_spin=0.0,
@@ -146,7 +146,7 @@ class TestComposableAGNEquivalents:
             agn_log_nh_silva=23.0,
             agn_torus_frac=agn_torus_frac,
         )
-        l_nu_comp = (l_disc + l_torus) * agn_frac
+        l_nu_comp = (l_disc + l_torus) * agn_lum_ratio
 
         # Both paths should produce finite, positive SEDs
         assert jnp.all(jnp.isfinite(l_nu_mono)), "Monolithic path produced NaN/Inf"
@@ -170,17 +170,17 @@ class TestComposableAGNEquivalents:
         # Deprecated monolithic path
         with pytest.warns(DeprecationWarning):
             fn_monolithic = resolve_agn_model("adaf")
-        l_nu_mono = fn_monolithic(wavelength, agn_log_lbol=10.0, agn_frac=0.05)
+        l_nu_mono = fn_monolithic(wavelength, agn_log_lbol=10.0, agn_lum_ratio=0.05)
 
         # Composable path (faithful Mahadevan 1997 ADAF, #898)
         agn_log_lbol = 10.0
-        agn_frac = 0.05
+        agn_lum_ratio = 0.05
         agn_torus_frac = 0.3
 
         l_disc = adaf_spectrum(
             wavelength,
             agn_log_lbol=agn_log_lbol,
-            agn_frac=1.0 - agn_torus_frac,
+            agn_lum_ratio=1.0 - agn_torus_frac,
             agn_log_mbh=8.0,
             agn_adaf_alpha=0.3,
             agn_adaf_beta=0.5,
@@ -192,7 +192,7 @@ class TestComposableAGNEquivalents:
             agn_log_nh_silva=23.0,
             agn_torus_frac=agn_torus_frac,
         )
-        l_nu_comp = (l_disc + l_torus) * agn_frac
+        l_nu_comp = (l_disc + l_torus) * agn_lum_ratio
 
         assert jnp.all(jnp.isfinite(l_nu_mono)), "Monolithic path produced NaN/Inf"
         assert jnp.all(jnp.isfinite(l_nu_comp)), "Composable path produced NaN/Inf"

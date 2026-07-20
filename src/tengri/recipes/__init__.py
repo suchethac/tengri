@@ -411,7 +411,7 @@ def composable_agn() -> dict:
             "torus": {"type": "skirtor"},
             "atten": {"type": "polar_dust"},
             "norm": "cigale_joint",
-            # agn_fracAGN constraint is [0, 1) — keep the upper bound strictly < 1.
+            # agn_ir_frac constraint is [0, 1) — keep the upper bound strictly < 1.
             "fracAGN": Uniform(0.01, 0.99),
             WILDCARD_ALIAS: FREE,
         },

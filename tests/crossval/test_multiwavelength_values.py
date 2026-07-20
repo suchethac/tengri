@@ -433,8 +433,8 @@ class TestRadioComponentDecomposition:
             include_freefree=True,
         )
         total = float(comps["synchrotron"][0] + comps["freefree"][0] + comps["agn"][0])
-        agn_frac = float(comps["agn"][0]) / total
-        assert agn_frac > 0.9, f"AGN fraction = {agn_frac:.2%}"
+        agn_lum_ratio = float(comps["agn"][0]) / total
+        assert agn_lum_ratio > 0.9, f"AGN fraction = {agn_lum_ratio:.2%}"
 
     def test_sf_dominates_radio_quiet(self):
         """Radio-quiet with strong SF: SF > 90% at 1.4 GHz."""

@@ -121,7 +121,7 @@ L_nu_toy = np.asarray(
     demo_graybody_torus(
         jnp.asarray(model_skirtor.wavelengths),
         agn_log_lbol=LOG_LBOL,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_T_torus=300.0,
         agn_torus_frac=0.5,
     )

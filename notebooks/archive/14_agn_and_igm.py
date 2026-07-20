@@ -112,17 +112,17 @@ log_lbol = 44.0  # log10(L_bol / Lsun) ~ luminous Seyfert
 
 # --- Compute all three AGN SEDs ---
 sed_simple = get_agn_model("simple")(
-    wave, agn_log_lbol=log_lbol, agn_frac=1.0,
+    wave, agn_log_lbol=log_lbol, agn_lum_ratio=1.0,
     agn_alpha=-1.0, agn_T_torus=1000.0, agn_torus_frac=0.5,
 )
 sed_standard = get_agn_model("standard")(
-    wave, agn_log_lbol=log_lbol, agn_frac=1.0,
+    wave, agn_log_lbol=log_lbol, agn_lum_ratio=1.0,
     agn_log_mbh=8.0, agn_log_ledd=-1.0,
     agn_T_hot=1200.0, agn_T_warm=300.0, agn_frac_hot=0.3,
     agn_torus_frac=0.5,
 )
 sed_kubota = get_agn_model("kubota_done")(
-    wave, agn_log_lbol=log_lbol, agn_frac=1.0,
+    wave, agn_log_lbol=log_lbol, agn_lum_ratio=1.0,
     agn_log_mbh=8.0, agn_log_ledd=-1.0,
     agn_a_spin=0.5, agn_cos_inc=0.5,
     agn_T_hot=1200.0, agn_T_warm=300.0, agn_frac_hot=0.3,
@@ -176,7 +176,7 @@ plt.show()
 torus_frac = 0.5
 
 # Disc only (power-law)
-l_disc = powerlaw_disc(wave, agn_log_lbol=log_lbol, agn_frac=1.0 - torus_frac,
+l_disc = powerlaw_disc(wave, agn_log_lbol=log_lbol, agn_lum_ratio=1.0 - torus_frac,
                        agn_alpha=-1.0)
 # Torus only (single-T)
 l_torus = simple_torus(wave, agn_log_lbol=log_lbol, agn_torus_frac=torus_frac,
@@ -222,7 +222,7 @@ plt.show()
 # %% [markdown]
 # ### 1c. Effect of AGN Fraction on the Total SED
 #
-# The `agn_frac` parameter controls what fraction of the total bolometric
+# The `agn_lum_ratio` parameter controls what fraction of the total bolometric
 # luminosity comes from the AGN. At low fractions the galaxy SED dominates;
 # at high fractions the UV and MIR are boosted by the disc and torus.
 
@@ -233,7 +233,7 @@ colors_frac = plt.cm.plasma(np.linspace(0.15, 0.85, len(agn_fracs)))
 fig, ax = plt.subplots(figsize=(9, 5.5))
 for frac, col in zip(agn_fracs, colors_frac):
     sed_frac = get_agn_model("simple")(
-        wave, agn_log_lbol=log_lbol, agn_frac=frac,
+        wave, agn_log_lbol=log_lbol, agn_lum_ratio=frac,
         agn_alpha=-1.0, agn_T_torus=1000.0, agn_torus_frac=0.5,
     )
     ax.loglog(wave_um, np.array(sed_frac) * nu, color=col,
@@ -254,7 +254,7 @@ plt.show()
 #
 # When `agn_model="simple"` is set in the `ParamSpec`, the `SEDModel` class
 # automatically adds AGN emission to the stellar SED. The AGN bolometric
-# luminosity is computed as `agn_frac * L_bol_stellar`, so the same
+# luminosity is computed as `agn_lum_ratio * L_bol_stellar`, so the same
 # parameter controls the relative AGN contribution at all wavelengths.
 #
 # Here we compare a galaxy SED with and without AGN using
@@ -301,7 +301,7 @@ spec_agn = ParamSpec(
     met_logzsol=Fixed(-0.2),
     dust_tau_bc=Fixed(0.3),
     dust_tau_diff=Fixed(0.6),
-    agn_frac=Fixed(0.1),
+    agn_lum_ratio=Fixed(0.1),
     agn_alpha=Fixed(-1.0),
     agn_T_torus=Fixed(1000.0),
     redshift=Fixed(0.1),

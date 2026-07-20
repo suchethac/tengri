@@ -272,7 +272,7 @@ class KD18Disc(SEDModelComponent):
         sed_disc = _kubota_done_disc_fn(
             wavelength=wave,
             agn_log_lbol=p["log_lbol"],
-            agn_frac=p["frac"],
+            agn_lum_ratio=p["frac"],
             agn_log_mbh=p["log_mbh"],
             agn_log_ledd=p["log_ledd"],
             agn_a_spin=p["a_spin"],

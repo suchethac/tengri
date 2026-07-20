@@ -85,7 +85,7 @@ _UNIVERSAL_SHORT_NAMES: dict[str, str] = {
     "tau_bc": "dust_tau_bc",
     "tau_diff": "dust_tau_diff",
     "dust_slope": "dust_slope",
-    "agn_frac": "agn_frac",
+    "agn_lum_ratio": "agn_lum_ratio",
     "neb_logU": "neb_logU",
     "redshift": "redshift",
 }
@@ -807,8 +807,8 @@ Add the following method to the `Model` class immediately before `fit()` (around
             expanded.setdefault("redshift", float(redshift))
 
         # --- Inject AGN frac if agn enabled and not already in priors ---
-        if agn is not None and "agn_frac" not in expanded:
-            expanded["agn_frac"] = Uniform(0.0, 1.0)
+        if agn is not None and "agn_lum_ratio" not in expanded:
+            expanded["agn_lum_ratio"] = Uniform(0.0, 1.0)
 
         # --- Build ParamSpec ---
         # Parse sfh_type: "dpl+field" → ["dpl", "field"]

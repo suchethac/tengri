@@ -672,7 +672,7 @@ class Posterior:
         --------
         >>> labels = result.bpt_class()
         >>> import numpy as np
-        >>> agn_frac = float(np.mean(np.asarray(labels) == "AGN"))
+        >>> agn_lum_ratio = float(np.mean(np.asarray(labels) == "AGN"))
         """
         x, y = self.bpt_nii()  # log_nii_ha, log_oiii_hb
         x_arr = np.asarray(x)

@@ -42,7 +42,7 @@ class TestAdafDiscBounds:
         l_nu = adaf_disc(
             wavelength,
             agn_log_lbol=42.0,
-            agn_frac=0.1,
+            agn_lum_ratio=0.1,
             agn_log_mbh=8.0,
             agn_log_ledd=-3.0,
             agn_r_tr=100.0,
@@ -60,7 +60,7 @@ class TestAdafDiscBounds:
         l_nu = adaf_disc(
             wavelength,
             agn_log_lbol=42.0,
-            agn_frac=0.1,
+            agn_lum_ratio=0.1,
             agn_log_mbh=8.0,
             agn_log_ledd=-3.0,
         )
@@ -78,7 +78,7 @@ class TestAdafDiscBounds:
         l_adaf = adaf_disc(
             wavelength,
             agn_log_lbol=42.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_log_mbh=8.0,
             agn_log_ledd=-3.0,
             agn_r_tr=100.0,
@@ -86,7 +86,7 @@ class TestAdafDiscBounds:
         l_disc = multicolor_disc(
             wavelength,
             agn_log_lbol=42.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
         )
@@ -105,10 +105,18 @@ class TestAdafDiscBounds:
         from tengri.components.agn.disc import adaf_disc
 
         l_small_tr = adaf_disc(
-            optical_wavelength, agn_log_lbol=10.0, agn_frac=1.0, agn_log_mbh=8.0, agn_r_tr=30.0
+            optical_wavelength,
+            agn_log_lbol=10.0,
+            agn_lum_ratio=1.0,
+            agn_log_mbh=8.0,
+            agn_r_tr=30.0,
         )
         l_large_tr = adaf_disc(
-            optical_wavelength, agn_log_lbol=10.0, agn_frac=1.0, agn_log_mbh=8.0, agn_r_tr=500.0
+            optical_wavelength,
+            agn_log_lbol=10.0,
+            agn_lum_ratio=1.0,
+            agn_log_mbh=8.0,
+            agn_r_tr=500.0,
         )
 
         # r_tr is a retired no-op kwarg -> identical SEDs.
@@ -128,7 +136,7 @@ class TestAdafDiscBounds:
         l_low = adaf_disc(
             wavelength,
             agn_log_lbol=42.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_log_mbh=8.0,
             agn_log_ledd=-4.0,
             agn_r_tr=300.0,
@@ -138,7 +146,7 @@ class TestAdafDiscBounds:
         l_high = adaf_disc(
             wavelength,
             agn_log_lbol=44.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_r_tr=10.0,
@@ -158,15 +166,15 @@ class TestAdafDiscBounds:
         )
 
     def test_agn_frac_scaling(self, wavelength):
-        """agn_frac linearly scales the output.
+        """agn_lum_ratio linearly scales the output.
 
         The SED must scale linearly with the AGN luminosity fraction:
-        L_nu(agn_frac=0.5) = 0.5 * L_nu(agn_frac=1.0) everywhere.
+        L_nu(agn_lum_ratio=0.5) = 0.5 * L_nu(agn_lum_ratio=1.0) everywhere.
         """
         from tengri.components.agn.disc import adaf_disc
 
-        l_full = adaf_disc(wavelength, agn_log_lbol=42.0, agn_frac=1.0)
-        l_half = adaf_disc(wavelength, agn_log_lbol=42.0, agn_frac=0.5)
+        l_full = adaf_disc(wavelength, agn_log_lbol=42.0, agn_lum_ratio=1.0)
+        l_half = adaf_disc(wavelength, agn_log_lbol=42.0, agn_lum_ratio=0.5)
 
         ratio = l_full / jnp.maximum(l_half, 1e-100)
         # Should be ~2 everywhere (within numerical precision)

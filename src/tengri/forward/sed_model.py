@@ -479,7 +479,7 @@ def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
 def _warn_agn_dust_double_count(spec) -> None:
     """Warn when composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
 
-    The composable AGN's ``agn_fracAGN`` (CIGALE-joint tie) and Dale2014's
+    The composable AGN's ``agn_ir_frac`` (CIGALE-joint tie) and Dale2014's
     embedded quasar template ``dust_frac_agn`` are two distinct AGN surfaces,
     both keyed off the same stellar ``L_absorbed`` (component_factory.py:346,
     ADR-0018 §5, issue #721). With both > 0 the AGN mid/far-IR is double-counted
@@ -501,13 +501,13 @@ def _warn_agn_dust_double_count(spec) -> None:
             return True
         return float(fixed.get(name, 0.0)) > 0.0
 
-    if not (_positive_active("dust_frac_agn") and _positive_active("agn_fracAGN")):
+    if not (_positive_active("dust_frac_agn") and _positive_active("agn_ir_frac")):
         return
 
     from tengri.config.exceptions import AGNDustDoubleCountWarning
 
     warnings.warn(
-        "Both AGN surfaces are active: the composable AGN (agn_fracAGN > 0) and "
+        "Both AGN surfaces are active: the composable AGN (agn_ir_frac > 0) and "
         "Dale2014 dust emission (dust_frac_agn > 0). Both inject AGN-heated IR "
         "from the same stellar L_absorbed, so AGN mid/far-IR is DOUBLE-COUNTED. "
         "Use one surface: set dust_frac_agn=0 and let the composable AGN torus "
@@ -2097,7 +2097,7 @@ class SEDModel:
         if self._agn_model:
             agn_dists = getattr(spec, "_distributions", {})
             agn_lbol_dist = agn_dists.get("agn_log_lbol")
-            agn_frac_dist = agn_dists.get("agn_frac")
+            agn_frac_dist = agn_dists.get("agn_lum_ratio")
             lbol_is_free = agn_lbol_dist is not None and not agn_lbol_dist.is_fixed
             frac_is_free = agn_frac_dist is not None and not agn_frac_dist.is_fixed
             self._agn_luminosity_mode = lbol_is_free and not frac_is_free
@@ -2682,7 +2682,7 @@ class SEDModel:
             kw["agn_polar_ebv"] = p.get("agn_polar_ebv", 0.0)
             kw["agn_cos_inc"] = p.get("agn_cos_inc", 0.5)
             kw["agn_polar_oa"] = p.get("agn_polar_oa", 45.0)
-            kw["agn_frac"] = p.get("agn_frac", 1.0)
+            kw["agn_lum_ratio"] = p.get("agn_lum_ratio", 1.0)
             kw["agn_a_spin"] = p.get("agn_a_spin", 0.0)
             kw["agn_log_mbh"] = p.get("agn_log_mbh", 7.0)
             kw["agn_log_ledd"] = p.get("agn_log_ledd", -1.0)

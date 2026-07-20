@@ -96,7 +96,7 @@ class TestSKIRTORParameterDiscovery:
     def test_declared_parameter_names(self):
         """Parameter names have agn_ prefix as per naming contract.
 
-        Post-#329 ``agn_torus_frac`` was renamed to ``agn_frac_agn`` to align
+        Post-#329 ``agn_torus_frac`` was renamed to ``agn_band_frac`` to align
         with CIGALE's nomenclature. The polar-dust trio (``agn_polar_ebv``,
         ``agn_polar_temperature``, ``agn_polar_beta``) was promoted to free
         params when the bi-conical re-emission pipeline was wired through
@@ -112,7 +112,7 @@ class TestSKIRTORParameterDiscovery:
             "agn_q_skirtor",
             "agn_oa_skirtor",
             "agn_cos_inc",
-            "agn_frac_agn",
+            "agn_band_frac",
             "agn_polar_ebv",
             "agn_polar_temperature",
             "agn_polar_beta",
