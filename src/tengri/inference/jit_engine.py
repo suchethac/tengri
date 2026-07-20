@@ -158,7 +158,7 @@ class CompileCache:
 # helper + an env-var opt-out.
 #
 # Tuning:
-#   TENGRI_ENGINE_CACHE_MAXSIZE   default 8; max number of engines held.
+#   TENGRI_ENGINE_CACHE_MAXSIZE   default 2; max number of engines held.
 #   TENGRI_DISABLE_SHARED_CACHES  if set to "1", caches are never populated
 #                                 (every Fitter compiles fresh). Use this if
 #                                 you can afford the recompile cost and want
