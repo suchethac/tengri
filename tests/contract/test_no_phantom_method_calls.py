@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Every ``self.<name>(...)`` call must resolve to an attribute the class actually has.
 
 Guards the bug class that shipped ``Fitter.fit_batch(method="map")`` dead on arrival:
