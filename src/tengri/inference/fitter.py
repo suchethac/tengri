@@ -1880,9 +1880,17 @@ class Fitter:
         object with samples, diagnostics, and derived quantities.
 
         Hierarchical fits (``model`` is a ForwardModel built with
-        ``population=PopulationSEDModel(...)``) route through
-        :class:`tengri.PopulationFitter` automatically. No change in
-        the user-facing call site.
+        ``population=PopulationSEDModel(...)``) are handled here, with no change
+        to the user-facing call site: ``Fitter`` builds its own hierarchical
+        Hamiltonian and reaches the galaxy axis through ``jax.vmap`` in
+        :mod:`tengri.forward.population_sed_model`.
+
+        They do **not** route through :class:`tengri.PopulationFitter` — this
+        module does not import it. That class is the separate legacy path, and
+        its ``jax.lax.map`` galaxy loop is not what this method executes.
+        (Instrumenting a real fit records zero ``lax.map`` calls. The claim that
+        ``run`` delegates to ``PopulationFitter`` stood here for a long time and
+        was false; it sent a multi-device optimization at the wrong loop.)
 
         Parameters
         ----------
