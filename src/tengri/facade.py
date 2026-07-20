@@ -386,10 +386,14 @@ class Galaxy:
         Parameters
         ----------
         backend : str
-            Inference backend. One of "map", "vi", "vi_native", "mcmc_nuts",
-            "mcmc_raytrace", "mcmc_hmc", "mcmc_dynamic_hmc", "mcmc_ghmc",
-            "mcmc_mclmc", "mcmc_adjusted_mclmc", "mcmc_ess", "nss".
-            Default: "map".
+            Inference backend. ``tengri.list_inference_methods()`` is the live
+            list — "map", "vi", "vi_linear", "mcmc_nuts", "mcmc_raytrace",
+            "mcmc_hmc", "mcmc_dynamic_hmc", "mcmc_adjusted_mclmc", "mcmc_ess",
+            "nss" among them. Default: "map".
+
+            ``"vi_native"`` was listed here and is not a registered name — it
+            raises ``KeyError``. ``"mcmc_ghmc"`` and ``"mcmc_mclmc"`` were too,
+            and are now ``tier="broken"`` (#1287).
         verbose : bool
             Print progress. Default: True.
         approx : {"auto", None} or precompute config, default "auto"

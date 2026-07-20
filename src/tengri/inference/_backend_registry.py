@@ -24,7 +24,11 @@ class BackendEntry:
 
         where ``context`` is an :class:`InferenceContext`.
     tier : str
-        ``"primary"`` for promoted methods, ``"experimental"`` otherwise.
+        ``"primary"`` for promoted methods, ``"experimental"`` for backends
+        that work but are not yet validated, ``"broken"`` for backends known
+        to produce wrong answers or crash. ``"broken"`` is hidden from the
+        default :func:`tengri.list_inference_methods` listing and refused by
+        ``Fitter.run`` unless the caller passes ``allow_unvalidated=True``.
     short_doc : str
         Brief description.
     requires : tuple[str, ...]
@@ -49,6 +53,15 @@ class BackendEntry:
     is_compatible: Callable[[Any], bool] | None = None
 
 
+#: The tiers a backend may declare.
+#:
+#: ``"broken"`` is not a softer ``"experimental"``. Experimental means "works,
+#: not yet validated"; broken means the backend's own ``short_doc`` says it
+#: returns wrong answers (``[POOR MIXING]``) or crashes the process
+#: (``[UNSTABLE]``). Five backends carried such a warning while sitting in the
+#: experimental tier, indistinguishable from ones that work (#1287).
+TIERS: frozenset[str] = frozenset({"primary", "experimental", "broken"})
+
 _BACKENDS: dict[str, BackendEntry] = {}
 
 
@@ -69,14 +82,26 @@ def register_backend(
     name : str
         Canonical method name (e.g., "map", "mcmc_nuts").
     tier : str
-        "primary" for primary methods, "experimental" otherwise.
+        One of :data:`TIERS`. ``"primary"`` for promoted methods,
+        ``"experimental"`` for working-but-unvalidated ones, ``"broken"``
+        for backends known to return wrong answers or crash.
     short_doc : str
         Brief description of the method.
     requires : tuple[str, ...]
         Optional dependency import names (e.g., ("blackjax",)).
     aliases : tuple[str, ...]
         Additional names that map to this backend.
+
+    Raises
+    ------
+    ValueError
+        If ``tier`` is not a recognized tier. A typo would otherwise create a
+        silent third tier that no filter matches.
     """
+    if tier not in TIERS:
+        raise ValueError(
+            f"register_backend({name!r}): unknown tier {tier!r}. Valid tiers: {sorted(TIERS)}."
+        )
 
     def deco(fn):
         entry = BackendEntry(
@@ -165,8 +190,56 @@ def check_requires(entry: BackendEntry) -> None:
             ) from exc
 
 
-def all_backends() -> list[BackendEntry]:
+def check_usable(entry: BackendEntry, *, allow_unvalidated: bool = False) -> None:
+    """Refuse to run a backend that is known to give wrong answers (#1287).
+
+    Five backends declared ``[POOR MIXING]`` or ``[UNSTABLE]`` in their own
+    ``short_doc`` while sitting at ``tier="experimental"`` — the same tier as
+    backends that work. A user who picked ``mcmc_ghmc`` because it is "fast
+    (cold ~17s)" got R-hat ~ 2.5-3.1 and no runtime signal that the chains
+    had not converged.
+
+    Wrongness that only a doc string mentions is wrongness that ships. This
+    makes the caller say out loud that they accept it.
+
+    Parameters
+    ----------
+    entry : BackendEntry
+        The backend about to be dispatched.
+    allow_unvalidated : bool, optional
+        Escape hatch for benchmarking and backend development. Default False.
+
+    Raises
+    ------
+    BackendError
+        If ``entry.tier == "broken"`` and ``allow_unvalidated`` is False. The
+        message carries the backend's own diagnosis verbatim.
+    """
+    if entry.tier != "broken" or allow_unvalidated:
+        return
+
+    from tengri.config.exceptions import BackendError
+
+    primary = sorted({e.name for e in _BACKENDS.values() if e.tier == "primary"})
+    raise BackendError(
+        f"Inference method '{entry.name}' is registered as tier='broken' and "
+        f"will not run by default.\n\n"
+        f"  {entry.short_doc}\n\n"
+        f"Working alternatives (tier=primary): {primary}.\n"
+        f"To run it anyway -- for benchmarking or backend development, not for "
+        f"science -- pass allow_unvalidated=True."
+    )
+
+
+def all_backends(*, include_broken: bool = True) -> list[BackendEntry]:
     """Return all registered backends, deduplicated and sorted.
+
+    Parameters
+    ----------
+    include_broken : bool, optional
+        Include ``tier="broken"`` entries. Default True, so internal callers
+        that need the complete registry (dispatch, conformance tests) keep
+        seeing everything; the user-facing listing opts out.
 
     Returns
     -------
@@ -178,5 +251,7 @@ def all_backends() -> list[BackendEntry]:
         if id(entry) in seen:
             continue
         seen.add(id(entry))
+        if not include_broken and entry.tier == "broken":
+            continue
         out.append(entry)
     return sorted(out, key=lambda e: (e.tier != "primary", e.name))

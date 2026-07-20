@@ -79,10 +79,14 @@ class VIConfig:
     Notes
     -----
     Frozen dataclass configuring the variational inference backend. Key fields:
-    ``method`` selects the VI algorithm (``'vi'`` / ``'vi_native'``). The two
-    backends are NOT posterior-equivalent — ``'vi_native'`` is ~19× faster but
-    PSD timescale posteriors differ from the NIFTy path; validate per-problem
-    before swapping.
+    ``method`` selects the VI algorithm. ``'vi'`` (NIFTy geoVI) and
+    ``'vi_linear'`` (NIFTy MGVI) are the working paths.
+
+    The pure-JAX ``native_vi_nonlinear`` / ``native_vi_linear`` backends are
+    registered ``tier="broken"`` (#1287) — they segfault on DPL/dense_basis
+    photometry mocks — and ``'vi_native'`` was never a registered name at all;
+    it raises ``KeyError``. The "~19x faster" figure once quoted here was
+    withdrawn: it compared MGVI against geoVI, not native against NIFTy.
 
     Examples
     --------

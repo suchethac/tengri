@@ -1356,8 +1356,11 @@ def list_inference_methods(
     Parameters
     ----------
     tier : str, optional
-        Filter by ``"primary"`` (recommended for new users) or
-        ``"experimental"``.
+        Filter by ``"primary"`` (recommended for new users),
+        ``"experimental"``, or ``"broken"``. Backends registered as
+        ``"broken"`` — those whose own ``short_doc`` reports wrong answers or
+        crashes — are **excluded from the default listing** (#1287); pass
+        ``tier="broken"`` to see them.
     target : Fitter | InferenceContext, optional
         If supplied, each entry's ``status`` column reflects whether the
         backend's ``is_compatible`` predicate (if any) accepts the
@@ -1374,8 +1377,11 @@ def list_inference_methods(
     from tengri.inference._backend_registry import all_backends
     from tengri.inference._strategy import resolve_status
 
+    # Broken backends are listed only on explicit request. Offering a sampler
+    # that returns R-hat ~ 3 in the same table as one that works is what let
+    # users pick it on the strength of its speed (#1287).
     out = []
-    for entry in all_backends():
+    for entry in all_backends(include_broken=tier == "broken"):
         out.append(
             {
                 "name": entry.name,
