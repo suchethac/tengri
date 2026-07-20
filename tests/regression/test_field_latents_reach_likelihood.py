@@ -188,6 +188,61 @@ def test_posterior_params_evaluate_to_the_fitted_model():
 
 
 @pytest.mark.skipif(not _SSP.exists(), reason="wNE SSP grid not available")
+def test_predict_sfh_native_grid_is_reachable_and_unresampled():
+    """``grid="native"`` must expose the SFH on the model's own log-age nodes.
+
+    Without it there is no public way to score an SFH residual on the grid the
+    model is parameterized on: ``predict_sfh`` only returned a uniform
+    LINEAR-time resampling whose step is ``age_max / n_linear`` (13.8 Myr at the
+    defaults). Five of the sixteen log-age nodes lie below 15 Myr, and the linear
+    grid puts 2 of 1000 samples there — so a residual scored on it weights the
+    young bins at ~5% instead of ~50%.
+
+    That is not academic: it turned a real +54% improvement in recovery from
+    adding emission-line fluxes into an apparent 0%, because nearly all of the
+    line information sits below 15 Myr. Scoring code must be able to ask for the
+    native grid, and it must be the unresampled values.
+    """
+    ssp = load_ssp_data(str(_SSP))
+    phot = Photometry.from_names(["galex_fuv", "sdss_g", "sdss_r", "2mass_ks"])
+    observation = Observation(
+        photometry=phot, noise=NoiseModel(calibration_floor=0.01, student_t_dof=None)
+    )
+    model = _model(ssp, observation)
+    params = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(5))}
+
+    native = model.predict_sfh(params, grid="native")
+    linear = model.predict_sfh(params)
+
+    n_grid = int(np.asarray(model.log_age_grid).shape[0])
+    assert np.asarray(native["sfr_full"]).shape == (n_grid,)
+    np.testing.assert_allclose(
+        np.asarray(native["t_gyr"]), 10.0 ** np.asarray(model.log_age_grid) / 1e9, rtol=1e-12
+    )
+
+    # The native values must be the model's own, not a round-trip through the
+    # lossy linear grid -- that is the entire point of the parameter.
+    internal = model._compute_sfr_mean_and_full(model._get_internal_params(params))[1]
+    np.testing.assert_allclose(
+        np.asarray(native["sfr_full"]),
+        np.asarray(internal),
+        rtol=1e-12,
+        err_msg="grid='native' must return the unresampled internal SFH",
+    )
+
+    # The sampling asymmetry that motivated the parameter.
+    t_nat, t_lin = np.asarray(native["t_gyr"]), np.asarray(linear["t_gyr"])
+    assert (t_nat < 0.015).sum() > (t_lin[t_lin < 0.5] < 0.015).sum(), (
+        "the native grid must sample the young ages better than the linear resampling"
+    )
+
+    # Default stays backward compatible.
+    assert np.asarray(linear["t_gyr"]).shape == (1000,)
+    with pytest.raises(ValueError, match="grid must be"):
+        model.predict_sfh(params, grid="bogus")
+
+
+@pytest.mark.skipif(not _SSP.exists(), reason="wNE SSP grid not available")
 def test_sampler_spelling_alone_does_not_reach_the_flux_path():
     """Pin the asymmetry that makes publishing ``sfh_field_xi`` mandatory.
 
