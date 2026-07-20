@@ -36,6 +36,7 @@ from tengri import (
     FREE,
     Fitter,
     Fixed,
+    ForwardModel,
     NoiseModel,
     Observation,
     Photometry,
@@ -87,7 +88,8 @@ def test_field_latents_receive_likelihood_gradient():
     flux, err = np.asarray(mock.flux_obs), np.asarray(mock.noise)
 
     def grad_psd_xi(noise_scale):
-        fitter = Fitter(_model(ssp, observation), flux, err * noise_scale, approx=None)
+        forward = ForwardModel.build(sed=_model(ssp, observation), observation=observation)
+        fitter = Fitter(forward, flux, err * noise_scale, approx=None)
         ctx = InferenceContext.from_target(fitter)
         x0 = ctx.initial_params(jax.random.PRNGKey(2))
         _, grad = ctx.grad_fn(x0, ctx.data_args)
@@ -159,9 +161,16 @@ def test_posterior_params_evaluate_to_the_fitted_model():
     mock = model.mock(params, snr=20.0, key=jax.random.PRNGKey(1))
     flux, err = np.asarray(mock.flux_obs), np.asarray(mock.noise)
 
-    fitter = Fitter(_model(ssp, observation), flux, err, approx=None)
-    res = fitter.run(
-        method="map", n_steps=200, n_restarts=1, key=jax.random.PRNGKey(2), verbose=False
+    forward = ForwardModel.build(sed=_model(ssp, observation), observation=observation)
+    res = forward.fit(
+        flux,
+        err,
+        method="map",
+        approx=None,
+        n_steps=200,
+        n_restarts=1,
+        key=jax.random.PRNGKey(2),
+        verbose=False,
     )
 
     assert "sfh_field_xi" in res.params, (
