@@ -117,3 +117,34 @@ def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
     positive = usable & (magnitude > 0)
     safe = jnp.where(positive, magnitude, 1.0)
     return jnp.where(positive, offset + jnp.log10(safe), -jnp.inf)
+
+
+def max_finite_exponent() -> float:
+    """Largest ``x`` for which ``exp(x)``/``expm1(x)`` stays finite at working precision.
+
+    Returns 500.0 under float64 — the value the Planck clamps used before —
+    and ~87.7 under float32, whose ``exp`` overflows above x ~ 88.7.
+
+    An overflowing exponential is not merely a forward-value problem. A
+    saturated ``inf`` denominator still gives the correct limit (the Wien tail
+    tends to zero), but its *gradient* is ``inf/inf`` — NaN — so a fit would
+    fail where the forward pass looked fine. Capping at the dtype's own limit
+    keeps both finite.
+
+    Physically free for a blackbody: x = 88 already puts the Wien tail at
+    ``e**-88 ~ 6e-39`` of the peak, far below anything measurable (#1206).
+
+    Returns
+    -------
+    float
+        Clamp ceiling [dimensionless]; a static Python float, safe as a
+        ``jnp.clip`` bound under JIT.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — resolved at trace time from
+    ``jnp.result_type(float)``, so it is a compile-time constant.
+    """
+    import math
+
+    return float(min(500.0, math.log(float(jnp.finfo(jnp.result_type(float)).max)) - 1.0))

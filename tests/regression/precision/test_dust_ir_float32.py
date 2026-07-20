@@ -42,6 +42,12 @@ TEMPLATE_MODELS = (
     "schreiber2018",
     "astrodust",
     "pah_drude",
+    # Analytic Planck closures, float32-clean since the nu**3 intermediate was
+    # removed from planck_bnu (#1206).
+    "mbb",
+    "modified_blackbody",
+    "casey2012",
+    "schreiber2016",
 )
 
 #: Subset that is strictly energy-balanced, i.e. normalizes its template so the
@@ -49,24 +55,12 @@ TEMPLATE_MODELS = (
 #: template by L_ir without renormalizing to it, so it re-emits only a fraction.
 ENERGY_BALANCED_MODELS = tuple(m for m in TEMPLATE_MODELS if m != "pah_drude")
 
-#: Models still not float32-capable, with the measured reason. These are NOT
-#: blocked by the ``L_ir`` seam — they were already broken before it was fixed,
-#: at exactly these finite fractions.
+#: Models still not float32-capable, with the measured reason.
 #:
-#: The analytic closures evaluate a modified blackbody whose float64 values run
-#: down to ~7.5e-218, far below float32's smallest denormal (~1.4e-45), so most
-#: of the grid underflows to zero and the normalization then yields 0 or NaN.
-#: Factoring ``L_ir`` cannot help: the shape itself is unrepresentable, so those
-#: closures need their own log-domain treatment.
-#:
-#: ``energy_balance_split`` is separate again — it opts out of factoring because
-#: it is affine in ``L_ir`` (``L_ir + dust_L_agn_ir``), see
-#: ``EmissionComponent.factors_l_ir``.
+#: ``energy_balance_split`` opts out of ``L_ir`` factoring because it is affine
+#: rather than proportional (``L_ir + dust_L_agn_ir``), see
+#: ``EmissionComponent.factors_l_ir``. It needs the budget itself in log space.
 NOT_YET_FLOAT32 = {
-    "mbb": "analytic Planck closure underflows (float64 values to 7.5e-218)",
-    "modified_blackbody": "analytic Planck closure underflows",
-    "casey2012": "analytic Planck + power-law closure underflows",
-    "schreiber2016": "analytic Planck closure underflows",
     "energy_balance_split": "affine in L_ir, opts out of factoring (factors_l_ir=False)",
 }
 

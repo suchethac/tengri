@@ -90,7 +90,7 @@ Measured on a real grid (`ssp_prsc_miles`, 1e10 M⊙, z = 0.5): `L_absorbed = 2.
 
 Compensated summation (Kahan / pairwise) was **not** used: it addresses lost significant digits, and this failure is one of dynamic range. Kahan summation of values whose sum is 1e43 still overflows float32.
 
-**Still open:** dust IR *emission* consumes the linear `L_ir`, so `sed_dust_ir` is `inf` in pure float32 and poisons the total SED. See "Remaining work" below.
+**Follow-on:** dust IR *emission* also consumed the linear `L_ir` and so was `inf` in float32, poisoning the total SED. Fixed under item 6 below.
 
 ---
 
@@ -249,16 +249,57 @@ zeroing the exponent when the peak is zero, preserving `0 * 10**s == 0` at every
 
 ### Still not float32-capable
 
-Two groups remain, neither blocked by the `L_ir` seam — both were already broken before it was fixed,
-at exactly the same finite fractions:
-
 | Model | Reason |
 |---|---|
-| `mbb`, `modified_blackbody`, `casey2012`, `schreiber2016` | The analytic Planck closures evaluate values down to ~7.5e-218 in float64 — far below float32's smallest denormal (~1.4e-45). Most of the grid underflows to zero and the normalization then yields 0 or `NaN`. The *shape* is unrepresentable, so factoring `L_ir` cannot help; these need their own log-domain treatment. |
 | `energy_balance_split` | Affine, not proportional: `L_ir_total = L_ir + dust_L_agn_ir`. Opted out via `factors_l_ir = False` so it keeps the linear path rather than returning a wrong SED. Needs the budget itself in log space (`log10_add` of the two terms). |
 
-Both are pinned by `test_known_non_float32_models_stay_documented`, which fails if one becomes clean
-— so this table cannot understate what float32 delivers.
+Pinned by `test_known_non_float32_models_stay_documented`, which fails if it becomes clean — so this
+table cannot understate what float32 delivers.
+
+---
+
+## The Planck function — three copies of one overflow
+
+The analytic closures (`mbb`, `modified_blackbody`, `casey2012`, `schreiber2016`) were blocked by a
+defect independent of the `L_ir` seam, in the Planck function itself:
+
+```
+B_nu(T) = 2 h nu**3 / c**2 / (exp(h nu / k T) - 1)
+```
+
+Written that way, `nu**3` reaches **2.7e49** on a 100 Å – 1 mm grid — eleven decades past the float32
+ceiling — even though `B_nu` peaks at ~8e-12 and is perfectly representable. 73% of the array went
+non-finite.
+
+**Both implementations already knew.** `dust/emission/_physics.py` and `agn/_phys.py` each carried a
+comment naming the exact hazard ("float32 max is ~3.4e38 … nu**3 ~ 1.5e53") and guarded it by casting
+to `float64` first. Under `jax.enable_x64(False)` that cast is **silently truncated back to float32**
+— JAX emits a `UserWarning` and carries on — so the guard evaporated in precisely the configuration
+Tier B targets. A mitigation that only works when you don't need it.
+
+**Fixes, all algebraically exact:**
+
+1. **Never form the cube.** `2h·nu³/c²` regrouped as `2h·nu·(nu/c)²` caps the largest intermediate at
+   ~1e12. Identical in float64 to 4e-16 relative.
+2. **Follow the working dtype.** `jnp.result_type(float)` instead of a hard `float64` — float64 under
+   x64, float32 without it, no silent truncation.
+3. **Dtype-aware exponent clamp** (`tengri.utils.scale.max_finite_exponent`). The clamp was a fixed
+   `x <= 500`; `expm1(500)` is 1.4e217, finite in float64 but `inf` in float32, which overflows above
+   x ~ 88.7. The forward value was still *correct* (a saturated denominator gives the right Wien-tail
+   limit of zero) but the **gradient was `inf/inf` = NaN** — a fit would have failed where the forward
+   pass looked fine. Capping at the dtype's own limit is physically free: x = 88 already puts the tail
+   at e⁻⁸⁸ ≈ 6e-39 of the peak.
+4. **A third copy.** `_casey_graybody_nu` formed `(c/λ)³` separately. It is a *shape*, normalized
+   downstream by its own frequency integral, so dropping the constant `c³` and using `(1/λ)³` cancels
+   exactly — both callers pick up the same factor.
+
+float64 cross-version parity over 96 configurations covering all four analytic closures: 4730 fields
+bit-exact, 38 moved (only `sed_dust_ir`), worst **6.55e-16**, zero NaN-status changes.
+
+A stale docstring was corrected in the same pass: `planck_lnu` claimed it "uses logarithmic
+arithmetic to avoid overflow". It never did — it used the float64 cast.
+
+---
 
 ### Historical: the original analysis
 

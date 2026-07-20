@@ -26,6 +26,7 @@ from tengri.utils.physics_constants import (
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZMANN,
 )
+from tengri.utils.scale import max_finite_exponent
 
 
 def modified_blackbody(
@@ -181,10 +182,18 @@ def _casey_graybody_nu(
     -----
     **JIT-compatible**: yes — ``optically_thin`` is a static Python bool.
     """
-    x = jnp.clip(_H_PLANCK * _C_CGS / (wavelength_cm * _K_BOLTZMANN * T_eff), 0.0, 500.0)
+    x = jnp.clip(
+        _H_PLANCK * _C_CGS / (wavelength_cm * _K_BOLTZMANN * T_eff), 0.0, max_finite_exponent()
+    )
     tau = (_CASEY_LAMBDA0_CM / wavelength_cm) ** dust_beta_ir
     opacity = tau if optically_thin else -jnp.expm1(-tau)
-    return opacity * (_C_CGS / wavelength_cm) ** 3 / jnp.expm1(x)
+    # ``nu**3`` written out reaches ~2.7e49 on a UV-to-far-IR grid, eleven
+    # decades past the float32 ceiling. Using (1/lambda)**3 [cm^-3] instead
+    # drops a constant factor c**3, which cancels exactly: this is a *shape*,
+    # normalized downstream by its own frequency integral, and both callers
+    # (the graybody and the power-law amplitude tied to it at lambda_c) pick up
+    # the same factor. Largest intermediate becomes ~1e18 (#1206).
+    return opacity * (1.0 / wavelength_cm) ** 3 / jnp.expm1(x)
 
 
 def casey2012(
