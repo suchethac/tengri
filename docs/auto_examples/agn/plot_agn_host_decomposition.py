@@ -75,7 +75,7 @@ BASE_AGN = dict(
 
 def _build_model(agn_lum_ratio):
     """Build a model with specified AGN fraction."""
-    agn_config = {**BASE_AGN, "all_params": tengri.FIXED, "frac": agn_lum_ratio}
+    agn_config = {**BASE_AGN, "all_params": tengri.FIXED, "lum_ratio": agn_lum_ratio}
     model = tengri.SEDModel.build(ssp, agn=agn_config, **COMMON)
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict(p)

@@ -60,7 +60,7 @@ BASE_AGN = {
     "disc": {"type": "multicolor", "all_params": tengri.FIXED},
     "all_params": tengri.FIXED,
     "log_lbol": 12.0,
-    "frac": 1.0,
+    "lum_ratio": 1.0,
 }
 
 

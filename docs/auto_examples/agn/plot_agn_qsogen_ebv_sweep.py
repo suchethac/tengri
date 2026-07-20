@@ -59,7 +59,7 @@ model = tengri.SEDModel.build(
         "all_params": tengri.FIXED,
         "agn_lum_ratio": 1.0,
         "log_lbol": 11.0,
-        "frac": 1.0,  # composable AGN is scaled by agn_lum_ratio * frac; keep both at 1
+        "lum_ratio": 1.0,  # composable AGN is scaled by agn_lum_ratio * frac; keep both at 1
     },
     redshift=tengri.Fixed(0.05),
 )

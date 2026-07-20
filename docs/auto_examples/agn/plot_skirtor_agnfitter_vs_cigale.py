@@ -84,7 +84,7 @@ try:
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
             "log_lbol": log_lbol,
-            "frac": agn_lum_ratio,
+            "lum_ratio": agn_lum_ratio,
             "oa_skirtor": 30.0,  # half-opening angle [deg]
             "incl_skirtor": 45.0,  # inclination [deg]
             "tv_skirtor": 6.0,  # optical depth at 9.7 micron
@@ -106,7 +106,7 @@ try:
             "torus": {"type": "skirtor_agnfitter", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
             "log_lbol": log_lbol,
-            "frac": agn_lum_ratio,
+            "lum_ratio": agn_lum_ratio,
             "oa_skirtor": 30.0,
             "incl_skirtor": 45.0,
             "tv_skirtor": 6.0,

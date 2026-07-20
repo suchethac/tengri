@@ -60,7 +60,7 @@ AGN = {
     "atten": {"type": "polar_dust", "all_params": tengri.FIXED},
     "all_params": tengri.FIXED,
     "log_lbol": 12.0,
-    "frac": 1.0,  # without this the AGN is multiplied by 0 (default)
+    "lum_ratio": 1.0,  # without this the AGN is multiplied by 0 (default)
     # A Distribution at per-param level overrides the wildcard and makes the
     # parameter FREE (a bare FREE sentinel here is swallowed by '*: FIXED').
     "polar_ebv": tengri.Uniform(0.0, 0.5),

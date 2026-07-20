@@ -105,7 +105,7 @@ def build_ulirg_qso_model(tau_v, agn_lum_ratio):
     agn_dict = {
         "type": "composable",
         "log_lbol": log_lbol,
-        "frac": agn_lum_ratio,
+        "lum_ratio": agn_lum_ratio,
         "disc": {"type": "multicolor", "all_params": tengri.FIXED},
         "torus": {"type": "skirtor", "all_params": tengri.FIXED},
         "nlr": {"type": "analytic", "all_params": tengri.FIXED},

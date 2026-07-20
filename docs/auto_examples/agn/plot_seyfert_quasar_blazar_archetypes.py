@@ -73,7 +73,7 @@ def build_agn_archetype(log_lbol, agn_lum_ratio, agn_blocks, sfr_log, dust_confi
     """
     agn_dict = {
         "log_lbol": log_lbol,
-        "frac": agn_lum_ratio,
+        "lum_ratio": agn_lum_ratio,
         "all_params": tengri.FIXED,
     }
     agn_dict.update(agn_blocks)
