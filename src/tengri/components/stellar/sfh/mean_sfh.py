@@ -32,10 +32,12 @@ Canonical names (short name alias in parentheses):
 
 References
 ----------
+
 - Bellstedt+2020 (arXiv:2005.11917): snorm, snorm_trunc parameterizations.
 - Robotham+2020 (arXiv:2002.06980): ProSpect SFH models including spline and burst variants.
 - Carnall+2018: double power law (BAGPIPES).
 - Zacharegkas+2025 (arXiv:2506.19919): triweight burst model.
+
 """
 
 import jax

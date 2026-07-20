@@ -13,11 +13,13 @@ Angstrom at the call site if needed.
 
 References
 ----------
+
 - Stalevski et al. 2012, MNRAS, 420, 2756 (SKIRTOR radiative transfer)
 - Stalevski et al. 2016, MNRAS, 458, 2288 (updated SKIRTOR grid)
 - Boquien et al. 2019, A&A, 622, A103 (CIGALE code)
 - Schartmann et al. 2005, A&A, 437, 861 (alternative torus RT)
 - Lopez et al. 2024 (ADAF-disc transition)
+
 """
 
 from __future__ import annotations

@@ -2,6 +2,7 @@
 """Gaussian Process realizations from Power Spectral Density functions.
 
 Two modes:
+
 - Stochastic: generate_gp_fourier() draws random GP realizations (for mocks)
 - Deterministic: gp_from_xi() maps a fixed latent vector to a GP (for inference)
 

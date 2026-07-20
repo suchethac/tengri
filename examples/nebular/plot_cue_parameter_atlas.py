@@ -29,6 +29,7 @@ References:
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue)
 - Kewley & Dolphin 2002, ApJ, 549, 716 (logU diagnostics)
 - Kewley+2019, ARA&A, 57, 511 (modern line-diagnostics review)
+
 """
 
 import os

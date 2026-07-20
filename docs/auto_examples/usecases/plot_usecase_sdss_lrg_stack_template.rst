@@ -31,16 +31,18 @@ composite that shows the D4000 break, Mg b 5170 Å absorption feature,
 and Ca II H+K lines characteristic of quiescent early-type galaxies.
 
 Key techniques:
+
 - Build tengri models with simple quiescent SFH (narrow tsnorm)
 - Use jax.vmap to batch-predict N spectra in parallel
 - Stack with simple median-flux combination
 - Label age-sensitive features (D4000, Mg b, Ca II H+K)
 
 References:
+
 - Eisenstein et al. 2001, AJ, 122, 2267 (SDSS LRG selection)
 - Thomas et al. 2005, ApJ, 621, 673 (red-sequence ages)
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-152
+.. GENERATED FROM PYTHON SOURCE LINES 27-155
 
 
 
@@ -54,10 +56,6 @@ References:
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
     Predicting 200 quiescent spectra (ages 6.0–11.0 Gyr)...
       Batch shape: (200, 2400)
 
@@ -202,7 +200,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.518 seconds)
+   **Total running time of the script:** (0 minutes 3.887 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sdss_lrg_stack_template.py:

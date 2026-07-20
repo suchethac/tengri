@@ -14,6 +14,7 @@ Reading order: stellar continuum (gray) → dust-attenuated stellar
 → X-ray (from accreting binaries).
 
 **References:**
+
  - Kennicutt & Evans (2012) [1]_ for MW analog SFR calibration
  - Bruzual & Charlot (2003) [2]_ for stellar population synthesis
  - Dale et al. (2014) [3]_ for dust emission model

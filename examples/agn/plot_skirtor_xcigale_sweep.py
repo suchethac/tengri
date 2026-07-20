@@ -14,6 +14,7 @@ The panels sweep the two most consequential axes:
 
 - **Equatorial optical depth** ``tau`` (left): a thicker torus deepens the
   9.7 micron silicate absorption and redistributes the reprocessed power.
+
 - **Inclination** (right): edge-on lines of sight (low ``cos i``) graze the
   optically-thick equatorial dust (Type-2-like, deep silicate absorption);
   face-on sight lines look down the polar funnel (Type-1-like).

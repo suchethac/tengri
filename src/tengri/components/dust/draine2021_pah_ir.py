@@ -106,6 +106,7 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
     Notes
     -----
     **Cross-component contract**:
+
     - Reads: ``state.derived["L_ir"]`` (erg/s) — luminosity absorbed by dust.
     - Publishes: ``{"L_ir_emission": erg/s}`` — bolometric IR from templates.
 
@@ -265,7 +266,9 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
         ----------
         p : mapping[str, ndarray]
             Sliced parameters (prefix stripped):
+
             - ``p["lgU"]``: log10(U) [dex]
+
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (ignored; PAHspec emission is computed
             from L_ir independently).
@@ -273,11 +276,13 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
             Rest-frame wavelength grid in Angstrom.
         **inputs : ndarray
             Cross-component inputs:
+
             - ``L_ir``: absorbed luminosity [erg/s]
 
         Returns
         -------
         tuple[ndarray, dict]
+
             - ``sed_out``: Updated SED in erg/s/Hz.
             - ``published``: Dict with ``{"L_ir_emission": scalar}``.
 

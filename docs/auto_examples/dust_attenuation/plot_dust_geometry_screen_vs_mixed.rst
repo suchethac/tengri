@@ -36,11 +36,12 @@ A_λ/A_V.
 
 References
 ----------
+
 - Calzetti et al. 2000, ApJ, 533, 682 (starburst geometry)
 - Witt & Gordon 2000, ApJ, 528, 799 (dust geometry effects)
 - Kramer et al. 2003, ApJS, 144, 1 (mixed geometry approximation)
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-171
+.. GENERATED FROM PYTHON SOURCE LINES 26-173
 
 
 
@@ -50,19 +51,8 @@ References
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

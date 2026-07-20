@@ -34,16 +34,18 @@ We compare three estimators:
 - **SFR(UV+IR)**: sum of both (hybrid; Hao et al. 2011)
 
 The plot demonstrates the key physics:
+
 - SFR(UV) drops sharply with dust optical depth (obscuration)
 - SFR(IR) rises with dust optical depth (more heating)
 - SFR(UV+IR) remains roughly constant (dust-insensitive)
 
 References
 ----------
+
 - Kennicutt 1998, ARA&A, 36, 189 — SFR UV/IR/radio calibrations
 - Hao et al. 2011, ApJ, 741, 124 — hybrid UV+IR SFR recipe
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-227
+.. GENERATED FROM PYTHON SOURCE LINES 30-230
 
 
 
@@ -262,7 +264,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.671 seconds)
+   **Total running time of the script:** (0 minutes 2.071 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py:

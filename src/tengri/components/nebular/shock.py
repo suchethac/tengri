@@ -15,6 +15,7 @@ hardcoded arrays (solar, n=1 cm⁻³, 8 velocity points, 10 lines) with a
 
 Interpolation strategy
 ----------------------
+
 - velocity, B-field, log_density : ``interp_nd_triweight`` — C²-continuous
   triweight kernel (Hearin et al. 2023 / DSPS), jointly interpolated across
   all three continuous axes.  Bin edges are precomputed at grid load time via
@@ -23,6 +24,7 @@ Interpolation strategy
 
 References
 ----------
+
 - Allen et al. 2008, ApJS, 178, 20         (MAPPINGS III)
 - Sutherland & Dopita 2017, ApJS, 229, 34  (MAPPINGS V)
 - Alarie & Morisset 2019, RMxAA, 55, 279  (3MdBs / Zenodo 14140949)

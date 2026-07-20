@@ -27,11 +27,13 @@ All dust IR-emission libraries shipped in tengri, shown on two scales:
 (analytic models and template-based libraries). The differences sit entirely in
 the SED *shape* — peak wavelength (T_dust proxy), PAH-feature amplitude in the
 3–20 μm window, and how steeply the sub-mm tail falls.
+
   - Analytic: modified blackbody, Casey 2012, energy-balance split
   - Templates: Draine & Li 2007, Draine+2014, Dale+2014
 
 (Bottom) Seven-library L_IR-normalized comparison via full SEDModel with
 constant SFH and dust parameters (tau_diff=1, tau_bc=1.5):
+
 - ``dale2014``  — Dale+2014 SFR-driven template family
 - ``dl07``      — Draine & Li 2007 grain mixture
 - ``dl14``      — Draine+2014 update (extended PAH/silicate)
@@ -44,7 +46,7 @@ The L_IR normalization isolates the shape differences; combined with the fixed-L
 view, both perspectives reveal the diversity of grain models and their physical
 implications.
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-194
+.. GENERATED FROM PYTHON SOURCE LINES 30-196
 
 
 
@@ -54,19 +56,8 @@ implications.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -240,7 +231,7 @@ implications.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.565 seconds)
+   **Total running time of the script:** (0 minutes 2.669 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_ir_library_compare.py:

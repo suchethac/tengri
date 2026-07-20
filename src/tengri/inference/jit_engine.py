@@ -53,10 +53,12 @@ class CompileCache:
         Default 2; tune via TENGRI_ENGINE_CACHE_MAXSIZE env var or per-instance.
     mode : {'normal', 'lean', 'persistent'}, optional
         Cache behavior mode. Default 'normal'.
+
         - 'normal': keep all cached entries (existing behavior).
         - 'lean': call clear_shared_caches(..., scope='inference_body')
           before each inference to drop stale entries.
         - 'persistent': never clear automatically; user calls clear() manually.
+
     _store : OrderedDict
         Internal LRU dict. Do not access directly; use get_or_compile().
     _store_lock : threading.Lock
@@ -391,6 +393,7 @@ def clear_shared_caches(
     ----------
     scope : {"all", "inference_body"}, default "all"
         Scope of caches to clear:
+
         - ``"all"``: Clear *everything* — engines, loss fns, grad fns,
           logdensity fns, prediction kernels, per-model caches, and JAX's
           XLA cache (if ``drop_xla=True``). Used by ``tengri.gc()``.
@@ -438,14 +441,17 @@ def clear_shared_caches(
 
     What gets cleared by scope="all"
     --------------------------------
+
     - All caches listed under scope="inference_body"
     - Cross-fitter structural kernel cache (prediction kernels)
     - JAX's process-internal caches (when ``drop_xla=True``)
 
     What does *not* get cleared
     ---------------------------
+
     - The on-disk persistent JAX compile cache (``~/.cache/tengri_jax_cache``).
       Use ``tengri.clear_cache()`` for that.
+
     """
     if scope not in ("all", "inference_body"):
         raise ValueError(f"scope must be 'all' or 'inference_body', got {scope!r}")
@@ -1476,6 +1482,7 @@ def build_jit_engine(fitter, pos_dict):
         - ``"nonlinear_resample"`` — fresh geoVI samples
         - ``"nonlinear_sample"`` — reuse keys + curve (deterministic geoVI)
         - ``"nonlinear_update"`` — re-curve existing residuals at new m
+
         """
         # Generate per-iteration keys on-the-fly via fold_in (no
         # pre-split needed, so n_iterations can be dynamic).

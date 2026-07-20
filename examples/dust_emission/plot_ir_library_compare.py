@@ -8,6 +8,7 @@ All dust IR-emission libraries shipped in tengri, shown on two scales:
 (analytic models and template-based libraries). The differences sit entirely in
 the SED *shape* — peak wavelength (T_dust proxy), PAH-feature amplitude in the
 3–20 μm window, and how steeply the sub-mm tail falls.
+
   - Analytic: modified blackbody, Casey 2012, energy-balance split
   - Templates: Draine & Li 2007, Draine+2014, Dale+2014
 

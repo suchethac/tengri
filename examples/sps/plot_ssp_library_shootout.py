@@ -15,6 +15,7 @@ References:
   - Bruzual & Charlot 2003 (BC03): ApJ 405, 538
   - Conroy et al. 2009 (FSPS): ApJ 699, 486
   - Vazdekis et al. 2010 (MILES): MNRAS 404, 1639
+
 """
 
 import os

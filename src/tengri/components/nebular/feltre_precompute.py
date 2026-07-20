@@ -90,6 +90,7 @@ def precompute(
     -------
     dict
         Keys:
+
         - ``line_lum_grid``: line-luminosity grid after projecting through
           filters, shape (collapsed_dims, n_filters). Per-unit Q_H.
         - ``line_weight_matrix``: (n_lines, n_filters) projection matrix.
@@ -207,6 +208,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     -------
     dict
         Keys:
+
         - ``predict_lines``: JIT-compiled callable returning
           (wavelengths, luminosities).
         - ``line_wavelengths``: line vacuum wavelengths [Angstrom].

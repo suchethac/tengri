@@ -18,6 +18,7 @@ References:
 
 - Soltan, A. 1982, MNRAS, 200, 115 — AGN mass density evolution
 - King, A. 2003, ApJ, 596, L27 — AGN feedback on galaxy growth
+
 """
 
 import os

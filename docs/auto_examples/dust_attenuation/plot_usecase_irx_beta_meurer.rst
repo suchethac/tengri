@@ -33,12 +33,13 @@ reddening and star formation rate indicators in galaxies. Here we:
    refinements from Reddy+2018.
 
 **References:**
+
 - Meurer et al. (1999) ApJ 521, 64. The canonical local-universe IRX–β relation.
 - Calzetti et al. (2000) ApJ 533, 682. Starburst attenuation law at z~0.
 - Reddy et al. (2018) ApJ 869, 92. z~2 IRX–β scatter and implications for
   UV-to-IR conversions in high-z star-forming galaxies.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-384
+.. GENERATED FROM PYTHON SOURCE LINES 24-386
 
 
 
@@ -52,36 +53,34 @@ reddening and star formation rate indicators in galaxies. Here we:
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
     Loaded SSP: 5994 wavelength points
 
     Building 25 models with τ_diff ∈ [0, 4]...
-      τ_diff=0.00: β=-2.37, IRX=-1.66
-      τ_diff=0.17: β=-2.16, IRX=-0.18
-      τ_diff=0.33: β=-1.95, IRX=+0.22
-      τ_diff=0.50: β=-1.74, IRX=+0.51
-      τ_diff=0.67: β=-1.53, IRX=+0.75
-      τ_diff=0.83: β=-1.33, IRX=+0.97
-      τ_diff=1.00: β=-1.12, IRX=+1.17
-      τ_diff=1.17: β=-0.91, IRX=+1.36
-      τ_diff=1.33: β=-0.70, IRX=+1.54
-      τ_diff=1.50: β=-0.49, IRX=+1.72
-      τ_diff=1.67: β=-0.28, IRX=+1.89
-      τ_diff=1.83: β=-0.07, IRX=+2.06
-      τ_diff=2.00: β=+0.14, IRX=+2.23
-      τ_diff=2.17: β=+0.35, IRX=+2.39
-      τ_diff=2.33: β=+0.55, IRX=+2.56
-      τ_diff=2.50: β=+0.76, IRX=+2.72
-      τ_diff=2.67: β=+0.97, IRX=+2.87
-      τ_diff=2.83: β=+1.18, IRX=+3.03
-      τ_diff=3.00: β=+1.39, IRX=+3.18
-      τ_diff=3.17: β=+1.60, IRX=+3.34
-      τ_diff=3.33: β=+1.81, IRX=+3.49
-      τ_diff=3.50: β=+2.02, IRX=+3.64
-      τ_diff=3.67: β=+2.23, IRX=+3.79
-      τ_diff=3.83: β=+2.44, IRX=+3.94
-      τ_diff=4.00: β=+2.64, IRX=+4.08
+      τ_diff=0.00: β=-2.41, IRX=-2.44
+      τ_diff=0.17: β=-2.20, IRX=-0.20
+      τ_diff=0.33: β=-1.99, IRX=+0.20
+      τ_diff=0.50: β=-1.78, IRX=+0.49
+      τ_diff=0.67: β=-1.57, IRX=+0.73
+      τ_diff=0.83: β=-1.36, IRX=+0.95
+      τ_diff=1.00: β=-1.15, IRX=+1.15
+      τ_diff=1.17: β=-0.95, IRX=+1.34
+      τ_diff=1.33: β=-0.74, IRX=+1.52
+      τ_diff=1.50: β=-0.53, IRX=+1.70
+      τ_diff=1.67: β=-0.32, IRX=+1.87
+      τ_diff=1.83: β=-0.11, IRX=+2.04
+      τ_diff=2.00: β=+0.10, IRX=+2.21
+      τ_diff=2.17: β=+0.31, IRX=+2.37
+      τ_diff=2.33: β=+0.52, IRX=+2.53
+      τ_diff=2.50: β=+0.73, IRX=+2.69
+      τ_diff=2.67: β=+0.94, IRX=+2.85
+      τ_diff=2.83: β=+1.14, IRX=+3.00
+      τ_diff=3.00: β=+1.35, IRX=+3.16
+      τ_diff=3.17: β=+1.56, IRX=+3.31
+      τ_diff=3.33: β=+1.77, IRX=+3.46
+      τ_diff=3.50: β=+1.98, IRX=+3.61
+      τ_diff=3.67: β=+2.19, IRX=+3.76
+      τ_diff=3.83: β=+2.40, IRX=+3.91
+      τ_diff=4.00: β=+2.61, IRX=+4.05
 
     Computed 25 models successfully.
 
@@ -90,8 +89,8 @@ reddening and star formation rate indicators in galaxies. Here we:
     ======================================================================
     VERIFICATION SUMMARY
     ======================================================================
-    β range:        -2.37 to +2.64
-    IRX range:      -1.66 to +4.08
+    β range:        -2.41 to +2.61
+    IRX range:      -2.44 to +4.05
     τ_diff range:   0.00 to 4.00
 
     Physical interpretation:
@@ -99,8 +98,8 @@ reddening and star formation rate indicators in galaxies. Here we:
       • τ_diff=4 (heavy dust): Very red (β≈+2.5), strong IR → IRX ≈ +4.1
       → Points lie above Meurer+1999 (expected for young starbursts)
 
-    Measured (τ_diff=0):   β=-2.37, IRX=-1.66 ✓
-    Measured (τ_diff=4):   β=+2.64, IRX=+4.08 ✓
+    Measured (τ_diff=0):   β=-2.41, IRX=-2.44 ✓
+    Measured (τ_diff=4):   β=+2.61, IRX=+4.05 ✓
     ======================================================================
 
 

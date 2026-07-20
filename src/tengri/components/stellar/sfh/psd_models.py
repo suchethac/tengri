@@ -9,10 +9,12 @@ in the paper; others are provided for extensibility.
 
 References
 ----------
+
 - DRW: Munoz+2026 (arXiv:2601.07912)
 - Extended Regulator: Tacchella+2020, Caplar & Tacchella 2019
 - Flex-PSD: Burnham+2026 (arXiv:2601.20930)
 - Matern: generalizes DRW (nu=0.5 recovers DRW)
+
 """
 
 import jax.numpy as jnp

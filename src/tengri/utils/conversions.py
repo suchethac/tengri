@@ -2,6 +2,7 @@
 """Pure JAX, JIT-compatible spectral unit conversion utilities.
 
 All functions take and return bare jnp arrays (no unit objects) in CGS units:
+
 - Luminosity: erg/s
 - Flux: erg/s/cm²/Hz or erg/s/cm²/Å
 - Wavelength: Ångström (Å)
@@ -13,12 +14,14 @@ The conversion formulae use fundamental physical constants from
 
 References
 ----------
+
 - Spectral density formula: L_λ = L_ν × c / λ²
   (e.g., Rybicki & Lightman 1979, Radiative Processes in Astrophysics)
 - Cosmological flux-luminosity: f_ν = L_ν × (1+z) / (4π d_L²)
   (e.g., Hogg et al. 1999, AJ, 118, 1407)
 - Morton (1991) vacuum-air conversion: ApJS, 77, 119
 - Edlén (1953) air-vacuum conversion: JOSA, 43(5), 339
+
 """
 
 from __future__ import annotations

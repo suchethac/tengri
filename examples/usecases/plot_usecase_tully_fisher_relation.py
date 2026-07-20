@@ -23,6 +23,7 @@ References:
   - Tully & Fisher 1977, ApJ, 211, 31 (original relation)
   - McGaugh 2000, ApJ, 541, L33 (baryonic TF relation)
   - Verheijen 2001, ApJ, 563, 694 (optical TF calibration)
+
 """
 
 import os

@@ -93,6 +93,16 @@ FROM_TENGRI = re.compile(r"^\s*from\s+tengri\s+import\s+\(?([^)\n]+)\)?", re.MUL
 PY_FENCE = re.compile(r"```(?:python|py)\n(.*?)```", re.DOTALL)
 INLINE_CODE = re.compile(r"`([^`\n]+)`")
 
+# ``.. autofunction:: tengri.foo`` and friends. Sphinx only *warns* when one of
+# these fails to import, so three directives naming functions that do not exist
+# (``tengri.constant_sfh``, ``tengri.exponential_sfh``,
+# ``tengri.delayed_exponential_sfh`` — the real names have no ``_sfh`` suffix)
+# sat in models.rst producing silently empty sections.
+AUTODOC = re.compile(
+    r"^\s*\.\.\s+auto(?:function|class|data|method|attribute|exception|module)::\s+([\w.]+)",
+    re.MULTILINE,
+)
+
 
 def is_excluded(path: Path) -> bool:
     if path.name in EXCLUDED_FILES:
@@ -174,6 +184,34 @@ def check(verbose: bool = False) -> list[str]:
     for p in sorted((REPO / "docs").rglob("*.rst")):
         if not is_excluded(p):
             targets.append((p, snippets_from_markdown(p)))
+
+    # 0. Every autodoc directive must name something importable. Sphinx only
+    #    warns on a failed import, so a typo renders an empty section instead
+    #    of failing the build.
+    import importlib
+    import warnings as _warnings
+
+    # Probing a deprecated re-export emits its DeprecationWarning. That is the
+    # shim working as designed; existence is what is being checked here.
+    _warnings.simplefilter("ignore", DeprecationWarning)
+
+    for p in sorted((REPO / "docs").rglob("*.rst")):
+        if is_excluded(p):
+            continue
+        rel = p.relative_to(REPO)
+        for dotted in AUTODOC.findall(p.read_text(encoding="utf-8", errors="replace")):
+            checked += 1
+            mod, _, attr = dotted.rpartition(".")
+            ok = False
+            try:
+                ok = importlib.import_module(dotted) is not None
+            except Exception:
+                try:
+                    ok = getattr(importlib.import_module(mod), attr, None) is not None
+                except Exception:
+                    ok = False
+            if not ok:
+                violations.append(f"{rel}: `.. auto*:: {dotted}` — cannot be imported")
 
     for path, snips in targets:
         rel = path.relative_to(REPO)

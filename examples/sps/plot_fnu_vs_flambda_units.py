@@ -30,6 +30,7 @@ References:
 
 - Hogg, D. W., Blanton, M. R., et al. 2002, AJ, 123, 1147 (K-corrections
   and SED unit conventions)
+
 """
 
 import os

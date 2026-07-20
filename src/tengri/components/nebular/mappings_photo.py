@@ -7,6 +7,7 @@ available at Zenodo 10.5281/zenodo.14140949.
 
 Grid characteristics
 --------------------
+
 - Nicholls+2017 empirical stellar abundance patterns (ζ_O = 0.05–2)
 - Jenkins+2009/2014 empirical dust depletion (F★ = 0.43)
 - CHIANTI v10 atomic data
@@ -38,6 +39,7 @@ Build the HDF5 grid file once:
 
 References
 ----------
+
 - Flury et al. 2024, arXiv:2412.06763
 - Sutherland & Dopita 2017 (MAPPINGS V)
 - Nicholls et al. 2017 (empirical abundance scaling)

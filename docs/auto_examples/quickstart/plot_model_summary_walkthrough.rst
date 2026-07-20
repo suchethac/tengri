@@ -19,7 +19,7 @@
 
 
 Understanding model structure through parameter provenance tags
-==============================================================
+===============================================================
 
 The ``model.spec.summary()`` method displays each parameter's source
 through provenance tags: ``[user]`` for explicit overrides, ``[all_params FREE]``
@@ -143,7 +143,7 @@ annotated summary as a figure caption, and show the predicted SED.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.631 seconds)
+   **Total running time of the script:** (0 minutes 2.838 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_model_summary_walkthrough.py:

@@ -21,6 +21,7 @@ References:
 - Schaerer, D. 2003, A&A, 397, 527 (z>6 Lya emitters)
 - Bouwens, R. J., et al. 2022, ApJ, 931, 160 (EoR LBGs)
 - Rieke, M. J., et al. 2023, PASP, 135, 028001 (JWST NIRCam performance)
+
 """
 
 import os

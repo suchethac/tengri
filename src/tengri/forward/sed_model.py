@@ -2,6 +2,7 @@
 """SEDModel: high-level forward model wrapping the tengri SED pipeline.
 
 SEDModel provides a clean API for:
+
 - Forward predictions (SED, photometry, spectrum, SFH, derived quantities)
 - Mock galaxy generation (single and batch)
 - Convenience fitting (delegates to Fitter)
@@ -49,6 +50,7 @@ marker lines to jump. In order:
   - ``Batch operations``
   - ``Private prediction dispatch``
   - ``Utilities``
+
 """
 
 from __future__ import annotations

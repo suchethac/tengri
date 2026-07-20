@@ -18,6 +18,7 @@ References:
 
 - Kauffmann+2003, MNRAS, 341, 33 (D_n(4000) vs Hα EW)
 - Martin+2007, ApJS, 173, 342 (NUV − r and the green valley)
+
 """
 
 import os

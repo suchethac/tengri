@@ -36,15 +36,11 @@ class Photometry:
     Then the full fit pattern::
 
         obs = tengri.Observation(photometry=phot)
-        sed = tengri.SEDModel.build(
-            ssp_data=ssp_data, observation=obs, redshift=tengri.Fixed(0.1)
-        )
+        sed = tengri.SEDModel.build(ssp_data=ssp_data, observation=obs, redshift=tengri.Fixed(0.1))
         forward = tengri.ForwardModel.build(sed=sed, observation=obs)
 
         # Your measured fluxes and sigmas go in here, not into Photometry.
-        posterior = forward.fit(
-            measured_fluxes, measured_errors, method="mcmc_nuts"
-        )
+        posterior = forward.fit(measured_fluxes, measured_errors, method="mcmc_nuts")
 
     Parameters
     ----------

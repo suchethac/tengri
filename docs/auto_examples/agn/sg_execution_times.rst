@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:08.831** total execution time for 43 files **from auto_examples/agn**:
+**00:10.814** total execution time for 43 files **from auto_examples/agn**:
 
 .. container::
 
@@ -32,8 +32,23 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_lines_compare.py` (``plot_agn_lines_compare.py``)
-     - 00:08.831
+   * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_xcigale_sweep.py` (``plot_skirtor_xcigale_sweep.py``)
+     - 00:03.685
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_host_decomposition.py` (``plot_agn_host_decomposition.py``)
+     - 00:02.679
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_ulirg_to_qso_transition.py` (``plot_ulirg_to_qso_transition.py``)
+     - 00:01.429
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_slone_netzer_disc_sweep.py` (``plot_slone_netzer_disc_sweep.py``)
+     - 00:01.228
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_smbh_growth_track.py` (``plot_smbh_growth_track.py``)
+     - 00:00.991
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py` (``plot_alpha_ox_lusso_risaliti.py``)
+     - 00:00.803
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py` (``plot_agn_alpha_ox_lbol_2d.py``)
      - 00:00.000
@@ -56,7 +71,7 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_hierarchy.py` (``plot_agn_hierarchy.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_host_decomposition.py` (``plot_agn_host_decomposition.py``)
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_lines_compare.py` (``plot_agn_lines_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_qsogen_ebv_sweep.py` (``plot_agn_qsogen_ebv_sweep.py``)
@@ -66,9 +81,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_torus_compare.py` (``plot_agn_torus_compare.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py` (``plot_alpha_ox_lusso_risaliti.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_uv_xray_connection.py` (``plot_alpha_ox_uv_xray_connection.py``)
@@ -137,15 +149,6 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_vs_smooth_torus.py` (``plot_skirtor_vs_smooth_torus.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_xcigale_sweep.py` (``plot_skirtor_xcigale_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_slone_netzer_disc_sweep.py` (``plot_slone_netzer_disc_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_smbh_growth_track.py` (``plot_smbh_growth_track.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_torus_library_inclination_grid.py` (``plot_torus_library_inclination_grid.py``)
      - 00:00.000
      - 0.0
@@ -156,8 +159,5 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_type1_type2_unified_model.py` (``plot_type1_type2_unified_model.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_ulirg_to_qso_transition.py` (``plot_ulirg_to_qso_transition.py``)
      - 00:00.000
      - 0.0

@@ -23,6 +23,7 @@ where f_cal is a free parameter inferred from data (typically 1-15%).
 
 References
 ----------
+
 - Enßlin et al. (2009): Information field theory
 - Knollmüller & Enßlin (2019): Encoding prior knowledge in the structure of
   the likelihood
@@ -455,6 +456,7 @@ def variable_noise_metric_vec(
     """GGN metric-vector product for VariableCovarianceGaussian.
 
     Computes M @ v = J^T H_E J v + v, where:
+
     - J is the Jacobian of (f, τ) w.r.t. ξ
     - H_E is the Hessian of E w.r.t. (f, τ):
         d²E/df² = τ²
@@ -787,6 +789,7 @@ class PoissonNoiseLikelihood:
     when observed count rates are ≥ ~5 photons (Newberry 1991).
 
     The variance combines:
+
     - Poisson shot noise: σ²_shot = F / g (counts → e⁻)
     - Sky background: σ²_sky = σ_sky² / g
     - Read noise: σ²_read = σ_read² / g²

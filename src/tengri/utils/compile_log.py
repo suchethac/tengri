@@ -18,12 +18,14 @@ Then run a notebook. A JSON lines log will be written to
     python scripts/analyze_compile_log.py
 
 Each log entry is a single JSON object with:
+
 - ``timestamp``: ISO 8601 timestamp
 - ``name``: function/phase name (e.g., "signal_response", "run_hmc")
 - ``method``: inference method if applicable (e.g., "mcmc_hmc", "vi")
 - ``signature``: stringified compile_signature tuple for deduplication
 - ``duration_s``: wall-clock compile time in seconds
 - ``inferred_cache_hit``: boolean heuristic (duration < 1.0 s)
+
 """
 
 from __future__ import annotations

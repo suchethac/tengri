@@ -33,6 +33,7 @@ def plot_sfh(
     """Plot SFH posterior with uncertainty band — BAGPIPES/Prospector style.
 
     Features:
+
     - Filled 68% credible interval (not sample spaghetti)
     - Optional faint sample draws underneath
     - Truth as solid black line

@@ -1132,6 +1132,7 @@ class Posterior:
         Notes
         -----
         The table includes:
+
         - Method name and number of samples (or ``"MAP"``)
         - Wall-clock time in seconds
         - Parameter names with median and credible intervals
@@ -1328,8 +1329,10 @@ class Posterior:
         Notes
         -----
         Two autocorrelation time estimates are computed:
+
         - tau_standard: based on standard ACF
         - tau_absolute: based on absolute-deviation ACF (robust to mean/variance changes)
+
         The maximum is returned (conservative). ESS = N / tau_max.
         Convergence flag uses the criterion N > 5τ_max from Behroozi (2025).
 
@@ -1850,9 +1853,11 @@ class Posterior:
         -----
         For MAP results, all parameters become ``Fixed`` at the MAP value.
         For sampling methods, each parameter gets a ``Gaussian`` prior with:
+
         - mean: median of samples
         - sigma: standard deviation of samples
         - bounds: [min, max] from samples (clipping)
+
         Inherits ``stochastic`` and ``n_grid`` settings from the original model.
 
         Examples
@@ -1956,11 +1961,13 @@ class Posterior:
         Notes
         -----
         Saves to HDF5 format with groups:
+
         - ``samples``: posterior samples (if available)
         - ``params``: best-fit or MAP parameters
         - ``loss_history``: optimization loss over iterations (if available)
         - ``diagnostics``: method-specific convergence metrics
         - ``eline``: emission line fluxes, covariances, names, wavelengths
+
         Use ``load()`` to restore the Posterior from disk.
 
         Examples

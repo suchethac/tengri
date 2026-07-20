@@ -16,6 +16,7 @@ parameter family:
   Registered when ``dla=True``. Backs ``_DLA_PARAMS``. The ``dla_*``
   prefix is owned here because the DLA absorber is conceptually an
   IGM/line-of-sight phenomenon.
+
 """
 
 from __future__ import annotations

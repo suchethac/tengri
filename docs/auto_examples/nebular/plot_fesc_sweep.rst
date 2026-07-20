@@ -32,11 +32,12 @@ highlighting the Lyman continuum discontinuity (800–1350 Å). Contours
 trace how f_esc modulates the ionizing photon budget seen by the ISM.
 
 References:
+
 - Inoue et al. 2014, MNRAS, 442, 1805 (escape fraction formalism)
 - Steidel et al. 2018, ApJ, 869, 123 (Lyman continuum observations)
 - Li et al. 2024, ApJ, 969, 28 (Cue emulator)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-107
+.. GENERATED FROM PYTHON SOURCE LINES 22-109
 
 
 
@@ -46,19 +47,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/examples/nebular/plot_fesc_sweep.py:105: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
-      fig.tight_layout()
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -149,11 +139,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_fesc_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.954 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_fesc_sweep.py:

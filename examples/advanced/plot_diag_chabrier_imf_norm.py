@@ -18,6 +18,7 @@ mass-remaining curve is NOT currently exposed on the public surface
 References:
 
 - Chabrier 2003 PASP 115 763.
+
 """
 
 import warnings

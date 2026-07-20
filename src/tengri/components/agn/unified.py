@@ -62,6 +62,7 @@ for compatibility with gradient-based inference (VI, HMC):
 
 Pre-registered configurations
 ------------------------------
+
 - **multicolor_agn** (= deprecated alias ``kubota_done``): multi-color disc with
   BH physics + 2-T torus (8+ params).
 - **kubota_done_full**: full Kubota & Done 3-zone disc + 2-T torus (13+ params).
@@ -935,8 +936,8 @@ def skirtor_stalevski_agn(
     Returns
     -------
     ndarray, shape (n_wave,)
-        L_nu [erg/s/Hz], total SKIRTOR SED scaled to ``10**agn_log_lbol * L_sun
-        * agn_frac``.
+        L_nu [erg/s/Hz], total SKIRTOR SED scaled to
+        ``10**agn_log_lbol * L_sun * agn_frac``.
 
     Notes
     -----

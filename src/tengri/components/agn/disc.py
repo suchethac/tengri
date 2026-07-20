@@ -22,6 +22,7 @@ Physical constants are in CGS. Wavelength inputs are in Angstrom.
 
 References
 ----------
+
 - Shakura & Sunyaev 1973, A&A, 24, 337
 - Kubota & Done 2018, MNRAS, 480, 1247
 - Nandra & Pounds 1994, MNRAS, 268, 405 (power-law slopes)
@@ -30,6 +31,7 @@ References
 - Nemmen et al. 2014, MNRAS, 438, 2804 (ADAF modeling)
 - Lopez et al. 2024 (ADAF + truncated disc for LLAGN)
 - Beloborodov 1999, ApJ, 510, L123 (self-consistent Gamma_hot)
+
 """
 
 import functools
@@ -366,6 +368,7 @@ def _self_gravity_radius(log_mbh: float, l_edd_ratio: float, alpha_visc: float =
 
     Laor & Netzer (1989), Eq. 10:
         r_sg = 2150 * (alpha/0.1)^{2/9} * lambda_Edd^{4/9}
+
                * (M_BH / 10^9 M_sun)^{-2/9}   [R_g]
 
     where lambda_Edd = L_bol / L_Edd is the Eddington ratio and
@@ -869,6 +872,7 @@ def _compute_bh_params(
     -------
     tuple
         (r_g, r_isco_rg, r_isco_cm, eta, l_edd, mdot) where:
+
         - r_g : Gravitational radius [cm]
         - r_isco_rg : ISCO radius in units of r_g [dimensionless]
         - r_isco_cm : ISCO radius [cm]
@@ -1054,6 +1058,7 @@ def _compute_zone_luminosities(
     -------
     tuple
         (l_nu_total, scale) where:
+
         - l_nu_total : Unnormalized total L_ν [erg s^-1 Hz^-1] (before scaling)
         - scale : Normalization scale factor to conserve L_bol [dimensionless]
 

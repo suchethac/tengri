@@ -15,11 +15,13 @@ star-forming galaxies cluster below this threshold.
 This gallery:
 
 1. Builds ~50 star-forming galaxy models with:
+
    - Variable dust opacity (tau_diff ∈ [0, 2], tau_bc ∈ [0.1, 1.5])
    - Fixed SFH shape (DPL) and redshift (z = 0.1)
    - Fixed dust temperature (35 K, cool)
 
 2. Builds ~10 hot-dust-emission models (AGN proxy) with:
+
    - Suppressed stellar emission (log_sfr = −2)
    - Variable dust temperature (60–100 K, hotter than SF)
    - Variable opacity to mimic AGN-heated torus

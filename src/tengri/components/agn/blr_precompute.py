@@ -92,6 +92,7 @@ def precompute(
     -------
     dict
         Keys:
+
         - ``line_wavelengths_obs``: (n_lines,) observed-frame wavelengths [A].
         - ``line_strengths``: (n_lines,) relative line strengths.
         - ``feii_centers``: (n_feii,) Fe II group centers [A], observed frame.
@@ -111,10 +112,12 @@ def precompute(
     **Precompute vs runtime split**:
 
     Precompute-fixed (lines 1–3 in this module):
+
         - Line/Fe II center wavelengths
         - Filter projection matrix (delta function at center)
 
     Runtime-varying:
+
         - Line widths (sigma_BLR in km/s)
         - Line ratios (relative strengths per AGN type / continuum)
 
@@ -182,6 +185,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
     -------
     dict
         Keys:
+
         - ``predict_blr_photometry``: JIT-compiled callable returning
           (n_filt,) photometry array [erg/s/Hz].
         - ``line_wavelengths_obs``: line vacuum wavelengths [Angstrom].

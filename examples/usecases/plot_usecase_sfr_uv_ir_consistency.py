@@ -22,8 +22,10 @@ The plot demonstrates the key physics:
 
 References
 ----------
+
 - Kennicutt 1998, ARA&A, 36, 189 — SFR UV/IR/radio calibrations
 - Hao et al. 2011, ApJ, 741, 124 — hybrid UV+IR SFR recipe
+
 """
 
 import os

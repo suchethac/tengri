@@ -23,6 +23,7 @@ References:
 
 - Papovich et al. 2001, AJ, 122, 1
 - Poggianti & Barbaro 1997, A&A, 325, 1025
+
 """
 
 import os

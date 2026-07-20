@@ -648,6 +648,7 @@ def csp_log_interp_matrix(ssp_ages_yr, n_gl: int = 5):
     interval, exact for polynomials up to degree 9.
 
     The returned matrix is symmetric tridiagonal:
+
     - A[j, j-1] = contribution from left interval via b_j
     - A[j, j]   = sum of right-interval a_j and left-interval b_j contributions
     - A[j, j+1] = contribution from right interval via a_j (symmetric)
@@ -1961,6 +1962,7 @@ def compute_log_z_evolving(
     The metallicity evolves linearly in log(Z/Zsun) space:
 
         log_z(t_lookback) = log_z_final + (log_z_initial - log_z_final)
+
                             * t_lookback / t_universe
 
     where t_lookback=0 is today (log_z_final) and t_lookback=t_universe

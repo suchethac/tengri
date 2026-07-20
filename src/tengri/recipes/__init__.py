@@ -57,6 +57,7 @@ def star_forming_photometry() -> dict:
     ``CueWNESSPError``.
 
     **Configuration:**
+
     - **SFH**: Dual power-law (DPL) with all parameters free
     - **Dust**: Two-component Calzetti attenuation (both optical depths free)
     - **Dust IR emission**: Dale2014 templates (fixed)
@@ -106,6 +107,7 @@ def quiescent_z0() -> dict:
     :func:`star_forming_photometry` for details).
 
     **Configuration:**
+
     - **SFH**: Delayed-exponential (dexp) with all parameters free
     - **Dust**: Two-component Calzetti attenuation (both optical depths free,
       lower bounds than star-forming recipe)
@@ -159,6 +161,7 @@ def high_z() -> dict:
     contribution.
 
     **Configuration:**
+
     - **SFH**: Truncated skew-normal (tsnorm) — bursty, short timescales
     - **Dust**: Two-component, Calzetti birth cloud + power-law diffuse
       (slope fixed at -0.7), no IR emission block
@@ -220,6 +223,7 @@ def photoz() -> dict:
     **SSP requirement:** any (nebular emission is off).
 
     **Configuration:**
+
     - **SFH**: Double power-law with extended timescales (tau up to 13 Gyr)
     - **Dust**: Two-component, Calzetti birth cloud + power-law diffuse
       (slope fixed at -0.7), wide optical-depth ranges for photo-z
@@ -280,6 +284,7 @@ def agn_panchromatic() -> dict:
     :func:`star_forming_photometry` for details).
 
     **Configuration:**
+
     - **SFH**: DPL (free)
     - **Dust**: Two-component Calzetti attenuation (free)
     - **Dust IR emission**: Dale2014 (free)
@@ -345,6 +350,7 @@ def composable_agn() -> dict:
     tengri. No external Synthesizer Cloudy grids or other downloads needed.
 
     **Configuration:**
+
     - **Disc**: Multicolor accretion disc (free)
     - **NLR**: Analytic narrow-line region (free)
     - **BLR**: Analytic broad-line region (free)
@@ -417,6 +423,7 @@ def stochastic_sfh_jwst() -> dict:
     :func:`star_forming_photometry` for details).
 
     **Configuration:**
+
     - **SFH**: DPL + stochastic field composition (both free)
     - **Dust**: Two-component Calzetti attenuation (free)
     - **Dust IR emission**: Dale2014 (fixed)
@@ -469,6 +476,7 @@ def mock_recovery_minimal() -> dict:
     works with both bare-stellar and wNE SSP files.
 
     **Configuration:**
+
     - **SFH**: Truncated skew-normal (tsnorm) with ~4 free params
     - **Dust**: Calzetti attenuation (tau_bc free)
     - **Dust IR emission**: Disabled (no PAH/continuum)
@@ -521,6 +529,7 @@ def dust_demo() -> dict:
     (The bare-stellar ``load_ssp()`` default carries no baked nebular lines.)
 
     **Configuration:**
+
     - **SFH**: Truncated skew-normal peaked at ~0.5 Gyr (young SF)
     - **Dust**: Two-component Calzetti attenuation, τ_BC = 1, τ_diff = 0.3, δ = -0.7
     - **Dust IR emission**: Disabled (gallery wavelength range is UV-optical)
@@ -591,6 +600,7 @@ def unified_agn() -> dict:
     --agn-test-grids``. Tests will be skipped if grids are absent.
 
     **Configuration:**
+
     - **Disc**: Kubota & Done accretion disc (free)
     - **NLR**: Synthesizer Cloudy photoionization grid (free)
     - **BLR**: Synthesizer Cloudy photoionization grid (free)

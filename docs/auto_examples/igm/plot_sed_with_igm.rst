@@ -35,10 +35,11 @@ the u-band drops out entirely, at z ≥ 6 g goes dark, at z ≥ 8 r
 goes dark.
 
 References:
+
 - Inoue et al. 2014, MNRAS, 442, 1805
 - Steidel et al. 1996, AJ, 112, 352 (LBG dropout origins)
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-100
+.. GENERATED FROM PYTHON SOURCE LINES 24-101
 
 
 

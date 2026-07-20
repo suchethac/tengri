@@ -29,6 +29,7 @@ spectral peak walks across the UV/optical as those two knobs change:
 
 - **More massive black holes** have larger, cooler discs — the big blue bump
   shifts redward (toward the optical).
+
 - **Higher Eddington ratios** push more material through the inner disc —
   the peak moves blueward and the disc brightens.
 
@@ -51,7 +52,7 @@ References
    spectral energy distributions of AGNs," A&A 688, A46 (2024).
    arXiv:2405.12111. https://doi.org/10.1051/0004-6361/202449329
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-138
+.. GENERATED FROM PYTHON SOURCE LINES 36-139
 
 
 

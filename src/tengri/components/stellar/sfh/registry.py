@@ -22,6 +22,7 @@ The returned ``fn`` is a pure JAX closure that can be JIT-compiled.
 
 References
 ----------
+
 - Bellstedt+2020 (arXiv:2005.11917): snorm, tsnorm.
 - Robotham+2020 (arXiv:2002.06980): snorm_burst, tsnorm_burst (ProSpect).
 - Carnall+2018: DPL.
@@ -1711,7 +1712,8 @@ def resolve_sfh(
     Returns
     -------
     composed_fn : callable
-        Pure JAX function: fn(t_lookback, **all_internal_kwargs) -> SFR [Msun/yr].
+        Pure JAX function ``fn(t_lookback, **all_internal_kwargs) -> SFR``
+        [Msun/yr].
     merged_params : dict[str, ParamDef]
         All fittable parameters across selected models.
     merged_param_map : dict[str, tuple[str, float, float]]

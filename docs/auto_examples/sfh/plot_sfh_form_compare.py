@@ -9,6 +9,7 @@ total stellar mass, so the differences are entirely in the *shape* —
 not the normalization.
 
 Forms shown:
+
 - ``const``, ``exp``, ``dexp``, ``tau``           — single-parameter classics
 - ``lnorm``, ``snorm``, ``tsnorm``                — peaked smooth families
 - ``dpl``                                          — Carnall+2018 double power-law

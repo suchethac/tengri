@@ -19,7 +19,7 @@
 
 
 Dust attenuation: uncertainty in SED from dust parameter estimation
-==================================================================
+===================================================================
 
 Demonstrates dust attenuation effects and how fitting uncertainty propagates
 to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff)
@@ -195,7 +195,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.025 seconds)
+   **Total running time of the script:** (0 minutes 4.352 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_dust_mc_resampling.py:

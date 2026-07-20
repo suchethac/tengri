@@ -196,6 +196,7 @@ class XRayQuantities(NamedTuple):
     - ``l_x_agn`` (erg/s) — AGN X-ray luminosity from the published
       ``L_agn_bol`` via :func:`compute_l_x_agn`.
     - ``l_x_total`` (erg/s) — sum of the two.
+
     """
 
     l_x_xrb: jnp.ndarray
@@ -212,6 +213,7 @@ class IonizingQuantities(NamedTuple):
     - ``q_h`` (photons/s) — total ionizing photon production rate;
       sourced directly from ``state.derived["nion"]``.
     - ``xi_ion`` (Hz/erg) — production efficiency q_h / νLν(1500 Å).
+
     """
 
     q_h: jnp.ndarray

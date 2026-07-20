@@ -20,6 +20,7 @@ References:
 - Kewley & Dopita 2002, ApJS, 142, 35 (strong-line calibrations)
 - Marino et al. 2013, ApJ, 768, 171 (N2 metallicity diagnostic)
 - Pettini & Pagel 2004, MNRAS, 348, L59 (O3N2 diagnostic)
+
 """
 
 import os

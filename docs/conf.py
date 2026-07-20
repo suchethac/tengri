@@ -509,6 +509,17 @@ suppress_warnings = [
     # MyST reports "Document headings start at H2". The heading exists; it is
     # just HTML so it can carry the hero styling.
     "myst.header",
+    # Ambiguity only. ``nitpicky`` is off, so Sphinx does not report unresolved
+    # Python references; the sole ``ref.python`` warning left is "more than one
+    # target found for cross-reference 'n_grid'". That comes from the shape
+    # annotations the docstring standard mandates —
+    # ``ndarray, shape (n_grid,)`` — where the shape variable happens to share
+    # a name with a property documented on ForwardModel, SEDModel and
+    # Parameters (the same value, delegated down the chain). Sphinx picks one
+    # and links it. The alternatives are dropping the mandated shape
+    # annotation or hiding two of the three properties; neither is an
+    # improvement.
+    "ref.python",
 ]
 
 # -- intersphinx mapping -----------------------------------------------------

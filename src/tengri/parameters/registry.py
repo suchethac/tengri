@@ -224,6 +224,7 @@ def as_param_map() -> dict[str, tuple[str, float, float, str]]:
 
     This is the canonical view for parameter translation. Each entry maps
     a public parameter name to a 4-tuple of:
+
     - internal name (used internally in computations)
     - scale factor (multiplicative conversion)
     - offset (additive conversion: internal = scale * public + offset)

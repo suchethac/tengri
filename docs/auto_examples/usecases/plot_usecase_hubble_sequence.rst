@@ -33,10 +33,11 @@ emerging atlas shows the same chromatic ordering as Coleman+1980:
 ellipticals are reddest at all wavelengths, irregulars dominate the UV.
 
 References:
+
 - Coleman, Wu & Weedman 1980, ApJS, 43, 393
 - Kennicutt 1992, ApJS, 79, 255 (modern revision of the atlas)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-100
+.. GENERATED FROM PYTHON SOURCE LINES 22-102
 
 
 
@@ -46,19 +47,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

@@ -21,8 +21,10 @@ References:
   - Bradbury et al. 2018 (JAX: composable transformations):
 
     arXiv:1811.02693
+
   - Hearin et al. 2023 (DSPS — differentiable stellar population synthesis):
     arXiv:2308.16742
+
 """
 
 import os

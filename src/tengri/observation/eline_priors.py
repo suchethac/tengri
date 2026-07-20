@@ -14,6 +14,7 @@ All functions are pure JAX and JIT-compatible.
 
 References
 ----------
+
 - Byler+2017: CLOUDY+MESA Isochrones nebular emission predictions.
 - Johnson+2021: Prospector emission line marginalization.
 - Ferland+2017: CLOUDY photoionization code.

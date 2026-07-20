@@ -37,11 +37,12 @@ predictions for the 2-10 keV luminosity differ by a factor of ~2.
 
 References
 ----------
+
 - Just et al. 2007, ApJ 665, 1004.
 - Lusso & Risaliti 2016, ApJ 819, 154.
 - Lusso & Risaliti 2017, A&A 602, A79.
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-106
+.. GENERATED FROM PYTHON SOURCE LINES 27-108
 
 
 

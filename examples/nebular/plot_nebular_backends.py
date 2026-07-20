@@ -17,6 +17,7 @@ References:
 
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue neural emulator)
 - Byler et al. 2017, ApJ, 840, 44 (BakedIn SSP-embedded lines)
+
 """
 
 import os

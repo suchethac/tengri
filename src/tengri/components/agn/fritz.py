@@ -7,6 +7,7 @@ smooth inference (VI, MAP, NUTS).
 
 The Fritz2006 model provides a semi-empirical radiative-transfer grid of
 dust torus SEDs parameterized by six dimensions:
+
 - r_ratio: maximum-to-minimum dust torus radius ratio
 - tau: optical depth at 9.7 µm
 - beta: radial dust density power-law index

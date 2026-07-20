@@ -17,6 +17,7 @@ References:
 - Inoue et al. 2014, MNRAS, 442, 1805 (escape fraction formalism)
 - Steidel et al. 2018, ApJ, 869, 123 (Lyman continuum observations)
 - Li et al. 2024, ApJ, 969, 28 (Cue emulator)
+
 """
 
 import os

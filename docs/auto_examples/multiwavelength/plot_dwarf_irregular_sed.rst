@@ -30,6 +30,7 @@ Metal-poor stellar populations and active star formation drive the
 starburst signature visible from UV through optical.
 
 **References:**
+
  - Östlin et al. (2014) [1]_ for dwarf starburst SED archetypes
  - Chabrier (2003) [2]_ for young, metal-poor IMF
  - Cue (2009) [3]_ for nebular emission at low metallicity
@@ -46,7 +47,7 @@ starburst signature visible from UV through optical.
    *Astrophys. J. Suppl. Ser.* **183**, 1–39.
    https://doi.org/10.1088/0067-0049/183/1/1
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-126
+.. GENERATED FROM PYTHON SOURCE LINES 31-127
 
 
 
@@ -157,11 +158,6 @@ starburst signature visible from UV through optical.
 
     fig.tight_layout()
     plt.savefig("plot_dwarf_irregular_sed.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 27.571 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_dwarf_irregular_sed.py:

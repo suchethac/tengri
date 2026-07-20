@@ -10,6 +10,7 @@ weights the Green's function by the mean SFH, telling you which
 lookback times actually contribute to the observed flux.
 
 Together these answer:
+
 - "Which ages does H-alpha probe?" (young, ~few Myr)
 - "Which ages does the Balmer break probe?" (intermediate, ~100 Myr-1 Gyr)
 - "Which ages does the K-band probe?" (old, ~Gyr)
@@ -131,7 +132,7 @@ def compute_window_function_fourier(window_fn, ssp_ages_yr):
     Returns
     -------
     power_transfer : array, shape (n_freq,)
-        |W_tilde(omega)|^2 — the PSD-to-observable transfer function.
+        ``|W_tilde(omega)|^2`` — the PSD-to-observable transfer function.
     omega : array, shape (n_freq,)
         Angular frequencies (rad/yr).
     """

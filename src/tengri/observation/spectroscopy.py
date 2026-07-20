@@ -653,6 +653,7 @@ class Spectroscopy:
         error to infinity.
 
         Unit conversions:
+
         - Wavelength: µm → Å (×10⁴)
         - Flux: µJy → erg/s/cm²/Hz (×10⁻²⁹)
 

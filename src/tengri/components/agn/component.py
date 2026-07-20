@@ -13,6 +13,7 @@ is read from :data:`BARE_NAME_ALLOWLIST`.
 
 Cross-component publications
 ----------------------------
+
 - ``state.derived["L_agn_bol"]`` (scalar, erg/s) — bolometric AGN
   luminosity. Consumed by
   :class:`tengri.components.xray.XRaySEDComponent` and
@@ -193,6 +194,7 @@ class AGNSEDComponent:
         r"""Cache filter passbands and SKIRTOR templates for precomputation.
 
         When ``approx=WavePrecomp()`` is set:
+
         - Stores filter passbands so :meth:`apply` can publish
           ``agn_phot_lnu_precomp`` (filter-integrated AGN photometry).
         - If the AGN model is "skirtor", pre-loads the template grids

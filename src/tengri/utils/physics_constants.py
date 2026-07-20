@@ -6,6 +6,7 @@ every numerical value can be audited against the primary reference.
 
 Sources
 -------
+
 - **CODATA 2018** (NIST): https://physics.nist.gov/cuu/Constants/
   h, k_B, c, G, σ_T, m_p, m_e are exact or CODATA-2018 recommended.
   Note: h, k_B, and c are *exact* in SI since the 2019 SI redefinition.
@@ -24,6 +25,7 @@ each line shows::
 
 Naming conventions
 ------------------
+
 - ``H_PLANCK``   — Planck's constant h
 - ``K_BOLTZ``    — Boltzmann constant k_B
 - ``C_CGS``      — speed of light c in cm/s

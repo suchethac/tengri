@@ -23,6 +23,7 @@ References:
 - Conroy 2013, ARA&A, 51, 393 (§3, SED fitting overview)
 - Worthey 1994, ApJS, 95, 107 (age/Z degeneracy origin)
 - Meurer et al. 1999, ApJ, 521, 64 (UV slope as diagnostic)
+
 """
 
 import os

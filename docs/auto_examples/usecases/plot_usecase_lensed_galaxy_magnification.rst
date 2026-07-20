@@ -19,7 +19,7 @@
 
 
 Strong-lensing magnification: EoR galaxy SEDs at μ = 1, 5, 20, 100
-=========================================================
+==================================================================
 
 Demonstrates how strong gravitational lensing elevates intrinsically-faint
 high-redshift (z=7) galaxies above the JWST NIRCam 5σ detection threshold.
@@ -35,12 +35,13 @@ how only μ ≥ 5 crosses the detection threshold, making strong lensing critica
 observing the faintest reionization-epoch objects.
 
 References:
+
 - Refsdal, S. 1964, MNRAS, 128, 295 (gravitational lensing magnification)
 - Schaerer, D. 2003, A&A, 397, 527 (z>6 Lya emitters)
 - Bouwens, R. J., et al. 2022, ApJ, 931, 160 (EoR LBGs)
 - Rieke, M. J., et al. 2023, PASP, 135, 028001 (JWST NIRCam performance)
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-212
+.. GENERATED FROM PYTHON SOURCE LINES 26-214
 
 
 
@@ -50,19 +51,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -254,11 +244,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_usecase_lensed_galaxy_magnification.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 18.325 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_lensed_galaxy_magnification.py:

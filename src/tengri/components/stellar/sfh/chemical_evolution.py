@@ -17,10 +17,12 @@ where y is the nucleosynthetic yield, eta is the mass-loading factor
 
 References
 ----------
+
 - Bellstedt et al. 2020 (MNRAS 498, 5581): ProSpect chemical evolution
 - Bellstedt et al. 2021 (MNRAS 503, 3309): Shark + ProSpect validation
 - Leja et al. 2019 (ApJ 876, 3): Prospector continuity SFH
 - Tinsley 1980 (Fundamentals of Cosmic Physics 5, 287): closed-box model
+
 """
 
 from __future__ import annotations

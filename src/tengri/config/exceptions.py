@@ -31,6 +31,7 @@ class ParameterMapError(ParameterError):
     """Parameter map validation failure during SEDModel construction.
 
     Raised when:
+
     - A free parameter in spec has no entry in the parameter map
     - Multiple components claim conflicting (scale, offset) for the same parameter
     - Other parameter map consistency violations

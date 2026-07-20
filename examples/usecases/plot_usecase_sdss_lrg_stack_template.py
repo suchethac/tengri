@@ -22,6 +22,7 @@ References:
 
 - Eisenstein et al. 2001, AJ, 122, 2267 (SDSS LRG selection)
 - Thomas et al. 2005, ApJ, 621, 673 (red-sequence ages)
+
 """
 
 import os

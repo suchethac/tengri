@@ -8,6 +8,7 @@ users can write ``from tengri import units`` without reaching into
 
 Conventions
 -----------
+
 - Wavelength: Angstrom (vacuum throughout).
 - L_nu: erg/s/Hz.
 - F_nu: erg/s/cm^2/Hz (cgs); helpers convert to/from Jy, mJy, uJy, nJy,

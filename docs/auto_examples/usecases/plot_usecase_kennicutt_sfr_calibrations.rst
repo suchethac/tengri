@@ -43,10 +43,11 @@ each indicator exhibits different scatter. Hα shows highest variance (most
 sensitive to recent star formation), while bolometric is most stable.
 
 References:
+
 - Kennicutt 1998, ARA&A, 36, 189 (baseline calibrations)
 - Conroy 2013, ARA&A, 51, 393 (SED fitting; SFR diagnostics)
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-218
+.. GENERATED FROM PYTHON SOURCE LINES 32-220
 
 
 
@@ -56,19 +57,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

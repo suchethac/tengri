@@ -538,6 +538,7 @@ def compute_analytic_nebular_continuum(
         is the Einstein A coefficient for the forbidden 2s → 1s transition.
 
     **Approximation flags**:
+
         - **Missing continua**: Free-bound (recombination) continuum is omitted
           (contributes λ < 3646 Å, Balmer limit). This is acceptable for optical
           SEDs but underestimates UV flux shortward of the Balmer limit.

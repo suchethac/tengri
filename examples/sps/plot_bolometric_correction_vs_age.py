@@ -19,6 +19,7 @@ References:
 
 - Conroy, Gunn, White 2009 ApJ 699 486.
 - Bruzual & Charlot 2003 MNRAS 344 1000.
+
 """
 
 import warnings

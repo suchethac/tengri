@@ -25,11 +25,11 @@ parameters, returning SFR in solar masses per year.
 
 .. autofunction:: tengri.delayed_tau
 
-.. autofunction:: tengri.constant_sfh
+.. autofunction:: tengri.constant
 
-.. autofunction:: tengri.exponential_sfh
+.. autofunction:: tengri.exponential
 
-.. autofunction:: tengri.delayed_exponential_sfh
+.. autofunction:: tengri.delayed_exponential
 
 .. autofunction:: tengri.triweight_burst
 

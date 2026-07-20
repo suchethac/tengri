@@ -96,8 +96,10 @@ def logX(rng_key: PRNGKey, dead_info: NSInfo, shape: int = 100) -> tuple[Array, 
     Returns
     -------
     tuple[Array, Array]
+
         - logX_cumulative: shape (n_dead, shape)
         - log_dX_elements: shape (n_dead, shape)
+
     """
     rng_key, subkey = jax.random.split(rng_key)
     u = jax.random.uniform(

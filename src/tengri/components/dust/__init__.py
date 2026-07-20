@@ -38,6 +38,7 @@ Internal plumbing:
 - ``_protocol.py`` — structural Protocols for laws and templates.
 - ``*_precompute.py`` — build-time LUT construction for the
   ``approx=WavePrecomp(...)`` path.
+
 """
 
 # Convenience re-exports for `from tengri.dust import ...`

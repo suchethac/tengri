@@ -37,6 +37,7 @@ marker lines to jump. In order:
 
 - ``Backend Registry Initialization`` — imports that populate the
   registry at module load
+
 """
 
 from __future__ import annotations
@@ -905,10 +906,12 @@ class Fitter:
 
         Notes
         -----
+
         - ``None`` → ``()`` (no background compile)
         - ``"auto"`` → infer from ``spec.stochastic`` and ``data_type``
         - ``str`` → wrap as ``(str,)``
         - ``tuple`` → return as-is
+
         """
         if compile_modes is None:
             return ()
@@ -2231,6 +2234,7 @@ class Fitter:
         Notes
         -----
         The summary includes:
+
         - Data dimensionality and median signal-to-noise ratio
         - Free parameters and latent grid points (ξ) if stochastic SFH
         - Parameter names, prior distributions, and bounds

@@ -7,6 +7,7 @@ module and registers itself for automatic discovery in the SEDModelComponent
 registry.
 
 Available models (auto-registered):
+
 - ``dale2014`` — Dale et al. (2014) 1-parameter template
 - ``dale2014_cigale`` — CIGALE variant of Dale et al. (2014)
 - ``draine_li2007`` — Draine & Li (2007) 3-parameter template

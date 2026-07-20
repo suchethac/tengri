@@ -89,6 +89,7 @@ require Synthesizer Box credentials (``synthesizer-download --agn-grids``).
 
 References
 ----------
+
 - Li et al. 2024, ApJ, 969, 28 (Cue v1)
 - Li et al. 2025, ApJ, 986, 9 (Cue v2, AGN extension)
 - Gutkin, Charlot & Bruzual 2016, MNRAS, 462, 1757 (BEAGLE HII grids)

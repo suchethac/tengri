@@ -135,6 +135,7 @@ The Synthesizer test grids (2-point per axis, 19 MB each) are at
 
 References
 ----------
+
 - Feltre, Charlot & Gutkin 2016, MNRAS, 456, 3354 (arXiv:1511.08217)
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
 - Li et al. 2024, ApJ, 969, 28 (Cue v1)
@@ -651,6 +652,7 @@ class SynthesizerNLRBackend:
     ----------------------
     All 6 axes use C²-continuous triweight interpolation via
     ``interp_nd_triweight``:
+
     - Internal storage in log10 (except cosine_inclination, which is linear)
     - All axes interpolated independently
 
@@ -1139,6 +1141,7 @@ class FeltreNLRBackend:
 
     Interpolation strategy
     ----------------------
+
     - **Continuous axes** (log U_S, log Z, log n_H): C²-continuous triweight
       interpolation via ``interp_nd_triweight`` — compatible with VI/MAP.
     - **Discrete axes** (α, ξ_d): nearest-neighbor index lookup.
@@ -1374,6 +1377,7 @@ def agn_nlr_emission(
     Returns
     -------
     tuple
+
         - line_wavelengths : ndarray, shape (n_lines,) — emission line vacuum
           wavelengths [Angstrom]
         - line_luminosities : ndarray, shape (n_lines,) — emission line
