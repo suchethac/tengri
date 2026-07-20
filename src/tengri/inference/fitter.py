@@ -80,6 +80,19 @@ _AUTO_D_THRESHOLD = 20
 # D threshold for "mcmc": D <= this → NUTS, D > this → Ray Tracing
 _MCMC_AUTO_D_THRESHOLD = 20
 
+#: Methods whose galaxy axis ``run(devices=...)`` can shard. It reaches that
+#: axis via ``jax.vmap`` (``forward/population_sed_model.py``), which GSPMD
+#: partitions from a sharding on the data alone. Everything else — the NIFTy VI
+#: backends, every sampler — would accept the argument and ignore it, so passing
+#: ``devices=`` to those warns instead. See :mod:`tengri.inference.sharding`.
+#:
+#: ``native_vi_nonlinear`` (geoVI) is deliberately absent: its coordinate
+#: transform (``curve_residual`` / ``transformation_flat`` /
+#: ``left_sqrt_metric_flat``) carries flat quantities that would need the same
+#: replication constraints as the MGVI pair, and that has not been measured.
+#: Listing it here unverified is how a "supported" option becomes a crash.
+_SHARDABLE_METHODS = frozenset({"native_vi_linear"})
+
 # Samplers that evaluate the forward model thousands of times per fit. On the
 # exact wave-grid photometry path (no WavePrecomp LUT) each evaluation costs
 # several times more (~2-6x measured, depending on which components are active),
@@ -555,7 +568,10 @@ class Fitter:
         self._bounds = {n: self.spec.get_distribution(n).bounds for n in self._free_names}
 
         # ── Data arguments ─────────────────────────────────────────
-        self._data_args = self._build_data_args(model)
+        # Stored replicated. ``_data_args`` (the property below) hands out a
+        # galaxy-sharded view when ``run(devices=...)`` asked for one, so a
+        # sharded run cannot leave stale sharding behind for the next one.
+        self._data_args_raw = self._build_data_args(model)
 
         # ── Auto-build Protocol likelihood (option β default) ──────
         # When the user didn't pass a custom likelihood AND none of the
@@ -814,6 +830,26 @@ class Fitter:
         else:
             self._eline_amplitude_names = []
             self._eline_amp_priors = {}
+
+    @property
+    def _data_args(self) -> dict:
+        """Data arguments for this run, galaxy-sharded when ``devices=`` asked.
+
+        Sharding is applied to a *view*, never to ``_data_args_raw``, so a
+        multi-device run followed by a single-device one starts from replicated
+        arrays rather than inheriting the previous run's mesh. The sharded copy
+        is cached per device list — ``device_put`` on every access would move
+        the catalog across the interconnect once per gradient evaluation.
+        """
+        devs = getattr(self, "_devices", None)
+        if not devs or len(devs) < 2:
+            return self._data_args_raw
+        cached = getattr(self, "_data_args_sharded", None)
+        if cached is None or cached[0] != devs:
+            from tengri.inference.sharding import shard_leading_axis
+
+            self._data_args_sharded = (devs, shard_leading_axis(self._data_args_raw, devs))
+        return self._data_args_sharded[1]
 
     def _build_data_args(self, model: Any) -> dict:
         """Build the data-dependent argument dict passed to JIT'd loss functions.
@@ -1089,6 +1125,11 @@ class Fitter:
             line_ratio_cfg is not None,
             index_cfg is not None,
             self.data_mask is not None,
+            # Device count, because run(devices=...) bakes sharding constraints
+            # into the traced engine. Without it here, a multi-device run would
+            # reuse the cached single-device engine — constraint-free, and so
+            # free to propagate the galaxy sharding into the optimizer state.
+            getattr(self, "_n_devices", 1),
         )
 
     def _get_or_build_engine(self, pos_dict: dict) -> dict:
@@ -1903,6 +1944,30 @@ class Fitter:
             policy is set with ``approx=`` on the :class:`Fitter` constructor /
             :meth:`ForwardModel.fit`, not here.)
 
+        devices : None or {'all'} or list of Device, optional
+            Shard a hierarchical fit's galaxy axis across devices. ``None``
+            (default) runs on one device; ``'all'`` uses every
+            :func:`jax.devices`; a list selects specific ones. Each device then
+            evaluates the forward model for its own slice of the population,
+            and the likelihood's ``chi2`` sum combines the slices — one fit,
+            distributed, not many fits in parallel.
+
+            Only ``"native_vi_linear"`` supports it, and only for a Fitter built
+            from a ``ForwardModel`` with ``population=PopulationSEDModel(...)``.
+            Anything else — including ``"native_vi_nonlinear"`` (geoVI), whose
+            coordinate transform has not been measured under sharding — warns
+            and runs single-device rather than accepting the argument silently.
+
+            The galaxy count must divide evenly by the device count: unlike an
+            independent-galaxy catalog, a hierarchical fit couples every galaxy
+            through the shared hyperparameters, so padding with dummy galaxies
+            would bias them. ``Posterior.diagnostics["n_devices"]`` reports what
+            actually ran.
+
+            >>> post = fitter.run("native_vi_linear", devices="all")
+            >>> post.diagnostics["n_devices"]  # on an 8-GPU node
+            8
+
         **kwargs
             Method-specific keyword arguments passed to the underlying backend:
 
@@ -2124,6 +2189,47 @@ class Fitter:
         #   modes get separate cached engines.
         # - posterior_chunk_size controls peak memory of _draw_jit_samples
         #   (see _draw_posterior_samples docstring).
+        # - devices shards the galaxy axis of a hierarchical fit across a mesh.
+        #   Resolved here (same reason as memory_mode: orthogonal to the method,
+        #   so it is stashed rather than plumbed through every _run_* signature)
+        #   and consumed by the ``_data_args`` property. A method that cannot
+        #   use it says so — accepting the argument and running single-device
+        #   anyway is the failure mode this warning exists to prevent.
+        from tengri.inference.sharding import make_mesh, resolve_devices
+
+        _dev_list = resolve_devices(kwargs.pop("devices", None))
+        if _dev_list is not None and len(_dev_list) > 1:
+            import warnings
+
+            if method not in _SHARDABLE_METHODS:
+                warnings.warn(
+                    f"devices= is ignored by method {method!r}: only "
+                    f"{sorted(_SHARDABLE_METHODS)} shard the galaxy axis. "
+                    "Running on a single device.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                _dev_list = None
+            elif jnp.ndim(self.data) < 2:
+                warnings.warn(
+                    f"devices= needs a galaxy axis to shard, but this fit's data has "
+                    f"shape {jnp.shape(self.data)} — a single galaxy. Build the Fitter "
+                    "from a ForwardModel with population=PopulationSEDModel(...) to "
+                    "fit a population. Running on a single device.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                _dev_list = None
+        if getattr(self, "_devices", None) != _dev_list:
+            # A different mesh needs a different compiled program.
+            self._jit_sampler = None
+        self._devices = _dev_list
+        self._n_devices = len(_dev_list) if _dev_list else 1
+        # Baked into the engine's sharding constraints at trace time, which is
+        # why _engine_cache_key carries the device count: a sharded run served a
+        # cached single-device engine would get no constraints at all.
+        self._mesh = make_mesh(_dev_list)
+
         memory_mode = kwargs.pop("memory_mode", "auto")
         if memory_mode == "auto":
             memory_mode = "low" if self.spec.stochastic else "fast"

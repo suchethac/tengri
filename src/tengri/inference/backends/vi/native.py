@@ -849,6 +849,10 @@ def run_native_vi(
             "n_seeds": n_seeds,
             "chi2_dof": chi2_dof,
             "sample_mode": "evi_jit",
+            # 1 unless run(devices=...) sharded the galaxy axis. Reported so a
+            # multi-device run is visible in the result rather than having to be
+            # inferred from wall time.
+            "n_devices": getattr(fitter, "_n_devices", 1),
         },
         loss_history=None,
         _model=fitter.model,

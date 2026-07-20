@@ -712,6 +712,20 @@ def build_jit_engine(fitter, pos_dict):
     noise_dof = get_noise_dof(fitter.spec) if uses_student_t(fitter.spec) else None
     use_components = bool(getattr(fitter, "use_components", False))
 
+    # Galaxy mesh for a sharded population fit (None on the single-device path,
+    # which makes ``_rep`` the identity and leaves this engine byte-identical to
+    # its unsharded self). ``data_args`` arrive sharded on the galaxy axis; the
+    # forward model is what we want partitioned, so every *flat* quantity —
+    # parameter vector, CG iterates, gradients — is pinned replicated to stop
+    # the sharding propagating into optimizer state that has no galaxy axis.
+    from tengri.inference.sharding import replicate as _replicate
+
+    _mesh = getattr(fitter, "_mesh", None)
+
+    def _rep(x):
+        """Pin a flat (galaxy-axis-free) quantity to a replicated layout."""
+        return _replicate(x, _mesh)
+
     # --- Signal response (physics only) ---
     # NOT JIT'd here — must remain traceable so jax.jvp/vjp (in metric_vec)
     # and jax.value_and_grad (in hamiltonian) can differentiate through it.
@@ -788,21 +802,30 @@ def build_jit_engine(fitter, pos_dict):
     _eps = 6.0 * jnp.finfo(jnp.float64).eps
 
     if use_variable_noise:
+        # The _rep calls below mirror the fixed-noise pair but are currently
+        # unexercised: ``devices=`` only applies to population fits, and a
+        # population fit with a free noise_ parameter fails before it gets here
+        # (per-galaxy ``noise_frac_cal`` of shape (N_gal,) will not broadcast
+        # against (N_gal, n_data) data). That is independent of sharding —
+        # it reproduces single-device on main. Kept so the constraints are
+        # already right whenever that is fixed.
 
         def metric_vec(xi, v, data_args):
             """GGN metric for VariableCovarianceGaussian likelihood."""
             data = data_args["data"]
+            xi, v = _rep(xi), _rep(v)
 
             def _snr(primals):
                 """Compute signal and noise response for variable-noise likelihood."""
                 return signal_noise_response(primals, data_args)
 
-            return variable_noise_metric_vec(xi, v, _snr, data, unflatten, flatten)
+            return _rep(variable_noise_metric_vec(xi, v, _snr, data, unflatten, flatten))
 
         def hamiltonian(xi, data_args):
             """E_lh + 0.5 ||xi||^2 with variable noise (includes logdet)."""
             data = data_args["data"]
             noise = data_args["noise"]
+            xi = _rep(xi)
             primals = unflatten(xi)
             params = _primals_to_params(primals)
             pred = signal_response(primals)
@@ -816,22 +839,27 @@ def build_jit_engine(fitter, pos_dict):
         def metric_vec(xi, v, data_args):
             """M(xi) @ v = J^T N^{-1} J v + v."""
             noise_inv = data_args["noise_inv"]
+            xi, v = _rep(xi), _rep(v)
             xi_d, v_d = unflatten(xi), unflatten(v)
             _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
             _, vjp_fn = jax.vjp(signal_response, xi_d)
-            return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+            return _rep(flatten(vjp_fn(noise_inv * Jv)[0]) + v)
 
         def hamiltonian(xi, data_args):
             """H(xi) = 0.5 chi2 + 0.5 ||xi||^2."""
             data = data_args["data"]
             noise = data_args["noise"]
+            xi = _rep(xi)
             pred = signal_response(unflatten(xi))
+            # data/noise/pred all carry the galaxy axis, so this sum lowers to a
+            # cross-device all-reduce; the scalar it yields is replicated.
             chi2 = jnp.sum(((data - pred) / noise) ** 2)
             return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
 
     def H_vg(xi, data_args):
         """Hamiltonian value and gradient w.r.t. xi only."""
-        return jax.value_and_grad(lambda x: hamiltonian(x, data_args))(xi)
+        val, grad = jax.value_and_grad(lambda x: hamiltonian(x, data_args))(xi)
+        return val, _rep(grad)
 
     _tiny = 6.0 * jnp.finfo(jnp.float64).tiny
     _n_reset = 20
@@ -926,6 +954,7 @@ def build_jit_engine(fitter, pos_dict):
     def draw_residuals(pos_f, subkeys, data_args):
         """Draw n linear residual samples (vmapped)."""
         sqrt_ni = data_args["sqrt_noise_inv"]
+        pos_f = _rep(pos_f)
 
         def draw_one(subkey):
             """Draw one posterior residual sample."""
@@ -939,7 +968,7 @@ def build_jit_engine(fitter, pos_dict):
             # and broke population spectroscopy — suchethac/tengri#711).
             eta_lh = jax.random.normal(k2, shape=sqrt_ni.shape)
             _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
-            jt = flatten(vjp_fn(sqrt_ni * eta_lh)[0])
+            jt = _rep(flatten(vjp_fn(sqrt_ni * eta_lh)[0]))
             return cg_solve(
                 lambda v: metric_vec(pos_f, v, data_args),
                 jt + eta_pr,
