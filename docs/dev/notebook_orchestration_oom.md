@@ -72,7 +72,7 @@ the compile cost.
   arg — the JIT cache *does* survive different data values for the
   same observation type.
 - When that's not possible, drop dense mass matrix:
-  `fitter.run("mcmc_nuts", dense_mass=False, ...)` cuts compile peak
+  `fitter.run("mcmc_nuts", dense_mass_matrix=False, ...)` cuts compile peak
   by ~3× at the cost of ~2× sample autocorrelation.
 - Or use `mcmc_hmc` (plain HMC) instead of NUTS — same posterior, much
   smaller JIT graph (no doubling-binary-tree expansion).

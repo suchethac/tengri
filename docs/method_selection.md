@@ -42,7 +42,7 @@ The table below is a decision aid; when it disagrees with
 ## Memory and the one-fit-per-process rule
 
 NUTS/VI warmup can peak well above the resident forward model — 20+ GB on
-`dense_basis` D≈8 with `dense_mass=True`. Run **one** NUTS/VI fit per Python
+`dense_basis` D≈8 with `dense_mass_matrix=True`. Run **one** NUTS/VI fit per Python
 process, and drop to `dense_mass_matrix=False` or `mcmc_hmc` on D ≥ 8. The
 fitting tutorials ([05](spine/05_fitting_photometry),
 [06](spine/06_fitting_spectroscopy),

@@ -16,9 +16,9 @@ with < 32 GB if you're batch-authoring notebooks.
 | Spectroscopy (1000-pix optical, NUTS) | ~300 MB | 4–8 GB |
 | Joint photo + spec (NUTS) | ~500 MB | 6–10 GB |
 
-NUTS warmup with `dense_mass=True` peaks 3–6× higher than steady state due
+NUTS warmup with `dense_mass_matrix=True` peaks 3–6× higher than steady state due
 to `vmap(vmap(...))` tracing. D ≥ 8 with `dense_basis` can hit 20+ GB.
-**Multi-fit notebooks need `dense_mass=False`** — see [Multiple NUTS
+**Multi-fit notebooks need `dense_mass_matrix=False`** — see [Multiple NUTS
 fits](#pattern-multiple-nuts-fits-per-process).
 
 These numbers are CPU on Apple M-series; GPU peaks are typically lower
@@ -37,7 +37,7 @@ re-paying compile cost.
 
 1. **One NUTS fit per notebook.** Use MAP for cheap "before" fits.
 2. Share state: same model, same observation *type*, only data changes. JIT cache survives.
-3. Drop dense mass: `fitter.run("mcmc_nuts", dense_mass=False, ...)`. Cuts
+3. Drop dense mass: `fitter.run("mcmc_nuts", dense_mass_matrix=False, ...)`. Cuts
    compile ~3× (costs ~2× autocorrelation; run more samples).
 4. Use HMC: `fitter.run("mcmc_hmc", ...)`. Smaller JIT graph, no binary-tree expansion.
 
