@@ -75,7 +75,7 @@ import tengri
 tengri.clear_cache()
 ```
 
-See [compilation_cache.md](https://github.com/suchethac/tengri/blob/main/docs/inference/compilation_cache.md) for details.
+See [Compilation: caching and diagnostics](compilation) for details.
 
 ## A safety-net watchdog
 

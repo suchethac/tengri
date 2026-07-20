@@ -518,7 +518,7 @@ class PopulationFitter:
         over different catalog sizes, rely on the persistent
         compilation cache instead — see
         :func:`tengri.enable_persistent_cache` and
-        ``docs/inference/compilation_cache.md``.
+        ``docs/performance/compilation.md``.
         """
         if key is None:
             key = jax.random.PRNGKey(0)

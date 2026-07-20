@@ -181,7 +181,7 @@ def run_nuts(
         nb06's well-conditioned spec posterior; the cap matters only
         when NUTS is hitting deep trees, which is workload-specific.
         Compile cost scales with this knob but is typically <3s at
-        warm cache (see docs/inference/compilation_diagnostics.md).
+        warm cache (see docs/performance/compilation.md).
     dense_mass_matrix : bool or None, optional
         Use a dense (full) mass matrix instead of diagonal. Captures
         parameter correlations (e.g. age-dust-metallicity) and
