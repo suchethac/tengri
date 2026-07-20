@@ -802,8 +802,8 @@ def build_jit_engine(fitter, pos_dict):
     _eps = 6.0 * jnp.finfo(jnp.float64).eps
 
     if use_variable_noise:
-        # The _rep calls below mirror the fixed-noise pair but are currently
-        # unexercised: ``devices=`` only applies to population fits, and a
+        # The _rep calls below mirror the fixed-noise pair but are never reached
+        # today: ``devices=`` only applies to population fits, and a
         # population fit with a free noise_ parameter fails before it gets here
         # (per-galaxy ``noise_frac_cal`` of shape (N_gal,) will not broadcast
         # against (N_gal, n_data) data). That is independent of sharding —
