@@ -301,6 +301,8 @@ def _usage_hint(name: str, kind: str) -> str:
         return f"SEDModel.build(..., xray={{'type': '{name}'}})"
     if kind == "radio_model":
         return f"SEDModel.build(..., radio={{'type': '{name}'}})"
+    if kind == "shock_model":
+        return f"SEDModel.build(..., shock={{'type': '{name}'}})"
     if kind == "igm_model":
         return f"SEDModel.build(..., igm={{'type': '{name}'}})"
     if kind == "component":
@@ -322,9 +324,10 @@ _COMPONENT_MENUS: dict[str, str] = {
     "dust": "list_dust_models() / list_dust_laws() / list_dust_emission_models()",
     "agn": "list_agn_models() / list_agn_blocks()",
     "nebular": "list_nebular_backends()",
-    "radio": "list_radio_models()",
+    "radio": "list_radio_models() / list_radio_blocks()",
     "igm": "list_igm_models()",
     "xray": "list_xray_models()",
+    "shock": "list_shock_models()",
 }
 
 
@@ -802,6 +805,156 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
     from tengri.components.radio._models import RADIO_MODELS
 
     out = [_entry_to_dict(n, e, kind="radio_model") for n, e in RADIO_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+# Radio *sub-block* variants — the ``radio={'sf': ...}`` / ``radio={'agn': ...}``
+# axes, which are separate from the legacy ``radio={'type': ...}`` menu in
+# :func:`list_radio_models`. Keyed by ``(category, name)`` like AGN_BLOCK_META.
+# The names themselves are NOT listed here: they are derived from the tuples the
+# validator checks against (see :func:`list_radio_blocks`), so a variant added to
+# the physics can never be missing from the menu.
+_RADIO_BLOCK_METADATA: dict[tuple[str, str], dict[str, str]] = {
+    ("sf", "none"): {
+        "short_doc": "No star-forming synchrotron (AGN radio only)",
+    },
+    ("sf", "bell2003"): {
+        "citation": "Bell 2003 (ApJ 586, 794)",
+        "short_doc": "Fixed-q FIR-radio correlation",
+    },
+    ("sf", "delvecchio2021"): {
+        "citation": "Delvecchio+2021 FIRRC (SEMPER Eq. 4, arXiv:2503.20525)",
+        "short_doc": "Mass- and z-dependent q_IR at 1.4 GHz",
+    },
+    ("sf", "mccheyne2022"): {
+        "citation": "McCheyne+2022 FIRRC (SEMPER Eq. 5, arXiv:2503.20525)",
+        "short_doc": "Mass- and z-dependent q_IR at 150 MHz (LOFAR)",
+    },
+    ("agn", "none"): {
+        "short_doc": "No AGN radio (star-forming synchrotron only)",
+    },
+    ("agn", "powerlaw"): {
+        "short_doc": "Single power-law AGN radio scaled by radio-loudness",
+    },
+    ("agn", "dpl"): {
+        "citation": "Martinez-Ramirez+2024 (A&A 692, A85)",
+        "short_doc": "Broken double power-law with exp aging cutoff",
+    },
+}
+
+
+def list_radio_blocks(*, category: str | None = None, status: str | None = None) -> _RegistryTable:
+    """List the composable radio sub-block variants — ``sf`` and ``agn``.
+
+    Radio is selected along two independent axes: the star-forming
+    synchrotron model (``radio={'sf': {'type': ...}}``) and the AGN radio
+    model (``radio={'agn': {'type': ...}}``). Either may be ``'none'`` to
+    run the other alone.
+
+    This is a different axis from :func:`list_radio_models`, which lists the
+    **legacy** ``radio={'type': ...}`` key. That key predates the SF/AGN split
+    and cannot be combined with these sub-blocks; mixing the two raises.
+
+    Parameters
+    ----------
+    category : str, optional
+        Filter to ``"sf"`` or ``"agn"``. If ``None``, list both.
+    status : str, optional
+        Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
+        ``"deprecated"``.
+
+    Returns
+    -------
+    _RegistryTable
+        List of metadata dicts. Prints as a table in a notebook.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.list_radio_blocks(category="sf")
+    >>> tengri.list_radio_blocks()
+    """
+    from tengri.components.radio.component import AGN_RADIO_MODELS, SF_RADIO_MODELS
+
+    # Derived from the validator's own tuples, never from a hand-written list.
+    names_by_category = {"sf": SF_RADIO_MODELS, "agn": AGN_RADIO_MODELS}
+
+    out: list[dict] = []
+    for cat, names in names_by_category.items():
+        if category is not None and cat != category:
+            continue
+        for name in names:
+            meta = _RADIO_BLOCK_METADATA.get((cat, name), {})
+            out.append(
+                {
+                    "name": name,
+                    "category": cat,
+                    "kind": "radio_block",
+                    "status": meta.get("status", "production"),
+                    "citation": meta.get("citation", ""),
+                    "short_doc": meta.get("short_doc", ""),
+                    "use": f"SEDModel.build(..., radio={{'{cat}': {{'type': '{name}'}}}})",
+                }
+            )
+
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
+
+
+# Shock models — the ``shock={'type': ...}`` axis. Names derive from
+# ``_VALID_SHOCK_TYPES`` (see :func:`list_shock_models`).
+_SHOCK_MODEL_METADATA: dict[str, dict[str, str]] = {
+    "none": {
+        "short_doc": "No shock component",
+    },
+    "mappings": {
+        "citation": "Allen+2008 (ApJS 178, 20); Sutherland & Dopita 2017 (ApJS 229, 34)",
+        "short_doc": "MAPPINGS shock + precursor emission, additive to any neb backend",
+    },
+}
+
+
+def list_shock_models(*, status: str | None = None) -> _RegistryTable:
+    """List the shock emission models — the ``shock={'type': ...}`` choice.
+
+    The shock component is **additive**: it composes with whichever
+    photoionized nebular backend is active rather than replacing it, so both
+    can be on at once.
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
+        ``"deprecated"``.
+
+    Returns
+    -------
+    _RegistryTable
+        List of metadata dicts. Prints as a table in a notebook.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.list_shock_models()
+    """
+    from tengri.parameters.groups import _VALID_SHOCK_TYPES
+
+    out: list[dict] = []
+    for name in _VALID_SHOCK_TYPES:
+        meta = _SHOCK_MODEL_METADATA.get(name, {})
+        out.append(
+            {
+                "name": name,
+                "kind": "shock_model",
+                "status": meta.get("status", "production"),
+                "citation": meta.get("citation", ""),
+                "short_doc": meta.get("short_doc", ""),
+                "use": _usage_hint(name, "shock_model"),
+            }
+        )
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
@@ -1419,6 +1572,8 @@ def _menu_listers() -> tuple:
         list_nebular_backends,
         list_xray_models,
         list_radio_models,
+        list_radio_blocks,
+        list_shock_models,
         list_igm_models,
     )
 
@@ -1465,11 +1620,23 @@ def describe(name: str) -> _DescribeRecord:
                 kind = entry.get("kind", "?")
                 return f"{kind} ({category})" if category else kind
 
+            # Quote each alternative's own ``use:`` line rather than naming a
+            # lookup helper. The message used to recommend
+            # ``describe_agn_block(name, category=...)`` for every ambiguity,
+            # which was true only while AGN blocks were the sole categorized
+            # menu: once radio gained sf/agn categories the advice raised
+            # ("Unknown AGN block 'dpl' ... Known names: []") for exactly the
+            # user it was written to help. Each row already carries an exact,
+            # copy-pasteable build call, so quote that and it cannot go stale.
+            def _how(entry: dict) -> str:
+                use = entry.get("use", "")
+                return use or f"see {_where(entry)}"
+
+            others = "; ".join(_how(m) for m in matches[1:])
             record["also_registered_as"] = (
                 f"'{name}' is registered in {len(matches)} places "
-                f"[{'; '.join(_where(m) for m in matches)}] — showing the first. "
-                "Use the category-specific list (e.g. describe_agn_block"
-                "(name, category=...)) to select another."
+                f"[{'; '.join(_where(m) for m in matches)}] — showing the first "
+                f"({_how(matches[0])}). The others: {others}."
             )
         return _DescribeRecord(record)
     raise KeyError(
