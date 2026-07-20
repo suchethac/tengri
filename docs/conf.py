@@ -362,6 +362,49 @@ def _inject_missing_image_directives(app, *_args, **_kwargs):
         print(f"[conf.py] injected .. image:: directives into {fixed} skipped RSTs")
 
 
+# ── Per-object citation labels ──────────────────────────────────────────────
+# NAMING_CONTRACT / docstring-standard mandate numpydoc ``References`` sections
+# using ``.. [1]``, ``.. [2]``. docutils reads those as *footnotes*, whose
+# labels must be unique per document — but autodoc renders dozens of objects
+# onto one page (api/core, api/models, ...), so every docstring redefines
+# ``[1]``. That produced 88 "Duplicate explicit target name" warnings.
+#
+# src/ has 582 such definitions across 143 files plus 114 inline ``[N]_``
+# references. Renaming them by hand is infeasible and would contradict the
+# documented citation standard. Switching napoleon out for the numpydoc
+# extension does fix the collisions (it mangles labels the same way), but with
+# ``numpydoc_show_class_members = False`` it drops the class-docstring
+# ``Attributes`` descriptions from the rendered page entirely — measured: the
+# text survives only in the viewcode source listing. A fix that deletes
+# documentation is not a fix.
+#
+# So do the label mangling here and leave the docstrings alone: rewrite
+# ``.. [N]`` and ``[N]_`` to carry the fully-qualified object name, which is
+# unique per object by construction. Rendering is unchanged — readers still
+# see "[1]" — only the internal target id differs.
+_CITATION_DEF = _re.compile(r"^(\s*)\.\.\s+\[(\d+)\]", _re.MULTILINE)
+_CITATION_REF = _re.compile(r"\[(\d+)\]_")
+
+
+def _uniquify_citation_labels(app, what, name, obj, options, lines):
+    """Namespace numeric citation labels by owning object.
+
+    Turns ``.. [1]`` into ``.. [tengri.Fitter-1]`` and ``[1]_`` into
+    ``[tengri.Fitter-1]_`` for one docstring, so two objects rendered onto the
+    same page cannot collide. No-op for docstrings without numeric citations.
+    """
+    if not lines:
+        return
+    text = "\n".join(lines)
+    if "[1]" not in text and "[2]" not in text:
+        return  # cheap bail-out: the overwhelming majority of docstrings
+    slug = name.replace("%", "-")
+    new = _CITATION_DEF.sub(rf"\1.. [{slug}-\2]", text)
+    new = _CITATION_REF.sub(rf"[{slug}-\1]_", new)
+    if new != text:
+        lines[:] = new.split("\n")
+
+
 def setup(app):
     # Priority 1000 runs *after* sphinx-gallery's own builder-inited handler.
     app.connect("builder-inited", _fix_gallery_index_toctree, priority=1000)
@@ -369,6 +412,8 @@ def setup(app):
     # per-script RSTs but BEFORE sphinx parses any source, which is exactly
     # the window we need to mutate the RSTs on disk.
     app.connect("env-before-read-docs", _inject_missing_image_directives)
+    # Runs after napoleon has converted the numpydoc References section to RST.
+    app.connect("autodoc-process-docstring", _uniquify_citation_labels)
 
 
 # -- MyST configuration ------------------------------------------------------
@@ -426,6 +471,57 @@ napoleon_numpy_docstring = True
 napoleon_use_param = True
 napoleon_use_rtype = True
 
+# Render numpydoc ``Attributes`` sections as ``:ivar:`` info-fields rather than
+# standalone ``.. attribute::`` directives.
+#
+# Many tengri classes list an attribute in the class docstring's ``Attributes``
+# section *and* implement it as a real property with its own docstring. With
+# the default (False), napoleon emits a ``py:attribute`` object for the former
+# while ``:members:`` emits one for the latter, so the same name is registered
+# twice on the same page — "duplicate object description of
+# tengri.Parameters.all_params, other instance in api/core". That accounted for
+# 115 of the 416 warnings; ``Parameters`` alone lists 7 such attributes and
+# produced exactly 7 warnings. ``:ivar:`` fields are not separate objects, so
+# nothing collides and both descriptions still render.
+napoleon_use_ivar = True
+
+# -- Warning suppression -----------------------------------------------------
+#
+# Exactly two categories, both meaning the same benign thing: "a References
+# section lists a source that no inline ``[N]_`` marker cites".
+#
+# The docstring standard requires a numpydoc ``References`` section whenever a
+# formula or algorithm comes from a paper. It does not require citing each
+# entry inline in the prose, and for most entries that would read badly — the
+# section *is* the citation. docutils disagrees and warns once per uncited
+# entry: 74 as citations (autodoc docstrings, after the label-uniquifying hook
+# below) and 50 as footnotes (sphinx-gallery example headers).
+#
+# Deliberately NOT suppressed: ``docutils``. That category carries genuinely
+# malformed markup — block quotes without a blank line, short title
+# underlines, unterminated inline markup — which are real defects and are
+# fixed rather than hidden.
+suppress_warnings = [
+    "ref.citation",
+    "ref.footnote",
+    # The landing page supplies its <h1> inside the styled hero div
+    # (``<h1 class="tg-hero__title">``) rather than as a markdown heading, so
+    # MyST reports "Document headings start at H2". The heading exists; it is
+    # just HTML so it can carry the hero styling.
+    "myst.header",
+    # Ambiguity only. ``nitpicky`` is off, so Sphinx does not report unresolved
+    # Python references; the sole ``ref.python`` warning left is "more than one
+    # target found for cross-reference 'n_grid'". That comes from the shape
+    # annotations the docstring standard mandates —
+    # ``ndarray, shape (n_grid,)`` — where the shape variable happens to share
+    # a name with a property documented on ForwardModel, SEDModel and
+    # Parameters (the same value, delegated down the chain). Sphinx picks one
+    # and links it. The alternatives are dropping the mandated shape
+    # annotation or hiding two of the three properties; neither is an
+    # improvement.
+    "ref.python",
+]
+
 # -- intersphinx mapping -----------------------------------------------------
 
 intersphinx_mapping = {
@@ -451,16 +547,25 @@ exclude_patterns = [
     # Sphinx-gallery internal outputs that shouldn't be picked up as source
     "auto_examples/index.rst.new",
     "sg_execution_times.rst",
+    # sphinx-gallery also writes a per-section timing page. Only the top-level
+    # one was excluded, so the per-section copies were still parsed — and each
+    # links to every example in its section via a ``sphx_glr_...`` label. Those
+    # labels only exist for scripts the build actually executed, and the build
+    # deliberately reuses committed renders (``plot_gallery`` is False on CI,
+    # and locally ``_DO_NOT_EXECUTE`` skips anything already rendered). The
+    # result was 18 "undefined label" warnings for timing pages nothing links
+    # to. Exclude them for the same reason the top-level one is excluded.
+    "auto_examples/*/sg_execution_times.rst",
     "auto_examples/**/*.py",
     "auto_examples/**/*.md5",
     "auto_examples/**/*.codeobj.json",
     "auto_examples/**/*.zip",
     "auto_examples/**/*.ipynb",
-    # Narrative sections superseded by repo root notebooks/ spine
+    # Narrative sections superseded by repo root notebooks/ spine.
+    # ``forward_model/`` and ``fitting/`` are gone: the former's one page is
+    # now published as ``forward_model.md``, the latter held only a toctree.
     "getting_started/**",
-    "forward_model/**",
     "inference/**",
-    "fitting/**",
     "advanced/**",
     "developer/**",
     "dev/**",
@@ -474,7 +579,6 @@ exclude_patterns = [
     "_notebooks/**",
     # Not part of the published sidebar (content folded into index.md or omitted)
     "changelog.md",
-    "documentation.md",
     # Spine notebooks not currently in the published sidebar (08 emission
     # lines + 09 parameter sweeps were the "physics deep dives" section,
     # dropped from the index in the 2026-05 polish pass).
@@ -491,11 +595,12 @@ exclude_patterns = [
     # posterior, so this longer treatment is redundant. Inbound prose links
     # in 04/06/07 now point at the quickstart instead.
     "spine/05_fitting_photometry.ipynb",
-    # Guides section hidden from the published sidebar (2026-06). These four
-    # pages cross-reference only each other and index.md, so excluding them
-    # together leaves no dangling toctree entries or broken links.
+    # Guides section hidden from the published sidebar (2026-06). Two of the
+    # original four are now published: ``method_selection.md`` (README points
+    # at it) and ``known_limitations.md`` (a runtime warning in
+    # ``sed_model.py`` tells users to read it). The two below stay excluded
+    # because ``spine/07_joint_photo_spec`` and ``tengri.list_recipes()``
+    # already cover them; inbound links were repointed there.
     "recipes.md",
     "joint_fitting.md",
-    "method_selection.md",
-    "known_limitations.md",
 ]

@@ -32,13 +32,13 @@ class _Tutorial:
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 1 — first fit (synthetic, ~30 s)
+# Recipe 1 — first fit (synthetic)
 # ──────────────────────────────────────────────────────────────────
 
 
 _FIRST_FIT = _Tutorial(
     name="first_fit",
-    title="Your first SED fit (mock galaxy → posterior, ~30 s)",
+    title="Your first SED fit (mock galaxy → posterior)",
     needs_ssp=True,
     code=textwrap.dedent(
         """
@@ -174,7 +174,7 @@ _SWAP_INFERENCE = _Tutorial(
         # NUTS — exact, ≲20-D, gold standard
         nuts_result = fitter.run("mcmc_nuts", init_from=map_result, n_warmup=500)
 
-        # geoVI — variational, scales to high-D, ~10× faster than NUTS
+        # geoVI — variational, scales to high-D, cheaper than NUTS
         vi_result = fitter.run("vi", init_from=map_result)
 
         # "auto" — picks NUTS for low-D, ray-tracing for high-D
@@ -408,7 +408,7 @@ _PHILOSOPHY = _Tutorial(
             no global state, no in-place mutation.  This buys us:
 
             • analytic gradients — every parameter gets ∂loss/∂param free
-            • JIT compilation — one big XLA graph, ~140 µs / forward
+            • JIT compilation — the whole forward pass as one XLA graph
             • vmap — parallel evaluation of N galaxies for free
             • full sampler portfolio — MAP, NUTS, geoVI, ray-tracing,
               MCLMC, Pathfinder all share the same forward model
@@ -436,11 +436,16 @@ _PHILOSOPHY = _Tutorial(
 
             Every block has a registry of alternatives — see:
 
-                tengri.list_agn_models()        # 12 AGN models
-                tengri.list_dust_laws()         # 21 attenuation curves
-                tengri.list_dust_emission_models()  # 7 IR templates
-                tengri.list_sfh_models()        # 34 SFH variants
-                tengri.list_nebular_backends()  # 4 backends
+                tengri.list_agn_models()        # AGN model families
+                tengri.list_agn_blocks()        # composable AGN blocks
+                tengri.list_dust_laws()         # attenuation curves
+                tengri.list_dust_emission_models()  # IR emission templates
+                tengri.list_sfh_models()        # SFH variants
+                tengri.list_nebular_backends()  # nebular backends
+
+            Counts live in tengri.summary() — this page does not repeat
+            them, because a hand-written number goes stale the next time
+            someone registers a model.
 
             Adding your own:  tengri.tutorial("register_a_model")
 
@@ -555,7 +560,7 @@ _USE_CASES = _Tutorial(
         Use case 1  ──  ONE GALAXY, broadband photometry
         ─────────────────────────────────────────────────
         DPL SFH + two-component dust + Charlot-Fall attenuation.
-        Posterior in 30 s with MAP, ~5 min with NUTS.
+        MAP gives a quick point estimate; NUTS costs more, gives the posterior.
 
             tengri.tutorial("first_fit")
 
@@ -877,12 +882,12 @@ _FAST_VS_EXACT = _Tutorial(
         #
         # EXACT — full SED integration (default)
         #   Always safe; valid for any filter and any redshift.
-        #   ~300 μs per call. Used in fitting.
+        #   Used in fitting.
         #
         # FAST — lookup table (WavePrecomp)
         #   Precomputed at build time on the model's filters + z grid.
-        #   ~10 μs per call. ~30× speedup. Valid only for build-time
-        #   filters + grid; arbitrary filters always use EXACT.
+        #   Cheaper per call, but valid only for build-time filters + grid;
+        #   arbitrary filters always use EXACT. Measure before relying on it.
 
         import jax
         import tengri
@@ -893,7 +898,7 @@ _FAST_VS_EXACT = _Tutorial(
         model_exact = tengri.SEDModel.build(ssp_data=ssp, observation=obs, ...)
 
         # Opt into the fast path: precompute a lookup table
-        # (cost: ~5 s, saves at every subsequent predict call)
+        # (paid once at build time, saves at every later predict call)
         model_fast = tengri.SEDModel.build(
             ssp_data=ssp,
             observation=obs,
@@ -915,7 +920,7 @@ _FAST_VS_EXACT = _Tutorial(
         photo_exact = pred.photometry()           # exact path
 
         # Opt into fast for post-fit batches on build-time filters
-        photo_fast = pred.photometry(fast=True)  # ~30× speedup
+        photo_fast = pred.photometry(fast=True)
 
         # ── VMAP BATCH (MOCK CATALOG) ──
 
@@ -1140,18 +1145,17 @@ def tutorial(name: str | None = None, *, run: bool = False) -> None:
 def explain(thing) -> None:
     """Print the architectural role of a built-in class or model.
 
+    For built-in classes this prints the layered-architecture context
+    (where the class fits in the Parameters → SEDModel → Fitter →
+    Posterior pipeline) plus a pointer to the relevant tutorial. For
+    registered names it delegates to :func:`tengri.describe`.
+
     Parameters
     ----------
     thing : type or str
         Either a tengri class (``tengri.Parameters``, ``tengri.SEDModel``,
         ``tengri.Fitter``, ``tengri.Posterior``, ``tengri.Observation``)
         or a registered name (``"skirtor"``, ``"calzetti"``, ``"dpl"``…).
-
-    For built-in classes this prints the layered-architecture context
-    (where the class fits in the Parameters → SEDModel → Fitter →
-    Posterior pipeline) plus a pointer to the relevant tutorial.
-
-    For registered names this delegates to :func:`tengri.describe`.
 
     Examples
     --------

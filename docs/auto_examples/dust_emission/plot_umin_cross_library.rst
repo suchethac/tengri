@@ -65,7 +65,7 @@ References:
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
       return load_ssp_data(str(candidate))
 
 
@@ -162,7 +162,7 @@ References:
     }
     COLORS_SWEEP = plt.cm.viridis(np.linspace(0.1, 0.9, len(UMIN_VALUES)))
 
-    recipe = {"sfh": {"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0}}
+    recipe = {"sfh": {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0}}
     ssp = tengri.load_ssp()
 
     fig_sweep = plt.figure(figsize=(8, 5))
@@ -175,12 +175,12 @@ References:
                 **recipe,
                 dust={
                     "type": "two_component",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "tau_diff": 1.0,
                     "tau_bc": 1.5,
                     "emission": {
                         "type": lib_type,
-                        "*": tengri.FIXED,
+                        "all_params": tengri.FIXED,
                         "umin": umin,
                         "gamma_dl": 0.01,
                         "qpah": 2.5,
@@ -189,15 +189,15 @@ References:
                 redshift=tengri.Fixed(0.05),
             )
             p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-            out = model.predict_rest_sed(p)
-            wave = np.asarray(out.wavelength)
-            nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+            out = model.predict(p)
+            wave = np.asarray(model.wavelengths)
+            nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
             ir = (wave > 8e4) & (wave < 1e7)
             if ir.sum() < 5:
                 continue
             nu_ir = C_AA_PER_S / wave[ir]
             order = np.argsort(nu_ir)
-            l_ir = np.trapezoid(np.asarray(out.sed)[ir][order], nu_ir[order])
+            l_ir = np.trapezoid(np.asarray(out.rest_sed())[ir][order], nu_ir[order])
             if l_ir > 0:
                 nu_l_nu = nu_l_nu / l_ir
             label = rf"$U_{{\min}}$ = {umin:.1f} ({lib_type.replace('_', ' ')})"
@@ -223,6 +223,11 @@ References:
     fig_sweep.savefig("plot_umin_cross_library_sweep.png", dpi=150, bbox_inches="tight")
 
     plt.savefig("plot_umin_cross_library.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.615 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_umin_cross_library.py:

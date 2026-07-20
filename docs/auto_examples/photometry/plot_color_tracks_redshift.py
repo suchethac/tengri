@@ -13,11 +13,14 @@ Useful intuition this figure makes obvious:
 
 - the 4000 Å break sweeps from the *u-g* baseline at ``z = 0``
   into the *r-z* baseline by ``z ≳ 1.2``
+
 - the star-forming and quiescent tracks separate most at low z,
   then converge at high z as the break leaves all visible bands
+
 - the visible-band colors alone cannot distinguish a dusty
   z = 0.5 SF galaxy from an unobscured z = 3 LBG (the LBG dropout
   degeneracy demonstrated in workflows/plot_workflow_photoz_degeneracy)
+
 """
 
 import os
@@ -50,7 +53,7 @@ def _build_population(peak_lbt, width, tau_diff):
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": peak_lbt,
             "width_gyr": width,
             "log_total_mass": 10.0,
@@ -59,7 +62,7 @@ def _build_population(peak_lbt, width, tau_diff):
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tau_diff,
             "tau_bc": 0.3,
             "slope": -0.7,

@@ -1,6 +1,6 @@
 """
 Lusso & Risaliti 2016: α_OX – L_UV relation for AGN discs
-========================================================
+=========================================================
 
 The ultraviolet-to-X-ray spectral slope α_OX encodes the fundamental
 physics of accretion discs. At higher bolometric luminosities, discs
@@ -38,12 +38,12 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_total_mass": 10.0},
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05},
+    sfh={"type": "dpl", "all_params": tengri.FIXED, "tau_gyr": 3.0, "log_total_mass": 10.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05},
     agn={
         "type": "composable",
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "*": tengri.FIXED,
+        "disc": {"type": "multicolor", "all_params": tengri.FIXED},
+        "all_params": tengri.FIXED,
         "frac": 1.0,  # Full AGN contribution
     },
     redshift=tengri.Fixed(0.0),  # Rest-frame only
@@ -76,10 +76,10 @@ log_l_2500_values = []
 
 for log_lbol in log_lbol_values:
     params = {**baseline, "agn_log_lbol": jnp.float64(log_lbol)}
-    out = model.predict_rest_sed(params)
+    out = model.predict(params)
 
-    wave = np.asarray(out.wavelength)
-    sed = np.asarray(out.sed)  # erg/s/Hz
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(out.rest_sed())  # erg/s/Hz
 
     # Linear interpolation to get L_ν at reference wavelengths
     # sed is L_ν(λ) in erg/s/Hz

@@ -75,14 +75,14 @@ Hα luminosity should follow the theoretical (1 − f_esc) scaling exactly.
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 4.0,
             "beta": 2.0,
             "tau_gyr": 1.5,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED, "logU": -3.0, "logZ_gas": -1.0, "fesc": 0.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={"type": "cue", "all_params": tengri.FIXED, "logU": -3.0, "logZ_gas": -1.0, "fesc": 0.0},
         redshift=tengri.Fixed(0.0),
     )
 
@@ -94,7 +94,7 @@ Hα luminosity should follow the theoretical (1 − f_esc) scaling exactly.
 
     for fesc in fesc_vals:
         params = {**baseline, "neb_fesc": float(fesc)}
-        lines = model.predict_emission_lines(params)
+        lines = model.predict(params).lines
         halpha_lums.append(float(lines.halpha))
 
     halpha_lums = np.array(halpha_lums)
@@ -130,6 +130,11 @@ Hα luminosity should follow the theoretical (1 − f_esc) scaling exactly.
     fig.tight_layout()
     plt.savefig("plot_diag_fesc_lyc_conservation.png", dpi=150, bbox_inches="tight")
     print(f"Max deviation from y=x: {max_deviation:.2%}")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 33.780 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_fesc_lyc_conservation.py:

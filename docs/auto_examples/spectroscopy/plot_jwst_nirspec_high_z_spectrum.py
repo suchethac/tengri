@@ -39,14 +39,14 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.05,
         "log_total_mass": 10.0,
         "alpha": 3.5,
         "beta": 2.2,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.08, "tau_bc": 0.15},
-    neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -1.0, "logU": -2.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.08, "tau_bc": 0.15},
+    neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": -1.0, "logU": -2.0},
     redshift=tengri.Fixed(7.0),
 )
 
@@ -65,9 +65,9 @@ wave_obs_aa = wave_obs_um * 1e4  # Convert to Ångströms
 # ============================================================================
 # Predict Spectrum (Rest-frame SED, no observation)
 # ============================================================================
-out = model.predict_rest_sed(p)
-wave_rest = np.asarray(out.wavelength)  # Rest-frame Å
-sed_rest = np.asarray(out.sed)  # Rest-frame L_ν (erg/s/Hz)
+out = model.predict(p)
+wave_rest = np.asarray(model.wavelengths)  # Rest-frame Å
+sed_rest = np.asarray(out.rest_sed())  # Rest-frame L_ν (erg/s/Hz)
 
 # Map to observed frame via linear interpolation
 # Observed wavelength maps back to rest via: λ_rest = λ_obs / (1+z)

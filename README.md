@@ -53,7 +53,7 @@ The full philosophy and an architecture flow chart are on the
 Most of tengri was built in about six months by a human author
 working closely with AI agents. That is a deliberate part of the
 design philosophy, and the development trail is kept open (see
-[`AGENTS.md`](AGENTS.md)). Trust has to be earned the usual way:
+[`docs/dev/agents.md`](docs/dev/agents.md)). Trust has to be earned the usual way:
 every piece gets checked against established codes, and the status
 of each one is tracked at
 [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md).
@@ -143,10 +143,19 @@ forward = ForwardModel.build(sed=sed, observation=obs)
 key = jax.random.PRNGKey(0)
 mock = sed.mock(sed.spec.sample(key), key=key)
 
+# This recipe has 8 free parameters. Past D ~ 6, NUTS spends most of its
+# time in warmup, so use fixed-length HMC — see docs/method_selection.md
+# for the full decision table.
 fitter = Fitter(forward, mock.flux_obs, mock.noise)
-result = fitter.run("mcmc_nuts")
+result = fitter.run("mcmc_hmc")
 print(result.summary_table())
 ```
+
+Building the model takes a few seconds and the fit about 40 s on a laptop
+CPU; the first run also pays a one-off JAX compile. Swap in `"map"` for a
+point estimate in ~4 s, or `"laplace"` for credible intervals in ~5 s.
+`"mcmc_nuts"` is the gold standard below D ≈ 6, but on this 8-parameter
+model its warmup pushes the fit past 8 minutes.
 
 For real data, pass your own `(flux, noise)` to `Fitter`. The full
 walkthrough is in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
@@ -161,11 +170,14 @@ from tengri import FREE, FIXED, Uniform
 
 sed = SEDModel.build(
     ssp_data=ssp, observation=obs,
-    sfh={'type': 'dpl', '*': FREE, 'beta': Uniform(1, 3)},
-    dust={'type': 'two_component', '*': FIXED},
-    neb={'type': 'cue', '*': FIXED},
+    sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)},
+    dust={'type': 'two_component', 'all_params': FIXED},
+    neb={'type': 'cue', 'all_params': FIXED},
 )
 ```
+
+`all_params` sets every parameter in the group at once; per-parameter keys
+(like `beta` above) override it. `'*'` is an accepted synonym.
 
 See [`notebooks/04_building_models.py`](notebooks/04_building_models.py)
 for the grammar; `tengri.recipes` shows the curated starting points.
@@ -176,7 +188,7 @@ The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 
 | #  | Notebook                       | Topic                                                       |
 |----|--------------------------------|-------------------------------------------------------------|
-| 00 | `00_quickstart.py`             | mock galaxy → posterior in ~30 s                            |
+| 00 | `00_quickstart.py`             | mock galaxy → posterior, end to end                         |
 | 01 | `01_why_jax.py`                | JIT, `vmap`, `grad` in the context of galaxy SED inference  |
 | 02 | `02_sed_anatomy.py`            | the panchromatic SED, component by component                |
 | 03 | `03_discovering_the_menu.py`   | discovery API (`list_*`, `describe`, `search`)              |
@@ -227,8 +239,9 @@ The SFH layer covers parametric families (15+, registry-driven),
 non-parametric reconstructions (Leja+ continuity, Dirichlet), and
 stochastic fields (IFT correlated fields with PSD-governed
 burstiness). Dust is swappable on both the attenuation and emission
-sides. Nebular emission has four backends (`baked_in`, `cue`,
-`cloudy_grid`, `cb19`). AGN spans disc, torus, BLR/NLR, and IR
+sides. Nebular emission has four backends: `ssp` (emission baked into
+the SSP grid), `cue` (emulator), `cloudy`, and `cb19`. AGN spans disc,
+torus, BLR/NLR, and IR
 re-emission, unified across optical, IR, and X-ray. IGM, radio, and
 X-ray sit alongside as components, not afterthoughts.
 

@@ -8,11 +8,13 @@ All dust IR-emission libraries shipped in tengri, shown on two scales:
 (analytic models and template-based libraries). The differences sit entirely in
 the SED *shape* — peak wavelength (T_dust proxy), PAH-feature amplitude in the
 3–20 μm window, and how steeply the sub-mm tail falls.
+
   - Analytic: modified blackbody, Casey 2012, energy-balance split
   - Templates: Draine & Li 2007, Draine+2014, Dale+2014
 
 (Bottom) Seven-library L_IR-normalized comparison via full SEDModel with
 constant SFH and dust parameters (tau_diff=1, tau_bc=1.5):
+
 - ``dale2014``  — Dale+2014 SFR-driven template family
 - ``dl07``      — Draine & Li 2007 grain mixture
 - ``dl14``      — Draine+2014 update (extended PAH/silicate)
@@ -64,7 +66,7 @@ LIBS = [
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(LIBS)))
 
 C_AA_PER_S = 2.998e18
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0}
 
 ssp = tengri.load_ssp()
 
@@ -151,26 +153,26 @@ for (lib, label), color in zip(LIBS, COLORS):
             sfh=SFH,
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 1.0,
                 "tau_bc": 1.5,
-                "emission": {"type": lib, "*": tengri.FIXED},
+                "emission": {"type": lib, "all_params": tengri.FIXED},
             },
             redshift=tengri.Fixed(0.05),
         )
     except Exception:
         continue
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     # Normalize on integrated L_IR(8-1000 μm).
     ir = (wave > 8e4) & (wave < 1e7)
     if ir.sum() < 5:
         continue
     nu_ir = C_AA_PER_S / wave[ir]
     order = np.argsort(nu_ir)
-    l_ir = np.trapezoid(np.asarray(out.sed)[ir][order], nu_ir[order])
+    l_ir = np.trapezoid(np.asarray(out.rest_sed())[ir][order], nu_ir[order])
     if l_ir > 0:
         nu_l_nu = nu_l_nu / l_ir
     ax_lir.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)

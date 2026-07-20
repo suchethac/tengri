@@ -2,6 +2,7 @@
 """Spectral index definitions and observed data for direct fitting.
 
 Supports two index types:
+
 - **EW** (equivalent width): measures absorption or emission strength
   relative to a pseudo-continuum defined by sideband windows.
 - **break** (flux ratio): ratio of mean fluxes in two continuum windows

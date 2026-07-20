@@ -94,11 +94,11 @@ SED shape of each recipe.
 
         # Sample at prior medians for canonical SED shape
         params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(params)
+        out = model.predict(params)
 
         # Convert to νL_ν for perceptual SED display
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
 
         ax.loglog(wave, nu_l_nu, color=color, lw=1.6, label=name)
 
@@ -116,7 +116,7 @@ SED shape of each recipe.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 20.935 seconds)
+   **Total running time of the script:** (0 minutes 8.128 seconds)
 
 
 .. _sphx_glr_download_auto_examples_showcase_plot_recipes_gallery.py:

@@ -8,6 +8,7 @@ luminosity from the attenuation step.
 
 Available Emission Models
 -------------------------
+
 - **modified_blackbody**: Optically-thin modified blackbody (2-3 params)
 - **casey2012**: Casey (2012) modified blackbody + mid-IR power law (3 params)
 - **pah_drude**: Smith et al. (2007) PAH Drude profiles (0 params, pure template)
@@ -40,6 +41,7 @@ This is computed from the attenuation step and passed to each model as
 
 References
 ----------
+
 - Casey 2012, MNRAS, 425, 3094
 - Chary, R. & Elbaz, D. 2001, ApJ, 556, 562 (CE01)
 - Dale, D. A. & Helou, G. 2002, ApJ, 576, 159 (DH02)

@@ -27,6 +27,7 @@ a diffuse-ISM component (``τ_diff``) that attenuates all stellar light. The two
 are degenerate for an old population but separate cleanly for a young one.
 
 Panels:
+
 - Top-left: τ_bc sweep at fixed τ_diff = 0.2 (young burst; far-UV suppressed)
 - Top-right: τ_diff sweep at fixed τ_bc = 0.5 (young burst; full SED suppressed)
 - Bottom: age-dependent attenuation showing how single-age stellar populations
@@ -35,7 +36,7 @@ Panels:
 
 Reference: Charlot & Fall 2000, ApJ, 539, 718.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-193
+.. GENERATED FROM PYTHON SOURCE LINES 20-200
 
 
 
@@ -85,7 +86,7 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718.
     ssp = tengri.load_ssp()
     SFH = {
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 0.3,
         "log_total_mass": 10.0,
         "alpha": 4.0,
@@ -99,7 +100,7 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718.
             sfh=SFH,
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": tau_diff,
                 "tau_bc": tau_bc,
                 "slope": -0.7,
@@ -120,19 +121,25 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718.
     for tau in tau_bc_vals:
         model = _model(tau_diff=0.2, tau_bc=float(tau))
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
         ax_bc.loglog(
-            wave, C_AA_PER_S / wave * np.asarray(out.sed), color=plt.cm.viridis(norm_bc(tau)), lw=1.4
+            wave,
+            C_AA_PER_S / wave * np.asarray(out.rest_sed()),
+            color=plt.cm.viridis(norm_bc(tau)),
+            lw=1.4,
         )
 
     for tau in tau_diff_vals:
         model = _model(tau_diff=float(tau), tau_bc=0.5)
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
         ax_diff.loglog(
-            wave, C_AA_PER_S / wave * np.asarray(out.sed), color=plt.cm.viridis(norm_diff(tau)), lw=1.4
+            wave,
+            C_AA_PER_S / wave * np.asarray(out.rest_sed()),
+            color=plt.cm.viridis(norm_diff(tau)),
+            lw=1.4,
         )
 
     for ax in (ax_bc, ax_diff):
@@ -187,14 +194,14 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718.
             ssp,
             sfh={
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "peak_lbt_gyr": float(peak_lbt_gyr),
                 "width_gyr": 0.1,
                 "log_total_mass": 10.0,
             },
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_bc": TAU_BC,
                 "tau_diff": TAU_DIFF,
                 "slope": -0.7,
@@ -203,10 +210,10 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718.
         )
 
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
+        out = model.predict(p)
 
-        wave = np.asarray(out.wavelength)
-        nu_lnu = C_AA_PER_S / wave * np.asarray(out.sed)
+        wave = np.asarray(model.wavelengths)
+        nu_lnu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
 
         label = f"{age_myr:.0f} Myr" if age_myr < 100 else f"{age_myr / 1e3:.1f} Gyr"
         ax_age.loglog(wave, nu_lnu, color=colors_age[i], lw=2.0, label=label)

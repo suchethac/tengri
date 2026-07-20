@@ -802,27 +802,27 @@
    "name": "SEDModel"
   }
  ],
- "model.predict_magnitudes": [
+ "model.predict": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward.sed_model",
    "module_short": "tengri.forward.sed_model",
-   "name": "SEDModel.predict_magnitudes"
+   "name": "SEDModel.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.forward",
    "module_short": "tengri.forward",
-   "name": "SEDModel.predict_magnitudes"
+   "name": "SEDModel.predict"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "SEDModel.predict_magnitudes"
+   "name": "SEDModel.predict"
   }
  ],
  "model.predict_photometry": [

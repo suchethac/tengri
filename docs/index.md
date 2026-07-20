@@ -181,6 +181,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    spine/06_fitting_spectroscopy
    spine/07_joint_photo_spec
    spine/10_fastspecfit_joint_fit
+   spine/11_catalog_fits
 
 .. toctree::
    :caption: Examples
@@ -202,9 +203,13 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    :maxdepth: 1
    :hidden:
 
+   forward_model
    api/index
+   method_selection
    performance/index
    performance/memory
+   performance/compilation
+   known_limitations
    units
 
 .. toctree::

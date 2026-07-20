@@ -1,6 +1,6 @@
 """
 UVJ diagram: rest-frame colors separate star-forming from quiescent
-==================================================================
+===================================================================
 
 Generates a mock star-forming and quiescent galaxy population and plots
 each on the rest-frame UVJ color-color plane (U-V vs V-J). The Williams+2009

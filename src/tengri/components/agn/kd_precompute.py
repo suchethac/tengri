@@ -16,8 +16,10 @@ giving ~40x speedup for the K&D component.
 
 References
 ----------
+
 - Kubota & Done 2018, MNRAS, 480, 1247
 - docs/dev/kd18-precomputation.md (design document)
+
 """
 
 from __future__ import annotations

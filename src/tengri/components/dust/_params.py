@@ -75,6 +75,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Draine & Li 2007 PDR fraction (0-1)",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
+        free_prior=Uniform(0.0, 1.0, "DL07 PDR fraction", default=0.01),
     ),
     ParamDeclaration(
         "dust_qpah",
@@ -89,6 +90,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "DL14 power-law slope of radiation field distribution (1.0-3.0)",
         lambda lo, hi: lo >= 1.0 and hi <= 3.0,
         "must be in [1.0, 3.0]",
+        free_prior=Uniform(1.0, 3.0, "DL14 radiation-field slope", default=2.0),
     ),
     ParamDeclaration(
         "dust_eta_balance",
@@ -131,6 +133,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "carries the remaining 1 - f_cold.",
         lambda lo, hi: lo >= 0.0 and hi <= 1.0,
         "must be in [0, 1]",
+        free_prior=Uniform(0.0, 1.0, "Cold-component fraction of L_IR", default=0.5),
     ),
     ParamDeclaration(
         "dust_L_agn_ir",
@@ -176,6 +179,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "log10(U) starlight intensity in mMMP units for Draine+2021 PAHspec (0..7)",
         lambda lo, hi: lo >= 0.0 and hi <= 7.0,
         "must be in [0, 7]",
+        free_prior=Uniform(
+            0.0, 7.0, "log10(U) starlight intensity", units="log10(mMMP)", default=0.0
+        ),
     ),
     # ── CIGALE-parity emission knobs (2026-06) ────────────────────
     ParamDeclaration(
@@ -186,6 +192,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "template bit-for-bit (alpha=2 anchor).",
         lambda lo, hi: lo >= 1.0 and hi <= 3.0,
         "must be in [1.0, 3.0]",
+        free_prior=Uniform(1.0, 3.0, "THEMIS radiation-field slope", default=2.0),
     ),
     ParamDeclaration(
         "dust_frac_agn",
@@ -206,6 +213,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Canonical name (#849); the old spelling ``dust_fpah`` is an alias.",
         lambda lo, hi: lo >= 0.0 and hi <= 1.0,
         "must be in [0, 1]",
+        free_prior=Uniform(0.0, 1.0, "PAH mass fraction", default=0.05),
     ),
     ParamDeclaration(
         "dust_epsilon_mbb",
@@ -214,6 +222,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "(CIGALE mbb epsilon_mbb; 1.0 = full energy balance)",
         lambda lo, hi: lo >= 0.0 and hi <= 1.0,
         "must be in [0, 1]",
+        free_prior=Uniform(0.0, 1.0, "MBB fraction of L_dust", default=1.0),
     ),
 )
 
@@ -245,6 +254,14 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "Fraction of unobscured sightlines (Lower 2022)",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
+        # Deliberately NO free_prior, despite a clean [0, 1] domain. The test is
+        # not "does this have a valid range?" but "is freeing it what a caller
+        # means by `dust: all_params: FREE`?" — and here that is empirically no:
+        # all 11 call sites in this repo (4 recipes, 7 gallery examples) want
+        # that wildcard to mean {tau_bc, tau_diff}. f_obscuration is a
+        # two-population geometry knob whose default 0.0 is a modeling stance,
+        # and it is strongly degenerate with tau_diff. Freeing it stays explicit:
+        # pass f_obscuration=Uniform(0, 1).
     ),
     ParamDeclaration(
         "dust_bump_strength",

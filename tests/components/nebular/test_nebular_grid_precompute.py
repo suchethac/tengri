@@ -81,6 +81,10 @@ def _nion(m, p):
     return float(np.sum(np.asarray(m.predict_state(p).derived["nion"])))
 
 
+def _log_nion(m, p):
+    return float(np.asarray(m.predict_state(p).derived["log_nion"]))
+
+
 _BANDS = ["galex_fuv", "galex_nuv", "des_g", "des_r", "des_i", "des_z", "wise_w1", "wise_w2"]
 
 
@@ -222,8 +226,8 @@ def test_phot_channel_reconstructs_nebular_precomp():
         p = dict(m.spec.sample(jax.random.PRNGKey(500 + i)))
         st = m.predict_state(p)
         exact = np.asarray(st.derived["nebular_phot_lnu_precomp"])  # rest-frame L_nu
-        nion = float(np.sum(np.asarray(st.derived["nion"])))
-        fast = np.asarray(reconstruct_nebular_phot(nion, p, table))
+        log_nion = float(np.asarray(st.derived["log_nion"]))
+        fast = np.asarray(reconstruct_nebular_phot(log_nion, p, table))
         strong = np.abs(exact) > 1e-3 * np.max(np.abs(exact))
         rel = np.max(np.abs(fast - exact)[strong] / (np.abs(exact)[strong] + 1e-40))
         worst = max(worst, rel)
@@ -238,7 +242,7 @@ def test_phot_channel_absent_without_wave_precomp():
     assert table.log_phot_per_qh is None
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
     with pytest.raises(ValueError, match="no photometry channel"):
-        reconstruct_nebular_phot(_nion(m, p), p, table)
+        reconstruct_nebular_phot(_log_nion(m, p), p, table)
 
 
 def test_unsnapped_met_axis_warns_and_snapped_one_does_not():

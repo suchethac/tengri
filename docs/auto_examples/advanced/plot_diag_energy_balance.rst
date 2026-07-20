@@ -27,7 +27,7 @@ attenuation and emission modules. Ratio = L_emitted / L_absorbed should equal 1.
 
 Reference: Draine & Li 2007, ApJ, 657, 810.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-116
+.. GENERATED FROM PYTHON SOURCE LINES 11-120
 
 
 
@@ -62,7 +62,7 @@ Reference: Draine & Li 2007, ApJ, 657, 810.
     # Star-forming galaxy baseline (fixed, only tau_diff swept)
     SFH = {
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_gyr": 1.0,
         "log_total_mass": 10.0,
         "alpha": 2.5,
@@ -73,9 +73,9 @@ Reference: Draine & Li 2007, ApJ, 657, 810.
         "type": "two_component",
         "law_bc": "calzetti",
         "law_diff": "calzetti",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.2,
-        "emission": {"type": "draine_li2007", "*": tengri.FIXED},
+        "emission": {"type": "draine_li2007", "all_params": tengri.FIXED},
     }
 
     # Load SSP and build model with dust emission enabled
@@ -101,10 +101,14 @@ Reference: Draine & Li 2007, ApJ, 657, 810.
         # Baseline parameters (redshift=0, SFH fixed, dust bc fixed)
         p_base = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
+        # The SED lives on the model's own grid; resample onto ``wave`` so the
+        # trapezoid integrals below line up with the masks built from it.
+        grid = np.asarray(model.wavelengths)
+
         p_int = {**p_base, "dust_tau_bc": 0.0, "dust_tau_diff": 0.0}
-        sed_int = np.asarray(model.predict_rest_sed(p_int, wave=wave_jax)).sum(axis=0)
+        sed_int = np.interp(wave, grid, np.asarray(model.predict(p_int).rest_sed()))
         p_full = {**p_base, "dust_tau_bc": 0.2, "dust_tau_diff": tau_diff}
-        sed_full = np.asarray(model.predict_rest_sed(p_full, wave=wave_jax)).sum(axis=0)
+        sed_full = np.interp(wave, grid, np.asarray(model.predict(p_full).rest_sed()))
         nu = C_AA_PER_S / wave
 
         # L = ∫ L_ν dν.  np.trapz needs frequency in INCREASING order.
@@ -112,7 +116,7 @@ Reference: Draine & Li 2007, ApJ, 657, 810.
         nu_uv = nu[mask_uv_opt]
         order = np.argsort(nu_uv)
         L_absorbed = float(
-            np.trapz(
+            np.trapezoid(
                 (sed_int[mask_uv_opt] - sed_full[mask_uv_opt])[order],
                 nu_uv[order],
             )
@@ -120,7 +124,7 @@ Reference: Draine & Li 2007, ApJ, 657, 810.
         mask_fir = (wave >= 80000.0) & (wave <= 1.0e7)
         nu_fir = nu[mask_fir]
         order = np.argsort(nu_fir)
-        L_emitted = float(np.trapz(sed_full[mask_fir][order], nu_fir[order]))
+        L_emitted = float(np.trapezoid(sed_full[mask_fir][order], nu_fir[order]))
         ratio = L_emitted / L_absorbed if L_absorbed > 0 else np.nan
         ratios.append(ratio)
         L_abs_list.append(L_absorbed)
@@ -151,7 +155,7 @@ Reference: Draine & Li 2007, ApJ, 657, 810.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.112 seconds)
+   **Total running time of the script:** (0 minutes 3.899 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_energy_balance.py:

@@ -37,15 +37,40 @@ The stellar ionizing-photon array `_sed_ion` in `src/tengri/components/stellar/c
 
 ## Part 2: Tier B Blockers — Pure Float32 (Metal, No Float64 Fallback)
 
-### 1. Ionizing-Photon Integral (Q_H)
+### 1. Ionizing-Photon Integral (Q_H) — DELIVERED (log_nion contract)
 
-**Problem:** The Q_H ionizing-photon integral (number of photons per second ionizing hydrogen) exceeds float32 max (~1e56 photons/s > 3.4e38).
+**Problem:** The Q_H ionizing-photon rate exceeds float32 max (~1e56 photons/s > 3.4e38) — no
+summand precision helps, because the reduction *result* itself is out of range.
 
-**Current behavior:** `_integrate_nion` in `src/tengri/components/stellar/component.py` (line 493) integrates the ionizing SED and returns the result as linear `derived["nion"]`, published to the Cue and CloudyGrid nebular backends and consumed by the `q_h` property.
+**Delivered:** A `log_nion` (log10 Q_H) contract. `_integrate_nion_log10` in
+`src/tengri/components/stellar/component.py` computes the integral in the log domain —
+peak-normalizing the ionizing L_ν and folding both the `1/h` factor and the mass scale into a single
+log sum, so no out-of-range intermediate is materialized. `_integrate_nion` is now a thin
+`pow10(_integrate_nion_log10(...))` wrapper (f64-exact vs the pre-change form to rtol ≤ 1e-12).
+`StellarSEDComponent` publishes `derived["log_nion"]` (dex) alongside the transition-only
+`derived["nion"] = pow10(log_nion)`, and exposes the float32-safe **`log_q_h`** property. Consumers
+that combine Q_H in log space were migrated to read `log_nion`:
 
-**Fix:** Introduce a `log_nion` (log10 Q_H) contract — compute the integral as `log10(∫ of the mass-scale-free ionizing flux) + log10_mass_scale`, keeping both terms in representable range. Update `StellarSEDComponent` to publish both `nion` (or deprecate in favor of `log_nion`) and `log_nion`. Every consumer of Q_H (Cue ionization solver, CloudyGrid, the `q_h` property in `src/tengri/forward/sed_model.py`) must accept the log form.
+- Cue `_compute_weighted_cue_params` — total Q_H via base-10 `logsumexp`, effective ionizing-spectrum
+  shape via per-segment max-offset (replaces the linear `10**logqion` sums that silently zeroed
+  every young bin in float32).
+- `reconstruct_nebular_phot` — `pow10(log_nion + log_ppq)` (nebular continuum L_ν ~1e28, f32-safe).
+- Radio thermal (`compute_l_radio_thermal_from_log_qh`) and `xi_ion`
+  (`compute_xi_ion_from_log_qh`, shared by the property and `state_to_ionizing_quantities`).
+- The Cue `nion` fallback in `nebular/component.py` (`maximum(log_nion, 0.0)`).
 
-**Test:** `tests/regression/precision/test_ionizing_scale.py::test_ionizing_sed_pure_float32_cue_only` is marked xfail(strict) and validates this end-to-end once the contract is in place.
+**Guard:** `tests/regression/precision/test_no_raw_nion_read.py` is a two-way inventory that pins the
+remaining `derived["nion"]` readers to a documented allow-list, so no new float32-overflowing linear
+consumer can appear silently. Each allow-list entry is one of the deferred paths below.
+
+**Still deferred (why `derived["nion"]` is still published):** the linear `q_h` property (~1e56
+photons/s) and the erg/s emission-line paths belong to item 3; the observed-line-flux reconstructs
+divide by `4π d_L²` (item 2). Those readers stay linear until items 2/3 land.
+
+**Tests:** `tests/regression/precision/test_ionizing_scale.py::test_log_q_h_pure_float32_cue_only`
+PASSES (pure-f32 `log_q_h` and `rest_sed()` finite and float64-accurate);
+`test_linear_observables_pure_float32_cue_only` is `xfail(strict)` for the item-3 remainder
+(`q_h` → inf, `balmer_decrement` → nan in pure float32).
 
 ---
 
@@ -126,9 +151,13 @@ Document in `src/tengri/inference/context.py` or a new `docs/dev/inference-float
 **Tier A is CUDA mixed-precision-ready today:** `forward_dtype="float32"` with `jax_enable_x64=True` provides production inference on V100/A100, validated against float64 (rtol ≤ 3e−3).
 
 **Tier B (pure float32 / Metal end-to-end) requires:**
-1. Q_H integral reparametrization (log10 contract) and six-backend update.
+1. ~~Q_H integral reparametrization (log10 contract) and consumer update.~~ **DONE** — the
+   `log_nion` contract (`_integrate_nion_log10`, `log_q_h` property, log-domain Cue combine, and the
+   f32-safe reconstruct/radio/xi_ion consumers) plus the `test_no_raw_nion_read.py` guard. The linear
+   `q_h` property and erg/s line paths remain, folded into item 3.
 2. Bolometric integral compensation (log-domain or Kahan summation).
-3. Linear-scale property unit changes (15 emission lines + AGN luminosities → L_sun or log10).
+3. Linear-scale property unit changes (15 emission lines + AGN luminosities → L_sun or log10);
+   includes retiring the transition-only linear `derived["nion"]` once its readers move to `log_nion`.
 4. SKIRTOR interpolation dtype consistency.
 5. Inference method restrictions (MAP, Laplace, robust VI only).
 

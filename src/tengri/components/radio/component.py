@@ -86,6 +86,19 @@ __all__ = ["RadioSEDComponent", "RadioSEDComponentConfig"]
 # radio_log_nu_break) get added together in the same PR.
 AGN_RADIO_MODELS: tuple[str, ...] = ("none", "powerlaw", "dpl")
 
+# Mode strings for the star-formation radio sub-model, the sibling axis to
+# :data:`AGN_RADIO_MODELS`. Named here rather than spelled inline at each
+# check so the grammar validator (``parameters.groups._translate_radio``) and
+# the discovery menu (``registry.list_radio_blocks``) read the *same* tuple —
+# a hand-copied second list is how the dust menu and the radio error message
+# both drifted out of agreement with what the builder actually accepts.
+#
+# - ``"none"`` — SF synchrotron turned off; AGN radio only.
+# - ``"bell2003"`` (default) — fixed-q FIR-radio correlation.
+# - ``"delvecchio2021"`` — mass- and z-dependent FIRRC at 1.4 GHz.
+# - ``"mccheyne2022"`` — mass- and z-dependent FIRRC at 150 MHz.
+SF_RADIO_MODELS: tuple[str, ...] = ("none", "bell2003", "delvecchio2021", "mccheyne2022")
+
 
 @dataclass(frozen=True)
 class RadioSEDComponentConfig(SEDComponentConfig):
@@ -123,6 +136,15 @@ class RadioSEDComponentConfig(SEDComponentConfig):
             raise ValueError(
                 f"Unknown agn_radio_model {self.agn_radio_model!r}. "
                 f"Choose one of {AGN_RADIO_MODELS}."
+            )
+        # ``sfr_mode`` went unchecked here while its AGN sibling was validated.
+        # A typo did still raise, but only later and further away: inside
+        # ``radio._dispatch_sfr`` during a forward pass, naming a function
+        # argument rather than the config field the user actually set. Checking
+        # at construction keeps both radio axes failing at the same boundary.
+        if self.sfr_mode not in SF_RADIO_MODELS:
+            raise ValueError(
+                f"Unknown sfr_mode {self.sfr_mode!r}. Choose one of {SF_RADIO_MODELS}."
             )
 
 
@@ -560,16 +582,16 @@ def _l_1p4ghz_fn(state, params):
 
 def _l_thermal_fn(state, params):
     """Radio thermal (free-free) luminosity [erg/s/Hz]."""
-    from tengri.utils.sed_quantities import compute_l_radio_thermal
+    from tengri.utils.sed_quantities import compute_l_radio_thermal_from_log_qh
 
     derived = state.derived
-    nion = jnp.asarray(derived.get("nion", 0.0))
-    return compute_l_radio_thermal(nion)
+    log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+    return compute_l_radio_thermal_from_log_qh(log_nion)
 
 
 def _l_nonthermal_fn(state, params):
     """Radio non-thermal synchrotron luminosity [erg/s/Hz]."""
-    from tengri.utils.sed_quantities import compute_l_radio_thermal
+    from tengri.utils.sed_quantities import compute_l_radio_thermal_from_log_qh
 
     derived = state.derived
     if "sed_radio" not in derived:
@@ -579,8 +601,8 @@ def _l_nonthermal_fn(state, params):
     wave = state.wave
     l_1p4ghz = jnp.interp(_WAVE_21CM_AA, wave, L_radio)
 
-    nion = jnp.asarray(derived.get("nion", 0.0))
-    l_thermal = compute_l_radio_thermal(nion)
+    log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+    l_thermal = compute_l_radio_thermal_from_log_qh(log_nion)
     return l_1p4ghz - l_thermal
 
 

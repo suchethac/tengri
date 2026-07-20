@@ -40,11 +40,12 @@ marks the Universe's peak epoch of star formation; by z~0.1, quenching
 processes become dominant.
 
 References:
+
 - Speagle et al. 2014, ApJS, 214, 15 (z~0 main sequence)
 - Whitaker et al. 2014, ApJ, 795, 104 (z~2 main sequence, sSFR evolution)
 - Schreiber et al. 2015, A&A, 575, A74 (universal MS parameters)
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-276
+.. GENERATED FROM PYTHON SOURCE LINES 30-278
 
 
 
@@ -177,9 +178,9 @@ References:
     # Use dpl (double-power-law) SFH with free log_total_mass (normalization)
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED, "log_total_mass": 10.0},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED},
+        sfh={"type": "dpl", "all_params": tengri.FIXED, "log_total_mass": 10.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={"type": "cue", "all_params": tengri.FIXED},
     )
 
     # Sample baseline parameters (all fixed except log_total_mass)

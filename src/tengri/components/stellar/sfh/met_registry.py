@@ -8,6 +8,7 @@ via ``met_mode="two_step"`` (etc.) in :class:`Parameters`, and
 
 Modes
 -----
+
 - ``delta``:  Single metallicity for all ages (default).
 - ``ramp``:  Linear ramp from initial to final Z.
 - ``two_step``:  Step function at a lookback time.

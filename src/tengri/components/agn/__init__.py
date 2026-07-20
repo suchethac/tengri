@@ -27,12 +27,14 @@ Usage::
 
 References
 ----------
+
 - Shakura & Sunyaev 1973, A&A, 24, 337
 - Kubota & Done 2018, MNRAS, 480, 1247
 - Nenkova et al. 2008, ApJ, 685, 147
 - Stalevski et al. 2012, MNRAS, 420, 2756
 - Stalevski et al. 2016, MNRAS, 458, 2288
 - Temple, Hewett & Banerji 2021, MNRAS, 508, 737
+
 """
 
 # Importing ``blocks`` side-effects all @register_agn_block calls plus

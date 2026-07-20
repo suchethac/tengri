@@ -14,10 +14,12 @@ reddening and star formation rate indicators in galaxies. Here we:
    refinements from Reddy+2018.
 
 **References:**
+
 - Meurer et al. (1999) ApJ 521, 64. The canonical local-universe IRX–β relation.
 - Calzetti et al. (2000) ApJ 533, 682. Starburst attenuation law at z~0.
 - Reddy et al. (2018) ApJ 869, 92. z~2 IRX–β scatter and implications for
   UV-to-IR conversions in high-z star-forming galaxies.
+
 """
 
 import os

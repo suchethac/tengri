@@ -7,10 +7,10 @@ into a single object so users don't have to construct each by hand.
 
 from __future__ import annotations
 
-import glob
 import os
 import platform
 import sys
+import warnings
 from typing import Any
 
 import jax
@@ -376,21 +376,43 @@ class Galaxy:
 
     def fit(
         self,
-        backend: str = "map",
+        method: str | None = None,
         verbose: bool = True,
         *,
         approx="auto",
+        backend: str | None = None,
         **kwargs,
     ) -> Galaxy:
         """Run inference and store result.
 
+        .. note::
+
+           Unlike :meth:`tengri.ForwardModel.fit`, which defaults to
+           ``"vi"``, this facade defaults to ``"map"`` — a point estimate with
+           **no uncertainties**. That difference is deliberate: ``Galaxy`` is
+           the beginner-facing shortcut and ``"vi"`` costs ~100 s cold and
+           ~20 GB RSS at D=6-7, which is not a reasonable thing to do by
+           surprise. It is called out here because it used to be silent: five
+           fit surfaces disagreed about the default and nothing said so
+           (#1289). If you want a posterior, pass ``method="vi"``.
+
         Parameters
         ----------
-        backend : str
-            Inference backend. One of "map", "vi", "vi_native", "mcmc_nuts",
-            "mcmc_raytrace", "mcmc_hmc", "mcmc_dynamic_hmc", "mcmc_ghmc",
-            "mcmc_mclmc", "mcmc_adjusted_mclmc", "mcmc_ess", "nss".
-            Default: "map".
+        method : str, optional
+            Inference method. Default ``"map"``.
+            ``tengri.list_inference_methods()`` is the live list — "map",
+            "vi", "vi_linear", "mcmc_nuts", "mcmc_raytrace", "mcmc_hmc",
+            "mcmc_dynamic_hmc", "mcmc_adjusted_mclmc", "mcmc_ess", "nss"
+            among them.
+
+            This docstring used to list ``"vi_native"``, which has never been
+            a registered name and raises ``KeyError``, alongside
+            ``"mcmc_ghmc"`` and ``"mcmc_mclmc"``, now ``tier="broken"``
+            (#1287).
+        backend : str, optional
+            Deprecated alias for ``method``. Every other fit surface in the
+            package spells this argument ``method``; ``backend`` here was the
+            odd one out. Passing it emits a :class:`DeprecationWarning`.
         verbose : bool
             Print progress. Default: True.
         approx : {"auto", None} or precompute config, default "auto"
@@ -412,6 +434,27 @@ class Galaxy:
         AttributeError
             If flux data not available (from_arrays required).
         """
+        # `backend=` is the legacy spelling of `method=` (#1289). Every other
+        # fit surface says `method`; this one said `backend`, so the same
+        # concept had two names depending on which entry point you found.
+        if backend is not None:
+            if method is not None:
+                raise TypeError(
+                    "Galaxy.fit() got both 'method' and its deprecated alias "
+                    f"'backend' (method={method!r}, backend={backend!r}). "
+                    "Pass 'method' only."
+                )
+            warnings.warn(
+                "Galaxy.fit(backend=...) is deprecated; use "
+                "Galaxy.fit(method=...). Every other fit surface in tengri "
+                "spells this argument 'method'.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            method = backend
+        if method is None:
+            method = "map"
+
         # Ensure model is built
         self.build_model()
 
@@ -424,12 +467,15 @@ class Galaxy:
         fitter = Fitter(self.model, self.flux_obs, self.noise, approx=approx)
 
         # Run inference
-        self.result = fitter.run(backend, verbose=verbose, **kwargs)
+        self.result = fitter.run(method, verbose=verbose, **kwargs)
 
-        # Record the backend used for later save/load
-        self._last_backend = backend
+        # Record the method used for later save/load
+        self._last_backend = method
         # Record the inference backend citation(s) now that a fit has run.
-        self.bibliography.add_backend(backend)
+        # Must be `method`, not the raw `backend` alias -- the latter is None
+        # unless the caller used the deprecated spelling, which would silently
+        # drop the citation for every ordinary call.
+        self.bibliography.add_backend(method)
 
         return self
 
@@ -577,11 +623,13 @@ class Galaxy:
         Parameters
         ----------
         fmt : {"list", "short", "bibtex", "report", "bibliography"}
+
             - "list" (default): list of ``Citation`` records.
             - "short": newline-joined one-line forms.
             - "bibtex": BibTeX blocks separated by blank lines.
             - "report": grouped human-readable report.
             - "bibliography": the :class:`Bibliography` container itself.
+
         """
         if fmt == "bibliography":
             return self.bibliography
@@ -713,6 +761,7 @@ def doctor() -> str:
     """Run an environment health check and return a human-readable report.
 
     Checks:
+
     - JAX version and backend
     - 64-bit (x64) enabled
     - XLA compilation cache directory
@@ -795,27 +844,24 @@ def doctor() -> str:
 
     lines.append("")
 
-    # SSP data availability
+    # SSP data availability. Search exactly where the loaders search
+    # (data_dirs), and glob what download_ssp actually writes: the old
+    # "ssp_*.h5" pattern could not match "fsps_prsc_miles_chabrier.h5", so
+    # doctor reported "no SSP data" for a correctly populated install.
     lines.append("SSP Data:")
-    ssp_locations = [
-        "./data/ssp_*.h5",
-        "~/tengri/data/ssp_*.h5",
-        os.path.expandvars("$TENGRI_DATA/ssp_*.h5"),
-    ]
-    found_ssp = False
-    for pattern in ssp_locations:
-        expanded = os.path.expanduser(pattern)
-        matches = glob.glob(expanded)
-        if matches:
-            lines.append(f"  ✓ Found: {matches[0]}")
-            found_ssp = True
-            break
+    from tengri._data_setup import TENGRI_DATA_ENV, find_ssp_files
 
-    if not found_ssp:
+    found = find_ssp_files()
+    if found:
+        lines.append(f"  ✓ Found: {found[0]}")
+        if len(found) > 1:
+            lines.append(f"    ({len(found)} SSP grids visible)")
+
+    if not found:
         lines.append("  WARNING: No SSP data found in common locations.")
         lines.append("    Run tengri.download_ssp() to fetch the default grid")
         lines.append("    (tengri.list_known_ssps() shows alternatives), or point")
-        lines.append("    TENGRI_DATA at an existing SSP directory.")
+        lines.append(f"    ${TENGRI_DATA_ENV} at an existing SSP directory.")
 
     lines.append("")
 

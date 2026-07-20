@@ -28,6 +28,7 @@ Two factory contracts coexist in the registry:
   SEDModelConfig)`` — the legacy expert surface consumed by
   :class:`tengri.Galaxy` via :func:`resolve_preset`. For new code prefer the
   grammar recipes in :mod:`tengri.recipes`.
+
 """
 
 from __future__ import annotations

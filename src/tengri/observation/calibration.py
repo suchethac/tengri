@@ -17,7 +17,7 @@ Coefficients a_n have a Gaussian(0, sigma) prior that regularizes the
 polynomial toward unity, preventing overfitting of broad spectral features.
 
 Parameters integration example
------------------------------
+------------------------------
 To add calibration coefficients as free parameters::
 
     from tengri.parameters.priors import Gaussian

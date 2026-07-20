@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:03.287** total execution time for 302 files **from all galleries**:
+**00:01.561** total execution time for 279 files **from all galleries**:
 
 .. container::
 
@@ -32,13 +32,10 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_agn_plot_smbh_growth_track.py` (``../examples/agn/plot_smbh_growth_track.py``)
-     - 00:02.869
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_ab_mag_zero_point.py` (``../examples/advanced/plot_diag_ab_mag_zero_point.py``)
+     - 00:01.561
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_custom_attenuation_component.py` (``../examples/advanced/plot_custom_attenuation_component.py``)
-     - 00:00.417
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_ab_mag_zero_point.py` (``../examples/advanced/plot_diag_ab_mag_zero_point.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_calzetti_kv_norm.py` (``../examples/advanced/plot_diag_calzetti_kv_norm.py``)
@@ -155,9 +152,6 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_uv_xray_connection.py` (``../examples/agn/plot_alpha_ox_uv_xray_connection.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_boroson_green_feii_template.py` (``../examples/agn/plot_boroson_green_feii_template.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_cat3d_wind_sweep.py` (``../examples/agn/plot_cat3d_wind_sweep.py``)
      - 00:00.000
      - 0.0
@@ -182,9 +176,6 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_grahsp_paper_fig1_overview.py` (``../examples/agn/plot_grahsp_paper_fig1_overview.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_grahsp_paper_fig3_params.py` (``../examples/agn/plot_grahsp_paper_fig3_params.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_grahsp_paper_fig9_agn_attenuation.py` (``../examples/agn/plot_grahsp_paper_fig9_agn_attenuation.py``)
      - 00:00.000
      - 0.0
@@ -203,9 +194,6 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_polar_dust_ebv_type12_sweep.py` (``../examples/agn/plot_polar_dust_ebv_type12_sweep.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_qsogen_spectrum.py` (``../examples/agn/plot_qsogen_spectrum.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_relagn_spin.py` (``../examples/agn/plot_relagn_spin.py``)
      - 00:00.000
      - 0.0
@@ -218,16 +206,10 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_silva04_nh_sweep.py` (``../examples/agn/plot_silva04_nh_sweep.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_agnfitter_sweep.py` (``../examples/agn/plot_skirtor_agnfitter_sweep.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_agnfitter_vs_cigale.py` (``../examples/agn/plot_skirtor_agnfitter_vs_cigale.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_inclination_sweep.py` (``../examples/agn/plot_skirtor_inclination_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_variants.py` (``../examples/agn/plot_skirtor_variants.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_vs_smooth_torus.py` (``../examples/agn/plot_skirtor_vs_smooth_torus.py``)
@@ -237,6 +219,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_slone_netzer_disc_sweep.py` (``../examples/agn/plot_slone_netzer_disc_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_smbh_growth_track.py` (``../examples/agn/plot_smbh_growth_track.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_torus_library_inclination_grid.py` (``../examples/agn/plot_torus_library_inclination_grid.py``)
@@ -266,9 +251,6 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_geometry_screen_vs_mixed.py` (``../examples/dust_attenuation/plot_dust_geometry_screen_vs_mixed.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_geometry_sweep.py` (``../examples/dust_attenuation/plot_dust_geometry_sweep.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_law_application.py` (``../examples/dust_attenuation/plot_dust_law_application.py``)
      - 00:00.000
      - 0.0
@@ -290,12 +272,6 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_rv_av_uv_slope_degeneracy.py` (``../examples/dust_attenuation/plot_rv_av_uv_slope_degeneracy.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_tau_bc_sweep.py` (``../examples/dust_attenuation/plot_tau_bc_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_tau_diff_sweep.py` (``../examples/dust_attenuation/plot_tau_diff_sweep.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_two_component.py` (``../examples/dust_attenuation/plot_two_component.py``)
      - 00:00.000
      - 0.0
@@ -303,9 +279,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_bump_strength_sweep.py` (``../examples/dust_attenuation/plot_uv_bump_strength_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_bump_sweep.py` (``../examples/dust_attenuation/plot_uv_bump_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_ir_energy_balance.py` (``../examples/dust_attenuation/plot_uv_ir_energy_balance.py``)
@@ -321,9 +294,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_grid.py` (``../examples/dust_emission/plot_bosa_grid.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_ltir_sweep.py` (``../examples/dust_emission/plot_bosa_ltir_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dale2014_agn_fraction.py` (``../examples/dust_emission/plot_dale2014_agn_fraction.py``)
@@ -380,9 +350,6 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_igm_plot_igm_redshift.py` (``../examples/igm/plot_igm_redshift.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_z_evolution.py` (``../examples/igm/plot_igm_z_evolution.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_inoue_vs_madau_z5_z7.py` (``../examples/igm/plot_inoue_vs_madau_z5_z7.py``)
      - 00:00.000
      - 0.0
@@ -408,9 +375,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_metallicity_plot_logzsol_panchromatic.py` (``../examples/metallicity/plot_logzsol_panchromatic.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_metallicity_plot_logzsol_sweep.py` (``../examples/metallicity/plot_logzsol_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_metallicity_plot_metallicity_age_grid.py` (``../examples/metallicity/plot_metallicity_age_grid.py``)
@@ -479,16 +443,7 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_fesc_logu_atlas.py` (``../examples/nebular/plot_cue_fesc_logu_atlas.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_flex_tour.py` (``../examples/nebular/plot_cue_flex_tour.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_parameter_atlas.py` (``../examples/nebular/plot_cue_parameter_atlas.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_dig_frac_sweep.py` (``../examples/nebular/plot_dig_frac_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_emission_line_atlas.py` (``../examples/nebular/plot_emission_line_atlas.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_lya_sweep.py` (``../examples/nebular/plot_fesc_lya_sweep.py``)
@@ -546,9 +501,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py` (``../examples/photometry/plot_cosmic_dimming_observed_flux.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_curves.py` (``../examples/photometry/plot_filter_curves.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_set_comparison.py` (``../examples/photometry/plot_filter_set_comparison.py``)
@@ -674,16 +626,10 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_burstiness.py` (``../examples/sfh/plot_psd_burstiness.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_burstiness_prior.py` (``../examples/sfh/plot_psd_burstiness_prior.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_quenching_pathway_compare.py` (``../examples/sfh/plot_quenching_pathway_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh2exp_main_plus_burst.py` (``../examples/sfh/plot_sfh2exp_main_plus_burst.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_double_burst.py` (``../examples/sfh/plot_sfh_double_burst.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_form_compare.py` (``../examples/sfh/plot_sfh_form_compare.py``)
@@ -776,9 +722,6 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_band_comparison.py` (``../examples/sps/plot_mass_to_light_band_comparison.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_ratios.py` (``../examples/sps/plot_mass_to_light_ratios.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_sps_library_compare.py` (``../examples/sps/plot_sps_library_compare.py``)
      - 00:00.000
      - 0.0
@@ -818,16 +761,10 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_cosmology_ladder.py` (``../examples/usecases/plot_usecase_cosmology_ladder.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_d4000_age.py` (``../examples/usecases/plot_usecase_d4000_age.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_d4000_vs_ssfr.py` (``../examples/usecases/plot_usecase_d4000_vs_ssfr.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_dropout_selection_z3.py` (``../examples/usecases/plot_usecase_dropout_selection_z3.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_emission_line_pcc.py` (``../examples/usecases/plot_usecase_emission_line_pcc.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_fundamental_metallicity_relation.py` (``../examples/usecases/plot_usecase_fundamental_metallicity_relation.py``)
@@ -846,9 +783,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_main_sequence_cosmic_evolution.py` (``../examples/usecases/plot_usecase_main_sequence_cosmic_evolution.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_mass_completeness.py` (``../examples/usecases/plot_usecase_mass_completeness.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sdss_lrg_stack_template.py` (``../examples/usecases/plot_usecase_sdss_lrg_stack_template.py``)
@@ -918,9 +852,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_xray_plot_xray_component_decomposition.py` (``../examples/xray/plot_xray_component_decomposition.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_delta_alpha_ox_sed.py` (``../examples/xray/plot_xray_delta_alpha_ox_sed.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_xray_plot_xray_gamma_sweep.py` (``../examples/xray/plot_xray_gamma_sweep.py``)

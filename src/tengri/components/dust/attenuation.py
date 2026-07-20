@@ -8,6 +8,7 @@ geometry (f_obscuration, Lower 2022).
 Structure
 ---------
 Two physical components with independent attenuation curves:
+
 - **Birth cloud**: affects young stars (age < t_birth), optical depth tau_v1
 - **Diffuse ISM**: affects all stars, optical depth tau_v2
 
@@ -20,6 +21,7 @@ where w(age) is a smooth sigmoid transition at t_birth.
 
 Available Attenuation Curves
 ----------------------------
+
 - **power_law**: (lambda/5500)^n — original Charlot & Fall (2000)
 - **calzetti**: Calzetti et al. (2000) starburst polynomial, R_V=4.05
 - **leitherer02**: Leitherer et al. (2002) UV extension of Calzetti (970-1800 A)
@@ -38,12 +40,14 @@ Available Attenuation Curves
 
 Dust Geometries (Witt & Gordon 2000)
 -------------------------------------
+
 - **wg00_shell**: Foreground screen — standard exp(-tau*k)
 - **wg00_cloudy**: Homogeneous dust-star mix (slab) — grayer than screen
 - **wg00_dusty**: Clumpy two-phase medium (Natta & Panagia 1984) — grayest
 
 References
 ----------
+
 - Calzetti et al. 2000, ApJ, 533, 682
 - Cardelli et al. 1989, ApJ, 345, 245
 - Charlot & Fall 2000, ApJ, 539, 718
@@ -62,6 +66,7 @@ References
 - Wild et al. 2007, MNRAS, 381, 543
 - Witt & Gordon 2000, ApJ, 528, 799
 - Zacharegkas et al. 2025, arXiv:2506.19919
+
 """
 
 import jax
@@ -1543,6 +1548,7 @@ def wg00_dusty(
     low-column channels between clumps.
 
     **Limiting behavior:**
+
     - :math:`n_{\rm clumps} \to \infty` (fixed :math:`\tau_V`): recovers the homogeneous slab.
     - :math:`n_{\rm clumps} = 1`: single clump with Poisson averaging.
     - :math:`\tau_V = 0`: T = 1 (transparent), regardless of n_clumps.

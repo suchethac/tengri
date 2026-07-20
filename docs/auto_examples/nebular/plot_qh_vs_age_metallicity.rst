@@ -39,12 +39,14 @@ stellar mass of a single-age population to give photons per second per solar mas
 
 References
 ----------
+
 - Leitherer, C., et al. 1999, "Starburst99: Synthesis Models for Galaxies with
   Active Star Formation," ApJS, 123, 3. https://doi.org/10.1086/313233
+
 - Eldridge, J. J. & Stanway, E. R. 2016, "Binary population synthesis and the
   morphology-density relation at z ~ 0.05," MNRAS, 462, 3302 (binaries).
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-111
+.. GENERATED FROM PYTHON SOURCE LINES 31-114
 
 
 

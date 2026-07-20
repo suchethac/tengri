@@ -72,7 +72,7 @@ necessarily draws mass away from the old population.
             ssp,
             sfh={
                 "type": "sfh2exp",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_total_mass": 10.5,
                 "tau_main_gyr": 4.0,
                 "tau_burst_gyr": 0.1,
@@ -80,7 +80,7 @@ necessarily draws mass away from the old population.
                 "age_gyr": 10.0,
                 "burst_age_gyr": 0.3,
             },
-            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.2},
+            dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.2},
             redshift=tengri.Fixed(0.05),
         )
 
@@ -93,9 +93,9 @@ necessarily draws mass away from the old population.
     for f, c in zip(f_burst_values, colors):
         model = build(f)
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=c, lw=2.0, label=rf"$f_{{\rm burst}}={f:.2f}$")
 
     # Rest-frame UV window where the young burst dominates.

@@ -76,14 +76,14 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 0.5,
         "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Uniform(0.05, 4.5),
 )
 
@@ -97,9 +97,9 @@ wave_rest = np.logspace(2.8, 4.2, 1024)  # 631 Å to 15800 Å rest-frame
 seds_obs = {}
 for z in REDSHIFTS:
     params = {**p_base, "redshift": float(z)}
-    out = model.predict_rest_sed(params)
-    wave_rest_out = np.asarray(out.wavelength)
-    sed_rest = np.asarray(out.sed)
+    out = model.predict(params)
+    wave_rest_out = np.asarray(model.wavelengths)
+    sed_rest = np.asarray(out.rest_sed())
 
     # Transform to observer frame
     wave_obs = wave_rest_out * (1.0 + z)

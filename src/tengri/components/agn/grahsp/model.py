@@ -423,7 +423,9 @@ def compute_grahsp_sed(
     :math:`L_\mathrm{bol}`. Specifically::
 
         l5100 = 10**agn_log_lbol * L_sun_erg
+
                 * agn_frac
+
                 / (l_bol_intrinsic / l5100_unit)
 
     where ``l_bol_intrinsic / l5100_unit`` is the bolometric correction

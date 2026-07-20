@@ -88,7 +88,7 @@ class LineFluxData:
 
     Examples
     --------
-    >>> from tengri import LineFluxData
+    >>> from tengri.observation import LineFluxData
     >>> lfd = LineFluxData.from_dict(
     ...     {
     ...         "Halpha": (1.2e-16, 0.1e-16),

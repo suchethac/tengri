@@ -32,11 +32,12 @@ highlighting the Lyman continuum discontinuity (800–1350 Å). Contours
 trace how f_esc modulates the ionizing photon budget seen by the ISM.
 
 References:
+
 - Inoue et al. 2014, MNRAS, 442, 1805 (escape fraction formalism)
 - Steidel et al. 2018, ApJ, 869, 123 (Lyman continuum observations)
 - Li et al. 2024, ApJ, 969, 28 (Cue emulator)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-107
+.. GENERATED FROM PYTHON SOURCE LINES 22-109
 
 
 
@@ -77,14 +78,14 @@ References:
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": 0.3,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED, "fesc": tengri.Uniform(0.0, 1.0)},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={"type": "cue", "all_params": tengri.FIXED, "fesc": tengri.Uniform(0.0, 1.0)},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -97,9 +98,9 @@ References:
     seds_by_fesc = {}
     for fesc in fesc_values:
         params = {**baseline, "neb_fesc": jnp.float64(fesc)}
-        out = model.predict_rest_sed(params)
-        wave = np.asarray(out.wavelength)
-        sed = np.asarray(out.sed)
+        out = model.predict(params)
+        wave = np.asarray(model.wavelengths)
+        sed = np.asarray(out.rest_sed())
         seds_by_fesc[fesc] = (wave, sed)
 
     # Main plot with full SED

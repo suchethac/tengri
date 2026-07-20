@@ -75,7 +75,7 @@ redshift where ground-based surveys probe star formation epochs.
             ssp,
             sfh={
                 "type": "dpl",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "alpha": 2.0,
                 "beta": 2.5,
                 "tau_gyr": 1.5,
@@ -83,10 +83,10 @@ redshift where ground-based surveys probe star formation epochs.
             },
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_bc": 0.5,
                 "tau_diff": 0.3,
-                "emission": {"type": "dale2014", "*": tengri.FIXED},
+                "emission": {"type": "dale2014", "all_params": tengri.FIXED},
             },
             redshift=tengri.Fixed(z),
         )
@@ -95,9 +95,9 @@ redshift where ground-based surveys probe star formation epochs.
         params = {**baseline}
 
         # Predict rest-frame SED
-        out = model.predict_rest_sed(params)
-        wave_rest = np.asarray(out.wavelength)
-        sed_rest = np.asarray(out.sed)
+        out = model.predict(params)
+        wave_rest = np.asarray(model.wavelengths)
+        sed_rest = np.asarray(out.rest_sed())
 
         # Shift to observed frame
         wave_obs_um = (wave_rest / 1e4) * (1 + z)

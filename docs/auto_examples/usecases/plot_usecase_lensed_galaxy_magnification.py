@@ -1,6 +1,6 @@
 """
 Strong-lensing magnification: EoR galaxy SEDs at μ = 1, 5, 20, 100
-=========================================================
+==================================================================
 
 Demonstrates how strong gravitational lensing elevates intrinsically-faint
 high-redshift (z=7) galaxies above the JWST NIRCam 5σ detection threshold.
@@ -16,10 +16,12 @@ how only μ ≥ 5 crosses the detection threshold, making strong lensing critica
 observing the faintest reionization-epoch objects.
 
 References:
+
 - Refsdal, S. 1964, MNRAS, 128, 295 (gravitational lensing magnification)
 - Schaerer, D. 2003, A&A, 397, 527 (z>6 Lya emitters)
 - Bouwens, R. J., et al. 2022, ApJ, 931, 160 (EoR LBGs)
 - Rieke, M. J., et al. 2023, PASP, 135, 028001 (JWST NIRCam performance)
+
 """
 
 import os
@@ -77,7 +79,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 0.1,  # minimal dust in z~7 LAEs
         "tau_diff": 0.05,
         "slope": -0.7,

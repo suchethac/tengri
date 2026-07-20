@@ -214,12 +214,45 @@ globals().update(_FACTORIES)
 
 
 def available() -> list[str]:
-    """Return the list of variant names exposed by this module.
+    """Return the SFH variant names that can actually be built.
 
-    Mirrors the canonical keys of :data:`SFH_REGISTRY`. Aliases are not
-    surfaced — call them via the canonical name.
+    The canonical keys of :data:`SFH_REGISTRY` **minus**
+    :data:`~tengri.components.stellar.sfh.registry.UNVALIDATED_SFH_TYPES` —
+    types that are registered but not yet wired into the DSPS forward path, so
+    ``SEDModel.build`` raises on them. Aliases are not surfaced; call them via
+    the canonical name.
+
+    Returns
+    -------
+    list of str
+        Buildable variant names, sorted.
+
+    Notes
+    -----
+    This is deliberately shorter than :func:`tengri.list_sfh_models`, which
+    reports every *registered* type — including the unvalidated ones, marked
+    ``status='unvalidated'`` — so the two answer different questions: "what can
+    I build?" versus "what exists?". The counts differ by exactly the
+    unvalidated set.
+
+    Examples
+    --------
+    >>> from tengri import builders
+    >>> "dpl" in builders.sfh.available()
+    True
     """
     return sorted(_FACTORIES)
 
 
 __all__ = ["available", *sorted(_FACTORIES)]
+
+
+def __dir__() -> list[str]:
+    """Restrict tab-completion to the names this namespace actually offers.
+
+    ``__all__`` governs ``from ... import *`` but not ``dir()``, so without
+    this the module's own imports -- ``Any``, ``Callable``, the ``__future__``
+    ``annotations`` object, and internal helpers like ``make_factory`` --
+    showed up as completions beside the physics (#1288).
+    """
+    return sorted(__all__)

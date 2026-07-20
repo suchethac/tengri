@@ -15,6 +15,7 @@ dust screen exactly like the rest of the intrinsic SED.
 
 Normalization (two knobs, selected by the static ``norm`` config)
 -----------------------------------------------------------------
+
 * ``norm="frac"`` (**default**) — *relative*: the shock Hα luminosity is a
   fraction ``shock_frac`` of the galaxy's approximate Hα
   (``L(Hα) ~ 1e-3 L_bol`` of the SED accumulated so far). Intuitive "how

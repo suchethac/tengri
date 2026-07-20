@@ -196,6 +196,7 @@ class XRayQuantities(NamedTuple):
     - ``l_x_agn`` (erg/s) — AGN X-ray luminosity from the published
       ``L_agn_bol`` via :func:`compute_l_x_agn`.
     - ``l_x_total`` (erg/s) — sum of the two.
+
     """
 
     l_x_xrb: jnp.ndarray
@@ -212,6 +213,7 @@ class IonizingQuantities(NamedTuple):
     - ``q_h`` (photons/s) — total ionizing photon production rate;
       sourced directly from ``state.derived["nion"]``.
     - ``xi_ion`` (Hz/erg) — production efficiency q_h / νLν(1500 Å).
+
     """
 
     q_h: jnp.ndarray
@@ -821,8 +823,8 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
     Reads ``state.derived["sed_radio"]`` (the radio-component-published
     SED in erg/s/Hz on the rest-frame wave grid) and interpolates at
     21 cm (= 1.4 GHz) to populate ``l_1p4ghz``. Thermal / non-thermal
-    split uses the published ``nion`` and the legacy
-    :func:`tengri.utils.sed_quantities.compute_l_radio_thermal`.
+    split uses the published ``log_nion`` and the log-domain
+    :func:`tengri.utils.sed_quantities.compute_l_radio_thermal_from_log_qh`.
 
     Returns
     -------
@@ -835,7 +837,7 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
     :class:`RadioSEDComponent` (no ``L_radio`` published).
     """
     from tengri.utils.physics_constants import L_SUN
-    from tengri.utils.sed_quantities import compute_l_radio_thermal, compute_q_ir
+    from tengri.utils.sed_quantities import compute_l_radio_thermal_from_log_qh, compute_q_ir
 
     derived = state.derived
     nan_scalar = jnp.asarray(jnp.nan)
@@ -852,8 +854,8 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
     wave_21cm = 21.106e8  # Å — 1.4 GHz exactly
     l_1p4ghz = jnp.interp(wave_21cm, wave, L_radio)
 
-    nion = jnp.asarray(derived.get("nion", 0.0))
-    l_thermal = compute_l_radio_thermal(nion)
+    log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+    l_thermal = compute_l_radio_thermal_from_log_qh(log_nion)
     l_nonthermal = l_1p4ghz - l_thermal
 
     l_ir = jnp.asarray(derived.get("L_ir", 0.0))
@@ -903,16 +905,16 @@ def state_to_xray_quantities(state: Any) -> XRayQuantities:
 def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
     """Convert :class:`ForwardState` → :class:`IonizingQuantities`.
 
-    Reads ``state.derived["nion"]`` (ionizing photon rate, photons/s)
-    and computes ``xi_ion`` = q_h / νLν(1500 Å).
+    Reads ``state.derived["nion"]`` for q_h (ionizing photon rate, photons/s;
+    deferred to #1206 items 2/3) and computes ``xi_ion`` from ``log_nion``
+    using the log-domain helper for float32 safety.
 
     Returns
     -------
     IonizingQuantities
         ``q_h``, ``xi_ion``.
     """
-    from tengri.utils.physics_constants import C_AA
-    from tengri.utils.sed_quantities import compute_fuv_flux
+    from tengri.utils.sed_quantities import compute_xi_ion_from_log_qh
 
     derived = state.derived
     nan_scalar = jnp.asarray(jnp.nan)
@@ -922,10 +924,8 @@ def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
     if sed is None:
         xi_ion = nan_scalar
     else:
-        fuv = compute_fuv_flux(sed, state.wave)  # mean L_ν in 1000-1700 Å
-        nu_uv = C_AA / 1500.0  # Hz
-        nu_l_uv = fuv * nu_uv  # erg/s
-        xi_ion = q_h / jnp.maximum(nu_l_uv, _TINY)
+        log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
+        xi_ion = compute_xi_ion_from_log_qh(log_nion, sed, state.wave)
 
     return IonizingQuantities(q_h=q_h, xi_ion=xi_ion)
 

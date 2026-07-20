@@ -2,6 +2,7 @@
 """SEDModel: high-level forward model wrapping the tengri SED pipeline.
 
 SEDModel provides a clean API for:
+
 - Forward predictions (SED, photometry, spectrum, SFH, derived quantities)
 - Mock galaxy generation (single and batch)
 - Convenience fitting (delegates to Fitter)
@@ -49,6 +50,7 @@ marker lines to jump. In order:
   - ``Batch operations``
   - ``Private prediction dispatch``
   - ``Utilities``
+
 """
 
 from __future__ import annotations
@@ -77,6 +79,7 @@ from tengri.forward.sed_model_types import (
     PriorPredictive,
     SEDModelState,
 )
+from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.observation.photometry import ab_mag_from_flux
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
@@ -396,6 +399,83 @@ class FeaturePrecomp:
     ranges: dict | None = None
 
 
+@dataclasses.dataclass(frozen=True)
+class ApproxState:
+    """The effective approximation state of a built model.
+
+    A read-only summary of which build-time look-up tables resolved and
+    activated. Read it off any model — :class:`SEDModel` or
+    :class:`~tengri.forward.forward_model.ForwardModel` — via the ``approx``
+    property, which answers the same question on both:
+
+    >>> model.approx.wave_precomp  # doctest: +SKIP
+    True
+    >>> print(model.approx)  # doctest: +SKIP
+    ApproxState(wave_precomp=True, n_subbands=5)
+
+    This reports what the model *resolved*, not what was requested: a
+    :class:`SpectrumPrecomp` that fell back to the exact path because the
+    spectral resolution was too high reports ``spectrum_precomp=False``.
+
+    Attributes
+    ----------
+    wave_precomp : bool
+        The SSP x filter photometry LUT is active.
+    spectrum_precomp : bool
+        The spectrum LUT is active.
+    feature_precomp : bool
+        The emission-line LUT is active.
+    ztable : bool
+        Photometry is interpolated through a redshift table (free redshift, or
+        a ``catalog_z_range`` reuse window).
+    n_subbands : int
+        Sub-band samples per filter used by the photometry LUT; ``0`` when the
+        LUT is off or unsampled.
+
+    Notes
+    -----
+    Truthiness reports whether *any* LUT is active, so ``if model.approx:``
+    distinguishes an approximated model from an exact one::
+
+        if not model.approx:
+            ...  # exact wave-grid model
+
+    Not JIT-relevant: this is Python-side introspection, never traced.
+    """
+
+    wave_precomp: bool = False
+    spectrum_precomp: bool = False
+    feature_precomp: bool = False
+    ztable: bool = False
+    n_subbands: int = 0
+
+    def __bool__(self) -> bool:
+        """Whether any build-time LUT is active."""
+        return self.wave_precomp or self.spectrum_precomp or self.feature_precomp
+
+    def __repr__(self) -> str:
+        """Show only the active flags — the exact model prints as ``exact``."""
+        on = [
+            f"{name}={getattr(self, name)!r}"
+            for name in ("wave_precomp", "spectrum_precomp", "feature_precomp", "ztable")
+            if getattr(self, name)
+        ]
+        if self.n_subbands:
+            on.append(f"n_subbands={self.n_subbands}")
+        return f"ApproxState({', '.join(on)})" if on else "ApproxState(exact)"
+
+
+def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
+    """Warn that a grid cache could not be warmed, naming the failure it invites."""
+    warnings.warn(
+        f"tengri: could not pre-load the {label} grid ({exc}). It will be loaded "
+        f"lazily instead, which raises UnexpectedTracerError if the first load "
+        f"happens inside a JIT trace.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+
+
 def _warn_agn_dust_double_count(spec) -> None:
     """Warn when composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
 
@@ -436,59 +516,6 @@ def _warn_agn_dust_double_count(spec) -> None:
         "quasar template alone. See ADR-0018 §5 / issue #721. Filter "
         "AGNDustDoubleCountWarning if the overlap is deliberate.",
         AGNDustDoubleCountWarning,
-        stacklevel=3,
-    )
-
-
-def _warn_line_data_without_line_model(model, observation) -> None:
-    """Warn when the likelihood scores discrete emission lines but the nebular
-    model cannot predict a line catalog.
-
-    Fires when the observation configures discrete emission-line data — line
-    fluxes (``observation.has_line_fluxes``) or line ratios
-    (``observation.has_line_ratios``) — while the model's nebular backend is the
-    baked-in / SSP-embedded kind (:class:`BakedInBackend`) or nebular is off.
-    Those backends publish no discrete line catalog — ``predict_emission_lines``
-    raises for them (#302) and the line-flux/ratio paths reduce to empty line
-    luminosities — so the line terms in the likelihood contribute no signal (a
-    silent mis-fit). Only the photoionization backends (Cue, CloudyGrid, CB19)
-    publish discrete lines, so the guard keys on
-    ``isinstance(backend, BakedInBackend)`` — the exact condition that makes line
-    prediction fail — not on "is any nebular present".
-
-    Emits a filterable :class:`LineDataWithoutLineModelWarning`. Spectral indices
-    and spectroscopy are intentionally not triggers: those are measured on the
-    SED, which a baked-in SSP does carry (continuum + baked-in lines together).
-    """
-    if observation is None:
-        return
-    has_line_components = getattr(observation, "has_line_fluxes", False) or getattr(
-        observation, "has_line_ratios", False
-    )
-    if not has_line_components:
-        return
-
-    from tengri.components.nebular import BakedInBackend
-
-    backend = getattr(model, "_nebular_backend", None)
-    if backend is not None and not isinstance(backend, BakedInBackend):
-        return  # cue / cloudy / cb19 publish a discrete line catalog
-
-    from tengri.config.exceptions import LineDataWithoutLineModelWarning
-
-    backend_name = getattr(backend, "name", "none")
-    warnings.warn(
-        "The observation includes discrete emission-line data (line fluxes or "
-        f"ratios), but the model's nebular backend ('{backend_name}') does not "
-        "publish a discrete emission-line catalog. Predicted line fluxes will be "
-        "empty, so the emission-line terms in the likelihood contribute no signal "
-        "— a silent mis-fit. To fit emission lines, build with a photoionization "
-        "backend on a bare-stellar SSP, e.g. neb={'type': 'cue'} or "
-        "neb={'type': 'cloudy', ...}. A wNE (baked-in) SSP carries nebular "
-        "emission in its continuum but cannot separate discrete lines. Filter "
-        "LineDataWithoutLineModelWarning if this is intentional (e.g. fitting the "
-        "continuum only).",
-        LineDataWithoutLineModelWarning,
         stacklevel=3,
     )
 
@@ -2454,8 +2481,10 @@ class SEDModel:
         permanently leak into downstream code. This method calls each loader once
         OUTSIDE a JIT context so the cache stores concrete arrays instead.
 
-        Wrapped in try/except because grid files are optional — missing files
-        should not block SEDModel construction.
+        A grid file may legitimately be absent, so a failed warm degrades to the
+        lazy path rather than blocking construction — but it warns, because the
+        lazy path is precisely what raises ``UnexpectedTracerError`` later, far
+        from this cause.
         """
         # MAPPINGS shock emission grids (nebular/shock.py:_load_mappings_grids)
         if self._uses_shock:
@@ -2463,8 +2492,8 @@ class SEDModel:
                 from tengri.components.nebular.shock import _load_mappings_grids
 
                 _load_mappings_grids()
-            except Exception:
-                pass
+            except (OSError, ImportError) as exc:
+                _warn_grid_warm_failed("MAPPINGS shock emission", exc)
 
         # CAT3D-Wind AGN torus grids (agn/cat3d_wind.py:_load_cat3d_default)
         if self._agn_model == "cat3d_wind":
@@ -2472,38 +2501,23 @@ class SEDModel:
                 from tengri.components.agn.cat3d_wind import _load_cat3d_default
 
                 _load_cat3d_default()
-            except Exception:
-                pass
+            except (OSError, ImportError) as exc:
+                _warn_grid_warm_failed("CAT3D-Wind AGN torus", exc)
 
         # Astrodust+PAH emission grid (dust/emission/templates/astrodust.py).
         # The faithful HD23 implementation self-loads its grid in load()/predict();
         # warm the process cache OUTSIDE any trace so an in-trace lazy load hits
         # concrete arrays rather than leaking a tracer (UnexpectedTracerError).
         # The grammar builds the component with the default template path (None).
-        if getattr(self, "_dust_emission_model", None) == "astrodust":
+        if self._dust_emission_model == "astrodust":
             try:
                 from tengri.components.dust.emission.templates.astrodust import (
                     _cached_astrodust_grid,
                 )
 
                 _cached_astrodust_grid(None)
-            except Exception:
-                pass
-
-    def ensure_photometry_precomputed(self) -> bool:
-        """Deprecated no-op (the legacy ``PrecomputedData`` container was retired, #620).
-
-        The photometry fast path is now opt-in at build time via
-        ``approx=WavePrecomp()`` and is built through the component chain, not
-        lazily here. Retained as a no-op so existing callers (e.g. the Fitter,
-        whose return value was already discarded) keep working.
-
-        Returns
-        -------
-        bool
-            Always ``False`` (nothing is built lazily).
-        """
-        return False
+            except (OSError, ImportError) as exc:
+                _warn_grid_warm_failed("Astrodust+PAH emission", exc)
 
     def _get_internal_params(self, params):
         """Translate public param dict to internal names with unit conversion.
@@ -2713,6 +2727,46 @@ class SEDModel:
         return kw
 
     # ── Clone with a different approximation policy ────────────────────
+
+    @property
+    def approx(self) -> ApproxState:
+        """The effective approximation state of this model.
+
+        Answers "is a build-time look-up table live on this model?" — the same
+        question, spelled the same way, on
+        :class:`~tengri.forward.forward_model.ForwardModel`.
+
+        Returns
+        -------
+        ApproxState
+            Frozen summary of the LUTs that resolved and activated. Falsy for an
+            exact wave-grid model.
+
+        Examples
+        --------
+        >>> model.approx.wave_precomp  # doctest: +SKIP
+        True
+        >>> if not model.approx:  # doctest: +SKIP
+        ...     ...  # exact path
+
+        Notes
+        -----
+        Reads the same lowered ``_approx`` flags the forward pipeline itself
+        consumes, so it reports what the code *does*, not what was requested —
+        a ``SpectrumPrecomp`` that fell back to the exact path reports
+        ``spectrum_precomp=False``. Deriving it from any other source would
+        make this a third spelling of the question and free it to drift.
+
+        Not JIT-relevant: Python-side introspection, never traced.
+        """
+        flags = self._approx or {}
+        return ApproxState(
+            wave_precomp=bool(flags.get("wave_precomp")),
+            spectrum_precomp=bool(flags.get("spectrum_precomp")),
+            feature_precomp=self._approx_config_feature is not None,
+            ztable=bool(flags.get("ztable")),
+            n_subbands=int(flags.get("n_subbands", 0) or 0),
+        )
 
     def _has_modern_approx(self) -> bool:
         """Whether a build-time ``approx=`` LUT is active on this model.
@@ -3219,8 +3273,21 @@ class SEDModel:
         predict_line_luminosities : JIT-compatible emission lines for batch.
         predict_rest_sed : Full rest-frame SED for custom analysis.
         """
+        from collections.abc import Mapping
+
         from tengri.forward.prediction import Prediction
 
+        if not isinstance(params, Mapping):
+            raise TypeError(
+                f"model.predict() expects a params dict (e.g. from "
+                f"spec.sample(key)), got {type(params).__name__}."
+            )
+        # Validate eagerly — matching predict_photometry — so a typo'd or
+        # missing free parameter raises a helpful error here instead of a bare
+        # KeyError deferred to the first accessor of the lazy Prediction. Both
+        # asymmetries were flagged as silent-wrong footguns in a fresh-user audit.
+        check_unknown_params(params, self._param_map)
+        check_missing_free_params(params, self.spec, self._param_map)
         return Prediction(self, params)
 
     def compile_signature(self) -> tuple:
@@ -6021,6 +6088,15 @@ class SEDModel:
         an :class:`Observables` NamedTuple with one field per configured
         observation sub-block (``phot_fnu``, ``phot_rest_fnu``, ``spec_fnu``).
 
+        .. warning::
+
+           This is the **exact** wave-grid path: it bypasses the WavePrecomp
+           LUT even when the model was built with ``approx=WavePrecomp(...)``.
+           If you only need photometry, :meth:`predict_photometry` returns the
+           same ``phot_fnu`` through the LUT at roughly **16.5x** the speed.
+           Reach for this one when you need several channels from one pass, or
+           when you specifically want the exact path.
+
         Parameters
         ----------
         params : Mapping
@@ -7333,15 +7409,13 @@ class SEDModel:
 
         spec = parse_groups(**groups)
         _warn_agn_dust_double_count(spec)
-        model = cls(
+        return cls(
             spec,
             ssp_data,
             filters=filters,
             observation=observation,
             **model_kwargs,
         )
-        _warn_line_data_without_line_model(model, observation)
-        return model
 
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
         """Sample from the prior and evaluate forward model on each draw.
@@ -7376,7 +7450,7 @@ class SEDModel:
         self,
         data=None,
         noise=None,
-        method: str = "vi",
+        method: str = DEFAULT_METHOD,
         data_type: str | None = None,
         *,
         photometry: tuple | None = None,

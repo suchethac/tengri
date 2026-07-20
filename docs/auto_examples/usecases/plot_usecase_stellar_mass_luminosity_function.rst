@@ -43,11 +43,12 @@ the forward model: stellar mass → SED → rest-frame
 absolute magnitudes.
 
 References:
+
 - Schechter 1976, ApJ, 203, 297 (SMF parameterization)
 - Baldry et al. 2012, MNRAS, 421, 621 (Schechter fit z~0)
 - Blanton et al. 2003, ApJ, 592, 819 (SDSS luminosity function)
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-315
+.. GENERATED FROM PYTHON SOURCE LINES 34-318
 
 
 
@@ -67,13 +68,13 @@ References:
       log10(M*) range: 7.80 – 10.92
 
     Predicting r-band absolute magnitudes...
-      50/200: log10(M*)=8.04, m_r=-17.57, M_r=-17.57
-      100/200: log10(M*)=8.37, m_r=-18.14, M_r=-18.14
-      150/200: log10(M*)=8.91, m_r=-19.10, M_r=-19.10
-      200/200: log10(M*)=10.92, m_r=-22.61, M_r=-22.61
+      50/200: log10(M*)=8.04, m_r=-17.53, M_r=-17.53
+      100/200: log10(M*)=8.37, m_r=-18.11, M_r=-18.11
+      150/200: log10(M*)=8.91, m_r=-19.06, M_r=-19.06
+      200/200: log10(M*)=10.92, m_r=-22.57, M_r=-22.57
 
     Computed 200 absolute magnitudes
-      M_r range: -22.61 to -17.16
+      M_r range: -22.57 to -17.12
 
 
 
@@ -293,6 +294,7 @@ References:
         Parameterization (SDSS: h=0.7):
           Phi(M_r) = Phi_1 * 10^(0.4*(alpha_1+1)*(M_r - M_r*)) \
                      * exp(-10^(0.4*(M_r - M_r*)))
+
                     + Phi_2 * 10^(0.4*(alpha_2+1)*(M_r - M_r*)) \
                     * exp(-10^(0.4*(M_r - M_r*)))
 
@@ -371,7 +373,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.533 seconds)
+   **Total running time of the script:** (0 minutes 7.389 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_stellar_mass_luminosity_function.py:

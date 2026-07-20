@@ -31,7 +31,7 @@ inefficient ADAF, empirical composite vs first-principles continuum.
 
 Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-91
+.. GENERATED FROM PYTHON SOURCE LINES 15-98
 
 
 
@@ -41,19 +41,8 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -94,8 +83,15 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
     COLORS = plt.cm.tab20(np.linspace(0, 1, 20))[: len(DISC_MODELS)]
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+
+    # `powerlaw` is a bare phenomenological disc that tengri deprecates for science
+    # fits (use multicolor or kubota_done for that). It is on this panel ON PURPOSE —
+    # the point is to show what a power-law gives up against a physically derived
+    # disc. Its DeprecationWarning is therefore expected here, and only here;
+    # suppressing it narrowly keeps the gallery gate (#1146) meaningful everywhere else.
+    warnings.filterwarnings("ignore", message=".*powerlaw_disc is deprecated.*")
 
     ssp = tengri.load_ssp()
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
@@ -106,17 +102,17 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
             sfh=SFH,
             dust=DUST,
             agn={
-                "disc": {"type": disc, "*": tengri.FIXED},
-                "*": tengri.FIXED,
+                "disc": {"type": disc, "all_params": tengri.FIXED},
+                "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
                 "frac": 1.0,
             },
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
 
     ax.set(
@@ -137,7 +133,7 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.374 seconds)
+   **Total running time of the script:** (0 minutes 4.048 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:

@@ -34,12 +34,12 @@ For inference loops and likelihood evaluation, use the **lean methods** directly
 
 ```python
 # These methods are called by the inference loop
-photometry = model.predict_photometry(params, filters=filter_list)
+photometry = model.predict_photometry(params)   # the filters built into the model
 spectrum = model.predict_spectrum(params, wave_obs)
 lines = model.predict_emission_lines(params)
 ```
 
-These bypass the lazy `Prediction` wrapper and return only what you request, with no caching overhead. They are **JIT-compatible** and safe to call from inside an inference loop.
+These bypass the lazy `Prediction` wrapper and return only what you request, with no caching overhead. They are **JIT-compatible** and safe to call from inside an inference loop. The lean `predict_photometry` uses the filters the model was built with; to evaluate a *different* filter set at runtime, use the rich accessor `pred.photometry(filters=[...])` instead (see [Exact vs fast photometry](#exact-vs-fast-photometry)).
 
 **When to use:** Likelihood evaluation, fitting, parameter sweeps.
 
@@ -218,12 +218,13 @@ Integrating `obs_sed()` as if it were a flux is wrong by ~57 orders of magnitude
 
 ### Spectrum: instrument-specific, LSF-convolved, calibrated
 
-The `.spectrum()` method returns an **instrument-ready** spectrum — convolved with the line-spread function, rebinned to a specific wavelength grid, and calibrated:
+The `.spectrum()` method returns an **instrument-ready** spectrum — convolved with the line-spread function, rebinned to a specific wavelength grid, and calibrated. It requires the model to have a spectroscopy channel: build with `observation=Observation(spectroscopy=...)`, otherwise `pred.spectrum(...)` raises `ValueError` (a photometry-only model has no LSF or calibration to apply). For a bare model SED with no instrument convolution, use `pred.obs_sed(wave_obs)` instead.
 
 ```python
-# Spectrum at specific observer-frame wavelengths
-obs_wave_rest = jnp.linspace(4000, 7000, 200)  # Å, rest-frame wavelengths
-obs_wave = obs_wave_rest * (1 + model.redshift)
+# Spectrum at specific observer-frame wavelengths.
+# Give the grid you actually observed on — do not build it from a rest-frame
+# grid times (1 + z). `wave_obs` is already in the observer frame.
+obs_wave = jnp.linspace(4000, 7000, 200)  # Å, observer-frame
 
 spec = pred.spectrum(wave_obs=obs_wave)
 # spec.flux — F_ν at observed wavelengths [erg/s/cm²/Å]
@@ -268,7 +269,7 @@ spectrum_fast = pred.spectrum(wave_obs=..., fast=True)  # interpolates precomput
 
 ### When to use fast
 
-- **During inference**: Fitting uses the approximation that was baked in at build time (configurable via `model.approx`).
+- **During inference**: Fitting uses the approximation that was baked in at build time. Set it with `approx=` at build (or `model.with_approx(...)`, which returns a clone); read it back with `model.approx`, which reports the LUTs that actually resolved.
 - **Post-fit inspection**: Use `fast=True` to match inference exactly.
 - **Speed-critical analysis**: e.g., generating a mock catalog of 1 million galaxies.
 
@@ -335,19 +336,30 @@ catalog.to_csv("mock_catalog.csv", index=False)
 
 This workflow is pure JAX — no loop, fully differentiable, and trivial to parallelize.
 
-## Error handling: KeyError on unknown properties
+## Error handling: unknown properties raise, never return NaN
 
-If you request a property that doesn't exist or isn't active in the model, you get a clear error:
+If you request a property the model doesn't provide, you get a clear error naming the
+available ones — never a silent `NaN` or `None`. Which exception you catch depends on how
+you asked:
+
+| Access style | Raises |
+|---|---|
+| `pred.nonexistent_property` (attribute sugar) | `AttributeError` |
+| `pred.properties["nonexistent"]` (catalog) | `KeyError` |
 
 ```python
 pred = model.predict(params)
 
 try:
-    print(pred.nonexistent_property)
+    print(pred.nonexistent_property)        # attribute sugar
 except AttributeError as e:
     print(f"Error: {e}")
-    # Suggestion: list available properties
     print("Available properties:", list(pred.properties.keys()))
+
+try:
+    print(pred.properties["nonexistent"])   # catalog access
+except KeyError as e:
+    print(f"Error: {e}")
 ```
 
 The model always knows which properties are available. Never silently return NaN for an unknown name.
@@ -358,5 +370,6 @@ The model always knows which properties are available. Never silently return NaN
 - `tengri.describe_property()` — get detailed info on one
 - `Prediction` — lazy exploration object
 - `Posterior` — fitting results with credible intervals
-- `ForwardModel.predict_properties()` — the underlying JIT-safe method
-- `Observation.predict_photometry()` — likelihood evaluation
+- `SEDModel.predict_properties()` — the underlying JIT/vmap-safe method
+- `Observation.predict()` — likelihood evaluation (`predict_via_precomp()` on
+  the precompute path)

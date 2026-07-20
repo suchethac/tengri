@@ -4,10 +4,13 @@ You have 5-band SDSS photometry (u, g, r, i, z) for a galaxy and want to fit
 the stellar mass, star formation rate, and dust content with a single function
 call. The Galaxy facade wraps the full model-building pipeline into one line.
 
+For a spectroscopic equivalent, see [JWST NIRSpec](jwst_nirspec_spectroscopy.md).
+
 ```python
 import tengri
+from tengri import load_ssp_data
 
-ssp = tengri.load_ssp()
+ssp = load_ssp_data(tengri.download_ssp())
 
 galaxy = tengri.Galaxy.from_arrays(
     filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
@@ -33,13 +36,18 @@ print(galaxy.summary())
 
 **Get credible intervals:**
 
-For sampling-based posteriors (VI or MCMC), `summary()` reports medians
-with 68% intervals:
+For credible intervals on photometry (where `map` gives only a point estimate),
+the fastest option is `laplace` (Laplace approximation around the MAP):
 
 ```python
-galaxy = galaxy.fit(backend="vi")
+galaxy = galaxy.fit(backend="laplace")
 print(galaxy.summary())    # {param}_median, {param}_lo68, {param}_hi68
 ```
+
+Laplace is cheap (warm ~1–2 s, ~3 GB) and works well on small photometry problems.
+For full posterior samples (VI or MCMC), note that `backend="vi"` is memory-heavy
+(cold ~100 s, ~20 GB RSS on D=6–7 photometry) and intended for high-dimensional
+problems. For most photometry fits, `laplace` is the practical choice.
 
 **Bibliography:**
 

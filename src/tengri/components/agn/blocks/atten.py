@@ -143,9 +143,7 @@ def polar_dust_reemission_lnu(
     wave_aa = jnp.asarray(wavelength)
     l_lambda_in = jnp.asarray(l_in)
 
-    # Step 1: compute geometry-independent absorbed fraction per wavelength bin.
-    # polar_dust_extinction returns (l_nu_attenuated, l_absorbed) where l_absorbed
-    # is the per-bin absorbed luminosity (geometry-independent).
+    # l_absorbed_per_bin is the per-bin absorbed luminosity, geometry-independent.
     _l_nu_atten, l_absorbed_per_bin = polar_dust_extinction(
         l_lambda_in,
         wave_aa,
@@ -155,14 +153,13 @@ def polar_dust_reemission_lnu(
         law=agn_polar_law,
     )
 
-    # Step 2: bolometric absorbed luminosity = ∫ L_λ dλ [erg/s].
     # l_absorbed_per_bin shares units with l_in (L_λ in erg/s/Å here), so
     # integrate over wavelength (sorted ascending). Integrating over ν would
     # mix erg/s/Å with Hz and produce a ~12-dex overshoot in the reemission.
     idx_w = jnp.argsort(wave_aa)
     l_absorbed_total = jnp.trapezoid(l_absorbed_per_bin[idx_w], wave_aa[idx_w])
 
-    # Step 3: compute the graybody reemission (returns L_ν in erg/s/Hz).
+    # Returns L_ν in erg/s/Hz.
     l_nu_reemit = polar_dust_emission(
         l_absorbed_total,
         wave_aa,

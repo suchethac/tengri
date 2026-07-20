@@ -81,6 +81,7 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
     power-law with aging is a follow-up).
 
     Free parameters (7):
+
     - radio_q_ir: FIR-radio correlation parameter
     - radio_alpha_sf: SFR-driven radio slope
     - radio_loudness: AGN radio loudness parameter
@@ -173,8 +174,10 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
         Returns
         -------
         tuple[ndarray, mapping]
+
             - sed_out: sed_in + radio continuum.
             - published: Dict with "sed_radio".
+
         """
         # Read cross-component inputs with fallbacks
         L_ir = jnp.asarray(inputs.get("L_ir", 0.0))

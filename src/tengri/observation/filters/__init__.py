@@ -933,6 +933,7 @@ def suggest(
         Redshift of the source (z >= 0).
     coverage : str
         Rest-frame wavelength coverage preset. Options:
+
         - "visible": 3500–9000 Å (optical)
         - "visible_to_nir": 3500–25000 Å (optical + near-IR) [default]
         - "uv_to_ir": 1200–50000 Å (UV + optical + IR)

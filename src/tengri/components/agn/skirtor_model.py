@@ -337,6 +337,7 @@ class SKIRTORTorus(SEDModelComponent):
         ----------
         p : mapping[str, ndarray]
             Parameters with prefix already stripped:
+
             - log_lbol: log₁₀(L_bol / L_sun)
             - tau_skirtor: optical depth at 9.7 µm
             - p_skirtor: radial density gradient
@@ -348,6 +349,7 @@ class SKIRTORTorus(SEDModelComponent):
             - polar_ebv: polar dust E(B-V)
             - polar_temperature: polar dust graybody temperature (K)
             - polar_beta: polar dust emissivity index
+
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
         wave : ndarray, shape (n_wave,)
@@ -359,6 +361,7 @@ class SKIRTORTorus(SEDModelComponent):
         -------
         tuple[ndarray, dict]
             (sed_out, published) where:
+
             - sed_out: Updated SED (sed_in + attenuated disc + torus + polar dust reemission).
             - published: dict with keys L_agn_disc, L_agn_torus, L_agn_polar_dust,
               L_2500_30deg, L_6um, L_12um [erg/s] or [erg/s/Hz].
@@ -368,6 +371,7 @@ class SKIRTORTorus(SEDModelComponent):
         **JIT-compatible**: yes — uses static disk_type (not traced).
 
         **Disc selection**: config.disk_type selects the disc spectrum model:
+
         - 0: SKIRTOR intrinsic disc (Stalevski et al. 2012)
         - 1: Schartmann et al. (2005) torus model (CIGALE default)
         - 2: ADAF + thin disc blend (Lopez et al. 2024)

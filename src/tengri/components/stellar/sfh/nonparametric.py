@@ -20,6 +20,7 @@ All functions are pure JAX and JIT-compatible.
 
 References
 ----------
+
 - Leja+2017 (arXiv:1609.09073): Dirichlet SFH prior.
 - Leja+2019 (arXiv:1905.11997): Continuity and ContinuityFlex SFH priors.
 - Johnson+2021: Prospector implementation.
@@ -27,6 +28,7 @@ References
 - Wang et al. 2024 (arXiv:2401.12198): Prospector-β agebins scheme.
 - Synthesizer (ContinuityFlex upstream ref) — cite both: Lovell et al. 2025
   (OJA) + Roper et al. 2026 (JOSS).
+
 """
 
 from __future__ import annotations
@@ -486,6 +488,7 @@ def psb_continuity(
         = [0.3, 1.0, 3.0, 6.0, 13.7] Gyr.
     **ratio_kwargs
         Log-SFR ratios. Convention:
+
         - ``ratio_young`` — youngest bin vs flex bin (large positive = burst).
         - ``ratio_old_0``, ``ratio_old_1``, ... — ratios among old fixed bins.
 

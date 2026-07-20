@@ -18,9 +18,11 @@ JAX and JIT-compilable.
 
 References
 ----------
+
 - Nenkova et al. 2008, ApJ, 685, 147 (CLUMPY torus)
 - Stalevski et al. 2012, MNRAS, 420, 2756 (SKIRTOR)
 - Draine 2003, ARA&A, 41, 241 (silicate opacity)
+
 """
 
 import functools

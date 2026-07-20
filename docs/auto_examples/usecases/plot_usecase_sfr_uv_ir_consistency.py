@@ -15,14 +15,17 @@ We compare three estimators:
 - **SFR(UV+IR)**: sum of both (hybrid; Hao et al. 2011)
 
 The plot demonstrates the key physics:
+
 - SFR(UV) drops sharply with dust optical depth (obscuration)
 - SFR(IR) rises with dust optical depth (more heating)
 - SFR(UV+IR) remains roughly constant (dust-insensitive)
 
 References
 ----------
+
 - Kennicutt 1998, ARA&A, 36, 189 — SFR UV/IR/radio calibrations
 - Hao et al. 2011, ApJ, 741, 124 — hybrid UV+IR SFR recipe
+
 """
 
 import os
@@ -113,9 +116,9 @@ for i, tau_v in enumerate(tau_v_values):
             "law_bc": "calzetti",
             "tau_bc": Fixed(tau_bc),
             "tau_diff": Fixed(tau_diff),
-            "emission": {"type": "dale2014", "*": FIXED},
+            "emission": {"type": "dale2014", "all_params": FIXED},
         },
-        "neb": {"type": "cue", "*": FIXED},
+        "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(0.01),
         "apply_igm": False,
     }
@@ -125,7 +128,7 @@ for i, tau_v in enumerate(tau_v_values):
 
     # Predict rest-frame SED
     # (no observed-frame transformation needed; we work in rest-frame)
-    pred = model.predict_rest_sed({})
+    pred = model.predict({})
 
     # Extract actual SFH-derived SFR (if available)
     if hasattr(pred, "sfr_100myr"):
@@ -133,8 +136,8 @@ for i, tau_v in enumerate(tau_v_values):
     else:
         actual_sfr = None
 
-    wave = np.asarray(pred.wavelength)
-    sed = np.asarray(pred.sed)
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(pred.rest_sed())
 
     if wave_grid is None:
         wave_grid = wave

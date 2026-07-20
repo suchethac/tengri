@@ -18,7 +18,9 @@ The posterior shifts away from truth at low S/N when the prior is
 strong; at high S/N both priors give the same MAP.
 
 References:
+
 - Gelman et al. 2013 *Bayesian Data Analysis* (3rd ed.), §3.4.
+
 """
 
 import warnings
@@ -43,7 +45,7 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "dpl",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "alpha": 1.5,
         "beta": 2.5,
         "tau_gyr": 0.5,
@@ -51,7 +53,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": tengri.Uniform(0.0, 2.0),
         "tau_bc": 0.2,
     },

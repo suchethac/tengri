@@ -80,7 +80,7 @@ Reference: Conroy 2013, ARA&A, 51, 393.
         ssp,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": 2.0,
             "width_gyr": 1.5,
@@ -89,7 +89,7 @@ Reference: Conroy 2013, ARA&A, 51, 393.
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.4,
             "tau_diff": 0.2,
             "slope": -0.7,
@@ -98,9 +98,9 @@ Reference: Conroy 2013, ARA&A, 51, 393.
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    pred = model.predict_rest_sed(baseline)
-    wave = np.asarray(pred.wavelength)
-    sed = np.asarray(pred.sed)
+    pred = model.predict(baseline)
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(pred.rest_sed())
     # Smooth the emission-line spikes for display only — the photometry path
     # still integrates the spiky SED through the filters.
     sed_smooth = median_filter(sed, size=51)
@@ -136,7 +136,7 @@ Reference: Conroy 2013, ARA&A, 51, 393.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.655 seconds)
+   **Total running time of the script:** (0 minutes 10.491 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_set_comparison.py:

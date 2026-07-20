@@ -57,6 +57,7 @@ def star_forming_photometry() -> dict:
     ``CueWNESSPError``.
 
     **Configuration:**
+
     - **SFH**: Dual power-law (DPL) with all parameters free
     - **Dust**: Two-component Calzetti attenuation (both optical depths free)
     - **Dust IR emission**: Dale2014 templates (fixed)
@@ -106,6 +107,7 @@ def quiescent_z0() -> dict:
     :func:`star_forming_photometry` for details).
 
     **Configuration:**
+
     - **SFH**: Delayed-exponential (dexp) with all parameters free
     - **Dust**: Two-component Calzetti attenuation (both optical depths free,
       lower bounds than star-forming recipe)
@@ -134,8 +136,13 @@ def quiescent_z0() -> dict:
     """
     return dict(
         sfh=builders.sfh.dexp(defaults=FREE),
+        # ``defaults=FIXED``: only tau_bc / tau_diff are fitted here. The
+        # remaining attenuation params (slope, Rv, delta, bump_strength,
+        # f_obscuration) carry Fixed registry defaults, so the FREE this
+        # previously requested never freed any of them — the recipe now says
+        # what it has always actually done.
         dust=builders.dust.two_component(
-            defaults=FREE,
+            defaults=FIXED,
             law_bc="calzetti",
             tau_bc=Uniform(0, 0.5),
             tau_diff=Uniform(0, 0.3),
@@ -159,6 +166,7 @@ def high_z() -> dict:
     contribution.
 
     **Configuration:**
+
     - **SFH**: Truncated skew-normal (tsnorm) — bursty, short timescales
     - **Dust**: Two-component, Calzetti birth cloud + power-law diffuse
       (slope fixed at -0.7), no IR emission block
@@ -220,6 +228,7 @@ def photoz() -> dict:
     **SSP requirement:** any (nebular emission is off).
 
     **Configuration:**
+
     - **SFH**: Double power-law with extended timescales (tau up to 13 Gyr)
     - **Dust**: Two-component, Calzetti birth cloud + power-law diffuse
       (slope fixed at -0.7), wide optical-depth ranges for photo-z
@@ -280,6 +289,7 @@ def agn_panchromatic() -> dict:
     :func:`star_forming_photometry` for details).
 
     **Configuration:**
+
     - **SFH**: DPL (free)
     - **Dust**: Two-component Calzetti attenuation (free)
     - **Dust IR emission**: Dale2014 (free)
@@ -314,7 +324,9 @@ def agn_panchromatic() -> dict:
         sfh=builders.sfh.dpl(defaults=FREE),
         dust=builders.dust.two_component(
             defaults=FREE,
-            emission=builders.dust.emission.dale2014(defaults=FREE),
+            # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
+            # choice, not something a wildcard should open by default.
+            emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
         neb=builders.neb.cue(defaults=FIXED),
         agn=builders.agn.composable(
@@ -345,6 +357,7 @@ def composable_agn() -> dict:
     tengri. No external Synthesizer Cloudy grids or other downloads needed.
 
     **Configuration:**
+
     - **Disc**: Multicolor accretion disc (free)
     - **NLR**: Analytic narrow-line region (free)
     - **BLR**: Analytic broad-line region (free)
@@ -384,7 +397,9 @@ def composable_agn() -> dict:
         sfh=builders.sfh.dpl(defaults=FREE),
         dust=builders.dust.two_component(
             defaults=FREE,
-            emission=builders.dust.emission.dale2014(defaults=FREE),
+            # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
+            # choice, not something a wildcard should open by default.
+            emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
         neb=builders.neb.cue(defaults=FIXED),
         agn={
@@ -417,6 +432,7 @@ def stochastic_sfh_jwst() -> dict:
     :func:`star_forming_photometry` for details).
 
     **Configuration:**
+
     - **SFH**: DPL + stochastic field composition (both free)
     - **Dust**: Two-component Calzetti attenuation (free)
     - **Dust IR emission**: Dale2014 (fixed)
@@ -469,6 +485,7 @@ def mock_recovery_minimal() -> dict:
     works with both bare-stellar and wNE SSP files.
 
     **Configuration:**
+
     - **SFH**: Truncated skew-normal (tsnorm) with ~4 free params
     - **Dust**: Calzetti attenuation (tau_bc free)
     - **Dust IR emission**: Disabled (no PAH/continuum)
@@ -515,11 +532,13 @@ def dust_demo() -> dict:
     that :func:`~tengri.analysis.plotting.sweep_parameter` can override
     one knob at a time without touching the rest.
 
-    **SSP requirement:** wNE (with-nebular-emission), e.g.
-    ``load_ssp()`` default. Uses the BakedIn nebular path bundled with
-    the SSP, so optical emission lines render in the SED plots.
+    **SSP requirement:** wNE (with-nebular-emission), i.e.
+    ``load_ssp("prsc_miles_chabrier_wNE")``. Uses the BakedIn nebular path
+    bundled with the SSP, so optical emission lines render in the SED plots.
+    (The bare-stellar ``load_ssp()`` default carries no baked nebular lines.)
 
     **Configuration:**
+
     - **SFH**: Truncated skew-normal peaked at ~0.5 Gyr (young SF)
     - **Dust**: Two-component Calzetti attenuation, τ_BC = 1, τ_diff = 0.3, δ = -0.7
     - **Dust IR emission**: Disabled (gallery wavelength range is UV-optical)
@@ -539,7 +558,7 @@ def dust_demo() -> dict:
         from tengri import SEDModel, load_ssp, recipes
         from tengri.analysis.plotting import sweep_parameter, SWEEP_CMAPS
 
-        model = SEDModel.build(ssp_data=load_ssp(), **recipes.dust_demo())
+        model = SEDModel.build(ssp_data=load_ssp("prsc_miles_chabrier_wNE"), **recipes.dust_demo())
         sweep_parameter(
             model,
             "dust_tau_bc",
@@ -590,6 +609,7 @@ def unified_agn() -> dict:
     --agn-test-grids``. Tests will be skipped if grids are absent.
 
     **Configuration:**
+
     - **Disc**: Kubota & Done accretion disc (free)
     - **NLR**: Synthesizer Cloudy photoionization grid (free)
     - **BLR**: Synthesizer Cloudy photoionization grid (free)
@@ -628,3 +648,14 @@ def unified_agn() -> dict:
         },
         redshift=Fixed(0.0),
     )
+
+
+def __dir__() -> list[str]:
+    """Restrict tab-completion to the names this namespace actually offers.
+
+    ``__all__`` governs ``from ... import *`` but not ``dir()``, so without
+    this the module's own imports -- ``Any``, ``Callable``, the ``__future__``
+    ``annotations`` object, and internal helpers like ``make_factory`` --
+    showed up as completions beside the physics (#1288).
+    """
+    return sorted(__all__)

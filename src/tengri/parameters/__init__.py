@@ -2,10 +2,12 @@
 """Parameter specification, priors, and name translation.
 
 Key classes:
+
 - ``Parameters`` — define priors and fixed values for all model parameters
 - ``Uniform``, ``Gaussian``, ``LogNormal``, ``LogUniform``, ``Fixed``, ``StudentT`` — priors
 
 Sentinels for nested-dict builder API:
+
 - ``FREE`` — use registry's default prior for a parameter
 - ``FIXED`` — pin parameter to registry's default value
 

@@ -9,6 +9,7 @@ intervals — useful when the data resolve more than ~5 SFR bins and you
 want a flexible prior that doesn't impose a strong shape.
 
 Three forms overlaid at their default priors:
+
 - ``continuity``       — Leja+2019 fixed-bin continuity prior
 - ``dirichlet``        — Leja+2017 Dirichlet over normalized bin weights
 - ``dense_basis``      — Iyer+2019 GP-regularized cumulative SFH
@@ -49,7 +50,7 @@ fig, axes = plt.subplots(
 )
 
 ref = tengri.SEDModel.build(
-    ssp, sfh={"type": "dpl", "*": tengri.FIXED}, redshift=tengri.Fixed(0.0)
+    ssp, sfh={"type": "dpl", "all_params": tengri.FIXED}, redshift=tengri.Fixed(0.0)
 )
 p_ref = dict(ref.spec.sample(jax.random.PRNGKey(99)))
 sfh_ref = ref.predict_sfh(p_ref)
@@ -62,7 +63,7 @@ key0 = jax.random.PRNGKey(7)
 for ax, (form, label, color) in zip(axes, FORMS):
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": form, "*": tengri.FREE},
+        sfh={"type": form, "all_params": tengri.FREE},
         redshift=tengri.Fixed(0.0),
     )
     for _i, sub_key in enumerate(jax.random.split(key0, N_DRAWS)):

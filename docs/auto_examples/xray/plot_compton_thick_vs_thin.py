@@ -15,9 +15,11 @@ Ricci et al. 2017, showing N_H values from 10²² to 10²⁵ cm⁻².
 
 References
 ----------
+
 - Ricci et al. 2017, Nature 549, 488 (zphabs × cabs model).
 - Morrison & McCammon 1983, ApJ 270, 119 (photoelectric cross-sections).
 - Raimundo et al. 2012, A&A 537, A21 (Compton-thick AGN).
+
 """
 
 import warnings

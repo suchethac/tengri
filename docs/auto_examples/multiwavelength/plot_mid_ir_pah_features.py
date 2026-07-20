@@ -44,33 +44,33 @@ model_sf = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "const",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.0,  # ~32 Msun/yr over 0.3 Gyr (moderate starburst)
         "start_gyr": 0.3,
         "end_gyr": 0.0,
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 0.5,  # diffuse dust: moderate optical depth
         "tau_bc": 1.2,  # birth cloud opacity: birth clouds
         "emission": {
             "type": "dale2014",  # Dale et al. 2014 dust SED
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
         },
     },
     agn={
         "torus": {"type": "none"},  # No AGN torus
         "frac": 0.0,  # No AGN contribution
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
     },
     redshift=tengri.Fixed(0.05),
 )
 
 p_sf = dict(model_sf.spec.sample(jax.random.PRNGKey(42)))
-out_sf = model_sf.predict_rest_sed(p_sf)
-wave_sf = np.asarray(out_sf.wavelength)
-sed_sf = np.asarray(out_sf.sed)
+out_sf = model_sf.predict(p_sf)
+wave_sf = np.asarray(model_sf.wavelengths)
+sed_sf = np.asarray(out_sf.rest_sed())
 nu_l_nu_sf = C_AA_PER_S / wave_sf * sed_sf
 
 # =============================================================================
@@ -80,41 +80,41 @@ model_agn = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "const",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 5.0,  # SFR ≈ 0 (quiescent)
         "start_gyr": 10.0,
         "end_gyr": 1.0,
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 1.5,  # warm dust around AGN
         "tau_bc": 0.0,  # no birth clouds
         "emission": {
             "type": "draine_li2007",  # Draine & Li 2007 dust SED (warmer)
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
         },
     },
     agn={
         "disc": {
             "type": "grahsp_sbpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
         },
         "torus": {
             "type": "skirtor",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
         },
         "log_lbol": 12.0,  # AGN bolometric luminosity: ~1e12 Lsun
         "frac": 1.0,  # 100% AGN (no stellar contribution to near/mid-IR)
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
     },
     redshift=tengri.Fixed(0.05),
 )
 
 p_agn = dict(model_agn.spec.sample(jax.random.PRNGKey(43)))
-out_agn = model_agn.predict_rest_sed(p_agn)
-wave_agn = np.asarray(out_agn.wavelength)
-sed_agn = np.asarray(out_agn.sed)
+out_agn = model_agn.predict(p_agn)
+wave_agn = np.asarray(model_agn.wavelengths)
+sed_agn = np.asarray(out_agn.rest_sed())
 nu_l_nu_agn = C_AA_PER_S / wave_agn * sed_agn
 
 # =============================================================================
@@ -124,41 +124,41 @@ model_composite = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "const",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "log_total_mass": 10.2,  # ~16 Msun/yr over 1 Gyr
         "start_gyr": 1.0,
         "end_gyr": 0.0,
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 1.0,
         "tau_bc": 0.8,
         "emission": {
             "type": "dale2014",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
         },
     },
     agn={
         "disc": {
             "type": "grahsp_sbpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
         },
         "torus": {
             "type": "skirtor",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
         },
         "log_lbol": 11.5,  # AGN bolometric luminosity: ~3e11 Lsun
         "frac": 0.5,  # 50% AGN, 50% stellar
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
     },
     redshift=tengri.Fixed(0.05),
 )
 
 p_composite = dict(model_composite.spec.sample(jax.random.PRNGKey(44)))
-out_composite = model_composite.predict_rest_sed(p_composite)
-wave_composite = np.asarray(out_composite.wavelength)
-sed_composite = np.asarray(out_composite.sed)
+out_composite = model_composite.predict(p_composite)
+wave_composite = np.asarray(model_composite.wavelengths)
+sed_composite = np.asarray(out_composite.rest_sed())
 nu_l_nu_composite = C_AA_PER_S / wave_composite * sed_composite
 
 # =============================================================================

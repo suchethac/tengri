@@ -25,11 +25,11 @@ parameters, returning SFR in solar masses per year.
 
 .. autofunction:: tengri.delayed_tau
 
-.. autofunction:: tengri.constant_sfh
+.. autofunction:: tengri.constant
 
-.. autofunction:: tengri.exponential_sfh
+.. autofunction:: tengri.exponential
 
-.. autofunction:: tengri.delayed_exponential_sfh
+.. autofunction:: tengri.delayed_exponential
 
 .. autofunction:: tengri.triweight_burst
 
@@ -38,9 +38,15 @@ SFH Registry
 
 .. autofunction:: tengri.resolve_sfh
 
-.. autodata:: tengri.SFH_REGISTRY
+.. Both are re-exported as ``tengri.SFH_REGISTRY`` / ``tengri.FIELD_MODEL_REGISTRY``.
+   Document them at the defining module: autodoc resolves a ``#:`` doc-comment
+   against the module named in the directive, and ``tengri/__init__.py`` only
+   imports them. Pointed at ``tengri`` these rendered Python's builtin
+   ``dict.__doc__`` ("dict() -> new empty dictionary ...") instead.
 
-.. autodata:: tengri.FIELD_MODEL_REGISTRY
+.. autodata:: tengri.components.stellar.sfh.registry.SFH_REGISTRY
+
+.. autodata:: tengri.components.stellar.sfh.registry.FIELD_MODEL_REGISTRY
 
 Power Spectral Density
 ----------------------
@@ -69,8 +75,6 @@ and a latent vector.
 .. autofunction:: tengri.generate_gp_batch
 
 .. autofunction:: tengri.gp_from_xi
-
-.. autofunction:: tengri.make_log_age_grid
 
 Dust Attenuation
 -----------------

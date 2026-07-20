@@ -25,9 +25,11 @@ the forward model: stellar mass → SED → rest-frame
 absolute magnitudes.
 
 References:
+
 - Schechter 1976, ApJ, 203, 297 (SMF parameterization)
 - Baldry et al. 2012, MNRAS, 421, 621 (Schechter fit z~0)
 - Blanton et al. 2003, ApJ, 592, 819 (SDSS luminosity function)
+
 """
 
 import os
@@ -238,6 +240,7 @@ def blanton2003_lf(m_r: np.ndarray) -> np.ndarray:
     Parameterization (SDSS: h=0.7):
       Phi(M_r) = Phi_1 * 10^(0.4*(alpha_1+1)*(M_r - M_r*)) \
                  * exp(-10^(0.4*(M_r - M_r*)))
+
                 + Phi_2 * 10^(0.4*(alpha_2+1)*(M_r - M_r*)) \
                 * exp(-10^(0.4*(M_r - M_r*)))
 

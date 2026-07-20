@@ -23,13 +23,13 @@ AGN parameters are free-able now — and every one moves the SED
 
 Until recently the ``agn_*`` parameters were declared with *fixed* defaults and
 no prior range, so the build grammar's ``FREE`` controls
-(``agn={'*': FREE}``, ``recipes.agn_panchromatic()``) silently resolved every
+(``agn={'all_params': FREE}``, ``recipes.agn_panchromatic()``) silently resolved every
 AGN parameter to a constant — a fit would freeze the entire AGN sector with no
 error. The registry now gives each parameter a physically-motivated
 ``Uniform``/``LogUniform`` prior (Nenkova+2008, Kubota & Done 2018,
 Stalevski+2016 grid extents), so ``FREE`` actually frees them.
 
-A group-level ``agn={'*': FREE}`` is **block-scoped**: it frees only the
+A group-level ``agn={'all_params': FREE}`` is **block-scoped**: it frees only the
 parameters the active disc / torus / lines blocks actually consume, not the
 full declared superset — so you never get unconstrained no-op nuisance
 dimensions for parameters belonging to inactive blocks.
@@ -43,7 +43,7 @@ by ``tests/contract/test_agn_block_consumes.py``.
 References: Nenkova et al. 2008 (CLUMPY torus); Kubota & Done 2018 (multicolor
 disc); Feltre et al. 2016 (NLR grid).
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-60
+.. GENERATED FROM PYTHON SOURCE LINES 27-62
 
 .. code-block:: Python
 
@@ -66,16 +66,18 @@ disc); Feltre et al. 2016 (NLR grid).
 
     C_AA_PER_S = 2.998e18
 
-    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
-    # Bare type selectors: no per-block ``'*'``, so the *top-level* AGN wildcard
-    # governs every block's parameters. (A sub-block's own ``'*'`` would override
+    SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    # Bare type selectors: no per-block ``'all_params'``, so the *top-level* AGN
+    # wildcard governs every block's parameters. (A sub-block's own ``'all_params'``
+    # would override
     # the top-level one for that block — a useful nuance, but it would hide the
     # point here.)
     BLOCKS = {
         "disc": {"type": "multicolor"},
         "torus": {"type": "nenkova"},
-        "lines": {"type": "nlr"},
+        "nlr": {"type": "analytic"},
+        "blr": {"type": "none"},
     }
 
     ssp = tengri.load_ssp()
@@ -87,21 +89,21 @@ disc); Feltre et al. 2016 (NLR grid).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 61-63
+.. GENERATED FROM PYTHON SOURCE LINES 63-65
 
-The headline: ``'*': FREE`` now frees the AGN parameters the active blocks
-consume. Before the registry fix this set was empty.
+The headline: ``'all_params': FREE`` now frees the AGN parameters the active
+blocks consume. Before the registry fix this set was empty.
 
-.. GENERATED FROM PYTHON SOURCE LINES 63-70
+.. GENERATED FROM PYTHON SOURCE LINES 65-72
 
 .. code-block:: Python
 
-    agn_free = {"*": tengri.FREE, "log_lbol": 12.0, "frac": 1.0, **BLOCKS}
+    agn_free = {"all_params": tengri.FREE, "log_lbol": 12.0, "frac": 1.0, **BLOCKS}
     model_free = tengri.SEDModel.build(
         ssp, sfh=SFH, dust=DUST, agn=agn_free, redshift=tengri.Fixed(0.0)
     )
     free_agn = [p for p in model_free.spec.free_params if p.startswith("agn_")]
-    print(f"AGN parameters freed by agn={{'*': FREE}} (block-scoped): {sorted(free_agn)}")
+    print(f"AGN parameters freed by agn={{'all_params': FREE}} (block-scoped): {sorted(free_agn)}")
 
 
 
@@ -111,22 +113,22 @@ consume. Before the registry fix this set was empty.
 
  .. code-block:: none
 
-    AGN parameters freed by agn={'*': FREE} (block-scoped): ['agn_a_spin', 'agn_cos_inc', 'agn_fracAGN', 'agn_log_mbh', 'agn_nlr_cf', 'agn_nlr_line_efficiency', 'agn_tau', 'agn_theta_torus', 'agn_torus_frac']
+    AGN parameters freed by agn={'all_params': FREE} (block-scoped): ['agn_a_spin', 'agn_cos_inc', 'agn_fracAGN', 'agn_log_mbh', 'agn_nlr_cf', 'agn_nlr_line_efficiency', 'agn_tau', 'agn_theta_torus', 'agn_torus_frac']
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 71-74
+.. GENERATED FROM PYTHON SOURCE LINES 73-76
 
 Sweep three consumed parameters across their priors. We build the model once
 with the AGN sector held fixed at its defaults, then override one parameter at
 a time in the prediction dict — a clean, deterministic parameter sweep.
 
-.. GENERATED FROM PYTHON SOURCE LINES 74-110
+.. GENERATED FROM PYTHON SOURCE LINES 76-112
 
 .. code-block:: Python
 
-    agn_fixed = {"*": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **BLOCKS}
+    agn_fixed = {"all_params": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **BLOCKS}
     model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn_fixed, redshift=tengri.Fixed(0.0))
     base = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
@@ -140,9 +142,9 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
     for ax, (param, values, label) in zip(axes, SWEEPS):
         cmap = plt.cm.viridis(np.linspace(0.15, 0.9, len(values)))
         for v, color in zip(values, cmap):
-            out = model.predict_rest_sed({**base, param: float(v)})
-            wave_um = np.asarray(out.wavelength) * 1.0e-4
-            nu_lnu = C_AA_PER_S / np.asarray(out.wavelength) * np.asarray(out.sed)
+            out = model.predict({**base, param: float(v)})
+            wave_um = np.asarray(model.wavelengths) * 1.0e-4
+            nu_lnu = C_AA_PER_S / np.asarray(model.wavelengths) * np.asarray(out.rest_sed())
             ax.loglog(
                 wave_um,
                 np.where(nu_lnu > 0, nu_lnu, np.nan),

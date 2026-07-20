@@ -48,14 +48,14 @@ COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(LIBRARIES)))
 C_AA_PER_S = 2.998e18
 SFH = {
     "type": "tsnorm",
-    "*": tengri.FIXED,
+    "all_params": tengri.FIXED,
     "peak_lbt_gyr": 1.0,
     "width_gyr": 0.05,
     "log_total_mass": 10.0,
     "skew": 0.0,
     "trunc": 13.0,
 }
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
@@ -71,9 +71,9 @@ for (ssp_name, label), color in zip(LIBRARIES, COLORS):
         redshift=tengri.Fixed(0.01),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     norm = nu_l_nu[np.argmin(np.abs(wave - 5500.0))]
     if norm > 0:
         nu_l_nu = nu_l_nu / norm

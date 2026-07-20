@@ -13,6 +13,13 @@ on:
       - "docs/**"
       - "examples/**"
       - "src/tengri/**"
+      # The spine pages are GENERATED at build time: `make html` depends on
+      # spine-ipynb, which re-merges each docs/spine/*.ipynb source from
+      # notebooks/<slug>.py. So a notebooks/ edit changes the published site,
+      # and a change to the generator changes every spine page -- neither is
+      # under docs/, and without these both shipped with no preview build.
+      - "notebooks/**"
+      - "scripts/sync_spine_notebooks_for_docs.py"
       - ".github/workflows/docs-preview.yml"
       - ".github/workflows/docs.yml"
 
@@ -62,7 +69,7 @@ jobs:
         # it executes the script).
         env:
           CI: "true"
-        run: cd docs && make html
+        run: cd docs && make html SPHINXOPTS="-W --keep-going"
 
       - name: Upload preview artifact
         uses: actions/upload-artifact@v7

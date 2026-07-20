@@ -1,4 +1,4 @@
-# Persistent compilation cache
+# Compilation: caching and diagnostics
 
 Every JIT-compiled function in tengri (every backend, every fitter) goes
 through XLA. First compile of a given shape is expensive — geoVI compiles
@@ -153,7 +153,154 @@ want to keep a stale L3 entry alive across phases (e.g. running MAP and
 HMC repeatedly in alternation and reusing both compiles). The default
 smart-lean path covers the catalog and multi-phase cases without it.
 
+### Tuning the in-memory caches
+
+The L1–L3 caches above are also tunable from the environment, which is
+useful when a process is memory-bound rather than compile-bound:
+
+```bash
+export TENGRI_ENGINE_CACHE_MAXSIZE=1   # default 2; L3 entries held before eviction
+export TENGRI_DISABLE_SHARED_CACHES=1  # never populate the shared caches at all
+export TENGRI_LEAN=1                   # force lean mode process-wide
+export TENGRI_PERSISTENT=1             # opt out of the lean default
+```
+
+Each L3 entry holds a compiled XLA executable, so lowering
+`TENGRI_ENGINE_CACHE_MAXSIZE` to 1 trades one extra compile for a
+smaller resident set. `TENGRI_DISABLE_SHARED_CACHES=1` is the strongest
+guarantee — every `Fitter` compiles fresh, and nothing is retained
+between fits — at the cost of paying the compile on every run.
+
+The in-process equivalents are `tengri.lean()` / `tengri.persistent()`
+(context managers) and `tengri.gc()` / `tengri.clear_shared_caches()`.
+All four are importable from the top-level package, though they are not
+listed in `tengri.__all__`.
+
 The disk cache underneath all three means even a full `tengri.gc()` on a
 warm process does not recompile from scratch on the next call: XLA reads
 the already-optimized binary from `~/.cache/tengri_jax_cache` (~3 s
 versus the ~80 s cold compile).
+
+## Diagnosing recompilations
+
+The cache above makes a *repeated* compile cheap. When wall time is
+still dominated by compilation, the question is which kernels are
+recompiling and why — that is what the compile-event tracer answers.
+
+When working with JAX inference on large models, cold compilation can
+dominate wall-clock time. The compile-event tracer shows what is recompiling
+and why.
+
+### Quick Start
+
+#### 1. Enable logging
+
+Set the environment variable before running your notebook:
+
+```bash
+export TENGRI_LOG_COMPILES=1
+```
+
+#### 2. Run your notebook
+
+Execute your notebook as normal. Events will be logged to
+`~/.cache/tengri_jax_cache/compile.log` (or override via
+`TENGRI_COMPILE_LOG_PATH`).
+
+#### 3. Analyze the log
+
+```bash
+python scripts/analyze_compile_log.py
+```
+
+or specify a custom log path:
+
+```bash
+python scripts/analyze_compile_log.py --log /path/to/compile.log
+```
+
+### What the Analysis Shows
+
+The report includes:
+
+- **Total compile events**: How many JIT compilations occurred
+- **Total wall time**: Aggregate compilation time (seconds)
+- **Cache-hit ratio**: Proportion of fast (cached) vs. slow (cold) compiles
+- **Per-method breakdown**: Count, total, mean, and max duration for each inference method
+- **Spurious recompiles**: Consecutive events with different signatures
+  (indicates unnecessary recompilation)
+
+Example output:
+
+```
+================================================================================
+TENGRI COMPILE LOG ANALYSIS
+================================================================================
+
+SUMMARY
+-------
+Total compile events:        14
+Total compile wall time:     42.53 s
+Cache hits (inferred):       8
+Cache misses (inferred):     6
+Hit ratio:                   57.1%
+
+PER-METHOD BREAKDOWN
+-------
+Method                 Count      Total (s)      Mean (s)      Max (s)
+-------
+geovi                      2         15.23          7.61         8.10
+vi                         6          8.54          1.42         2.31
+unknown                    6         18.76          3.13         6.54
+
+SPURIOUS RECOMPILES (consecutive events with different signatures)
+-------
+[2→3] signal_response (None) → run_evi (vi)
+  sig[2]: ((...shape_sig..., ...model_sig...),)
+  sig[3]: ((...different_model_sig...,),)
+
+```
+
+### Configuration
+
+#### Environment Variables
+
+- `TENGRI_LOG_COMPILES=1` – Enable compile logging (default: off)
+- `TENGRI_COMPILE_LOG_PATH=/custom/path.log` – Override log file location
+
+#### Disabling Logging
+
+By default, the logger is completely disabled and adds zero overhead. To confirm:
+
+```python
+from tengri.utils.compile_log import is_enabled
+print(is_enabled())  # False if TENGRI_LOG_COMPILES not set
+```
+
+### Cache-Hit Heuristic
+
+The log marks events as "cache hits" if they complete in < 1.0 s. This is a rough approximation:
+
+- **True hits** (file on disk): typically 0.1–0.5 s
+- **Cold compiles**: typically 5–30+ seconds (depends on graph size)
+- **Hybrid cases** (e.g., warm iteration with some tracing): 1–5 s
+
+On fast hardware, the heuristic may flag slow loads as hits. On
+network-mounted storage, it may misclassify cache loads as cold compiles.
+
+### Integration
+
+The tracer hooks into:
+
+- `get_or_build_signal_response()` – Physics kernel compilation
+- `build_jit_engine()` – Inference engine (VI, geoVI, etc.)
+
+Each compilation site is wrapped with a context manager that records timing
+and metadata. No code changes required.
+
+### Notes
+
+- Logging is **thread-safe**: multiple threads can write events simultaneously
+- The log file grows indefinitely; manually clean it up as needed
+- Timestamps are UTC ISO 8601 format
+- Signatures are stringified tuples for easy diffing to detect spurious recompiles

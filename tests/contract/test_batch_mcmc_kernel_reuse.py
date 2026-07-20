@@ -114,28 +114,7 @@ def test_different_config_builds_distinct_kernel(fitter):
     assert len(cache) == 2, "distinct n_samples must key distinct kernels, not collide"
 
 
-@pytest.mark.parametrize(
-    "method",
-    [
-        "mcmc_nuts",
-        "mcmc_hmc",
-        "mcmc_dynamic_hmc",
-        pytest.param(
-            "mcmc_ghmc",
-            marks=pytest.mark.xfail(
-                reason=(
-                    "Pre-existing (not this change): the vmap-batch GHMC init call "
-                    "`blackjax.mcmc.ghmc.init(pos, key, logdensity)` is correct for "
-                    "blackjax 1.3 but breaks on newer blackjax where the arg order is "
-                    "`(pos, logdensity, key)`. The init call is unchanged by adaptation "
-                    "threading; vmap-batch GHMC simply had no prior test. Tracked for a "
-                    "separate version-compat fix."
-                ),
-                strict=False,
-            ),
-        ),
-    ],
-)
+@pytest.mark.parametrize("method", ["mcmc_nuts", "mcmc_hmc", "mcmc_dynamic_hmc", "mcmc_ghmc"])
 def test_all_vmap_mcmc_methods_run_after_adaptation_threading(fitter, method):
     """Each threaded ``_sample_scan`` branch runs end-to-end with finite samples.
 

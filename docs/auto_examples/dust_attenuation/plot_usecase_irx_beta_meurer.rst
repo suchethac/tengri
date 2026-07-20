@@ -33,12 +33,13 @@ reddening and star formation rate indicators in galaxies. Here we:
    refinements from Reddy+2018.
 
 **References:**
+
 - Meurer et al. (1999) ApJ 521, 64. The canonical local-universe IRX–β relation.
 - Calzetti et al. (2000) ApJ 533, 682. Starburst attenuation law at z~0.
 - Reddy et al. (2018) ApJ 869, 92. z~2 IRX–β scatter and implications for
   UV-to-IR conversions in high-z star-forming galaxies.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-384
+.. GENERATED FROM PYTHON SOURCE LINES 24-386
 
 
 
@@ -55,31 +56,31 @@ reddening and star formation rate indicators in galaxies. Here we:
     Loaded SSP: 5994 wavelength points
 
     Building 25 models with τ_diff ∈ [0, 4]...
-      τ_diff=0.00: β=-2.37, IRX=-1.66
-      τ_diff=0.17: β=-2.16, IRX=-0.18
-      τ_diff=0.33: β=-1.95, IRX=+0.22
-      τ_diff=0.50: β=-1.74, IRX=+0.51
-      τ_diff=0.67: β=-1.53, IRX=+0.75
-      τ_diff=0.83: β=-1.33, IRX=+0.97
-      τ_diff=1.00: β=-1.12, IRX=+1.17
-      τ_diff=1.17: β=-0.91, IRX=+1.36
-      τ_diff=1.33: β=-0.70, IRX=+1.54
-      τ_diff=1.50: β=-0.49, IRX=+1.72
-      τ_diff=1.67: β=-0.28, IRX=+1.89
-      τ_diff=1.83: β=-0.07, IRX=+2.06
-      τ_diff=2.00: β=+0.14, IRX=+2.23
-      τ_diff=2.17: β=+0.35, IRX=+2.39
-      τ_diff=2.33: β=+0.55, IRX=+2.56
-      τ_diff=2.50: β=+0.76, IRX=+2.72
-      τ_diff=2.67: β=+0.97, IRX=+2.87
-      τ_diff=2.83: β=+1.18, IRX=+3.03
-      τ_diff=3.00: β=+1.39, IRX=+3.18
-      τ_diff=3.17: β=+1.60, IRX=+3.34
-      τ_diff=3.33: β=+1.81, IRX=+3.49
-      τ_diff=3.50: β=+2.02, IRX=+3.64
-      τ_diff=3.67: β=+2.23, IRX=+3.79
-      τ_diff=3.83: β=+2.44, IRX=+3.94
-      τ_diff=4.00: β=+2.64, IRX=+4.08
+      τ_diff=0.00: β=-2.41, IRX=-2.44
+      τ_diff=0.17: β=-2.20, IRX=-0.20
+      τ_diff=0.33: β=-1.99, IRX=+0.20
+      τ_diff=0.50: β=-1.78, IRX=+0.49
+      τ_diff=0.67: β=-1.57, IRX=+0.73
+      τ_diff=0.83: β=-1.36, IRX=+0.95
+      τ_diff=1.00: β=-1.15, IRX=+1.15
+      τ_diff=1.17: β=-0.95, IRX=+1.34
+      τ_diff=1.33: β=-0.74, IRX=+1.52
+      τ_diff=1.50: β=-0.53, IRX=+1.70
+      τ_diff=1.67: β=-0.32, IRX=+1.87
+      τ_diff=1.83: β=-0.11, IRX=+2.04
+      τ_diff=2.00: β=+0.10, IRX=+2.21
+      τ_diff=2.17: β=+0.31, IRX=+2.37
+      τ_diff=2.33: β=+0.52, IRX=+2.53
+      τ_diff=2.50: β=+0.73, IRX=+2.69
+      τ_diff=2.67: β=+0.94, IRX=+2.85
+      τ_diff=2.83: β=+1.14, IRX=+3.00
+      τ_diff=3.00: β=+1.35, IRX=+3.16
+      τ_diff=3.17: β=+1.56, IRX=+3.31
+      τ_diff=3.33: β=+1.77, IRX=+3.46
+      τ_diff=3.50: β=+1.98, IRX=+3.61
+      τ_diff=3.67: β=+2.19, IRX=+3.76
+      τ_diff=3.83: β=+2.40, IRX=+3.91
+      τ_diff=4.00: β=+2.61, IRX=+4.05
 
     Computed 25 models successfully.
 
@@ -88,8 +89,8 @@ reddening and star formation rate indicators in galaxies. Here we:
     ======================================================================
     VERIFICATION SUMMARY
     ======================================================================
-    β range:        -2.37 to +2.64
-    IRX range:      -1.66 to +4.08
+    β range:        -2.41 to +2.61
+    IRX range:      -2.44 to +4.05
     τ_diff range:   0.00 to 4.00
 
     Physical interpretation:
@@ -97,8 +98,8 @@ reddening and star formation rate indicators in galaxies. Here we:
       • τ_diff=4 (heavy dust): Very red (β≈+2.5), strong IR → IRX ≈ +4.1
       → Points lie above Meurer+1999 (expected for young starbursts)
 
-    Measured (τ_diff=0):   β=-2.37, IRX=-1.66 ✓
-    Measured (τ_diff=4):   β=+2.64, IRX=+4.08 ✓
+    Measured (τ_diff=0):   β=-2.41, IRX=-2.44 ✓
+    Measured (τ_diff=4):   β=+2.61, IRX=+4.05 ✓
     ======================================================================
 
 
@@ -252,7 +253,7 @@ reddening and star formation rate indicators in galaxies. Here we:
     # Fixed SFH: tsnorm with 50 Myr peak (young starburst)
     SFH_BASE = {
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 0.05,  # 50 Myr lookback
         "width_gyr": 0.05,  # 50 Myr width
         "log_total_mass": 10.0,  # SFR peak = 10 M☉/yr (arbitrary; scales L_IR/L_UV ratio)
@@ -282,12 +283,12 @@ reddening and star formation rate indicators in galaxies. Here we:
         # Birth cloud τ_bc = 0 since we're sweeping τ_diff to cover full range
         dust_config = {
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 0.0,  # birth cloud attenuation (fixed to zero)
             "tau_diff": tau_diff,  # sweep diffuse attenuation
             "slope": -0.7,  # typical Calzetti slope
             "law_bc": "calzetti",  # Calzetti+2000 law
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         }
 
         try:
@@ -307,9 +308,9 @@ reddening and star formation rate indicators in galaxies. Here we:
 
         # Predict rest-frame SED
         try:
-            sed_rest = model.predict_rest_sed(params_dict)
-            wave_rest = np.asarray(sed_rest.wavelength)
-            l_nu_rest = np.asarray(sed_rest.sed)
+            sed_rest = model.predict(params_dict)
+            wave_rest = np.asarray(model.wavelengths)
+            l_nu_rest = np.asarray(sed_rest.rest_sed())
         except Exception as e:
             print(f"  τ_diff={tau_diff:.2f}: predict failed ({str(e)[:50]}...)")
             continue

@@ -44,6 +44,24 @@
    "name": "list"
   }
  ],
+ "_LINES_EXPANSION": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "_LINES_EXPANSION.get": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  }
+ ],
  "_build": [
   {
    "is_class": false,

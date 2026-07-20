@@ -19,9 +19,11 @@ marked; above it the soft band is dominated by the scattered floor.
 
 References
 ----------
+
 - Just et al. 2007, ApJ 665, 1004 (alpha_OX-L_2500).
 - Ricci et al. 2017, Nature 549, 488 (X-ray spectral model).
 - Yang et al. 2020, MNRAS 491, 740 (X-CIGALE corona).
+
 """
 
 import os

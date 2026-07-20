@@ -21,22 +21,16 @@
 Load and fit photometry from CSV
 ================================
 
+.. image:: images/sphx_glr_plot_recipe_load_real_csv_001.png
+   :alt: plot recipe load real csv
+   :class: sphx-glr-single-img
+
+
 How do I load measured photometry from a table and fit it? This recipe
 generates mock photometry for 3 galaxies and fits each one independently
 with a MAP fit, demonstrating the workflow for catalog-scale SED fitting.
 
 .. GENERATED FROM PYTHON SOURCE LINES 9-102
-
-
-
-.. image-sg:: /auto_examples/recipes/images/sphx_glr_plot_recipe_load_real_csv_001.png
-   :alt: plot recipe load real csv
-   :srcset: /auto_examples/recipes/images/sphx_glr_plot_recipe_load_real_csv_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -71,14 +65,14 @@ with a MAP fit, demonstrating the workflow for catalog-scale SED fitting.
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_total_mass": 10.0,
                 "peak_lbt_gyr": 3.0,
                 "width_gyr": 2.0,
                 "skew": 0.0,
                 "trunc": 5.0,
             },
-            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "slope": -0.7},
+            dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.3, "slope": -0.7},
             redshift=tengri.Fixed(0.1),
         )
         params = dict(model_template.spec.sample(jax.random.fold_in(key, gal_id)))
@@ -99,8 +93,8 @@ with a MAP fit, demonstrating the workflow for catalog-scale SED fitting.
         model = tengri.SEDModel.build(
             ssp,
             observation=obs,
-            sfh={"type": "tsnorm", "*": tengri.FREE},
-            dust={"type": "two_component", "*": tengri.FREE},
+            sfh={"type": "tsnorm", "all_params": tengri.FREE},
+            dust={"type": "two_component", "all_params": tengri.FREE},
             redshift=tengri.Fixed(gal["redshift"]),
         )
 
@@ -133,11 +127,6 @@ with a MAP fit, demonstrating the workflow for catalog-scale SED fitting.
 
     fig.tight_layout()
     plt.savefig("plot_recipe_load_real_csv.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 8.597 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_load_real_csv.py:

@@ -14,8 +14,10 @@ emerging atlas shows the same chromatic ordering as Coleman+1980:
 ellipticals are reddest at all wavelengths, irregulars dominate the UV.
 
 References:
+
 - Coleman, Wu & Weedman 1980, ApJS, 43, 393
 - Kennicutt 1992, ApJS, 79, 255 (modern revision of the atlas)
+
 """
 
 import os

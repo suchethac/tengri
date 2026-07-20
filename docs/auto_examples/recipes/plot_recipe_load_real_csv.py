@@ -37,14 +37,14 @@ for gal_id in range(3):
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_total_mass": 10.0,
             "peak_lbt_gyr": 3.0,
             "width_gyr": 2.0,
             "skew": 0.0,
             "trunc": 5.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "slope": -0.7},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.3, "slope": -0.7},
         redshift=tengri.Fixed(0.1),
     )
     params = dict(model_template.spec.sample(jax.random.fold_in(key, gal_id)))
@@ -65,8 +65,8 @@ for gal_idx, gal in enumerate(galaxy_data):
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FREE},
-        dust={"type": "two_component", "*": tengri.FREE},
+        sfh={"type": "tsnorm", "all_params": tengri.FREE},
+        dust={"type": "two_component", "all_params": tengri.FREE},
         redshift=tengri.Fixed(gal["redshift"]),
     )
 

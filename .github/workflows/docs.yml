@@ -38,8 +38,14 @@ jobs:
       - name: Install pandoc
         run: sudo apt-get install -y pandoc
 
+      # Warnings are errors. The docs are the API reference (docs/api/*.rst are
+      # autodoc stubs, so docstrings ARE the published pages), and a Sphinx
+      # warning there means something is actually wrong: LaTeX eaten by a
+      # non-raw docstring, a registry documenting itself as builtin dict(),
+      # markup that silently swallows the text after it. --keep-going reports
+      # every warning in one run instead of stopping at the first.
       - name: Build documentation
-        run: cd docs && make html
+        run: cd docs && make html SPHINXOPTS="-W --keep-going"
 
       - uses: actions/upload-pages-artifact@v5
         with:

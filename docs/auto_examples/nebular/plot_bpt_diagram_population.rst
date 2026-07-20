@@ -41,7 +41,7 @@ References:
     Kauffmann et al. 2003, MNRAS, 346, 1055 (SF/composite line)
     Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks)
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-269
+.. GENERATED FROM PYTHON SOURCE LINES 25-274
 
 
 
@@ -104,16 +104,21 @@ References:
                 ssp,
                 sfh={
                     "type": "dpl",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "alpha": 1.0,
                     "beta": 2.5,
                     "tau_gyr": 0.1,
                     "log_total_mass": 10.0,
                 },
-                dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
+                dust={
+                    "type": "two_component",
+                    "all_params": tengri.FIXED,
+                    "tau_diff": 0.05,
+                    "tau_bc": 0.1,
+                },
                 neb={
                     "type": "cue",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "logU": tengri.Fixed(logu),
                     "logZ_gas": tengri.Fixed(logz),
                 },
@@ -121,7 +126,7 @@ References:
             )
 
             params = dict(model.spec.sample(jax.random.PRNGKey(42)))
-            lines = model.predict_emission_lines(params)
+            lines = model.predict(params).lines
 
             if lines is not None:
                 ha = float(lines.halpha)
@@ -159,16 +164,16 @@ References:
             ssp,
             sfh={
                 "type": "dpl",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "alpha": 1.0,
                 "beta": 2.0,
                 "tau_gyr": 0.15,
                 "log_total_mass": 10.0,
             },
-            dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.2},
+            dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.2},
             neb={
                 "type": "cue",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "logU": tengri.Fixed(config["logu"]),
                 "logZ_gas": tengri.Fixed(config["logz"]),
             },
@@ -176,7 +181,7 @@ References:
         )
 
         params = dict(model.spec.sample(jax.random.PRNGKey(123)))
-        lines = model.predict_emission_lines(params)
+        lines = model.predict(params).lines
 
         if lines is not None:
             ha = float(lines.halpha)
@@ -304,7 +309,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.270 seconds)
+   **Total running time of the script:** (1 minutes 34.879 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_diagram_population.py:

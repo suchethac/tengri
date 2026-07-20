@@ -76,6 +76,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
     the X-CIGALE corona treatment.
 
     Free parameters (3):
+
     - agn_xray_gamma: X-ray photon index (Gamma)
     - agn_xray_delta_alpha_ox: offset [dex] on the Just+2007 alpha_ox(L_2500)
     - agn_xray_e_cut: high-energy cutoff [keV]
@@ -153,8 +154,10 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
         Returns
         -------
         tuple[ndarray, mapping]
+
             - sed_out: sed_in + X-ray continuum.
             - published: Dict with "L_xray_agn" (integrated X-ray luminosity).
+
         """
         # L_2500 anchor chain (matches the live ``xray/component.py``):
         # 1. ``L_2500_intrinsic`` — the composable AGN runner's actual disc

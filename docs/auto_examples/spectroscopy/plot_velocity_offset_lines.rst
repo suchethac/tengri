@@ -28,7 +28,7 @@ distinguishing AGN BLR from NLR.
 
 .. sphx-glr-precomputed-img:
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-99
+.. GENERATED FROM PYTHON SOURCE LINES 17-104
 
 
 
@@ -79,14 +79,19 @@ distinguishing AGN BLR from NLR.
         observation=obs,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "alpha": 3.0,
             "beta": 0.3,
             "tau_gyr": 0.03,
             "log_total_mass": 8.48,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.05},
-        neb={"type": "cue", "*": tengri.FIXED, "logU": tengri.Fixed(-2.5), "fesc": tengri.Fixed(0.0)},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.05},
+        neb={
+            "type": "cue",
+            "all_params": tengri.FIXED,
+            "logU": tengri.Fixed(-2.5),
+            "fesc": tengri.Fixed(0.0),
+        },
         redshift=tengri.Fixed(Z),
     )
 
@@ -125,6 +130,11 @@ distinguishing AGN BLR from NLR.
 
     fig.tight_layout()
     plt.savefig("plot_velocity_offset_lines.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.405 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_velocity_offset_lines.py:

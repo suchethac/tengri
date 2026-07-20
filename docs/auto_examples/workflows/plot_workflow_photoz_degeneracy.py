@@ -14,8 +14,10 @@ follow-up (e.g. EUCLID *Y/J/H*) and medium-band surveys for high-z
 galaxy selection.
 
 References:
+
 - Steidel et al. 1996, AJ, 112, 352 (LBG dropout selection)
 - Massarotti, Iovino & Buzzoni 2001, A&A, 368, 74 (photo-z degeneracies)
+
 """
 
 import os
@@ -49,7 +51,7 @@ def _make(z_value: float, tau_diff: float, peak_lbt: float, log_total_mass: floa
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": peak_lbt,
             "width_gyr": 1.5,
             "log_total_mass": 10.0,
@@ -58,7 +60,7 @@ def _make(z_value: float, tau_diff: float, peak_lbt: float, log_total_mass: floa
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tau_diff,
             "tau_bc": 0.4,
             "slope": -0.7,
@@ -78,9 +80,9 @@ flux_hi = flux_hi * (flux_low[2] / flux_hi[2])
 
 
 def _rest_to_obs(model, params, z, scale):
-    out = model.predict_rest_sed(params)
-    wave_obs = np.asarray(out.wavelength) * (1.0 + z)
-    fnu_obs = scale * np.asarray(out.sed)
+    out = model.predict(params)
+    wave_obs = np.asarray(model.wavelengths) * (1.0 + z)
+    fnu_obs = scale * np.asarray(out.rest_sed())
     return wave_obs, fnu_obs
 
 

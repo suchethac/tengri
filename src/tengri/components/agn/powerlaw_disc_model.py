@@ -142,10 +142,12 @@ class PowerLawDisc(SEDModelComponent):
         ----------
         p : mapping[str, ndarray]
             Parameters with prefix already stripped:
+
             - log_lbol: log₁₀(L_bol / L_sun)
             - alpha: power-law index
             - T_max: UV cutoff temperature (K)
             - frac: disc luminosity fraction
+
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
         wave : ndarray, shape (n_wave,)
@@ -157,8 +159,10 @@ class PowerLawDisc(SEDModelComponent):
         -------
         tuple[ndarray, dict]
             (sed_out, published) where:
+
             - sed_out: Updated SED (sed_in + disc contribution).
             - published: {"L_agn_disc": bolometric disc luminosity [erg/s]}.
+
         """
         # Call power-law disc model
         sed_disc = _powerlaw_disc_fn(

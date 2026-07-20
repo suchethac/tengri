@@ -40,7 +40,11 @@ KEY = jax.random.PRNGKey(0)
 
 @pytest.fixture(scope="module")
 def ssp():
-    return tengri.load_ssp()
+    # wNE (nebular-baked): the sharp emission lines are what make point
+    # interpolation drift at low R, which is the aliasing bias this test
+    # measures. The bare-stellar default has no such lines and the drift falls
+    # below the vacuity guard (~0.03%), so the test would be toothless.
+    return tengri.load_ssp("prsc_miles_chabrier_wNE")
 
 
 @pytest.fixture(scope="module")

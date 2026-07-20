@@ -36,13 +36,15 @@ and age has opposing effects across the spectrum (younger = brighter UV,
 older = redder continuum through dust absorption).
 
 References:
+
   - Bradbury et al. 2018 (JAX: composable transformations):
 
     arXiv:1811.02693
+
   - Hearin et al. 2023 (DSPS — differentiable stellar population synthesis):
     arXiv:2308.16742
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-182
+.. GENERATED FROM PYTHON SOURCE LINES 29-185
 
 
 
@@ -87,13 +89,13 @@ References:
         observation=obs,
         sfh={
             "type": "dpl",
-            "*": tengri.FREE,
+            "all_params": tengri.FREE,
             "alpha": tengri.Fixed(0.5),  # Fix early slope; vary peak SFR, beta, tau
         },
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
-            "*": tengri.FREE,  # Allow dust parameters to vary
+            "all_params": tengri.FREE,  # Allow dust parameters to vary
         },
         redshift=tengri.Fixed(0.0),
     )

@@ -481,6 +481,7 @@ class PopulationFitter:
 
             - ``"mcmc_raytrace"`` — Ray Tracing on flat vector.
             - ``"mcmc_ess"`` — Elliptical slice sampling (cheap MCMC variant).
+
         key : PRNGKey, optional
             Random key for reproducibility. If None, uses PRNGKey(0).
         **kwargs
@@ -517,7 +518,7 @@ class PopulationFitter:
         over different catalog sizes, rely on the persistent
         compilation cache instead — see
         :func:`tengri.enable_persistent_cache` and
-        ``docs/inference/compilation_cache.md``.
+        ``docs/performance/compilation.md``.
         """
         if key is None:
             key = jax.random.PRNGKey(0)
@@ -1665,8 +1666,10 @@ class PopulationFitter:
         """Hierarchical geoVI via NIFTy.re.
 
         The joint model has:
+
         - 2 shared PSD params (unbounded)
         - N × (n_free + n_grid) per-galaxy params
+
         """
         try:
             import nifty8.re as jft

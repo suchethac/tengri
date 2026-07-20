@@ -36,6 +36,7 @@ two-component dust model (diffuse + birth cloud) and Dale et al. (2014)
 infrared re-emission.
 
 **References:**
+
  - Förster Schreiber et al. (2003) [1]_ for M82 SED observations
 
  - Engelbracht et al. (2008) [2]_ for Spitzer MIR/FIR measurements
@@ -53,7 +54,7 @@ infrared re-emission.
    *Astrophys. J.* **784**, 83.
    https://doi.org/10.1088/0004-637X/784/1/83
 
-.. GENERATED FROM PYTHON SOURCE LINES 37-231
+.. GENERATED FROM PYTHON SOURCE LINES 38-232
 
 
 
@@ -106,7 +107,7 @@ infrared re-emission.
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_gyr": 0.05,  # Burst timescale 50 Myr
             "log_total_mass": 10.0,  # Peak SFR ~ 9 Msun/yr
             "alpha": 2.0,  # Sharp initial rise (young burst)
@@ -114,20 +115,20 @@ infrared re-emission.
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 1.5,  # Diffuse ISM: tau_V ~ 1.5 mag
             "tau_bc": 2.0,  # Birth cloud: tau_V ~ 2.0 mag (star-forming regions)
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
-        radio={"type": "condon92", "*": tengri.FIXED},
+        radio={"type": "condon92", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.0),  # z=0 rest-frame (nearby galaxy)
     )
 
     # Sample parameters and compute rest-frame SED
     p = dict(model.spec.sample(jax.random.PRNGKey(42)))
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    sed = np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    sed = np.asarray(out.rest_sed())
     nu_l_nu = C_AA_PER_S / wave * sed
 
     # Compute intrinsic (dust-free) SED for comparison
@@ -135,7 +136,7 @@ infrared re-emission.
         ssp,
         sfh={
             "type": "dpl",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_gyr": 0.05,
             "log_total_mass": 10.0,
             "alpha": 2.0,
@@ -143,17 +144,17 @@ infrared re-emission.
         },
         dust={
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.0,
             "tau_bc": 0.0,
-            "emission": {"type": "dale2014", "*": tengri.FIXED},
+            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
         redshift=tengri.Fixed(0.0),
     )
     p_int = dict(model_intrinsic.spec.sample(jax.random.PRNGKey(42)))
-    out_int = model_intrinsic.predict_rest_sed(p_int)
-    wave_int = np.asarray(out_int.wavelength)
-    nu_l_nu_int = C_AA_PER_S / wave_int * np.asarray(out_int.sed)
+    out_int = model_intrinsic.predict(p_int)
+    wave_int = np.asarray(model_intrinsic.wavelengths)
+    nu_l_nu_int = C_AA_PER_S / wave_int * np.asarray(out_int.rest_sed())
 
     # M82 photometric points (literature values, approximate fluxes)
     # Wavelength (Angstrom) and nu*L_nu (erg/s); values from Förster Schreiber+2003,
@@ -174,7 +175,7 @@ infrared re-emission.
     ax.loglog(wave[mask], nu_l_nu[mask], color="0.15", lw=1.8, label="M82 starburst model", zorder=5)
 
     # Overplot intrinsic stellar SED (faint dashed)
-    mask_int = np.asarray(out_int.sed) > 0
+    mask_int = np.asarray(out_int.rest_sed()) > 0
     ax.loglog(
         wave_int[mask_int],
         nu_l_nu_int[mask_int],

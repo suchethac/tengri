@@ -15,8 +15,10 @@ sibling :class:`DustSEDComponent` in
 
 Cross-component reads
 ---------------------
+
 - ``sed_intrinsic`` (erg/s/Hz) — produced by upstream emitters (stellar +
   AGN + radio + X-ray etc.). If ``None`` this adapter is a no-op.
+
 """
 
 from __future__ import annotations

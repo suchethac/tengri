@@ -519,6 +519,28 @@ def _n_phot_split(context: InferenceContext) -> int:
     return n_phot
 
 
+def _eline_scalar_resolution(model) -> float:
+    """Scalar R for the e-line design matrix, from the model's observation.
+
+    The old probe read ``model._spectral_resolution`` — an attribute nothing
+    in the codebase has ever set — so the 2000 fallback always won and the
+    instrument's declared resolution never reached the line profiles.
+    ``Spectroscopy.resolution`` may be a scalar or a per-pixel array; the
+    Gaussian design matrix takes one number, so an array reduces to its
+    median (first-order — R varies slowly across a band). 2000 remains the
+    fallback only when the observation declares no resolution at all.
+    """
+    spec_cfg = getattr(getattr(model, "observation", None), "spectroscopy", None)
+    resolution = getattr(spec_cfg, "resolution", None)
+    if resolution is None:
+        return 2000.0
+    if getattr(resolution, "ndim", 0):
+        import numpy as np
+
+        return float(np.median(np.asarray(resolution)))
+    return float(resolution)
+
+
 def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constraint_matrix):
     """Build emission line design matrix with doublet constraints applied."""
     from tengri.observation.eline_marginalization import (
@@ -529,7 +551,7 @@ def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constrain
     z = params.get("redshift", fixed_values.get("redshift", 0.0))
     sigma_kms = params.get("eline_sigma_kms", 0.0)
     delta_v = params.get("eline_delta_v_kms", 0.0)
-    resolution = getattr(model, "_spectral_resolution", None) or 2000.0
+    resolution = _eline_scalar_resolution(model)
     G = build_eline_design_matrix(
         model.wave_obs,
         eline_wavelengths,

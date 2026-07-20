@@ -1,6 +1,6 @@
 """
 Dust attenuation law validation: tengri vs dust_extinction PyPI package
-======================================================================
+=======================================================================
 
 Diagnostic figure comparing tengri's Calzetti and Cardelli/CCM89 attenuation
 laws against the reference implementations in the ``dust_extinction`` package

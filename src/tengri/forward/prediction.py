@@ -2051,6 +2051,7 @@ class Prediction:
         - ``ssp_flux_at_z`` ← ``lnu_age / (age_weights * LSUN_ERG)``
           (safe-divided where ``age_weights`` is zero)
         - ``agn_bol_erg`` ← ``state.derived["L_agn_bol"]`` if present.
+
         """
         if "sed_total" in self._cache:
             return
@@ -2268,6 +2269,18 @@ class Prediction:
         >>> phot_custom.shape
         (2,)
         """
+        # A model built without an observation is a valid rest-frame-only model
+        # (pred.rest_sed(), pred.stellar_mass, ... all work), but has nothing to
+        # project photometry onto. Name the fix instead of crashing with a bare
+        # ``'NoneType' object has no attribute 'photometry'`` — the lean
+        # model.predict_photometry() already raises a helpful ValueError here.
+        if self._model.observation is None:
+            raise ValueError(
+                "No observation is configured on the model, so photometry cannot "
+                "be projected. Build the model with observation=... (or filters=...) "
+                "to get photometry; without one, only rest-frame quantities "
+                "(pred.rest_sed(), pred.stellar_mass, ...) are available."
+            )
         # Validate arguments
         if fast and filters is not None:
             raise ValueError(
@@ -2455,7 +2468,7 @@ class Prediction:
         >>> spec.shape
         (2048,)
         """
-        if self._model.observation.spectroscopy is None:
+        if self._model.observation is None or self._model.observation.spectroscopy is None:
             raise ValueError(
                 "No spectroscopy is configured on the model. "
                 "Build the model with observation=Observation(spectroscopy=...) and try again."
@@ -2691,6 +2704,7 @@ class Prediction:
         not inside :func:`jax.jit`.
 
         The redshift value is resolved through the model's spec:
+
         - If ``redshift`` is a free parameter, it is taken from ``params``.
         - If ``redshift`` is fixed in the spec, the fixed value is used.
         - If ``redshift`` is not found in either place, raises ``KeyError``.

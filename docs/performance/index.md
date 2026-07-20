@@ -43,15 +43,16 @@ Inference backends on a 7-parameter mock fit (compile + sample wall):
 | Laplace | ~5 s | < 1 s |
 | Pathfinder | ~10 s | ~2 s |
 | NUTS (1k samples) | ~30 s | ~5 s |
-| `vi_native` (geoVI, JAX-native) | ~10 s | **2.3 s** |
+| `native_vi_nonlinear` (geoVI, JAX-native, experimental) | ~10 s | **2.3 s** |
 | `vi` (NIFTy.re) | ~75 s | 43.7 s |
 
 — *full breakdowns: [`2026-04-17_native_vs_nifty.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-04-17_native_vs_nifty.md), [`2026-04-22_pathfinder_vs_window_nuts.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-04-22_pathfinder_vs_window_nuts.md), [`2026-05-06_compile_vs_sampling_breakdown.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_compile_vs_sampling_breakdown.md)*
 
-`vi_native` is **19–25× faster** than the NIFTy path on smooth-SFH fits
-but is **not drop-in posterior-equivalent**: PSD-timescale parameters
-differ by an order of magnitude on stochastic fits. Validate per problem
-before swapping.
+`native_vi_nonlinear` is **19–25× faster** than the NIFTy path on
+smooth-SFH fits but is **not drop-in posterior-equivalent**: PSD-timescale
+parameters differ by an order of magnitude on stochastic fits. Both native
+backends (`native_vi_nonlinear`, `native_vi_linear`) are experimental and
+flagged unstable in the registry — validate per problem before swapping.
 
 ## Persistent compile cache
 
@@ -74,9 +75,8 @@ tengri.clear_cache()
 
 Default `min_compile_time_secs=0.05` persists per-filter kernels and
 component precompute compiles. See
-[compilation_cache.md](https://github.com/suchethac/tengri/blob/main/docs/inference/compilation_cache.md)
-and [compilation_diagnostics.md](https://github.com/suchethac/tengri/blob/main/docs/inference/compilation_diagnostics.md)
-for full details.
+[Compilation: caching and diagnostics](compilation) for full details,
+including how to trace what is recompiling and why.
 
 ## Health check and dispatcher
 
@@ -108,7 +108,7 @@ Available benchmarks (`bench list`):
 | `jit_compile` | Population-scale JIT compile time vs N galaxies |
 | `jit_real_path` | Compile time on the production forward-model path |
 | `inference_engines` | MAP / Laplace / NUTS / VI / NSS at D = 7, 12, 20 |
-| `vi_native_vs_nifty` | geoVI: pure-JAX `vi_native` vs the NIFTy.re reference path |
+| `vi_native_vs_nifty` | geoVI: pure-JAX `native_vi_nonlinear` vs the NIFTy.re reference path |
 | `vi_xlarge` | VI scaling on stochastic-SFH problems with D >> 100 |
 | `population_native` | Hierarchical PopulationFitter: per-iteration cost vs N galaxies |
 | `adam_vs_lbfgs` | MAP optimizers head-to-head |
@@ -138,8 +138,8 @@ tracks which scripts are due for a re-run.
 - JAX Metal (Apple GPU) is experimental and causes test failures. CPU is the
   reference platform. Set `JAX_PLATFORMS=cpu` explicitly.
 - **Memory:** D = 7 smooth fits ~100 MB; D = 137 stochastic ~1.5 GB. NUTS
-  warmup with `dense_mass=True` peaks 3–6× steady state; can hit 20+ GB on D
-  ≥ 8 with `dense_basis` SFHs. Multi-fit notebooks need `dense_mass=False`.
+  warmup with `dense_mass_matrix=True` peaks 3–6× steady state; can hit 20+ GB on D
+  ≥ 8 with `dense_basis` SFHs. Multi-fit notebooks need `dense_mass_matrix=False`.
   See [Memory expectations](memory.md).
 
 ## When numbers look wrong

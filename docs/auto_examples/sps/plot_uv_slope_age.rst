@@ -40,8 +40,21 @@ that ``plot_usecase_uv_slope_beta`` recovers).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -95,14 +108,14 @@ that ``plot_usecase_uv_slope_beta`` recovers).
         tengri.load_ssp(),
         sfh={
             "type": "tsnorm",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "peak_lbt_gyr": tengri.Uniform(0.01, 13.0),
             "width_gyr": 0.05,
             "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.01),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -111,8 +124,8 @@ that ``plot_usecase_uv_slope_beta`` recovers).
     beta = np.empty_like(ages)
     for i, age in enumerate(ages):
         p = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age)}
-        out = model.predict_rest_sed(p)
-        beta[i] = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
+        out = model.predict(p)
+        beta[i] = _beta_uv(np.asarray(model.wavelengths), np.asarray(out.rest_sed()))
 
     fig, ax = plt.subplots(figsize=(6.4, 4.4))
     ax.plot(ages * 1.0e3, beta, color="C0", lw=1.6)

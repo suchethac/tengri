@@ -730,20 +730,20 @@
    "name": "logspace"
   }
  ],
- "np.trapz": [
+ "np.trapezoid": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "_ArrayFunctionDispatcher"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "trapz"
+   "name": "trapezoid"
   }
  ],
  "nu": [

@@ -1,6 +1,6 @@
 """
 Dust attenuation across the SED: intrinsic, attenuated, and absorbed
-===================================================================
+====================================================================
 
 Build a model with both stellar and dust components. Predict the full SED
 with attenuation, then predict without dust absorption to isolate the

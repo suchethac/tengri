@@ -18,10 +18,12 @@ the critical importance of short-wavelength coverage for stellar age
 and dust determination.
 
 References:
+
 - Conroy et al. 2009, ApJ, 699, 486 (age-dust-metallicity degeneracy)
 - Conroy 2013, ARA&A, 51, 393 (§3, SED fitting overview)
 - Worthey 1994, ApJS, 95, 107 (age/Z degeneracy origin)
 - Meurer et al. 1999, ApJ, 521, 64 (UV slope as diagnostic)
+
 """
 
 import os
@@ -53,7 +55,7 @@ model_optical = tengri.SEDModel.build(
     observation=obs_optical,
     sfh={
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": tengri.Uniform(0.1, 13.0),
         "width_gyr": 0.3,
         "log_total_mass": 10.0,
@@ -62,7 +64,7 @@ model_optical = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": tengri.Uniform(0.0, 2.0),
         "tau_bc": 0.3,
         "slope": -0.7,

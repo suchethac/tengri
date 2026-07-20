@@ -11,6 +11,7 @@ Metal-poor stellar populations and active star formation drive the
 starburst signature visible from UV through optical.
 
 **References:**
+
  - Östlin et al. (2014) [1]_ for dwarf starburst SED archetypes
  - Chabrier (2003) [2]_ for young, metal-poor IMF
  - Cue (2009) [3]_ for nebular emission at low metallicity

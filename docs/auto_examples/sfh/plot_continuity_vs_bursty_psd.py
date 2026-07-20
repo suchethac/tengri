@@ -25,11 +25,14 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 ssp = load_ssp("fsps_prsc_miles_chabrier")
 
 model_cont = SEDModel.build(
-    ssp_data=ssp, sfh={"type": "continuity", "*": FREE}, redshift=Fixed(0.0)
+    ssp_data=ssp, sfh={"type": "continuity", "all_params": FREE}, redshift=Fixed(0.0)
 )
 model_field = SEDModel.build(
     ssp_data=ssp,
-    sfh=[{"type": "tsnorm", "*": FREE}, {"type": "field", "psd_sigma": 0.6, "psd_tau_myr": 100}],
+    sfh=[
+        {"type": "tsnorm", "all_params": FREE},
+        {"type": "field", "psd_sigma": 0.6, "psd_tau_myr": 100},
+    ],
     redshift=Fixed(0.0),
 )
 

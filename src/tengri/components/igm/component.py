@@ -18,6 +18,7 @@ Design choices (mirrored in :mod:`tengri.components.radio.component`):
 - :meth:`precompute` is a no-op (Inoue's piecewise-power-law fit is
   evaluated lazily inside :func:`igm_transmission`; no redshift-dependent
   grid needs caching).
+
 """
 
 from __future__ import annotations

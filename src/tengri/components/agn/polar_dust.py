@@ -11,9 +11,11 @@ The Type 1/2 boundary uses a smooth sigmoid transition for differentiability.
 
 References
 ----------
+
 - Yang et al. 2020, MNRAS, 491, 740 (X-CIGALE polar dust § 2.2.2)
 - Gordon et al. 2003, ApJ, 594, 279 (SMC extinction)
 - Pei 1992, ApJ, 395, 130 (SMC parameterization used here)
+
 """
 
 from __future__ import annotations
@@ -255,6 +257,7 @@ def polar_dust_extinction(
     Notes
     -----
     **Absorption vs. Attenuation:**
+
     - ``l_absorbed`` (geometry-independent) is the disc photon fraction intercepted
       by the bi-conical polar dust (Yang+2020 §2.2.2). This drives the
       graybody FIR reemission and is viewed isotropically.

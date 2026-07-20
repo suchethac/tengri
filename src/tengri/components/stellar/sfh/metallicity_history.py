@@ -13,6 +13,7 @@ comparing to Bagpipes results.
 
 Modes
 -----
+
 - ``two_step``:  Abrupt metallicity change at a lookback time.
 - ``psb_two_step``:  Step at the PSB burst age (Leung et al. 2024).
 - ``metallicity_bins``:  Per-bin metallicities aligned with continuity SFH bins.
@@ -24,9 +25,11 @@ The solar offset ``LOG10_ZSUN`` is applied in the parameter translation layer
 
 References
 ----------
+
 - Carnall et al. 2018 (MNRAS 480, 4379): Bagpipes
 - Leung et al. 2024 (MNRAS 528, 4029): psb_two_step metallicity model
 - Leja et al. 2019 (ApJ 876, 3): Continuity SFH / metallicity bins
+
 """
 
 from __future__ import annotations
@@ -433,6 +436,7 @@ def massmap_box_metallicity(
         μ_f = 1 - \\exp\\left( -\\frac{Z_{\\rm final} - Z_{\\rm start}}{ρ} \\right)
 
     The formula assumes:
+
     - Zstart and Zfinal are in absolute log10(Z) space
     - Nucleosynthetic yield ρ is constant throughout cosmic time
     - All stellar ejecta immediately enrich the ISM (instantaneous mixing)

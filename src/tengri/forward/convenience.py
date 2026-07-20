@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.parameters.defaults import UNSET as _UNSET
 
 if TYPE_CHECKING:
@@ -684,7 +685,7 @@ def catalog_summary(
 def fit_population(
     model: SEDModel,
     observations_list: list,
-    method: str = "vi",
+    method: str = DEFAULT_METHOD,
     population_prior: dict | None = None,
     **kwargs,
 ):

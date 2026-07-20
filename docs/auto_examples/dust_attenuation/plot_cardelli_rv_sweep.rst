@@ -39,8 +39,19 @@ on the same intrinsic SED at τ_V = 1.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -66,7 +77,7 @@ on the same intrinsic SED at τ_V = 1.
     ssp = tengri.load_ssp()
     SFH = {
         "type": "tsnorm",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "peak_lbt_gyr": 0.05,
         "width_gyr": 0.05,
         "log_total_mass": 10.0,
@@ -81,7 +92,7 @@ on the same intrinsic SED at τ_V = 1.
             sfh=SFH,
             dust={
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 1.0,
                 "tau_bc": 0.0,
                 "law_diff": "cardelli",
@@ -99,9 +110,9 @@ on the same intrinsic SED at τ_V = 1.
     for rv in rv_grid:
         model = _model(float(rv))
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        out = model.predict(p)
+        wave = np.asarray(model.wavelengths)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=cmap(norm(rv)), lw=1.4)
 
     ax.axvline(2175, color="0.55", lw=0.4, ls=":")
@@ -117,6 +128,11 @@ on the same intrinsic SED at τ_V = 1.
 
     fig.tight_layout()
     plt.savefig("plot_cardelli_rv_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.282 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_cardelli_rv_sweep.py:

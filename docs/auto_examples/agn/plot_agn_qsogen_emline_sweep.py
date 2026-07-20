@@ -37,8 +37,8 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 C_AA_PER_S = 2.998e18
 
-SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
 
@@ -53,18 +53,19 @@ for lbol in log_lbol_values:
         sfh=SFH,
         dust=DUST,
         agn={
-            "disc": {"type": "qsogen", "*": tengri.FIXED},
-            "lines": {"type": "qsogen", "*": tengri.FIXED},
-            "*": tengri.FIXED,
+            "disc": {"type": "qsogen", "all_params": tengri.FIXED},
+            "nlr": {"type": "none", "all_params": tengri.FIXED},
+            "blr": {"type": "qsogen", "all_params": tengri.FIXED},
+            "all_params": tengri.FIXED,
             "frac": 1.0,
             "log_lbol": lbol,
         },
         redshift=tengri.Fixed(0.0),
     )
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(params)
-    wave = np.asarray(out.wavelength)
-    nu_lnu = (C_AA_PER_S / wave) * np.asarray(out.sed)
+    out = model.predict(params)
+    wave = np.asarray(model.wavelengths)
+    nu_lnu = (C_AA_PER_S / wave) * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_lnu, color=cmap(norm(lbol)), lw=1.4)
 
 cbar = fig.colorbar(

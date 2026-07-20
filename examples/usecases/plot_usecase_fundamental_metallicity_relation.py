@@ -19,8 +19,10 @@ with ~0.1 dex scatter, dominated by dust, ISM geometry, and starburst
 history.
 
 References:
+
 - Mannucci et al. 2010, MNRAS, 408, 2115 (the FMR definition)
 - Lara-López et al. 2010, A&A, 521, L53 (confirmation with SDSS)
+
 """
 
 import os

@@ -10,12 +10,15 @@ TIER A GUARANTEE (mixed-precision, forward_dtype="float32" under x64=True):
     Ionizing SED computed in f32; scalars remain f64. The log-offset
     reparametrization keeps the Balmer decrement finite and correct.
 
-TIER B DEFERRAL (pure-float32, jax.enable_x64(False)):
-  - test C (test_ionizing_sed_pure_float32_cue_only): XFAIL.
-    Q_H integral (_integrate_nion) yields ~1e56 photons/s, exceeding float32 max (~3.4e38).
-    Overflow to inf regardless of summand precision. Fix requires log_nion (log10 Q_H)
-    output contract change across nebular consumers (Cue, CloudyGrid, compute_nion, q_h).
-    That is a reduction-reformulation, scoped to Tier B. This task (Tier A) is the precursor.
+TIER B STEP 1 DELIVERED (pure-float32, jax.enable_x64(False)) — the log_nion contract (#1206):
+  - test C1 (test_log_q_h_pure_float32_cue_only): PASSES.
+    The log_nion reparametrization makes log_q_h (= log10 Q_H) and the nebular continuum
+    rest_sed() (L_nu ~1e29, float32-representable) finite and float64-accurate. This is the
+    usable pure-float32 ionizing diagnostic the contract provides.
+  - test C2 (test_linear_observables_pure_float32_cue_only): XFAIL(strict) — #1206 item 3.
+    The linear q_h property (~1e56 photons/s) and the erg/s line_lums (~1e41, hence
+    balmer_decrement) still exceed float32 max. Returning them in L_sun/log10 is a breaking
+    unit change (#1206 item 3), not yet done. log_q_h is the finite replacement.
 """
 
 import jax
@@ -89,52 +92,60 @@ def test_balmer_decrement_pure_float32(ssp_bare):
     assert_allclose(dec32, dec64, rtol=5e-3)
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Tier B: Q_H integral (_integrate_nion) yields ~1e56 photons/s, exceeding float32 max. "
-        "Pure-f32 needs log_nion contract across Cue/CloudyGrid/compute_nion/q_h. "
-        "Tier A task (_sed_ion reparam) is the precursor."
-    ),
-    strict=True,
-)
-def test_ionizing_sed_pure_float32_cue_only(ssp_bare):
-    """(C) Pure-float32 isolated stellar+Cue (no AGN SKIRTOR blocker).
+def test_log_q_h_pure_float32_cue_only(ssp_bare):
+    """(C1) Pure-float32 stellar+Cue: the log_nion contract makes the ionizing
+    readout and the nebular continuum SED finite (issue #1206 step 1).
 
-    Build a minimal model with stellar SFH + Cue nebular only (no AGN, dust IR,
-    radio, xray). Run under pure float32 (jax.enable_x64(False)) to validate
-    that the ionizing-SED reparametrization (_sed_ion via apply_log10_scale)
-    is safe and does not overflow.
-
-    This test isolates the ionizing-SED path without the AGN SKIRTOR dtype
-    mismatch that affects the panchromatic test_B.
+    log_q_h (= log10 Q_H) and rest_sed() (L_nu ~1e29, float32-representable) stay
+    finite and track the float64 reference. This is what the log_nion
+    reparametrization (the log-domain Q_H contract) delivers: a usable pure-float32
+    ionizing diagnostic where the linear q_h property overflows (see the companion
+    strict-xfail test). The gas_logqion Cue seam is exercised transitively — a broken
+    seam would poison the nebular continuum, so rest_sed finiteness is the end-to-end
+    check. Isolated stellar+Cue avoids the AGN SKIRTOR dtype blocker of test B.
     """
     from .conftest import build_minimal_cue_model
 
-    # Build f64 reference
     m64 = build_minimal_cue_model(ssp_bare, "float64")
     p = dict(m64.spec.sample(jax.random.PRNGKey(0)))
     pred64 = m64.predict(p)
-    q_h_64 = float(pred64.properties["q_h"])
-    dec64 = float(pred64.properties["balmer_decrement"])
+    log_q_h_64 = float(pred64.properties["log_q_h"])
 
-    # Build and predict under pure float32
     with jax.enable_x64(False):
         m32 = build_minimal_cue_model(ssp_bare, "float32")
         pred32 = m32.predict(p)
+        log_q_h_32 = float(pred32.properties["log_q_h"])
+        rest_sed_32 = np.asarray(pred32.rest_sed())
+
+    assert np.isfinite(log_q_h_32), f"pure-f32 log_q_h non-finite: {log_q_h_32}"
+    assert np.all(np.isfinite(rest_sed_32)), "pure-f32 rest_sed has non-finite entries"
+    assert_allclose(log_q_h_32, log_q_h_64, atol=5e-3)  # dex
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Tier B item 3 (breaking unit change, not yet done): the linear q_h property "
+        "(~1e56 photons/s) and the erg/s line_lums (~1e41, hence balmer_decrement) exceed "
+        "float32 max. The log_nion contract (#1206 step 1) gives a finite log_q_h instead — "
+        "see test_log_q_h_pure_float32_cue_only. Returning these in L_sun/log10 is #1206 item 3."
+    ),
+    strict=True,
+)
+def test_linear_observables_pure_float32_cue_only(ssp_bare):
+    """(C2) The linear-erg/s observables that Tier B item 3 must still fix.
+
+    In pure float32 the linear ``q_h`` overflows to inf and ``balmer_decrement``
+    (a ratio of erg/s ``line_lums`` ~1e41) is nan. This test is expected to fail
+    until item 3 rescales these to L_sun/log10; if it ever XPASSES, promote it.
+    """
+    from .conftest import build_minimal_cue_model
+
+    with jax.enable_x64(False):
+        m32 = build_minimal_cue_model(ssp_bare, "float32")
+        p = dict(m32.spec.sample(jax.random.PRNGKey(0)))
+        pred32 = m32.predict(p)
         q_h_32 = float(pred32.properties["q_h"])
-        dec32 = float(pred32.properties["balmer_decrement"])
+        dec_32 = float(pred32.properties["balmer_decrement"])
 
-    # Validate ionizing path (q_h) is finite
-    assert np.isfinite(q_h_32), (
-        f"pure-f32 q_h is non-finite: {q_h_32}; indicates _sed_ion overflow in Cue ionizing flux"
-    )
-
-    # Validate Balmer decrement is finite and in Case B range
-    assert np.isfinite(dec32), (
-        f"pure-f32 Balmer decrement is non-finite: {dec32}; indicates _sed_ion scale issue"
-    )
-    assert 2.5 < dec32 < 3.2, f"pure-f32 Balmer decrement {dec32} outside Case B range [2.5, 3.2]"
-
-    # Compare to f64 reference
-    assert_allclose(q_h_32, q_h_64, rtol=5e-3)
-    assert_allclose(dec32, dec64, rtol=5e-3)
+    assert np.isfinite(q_h_32), f"linear q_h overflows float32: {q_h_32}"
+    assert np.isfinite(dec_32), f"balmer_decrement is nan in float32: {dec_32}"

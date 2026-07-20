@@ -49,17 +49,17 @@ def _build(q_pah=None, u_min=None):
     """Build SEDModel with DL07 dust at specified q_PAH and U_min."""
     dust = {
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_diff": 1.0,
         "tau_bc": 0.3,
         "emission": {
             "type": "draine_li2007",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
         },
     }
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0},
+        sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
         dust=dust,
         redshift=tengri.Fixed(0.05),
     )
@@ -85,9 +85,9 @@ colors = {"Cold cirrus": "#1f77b4", "Spiral galaxy": "#ff7f0e", "Starburst": "#d
 
 for regime, params in regimes.items():
     model, p = _build(q_pah=params["q_pah"], u_min=params["u_min"])
-    out = model.predict_rest_sed(p)
-    wave = np.asarray(out.wavelength)
-    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    out = model.predict(p)
+    wave = np.asarray(model.wavelengths)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
 
     ax.loglog(
         wave,

@@ -16,9 +16,9 @@ with < 32 GB if you're batch-authoring notebooks.
 | Spectroscopy (1000-pix optical, NUTS) | ~300 MB | 4–8 GB |
 | Joint photo + spec (NUTS) | ~500 MB | 6–10 GB |
 
-NUTS warmup with `dense_mass=True` peaks 3–6× higher than steady state due
+NUTS warmup with `dense_mass_matrix=True` peaks 3–6× higher than steady state due
 to `vmap(vmap(...))` tracing. D ≥ 8 with `dense_basis` can hit 20+ GB.
-**Multi-fit notebooks need `dense_mass=False`** — see [Multiple NUTS
+**Multi-fit notebooks need `dense_mass_matrix=False`** — see [Multiple NUTS
 fits](#pattern-multiple-nuts-fits-per-process).
 
 These numbers are CPU on Apple M-series; GPU peaks are typically lower
@@ -37,7 +37,7 @@ re-paying compile cost.
 
 1. **One NUTS fit per notebook.** Use MAP for cheap "before" fits.
 2. Share state: same model, same observation *type*, only data changes. JIT cache survives.
-3. Drop dense mass: `fitter.run("mcmc_nuts", dense_mass=False, ...)`. Cuts
+3. Drop dense mass: `fitter.run("mcmc_nuts", dense_mass_matrix=False, ...)`. Cuts
    compile ~3× (costs ~2× autocorrelation; run more samples).
 4. Use HMC: `fitter.run("mcmc_hmc", ...)`. Smaller JIT graph, no binary-tree expansion.
 
@@ -75,32 +75,36 @@ import tengri
 tengri.clear_cache()
 ```
 
-See [compilation_cache.md](https://github.com/suchethac/tengri/blob/main/docs/inference/compilation_cache.md) for details.
+See [Compilation: caching and diagnostics](compilation) for details.
 
 ## A safety-net watchdog
 
-If you batch-author notebooks on a < 32 GB machine, running a simple
-watchdog as a background process is cheap insurance. The default
-threshold is 20 GB — comfortable headroom above the worst-case
-single-NUTS-fit peak, low enough to catch a runaway:
+If you batch-author notebooks or run several sessions in parallel,
+running a watchdog daemon in the background is cheap insurance. Two
+ship in `scripts/`:
+
+- `scripts/python_oom_guard.sh` — SIGKILLs any **single** python
+  process whose RSS exceeds `LIMIT_GB` (default 10). Catches one
+  runaway JIT compile or fit.
+- `scripts/python_total_oom_guard.sh` — watches the **machine-wide
+  total** RSS of all python processes and, when the sum exceeds
+  `TOTAL_LIMIT_GB` (default 75% of physical RAM), SIGKILLs the most
+  memory-hungry processes first until the total is back under the
+  limit. This catches what the per-process guard cannot: many
+  individually-modest workers (pytest-xdist, parallel sessions,
+  orphaned kernels) that together sum past physical RAM.
 
 ```bash
-THRESHOLD_KB=20971520  # 20 GB; lower to 10 GB if your machine is tight
-while true; do
-  ps -axo pid=,rss=,comm= \
-    | awk -v t=$THRESHOLD_KB '$2>t && $3 ~ /python/ {print $1, $2, $3}' \
-    | while read pid rss cmd; do
-        echo "$(date) KILL $pid rss=${rss}KB cmd=$cmd" >> /tmp/oom_killer.log
-        kill -9 $pid 2>/dev/null
-      done
-  sleep 5
-done
+scripts/python_oom_guard.sh &                            # per-process limit
+TOTAL_LIMIT_GB=30 scripts/python_total_oom_guard.sh &    # machine-wide budget
 ```
 
-Logs go to `/tmp/oom_killer.log` so you can see what got killed. Drop
-the threshold only if your heaviest legitimate fit stays under it —
-NUTS on a model with template dust emission can briefly cross 10 GB
-during compile.
+Both log kills to `/tmp` (`python_oom_guard.log`,
+`python_total_oom_guard.log`). The total guard also appends the global
+RSS every poll, so after an incident you can see the ramp, and supports
+`DRY_RUN=1` to preview which processes a limit would shed. Set limits
+so your heaviest legitimate fit stays under them — NUTS on a model with
+template dust emission can briefly cross 10 GB during compile.
 
 ## When to file a bug
 

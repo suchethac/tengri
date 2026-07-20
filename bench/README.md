@@ -24,7 +24,7 @@ conventions.
 | `benchmark_jit_compile.py` | Population-scale JIT compile time vs N galaxies, batching strategies |
 | `benchmark_jit_real_path.py` | Compile time on the production forward-model path |
 | `benchmark_inference_engines.py` | MAP / Laplace / NUTS / VI / NSS at D = 7, 12, 20 |
-| `benchmark_vi_native_vs_nifty.py` | geoVI: pure-JAX `vi_native` vs the NIFTy.re reference path |
+| `benchmark_vi_native_vs_nifty.py` | geoVI: pure-JAX `native_vi_nonlinear` vs the NIFTy.re reference path |
 | `benchmark_vi_xlarge.py` | VI scaling on stochastic-SFH problems with D >> 100 |
 | `benchmark_population_native.py` | Hierarchical PopulationFitter: per-iteration cost vs N galaxies |
 | `benchmark_adam_vs_lbfgs.py` | MAP optimizers head-to-head |
