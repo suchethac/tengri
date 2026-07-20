@@ -214,7 +214,7 @@ class KD18Disc(SEDModelComponent):
         units="dimensionless",
         default=3.0,
     )
-    frac = Uniform(
+    lum_ratio = Uniform(
         0.0,
         1.0,
         description="Disc luminosity fraction of L_bol",
