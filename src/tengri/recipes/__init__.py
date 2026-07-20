@@ -136,8 +136,13 @@ def quiescent_z0() -> dict:
     """
     return dict(
         sfh=builders.sfh.dexp(defaults=FREE),
+        # ``defaults=FIXED``: only tau_bc / tau_diff are fitted here. The
+        # remaining attenuation params (slope, Rv, delta, bump_strength,
+        # f_obscuration) carry Fixed registry defaults, so the FREE this
+        # previously requested never freed any of them — the recipe now says
+        # what it has always actually done.
         dust=builders.dust.two_component(
-            defaults=FREE,
+            defaults=FIXED,
             law_bc="calzetti",
             tau_bc=Uniform(0, 0.5),
             tau_diff=Uniform(0, 0.3),
@@ -319,7 +324,9 @@ def agn_panchromatic() -> dict:
         sfh=builders.sfh.dpl(defaults=FREE),
         dust=builders.dust.two_component(
             defaults=FREE,
-            emission=builders.dust.emission.dale2014(defaults=FREE),
+            # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
+            # choice, not something a wildcard should open by default.
+            emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
         neb=builders.neb.cue(defaults=FIXED),
         agn=builders.agn.composable(
@@ -390,7 +397,9 @@ def composable_agn() -> dict:
         sfh=builders.sfh.dpl(defaults=FREE),
         dust=builders.dust.two_component(
             defaults=FREE,
-            emission=builders.dust.emission.dale2014(defaults=FREE),
+            # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
+            # choice, not something a wildcard should open by default.
+            emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
         neb=builders.neb.cue(defaults=FIXED),
         agn={

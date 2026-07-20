@@ -190,9 +190,12 @@ class TestNesting:
             dust={
                 "type": "two_component",
                 "*": FIXED,
+                # FIXED, not FREE: every Dale+2014 param has a Fixed registry
+                # default, so FREE here frees nothing and is now refused. This
+                # test is about sub-block *declaration*, not freeing.
                 "emission": {
                     "type": "dale2014",
-                    "*": FREE,
+                    "*": FIXED,
                     "alpha_dale": Uniform(0.5, 4.0),
                 },
             },
@@ -769,9 +772,11 @@ class TestAllParamsAlias:
                 dust={
                     "type": "two_component",
                     wk: FIXED,
+                    # FIXED, not FREE: this test is about the alias resolving
+                    # identically to '*', not about what the wildcard frees.
                     "emission": {
                         "type": "dale2014",
-                        wk: FREE,
+                        wk: FIXED,
                         "alpha_dale": Uniform(0.5, 4.0),
                     },
                 },
