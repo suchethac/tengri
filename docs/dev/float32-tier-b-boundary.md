@@ -74,26 +74,33 @@ PASSES (pure-f32 `log_q_h` and `rest_sed()` finite and float64-accurate);
 
 ---
 
-### 2. Energy-Balance / Bolometric Integrals
+### 2. Energy-Balance / Bolometric Integrals — DELIVERED (peak factoring + `log_L_ir`)
 
-**Problem:** The bolometric integral `∫ L_ν dν` (~1e47 erg/s) and dust-coupling integrals (UV absorbed → IR re-emitted) exceed float32 max.
+**Problem:** The absorbed bolometric integral `∫ (L_ν^intr − L_ν^att) dν` exceeds float32 max. The integrand is ~1e28 erg/s/Hz and the frequency span ~1e15 Hz, so the product lands at ~1e43 erg/s against a ceiling of 3.4e38.
 
-**Current behavior:** Reduction operations (trapz_freq) in `src/tengri/utils/` and dust-emission logic in `src/tengri/components/dust/` perform uncompensated summation, overflowing in pure float32.
+Measured on a real grid (`ssp_prsc_miles`, 1e10 M⊙, z = 0.5): `L_absorbed = 2.36e43 erg/s`. An earlier revision of this document said ~1e47; that figure came from a synthetic fixture and is wrong for any real galaxy — see the fixture warning at the end of this section.
 
-**Fix:** For integrals that are O(1e47) or larger, either:
-- Factor the peak as a log offset and integrate the O(1) residual (analog of `apply_log10_scale` for reductions).
-- Use compensated summation (Kahan / pairwise) to maintain precision in float32 without materializing the full range.
+**What actually failed — a silent fail-open, not an overflow.** The reduction returned `inf`, and the trailing `jnp.where(jnp.isfinite(signed), signed, 0.0)` guard turned that `inf` into **0.0**. Dust IR re-emission switched off completely and nothing raised. The guard is not the bug: it exists for genuine `Inf*0` artifacts from extreme-metallicity SSP fluxes. The bug was that overflow manufactured a non-finite value out of perfectly finite inputs, so the guard fired on healthy data.
 
-**Impact:** Dust energy balance (`src/tengri/components/dust/energy_balance.py`), emission libraries, and validation against observations.
+**Delivered:**
+- `_peak_factored_trapezoid` divides the integrand by its own peak, integrates the O(1) residual, and re-applies the scale in log space. No intermediate leaves float32 range; overflow is confined to the final re-scaling, where it is loud.
+- `bolometric_absorbed_log10` returns `(log_magnitude, sign)`. The sign is separate because that *is* what a signed quantity looks like in log space — log contracts are exact under multiplication but **not** under addition, so a caller combining a stellar and a nebular absorbed term needs the sign to reproduce `|a + b|` rather than `|a| + |b|`.
+- `tengri.utils.scale.log10_add` — a signed base-10 `logaddexp` for those additive seams.
+- `log_L_ir` is published beside the linear `L_ir` (`two_component.py`, `component.py`, `wg00_model.py`).
+
+Compensated summation (Kahan / pairwise) was **not** used: it addresses lost significant digits, and this failure is one of dynamic range. Kahan summation of values whose sum is 1e43 still overflows float32.
+
+**Still open:** dust IR *emission* consumes the linear `L_ir`, so `sed_dust_ir` is `inf` in pure float32 and poisons the total SED. See "Remaining work" below.
 
 ---
 
 ### 3. Published Linear-Scale Quantities That Exceed Float32 Range
 
-**Stellar mass scale:**
-- Symbol: `stellar_mass_scale` (or `total_mass * L_sun` ~1e42).
+**Stellar mass scale — DELIVERED (`log_stellar_mass_scale`):**
+- Symbol: `stellar_mass_scale` = `total_mass × L_sun`. Measured 3.828e43 for a 1e10 M⊙ galaxy.
 - Location: `src/tengri/components/stellar/component.py`, published in `derived["stellar_mass_scale"]`.
-- **Tier B decision:** Publish in log form (e.g., `log10_stellar_mass_scale`) or deprecate the linear form and require log form from callers. (Allowlisted as "deferred" in the flux-scale guard.)
+- **No SSP grid rescues this.** It is `total_mass` times a constant, with no SSP flux factor to keep it small, so it overflows for *every* galaxy above `3.4e38 / 3.828e33 ≈ 9e4` M⊙. Unlike the SED — where `total_mass × ssp_flux_at_age` lands first and keeps the magnitude in range — this scale has no small factor to hide behind.
+- **Delivered:** the producer already computed `log10_mass_scale` for the log-domain Q_H integral and simply never published it. It is now published alongside the linear key, with a `DerivedKey`, a `DerivedState` field, and a `_CANONICAL_UNITS` entry pinning it to `dex`. The `jnp.log10(mass_scale)` fallback the dust energy balance carried is removed — it would have recovered `inf` rather than the finite value the producer already holds.
 
 **Luminosity distance curvature factor:**
 - Symbol: `4π d_L²` (~1e57 cm²).
@@ -155,10 +162,102 @@ Document in `src/tengri/inference/context.py` or a new `docs/dev/inference-float
    `log_nion` contract (`_integrate_nion_log10`, `log_q_h` property, log-domain Cue combine, and the
    f32-safe reconstruct/radio/xi_ion consumers) plus the `test_no_raw_nion_read.py` guard. The linear
    `q_h` property and erg/s line paths remain, folded into item 3.
-2. Bolometric integral compensation (log-domain or Kahan summation).
+2. ~~Bolometric integral compensation.~~ **DONE** — peak-factored reductions plus the
+   `bolometric_absorbed_log10` / `log10_add` contracts (§2). Kahan summation was the wrong tool: the
+   failure is dynamic range, not lost digits.
 3. Linear-scale property unit changes (15 emission lines + AGN luminosities → L_sun or log10);
    includes retiring the transition-only linear `derived["nion"]` once its readers move to `log_nion`.
-4. SKIRTOR interpolation dtype consistency.
+4. ~~SKIRTOR interpolation dtype consistency.~~ **DONE**.
 5. Inference method restrictions (MAP, Laplace, robust VI only).
+6. **Dust IR emission must consume `log_L_ir`** — the remaining blocker for end-to-end float32
+   photometry. See "Remaining work" below.
 
 Each fix is a distinct pull request with targeted tests. Coordinate the unit-change PRs (item 3) to avoid breaking the public API across multiple releases.
+
+---
+
+## Measured boundary
+
+Pure float32 via `jax.enable_x64(False)`, real grid
+(`data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5`), 1e10 M⊙ delayed-τ galaxy at z = 0.5,
+two-component dust (τ_bc = 1.0, τ_diff = 0.7) with Dale 2014 emission.
+
+| Key | float64 | pure float32 | status |
+|---|---|---|---|
+| `lnu_age` | 2.7795e28 | 2.7795e28, all finite | in range |
+| `sed_dust_attenuated` | 1.6524e29 | 1.6524e29, all finite | in range |
+| `log_nion` | 49.407332 | 49.407333 | log contract holds |
+| `log_L_ir` | 43.372214 | 43.372215 | log contract holds |
+| `log_stellar_mass_scale` | 43.583 | 43.583 | log contract holds |
+| `stellar_mass_scale` | 3.828e43 | `inf` | linear, use log form |
+| `nion` | 2.5547e49 | `inf` | linear, use `log_nion` |
+| `L_absorbed` / `L_ir` | 2.3562e43 | `inf` | linear, use `log_L_ir` |
+| `sed_dust_ir` | 4.4273e30 | `inf` | **blocker** (item 6) |
+
+The stellar SED is **not** the problem: `lnu_age` is entirely finite in float32 and matches float64 to
+five-plus digits. Only the scalar bolometric quantities leave the window, and each now has a log form.
+
+This inventory is enforced two-way by
+`tests/regression/precision/test_float32_boundary_inventory.py` — a key that goes non-finite is a
+regression, and a key that becomes representable also fails, so the table cannot quietly rot into a
+lie while the suite stays green.
+
+### Fixture warning — do not measure float32 range on `synthetic_ssp_wide`
+
+`synthetic_ssp_wide` uses `ssp_flux = (5000/wave)**2` (~1e-12 to 2.5e3). A real grid spans ~1.4e-70
+to 9.4e-11. A 1e10 M⊙ galaxy on the fixture therefore reaches `sed_intrinsic ≈ 2.8e47` — seventeen
+decades brighter than reality and nine past the float32 ceiling.
+
+Consequences, all observed:
+
+- The *SED itself* overflows in float32, so `log_L_ir` reads `-inf` and `log_nion` reads `nan`. The
+  log contracts appear broken when the input is what is broken.
+- `L_ir` reads *finite* in float32 — because it is exactly `0.0`, the fail-open value.
+- An earlier revision of this document recorded the bolometric integral as ~1e47. That number is a
+  fixture artifact.
+
+Use a real grid, or rescale the fixture's flux (the boundary inventory test multiplies it by 1e-17,
+which reproduces a real grid's regime: `L_ir` 1.5e43 vs a real 2.4e43). Structural conclusions from
+the fixture are fine; magnitude conclusions are not.
+
+---
+
+## Remaining work — dust IR emission (item 6)
+
+`sed_dust_ir` is `inf` in pure float32 because every dust emission model consumes the **linear**
+`L_ir`, which is `inf`, even though `log_L_ir` is published and finite.
+
+**Runtime seam — 8 sites**, all of the shape `(L / denom) × shape`:
+
+| Site | Expression |
+|---|---|
+| `emission_templates.py:252`, `:1050`, `:1522` | `norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)` |
+| `emission/analytic/_closures.py:124`, `:293`, `:529` | same |
+| `draine2021_pah_ir.py:317`, `emission/templates/astrodust.py:366` | `scale = jnp.where(norm_at_lgU > 0, L_ir / norm_at_lgU, 0.0)` |
+
+The many other `lnu / integral` occurrences in `emission_templates.py` are **build-time** template
+normalization into NumPy arrays and never see `L_ir`. Do not touch them.
+
+**Per-site rewrite:**
+
+```python
+ok = integral > 0
+safe = jnp.where(ok, integral, 1.0)
+result = jnp.where(ok, apply_log10_scale(shape / safe, log_L_ir), 0.0)
+```
+
+**Two traps:**
+
+1. `emission/_component_base.py:101-107` supplies `jnp.asarray(0.0)` for an optional input absent
+   from `state.derived`. For a **log** quantity that reads as `1.0` linear, not zero — a fail-open in
+   exactly the shape this whole tier exists to remove. The sentinel must be `-inf`.
+2. The rewrite factors `L_ir` out of the template, which is valid only for a model exactly
+   proportional to `L_ir`. Measured across all 19 registered emission models, 17 are (deviation
+   ≤ 5.4e-14) — but `energy_balance_split` computes `L_ir_total = η·L_stellar + L_agn_ir`, which is
+   **affine**: the ratio degrades 2.0 → 1.909 → 1.5 → 1.09 as `L_agn_ir` approaches the stellar term.
+   It reads as proportional at defaults only because `dust_L_agn_ir` defaults to 0. It needs
+   `log10_add`, not a single factored scale.
+
+`tests/contract/test_dust_emission_l_ir_linearity.py` pins the proportionality per model and makes
+the one affine exemption earn itself, so a new non-proportional model fails loudly rather than
+silently returning wrong fluxes.
