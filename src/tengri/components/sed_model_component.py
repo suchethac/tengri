@@ -417,8 +417,8 @@ class SEDModelComponent:
         result = []
         for name, prior in self._priors.items():
             full_name = self.parameter_prefix + name
-            description = getattr(prior, "description", "")
-            units = getattr(prior, "units", "")
+            description = prior.description
+            units = prior.units
             result.append(
                 ParamDeclaration(name=full_name, prior=prior, description=description, units=units)
             )

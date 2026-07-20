@@ -103,8 +103,8 @@ class SpatialModelComponent:
                 ParamDeclaration(
                     name=f"{self.parameter_prefix}{attr_name}",
                     prior=dist,
-                    description=getattr(dist, "description", ""),
-                    units=getattr(dist, "units", ""),
+                    description=dist.description,
+                    units=dist.units,
                 )
             )
         return decls
