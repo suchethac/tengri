@@ -288,6 +288,12 @@ _VALID_DUST_TYPES = {
     "wg00",
 }
 
+#: Valid ``shock={'type': ...}`` values. Named here rather than built inline
+#: at the point of validation so :func:`tengri.list_shock_models` can derive
+#: its menu from the very set the builder checks against — the menu and the
+#: validator then cannot drift (the failure mode behind #1273 and #1276).
+_VALID_SHOCK_TYPES = frozenset({"none", "mappings"})
+
 #: Witt & Gordon (2000) structural selectors (dust_model="wg00", FSPS dust_type=3).
 _WG00_DUST_CURVES = ("mw", "smc")
 _WG00_GEOMETRIES = ("shell", "cloudy", "dusty")
@@ -1454,7 +1460,7 @@ def _translate_shock(shock_dict: dict, result: dict) -> None:
     params in :func:`parse_groups`.
     """
     shock_type = shock_dict.get("type", "mappings")
-    valid_shock = frozenset({"none", "mappings"})
+    valid_shock = _VALID_SHOCK_TYPES
     if shock_type not in valid_shock:
         suggestions = difflib.get_close_matches(shock_type, valid_shock, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
@@ -1579,7 +1585,9 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
         sf_dict = radio_dict["sf"]
         if isinstance(sf_dict, dict):
             sf_variant = sf_dict.get("type", "bell2003")
-            valid_sf = frozenset({"none", "bell2003", "delvecchio2021", "mccheyne2022"})
+            from tengri.components.radio.component import SF_RADIO_MODELS
+
+            valid_sf = frozenset(SF_RADIO_MODELS)
             if sf_variant not in valid_sf:
                 suggestions = difflib.get_close_matches(sf_variant, valid_sf, n=2, cutoff=0.6)
                 suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""

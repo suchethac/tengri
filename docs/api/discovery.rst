@@ -56,6 +56,8 @@ and a one-line description.
 
 .. autofunction:: tengri.list_sfh_models
 
+.. autofunction:: tengri.list_dust_models
+
 .. autofunction:: tengri.list_dust_laws
 
 .. autofunction:: tengri.list_dust_emission_models
@@ -69,6 +71,10 @@ and a one-line description.
 .. autofunction:: tengri.list_xray_models
 
 .. autofunction:: tengri.list_radio_models
+
+.. autofunction:: tengri.list_radio_blocks
+
+.. autofunction:: tengri.list_shock_models
 
 .. autofunction:: tengri.list_igm_models
 

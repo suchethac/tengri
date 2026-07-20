@@ -106,8 +106,62 @@ def test_describe_discloses_ambiguous_names():
         assert "also_registered_as" in rec, f"describe({name!r}) hid its ambiguity"
         assert name in rec["also_registered_as"]
 
-    # an unambiguous name carries no disambiguation note
-    assert "also_registered_as" not in dict(tengri.describe("dpl"))
+
+def test_ambiguity_disclosure_fires_exactly_when_a_name_is_shared():
+    """Derived both directions, so it cannot rot as menus are added.
+
+    This replaced a literal ``assert "also_registered_as" not in describe("dpl")``.
+    That assertion encoded a *bug* as the expectation: ``dpl`` looked
+    unambiguous only because the radio AGN variants lived in no menu, and
+    registering them (#1276) correctly flipped it. Counting the menus that
+    claim each name means the next such name is covered without an edit.
+    """
+    from collections import Counter
+
+    from tengri.registry import (
+        _menu_listers,
+        list_components,
+        list_filters,
+        list_plots,
+        list_recipes,
+    )
+
+    # The same sources describe() itself consults.
+    sources = (*_menu_listers(), list_components, list_filters, list_plots, list_recipes)
+    counts: Counter[str] = Counter(name for fn in sources for name in fn().names())
+    assert counts, "no names at all — this guard would pass vacuously"
+
+    menu_names = {name for fn in _menu_listers() for name in fn().names()}
+    shared = [n for n in menu_names if counts[n] > 1]
+    unique = [n for n in menu_names if counts[n] == 1]
+    assert shared and unique, f"need both cases to test; got {len(shared)}/{len(unique)}"
+
+    for name in shared:
+        rec = dict(tengri.describe(name))
+        assert "also_registered_as" in rec, f"describe({name!r}) hid its ambiguity"
+        assert name in rec["also_registered_as"]
+
+    for name in unique:
+        rec = dict(tengri.describe(name))
+        assert "also_registered_as" not in rec, (
+            f"describe({name!r}) claims ambiguity but the name is in one menu only"
+        )
+
+
+def test_ambiguity_disclosure_advice_is_executable():
+    """The note must hand back a build call, not the name of a lookup helper.
+
+    It used to say "Use the category-specific list (e.g. describe_agn_block
+    (name, category=...))" for *every* ambiguity. That was true only while AGN
+    blocks were the sole categorized menu: once radio gained sf/agn categories,
+    following it for ``dpl`` raised ``KeyError: Unknown AGN block 'dpl' in
+    category 'agn'. Known names: []`` — advice that fails the one user it
+    exists to help (the #1275 class).
+    """
+    rec = dict(tengri.describe("dpl"))
+    note = rec["also_registered_as"]
+    assert "radio={'agn': {'type': 'dpl'}}" in note, note
+    assert "describe_agn_block" not in note, note
 
 
 # ── tab-completion (dir) surfaces the recommended-workflow essentials ────────
@@ -300,6 +354,89 @@ def test_dust_model_menu_cannot_drift_from_the_builder():
     assert set(tengri.list_dust_models().names()) == set(_VALID_DUST_TYPES)
 
 
+# ── the radio sub-block and shock axes are discoverable at all ──────────────
+
+
+def _radio_block_values():
+    from tengri.components.radio.component import AGN_RADIO_MODELS, SF_RADIO_MODELS
+
+    assert SF_RADIO_MODELS and AGN_RADIO_MODELS, "no radio variants — guard would pass vacuously"
+    return [("sf", n) for n in SF_RADIO_MODELS] + [("agn", n) for n in AGN_RADIO_MODELS]
+
+
+@pytest.mark.parametrize(("category", "value"), _radio_block_values())
+def test_radio_subblock_values_are_discoverable(category, value):
+    """``radio={'sf'|'agn': {'type': ...}}`` must be reachable from discovery.
+
+    ``list_radio_models()`` covers only the legacy ``radio={'type': ...}`` key.
+    The three SF variants and the two AGN variants were accepted by the builder
+    but named by no menu at all, so ``describe('bell2003')`` raised ``KeyError``.
+    Worse for the AGN pair: ``powerlaw`` and ``dpl`` exist as names in *other*
+    menus, so ``describe('dpl')`` confidently answered "Double power-law SFH"
+    with an ``sfh={...}`` hint — a wrong answer does more damage than a
+    ``KeyError``, and the ambiguity note could not fire because a name must be
+    in two menus to be flagged as ambiguous.
+    """
+    from tengri.registry import _menu_listers
+
+    homes = [ln.__name__ for ln in _menu_listers() if value in set(ln().names())]
+    assert homes, f"radio {category} {value!r} is accepted by the builder but named by no menu"
+    assert "list_radio_blocks" in homes
+
+    assert dict(tengri.describe(value))["name"] == value
+    assert value in set(tengri.search(value).names())
+
+
+def _valid_shock_types():
+    from tengri.parameters.groups import _VALID_SHOCK_TYPES
+
+    assert _VALID_SHOCK_TYPES, "no shock types registered — this guard would pass vacuously"
+    return sorted(_VALID_SHOCK_TYPES)
+
+
+@pytest.mark.parametrize("shock_type", _valid_shock_types())
+def test_shock_types_are_discoverable(shock_type):
+    """``shock={'type': ...}`` must be reachable from the discovery API."""
+    from tengri.registry import _menu_listers
+
+    homes = [ln.__name__ for ln in _menu_listers() if shock_type in set(ln().names())]
+    assert homes, f"shock {shock_type!r} is accepted by the builder but named by no list_* menu"
+    assert "list_shock_models" in homes
+
+    assert dict(tengri.describe(shock_type))["name"] == shock_type
+    assert shock_type in set(tengri.search(shock_type).names())
+
+
+def test_radio_and_shock_menus_cannot_drift_from_the_builder():
+    """Both menus derive their names from the sets the validator checks.
+
+    Hard-coding them here would let a menu advertise a variant
+    ``SEDModel.build`` rejects, or hide one it accepts — the #1179 failure
+    mode, in both directions.
+    """
+    from tengri.components.radio.component import AGN_RADIO_MODELS, SF_RADIO_MODELS
+    from tengri.parameters.groups import _VALID_SHOCK_TYPES
+
+    assert set(tengri.list_radio_blocks(category="sf").names()) == set(SF_RADIO_MODELS)
+    assert set(tengri.list_radio_blocks(category="agn").names()) == set(AGN_RADIO_MODELS)
+    assert set(tengri.list_shock_models().names()) == set(_VALID_SHOCK_TYPES)
+
+
+def test_radio_block_categories_are_kept_apart():
+    """``sf`` and ``agn`` are different axes that share the name ``none``.
+
+    Collapsing them would make ``list_radio_blocks(category='sf')`` advertise
+    an AGN-only variant, whose ``use:`` hint would then name the wrong key.
+    """
+    sf = {r["name"] for r in tengri.list_radio_blocks(category="sf")}
+    agn = {r["name"] for r in tengri.list_radio_blocks(category="agn")}
+    assert "bell2003" in sf and "bell2003" not in agn
+    assert "dpl" in agn and "dpl" not in sf
+
+    for row in tengri.list_radio_blocks():
+        assert f"'{row['category']}'" in row["use"], row["use"]
+
+
 # ── usage hints teach the current SEDModel.build grammar ────────────────────
 
 
@@ -312,6 +449,8 @@ def test_dust_model_menu_cannot_drift_from_the_builder():
         tengri.list_dust_emission_models,
         tengri.list_nebular_backends,
         tengri.list_agn_models,
+        tengri.list_radio_blocks,
+        tengri.list_shock_models,
     ],
 )
 def test_usage_hints_teach_build_grammar(lister):

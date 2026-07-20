@@ -14,11 +14,20 @@ never a legacy ``type``. The only accepted legacy types are ``condon92`` and
 The guard is deliberately general: it pulls every ``group={...}`` snippet out of
 the raised message and feeds it back through :func:`parse_groups`. Anything the
 grammar suggests, the grammar must accept.
+
+The same rule covers the library's other two channels of build advice, which
+are equally unexecuted by anything else:
+
+* the ``use:`` hint on every discovery-menu row (advertised, not merely raised);
+* ``describe()``'s "registered in N places" note, whose hard-coded
+  ``describe_agn_block(...)`` suggestion silently became wrong for radio blocks
+  once a second categorized menu existed (#1276).
 """
 
 from __future__ import annotations
 
 import ast
+from pathlib import Path
 
 import pytest
 
@@ -100,6 +109,99 @@ def test_error_message_advice_is_itself_valid(kwargs) -> None:
                 f"but that raises {type(exc).__name__}: {exc}. Recovery advice "
                 f"must be accepted by the grammar it describes."
             )
+
+
+def _skip_reason(name: str, value: dict, status: str) -> str | None:
+    """Why this advice is exempt from "must be accepted", or ``None``.
+
+    Two exemptions, both principled rather than a name allowlist:
+
+    * ``status == "unvalidated"`` — the menu already tells the reader, in the
+      same row as the hint, that the builder refuses this entry. The advice is
+      not lying; the row is self-consistent.
+    * the hint names a file that does not exist — e.g. the CLOUDY backend's
+      ``gridfile='grid.h5'`` placeholder. Its job is to teach the *key*, and no
+      literal path could be correct for every install.
+    """
+    if status == "unvalidated":
+        return "menu flags the entry as unvalidated"
+    for v in value.values():
+        if isinstance(v, str) and Path(v).suffix and not Path(v).exists():
+            return f"hint names a placeholder path {v!r}"
+    return None
+
+
+def test_every_menu_usage_hint_is_accepted_by_the_grammar() -> None:
+    """A ``use:`` hint is advice too — and it is advertised, not just raised.
+
+    Every menu row carries a copy-pasteable ``SEDModel.build(...)`` call. This
+    walks all of them and feeds the group dict back through the grammar, so a
+    menu can never advertise a spelling the builder rejects (#1179), and a hint
+    can never drift from the key it names.
+    """
+    from tengri.registry import _menu_listers
+
+    checked = 0
+    failures: list[str] = []
+    for lister in _menu_listers():
+        for row in lister():
+            for name, value in _dict_snippets(row.get("use", "")):
+                if _skip_reason(row["name"], value, row.get("status", "")):
+                    continue
+                checked += 1
+                try:
+                    parse_groups(**{name: value})
+                except Exception as exc:
+                    failures.append(
+                        f"{lister.__name__} row {row['name']!r} advertises "
+                        f"{name}={value!r} -> {type(exc).__name__}: {exc}"
+                    )
+
+    assert checked > 50, f"only {checked} hints checked — the extractor probably rotted"
+    assert not failures, "menus advertise build calls the grammar rejects:\n" + "\n".join(failures)
+
+
+def test_ambiguity_note_advice_is_accepted_by_the_grammar() -> None:
+    """``describe()``'s "registered in N places" note must also be executable.
+
+    It quotes each alternative's own build call; those must parse for the same
+    reason the menu hints must.
+    """
+    import tengri
+    from tengri.registry import _menu_listers
+
+    names = {name for fn in _menu_listers() for name in fn().names()}
+    notes = {n: dict(tengri.describe(n)).get("also_registered_as") for n in names}
+    notes = {n: note for n, note in notes.items() if note}
+    assert notes, "no ambiguous names found — this guard would pass vacuously"
+
+    # How many build calls each note *owes* the reader: one per menu row that
+    # claims the name and advertises a group dict. Without this the test is
+    # vacuous — the note this replaced named a helper function and contained no
+    # ``{...}`` at all, so the parse loop below ran zero times and passed.
+    owed: dict[str, int] = {}
+    for fn in _menu_listers():
+        for row in fn():
+            if row["name"] in notes and "={" in row.get("use", ""):
+                owed[row["name"]] = owed.get(row["name"], 0) + 1
+
+    for owner, note in notes.items():
+        snippets = _dict_snippets(note)
+        assert len(snippets) >= owed.get(owner, 1), (
+            f"describe({owner!r})'s note names {owed.get(owner, 1)} menu entries but "
+            f"offers only {len(snippets)} build call(s) — it is describing the "
+            f"alternatives without showing how to reach them. Note: {note}"
+        )
+        for name, value in snippets:
+            if _skip_reason(owner, value, ""):
+                continue
+            try:
+                parse_groups(**{name: value})
+            except Exception as exc:
+                pytest.fail(
+                    f"describe({owner!r})'s ambiguity note recommends {name}={value!r}, "
+                    f"but that raises {type(exc).__name__}: {exc}"
+                )
 
 
 def test_snippet_extractor_handles_nesting() -> None:
