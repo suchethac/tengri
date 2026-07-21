@@ -3546,6 +3546,25 @@ class SEDModel:
         # re-derives it can silently disagree with the physics it is caching.
         approx_n_subbands = int((self._approx or {}).get("n_subbands", 0))
 
+        # FeaturePrecomp leaves NO trace in ``self._approx`` — it sets
+        # ``_fast_line_measurement`` instead — so neither ``approx_resolved_flags``
+        # nor ``approx_n_subbands`` above can see it, and two models differing only
+        # in FeaturePrecomp produced an IDENTICAL signature. Whichever was built
+        # first won the JIT cache and the second silently reused its gradient:
+        # measured 12.4 ms vs 0.5 ms for the same objective (~25x), and the loser
+        # was whichever came second, not whichever was slower.
+        #
+        # Worse than the lost speed, it is a correctness hazard: two models with
+        # different approximations sharing one compiled gradient means the second
+        # computes the FIRST's approximation. Benign only while the two happen to
+        # be bit-identical, which is luck, not a contract.
+        #
+        # Keyed off the same resolved state the PUBLIC ``model.approx`` reports
+        # (``ApproxState.feature_precomp``), so what a user is shown and what the
+        # cache keys on cannot drift apart — they disagreed here, which is exactly
+        # how this survived.
+        approx_feature_precomp = bool(getattr(self, "_fast_line_measurement", False))
+
         def _cfg_key(cfg):
             if cfg is None:
                 return None
@@ -3672,6 +3691,7 @@ class SEDModel:
             has_sigma_v,
             compile_mode,
             approx_resolved,
+            approx_feature_precomp,
             spec_fixed_id,
             nebular_grid_sig,
         )
