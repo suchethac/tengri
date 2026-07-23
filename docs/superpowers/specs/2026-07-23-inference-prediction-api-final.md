@@ -432,6 +432,13 @@ cat_post.to_table()                   # ◆ table-OUT (parquet/FITS) — closes 
 
 Tier 2 is galaxy-agnostic by construction — `data_args` is traced, never closed over (`backends/mcmc/_shared.py:25`) — the mechanism behind both `Catalog` vmap and the hierarchical scaling contract. All expensive caches are **model-keyed** (`_model_cache.py` WeakKeyDictionary), which is why `Fitter` has no state a fresh one lacks and stays internal.
 
+**Compile-reuse contract ◆ (binding on all implementation).** Compiled galaxy models are *always* reusable across different data:
+
+- Data enters compiled programs exclusively as **traced arguments** — never closed over, never baked. Baking a per-galaxy value into a compile signature is a bug ([#1316](https://github.com/suchethac/tengri/issues/1316) is the canonical instance).
+- Recompilation has exactly **four legitimate triggers**: model structure, data *shape* (bucketed via `n_pad`), free-parameter set, engine/method. Per-galaxy redshift is explicitly **not** a trigger (`catalog_z_range` ztable); per-galaxy data values are **never** a trigger.
+- Minimize distinct compile signatures — prefer runtime inputs over baked constants wherever the numerics allow. LUTs (tier 1) are method-agnostic: one LUT serves MAP, HMC, and VI alike.
+- Tier 3 is the only per-data artifact, and it must stay bounded (the surface-derived policy above).
+
 **W3 ([#1318](https://github.com/suchethac/tengri/issues/1318)) ◆:** `forward.prewarm()` exposed (today on the internal Fitter only). `lean=` retired — policy derives from the surface: `forward.fit()` = iterate policy (tier-3 kept, keyed by data fingerprint with cap 1 — re-running the same fit reuses it, a new galaxy replaces it, so loops never accumulate); `Catalog` = sweep policy (tiers 1–2 kept, per-galaxy tier-3 dropped). `lean=True/False` survives as a hidden deprecated alias.
 
 ---
@@ -446,6 +453,8 @@ Tier 2 is galaxy-agnostic by construction — `data_args` is traced, never close
 ---
 
 ## 11. Work items
+
+Implementation ordering, absorbed-backlog mapping, and the near-term method focus (**MAP + HMC/NUTS first; VI off the critical path**) live in the epic: [#1322](https://github.com/suchethac/tengri/issues/1322).
 
 | ID | Piece | Status | Tracks |
 |---|---|---|---|
