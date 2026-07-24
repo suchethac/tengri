@@ -26,6 +26,46 @@ from jax.flatten_util import ravel_pytree
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
 
+def _compute_summaries(samples, percentiles=None, reducers=None):
+    """Compute percentiles and reducer statistics for a sample dict.
+
+    Parameters
+    ----------
+    samples : dict
+        Parameter samples, keys are parameter names, values are (n_samples,) arrays.
+    percentiles : tuple, optional
+        Percentile values to compute. Default (16, 50, 84).
+    reducers : dict, optional
+        Additional reducers {name: callable} (e.g., {"mean": jnp.mean}).
+
+    Returns
+    -------
+    percentiles_dict : dict
+        Keys are parameter names, values are (n_pct,) arrays.
+    summary_dict : dict
+        Nested dict: {reducer_name: {param_name: scalar value}}.
+    """
+    if percentiles is None:
+        percentiles = (16, 50, 84)
+    if reducers is None:
+        reducers = {}
+
+    percentiles_dict = {}
+    summary_dict = {}
+
+    # Compute percentiles
+    for name, samples_arr in samples.items():
+        percentiles_dict[name] = np.percentile(np.asarray(samples_arr), percentiles)
+
+    # Compute reducers
+    for reducer_name, reducer_fn in reducers.items():
+        summary_dict[reducer_name] = {}
+        for name, samples_arr in samples.items():
+            summary_dict[reducer_name][name] = float(reducer_fn(np.asarray(samples_arr)))
+
+    return percentiles_dict, summary_dict
+
+
 def _resolve_n_padded(n_gal: int, K: int, n_pad: int | str | None) -> int:
     """Resolve the padded catalog size for the catalog VI engine.
 
@@ -86,6 +126,16 @@ class CatalogPosterior:
         Number of galaxies.
     diagnostics : dict
         Method-specific diagnostics (e.g. ``mean_n_iterations`` for native VI).
+    percentiles : dict or None
+        Per-galaxy percentile summaries when store="summary". Keys are property
+        names, values are (n_galaxies, n_percentiles) arrays. None for store="full".
+    summary : dict or None
+        Per-galaxy summary statistics when store="summary". Keys are reducer names
+        (e.g., "mean", "std"), values are dicts mapping property names to
+        (n_galaxies,) arrays. None for store="full".
+    store : str
+        Storage mode: "full" keeps all samples, "summary" computes percentiles
+        and reducers and drops samples to save memory.
 
     Raises
     ------
@@ -105,6 +155,9 @@ class CatalogPosterior:
     wall_time_s: float = 0.0
     n_galaxies: int = 0
     diagnostics: dict = field(default_factory=dict)
+    percentiles: dict | None = None
+    summary: dict | None = None
+    store: str = "full"
 
     def __getitem__(self, i):
         return self.posteriors[i]
@@ -138,6 +191,81 @@ class CatalogPosterior:
         (500,)
         """
         return CatalogProperties(self)
+
+    def to_table(self) -> dict:
+        """Export posteriors as a table dict (round-trips through ingest_catalog).
+
+        Returns
+        -------
+        dict[str, np.ndarray]
+            Dict mapping property names to (N,) arrays over galaxies. Includes
+            medians from the per-galaxy posteriors and percentile columns when
+            percentiles are stored (e.g., "stellar_mass_p16", "stellar_mass_p50",
+            "stellar_mass_p84" for percentiles=[16, 50, 84]).
+
+        Notes
+        -----
+        The returned dict is a duck-type match for the input to
+        :func:`~tengri.inference.catalog_ingest.ingest_catalog`, enabling
+        round-trip workflows: ``Catalog(..., table).fit() -> cat.to_table()``.
+        """
+        table = {}
+
+        # If percentiles are stored (store='summary' case), use them preferentially
+        if self.percentiles:
+            # Extract medians from percentile columns
+            first_name = next(iter(self.percentiles.keys()))
+            n_pct = self.percentiles[first_name].shape[1]
+
+            # Infer percentile values from the shape (assumes standard 16/50/84 or similar)
+            pct_values = [16, 50, 84]
+            if n_pct == 1:
+                pct_values = [50]
+            elif n_pct == 2:
+                pct_values = [16, 84]
+            elif n_pct > 3:
+                # Fallback: evenly spaced
+                pct_values = np.linspace(0, 100, n_pct).astype(int).tolist()
+
+            # Add median (index 1 for [16, 50, 84]) as the main column
+            for name, percentile_array in self.percentiles.items():
+                # Median is typically at index 1 (50th percentile)
+                median_idx = min(1, n_pct - 1)  # fallback to 0 if only 1 pct
+                table[name] = percentile_array[:, median_idx]
+
+                # Add all percentile columns
+                for i, pct in enumerate(pct_values[:n_pct]):
+                    col_name = f"{name}_p{pct}"
+                    table[col_name] = percentile_array[:, i]
+
+        else:
+            # store='full' case: try to get properties, with graceful fallback
+            try:
+                props = self.properties
+                for name in props:
+                    # Get the per-galaxy values
+                    vals = props[name]
+                    if isinstance(vals, list):
+                        # Ragged posteriors — convert to array
+                        medians = [np.median(np.asarray(v)) if np.ndim(v) > 0 else v for v in vals]
+                        vals = np.array(medians)
+                    else:
+                        # Stacked posteriors
+                        if vals.ndim > 1:
+                            # Has sample axis — take median along it
+                            vals = np.median(vals, axis=1)
+                    table[name] = vals
+            except (RuntimeError, KeyError, AttributeError):
+                # No model available; fall back to parameter median
+                if self.posteriors:
+                    # Just include the parameter values as a fallback
+                    first_post = self.posteriors[0]
+                    if first_post.params:
+                        for param_name in first_post.params:
+                            vals = np.array([p.params[param_name] for p in self.posteriors])
+                            table[param_name] = np.asarray(vals)
+
+        return table
 
     def __repr__(self) -> str:
         return (
@@ -296,6 +424,9 @@ class _CatalogFitterOriginal:
         forward_chunk_size=1,
         n_pad: int | str | None = None,
         devices=None,
+        store: str | None = None,
+        percentiles: tuple | None = None,
+        reducers: dict | None = None,
         **kwargs,
     ):
         """Fit all galaxies independently.
@@ -328,6 +459,17 @@ class _CatalogFitterOriginal:
             Only applies to native methods. Ignored with a warning for
             sequential paths (each galaxy is fit in its own jit, so
             shape-bucketing has no effect).
+        store : {"full", "summary"} or None
+            Storage mode for posterior samples. ``None`` (default) auto-selects:
+            ``"full"`` if N <= 1000, else ``"summary"`` with a warning.
+            ``"full"`` retains all samples. ``"summary"`` computes percentiles
+            and reducer statistics per property, then drops samples.
+        percentiles : tuple, optional
+            Percentiles to compute when store="summary". Default (16, 50, 84).
+        reducers : dict, optional
+            Additional reducer functions {name: callable} to apply per property
+            (e.g., {"mean": jnp.mean, "std": jnp.std}). With store="full", these
+            are ignored.
         **kwargs
             Forwarded to the underlying inference method.
 
@@ -356,6 +498,24 @@ class _CatalogFitterOriginal:
         """
         from tengri.inference.fitter import resolve_method
 
+        # Auto-select store mode based on catalog size if not specified
+        if store is None:
+            if self.n_galaxies <= 1000:
+                store = "full"
+            else:
+                store = "summary"
+                warnings.warn(
+                    f"Catalog has {self.n_galaxies} galaxies > 1000; "
+                    f"automatically switching to store='summary' to save memory. "
+                    f"Samples will be dropped after computing percentiles. "
+                    f"Pass store='full' to retain all samples.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+        if percentiles is None:
+            percentiles = (16, 50, 84)
+
         resolved = resolve_method(method)
         # Per-galaxy fixed-value overrides (e.g. redshift) are threaded only through
         # the sequential path today; the batched native/MCMC paths stack flux/noise
@@ -375,6 +535,9 @@ class _CatalogFitterOriginal:
                 key=key,
                 forward_chunk_size=forward_chunk_size,
                 n_pad=n_pad,
+                store=store,
+                percentiles=percentiles,
+                reducers=reducers,
                 **kwargs,
             )
         elif resolved in self._MCMC_VMAPPABLE:
@@ -384,6 +547,9 @@ class _CatalogFitterOriginal:
                 forward_chunk_size=forward_chunk_size,
                 n_pad=n_pad,
                 devices=devices,
+                store=store,
+                percentiles=percentiles,
+                reducers=reducers,
                 **kwargs,
             )
         else:
@@ -411,7 +577,14 @@ class _CatalogFitterOriginal:
                     UserWarning,
                     stacklevel=2,
                 )
-            return self._run_sequential(method, key=key, **kwargs)
+            return self._run_sequential(
+                method,
+                key=key,
+                store=store,
+                percentiles=percentiles,
+                reducers=reducers,
+                **kwargs,
+            )
 
     # ------------------------------------------------------------------
     # Internal: native vmapped path
@@ -488,6 +661,9 @@ class _CatalogFitterOriginal:
         key,
         forward_chunk_size=1,
         n_pad: int | str | None = None,
+        store: str = "full",
+        percentiles: tuple = (16, 50, 84),
+        reducers: dict | None = None,
         n_iterations=20,
         n_samples=3,
         n_posterior_samples=500,
@@ -595,21 +771,53 @@ class _CatalogFitterOriginal:
             samples_phys = {k: jnp.stack([sd[k] for sd in sample_dicts]) for k in sample_dicts[0]}
             best_params = _mean_params(samples_phys)
 
-            posteriors.append(
-                Posterior(
-                    samples=samples_phys,
-                    params=best_params,
-                    method=f"CatalogFitter/{method_tag}",
-                    wall_time_s=time.time() - t0,
-                    diagnostics={"n_iterations": int(all_n_iters[i])},
-                    loss_history=None,
-                    _model=self.model,
-                )
+            # Compute percentiles and summary if store="summary"
+            percentiles_i = None
+            summary_i = None
+            samples_to_store = samples_phys
+            if store == "summary":
+                percentiles_i, summary_i = _compute_summaries(samples_phys, percentiles, reducers)
+                samples_to_store = None  # Drop samples to save memory
+
+            post_i = Posterior(
+                samples=samples_to_store,
+                params=best_params,
+                method=f"CatalogFitter/{method_tag}",
+                wall_time_s=time.time() - t0,
+                diagnostics={"n_iterations": int(all_n_iters[i])},
+                loss_history=None,
+                _model=self.model,
             )
+
+            # Attach summaries if computed
+            if percentiles_i is not None:
+                post_i._percentiles_stats_ = percentiles_i
+            if summary_i is not None:
+                post_i._summary_stats_ = summary_i
+
+            posteriors.append(post_i)
 
         wall = time.time() - t0
         if verbose:
             print(f"  Done in {wall:.1f}s ({wall / n_gal:.2f}s/galaxy)")
+
+        # Stack percentiles and summary across galaxies if they exist
+        cat_percentiles = None
+        cat_summary = None
+        if store == "summary" and posteriors and hasattr(posteriors[0], "_percentiles_stats_"):
+            cat_percentiles = {}
+            first_post = posteriors[0]
+            for name in first_post._percentiles_stats_:
+                cat_percentiles[name] = np.stack([p._percentiles_stats_[name] for p in posteriors])
+
+            if hasattr(posteriors[0], "_summary_stats_") and posteriors[0]._summary_stats_:
+                cat_summary = {}
+                for reducer_name in posteriors[0]._summary_stats_:
+                    cat_summary[reducer_name] = {}
+                    for name in posteriors[0]._summary_stats_[reducer_name]:
+                        cat_summary[reducer_name][name] = np.array(
+                            [p._summary_stats_[reducer_name][name] for p in posteriors]
+                        )
 
         return CatalogPosterior(
             posteriors=posteriors,
@@ -617,6 +825,9 @@ class _CatalogFitterOriginal:
             wall_time_s=wall,
             n_galaxies=n_gal,
             diagnostics={"mean_n_iterations": float(jnp.mean(all_n_iters))},
+            percentiles=cat_percentiles,
+            summary=cat_summary,
+            store=store,
         )
 
     # ------------------------------------------------------------------
@@ -631,6 +842,9 @@ class _CatalogFitterOriginal:
         forward_chunk_size=1,
         n_pad: int | str | None = None,
         devices=None,
+        store: str = "full",
+        percentiles: tuple = (16, 50, 84),
+        reducers: dict | None = None,
         n_warmup=300,
         n_burnin=100,
         n_samples=1000,
@@ -739,21 +953,54 @@ class _CatalogFitterOriginal:
             )
             best_params = _mean_params(samples_phys)
             n_div = int(jnp.sum(all_divergent[i]))
-            posteriors.append(
-                Posterior(
-                    samples=samples_phys,
-                    params=best_params,
-                    method=f"CatalogFitter/{method_tag}",
-                    wall_time_s=time.time() - t0,
-                    diagnostics={"n_divergent": n_div, "n_samples": n_samples},
-                    loss_history=None,
-                    _model=self.model,
-                )
+
+            # Compute percentiles and summary if store="summary"
+            percentiles_i = None
+            summary_i = None
+            samples_to_store = samples_phys
+            if store == "summary":
+                percentiles_i, summary_i = _compute_summaries(samples_phys, percentiles, reducers)
+                samples_to_store = None  # Drop samples to save memory
+
+            post_i = Posterior(
+                samples=samples_to_store,
+                params=best_params,
+                method=f"CatalogFitter/{method_tag}",
+                wall_time_s=time.time() - t0,
+                diagnostics={"n_divergent": n_div, "n_samples": n_samples},
+                loss_history=None,
+                _model=self.model,
             )
+
+            # Attach summaries if computed
+            if percentiles_i is not None:
+                post_i._percentiles_stats_ = percentiles_i
+            if summary_i is not None:
+                post_i._summary_stats_ = summary_i
+
+            posteriors.append(post_i)
 
         wall = time.time() - t0
         if verbose:
             print(f"  Done in {wall:.1f}s ({wall / n_gal:.2f}s/galaxy)")
+
+        # Stack percentiles and summary across galaxies if they exist
+        cat_percentiles = None
+        cat_summary = None
+        if store == "summary" and posteriors and hasattr(posteriors[0], "_percentiles_stats_"):
+            cat_percentiles = {}
+            first_post = posteriors[0]
+            for name in first_post._percentiles_stats_:
+                cat_percentiles[name] = np.stack([p._percentiles_stats_[name] for p in posteriors])
+
+            if hasattr(posteriors[0], "_summary_stats_") and posteriors[0]._summary_stats_:
+                cat_summary = {}
+                for reducer_name in posteriors[0]._summary_stats_:
+                    cat_summary[reducer_name] = {}
+                    for name in posteriors[0]._summary_stats_[reducer_name]:
+                        cat_summary[reducer_name][name] = np.array(
+                            [p._summary_stats_[reducer_name][name] for p in posteriors]
+                        )
 
         return CatalogPosterior(
             posteriors=posteriors,
@@ -769,6 +1016,9 @@ class _CatalogFitterOriginal:
                 "n_warmup": n_warmup,
                 "n_samples": n_samples,
             },
+            percentiles=cat_percentiles,
+            summary=cat_summary,
+            store=store,
         )
 
     @staticmethod
@@ -810,7 +1060,17 @@ class _CatalogFitterOriginal:
     # Internal: sequential fallback (all other methods)
     # ------------------------------------------------------------------
 
-    def _run_sequential(self, method, *, key, verbose=True, **kwargs):
+    def _run_sequential(
+        self,
+        method,
+        *,
+        key,
+        store: str = "full",
+        percentiles: tuple = (16, 50, 84),
+        reducers: dict | None = None,
+        verbose=True,
+        **kwargs,
+    ):
         from tengri.inference.fitter import Fitter
 
         t0 = time.time()
@@ -838,6 +1098,17 @@ class _CatalogFitterOriginal:
                 params_override=override,
             )
             post_i = fitter_i.run(method, key=keys[i], verbose=False, **kwargs)
+
+            # Compute percentiles and summary if store="summary"
+            if store == "summary" and post_i.samples is not None:
+                percentiles_i, summary_i = _compute_summaries(
+                    post_i.samples, percentiles, reducers
+                )
+                post_i._percentiles_stats_ = percentiles_i
+                if summary_i:
+                    post_i._summary_stats_ = summary_i
+                post_i.samples = None  # Drop samples to save memory
+
             posteriors.append(post_i)
 
         wall = time.time() - t0
@@ -845,11 +1116,32 @@ class _CatalogFitterOriginal:
             per = wall / self.n_galaxies
             print(f"  {self.n_galaxies} galaxies done in {wall:.1f}s ({per:.2f}s/galaxy)")
 
+        # Stack percentiles and summary across galaxies if they exist
+        cat_percentiles = None
+        cat_summary = None
+        if store == "summary" and posteriors and hasattr(posteriors[0], "_percentiles_stats_"):
+            cat_percentiles = {}
+            first_post = posteriors[0]
+            for name in first_post._percentiles_stats_:
+                cat_percentiles[name] = np.stack([p._percentiles_stats_[name] for p in posteriors])
+
+            if hasattr(posteriors[0], "_summary_stats_") and posteriors[0]._summary_stats_:
+                cat_summary = {}
+                for reducer_name in posteriors[0]._summary_stats_:
+                    cat_summary[reducer_name] = {}
+                    for name in posteriors[0]._summary_stats_[reducer_name]:
+                        cat_summary[reducer_name][name] = np.array(
+                            [p._summary_stats_[reducer_name][name] for p in posteriors]
+                        )
+
         return CatalogPosterior(
             posteriors=posteriors,
             method=method,
             wall_time_s=wall,
             n_galaxies=self.n_galaxies,
+            percentiles=cat_percentiles,
+            summary=cat_summary,
+            store=store,
         )
 
 

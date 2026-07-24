@@ -176,6 +176,9 @@ class Catalog:
         key,
         forward_chunk_size=1,
         n_pad=None,
+        store=None,
+        percentiles=None,
+        reducers=None,
         **kwargs,
     ) -> CatalogPosterior:
         """Fit all galaxies independently.
@@ -193,6 +196,17 @@ class Catalog:
             Pad the catalog up to this many galaxies before running. Allows
             different catalog sizes to share XLA cache entries. ``None``
             (default) pads only to the next multiple of K.
+        store : {"full", "summary"} or None
+            Storage mode for posterior samples. ``None`` (default) auto-selects:
+            ``"full"`` if N <= 1000, else ``"summary"`` with a warning.
+            ``"full"`` retains all samples. ``"summary"`` computes percentiles
+            and reducer statistics per property, then drops samples.
+        percentiles : tuple, optional
+            Percentiles to compute when store="summary". Default (16, 50, 84).
+        reducers : dict, optional
+            Additional reducer functions {name: callable} to apply per property
+            (e.g., {"mean": np.mean, "std": np.std}). With store="full", these
+            are ignored.
         **kwargs
             Forwarded to the inference method (e.g., ``n_warmup``, ``n_samples``
             for MCMC).
@@ -235,6 +249,9 @@ class Catalog:
             key=key,
             forward_chunk_size=forward_chunk_size,
             n_pad=n_pad,
+            store=store,
+            percentiles=percentiles,
+            reducers=reducers,
             **kwargs,
         )
 
