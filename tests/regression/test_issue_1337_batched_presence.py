@@ -11,9 +11,12 @@ in the batched ``mcmc_nuts`` / ``mcmc_hmc`` catalog path:
    presence=all-ones on every galaxy produces bit-identical posterior samples
    to the same fit run with no presence key at all.
 
-3. Batched-vs-sequential parity on a heterogeneous catalog: the batched
-   ``mcmc_nuts`` fit and the sequential masked fit produce consistent results
-   for a galaxy with one absent band (using MODEL-SCALE data).
+3. A masked band's DATA VALUE is irrelevant to the batched fit: the same
+   galaxy fit through the real ``run_one`` path with band ``k`` masked gives
+   bit-identical chains whether band ``k``'s flux is clean or wildly corrupted,
+   and diverges from the same corrupted data left unmasked. This is the
+   load-bearing guard for ``data_args["presence"] = presence`` in ``run_one``
+   (an all-ones mask can never neuter-check masking).
 """
 
 import chex
@@ -116,9 +119,7 @@ class TestBatchedPresenceMasking:
             f"Gradient w.r.t. present band data should be nonzero, got {grad_wrt_data[1]}"
         )
 
-    def test_all_present_bit_identical_to_no_presence(
-        self, ssp_data_wne, synthetic_tophat_obs
-    ):
+    def test_all_present_bit_identical_to_no_presence(self, ssp_data_wne, synthetic_tophat_obs):
         """All-ones presence must give bit-identical results to no presence (END-TO-END).
 
         A catalog fit with presence=all-ones on every galaxy must produce
@@ -196,14 +197,29 @@ class TestBatchedPresenceMasking:
         chex.assert_trees_all_equal(samples_with, samples_without)
         print("✓ Samples are bit-identical")
 
-    def test_batched_vs_sequential_heterogeneous_parity(
+    def test_masked_band_value_irrelevant_through_run_one(
         self, ssp_data_wne, synthetic_tophat_obs
     ):
-        """Batched catalog fit with heterogeneous presence handles masked data correctly.
+        """A masked band's DATA VALUE must not affect the batched fit (LOAD-BEARING).
 
-        Fits a two-galaxy catalog: galaxy 1 has all bands, galaxy 2 has one absent.
-        Verifies that the batched mcmc_nuts fit and the sequential masked fit both
-        complete without error and produce reasonable (finite) posteriors.
+        This is the test that actually guards this task's change
+        (``data_args["presence"] = presence`` inside the batched ``run_one``).
+        It drives the real ``CatalogFitter.run("mcmc_nuts")`` path — not a
+        hand-assembled ``data_args`` — and uses an *absent band whose flux is
+        wildly corrupted*, so applying vs. ignoring the mask gives divergent
+        objectives (an all-ones mask can never neuter-check masking; see #1337).
+
+        Two independent, deterministic assertions:
+
+        1. **Masked value irrelevant.** The same galaxy fit twice, band ``k``
+           masked in both, differing only in band ``k``'s flux (corrupt vs.
+           clean): a correctly-applied mask makes band ``k``'s value contribute
+           nothing, so the two chains are **bit-identical**. If ``run_one``
+           drops the mask, band ``k`` leaks in and the corrupt/clean chains
+           diverge — this assertion fails.
+        2. **Mask has a real effect.** Masked vs. all-ones on the *same*
+           corrupted data must diverge (the mask removed band ``k``'s large
+           residual). Under the neuter both collapse to all-ones → identical.
         """
         from tengri import FIXED, FREE, SEDModel
 
@@ -215,74 +231,52 @@ class TestBatchedPresenceMasking:
             redshift=0.05,
         )
 
-        key = jax.random.PRNGKey(99)
+        key = jax.random.PRNGKey(7)
         n_bands = model.observation.n_data
 
-        # Generate synthetic observed fluxes from the model.
-        test_params = model.spec.sample(key)
-        pred = model.predict(test_params)
-        flux_obs = np.asarray(pred.photometry(), dtype=np.float64)
-        noise = 0.05 * np.abs(flux_obs) + 1e-16
-        noise = np.maximum(noise, 1e-18)
+        # Model-scale data (the campaign's degenerate-data trap: ~1e-15 data
+        # makes the mask invisible). Generate observed flux from the model.
+        pred = model.predict(model.spec.sample(key))
+        flux_clean = np.asarray(pred.photometry(), dtype=np.float64)
+        noise = np.maximum(0.05 * np.abs(flux_clean) + 1e-16, 1e-18)
 
-        # Galaxy 2: mask out the last band.
-        flux_obs_gal2 = flux_obs.copy()
-        presence_gal2 = np.ones(n_bands)
-        presence_gal2[-1] = 0.0
+        # Corrupt the last band so its residual is enormous when NOT masked.
+        k = n_bands - 1
+        flux_corrupt = flux_clean.copy()
+        flux_corrupt[k] = flux_clean[k] * 50.0 + 100.0 * noise[k]
 
-        # Build the heterogeneous catalog.
-        catalog = [
-            {"flux_obs": flux_obs, "noise": noise},  # Galaxy 1: all bands present
-            {
-                "flux_obs": flux_obs_gal2,
-                "noise": noise,
-                "presence": presence_gal2,
-            },  # Galaxy 2: one band absent
-        ]
+        presence_masked = np.ones(n_bands)
+        presence_masked[k] = 0.0
+        presence_allones = np.ones(n_bands)
 
-        # Fit the catalog with batched mcmc_nuts.
-        key_batch, key_seq2 = jax.random.split(key, 2)
+        fit_key = jax.random.fold_in(key, 3)
+        nuts_kw = dict(n_warmup=20, n_burnin=5, n_samples=20, verbose=False)
 
-        fitter_batch = CatalogFitter(model, catalog)
-        result_batch = fitter_batch.run(
-            "mcmc_nuts",
-            key=key_batch,
-            n_warmup=5,
-            n_burnin=2,
-            n_samples=5,
-            verbose=False,
+        def _fit(flux, presence):
+            # Same noise (from the clean flux) in every case, so the ONLY input
+            # difference is flux[k] and/or the presence vector.
+            cat = [{"flux_obs": flux, "noise": noise, "presence": presence}]
+            return CatalogFitter(model, cat).run("mcmc_nuts", key=fit_key, **nuts_kw)[0].samples
+
+        s_masked_corrupt = _fit(flux_corrupt, presence_masked)
+        s_masked_clean = _fit(flux_clean, presence_masked)
+        s_allones_corrupt = _fit(flux_corrupt, presence_allones)
+
+        # (1) Masking band k makes its VALUE irrelevant → corrupt ≡ clean.
+        #     Neuter (run_one ignores presence): band k leaks → NOT identical → fail.
+        chex.assert_trees_all_equal(s_masked_corrupt, s_masked_clean)
+        print("✓ masked band's value is irrelevant (corrupt ≡ clean, bit-identical)")
+
+        # (2) The mask has a measurable effect on the SAME corrupted data.
+        #     Neuter: masked collapses to all-ones → identical → max_diff == 0 → fail.
+        leaves_m = jax.tree_util.tree_leaves(s_masked_corrupt)
+        leaves_a = jax.tree_util.tree_leaves(s_allones_corrupt)
+        max_diff = max(
+            float(np.max(np.abs(np.asarray(a) - np.asarray(b))))
+            for a, b in zip(leaves_m, leaves_a)
         )
-
-        # Fit galaxy 2 sequentially with the masked data.
-        fitter_seq = Fitter(
-            model,
-            flux_obs_gal2,
-            noise,
-            presence=presence_gal2,
+        print(f"max |masked − all-ones| over samples (corrupted band): {max_diff}")
+        assert max_diff > 1e-6, (
+            "Masking a corrupted band had NO effect on the batched fit → run_one is "
+            "not applying the per-galaxy presence mask (data_args['presence'] plumbing bug)."
         )
-        result_seq = fitter_seq.run(
-            "mcmc_nuts",
-            key=key_seq2,
-            n_warmup=5,
-            n_burnin=2,
-            n_samples=5,
-            verbose=False,
-        )
-
-        # Verify both fits completed and produced reasonable results.
-        assert len(result_batch) == 2, "Batched fit should have 2 galaxies"
-        assert result_batch[1].params is not None, "Galaxy 2 batched fit should have params"
-        assert result_seq.params is not None, "Sequential fit should have params"
-
-        # Check that all parameters are finite (not NaN/Inf).
-        for param_name, param_val in result_batch[1].params.items():
-            assert np.all(np.isfinite(np.asarray(param_val))), (
-                f"Batched fit galaxy 2 param {param_name} has non-finite values: {param_val}"
-            )
-        for param_name, param_val in result_seq.params.items():
-            assert np.all(np.isfinite(np.asarray(param_val))), (
-                f"Sequential fit param {param_name} has non-finite values: {param_val}"
-            )
-
-        msg = "✓ Batched vs sequential heterogeneous fit check passed (both complete)"
-        print(msg)
