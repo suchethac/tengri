@@ -7,7 +7,6 @@ Tests the surface-derived cache policy contract and the lean= deprecation path.
 import warnings
 
 import jax.numpy as jnp
-import pytest
 
 from tengri import ForwardModel, SEDModel, recipes
 
@@ -73,17 +72,21 @@ class TestForwardPrewarm:
             assert len(dep_warns) >= 1
             assert "#1318" in str(dep_warns[0].message)
 
-    def test_iterate_policy_same_fit_reuses_tier3(self, synthetic_ssp_wide, synthetic_tophat_obs):
-        """iterate policy (default) reuses tier-3 cache for identical fits.
+    def test_cache_policy_derivation_iterate_vs_sweep(
+        self, monkeypatch, synthetic_ssp_wide, synthetic_tophat_obs
+    ):
+        """The cache-policy SEAM (#1318), tested DETERMINISTICALLY.
 
-        When two identical fits run back-to-back with the default policy
-        (derive policy = 'iterate' when no Catalog flag is set), the second
-        fit is significantly faster than the first because it reuses the
-        tier-3 inference-body cache. The timing ratio (second / first) is
-        measured; if flaky due to system load, the test keeps a generous
-        threshold and notes the flakiness.
+        The wall-clock 'second fit is faster' proxy is not reliable at unit
+        scale — a small MAP fit is dominated by fixed overhead, so the warm/cold
+        ratio hovers near 1.0 regardless of reuse. Instead we assert the actual
+        policy derivation, which is what T4 built: the default run derives
+        'iterate' (``clear_shared_caches`` called with a keep_sig TUPLE, so the
+        matching entry is preserved), while the deprecated ``lean=True`` derives
+        'sweep' (keep_sig=None, drop everything).
         """
-        import time
+        import tengri.inference.jit_engine as je
+        from tengri.inference.fitter import Fitter
 
         sed = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
@@ -94,27 +97,29 @@ class TestForwardPrewarm:
         data = jnp.ones(5)
         noise = jnp.ones(5) * 0.1
 
-        from tengri.inference.fitter import Fitter
+        keep_sigs = []
+        orig = je.clear_shared_caches
 
-        # First fit (cold cache)
-        fitter1 = Fitter(fwd, data=data, noise=noise)
-        start1 = time.time()
-        result1 = fitter1.run("map", n_steps=5)
-        time1 = time.time() - start1
+        def spy(*args, **kwargs):
+            keep_sigs.append(kwargs.get("keep_sig", "MISSING"))
+            return orig(*args, **kwargs)
 
-        # Second fit (warm cache from first run)
-        fitter2 = Fitter(fwd, data=data, noise=noise)
-        start2 = time.time()
-        result2 = fitter2.run("map", n_steps=5)
-        time2 = time.time() - start2
+        monkeypatch.setattr(je, "clear_shared_caches", spy)
 
-        # The second fit should reuse the tier-3 cache and be faster.
-        # Wall-clock ratio: time2 / time1 should be << 1.0.
-        # Threshold is generous (1.2) to account for system load variability.
-        # If this test fails ONLY on timing (not logic), note the flakiness
-        # in the report and keep the generous threshold.
-        ratio = time2 / time1 if time1 > 0 else 1.0
-        assert ratio < 1.2, (
-            f"Second fit not significantly faster. Ratio: {ratio:.3f}. "
-            f"This may be flaky under system load; check if logic is correct."
+        # Default policy -> iterate -> keep_sig is a tuple (preserve matching).
+        Fitter(fwd, data=data, noise=noise).run("map", n_steps=5)
+        assert keep_sigs, "run() did not invoke the cache-policy seam"
+        assert isinstance(keep_sigs[-1], tuple), (
+            f"default policy should be 'iterate' (keep_sig tuple), got {keep_sigs[-1]!r}"
+        )
+
+        # Deprecated lean=True -> sweep -> keep_sig is None (drop all stale).
+        keep_sigs.clear()
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            Fitter(fwd, data=data, noise=noise).run("map", n_steps=5, lean=True)
+        assert keep_sigs and keep_sigs[-1] is None, (
+            f"lean=True should derive 'sweep' (keep_sig=None), got {keep_sigs[-1]!r}"
         )
