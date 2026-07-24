@@ -28,12 +28,11 @@ pytestmark = pytest.mark.contract
 
 DOC = tengri.__doc__ or ""
 
-#: Names the docstring used to advertise as star-importable Core.
+#: Names that are importable but deliberately kept out of ``__all__``. The
+#: Observation instrument-schema family (Observation, Photometry, Spectroscopy,
+#: NoiseModel, LineList) was re-promoted to ``__all__`` in #1338, so it is no
+#: longer here — see EXPECTED_ALL / ALLOWED_TOP_LEVEL and api_migration_v0.x.md.
 DELIBERATELY_NOT_IN_ALL = [
-    "Photometry",
-    "Observation",
-    "Spectroscopy",
-    "NoiseModel",
     "Fitter",
     "Posterior",
     "Prediction",
