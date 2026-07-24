@@ -769,12 +769,13 @@ class ForwardModel:
 
         Parameters
         ----------
-        data : array, optional
-            Observed flux (photometry / spectroscopy). Optional for
-            hierarchical fits where the per-galaxy data lives on the
-            :class:`PopulationSEDModel`.
+        data : array_like or Data, optional
+            Observed flux (photometry / spectroscopy) or a :class:`Data`
+            record. Optional for hierarchical fits where the per-galaxy data
+            lives on the :class:`PopulationSEDModel`.
         noise : array, optional
-            1-sigma uncertainties matching ``data``.
+            1-sigma uncertainties matching ``data``. Must be ``None`` if
+            ``data`` is a :class:`Data` record.
         method : str, default ``"vi"``
             Inference method. Any value accepted by
             :meth:`Fitter.run` (``"vi"``, ``"mcmc_nuts"``, ``"map"``,
@@ -806,8 +807,29 @@ class ForwardModel:
         low-level path; ``forward.fit(...)`` is just the shortcut.
         """
         from tengri.inference.fitter import Fitter
+        from tengri.observation.data import Data as _Data
 
-        fitter = Fitter(self, data=data, noise=noise, approx=approx)
+        data_mask = None
+        if isinstance(data, _Data):
+            if noise is not None:
+                raise TypeError(
+                    "fit(Data, noise=...) is ambiguous: the Data "
+                    "record already carries its uncertainties."
+                )
+            v = data.validate_against(self.observation)
+            data_mask = v.censor
+            if v.spec_flux is not None and v.flux is not None:
+                kwargs.setdefault("photometry", (v.flux, v.noise))
+                kwargs.setdefault("spectrum", (v.spec_flux, v.spec_noise))
+                data, noise = None, None
+            elif v.spec_flux is not None:
+                data, noise = v.spec_flux, v.spec_noise
+            else:
+                data, noise = v.flux, v.noise
+            if v.line_values is not None:
+                raise NotImplementedError("Data.lines routing lands with the T3 schema change.")
+
+        fitter = Fitter(self, data=data, noise=noise, data_mask=data_mask, approx=approx)
         return fitter.run(method, key=key, **kwargs)
 
     def _params_for_population(
