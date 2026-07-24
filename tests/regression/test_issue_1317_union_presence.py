@@ -258,3 +258,64 @@ class TestIssue1317UnionPresence:
             f"{float(grad[1])}. If you removed the presence factor, this proves "
             "the test catches it."
         )
+
+    def test_gradient_zero_through_the_full_fitter_loss(self):
+        """END-TO-END: the presence mask must reach the ACTUAL compiled Fitter
+        loss, not just the unit ``diag_gaussian_chi2``.
+
+        The unit test above passes even if the plumbing between the Fitter's
+        ``data_args["presence"]`` and the likelihood adapter is broken (the adapter
+        must be constructed with ``presence_key="presence"`` for it to read the
+        mask). This test grads the real loss w.r.t. the data and asserts the absent
+        band's gradient is exactly 0.0 while present bands are nonzero — hermetic
+        (synthetic SSP), no data files.
+        """
+        from tengri import (
+            FIXED,
+            FREE,
+            ForwardModel,
+            Observation,
+            Photometry,
+            SEDModel,
+            Uniform,
+        )
+        from tengri.components.stellar.sps.dsps_wrapper import SSPData
+        from tengri.inference.fitter import Fitter
+        from tengri.observation.photometry import FilterCurve
+
+        wave = jnp.linspace(3000.0, 10000.0, 60)
+        ssp = SSPData(
+            ssp_wave=wave,
+            ssp_flux=jnp.abs(jnp.ones((3, 12, 60))) * 1e-3 + 1e-5,
+            ssp_lg_age_gyr=jnp.linspace(-1.0, 1.14, 12),
+            ssp_lgmet=jnp.array([-1.5, -0.5, 0.0]),
+        )
+        curves = tuple(
+            FilterCurve(wave=jnp.linspace(lo, hi, 30), trans=jnp.ones(30) * 0.5, name=f"b{i}")
+            for i, (lo, hi) in enumerate([(3500.0, 4500.0), (5000.0, 6500.0), (7500.0, 9000.0)])
+        )
+        obs = Observation(photometry=Photometry(filters=curves))
+        sed = SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "dpl", "all_params": FREE},
+            dust={"type": "two_component", "all_params": FIXED, "tau_bc": 0.5},
+            neb={"type": "none"},
+            redshift=Uniform(0.1, 1.0),
+        )
+        fwd = ForwardModel.build(sed=sed, observation=obs)
+        data = jnp.array([1.0, 2.0, 3.0])
+        noise = jnp.array([0.1, 0.2, 0.3])
+
+        fitter = Fitter(fwd, data=data, noise=noise, presence=jnp.array([1.0, 0.0, 1.0]))
+        loss = fitter._get_or_build_loss_fn()
+        x0 = fitter._initialize_unbounded(jax.random.PRNGKey(0))
+        da = fitter._data_args
+
+        grad = np.asarray(jax.grad(lambda d: loss(x0, {**da, "data": d}))(data))
+        assert float(grad[1]) == 0.0, (
+            f"absent band's gradient through the full Fitter loss must be exactly 0.0, "
+            f"got {float(grad[1])} — the presence mask is not reaching the compiled loss "
+            f"(check presence_key wiring in build_base_likelihood)."
+        )
+        assert float(grad[0]) != 0.0 and float(grad[2]) != 0.0, "present bands must be nonzero"
