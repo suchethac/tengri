@@ -801,6 +801,7 @@ class ForwardModel:
         *,
         approx: Any = "auto",
         key: Any = None,
+        params: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
         """Run inference. Canonical convenience entry point.
@@ -834,6 +835,14 @@ class ForwardModel:
             unchanged; the returned posterior references the fit clone.
         key : jax.random.PRNGKey, optional
             Inference seed.
+        params : dict, optional
+            Per-fit parameter override dict. Keys that name fixed parameters
+            (not free) will override their values for this fit only; the model
+            object is left unchanged. Useful for catalog-fitting with per-galaxy
+            fixed values (e.g. ``params={"redshift": z_i}``). Keys must name
+            valid parameters (raise ``ValueError`` if not); keys naming free
+            parameters raise ``ValueError`` (you cannot pin a parameter being fit).
+            Default ``None`` (no override).
         **kwargs : Any
             Forwarded to :meth:`Fitter.run` (e.g. ``prewarm=`` — JIT-compile the
             loss/sampler/predict surface before the fit loop, default ``True``).
@@ -921,11 +930,23 @@ class ForwardModel:
                 fwd_with_lines = dataclasses.replace(self, observation=obs_with_lines)
 
                 fitter = Fitter(
-                    fwd_with_lines, data=data, noise=noise, data_mask=data_mask, approx=approx
+                    fwd_with_lines,
+                    data=data,
+                    noise=noise,
+                    data_mask=data_mask,
+                    approx=approx,
+                    params_override=params,
                 )
                 return fitter.run(method, key=key, **kwargs)
 
-        fitter = Fitter(self, data=data, noise=noise, data_mask=data_mask, approx=approx)
+        fitter = Fitter(
+            self,
+            data=data,
+            noise=noise,
+            data_mask=data_mask,
+            approx=approx,
+            params_override=params,
+        )
         return fitter.run(method, key=key, **kwargs)
 
     def _params_for_population(
