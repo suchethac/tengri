@@ -177,3 +177,31 @@ def test_fit_batch_multi_row_returns_correct_length(minimal_sed_model, catalog_m
     for i, result in enumerate(results):
         assert isinstance(result, Posterior), f"Result {i} is not a Posterior"
         assert result.params is not None, f"Result {i} has no params"
+
+
+def test_fit_batch_output_dir_checkpoint_preserved(tmp_path, minimal_sed_model, catalog_multi_row):
+    """fit_batch's output_dir checkpoint/resume feature must survive the Catalog
+    delegation: output_dir keeps the per-row loop (Catalog has no persistence)."""
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        r1 = minimal_sed_model.fit_batch(
+            catalog_multi_row,
+            flux_cols=["flux_u", "flux_g", "flux_r"],
+            err_cols=["err_u", "err_g", "err_r"],
+            method="map",
+            output_dir=str(tmp_path),
+            verbose=False,
+        )
+        saved = sorted(p.name for p in tmp_path.glob("*.h5"))
+        # Re-run: every galaxy loads from its checkpoint instead of refitting.
+        r2 = minimal_sed_model.fit_batch(
+            catalog_multi_row,
+            flux_cols=["flux_u", "flux_g", "flux_r"],
+            err_cols=["err_u", "err_g", "err_r"],
+            method="map",
+            output_dir=str(tmp_path),
+            verbose=False,
+        )
+    assert len(r1) == 3 and len(saved) == 3 and len(r2) == 3

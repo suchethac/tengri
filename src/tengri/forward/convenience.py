@@ -494,6 +494,45 @@ def fit_batch(
             f"Got {type(catalog)}"
         )
 
+    # ── Consolidation (#1336): unless per-galaxy checkpointing is requested,
+    # route the whole batch through Catalog — the one fitting code path. Catalog
+    # owns ingestion, unit conversion, and per-galaxy redshift; we unwrap its
+    # CatalogPosterior back to the legacy list-of-Posterior. The output_dir
+    # checkpoint/resume path below keeps the per-row loop (Catalog has no
+    # persistence layer), so every fit_batch feature is preserved.
+    if output_dir is None:
+        from tengri.forward.forward_model import ForwardModel
+        from tengri.inference.catalog import Catalog
+
+        fwd = ForwardModel.build(sed=model)
+        band_names = list(fwd.observation.photometry.names)
+        if len(flux_cols) != len(band_names) or len(err_cols) != len(band_names):
+            raise ValueError(
+                f"flux_cols/err_cols must have one entry per observation band "
+                f"({len(band_names)}); got {len(flux_cols)} flux, {len(err_cols)} err."
+            )
+        # fit_batch's flux_cols/err_cols are POSITIONAL (catalog column names,
+        # mapped to the model's bands in order) — the catalog columns need not be
+        # named after the bands. Rename them to the observation band names so
+        # Catalog can name-match, preserving fit_batch's positional contract.
+        table: dict = {}
+        for band, fcol, ecol in zip(band_names, flux_cols, err_cols):
+            table[band] = np.asarray([float(row[fcol]) for row in rows])
+            table[f"{band}_err"] = np.asarray([float(row[ecol]) for row in rows])
+        if redshift_col is not None:
+            table["_fit_batch_z"] = np.asarray([float(row[redshift_col]) for row in rows])
+        cat = Catalog(
+            fwd,
+            table,
+            flux_unit="cgs_fnu",  # fit_batch always assumed cgs f_nu
+            redshift_col="_fit_batch_z" if redshift_col is not None else None,
+        )
+        fit_key = kwargs.pop("key", None)
+        if fit_key is None:
+            fit_key = jax.random.PRNGKey(0)
+        post = cat.fit(method=method, key=fit_key, **kwargs)
+        return list(post.posteriors)
+
     if output_dir is not None:
         os.makedirs(output_dir, exist_ok=True)
 

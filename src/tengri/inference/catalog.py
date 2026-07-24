@@ -7,6 +7,8 @@ ingestion and validation happen at construction (fail fast, before any compile).
 
 from __future__ import annotations
 
+import warnings
+
 import jax
 import numpy as np
 
@@ -134,38 +136,36 @@ class Catalog:
                         "redshift=Fixed(...) with a catalog_z_range."
                     )
 
-                # Check catalog_z_range covers the table's redshift span
+                # A catalog_z_range lets per-galaxy redshift flow as a runtime
+                # input so the program compiles ONCE. Without it, each distinct
+                # redshift recompiles the fit (correct, just slow) — warn loudly
+                # rather than refuse, so ``fit_batch``-style catalogs still run.
                 z_range = fwd.populations[0].sed._catalog_z_range
                 if z_range is None:
-                    raise ValueError(
-                        "redshift_col was provided but the model has no catalog_z_range. "
-                        "Set approx=WavePrecomp(catalog_z_range=...) at model build time."
+                    warnings.warn(
+                        "redshift_col was provided but the model has no "
+                        "catalog_z_range, so the forward model recompiles for EVERY "
+                        "distinct redshift (one compile per galaxy). Build the model "
+                        "with approx=WavePrecomp(catalog_z_range=(zmin, zmax)) to "
+                        "compile once. See #1316.",
+                        UserWarning,
+                        stacklevel=2,
                     )
-
-                z_lo, z_hi = z_range
-                z_min, z_max = ca.redshift.min(), ca.redshift.max()
-                if z_min < z_lo or z_max > z_hi:
-                    raise ValueError(
-                        f"Redshift span [{z_min:.3f}, {z_max:.3f}] exceeds model's "
-                        f"catalog_z_range=[{z_lo:.3f}, {z_hi:.3f}]. "
-                        f"Widen catalog_z_range at model build time or filter the table."
-                    )
-            else:
-                # Condition 2: no redshift_col, must have free redshift
-                model_spec = fwd.spec
-                try:
-                    redshift_prior = model_spec.get_distribution("redshift")
-                except (KeyError, AttributeError):
-                    redshift_prior = None
-
-                if redshift_prior is not None:
-                    from tengri.parameters.priors import Fixed
-
-                    if isinstance(redshift_prior, Fixed):
+                else:
+                    z_lo, z_hi = z_range
+                    z_min, z_max = ca.redshift.min(), ca.redshift.max()
+                    if z_min < z_lo or z_max > z_hi:
                         raise ValueError(
-                            "Model has a Fixed redshift but no redshift_col was provided. "
-                            "Pass redshift_col='...' to inject per-galaxy redshifts."
+                            f"Redshift span [{z_min:.3f}, {z_max:.3f}] exceeds model's "
+                            f"catalog_z_range=[{z_lo:.3f}, {z_hi:.3f}]. "
+                            f"Widen catalog_z_range at model build time or filter the table."
                         )
+            else:
+                # Condition 2: no redshift_col. A free redshift is fit per galaxy;
+                # a Fixed redshift is legitimate too — every galaxy is fit at the
+                # model's shared redshift (e.g. a cluster at known z, or the
+                # fit_batch shared-redshift case). Nothing to validate here.
+                pass
         else:
             self._catalog_arrays = None
 
