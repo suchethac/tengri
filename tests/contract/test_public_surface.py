@@ -179,6 +179,9 @@ EXPECTED_ALL = frozenset(
         "fit_batch",
         # Data discovery helpers
         "data_path",
+        # Object model — the measurement record (razor: Observation is the
+        # instrument schema, Data the per-galaxy record; #1321, spec §3.2).
+        "Data",
     }
 )
 

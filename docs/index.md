@@ -203,9 +203,13 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    :maxdepth: 1
    :hidden:
 
+   forward_model
    api/index
+   method_selection
    performance/index
    performance/memory
+   performance/compilation
+   known_limitations
    units
 
 .. toctree::

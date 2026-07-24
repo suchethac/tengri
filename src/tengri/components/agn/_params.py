@@ -750,6 +750,30 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0 and hi < 1.0,
         "must be in [0, 1)",
     ),
+    ParamDeclaration(
+        "agn_T_max",
+        Uniform(1e4, 1e6, default=1e5),
+        "UV cutoff temperature",
+        units="K",
+    ),
+    ParamDeclaration(
+        "agn_polar_temperature",
+        Uniform(50.0, 200.0, default=100.0),
+        "Polar dust graybody temperature",
+        units="K",
+    ),
+    ParamDeclaration(
+        "agn_delta",
+        Uniform(
+            -1.0,
+            1.0,
+            default=0.0,
+        ),
+        "Disc spectral slope modulation delta (CIGALE skirtor2016). "
+        "For disk_type 0/1 it tilts the optical-MIR disc slope; for disk_type 2 "
+        "it is the ADAF->thin-disc blend weight (clipped to [0, 1]).",
+        units="dimensionless",
+    ),
 )
 
 __all__ = ["PARAMS"]

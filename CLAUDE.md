@@ -70,7 +70,7 @@ Default `min_compile_time_secs=0.05` persists per-filter
 precompute compiles. Threshold history: 5.0 (≤ 2026-05-04, skipped
 the orchestrator chain), 0.5 (≤ 2026-05-22, missed per-filter
 micro-compiles), 0.05 (current). See
-`docs/inference/compilation_cache.md` for full details.
+`docs/performance/compilation.md` for full details.
 
 ## Naming contract (MANDATORY)
 
@@ -201,8 +201,9 @@ model = SEDModel.build(
   (`star_forming_photometry`, `quiescent_z0`, `stochastic_sfh_jwst`,
   `high_z`, `photoz`), three AGN (`agn_panchromatic`, `composable_agn`,
   `unified_agn`), and two for forward-only work (`mock_recovery_minimal`,
-  `dust_demo`). Each docstring states its SSP requirement (bare-stellar vs
-  any). `tengri.list_recipes()` is the live list — do not re-enumerate them
+  `dust_demo`). Each docstring states its SSP requirement — three values,
+  not two: bare-stellar, wNE (with-nebular-emission), or any.
+  `tengri.list_recipes()` is the live list — do not re-enumerate them
   from memory.
 - The flat-kwarg `Parameters(...)` form is the **expert escape hatch** — still
   works, still used internally, but not the recommended user-facing path.

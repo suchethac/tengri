@@ -308,3 +308,70 @@ def test_the_dust_ir_term_does_not_change_the_measured_lines():
             f"tau_bc={tau_bc}, tau_diff={tau_diff} — the continuum subtraction is no "
             f"longer canceling it, so the window LUT must not admit dust emission"
         )
+
+
+# ── the cache could not tell FeaturePrecomp apart (#1152 follow-up) ─────────
+
+
+def _grad_flops(m):
+    """Compiled FLOPs of the gradient the SAMPLER calls, not build_loss_fn's.
+
+    MAP/HMC/VI go through ``InferenceContext.grad_fn`` →
+    ``Fitter._get_or_build_grad_fn``, which is model-cached. The existing
+    ``_loss_grad_flops`` builds and jits ``build_loss_fn`` locally and so never
+    touches that cache — which is why it stayed green while every real fit paid
+    the exact line forward.
+    """
+    from tengri.inference.context import InferenceContext
+
+    n = len(BANDS)
+    f = Fitter(m, jnp.ones(n), jnp.ones(n))
+    ctx = InferenceContext.from_target(f)
+    x0 = ctx.initial_params(jax.random.PRNGKey(0))
+    return ctx.grad_fn.lower(x0, ctx.data_args).compile().cost_analysis()["flops"]
+
+
+def test_feature_precomp_changes_the_compile_signature(synthetic_ssp_wide):
+    """Two models differing only in FeaturePrecomp must not share a cache slot.
+
+    ``FeaturePrecomp`` records itself in ``_fast_line_measurement``, NOT in
+    ``self._approx``, so ``approx_resolved_flags`` (built from ``_approx``) could
+    not see it and both models produced an identical ``compile_signature()``.
+    Whichever was built first won the JIT cache and the second silently reused
+    its compiled gradient.
+
+    The public surface reported the difference correctly the whole time —
+    ``model.approx.feature_precomp`` is False vs True — so a user could read
+    "feature_precomp=True" off a model whose cached gradient was the exact-path
+    one. Public state and cache key must agree; that they did not is how this
+    survived.
+    """
+    slow = _build(synthetic_ssp_wide, cue=False, approx=WavePrecomp())
+    fast = _build(synthetic_ssp_wide, cue=False, approx=(WavePrecomp(), FeaturePrecomp()))
+
+    assert slow.approx.feature_precomp is False
+    assert fast.approx.feature_precomp is True, "public ApproxState must report the fast path"
+    assert slow.compile_signature() != fast.compile_signature(), (
+        "models differing in FeaturePrecomp share a compile_signature(); the JIT cache "
+        "cannot tell them apart and the second built silently reuses the first's gradient"
+    )
+
+
+def test_the_sampler_gradient_reaches_the_fast_line_path(synthetic_ssp_wide):
+    """The SAMPLER's cached gradient must get the speedup, in collision order.
+
+    Deliberately builds the slow model FIRST — that is the order that failed.
+    Measured on the real wNE model before the fix: 12.4 ms vs 12.2 ms (1.0x);
+    after: 23.3 ms vs 0.6 ms (39.5x). FLOPs rather than wall clock so the guard
+    is machine-independent.
+    """
+    slow_model = _build(synthetic_ssp_wide, cue=False, approx=WavePrecomp())
+    slow = _grad_flops(slow_model)  # populate the cache with the SLOW engine first
+    fast = _grad_flops(
+        _build(synthetic_ssp_wide, cue=False, approx=(WavePrecomp(), FeaturePrecomp()))
+    )
+    assert fast < slow / 5, (
+        f"the sampler's gradient does not reach the fast line path: {fast:,.0f} vs "
+        f"{slow:,.0f} FLOPs. Every MAP/HMC/VI fit with line fluxes pays the exact "
+        f"line forward regardless of FeaturePrecomp."
+    )

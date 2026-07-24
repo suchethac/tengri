@@ -259,6 +259,6 @@ becomes minutes of wall-time and the vectorized path stays bounded.
 ## See also
 
 - `docs/inference/scaling.md` — wall-time scaling and PSD posterior recovery.
-- `docs/inference/compilation_cache.md` — persistent JAX cache.
+- `docs/performance/compilation.md` — persistent JAX cache.
 - `bench/scripts/benchmark_jit_compile.py` — synthetic compile-time benchmark.
 - `bench/scripts/benchmark_jit_real_path.py` — real-path compile-time benchmark.

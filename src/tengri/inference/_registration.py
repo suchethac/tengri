@@ -259,7 +259,8 @@ register_backend(
     short_doc=(
         "[POOR MIXING] Microcanonical Langevin MC — fast warm call (~2s) "
         "but R-hat ≈ 1.7 / 1.13 and ESS ≈ 1 on D=6-7 mocks at 4000 samples. "
-        "Do not use for science until tuning is investigated."
+        "Do not use for science until tuning is investigated. "
+        "Requires blackjax >= 1.6."
     ),
     requires=("blackjax",),
     legacy_fitter=False,
@@ -269,7 +270,10 @@ register_backend(
 register_backend(
     "mcmc_adjusted_mclmc",
     tier="experimental",
-    short_doc="Adjusted microcanonical Langevin (cold ~60s, ~3x compile premium over mclmc)",
+    short_doc=(
+        "Adjusted microcanonical Langevin (cold ~60s, ~3x compile premium over "
+        "mclmc). Requires blackjax >= 1.6."
+    ),
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_adjusted_mclmc)
