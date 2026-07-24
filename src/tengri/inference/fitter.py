@@ -437,6 +437,7 @@ class Fitter:
         compile_modes=None,
         cache=None,
         approx="auto",
+        params_override=None,
     ):
         # ── Auto-extract batched data for hierarchical ForwardModels ─
         # When ``model`` is a ForwardModel whose SubModel publishes
@@ -555,6 +556,26 @@ class Fitter:
         self._free_names = self.spec.free_params
         self._fixed_values = self.spec.get_fixed_values()
         self._bounds = {n: self.spec.get_distribution(n).bounds for n in self._free_names}
+
+        # ── Per-fit params override (issue #1329) ──────────────────
+        # Validate params_override: keys must be fixed parameters (not free),
+        # and must be valid parameter names.
+        self._params_override = None
+        if params_override is not None:
+            self._params_override = dict(params_override)
+            for key in self._params_override:
+                if key in self._free_names:
+                    raise ValueError(
+                        f"Parameter {key!r} is free and cannot be overridden in a fit. "
+                        f"A params= key that names a free parameter (being fit) would "
+                        f"corrupt inference. Free parameters: {sorted(self._free_names)}"
+                    )
+                if key not in self._fixed_values and key not in self._free_names:
+                    all_params = sorted(set(self._free_names) | set(self._fixed_values.keys()))
+                    raise ValueError(
+                        f"Parameter {key!r} is not a valid parameter name. "
+                        f"Valid parameters: {all_params}"
+                    )
 
         # ── Data arguments ─────────────────────────────────────────
         self._data_args = self._build_data_args(model)
@@ -1617,6 +1638,10 @@ class Fitter:
             params[name] = dist.unstandardize(params_unbounded[name])
         for name, val in self._fixed_values.items():
             params[name] = jnp.array(val)
+        # Apply per-fit params override (issue #1329): merge override over fixed values
+        if self._params_override is not None:
+            for key, val in self._params_override.items():
+                params[key] = jnp.array(val)
         if self.spec.stochastic and "psd_xi" in params_unbounded:
             # Publish under both names so the returned ``Posterior.params``
             # evaluates to the model that was actually fitted: ``psd_xi`` is the
