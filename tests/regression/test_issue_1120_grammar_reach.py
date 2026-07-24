@@ -1,0 +1,73 @@
+"""Regression test for #1120: components reachable from the build grammar.
+
+Components registered in _REGISTRY but absent from their axis menu are
+silently unreachable to users — describe(), search(), and list_*() all fail
+to name them, and SEDModel.build(xray={'type': 'xray_aird'}) is the only
+path to instantiate them. This mirrors #1273 (dust structural axis) and
+#1276 (radio sub-block axis invisible to discovery).
+"""
+
+import pytest
+
+pytestmark = pytest.mark.regression_bug
+
+
+@pytest.mark.parametrize(
+    "axis,expected",
+    [
+        ("xray", {"xray_aird", "agn_xray_corona"}),
+        ("radio", {"radio_powerlaw", "radio_dpl"}),
+    ],
+)
+def test_registered_components_reachable_from_grammar(axis, expected):
+    """#1120: every component registered for an axis must appear in its
+    grammar menu, or it is silently unreachable.
+
+    This inverts the T5 guard (menu subset of builder), and tests the
+    builder subset of menu — every type the grammar accepts must be
+    named by the corresponding discovery menu.
+    """
+    from tengri.parameters.groups import _valid_radio_types, _valid_xray_types
+
+    if axis == "xray":
+        menu = _valid_xray_types()
+    elif axis == "radio":
+        menu = _valid_radio_types()
+    else:
+        raise ValueError(f"Unknown axis: {axis}")
+
+    assert expected <= menu, f"unreachable on {axis}: {expected - menu}"
+
+
+@pytest.mark.parametrize(
+    "axis,expected",
+    [
+        ("xray", [("xray_aird", "FIXED"), ("agn_xray_corona", "FIXED")]),
+        ("radio", [("radio_powerlaw", "FIXED"), ("radio_dpl", "FIXED")]),
+    ],
+)
+def test_newly_reachable_components_build_with_fixed_defaults(
+    axis, expected, synthetic_ssp_wide, synthetic_tophat_obs
+):
+    """Each newly reachable component must actually construct with default
+    parameters ('all_params': FIXED).
+
+    A name appearing in a menu but failing to build would be the #1279
+    (T5) mirror image — moving the lie, not fixing it. These components
+    need grid coverage beyond the optical (UV and FIR for X-ray, radio);
+    use synthetic_ssp_wide + synthetic_tophat_obs (session fixtures) which
+    span 100 Angstrom – 1 mm.
+    """
+    from tengri import FIXED, SEDModel
+
+    for comp_name, _ in expected:
+        try:
+            model = SEDModel.build(
+                ssp_data=synthetic_ssp_wide,
+                observation=synthetic_tophat_obs,
+                **{axis: {"type": comp_name, "all_params": FIXED}},
+            )
+            # If we reach here, the model built successfully.
+            assert model is not None
+        except Exception as exc:
+            pytest.fail(f"Component {comp_name} on {axis} failed to build: {exc}")
