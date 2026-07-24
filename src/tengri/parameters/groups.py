@@ -309,10 +309,11 @@ _WG00_STRUCTURES = ("homogeneous", "clumpy")
 _LAZY_DUST_EMISSION_TYPES = frozenset(
     {
         "dl07_tabulated",
-        # Note: "dh02_ce01" (Dale & Helou 2002 + Chary & Elbaz 2001 cold dust,
-        # with grid at data/dh02_ce01_grid.h5) exists in DUST_EMISSION_MODELS
-        # but has no SEDModelComponent wrapper, so cannot be built via the
-        # grammar. Removed from menu to enforce menu ⊆ registry (#1279).
+        # AGNfitter-rX DH02_CE01 legacy cold-dust library: an engine-only
+        # tabulated model registered lazily in DUST_EMISSION_MODELS (no
+        # SEDModelComponent port), so it is not discovered via the _REGISTRY
+        # scan and must be declared here to be an accepted dust.emission type.
+        "dh02_ce01",
     }
 )
 
