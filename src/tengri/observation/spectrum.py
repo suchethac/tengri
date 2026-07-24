@@ -623,9 +623,12 @@ def compute_spectrum(
     # Interpolate rest-frame SED
     sed_at_pixels = jnp.interp(wave_rest_query, wave_rest, sed_rest, left=0.0, right=0.0)
 
-    # Scale using lnu_to_fnu conversion for consistency with cosmological flux formula
-    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
-    return flux_scale * sed_at_pixels
+    # Apply the (1+z)/(4π d_L²) dimming to the pixel SED directly. A standalone
+    # ``flux_scale = lnu_to_fnu(1.0, ...)`` is ~1e-58 and underflows float32 to
+    # zero (peak 1.0 absorbs none of the -58 decades); applied to sed_at_pixels
+    # (~1e30) apply_log10_scale folds the offset into the array peak and the
+    # result stays in range. Identical in float64 (#1206).
+    return lnu_to_fnu(sed_at_pixels, dl_cm, redshift)
 
 
 def _flux_conserving_resample(
@@ -714,8 +717,10 @@ def compute_spectrum_conserving(
     """
     wave_rest_query = wave_obs / (1.0 + redshift)
     sed_at_pixels = _flux_conserving_resample(wave_rest, sed_rest, wave_rest_query)
-    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
-    return flux_scale * sed_at_pixels
+    # Dimming applied to the pixel SED directly, not as a standalone flux_scale
+    # (~1e-58, which underflows float32 to zero). See _resample_to_spectrum
+    # above and #1206.
+    return lnu_to_fnu(sed_at_pixels, dl_cm, redshift)
 
 
 @jax.jit

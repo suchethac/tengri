@@ -113,7 +113,12 @@ def compute_effective_noise(
     """
 
     cal_noise = f_cal * jnp.abs(model_flux)
-    return jnp.sqrt(noise_obs**2 + cal_noise**2)
+    # hypot, not sqrt(a**2 + b**2): flux uncertainties are ~1e-30, so their
+    # squares (~1e-60) underflow float32 to zero — sigma_eff collapses to 0 and
+    # the likelihood residual (data - pred)/sigma_eff becomes NaN. hypot factors
+    # out the larger term, keeping the intermediate O(1). Identical in float64
+    # to the last bit (#1206).
+    return jnp.hypot(noise_obs, cal_noise)
 
 
 def compute_std_inv(
@@ -787,7 +792,9 @@ def apply_zp_floor(
             raise ValueError("zp floor must be non-negative (got < 0 in some band)")
 
     sys_term = floor_arr * jnp.abs(flux_arr)
-    return jnp.sqrt(noise_arr**2 + sys_term**2)
+    # hypot avoids the float32 underflow of squaring ~1e-30 flux uncertainties
+    # (see compute_effective_noise). Identical in float64 (#1206).
+    return jnp.hypot(noise_arr, sys_term)
 
 
 # ── Photon-limited Poisson likelihood ─────────────────────────────

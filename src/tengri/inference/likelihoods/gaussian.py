@@ -65,10 +65,20 @@ def diag_gaussian_chi2(
     Notes
     -----
     **JIT-compatible**: yes — pure JAX.
+
+    **Numerical stability (#1206)**: the standardized residual
+    :math:`r = (d - \mu)/\sigma_{\rm eff}` is formed *before* squaring, rather
+    than evaluating :math:`(d-\mu)^2/\sigma^2` directly. Flux uncertainties are
+    ~1e-30, so :math:`\sigma^2` (~1e-60) and :math:`(d-\mu)^2` (~1e-56) both
+    underflow float32 to zero and the ratio becomes ``0/0 = NaN`` — even though
+    :math:`r` itself is O(1) and representable. :func:`jnp.hypot` combines the
+    measurement noise and the fractional floor without squaring either. This is
+    what lets a pure-float32 fit produce a finite likelihood; identical in
+    float64 to the last bit.
     """
-    var = sigma * sigma + (sigma_floor * observed) ** 2
-    residual = observed - predicted
-    return jnp.sum(residual * residual / var)
+    sigma_eff = jnp.hypot(sigma, sigma_floor * observed)
+    r = (observed - predicted) / sigma_eff
+    return jnp.sum(r * r)
 
 
 def diag_gaussian_log_prob(
