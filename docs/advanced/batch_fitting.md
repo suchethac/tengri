@@ -104,7 +104,9 @@ result = cat.fit(method="map", key=jax.random.PRNGKey(0))
 # Access individual posterior for galaxy i
 post_i = result[i]
 print(post_i.summary_table())
-print(f"Galaxy {i}: chi2/dof = {post_i.diagnostics['chi2_dof']:.2f}")
+# A MAP fit reports 'final_loss' and 'converged'; VI/sampling methods also
+# populate 'chi2_dof' (access it with post_i.diagnostics.get("chi2_dof")).
+print(f"Galaxy {i}: final_loss = {post_i.diagnostics['final_loss']:.2f}")
 
 # Iterate over all galaxies
 for i, post in enumerate(result):
@@ -150,9 +152,9 @@ print(f"{n_converged}/{result.n_galaxies} galaxies converged")
 For galaxies that fail convergence, refit individually using `forward.fit`:
 
 ```python
-# Get per-galaxy data
-flux_i = cat._catalog_arrays.flux[i]
-noise_i = cat._catalog_arrays.noise[i]
+# Reuse the per-galaxy columns from your own table (cgs_fnu = model-native units)
+flux_i = catalog["flux"][i]
+noise_i = catalog["noise"][i]
 
 # Refit with MAP first, then VI with MAP initialization
 result_map = forward.fit(flux_i, noise_i, method="map", n_steps=1500)
