@@ -205,3 +205,50 @@ def test_fit_batch_output_dir_checkpoint_preserved(tmp_path, minimal_sed_model, 
             verbose=False,
         )
     assert len(r1) == 3 and len(saved) == 3 and len(r2) == 3
+
+
+def test_fit_batch_forwards_explicit_approx(minimal_sed_model, catalog_multi_row, monkeypatch):
+    """An explicit approx= must reach the model, not be silently dropped.
+
+    Regression (#1336 follow-up): the delegation built the ForwardModel without
+    applying approx=, so a caller passing e.g. WavePrecomp silently got "auto".
+    """
+    from tengri import WavePrecomp
+    from tengri.forward import forward_model as fm
+
+    seen = []
+    orig = fm.ForwardModel.with_approx
+    monkeypatch.setattr(
+        fm.ForwardModel,
+        "with_approx",
+        lambda self, approx: (seen.append(approx), orig(self, approx))[1],
+    )
+    wp = WavePrecomp(catalog_z_range=(0.01, 2.0))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        minimal_sed_model.fit_batch(
+            catalog_multi_row,
+            flux_cols=["flux_u", "flux_g", "flux_r"],
+            err_cols=["err_u", "err_g", "err_r"],
+            method="map",
+            approx=wp,
+            verbose=False,
+        )
+    assert wp in seen, "explicit approx= was not forwarded to the model (silently dropped)"
+
+
+def test_fit_batch_verbose_false_silences_progress(minimal_sed_model, catalog_multi_row, capsys):
+    """verbose=False must suppress the engine's per-galaxy progress output."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        minimal_sed_model.fit_batch(
+            catalog_multi_row,
+            flux_cols=["flux_u", "flux_g", "flux_r"],
+            err_cols=["err_u", "err_g", "err_r"],
+            method="map",
+            verbose=False,
+        )
+    out = capsys.readouterr().out
+    assert "galaxies done" not in out and "Galaxy" not in out, (
+        f"verbose=False did not silence: {out!r}"
+    )
