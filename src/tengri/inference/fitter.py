@@ -426,6 +426,7 @@ class Fitter:
         noise=None,
         data_type=None,
         data_mask=None,
+        presence=None,
         calibration_marginalize=False,
         cal_n_poly=3,
         cal_prior_sigma=1.0,
@@ -511,6 +512,13 @@ class Fitter:
                     "drop it from data/noise or inflate its noise."
                 )
         self.data_mask = data_mask
+        if presence is not None:
+            presence = jnp.asarray(presence, dtype=jnp.float32)
+            if presence.shape != self.data.shape:
+                raise ValueError(
+                    f"presence shape {presence.shape} does not match data shape {self.data.shape}"
+                )
+        self.presence = presence
         self.data_type = self._resolve_data_type(data_type, model)
         self.spec = model.spec
 
@@ -873,6 +881,8 @@ class Fitter:
         }
         if self.data_mask is not None:
             args["data_mask"] = self.data_mask
+        if self.presence is not None:
+            args["presence"] = self.presence
 
         obs = getattr(model, "observation", None)
         if obs is not None:

@@ -517,9 +517,9 @@ class _CatalogFitterOriginal:
             percentiles = (16, 50, 84)
 
         resolved = resolve_method(method)
-        # Per-galaxy fixed-value overrides (e.g. redshift) are threaded only through
-        # the sequential path today; the batched native/MCMC paths stack flux/noise
-        # and would SILENTLY DROP per-galaxy redshift. Fail loudly instead.
+        # Per-galaxy fixed-value overrides (e.g. redshift) and presence masks are
+        # threaded only through the sequential path today; the batched native/MCMC
+        # paths stack flux/noise and would SILENTLY DROP per-galaxy values. Fail loudly instead.
         if (resolved in self._NATIVE_VMAPPABLE or resolved in self._MCMC_VMAPPABLE) and any(
             "redshift" in g for g in self.galaxies
         ):
@@ -527,6 +527,15 @@ class _CatalogFitterOriginal:
                 f"Per-galaxy redshift is not yet supported for batched method "
                 f"{method!r}. Use method='map' (the Catalog default; sequential) for "
                 f"per-galaxy redshifts — batched per-galaxy redshift threading is a "
+                f"follow-up. See #1317."
+            )
+        if (resolved in self._NATIVE_VMAPPABLE or resolved in self._MCMC_VMAPPABLE) and any(
+            "presence" in g for g in self.galaxies
+        ):
+            raise NotImplementedError(
+                f"Per-galaxy presence masks are not yet supported for batched method "
+                f"{method!r}. Use method='map' (the Catalog default; sequential) for "
+                f"heterogeneous photometry — batched per-galaxy presence threading is a "
                 f"follow-up. See #1317."
             )
         if resolved in self._NATIVE_VMAPPABLE:
@@ -1089,11 +1098,14 @@ class _CatalogFitterOriginal:
             # Per-galaxy redshift (or any fixed-value override) reaches the forward
             # pass via the #1329 params-override seam, not just the reported params.
             override = {"redshift": galaxy["redshift"]} if "redshift" in galaxy else None
+            # Per-galaxy presence mask for heterogeneous catalogs (missing="mask" in ingestion)
+            presence = galaxy.get("presence", None)
             fitter_i = Fitter(
                 self.model,
                 galaxy["flux_obs"],
                 galaxy["noise"],
                 data_type=self.data_type,
+                presence=presence,
                 cache=self.cache,
                 params_override=override,
             )

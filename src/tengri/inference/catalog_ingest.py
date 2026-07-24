@@ -114,8 +114,20 @@ def ingest_catalog(
     # Step 1: Determine which columns to read
     if flux_cols is None:
         flux_cols = [f"{name}" for name in band_names]
+    else:
+        # Validate that all flux_cols are in the photometry observation
+        flux_cols = list(flux_cols)  # coerce to list if needed
+        for col in flux_cols:
+            if col not in band_names:
+                raise ValueError(
+                    f"Flux column '{col}' is not in the observation. "
+                    f"Observation bands: {band_names}"
+                )
+
     if err_cols is None:
         err_cols = [f"{name}_err" for name in band_names]
+    else:
+        err_cols = list(err_cols)
 
     # Validate counts
     if len(flux_cols) != n_bands:

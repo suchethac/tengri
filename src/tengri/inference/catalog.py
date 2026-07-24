@@ -232,6 +232,7 @@ class Catalog:
         # Per-galaxy redshift rides in the galaxy dict; the engine injects it into
         # each galaxy's fit as a fixed-value override (the #1329 mechanism) so it
         # actually reaches the forward pass — NOT just the reported params.
+        # Per-galaxy presence mask (for heterogeneous photometry) rides in the dict too.
         galaxies = []
         for i in range(ca.n_galaxies):
             galaxy_dict = {
@@ -240,6 +241,8 @@ class Catalog:
             }
             if ca.redshift is not None:
                 galaxy_dict["redshift"] = float(ca.redshift[i])
+            if ca.presence is not None:
+                galaxy_dict["presence"] = ca.presence[i].astype(np.float32)
             galaxies.append(galaxy_dict)
 
         # Delegate to the existing engine.
