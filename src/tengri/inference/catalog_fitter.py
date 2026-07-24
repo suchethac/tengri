@@ -529,14 +529,12 @@ class _CatalogFitterOriginal:
                 f"per-galaxy redshifts — batched per-galaxy redshift threading is a "
                 f"follow-up. See #1317."
             )
-        if (resolved in self._NATIVE_VMAPPABLE or resolved in self._MCMC_VMAPPABLE) and any(
-            "presence" in g for g in self.galaxies
-        ):
+        if resolved in self._NATIVE_VMAPPABLE and any("presence" in g for g in self.galaxies):
             raise NotImplementedError(
-                f"Per-galaxy presence masks are not yet supported for batched method "
-                f"{method!r}. Use method='map' (the Catalog default; sequential) for "
-                f"heterogeneous photometry — batched per-galaxy presence threading is a "
-                f"follow-up. See #1317."
+                "Per-galaxy presence masks are not yet supported for batched "
+                "native VI methods (experimental, off the critical path). "
+                "Use method='mcmc_nuts' (batched, presence-aware) or "
+                "method='map' (sequential) for heterogeneous photometry. See #1337."
             )
         if resolved in self._NATIVE_VMAPPABLE:
             return self._run_native(
@@ -928,11 +926,20 @@ class _CatalogFitterOriginal:
         # Stack per-galaxy data; pad with dummy galaxies (trimmed after).
         all_data_orig = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
         all_noise_orig = jnp.stack([jnp.asarray(g["noise"]) for g in self.galaxies])
+        # Per-galaxy presence masks (0/1) for heterogeneous catalogs; default to all-ones.
+        # Use the same dtype as data for consistent numeric behavior under multiplication.
+        all_presence_orig = jnp.stack(
+            [jnp.asarray(g.get("presence", np.ones(n_data)), dtype=all_data_orig.dtype)
+             for g in self.galaxies]
+        )
         if n_pad_extra > 0:
             all_data = jnp.concatenate([all_data_orig, jnp.zeros((n_pad_extra, n_data))], axis=0)
             all_noise = jnp.concatenate([all_noise_orig, jnp.ones((n_pad_extra, n_data))], axis=0)
+            # Padded rows: all-ones presence (no masking, they're discarded anyway).
+            pad_presence = jnp.ones((n_pad_extra, n_data), dtype=all_data_orig.dtype)
+            all_presence = jnp.concatenate([all_presence_orig, pad_presence], axis=0)
         else:
-            all_data, all_noise = all_data_orig, all_noise_orig
+            all_data, all_noise, all_presence = all_data_orig, all_noise_orig, all_presence_orig
 
         init_keys = jax.random.split(key, n_padded)
         all_init = jnp.stack(
@@ -943,10 +950,10 @@ class _CatalogFitterOriginal:
         gal_keys = jax.random.split(jax.random.fold_in(key, 1), n_padded)
 
         def _run_one(args):
-            ini, gk, d, n = args
-            return run_one(ini, gk, d, n)
+            ini, gk, d, n, p = args
+            return run_one(ini, gk, d, n, p)
 
-        xs = (all_init, gal_keys, all_data, all_noise)
+        xs = (all_init, gal_keys, all_data, all_noise, all_presence)
         if n_dev > 1:
             all_positions, all_divergent = self._sharded_vmap(run_one, xs, dev_list)
         else:
