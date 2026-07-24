@@ -53,13 +53,16 @@ class PhotometryLikelihood(GaussianLikelihood):
         fnu_err: jnp.ndarray,
         sigma_floor: float = 0.0,
         data_slice: tuple[int, int] | None = None,
+        presence_key: str | None = None,
     ) -> None:
         # frozen=True forbids ordinary __setattr__; route through the
         # superclass __init__ which uses object.__setattr__ internally.
         # obs_key/err_key default to the Fitter data_args entries so a
         # shared compiled loss reads the current galaxy's data (see
         # ``resolve_channel_data``); ``data_slice`` selects the photometry
-        # segment of a joint data vector.
+        # segment of a joint data vector. ``presence_key`` names the data_args
+        # entry carrying the per-band presence mask (heterogeneous catalogs,
+        # #1317); a no-op when unset or absent from data_args.
         super().__init__(
             obs=fnu_obs,
             err=fnu_err,
@@ -69,6 +72,7 @@ class PhotometryLikelihood(GaussianLikelihood):
             obs_key="data",
             err_key="noise",
             data_slice=data_slice,
+            presence_key=presence_key,
         )
 
     @property
