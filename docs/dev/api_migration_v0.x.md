@@ -900,6 +900,38 @@ it is now what `FeaturePrecomp` calls for the Cue backend.
 
 ---
 
+## `Data` — the measurement record (2026-07, #1321)
+
+Wave 1 of the inference/prediction API redesign splits the old hybrid
+`Observation` into two objects (spec §3): `Observation` is the pure instrument
+**schema** (which filters, which spectrograph, which lines), and the new
+`Data` is the per-galaxy measurement **record** (the flux/error values, censor
+flags, line values). One galaxy's measurements no longer force a fresh
+`Observation` — and therefore no recompile:
+
+```python
+from tengri import Data
+
+fwd.fit(Data(photometry=(flux, err)), ...)   # bare arrays remain sugar
+```
+
+`Data` is validated against the model's `Observation` in exactly one seam,
+`Data.validate_against(observation)` — the single place shape mismatches, NaN
+policy, boolean-censor traps, and unknown line names fail loudly with the
+offending channel named.
+
+| Name          | Canonical path        | Advertised (`__all__`)? | Warns? |
+| ------------- | --------------------- | ----------------------- | ------ |
+| `tengri.Data` | `tengri.observation.Data` | **yes** (new top-level) | no     |
+
+`Data` is a genuinely new class, not a relocated one, so it is advertised at
+top level rather than listed in the Phase-2 relocation table above. Its razor
+partner `Observation` remains importable but not advertised from the earlier
+Phase-2 cleanup; re-promoting the object-model family to `__all__` is a
+separate decision, tracked outside this wave.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in
