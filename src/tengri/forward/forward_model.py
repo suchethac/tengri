@@ -827,7 +827,72 @@ class ForwardModel:
             else:
                 data, noise = v.flux, v.noise
             if v.line_values is not None:
-                raise NotImplementedError("Data.lines routing lands with the T3 schema change.")
+                # Route Data.lines through to the Fitter using schema wavelengths
+                # and per-galaxy values. The schema (Observation.lines) provides
+                # compile-relevant wavelengths; values are traced data arguments.
+                lines_schema = getattr(self.observation, "lines", None)
+                if lines_schema is None:
+                    raise ValueError(
+                        "Data has lines but Observation.lines is not declared. "
+                        "Declare which lines with lines=LineList([...]) in the schema."
+                    )
+                # Extract wavelengths from schema for matching line names
+                line_names = tuple(sorted(v.line_values.keys()))
+                wavelengths = []
+                for name in line_names:
+                    # Find the wavelength in the schema
+                    try:
+                        idx = lines_schema.names.index(name)
+                        wavelengths.append(float(lines_schema.wavelengths[idx]))
+                    except (ValueError, AttributeError, TypeError) as e:
+                        raise ValueError(
+                            f"Line '{name}' in Data.lines not found in Observation.lines"
+                        ) from e
+                wavelengths_arr = jnp.asarray(wavelengths)
+
+                # Build LineFluxData with schema wavelengths and per-galaxy values
+                line_fluxes_arr = jnp.array([v.line_values[n][0] for n in line_names])
+                line_errors_arr = jnp.array([v.line_values[n][1] for n in line_names])
+
+                from tengri.observation.line_flux_data import LineFluxData
+
+                temp_line_flux_data = LineFluxData(
+                    names=line_names,
+                    wavelengths=wavelengths_arr,
+                    fluxes=line_fluxes_arr,
+                    errors=line_errors_arr,
+                )
+
+                # Create a proxy ForwardModel that provides line_fluxes from Data
+                # without recompiling (wavelengths are from schema, values are traced).
+                class _ForwardModelProxy:
+                    def __init__(self, fwd, temp_line_flux):
+                        self._fwd = fwd
+                        self._line_flux = temp_line_flux
+
+                    @property
+                    def observation(self):
+                        # Return a proxy that injects line_fluxes
+                        class _ObsProxy:
+                            def __init__(self, obs, lf):
+                                self._obs = obs
+                                self._lf = lf
+
+                            def __getattr__(self, name):
+                                if name == "line_fluxes":
+                                    return self._lf
+                                return getattr(self._obs, name)
+
+                        return _ObsProxy(self._fwd.observation, self._line_flux)
+
+                    def __getattr__(self, name):
+                        return getattr(self._fwd, name)
+
+                fwd_proxy = _ForwardModelProxy(self, temp_line_flux_data)
+                fitter = Fitter(
+                    fwd_proxy, data=data, noise=noise, data_mask=data_mask, approx=approx
+                )
+                return fitter.run(method, key=key, **kwargs)
 
         fitter = Fitter(self, data=data, noise=noise, data_mask=data_mask, approx=approx)
         return fitter.run(method, key=key, **kwargs)

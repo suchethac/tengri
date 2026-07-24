@@ -428,6 +428,47 @@ class LineList:
             plot_group=tuple("" for _ in names_tuple),
         )
 
+    @classmethod
+    def from_names(cls, names: Sequence[str]) -> LineList:
+        r"""Construct a LineList from a list of line names.
+
+        Uses the default optical catalog and selects only the requested
+        line names. Raises ``ValueError`` if any name is unknown.
+
+        Parameters
+        ----------
+        names : sequence of str
+            Line identifiers to select (e.g., ``["Halpha", "OIII_5007"]``).
+
+        Returns
+        -------
+        LineList
+            A new LineList containing only the requested lines, in wavelength order.
+
+        Raises
+        ------
+        ValueError
+            If any name in ``names`` is not found in the default optical catalog.
+
+        Notes
+        -----
+        Not JIT-compatible (uses Python class methods and filtering).
+
+        This is the recommended way to construct a LineList from line names
+        for schema declarations::
+
+            obs = Observation(photometry=..., lines=LineList.from_names(["Halpha", "OIII_5007"]))
+
+        Examples
+        --------
+        Select a few lines for a BPT diagram::
+
+            ll = LineList.from_names(["Halpha", "Hbeta", "OIII_5007", "NII_6584"])
+            assert ll.n_lines == 4
+
+        """
+        return cls.default_optical().select(names=names)
+
     # ── Filtering ─────────────────────────────────────────────────
 
     def select(
