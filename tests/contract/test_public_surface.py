@@ -184,6 +184,12 @@ EXPECTED_ALL = frozenset(
         # Object model — the measurement record (razor: Observation is the
         # instrument schema, Data the per-galaxy record; #1321, spec §3.2).
         "Data",
+        # Object model — the instrument-schema family, re-promoted (#1338).
+        "Observation",
+        "Photometry",
+        "Spectroscopy",
+        "NoiseModel",
+        "LineList",
     }
 )
 

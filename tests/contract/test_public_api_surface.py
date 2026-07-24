@@ -45,9 +45,15 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "FeaturePrecomp",
         # ── Object model — the measurement record (#1321) ───────────
         # The razor: Observation is the instrument schema, Data the
-        # per-galaxy record it is validated against at fit(). Advertised
-        # top-level (unlike the Phase-2-demoted Observation family below).
+        # per-galaxy record it is validated against at fit(). Data and the
+        # instrument-schema family are both advertised top-level (#1338).
         "Data",
+        # ── Object model — the instrument-schema family, re-promoted (#1338) ──
+        "Observation",
+        "Photometry",
+        "Spectroscopy",
+        "NoiseModel",
+        "LineList",
         # ── Catalog fitting — the astronomer-facing noun (#1317) ────
         "Catalog",
         # ── Spatial profile components ──────────────────────────────
@@ -284,12 +290,9 @@ DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
         "NebularConfig",
         "SEDModelConfig",
         "SFHConfig",
-        # Observation classes → tengri.observation
-        "Photometry",
-        "Spectroscopy",
-        "NoiseModel",
-        "Observation",
-        "LineList",
+        # (The Observation instrument-schema family — Observation, Photometry,
+        # Spectroscopy, NoiseModel, LineList — was re-promoted to __all__ /
+        # ALLOWED_TOP_LEVEL in #1338; it is no longer demoted.)
         # LineFluxData / SpectralIndex{Def,Data} no longer resolvable at
         # the top level — import from `tengri.observation` directly. The
         # back-compat shim was removed in the alias cleanup pass.

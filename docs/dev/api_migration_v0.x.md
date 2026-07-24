@@ -258,14 +258,17 @@ without breaking working notebooks.
 | `tengri.NebularConfig` | `tengri.config.NebularConfig` | yes (direct import) | no |
 | `tengri.SEDModelConfig` | `tengri.config.SEDModelConfig` | yes (direct import) | no |
 | `tengri.SFHConfig` | `tengri.config.SFHConfig` | yes (direct import) | no |
-| `tengri.Photometry` | `tengri.observation.Photometry` | yes (direct import) | no |
-| `tengri.Spectroscopy` | `tengri.observation.Spectroscopy` | yes (direct import) | no |
-| `tengri.NoiseModel` | `tengri.observation.NoiseModel` | yes (direct import) | no |
-| `tengri.Observation` | `tengri.observation.Observation` | yes (direct import) | no |
-| `tengri.LineList` | `tengri.observation.LineList` | yes (direct import) | no |
 | `tengri.LineFluxData` | `tengri.observation.LineFluxData` | yes (`__getattr__` shim) | **yes** |
 | `tengri.SpectralIndexDef` | `tengri.observation.SpectralIndexDef` | yes (`__getattr__` shim) | **yes** |
 | `tengri.SpectralIndexData` | `tengri.observation.SpectralIndexData` | yes (`__getattr__` shim) | **yes** |
+
+**Re-promoted in #1338:** the instrument-schema family — `Observation`,
+`Photometry`, `Spectroscopy`, `NoiseModel`, `LineList` — was moved back into
+`tengri.__all__` (and `ALLOWED_TOP_LEVEL`), matching how `Data` (#1321) and
+`Catalog` (#1317) are advertised. Advertising the records/nouns while hiding the
+schema objects you build them from was a discoverability asymmetry; the family
+is the natural top-level surface for constructing an `Observation` /
+`ForwardModel` / `Catalog`, so it is advertised, not demoted.
 
 The three names that still warn — `LineFluxData`, `SpectralIndexDef`,
 `SpectralIndexData` — are rarely-used (line-flux measurements and Lick

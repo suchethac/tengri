@@ -500,7 +500,12 @@ __all__ = [  # noqa: RUF022
     "Parameters",
     "ParameterRecord",
     "parse_groups",
-    # Observations
+    # Observations — the instrument-schema family, re-promoted (#1338)
+    "Observation",
+    "Photometry",
+    "Spectroscopy",
+    "NoiseModel",
+    "LineList",
     # Inference
     # Results
     # High-level facade
