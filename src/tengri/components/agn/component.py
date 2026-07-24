@@ -49,6 +49,10 @@ from tengri.protocols.component import (
 )
 from tengri.utils.physics_constants import L_SUN
 
+#: log10 of the solar luminosity [dex], for folding the AGN bolometric scale
+#: into log space (float32 safety, #1206). L_SUN ~3.828e33 erg/s.
+_LOG10_L_SUN: float = float(jnp.log10(L_SUN))
+
 __all__ = ["AGNSEDComponent", "AGNSEDComponentConfig"]
 
 
@@ -282,10 +286,11 @@ class AGNSEDComponent:
         """
         wave = state.wave
 
-        # Convert log10(L_bol/Lsun) → erg/s once for both the model
-        # call and the L_agn_bol publication.
+        import jax as _jax
+
+        from tengri.utils.scale import pow10 as _pow10
+
         agn_log_lbol = jnp.asarray(params["agn_log_lbol"])
-        L_agn_bol = jnp.power(10.0, agn_log_lbol) * L_SUN
 
         # CIGALE-faithful cross-component coupling
         # ────────────────────────────────────────────────────────────
@@ -297,20 +302,38 @@ class AGNSEDComponent:
         # the existing block normalization ``l_scale = L_bol × frac``
         # produces ``l_scale = agn_power``. This way the torus block
         # API stays unchanged while the higher-level driver matches
-        # CIGALE bit-for-bit. ``lambda_fracAGN="0/0"`` (CIGALE's
-        # whole-IR default) is assumed; the alternative wavelength-
-        # window flow is not yet wired.
+        # CIGALE bit-for-bit.
+        #
+        # Every luminosity here (``L_absorbed`` ~1e43, ``L_agn_bol`` ~1e46) is
+        # ``inf`` in pure float32, so the ratio ``agn_power / L_agn_bol`` is
+        # formed in LOG space (from the float32-safe ``log_L_ir``), never as
+        # inf/inf. ``agn_fracAGN == 0`` leaves the coupling inert (the user
+        # torus_frac), with the log branch still finite so its unused-branch
+        # gradient cannot leak (#1206).
         agn_fracAGN = jnp.asarray(params.get("agn_fracAGN", 0.0))
-        L_absorbed = jnp.asarray(state.derived.get("L_absorbed", 0.0))
-        # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
         _one_minus_frac = jnp.maximum(1.0 - agn_fracAGN, 1e-6)
-        agn_power_from_stellar = L_absorbed * agn_fracAGN / _one_minus_frac
         agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
-        agn_torus_frac_effective = jnp.where(
-            agn_fracAGN > 0.0,
-            agn_power_from_stellar / jnp.maximum(L_agn_bol, 1e-30),
-            agn_torus_frac_user,
+        _log_L_absorbed = state.derived.get("log_L_ir")
+        if _log_L_absorbed is None:
+            _log_L_absorbed = jnp.log10(
+                jnp.maximum(jnp.asarray(state.derived.get("L_absorbed", 0.0)), 1e-30)
+            )
+        # log10(agn_power / L_agn_bol)
+        #   = log10(L_absorbed) + log10(frac/(1−frac)) − agn_log_lbol − log10(L_sun)
+        _log_torus_frac = (
+            _log_L_absorbed
+            + jnp.log10(jnp.maximum(agn_fracAGN, 1e-30))
+            - jnp.log10(_one_minus_frac)
+            - agn_log_lbol
+            - _LOG10_L_SUN
         )
+        agn_torus_frac_effective = jnp.where(
+            agn_fracAGN > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
+        )
+        # Published byproduct only [erg/s]; ~1e46 and ``inf`` in float32.
+        # stop_gradient so that inf cannot poison the reverse pass via 0*inf;
+        # consumers needing it linearly run in float64.
+        L_agn_bol = _jax.lax.stop_gradient(_pow10(agn_log_lbol + _LOG10_L_SUN))
 
         # Resolve the AGN model from the registry. resolve_agn_model is
         # a factory-time lookup but the returned callable is pure JAX
@@ -378,14 +401,29 @@ class AGNSEDComponent:
         # and L_4400_intrinsic. For monolithic models, both default to 0.0
         # (X-ray falls back to L_bol BC or SKIRTOR's published L_2500_30deg;
         # radio falls back to L_bol bolometric correction).
+        # The AGN L_nu factors uniformly with 10^agn_log_lbol: the disc scales
+        # with L_bol, and when agn_fracAGN>0 the torus is pinned to agn_power
+        # through a 1/L_bol ``agn_torus_frac``, so it too comes out 10^-lbol of
+        # its physical value at the reference. Evaluate every block at
+        # agn_log_lbol=0 (L_bol = L_sun, comfortably float32-representable) and
+        # re-apply the true 10^agn_log_lbol in log space via apply_log10_scale,
+        # so the ~1e46 erg/s bolometric is never materialized. Exact in float64;
+        # the AGN SED is proportional to 10^agn_log_lbol to machine precision
+        # (verified) (#1206).
+        from tengri.utils.scale import apply_log10_scale
+
+        _lbol_ref = jnp.zeros_like(agn_log_lbol)
         if self.config.model == "composable":
-            L_agn, L_2500_intrinsic, L_4400_intrinsic = agn_fn(
-                wave, agn_log_lbol=agn_log_lbol, return_l2500=True, **agn_kwargs
+            L_agn_unit, L_2500_unit, L_4400_unit = agn_fn(
+                wave, agn_log_lbol=_lbol_ref, return_l2500=True, **agn_kwargs
             )
         else:
-            L_agn = agn_fn(wave, agn_log_lbol=agn_log_lbol, **agn_kwargs)
-            L_2500_intrinsic = jnp.asarray(0.0)
-            L_4400_intrinsic = jnp.asarray(0.0)
+            L_agn_unit = agn_fn(wave, agn_log_lbol=_lbol_ref, **agn_kwargs)
+            L_2500_unit = jnp.asarray(0.0)
+            L_4400_unit = jnp.asarray(0.0)
+        L_agn = apply_log10_scale(L_agn_unit, agn_log_lbol)
+        L_2500_intrinsic = apply_log10_scale(L_2500_unit, agn_log_lbol)
+        L_4400_intrinsic = apply_log10_scale(L_4400_unit, agn_log_lbol)
 
         # Filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
