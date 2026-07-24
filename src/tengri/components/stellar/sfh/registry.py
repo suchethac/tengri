@@ -42,7 +42,7 @@ import jax.numpy as jnp
 from tengri.components.stellar.sfh.dense_basis import dense_basis, dense_basis_pure
 from tengri.components.stellar.sfh.gp_sfh import (
     compute_sqrt_power_drw,
-    drw_linear_gp_from_xi,
+    drw_innovations_gp_from_xi,
     gp_from_xi,
     make_log_age_grid,
 )
@@ -1924,11 +1924,14 @@ def compute_field_gp(
 
     ``field_model="drw"`` builds a damped random walk stationary in **linear
     (physical) time** — the covariance ``(sigma ln10)^2 exp(-|t_i-t_j|/tau)`` at
-    physical times ``t_i = 10**u_i``, realized via Cholesky (#865). ``psd_sigma``
-    is then the modulation std in dex and ``psd_tau_yr`` the physical
-    decorrelation timescale. Other PSD models keep the Fourier/log-age
-    construction (:func:`gp_from_xi`). See
-    :func:`tengri.components.stellar.sfh.gp_sfh.drw_linear_gp_from_xi`.
+    physical times ``t_i = 10**u_i`` (#865). ``psd_sigma`` is then the modulation
+    std in dex and ``psd_tau_yr`` the physical decorrelation timescale. It is
+    realized via the exact OU state-space (innovations) recursion
+    (:func:`~tengri.components.stellar.sfh.gp_sfh.drw_innovations_gp_from_xi`): the
+    *same* covariance as a dense Cholesky — a bit-exact-same-prior reparameterization
+    — but ``psd_tau`` enters the ``xi -> SFH`` map through per-step scalars instead
+    of a rotation, giving HMC a geometry a global mass matrix can track (#1301).
+    Other PSD models keep the Fourier/log-age construction (:func:`gp_from_xi`).
 
     Examples
     --------
@@ -1952,9 +1955,18 @@ def compute_field_gp(
         # Iyer+2020 timescale). Replaces the former Fourier/log-age construction,
         # whose correlation length was fixed in dex (scale-free) and only matched
         # the physical timescale near a single reference age.
+        #
+        # Realized via the exact OU state-space (innovations) recursion rather
+        # than a dense Cholesky (#1301). Same covariance ``K(sigma,tau)`` — a
+        # bit-exact-same-prior reparameterization — but ``psd_tau`` enters the
+        # ``xi -> SFH`` map only through per-step scalars ``rho_i`` (banded, local)
+        # instead of a rotation that re-orients with ``psd_tau``, which a single
+        # global HMC mass matrix cannot track. O(n) and jitter-free. The dense
+        # Cholesky (``drw_linear_gp_from_xi``) is retained as the reference oracle;
+        # the zero-rotation Fourier variant is tracked in #1333.
         if log_age_grid is None:
             log_age_grid = make_log_age_grid(n_grid)
-        return drw_linear_gp_from_xi(xi, psd_sigma, psd_tau_yr, log_age_grid)
+        return drw_innovations_gp_from_xi(xi, psd_sigma, psd_tau_yr, log_age_grid)
 
     # Other PSD models (e.g. flex-PSD) keep the Fourier/log-age construction.
     sqrt_power_fn = FIELD_MODEL_REGISTRY[field_model]
