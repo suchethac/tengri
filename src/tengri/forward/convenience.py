@@ -488,6 +488,19 @@ def fit_batch(
     n_skipped = 0
     t0 = time.time()
 
+    # Warn loudly once if redshift_col is set but catalog_z_range is not
+    if redshift_col is not None and getattr(model, "_catalog_z_range", None) is None:
+        import warnings
+
+        warnings.warn(
+            "fit_batch(redshift_col=...) without WavePrecomp(catalog_z_range=...) "
+            "recompiles the forward model for EVERY row (one compile per galaxy). "
+            "Build the model with approx=WavePrecomp(catalog_z_range=(zmin, zmax)) "
+            "to compile once. See #1316.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     for i, row in enumerate(rows):
         gal_id = str(row[id_col]) if id_col is not None else str(i)
 
