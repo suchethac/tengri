@@ -828,8 +828,10 @@ class ForwardModel:
                 data, noise = v.flux, v.noise
             if v.line_values is not None:
                 # Route Data.lines through to the Fitter using schema wavelengths
-                # and per-galaxy values. The schema (Observation.lines) provides
-                # compile-relevant wavelengths; values are traced data arguments.
+                # and per-galaxy values. Create a temporary Observation with the
+                # line_fluxes populated, keeping all wavelengths from schema.
+                # The cache key uses wavelengths (constant across fits), not values,
+                # so fits with the same schema reuse the compiled program.
                 lines_schema = getattr(self.observation, "lines", None)
                 if lines_schema is None:
                     raise ValueError(
@@ -854,6 +856,8 @@ class ForwardModel:
                 line_fluxes_arr = jnp.array([v.line_values[n][0] for n in line_names])
                 line_errors_arr = jnp.array([v.line_values[n][1] for n in line_names])
 
+                import dataclasses
+
                 from tengri.observation.line_flux_data import LineFluxData
 
                 temp_line_flux_data = LineFluxData(
@@ -863,34 +867,18 @@ class ForwardModel:
                     errors=line_errors_arr,
                 )
 
-                # Create a proxy ForwardModel that provides line_fluxes from Data
-                # without recompiling (wavelengths are from schema, values are traced).
-                class _ForwardModelProxy:
-                    def __init__(self, fwd, temp_line_flux):
-                        self._fwd = fwd
-                        self._line_flux = temp_line_flux
+                # Use dataclasses.replace to create a new Observation with the
+                # LineFluxData, keeping all other fields (including schema wavelengths).
+                obs_with_lines = dataclasses.replace(
+                    self.observation, line_fluxes=temp_line_flux_data
+                )
 
-                    @property
-                    def observation(self):
-                        # Return a proxy that injects line_fluxes
-                        class _ObsProxy:
-                            def __init__(self, obs, lf):
-                                self._obs = obs
-                                self._lf = lf
+                # Create a ForwardModel wrapper that overrides only the observation
+                # This avoids rebuilding the model, only changing the observation's data.
+                fwd_with_lines = dataclasses.replace(self, observation=obs_with_lines)
 
-                            def __getattr__(self, name):
-                                if name == "line_fluxes":
-                                    return self._lf
-                                return getattr(self._obs, name)
-
-                        return _ObsProxy(self._fwd.observation, self._line_flux)
-
-                    def __getattr__(self, name):
-                        return getattr(self._fwd, name)
-
-                fwd_proxy = _ForwardModelProxy(self, temp_line_flux_data)
                 fitter = Fitter(
-                    fwd_proxy, data=data, noise=noise, data_mask=data_mask, approx=approx
+                    fwd_with_lines, data=data, noise=noise, data_mask=data_mask, approx=approx
                 )
                 return fitter.run(method, key=key, **kwargs)
 
