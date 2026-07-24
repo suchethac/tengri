@@ -1,63 +1,67 @@
 # Batch Fitting
 
-Fitting catalogs of galaxies: `fit_batch` (independent fits) and
+Fitting catalogs of galaxies: `Catalog` (independent fits) and
 `fit_population` (hierarchical, shared hyperparameters), mock catalog
 generation, result aggregation, and practical considerations for real survey data.
 
 :::{important}
-**fit_batch vs fit_population — choose the right one:**
+**Catalog vs fit_population — choose the right one:**
 
 | Use case | Method | Returns |
 |----------|--------|---------|
-| N independent galaxy fits, no shared parameters | `model.fit_batch(observations)` | `list[Posterior]` |
-| N galaxies jointly, shared PSD / dust prior | `model.fit_population(observations)` | `PopulationPosterior` |
+| N independent galaxy fits, no shared parameters | `Catalog(forward, table, flux_unit=...).fit()` | `CatalogPosterior` |
+| N galaxies jointly, shared PSD / dust prior | `fit_population` (future API, #1319) | `PopulationPosterior` |
 
-`fit_batch` is fast and parallelizable. `fit_population` learns the population-level
-burstiness prior from data — use it when you want to constrain the PSD hyperparameters
-rather than assuming them.
+`Catalog.fit()` is fast and parallelizable, supporting all inference methods.
+The hierarchical `fit_population` API is planned for a future release to learn
+population-level burstiness priors from data.
 :::
 
 ## The batch API
 
-`fit_batch` fits a list of galaxies sequentially, sharing the XLA
+`Catalog` fits a table of galaxies independently, sharing the XLA
 compilation cache so only the first galaxy pays the compile cost:
 
 ```python
-from tengri import SEDModel, Fitter, ForwardModel
+from tengri import SEDModel, ForwardModel, Catalog
+import jax
 
 model = SEDModel.build(ssp_data=ssp, observation=obs)
 forward = ForwardModel.build(sed=model, observation=obs)
-fitter = Fitter(forward, flux_obs, noise)  # template fitter
 
-galaxies = [
-    {"flux_obs": flux_array_i, "noise": noise_array_i}
-    for flux_array_i, noise_array_i in zip(catalog_flux, catalog_noise)
-]
+# Table is any dict-like with flux and error columns
+cat = Catalog(forward, table, flux_unit="cgs_fnu")
 
-results = fitter.fit_batch(galaxies, method="vi", n_iterations=15)
+key = jax.random.PRNGKey(0)
+result = cat.fit(method="map", key=key)
 ```
 
 **Key points:**
 - First galaxy: ~15s (compilation). Subsequent: ~2ms each (cached).
-- Any inference method works: `vi`, `mcmc_raytrace`, `mcmc_nuts`, etc.
-- `n_seeds=5` is set automatically for VI.
+- Any inference method works: `"map"`, `"vi"`, `"mcmc_raytrace"`, `"mcmc_nuts"`, etc.
+- Table can be a dict, pandas DataFrame, or any object supporting `__getitem__` and `len()`.
 
 ### Parameters
 
 ```python
-results = fitter.fit_batch(
-    galaxies,                   # list of {"flux_obs": ..., "noise": ...}
-    method="vi",                # any method from fitter.run()
+result = cat.fit(
+    method="map",               # inference method
     key=jax.random.PRNGKey(42), # reproducibility
-    verbose=True,               # progress printing
-    n_iterations=15,            # passed through to run()
+    forward_chunk_size=1,       # K galaxies in parallel (native methods only)
+    n_pad=None,                 # pad catalog size for cache sharing
+    store=None,                 # "full" (all samples) or "summary" (percentiles only)
+    percentiles=None,           # custom percentiles for store="summary"
+    reducers=None,              # additional summary statistics
 )
 ```
 
+All other kwargs are forwarded to the inference backend (e.g., `n_warmup`, `n_samples`
+for MCMC).
+
 ### Return value
 
-A list of `Posterior` objects, one per galaxy. Each has `.params`, `.samples`,
-`.diagnostics`, `.summary_table()`, and `.plot_corner()`.
+A `CatalogPosterior` object containing results for all galaxies. Access individual
+posteriors via indexing or iteration: `result[0]`, or `for post in result`.
 
 ## Generating mock catalogs
 
@@ -66,79 +70,93 @@ Use `generate_mock` to create synthetic photometry for testing:
 ```python
 from tengri import generate_mock
 import jax
-import jax.numpy as jnp
+import numpy as np
 
 # Draw parameters from the prior
 key = jax.random.PRNGKey(0)
 n_galaxies = 100
 
-catalog = []
+catalog = {"flux": [], "noise": []}
 for i in range(n_galaxies):
     key, subkey = jax.random.split(key)
-    params_i = spec.sample(subkey)
+    params_i = model.spec.sample(subkey)
     mock_i = generate_mock(model, params_i, key=subkey, snr=20.0)
-    catalog.append(mock_i)
+    catalog["flux"].append(mock_i["flux_obs"])
+    catalog["noise"].append(mock_i["noise"])
 
-# mock_i contains: "flux_true", "flux_obs", "noise", "params"
+# Convert to arrays
+catalog["flux"] = np.array(catalog["flux"])
+catalog["noise"] = np.array(catalog["noise"])
 ```
 
 Then fit the catalog:
 
 ```python
-galaxies = [
-    {"flux_obs": m["flux_obs"], "noise": m["noise"]}
-    for m in catalog
-]
-results = fitter.fit_batch(galaxies)
+cat = Catalog(forward, catalog, flux_unit="cgs_fnu")
+result = cat.fit(method="map", key=jax.random.PRNGKey(0))
 ```
 
 ## Result aggregation
 
-### Summary table
+### Per-galaxy posteriors
 
 ```python
-import numpy as np
+# Access individual posterior for galaxy i
+post_i = result[i]
+print(post_i.summary_table())
+print(f"Galaxy {i}: chi2/dof = {post_i.diagnostics['chi2_dof']:.2f}")
 
-for i, result in enumerate(results):
-    table = result.summary_table()
-    # table has columns: param, median, lo_68, hi_68, ESS
-    print(f"Galaxy {i}: chi2/dof = {result.diagnostics['chi2_dof']:.2f}")
+# Iterate over all galaxies
+for i, post in enumerate(result):
+    stellar_mass = post.properties["stellar_mass"]
+    print(f"Galaxy {i}: stellar_mass = {np.median(stellar_mass):.2e}")
 ```
 
-### Extracting parameter arrays
+### Catalog properties
 
 ```python
-# Collect posterior medians across the catalog
-medians = {
-    param: np.array([
-        np.median(r.samples[param]) for r in results
-    ])
-    for param in results[0].samples.keys()
-    if not param.startswith("psd_xi")
-}
+# Properties are automatically lifted over the galaxy axis
+stellar_masses = result.properties["stellar_mass"]  # shape (n_galaxies,) or (n_galaxies, n_samples)
+sfr_values = result.properties["sfr_avg"]
 
-# Now medians["sfh_dpl_alpha"] is shape (n_galaxies,)
+# Get credible intervals for each galaxy
+ci_table = result.properties.ci("stellar_mass", level=0.68)  # shape (n_galaxies, 3)
+# ci_table[:, 0] = lower, ci_table[:, 1] = median, ci_table[:, 2] = upper
+```
+
+### Export to table
+
+```python
+# Convert results to a table dict (round-trips through catalog ingest)
+table = result.to_table()
+# table["stellar_mass"] has shape (n_galaxies,)
+# If store="summary", also includes percentile columns:
+# table["stellar_mass_p16"], table["stellar_mass_p50"], table["stellar_mass_p84"]
 ```
 
 ### Convergence across the catalog
 
 ```python
-from _plot_style import convergence_check
+import numpy as np
 
 n_converged = sum(
-    convergence_check(r, verbose=False)["converged"]
-    for r in results
+    post.diagnostics.get("converged", False)
+    for post in result
 )
-print(f"{n_converged}/{len(results)} galaxies converged")
+print(f"{n_converged}/{result.n_galaxies} galaxies converged")
 ```
 
 :::{tip}
-For galaxies that fail convergence, try re-fitting with more iterations, a
-different method (e.g., `mcmc_raytrace`), or MAP initialization:
+For galaxies that fail convergence, refit individually using `forward.fit`:
 
 ```python
-result_map = fitter_i.run("map", n_steps=1500)
-result = fitter_i.run("vi", init_from=result_map, n_iterations=25)
+# Get per-galaxy data
+flux_i = cat._catalog_arrays.flux[i]
+noise_i = cat._catalog_arrays.noise[i]
+
+# Refit with MAP first, then VI with MAP initialization
+result_map = forward.fit(flux_i, noise_i, method="map", n_steps=1500)
+result_vi = forward.fit(flux_i, noise_i, method="vi", init_from=result_map, n_iterations=25)
 ```
 :::
 
@@ -147,7 +165,7 @@ result = fitter_i.run("vi", init_from=result_map, n_iterations=25)
 ### SDSS photometry
 
 ```python
-from tengri import SEDModel, Fitter, ForwardModel, Fixed, Observation, Photometry
+from tengri import SEDModel, ForwardModel, Catalog, Fixed, Observation, Photometry
 
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
@@ -160,8 +178,8 @@ model = SEDModel.build(
 )
 
 forward = ForwardModel.build(sed=model, observation=obs)
-fitter = Fitter(forward, flux_obs, noise)
-results = fitter.fit_batch(sdss_galaxies)
+cat = Catalog(forward, sdss_table, flux_unit="cgs_fnu")
+result = cat.fit(method="map", key=jax.random.PRNGKey(0))
 ```
 
 ### JWST high-redshift considerations
@@ -176,18 +194,20 @@ High-redshift JWST fitting introduces specific challenges:
 - **Nebular emission**: strong at high-z. Enable with `nebular=True` in `Parameters`.
 
 ```python
-spec = Parameters(
-    redshift=7.5,
-    sfh="field",
-    dust=True,
-    nebular=True,
-)
+from tengri import SEDModel, Fixed
 
 obs = Observation(photometry=Photometry.from_names(
     ["jwst_f115w", "jwst_f150w", "jwst_f200w",
      "jwst_f277w", "jwst_f356w", "jwst_f444w"]
 ))
-model = Model(spec, ssp, observation=obs)
+model = SEDModel.build(
+    ssp_data=ssp,
+    observation=obs,
+    sfh={'type': 'field'},
+    dust={'all_params': FREE},
+    neb={'type': 'cue', 'all_params': FREE},
+    redshift=Fixed(7.5),  # fixed high-redshift
+)
 ```
 
 :::{note}
@@ -208,14 +228,14 @@ The XLA compilation cache persists across Python sessions (stored at
 `~/.cache/tengri_jax_cache`), so restarting the kernel does not re-trigger compilation
 for the same model configuration.
 
-## When to use fit_batch vs. fit_population
+## When to use Catalog vs. fit_population
 
 | Scenario | Use |
 |----------|-----|
-| Independent fits, no shared parameters | `fit_batch` |
-| Shared PSD / dust prior across population | `fit_population` |
-| Quick catalog exploration | `fit_batch` + `vi` |
-| Population-level SFH constraints | `fit_population` |
+| Independent fits, no shared parameters | `Catalog.fit()` |
+| Shared PSD / dust prior across population | `fit_population` (future, #1319) |
+| Quick catalog exploration | `Catalog.fit(method="map")` |
+| Population-level SFH constraints | `fit_population` (future, #1319) |
 
 See {doc}`hierarchical` for population-level inference.
 
