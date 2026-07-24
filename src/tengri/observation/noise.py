@@ -73,8 +73,10 @@ def compute_effective_noise(
     model_flux : array, shape (n_bands,)
         Model-predicted fluxes [flux units] (absolute value used for
         calibration term).
-    f_cal : float or scalar array
+    f_cal : float or array, shape (n_bands,)
         Fractional calibration uncertainty [dimensionless].
+        A scalar applies the same floor to all bands. An array applies
+        a per-band floor; shape must match ``noise_obs`` and ``model_flux``.
         Typical range: 0.01–0.15.
 
     Returns
@@ -88,7 +90,9 @@ def compute_effective_noise(
 
     The calibration term ``f_cal * |model|`` adds a flux-dependent
     floor to the noise budget, preventing zero-noise solutions when
-    measurement uncertainties are very small.
+    measurement uncertainties are very small. Per-band floors allow
+    calibration uncertainty to vary across filters, e.g., due to
+    detector or photometry pipeline differences.
 
     Examples
     --------
@@ -99,7 +103,15 @@ def compute_effective_noise(
     >>> sigma_eff = compute_effective_noise(noise, model, f_cal=0.05)
     >>> sigma_eff.shape
     (3,)
+
+    Per-band floor example:
+
+    >>> f_cal_per_band = jnp.array([0.02, 0.10, 0.05])
+    >>> sigma_eff = compute_effective_noise(noise, model, f_cal=f_cal_per_band)
+    >>> sigma_eff.shape
+    (3,)
     """
+
     cal_noise = f_cal * jnp.abs(model_flux)
     return jnp.sqrt(noise_obs**2 + cal_noise**2)
 
