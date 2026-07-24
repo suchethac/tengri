@@ -43,6 +43,11 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "WavePrecomp",
         "SpectrumPrecomp",
         "FeaturePrecomp",
+        # ── Object model — the measurement record (#1321) ───────────
+        # The razor: Observation is the instrument schema, Data the
+        # per-galaxy record it is validated against at fit(). Advertised
+        # top-level (unlike the Phase-2-demoted Observation family below).
+        "Data",
         # ── Spatial profile components ──────────────────────────────
         "Exponential",
         "FilterConvention",

@@ -551,6 +551,7 @@ __all__ = [  # noqa: RUF022
     "data_path",
     # Components & physics
     "FilterConvention",
+    "Data",
     "CompositeIndexDef",
     "SpectralIndexDef",
     "SpectralIndexData",
@@ -671,6 +672,7 @@ from tengri.inference.catalog_fitter import CatalogFitter
 from tengri.inference.fitter import Fitter
 from tengri.inference.hierarchical import PopulationFitter
 from tengri.inference.vi_config import VIConfig
+from tengri.observation.data import Data
 from tengri.observation.instrument import Instrument, list_instruments
 from tengri.observation.line_list import LineList
 from tengri.observation.noise_model import NoiseModel

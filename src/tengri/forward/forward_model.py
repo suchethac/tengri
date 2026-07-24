@@ -122,6 +122,7 @@ class ForwardModel:
 
     populations: tuple[Population, ...]
     observation: Any
+    mode: str = "single"
 
     # ── Legacy-SEDModel delegations (for Fitter consumption) ─────────
     # The Fitter inner machinery (loss_fn, JIT compile, posterior
@@ -397,6 +398,7 @@ class ForwardModel:
         spatial: Any | None = None,
         population: Any | None = None,
         populations: Iterable[Population] | None = None,
+        mode: str | None = None,
         observation: Any | None = None,
     ) -> ForwardModel:
         """Construct a :class:`ForwardModel`.
@@ -505,7 +507,48 @@ class ForwardModel:
                 f"got duplicates {duplicates}."
             )
 
-        return cls(populations=pops, observation=observation)
+        # Validate and infer mode
+        valid_modes = ("single", "multi_population", "hierarchical")
+        if mode is not None and mode not in valid_modes:
+            raise ValueError(f"mode={mode!r} is not valid. Choose from: {', '.join(valid_modes)}")
+
+        # Infer mode based on which kwargs were provided
+        if populations is not None:
+            inferred_mode = "multi_population"
+        elif population is not None:
+            inferred_mode = "hierarchical"
+        else:
+            inferred_mode = "single"
+
+        # Check for hierarchical mode (reserved for #1319)
+        if mode == "hierarchical" and population is None:
+            raise NotImplementedError(
+                "mode='hierarchical' requires the #1319 shared= parameter "
+                "(not yet implemented). See issue #1319."
+            )
+
+        # Validate mode assertion
+        if mode is not None and mode != inferred_mode:
+            if mode == "multi_population":
+                raise ValueError(
+                    f"mode='multi_population' requires populations=... "
+                    f"(got {['sed=', 'population='][population is not None]}); "
+                    f"inferred mode would be {inferred_mode!r}"
+                )
+            else:
+                needed = {
+                    "single": "sed=",
+                    "hierarchical": "population=",
+                }[mode]
+                got_kwarg = ["sed=", "population=", "populations="][
+                    [sed is not None, population is not None, populations is not None].index(True)
+                ]
+                raise ValueError(
+                    f"mode={mode!r} requires {needed} (got {got_kwarg}); "
+                    f"inferred mode would be {inferred_mode!r}"
+                )
+
+        return cls(populations=pops, observation=observation, mode=inferred_mode)
 
     def predict(self, params: Mapping[str, Any]) -> Any:
         """Lazy :class:`~tengri.forward.prediction.Prediction` for derived quantities.
@@ -769,12 +812,13 @@ class ForwardModel:
 
         Parameters
         ----------
-        data : array, optional
-            Observed flux (photometry / spectroscopy). Optional for
-            hierarchical fits where the per-galaxy data lives on the
-            :class:`PopulationSEDModel`.
+        data : array_like or Data, optional
+            Observed flux (photometry / spectroscopy) or a :class:`Data`
+            record. Optional for hierarchical fits where the per-galaxy data
+            lives on the :class:`PopulationSEDModel`.
         noise : array, optional
-            1-sigma uncertainties matching ``data``.
+            1-sigma uncertainties matching ``data``. Must be ``None`` if
+            ``data`` is a :class:`Data` record.
         method : str, default ``"vi"``
             Inference method. Any value accepted by
             :meth:`Fitter.run` (``"vi"``, ``"mcmc_nuts"``, ``"map"``,
@@ -806,8 +850,82 @@ class ForwardModel:
         low-level path; ``forward.fit(...)`` is just the shortcut.
         """
         from tengri.inference.fitter import Fitter
+        from tengri.observation.data import Data as _Data
 
-        fitter = Fitter(self, data=data, noise=noise, approx=approx)
+        data_mask = None
+        if isinstance(data, _Data):
+            if noise is not None:
+                raise TypeError(
+                    "fit(Data, noise=...) is ambiguous: the Data "
+                    "record already carries its uncertainties."
+                )
+            v = data.validate_against(self.observation)
+            data_mask = v.censor
+            if v.spec_flux is not None and v.flux is not None:
+                kwargs.setdefault("photometry", (v.flux, v.noise))
+                kwargs.setdefault("spectrum", (v.spec_flux, v.spec_noise))
+                data, noise = None, None
+            elif v.spec_flux is not None:
+                data, noise = v.spec_flux, v.spec_noise
+            else:
+                data, noise = v.flux, v.noise
+            if v.line_values is not None:
+                # Route Data.lines through to the Fitter using schema wavelengths
+                # and per-galaxy values. Create a temporary Observation with the
+                # line_fluxes populated, keeping all wavelengths from schema.
+                # The cache key uses wavelengths (constant across fits), not values,
+                # so fits with the same schema reuse the compiled program.
+                lines_schema = getattr(self.observation, "lines", None)
+                if lines_schema is None:
+                    raise ValueError(
+                        "Data has lines but Observation.lines is not declared. "
+                        "Declare which lines with lines=LineList([...]) in the schema."
+                    )
+                # Extract wavelengths from schema for matching line names
+                line_names = tuple(sorted(v.line_values.keys()))
+                wavelengths = []
+                for name in line_names:
+                    # Find the wavelength in the schema
+                    try:
+                        idx = lines_schema.names.index(name)
+                        wavelengths.append(float(lines_schema.wavelengths[idx]))
+                    except (ValueError, AttributeError, TypeError) as e:
+                        raise ValueError(
+                            f"Line '{name}' in Data.lines not found in Observation.lines"
+                        ) from e
+                wavelengths_arr = jnp.asarray(wavelengths)
+
+                # Build LineFluxData with schema wavelengths and per-galaxy values
+                line_fluxes_arr = jnp.array([v.line_values[n][0] for n in line_names])
+                line_errors_arr = jnp.array([v.line_values[n][1] for n in line_names])
+
+                import dataclasses
+
+                from tengri.observation.line_flux_data import LineFluxData
+
+                temp_line_flux_data = LineFluxData(
+                    names=line_names,
+                    wavelengths=wavelengths_arr,
+                    fluxes=line_fluxes_arr,
+                    errors=line_errors_arr,
+                )
+
+                # Use dataclasses.replace to create a new Observation with the
+                # LineFluxData, keeping all other fields (including schema wavelengths).
+                obs_with_lines = dataclasses.replace(
+                    self.observation, line_fluxes=temp_line_flux_data
+                )
+
+                # Create a ForwardModel wrapper that overrides only the observation
+                # This avoids rebuilding the model, only changing the observation's data.
+                fwd_with_lines = dataclasses.replace(self, observation=obs_with_lines)
+
+                fitter = Fitter(
+                    fwd_with_lines, data=data, noise=noise, data_mask=data_mask, approx=approx
+                )
+                return fitter.run(method, key=key, **kwargs)
+
+        fitter = Fitter(self, data=data, noise=noise, data_mask=data_mask, approx=approx)
         return fitter.run(method, key=key, **kwargs)
 
     def _params_for_population(
