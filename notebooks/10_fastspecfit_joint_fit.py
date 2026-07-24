@@ -278,11 +278,12 @@ def timed_map(model, label):
     model.fit(flux_phot, n_phot, data_type="photometry", **MAP_KW)  # pays the JIT compile
     cold = time.perf_counter() - t0
     t0 = time.perf_counter()
-    # The compile cache is model-keyed, so a second fit on the same model reuses it.
+    # A second fit re-traces the step, so its wall time is ~= the first: the
+    # number that isolates the physics is post.wall_time_s below, not this one.
     post = model.fit(flux_phot, n_phot, data_type="photometry", **MAP_KW)
     warm = time.perf_counter() - t0
     loop = post.wall_time_s  # the compiled optimization loop, compile excluded
-    print(f"  {label:22s} run() wall {warm:5.2f}s   compiled step {loop:5.2f}s")
+    print(f"  {label:22s} fit() wall {warm:5.2f}s   compiled step {loop:5.2f}s")
     return post, cold, warm, loop
 
 
