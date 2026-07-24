@@ -929,8 +929,10 @@ class _CatalogFitterOriginal:
         # Per-galaxy presence masks (0/1) for heterogeneous catalogs; default to all-ones.
         # Use the same dtype as data for consistent numeric behavior under multiplication.
         all_presence_orig = jnp.stack(
-            [jnp.asarray(g.get("presence", np.ones(n_data)), dtype=all_data_orig.dtype)
-             for g in self.galaxies]
+            [
+                jnp.asarray(g.get("presence", np.ones(n_data)), dtype=all_data_orig.dtype)
+                for g in self.galaxies
+            ]
         )
         if n_pad_extra > 0:
             all_data = jnp.concatenate([all_data_orig, jnp.zeros((n_pad_extra, n_data))], axis=0)
