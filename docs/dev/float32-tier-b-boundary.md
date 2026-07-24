@@ -144,12 +144,46 @@ Document the choice in `src/tengri/forward/sed_model.py` and update `NAMING_CONT
 
 **Current behavior:** Mixed-precision inference falls back to float64 log-posterior reduction and gradient accumulation. Pure-float32 inference must compute gradients and Hessians in float32, causing convergence failure on high-dimensional SFH fits.
 
-**Tier B decision:** Likely restrict pure-float32 inference to robust methods:
-- MAP (gradient-free or robust second-order).
-- Laplace approximation (limited to ~20–30 parameters).
-- Robust VI (e.g., Student-t posterior, not Gaussian).
+**Measured (2026-07).** The feasibility study's prediction is confirmed, and the
+cause is now pinned precisely. Two layers:
 
-Document in `src/tengri/inference/context.py` or a new `docs/dev/inference-float32-guidance.md`: list inference backends compatible with pure float32 and their parameter count limits.
+**Layer 1 — the objective VALUE was silently wrong in float32, and it is now fixed.**
+Making the forward SED float32-safe is necessary but not sufficient for a fit: the
+photometry likelihood path carried three separate float32 underflows that a
+forward-only finiteness check never sees, because each fails to a silent *zero* or
+a *NaN*, not an `inf`. All three are now range-safe (`test_likelihood_float32.py`),
+identical in float64:
+
+| Seam | Was | Failure in float32 | Fix |
+|---|---|---|---|
+| Flux projection (`photometry.py`, `spectrum.py` ×2) | `flux_scale = lnu_to_fnu(1.0, …); flux_scale * L` | `flux_scale` ~1e-58 underflows against a peak of 1 → **every flux zero** | apply `lnu_to_fnu` to the ~1e30 `L_ν` so the offset folds into its peak |
+| Effective noise (`noise.py` ×2) | `sqrt(σ² + cal²)` | σ ~1e-30 → σ² ~1e-60 underflows → σ_eff = 0 → NaN residual | `jnp.hypot(σ, cal)` |
+| Gaussian χ² (`likelihoods/gaussian.py`) | `(d-μ)²/var` | both ~1e-56 and ~1e-60 underflow → `0/0 = NaN` | standardize `r = (d-μ)/σ_eff` **before** squaring |
+
+With these, the **neg-log-posterior value is finite in pure float32**.
+
+**Layer 2 — the GRADIENT is not, and this is fundamental, not a bug.** The backward
+pass spans ~100 decades: the cosmological dimming `(1+z)/(4π d_L²)` ~1e-58 at one end
+and the stellar mass scale `total_mass · L_sun` ~3.8e43 at the other. The *forward*
+value fits in float32 because the multiplies can be **ordered** to keep partial
+products small (`total_mass · ssp_flux` before `L_sun`). Autodiff's chain rule cannot:
+it produces intermediates at *every* partial-Jacobian scale, and no ordering keeps all
+~100 decades inside float32's ~76-decade window. A `custom_vjp` fixing the multiply
+order merely trades the overflow NaN for an *underflow zero* when the incoming cotangent
+is ~1e-58 (the photometry dimming) — a silently wrong gradient, which is worse.
+(Confirmed: the gradient is finite under `jax_debug_nans`, i.e. the unfused path
+reorders it into range, but the optimized fusion does not — and even the unfused path
+underflows the mass gradient to zero.)
+
+**Consequence:** pure-float32 *inference* (sampler under `jax.enable_x64(False)`) is not
+achievable for this forward model, for **every** gradient-based backend — MAP, Laplace,
+NUTS/HMC, and VI all need `grad(nlp)`. Pure float32 is for *prediction* (delivered:
+finite SED, photometry, and objective value). The path for a memory-efficient *fit* is
+**mixed precision** — `SEDModel(..., forward_dtype="float32")` with `jax_enable_x64=True`
+— which runs the forward in float32 (the memory win) and the gradient/sampler in float64
+(the range it needs). Verified 2026-07: mixed-precision MAP recovers the identical point
+estimate as full float64; f64 MAP and NUTS both recover the injected truth
+(log M = 10.03 ± 0.02).
 
 ---
 
@@ -168,7 +202,13 @@ Document in `src/tengri/inference/context.py` or a new `docs/dev/inference-float
 3. Linear-scale property unit changes (15 emission lines + AGN luminosities → L_sun or log10);
    includes retiring the transition-only linear `derived["nion"]` once its readers move to `log_nion`.
 4. ~~SKIRTOR interpolation dtype consistency.~~ **DONE**.
-5. Inference method restrictions (MAP, Laplace, robust VI only).
+5. ~~Inference method restrictions (MAP, Laplace, robust VI only).~~ **MEASURED (§6):** pure-float32
+   inference is not achievable for *any* gradient-based backend — the backward pass spans ~100
+   decades (dimming ~1e-58 → mass scale ~1e43), beyond float32's ~76-decade window, and no multiply
+   order fixes it. The three likelihood-path underflows (flux projection, noise quadrature, Gaussian
+   χ²) are fixed, so the objective *value* is finite in float32; the *gradient* is not. Memory-
+   efficient fitting is `forward_dtype="float32"` (forward float32, sampler float64), verified to give
+   the identical MAP as full float64.
 6. **Dust IR emission must consume `log_L_ir`** — the remaining blocker for end-to-end float32
    photometry. See "Remaining work" below.
 
