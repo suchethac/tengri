@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for #1120: components reachable from the build grammar.
 
 Components registered in _REGISTRY but absent from their axis menu are

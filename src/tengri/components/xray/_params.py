@@ -72,25 +72,6 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "(Asmus+2015 / Lopez+2024). Higher -> fainter X-ray. Ignored by yang20. "
         "Typical range 0.0-0.6.",
     ),
-    # AGN X-ray corona (agn_xray_corona component, #1307)
-    ParamDeclaration(
-        "agn_xray_gamma",
-        Uniform(1.4, 2.4, default=1.9),
-        "X-ray photon index",
-        units="dimensionless",
-    ),
-    ParamDeclaration(
-        "agn_xray_delta_alpha_ox",
-        Fixed(0.0),
-        "Offset on Just+2007 alpha_ox(L_2500)",
-        units="dex",
-    ),
-    ParamDeclaration(
-        "agn_xray_e_cut",
-        Fixed(300.0),
-        "High-energy cutoff",
-        units="keV",
-    ),
     # X-ray binary offsets (xray_aird component, #1307)
     ParamDeclaration(
         "xray_det_hmxb",
