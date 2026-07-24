@@ -122,6 +122,7 @@ class ForwardModel:
 
     populations: tuple[Population, ...]
     observation: Any
+    mode: str = "single"
 
     # ── Legacy-SEDModel delegations (for Fitter consumption) ─────────
     # The Fitter inner machinery (loss_fn, JIT compile, posterior
@@ -397,6 +398,7 @@ class ForwardModel:
         spatial: Any | None = None,
         population: Any | None = None,
         populations: Iterable[Population] | None = None,
+        mode: str | None = None,
         observation: Any | None = None,
     ) -> ForwardModel:
         """Construct a :class:`ForwardModel`.
@@ -505,7 +507,48 @@ class ForwardModel:
                 f"got duplicates {duplicates}."
             )
 
-        return cls(populations=pops, observation=observation)
+        # Validate and infer mode
+        valid_modes = ("single", "multi_population", "hierarchical")
+        if mode is not None and mode not in valid_modes:
+            raise ValueError(f"mode={mode!r} is not valid. Choose from: {', '.join(valid_modes)}")
+
+        # Infer mode based on which kwargs were provided
+        if populations is not None:
+            inferred_mode = "multi_population"
+        elif population is not None:
+            inferred_mode = "hierarchical"
+        else:
+            inferred_mode = "single"
+
+        # Check for hierarchical mode (reserved for #1319)
+        if mode == "hierarchical" and population is None:
+            raise NotImplementedError(
+                "mode='hierarchical' requires the #1319 shared= parameter "
+                "(not yet implemented). See issue #1319."
+            )
+
+        # Validate mode assertion
+        if mode is not None and mode != inferred_mode:
+            if mode == "multi_population":
+                raise ValueError(
+                    f"mode='multi_population' requires populations=... "
+                    f"(got {['sed=', 'population='][population is not None]}); "
+                    f"inferred mode would be {inferred_mode!r}"
+                )
+            else:
+                needed = {
+                    "single": "sed=",
+                    "hierarchical": "population=",
+                }[mode]
+                got_kwarg = ["sed=", "population=", "populations="][
+                    [sed is not None, population is not None, populations is not None].index(True)
+                ]
+                raise ValueError(
+                    f"mode={mode!r} requires {needed} (got {got_kwarg}); "
+                    f"inferred mode would be {inferred_mode!r}"
+                )
+
+        return cls(populations=pops, observation=observation, mode=inferred_mode)
 
     def predict(self, params: Mapping[str, Any]) -> Any:
         """Lazy :class:`~tengri.forward.prediction.Prediction` for derived quantities.
