@@ -227,6 +227,9 @@ The exact-op localization was the crux: `checkify` named the primitive
    works and is the CUDA path.
 6. **Dust IR emission must consume `log_L_ir`** — the remaining blocker for end-to-end float32
    photometry. See "Remaining work" below.
+7. ~~Radio SED must not materialize the linear `L_ir` / `L_agn_bol`.~~ **DONE** — log-threaded
+   luminosities (§7). One residual float32 limitation: the composable **multicolor** disc's
+   L_bol-dependent shape (§7), which also fixes a float64 regression the output-factoring introduced.
 
 Each fix is a distinct pull request with targeted tests. Coordinate the unit-change PRs (item 3) to avoid breaking the public API across multiple releases.
 
@@ -428,3 +431,82 @@ result = jnp.where(ok, apply_log10_scale(shape / safe, log_L_ir), 0.0)
 `tests/contract/test_dust_emission_l_ir_linearity.py` pins the proportionality per model and makes
 the one affine exemption earn itself, so a new non-proportional model fails loudly rather than
 silently returning wrong fluxes.
+
+---
+
+## Item 7 — radio: DELIVERED (log-threaded luminosities); one AGN disc-shape limitation
+
+### Radio SF / free-free / jet — the divide, not the answer
+
+Radio emission is small — the SF synchrotron reference luminosity is
+`L_ref ≈ 1e28` erg/s/Hz and the whole radio SED peaks ~1e29, both comfortably
+float32-representable. The overflow is entirely in the **inputs**: every kernel
+opens with a divide of a huge luminosity by a large constant —
+
+```
+L_ref = L_ir / (3.75e12 · 10^q_ir)      # FIR–radio correlation (bell/delvecchio/mccheyne)
+sfr   = L_ir / L_IR,sun                  # free-free (Kennicutt)
+L_B   = L_agn_bol / (BC_B · nu_B)        # AGN jet radio-loudness reference (fallback)
+```
+
+`L_ir ≈ 1e43` and `L_agn_bol ≈ 1e46` exceed float32 max (3.4e38), so they arrive
+as `inf` and `inf / finite = inf`. No multiply/divide reordering helps —
+`inf · tiny = inf`. And the FIR–radio relation is **non-linear** in `L_ir` (Bell
+2003 synchrotron suppression, `n(L)·L ∝ L_ir^1.3`), so the reference-luminosity +
+linear-rescale trick used elsewhere is invalid here — it cannot reproduce a
+non-linear scaling.
+
+**Fix (exact).** Thread the float32-safe log companions `log_L_ir` /
+`log_L_agn_bol` into the kernels and form the representable quotient directly:
+
+```python
+L_ref = pow10(log_L_ir - log10(3.75e12) - q_ir)   # ~1e28, never touches 1e43
+sfr   = pow10(log_L_ir - log10(L_IR_KENNICUTT))
+L_B   = pow10(log_L_agn_bol - log10(BC_B · nu_B))
+```
+
+The non-linear suppression then operates on the correct `L_ref`. Each kernel
+gained an optional `log_L_ir` / `log_L_agn_bol` keyword (default `None` → the
+exact linear path, so every existing caller and test is untouched); the radio
+component passes them only when `wave.dtype == float32`, so **float64 is
+bit-identical**. `radio_agn`'s `jnp.where(l_bband > 0, l_bband, fallback)` also
+had its dead branch made finite (the `inf` fallback poisoned the reverse pass
+with `0 · inf = nan`). New typed field `DerivedState.log_L_agn_bol` (canonical
+unit `dex`), published by the AGN component beside `L_agn_bol`.
+
+Pinned by `tests/regression/precision/test_radio_float32.py` (finite + f64-match
++ finite `grad(nlp)`, mutation-checked).
+
+### AGN multicolor-disc shape — a float64 regression the radio work uncovered
+
+Making radio finite exposed that the composable AGN's `L_4400_intrinsic` (the
+radio-loudness reference) was `6.9e-171` in float64 — physically ~2e28. The AGN
+float32 pass (`35f132ea9`, `8f08203c4`) output-factors the **whole** AGN SED by
+`10^agn_log_lbol`: evaluate every block at a reference `L_bol = 1e10` erg/s (in
+range) and re-apply the scale via `apply_log10_scale`. That is exact for
+shape-invariant blocks — the SKIRTOR **torus** template and the **power-law**
+disc scale linearly with `L_bol` (verified: factored-vs-true rel ≤ 1e-14). It is
+**invalid for the multicolor disc**, whose temperature rises with `L_bol`: its
+2500/4400 Å monochromatic luminosities are sub-linear (`L ∝ L_bol^~0.7`, ≈ ×4.8
+per dex, not ×10), so evaluating a *cold* reference disc (`L_bol = 1e10` → deep
+Wien suppression) and rescaling gives values ~200 decades too small and the wrong
+disc SED shape. Through `L_2500_intrinsic` this also silently corrupted X-ray
+`alpha_ox`.
+
+**Fix.** Evaluate the AGN at the **true** `agn_log_lbol` in float64 (the
+reference implementation — bit-identical to pre-#1206 main for every disc type;
+no `apply_log10_scale` at all) and reserve the reference factoring for float32
+only (`_use_ref = wave.dtype == float32`). This restores float64 correctness for
+all disc types.
+
+Pinned by `tests/regression/precision/test_agn_lbol_shape_dependence.py`
+(mutation-checked): `L_4400`/`L_2500` physical, multicolor sub-linear (~×4.8),
+power-law control linear (×10).
+
+**Remaining float32 limitation.** In float32 the multicolor disc still uses the
+(invalid) factoring, so radio + multicolor-disc AGN is approximate there
+(`L_4400_intrinsic` underflows to 0, flipping the jet's `where` branch).
+Torus-only and power-law-disc AGN + radio are exact in float32. A fully exact
+float32 multicolor disc needs the internal CIGALE-joint bolometric integrals
+(`trapz(L_torus)` / `trapz(L_disc)` ~ `L_bol` at `blocks/runner.py:654–661`)
+log-spaced so the true-`log_lbol` evaluation stays in range — a #1206 follow-up.
