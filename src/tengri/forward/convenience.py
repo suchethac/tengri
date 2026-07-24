@@ -505,6 +505,12 @@ def fit_batch(
         from tengri.inference.catalog import Catalog
 
         fwd = ForwardModel.build(sed=model)
+        # Forward an explicit approx= (the legacy loop passed it to every Fitter).
+        # "auto" is the default and Catalog/Fitter already resolve it, so only a
+        # non-default value needs applying — dropping it would silently change the
+        # fit's approximation policy.
+        if approx != "auto":
+            fwd = fwd.with_approx(approx)
         band_names = list(fwd.observation.photometry.names)
         if len(flux_cols) != len(band_names) or len(err_cols) != len(band_names):
             raise ValueError(
@@ -530,7 +536,9 @@ def fit_batch(
         fit_key = kwargs.pop("key", None)
         if fit_key is None:
             fit_key = jax.random.PRNGKey(0)
-        post = cat.fit(method=method, key=fit_key, **kwargs)
+        # Forward verbose so fit_batch(verbose=False) still silences progress
+        # (the engine's per-galaxy "N galaxies done" line honors it).
+        post = cat.fit(method=method, key=fit_key, verbose=verbose, **kwargs)
         return list(post.posteriors)
 
     if output_dir is not None:
