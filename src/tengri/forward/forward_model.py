@@ -950,11 +950,13 @@ class ForwardModel:
         return fitter.run(method, key=key, **kwargs)
 
     def prewarm(self, *, data_shape=None, method: str = "mcmc_nuts", **kwargs):
-        """Pre-compile JIT kernels and populate the inference adaptation cache.
+        """Pre-compile the JIT kernels for ``method`` against this model's shape.
 
         After this returns, a subsequent :meth:`fit` call with the same
-        ``method`` skips XLA compilation **and** sampler warmup window
-        adaptation — only the actual sampling work remains.
+        ``method`` skips XLA compilation. It still runs its own sampler warmup
+        adaptation on the real data: the dummy (zeros) data used here would give a
+        meaningless step size / mass matrix, so that adaptation is discarded and
+        only the value-independent compile is kept.
 
         Parameters
         ----------
@@ -1004,21 +1006,35 @@ class ForwardModel:
             else:
                 data_shape = None
 
-        # Create dummy data and noise (zeros — value-independent)
-        if data_shape is not None:
-            data = jnp.zeros(data_shape)
-            noise = jnp.ones(data_shape)
-        else:
-            data = None
-            noise = None
+        # Without a data shape (e.g. a hierarchical model with no top-level
+        # photometry) there is nothing to build a dummy Fitter against — passing
+        # data=None would crash. Skip rather than raise: prewarm is a best-effort
+        # optimization.
+        if data_shape is None:
+            return
 
-        # Build Fitter with dummy data and call its prewarm
-        fitter = Fitter(
-            self,
-            data=data,
-            noise=noise,
-        )
+        # Dummy data (zeros). The XLA compile is value-independent, but the
+        # sampler *adaptation* (step size + mass matrix) is NOT — a warmup on
+        # zeros produces geometry tuned to a meaningless posterior. We keep the
+        # compile and DROP that adaptation below so a real fit re-adapts.
+        data = jnp.zeros(data_shape)
+        noise = jnp.ones(data_shape)
+
+        # Build Fitter with dummy data and call its prewarm (compiles kernels
+        # AND writes a per-model adaptation entry keyed structurally on shape).
+        fitter = Fitter(self, data=data, noise=noise)
         fitter.prewarm(method=method, **kwargs)
+
+        # Discard the zeros-data adaptation so a subsequent real fit with the same
+        # shape does not silently reuse it (wrong mass matrix → degraded sampling,
+        # divergence risk). The XLA compile persists in the JAX cache; only the
+        # value-dependent adaptation half is dropped.
+        try:
+            from tengri.inference._model_cache import _default_owner
+
+            _default_owner.get_or_compile_model(self).get("adaptation", {}).clear()
+        except Exception:
+            pass
 
     def _params_for_population(
         self,

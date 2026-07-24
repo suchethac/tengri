@@ -7,6 +7,7 @@ Tests the surface-derived cache policy contract and the lean= deprecation path.
 import warnings
 
 import jax.numpy as jnp
+import pytest
 
 from tengri import ForwardModel, SEDModel, recipes
 
@@ -122,4 +123,63 @@ class TestForwardPrewarm:
             Fitter(fwd, data=data, noise=noise).run("map", n_steps=5, lean=True)
         assert keep_sigs and keep_sigs[-1] is None, (
             f"lean=True should derive 'sweep' (keep_sig=None), got {keep_sigs[-1]!r}"
+        )
+
+    def test_persistent_mode_keeps_everything_no_clear(
+        self, monkeypatch, synthetic_ssp_wide, synthetic_tophat_obs
+    ):
+        """persistent() must derive the 'persistent' policy — NO cache clear at all.
+
+        Regression: it was silently remapped to 'iterate' (identical to the
+        default), making the context manager a no-op despite promising to keep
+        every cached artefact. Under persistent(), clear_shared_caches must not
+        be called.
+        """
+        import warnings
+
+        import tengri.inference.jit_engine as je
+        from tengri import persistent
+        from tengri.inference.fitter import Fitter
+
+        sed = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=synthetic_tophat_obs,
+            **recipes.star_forming_photometry(),
+        )
+        fwd = ForwardModel.build(sed=sed)
+        calls = []
+        orig = je.clear_shared_caches
+        monkeypatch.setattr(
+            je, "clear_shared_caches", lambda *a, **k: (calls.append(1), orig(*a, **k))[1]
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            with persistent():
+                Fitter(fwd, data=jnp.ones(5), noise=jnp.ones(5) * 0.1).run("map", n_steps=3)
+        assert calls == [], "persistent() must not clear the cache (it was a no-op before)"
+
+    @pytest.mark.slow
+    def test_prewarm_does_not_poison_adaptation_cache(
+        self, synthetic_ssp_wide, synthetic_tophat_obs
+    ):
+        """ForwardModel.prewarm must NOT leave zeros-data adaptation in the cache.
+
+        Regression: prewarm ran a warmup on dummy zeros data and cached the step
+        size / mass matrix keyed structurally, so a real fit with the same shape
+        silently reused the wrong geometry. The compile is kept; the adaptation
+        must be dropped.
+        """
+        from tengri.inference._model_cache import _default_owner
+
+        sed = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=synthetic_tophat_obs,
+            **recipes.star_forming_photometry(),
+        )
+        fwd = ForwardModel.build(sed=sed)
+        fwd.prewarm(method="mcmc_nuts")
+        adaptation = _default_owner.get_or_compile_model(fwd).get("adaptation", {})
+        assert len(adaptation) == 0, (
+            f"prewarm left {len(adaptation)} adaptation entrie(s) from dummy zeros data; "
+            "a real fit would reuse the wrong geometry."
         )

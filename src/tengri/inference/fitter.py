@@ -2198,7 +2198,11 @@ class Fitter:
             else:
                 # Derive from context (persistent/lean/default)
                 if _is_persistent_mode():
-                    _cache_policy = "iterate"  # Keep all non-matching entries
+                    # persistent() promises to keep ALL cached artefacts, including
+                    # non-matching L3 entries — a distinct policy, NOT "iterate"
+                    # (which drops stale non-matching entries). Mapping it to
+                    # "iterate" made persistent() a silent no-op.
+                    _cache_policy = "persistent"
                 elif _is_lean_mode():
                     _cache_policy = "sweep"  # Drop all stale entries
                 else:
@@ -2226,6 +2230,11 @@ class Fitter:
             # logdensity caches are preserved unconditionally at this
             # scope.
             _clear_shared_caches(scope="inference_body", keep_sig=self._lean_keep_sig)
+        elif _cache_policy == "persistent":
+            # persistent(): keep EVERYTHING — no L3 clear at all, even
+            # non-matching stale entries. This is what the context manager /
+            # TENGRI_PERSISTENT promise, and it is distinct from "iterate".
+            pass
 
         # --- Merge TOML method-specific defaults (caller kwargs win) ---
         try:
