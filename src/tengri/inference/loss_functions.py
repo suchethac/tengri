@@ -42,7 +42,16 @@ def _unstandardize_parameters(params_unbounded, spec, free_names, fixed_values, 
     for name, val in fixed_values.items():
         params[name] = val
     if stochastic and "psd_xi" in params_unbounded:
+        # Publish under BOTH names. The sampler's vector keys the GP latents
+        # ``psd_xi``, but ``StellarSEDComponent`` reads ``sfh_field_xi`` and
+        # silently falls back to ``jnp.zeros(n_grid)`` when it is absent
+        # (components/stellar/component.py). Attaching only ``psd_xi`` therefore
+        # pinned the GP field to zero for the whole fit: no exception, no
+        # warning, just exp(0 - K0/2) = constant and a likelihood with exactly
+        # zero gradient w.r.t. the latents. The burstiness degrees of freedom
+        # were sampled from their prior and never reached the SED.
         params["psd_xi"] = params_unbounded["psd_xi"]
+        params["sfh_field_xi"] = params_unbounded["psd_xi"]
     return spec.resolve_mirrors(params)
 
 

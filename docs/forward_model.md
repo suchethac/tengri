@@ -6,7 +6,8 @@ Tengri's forward model is split into two clearly separated layers.
 ┌─────────────────────────────────────────────────────────┐
 │  Inference (Fitter / MAP / NUTS / VI / …)               │
 │  Entry point: ForwardModel.fit(data, noise, method).    │
-│  Talks to the model only through .predict(params).      │
+│  Hot path is .predict_photometry(params); .predict()    │
+│  is the rich, exploratory surface (bypasses the LUT).   │
 └────────────────────────┬────────────────────────────────┘
                          ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -47,7 +48,7 @@ standard ``Fitter`` pipeline underneath.
 
 ```python
 import tengri
-from tengri import FIXED, Fitter, ForwardModel, Parameters, SEDModel
+from tengri import FIXED, ForwardModel, SEDModel
 
 ssp = tengri.load_ssp_data()
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r"]))
@@ -65,9 +66,10 @@ sed = SEDModel.build(
 # 2. Wrap it in the outer shell.
 forward = ForwardModel.build(sed=sed, observation=obs)
 
-# 3. Hand to inference.
-fitter = Fitter(forward, data=photometry_array, noise=noise_array)
-posterior = fitter.run("map")
+# 3. Hand to inference. `forward.fit` is the canonical entry point;
+#    `Fitter(forward, data, noise).run("map")` is the same thing one
+#    layer down, for when you need to reach the engine directly.
+posterior = forward.fit(photometry_array, noise_array, method="map")
 posterior.summary()
 ```
 
@@ -205,13 +207,12 @@ gradient-traceable, and batchable through `vmap`.
 
 | Notebook | Focus |
 |----------|-------|
-| [`00_quickstart`](../spine/00_quickstart) | One-screen end-to-end fit |
-| [`02_sed_anatomy`](../spine/02_sed_anatomy) | The panchromatic SED, component by component |
-| [`04_building_models`](../spine/04_building_models) | Building models with `Parameters`; swapping SFH families, dust laws, IR templates |
-| [`05_fitting_photometry`](../spine/05_fitting_photometry) | Photometry-only MAP/NUTS fits |
-| [`06_fitting_spectroscopy`](../spine/06_fitting_spectroscopy) | Spectroscopy-only fits with calibration |
-| [`07_joint_photo_spec`](../spine/07_joint_photo_spec) | Combining photometry and spectroscopy in one likelihood |
-| [`08_emission_lines`](../spine/08_emission_lines) | Nebular line fluxes, BPT diagnostics, Hα-derived SFR |
+| [`00_quickstart`](spine/00_quickstart) | One-screen end-to-end fit, including a photometry MAP/NUTS fit and its posterior |
+| [`02_sed_anatomy`](spine/02_sed_anatomy) | The panchromatic SED, component by component |
+| [`04_building_models`](spine/04_building_models) | Building models with the nested-dict grammar; swapping SFH families, dust laws, IR templates |
+| [`06_fitting_spectroscopy`](spine/06_fitting_spectroscopy) | Spectroscopy-only fits with calibration |
+| [`07_joint_photo_spec`](spine/07_joint_photo_spec) | Combining photometry and spectroscopy in one likelihood |
+| [`11_catalog_fits`](spine/11_catalog_fits) | Fitting a catalog of galaxies |
 
 The pedagogical order in the spine is *SFH → dust → nebular → AGN →
 multi-wavelength*, which mirrors the order of decisions a user typically

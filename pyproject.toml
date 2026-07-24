@@ -55,7 +55,7 @@ Issues = "https://github.com/suchethac/tengri/issues"
 tengri = "tengri.cli:main"
 
 [project.optional-dependencies]
-nuts = ["blackjax>=1.0"]
+nuts = ["blackjax>=1.6"]
 optax = ["optax>=0.2"]
 # Grain-model attenuation laws (wd01_*, d03_*, hd23_*) wrap the
 # dust-extinction package rather than reimplementing the profiles.
@@ -70,7 +70,7 @@ grain-dust = ["dust-extinction>=1.0"]
 gpu = ["jax[cuda12]>=0.4.20"]
 metal = ["jax-metal>=0.1.0"]
 all = [
-    "blackjax>=1.0",
+    "blackjax>=1.6",
     "optax>=0.2",
     # Grain-model attenuation laws (wd01_*, d03_*, hd23_*) need this; without
     # it those laws raise ImportError at predict time, so "[all]" must ship it.
@@ -96,7 +96,7 @@ dev = [
     # pytest still hits them via tests in test_map_*.py etc. Bundle into dev
     # so CI green. Not propagated to runtime install for end users.
     "optax>=0.2",
-    "blackjax>=1.0",
+    "blackjax>=1.6",
     "jaxopt>=0.8",
     # Required by tests/unit/test_physical_amplitudes.py for grain-model dust
     # laws (D03/HD23/WD01). Runtime imports inside attenuation.py are guarded,

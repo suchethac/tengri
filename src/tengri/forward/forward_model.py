@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.forward.population import Population
 from tengri.inference._backend_registry import DEFAULT_METHOD
@@ -28,6 +29,24 @@ from tengri.protocols.component import ForwardState
 from tengri.protocols.derived_state import DerivedState
 
 __all__ = ["ForwardModel"]
+
+
+def _filters_fingerprint(obs):
+    """Compute content-hash of filter transmission curves.
+
+    Parameters
+    ----------
+    obs : object
+        Observation model with optional ``.photometry`` attribute.
+
+    Returns
+    -------
+    int or None
+        Hash of filter transmission curves, or None if obs has no photometry.
+    """
+    if obs is None or not hasattr(obs, "photometry") or obs.photometry is None:
+        return None
+    return hash(tuple(np.asarray(t).tobytes() for t in obs.photometry.filter_trans))
 
 
 @dataclass(frozen=True)
@@ -103,6 +122,7 @@ class ForwardModel:
 
     populations: tuple[Population, ...]
     observation: Any
+    mode: str = "single"
 
     # ── Legacy-SEDModel delegations (for Fitter consumption) ─────────
     # The Fitter inner machinery (loss_fn, JIT compile, posterior
@@ -160,6 +180,68 @@ class ForwardModel:
         return bool(
             getattr(self._inner_sed_for_delegation(), "has_fixedz_photometry_precompute", False)
         )
+
+    # ── Inner-SED delegation (#1300) ─────────────────────────────────
+    #
+    # ForwardModel is the canonical inference surface (#211) but has no
+    # ``__getattr__`` fall-through — it forwards through an explicit list. The
+    # inference stack does ``model = fitter.model`` and then calls SEDModel
+    # methods on it, so anything absent from that list raised AttributeError:
+    # the DEPRECATED ``Fitter(sed_model, ...)`` path worked and the recommended
+    # one did not. A sweep of ``src/tengri/inference`` for ``model.<attr>``
+    # found twelve such methods, reached from loss_functions, jit_engine,
+    # fitter, posterior and _sample_utils.
+    #
+    # Forwarding is semantically correct for a SINGLE population: the JIT cache
+    # is keyed on ``compile_signature()`` rather than object identity, and the
+    # ``*_via_state`` pair runs the component chain against the SED's own
+    # observation. It is NOT correct for a multi-population forward, where
+    # ``populations[0]`` is an arbitrary pick — those raise instead.
+
+    _DELEGATED_TO_INNER_SED = (
+        "_has_line_catalog",
+        "measure_line_fluxes",
+        "_get_or_build_predict_observables_jit",
+        "_photometry_via_state",
+        "_spectrum_via_state",
+        "_predict_derived",
+        "_predict_rest_sed",
+        "_predict_sfh_quantities",
+        "_template_data_for_jit",
+        "mock",
+        "name",
+        "predict_observables_jit",
+        "predict_properties",
+    )
+
+    def _single_inner_sed(self, what: str):
+        """Inner SED for a delegation that only makes sense for one population.
+
+        Raises rather than silently answering for ``populations[0]``: picking an
+        arbitrary population would fail open, which is the shape of #1271.
+        """
+        if len(self.populations) != 1:
+            raise NotImplementedError(
+                f"{type(self).__name__}.{what} delegates to a single inner SED, but this "
+                f"ForwardModel holds {len(self.populations)} populations. Call it on the "
+                f"population you mean (e.g. forward.populations[i].sed.{what})."
+            )
+        return self._inner_sed_for_delegation()
+
+    def _has_line_catalog(self) -> bool:
+        """Whether the nebular backend publishes a discrete line catalog.
+
+        ``loss_functions`` calls this whenever the observation carries line
+        fluxes, to choose between *predicting* lines (photoionization backends)
+        and *measuring* them off the spectrum (wNE / shock).
+        """
+        fn = getattr(self._single_inner_sed("_has_line_catalog"), "_has_line_catalog", None)
+        return bool(fn()) if callable(fn) else False
+
+    @property
+    def available_properties(self):
+        """Derived-property catalog of the inner SED. Delegated (#1300)."""
+        return self._single_inner_sed("available_properties").available_properties
 
     @property
     def hybrid(self):
@@ -316,7 +398,8 @@ class ForwardModel:
         spatial: Any | None = None,
         population: Any | None = None,
         populations: Iterable[Population] | None = None,
-        observation: Any,
+        mode: str | None = None,
+        observation: Any | None = None,
     ) -> ForwardModel:
         """Construct a :class:`ForwardModel`.
 
@@ -355,8 +438,8 @@ class ForwardModel:
         populations : iterable of Population, optional
             Explicit population list for galaxy decompositions.
             Mutually exclusive with ``sed`` and ``population``.
-        observation : object
-            Observation model.
+        observation : object, optional
+            Observation model. Inherited from ``sed`` when omitted.
 
         Returns
         -------
@@ -375,6 +458,30 @@ class ForwardModel:
                 "ForwardModel.build(spatial=...) requires sed=... too. "
                 "Use populations=[...] for explicit pairing."
             )
+        # Resolve observation: inherit from sed if omitted
+        if observation is None:
+            if sed is None:
+                raise TypeError(
+                    "ForwardModel.build(populations=...)/(population=...) requires "
+                    "observation=... explicitly (no single sed to inherit from)."
+                )
+            observation = getattr(sed, "observation", None)
+            if observation is None:
+                raise TypeError("ForwardModel.build needs observation=... (the sed carries none).")
+        elif sed is not None:
+            sed_obs = getattr(sed, "observation", None)
+            if (
+                sed_obs is not None
+                and _filters_fingerprint(sed_obs) != _filters_fingerprint(observation)
+                and getattr(sed, "_approx", {}).get("wave_precomp")
+            ):
+                raise ValueError(
+                    "This sed carries a WavePrecomp LUT integrated against different "
+                    "filters than the observation passed to ForwardModel.build — its "
+                    "photometry would be silently wrong (#1315). Rebuild the sed with "
+                    "this observation, or build it without approx=."
+                )
+
         provided = sum(x is not None for x in (sed, population, populations))
         if provided != 1:
             raise ValueError(
@@ -400,7 +507,48 @@ class ForwardModel:
                 f"got duplicates {duplicates}."
             )
 
-        return cls(populations=pops, observation=observation)
+        # Validate and infer mode
+        valid_modes = ("single", "multi_population", "hierarchical")
+        if mode is not None and mode not in valid_modes:
+            raise ValueError(f"mode={mode!r} is not valid. Choose from: {', '.join(valid_modes)}")
+
+        # Infer mode based on which kwargs were provided
+        if populations is not None:
+            inferred_mode = "multi_population"
+        elif population is not None:
+            inferred_mode = "hierarchical"
+        else:
+            inferred_mode = "single"
+
+        # Check for hierarchical mode (reserved for #1319)
+        if mode == "hierarchical" and population is None:
+            raise NotImplementedError(
+                "mode='hierarchical' requires the #1319 shared= parameter "
+                "(not yet implemented). See issue #1319."
+            )
+
+        # Validate mode assertion
+        if mode is not None and mode != inferred_mode:
+            if mode == "multi_population":
+                raise ValueError(
+                    f"mode='multi_population' requires populations=... "
+                    f"(got {['sed=', 'population='][population is not None]}); "
+                    f"inferred mode would be {inferred_mode!r}"
+                )
+            else:
+                needed = {
+                    "single": "sed=",
+                    "hierarchical": "population=",
+                }[mode]
+                got_kwarg = ["sed=", "population=", "populations="][
+                    [sed is not None, population is not None, populations is not None].index(True)
+                ]
+                raise ValueError(
+                    f"mode={mode!r} requires {needed} (got {got_kwarg}); "
+                    f"inferred mode would be {inferred_mode!r}"
+                )
+
+        return cls(populations=pops, observation=observation, mode=inferred_mode)
 
     def predict(self, params: Mapping[str, Any]) -> Any:
         """Lazy :class:`~tengri.forward.prediction.Prediction` for derived quantities.
@@ -653,6 +801,7 @@ class ForwardModel:
         *,
         approx: Any = "auto",
         key: Any = None,
+        params: dict[str, Any] | None = None,
         **kwargs: Any,
     ):
         """Run inference. Canonical convenience entry point.
@@ -664,12 +813,13 @@ class ForwardModel:
 
         Parameters
         ----------
-        data : array, optional
-            Observed flux (photometry / spectroscopy). Optional for
-            hierarchical fits where the per-galaxy data lives on the
-            :class:`PopulationSEDModel`.
+        data : array_like or Data, optional
+            Observed flux (photometry / spectroscopy) or a :class:`Data`
+            record. Optional for hierarchical fits where the per-galaxy data
+            lives on the :class:`PopulationSEDModel`.
         noise : array, optional
-            1-sigma uncertainties matching ``data``.
+            1-sigma uncertainties matching ``data``. Must be ``None`` if
+            ``data`` is a :class:`Data` record.
         method : str, default ``"vi"``
             Inference method. Any value accepted by
             :meth:`Fitter.run` (``"vi"``, ``"mcmc_nuts"``, ``"map"``,
@@ -685,6 +835,14 @@ class ForwardModel:
             unchanged; the returned posterior references the fit clone.
         key : jax.random.PRNGKey, optional
             Inference seed.
+        params : dict, optional
+            Per-fit parameter override dict. Keys that name fixed parameters
+            (not free) will override their values for this fit only; the model
+            object is left unchanged. Useful for catalog-fitting with per-galaxy
+            fixed values (e.g. ``params={"redshift": z_i}``). Keys must name
+            valid parameters (raise ``ValueError`` if not); keys naming free
+            parameters raise ``ValueError`` (you cannot pin a parameter being fit).
+            Default ``None`` (no override).
         **kwargs : Any
             Forwarded to :meth:`Fitter.run` (e.g. ``prewarm=`` — JIT-compile the
             loss/sampler/predict surface before the fit loop, default ``True``).
@@ -701,8 +859,94 @@ class ForwardModel:
         low-level path; ``forward.fit(...)`` is just the shortcut.
         """
         from tengri.inference.fitter import Fitter
+        from tengri.observation.data import Data as _Data
 
-        fitter = Fitter(self, data=data, noise=noise, approx=approx)
+        data_mask = None
+        if isinstance(data, _Data):
+            if noise is not None:
+                raise TypeError(
+                    "fit(Data, noise=...) is ambiguous: the Data "
+                    "record already carries its uncertainties."
+                )
+            v = data.validate_against(self.observation)
+            data_mask = v.censor
+            if v.spec_flux is not None and v.flux is not None:
+                kwargs.setdefault("photometry", (v.flux, v.noise))
+                kwargs.setdefault("spectrum", (v.spec_flux, v.spec_noise))
+                data, noise = None, None
+            elif v.spec_flux is not None:
+                data, noise = v.spec_flux, v.spec_noise
+            else:
+                data, noise = v.flux, v.noise
+            if v.line_values is not None:
+                # Route Data.lines through to the Fitter using schema wavelengths
+                # and per-galaxy values. Create a temporary Observation with the
+                # line_fluxes populated, keeping all wavelengths from schema.
+                # The cache key uses wavelengths (constant across fits), not values,
+                # so fits with the same schema reuse the compiled program.
+                lines_schema = getattr(self.observation, "lines", None)
+                if lines_schema is None:
+                    raise ValueError(
+                        "Data has lines but Observation.lines is not declared. "
+                        "Declare which lines with lines=LineList([...]) in the schema."
+                    )
+                # Extract wavelengths from schema for matching line names
+                line_names = tuple(sorted(v.line_values.keys()))
+                wavelengths = []
+                for name in line_names:
+                    # Find the wavelength in the schema
+                    try:
+                        idx = lines_schema.names.index(name)
+                        wavelengths.append(float(lines_schema.wavelengths[idx]))
+                    except (ValueError, AttributeError, TypeError) as e:
+                        raise ValueError(
+                            f"Line '{name}' in Data.lines not found in Observation.lines"
+                        ) from e
+                wavelengths_arr = jnp.asarray(wavelengths)
+
+                # Build LineFluxData with schema wavelengths and per-galaxy values
+                line_fluxes_arr = jnp.array([v.line_values[n][0] for n in line_names])
+                line_errors_arr = jnp.array([v.line_values[n][1] for n in line_names])
+
+                import dataclasses
+
+                from tengri.observation.line_flux_data import LineFluxData
+
+                temp_line_flux_data = LineFluxData(
+                    names=line_names,
+                    wavelengths=wavelengths_arr,
+                    fluxes=line_fluxes_arr,
+                    errors=line_errors_arr,
+                )
+
+                # Use dataclasses.replace to create a new Observation with the
+                # LineFluxData, keeping all other fields (including schema wavelengths).
+                obs_with_lines = dataclasses.replace(
+                    self.observation, line_fluxes=temp_line_flux_data
+                )
+
+                # Create a ForwardModel wrapper that overrides only the observation
+                # This avoids rebuilding the model, only changing the observation's data.
+                fwd_with_lines = dataclasses.replace(self, observation=obs_with_lines)
+
+                fitter = Fitter(
+                    fwd_with_lines,
+                    data=data,
+                    noise=noise,
+                    data_mask=data_mask,
+                    approx=approx,
+                    params_override=params,
+                )
+                return fitter.run(method, key=key, **kwargs)
+
+        fitter = Fitter(
+            self,
+            data=data,
+            noise=noise,
+            data_mask=data_mask,
+            approx=approx,
+            params_override=params,
+        )
         return fitter.run(method, key=key, **kwargs)
 
     def _params_for_population(
@@ -806,3 +1050,37 @@ def _linear_flux_sum(
             total = total + c
         summed[key] = total
     return summed
+
+
+def _install_inner_sed_delegations() -> None:
+    """Attach the method delegations named in ``ForwardModel._DELEGATED_TO_INNER_SED``.
+
+    Generated from the tuple rather than written out thirteen times, so the
+    declared list and the installed methods cannot drift apart — that drift is
+    what produced #1300 in the first place. ``_has_line_catalog`` and
+    ``available_properties`` are defined explicitly on the class (one coerces to
+    bool, the other is a property) and are skipped here.
+    """
+    explicit = {"_has_line_catalog", "available_properties"}
+
+    def _make(name: str):
+        def _delegated(self, *args, **kwargs):
+            return getattr(self._single_inner_sed(name), name)(*args, **kwargs)
+
+        _delegated.__name__ = name
+        _delegated.__qualname__ = f"ForwardModel.{name}"
+        _delegated.__doc__ = (
+            f"Delegated to the inner SEDModel's ``{name}`` (#1300).\n\n"
+            "The inference stack calls this on ``fitter.model``, which is a\n"
+            "ForwardModel on the canonical path. Raises for multi-population\n"
+            "forwards rather than answering for an arbitrary population."
+        )
+        return _delegated
+
+    for name in ForwardModel._DELEGATED_TO_INNER_SED:
+        if name in explicit or name in vars(ForwardModel):
+            continue
+        setattr(ForwardModel, name, _make(name))
+
+
+_install_inner_sed_delegations()

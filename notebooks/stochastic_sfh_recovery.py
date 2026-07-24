@@ -100,7 +100,10 @@ def silence():
         os.close(o2)
 
 
-warnings.filterwarnings("ignore", message=r".*Fitter\(sed_model.*deprecated.*")
+# NOTE: this file used to silence the "Fitter(sed_model, ...) is deprecated"
+# warning here. It now uses the canonical ForwardModel surface instead, so the
+# filter is gone -- suppressing that message is what kept the deprecated call
+# invisible through several rewrites.
 # age_gyr=12 at z=0.1 forms ~1% of mass just before the Big Bang (truncated); benign here.
 warnings.filterwarnings("ignore", message=r".*before the Big Bang.*")
 
@@ -115,8 +118,8 @@ from pathlib import Path
 import tengri
 from tengri import (
     FREE,
-    Fitter,
     Fixed,
+    ForwardModel,
     NoiseModel,
     Observation,
     Photometry,
@@ -415,20 +418,45 @@ lfd = LineFluxData(
     wavelengths=line_template.wavelengths,
 )
 model_fit = build(lfd, n_grid=N_GRID)
-fitter = Fitter(model_fit, g["flux_phot"], g["noise_phot"])
+# Inference is canonically through ForwardModel (issue #211); passing a bare
+# SEDModel to Fitter is deprecated.
+forward = ForwardModel.build(sed=model_fit, observation=model_fit.observation)
 
+# MAP budget: 10 000 steps, not 2 000. A budget scan on this exact problem gives
+# chi2/N = 3.63 at 2 000 steps and 1.21 at 10 000, against 1.41 at the truth --
+# so the shorter budget stops well short of the mode and reads as a bad fit.
+# 30 000 steps and 16 restarts change nothing (1.22), so 10 000 is the plateau.
 t0 = time.perf_counter()
-result_map = fitter.run(
-    method="map", n_steps=2000, n_restarts=6, key=jax.random.PRNGKey(0), verbose=False
+result_map = forward.fit(
+    g["flux_phot"],
+    g["noise_phot"],
+    method="map",
+    n_steps=10_000,
+    n_restarts=6,
+    key=jax.random.PRNGKey(0),
+    verbose=False,
 )
 t_map = time.perf_counter() - t0
 
 t0 = time.perf_counter()
-result_hmc = fitter.run(
+result_hmc = forward.fit(
+    g["flux_phot"],
+    g["noise_phot"],
     method="mcmc_hmc",
     init_from=result_map,
-    n_warmup=400,
-    n_samples=300,
+    # Budget: HMC cost is (n_warmup + n_samples) x n_leapfrog_steps x n_chains
+    # objective evaluations, ~2.7 ms each here -> 800+600 at L=100 is ~20 min on a
+    # laptop CPU, plus ~6 for the MAP above. The original 400/300 was too short to
+    # trust at D=25; 1500/1000 measured 39 min, more than a demonstration warrants.
+    # L=100 is deliberate — the default L=10 under-explores this posterior.
+    #
+    # Convergence here is limited by GEOMETRY, not budget: the non-centering
+    # gp_x = cholesky(cov(sigma, tau)) @ xi rotates with psd_tau, so the curvature
+    # is position-dependent and one global dense mass matrix cannot represent it.
+    # Expect R-hat ~1.1 and a nonzero divergence count however long this runs
+    # (#1301). Read the recovery values; do not quote the uncertainties.
+    n_warmup=800,
+    n_samples=600,
     n_leapfrog_steps=100,
     dense_mass_matrix=True,
     key=jax.random.PRNGKey(1),
@@ -499,10 +527,57 @@ t_true = np.asarray(sfh_true["t_gyr"])
 sfr_true = np.asarray(sfh_true["sfr_full"])
 sfr_mean_true = np.asarray(sfh_true["sfr_mean"])
 
-# Coverage diagnostics.
-cov68 = float(np.mean((sfr_true >= lo68) & (sfr_true <= hi68)))
-cov95 = float(np.mean((sfr_true >= lo95) & (sfr_true <= hi95)))
-print(f"SFH coverage: 68% band {cov68:.2f},  95% band {cov95:.2f}")
+# Coverage diagnostics — on the NATIVE log-age grid, not the curves plotted above.
+#
+# `predict_sfh` defaults to a uniform LINEAR-time resampling for plotting. Scoring
+# on it silently reweights the answer: the step is age_max/n_linear = 13.8 Myr, so
+# of the 37 samples inside the recent 0.5 Gyr only 2 land below 15 Myr, while 5 of
+# the 16 log-age nodes do. Every megayear then counts equally and 15-500 Myr swamps
+# the young bins. Coverage over NODES is coverage over the model's actual degrees
+# of freedom; coverage over resampled points counts interpolated duplicates.
+sfh_nod = model_fit.predict_sfh(truth_full, grid="native")
+t_nod = np.asarray(sfh_nod["t_gyr"])
+sfr_true_nod = np.asarray(sfh_nod["sfr_full"])
+draws_nod = np.array(
+    [
+        np.asarray(model_fit.predict_sfh(draw_params(i), grid="native")["sfr_full"])
+        for i in range(n_total)
+    ]
+)
+lo68n, hi68n = np.percentile(draws_nod, [16, 84], axis=0)
+lo95n, hi95n = np.percentile(draws_nod, [2.5, 97.5], axis=0)
+cov68 = float(np.mean((sfr_true_nod >= lo68n) & (sfr_true_nod <= hi68n)))
+cov95 = float(np.mean((sfr_true_nod >= lo95n) & (sfr_true_nod <= hi95n)))
+print(
+    f"SFH coverage on the {t_nod.size} native log-age nodes: "
+    f"68% band {cov68:.2f},  95% band {cov95:.2f}"
+)
+
+# Which nodes did the DATA actually constrain? Shrinkage needs no truth, so this
+# is the diagnostic that carries over to real galaxies, where coverage does not
+# exist. A node whose posterior is as wide as its prior is a prior draw, and
+# quoting it as a measured SFR is exactly the failure #1271 made unavoidable.
+prior_draws = np.array(
+    [
+        np.asarray(
+            model_fit.predict_sfh(
+                {**fixed_values, **model_fit.spec.sample(jax.random.PRNGKey(9_000 + k))},
+                grid="native",
+            )["sfr_full"]
+        )
+        for k in range(200)
+    ]
+)
+_pw = np.diff(
+    np.percentile(np.log10(np.clip(prior_draws, 1e-12, None)), [16, 84], axis=0), axis=0
+)[0]
+_qw = np.diff(np.percentile(np.log10(np.clip(draws_nod, 1e-12, None)), [16, 84], axis=0), axis=0)[
+    0
+]
+shrinkage = 1.0 - _qw / np.clip(_pw, 1e-9, None)
+print("shrinkage per node (1 = data-driven, 0 = prior draw):")
+for _t, _s in zip(t_nod, shrinkage):
+    print(f"   {_t:8.4f} Gyr   {_s:5.2f}{'   <-- prior draw' if _s < 0.3 else ''}")
 
 # %%
 fig, (axl, axlog) = plt.subplots(1, 2, figsize=(13, 5))
@@ -583,20 +658,26 @@ plt.show()
 #
 # | Quantity | Stage-0 result (n_grid=16, D=25) |
 # |---|---|
-# | **Fit quality** | reproduces the data within the noise (χ²/N < 1 — the field prior regularizes the under-determined 25-D fit) |
-# | **SFH shape** | truth inside the **95 % band at all lookback times**; the rising shape (`age`, `α`, `β`) recovered into the 68 % CI |
-# | **Burst amplitude** σ_PSD | recovered — truth inside the 68 % CI (median biased mildly high, the outshining floor) |
-# | **Burst timescale** τ_PSD | recovered into the 68 % CI here, but broad and prior-influenced per galaxy (motivates hierarchical inference) |
-# | **Mass / diffuse dust** | anti-correlated (mass ↔ τ_diff); marginals can sit just outside 68 % — the classic degeneracy, not a field failure |
-# | **Method** | MAP lands the mode; dense-mass HMC (L=100) gives calibrated wide bands — full NUTS agrees, ~8× slower |
+# | **Fit quality** | reproduces the data within the noise; χ²/N at the MAP ≈ 0.3–1.0 across realizations, against ≈ 1.4 at the truth |
+# | **SFH shape** | recovered where the data carry information — see the per-node **shrinkage** printed above, not the band alone |
+# | **Burst amplitude** σ_PSD | **not recovered from photometry alone.** σ̂ compresses toward the prior mean (0.26 → 0.46 as σ_true goes 0.2 → 0.6). Adding 8 optical line fluxes tracks the truth (0.17 → 0.61) |
+# | **Emission lines** | cut young-bin (< 15 Myr) SFH error by ~60 % at every σ (13/15, 13/15, 12/14 realizations; sign test p = 0.007 / 0.007 / 0.013) |
+# | **Full spectrum vs lines** | *identical* below 15 Myr (24/44, p = 0.65); better at 15 Myr – 1 Gyr (36/44, p = 2.5e-5) — that gain is the **continuum**, not the lines |
+# | **Convergence** | R̂ up to 1.16 and ≤ 864 divergences / 8000 draws at this budget. Quote recovery *values*; the *uncertainties* are not yet reliable |
 #
-# **Takeaway.** For a **fiducial** star-forming galaxy with modest dust, the
-# stochastic field SFH is recovered, not broken — the injected history sits inside
-# calibrated bands (NUTS and HMC L=100 agree), and the **log-time** view makes the
-# recent bursts legible. Recovery is *not* uniform across the prior population:
-# heavy dust or strong bursts make an old+rising and a young+dusty SFH degenerate at
-# χ² ≈ 1, so the per-galaxy *shape* is pinned only when the diffuse dust is low — the
-# **mean SFR and burst amplitude** are the robust quantities. Quantifying that
-# degradation across dust, burstiness, and dimension D, and testing whether geoVI /
-# the raytracer match NUTS, is the job of the companion sweep — and breaking the
-# per-galaxy degeneracy is what **hierarchical (population) inference** is for.
+# **Takeaway.** The stochastic field SFH is recovered where the data constrain it,
+# and the honest question is *which bins those are*. Report on the model's own
+# log-age grid (`predict_sfh(..., grid="native")`) — the default linear resampling
+# puts 2 of 1000 samples below 15 Myr and silently reweights any residual computed
+# on it. For **real** galaxies, where no truth exists, replace coverage with the
+# per-node **shrinkage** printed above: a node whose posterior is as wide as its
+# prior is a prior draw, and plotting it as a measured SFR is the legitimate form
+# of the failure that #1271 made unavoidable. Prefer quoting physically-defined
+# integrals (SFR over 0–10 and 0–100 Myr, M★, mass-weighted age) over per-node SFR.
+#
+# **Provenance.** Every claim above was re-measured after #1271, which fixed two
+# halves of a silent failure: the GP field latents reached neither the likelihood
+# nor the returned `Posterior.params`, so all pre-fix recovery numbers described
+# the *prior*. An earlier version of this summary reported "truth inside the 95 %
+# band at all lookback times" and "σ_PSD recovered" — both were artifacts of that
+# bug and are retracted.

@@ -74,6 +74,31 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "(Asmus+2015 / Lopez+2024). Higher -> fainter X-ray. Ignored by yang20. "
         "Typical range 0.0-0.6.",
     ),
+    # X-ray binary offsets (xray_aird component, #1307)
+    ParamDeclaration(
+        "xray_det_hmxb",
+        Uniform(
+            -2.0,
+            2.0,
+            default=0.0,
+        ),
+        "Deviation from expected HMXB log L_X (Yang+2020 [1]_). "
+        "Positive = brighter X-ray. Allows intrinsic scatter or evolution "
+        "around the Lehmer+2016 SFR relation.",
+        units="dex",
+    ),
+    ParamDeclaration(
+        "xray_det_lmxb",
+        Uniform(
+            -2.0,
+            2.0,
+            default=0.0,
+        ),
+        "Deviation from expected LMXB log L_X (Yang+2020 [1]_). "
+        "Positive = brighter X-ray. Allows intrinsic scatter or evolution "
+        "around the Lehmer+2016 age/mass relation.",
+        units="dex",
+    ),
 )
 
 __all__ = ["PARAMS"]

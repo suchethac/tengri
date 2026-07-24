@@ -390,14 +390,39 @@ _IGM_TYPE_ALIASES = {
 
 
 def _valid_radio_types() -> frozenset[str]:
-    """Derive accepted ``radio.type`` values from :data:`RADIO_MODELS`."""
-    from tengri.components.radio import RADIO_MODELS
+    """Derive accepted ``radio={'type': ...}`` values from :data:`RADIO_MODELS`
+    and SEDModelComponent radio variants.
 
-    return frozenset(RADIO_MODELS.keys())
+    RADIO_MODELS contains the legacy ``radio={'type': 'condon92'|'none'}``
+    path; SEDModelComponent models like ``radio_powerlaw`` and ``radio_dpl``
+    are also valid ``type`` values and must be discoverable to users.
+    Both derive from the registry so the menu and the builder cannot drift
+    (the failure mode behind #1120).
+    """
+    from tengri.components.radio import RADIO_MODELS
+    from tengri.forward.component_factory import _REGISTRY
+
+    # Legacy function-based models: 'condon92', 'none'
+    valid_types = set(RADIO_MODELS.keys())
+
+    # SEDModelComponent models: 'radio_powerlaw', 'radio_dpl'
+    # Filter for components that start with 'radio_' to avoid including the
+    # main 'radio' dispatcher component
+    radio_component_models = {name for name in _REGISTRY if name.startswith("radio_")}
+    valid_types.update(radio_component_models)
+
+    return frozenset(valid_types)
 
 
 def _valid_xray_types() -> frozenset[str]:
-    """Derive accepted ``xray.type`` values from :data:`XRAY_MODELS`.
+    """Derive accepted ``xray={'type': ...}`` values from :data:`XRAY_MODELS`
+    and SEDModelComponent X-ray variants.
+
+    XRAY_MODELS contains the function-based models (``simple``, ``lopez24``,
+    ``yang20`` alias, ``none`` disable). SEDModelComponent models like
+    ``xray_aird`` and ``agn_xray_corona`` are also valid ``type`` values and
+    must be discoverable to users. Both derive from the registry so the menu
+    and the builder cannot drift (the failure mode behind #1120).
 
     ``"yang20"`` is registered in :data:`XRAY_MODELS` as an alias of
     ``"simple"``: tengri's X-ray component already implements the
@@ -406,8 +431,18 @@ def _valid_xray_types() -> frozenset[str]:
     missing. See ``components/xray/xray.py`` for the formulas.
     """
     from tengri.components.xray import XRAY_MODELS
+    from tengri.forward.component_factory import _REGISTRY
 
-    return frozenset(XRAY_MODELS.keys())
+    # Function-based models: 'none', 'simple', 'yang20', 'lopez24'
+    valid_types = set(XRAY_MODELS.keys())
+
+    # SEDModelComponent models: 'xray_aird', 'agn_xray_corona'
+    # Filter for components that contain 'xray_' to include both xray-prefixed
+    # and agn_xray components
+    xray_component_models = {name for name in _REGISTRY if "xray_" in name}
+    valid_types.update(xray_component_models)
+
+    return frozenset(valid_types)
 
 
 def _valid_dust_laws() -> frozenset[str]:
