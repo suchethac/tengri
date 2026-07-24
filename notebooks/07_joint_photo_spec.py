@@ -36,12 +36,11 @@ import warnings
 
 # Keep the rendered tutorial clean: silence framework notices that do not
 # change the science shown here (baked-in nebular, the WavePrecomp blue-band
-# approximation, the intentional Fitter(sed_model, ...) LUT path, and
+# approximation, the intentional sed_model.fit(...) LUT path, and
 # recipe/parameter-provenance notices). Genuine deprecations in user-facing
 # calls are fixed in the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
 warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
 warnings.filterwarnings("ignore", message=".*Composable AGN.*")
 warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
@@ -72,7 +71,6 @@ from tengri import (
     load_ssp_data,
     plot,
 )
-from tengri.inference.fitter import Fitter
 from tengri.utils.conversions import lnu_to_fnu
 
 plot.setup_style()
@@ -221,7 +219,7 @@ HMC = dict(
 
 def run(model, data, noise, data_type, label):
     t0 = time.perf_counter()
-    post = Fitter(model, data, noise, data_type=data_type).run("mcmc_hmc", **HMC)
+    post = model.fit(data, noise, method="mcmc_hmc", data_type=data_type, **HMC)
     rmax = max(float(v) for v in post.rhat().values())
     print(
         f"  {label:12s} {time.perf_counter() - t0:6.0f}s   max R-hat {rmax:.3f}   "

@@ -39,7 +39,7 @@ import warnings
 
 # Keep the rendered tutorial clean: silence framework notices that do not
 # change the science shown here (baked-in nebular, the WavePrecomp blue-band
-# approximation, the intentional Fitter(sed_model, ...) LUT path, and
+# approximation, the intentional sed_model.fit(...) LUT path, and
 # recipe/parameter-provenance notices). Genuine deprecations in user-facing
 # calls are fixed in the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -60,7 +60,6 @@ import numpy as np
 
 import tengri
 from tengri import (
-    Fitter,
     Observation,
     Photometry,
     SEDModel,
@@ -239,8 +238,10 @@ _ = forward(batch_params).block_until_ready()
 t_batch = perf_counter() - t0
 
 t0 = perf_counter()
-posterior = Fitter(model, flux_obs, noise, data_type="photometry").run(
+posterior = model.fit(
+    flux_obs, noise,
     method="mcmc_nuts",
+    data_type="photometry",
     key=jax.random.PRNGKey(2),
     n_warmup=300,
     n_samples=300,

@@ -7479,24 +7479,15 @@ class SEDModel:
         init: str | None = None,
         **kwargs,
     ):
-        """Fit observed data. Deprecated — prefer ``ForwardModel.fit`` for new code.
+        """Fit observed data with a convenient one-liner.
 
-        .. deprecated:: 0.x
-            Inference is canonically through :class:`ForwardModel`
-            (issue #211). Replace::
+        A Bagpipes-style sugar over :class:`ForwardModel.fit`; equivalent to::
 
-                result = sed.fit(data, noise, method="vi")
+            forward = ForwardModel.build(sed=self, observation=...)
+            result = forward.fit(data, noise, method=method, ...)
 
-            with::
-
-                forward = ForwardModel.build(sed=sed, observation=obs)
-                result = forward.fit(data, noise, method="vi")
-
-            or the equivalent ``Fitter(forward, data, noise).run("vi")``.
-
-            ``SEDModel.fit`` keeps working until tengri v1.0; this method
-            is a thin shim around :func:`tengri.forward.convenience.fit_model`
-            and emits a one-shot DeprecationWarning.
+        For full control over loss functions and iterative refinement,
+        use :class:`ForwardModel` and :class:`Fitter` directly.
 
         Parameters
         ----------
@@ -7544,17 +7535,6 @@ class SEDModel:
         >>> result = model.fit(flux_obs, noise, init="map")
         >>> result = model.fit(flux_obs, noise).refine("mcmc_raytrace")
         """
-        import warnings
-
-        warnings.warn(
-            "SEDModel.fit is deprecated and will be removed in tengri v1.0. "
-            "Use ForwardModel.fit instead: "
-            "forward = ForwardModel.build(sed=sed, observation=obs); "
-            "result = forward.fit(data, noise, method=...). "
-            "See issue #211.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         from tengri.forward.convenience import fit_model
 
         return fit_model(

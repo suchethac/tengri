@@ -1100,7 +1100,17 @@ def fit_model(
             data_type = "photometry"
 
     # --- Build fitter ---
-    fitter = Fitter(model, data, noise, data_type=data_type, approx=approx)
+    # When SEDModel.fit() delegates to fit_model(), silence the Fitter(sed_model)
+    # deprecation warning since SEDModel.fit is now un-deprecated sugar (#1322).
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Fitter\\(sed_model.*",
+            category=DeprecationWarning,
+        )
+        fitter = Fitter(model, data, noise, data_type=data_type, approx=approx)
     model.fitter_ = fitter
 
     # --- Optional MAP warm start ---
