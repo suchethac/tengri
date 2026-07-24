@@ -1049,7 +1049,7 @@ plot_galaxy(17418, source=galaxies_floor, tag="_floor")
 #   photometry. BMA makes that systematic spread explicit.
 # - Everything runs through the public API. Each model comes from
 #   `SEDModel.build(...)`, the speed path is `approx=WavePrecomp()`, and inference
-#   is `Fitter(model, data, noise).run("nss", ...)`, whose `log_evidence`
+#   is `model.fit(data, noise, method="nss", ...)`, whose `log_evidence`
 #   supplies the averaging weights.
 # - The error budget decides whether averaging matters. With raw catalog errors
 #   the evidence collapses onto one model; a realistic ~10% floor (§9) makes the
