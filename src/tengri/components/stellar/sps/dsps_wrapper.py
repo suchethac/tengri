@@ -219,19 +219,30 @@ def load_ssp(name: str | None = None) -> "SSPData":
     )
 
 
-def _load_float(dataset) -> jnp.ndarray:
+def _load_float(dataset, dtype=None) -> jnp.ndarray:
     """Read an HDF5 float dataset at tengri's working precision (#1099).
 
     Several repackaged grids store float32 (``bc03_*``, ``pgny_*``). Left as
     float32, ``stellar_mass_scale = total_mass x L_sun`` ~ 1e42 overflows the
     float32 ceiling of 3.4e38 to ``inf`` — silently — and poisons the ionizing
-    SED the nebular backends consume. The upcast is lossless: every float32 is
-    exactly a float64, so no stored value changes.
+    SED the nebular backends consume. The default upcast is lossless: every
+    float32 is exactly a float64, so no stored value changes.
+
+    Parameters
+    ----------
+    dataset : h5py.Dataset
+        The HDF5 dataset to read.
+    dtype : DTypeLike, optional
+        Target dtype. ``None`` (default) follows tengri's working precision
+        (``jnp.result_type(float)``); an explicit dtype (e.g. ``jnp.float32``)
+        forces it regardless of the ``jax_enable_x64`` flag — the opt-in for a
+        fully 32-bit pipeline (#1206), safe now that the ~1e42/1e56 scale seams
+        are carried in log space.
     """
-    return jnp.asarray(dataset[:], dtype=jnp.result_type(float))
+    return jnp.asarray(dataset[:], dtype=dtype if dtype is not None else jnp.result_type(float))
 
 
-def load_ssp_data(filepath: str) -> SSPData:
+def load_ssp_data(filepath: str, *, dtype=None) -> SSPData:
     """Load SSP templates from a DSPS-format HDF5 file.
 
     Reads stellar population synthesis templates stored in HDF5 format
@@ -244,6 +255,15 @@ def load_ssp_data(filepath: str) -> SSPData:
     filepath : str
         Path to HDF5 file. Expected fields: ssp_wave, ssp_flux,
         ssp_lg_age_gyr, ssp_lgmet. Optional: ssp_mass_remaining, ssp_alpha_fe.
+    dtype : DTypeLike, optional
+        Dtype for every loaded float array. ``None`` (default) follows tengri's
+        working precision (float64 under ``jax_enable_x64``, its default). Pass
+        ``jnp.float32`` for a fully 32-bit pipeline: it halves the host-side
+        grid — the ``ssp_flux`` cube is the model's largest single array — and
+        is applied regardless of the ``jax_enable_x64`` flag. Safe now that the
+        ~1e42 ``stellar_mass_scale`` and ~1e56 ``nion`` seams are carried in log
+        space (#1206); before that, a float32 grid overflowed them silently,
+        which is why the default still upcasts.
 
     Returns
     -------
@@ -267,12 +287,23 @@ def load_ssp_data(filepath: str) -> SSPData:
     **File format**: Standard DSPS HDF5 layout. See DSPS documentation
     and distributed templates on halos.as.arizona.edu for format details.
 
+    **Precision**: for a pure-float32 forward pass, pair ``dtype=jnp.float32``
+    here with a ``jax.enable_x64(False)`` context (or leave x64 off) so the
+    numpy source and the JAX compute are both 32-bit. Under the default x64
+    config a float32 grid still gives correct results — intermediates promote to
+    float64 — but only the host grid, not the compute, is halved.
+
     Examples
     --------
     >>> from tengri.components.stellar.sps import load_ssp_data
     >>> ssp = load_ssp_data("data/ssp_bc03.h5")
     >>> print(ssp.ssp_wave.shape, ssp.ssp_flux.shape)
     (6000,) (50, 300, 6000)
+
+    >>> import jax.numpy as jnp
+    >>> ssp32 = load_ssp_data("data/ssp_bc03.h5", dtype=jnp.float32)  # doctest: +SKIP
+    >>> ssp32.ssp_flux.dtype  # doctest: +SKIP
+    dtype('float32')
 
     """
     try:
@@ -306,8 +337,8 @@ def load_ssp_data(filepath: str) -> SSPData:
         )
 
     with h5py.File(filepath, "r") as f:
-        ssp_lg_age_gyr = _load_float(f["ssp_lg_age_gyr"])
-        ssp_lgmet = _load_float(f["ssp_lgmet"])
+        ssp_lg_age_gyr = _load_float(f["ssp_lg_age_gyr"], dtype=dtype)
+        ssp_lgmet = _load_float(f["ssp_lgmet"], dtype=dtype)
 
         # IMF discovery (#307): HDF5 attribute wins, else parse filename
         # tail. Surfaced as ``ssp.imf`` so model spec / summary / gallery
@@ -342,27 +373,32 @@ def load_ssp_data(filepath: str) -> SSPData:
         # flat 0.29 % absolute-flux offset. Rescale on load so the
         # in-memory arrays are IAU-Lsun-normalized and every downstream
         # conversion is exact.
-        ssp_flux = _load_float(f["ssp_flux"])
+        ssp_flux = _load_float(f["ssp_flux"], dtype=dtype)
         native_lsun = _detect_native_lsun(f, fp.name)
         if native_lsun is not None:
             from tengri.utils.physics_constants import L_SUN
 
             if abs(native_lsun / L_SUN - 1.0) > 1e-12:
+                # Python-float scalar keeps ssp_flux's dtype under JAX weak typing.
                 ssp_flux = ssp_flux * (native_lsun / L_SUN)
 
         if "ssp_mass_remaining" in f:
-            mass_remaining = _load_float(f["ssp_mass_remaining"])
+            mass_remaining = _load_float(f["ssp_mass_remaining"], dtype=dtype)
         else:
             mass_remaining = _synthesize_mass_remaining(
                 filepath, ssp_lg_age_gyr, ssp_lgmet, imf_tag=imf
             )
+            # The synthesizer works at default precision; honor the request so
+            # every array in the returned grid shares one dtype.
+            if dtype is not None and mass_remaining is not None:
+                mass_remaining = jnp.asarray(mass_remaining, dtype=dtype)
 
         alpha_fe = None
         if "ssp_alpha_fe" in f:
-            alpha_fe = _load_float(f["ssp_alpha_fe"])
+            alpha_fe = _load_float(f["ssp_alpha_fe"], dtype=dtype)
 
         return SSPData(
-            ssp_wave=_load_float(f["ssp_wave"]),
+            ssp_wave=_load_float(f["ssp_wave"], dtype=dtype),
             ssp_flux=ssp_flux,
             ssp_lg_age_gyr=ssp_lg_age_gyr,
             ssp_lgmet=ssp_lgmet,
