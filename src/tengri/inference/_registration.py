@@ -144,7 +144,7 @@ register_backend(
 
 register_backend(
     "native_vi_nonlinear",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[UNSTABLE] Pure JAX geoVI — segfaults on DPL/dense_basis "
         "photometry mocks (validated 2026-05-22, issue #231). Use 'vi' instead."
@@ -161,7 +161,7 @@ register_backend(
 
 register_backend(
     "native_vi_linear",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[UNSTABLE] Pure JAX MGVI — segfaults on DPL/dense_basis "
         "photometry mocks (validated 2026-05-22, issue #231). Use 'vi_linear' instead."
@@ -242,7 +242,7 @@ register_backend(
 
 register_backend(
     "mcmc_ghmc",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[POOR MIXING] Generalized HMC — fast (cold ~17s) but R-hat ≈ "
         "2.5-3.1 and ESS ≈ 1 on D=6-7 mocks even with 1000 warmup + 2000 "
@@ -255,11 +255,12 @@ register_backend(
 
 register_backend(
     "mcmc_mclmc",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[POOR MIXING] Microcanonical Langevin MC — fast warm call (~2s) "
         "but R-hat ≈ 1.7 / 1.13 and ESS ≈ 1 on D=6-7 mocks at 4000 samples. "
-        "Do not use for science until tuning is investigated. Requires blackjax >= 1.6."
+        "Do not use for science until tuning is investigated. "
+        "Requires blackjax >= 1.6."
     ),
     requires=("blackjax",),
     legacy_fitter=False,
@@ -269,7 +270,10 @@ register_backend(
 register_backend(
     "mcmc_adjusted_mclmc",
     tier="experimental",
-    short_doc="Adjusted microcanonical Langevin (cold ~60s, ~3x compile premium over mclmc). Requires blackjax >= 1.6.",
+    short_doc=(
+        "Adjusted microcanonical Langevin (cold ~60s, ~3x compile premium over "
+        "mclmc). Requires blackjax >= 1.6."
+    ),
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_adjusted_mclmc)
@@ -297,7 +301,7 @@ register_backend(
 
 register_backend(
     "pathfinder",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[UNSTABLE] Pathfinder VI — segfaults on DPL/dense_basis photometry "
         "mocks (validated 2026-05-22, issue #231); use 'laplace' or 'vi' instead"

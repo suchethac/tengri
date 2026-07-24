@@ -139,7 +139,9 @@ def run_mclmc(
             return blackjax.mcmc.mclmc.init(p, ld_1arg, init_key)
 
         def _scan(s, ks):
-            _, p = _mclmc_sample_scan(s, ks, kernel, params.L, params.step_size)
+            _, p = _mclmc_sample_scan(
+                s, ks, kernel, params.L, params.step_size, ld_1arg, params.inverse_mass_matrix
+            )
             return p
 
         positions = _vmap_chains(
@@ -159,6 +161,8 @@ def run_mclmc(
             kernel,
             params.L,
             params.step_size,
+            ld_1arg,
+            params.inverse_mass_matrix,
         )
 
     wall_time = time.time() - t0
@@ -295,6 +299,7 @@ def run_adjusted_mclmc(
 
     L = params.L
     step_size = params.step_size
+    inverse_mass_matrix = params.inverse_mass_matrix
     n_integration_steps = jnp.ceil(L / step_size).astype(int)
 
     key, sample_key = jax.random.split(key)
@@ -304,7 +309,9 @@ def run_adjusted_mclmc(
             return blackjax.mcmc.adjusted_mclmc.init(p, ld_1arg)
 
         def _scan(s, ks):
-            _, (p, d) = _adjusted_mclmc_sample_scan(s, ks, kernel, step_size, n_integration_steps)
+            _, (p, d) = _adjusted_mclmc_sample_scan(
+                s, ks, kernel, step_size, n_integration_steps, ld_1arg, inverse_mass_matrix
+            )
             return p, d
 
         positions, divergent = _vmap_chains(
@@ -324,6 +331,8 @@ def run_adjusted_mclmc(
             kernel,
             step_size,
             n_integration_steps,
+            ld_1arg,
+            inverse_mass_matrix,
         )
     n_divergent = int(jnp.sum(divergent))
 
