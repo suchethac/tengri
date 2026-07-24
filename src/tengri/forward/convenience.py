@@ -407,6 +407,10 @@ def fit_batch(
 ) -> list:
     """Fit a batch of galaxies from a catalog, one row at a time.
 
+    .. deprecated:: 2026-07
+        Use :class:`Catalog` directly for new code. ``fit_batch`` will be
+        removed in a future release.
+
     Accepts pandas.DataFrame, astropy.table.Table, or list of dicts.
     Supports checkpoint resume via ``output_dir``.
 
@@ -446,6 +450,16 @@ def fit_batch(
     """
     import os
     import time
+    import warnings
+
+    # One-shot deprecation warning
+    warnings.warn(
+        "fit_batch is deprecated; use Catalog instead. "
+        "Catalog provides vectorized fitting and requires explicit flux_unit "
+        "(fit_batch assumed cgs). See #1317, #1316.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     from tengri.forward.sed_model import SEDModel as ModelClass
     from tengri.inference.fitter import Fitter
@@ -490,8 +504,6 @@ def fit_batch(
 
     # Warn loudly once if redshift_col is set but catalog_z_range is not
     if redshift_col is not None and getattr(model, "_catalog_z_range", None) is None:
-        import warnings
-
         warnings.warn(
             "fit_batch(redshift_col=...) without WavePrecomp(catalog_z_range=...) "
             "recompiles the forward model for EVERY row (one compile per galaxy). "
