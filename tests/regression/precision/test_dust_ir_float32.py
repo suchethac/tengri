@@ -48,6 +48,10 @@ TEMPLATE_MODELS = (
     "modified_blackbody",
     "casey2012",
     "schreiber2016",
+    # Affine model — proportional to the *total* budget L_ir + dust_L_agn_ir.
+    # Float32-clean since the budget itself moved to log space (log10_add of the
+    # two terms) so neither ~1e43 erg/s term is materialized linearly (#1206).
+    "energy_balance_split",
 )
 
 #: Subset that is strictly energy-balanced, i.e. normalizes its template so the
@@ -55,14 +59,11 @@ TEMPLATE_MODELS = (
 #: template by L_ir without renormalizing to it, so it re-emits only a fraction.
 ENERGY_BALANCED_MODELS = tuple(m for m in TEMPLATE_MODELS if m != "pah_drude")
 
-#: Models still not float32-capable, with the measured reason.
-#:
-#: ``energy_balance_split`` opts out of ``L_ir`` factoring because it is affine
-#: rather than proportional (``L_ir + dust_L_agn_ir``), see
-#: ``EmissionComponent.factors_l_ir``. It needs the budget itself in log space.
-NOT_YET_FLOAT32 = {
-    "energy_balance_split": "affine in L_ir, opts out of factoring (factors_l_ir=False)",
-}
+#: Models still not float32-capable, with the measured reason. Empty: every
+#: registered emission model is now float32-clean. ``energy_balance_split`` was
+#: the last holdout (affine in ``L_ir``); it moved to :data:`TEMPLATE_MODELS`
+#: once its two-term budget was assembled in log space (#1206).
+NOT_YET_FLOAT32: dict[str, str] = {}
 
 
 def _physical_ssp(ssp):

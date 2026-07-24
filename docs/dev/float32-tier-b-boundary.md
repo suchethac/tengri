@@ -247,14 +247,49 @@ returning zeros in float64. With no peak to fold in, the exponent collapses to t
 overflows float32, and `0 * inf` is `NaN` — so an SED with no emission scaled to `NaN`. Fixed by
 zeroing the exponent when the peak is zero, preserving `0 * 10**s == 0` at every scale.
 
-### Still not float32-capable
+### The affine model — `energy_balance_split`
 
-| Model | Reason |
-|---|---|
-| `energy_balance_split` | Affine, not proportional: `L_ir_total = L_ir + dust_L_agn_ir`. Opted out via `factors_l_ir = False` so it keeps the linear path rather than returning a wrong SED. Needs the budget itself in log space (`log10_add` of the two terms). |
+Every other emission model is proportional to `L_ir` (`sed = (L_ir / integral) · shape`), so the
+generic `apply`-level factoring — evaluate at `L_ir = 1`, re-apply one scale in log space — is exact.
+`energy_balance_split` is **affine, not proportional**:
 
-Pinned by `test_known_non_float32_models_stay_documented`, which fails if it becomes clean — so this
-table cannot understate what float32 delivers.
+```
+L_ir_total = L_ir + dust_L_agn_ir
+```
+
+Doubling `L_ir` does not double the output once `dust_L_agn_ir` is comparable to the stellar term
+(the ratio degrades 2.0 → 1.5). It reads as proportional at defaults only because `dust_L_agn_ir`
+defaults to 0. Factoring a single `L_ir` scale out would have scaled the `dust_L_agn_ir` term too —
+a silently wrong SED — so the model set `factors_l_ir = False` and opted out of the generic path.
+
+**Delivered.** The fix assembles the two-term budget in log space *inside* `predict`, so neither
+~1e43 erg/s term is ever materialized linearly:
+
+```python
+log_total = log10_add(log_L_ir, log10(dust_L_agn_ir))   # -inf on either term (absent) drops out
+shape     = ebs_fn(wave, 1.0, L_agn_ir=0.0, ...)         # unit-luminosity two-temperature shape S(λ)
+sed       = apply_log10_scale(shape, log_total)          # one rescale, of the total
+```
+
+`modified_blackbody` is exactly linear in its `L_absorbed`, so `ebs_fn(λ, 1, 0) = S(λ)` and
+`ebs_fn(λ, L, A) = (L + A)·S(λ)` — the factoring is exact. float64 cross-version parity over the
+default, CMB-corrected (z > 0), and full affine (`L_agn` from 0 to 3× stellar) regimes: worst
+**1.6e-14** relative, well inside the 1e-12 bar. The default `dust_L_agn_ir = 0` (strict stellar
+energy balance) is fully float32-clean; a *nonzero* AGN-IR luminosity is a linear erg/s parameter and
+must itself be float32-representable (≲ 3e38 erg/s) until `dust_L_agn_ir` moves to a log parameter
+(#1206 item 3).
+
+**A latent framework bug this surfaced.** `SEDModelComponent.__init_subclass__` deletes a concrete
+component's own I/O dict so the accessor *method* resolves — but when the component both **overrides**
+an I/O dict and inherits one from an abstract base (here `EmissionComponent.optional_inputs`),
+deleting the override merely re-exposed the base's dict, and the method-rebind ran only as an `elif`,
+so it never fired. `optional_inputs()` stayed a dict instead of the tuple-returning method. Fixed by
+making the rebind unconditional (a second `if`, not `elif`) — it now runs whenever the attribute is
+still a dict after the override is removed.
+
+With this, every registered emission model is float32-capable. `NOT_YET_FLOAT32` in
+`test_dust_ir_float32.py` is now empty, and `test_known_non_float32_models_stay_documented` guards it
+from silently repopulating.
 
 ---
 
