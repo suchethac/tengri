@@ -241,7 +241,12 @@ class Catalog:
             }
             if ca.redshift is not None:
                 galaxy_dict["redshift"] = float(ca.redshift[i])
-            if ca.presence is not None:
+            # Only thread a presence mask for galaxies that ACTUALLY have an
+            # absent band. An all-present galaxy needs no mask (the likelihood is
+            # bit-identical without it), and threading an all-ones mask would trip
+            # the batched-method guard for every ordinary catalog fit — silently
+            # blocking MCMC/VI on catalogs with no masking at all.
+            if ca.presence is not None and not bool(np.all(ca.presence[i])):
                 galaxy_dict["presence"] = ca.presence[i].astype(np.float32)
             galaxies.append(galaxy_dict)
 
