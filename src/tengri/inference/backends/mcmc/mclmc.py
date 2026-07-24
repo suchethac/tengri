@@ -2,6 +2,11 @@
 """MCLMC and Adjusted MCLMC via BlackJAX.
 
 Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc``.
+
+**Requires blackjax >= 1.4.** In blackjax >= 1.5, the mclmc adaptation
+functions gained a required `logdensity_fn` parameter. This module detects
+the parameter and passes it by keyword, maintaining compatibility with both
+versions (see #1177).
 """
 
 from __future__ import annotations
@@ -12,7 +17,11 @@ import time
 import jax
 import jax.numpy as jnp
 
-from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
+from tengri.inference._sample_utils import (
+    _maybe_map_init,
+    _mean_params,
+    _vmap_samples_to_physical,
+)
 from tengri.inference.backends.mcmc._shared import (
     _adjusted_mclmc_sample_scan,
     _get_cached_adaptation,
@@ -23,6 +32,23 @@ from tengri.inference.backends.mcmc._shared import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _call_mclmc_find_L_and_step_size(logdensity_fn, **kwargs):
+    """Call mclmc_find_L_and_step_size with version-aware parameters.
+
+    blackjax >= 1.5 added logdensity_fn as a required parameter. This helper
+    detects the parameter in the signature and passes it by keyword, working
+    on both blackjax 1.3 (no param) and >= 1.5 (required param).
+    """
+    import inspect
+
+    import blackjax
+
+    sig = inspect.signature(blackjax.mclmc_find_L_and_step_size)
+    if "logdensity_fn" in sig.parameters:
+        kwargs["logdensity_fn"] = logdensity_fn
+    return blackjax.mclmc_find_L_and_step_size(**kwargs)
 
 
 def run_mclmc(
@@ -111,7 +137,8 @@ def run_mclmc(
         state = blackjax.mcmc.mclmc.init(init_flat, ld_1arg, init_key)
 
         key, tune_key = jax.random.split(key)
-        state, params, _ = blackjax.mclmc_find_L_and_step_size(
+        state, params, _ = _call_mclmc_find_L_and_step_size(
+            logdensity_fn=ld_1arg,
             mclmc_kernel=kernel_factory,
             num_steps=n_warmup,
             state=state,
@@ -288,6 +315,7 @@ def run_adjusted_mclmc(
         key, tune_key = jax.random.split(key)
         state, params, _ = blackjax.adjusted_mclmc_find_L_and_step_size(
             mclmc_kernel=_kernel_for_adaptation,
+            logdensity_fn=ld_1arg,
             num_steps=n_warmup,
             state=state,
             rng_key=tune_key,
