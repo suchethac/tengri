@@ -55,7 +55,7 @@ class TestBugNSS03QsogenJit:
                 agn_emline_scale=1.0,  # Enable emission lines
                 agn_ebv=0.0,
                 agn_log_lbol=45.0,
-                agn_frac=1.0,
+                agn_lum_ratio=1.0,
                 agn_bcnorm=0.0,
             )
             # Should complete without error and return finite array
@@ -94,7 +94,7 @@ class TestBugNSS03QsogenJit:
                 agn_emline_scale=1.0,
                 agn_ebv=0.0,
                 agn_log_lbol=log_lbol,
-                agn_frac=1.0,
+                agn_lum_ratio=1.0,
                 agn_bcnorm=0.0,
             )
 

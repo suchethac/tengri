@@ -6,7 +6,7 @@ Importing this module side-effects ``AGN_MODELS["grahsp"]`` via
 entry follows the same signature contract as
 :func:`tengri.components.agn.qsogen.qsogen`::
 
-    fn(wavelength, agn_log_lbol, agn_frac, **agn_grahsp_*) -> L_nu
+    fn(wavelength, agn_log_lbol, agn_lum_ratio, **agn_grahsp_*) -> L_nu
 
 This file is the analog of the ``@register_agn_model("qsogen")`` block
 at the bottom of :mod:`tengri.components.agn.qsogen`.
@@ -55,7 +55,7 @@ __all__ = ["grahsp"]
 def grahsp(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 45.0,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_grahsp_uvslope: float = _DEFAULT_UVSLOPE,
     agn_grahsp_plslope: float = _DEFAULT_PLSLOPE,
     agn_grahsp_plbendloc_nm: float = _DEFAULT_PLBENDLOC_NM,
@@ -90,7 +90,7 @@ def grahsp(
     Thin wrapper around :func:`compute_grahsp_sed` matching the
     AGN_MODELS registry signature::
 
-        fn(wavelength, agn_log_lbol, agn_frac, **kwargs) -> L_nu
+        fn(wavelength, agn_log_lbol, agn_lum_ratio, **kwargs) -> L_nu
 
     Parameters
     ----------
@@ -98,7 +98,7 @@ def grahsp(
         Rest-frame wavelength grid [Å].
     agn_log_lbol : float, optional
         :math:`\log_{10}(L_\mathrm{bol}/L_\odot)`. Default ``45.0``.
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         AGN fraction scaling [dimensionless, 0-1]. Default ``1.0``.
     agn_grahsp_uvslope : float, optional
         BBB UV slope :math:`\alpha_1`. Default ``0.0`` (paper §2.1.1).
@@ -157,7 +157,7 @@ def grahsp(
     return compute_grahsp_sed(
         wavelength,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=agn_frac,
+        agn_lum_ratio=agn_lum_ratio,
         agn_grahsp_uvslope=agn_grahsp_uvslope,
         agn_grahsp_plslope=agn_grahsp_plslope,
         agn_grahsp_plbendloc_nm=agn_grahsp_plbendloc_nm,

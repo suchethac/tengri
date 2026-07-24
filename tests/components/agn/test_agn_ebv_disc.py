@@ -49,15 +49,15 @@ def model():
 
 
 def test_zero_ebv_is_noop(model, wavelength) -> None:
-    base = model(wavelength, agn_log_lbol=44.0, agn_frac=0.1)
-    with_zero = model(wavelength, agn_log_lbol=44.0, agn_frac=0.1, agn_ebv_disc=0.0)
+    base = model(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.1)
+    with_zero = model(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.1, agn_ebv_disc=0.0)
     assert jnp.allclose(base, with_zero, rtol=1e-12, atol=0.0)
 
 
 def test_positive_ebv_reduces_uv_disc_flux(model, wavelength) -> None:
     """The Prévot law has k(λ) > 0 in the UV; reddening must suppress L_ν there."""
-    unreddened = model(wavelength, agn_log_lbol=44.0, agn_frac=0.1, agn_ebv_disc=0.0)
-    reddened = model(wavelength, agn_log_lbol=44.0, agn_frac=0.1, agn_ebv_disc=0.3)
+    unreddened = model(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.1, agn_ebv_disc=0.0)
+    reddened = model(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.1, agn_ebv_disc=0.3)
     uv_mask = wavelength < 3000.0
     assert bool(jnp.all(reddened[uv_mask] <= unreddened[uv_mask] + 1e-30))
     # Require a meaningful (not numerical-noise) reduction somewhere in the UV.
@@ -72,8 +72,8 @@ def test_ir_flux_change_is_small_vs_uv(model, wavelength) -> None:
     effect on the total SED must be small there relative to the UV,
     where the disc dominates.
     """
-    unreddened = model(wavelength, agn_log_lbol=44.0, agn_frac=0.1, agn_ebv_disc=0.0)
-    reddened = model(wavelength, agn_log_lbol=44.0, agn_frac=0.1, agn_ebv_disc=0.3)
+    unreddened = model(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.1, agn_ebv_disc=0.0)
+    reddened = model(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.1, agn_ebv_disc=0.3)
     rel_change = jnp.abs(reddened - unreddened) / (unreddened + 1e-300)
     uv_mask = wavelength < 3000.0
     ir_mask = wavelength > 5e4
@@ -86,7 +86,7 @@ def test_ir_flux_change_is_small_vs_uv(model, wavelength) -> None:
 
 def test_grad_flows_through_ebv(model, wavelength) -> None:
     def scalar_loss(ebv: float) -> float:
-        sed = model(wavelength, agn_log_lbol=44.0, agn_frac=0.1, agn_ebv_disc=ebv)
+        sed = model(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.1, agn_ebv_disc=ebv)
         return jnp.log1p(jnp.sum(sed))
 
     g = jax.grad(scalar_loss)(0.1)

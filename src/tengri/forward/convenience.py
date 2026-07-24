@@ -877,11 +877,11 @@ def build_model_from_config(
         expanded.setdefault("redshift", float(redshift))
 
     # --- Inject AGN parametric mode if AGN enabled ---
-    # Default to agn_log_lbol (parametric) instead of agn_frac.
+    # Default to agn_log_lbol (parametric) instead of agn_lum_ratio.
     # Parametric mode is compatible with all kernel paths (hybrid,
     # compositional) because L_bol is specified directly, avoiding
     # the circular dependency L_AGN = f × (L_stellar + L_AGN).
-    if agn is not None and "agn_frac" not in expanded and "agn_log_lbol" not in expanded:
+    if agn is not None and "agn_lum_ratio" not in expanded and "agn_log_lbol" not in expanded:
         expanded["agn_log_lbol"] = Uniform(8.0, 12.0)
 
     # --- Build Parameters ---

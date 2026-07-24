@@ -39,7 +39,7 @@ def _compose(**overrides):
         agn_feii_block="none",
         agn_torus_block="none",
         agn_norm="conserving",
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
     )
     kw.update(overrides)
     return _band_energy(composable(_WAVE, 45.0, **kw), _WAVE)

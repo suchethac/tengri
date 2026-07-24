@@ -384,7 +384,7 @@ def build_components(
     # read ``state.derived["L_absorbed"]`` for the CIGALE-style
     # ``agn_power = L_abs × fracAGN/(1-fracAGN)`` cross-component
     # coupling (see ``agn/component.py`` and ``agn/_params.py:
-    # agn_fracAGN``). Note: although appended here, the topological sort
+    # agn_ir_frac``). Note: although appended here, the topological sort
     # places dust AFTER the nebular component (DustSEDComponent declares
     # ``sed_nebular`` an optional input) so the nebular continuum is
     # reddened by the HII-region dust, matching bagpipes/FSPS/CIGALE.
@@ -470,14 +470,14 @@ def build_components(
         components.append(shock_component_obj)
 
     # 4. AGN (optional) — placed after dust so ``state.derived["L_absorbed"]``
-    # is available for the CIGALE-coupled ``agn_fracAGN`` flow.
+    # is available for the CIGALE-coupled ``agn_ir_frac`` flow.
     if agn_model is not None:
         # NOTE (#721): ``dust_frac_agn`` (Dale2014's embedded quasar template) and
-        # the composable AGN's ``agn_fracAGN`` are two distinct AGN surfaces, both
+        # the composable AGN's ``agn_ir_frac`` are two distinct AGN surfaces, both
         # keyed off the same stellar ``L_absorbed`` — using both with positive
         # values double-counts AGN MIR. A *value-aware* guard cannot live here:
         # ``build_components`` sees only structural selectors, not the resolved
-        # ``dust_frac_agn``/``agn_fracAGN`` values (which may be FREE), so a
+        # ``dust_frac_agn``/``agn_ir_frac`` values (which may be FREE), so a
         # construction-time check would false-positive on legitimate models such
         # as ``recipes.composable_agn()`` (Dale2014 + composable AGN with
         # ``dust_frac_agn=0``). The value-aware guard therefore lives at

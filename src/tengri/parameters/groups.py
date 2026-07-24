@@ -513,7 +513,7 @@ _VALID_AGN_ATTEN_TYPES = _agn_block_types("attenuation")
 #: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)
 _AGN_PARTITION = {
     # Shared params (no sub-block prefix)
-    "agn_frac": "agn",
+    "agn_lum_ratio": "agn",
     "agn_log_lbol": "agn",
     "agn_alpha": "agn",
     "agn_log_mbh": "agn",
@@ -1813,12 +1813,21 @@ def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[s
     Used by :func:`_validate_user_keys` to recognize per-parameter overrides
     when walking a user's group dict.
     """
+    from tengri.parameters._aliases import legacy_names_for
+
     out: set[str] = set()
     for full_name, owner in param_partition.items():
         if owner != group:
             continue
         out.add(full_name)
         out.add(_extract_short_name(full_name, {}))
+        # Legacy spellings stay accepted so a rename does not turn a working
+        # group dict into "Unknown key" (#1296). The override lookup warns
+        # when one is actually used; admitting them here only stops the
+        # validator rejecting them first.
+        for legacy_full in legacy_names_for(full_name):
+            out.add(legacy_full)
+            out.add(_extract_short_name(legacy_full, {}))
     return out
 
 
@@ -2424,6 +2433,23 @@ def _resolve_value(
         override_key = short_name
     elif param_name != short_name and param_name in group_dict:
         override_key = param_name
+    else:
+        # A renamed parameter also invalidates its *short* key: after
+        # agn_frac -> agn_lum_ratio, `agn={'frac': 0.5}` became "Unknown key"
+        # (#1296). Accept the legacy spelling, both short and full, and warn
+        # -- the full-name alias map alone does not cover the grammar's short
+        # form, because the short form is derived by stripping the prefix.
+        from tengri.parameters._aliases import _warn_once_if_legacy, legacy_names_for
+
+        for legacy_full in legacy_names_for(param_name):
+            legacy_short = _extract_short_name(legacy_full, group_dict)
+            for candidate in (legacy_short, legacy_full):
+                if candidate in group_dict:
+                    _warn_once_if_legacy(candidate, short_name)
+                    override_key = candidate
+                    break
+            if override_key is not None:
+                break
 
     # Check for per-param override
     if override_key is not None:

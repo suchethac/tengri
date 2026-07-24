@@ -81,7 +81,7 @@ def powerlaw_disc_block(
     L_nu = powerlaw_disc(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_alpha=agn_alpha,
         agn_T_max=agn_T_max,
     )

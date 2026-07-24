@@ -285,7 +285,7 @@ class TestComputeQsogenSed:
     """Tests for the full QSOgen SED (requires template file)."""
 
     def test_shape_finite_non_negative_and_scaling(self, broad_wave):
-        """Shape, finiteness, non-negativity, and agn_frac scaling behavior.
+        """Shape, finiteness, non-negativity, and agn_lum_ratio scaling behavior.
 
         Note: compute_qsogen_sed includes stochastic emission lines, so we test
         physics (scaling, non-negativity) rather than frozen golden values.
@@ -299,9 +299,9 @@ class TestComputeQsogenSed:
         chex.assert_tree_all_finite(sed_default)
         assert jnp.all(sed_default >= 0.0), "SED must be non-negative"
 
-        # Test scaling: agn_frac should scale linearly
-        sed_half = compute_qsogen_sed(broad_wave, agn_frac=0.5)
-        sed_double = compute_qsogen_sed(broad_wave, agn_frac=2.0)
+        # Test scaling: agn_lum_ratio should scale linearly
+        sed_half = compute_qsogen_sed(broad_wave, agn_lum_ratio=0.5)
+        sed_double = compute_qsogen_sed(broad_wave, agn_lum_ratio=2.0)
         mask = sed_default > 0.0
         if jnp.any(mask):
             ratio_half = float(jnp.mean(sed_half[mask] / sed_default[mask]))
@@ -316,18 +316,18 @@ class TestComputeQsogenSed:
         assert jnp.all(sed >= 0.0)
 
     def test_agn_frac_zero_gives_zero(self, broad_wave):
-        """agn_frac=0 scales the entire SED to zero."""
+        """agn_lum_ratio=0 scales the entire SED to zero."""
         from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        sed = compute_qsogen_sed(broad_wave, agn_frac=0.0)
+        sed = compute_qsogen_sed(broad_wave, agn_lum_ratio=0.0)
         assert jnp.allclose(sed, 0.0)
 
     def test_agn_frac_scales_linearly(self, broad_wave):
-        """agn_frac doubles → SED doubles."""
+        """agn_lum_ratio doubles → SED doubles."""
         from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        sed1 = compute_qsogen_sed(broad_wave, agn_frac=1.0)
-        sed2 = compute_qsogen_sed(broad_wave, agn_frac=2.0)
+        sed1 = compute_qsogen_sed(broad_wave, agn_lum_ratio=1.0)
+        sed2 = compute_qsogen_sed(broad_wave, agn_lum_ratio=2.0)
         # Avoid dividing by zero at wavelengths where sed=0
         mask = sed1 > 0.0
         ratio = sed2[mask] / sed1[mask]

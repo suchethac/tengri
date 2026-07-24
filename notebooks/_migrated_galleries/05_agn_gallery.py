@@ -248,7 +248,7 @@ l_disc = np.asarray(
     multicolor_disc(
         wavelength,
         agn_log_lbol=_log_lbol,
-        agn_frac=1.0 - _torus_frac,
+        agn_lum_ratio=1.0 - _torus_frac,
         agn_log_mbh=8.0,
         agn_log_ledd=-1.0,
     )
@@ -664,7 +664,7 @@ lnu_simple = np.asarray(
     simple_fn(
         wavelength,
         agn_log_lbol=44.0,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_alpha=-1.0,
         agn_T_torus=1000.0,
         agn_torus_frac=0.5,
@@ -702,7 +702,7 @@ lnu_standard = np.asarray(
     standard_fn(
         wavelength,
         agn_log_lbol=44.0,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_log_mbh=8.0,
         agn_log_ledd=-1.0,
         agn_T_hot=1200.0,
@@ -748,7 +748,7 @@ l_disc_1 = np.asarray(
     multicolor_disc(
         wavelength,
         agn_log_lbol=44.0,
-        agn_frac=0.5,
+        agn_lum_ratio=0.5,
         agn_log_mbh=8.0,
         agn_log_ledd=-1.0,
     )

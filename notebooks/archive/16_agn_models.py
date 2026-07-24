@@ -127,7 +127,7 @@ seds = {}
 for name in sorted(AGN_MODELS.keys()):
     try:
         seds[name] = np.array(
-            AGN_MODELS[name](wave, agn_log_lbol=log_lbol, agn_frac=1.0)
+            AGN_MODELS[name](wave, agn_log_lbol=log_lbol, agn_lum_ratio=1.0)
         )
     except (FileNotFoundError, Exception) as e:
         print(f"Skipping {name}: {e}")
@@ -372,7 +372,7 @@ plt.show()
 #
 # When `agn_model="simple"` (or any registered model name) is set in
 # `ParamSpec`, the `SEDModel` class automatically adds AGN emission scaled
-# by `agn_frac * L_bol_stellar`.  Here we show a galaxy+AGN SED with
+# by `agn_lum_ratio * L_bol_stellar`.  Here we show a galaxy+AGN SED with
 # GALEX + SDSS + WISE photometry.
 
 # %%
@@ -416,7 +416,7 @@ spec_agn = ParamSpec(
     met_logzsol=Fixed(-0.2),
     dust_tau_bc=Fixed(0.3),
     dust_tau_diff=Fixed(0.5),
-    agn_frac=Fixed(0.15),
+    agn_lum_ratio=Fixed(0.15),
     redshift=Fixed(0.3),
     mean_sfh_type="dpl",
     agn_model="simple",
@@ -494,12 +494,12 @@ plt.show()
 # observation at $z = 0.3$ with known parameters, then recover them
 # using tengri's Evidence-maximizing Variational Inference (EVI).
 #
-# The key question: **can we recover `agn_frac` from photometry alone?**
+# The key question: **can we recover `agn_lum_ratio` from photometry alone?**
 # This is non-trivial because AGN emission is partially degenerate
 # with dust (both redden the UV and boost the MIR).
 
 # %%
-# Define the model with agn_frac as a free parameter
+# Define the model with agn_lum_ratio as a free parameter
 spec_fit = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
@@ -575,18 +575,18 @@ for name in sorted(true_params.keys()):
           f"{s['lo_68']:>8.3f} {s['hi_68']:>8.3f}")
 
 # %% [markdown]
-# ### 5a. Posterior of `agn_frac`
+# ### 5a. Posterior of `agn_lum_ratio`
 
 # %%
 fig, axes = plt.subplots(1, 3, figsize=(15, 4.5))
 
-# --- Panel 1: agn_frac posterior ---
+# --- Panel 1: agn_lum_ratio posterior ---
 ax = axes[0]
 agn_samples = np.array(result_evi.samples["agn_log_lbol"])
 ax.hist(agn_samples, bins=50, density=True, color="#8b6bba",
         alpha=0.7, edgecolor="white", lw=0.5)
 ax.axvline(float(all_true["agn_log_lbol"]), color="#1a1a1a", ls="--",
-           lw=2.0, label=f"Truth = {float(all_true['agn_frac']):.2f}")
+           lw=2.0, label=f"Truth = {float(all_true['agn_lum_ratio']):.2f}")
 ax.axvline(np.median(agn_samples), color="#c03d3e", ls="-",
            lw=1.5, label=f"Median = {np.median(agn_samples):.3f}")
 ax.set_xlabel(r"$\log\,L_{\rm bol,AGN}$ [erg/s]")
@@ -594,7 +594,7 @@ ax.set_ylabel("Posterior density")
 ax.set_title(r"AGN $\log L_{\rm bol}$ posterior")
 ax.legend(fontsize=9)
 
-# --- Panel 2: agn_frac vs dust_tau_diff (key degeneracy) ---
+# --- Panel 2: agn_lum_ratio vs dust_tau_diff (key degeneracy) ---
 ax = axes[1]
 dust_samples = np.array(result_evi.samples["dust_tau_diff"])
 ax.scatter(agn_samples, dust_samples, s=3, alpha=0.2, color="#8b6bba",
@@ -715,7 +715,7 @@ for lbol in agn_lbol_true_vals:
           f"({dt:.1f}s)")
 
 # %%
-# Plot: recovered vs true agn_frac
+# Plot: recovered vs true agn_lum_ratio
 fig, ax = plt.subplots(figsize=(6, 5.5))
 
 true_vals = np.array(agn_lbol_true_vals)

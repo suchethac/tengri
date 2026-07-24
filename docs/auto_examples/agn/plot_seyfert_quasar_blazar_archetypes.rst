@@ -82,14 +82,14 @@ classification depends on viewing angle, accretion rate, and dust geometry.
     )
 
 
-    def build_agn_archetype(log_lbol, agn_frac, agn_blocks, sfr_log, dust_config):
+    def build_agn_archetype(log_lbol, agn_lum_ratio, agn_blocks, sfr_log, dust_config):
         """Build an AGN archetype model.
 
         Parameters
         ----------
         log_lbol : float
             Bolometric AGN luminosity, log10(L_bol / L_sun).
-        agn_frac : float
+        agn_lum_ratio : float
             AGN fraction of total luminosity.
         agn_blocks : dict
             Composable AGN dict with 'disc', 'torus', 'nlr', 'blr', 'feii', 'atten'.
@@ -107,7 +107,7 @@ classification depends on viewing angle, accretion rate, and dust geometry.
         """
         agn_dict = {
             "log_lbol": log_lbol,
-            "frac": agn_frac,
+            "frac": agn_lum_ratio,
             "all_params": tengri.FIXED,
         }
         agn_dict.update(agn_blocks)
@@ -138,7 +138,7 @@ classification depends on viewing angle, accretion rate, and dust geometry.
 
     wave_sy2, sed_sy2 = build_agn_archetype(
         log_lbol=11.5,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_blocks=dict(
             disc={"type": "multicolor", "all_params": tengri.FIXED},
             torus={"type": "skirtor", "all_params": tengri.FIXED},
@@ -164,7 +164,7 @@ classification depends on viewing angle, accretion rate, and dust geometry.
 
     wave_q, sed_q = build_agn_archetype(
         log_lbol=13.5,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_blocks=dict(
             disc={"type": "multicolor", "all_params": tengri.FIXED},
             torus={"type": "skirtor", "all_params": tengri.FIXED},
@@ -190,7 +190,7 @@ classification depends on viewing angle, accretion rate, and dust geometry.
 
     wave_lirg, sed_lirg = build_agn_archetype(
         log_lbol=12.5,
-        agn_frac=0.6,  # Significant starburst contribution
+        agn_lum_ratio=0.6,  # Significant starburst contribution
         agn_blocks=dict(
             disc={"type": "multicolor", "all_params": tengri.FIXED},
             torus={"type": "skirtor", "all_params": tengri.FIXED},

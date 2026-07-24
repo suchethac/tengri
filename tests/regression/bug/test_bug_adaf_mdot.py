@@ -23,8 +23,8 @@ class TestADAFMdotDependence:
         """
         from tengri.components.agn.disc import adaf_disc
 
-        l_nu_high = adaf_disc(_WAVE, agn_log_lbol=10.0, agn_frac=0.1, agn_log_mbh=8.0)
-        l_nu_low = adaf_disc(_WAVE, agn_log_lbol=9.0, agn_frac=0.1, agn_log_mbh=8.0)
+        l_nu_high = adaf_disc(_WAVE, agn_log_lbol=10.0, agn_lum_ratio=0.1, agn_log_mbh=8.0)
+        l_nu_low = adaf_disc(_WAVE, agn_log_lbol=9.0, agn_lum_ratio=0.1, agn_log_mbh=8.0)
         # SEDs should differ in shape (not just scale, since both are renormalized to L_bol)
         ratio = l_nu_high / jnp.maximum(l_nu_low, 1e-300)
         # Synchrotron peak moves with m_dot, so the ratio should not be flat
@@ -38,10 +38,10 @@ class TestADAFMdotDependence:
 
         wave_radio = jnp.logspace(6, 9, 100)  # mm to cm radio
         l_nu_high = adaf_disc(
-            wave_radio, agn_log_lbol=10.0, agn_frac=1.0, agn_log_mbh=8.0, agn_log_ledd=-2.0
+            wave_radio, agn_log_lbol=10.0, agn_lum_ratio=1.0, agn_log_mbh=8.0, agn_log_ledd=-2.0
         )
         l_nu_low = adaf_disc(
-            wave_radio, agn_log_lbol=10.0, agn_frac=1.0, agn_log_mbh=8.0, agn_log_ledd=-4.0
+            wave_radio, agn_log_lbol=10.0, agn_lum_ratio=1.0, agn_log_mbh=8.0, agn_log_ledd=-4.0
         )
         peak_high = wave_radio[jnp.argmax(l_nu_high)]
         peak_low = wave_radio[jnp.argmax(l_nu_low)]

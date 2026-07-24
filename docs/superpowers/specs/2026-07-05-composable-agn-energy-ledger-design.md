@@ -24,7 +24,7 @@ broken PR #916.
 
 PR #916 tried to retire the monolithic `AGN_MODELS` by aliasing each old name to
 a composable "preset." Direct verification (monolithic function vs composable
-preset, matched `agn_frac`) showed it is **not physics-equivalent**:
+preset, matched `agn_lum_ratio`) showed it is **not physics-equivalent**:
 
 | model | preset / monolithic amplitude | cause |
 |---|---|---|
@@ -167,8 +167,8 @@ already normalize their output to `agn_torus_frac × L_bol`** (verified in
 silva04/cat3d_wind/fritz/nenkova/skirtor/skirtor_agnfitter torus blocks; the
 lines/FeII blocks normalize to the disc `l5100_disc` anchor). The only gap was
 the **disc**: the composable `powerlaw_disc_block` emitted at *full* `L_bol`
-(hardcoded `agn_frac=1.0`) while the monolithic models pass
-`agn_frac = 1 − agn_torus_frac`. So conservation is a disc-side debit in the
+(hardcoded `agn_lum_ratio=1.0`) while the monolithic models pass
+`agn_lum_ratio = 1 − agn_torus_frac`. So conservation is a disc-side debit in the
 runner, **not** a per-block migration.
 
 | Category | Today (`_protocol.py`) | Under the ledger |

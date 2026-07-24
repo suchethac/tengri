@@ -139,7 +139,7 @@ def test_unified_dispatch_registered() -> None:
     sed = fn(
         wl,
         agn_log_lbol=44.0,
-        agn_frac=0.1,
+        agn_lum_ratio=0.1,
         agn_cos_inc=0.5,
         agn_a_cat3d=-2.0,
         agn_fwd_cat3d=1.5,

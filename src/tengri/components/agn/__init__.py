@@ -20,7 +20,7 @@ Usage::
 
     # Named model
     model_fn = resolve_agn_model("multicolor_agn")
-    l_nu = model_fn(wavelength, agn_log_lbol=11.0, agn_frac=0.1)
+    l_nu = model_fn(wavelength, agn_log_lbol=11.0, agn_lum_ratio=0.1)
 
     # Generic combiner
     l_nu = unified_agn(wavelength, agn_log_lbol=11.0, disc_model="multicolor")

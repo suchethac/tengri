@@ -33,7 +33,7 @@ from tengri.components.agn.unified import register_agn_model
 def my_toy_torus(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 0.1,
+    agn_lum_ratio: float = 0.1,
     agn_T_torus: float = 300.0,
     agn_torus_frac: float = 0.5,
     **_kwargs,
@@ -49,7 +49,7 @@ def my_toy_torus(
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
         log10 of bolometric luminosity [Lsun].
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         AGN luminosity fraction of total SED [dimensionless]. Default 0.1.
     agn_T_torus : float, optional
         Dust torus temperature [K]. Default 300.
@@ -85,7 +85,7 @@ def my_toy_torus(
     B_norm = (2 * h * norm_1um_hz**3 / c**2) / (jnp.exp(h * norm_1um_hz / (k * agn_T_torus)) - 1)
     L_nu = (B_nu / B_norm) * (L_bol_erg_s / 1e10) * agn_torus_frac
 
-    return L_nu * agn_frac
+    return L_nu * agn_lum_ratio
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ print(
         truth.update({
             "sfh_tsnorm_log_total_mass": 0.5,
             "agn_log_lbol": 45.0,
-            "agn_frac": 0.1,
+            "agn_lum_ratio": 0.1,
         })
         mock = model.mock(truth, snr=100.0, key=key)
 

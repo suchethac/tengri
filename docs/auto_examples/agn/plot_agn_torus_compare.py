@@ -73,7 +73,7 @@ for (torus, label), color in zip(TORI, COLORS):
             "torus": {"type": torus, "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
             "log_lbol": 12.5,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         },
         redshift=tengri.Fixed(0.05),
     )

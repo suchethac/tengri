@@ -62,7 +62,22 @@ class ParameterRecord(NamedTuple):
 #: in its own name, so reading the suffix is transcription, not inference.
 #: ``ParamDef`` carries no units field, so this is the only source available
 #: for SFH parameters.
+#: Ordered longest-meaning-first: a *semantic stem* names the whole quantity
+#: (``log_total_mass``), a *bare suffix* only names its unit (``_gyr``). Stems
+#: must be tried first or ``sfh_db_log_sfr_inst`` would match nothing while
+#: ``sfh_snorm_burst_burst_sfr`` matched ``_yr`` inside "Msun/yr".
+#:
+#: Log quantities declare ``log10(<unit>)``, not ``<unit>``: ``log10(M/Msun)``
+#: is dimensionless, and saying "Msun" would invite exactly the units error
+#: this project keeps finding. ``dex`` is used when the log is of a ratio or
+#: an offset, where there is no underlying unit to name.
 _SUFFIX_UNITS: tuple[tuple[str, str], ...] = (
+    # semantic stems (more specific — must precede the bare unit suffixes)
+    ("log_total_mass", "log10(Msun)"),
+    ("log_sfr_inst", "log10(Msun/yr)"),
+    ("burst_sfr", "Msun/yr"),
+    ("met_logzsol_scatter", "dex"),
+    # bare unit suffixes
     ("_gyr", "Gyr"),
     ("_myr", "Myr"),
     ("_kms", "km/s"),
@@ -70,13 +85,48 @@ _SUFFIX_UNITS: tuple[tuple[str, str], ...] = (
     ("_yr", "yr"),
 )
 
+#: Patterns whose index varies, so a fixed suffix cannot catch them.
+_PATTERN_UNITS: tuple[tuple[str, str], ...] = (
+    # "log10 flex bin SFR ratio N (controls bin width)" — a log ratio.
+    (r"_flex_\d+$", "dex"),
+)
+
 
 def _units_from_name(name: str) -> str:
-    """Units implied by a parameter name's suffix, or ``""`` if none applies."""
+    """Units implied by a parameter name, or ``""`` if none applies.
+
+    Notes
+    -----
+    Inference-from-name is how every model-registry parameter (SFH, MET) gets
+    its units — those registries have no per-parameter ``units`` field, unlike
+    the component ``_params.py`` declarations. Before the stems above existed,
+    that meant only the five bare unit suffixes were recognized, so all 137
+    ``sfh_*`` parameters between them declared just ``Gyr``/``Myr``/``km/s``
+    and every ``log_total_mass`` declared nothing (#1296).
+    """
+    import re
+
     for suffix, units in _SUFFIX_UNITS:
         if name.endswith(suffix):
+            # A bare unit suffix on a log-valued name states the unit of the
+            # quantity *inside* the log, and log10(t/Myr) is dimensionless.
+            # `sfh_burst_log_tmax_myr` declared "Myr" on exactly that mistake.
+            # The semantic stems above already carry their own log10(...) form,
+            # so only the bare suffixes need wrapping.
+            if units.startswith("log10(") or units == "dex":
+                return units
+            return f"log10({units})" if _is_log_valued(name) else units
+    for pattern, units in _PATTERN_UNITS:
+        if re.search(pattern, name):
             return units
     return ""
+
+
+def _is_log_valued(name: str) -> bool:
+    """True when the parameter's *value* is a logarithm, from its name alone."""
+    import re
+
+    return bool(re.search(r"(^|_)l(og|g)[a-z0-9_]", name, flags=re.I))
 
 
 #: Registries that own their parameters' *translation* as well as their

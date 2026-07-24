@@ -126,7 +126,7 @@ def _evaluate_recipe_on_grid(
 
     base_call = dict(fixed_values)
     base_call.setdefault("agn_log_lbol", agn_log_lbol_default)
-    base_call.setdefault("agn_frac", 1.0)
+    base_call.setdefault("agn_lum_ratio", 1.0)
 
     for flat_idx, multi_idx in enumerate(indices):
         call = dict(base_call)
