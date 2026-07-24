@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """#1316: fit_batch(redshift_col=...) recompiles per galaxy without catalog_z_range.
 
 The zero-clone fix (skipping model clones when catalog_z_range is set) is
