@@ -4,7 +4,7 @@
 Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc``.
 
 **Requires blackjax >= 1.4.** In blackjax >= 1.5, the mclmc adaptation
-functions gained a required `logdensity_fn` parameter. This module detects
+functions require `logdensity_fn` as an explicit parameter. This module detects
 the parameter and passes it by keyword, maintaining compatibility with both
 versions (see #1177).
 """
@@ -49,6 +49,24 @@ def _call_mclmc_find_L_and_step_size(logdensity_fn, **kwargs):
     if "logdensity_fn" in sig.parameters:
         kwargs["logdensity_fn"] = logdensity_fn
     return blackjax.mclmc_find_L_and_step_size(**kwargs)
+
+
+def _call_adjusted_mclmc_find_L_and_step_size(logdensity_fn, **kwargs):
+    """Call adjusted_mclmc_find_L_and_step_size with version-aware parameters.
+
+    blackjax >= 1.5 added logdensity_fn as parameter 2 (after mclmc_kernel),
+    shifting all positional arguments. This helper detects the parameter and
+    passes all arguments by keyword, working on both blackjax 1.3 (no param)
+    and >= 1.5 (required param at position 2).
+    """
+    import inspect
+
+    import blackjax
+
+    sig = inspect.signature(blackjax.adjusted_mclmc_find_L_and_step_size)
+    if "logdensity_fn" in sig.parameters:
+        kwargs["logdensity_fn"] = logdensity_fn
+    return blackjax.adjusted_mclmc_find_L_and_step_size(**kwargs)
 
 
 def run_mclmc(
@@ -313,9 +331,9 @@ def run_adjusted_mclmc(
             return k(rng_key, state, step_size, n_steps)
 
         key, tune_key = jax.random.split(key)
-        state, params, _ = blackjax.adjusted_mclmc_find_L_and_step_size(
-            mclmc_kernel=_kernel_for_adaptation,
+        state, params, _ = _call_adjusted_mclmc_find_L_and_step_size(
             logdensity_fn=ld_1arg,
+            mclmc_kernel=_kernel_for_adaptation,
             num_steps=n_warmup,
             state=state,
             rng_key=tune_key,
