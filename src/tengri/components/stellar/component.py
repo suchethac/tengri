@@ -1785,8 +1785,19 @@ class StellarSEDComponent:
         # honest answer (DSPS's kernel instead floors SFR to SFR_MIN and
         # returns uniform-ish garbage weights for the same input).
         joint_weights = joint_weights / jnp.maximum(joint_weights.sum(), 1e-300)
-        # Per-age × per-Msun-formed weighted SSP flux (Lsun/Hz/Msun):
-        ssp_flux_at_age = jnp.einsum("ma,maw->aw", joint_weights, ssp_flux_for_csp)
+        # Per-age × per-Msun-formed weighted SSP flux in erg/s/Hz/Msun. L_sun is
+        # folded into the (params-independent) SSP operand INSIDE the einsum, not
+        # applied as a runtime factor in ``total_mass * X * L_sun`` below. The
+        # forward value is fine either way, but autodiff's local Jacobian for
+        # that product, ``d/dX = total_mass * L_sun`` ~ 3.8e43, overflows float32
+        # (3.4e38) as a standalone intermediate under XLA's *fused* reverse pass
+        # — even though the true gradient is in range (the unfused path is
+        # finite). With L_sun carried on the zero-gradient SSP constant, the only
+        # Jacobians autodiff forms are ``total_mass`` (~1e10) and the erg-scaled
+        # SSP (~3.8e18), both representable. Identical in float64 (#1206).
+        ssp_flux_at_age = jnp.einsum(
+            "ma,maw->aw", joint_weights, ssp_flux_for_csp * LSUN_ERG_PER_S
+        )
         # Per-age "mass" for downstream per-age operations (dust BC mask).
         # This is the marginalized age distribution × total_mass.
         age_weights = joint_weights.sum(axis=0) * total_mass  # (n_age,) Msun
@@ -1809,9 +1820,10 @@ class StellarSEDComponent:
         # exact SED, the photometry/spectrum LUTs, ``lnu_age``, ``L_age``,
         # ``age_weights``, and ``pred.stellar_mass`` all honor the one
         # contract mass. ``ssp_flux_at_age`` (line above) is the per-met-summed
-        # joint-weighted SSP flux per Msun formed; summing over age and scaling
-        # by ``total_mass`` is exactly ``Σ_age lnu_age``. (Reverses #394.)
-        lnu_age = total_mass * ssp_flux_at_age * LSUN_ERG_PER_S
+        # joint-weighted SSP flux per Msun formed, already in erg/s/Hz/Msun
+        # (L_sun folded in); scaling by ``total_mass`` is exactly ``Σ_age
+        # lnu_age``. (Reverses #394.)
+        lnu_age = total_mass * ssp_flux_at_age
         sed_intrinsic = lnu_age.sum(axis=0)
 
         # The bare erg/s scale ``total_mass x L_sun``. Written out on its own it
