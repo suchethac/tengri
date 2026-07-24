@@ -108,3 +108,73 @@ def test_ab_mag_conversion_with_error_propagation():
     fnu = 10 ** (-0.4 * (20.0 + 48.60))
     np.testing.assert_allclose(ca.flux[0, 0], fnu, rtol=1e-6)
     np.testing.assert_allclose(ca.noise[0, 0], fnu * np.log(10) / 2.5 * 0.1, rtol=1e-6)
+
+
+def test_boolean_censor_rejected():
+    """A boolean censor column would launder True->1 (upper limit) past the
+    Fitter data_mask guard — reject it at the ingest seam (#1317 review)."""
+    from tengri.inference.catalog_ingest import ingest_catalog
+
+    t = _table(gflag=np.array([True, False]), rflag=np.array([False, False]))
+    with pytest.raises(ValueError, match="boolean"):
+        ingest_catalog(
+            t,
+            photometry=_phot(),
+            flux_unit="cgs_fnu",
+            censor_cols={"sdss_g": "gflag", "sdss_r": "rflag"},
+        )
+
+
+def test_garbage_censor_flag_rejected():
+    """Flags outside {0, 1, -1} (e.g. -99, 2) are rejected, not silently kept."""
+    from tengri.inference.catalog_ingest import ingest_catalog
+
+    t = _table(gflag=np.array([2, -99]), rflag=np.array([0, 0]))
+    with pytest.raises(ValueError, match=r"invalid flag"):
+        ingest_catalog(
+            t,
+            photometry=_phot(),
+            flux_unit="cgs_fnu",
+            censor_cols={"sdss_g": "gflag", "sdss_r": "rflag"},
+        )
+
+
+def test_valid_censor_flags_accepted():
+    """The legal flag set {0, 1, -1} still passes and lands as ints."""
+    from tengri.inference.catalog_ingest import ingest_catalog
+
+    t = _table(gflag=np.array([0, 1]), rflag=np.array([-1, 0]))
+    ca = ingest_catalog(
+        t,
+        photometry=_phot(),
+        flux_unit="cgs_fnu",
+        censor_cols={"sdss_g": "gflag", "sdss_r": "rflag"},
+    )
+    assert ca.censor[1, 0] == 1 and ca.censor[0, 1] == -1
+    assert bool(ca.presence.all())  # censored != absent
+
+
+def test_nonfinite_redshift_rejected():
+    """A NaN/inf redshift becomes a NaN loss with no trail — reject at the seam."""
+    from tengri.inference.catalog_ingest import ingest_catalog
+
+    with pytest.raises(ValueError, match="non-finite"):
+        ingest_catalog(
+            _table(z=np.array([np.nan, 0.5])),
+            photometry=_phot(),
+            flux_unit="cgs_fnu",
+            redshift_col="z",
+        )
+
+
+def test_negative_redshift_rejected():
+    """A negative redshift is unphysical — reject it."""
+    from tengri.inference.catalog_ingest import ingest_catalog
+
+    with pytest.raises(ValueError, match=r">= 0|negative"):
+        ingest_catalog(
+            _table(z=np.array([0.1, -0.5])),
+            photometry=_phot(),
+            flux_unit="cgs_fnu",
+            redshift_col="z",
+        )

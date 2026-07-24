@@ -183,9 +183,23 @@ def ingest_catalog(
 
     # Step 7: Read redshift if requested
     if redshift_col is not None:
-        redshift = np.asarray(table[redshift_col])
+        redshift = np.asarray(table[redshift_col], dtype=float)
         if redshift.ndim != 1 or len(redshift) != n_galaxies:
             raise ValueError(f"redshift must be 1D with length {n_galaxies}")
+        # A non-finite or negative redshift produces a NaN/garbage loss with no
+        # trail back to the offending row — reject it at this seam.
+        if not np.all(np.isfinite(redshift)):
+            bad = np.where(~np.isfinite(redshift))[0].tolist()
+            raise ValueError(
+                f"redshift has non-finite value(s) at row(s) {bad}. A NaN/inf "
+                f"redshift becomes a NaN loss with no trail to the row; convert "
+                f"sentinels (e.g. -99) and fix missing redshifts before ingestion."
+            )
+        if np.any(redshift < 0.0):
+            bad = np.where(redshift < 0.0)[0].tolist()
+            raise ValueError(
+                f"redshift has negative value(s) at row(s) {bad}; redshift must be >= 0."
+            )
     else:
         redshift = None
 
@@ -196,7 +210,25 @@ def ingest_catalog(
             if band_name not in censor_cols:
                 raise ValueError(f"Band '{band_name}' not in censor_cols mapping")
             col_name = censor_cols[band_name]
-            censor[:, band_idx] = np.asarray(table[col_name])
+            col = np.asarray(table[col_name])
+            # Reject boolean flags: a bool ``True`` would silently cast to 1
+            # ("upper limit"), laundering an intended include-mask past the
+            # Fitter's data_mask guard (spec §3.3). Flags are integers {0,1,-1}.
+            if col.dtype == bool:
+                raise ValueError(
+                    f"censor column '{col_name}' is boolean; censor flags are "
+                    f"integers 0 (detected), 1 (upper limit), -1 (lower limit). "
+                    f"A boolean mask is not a censor flag — convert it explicitly."
+                )
+            # Reject garbage flag values (-99, 2, 0.5, NaN, ...) at the seam.
+            in_range = np.isin(col, (-1, 0, 1))
+            if not in_range.all():
+                bad = np.unique(col[~in_range]).tolist()
+                raise ValueError(
+                    f"censor column '{col_name}' has invalid flag value(s) {bad}; "
+                    f"allowed: 0 (detected), 1 (upper limit), -1 (lower limit)."
+                )
+            censor[:, band_idx] = col.astype(int)
     else:
         censor = None
 
