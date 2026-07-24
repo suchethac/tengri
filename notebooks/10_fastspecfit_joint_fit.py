@@ -57,7 +57,6 @@ import warnings
 # the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
 warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
 warnings.filterwarnings("ignore", message=".*Composable AGN.*")
 # The dense-mass NUTS run below deliberately uses dense_mass_matrix=True for
@@ -89,7 +88,6 @@ from tengri import (
     load_ssp_data,
     plot,
 )
-from tengri.inference.fitter import Fitter
 from tengri.observation import LineFluxData
 from tengri.utils.conversions import lnu_to_fnu
 
@@ -106,8 +104,8 @@ C_POST, C_TRUTH, C_DATA, C_LINE = "#3a76d9", "0.15", "#c3372a", "#2e8b57"
 # optical lines a FastSpecFit spectrum delivers: the [O II] doublet, the Balmer
 # lines, [O III], [N II], and [S II]. The line wavelengths come straight from
 # the built-in `LineList`; the observed fluxes and their errors go into a
-# `LineFluxData`, which the `Observation` carries alongside the photometry. The
-# `Fitter` then fits both channels through one likelihood — no extra wiring.
+# `LineFluxData`, which the `Observation` carries alongside the photometry.
+# `model.fit` then fits both channels through one likelihood — no extra wiring.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"  # bare-stellar SSP (Cue adds the nebular emission)
@@ -232,7 +230,7 @@ flux_phot = p_phot + _rng.normal(size=p_phot.shape) * n_phot
 flux_line = p_line + _rng.normal(size=p_line.shape) * n_line
 
 # The observed line fluxes live in the Observation the fit model carries; the
-# observed photometry is passed to the Fitter. This is the public joint-fit API.
+# observed photometry is passed to `model.fit`. This is the public joint-fit API.
 line_data = LineFluxData(
     names=tuple(LINE_NAMES),
     fluxes=jnp.asarray(flux_line),
@@ -274,13 +272,14 @@ MAP_KW = dict(method="map", key=jax.random.PRNGKey(1), n_steps=200)
 
 
 def timed_map(model, label):
-    fitter = Fitter(model, flux_phot, n_phot, data_type="photometry")
-    assert "line_flux_obs" in fitter._data_args, "line likelihood not active"
+    # The line likelihood is active because the Observation carries line_fluxes.
+    assert model.observation.line_fluxes is not None, "line likelihood not active"
     t0 = time.perf_counter()
-    fitter.run(**MAP_KW)  # first call pays the JIT compile
+    model.fit(flux_phot, n_phot, data_type="photometry", **MAP_KW)  # pays the JIT compile
     cold = time.perf_counter() - t0
     t0 = time.perf_counter()
-    post = fitter.run(**MAP_KW)  # a second run re-traces the step -> wall ~= cold
+    # The compile cache is model-keyed, so a second fit on the same model reuses it.
+    post = model.fit(flux_phot, n_phot, data_type="photometry", **MAP_KW)
     warm = time.perf_counter() - t0
     loop = post.wall_time_s  # the compiled optimization loop, compile excluded
     print(f"  {label:22s} run() wall {warm:5.2f}s   compiled step {loop:5.2f}s")
@@ -317,7 +316,10 @@ print(
 # %%
 N_WARMUP, N_SAMPLES, N_CHAINS, N_LEAPFROG = 500, 300, 2, 100
 t0 = time.perf_counter()
-posterior = Fitter(model_fast, flux_phot, n_phot, data_type="photometry").run(
+posterior = model_fast.fit(
+    flux_phot,
+    n_phot,
+    data_type="photometry",
     method="mcmc_hmc",
     key=jax.random.PRNGKey(7),
     n_warmup=N_WARMUP,
@@ -614,7 +616,7 @@ print(
 #
 # - A **FastSpecFit-style catalog** — broadband photometry + emission-line
 #   fluxes — is fit through one `Observation` carrying both, with the lines in a
-#   `LineFluxData`. No extra wiring: the `Fitter` picks up the line likelihood.
+#   `LineFluxData`. No extra wiring: the fit picks up the line likelihood.
 # - Model a catalog line flux with **`predict_line_fluxes`** — pure, deblended,
 #   absorption-corrected emission, the same quantity FastSpecFit's `LINE_FLUX`
 #   reports (Gaussian on a continuum-subtracted spectrum). A window-integrated
