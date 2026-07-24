@@ -2,6 +2,11 @@
 """MCLMC and Adjusted MCLMC via BlackJAX.
 
 Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc``.
+
+**Requires blackjax.** The mclmc kernel adaptation interface changed between
+blackjax 1.4 and 1.5. This module uses feature detection to support both
+versions, but the >= 1.5 path is UNVERIFIED in this codebase (see #1177).
+Verify in a CI job or scratch environment with blackjax >= 1.5.
 """
 
 from __future__ import annotations
@@ -23,6 +28,23 @@ from tengri.inference.backends.mcmc._shared import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _call_mclmc_find_L_and_step_size(**kwargs):
+    """Call mclmc_find_L_and_step_size with version-aware parameters.
+
+    blackjax >= 1.5 added the Lfactor parameter. This branch detects the
+    parameter and conditionally passes it. The >= 1.5 path is UNVERIFIED
+    in this environment (pinned to blackjax 1.3). See issue #1177.
+    """
+    import inspect
+
+    import blackjax
+
+    sig = inspect.signature(blackjax.mclmc_find_L_and_step_size)
+    if "Lfactor" in sig.parameters:
+        kwargs.setdefault("Lfactor", 0.4)
+    return blackjax.mclmc_find_L_and_step_size(**kwargs)
 
 
 def run_mclmc(
@@ -111,7 +133,7 @@ def run_mclmc(
         state = blackjax.mcmc.mclmc.init(init_flat, ld_1arg, init_key)
 
         key, tune_key = jax.random.split(key)
-        state, params, _ = blackjax.mclmc_find_L_and_step_size(
+        state, params, _ = _call_mclmc_find_L_and_step_size(
             mclmc_kernel=kernel_factory,
             num_steps=n_warmup,
             state=state,
