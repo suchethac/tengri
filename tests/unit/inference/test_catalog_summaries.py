@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for catalog per-galaxy summaries: percentiles, reducers, to_table()."""
+"""#1313: catalog per-galaxy summaries — percentiles, reducers, to_table().
+
+These tests exercise the REAL implementation end-to-end (``Catalog.fit`` and
+``_compute_summaries``), not hand-built fixture data. The reduction logic is
+checked against analytically-known values, and the store="summary" cube-drop and
+to_table round-trip are checked through an actual fit.
+"""
 
 import jax
 import jax.numpy as jnp
@@ -8,236 +14,108 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.inference.catalog_fitter import CatalogPosterior
-from tengri.inference.posterior import Posterior
-
 pytestmark = pytest.mark.contract
 
 
-@pytest.fixture
-def tiny_catalog_with_samples():
-    """Create a 3-galaxy catalog with known samples for testing percentiles."""
-    key = jax.random.PRNGKey(42)
-    keys = jax.random.split(key, 3)
+def _fwd_free_z():
+    """3-band model with a FREE redshift (so MCMC needs no per-galaxy redshift)."""
+    from tengri import FIXED, FREE, ForwardModel, Observation, Photometry, SEDModel, Uniform
+    from tengri.components.stellar.sps.dsps_wrapper import SSPData
+    from tengri.observation.photometry import FilterCurve
 
-    posteriors = []
-    for i, k in enumerate(keys):
-        # Each galaxy has 10 samples
-        k1, k2 = jax.random.split(k)
-        # Create known samples: galaxy i gets offset-i data
-        base_mass = 10.0 + float(i)
-        samples_i = {
-            "sfh_dpl_alpha": base_mass + 0.5 * jax.random.normal(k1, (10,)),
-            "dust_av": 0.5 + 0.1 * jax.random.normal(k2, (10,)),
-        }
-        params_i = {
-            "sfh_dpl_alpha": jnp.array(base_mass),
-            "dust_av": jnp.array(0.5),
-        }
-        posteriors.append(
-            Posterior(
-                samples=samples_i,
-                params=params_i,
-                method="test",
-                wall_time_s=1.0,
-                diagnostics={},
-            )
-        )
-
-    return CatalogPosterior(
-        posteriors=posteriors,
-        method="test",
-        wall_time_s=3.0,
-        n_galaxies=3,
-        diagnostics={},
+    wave = jnp.linspace(3000.0, 10000.0, 60)
+    ages = jnp.linspace(-1.0, 1.14, 12)
+    lgmet = jnp.array([-1.5, -0.5, 0.0])
+    ssp = SSPData(
+        ssp_wave=wave,
+        ssp_flux=jnp.abs(jnp.ones((3, 12, 60))) * 1e-3 + 1e-5,
+        ssp_lg_age_gyr=ages,
+        ssp_lgmet=lgmet,
     )
-
-
-@pytest.fixture
-def tiny_catalog_with_percentiles_and_summary():
-    """Create a 3-galaxy catalog with pre-computed percentiles and summary."""
-    key = jax.random.PRNGKey(42)
-    keys = jax.random.split(key, 3)
-
-    posteriors = []
-    for i, k in enumerate(keys):
-        # Each galaxy has 10 samples
-        k1, k2 = jax.random.split(k)
-        base_mass = 10.0 + float(i)
-        samples_i = {
-            "sfh_dpl_alpha": base_mass + 0.5 * jax.random.normal(k1, (10,)),
-            "dust_av": 0.5 + 0.1 * jax.random.normal(k2, (10,)),
-        }
-        params_i = {
-            "sfh_dpl_alpha": jnp.array(base_mass),
-            "dust_av": jnp.array(0.5),
-        }
-
-        # Compute percentiles manually
-        pcts = [16, 50, 84]
-        percentiles_i = {}
-        for name, samples in samples_i.items():
-            percentiles_i[name] = np.percentile(np.asarray(samples), pcts)
-
-        # Compute summary with mean and std reducers
-        summary_i = {
-            "mean": {},
-            "std": {},
-        }
-        for name, samples in samples_i.items():
-            summary_i["mean"][name] = float(np.mean(np.asarray(samples)))
-            summary_i["std"][name] = float(np.std(np.asarray(samples)))
-
-        post_i = Posterior(
-            samples=samples_i,
-            params=params_i,
-            method="test",
-            wall_time_s=1.0,
-            diagnostics={},
-        )
-        post_i._percentiles_stats_ = percentiles_i
-        post_i._summary_stats_ = summary_i
-
-        posteriors.append(post_i)
-
-    cat = CatalogPosterior(
-        posteriors=posteriors,
-        method="test",
-        wall_time_s=3.0,
-        n_galaxies=3,
-        diagnostics={},
+    curves = tuple(
+        FilterCurve(wave=jnp.linspace(lo, hi, 30), trans=jnp.ones(30) * 0.5, name=f"b{i}")
+        for i, (lo, hi) in enumerate([(3500.0, 4500.0), (5000.0, 6500.0), (7500.0, 9000.0)])
     )
-    cat.percentiles = {}
-    cat.summary = {}
-    cat.store = "summary"
-
-    # Stack percentiles and summary across galaxies
-    for name in posteriors[0]._percentiles_stats_:
-        cat.percentiles[name] = np.stack([p._percentiles_stats_[name] for p in posteriors])
-
-    for reducer_name in posteriors[0]._summary_stats_:
-        cat.summary[reducer_name] = {}
-        for name in posteriors[0]._summary_stats_[reducer_name]:
-            cat.summary[reducer_name][name] = np.array(
-                [p._summary_stats_[reducer_name][name] for p in posteriors]
-            )
-
-    return cat
+    obs = Observation(photometry=Photometry(filters=curves))
+    sed = SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl", "all_params": FREE},
+        dust={"type": "two_component", "all_params": FIXED, "tau_bc": 0.5},
+        neb={"type": "none"},
+        redshift=Uniform(0.1, 1.0),
+    )
+    return ForwardModel.build(sed=sed, observation=obs), sed
 
 
-class TestPercentileAndReducerShapes:
-    """Test that percentiles and reducers have correct shapes."""
-
-    def test_percentiles_and_reducers_shapes(self, tiny_catalog_with_percentiles_and_summary):
-        """Percentiles should have shape (N, n_pct); reducers shape (N,) per property."""
-        cat = tiny_catalog_with_percentiles_and_summary
-        n_gal = 3
-        n_pct = 3  # 16, 50, 84
-
-        # Check percentiles
-        assert "sfh_dpl_alpha" in cat.percentiles
-        assert cat.percentiles["sfh_dpl_alpha"].shape == (n_gal, n_pct)
-        assert cat.percentiles["dust_av"].shape == (n_gal, n_pct)
-
-        # Check summary / reducers
-        assert "mean" in cat.summary
-        assert "std" in cat.summary
-
-        assert cat.summary["mean"]["sfh_dpl_alpha"].shape == (n_gal,)
-        assert cat.summary["mean"]["dust_av"].shape == (n_gal,)
-        assert cat.summary["std"]["sfh_dpl_alpha"].shape == (n_gal,)
-        assert cat.summary["std"]["dust_av"].shape == (n_gal,)
+def _table(fwd, sed, n=3):
+    d = np.asarray(sed.predict_photometry({p: 0.0 for p in sed.spec.free_params}))
+    return {
+        "b0": np.array([d[0]] * n),
+        "b0_err": np.abs([d[0]] * n) * 0.1 + 1e-30,
+        "b1": np.array([d[1]] * n),
+        "b1_err": np.abs([d[1]] * n) * 0.1 + 1e-30,
+        "b2": np.array([d[2]] * n),
+        "b2_err": np.abs([d[2]] * n) * 0.1 + 1e-30,
+    }
 
 
-class TestStoreSummaryDropsTheCube:
-    """Test that store='summary' actually drops the samples cube from memory."""
+def test_compute_summaries_analytic():
+    """The reduction logic matches np.percentile / the reducers on KNOWN input.
 
-    def test_store_summary_drops_the_cube(self):
-        """With store='summary', accessing .samples on a per-galaxy Posterior drops it."""
-        # Build a catalog with samples, then manually set store='summary' and
-        # drop samples (simulating what the implementation should do)
-        key = jax.random.PRNGKey(42)
-        k1, k2 = jax.random.split(key)
+    This is the load-bearing non-vacuous check: a shape-only test passes for
+    ``np.zeros``, so we assert exact values on a known sample set.
+    """
+    from tengri.inference.catalog_fitter import _compute_summaries
 
-        samples = {
-            "sfh_dpl_alpha": 10.0 + 0.5 * jax.random.normal(k1, (10,)),
-            "dust_av": 0.5 + 0.1 * jax.random.normal(k2, (10,)),
-        }
-        params = {"sfh_dpl_alpha": jnp.array(10.0), "dust_av": jnp.array(0.5)}
-
-        # Compute summaries first
-        pcts = [16, 50, 84]
-        percentiles = {name: np.percentile(np.asarray(s), pcts) for name, s in samples.items()}
-
-        post = Posterior(
-            samples=samples,
-            params=params,
-            method="test",
-            wall_time_s=1.0,
-            diagnostics={},
-        )
-        post._percentiles_stats_ = percentiles
-        post._summary_stats_ = {
-            "mean": {name: float(np.mean(np.asarray(s))) for name, s in samples.items()}
-        }
-
-        # Manually drop samples to simulate store='summary'
-        post.samples = None
-
-        # Now accessing .samples should be None, not raise
-        assert post.samples is None
-
-        # The percentiles should still be accessible
-        assert "sfh_dpl_alpha" in post._percentiles_stats_
-        assert post._percentiles_stats_["sfh_dpl_alpha"].shape == (3,)
+    samples = {"x": np.arange(11.0)}  # [0, 1, ..., 10]
+    pc, sm = _compute_summaries(
+        samples, percentiles=(0, 25, 50, 75, 100), reducers={"mean": np.mean, "std": np.std}
+    )
+    np.testing.assert_allclose(pc["x"], [0.0, 2.5, 5.0, 7.5, 10.0])
+    np.testing.assert_allclose(sm["mean"]["x"], 5.0)
+    np.testing.assert_allclose(sm["std"]["x"], np.std(np.arange(11.0)))
 
 
-class TestStoreFullKeepsTodaysBehavior:
-    """Test that store='full' preserves samples and does not compute summaries."""
+@pytest.mark.slow
+def test_store_summary_end_to_end_drops_cube_and_summarizes():
+    """A real MCMC fit with store='summary' computes percentiles/reducers, drops
+    the samples cube, and to_table() round-trips as an ingest duck-type."""
+    fwd, sed = _fwd_free_z()
+    from tengri import Catalog
 
-    def test_store_full_keeps_todays_behavior(self, tiny_catalog_with_samples):
-        """With store='full', samples are retained and percentiles/summary are not computed."""
-        cat = tiny_catalog_with_samples
+    cat = Catalog(fwd, _table(fwd, sed), flux_unit="cgs_fnu")
+    post = cat.fit(
+        method="mcmc_nuts",
+        key=jax.random.PRNGKey(0),
+        n_warmup=20,
+        n_samples=30,
+        store="summary",
+        percentiles=(16, 50, 84),
+        reducers={"mean": np.mean, "std": np.std},
+    )
+    p = list(sed.spec.free_params)[0]
+    # percentiles + reducers materialized at (N, n_pct) / (N,)
+    assert post.percentiles is not None and np.asarray(post.percentiles[p]).shape == (3, 3)
+    assert post.summary is not None and np.asarray(post.summary["mean"][p]).shape == (3,)
+    v = np.asarray(post.percentiles[p][0])
+    assert v[0] <= v[1] <= v[2], "percentiles must be ordered p16<=p50<=p84"
+    # the cube is actually dropped (memory), not merely hidden
+    assert post.posteriors[0].samples is None
+    # to_table round-trips: a dict of length-N columns, re-ingestable
+    table = post.to_table()
+    assert isinstance(table, dict) and len(table) > 0
+    assert all(len(v) == 3 for v in table.values() if isinstance(v, np.ndarray))
 
-        # With no percentiles/summary stats, they should not exist as attributes
-        for post in cat.posteriors:
-            # Check that the summary stats dict (not the method) doesn't exist
-            assert not hasattr(post, "_percentiles")
-            # or that it's None if it does exist (implementation detail)
-            if hasattr(post, "_percentiles"):
-                assert post._percentiles is None
 
-        # But samples should be present
-        for post in cat.posteriors:
-            assert post.samples is not None
-            assert "sfh_dpl_alpha" in post.samples
+@pytest.mark.slow
+def test_store_full_keeps_samples():
+    """store='full' retains the per-galaxy samples (today's behavior)."""
+    fwd, sed = _fwd_free_z()
+    from tengri import Catalog
 
-
-class TestToTableRoundTripsColumnMapping:
-    """Test that to_table() round-trips through ingest_catalog."""
-
-    def test_to_table_round_trips_column_mapping(self, tiny_catalog_with_percentiles_and_summary):
-        """to_table() returns a dict with correct shape and keys matching ingest contract."""
-        cat = tiny_catalog_with_percentiles_and_summary
-
-        # Call to_table() — should return a dict-like with (N, n_data) shape
-        table = cat.to_table()
-
-        # Check that it's a dict
-        assert isinstance(table, dict)
-
-        # Check essential properties are present
-        assert "stellar_mass" in table or "sfh_dpl_alpha" in table  # depends on model
-
-        # Check shape: each column should have N rows
-        n_gal = cat.n_galaxies
-        for key, val in table.items():
-            if isinstance(val, np.ndarray):
-                assert len(val) == n_gal, f"Column {key} has {len(val)} rows, expected {n_gal}"
-
-        # The dict should be re-ingestable by ingest_catalog (duck-type contract)
-        # This means it should support __getitem__ and len()
-        assert len(table) > 0
-        # At least one key should be accessible
-        first_key = next(iter(table.keys()))
-        assert table[first_key] is not None
+    cat = Catalog(fwd, _table(fwd, sed), flux_unit="cgs_fnu")
+    post = cat.fit(
+        method="mcmc_nuts", key=jax.random.PRNGKey(1), n_warmup=20, n_samples=30, store="full"
+    )
+    assert post.posteriors[0].samples is not None
