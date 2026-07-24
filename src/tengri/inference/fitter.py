@@ -576,6 +576,15 @@ class Fitter:
                         f"Parameter {key!r} is not a valid parameter name. "
                         f"Valid parameters: {all_params}"
                     )
+            # Merge the override INTO the fixed-values dict — this is the single
+            # source of truth the loss closure bakes at build time
+            # (``loss_functions.build_loss_fn`` -> ``fitter._fixed_values``) and the
+            # output conversion (``_to_physical``) reads. Merging only in
+            # ``_to_physical`` is a silent relabel: the loss keeps running at the
+            # model's fixed value while the returned params echo the override.
+            # The override is part of ``_engine_cache_key`` so a second fit with a
+            # different override compiles its own loss rather than reusing this one.
+            self._fixed_values = {**self._fixed_values, **self._params_override}
 
         # ── Data arguments ─────────────────────────────────────────
         self._data_args = self._build_data_args(model)
@@ -902,8 +911,18 @@ class Fitter:
         import contextlib
 
         with contextlib.suppress(AttributeError, TypeError):
+            # Per-fit params override (#1329): the forward pass reads fixed values
+            # (e.g. redshift under ``catalog_z_range``) from this threaded dict at
+            # runtime, so the override MUST be merged here — not only in
+            # ``_to_physical`` (the output-conversion path). Merging only there is a
+            # silent relabel: the loss still runs at the model's fixed value while the
+            # returned ``params`` echo the override. Keys are already validated in
+            # ``__init__`` (fixed-only, real names).
+            jit_fixed_values = dict(model.spec.get_fixed_values())
+            if self._params_override is not None:
+                jit_fixed_values.update(self._params_override)
             args["_jit_inputs"] = {
-                "fixed_values": model.spec.get_fixed_values(),
+                "fixed_values": jit_fixed_values,
                 "ssp_data": model.ssp_data,
                 "template_data": model._template_data_for_jit(),
             }
@@ -1112,6 +1131,16 @@ class Fitter:
             line_ratio_cfg is not None,
             index_cfg is not None,
             self.data_mask is not None,
+            # Per-fit params override (#1329): the loss closure bakes
+            # ``fitter._fixed_values``, which now carries the override, so two
+            # fits differing only by override MUST get distinct loss functions —
+            # exactly like the feature channels above. Without this, fit #2
+            # silently reuses fit #1's baked override.
+            (
+                tuple(sorted((k, round(float(v), 8)) for k, v in self._params_override.items()))
+                if self._params_override
+                else None
+            ),
         )
 
     def _get_or_build_engine(self, pos_dict: dict) -> dict:
@@ -1637,11 +1666,9 @@ class Fitter:
             dist = self.spec.get_distribution(name)
             params[name] = dist.unstandardize(params_unbounded[name])
         for name, val in self._fixed_values.items():
+            # self._fixed_values already carries any per-fit params override
+            # (#1329, merged at construction) — no separate merge needed here.
             params[name] = jnp.array(val)
-        # Apply per-fit params override (issue #1329): merge override over fixed values
-        if self._params_override is not None:
-            for key, val in self._params_override.items():
-                params[key] = jnp.array(val)
         if self.spec.stochastic and "psd_xi" in params_unbounded:
             # Publish under both names so the returned ``Posterior.params``
             # evaluates to the model that was actually fitted: ``psd_xi`` is the
