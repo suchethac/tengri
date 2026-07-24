@@ -226,6 +226,7 @@ class Observation:
                 "line_fluxes, line_ratios, or spectral_indices."
             )
 
+    @property
     def can_do_photometry(self) -> bool:
         """Whether photometric filters are configured.
 
