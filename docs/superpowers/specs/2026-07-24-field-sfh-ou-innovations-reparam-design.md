@@ -3,6 +3,49 @@
 **Issue:** #1301 · **Follow-up enhancement:** #1333 · **Date:** 2026-07-24
 **Labels:** `area:sfh`, `area:inference`, `bug`
 
+---
+
+## ⚠️ CORRECTION (2026-07-24, after implementation) — the proposed remedy does not work
+
+**The OU innovations recursion *is* the Cholesky factor.** Unrolling it gives
+`s = M ξ` with `M` lower-triangular and positive on the diagonal, and `M Mᵀ = K`.
+The Cholesky factor is the **unique** matrix with those properties, so `M = L`
+exactly — measured agreement `≤ 5e-14` against an un-jittered
+`np.linalg.cholesky` across n ∈ {16,32,64} × σ ∈ {0.3,0.8} × τ ∈ {1e7,1e8,5e8},
+and the induced matrix's strict upper triangle is *exactly* zero.
+
+Consequences:
+
+1. **The ξ→SFH map is numerically identical, so the posterior geometry is
+   unchanged.** This change cannot reduce the #1301 divergences, and #1301 stays
+   open.
+2. The "Mechanism" section below is still correct about *the problem*: `L(σ,τ)`
+   does re-orient with τ. The error was in the *remedy* — §"THE THEOREM" already
+   proves every **exact** square root of `K(τ)` must carry that τ-dependence
+   (the kernels don't commute, so no τ-independent eigenbasis exists). The
+   innovations recursion is exact, therefore the theorem applies to it too. The
+   theorem was stated and then not applied to the proposed fix.
+3. **The only escape remains changing the representation** — the uniform
+   linear-time Fourier basis (#1333), which buys zero rotation at the cost of a
+   changed prior (circulant boundary ≠ finite-domain OU). That trade is now the
+   live option for #1301.
+4. **What the implementation does deliver** is real but different from the goal:
+   `O(n)` instead of `O(n³)`, and removal of the `1e-6` relative
+   positive-definiteness jitter, so the realized prior is the exact `K` rather
+   than `K + 1e-6·var·I` (the dense path perturbed every realization by ~1e-5
+   relative). It ships on those grounds, not as a geometry fix.
+
+The A/B that appeared to show innovations *worse* (21 vs 3 divergences,
+single chain) was measuring chaotic amplification of that ~1e-5 jitter difference
+in two non-converged chains (split-R̂ 1.69 and 1.14; σ̂ 0.543 vs 0.403). It is not
+evidence in either direction and should not be cited.
+
+**Success criterion 1 below is NOT met and cannot be met by this change.**
+Criterion 2 (prior unchanged) is met in the strongest possible sense: not merely
+the same distribution, the same map.
+
+---
+
 ## Problem
 
 Post-#1271 the GP field latents actually reach the likelihood, so the field

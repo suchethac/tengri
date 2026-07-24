@@ -250,16 +250,27 @@ def drw_innovations_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
     :math:`t_i = 10^{u_i}` from the (ascending) log-age grid, and step gaps
     :math:`\Delta t_i = t_i - t_{i-1} \ge 0`. Because a DRW is exactly Markov, this
     recursion reproduces :math:`K_{ij} = \mathrm{var}\,\exp(-|t_i-t_j|/\tau)` to
-    machine precision — it is a *bit-exact-same-prior* reparameterization of
-    :func:`drw_linear_gp_from_xi`.
+    machine precision.
 
-    The reason to prefer it for inference: the timescale :math:`\tau` enters the
-    :math:`\xi \to \mathrm{SFH}` map only through the per-step scalars
-    :math:`\rho_i(\tau)` — a **banded, local** dependence — whereas the dense
-    Cholesky factor :math:`L(\sigma,\tau)` is a **rotation** that re-orients as
-    :math:`\tau` moves. HMC carries one global mass matrix (a single fixed metric)
-    and cannot track a target whose principal axes rotate with a sampled
-    hyperparameter; the banded coupling is far better conditioned (#1301).
+    **It is the same square root, not an alternative one.** Unrolling the recursion
+    gives :math:`s = M \xi` with :math:`M` lower-triangular and positive on the
+    diagonal (:math:`M_{00} = \sqrt{\mathrm{var}}`,
+    :math:`M_{ii} = \sqrt{\mathrm{var}(1-\rho_i^2)}`), and :math:`M M^{T} = K`. The
+    Cholesky factor is the *unique* lower-triangular matrix with positive diagonal
+    satisfying :math:`L L^{T} = K`, hence :math:`M = L` exactly. The gain is
+    therefore computational and numerical, not geometric: :math:`O(n)` instead of
+    :math:`O(n^3)`, and no positive-definiteness jitter, so the realized prior is the
+    exact :math:`K` rather than :math:`K + \epsilon\,\mathrm{var}\,I` (the dense path
+    perturbs every realization by :math:`\sim 10^{-5}` relative; see
+    ``_DRW_CHOLESKY_JITTER``).
+
+    Because the :math:`\xi \to \mathrm{SFH}` map is numerically identical, this does
+    **not** change the posterior geometry and is **not** a remedy for the #1301 HMC
+    divergences — every *exact* square root of :math:`K(\tau)` carries the same
+    :math:`\tau`-dependence, since the kernels at different :math:`\tau` do not
+    commute and so share no :math:`\tau`-independent eigenbasis. Removing the
+    :math:`\tau`-coupling requires changing the *representation* (the uniform
+    linear-time Fourier basis, #1333), which changes the prior.
 
     Parameters
     ----------
