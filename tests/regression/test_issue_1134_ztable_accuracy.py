@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """#1134: free-z ztable photometry must track the exact path to <1%.
 
 Default n_z=100 gave -4% (des_i, z=0.3) and +40% (GALEX FUV, z=1):
