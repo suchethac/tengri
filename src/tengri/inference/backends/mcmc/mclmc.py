@@ -3,10 +3,11 @@
 
 Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc``.
 
-**Requires blackjax >= 1.4.** In blackjax >= 1.5, the mclmc adaptation
-functions require `logdensity_fn` as an explicit parameter. This module detects
-the parameter and passes it by keyword, maintaining compatibility with both
-versions (see #1177).
+**Requires blackjax >= 1.6.** Earlier versions have fundamentally incompatible
+APIs. In 1.5, build_kernel requires logdensity_fn and inverse_mass_matrix but
+mclmc_find_L_and_step_size does not. In 1.6+, build_kernel takes only the
+integrator and mclmc_find_L_and_step_size takes logdensity_fn as an optional
+parameter.
 """
 
 from __future__ import annotations
@@ -17,11 +18,7 @@ import time
 import jax
 import jax.numpy as jnp
 
-from tengri.inference._sample_utils import (
-    _maybe_map_init,
-    _mean_params,
-    _vmap_samples_to_physical,
-)
+from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import (
     _adjusted_mclmc_sample_scan,
     _get_cached_adaptation,
@@ -32,41 +29,6 @@ from tengri.inference.backends.mcmc._shared import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _call_mclmc_find_L_and_step_size(logdensity_fn, **kwargs):
-    """Call mclmc_find_L_and_step_size with version-aware parameters.
-
-    blackjax >= 1.5 added logdensity_fn as a required parameter. This helper
-    detects the parameter in the signature and passes it by keyword, working
-    on both blackjax 1.3 (no param) and >= 1.5 (required param).
-    """
-    import inspect
-
-    import blackjax
-
-    sig = inspect.signature(blackjax.mclmc_find_L_and_step_size)
-    if "logdensity_fn" in sig.parameters:
-        kwargs["logdensity_fn"] = logdensity_fn
-    return blackjax.mclmc_find_L_and_step_size(**kwargs)
-
-
-def _call_adjusted_mclmc_find_L_and_step_size(logdensity_fn, **kwargs):
-    """Call adjusted_mclmc_find_L_and_step_size with version-aware parameters.
-
-    blackjax >= 1.5 added logdensity_fn as parameter 2 (after mclmc_kernel),
-    shifting all positional arguments. This helper detects the parameter and
-    passes all arguments by keyword, working on both blackjax 1.3 (no param)
-    and >= 1.5 (required param at position 2).
-    """
-    import inspect
-
-    import blackjax
-
-    sig = inspect.signature(blackjax.adjusted_mclmc_find_L_and_step_size)
-    if "logdensity_fn" in sig.parameters:
-        kwargs["logdensity_fn"] = logdensity_fn
-    return blackjax.adjusted_mclmc_find_L_and_step_size(**kwargs)
 
 
 def run_mclmc(
@@ -129,18 +91,14 @@ def run_mclmc(
 
     t0 = time.time()
 
-    def kernel_factory(inv_mass):
-        """Create MCLMC kernel with given inverse mass matrix."""
-        return blackjax.mcmc.mclmc.build_kernel(
-            logdensity_fn=ld_1arg,
-            inverse_mass_matrix=inv_mass,
-            integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
-        )
+    # In blackjax >= 1.6, build_kernel takes only integrator (not logdensity_fn)
+    kernel = blackjax.mcmc.mclmc.build_kernel(
+        integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
+    )
 
     cached = _get_cached_adaptation(fitter, "mclmc")
     if cached is not None:
         params = cached
-        kernel = kernel_factory(params.inverse_mass_matrix)
         key, init_key = jax.random.split(key)
         state = blackjax.mcmc.mclmc.init(init_flat, ld_1arg, init_key)
         if verbose:
@@ -155,16 +113,15 @@ def run_mclmc(
         state = blackjax.mcmc.mclmc.init(init_flat, ld_1arg, init_key)
 
         key, tune_key = jax.random.split(key)
-        state, params, _ = _call_mclmc_find_L_and_step_size(
+        state, params, _ = blackjax.mclmc_find_L_and_step_size(
+            mclmc_kernel=kernel,
             logdensity_fn=ld_1arg,
-            mclmc_kernel=kernel_factory,
             num_steps=n_warmup,
             state=state,
             rng_key=tune_key,
             diagonal_preconditioning=True,
         )
 
-        kernel = kernel_factory(params.inverse_mass_matrix)
         _set_cached_adaptation(fitter, "mclmc", params)
 
         if verbose:
@@ -296,14 +253,14 @@ def run_adjusted_mclmc(
 
     t0 = time.time()
 
+    # In blackjax >= 1.6, build_kernel takes only integrator (not logdensity_fn)
+    kernel = blackjax.mcmc.adjusted_mclmc.build_kernel(
+        integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
+    )
+
     cached = _get_cached_adaptation(fitter, "adjusted_mclmc")
     if cached is not None:
         params = cached
-        kernel = blackjax.mcmc.adjusted_mclmc.build_kernel(
-            logdensity_fn=ld_1arg,
-            integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
-            inverse_mass_matrix=params.inverse_mass_matrix,
-        )
         state = blackjax.mcmc.adjusted_mclmc.init(init_flat, ld_1arg)
         if verbose:
             logger.info(
@@ -315,25 +272,10 @@ def run_adjusted_mclmc(
     else:
         state = blackjax.mcmc.adjusted_mclmc.init(init_flat, ld_1arg)
 
-        # Adaptation wrapper: blackjax 1.3 adaptation calls the kernel with
-        # keyword args (rng_key, state, avg_num_integration_steps, step_size,
-        # inverse_mass_matrix). We wrap build_kernel to match.
-        def _kernel_for_adaptation(
-            rng_key, state, avg_num_integration_steps, step_size, inverse_mass_matrix
-        ):
-            """Build adapted kernel for adjusted MCLMC tuning."""
-            k = blackjax.mcmc.adjusted_mclmc.build_kernel(
-                logdensity_fn=ld_1arg,
-                integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
-                inverse_mass_matrix=inverse_mass_matrix,
-            )
-            n_steps = jnp.ceil(avg_num_integration_steps).astype(int)
-            return k(rng_key, state, step_size, n_steps)
-
         key, tune_key = jax.random.split(key)
-        state, params, _ = _call_adjusted_mclmc_find_L_and_step_size(
+        state, params, _ = blackjax.adjusted_mclmc_find_L_and_step_size(
+            mclmc_kernel=kernel,
             logdensity_fn=ld_1arg,
-            mclmc_kernel=_kernel_for_adaptation,
             num_steps=n_warmup,
             state=state,
             rng_key=tune_key,
@@ -341,11 +283,6 @@ def run_adjusted_mclmc(
             diagonal_preconditioning=True,
         )
 
-        kernel = blackjax.mcmc.adjusted_mclmc.build_kernel(
-            logdensity_fn=ld_1arg,
-            integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
-            inverse_mass_matrix=params.inverse_mass_matrix,
-        )
         _set_cached_adaptation(fitter, "adjusted_mclmc", params)
 
         if verbose:

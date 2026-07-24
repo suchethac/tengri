@@ -204,6 +204,7 @@ markers = [
     "slow: heavy end-to-end tests (inference/integration trees); excluded from the default run",
     "crossval: cross-validation tests against community SED codes (bagpipes, etc.)",
     "benchmark: asserts a wall-clock ratio; run serially (`-m benchmark -n 0`), never under -n auto",
+    "regression: test for a specific issue fix (cite issue number)",
     "conservation: energy/mass/photon balance across a transformation",
     "bounds: non-negativity, monotonicity, unit-interval, credible-interval ordering",
     "limit: zero-input recovers the analytical answer (tau=0 -> intrinsic, etc.)",
