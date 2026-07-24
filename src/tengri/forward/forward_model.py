@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.forward.population import Population
 from tengri.inference._backend_registry import DEFAULT_METHOD
@@ -28,6 +29,24 @@ from tengri.protocols.component import ForwardState
 from tengri.protocols.derived_state import DerivedState
 
 __all__ = ["ForwardModel"]
+
+
+def _filters_fingerprint(obs):
+    """Compute content-hash of filter transmission curves.
+
+    Parameters
+    ----------
+    obs : object
+        Observation model with optional ``.photometry`` attribute.
+
+    Returns
+    -------
+    int or None
+        Hash of filter transmission curves, or None if obs has no photometry.
+    """
+    if obs is None or not hasattr(obs, "photometry") or obs.photometry is None:
+        return None
+    return hash(tuple(np.asarray(t).tobytes() for t in obs.photometry.filter_trans))
 
 
 @dataclass(frozen=True)
@@ -378,7 +397,7 @@ class ForwardModel:
         spatial: Any | None = None,
         population: Any | None = None,
         populations: Iterable[Population] | None = None,
-        observation: Any,
+        observation: Any | None = None,
     ) -> ForwardModel:
         """Construct a :class:`ForwardModel`.
 
@@ -417,8 +436,8 @@ class ForwardModel:
         populations : iterable of Population, optional
             Explicit population list for galaxy decompositions.
             Mutually exclusive with ``sed`` and ``population``.
-        observation : object
-            Observation model.
+        observation : object, optional
+            Observation model. Inherited from ``sed`` when omitted.
 
         Returns
         -------
@@ -437,6 +456,30 @@ class ForwardModel:
                 "ForwardModel.build(spatial=...) requires sed=... too. "
                 "Use populations=[...] for explicit pairing."
             )
+        # Resolve observation: inherit from sed if omitted
+        if observation is None:
+            if sed is None:
+                raise TypeError(
+                    "ForwardModel.build(populations=...)/(population=...) requires "
+                    "observation=... explicitly (no single sed to inherit from)."
+                )
+            observation = getattr(sed, "observation", None)
+            if observation is None:
+                raise TypeError("ForwardModel.build needs observation=... (the sed carries none).")
+        elif sed is not None:
+            sed_obs = getattr(sed, "observation", None)
+            if (
+                sed_obs is not None
+                and _filters_fingerprint(sed_obs) != _filters_fingerprint(observation)
+                and getattr(sed, "_approx", {}).get("wave_precomp")
+            ):
+                raise ValueError(
+                    "This sed carries a WavePrecomp LUT integrated against different "
+                    "filters than the observation passed to ForwardModel.build — its "
+                    "photometry would be silently wrong (#1315). Rebuild the sed with "
+                    "this observation, or build it without approx=."
+                )
+
         provided = sum(x is not None for x in (sed, population, populations))
         if provided != 1:
             raise ValueError(
