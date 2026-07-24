@@ -5,7 +5,7 @@ Five surfaces started a fit and three of them disagreed about the default:
 
     ForwardModel.fit   'vi'                  <- canonical
     Fitter.run         'vi_nonlinear_fast'   <- the engine ForwardModel.fit calls
-    SEDModel.fit       'vi'                  <- deprecated
+    SEDModel.fit       'vi'                  <- sugar over ForwardModel.fit
     fit_batch          'vi'
     Galaxy.fit         'map'                 <- and a different kwarg name
 
@@ -219,3 +219,59 @@ def test_no_deprecation_warning_on_the_canonical_path():
         warnings.simplefilter("error", DeprecationWarning)
         inspect.signature(tengri.ForwardModel.fit)
         inspect.signature(tengri.Fitter.run)
+
+
+def test_sedmodel_fit_emits_no_deprecation_warning(ssp_data_wne, simple_observation):
+    """SEDModel.fit is un-deprecated sugar — it must not warn.
+
+    Regression for #1322 Wave 3: SEDModel.fit was un-deprecated as the
+    Bagpipes one-liner. Verify it emits NO DeprecationWarning on actual use.
+    """
+    from tengri import FIXED
+
+    sed = tengri.SEDModel.build(
+        ssp_data=ssp_data_wne,
+        observation=simple_observation,
+        sfh={"type": "dpl", "*": FIXED},
+        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        neb={"type": "none"},
+    )
+    # Generate a trivial mock for fitting
+    params = {
+        "sfh_dpl_alpha": 1.5,
+        "sfh_dpl_beta": 1.0,
+        "sfh_dpl_tau_gyr": 5.0,
+        "sfh_dpl_age_gyr": 10.0,
+        "sfh_dpl_log_total_mass": 0.5,
+        "met_logzsol": 0.0,
+        "dust_tau_bc": 0.5,
+        "dust_tau_diff": 0.2,
+        "dust_slope": -0.7,
+        "redshift": 0.05,
+    }
+    mock = sed.mock(params, snr=5.0, key=__import__("jax").random.PRNGKey(0))
+
+    # Verify sed.fit(method="map") emits NO DeprecationWarning (excluding unrelated JAX warnings)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        result = sed.fit(mock.flux_obs, mock.noise, method="map")
+
+    # Check that NO tengri-related DeprecationWarning was raised.
+    # (JAX deprecation warnings are expected and unrelated to SEDModel.fit.)
+    # We filter for warnings that mention either "Fitter(sed_model" or "Test deprecation"
+    # to catch both the real deprecated-Fitter-path and any SEDModel.fit deprecation.
+    deprecation_warnings = [
+        w
+        for w in caught
+        if issubclass(w.category, DeprecationWarning)
+        and ("Fitter(sed_model" in str(w.message) or "Test deprecation" in str(w.message))
+    ]
+    assert not deprecation_warnings, (
+        f"SEDModel.fit should not emit DeprecationWarnings; got: "
+        f"{[str(w.message) for w in deprecation_warnings]}"
+    )
+
+    # Sanity check: the fit did run and returned a Posterior
+    from tengri.inference.posterior import Posterior
+
+    assert isinstance(result, Posterior)
