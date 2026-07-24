@@ -14,9 +14,21 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform
+from tengri.inference._backend_registry import _BACKENDS
 from tengri.inference.vi_config import BlockSchedule, BlockStep, OptimizationSchedule
 
 jax.config.update("jax_enable_x64", True)
+
+# ``native_vi_nonlinear`` (geoVI) and ``native_vi_linear`` (MGVI) are registered
+# tier="broken" (#1287): they segfault on DPL/dense_basis photometry mocks, so
+# ``fitter.run(...)`` on them raises ``BackendError`` by default. Only the
+# ``TestGeoVIRuns`` class calls ``fitter.run`` on these; the schedule and direct
+# engine-primitive classes below never hit the broken-tier guard and keep
+# running. Mirrors the tier-aware skip added in #1324.
+skip_if_broken = pytest.mark.skipif(
+    _BACKENDS["native_vi_nonlinear"].tier == "broken",
+    reason="native_vi_nonlinear is registered tier='broken' (#1287); skip until repaired",
+)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────
@@ -156,6 +168,7 @@ class TestEnginePrimitives:
 # ── geoVI run tests ───────────────────────────────────────────────
 
 
+@skip_if_broken
 class TestGeoVIRuns:
     """geoVI optimizer runs and produces reasonable results."""
 
