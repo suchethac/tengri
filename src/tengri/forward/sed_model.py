@@ -175,9 +175,10 @@ class WavePrecomp:
 
     Parameters
     ----------
-    n_z : int, default 100
+    n_z : int, default 250
         Number of grid points in the ztable. Higher → finer redshift
-        interpolation, slower precompute.
+        interpolation, slower precompute. Default 250 ensures <1% error
+        across all bands over z ∈ [0, 1.5] with ~37s build overhead (#1134).
     z_min : float or None, default None
         Lower bound of the ztable grid. ``None`` → pull from the redshift
         prior with 1 % padding. Ignored when redshift is ``Fixed`` unless
@@ -213,7 +214,7 @@ class WavePrecomp:
     ...     posterior = model.fit(row.data, params={"redshift": row.z})
     """
 
-    n_z: int = 100
+    n_z: int = 250
     z_min: float | None = None
     z_max: float | None = None
     catalog_z_range: tuple[float, float] | None = None
