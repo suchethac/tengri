@@ -53,6 +53,14 @@ from tengri.utils.physics_constants import L_SUN
 #: into log space (float32 safety, #1206). L_SUN ~3.828e33 erg/s.
 _LOG10_L_SUN: float = float(jnp.log10(L_SUN))
 
+#: Reference AGN ``agn_log_lbol`` (= log10(L_bol/L_sun)) at which every block is
+#: evaluated for the float32 factoring (#1206). Chosen so L_bol = 1e10 erg/s: low
+#: enough that the *squares* of the internal bolometric integrals stay in float32
+#: range (``(1e10)**2 = 1e20 << 3.4e38``), yet high enough that the runner's
+#: ``max(faceon/L_sun, 1e-30)`` zero-protection floor never engages (faceon/L_sun
+#: ~1e-23, seven decades clear). The true 10^agn_log_lbol is re-applied afterward.
+_AGN_LBOL_REF: float = 10.0 - _LOG10_L_SUN
+
 __all__ = ["AGNSEDComponent", "AGNSEDComponentConfig"]
 
 
@@ -405,14 +413,18 @@ class AGNSEDComponent:
         # with L_bol, and when agn_fracAGN>0 the torus is pinned to agn_power
         # through a 1/L_bol ``agn_torus_frac``, so it too comes out 10^-lbol of
         # its physical value at the reference. Evaluate every block at
-        # agn_log_lbol=0 (L_bol = L_sun, comfortably float32-representable) and
-        # re-apply the true 10^agn_log_lbol in log space via apply_log10_scale,
-        # so the ~1e46 erg/s bolometric is never materialized. Exact in float64;
-        # the AGN SED is proportional to 10^agn_log_lbol to machine precision
-        # (verified) (#1206).
+        # ``agn_log_lbol = _AGN_LBOL_REF`` (L_bol = 1e10 erg/s) and re-apply
+        # the true 10^(agn_log_lbol − _AGN_LBOL_REF) scale in log space via
+        # apply_log10_scale, so the ~1e46 erg/s bolometric is never
+        # materialized. The reference L_bol = 1e10 is chosen (see _AGN_LBOL_REF)
+        # so that even the *squares* of internal bolometric integrals — e.g. ``/
+        # disc_int`` disc renorm, whose reverse pass forms
+        # ``disc_int**2`` ~ L_bol**2 — stay in float32 range. Exact in
+        # float64; the AGN SED is proportional to 10^agn_log_lbol to machine
+        # precision (verified) (#1206).
         from tengri.utils.scale import apply_log10_scale
 
-        _lbol_ref = jnp.zeros_like(agn_log_lbol)
+        _lbol_ref = jnp.full_like(jnp.asarray(agn_log_lbol, dtype=wave.dtype), _AGN_LBOL_REF)
         if self.config.model == "composable":
             L_agn_unit, L_2500_unit, L_4400_unit = agn_fn(
                 wave, agn_log_lbol=_lbol_ref, return_l2500=True, **agn_kwargs
@@ -421,9 +433,9 @@ class AGNSEDComponent:
             L_agn_unit = agn_fn(wave, agn_log_lbol=_lbol_ref, **agn_kwargs)
             L_2500_unit = jnp.asarray(0.0)
             L_4400_unit = jnp.asarray(0.0)
-        L_agn = apply_log10_scale(L_agn_unit, agn_log_lbol)
-        L_2500_intrinsic = apply_log10_scale(L_2500_unit, agn_log_lbol)
-        L_4400_intrinsic = apply_log10_scale(L_4400_unit, agn_log_lbol)
+        L_agn = apply_log10_scale(L_agn_unit, agn_log_lbol - _AGN_LBOL_REF)
+        L_2500_intrinsic = apply_log10_scale(L_2500_unit, agn_log_lbol - _AGN_LBOL_REF)
+        L_4400_intrinsic = apply_log10_scale(L_4400_unit, agn_log_lbol - _AGN_LBOL_REF)
 
         # Filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
