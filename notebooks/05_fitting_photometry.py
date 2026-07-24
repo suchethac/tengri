@@ -157,21 +157,25 @@ wave_eff_um = (
 print(f"Mock: {len(flux_obs)} bands, SNR = 20")
 
 # %% [markdown]
-# ## Fit
+# ## Pre-warm and fit
 #
-# We use two parallel chains (via `jax.vmap`) — enough for a genuine
-# cross-chain split-R̂, and the `vmap` memory scales with the chain count, so
-# two keeps the peak well clear of the jetsam threshold on a laptop (see
-# docs/dev/notebook_orchestration_oom.md).
+# `forward.prewarm` compiles the sampler stack and runs NUTS window adaptation
+# once; the subsequent `forward.fit` reuses that compile cache. We use two
+# parallel chains (via `jax.vmap`) — enough for a genuine cross-chain split-R̂,
+# and the `vmap` memory scales with the chain count, so two keeps the peak well
+# clear of the jetsam threshold on a laptop (see docs/dev/notebook_orchestration_oom.md).
 
 # %%
 t = time.perf_counter()
+forward.prewarm(method="mcmc_nuts", n_chains=2)
+print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
+
 map_result = forward.fit(flux_obs, noise, method="map", key=key_fit, n_steps=200)
-print(f"  MAP wall: {time.perf_counter() - t:6.2f} s")
 
 t = time.perf_counter()
 posterior = forward.fit(
-    flux_obs, noise,
+    flux_obs,
+    noise,
     method="mcmc_nuts",
     key=key_fit,
     n_warmup=600,
