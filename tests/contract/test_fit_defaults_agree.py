@@ -256,19 +256,21 @@ def test_sedmodel_fit_emits_no_deprecation_warning(ssp_data_wne, simple_observat
         warnings.simplefilter("always")
         result = sed.fit(mock.flux_obs, mock.noise, method="map")
 
-    # Check that NO tengri-related DeprecationWarning was raised.
-    # (JAX deprecation warnings are expected and unrelated to SEDModel.fit.)
-    # We filter for warnings that mention either "Fitter(sed_model" or "Test deprecation"
-    # to catch both the real deprecated-Fitter-path and any SEDModel.fit deprecation.
-    deprecation_warnings = [
+    # sed.fit is un-deprecated sugar, so it must emit NO tengri DeprecationWarning
+    # — neither its own (removed) warning nor the internal Fitter(sed_model) one
+    # (suppressed in fit_model). Any non-third-party DeprecationWarning is a
+    # regression. We exclude only JAX's own version-deprecation chatter, matched by
+    # its message (never by a tengri-specific substring, so re-introducing ANY
+    # tengri deprecation text — e.g. the original "SEDModel.fit is deprecated" —
+    # fails this guard rather than slipping past a tailored string match).
+    tengri_deprecations = [
         w
         for w in caught
-        if issubclass(w.category, DeprecationWarning)
-        and ("Fitter(sed_model" in str(w.message) or "Test deprecation" in str(w.message))
+        if issubclass(w.category, DeprecationWarning) and "jax" not in str(w.message).lower()
     ]
-    assert not deprecation_warnings, (
-        f"SEDModel.fit should not emit DeprecationWarnings; got: "
-        f"{[str(w.message) for w in deprecation_warnings]}"
+    assert not tengri_deprecations, (
+        "SEDModel.fit (un-deprecated sugar) must emit no tengri DeprecationWarning; "
+        f"got: {[str(w.message) for w in tengri_deprecations]}"
     )
 
     # Sanity check: the fit did run and returned a Posterior
