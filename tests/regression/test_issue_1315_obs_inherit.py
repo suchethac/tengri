@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Test ForwardModel.build observation inheritance and LUT-mismatch guard (#1315).
 
 Regression test for:
