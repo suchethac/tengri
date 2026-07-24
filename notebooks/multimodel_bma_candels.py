@@ -76,7 +76,7 @@
 # All models are built through the public API: the nested-dict grammar of
 # `SEDModel.build(...)`, priors set with `Uniform`/`Fixed`, and the precompute
 # speed path enabled with `approx=WavePrecomp()`. Inference is
-# `Fitter(model, data, noise).run("nss")`.
+# `model.fit(data, noise, method="nss")`.
 
 # %% tags=["imports"]
 from __future__ import annotations
@@ -106,7 +106,6 @@ warnings.filterwarnings("ignore")
 from tengri import (
     FIXED,
     FREE,
-    Fitter,
     Fixed,
     Observation,
     Photometry,
@@ -441,8 +440,13 @@ def fit_one(model, fnu, sigma, *, gal_id, cfg, salt=""):
     """Run one nested-sampling fit; return ``(cfg, posterior, seconds)``."""
     key = jax.random.PRNGKey(stable_seed(gal_id, cfg, salt))
     t = time.time()
-    post = Fitter(model, fnu, sigma).run(
-        "nss", key=key, n_live=N_LIVE, n_posterior_samples=N_POST, verbose=False
+    post = model.fit(
+        fnu, sigma,
+        method="nss",
+        key=key,
+        n_live=N_LIVE,
+        n_posterior_samples=N_POST,
+        verbose=False,
     )
     return cfg, post, time.time() - t
 

@@ -35,8 +35,8 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import warnings
 
 # Keep the rendered tutorial clean: silence framework notices that do not
-# change the science shown here (baked-in nebular, the WavePrecomp blue-band
-# approximation, the intentional Fitter(sed_model, ...) LUT path, and
+# change the science shown here (baked-in nebular, the SpectrumPrecomp
+# approximation, the intentional sed_model.fit(...) LUT path, and
 # recipe/parameter-provenance notices). Genuine deprecations in user-facing
 # calls are fixed in the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -69,8 +69,6 @@ from tengri import (
     load_ssp_data,
     plot,
 )
-from tengri.inference.fitter import Fitter
-
 plot.setup_style()
 FIG_DIR = Path("_figs")
 FIG_DIR.mkdir(exist_ok=True)
@@ -157,9 +155,10 @@ print(f"Mock: {len(flux)}-pixel R=2000 spectrum, SNR = 30/pixel")
 
 # %%
 t0 = time.perf_counter()
-fitter = Fitter(sed_model, flux, noise, data_type="spectroscopy")
-posterior = fitter.run(
-    "mcmc_hmc",
+posterior = sed_model.fit(
+    flux, noise,
+    method="mcmc_hmc",
+    data_type="spectroscopy",
     n_warmup=1000,
     n_samples=600,
     n_leapfrog_steps=20,

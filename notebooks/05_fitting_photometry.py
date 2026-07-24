@@ -60,7 +60,6 @@ from tengri import (
     load_ssp_data,
     plot,
 )
-from tengri.inference.fitter import Fitter
 from tengri.utils.conversions import lnu_to_fnu
 
 plot.setup_style()
@@ -158,24 +157,21 @@ wave_eff_um = (
 print(f"Mock: {len(flux_obs)} bands, SNR = 20")
 
 # %% [markdown]
-# ## Pre-warm and fit
+# ## Fit
 #
-# `Fitter.prewarm` compiles the sampler stack and runs NUTS window adaptation
-# once; the `run` reuses that cache. We use two parallel chains (via `jax.vmap`)
-# — enough for a genuine cross-chain split-R̂, and the `vmap` memory scales with
-# the chain count, so two keeps the peak well clear of the jetsam threshold on a
-# laptop (see docs/dev/notebook_orchestration_oom.md).
+# We use two parallel chains (via `jax.vmap`) — enough for a genuine
+# cross-chain split-R̂, and the `vmap` memory scales with the chain count, so
+# two keeps the peak well clear of the jetsam threshold on a laptop (see
+# docs/dev/notebook_orchestration_oom.md).
 
 # %%
-fitter = Fitter(forward, flux_obs, noise, data_type="photometry")
 t = time.perf_counter()
-fitter.prewarm(method="mcmc_nuts", n_chains=2)
-print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
-
-map_result = fitter.run(method="map", key=key_fit, n_steps=200)
+map_result = forward.fit(flux_obs, noise, method="map", key=key_fit, n_steps=200)
+print(f"  MAP wall: {time.perf_counter() - t:6.2f} s")
 
 t = time.perf_counter()
-posterior = fitter.run(
+posterior = forward.fit(
+    flux_obs, noise,
     method="mcmc_nuts",
     key=key_fit,
     n_warmup=600,

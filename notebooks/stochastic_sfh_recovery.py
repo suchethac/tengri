@@ -100,10 +100,7 @@ def silence():
         os.close(o2)
 
 
-# NOTE: this file used to silence the "Fitter(sed_model, ...) is deprecated"
-# warning here. It now uses the canonical ForwardModel surface instead, so the
-# filter is gone -- suppressing that message is what kept the deprecated call
-# invisible through several rewrites.
+# NOTE: this file uses the canonical forward.fit() surface for inference.
 # age_gyr=12 at z=0.1 forms ~1% of mass just before the Big Bang (truncated); benign here.
 warnings.filterwarnings("ignore", message=r".*before the Big Bang.*")
 
