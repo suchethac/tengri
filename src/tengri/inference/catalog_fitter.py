@@ -16,7 +16,7 @@ import time
 import warnings
 from dataclasses import dataclass, field
 
-__all__ = ["CatalogFitter", "CatalogPosterior"]
+__all__ = ["CatalogPosterior"]
 
 import jax
 import jax.numpy as jnp
@@ -215,7 +215,7 @@ class CatalogProperties:
         )
 
 
-class CatalogFitter:
+class _CatalogFitterOriginal:
     """Per-galaxy catalog inference with optional K-way on-device parallelism.
 
     Wraps all :class:`~tengri.inference.fitter.Fitter` inference methods with a
@@ -835,3 +835,18 @@ class CatalogFitter:
             wall_time_s=wall,
             n_galaxies=self.n_galaxies,
         )
+
+
+def __getattr__(name: str):
+    """Emit a one-shot deprecation warning for CatalogFitter import."""
+    if name == "CatalogFitter":
+        warnings.warn(
+            "CatalogFitter is deprecated and will be removed in tengri v1.0; "
+            "use Catalog (from tengri.inference.catalog or tengri) instead. "
+            "Catalog wraps CatalogFitter with table-in/table-out access and "
+            "eager validation.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _CatalogFitterOriginal
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

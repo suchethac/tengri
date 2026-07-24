@@ -668,7 +668,8 @@ from tengri.analysis.plotting import (
     safe_corner,
     setup_style,
 )
-from tengri.inference.catalog_fitter import CatalogFitter
+from tengri.inference.catalog import Catalog
+from tengri.inference.catalog_fitter import _CatalogFitterOriginal as CatalogFitter
 from tengri.inference.fitter import Fitter
 from tengri.inference.hierarchical import PopulationFitter
 from tengri.inference.vi_config import VIConfig

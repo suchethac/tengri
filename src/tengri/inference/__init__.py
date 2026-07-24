@@ -7,7 +7,8 @@
 # can dispatch by name. See ADR-0010.
 from tengri.inference import _registration as _registration
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
-from tengri.inference.catalog_fitter import CatalogFitter, CatalogPosterior
+from tengri.inference.catalog_fitter import _CatalogFitterOriginal as CatalogFitter
+from tengri.inference.catalog_fitter import CatalogPosterior
 from tengri.inference.context import InferenceContext
 from tengri.inference.fitter import Fitter, resolve_method
 from tengri.inference.hierarchical import PopulationFitter, PopulationPosterior
