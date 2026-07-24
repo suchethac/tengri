@@ -949,6 +949,77 @@ class ForwardModel:
         )
         return fitter.run(method, key=key, **kwargs)
 
+    def prewarm(self, *, data_shape=None, method: str = "mcmc_nuts", **kwargs):
+        """Pre-compile JIT kernels and populate the inference adaptation cache.
+
+        After this returns, a subsequent :meth:`fit` call with the same
+        ``method`` skips XLA compilation **and** sampler warmup window
+        adaptation — only the actual sampling work remains.
+
+        Parameters
+        ----------
+        data_shape : tuple of int or None, optional
+            Shape of the data to pre-warm against. If ``None``, uses the
+            observation's photometry shape. Dummy data (zeros) of this shape
+            are created internally — pre-warm is value-independent and only
+            needs the compile signature (shape, filters, wavelengths, etc.).
+        method : str, default ``"mcmc_nuts"``
+            Inference method to pre-warm. Any name accepted by
+            :meth:`fit`.
+        **kwargs
+            Forwarded to the underlying :meth:`Fitter.prewarm` call
+            (e.g. ``n_chains=4`` for multichain compilation).
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        Pre-warm is idempotent — a second call with the same method is a
+        fast no-op, reusing the compiled kernels from the first call.
+        The persistent XLA cache (``~/.cache/tengri_jax_cache``) also
+        captures the compile, so a fresh Python process sees a warm
+        XLA cache too.
+
+        See Also
+        --------
+        Fitter.prewarm : Low-level pre-warm interface
+
+        Examples
+        --------
+        >>> fwd = ForwardModel.build(sed=sed, observation=obs)
+        >>> fwd.prewarm(method="mcmc_nuts", n_chains=4)
+        >>> posterior = fwd.fit(flux, flux_err, method="mcmc_nuts", n_chains=4)
+        """
+        from tengri.inference.fitter import Fitter
+
+        # Determine the observation shape for dummy data
+        obs = self.observation
+        if data_shape is None:
+            # Use photometry shape if available, else None (hierarchical fit)
+            if obs is not None and hasattr(obs, "photometry") and obs.photometry is not None:
+                n_filters = obs.photometry.n_filters
+                data_shape = (n_filters,)
+            else:
+                data_shape = None
+
+        # Create dummy data and noise (zeros — value-independent)
+        if data_shape is not None:
+            data = jnp.zeros(data_shape)
+            noise = jnp.ones(data_shape)
+        else:
+            data = None
+            noise = None
+
+        # Build Fitter with dummy data and call its prewarm
+        fitter = Fitter(
+            self,
+            data=data,
+            noise=noise,
+        )
+        fitter.prewarm(method=method, **kwargs)
+
     def _params_for_population(
         self,
         params: Mapping[str, Any],

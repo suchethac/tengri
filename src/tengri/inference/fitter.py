@@ -2162,21 +2162,58 @@ class Fitter:
         # alive (e.g. swapping back and forth between MAP and HMC and
         # wanting both compiles in RAM). Override per-call via
         # ``fitter.run(..., lean=True/False)``.
+        import warnings
+
         from tengri.inference.jit_engine import (
             clear_shared_caches as _clear_shared_caches,
             is_lean_mode as _is_lean_mode,
             is_persistent_mode as _is_persistent_mode,
         )
 
+        # --- Lean kwarg deprecation (issue #1318) ─────────────────────────
+        # The lean= kwarg is retired. Callers that pass it get a one-shot
+        # DeprecationWarning with the retire message. The behavior is still
+        # honored for back-compat. For new code, the cache policy is derived
+        # from a private _cache_policy kwarg (set by Catalog) or defaults to
+        # "iterate" (keep-matching smart-lean behavior).
         _user_lean = kwargs.pop("lean", None)
-        if _user_lean is None:
-            if _is_persistent_mode():
-                _user_lean = False
-            elif _is_lean_mode():
-                _user_lean = True
+        if _user_lean is not None:
+            warnings.warn(
+                "lean= is retired: fit() keeps your warm caches (iterate policy); "
+                "Catalog sweeps automatically. See #1318.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        # --- Cache policy derivation (2026-07) ────────────────────────────
+        # _cache_policy is a private kwarg set by Catalog (T2) when it passes
+        # _cache_policy='sweep' to trigger the drop-stale path. If not present,
+        # derive based on the deprecated lean= kwarg (for back-compat) or the
+        # context (persistent() vs lean()). Default: 'iterate' (keep-matching).
+        _cache_policy = kwargs.pop("_cache_policy", None)
+        if _cache_policy is None:
+            # Back-compat: if lean= was passed, honor it
+            if _user_lean is not None:
+                _cache_policy = "sweep" if _user_lean else "iterate"
             else:
-                _user_lean = True
-        if _user_lean:
+                # Derive from context (persistent/lean/default)
+                if _is_persistent_mode():
+                    _cache_policy = "iterate"  # Keep all non-matching entries
+                elif _is_lean_mode():
+                    _cache_policy = "sweep"  # Drop all stale entries
+                else:
+                    _cache_policy = "iterate"  # Default: keep-matching
+
+        # Apply cache policy. The policy semantic:
+        # - "iterate": drop only L3 entries that do NOT match this fitter's
+        #   compile_signature() (smart-lean behavior, 2026-05)
+        # - "sweep": drop all L3 entries (old lean=True behavior)
+        # The compile_signature() keys on shape, not values — so identical
+        # geometry always matches, even if parameters differ.
+        if _cache_policy == "sweep":
+            _clear_shared_caches(scope="inference_body", keep_sig=None)
+        elif _cache_policy == "iterate":
+            # Keep-matching: preserve the entry matching this fitter's signature
             # Smart lean (2026-05): drop only L3 entries that do NOT match
             # this fitter's compile_signature(). The matching entry — if
             # it exists from a prior identical run — is kept, so a
