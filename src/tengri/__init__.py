@@ -571,6 +571,8 @@ __all__ = [  # noqa: RUF022
     "gp_noise_covariance",
     "matern32_kernel",
     "fit_batch",
+    # Catalog fitting — the astronomer-facing noun (#1317)
+    "Catalog",
     "compute_mass_remaining_fraction",
     "recipe_parameters",
     # ========== Tier 4: INTROSPECTION (discovery & diagnostics) ==========

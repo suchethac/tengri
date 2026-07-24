@@ -357,6 +357,18 @@ class _CatalogFitterOriginal:
         from tengri.inference.fitter import resolve_method
 
         resolved = resolve_method(method)
+        # Per-galaxy fixed-value overrides (e.g. redshift) are threaded only through
+        # the sequential path today; the batched native/MCMC paths stack flux/noise
+        # and would SILENTLY DROP per-galaxy redshift. Fail loudly instead.
+        if (resolved in self._NATIVE_VMAPPABLE or resolved in self._MCMC_VMAPPABLE) and any(
+            "redshift" in g for g in self.galaxies
+        ):
+            raise NotImplementedError(
+                f"Per-galaxy redshift is not yet supported for batched method "
+                f"{method!r}. Use method='map' (the Catalog default; sequential) for "
+                f"per-galaxy redshifts — batched per-galaxy redshift threading is a "
+                f"follow-up. See #1317."
+            )
         if resolved in self._NATIVE_VMAPPABLE:
             return self._run_native(
                 resolved,
@@ -814,12 +826,16 @@ class _CatalogFitterOriginal:
         for i, galaxy in enumerate(self.galaxies):
             if verbose:
                 print(f"  Galaxy {i + 1}/{self.n_galaxies}...", end="\r", flush=True)
+            # Per-galaxy redshift (or any fixed-value override) reaches the forward
+            # pass via the #1329 params-override seam, not just the reported params.
+            override = {"redshift": galaxy["redshift"]} if "redshift" in galaxy else None
             fitter_i = Fitter(
                 self.model,
                 galaxy["flux_obs"],
                 galaxy["noise"],
                 data_type=self.data_type,
                 cache=self.cache,
+                params_override=override,
             )
             post_i = fitter_i.run(method, key=keys[i], verbose=False, **kwargs)
             posteriors.append(post_i)

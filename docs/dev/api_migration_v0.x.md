@@ -932,6 +932,36 @@ separate decision, tracked outside this wave.
 
 ---
 
+## `Catalog` — the catalog-fitting noun (2026-07, #1317)
+
+Wave 2 adds `tengri.Catalog`, the astronomer-facing surface for fitting a table
+of galaxies: table-in, table-out, name-matched columns, explicit units, eager
+validation at construction. It wraps the existing per-galaxy engine
+(`CatalogFitter`, now a deprecated alias):
+
+```python
+from tengri import Catalog
+
+cat = Catalog(fwd, table, flux_unit="cgs_fnu", redshift_col="z")
+post = cat.fit(method="map")           # MAP default; "mcmc_nuts" for posteriors
+```
+
+Per-galaxy redshift (via `redshift_col`) is injected into each galaxy's fit as a
+fixed-value override that reaches the forward pass (the `fit(params=)` seam,
+#1329) — not merely the reported params. It requires the model to carry a
+`Fixed` redshift and a `WavePrecomp(catalog_z_range=...)` covering the table's
+redshift span, validated at construction.
+
+| Name             | Canonical path                    | Advertised (`__all__`)? | Warns? |
+| ---------------- | --------------------------------- | ----------------------- | ------ |
+| `tengri.Catalog` | `tengri.inference.catalog.Catalog` | **yes** (new top-level) | no     |
+| `tengri.CatalogFitter` | `tengri.inference.catalog_fitter` | no (deprecated alias)   | on direct submodule import |
+
+`CatalogFitter` stays importable as a one-shot-deprecation alias of the internal
+engine; new code should use `Catalog`.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

@@ -48,6 +48,8 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # per-galaxy record it is validated against at fit(). Advertised
         # top-level (unlike the Phase-2-demoted Observation family below).
         "Data",
+        # ── Catalog fitting — the astronomer-facing noun (#1317) ────
+        "Catalog",
         # ── Spatial profile components ──────────────────────────────
         "Exponential",
         "FilterConvention",

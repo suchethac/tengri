@@ -215,12 +215,17 @@ class Catalog:
         # Build per-galaxy dicts for the engine.
         # adapter: engine takes list-of-dicts; the CatalogArrays are the source of
         # truth (spec 9.1); engine-native arrays are T5's problem.
+        # Per-galaxy redshift rides in the galaxy dict; the engine injects it into
+        # each galaxy's fit as a fixed-value override (the #1329 mechanism) so it
+        # actually reaches the forward pass — NOT just the reported params.
         galaxies = []
         for i in range(ca.n_galaxies):
             galaxy_dict = {
                 "flux_obs": ca.flux[i],
                 "noise": ca.noise[i],
             }
+            if ca.redshift is not None:
+                galaxy_dict["redshift"] = float(ca.redshift[i])
             galaxies.append(galaxy_dict)
 
         # Delegate to the existing engine.
