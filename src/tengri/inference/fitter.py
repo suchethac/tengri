@@ -2198,7 +2198,7 @@ class Fitter:
             else:
                 # Derive from context (persistent/lean/default)
                 if _is_persistent_mode():
-                    # persistent() promises to keep ALL cached artefacts, including
+                    # persistent() promises to keep ALL cached artifacts, including
                     # non-matching L3 entries — a distinct policy, NOT "iterate"
                     # (which drops stale non-matching entries). Mapping it to
                     # "iterate" made persistent() a silent no-op.

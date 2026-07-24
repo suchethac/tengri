@@ -94,7 +94,7 @@ def test_store_summary_end_to_end_drops_cube_and_summarizes():
         percentiles=(16, 50, 84),
         reducers={"mean": np.mean, "std": np.std},
     )
-    p = list(sed.spec.free_params)[0]
+    p = next(iter(sed.spec.free_params))
     # percentiles + reducers materialized at (N, n_pct) / (N,)
     assert post.percentiles is not None and np.asarray(post.percentiles[p]).shape == (3, 3)
     assert post.summary is not None and np.asarray(post.summary["mean"][p]).shape == (3,)

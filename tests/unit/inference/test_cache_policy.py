@@ -131,8 +131,8 @@ class TestForwardPrewarm:
         """persistent() must derive the 'persistent' policy — NO cache clear at all.
 
         Regression: it was silently remapped to 'iterate' (identical to the
-        default), making the context manager a no-op despite promising to keep
-        every cached artefact. Under persistent(), clear_shared_caches must not
+        default), making the context manager a no-op despite the docstring's claim to keep
+        every cached artifact. Under persistent(), clear_shared_caches must not
         be called.
         """
         import warnings
