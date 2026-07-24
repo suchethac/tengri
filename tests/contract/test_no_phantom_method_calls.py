@@ -23,7 +23,7 @@ Precision (why this does not fire on legitimate code):
   ``self._fn = jax.jit(...)`` followed by ``self._fn(x)`` is fine;
 * class-body names are excluded too, so a dataclass field annotated ``Callable`` and
   invoked as ``self.design_matrix_builder(params)`` is not a hit (this is the shape
-  used across ``inference/likelihoods/marginalized.py`` and ``OptimizationSchedule``);
+  used in ``inference/likelihoods/marginalized.py``);
 * classes with a ``__getattr__`` anywhere in the MRO are skipped, since attribute
   presence is genuinely undecidable there;
 * anything the import machinery cannot resolve is skipped rather than reported, so an
