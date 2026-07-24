@@ -26,9 +26,12 @@ n(L) = 0.9 × (L/L*)^0.3 below threshold L* = 3e28 erg/s/Hz.
 this limit; radio-only modes skip optical/IR computation entirely.
 """
 
+import math
+
 import jax.numpy as jnp
 
 from tengri.utils.physics_constants import C_AA as _C_AA, L_SUN as _L_SUN
+from tengri.utils.scale import pow10 as _pow10
 
 # Bell (2003) ApJ 586, 794 Eq. 3: characteristic luminosity L* at 1.4 GHz.
 # L* ≈ 3e28 erg/s/Hz corresponds to the M_V = -21 galaxy threshold.
@@ -46,6 +49,13 @@ _C_FF: float = 1.0 / 4.6e-28  # ≈ 2.174e27
 
 # Kennicutt+1998 IR-SFR calibration: L_IR [erg/s] → SFR [M☉/yr]
 _SFR_IR_KENNICUTT: float = 1.73e10 * _L_SUN  # ≈ 6.62e43 erg/s
+
+# log10 of the FIRRC / free-free divisors — used by the float32-safe branches
+# (#1206) that form the (representable) radio luminosity directly from
+# ``log10(L_IR)`` so the ~1e43 erg/s linear ``L_IR`` never materializes (it
+# overflows float32 max, 3.4e38, poisoning ``inf / finite → inf``).
+_LOG10_FIRRC_CONST: float = math.log10(3.75e12)  # bell/delvecchio/mccheyne norm
+_LOG10_SFR_IR_KENNICUTT: float = math.log10(_SFR_IR_KENNICUTT)  # free-free
 
 
 def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
@@ -108,6 +118,8 @@ def radio_sfr_bell2003(
     q_ir: float = 2.64,
     alpha_sf: float = 0.8,
     nu_ref: float = 1.4e9,
+    *,
+    log_L_ir: float | None = None,
 ) -> jnp.ndarray:
     """Star-forming synchrotron via fixed scalar FIRRC (Bell 2003).
 
@@ -144,7 +156,13 @@ def radio_sfr_bell2003(
     **JIT-compatible**: yes — pure JAX function.
     """
     nu = _C_AA / wavelength
-    L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz at nu_ref
+    if log_L_ir is None:
+        L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz at nu_ref
+    else:
+        # float32-safe (#1206): the ~1e28 erg/s/Hz radio luminosity is fully
+        # representable — only the linear ``L_IR`` (~1e43) overflows. Form the
+        # quotient straight from ``log10(L_IR)`` so ``L_IR`` never materializes.
+        L_ref = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
     L_nu = L_ref * (nu / nu_ref) ** (-alpha_sf)
     return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
 
@@ -164,6 +182,8 @@ def radio_sfr_delvecchio2021(
     alpha_sf: float = 0.7,
     nu_ref: float = 1.4e9,
     apply_suppression: bool = True,
+    *,
+    log_L_ir: float | None = None,
 ) -> jnp.ndarray:
     """Star-forming synchrotron via mass- and redshift-dependent FIRRC at 1.4 GHz.
 
@@ -226,8 +246,12 @@ def radio_sfr_delvecchio2021(
     # Mass- and redshift-dependent q_IR (Delvecchio+2021 UV+FIR, SEMPER Eq. 4)
     q_ir = q0 * (1.0 + redshift) ** z_slope - (log_mstar - 10.0) * mass_slope
 
-    # L at 1.4 GHz reference from FIRRC definition
-    L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz
+    # L at 1.4 GHz reference from FIRRC definition. float32-safe (#1206): form
+    # from log10(L_IR) when supplied so the ~1e43 linear L_IR never materializes.
+    if log_L_ir is None:
+        L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz
+    else:
+        L_ref = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
 
     # Optional Bell+2003 synchrotron suppression (low-SFR galaxies)
     L_ref = jnp.where(apply_suppression, _synchrotron_suppression(L_ref), L_ref)
@@ -247,6 +271,8 @@ def radio_sfr_mccheyne2022(
     alpha_sf: float = 0.7,
     nu_ref: float = 1.5e8,
     apply_suppression: bool = True,
+    *,
+    log_L_ir: float | None = None,
 ) -> jnp.ndarray:
     """Star-forming synchrotron via mass- and redshift-dependent FIRRC at 150 MHz.
 
@@ -312,8 +338,12 @@ def radio_sfr_mccheyne2022(
     # Mass- and redshift-dependent q at 150 MHz (McCheyne+2022, SEMPER Eq. 5)
     q_ir = q0 * (1.0 + redshift) ** z_slope + mass_slope * (log_mstar - 10.0)
 
-    # L at 150 MHz reference from FIRRC definition
-    L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz
+    # L at 150 MHz reference from FIRRC definition. float32-safe (#1206): form
+    # from log10(L_IR) when supplied so the ~1e43 linear L_IR never materializes.
+    if log_L_ir is None:
+        L_ref = L_ir / (3.75e12 * 10.0**q_ir)  # erg/s/Hz
+    else:
+        L_ref = _pow10(log_L_ir - _LOG10_FIRRC_CONST - q_ir)
 
     # Optional Bell+2003 synchrotron suppression
     L_ref = jnp.where(apply_suppression, _synchrotron_suppression(L_ref), L_ref)
@@ -327,6 +357,8 @@ def radio_freefree(
     L_ir: float,
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
+    *,
+    log_L_ir: float | None = None,
 ) -> jnp.ndarray:
     """Thermal free-free (bremsstrahlung) emission from HII regions.
 
@@ -380,7 +412,12 @@ def radio_freefree(
     """
     nu = _C_AA / wavelength  # Hz
     nu_ghz = nu / 1.0e9  # GHz
-    sfr = L_ir / _SFR_IR_KENNICUTT  # M☉/yr
+    # float32-safe (#1206): form the SFR straight from log10(L_IR) when supplied
+    # so the ~1e43 linear L_IR (inf in float32) never materializes.
+    if log_L_ir is None:
+        sfr = L_ir / _SFR_IR_KENNICUTT  # M☉/yr
+    else:
+        sfr = _pow10(log_L_ir - _LOG10_SFR_IR_KENNICUTT)  # M☉/yr
     # Murphy+2011 Eq. 11 inverted; (T_e/1e4)^0.45 factor from ionized gas physics
     L_nu = _C_FF * (T_e / 1.0e4) ** 0.45 * nu_ghz**alpha_ff * sfr
     return jnp.where(wavelength > _RADIO_WAVE_MIN_AA, L_nu, 0.0)
@@ -398,6 +435,7 @@ def _dispatch_sfr(
     mass_slope: float | None,
     z_slope: float | None,
     apply_suppression: bool,
+    log_L_ir: float | None = None,
 ) -> jnp.ndarray:
     """Dispatch SFR synchrotron component by mode (private helper).
 
@@ -443,7 +481,7 @@ def _dispatch_sfr(
     if sfr_mode == "none":
         return jnp.zeros_like(wavelength)
     elif sfr_mode == "bell2003":
-        return radio_sfr_bell2003(wavelength, L_ir, q_ir, alpha_sf)
+        return radio_sfr_bell2003(wavelength, L_ir, q_ir, alpha_sf, log_L_ir=log_L_ir)
     elif sfr_mode == "delvecchio2021":
         kw = {}
         if q0 is not None:
@@ -453,7 +491,13 @@ def _dispatch_sfr(
         if z_slope is not None:
             kw["z_slope"] = z_slope
         return radio_sfr_delvecchio2021(
-            wavelength, L_ir, log_mstar, redshift, apply_suppression=apply_suppression, **kw
+            wavelength,
+            L_ir,
+            log_mstar,
+            redshift,
+            apply_suppression=apply_suppression,
+            log_L_ir=log_L_ir,
+            **kw,
         )
     elif sfr_mode == "mccheyne2022":
         kw = {}
@@ -464,7 +508,13 @@ def _dispatch_sfr(
         if z_slope is not None:
             kw["z_slope"] = z_slope
         return radio_sfr_mccheyne2022(
-            wavelength, L_ir, log_mstar, redshift, apply_suppression=apply_suppression, **kw
+            wavelength,
+            L_ir,
+            log_mstar,
+            redshift,
+            apply_suppression=apply_suppression,
+            log_L_ir=log_L_ir,
+            **kw,
         )
     else:
         raise ValueError(
@@ -481,6 +531,8 @@ def radio_agn(
     nu_ref: float = 1.4e9,
     l_bband: float = 0.0,
     log_nu_cut: float = 13.0,
+    *,
+    log_L_agn_bol: float | None = None,
 ) -> jnp.ndarray:
     r"""Radio emission from AGN jets/lobes (single power law with aging cutoff).
 
@@ -539,7 +591,16 @@ def radio_agn(
     # nu_B = c / 4400 A = 6.818e14 Hz.
     _NU_B = 6.818e14  # Hz
     _BC_B = 5.15  # Hopkins+2007 bolometric correction at 4400 A
-    L_B = jnp.where(l_bband > 0.0, l_bband, L_agn_bol / (_BC_B * _NU_B))  # erg/s/Hz
+    # float32-safe (#1206): form the bolometric-correction fallback from
+    # log10(L_agn_bol) when supplied so the ~1e46 linear L_agn_bol never
+    # materializes. This also matters when ``l_bband > 0`` selects the other
+    # branch: ``jnp.where`` still evaluates both, and a linear ``inf`` in the
+    # dead branch turns the reverse pass into ``0 * inf = nan``.
+    if log_L_agn_bol is None:
+        L_B_fallback = L_agn_bol / (_BC_B * _NU_B)
+    else:
+        L_B_fallback = _pow10(log_L_agn_bol - math.log10(_BC_B * _NU_B))
+    L_B = jnp.where(l_bband > 0.0, l_bband, L_B_fallback)  # erg/s/Hz
 
     # L_5GHz from radio-loudness definition
     L_5GHz = L_B * 10.0**radio_loudness  # erg/s/Hz
@@ -563,6 +624,8 @@ def radio_agn_dpl(
     log_nu_cut: float = 13.0,
     nu_ref: float = 5.0e9,
     l_bband: float = 0.0,
+    *,
+    log_L_agn_bol: float | None = None,
 ) -> jnp.ndarray:
     """Double power-law AGN radio emission (AGNfitter-rx).
 
@@ -618,7 +681,14 @@ def radio_agn_dpl(
     # (disc-derived), use it directly; else derive from L_bol bolometric correction.
     _NU_B = 6.818e14  # Hz
     _BC_B = 5.15  # Hopkins+2007
-    L_B = jnp.where(l_bband > 0.0, l_bband, L_agn_bol / (_BC_B * _NU_B))  # erg/s/Hz
+    # float32-safe (#1206): see radio_agn — form the fallback from
+    # log10(L_agn_bol) so the ~1e46 linear L_agn_bol never materializes, and so
+    # the dead ``jnp.where`` branch is finite (avoiding 0 * inf = nan in grad).
+    if log_L_agn_bol is None:
+        L_B_fallback = L_agn_bol / (_BC_B * _NU_B)
+    else:
+        L_B_fallback = _pow10(log_L_agn_bol - math.log10(_BC_B * _NU_B))
+    L_B = jnp.where(l_bband > 0.0, l_bband, L_B_fallback)  # erg/s/Hz
 
     # L_5GHz from radio-loudness definition
     L_5GHz = L_B * 10.0**radio_loudness  # erg/s/Hz
@@ -667,6 +737,8 @@ def radio_total_terms(
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
     l_bband: float = 0.0,
+    log_L_ir: float | None = None,
+    log_L_agn_bol: float | None = None,
     **_kwargs,
 ) -> dict[str, jnp.ndarray]:
     """Decompose radio emission into additive terms for precomputation.
@@ -766,10 +838,18 @@ def radio_total_terms(
         mass_slope,
         z_slope,
         apply_suppression,
+        log_L_ir=log_L_ir,
     )
-    agn = radio_agn(wavelength, L_agn_bol, radio_loudness, alpha_agn, l_bband=l_bband)
+    agn = radio_agn(
+        wavelength,
+        L_agn_bol,
+        radio_loudness,
+        alpha_agn,
+        l_bband=l_bband,
+        log_L_agn_bol=log_L_agn_bol,
+    )
     ff = (
-        radio_freefree(wavelength, L_ir, T_e, alpha_ff)
+        radio_freefree(wavelength, L_ir, T_e, alpha_ff, log_L_ir=log_L_ir)
         if include_freefree
         else jnp.zeros_like(wavelength)
     )
@@ -900,6 +980,8 @@ def radio_total_dpl_terms(
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
     l_bband: float = 0.0,
+    log_L_ir: float | None = None,
+    log_L_agn_bol: float | None = None,
     **_kwargs,
 ) -> dict[str, jnp.ndarray]:
     """Decompose AGN double power-law radio emission into additive terms.
@@ -1007,6 +1089,7 @@ def radio_total_dpl_terms(
         mass_slope,
         z_slope,
         apply_suppression,
+        log_L_ir=log_L_ir,
     )
     agn = radio_agn_dpl(
         wavelength,
@@ -1017,9 +1100,10 @@ def radio_total_dpl_terms(
         log_nu_t,
         log_nu_cut,
         l_bband=l_bband,
+        log_L_agn_bol=log_L_agn_bol,
     )
     ff = (
-        radio_freefree(wavelength, L_ir, T_e, alpha_ff)
+        radio_freefree(wavelength, L_ir, T_e, alpha_ff, log_L_ir=log_L_ir)
         if include_freefree
         else jnp.zeros_like(wavelength)
     )

@@ -281,6 +281,11 @@ class DerivedState:
 
     # AGN (incl. GRAHSP alternates)
     L_agn_bol: jnp.ndarray | None = None
+    # log10(L_agn_bol / (erg/s)) — float32-safe companion to ``L_agn_bol``
+    # (~1e46 erg/s overflows float32 max 3.4e38). Consumed by the radio jet
+    # term (#1206) via ``apply_log10_scale`` so the AGN-driven radio emission
+    # never materializes the out-of-range linear luminosity.
+    log_L_agn_bol: jnp.ndarray | None = None
     L_agn_torus: jnp.ndarray | None = None
     L_agn_absorbed: jnp.ndarray | None = None
     # Intrinsic (un-reddened) disc monochromatic L_nu at 2500 A [erg/s/Hz];

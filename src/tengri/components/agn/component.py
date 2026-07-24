@@ -177,6 +177,12 @@ class AGNSEDComponent:
         """
         return (
             DerivedKey("L_agn_bol", "erg/s", "AGN bolometric luminosity"),
+            DerivedKey(
+                "log_L_agn_bol",
+                "dex",
+                "log10(L_agn_bol / (erg/s)); float32-safe form "
+                "(L_agn_bol ~1e46 overflows float32)",
+            ),
             DerivedKey("sed_agn", "erg/s/Hz", "AGN SED contribution on pipeline wave grid"),
             DerivedKey(
                 "L_2500_intrinsic",
@@ -409,39 +415,54 @@ class AGNSEDComponent:
         # and L_4400_intrinsic. For monolithic models, both default to 0.0
         # (X-ray falls back to L_bol BC or SKIRTOR's published L_2500_30deg;
         # radio falls back to L_bol bolometric correction).
-        # The AGN L_nu factors uniformly with 10^agn_log_lbol: the disc scales
-        # with L_bol, and when agn_fracAGN>0 the torus is pinned to agn_power
-        # through a 1/L_bol ``agn_torus_frac``, so it too comes out 10^-lbol of
-        # its physical value at the reference. Evaluate every block at
-        # ``agn_log_lbol = _AGN_LBOL_REF`` (L_bol = 1e10 erg/s) and re-apply
-        # the true 10^(agn_log_lbol − _AGN_LBOL_REF) scale in log space via
-        # apply_log10_scale, so the ~1e46 erg/s bolometric is never
-        # materialized. The reference L_bol = 1e10 is chosen (see _AGN_LBOL_REF)
-        # so that even the *squares* of internal bolometric integrals — e.g. ``/
-        # disc_int`` disc renorm, whose reverse pass forms
-        # ``disc_int**2`` ~ L_bol**2 — stay in float32 range. Exact in
-        # float64; the AGN SED is proportional to 10^agn_log_lbol to machine
-        # precision (verified) (#1206).
+        #
+        # Float32 boundary (#1206). Evaluating every AGN block at the true
+        # ``agn_log_lbol`` overflows float32: the CIGALE-joint disc renorm forms
+        # ``trapz(L_torus)`` and ``trapz(L_disc)`` ~ L_bol (~1e44 erg/s, past
+        # float32 max 3.4e38) at ``blocks/runner.py``. So in **float32 only** we
+        # evaluate every block at a low reference L_bol (``_AGN_LBOL_REF`` →
+        # 1e10 erg/s, comfortably in range) and re-apply the
+        # ``10^(agn_log_lbol − _AGN_LBOL_REF)`` scale in log space via
+        # apply_log10_scale. That output factoring is EXACT for shape-invariant
+        # blocks — the SKIRTOR torus template and the power-law disc scale
+        # linearly with L_bol — but only APPROXIMATE for the multicolor disc,
+        # whose spectral shape (temperature) depends on L_bol; making it exact in
+        # float32 needs the internal bolometric integrals log-spaced (#1206
+        # follow-up). In **float64** we evaluate at the true ``agn_log_lbol`` and
+        # publish the block outputs unchanged — the reference implementation,
+        # bit-for-bit identical to pre-#1206 main for every disc type.
         from tengri.utils.scale import apply_log10_scale
 
-        _lbol_ref = jnp.full_like(jnp.asarray(agn_log_lbol, dtype=wave.dtype), _AGN_LBOL_REF)
+        _use_ref = wave.dtype == jnp.float32
+        _lbol_eval = (
+            jnp.full_like(jnp.asarray(agn_log_lbol, dtype=wave.dtype), _AGN_LBOL_REF)
+            if _use_ref
+            else agn_log_lbol
+        )
         if self.config.model == "composable":
             L_agn_unit, L_2500_unit, L_4400_unit = agn_fn(
-                wave, agn_log_lbol=_lbol_ref, return_l2500=True, **agn_kwargs
+                wave, agn_log_lbol=_lbol_eval, return_l2500=True, **agn_kwargs
             )
         else:
-            L_agn_unit = agn_fn(wave, agn_log_lbol=_lbol_ref, **agn_kwargs)
+            L_agn_unit = agn_fn(wave, agn_log_lbol=_lbol_eval, **agn_kwargs)
             L_2500_unit = jnp.asarray(0.0)
             L_4400_unit = jnp.asarray(0.0)
-        L_agn = apply_log10_scale(L_agn_unit, agn_log_lbol - _AGN_LBOL_REF)
-        L_2500_intrinsic = apply_log10_scale(L_2500_unit, agn_log_lbol - _AGN_LBOL_REF)
-        L_4400_intrinsic = apply_log10_scale(L_4400_unit, agn_log_lbol - _AGN_LBOL_REF)
+        if _use_ref:
+            _offset = agn_log_lbol - _AGN_LBOL_REF
+            L_agn = apply_log10_scale(L_agn_unit, _offset)
+            L_2500_intrinsic = apply_log10_scale(L_2500_unit, _offset)
+            L_4400_intrinsic = apply_log10_scale(L_4400_unit, _offset)
+        else:
+            L_agn = L_agn_unit
+            L_2500_intrinsic = L_2500_unit
+            L_4400_intrinsic = L_4400_unit
 
         # Filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
         # can include the AGN contribution in the LUT sum.
         derived_overrides = dict(
             L_agn_bol=L_agn_bol,
+            log_L_agn_bol=(agn_log_lbol + _LOG10_L_SUN),
             sed_agn=L_agn,
             L_2500_intrinsic=L_2500_intrinsic,
             L_4400_intrinsic=L_4400_intrinsic,
