@@ -1,5 +1,7 @@
 # Wave 0 API Fixes Implementation Plan (epic #1322)
 
+> **OUTCOME (2026-07-23):** executed; shipped as PRs #1323–#1328. Three tasks proved STALE against origin/main (#1310, #1279, #1306 — closed with evidence), #1177 unverifiable on the pinned blackjax 1.3, #1316 shipped at half scope (blocked on new bug #1329). Both reviewer gates (RED-side neuter on main, diff review) re-run independently. Ledger: the executing job's `progress.md`; verdicts on epic #1322.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Land the nine Wave-0 correctness fixes plus #1315 from epic #1322 — every one a compile-reuse-contract or fail-loud violation on paths the later API waves rebuild.

@@ -13,7 +13,8 @@ Legend:
 
 | # | Title | Work item |
 |---|---|---|
-| [1310](https://github.com/suchethac/tengri/issues/1310) | IGM silently dropped in WavePrecomp LUT path | W1b |
+| [1310](https://github.com/suchethac/tengri/issues/1310) | ~~IGM silently dropped in WavePrecomp LUT path~~ **closed stale** (already fixed by #1135/#1149; verified by execution) | W1b |
+| [1329](https://github.com/suchethac/tengri/issues/1329) | `fit(params=...)` silently swallowed — the WavePrecomp docstring advertises a kwarg nothing consumes | W2 dep |
 | [1311](https://github.com/suchethac/tengri/issues/1311) | Per-axis `FeaturePrecomp.n_grid` | — |
 | [1312](https://github.com/suchethac/tengri/issues/1312) | Noisy mock predictions (`simulate`) for SBI | future |
 | [1313](https://github.com/suchethac/tengri/issues/1313) | Flexibly-summarized `CatalogPosterior` (percentiles + reducers) | future |
@@ -230,7 +231,7 @@ fwd = ForwardModel.build(..., approx=(WavePrecomp(n_z=200), SpectrumPrecomp())) 
 
 The fingerprint exists: `compile_signature`'s `filter_trans_id` (`sed_model.py:3313`) content-hashes the transmission curves — a genuine filter change is distinguishable from the same filters passed twice.
 
-**IGM regardless of LUT method (W1b, [#1310](https://github.com/suchethac/tengri/issues/1310)).** If IGM is in the model it must apply on every path. Today the exact path applies it; the LUT path folds in a **mean** IGM only when precomputable (#1135) — a patchy/free-parameter IGM is silently absent from the LUT path. Contract: apply post-LUT at projection, or raise at build on an incompatible combination. Never fail open.
+**IGM regardless of LUT method (W1b — resolved; [#1310](https://github.com/suchethac/tengri/issues/1310) closed stale).** The contract — IGM applies on every path, never fails open — **already holds**: the exact path applies `state.derived["igm_transmission"]`, and the #1135/#1149 sub-band fold covers the LUT path including patchy IGM. Verified 2026-07-23 by *executing* the path: 28/28 tests across `test_bug_1149_patchy_igm_jit.py`, `test_bug_1135_igm_subband_precompute.py`, and `test_igm_reaches_photometry.py` pass on main. An earlier revision of this spec asserted a silent drop for non-precomputable IGM; that claim came from reading a narrow code comment rather than executing the path, and was wrong. The contract stays stated here so any future LUT variant is held to it.
 
 **Per-axis `FeaturePrecomp.n_grid` ([#1311](https://github.com/suchethac/tengri/issues/1311)).** `n_grid` is one int for all free ionization axes; `ranges` is already per-axis. Allow a dict.
 
@@ -282,7 +283,7 @@ mock = cat.predict(param_table, chunk_size=4096)                   # ◆ → (N,
 
 **Scaling knobs ✓.** `forward_chunk_size=K` (XLA graph O(1) in N); `n_pad="auto"` (shape-bucket catalog sizes to reuse one compile).
 
-**The `fit_batch` cliff (W2, [#1316](https://github.com/suchethac/tengri/issues/1316)).** Today `fit_batch(redshift_col=…)` clones a fresh `SEDModel` per row → new signature → full recompile per galaxy, silently. `Catalog` must auto-enable/validate `catalog_z_range`; `fit_batch` becomes a deprecated alias of `Catalog.fit` ◆.
+**The `fit_batch` cliff (W2, [#1316](https://github.com/suchethac/tengri/issues/1316)).** Today `fit_batch(redshift_col=…)` clones a fresh `SEDModel` per row → new signature → full recompile per galaxy, silently. `Catalog` must auto-enable/validate `catalog_z_range`; `fit_batch` becomes a deprecated alias of `Catalog.fit` ◆. Wave 0 shipped the loud warning (#1326); the zero-clone half is **blocked on [#1329](https://github.com/suchethac/tengri/issues/1329)**: `SEDModel.fit` has no `params=` parameter and validates no unknown kwargs, so the per-row override the WavePrecomp docstring advertises (`model.fit(row.data, params={"redshift": row.z})`) is silently swallowed today. The plumbing plus unknown-kwarg validation is a Wave 2 prerequisite.
 
 ### 6.3 Catalog — heterogeneous (different filters per galaxy)
 
@@ -460,7 +461,8 @@ Implementation ordering, absorbed-backlog mapping, and the near-term method focu
 |---|---|---|---|
 | — | single/catalog/hierarchical construct + predict/fit; one predict contract | ✓ | — |
 | **W1** | `observation` optional on `ForwardModel.build` + inherit + LUT reuse-on-match + scoped guard | ◆ | [#1315](https://github.com/suchethac/tengri/issues/1315) |
-| **W1b** | IGM applied on every LUT path (or raise) | ◆ | [#1310](https://github.com/suchethac/tengri/issues/1310) |
+| **W1b** | IGM applied on every LUT path — **already true**; guard tests exist | ✓ (resolved stale) | [#1310](https://github.com/suchethac/tengri/issues/1310) |
+| **W2 dep** | fit-time `params=` plumbing (per-row z injection; unknown-kwarg validation) | ◆ | [#1329](https://github.com/suchethac/tengri/issues/1329) |
 | **W2** | `Catalog` noun: table-in/out, name-matching, `flux_unit=`, NaN policy, union-LUT + presence mask, `to_table()`; `fit_batch` cliff + deprecation | ◆ | [#1316](https://github.com/suchethac/tengri/issues/1316), [#1317](https://github.com/suchethac/tengri/issues/1317) |
 | **W3** | `forward.prewarm()`; retire `lean` → surface-derived policy | ◆ | [#1318](https://github.com/suchethac/tengri/issues/1318) |
 | **W4** | hierarchical: `mode="hierarchical"` + `shared=`, data at fit, scaling contract; Population classes dissolve | ◆ deferred | [#1319](https://github.com/suchethac/tengri/issues/1319) |

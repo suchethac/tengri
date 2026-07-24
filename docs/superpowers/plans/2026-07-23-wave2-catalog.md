@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12, JAX, pytest + chex, ruff. Tables: whatever `fit_batch` accepts today (dict-of-columns / pandas / astropy — T1 Step 1 pins it).
 
-**Depends on:** Wave 0 merged (esp. #1134 ztable defaults, #1316) and Wave 1 T1 (`Data`, for censor semantics). T4 depends only on Wave 0.
+**Depends on:** Wave 0 merged (esp. #1134 ztable defaults, #1316) and Wave 1 T1 (`Data`, for censor semantics). T4 depends only on Wave 0. **T2's per-row redshift injection additionally requires #1329** (fit-time `params=` plumbing + unknown-kwarg validation — the docstring-advertised override does not exist yet).
 
 ## Global Constraints
 
