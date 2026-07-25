@@ -597,6 +597,33 @@ contract. `grahsp_sbpl` additionally needs `agn_grahsp_l5100` to become a
 log-space parameter (#1206 item 3), since the parameter *value* is `inf` in
 float32 before any kernel arithmetic runs.
 
+#### The scaled-`L_lambda` refactor was attempted and measured — it cannot close these two
+
+The protocol works where the disc's scale cancels, and provably fails where it
+does not. Both halves were measured on `relagn`:
+
+* **Where it works.** Under `cigale_joint` with `agn_fracAGN > 0` the disc is
+  renormalized to `agn_power` (`R` and `agn_power·R / disc_int` are both
+  scale-free), so the disc's own normalization is *discarded*. Returning the disc
+  peak-normalized ("hat" form) with no restoration reproduces float64 to
+  **6.3e-06** for a disc+torus model.
+* **Why it cannot ship.** The moment a *disc-anchored* block is active
+  (`nlr`/`blr`/`feii` normalize to `λL_λ(5100 Å)`), the lines ride the hat scale
+  while disc and torus ride the absolute `agn_power` scale, and the composed SED
+  comes out **13× wrong in shape** (measured: `max_rel = 1.29e+01` with
+  `nlr=blr=analytic`). Restoring the offset onto `l5100_disc` before the line
+  blocks — the only correct fix — requires materializing relagn's absolute
+  `λL_λ(5100 Å) = 2.57e44` erg/s, which float32 (max 3.4e38) **cannot represent**.
+
+So the boundary is physical, not architectural: a disc whose absolute
+normalization is ~1e44 erg/s can never feed float32 blocks that need that
+absolute value. A hat-form disc is only sound for configurations that discard the
+disc's scale — shipping it unconditionally would silently corrupt every
+line-active fit, so it is deliberately **not** implemented. The remaining options
+are both behavioral, not representational: normalize `relagn` to `agn_log_lbol`
+like the other eleven discs (changes float64 results), or keep it float64-only
+(current state, guarded by `Float32UnsafeAGNWarning`).
+
 All eight **shape-class + shape-invariant** discs are exact in pure float32 —
 including the science defaults (`multicolor`, `powerlaw`) and the physical disc
 models (`kubota_done`, `adaf`). Pure-float32 AGN inference (finite `grad(nlp)`)
