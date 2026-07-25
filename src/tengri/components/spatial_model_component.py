@@ -17,7 +17,7 @@ contract, and a sensible default :meth:`apply` orchestration that:
 Subclasses MUST override :meth:`predict` with signature
 ``predict(p, profile_in, grid_kpc) -> (profile_out, published)``.
 
-See architecture spec ``docs/dev/forward-model-architecture.md`` §3.2.
+See architecture spec ``docs/dev/archive/forward-model-architecture.md`` §3.2.
 """
 
 from __future__ import annotations

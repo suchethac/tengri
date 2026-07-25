@@ -800,7 +800,7 @@ class SEDModel:
     """
 
     # ── SubModel Protocol surface ──────────────────────────────────────
-    # See docs/dev/forward-model-architecture.md §4. SEDModel directly
+    # See docs/dev/archive/forward-model-architecture.md §4. SEDModel directly
     # satisfies tengri.protocols.SubModel; ForwardModel's per-population
     # orchestration consumes the `run` and `declared_parameters` methods.
 
