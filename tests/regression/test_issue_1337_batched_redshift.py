@@ -103,6 +103,7 @@ class TestBatchedRedshift:
         with pytest.raises(ValueError, match="catalog_z_range"):
             CatalogFitter(model, catalog).run("mcmc_nuts", key=key, n_warmup=5, n_samples=5)
 
+    @pytest.mark.slow  # a real 2-galaxy NUTS catalog fit; see #1346 (shard OOM)
     def test_batched_heterogeneous_redshift_fits_and_separates(
         self, ssp_data_wne, synthetic_tophat_obs
     ):
