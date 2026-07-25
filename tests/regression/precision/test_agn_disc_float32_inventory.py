@@ -13,11 +13,20 @@ MAGNITUDE to a reference — are all fixed: ``multicolor``, ``kubota_done`` and
 ``richards2006``, ``skirtor``, ``qsogen``, ``schartmann2005``) are exact under
 the plain reference-evaluation + rescale.
 
-One float32 failure class remains — **grid/other-class** (``relagn``,
-``slone_netzer``, ``grahsp_sbpl``, ``adaf_lopez2024``): non-finite in float32
-*even at the reference L_bol*, so the overflow is NOT the L_bol magnitude — it is
-an internal grid value or a per-wavelength term (a ``0 * inf`` in the runner)
-needing its own float32 hardening.
+``adaf_lopez2024`` is exact too: its CIGALE piecewise power law formed
+``wavelength**coef * norm`` where, on a steep segment at long wavelength, the two
+factors leave the float32 window in OPPOSITE directions (``wavelength**-4``
+~1e-40 flushes to 0 while the continuity ``norm`` ~1e40 overflows) — ``0 * inf =
+nan``. It is now built as one log10 sum, peak-factored before exponentiating.
+
+Three float32 failures remain — **grid/other-class** (``relagn``,
+``slone_netzer``, ``grahsp_sbpl``): non-finite in float32 *even at the reference
+L_bol*, each from a DIFFERENT cause. ``grahsp_sbpl`` is blocked on a linear erg/s
+*parameter* (``agn_grahsp_l5100``, LogUniform(1e42, 1e47) — the value itself is
+``inf`` in float32), so it needs a log-space parameter, not a kernel fix (#1206
+item 3). ``relagn`` is finite in EAGER float32 and only ``inf`` under jit — an XLA
+fusion artifact, not a range wall. ``slone_netzer`` underflows its template
+normalization to zero.
 
 This test pins the exact discs (regression guard) and ``xfail``\ s the rest
 (progress tracker: fixing one turns its ``xfail`` into an unexpected pass). It is
@@ -45,13 +54,14 @@ _EXACT_DISCS = [
     "skirtor",
     "qsogen",
     "schartmann2005",
+    "adaf_lopez2024",
 ]
 
 # Shape depends on L_bol; float32 reference evaluation gives the wrong shape.
 _SHAPE_CLASS_XFAIL = []
 
 # Non-finite in float32 even at the reference L_bol — a distinct internal overflow.
-_GRID_CLASS_XFAIL = ["relagn", "slone_netzer", "grahsp_sbpl", "adaf_lopez2024"]
+_GRID_CLASS_XFAIL = ["relagn", "slone_netzer", "grahsp_sbpl"]
 
 
 def _sed_agn(ssp, disc, dtype):

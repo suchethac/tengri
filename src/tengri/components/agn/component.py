@@ -70,10 +70,10 @@ _AGN_LBOL_REF: float = 10.0 - _LOG10_L_SUN
 #: ``tests/regression/precision/test_agn_disc_float32_inventory.py``. The
 #: float32-safe discs are ``multicolor``, ``kubota_done``, ``adaf`` (physical,
 #: L_bol-dependent shape) and ``powerlaw`` / ``richards2006`` / ``skirtor`` /
-#: ``qsogen`` / ``schartmann2005`` (shape-invariant).
-_NON_FLOAT32_SAFE_DISCS: frozenset[str] = frozenset(
-    {"relagn", "slone_netzer", "grahsp_sbpl", "adaf_lopez2024"}
-)
+#: ``qsogen`` / ``schartmann2005`` / ``adaf_lopez2024`` (shape-invariant).
+#: ``grahsp_sbpl`` is blocked on a linear erg/s *parameter* (``agn_grahsp_l5100``
+#: is ``inf`` in float32), not a kernel overflow — it needs a log-space parameter.
+_NON_FLOAT32_SAFE_DISCS: frozenset[str] = frozenset({"relagn", "slone_netzer", "grahsp_sbpl"})
 
 
 class Float32UnsafeAGNWarning(UserWarning):
