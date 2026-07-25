@@ -55,13 +55,14 @@ _EXACT_DISCS = [
     "qsogen",
     "schartmann2005",
     "adaf_lopez2024",
+    "slone_netzer",
 ]
 
 # Shape depends on L_bol; float32 reference evaluation gives the wrong shape.
 _SHAPE_CLASS_XFAIL = []
 
 # Non-finite in float32 even at the reference L_bol — a distinct internal overflow.
-_GRID_CLASS_XFAIL = ["relagn", "slone_netzer", "grahsp_sbpl"]
+_GRID_CLASS_XFAIL = ["relagn", "grahsp_sbpl"]
 
 
 def _sed_agn(ssp, disc, dtype):
