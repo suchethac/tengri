@@ -2229,7 +2229,16 @@ class Fitter:
             # invalidation is unnecessary. Forward, loss, grad, and
             # logdensity caches are preserved unconditionally at this
             # scope.
-            _clear_shared_caches(scope="inference_body", keep_sig=self._lean_keep_sig)
+            # drop_xla=False (#1350): this policy's promise is "fit() keeps your
+            # warm caches". jax.clear_caches() would wipe the process-wide XLA
+            # executables, leaving the entries we deliberately keep as hollow
+            # shells that re-trace — and de-warming the caller's own
+            # predict_photometry too. The stale non-matching tengri entries are
+            # still dropped. "sweep" keeps drop_xla=True: it exists for memory
+            # relief (the notebook-OOM class) and must keep releasing executables.
+            _clear_shared_caches(
+                scope="inference_body", keep_sig=self._lean_keep_sig, drop_xla=False
+            )
         elif _cache_policy == "persistent":
             # persistent(): keep EVERYTHING — no L3 clear at all, even
             # non-matching stale entries. This is what the context manager /
