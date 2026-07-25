@@ -2836,7 +2836,7 @@ class SEDModel:
 
         **Raw forward-pass output** intended for plotting. For SFH-derived
         scalars (stellar mass, recent SFR, age), see
-        ``model.predict(params).sfh.*`` or :meth:`predict_sfh_quantities`
+        ``model.predict(params).sfh.*`` or :meth:`predict_properties`
         for the JIT-compatible form.
 
         Parameters
@@ -2868,7 +2868,7 @@ class SEDModel:
         Notes
         -----
         **JIT-compatible**: no — uses Python-side interpolation. For
-        JIT-compatible SFH evaluation, use :meth:`predict_sfh_quantities`
+        JIT-compatible SFH evaluation, use :meth:`predict_properties`
         to get integrated quantities (stellar mass, age, etc.).
 
         **Time grid**: with ``grid="linear"`` the output is resampled onto a
@@ -2908,7 +2908,7 @@ class SEDModel:
 
         See Also
         --------
-        predict_sfh_quantities : Integrated SFH quantities (JIT-compatible).
+        predict_properties : Integrated SFH quantities, JIT/vmap-safe.
         predict : Lazy access to SFH and all derived quantities.
         """
         if grid not in ("linear", "native"):
@@ -3202,10 +3202,10 @@ class SEDModel:
         for interactive exploration of a single galaxy's properties,
         trading speed for convenience.
 
-        For batch computation over posterior chains or mock catalogs,
-        use the JIT-compatible methods :meth:`predict_sfh_quantities`,
-        :meth:`predict_sed_quantities`, or :meth:`predict_line_luminosities`
-        with :func:`jax.vmap` instead (up to 1000× faster for large batches).
+        For batch computation over posterior chains or mock catalogs, use
+        :meth:`predict_properties` — the one JIT/vmap-safe surface for
+        derived quantities — with :func:`jax.vmap` instead (up to 1000×
+        faster for large batches).
 
         Parameters
         ----------
@@ -3229,8 +3229,8 @@ class SEDModel:
         **Not JIT-compatible**: Uses Python-side caching and object
         attribute access. Useful for interactive exploration, not
         for inference loops. For inference, use
-        :meth:`predict_sfh_quantities`, :meth:`predict_sed_quantities`,
-        etc. with :func:`jax.vmap`.
+        :meth:`predict_photometry` (the hot path) or
+        :meth:`predict_properties` with :func:`jax.vmap`.
 
         **Lazy evaluation**: Quantities are computed only when accessed.
         Repeated access to the same property reuses cached results.
@@ -3262,17 +3262,16 @@ class SEDModel:
 
         >>> import jax
         >>> params_batch = spec.sample(jax.random.PRNGKey(0), n=10000)
-        >>> sfh_fn = jax.vmap(model.predict_sfh_quantities)
+        >>> sfh_fn = jax.vmap(lambda p: model.predict_properties(p, names=("stellar_mass",)))
         >>> sfh_batch = sfh_fn(params_batch)
-        >>> sfh_batch.stellar_mass  # shape (10000,)
-        >>> sfh_batch.stellar_mass.mean()
+        >>> sfh_batch["stellar_mass"].shape  # (10000,)
+        >>> sfh_batch["stellar_mass"].mean()
 
         See Also
         --------
-        predict_sfh_quantities : JIT-compatible SFH quantities for batch.
-        predict_sed_quantities : JIT-compatible SED quantities for batch.
-        predict_line_luminosities : JIT-compatible emission lines for batch.
-        predict_rest_sed : Full rest-frame SED for custom analysis.
+        predict_properties : JIT/vmap-safe derived quantities for batch.
+        Prediction.rest_sed : Full rest-frame SED for custom analysis.
+        Prediction.lines : Emission-line luminosities.
         """
         from collections.abc import Mapping
 
@@ -3757,12 +3756,12 @@ class SEDModel:
         --------
         predict : Lazy prediction object for all derived quantities.
         predict_spectrum : Spectral flux at arbitrary wavelengths.
-        predict_magnitudes : AB magnitudes (uses photometry internally).
+        Prediction.magnitudes : AB magnitudes (uses photometry internally).
 
         Examples
         --------
         >>> flux = model.predict_photometry(params)
-        >>> mags = model._predict_magnitudes(params)
+        >>> mags = model.predict(params).magnitudes()
         >>> # For the fast LUT path, build with ``approx=WavePrecomp()``.
 
         References
@@ -5131,7 +5130,6 @@ class SEDModel:
         --------
         available_properties : List of properties available in this model.
         predict : Lazy Prediction object with attribute-access syntax.
-        predict_sfh_quantities : Legacy SFH quantity interface.
         """
         self._ensure_property_catalog()
 
@@ -7869,8 +7867,8 @@ class SEDModel:
 
         Notes
         -----
-        This is the grid used by :meth:`predict_rest_sed` by default when
-        no custom ``wave=`` is passed. Updated when radio/X-ray components
+        This is the grid used by :meth:`Prediction.rest_sed` by default when
+        no custom ``wave`` is passed. Updated when radio/X-ray components
         are added to the model.
 
         Examples
