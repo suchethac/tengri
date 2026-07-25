@@ -228,8 +228,11 @@ The exact-op localization was the crux: `checkify` named the primitive
 6. **Dust IR emission must consume `log_L_ir`** — the remaining blocker for end-to-end float32
    photometry. See "Remaining work" below.
 7. ~~Radio SED must not materialize the linear `L_ir` / `L_agn_bol`.~~ **DONE** — log-threaded
-   luminosities (§7). One residual float32 limitation: the composable **multicolor** disc's
-   L_bol-dependent shape (§7), which also fixes a float64 regression the output-factoring introduced.
+   luminosities (§7). Also fixed a float64 regression the AGN output-factoring introduced.
+8. ~~Multicolor accretion disc (L_bol-dependent shape) in pure float32.~~ **DONE** (§8) — log-space
+   disc internals + shape/normalization split. Follow-up: five more disc blocks (`kubota_done`,
+   `adaf` shape-class; `relagn`, `slone_netzer`, `grahsp_sbpl`, `adaf_lopez2024` grid-class) — see
+   the inventory table in §8. `multicolor`/`powerlaw` (the science defaults) are exact.
 
 Each fix is a distinct pull request with targeted tests. Coordinate the unit-change PRs (item 3) to avoid breaking the public API across multiple releases.
 
@@ -503,10 +506,49 @@ Pinned by `tests/regression/precision/test_agn_lbol_shape_dependence.py`
 (mutation-checked): `L_4400`/`L_2500` physical, multicolor sub-linear (~×4.8),
 power-law control linear (×10).
 
-**Remaining float32 limitation.** In float32 the multicolor disc still uses the
-(invalid) factoring, so radio + multicolor-disc AGN is approximate there
-(`L_4400_intrinsic` underflows to 0, flipping the jet's `where` branch).
-Torus-only and power-law-disc AGN + radio are exact in float32. A fully exact
-float32 multicolor disc needs the internal CIGALE-joint bolometric integrals
-(`trapz(L_torus)` / `trapz(L_disc)` ~ `L_bol` at `blocks/runner.py:654–661`)
-log-spaced so the true-`log_lbol` evaluation stays in range — a #1206 follow-up.
+## Item 8 — the multicolor accretion disc: DONE (log-space internals + shape/norm split)
+
+The multicolor disc was the shape-changing case that the output-factoring could
+not represent. It is now **exact in pure float32**. Two coupled fixes, both
+float32-gated (float64 keeps the linear arithmetic bit-for-bit):
+
+**1. Log-space internals (`multicolor_disc`).** At a realistic AGN luminosity the
+cgs intermediates overflow float32 even though every *result* is representable:
+`L_bol = 10^log_lbol·L_sun` ~1e44 erg/s, `L_Edd` ~1e46, the `t_in**4` accretion
+numerator ~1e58, and the EUV-tail / renormalization bolometric integrals ~1e43.
+The float32 branch forms each as a log10 sum and materializes only the
+representable result (`mdot` ~1e24 g/s, `t_in` ~1e5 K, `lambda_Edd` ~1e-2) via
+`pow10`, peak-factoring the ~1e43 energy integrals. This is the analogue of the
+Q_H / L_ir log-domain reductions, applied to the disc temperature.
+
+**2. Shape vs normalization luminosity.** The disc *shape* (temperature) depends
+on L_bol, so evaluating the whole composable runner at the low reference L_bol —
+which is what keeps the runner's ~1e40 `L_lambda` arithmetic in float32 range —
+would give the wrong (cold) shape. New `agn_log_lbol_shape` sets the disc
+temperature/geometry from the **true** L_bol while the output **magnitude** stays
+on the reference; the AGN component re-applies the true scale downstream. Because
+the whole runner then sits at reference magnitude with the true disc shape, the
+single `apply_log10_scale(·, log_lbol − ref)` in the component recovers the exact
+SED. Shape-invariant blocks (SKIRTOR torus, power-law disc) ignore the kwarg.
+
+Net: the multicolor disc, its intrinsic 2500/4400 Å luminosities, the full AGN
+SED, and `grad(nlp)` are exact/finite in pure float32 — a multicolor-disc AGN +
+radio fit runs end-to-end in float32. Pinned by
+`tests/regression/precision/test_agn_disc_float32.py` (mutation-checked).
+
+### The other disc blocks — float32 inventory (checked, pinned)
+
+`tests/regression/precision/test_agn_disc_float32_inventory.py` runs every
+registered composable-AGN disc through float64-vs-float32 and enforces the
+result. Two float32 failure classes remain (each `xfail(strict)` — fixing one
+flips to an unexpected pass):
+
+| disc | float32 status | class |
+|---|---|---|
+| `multicolor` | **exact** (this item) | — |
+| `powerlaw`, `richards2006`, `skirtor`, `qsogen`, `schartmann2005` | **exact** | shape-invariant (evaluated at the reference, rescaled) |
+| `kubota_done`, `adaf` | wrong value (finite) | **shape-class** — L_bol-dependent shape; needs the same log-space + shape/norm split threaded through their (3-zone / ADAF) internals |
+| `relagn`, `slone_netzer`, `grahsp_sbpl`, `adaf_lopez2024` | non-finite | **grid/other-class** — overflow *even at the reference L_bol* (an internal grid value or per-wavelength term, not the L_bol magnitude); needs its own float32 hardening (e.g. `adaf.py` hard-codes a `dtype=float64` that truncates under pure float32) |
+
+The multicolor and power-law discs are the science defaults, so pure-float32 AGN
+inference works today; the six above are the scoped follow-up.
