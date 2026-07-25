@@ -345,6 +345,11 @@ class TestGradients:
         )
 
 
+@pytest.mark.xfail(
+    reason="PRECONDITION_MAX_DIM is set from the breadth sweep; not implemented yet",
+    raises=ImportError,
+    strict=True,
+)
 class TestAutoPolicy:
     """``precondition=None`` resolves by dimension, mirroring `dense_mass_matrix` (#319).
 
