@@ -19,6 +19,8 @@ regression shard is already OOM-marginal (#1346). The rest are pure
 construction-time validation and cost nothing.
 """
 
+import jax
+import numpy as np
 import pytest
 
 from tengri import FIXED, FREE, FeaturePrecomp, SEDModel, Uniform, WavePrecomp
@@ -116,3 +118,10 @@ class TestPerAxisReachesTheBuilder:
         # length is set by the SSP grid rather than by the request — assert only
         # that it is present and non-degenerate, never a hard-coded node count.
         assert sizes["met_logzsol"] >= 2, sizes
+
+        # The resulting model must still predict. A dict makes the frozen
+        # FeaturePrecomp unhashable where the scalar default was hashable, so a
+        # config reaching a compile signature or a cache key by hash would fail
+        # here and nowhere in the shape assertions above.
+        phot = np.asarray(model.predict_photometry(model.spec.sample(jax.random.PRNGKey(0))))
+        assert np.all(np.isfinite(phot)), "per-axis grid model produced non-finite photometry"
