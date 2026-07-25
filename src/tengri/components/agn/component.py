@@ -115,7 +115,7 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         (default) ties the disc, torus and polar to CIGALE's single
         ``agn_power`` reference via the fixed SKIRTOR template ratios
         (energy-conserving; only active for ``agn_torus_block="skirtor"`` +
-        ``agn_fracAGN>0``). ``"independent"`` keeps each component on its own
+        ``agn_ir_frac>0``). ``"independent"`` keeps each component on its own
         luminosity scale (disc on ``agn_log_lbol``, torus on ``agn_power``,
         polar via the legacy face-on proxy) — the GRAHSP/AGNfitter-style
         bookkeeping. A static string, read by the runner like the block
@@ -331,7 +331,7 @@ class AGNSEDComponent:
 
         # CIGALE-faithful cross-component coupling
         # ────────────────────────────────────────────────────────────
-        # When ``agn_fracAGN > 0`` we follow CIGALE skirtor2016's
+        # When ``agn_ir_frac > 0`` we follow CIGALE skirtor2016's
         # bookkeeping: the AGN dust-IR power is derived from the
         # stellar dust-absorbed luminosity via
         # ``agn_power = L_absorbed × fracAGN / (1 − fracAGN)``
@@ -339,16 +339,19 @@ class AGNSEDComponent:
         # the existing block normalization ``l_scale = L_bol × frac``
         # produces ``l_scale = agn_power``. This way the torus block
         # API stays unchanged while the higher-level driver matches
-        # CIGALE bit-for-bit.
+        # CIGALE bit-for-bit. ``lambda_fracAGN="0/0"`` (CIGALE's
+        # whole-IR default) is assumed; the alternative wavelength-
+        # window flow is not yet wired.
         #
         # Every luminosity here (``L_absorbed`` ~1e43, ``L_agn_bol`` ~1e46) is
         # ``inf`` in pure float32, so the ratio ``agn_power / L_agn_bol`` is
         # formed in LOG space (from the float32-safe ``log_L_ir``), never as
-        # inf/inf. ``agn_fracAGN == 0`` leaves the coupling inert (the user
+        # inf/inf. ``agn_ir_frac == 0`` leaves the coupling inert (the user
         # torus_frac), with the log branch still finite so its unused-branch
         # gradient cannot leak (#1206).
-        agn_fracAGN = jnp.asarray(params.get("agn_fracAGN", 0.0))
-        _one_minus_frac = jnp.maximum(1.0 - agn_fracAGN, 1e-6)
+        agn_ir_frac = jnp.asarray(params.get("agn_ir_frac", 0.0))
+        # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
+        _one_minus_frac = jnp.maximum(1.0 - agn_ir_frac, 1e-6)
         agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
         _log_L_absorbed = state.derived.get("log_L_ir")
         if _log_L_absorbed is None:
@@ -359,13 +362,13 @@ class AGNSEDComponent:
         #   = log10(L_absorbed) + log10(frac/(1−frac)) − agn_log_lbol − log10(L_sun)
         _log_torus_frac = (
             _log_L_absorbed
-            + jnp.log10(jnp.maximum(agn_fracAGN, 1e-30))
+            + jnp.log10(jnp.maximum(agn_ir_frac, 1e-30))
             - jnp.log10(_one_minus_frac)
             - agn_log_lbol
             - _LOG10_L_SUN
         )
         agn_torus_frac_effective = jnp.where(
-            agn_fracAGN > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
+            agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
         )
         # Published byproduct only [erg/s]; ~1e46 and ``inf`` in float32.
         # stop_gradient so that inf cannot poison the reverse pass via 0*inf;
@@ -393,13 +396,13 @@ class AGNSEDComponent:
         #      block-specific params (skirtor, grahsp, cat3d_wind, etc.)
         #      reach the registered function via its ``**kwargs`` tail.
         agn_kwargs = {
-            "agn_frac": jnp.asarray(params.get("agn_frac", 1.0)),
+            "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", 1.0)),
             "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
             "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
             "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
             "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
             # CIGALE-coupled override: see ``agn_torus_frac_effective``
-            # block above. When ``agn_fracAGN > 0`` this carries the
+            # block above. When ``agn_ir_frac > 0`` this carries the
             # stellar-derived agn_power; otherwise it's the user value.
             "agn_torus_frac": agn_torus_frac_effective,
             "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),

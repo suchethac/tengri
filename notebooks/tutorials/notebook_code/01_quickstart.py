@@ -35,8 +35,8 @@ jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 from tengri import (
-    Fitter,
     Fixed,
+    ForwardModel,
     SEDModel,
     Observation,
     Parameters,
@@ -99,7 +99,7 @@ print(
 # %%
 # Define the parameter specification
 spec_param = Parameters(
-    sfh_tsnorm_log_total_mass=10.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -148,7 +148,7 @@ key = jax.random.PRNGKey(42)
 true_params_param = spec_param.sample(key)
 # Override tsnorm to a typical star-forming galaxy (still forming stars now)
 true_params_param = {**true_params_param}
-true_params_param["sfh_tsnorm_log_total_mass"] = jnp.array(1.2)
+true_params_param["sfh_tsnorm_log_total_mass"] = jnp.array(10.5)
 true_params_param["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
 true_params_param["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
 true_params_param["sfh_tsnorm_skew"] = jnp.array(0.3)
@@ -210,23 +210,24 @@ plt.show()
 
 # %%
 # MAP initialization + native_geovi inference
-fitter_param = Fitter(
-    model_param, mock_param.flux_obs, mock_param.noise,
-)
+forward_param = ForwardModel.build(sed=model_param)
 
 t0 = time.perf_counter()
-result_map_param = fitter_param.run("map", n_steps=500, verbose=False)
+result_map_param = forward_param.fit(
+    mock_param.flux_obs, mock_param.noise, method="map", n_steps=500, verbose=False
+)
 t_map = time.perf_counter() - t0
 
 # XLA compilation (one-time cost, cached on disk for future sessions)
 t0_compile = time.perf_counter()
-fitter_param.compile(verbose=False)
+forward_param.prewarm(method="vi")
 t_compile = time.perf_counter() - t0_compile
 
 # Inference runtime (this is what you pay per galaxy after compilation)
 t0 = time.perf_counter()
-result_geovi_param = fitter_param.run(
-    "vi",
+result_geovi_param = forward_param.fit(
+    mock_param.flux_obs, mock_param.noise,
+    method="vi",
     n_iterations=15,
     n_samples=6,
     n_seeds=5,
@@ -347,8 +348,9 @@ plt.show()
 # %%
 # Run NUTS from MAP initialization
 t0 = time.perf_counter()
-result_nuts_param = fitter_param.run(
-    "mcmc_nuts",
+result_nuts_param = forward_param.fit(
+    mock_param.flux_obs, mock_param.noise,
+    method="mcmc_nuts",
     n_warmup=500,
     n_samples=1000,
     init_from=result_map_param,
@@ -427,7 +429,7 @@ for name, res, t in [
 # %%
 # Define the stochastic parameter specification
 spec_stoch = Parameters(
-    sfh_tsnorm_log_total_mass=10.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -515,23 +517,24 @@ plt.show()
 
 # %%
 # MAP + native_geovi on the stochastic model
-fitter_stoch = Fitter(
-    model_stoch, mock_stoch.flux_obs, mock_stoch.noise,
-)
+forward_stoch = ForwardModel.build(sed=model_stoch)
 
 t0 = time.perf_counter()
-result_map_stoch = fitter_stoch.run("map", n_steps=1000, verbose=False)
+result_map_stoch = forward_stoch.fit(
+    mock_stoch.flux_obs, mock_stoch.noise, method="map", n_steps=1000, verbose=False
+)
 t_map_s = time.perf_counter() - t0
 
 # XLA compilation (one-time cost, cached on disk)
 t0_compile_s = time.perf_counter()
-fitter_stoch.compile(verbose=False)
+forward_stoch.prewarm(method="vi")
 t_compile_s = time.perf_counter() - t0_compile_s
 
 # Inference runtime
 t0 = time.perf_counter()
-result_geovi_stoch = fitter_stoch.run(
-    "vi",
+result_geovi_stoch = forward_stoch.fit(
+    mock_stoch.flux_obs, mock_stoch.noise,
+    method="vi",
     n_iterations=20,
     n_samples=6,
     n_seeds=5,
@@ -655,8 +658,9 @@ plt.show()
 # %%
 # Ray Tracing on the stochastic model
 t0 = time.perf_counter()
-result_rt_stoch = fitter_stoch.run(
-    "mcmc_raytrace",
+result_rt_stoch = forward_stoch.fit(
+    mock_stoch.flux_obs, mock_stoch.noise,
+    method="mcmc_raytrace",
     init_from=result_map_stoch,
     n_burnin=200,
     n_steps=2000,
@@ -771,7 +775,7 @@ print(f"  Headline: 137D posterior in {t_geovi_s:.0f}s runtime with native_geovi
 # %% [markdown]
 # ## What's Next
 #
-# - **tutorials/02** — Learn the SEDModel, Fitter, Posterior classes in detail.
+# - **tutorials/02** — Learn the SEDModel, ForwardModel, Posterior classes in detail.
 # - **tutorials/03** — Understand the IFT/PSD/GP machinery.
 # - **tutorials/04** — See how SFH becomes an observable SED.
 # - **tutorials/05** — Check your model before fitting (prior predictive).

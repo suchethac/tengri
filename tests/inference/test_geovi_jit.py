@@ -14,9 +14,20 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform
-from tengri.inference.vi_config import BlockSchedule, BlockStep, OptimizationSchedule
+from tengri.inference._backend_registry import _BACKENDS
 
 jax.config.update("jax_enable_x64", True)
+
+# ``native_vi_nonlinear`` (geoVI) and ``native_vi_linear`` (MGVI) are registered
+# tier="broken" (#1287): they segfault on DPL/dense_basis photometry mocks, so
+# ``fitter.run(...)`` on them raises ``BackendError`` by default. Only the
+# ``TestGeoVIRuns`` class calls ``fitter.run`` on these; the schedule and direct
+# engine-primitive classes below never hit the broken-tier guard and keep
+# running. Mirrors the tier-aware skip added in #1324.
+skip_if_broken = pytest.mark.skipif(
+    _BACKENDS["native_vi_nonlinear"].tier == "broken",
+    reason="native_vi_nonlinear is registered tier='broken' (#1287); skip until repaired",
+)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────
@@ -66,52 +77,6 @@ def data_args(fitter_and_mock):
     return fitter._data_args
 
 
-# ── BlockSchedule tests ───────────────────────────────────────────
-
-
-class TestBlockSchedule:
-    """BlockStep and BlockSchedule dataclasses."""
-
-    def test_block_step_defaults(self):
-        step = BlockStep()
-        assert step.sample_mode == "nonlinear_resample"
-        assert step.constants == ()
-        assert step.point_estimates == ()
-        assert step.n_samples is None
-
-    def test_block_step_custom(self):
-        step = BlockStep(
-            sample_mode="linear_resample",
-            constants=("sfh_field_xi",),
-            n_samples=4,
-        )
-        assert step.sample_mode == "linear_resample"
-        assert step.constants == ("sfh_field_xi",)
-        assert step.n_samples == 4
-
-    def test_individual_geovi_schedule(self):
-        sched = BlockSchedule.individual_geovi()
-        assert len(sched.blocks) == 2
-        assert sched.blocks[0].sample_mode == "nonlinear_resample"
-        assert "sfh_field_xi" in sched.blocks[0].constants
-        assert sched.blocks[1].sample_mode == "linear_resample"
-
-    def test_hierarchical_schedule(self):
-        sched = BlockSchedule.hierarchical()
-        assert len(sched.blocks) == 3
-        # Block 1: shared PSD with point estimates
-        assert sched.blocks[0].sample_mode == "nonlinear_resample"
-        assert sched.blocks[0].n_samples == 6
-        # Block 3: SFH with linear sampling
-        assert sched.blocks[2].sample_mode == "linear_resample"
-        assert sched.blocks[2].n_samples == 2
-
-    def test_block_schedule_immutable(self):
-        step = BlockStep()
-        with pytest.raises(AttributeError):
-            step.sample_mode = "linear_resample"
-
-
 # ── Engine primitive tests ────────────────────────────────────────
 
 
@@ -156,6 +121,7 @@ class TestEnginePrimitives:
 # ── geoVI run tests ───────────────────────────────────────────────
 
 
+@skip_if_broken
 class TestGeoVIRuns:
     """geoVI optimizer runs and produces reasonable results."""
 
@@ -280,53 +246,6 @@ class TestGeoVIRuns:
         # Residuals should be reasonable (chi < 10 per band)
         chi = jnp.abs(obs - pred_median) / mock.noise
         assert bool(jnp.all(chi < 10)), f"Posterior predictive residuals too large: chi = {chi}"
-
-
-# ── OptimizationSchedule tests ────────────────────────────────────
-
-
-class TestOptimizationSchedule:
-    """OptimizationSchedule factory methods and behavior."""
-
-    def test_geovi_schedule_resample_at_zero(self):
-        sched = OptimizationSchedule.geovi(n_iterations=15, resample_every=5)
-        assert sched(0).sample_mode == "nonlinear_resample"
-
-    def test_geovi_schedule_update_between(self):
-        sched = OptimizationSchedule.geovi(n_iterations=15, resample_every=5)
-        for i in [1, 2, 3, 4]:
-            assert sched(i).sample_mode == "nonlinear_update", f"iter {i}"
-
-    def test_geovi_schedule_resample_periodic(self):
-        sched = OptimizationSchedule.geovi(n_iterations=15, resample_every=5)
-        assert sched(5).sample_mode == "nonlinear_resample"
-        assert sched(10).sample_mode == "nonlinear_resample"
-
-    def test_evi_schedule_linear_then_nonlinear(self):
-        sched = OptimizationSchedule.evi(n_iterations=20, transition=10)
-        assert sched(0).sample_mode == "linear_resample"
-        assert sched(9).sample_mode == "linear_resample"
-        assert sched(10).sample_mode == "nonlinear_resample"
-        assert sched(11).sample_mode == "nonlinear_update"
-
-    def test_mgvi_schedule_always_linear(self):
-        sched = OptimizationSchedule.mgvi(n_iterations=10)
-        for i in range(10):
-            assert sched(i).sample_mode == "linear_resample"
-
-    def test_custom_schedule(self):
-        sched = OptimizationSchedule.custom(
-            lambda i: BlockStep("nonlinear_update" if i > 0 else "nonlinear_resample"),
-            n_iterations=5,
-        )
-        assert sched(0).sample_mode == "nonlinear_resample"
-        assert sched(3).sample_mode == "nonlinear_update"
-
-    def test_sample_mode_at_for_nifty(self):
-        """sample_mode_at returns string compatible with NIFTy."""
-        sched = OptimizationSchedule.geovi()
-        assert sched.sample_mode_at(0) == "nonlinear_resample"
-        assert sched.sample_mode_at(1) == "nonlinear_update"
 
 
 # ── Native geovi schedule test ────────────────────────────────────

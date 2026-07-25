@@ -28,12 +28,11 @@ pytestmark = pytest.mark.contract
 
 DOC = tengri.__doc__ or ""
 
-#: Names the docstring used to advertise as star-importable Core.
+#: Names that are importable but deliberately kept out of ``__all__``. The
+#: Observation instrument-schema family (Observation, Photometry, Spectroscopy,
+#: NoiseModel, LineList) was re-promoted to ``__all__`` in #1338, so it is no
+#: longer here — see EXPECTED_ALL / ALLOWED_TOP_LEVEL and api_migration_v0.x.md.
 DELIBERATELY_NOT_IN_ALL = [
-    "Photometry",
-    "Observation",
-    "Spectroscopy",
-    "NoiseModel",
     "Fitter",
     "Posterior",
     "Prediction",
@@ -97,8 +96,9 @@ def test_it_teaches_the_canonical_fit_entry_point():
 
 
 def test_it_does_not_teach_a_deprecated_surface():
-    """SEDModel.fit and the Galaxy facade are deprecated/demoted."""
+    """SEDModel.fit is sugar (not taught); ForwardModel.fit is canonical."""
     assert "sed.fit(" not in DOC and "model.fit(" not in DOC, (
-        "SEDModel.fit is deprecated in favor of ForwardModel.fit (#211)"
+        "The canonical fit surface is ForwardModel.fit. "
+        "SEDModel.fit is sugar over it but not taught in the module docstring (#211)"
     )
     assert "Galaxy" not in DOC, "Galaxy is demoted; the docstring should not teach it"

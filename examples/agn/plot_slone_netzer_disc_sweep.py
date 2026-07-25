@@ -84,7 +84,7 @@ def disc_sed(log_mbh: float, log_ledd: float) -> tuple[np.ndarray, np.ndarray]:
             "log_lbol": log_lbol,
             "log_mbh": log_mbh,
             "log_ledd": log_ledd,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         },
         redshift=tengri.Fixed(0.05),
     )

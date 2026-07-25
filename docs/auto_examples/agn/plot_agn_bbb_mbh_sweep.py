@@ -52,7 +52,7 @@ model = tengri.SEDModel.build(
         "type": "composable",
         "disc": {"type": "multicolor", "all_params": tengri.FIXED},
         "all_params": tengri.FIXED,
-        "frac": 1.0,
+        "lum_ratio": 1.0,
         "log_ledd": -1.0,
     },
     redshift=tengri.Fixed(0.05),

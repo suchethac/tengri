@@ -286,8 +286,8 @@ def test_unified_agn_recipe_structure():
     assert agn["nlr"]["type"] == "synthesizer_spectra"  # independent NLR block
     assert agn["blr"]["type"] == "synthesizer_spectra"  # independent BLR block
     # Parametric luminosity mode: the two scaling knobs are pinned fixed.
-    assert isinstance(agn["frac"], Fixed)
-    assert isinstance(agn["fracAGN"], Fixed)
+    assert isinstance(agn["lum_ratio"], Fixed)
+    assert isinstance(agn["ir_frac"], Fixed)
     assert agn["all_params"] is FREE
 
 

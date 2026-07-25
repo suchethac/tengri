@@ -500,7 +500,12 @@ __all__ = [  # noqa: RUF022
     "Parameters",
     "ParameterRecord",
     "parse_groups",
-    # Observations
+    # Observations — the instrument-schema family, re-promoted (#1338)
+    "Observation",
+    "Photometry",
+    "Spectroscopy",
+    "NoiseModel",
+    "LineList",
     # Inference
     # Results
     # High-level facade
@@ -571,6 +576,8 @@ __all__ = [  # noqa: RUF022
     "gp_noise_covariance",
     "matern32_kernel",
     "fit_batch",
+    # Catalog fitting — the astronomer-facing noun (#1317)
+    "Catalog",
     "compute_mass_remaining_fraction",
     "recipe_parameters",
     # ========== Tier 4: INTROSPECTION (discovery & diagnostics) ==========
@@ -668,7 +675,8 @@ from tengri.analysis.plotting import (
     safe_corner,
     setup_style,
 )
-from tengri.inference.catalog_fitter import CatalogFitter
+from tengri.inference.catalog import Catalog
+from tengri.inference.catalog_fitter import _CatalogFitterOriginal as CatalogFitter
 from tengri.inference.fitter import Fitter
 from tengri.inference.hierarchical import PopulationFitter
 from tengri.inference.vi_config import VIConfig

@@ -62,7 +62,7 @@ model = tengri.SEDModel.build(
         "torus": {"type": "skirtor", "all_params": tengri.FIXED},
         "all_params": tengri.FIXED,
         "log_lbol": tengri.Uniform(8.0, 14.0),
-        "frac": 1.0,
+        "lum_ratio": 1.0,
     },
     radio={"type": "condon92", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.05),

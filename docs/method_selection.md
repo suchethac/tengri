@@ -1,6 +1,6 @@
 # Choosing an inference method
 
-`Fitter.run("...")` dispatches to one of ~19 backends. They are not
+`forward.fit(..., method="...")` dispatches to one of ~19 backends. They are not
 interchangeable: some are exact samplers, some are fast approximations, and a
 few are still experimental. The authoritative, always-current list — with
 per-method tier, dependencies, and validation notes — is a function call:

@@ -411,8 +411,8 @@ def composable_agn() -> dict:
             "torus": {"type": "skirtor"},
             "atten": {"type": "polar_dust"},
             "norm": "cigale_joint",
-            # agn_fracAGN constraint is [0, 1) — keep the upper bound strictly < 1.
-            "fracAGN": Uniform(0.01, 0.99),
+            # agn_ir_frac constraint is [0, 1) — keep the upper bound strictly < 1.
+            "ir_frac": Uniform(0.01, 0.99),
             WILDCARD_ALIAS: FREE,
         },
         radio={"type": "condon92"},
@@ -642,8 +642,8 @@ def unified_agn() -> dict:
             # Parametric luminosity mode: the AGN strength is set by the free
             # agn_log_lbol, so the two alternative scaling knobs are held fixed
             # (freeing them would add no-op nuisance dimensions in this mode).
-            "frac": Fixed(1.0),
-            "fracAGN": Fixed(0.0),
+            "lum_ratio": Fixed(1.0),
+            "ir_frac": Fixed(0.0),
             WILDCARD_ALIAS: FREE,
         },
         redshift=Fixed(0.0),

@@ -568,8 +568,8 @@ class TestSEDComponents:
             diagnostics={},
         )
         p._model = model
-        agn_frac = p.agn_fraction()
-        np.testing.assert_allclose(np.asarray(agn_frac), 0.4, rtol=1e-6)
+        agn_lum_ratio = p.agn_fraction()
+        np.testing.assert_allclose(np.asarray(agn_lum_ratio), 0.4, rtol=1e-6)
 
     def test_agn_fraction_sampling(self):
         wave = jnp.linspace(1000.0, 1e6, 30)
@@ -585,11 +585,11 @@ class TestSEDComponents:
             diagnostics={},
         )
         p._model = model
-        agn_frac = p.agn_fraction()
+        agn_lum_ratio = p.agn_fraction()
         # Median across samples should track the input median frac
-        assert agn_frac.shape == (30,)  # one per wavelength
+        assert agn_lum_ratio.shape == (30,)  # one per wavelength
         # Wavelength-flat AGN fraction → at any wavelength, median of frac samples
-        assert agn_frac[0] == pytest.approx(np.median(fracs), rel=1e-6)
+        assert agn_lum_ratio[0] == pytest.approx(np.median(fracs), rel=1e-6)
 
     def test_custom_wavelength_arg_is_ignored(self):
         """``wavelength=`` is a back-compat pass-through after the orchestrator

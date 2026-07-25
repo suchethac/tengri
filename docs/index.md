@@ -52,7 +52,7 @@ you set, which are free, and which fell back to library defaults.
 import jax
 import tengri
 from tengri import (
-    SEDModel, Fitter, Fixed, ForwardModel,
+    SEDModel, Fixed, ForwardModel,
     Observation, Photometry, load_ssp_data, recipes,
 )
 
@@ -72,8 +72,7 @@ forward = ForwardModel.build(sed=sed, observation=obs)
 key  = jax.random.PRNGKey(0)
 mock = sed.mock(sed.spec.sample(key), key=key)
 
-fitter = Fitter(forward, mock.flux_obs, mock.noise)
-result = fitter.run("mcmc_nuts")
+result = forward.fit(mock.flux_obs, mock.noise, method="mcmc_nuts")
 print(result.summary_table())
 ```
 

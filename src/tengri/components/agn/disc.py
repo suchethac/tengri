@@ -106,7 +106,7 @@ _LSUN_OVER_C2: float = float(_LSUN_ERG) / float(_C_LIGHT) ** 2
 def powerlaw_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_alpha: float = -1.0,
     agn_T_max: float = 1e5,
     **_kwargs,
@@ -130,7 +130,7 @@ def powerlaw_disc(
         Rest-frame wavelength grid. [Angstrom]
     agn_log_lbol : float
         Total AGN bolometric luminosity. [log10(L_sun)]
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Fraction of bolometric luminosity emitted by this disc component.
         Default: 1.0. [dimensionless, 0–1]
     agn_alpha : float, optional
@@ -195,7 +195,7 @@ def powerlaw_disc(
     integral = jnp.trapezoid(shape[sort_idx], nu[sort_idx])
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
-    l_nu_erg = l_bol_erg * agn_frac * shape / integral_safe
+    l_nu_erg = l_bol_erg * agn_lum_ratio * shape / integral_safe
     return l_nu_erg
 
 
@@ -551,7 +551,7 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
 def multicolor_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_log_mbh: float = 8.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
@@ -575,7 +575,7 @@ def multicolor_disc(
         Rest-frame wavelength grid. [Angstrom]
     agn_log_lbol : float
         Total AGN bolometric luminosity. [log10(L_sun)]
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Fraction of bolometric luminosity emitted by the disc.
         Default: 1.0. [dimensionless, 0–1]
     agn_log_mbh : float, optional
@@ -771,7 +771,7 @@ def multicolor_disc(
     # a CIGALE-like rise below ~100 A; "wien" recovers the bare thin disc.
     l_nu_intrinsic = _apply_euv_tail(wavelength, nu, l_nu_intrinsic, euv_tail)
 
-    # Renormalize to requested L_bol * agn_frac (the MAGNITUDE is set by
+    # Renormalize to requested L_bol * agn_lum_ratio (the MAGNITUDE is set by
     # ``agn_log_lbol`` — the reference on the float32 path — NOT the shape
     # luminosity above).
     # Sort by ascending frequency before integrating (nu descends when wave ascends).
@@ -784,14 +784,14 @@ def multicolor_disc(
         # overflow float32; only their ratio (``scale`` ~1e-33 when normalizing
         # a true-shape disc to a 1e10 erg/s reference) is needed. Peak-factor the
         # integrand so the trapezoid stays in range, and carry the peak in log10.
-        _log_l_bol_req = agn_log_lbol + _LOG10_LSUN_ERG + jnp.log10(agn_frac)
+        _log_l_bol_req = agn_log_lbol + _LOG10_LSUN_ERG + jnp.log10(agn_lum_ratio)
         _peak = jnp.max(jnp.abs(l_nu_intrinsic))
         _peak = jnp.where(_peak > 0.0, _peak, 1.0)
         _hat_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx] / _peak, _nu[_sort_idx])
         _log_l_nu_total = jnp.log10(_peak) + jnp.log10(jnp.maximum(jnp.abs(_hat_total), 1e-100))
         scale = _pow10(_log_l_bol_req - _log_l_nu_total)
     else:
-        l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac
+        l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
         l_nu_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx], _nu[_sort_idx])
         l_nu_total_safe = jnp.maximum(jnp.abs(l_nu_total), 1e-100)
         scale = l_bol_requested / l_nu_total_safe
@@ -1443,7 +1443,7 @@ def compute_l2500(
 def kubota_done_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_log_mbh: float = 8.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
@@ -1503,7 +1503,7 @@ def kubota_done_disc(
     agn_log_lbol : float
         Total AGN bolometric luminosity (all three zones).
         [log10(L_sun)]
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Fraction of bolometric luminosity emitted by the disc system (all zones).
         Default: 1.0. [dimensionless, 0–1]
     agn_log_mbh : float, optional
@@ -1686,9 +1686,9 @@ def kubota_done_disc(
     # Normalization magnitude from agn_log_lbol (the reference on the float32
     # path); pass it in L_sun there so the zone helper's ``scale`` is a clean ratio.
     if _f32:
-        l_bol_requested = 10.0**agn_log_lbol * agn_frac  # L_sun
+        l_bol_requested = 10.0**agn_log_lbol * agn_lum_ratio  # L_sun
     else:
-        l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac
+        l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
 
     l_nu_total, scale = _compute_zone_luminosities(
         nu,
@@ -1721,7 +1721,7 @@ def kubota_done_disc(
 def adaf_disc(
     wavelength,
     agn_log_lbol,
-    agn_frac=1.0,
+    agn_lum_ratio=1.0,
     agn_log_mbh=8.0,
     agn_adaf_beta=0.5,
     agn_adaf_delta=0.1,
@@ -1744,7 +1744,7 @@ def adaf_disc(
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
         log10 of bolometric luminosity [Lsun].
-    agn_frac, agn_log_mbh, agn_adaf_beta, agn_adaf_delta, agn_adaf_alpha
+    agn_lum_ratio, agn_log_mbh, agn_adaf_beta, agn_adaf_delta, agn_adaf_alpha
         Forwarded to :func:`adaf_spectrum` (see there).
 
     Returns
@@ -1757,7 +1757,7 @@ def adaf_disc(
     return adaf_spectrum(
         wavelength,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=agn_frac,
+        agn_lum_ratio=agn_lum_ratio,
         agn_log_mbh=agn_log_mbh,
         agn_adaf_alpha=agn_adaf_alpha,
         agn_adaf_beta=agn_adaf_beta,

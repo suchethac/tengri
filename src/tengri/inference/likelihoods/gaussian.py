@@ -40,8 +40,9 @@ def diag_gaussian_chi2(
     observed: jnp.ndarray,
     sigma: jnp.ndarray,
     sigma_floor: float | jnp.ndarray = 0.0,
+    presence: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
-    r"""Diagonal-Gaussian χ²: :math:`\sum_i \frac{(d_i - \mu_i)^2}{\sigma_i^2 + (f \, d_i)^2}`.
+    r"""Diagonal-Gaussian χ²: :math:`\sum_i p_i \frac{(d_i - \mu_i)^2}{\sigma_i^2 + (f \, d_i)^2}`.
 
     Parameters
     ----------
@@ -56,6 +57,10 @@ def diag_gaussian_chi2(
         relative to ``observed``: total variance becomes
         ``sigma**2 + (sigma_floor * observed)**2``. Default ``0``
         (pure measurement noise).
+    presence : array_like, optional
+        Per-band presence mask (0.0 or 1.0 float). Absent bands
+        (presence=0) contribute exactly zero to χ² and its gradient.
+        Default ``None`` (all-ones; all bands present).
 
     Returns
     -------
@@ -78,7 +83,10 @@ def diag_gaussian_chi2(
     """
     sigma_eff = jnp.hypot(sigma, sigma_floor * observed)
     r = (observed - predicted) / sigma_eff
-    return jnp.sum(r * r)
+    chi2_summand = r * r
+    if presence is not None:
+        chi2_summand = presence * chi2_summand
+    return jnp.sum(chi2_summand)
 
 
 def diag_gaussian_log_prob(
@@ -86,6 +94,7 @@ def diag_gaussian_log_prob(
     observed: jnp.ndarray,
     sigma: jnp.ndarray,
     sigma_floor: float | jnp.ndarray = 0.0,
+    presence: jnp.ndarray | None = None,
 ) -> jnp.ndarray:
     r"""Data-term log-probability of a diagonal Gaussian: :math:`-\tfrac12 \chi^2`.
 
@@ -94,8 +103,15 @@ def diag_gaussian_log_prob(
     — most inference engines treat it as an additive constant. Add it
     back explicitly if you need a true log-evidence term.
 
+    Parameters
+    ----------
+    presence : array_like, optional
+        Per-band presence mask (0.0 or 1.0 float). Absent bands
+        contribute exactly zero to the log-probability and its gradient.
+        Default ``None`` (all-ones; all bands present).
+
     Notes
     -----
     **JIT-compatible**: yes — pure JAX.
     """
-    return -0.5 * diag_gaussian_chi2(predicted, observed, sigma, sigma_floor)
+    return -0.5 * diag_gaussian_chi2(predicted, observed, sigma, sigma_floor, presence)

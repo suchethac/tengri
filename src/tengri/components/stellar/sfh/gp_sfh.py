@@ -232,6 +232,109 @@ def drw_linear_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
     return gp_x, 0.5 * var
 
 
+def drw_innovations_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
+    r"""DRW realization via the OU state-space (innovations) recursion.
+
+    Realizes the *same* linear-time damped-random-walk field as
+    :func:`drw_linear_gp_from_xi` — same covariance, same prior — but through the
+    exact first-order Markov (Ornstein–Uhlenbeck) forward recursion rather than a
+    dense Cholesky factor:
+
+    .. math::
+
+        s_0 &= \sqrt{\mathrm{var}}\; \xi_0, \\
+        s_i &= \rho_i\, s_{i-1} + \sqrt{\mathrm{var}\,(1 - \rho_i^2)}\; \xi_i,
+        \qquad \rho_i = \exp(-\Delta t_i / \tau),
+
+    with :math:`\mathrm{var} = (\sigma \ln 10)^2`, physical times
+    :math:`t_i = 10^{u_i}` from the (ascending) log-age grid, and step gaps
+    :math:`\Delta t_i = t_i - t_{i-1} \ge 0`. Because a DRW is exactly Markov, this
+    recursion reproduces :math:`K_{ij} = \mathrm{var}\,\exp(-|t_i-t_j|/\tau)` to
+    machine precision.
+
+    **It is the same square root, not an alternative one.** Unrolling the recursion
+    gives :math:`s = M \xi` with :math:`M` lower-triangular and positive on the
+    diagonal (:math:`M_{00} = \sqrt{\mathrm{var}}`,
+    :math:`M_{ii} = \sqrt{\mathrm{var}(1-\rho_i^2)}`), and :math:`M M^{T} = K`. The
+    Cholesky factor is the *unique* lower-triangular matrix with positive diagonal
+    satisfying :math:`L L^{T} = K`, hence :math:`M = L` exactly. The gain is
+    therefore computational and numerical, not geometric: :math:`O(n)` instead of
+    :math:`O(n^3)`, and no positive-definiteness jitter, so the realized prior is the
+    exact :math:`K` rather than :math:`K + \epsilon\,\mathrm{var}\,I` (the dense path
+    perturbs every realization by :math:`\sim 10^{-5}` relative; see
+    ``_DRW_CHOLESKY_JITTER``).
+
+    Because the :math:`\xi \to \mathrm{SFH}` map is numerically identical, this does
+    **not** change the posterior geometry and is **not** a remedy for the #1301 HMC
+    divergences — every *exact* square root of :math:`K(\tau)` carries the same
+    :math:`\tau`-dependence, since the kernels at different :math:`\tau` do not
+    commute and so share no :math:`\tau`-independent eigenbasis. Removing the
+    :math:`\tau`-coupling requires changing the *representation* (the uniform
+    linear-time Fourier basis, #1333), which changes the prior.
+
+    Parameters
+    ----------
+    xi : array_like, shape (n,)
+        Standardized latent vector, :math:`\xi \sim \mathcal{N}(0, I)`.
+    psd_sigma_dex : float
+        Modulation amplitude [dex] = std of :math:`\log_{10}(\mathrm{SFR})`.
+    psd_tau_yr : float
+        Physical DRW decorrelation timescale [yr].
+    log_age_grid : array_like, shape (n,)
+        ``log10(age/yr)`` grid, ascending, the SFH is represented on.
+
+    Returns
+    -------
+    gp_x : ndarray, shape (n,)
+        Natural-log SFH modulation (applied as ``exp(gp_x - k0_half)``).
+    k0_half : ndarray, scalar
+        Log-normal bias correction :math:`(\sigma \ln 10)^2 / 2`.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: the recursion is a single ``jax.lax.scan`` — :math:`O(n)`
+    time, :math:`O(1)` memory, differentiable w.r.t. ``psd_sigma_dex``,
+    ``psd_tau_yr`` and ``xi``. No dense matrix, so (unlike
+    :func:`drw_linear_gp_from_xi`) there is no Cholesky and no
+    positive-definiteness jitter. At young ages :math:`\Delta t_i \ll \tau`
+    (:math:`\rho_i \to 1`) the field is strongly correlated; at old ages
+    :math:`\Delta t_i \gg \tau` (:math:`\rho_i \to 0`) successive nodes become
+    independent draws of variance ``var`` — burstiness below the local grid
+    resolution is unrepresentable there, matching :func:`drw_linear_gp_from_xi`.
+
+    The innovation scale carries a ``clip(1 - rho**2, 0, None)`` floor so float
+    round-off cannot drive the argument of the square root slightly negative; the
+    grid is strictly ascending so :math:`1 - \rho_i^2 > 0` analytically.
+
+    References
+    ----------
+    .. [1] K. G. Iyer et al., "The star formation history and variability of
+       galaxies," MNRAS, 498, 430 (2020). [physical decorrelation timescale]
+    .. [2] N. Caplar & S. Tacchella, MNRAS, 487, 3845 (2019). [PSD amplitude, dex]
+    """
+    ln10 = jnp.log(10.0)
+    t = 10.0 ** jnp.asarray(log_age_grid)
+    xi = jnp.asarray(xi)
+    var = (jnp.asarray(psd_sigma_dex) * ln10) ** 2
+    sigma_s = jnp.sqrt(var)
+
+    # Per-step correlation and fresh-innovation scale on the (ascending) grid.
+    dt = jnp.diff(t)
+    rho = jnp.exp(-dt / jnp.asarray(psd_tau_yr))
+    innov = sigma_s * jnp.sqrt(jnp.clip(1.0 - rho**2, 0.0, None))
+
+    s0 = sigma_s * xi[0]
+
+    def _step(s_prev, step_inputs):
+        rho_i, innov_i, xi_i = step_inputs
+        s_i = rho_i * s_prev + innov_i * xi_i
+        return s_i, s_i
+
+    _, s_rest = jax.lax.scan(_step, s0, (rho, innov, xi[1:]))
+    gp_x = jnp.concatenate([jnp.reshape(s0, (1,)), s_rest])
+    return gp_x, 0.5 * var
+
+
 def generate_gp_fourier(key: jax.Array, sqrt_power: jnp.ndarray, n_points: int) -> jnp.ndarray:
     r"""Stochastic GP realization for mock galaxy generation.
 

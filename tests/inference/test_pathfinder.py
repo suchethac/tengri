@@ -9,6 +9,7 @@ jax.config.update("jax_enable_x64", True)
 from pathlib import Path
 
 from tengri.forward.sed_model import SEDModel
+from tengri.inference._backend_registry import _BACKENDS
 from tengri.inference.fitter import Fitter
 from tengri.inference.posterior import Posterior
 from tengri.parameters.parameters import Parameters
@@ -69,6 +70,13 @@ def fitter_and_mock(ssp_data_wne, sdss_filters):
     return fitter, true_params
 
 
+# ``pathfinder`` is registered tier="broken" (#1287), so ``fitter.run("pathfinder")``
+# raises ``BackendError`` by default. Skip until repaired rather than forcing it
+# with ``allow_unvalidated=True``. Mirrors the tier-aware skip added in #1324.
+@pytest.mark.skipif(
+    _BACKENDS["pathfinder"].tier == "broken",
+    reason="pathfinder is registered tier='broken' (#1287); skip until repaired",
+)
 @pytest.mark.skipif(not _has_blackjax(), reason="blackjax not installed")
 class TestPathfinder:
     def test_returns_posterior(self, fitter_and_mock):

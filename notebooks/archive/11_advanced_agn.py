@@ -203,7 +203,7 @@ try:
         [COLORS["rt"], COLORS["nuts"], COLORS["model"]],
         [r"Face-on ($\cos i=0.9$)", r"Intermediate", r"Edge-on ($\cos i=0.1$)"],
     ):
-        l = skirtor_fn(wavelength, agn_log_lbol=44.0, agn_frac=1.0, agn_cos_inc=ci)
+        l = skirtor_fn(wavelength, agn_log_lbol=44.0, agn_lum_ratio=1.0, agn_cos_inc=ci)
         ax.loglog(wave_um, np.asarray(l), color=c, label=lb, lw=1.8)
     ax.set_title("SKIRTOR: inclination dependence")
 except Exception as e:
@@ -246,7 +246,7 @@ for ci, c, lb in zip(
         agn_cos_inc=ci,
         agn_theta_torus=30.0,
         agn_log_mbh=8.0,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
     )
     ax.loglog(wave_um, np.asarray(l * 3e18 / wavelength), color=c, label=lb, lw=1.8)
 ax.axvline(0.1216, color="gray", ls=":", alpha=0.4)
@@ -275,14 +275,14 @@ styles = {
 }
 for name, (color, ls) in styles.items():
     try:
-        l = get_agn_model(name)(wavelength, agn_log_lbol=44.0, agn_frac=1.0)
+        l = get_agn_model(name)(wavelength, agn_log_lbol=44.0, agn_lum_ratio=1.0)
         ax.loglog(
             wave_um, np.asarray(l * 3e18 / wavelength), color=color, ls=ls, label=name, lw=1.8
         )
     except Exception as e:
         print(f"Skipping {name}: {e}")
 try:
-    l = get_agn_model("skirtor")(wavelength, agn_log_lbol=44.0, agn_frac=1.0)
+    l = get_agn_model("skirtor")(wavelength, agn_log_lbol=44.0, agn_lum_ratio=1.0)
     ax.loglog(
         wave_um,
         np.asarray(l * 3e18 / wavelength),
@@ -318,7 +318,7 @@ galaxy = (
     galaxy / galaxy.max()
     + 0.3 * nu_arr**3 / (np.exp(x_d) - 1.0) / (nu_arr**3 / (np.exp(x_d) - 1.0)).max()
 )
-agn_raw = np.asarray(get_agn_model("standard")(wavelength, agn_log_lbol=44.0, agn_frac=1.0))
+agn_raw = np.asarray(get_agn_model("standard")(wavelength, agn_log_lbol=44.0, agn_lum_ratio=1.0))
 agn_norm = agn_raw / agn_raw.max()
 
 ax.loglog(wave_um, galaxy, color="gray", ls="--", lw=1.5, label="Host only", alpha=0.7)
@@ -658,7 +658,7 @@ for ebv, c, lb in zip(ebv_values, ebv_colors, ebv_labels):
         agn_cos_inc=0.95,  # face-on Type 1
         agn_theta_torus=30.0,
         agn_log_mbh=8.0,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_polar_ebv=ebv,
     )
     ax.loglog(

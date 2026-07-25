@@ -68,10 +68,10 @@ RECIPE_FREE_PARAMS = {
     "agn_panchromatic": [
         "agn_a_spin",
         "agn_cos_inc",
-        "agn_frac",
-        "agn_fracAGN",
+        "agn_ir_frac",
         "agn_log_lbol",
         "agn_log_mbh",
+        "agn_lum_ratio",
         "agn_nlr_cf",
         "agn_nlr_line_efficiency",
         "agn_oa_skirtor",
@@ -98,10 +98,10 @@ RECIPE_FREE_PARAMS = {
         "agn_blr_line_efficiency",
         "agn_cos_inc",
         "agn_fe2_strength",
-        "agn_frac",
-        "agn_fracAGN",
+        "agn_ir_frac",
         "agn_log_lbol",
         "agn_log_mbh",
+        "agn_lum_ratio",
         "agn_nlr_cf",
         "agn_nlr_line_efficiency",
         "agn_oa_skirtor",
@@ -287,7 +287,7 @@ class TestRecipeStructure:
         assert agn["torus"]["type"] == "skirtor"
         assert agn["atten"]["type"] == "polar_dust"
         assert agn["norm"] == "cigale_joint"
-        fracagn = agn["fracAGN"]
+        fracagn = agn["ir_frac"]
         assert hasattr(fracagn, "lo") and fracagn.lo > 0 and fracagn.hi < 1.0
         assert r["sfh"]["type"] == "dpl"
 

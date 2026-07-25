@@ -388,14 +388,14 @@ class TestGeometricMasking:
             agn_log_lbol=44.0,
             agn_cos_inc=1.0,  # face-on, Type 1
             agn_theta_torus=30.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
         )
         l_type2 = unified_nlr_blr(
             wavelength,
             agn_log_lbol=44.0,
             agn_cos_inc=0.0,  # edge-on, Type 2
             agn_theta_torus=30.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
         )
         # In the UV (rest 1500 A), Type 1 should dominate
         uv_idx = int(jnp.argmin(jnp.abs(wavelength - 1500.0)))
@@ -440,14 +440,14 @@ class TestPolarDust:
             agn_log_lbol=44.0,
             agn_cos_inc=1.0,
             agn_polar_ebv=0.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
         )
         l_reddened = unified_nlr_blr(
             wavelength,
             agn_log_lbol=44.0,
             agn_cos_inc=1.0,
             agn_polar_ebv=0.1,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
         )
         uv_idx = int(jnp.argmin(jnp.abs(wavelength - 1500.0)))
         ratio = float(l_reddened[uv_idx]) / float(l_unreddened[uv_idx])

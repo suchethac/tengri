@@ -949,6 +949,93 @@ class ForwardModel:
         )
         return fitter.run(method, key=key, **kwargs)
 
+    def prewarm(self, *, data_shape=None, method: str = "mcmc_nuts", **kwargs):
+        """Pre-compile the JIT kernels for ``method`` against this model's shape.
+
+        After this returns, a subsequent :meth:`fit` call with the same
+        ``method`` skips XLA compilation. It still runs its own sampler warmup
+        adaptation on the real data: the dummy (zeros) data used here would give a
+        meaningless step size / mass matrix, so that adaptation is discarded and
+        only the value-independent compile is kept.
+
+        Parameters
+        ----------
+        data_shape : tuple of int or None, optional
+            Shape of the data to pre-warm against. If ``None``, uses the
+            observation's photometry shape. Dummy data (zeros) of this shape
+            are created internally — pre-warm is value-independent and only
+            needs the compile signature (shape, filters, wavelengths, etc.).
+        method : str, default ``"mcmc_nuts"``
+            Inference method to pre-warm. Any name accepted by
+            :meth:`fit`.
+        **kwargs
+            Forwarded to the underlying :meth:`Fitter.prewarm` call
+            (e.g. ``n_chains=4`` for multichain compilation).
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        Pre-warm is idempotent — a second call with the same method is a
+        fast no-op, reusing the compiled kernels from the first call.
+        The persistent XLA cache (``~/.cache/tengri_jax_cache``) also
+        captures the compile, so a fresh Python process sees a warm
+        XLA cache too.
+
+        See Also
+        --------
+        Fitter.prewarm : Low-level pre-warm interface
+
+        Examples
+        --------
+        >>> fwd = ForwardModel.build(sed=sed, observation=obs)
+        >>> fwd.prewarm(method="mcmc_nuts", n_chains=4)
+        >>> posterior = fwd.fit(flux, flux_err, method="mcmc_nuts", n_chains=4)
+        """
+        from tengri.inference.fitter import Fitter
+
+        # Determine the observation shape for dummy data
+        obs = self.observation
+        if data_shape is None:
+            # Use photometry shape if available, else None (hierarchical fit)
+            if obs is not None and hasattr(obs, "photometry") and obs.photometry is not None:
+                n_filters = obs.photometry.n_filters
+                data_shape = (n_filters,)
+            else:
+                data_shape = None
+
+        # Without a data shape (e.g. a hierarchical model with no top-level
+        # photometry) there is nothing to build a dummy Fitter against — passing
+        # data=None would crash. Skip rather than raise: prewarm is a best-effort
+        # optimization.
+        if data_shape is None:
+            return
+
+        # Dummy data (zeros). The XLA compile is value-independent, but the
+        # sampler *adaptation* (step size + mass matrix) is NOT — a warmup on
+        # zeros produces geometry tuned to a meaningless posterior. We keep the
+        # compile and DROP that adaptation below so a real fit re-adapts.
+        data = jnp.zeros(data_shape)
+        noise = jnp.ones(data_shape)
+
+        # Build Fitter with dummy data and call its prewarm (compiles kernels
+        # AND writes a per-model adaptation entry keyed structurally on shape).
+        fitter = Fitter(self, data=data, noise=noise)
+        fitter.prewarm(method=method, **kwargs)
+
+        # Discard the zeros-data adaptation so a subsequent real fit with the same
+        # shape does not silently reuse it (wrong mass matrix → degraded sampling,
+        # divergence risk). The XLA compile persists in the JAX cache; only the
+        # value-dependent adaptation half is dropped.
+        try:
+            from tengri.inference._model_cache import _default_owner
+
+            _default_owner.get_or_compile_model(self).get("adaptation", {}).clear()
+        except Exception:
+            pass
+
     def _params_for_population(
         self,
         params: Mapping[str, Any],

@@ -445,6 +445,14 @@ def build_loss_fn(fitter):
         params = _unstandardize_parameters(
             params_unbounded, spec, free_names, fixed_values, stochastic
         )
+        # Per-galaxy runtime redshift override (batched catalog path, #1337 phase 2).
+        # When the caller threads a redshift through ``data_args`` it replaces the
+        # baked fixed value, so ONE compiled program serves every per-galaxy redshift
+        # (via the ``catalog_z_range`` ztable LUT). No single-galaxy fit ever sets
+        # ``data_args["redshift"]``, so ``params`` is unchanged there and the emitted
+        # program is byte-identical.
+        if "redshift" in data_args:
+            params = {**params, "redshift": data_args["redshift"]}
         e_lh = neg_log_lik(params, data_args)
 
         # Prior contributions (IFT Hamiltonian).

@@ -618,7 +618,7 @@ def _adaf_mdot_from_lbol(
 def adaf_spectrum(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_log_mbh: float = 8.0,
     agn_adaf_alpha: float = 0.3,
     agn_adaf_beta: float = 0.5,
@@ -648,7 +648,7 @@ def adaf_spectrum(
         Rest-frame wavelength grid [Angstrom].
     agn_log_lbol : float
         log10 of the ADAF bolometric luminosity [log10(L_sun)].
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Fraction of the bolometric assigned to the ADAF. Default 1.0.
     agn_log_mbh : float, optional
         Black hole mass [log10(M_sun)]. Default 8.0.
@@ -727,8 +727,10 @@ def adaf_spectrum(
         # work the normalization in L_sun (total/L_sun keeps the integral in
         # range) and order 10**log_lbol / integral before the ~1e28 shape.
         integral = jnp.trapezoid((total / _LSUN_ERG)[::-1], nu[::-1])
-        l_nu = (10.0**agn_log_lbol / jnp.maximum(integral, 1e-100)) * agn_frac * total
+        l_nu = (10.0**agn_log_lbol / jnp.maximum(integral, 1e-100)) * agn_lum_ratio * total
     else:
         integral = jnp.trapezoid(total[::-1], nu[::-1])
-        l_nu = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac * total / jnp.maximum(integral, 1e-100)
+        l_nu = (
+            10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio * total / jnp.maximum(integral, 1e-100)
+        )
     return l_nu

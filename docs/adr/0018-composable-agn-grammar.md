@@ -53,7 +53,7 @@ Each stage has a registry of swappable implementations (e.g., `agn_disc_block="m
    - Composable is the single canonical user-facing AGN surface; monolithic entries are thin wrappers.
 
 7. **Distinct AGN Surfaces**:
-   - **Composable `agn_frac`** (this system): covers all AGN-specific free parameters within the block framework.
+   - **Composable `agn_lum_ratio`** (this system): covers all AGN-specific free parameters within the block framework.
    - **CIGALE-embedded `dust_frac_agn`** (dust SEDModelComponent): a separate DALE2014 fixture allowing a fixed AGN luminosity proxy inside the dust continuum. These are orthogonal and should not coexist (duplication warning at model construction time).
    - Why composable blocks are canonical for AGN but dust-emission is a SEDModelComponent (#718): AGN requires per-wavelength masking (Type-1/2 screens) that the component protocol cannot express, while dust-emission is purely multiplicative.
 

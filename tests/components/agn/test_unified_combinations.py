@@ -94,7 +94,7 @@ class TestUnifiedAgnCombinations:
 
         The 1000 K torus has Wien tail at λ=5000 Å: x = hν/kT ≈ 28.8,
         giving B_nu ∝ exp(-28.8) ≈ 3e-13 relative to peak.  The disc
-        contributes nothing (agn_frac=0).  So IR >> UV by a factor >>1000.
+        contributes nothing (agn_lum_ratio=0).  So IR >> UV by a factor >>1000.
         """
         from tengri.components.agn.unified import unified_agn
 
@@ -118,8 +118,8 @@ class TestUnifiedAgnCombinations:
         from tengri.components.agn.unified import unified_agn
 
         l_unified = unified_agn(wavelength, agn_log_lbol=44.0, agn_torus_frac=0.0)
-        # Disc gets agn_frac = 1 - 0 = 1.0
-        l_disc = powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_frac=1.0)
+        # Disc gets agn_lum_ratio = 1 - 0 = 1.0
+        l_disc = powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_lum_ratio=1.0)
         np.testing.assert_allclose(
             np.array(l_unified),
             np.array(l_disc),
@@ -151,7 +151,7 @@ class TestUnifiedAgnCombinations:
             torus_model="silva04",
             agn_torus_frac=frac,
         )
-        l_disc = powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_frac=1.0 - frac)
+        l_disc = powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_lum_ratio=1.0 - frac)
         l_torus = silva04_analytic(wavelength, agn_log_lbol=44.0, agn_torus_frac=frac)
         np.testing.assert_allclose(
             np.array(l_unified),

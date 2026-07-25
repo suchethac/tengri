@@ -315,7 +315,7 @@ class Parameters:
     **AGN** (``agn_model != None``):
 
     ========================== ================= =======================================
-    agn_frac                   Fixed(1.0)        AGN fraction of stellar L_bol (1.0 = full AGN)
+    agn_lum_ratio              Fixed(1.0)        L_AGN / L_stellar_bol (1.0 = full AGN)
     agn_log_lbol               Fixed(10.0)       AGN log L_bol [erg/s] (parametric)
     agn_alpha                  Fixed(-1.0)       Disc power-law slope
     agn_T_torus                Fixed(1000)       Torus temperature (K)
