@@ -65,6 +65,17 @@ def _mcmc_auto_pick(context, *, key, init_from=None, **kw):
 
     if context.spec.n_free <= _MCMC_AUTO_D_THRESHOLD:
         return _ctx_run_nuts(context, key=key, init_from=init_from, **kw)
+
+    # Ray tracing is not a Hamiltonian sampler — there is no integrator metric to
+    # whiten, so it does not take ``precondition``. Refuse an explicit request rather
+    # than drop it: the caller would otherwise get no preconditioning and no signal.
+    if kw.pop("precondition", None):
+        raise ValueError(
+            f"precondition=True is not supported by the ray-tracing sampler, which "
+            f"method='mcmc' selects at D={context.spec.n_free} > "
+            f"{_MCMC_AUTO_D_THRESHOLD} free parameters. Request method='mcmc_nuts' or "
+            "method='mcmc_hmc' explicitly to keep metric preconditioning."
+        )
     return _ctx_run_raytrace(context, key=key, init_from=init_from, **kw)
 
 

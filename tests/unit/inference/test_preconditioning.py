@@ -343,3 +343,85 @@ class TestGradients:
             "raw descent unexpectedly converged — the test no longer discriminates "
             f"(distance {distance(raw):.2e})"
         )
+
+
+class TestAutoPolicy:
+    """``precondition=None`` resolves by dimension, mirroring `dense_mass_matrix` (#319).
+
+    Preconditioning is a strict geometry win but costs one dense ``(D, D)`` Hessian
+    (``O(D)`` backward passes through the forward model), so it cannot be unconditionally
+    on. These pin the *semantics*; the threshold itself is set from measurement and
+    referenced through the constant so the tests do not encode a guess.
+    """
+
+    def test_explicit_true_and_false_round_trip(self):
+        from tengri.inference.backends.mcmc.nuts import _resolve_precondition
+
+        assert _resolve_precondition(True, 10_000) is True
+        assert _resolve_precondition(False, 2) is False
+
+    def test_auto_enables_below_the_threshold(self):
+        from tengri.inference.backends.mcmc.nuts import (
+            PRECONDITION_MAX_DIM,
+            _resolve_precondition,
+        )
+
+        assert _resolve_precondition(None, PRECONDITION_MAX_DIM - 1) is True
+
+    def test_auto_disables_above_the_threshold(self):
+        from tengri.inference.backends.mcmc.nuts import (
+            PRECONDITION_MAX_DIM,
+            _resolve_precondition,
+        )
+
+        assert _resolve_precondition(None, PRECONDITION_MAX_DIM + 1) is False
+
+    def test_threshold_is_a_measured_dimension_not_a_sentinel(self):
+        from tengri.inference.backends.mcmc.nuts import PRECONDITION_MAX_DIM
+
+        assert isinstance(PRECONDITION_MAX_DIM, int)
+        assert 8 <= PRECONDITION_MAX_DIM <= 2048, "threshold outside any measured regime"
+
+
+class TestMcmcAutoDispatch:
+    """``method="mcmc"`` picks raytrace above D=20, which has no metric to whiten.
+
+    Passing the flag through unchanged raised
+    ``TypeError: run_raytrace() got an unexpected keyword argument`` — the same class
+    of wiring bug as ``mcmc_hmc`` dispatching to ``run_hmc``. Silently dropping it
+    would be worse: the user asks for preconditioning, gets none, and nothing says so.
+    """
+
+    class _Spec:
+        def __init__(self, n_free):
+            self.n_free = n_free
+
+    class _Ctx:
+        def __init__(self, n_free):
+            self.spec = TestMcmcAutoDispatch._Spec(n_free)
+
+    def test_explicit_request_that_cannot_be_honored_raises(self):
+        from tengri.inference._registration import _mcmc_auto_pick
+
+        with pytest.raises(ValueError, match="ray"):
+            _mcmc_auto_pick(self._Ctx(200), key=None, precondition=True)
+
+    def test_auto_and_disabled_are_dropped_quietly_for_raytrace(self):
+        """No request was made, so there is nothing to warn about — but it must not crash."""
+        import tengri.inference._registration as reg
+
+        seen = {}
+
+        def fake_raytrace(context, **kw):
+            seen.update(kw)
+            return "ok"
+
+        original = reg._ctx_run_raytrace
+        reg._ctx_run_raytrace = fake_raytrace
+        try:
+            for value in (None, False):
+                seen.clear()
+                assert reg._mcmc_auto_pick(self._Ctx(200), key=None, precondition=value) == "ok"
+                assert "precondition" not in seen, "raytrace must not receive the flag"
+        finally:
+            reg._ctx_run_raytrace = original
