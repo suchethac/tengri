@@ -80,6 +80,72 @@ _MET_AXIS_DENSITY_FACTOR = 2
 #: snapping never creates a near-degenerate interpolation cell.
 _SNAP_MERGE_FRAC = 0.25
 
+#: Points used for an axis the caller did not resolve explicitly — both the
+#: scalar default and the per-axis fallback for a dict that omits an axis.
+_DEFAULT_N_GRID = 16
+
+#: Fewest points an interpolation axis can carry. One knot cannot interpolate;
+#: an axis that should not vary belongs fixed in the spec, not shrunk to a point.
+_MIN_N_GRID = 2
+
+
+def validate_n_grid(n_grid):
+    """Validate a scalar or per-axis ``n_grid`` before any grid is built.
+
+    Parameters
+    ----------
+    n_grid : int or dict
+        Points per free ionization axis. A scalar applies to every axis; a dict
+        ``{axis_name: n}`` sets axes individually and falls back to
+        :data:`_DEFAULT_N_GRID` for any it omits.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    TypeError
+        If ``n_grid``, or any dict value, is not an integer.
+    ValueError
+        If a dict key names something that is not a griddable axis, or any
+        resolution is below :data:`_MIN_N_GRID`.
+
+    Notes
+    -----
+    Runs both at :class:`~tengri.forward.sed_model.FeaturePrecomp` construction
+    and again inside :func:`precompute_nebular_grid`, so a misspelled axis raises
+    where it was written. Before #1311 an unrecognized key was silently dropped
+    by the ``dict.get(name, default)`` lookup and the axis quietly took the
+    default resolution — the user got a grid they did not ask for, with no
+    warning.
+    """
+
+    def _check_one(value, where):
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+            raise TypeError(
+                f"n_grid{where} must be an integer; got {type(value).__name__} ({value!r})."
+            )
+        if int(value) < _MIN_N_GRID:
+            raise ValueError(
+                f"n_grid{where} must be >= {_MIN_N_GRID} (an interpolation axis needs at "
+                f"least two knots); got {value}. To drop an axis entirely, fix its "
+                f"parameter in the spec rather than shrinking its grid."
+            )
+
+    if isinstance(n_grid, dict):
+        unknown = sorted(k for k in n_grid if k not in _CANDIDATE_AXES)
+        if unknown:
+            raise ValueError(
+                f"n_grid names {unknown!r}, which are not griddable ionization axes. "
+                f"Valid axes are {', '.join(_CANDIDATE_AXES)}. Axes omitted from the "
+                f"dict default to {_DEFAULT_N_GRID}."
+            )
+        for name, value in n_grid.items():
+            _check_one(value, f"[{name!r}]")
+    else:
+        _check_one(n_grid, "")
+
 
 @dataclasses.dataclass(frozen=True)
 class NebularGridTable:
@@ -256,11 +322,16 @@ def precompute_nebular_grid(
         (``neb_logU`` / ``neb_logZ_gas``) at ``n_grid``; the ``met_logzsol`` axis
         also starts at ``n_grid`` and then gains the interior SSP metallicity nodes
         (see ``snap_met_to_ssp_nodes``), so it ends up slightly larger. Pass a dict
-        ``{axis_name: n}`` to set each axis explicitly (unspecified axes default to
-        16). Validate any accuracy claim with a dense sweep strictly inside the grid
-        range, never with random draws — a narrow feature hides from random draws,
-        and an error that ignores ``n_grid`` is an unresolved kink, not interpolation
-        error.
+        ``{axis_name: n}`` to set each axis explicitly; omitted axes take
+        :data:`_DEFAULT_N_GRID`, and an explicit per-axis number is used verbatim
+        (the unsnapped-met densification applies only to the default). Keys are
+        validated against :data:`_CANDIDATE_AXES`, so a misspelled axis raises
+        instead of silently selecting the default (#1311). Since build cost is the
+        *product* over axes, per-axis resolution is the lever for a model whose
+        axes differ in sensitivity. Validate any accuracy claim with a dense sweep
+        strictly inside the grid range, never with random draws — a narrow feature
+        hides from random draws, and an error that ignores ``n_grid`` is an
+        unresolved kink, not interpolation error.
     ranges : dict, optional
         Override ``{param: (lo, hi)}`` grid bounds. Defaults to each free param's
         prior support (else :data:`_DEFAULT_RANGE`).
@@ -297,6 +368,8 @@ def precompute_nebular_grid(
     snapped + linear                  30      0.28 %      0.15 %
     ==========================  ========  ==========  ==========
     """
+    validate_n_grid(n_grid)
+
     spec = model.spec
     free = set(spec.free_params)
     axis_names = tuple(p for p in _CANDIDATE_AXES if p in free)
@@ -305,15 +378,22 @@ def precompute_nebular_grid(
     met_nodes = _ssp_met_nodes(model) if snap_met_to_ssp_nodes else None
 
     # Per-axis resolution matched to the physics. A scalar ``n_grid`` resolves every
-    # axis at ``n_grid``; a dict ``{axis: n}`` sets each explicitly. An UNSNAPPED met
-    # axis is densified by ``_MET_AXIS_DENSITY_FACTOR`` because it must resolve the
-    # SSP-node kinks by brute force; a snapped one gets the nodes for free.
+    # axis at ``n_grid``; a dict ``{axis: n}`` sets each explicitly and the rest fall
+    # back to ``_DEFAULT_N_GRID``. An UNSNAPPED met axis is densified by
+    # ``_MET_AXIS_DENSITY_FACTOR`` because it must resolve the SSP-node kinks by brute
+    # force; a snapped one gets the nodes for free. Densification applies to the
+    # *default* only: a per-axis number is an explicit request and is honored verbatim,
+    # so ``{'met_logzsol': 30}`` builds 30 knots rather than silently doubling to 60.
     def _axis_n(name):
         if isinstance(n_grid, dict):
-            return int(n_grid.get(name, 16))
+            if name in n_grid:
+                return int(n_grid[name])
+            requested = _DEFAULT_N_GRID
+        else:
+            requested = n_grid
         if name == "met_logzsol" and met_nodes is None:
-            return int(n_grid * _MET_AXIS_DENSITY_FACTOR)
-        return int(n_grid)
+            return int(requested * _MET_AXIS_DENSITY_FACTOR)
+        return int(requested)
 
     # Guard: an UNSNAPPED free met axis cannot resolve the C0 kinks the ionizing-
     # spectrum tables put at every SSP metallicity node, so the forbidden lines
