@@ -247,3 +247,99 @@ def test_building_the_preconditioner_is_documented_as_not_jit_safe():
     log_p = _gaussian_logdensity(metric)
     with pytest.raises(jax.errors.TracerBoolConversionError):
         jax.jit(lambda x: preconditioned_logdensity(log_p, x, 0.0)[2])(jnp.zeros(2))
+
+
+class TestGradients:
+    """Gradients through the whitening map must be exact, finite, and optimizable.
+
+    Everything else rests on this: if ``grad`` is wrong the sampler is wrong, and if it
+    is merely *finite but wrong* nothing raises — the chain just explores the wrong
+    distribution. So the chain rule is checked as an identity, not a smoke test.
+    """
+
+    def test_gradient_obeys_the_chain_rule(self):
+        """``grad_zeta H(A zeta) == A^T grad_xi H(xi)`` exactly, by construction."""
+        M = _ill_conditioned_metric(cond=1e6)
+        log_p = _gaussian_logdensity(M)
+        pc = metric_preconditioner(negative_hessian_metric(log_p, jnp.zeros(6), 0.0))
+        zeta = jnp.asarray(np.random.default_rng(4).standard_normal(6))
+
+        got = np.asarray(jax.grad(pc.wrap(log_p))(zeta, 0.0))
+        want = np.asarray(pc.matrix.T @ jax.grad(log_p)(pc.to_xi(zeta), 0.0))
+        scale = max(float(np.max(np.abs(want))), 1e-12)
+        assert np.max(np.abs(got - want)) / scale < 1e-10
+
+    def test_gradient_matches_finite_differences(self):
+        """Independent check that does not reuse the analytic chain rule."""
+        M = _ill_conditioned_metric(n=4, cond=1e4)
+        log_p = _gaussian_logdensity(M)
+        pc = metric_preconditioner(negative_hessian_metric(log_p, jnp.zeros(4), 0.0))
+        wrapped = pc.wrap(log_p)
+        zeta = jnp.asarray([0.3, -0.7, 0.2, 0.9])
+
+        analytic = np.asarray(jax.grad(wrapped)(zeta, 0.0))
+        eps = 1e-6
+        numeric = np.array(
+            [
+                float(wrapped(zeta.at[i].add(eps), 0.0) - wrapped(zeta.at[i].add(-eps), 0.0))
+                / (2 * eps)
+                for i in range(4)
+            ]
+        )
+        assert np.max(np.abs(analytic - numeric)) / max(np.max(np.abs(numeric)), 1e-12) < 1e-6
+
+    @pytest.mark.parametrize("radius", [1.0, 10.0, 100.0])
+    def test_gradient_is_finite_far_from_the_expansion_point(self, radius):
+        """The metric is built at one point; the gradient must survive leaving it."""
+        M = _ill_conditioned_metric(cond=1e6)
+        log_p = _gaussian_logdensity(M)
+        pc = metric_preconditioner(negative_hessian_metric(log_p, jnp.zeros(6), 0.0))
+        wrapped = pc.wrap(log_p)
+        keys = jax.random.split(jax.random.PRNGKey(21), 8)
+        for k in keys:
+            g = jax.grad(wrapped)(jax.random.normal(k, (6,)) * radius, 0.0)
+            assert bool(jnp.all(jnp.isfinite(g))), f"non-finite gradient at radius {radius}"
+
+    def test_gradient_descent_converges_where_the_raw_coordinates_stall(self):
+        """ "Can we at least optimize?" — yes, and that is exactly what whitening buys.
+
+        Plain gradient descent with a fixed step size is limited by the largest
+        curvature (or it diverges) while progress along the flattest direction goes as
+        ``1 - step * lambda_min``. At cond 1e6 that is hopeless. After whitening every
+        direction has curvature 1, so one well-scaled step size fits all of them.
+        """
+        n = 6
+        M = _ill_conditioned_metric(n=n, cond=1e6, seed=8)
+        log_p = _gaussian_logdensity(M)
+        start = jnp.ones(n)
+
+        def descend(objective, x0, *, n_steps, step):
+            grad_fn = jax.jit(jax.grad(objective))
+
+            def body(x, _):
+                return x + step * grad_fn(x, 0.0), None  # ascend the log-density
+
+            x, _ = jax.lax.scan(body, x0, None, length=n_steps)
+            return x
+
+        # Largest stable step for the raw problem is set by its stiffest direction.
+        raw_step = 1.0 / float(np.linalg.eigvalsh(M).max())
+        raw = descend(log_p, start, n_steps=2000, step=raw_step)
+
+        pc = metric_preconditioner(negative_hessian_metric(log_p, jnp.zeros(n), 0.0))
+        pre_zeta = descend(pc.wrap(log_p), pc.to_latent(start), n_steps=2000, step=0.5)
+        pre = pc.to_xi(pre_zeta)
+
+        # The optimum is the origin; measure how far each run got, in Mahalanobis
+        # distance so the comparison is scale-free.
+        def distance(x):
+            v = np.asarray(x)
+            return float(np.sqrt(v @ np.asarray(M) @ v))
+
+        assert distance(pre) < 1e-6, (
+            f"preconditioned descent did not converge ({distance(pre):.2e})"
+        )
+        assert distance(raw) > 1e-3, (
+            "raw descent unexpectedly converged — the test no longer discriminates "
+            f"(distance {distance(raw):.2e})"
+        )

@@ -119,3 +119,56 @@ def test_preconditioned_samples_respect_the_prior_support(ssp_data_wne):
         assert draws.max() <= float(high) + 1e-8, f"{name} above prior support"
         checked += 1
     assert checked > 0, "no bounded priors were checked — the guard would pass vacuously"
+
+
+def test_gradients_through_the_real_model_are_exact_and_finite(ssp_data_wne):
+    """The chain rule and finiteness, on the actual SED likelihood.
+
+    The synthetic-Gaussian unit tests prove the algebra; this proves it survives the
+    real forward model, where the Jacobian comes from SSP interpolation, dust
+    attenuation and filter projection rather than a matrix multiply. A wrong-but-finite
+    gradient raises nothing and would simply sample the wrong distribution.
+
+    Reaches the objective the way a backend does (``InferenceContext`` over a
+    ``Fitter``) because that *is* the internal seam under test.
+    """
+    from jax.flatten_util import ravel_pytree
+
+    from tengri.inference.context import InferenceContext
+    from tengri.inference.fitter import Fitter
+    from tengri.inference.preconditioning import metric_preconditioner, negative_hessian_metric
+
+    model = _model(ssp_data_wne)
+    data, noise = _mock(model)
+    forward = ForwardModel.build(sed=model)
+    rmap = forward.fit(
+        data,
+        noise,
+        method="map",
+        n_steps=3000,
+        n_restarts=2,
+        verbose=False,
+        key=jax.random.PRNGKey(5),
+    )
+
+    ctx = InferenceContext.from_target(Fitter(forward, data, noise, approx="auto"))
+    nlp, data_args = ctx.neg_log_posterior_fn, ctx.data_args
+    flat0, unravel = ravel_pytree(ctx.initial_params(jax.random.PRNGKey(0), init_from=rmap))
+
+    def log_p(flat, args):
+        return -nlp(unravel(flat), args)
+
+    pc = metric_preconditioner(negative_hessian_metric(log_p, flat0, data_args))
+    wrapped = pc.wrap(log_p)
+
+    # Chain rule on the real likelihood.
+    zeta0 = pc.to_latent(flat0)
+    rng = np.random.default_rng(0)
+    for _ in range(3):
+        zeta = zeta0 + jnp.asarray(rng.standard_normal(flat0.shape[0]))
+        got = np.asarray(jax.grad(wrapped)(zeta, data_args))
+        want = np.asarray(pc.matrix.T @ jax.grad(log_p)(pc.to_xi(zeta), data_args))
+        scale = max(float(np.max(np.abs(want))), 1e-12)
+        assert np.max(np.abs(got - want)) / scale < 1e-8, "chain rule violated on the SED model"
+        assert np.all(np.isfinite(got)), "non-finite gradient on the SED model"
+        assert np.max(np.abs(got)) > 0.0, "gradient identically zero — the objective is flat"
