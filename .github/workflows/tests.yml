@@ -303,8 +303,16 @@ jobs:
     #
     # Shares of the old single-job wall clock, measured at -n 2:
     #   contract 43% · components 28% · regression 22% · physics 7%
-    # so regression+physics pair into one shard and `contract` (the long pole) sets
-    # the wall clock. Wall = slowest shard, not the sum.
+    # `contract` (the long pole) sets the wall clock. Wall = slowest shard, not the
+    # sum, so splitting the small shards is free.
+    #
+    # regression and physics were ONE shard until 2026-07. They were split because
+    # the paired shard walked back into the 16 GB ceiling: it died at ~21-22 min and
+    # ~95-97% of the suite with 'The runner has received a shutdown signal' and zero
+    # test failures — the same host-OOM signature the -n 2 note below describes, on a
+    # shard that had since accumulated more compile-heavy NUTS/HMC regression files
+    # (one measured at 2.6 GB peak alone). Two runners halve the per-worker
+    # accumulation instead of paying for it in headroom. See #1346.
     strategy:
       fail-fast: false
       matrix:
@@ -313,8 +321,10 @@ jobs:
             paths: tests/contract
           - shard: components
             paths: tests/components
-          - shard: physics-regression
-            paths: tests/physics tests/regression
+          - shard: regression
+            paths: tests/regression
+          - shard: physics
+            paths: tests/physics
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -401,7 +411,7 @@ jobs:
   # the entire fast tier in ONE process under coverage instrumentation, and it does
   # not fit in any sane cap:
   #
-  #   test shards on main:  contract ~26 min + components ~11 + physics-regression ~11
+  #   test shards on main:  contract ~26 min + components ~11 + regression ~9 + physics ~3
   #                         = ~48 min of work, and --cov adds a further 30-50%
   #
   # so it needs 70-80 min in a single job. It timed out at 35 (#1153), then at 50
@@ -428,8 +438,10 @@ jobs:
             paths: tests/contract
           - shard: components
             paths: tests/components
-          - shard: physics-regression
-            paths: tests/physics tests/regression
+          - shard: regression
+            paths: tests/regression
+          - shard: physics
+            paths: tests/physics
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
