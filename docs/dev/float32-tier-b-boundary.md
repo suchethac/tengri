@@ -549,7 +549,7 @@ flips to an unexpected pass):
 | `powerlaw`, `richards2006`, `skirtor`, `qsogen`, `schartmann2005` | **exact** | shape-invariant (evaluated at the reference, rescaled) |
 | `adaf_lopez2024` | **exact** | shape-invariant; its CIGALE piecewise power law needed the log-space rebuild (see below) |
 | `relagn` | **exact** | normalized to `agn_log_lbol` like the other eleven discs (behavior change — see below) |
-| `grahsp_sbpl` | non-finite | blocked on a **linear erg/s parameter**: `agn_grahsp_l5100` is `LogUniform(1e42, 1e47, default=1e44)` — the parameter *value itself* is `inf` in float32, so `L_lambda_unit × inf = nan`. Its auto-normalized path (`l5100=None`, tied to `agn_log_lbol`) *does* scale ×10/dex and would work; the explicit-`l5100` path cannot (its `L_lambda` ~3e41 is out of range regardless). Needs a log-space parameter — **#1206 item 3**, an API change, not a kernel fix |
+| `grahsp_sbpl` | **exact** | `agn_grahsp_l5100` is a *linear* erg/s parameter (1e42–1e47), so the parameter **value** is `inf` in float32 before any arithmetic. In float32 the block falls back to its `agn_log_lbol` normalization and says so (`Float32L5100FallbackWarning`); float64 keeps the explicit `l5100`, so **GRAHSP parity is unaffected**. Under the default `cigale_joint`+`fracAGN>0` the fallback is *exact* — measured ratio 1.0000, i.e. `l5100` has no effect on the composed SED there because the disc is renormalized to `agn_power` |
 | `slone_netzer` | **exact** | was the tractable one — two silent float32 traps in its grid closure, both now fixed (see below) |
 
 ### The piecewise power-law fix (`adaf_lopez2024`)
@@ -637,7 +637,7 @@ are both behavioral, not representational: normalize `relagn` to `agn_log_lbol`
 like the other eleven discs (changes float64 results), or keep it float64-only
 (current state, guarded by `Float32UnsafeAGNWarning`).
 
-All eight **shape-class + shape-invariant** discs are exact in pure float32 —
+**All twelve registered discs are exact in pure float32** —
 including the science defaults (`multicolor`, `powerlaw`) and the physical disc
 models (`kubota_done`, `adaf`). Pure-float32 AGN inference (finite `grad(nlp)`)
 runs end-to-end for them. The four grid/other-class discs are the scoped
