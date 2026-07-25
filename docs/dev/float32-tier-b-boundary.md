@@ -547,7 +547,35 @@ flips to an unexpected pass):
 |---|---|---|
 | `multicolor`, `kubota_done`, `adaf` | **exact** | **shape-class** — L_bol-dependent shape; log-space (or L_sun-unit) internals + the `agn_log_lbol_shape` split (true L_bol for the shape, reference for the magnitude) |
 | `powerlaw`, `richards2006`, `skirtor`, `qsogen`, `schartmann2005` | **exact** | shape-invariant (evaluated at the reference, rescaled) |
-| `relagn`, `slone_netzer`, `grahsp_sbpl`, `adaf_lopez2024` | non-finite | **grid/other-class** — overflow *even at the reference L_bol* (a `0*inf` in the runner / block), NOT the L_bol magnitude; four distinct grid-dependent causes (`relagn` runner:494, `slone_netzer` disc:787, `grahsp_sbpl` a grid-dependent bolometric-normalization `l5100 = target/0 → inf`, `adaf_lopez2024` `_cigale_disc_lambda`). Each needs its own float32 hardening |
+| `adaf_lopez2024` | **exact** | shape-invariant; its CIGALE piecewise power law needed the log-space rebuild (see below) |
+| `relagn` | non-finite | **not `agn_log_lbol`-normalized** (ratio 1.000/dex — it is set by M_BH/mdot). The reference-factoring cannot shrink it, and its `L_lambda` ~2.6e42 erg/s/Å inherently exceeds float32. Worse, factoring would *rescale* it by 10^34.6 — wrong even if finite. Needs the runner to carry a log10 offset alongside `L_lambda`, or relagn normalized to `agn_log_lbol`. **Architectural** |
+| `grahsp_sbpl` | non-finite | blocked on a **linear erg/s parameter**: `agn_grahsp_l5100` is `LogUniform(1e42, 1e47, default=1e44)` — the parameter *value itself* is `inf` in float32, so `L_lambda_unit × inf = nan`. Its auto-normalized path (`l5100=None`, tied to `agn_log_lbol`) *does* scale ×10/dex and would work; the explicit-`l5100` path cannot (its `L_lambda` ~3e41 is out of range regardless). Needs a log-space parameter — **#1206 item 3**, an API change, not a kernel fix |
+| `slone_netzer` | non-finite | **the tractable one**: it *does* scale with `agn_log_lbol` (×10/dex), so the reference-factoring applies and its float32 values should be ~1e7 — but its grid/template normalization underflows to **0** at the reference. A contained internal-hardening job (medium) |
+
+### The piecewise power-law fix (`adaf_lopez2024`)
+
+`piecewise_powerlaw_disk` built the spectrum as `wavelength**coef * norm`. On a
+steep segment at long wavelength the two factors leave the float32 window in
+*opposite* directions — `wavelength**(-4)` at ~1e6–1e7 nm is ~1e-36…1e-40 and
+flushes to **0**, while the matching continuity `norm` (a cumulative product of
+`limit**(coef_prev − coef_next)`) overflows to **inf**. Their product is O(1), but
+float32 sees `0 * inf = nan` across the whole tail. The float32 branch builds the
+same spectrum as a single log10 sum (continuity norms become a cumulative *sum* of
+`coef_step * log10(limit)`), peak-factors the log before exponentiating (the
+absolute level is arbitrary — the unit-area normalization divides it out), and
+materializes only the representable result. `skirtor` / `schartmann2005` share the
+kernel and stay exact; float64 keeps the linear form verbatim.
+
+### Why the last three are one class, not three bugs
+
+All three remaining discs are **absolutely normalized** rather than
+reference-shrinkable: their `L_lambda` in erg/s/Å is ~1e41–1e42, past float32 max
+(3.4e38). The nine working discs are only representable because the AGN
+component's reference-factoring evaluates them at `L_bol = 1e10` erg/s. So the
+real remedy for this class is not per-disc patching but giving the composable
+runner a **scaled `L_lambda` representation** (value + log10 offset), the same
+move that fixed the Q_H, `L_ir` and disc-internal seams. `slone_netzer` is the
+exception that *is* reference-shrinkable and so is fixable on its own.
 
 All eight **shape-class + shape-invariant** discs are exact in pure float32 —
 including the science defaults (`multicolor`, `powerlaw`) and the physical disc
