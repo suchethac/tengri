@@ -350,9 +350,17 @@ class FeaturePrecomp:
 
     Parameters
     ----------
-    n_grid : int, default 16
+    n_grid : int or dict, default 16
         Grid points per free ionization axis (Cue backend only; ignored for
         baked-in, whose window LUT has no ionization axes). Denser is tighter.
+
+        A scalar resolves every free axis alike. A dict ``{axis_name: n}``
+        resolves them independently — the griddable axes are ``met_logzsol``,
+        ``neb_logU`` and ``neb_logZ_gas``, omitted axes take 16, and any other
+        key raises rather than being silently ignored. Build cost is the
+        *product* over free axes, so per-axis resolution is what keeps a model
+        with several free axes affordable: spend points on the axis whose lines
+        actually move, not on the one you barely vary.
     lines : array_like or None, optional
         Rest-frame vacuum line wavelengths [Angstrom] to tabulate. ``None``
         (default) takes them from ``Observation.line_fluxes``.
@@ -393,11 +401,21 @@ class FeaturePrecomp:
     >>> # lines from the observation, photometry on the LUT path too:
     >>> SEDModel.build(..., approx=(WavePrecomp(), FeaturePrecomp()))
     >>> SEDModel.build(..., approx=FeaturePrecomp(n_grid=24))  # denser Cue grid
+    >>> # per-axis: dense where the lines move, coarse where they do not
+    >>> SEDModel.build(..., approx=FeaturePrecomp(n_grid={"met_logzsol": 24, "neb_logU": 8}))
     """
 
-    n_grid: int = 16
+    n_grid: int | dict[str, int] = 16
     lines: tuple[float, ...] | None = None
     ranges: dict | None = None
+
+    def __post_init__(self):
+        # Validate where the user typed it. The builder validates again at its own
+        # entry (it is reachable directly), but by then the traceback points at
+        # grid construction rather than at the config (#1311).
+        from tengri.components.nebular.nebular_grid_precompute import validate_n_grid
+
+        validate_n_grid(self.n_grid)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -4327,8 +4345,12 @@ class SEDModel:
         target_wavelengths : array_like, shape (n_lines,)
             Rest-frame vacuum line wavelengths [Angstrom] the grid tabulates and
             :meth:`predict_line_fluxes` serves.
-        n_grid : int, default 16
+        n_grid : int or dict, default 16
             Grid points per free ionization axis. Denser → tighter interpolation.
+            A dict ``{axis_name: n}`` resolves ``met_logzsol`` / ``neb_logU`` /
+            ``neb_logZ_gas`` independently; omitted axes take 16 and an
+            unrecognized key raises (#1311). Build cost is the product over free
+            axes.
         ranges : dict, optional
             Override ``{param: (lo, hi)}`` grid bounds (defaults to each free
             param's prior support).
