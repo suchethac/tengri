@@ -3312,8 +3312,8 @@ class SEDModel:
         See Also
         --------
         predict_properties : JIT/vmap-safe derived quantities for batch.
-        Prediction.rest_sed : Full rest-frame SED for custom analysis.
-        Prediction.lines : Emission-line luminosities.
+        :meth:`Prediction.rest_sed` : Full rest-frame SED for custom analysis.
+        :attr:`Prediction.lines` : Emission-line luminosities.
         """
         from collections.abc import Mapping
 
@@ -3798,7 +3798,7 @@ class SEDModel:
         --------
         predict : Lazy prediction object for all derived quantities.
         predict_spectrum : Spectral flux at arbitrary wavelengths.
-        Prediction.magnitudes : AB magnitudes (uses photometry internally).
+        :meth:`Prediction.magnitudes` : AB magnitudes (uses photometry internally).
 
         Examples
         --------
