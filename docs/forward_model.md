@@ -4,7 +4,7 @@ Tengri's forward model is split into two clearly separated layers.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  Inference (Fitter / MAP / NUTS / VI / …)               │
+│  Inference (MAP / NUTS / VI / nested sampling / …)      │
 │  Entry point: ForwardModel.fit(data, noise, method).    │
 │  Hot path is .predict_photometry(params); .predict()    │
 │  is the rich, exploratory surface (bypasses the LUT).   │
@@ -22,7 +22,7 @@ Tengri's forward model is split into two clearly separated layers.
             │      SubModels          │
             ├─────────────────────────┤
             │  SEDModel               │  single galaxy SED chain
-            │  PopulationSEDModel          │  N galaxies, shared params (hierarchical)
+            │  PopulationSEDModel     │  N galaxies, shared params (hierarchical)
             │  SpatialModel           │  single galaxy spatial profile
             │  SpatialSEDModel        │  SED + Spatial (joint)
             │  PopulationSpatialSED   │  far-future composition of all of the above
@@ -41,8 +41,8 @@ Tengri's forward model is split into two clearly separated layers.
 
 The outer-shell signature stays uniform across all SubModel variants —
 construction is always ``ForwardModel.build(<slot>=..., observation=obs)``
-and inference is always through ``forward.fit(...)`` — which is the
-standard ``Fitter`` pipeline underneath.
+and inference is always through ``forward.fit(...)``, whatever the
+SubModel underneath happens to be.
 
 ## The minimum usable fit
 
@@ -66,9 +66,7 @@ sed = SEDModel.build(
 # 2. Wrap it in the outer shell.
 forward = ForwardModel.build(sed=sed, observation=obs)
 
-# 3. Hand to inference. `forward.fit` is the canonical entry point;
-#    `Fitter(forward, data, noise).run("map")` is the same thing one
-#    layer down, for when you need to reach the engine directly.
+# 3. Hand to inference. `forward.fit` is the canonical entry point.
 posterior = forward.fit(photometry_array, noise_array, method="map")
 posterior.summary()
 ```
@@ -137,27 +135,27 @@ pop = PopulationSEDModel(
 
 forward = ForwardModel.build(population=pop, observation=obs)
 
-# Inference is the same as for a single galaxy: one Hamiltonian path,
-# Fitter sees a (N_gal, n_filters)-shaped batched prediction and
-# minimizes chi^2 + xi^T xi over the joint latent space.
-fitter = Fitter(forward)          # auto-extracts (data, noise) from pop.galaxies
-posterior = fitter.run('vi')
+# Inference is the same as for a single galaxy: one Hamiltonian path over
+# a (N_gal, n_filters)-shaped batched prediction, minimizing
+# chi^2 + xi^T xi over the joint latent space. Passing no data is what
+# selects the hierarchical path — the per-galaxy arrays already live on
+# the PopulationSEDModel.
+posterior = forward.fit(method='vi')
 ```
 
 The PSD priors live on the ``PopulationSEDModel`` construction — not on a
-separate ``HierarchicalFitter`` — so there is one place that
+separate hierarchical fitter class — so there is one place that
 parameterizes the hierarchy.
 
-Inference routes through the standard
-:class:`tengri.Fitter` machinery natively (PRs #241–#246, 2026-05).
-There is **one** information-Hamiltonian path —
-``Fitter(forward, ...).run('vi')`` — whether ``forward`` holds an
-:class:`SEDModel` (single galaxy), a :class:`PopulationSEDModel`
-(hierarchical), or :class:`SpatialSEDModel`. The
+Inference routes through the same machinery natively. There is **one**
+information-Hamiltonian path — ``forward.fit(method='vi')`` — whether
+``forward`` holds an :class:`SEDModel` (single galaxy), a
+:class:`PopulationSEDModel` (hierarchical), or
+:class:`SpatialSEDModel`. The
 :class:`PopulationSEDModel` publishes its batched axes
 (``{'galaxy': 0}``) and the spec view publishes per-param shapes
-(``(N_gal,)`` for per-galaxy, ``()`` for shared); the Fitter's
-existing inference backends consume the batched output without any
+(``(N_gal,)`` for per-galaxy, ``()`` for shared); the existing
+inference backends consume the batched output without any
 type-specific code.
 
 The legacy :class:`tengri.PopulationFitter` direct API remains
