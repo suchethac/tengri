@@ -298,10 +298,18 @@ jobs:
     # Sharded across runners, one tree per shard. The suite had grown to 22-24 min
     # against a 25 min cap — it was about to start failing on timeout rather than on
     # any test. More workers per runner is NOT the lever (that is exactly what OOM-
-    # killed the VM; see the -n 2 note below), but more RUNNERS is free: matrix jobs
-    # run concurrently, each still capped at -n 2, so peak RSS per runner is unchanged.
+    # killed the VM; see the worker-count note below), but more RUNNERS is free:
+    # matrix jobs run concurrently, so peak RSS per runner does not grow with the
+    # number of shards.
     #
-    # Shares of the old single-job wall clock, measured at -n 2:
+    # Worker count is now PER SHARD (`matrix.nproc`), not a uniform -n 2 — regression
+    # runs serial. Any statement below of the form "each shard runs at -n 2" is only
+    # true of contract/components/physics.
+    #
+    # Shares of the old single-job wall clock, measured at -n 2 — STALE, and left
+    # only as history. Re-measure before reasoning from shares; this comment has
+    # been wrong twice (it named `contract` the long pole long after `regression`
+    # took over at ~2x). See the re-measure recipe on #1346.
     #   contract 43% · components 28% · regression 22% · physics 7%
     # `contract` (the long pole) sets the wall clock. Wall = slowest shard, not the
     # sum, so splitting the small shards is free.
@@ -542,11 +550,16 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
-      # `-n 2` (not `-n auto`): `--cov` adds ~30–50 % memory on top of the test
-      # job, so this job OOM-killed the runner even more often than `test`
+      # `${{ matrix.nproc }}` (not `-n auto`): `--cov` adds ~30–50 % memory on top of
+      # the test job, so this job OOM-killed the runner even more often than `test`
       # (the dominant cause of red `main`). Sharding does not change peak RSS per
-      # runner — each shard still runs at -n 2 — it only stops one runner from having
-      # to carry the whole tier.
+      # runner — it only stops one runner from having to carry the whole tier.
+      #
+      # regression is `-n 1` here (#1371) and now also in `test` (#1372). The two
+      # jobs are deliberately kept in the SAME shape: running the same tests at the
+      # same commit on different runners is a free near-controlled experiment, and
+      # when one passes while the other dies the test *content* is exonerated by
+      # construction. That only holds while the jobs do not diverge in how they run.
       - run: |
           pytest ${{ matrix.paths }} -q \
             -n ${{ matrix.nproc }} \
