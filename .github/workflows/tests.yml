@@ -397,7 +397,29 @@ jobs:
         #
         # The per-test `--timeout=600` above still guards the failure mode this
         # number does NOT: a single hung test stalling a worker.
-        timeout-minutes: 35
+        #
+        # 35 -> 50. Same story one shard over. After the #1356 four-way split
+        # `regression` became the long pole. Completed durations measured
+        # 2026-07-25, all against a 35 min cap:
+        #
+        #   main @8524a837   32m00s     #1360 branch   34m03s
+        #   #1362 branch     34m56s  <- 4 seconds of margin
+        #
+        # A four-second margin is not a margin. Whether the spread is test
+        # content or runner variance does not matter here: the observed range
+        # already reaches the cap, so the next run that drifts high is a red
+        # main, and it will carry the "passed on the branch, KILLED on main"
+        # shape described above rather than a useful failure.
+        #
+        # Raised to 50 to match the push/schedule path below rather than drop
+        # regression coverage — the precedent the #1146 note above sets.
+        #
+        # This is headroom, NOT a rebalance: physics runs 3m26s against
+        # regression's 32m. And it does not touch the OTHER way this shard
+        # dies — a runner-VM OOM at ~93% with zero FAILED markers, which is
+        # unrelated to wall clock (seen at 27m11s, well inside the old cap).
+        # See #1346 (OOM) and #1352 (imbalance).
+        timeout-minutes: 50
       - uses: actions/cache/save@v4
         if: always()
         with:
