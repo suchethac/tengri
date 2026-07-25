@@ -234,3 +234,16 @@ def test_the_signature_check_can_actually_fail():
         return None
 
     assert "precondition" not in inspect.signature(runner_without_it).parameters
+
+
+def test_building_the_preconditioner_is_documented_as_not_jit_safe():
+    """The docstring says it raises under trace; pin that so the claim cannot drift.
+
+    ``metric_preconditioner`` reads a concrete boolean to reject a non-PD metric — a
+    guard that fails loudly is worth more than one that silently returns NaNs, but it
+    does mean this must be called outside any transform.
+    """
+    metric = np.diag([1.0, 4.0])
+    log_p = _gaussian_logdensity(metric)
+    with pytest.raises(jax.errors.TracerBoolConversionError):
+        jax.jit(lambda x: preconditioned_logdensity(log_p, x, 0.0)[2])(jnp.zeros(2))

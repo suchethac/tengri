@@ -228,8 +228,11 @@ def preconditioned_logdensity(
 
     Notes
     -----
-    **JIT-safe** but not intended to be traced: call once per fit, outside any
+    **Not JIT-safe** — the positive-definiteness check in
+    :func:`metric_preconditioner` reads a concrete boolean and raises
+    ``TracerBoolConversionError`` under trace. Call once per fit, outside any
     transform, then pass ``wrapped`` to the sampler as its static log-density.
+    The returned ``wrapped`` callable is itself fully traceable.
     """
     init_flat = jnp.asarray(init_flat)
     metric = negative_hessian_metric(logdensity_fn, init_flat, data_args, floor=floor)
