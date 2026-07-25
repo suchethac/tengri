@@ -201,7 +201,7 @@ def test_non_monotone_grid_is_bounded_even_though_meaningless(grids):
     The contract this pins is boundedness, not correctness -- consecutive ``|dt|``
     only telescope to ``|t_i - t_j|`` along a monotone sequence, so the induced
     covariance is legitimately not ``K`` here (measured O(1) relative deviation).
-    What must never return is the pre-fix behaviour: a finite 1e17-sigma answer.
+    What must never return is the pre-fix behavior: a finite 1e17-sigma answer.
     """
     asc, _ = grids
     mixed = np.asarray(asc).copy()
