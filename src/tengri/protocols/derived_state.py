@@ -331,6 +331,12 @@ class DerivedState:
     # predict_via_precomp under WavePrecomp (#624).
     radio_phot_lnu_precomp: jnp.ndarray | None = None
     xray_phot_lnu_precomp: jnp.ndarray | None = None
+    # Shock is an additive emitter like radio/xray, and SEDModelComponent
+    # publishes ``{name}_phot_lnu_precomp`` generically — but this field was
+    # never added, so any model with a shock component raised ComponentIOError
+    # ("_extras is non-empty") the moment the photometry LUT ran, i.e. on every
+    # inference call. Typed here so the shock LUT rides the same contract.
+    shock_phot_lnu_precomp: jnp.ndarray | None = None
 
     # Spectrum LUT (published only when approx=SpectrumPrecomp()
     # is set). Per-pixel rest-frame Lν contributions from each component

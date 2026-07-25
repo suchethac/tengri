@@ -162,6 +162,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Nebular — photometry LUT (only non-BakedIn backends
     # publish, when ``approx=WavePrecomp()`` is set).
     "nebular_phot_lnu_precomp": "erg/s/Hz",
+    "shock_phot_lnu_precomp": "erg/s/Hz",
     # Spectrum LUT (published when approx=SpectrumPrecomp() is set).
     # Per-pixel rest-frame Lν at spectrum pixel centers.
     "spec_eff_waves": "Angstrom",
