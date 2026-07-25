@@ -520,14 +520,20 @@ class _CatalogFitterOriginal:
         # Per-galaxy fixed-value overrides (e.g. redshift) and presence masks are
         # threaded only through the sequential path today; the batched native/MCMC
         # paths stack flux/noise and would SILENTLY DROP per-galaxy values. Fail loudly instead.
-        if (resolved in self._NATIVE_VMAPPABLE or resolved in self._MCMC_VMAPPABLE) and any(
-            "redshift" in g for g in self.galaxies
-        ):
+        _has_pg_z = any("redshift" in g for g in self.galaxies)
+        if _has_pg_z and resolved in self._NATIVE_VMAPPABLE:
             raise NotImplementedError(
-                f"Per-galaxy redshift is not yet supported for batched method "
-                f"{method!r}. Use method='map' (the Catalog default; sequential) for "
-                f"per-galaxy redshifts — batched per-galaxy redshift threading is a "
-                f"follow-up. See #1317."
+                "Per-galaxy redshift is not supported for batched native VI methods "
+                "(experimental, off the critical path). Use method='mcmc_nuts' / "
+                "'mcmc_hmc' (batched, runtime redshift) or method='map' (sequential). "
+                "See #1337."
+            )
+        if _has_pg_z and resolved in self._MCMC_VMAPPABLE and self._catalog_z_range() is None:
+            raise ValueError(
+                "Batched per-galaxy redshift requires a catalog_z_range so ONE "
+                "compiled program serves all redshifts. Build the model with "
+                "approx=WavePrecomp(catalog_z_range=(zmin, zmax)), or use "
+                "method='map' (sequential, recompiles per redshift). See #1337."
             )
         if resolved in self._NATIVE_VMAPPABLE and any("presence" in g for g in self.galaxies):
             raise NotImplementedError(
@@ -606,6 +612,21 @@ class _CatalogFitterOriginal:
                 self.model, g["flux_obs"], g["noise"], data_type=self.data_type, cache=self.cache
             )
         return self._dummy_fitter
+
+    def _catalog_z_range(self):
+        """The model's ``catalog_z_range`` (the runtime-redshift LUT span), or None.
+
+        A ``catalog_z_range`` is what lets a per-galaxy redshift flow as a runtime
+        input so ONE compiled program serves all z (#1337 phase 2). Reads it from a
+        ``ForwardModel`` (via its population's SED) or a bare ``SEDModel``.
+        """
+        m = self.model
+        if hasattr(m, "populations"):
+            try:
+                return m.populations[0].sed._catalog_z_range
+            except (AttributeError, IndexError):
+                return None
+        return getattr(m, "_catalog_z_range", None)
 
     def _get_catalog_linear_engine(self):
         if self._catalog_linear_engine is None:
@@ -901,6 +922,10 @@ class _CatalogFitterOriginal:
         n_data = self._validate_uniform_data()
 
         fitter = self._get_dummy_fitter()
+        # Per-galaxy redshift override (#1337 phase 2): only when the catalog actually
+        # carries a per-galaxy Fixed redshift. Free / shared-redshift catalogs leave
+        # thread_redshift False, so the compiled program is unchanged.
+        per_galaxy_z = any("redshift" in g for g in self.galaxies)
         run_one, unravel_fn = build_catalog_mcmc_engine(
             fitter,
             sampler,
@@ -911,6 +936,7 @@ class _CatalogFitterOriginal:
             n_leapfrog=n_leapfrog_steps,
             target_accept_rate=target_accept_rate,
             use_dense=bool(dense_mass_matrix),
+            thread_redshift=per_galaxy_z,
         )
 
         dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
@@ -934,14 +960,29 @@ class _CatalogFitterOriginal:
                 for g in self.galaxies
             ]
         )
+        # Per-galaxy redshift (#1337 phase 2); dummy zeros when not threaded.
+        if per_galaxy_z:
+            all_redshift_orig = jnp.stack(
+                [jnp.asarray(g["redshift"], dtype=all_data_orig.dtype) for g in self.galaxies]
+            )
+        else:
+            all_redshift_orig = jnp.zeros((n_gal,), dtype=all_data_orig.dtype)
         if n_pad_extra > 0:
             all_data = jnp.concatenate([all_data_orig, jnp.zeros((n_pad_extra, n_data))], axis=0)
             all_noise = jnp.concatenate([all_noise_orig, jnp.ones((n_pad_extra, n_data))], axis=0)
             # Padded rows: all-ones presence (no masking, they're discarded anyway).
             pad_presence = jnp.ones((n_pad_extra, n_data), dtype=all_data_orig.dtype)
             all_presence = jnp.concatenate([all_presence_orig, pad_presence], axis=0)
+            # Padded rows reuse galaxy 0's redshift (a valid LUT value; discarded).
+            pad_z = jnp.full((n_pad_extra,), all_redshift_orig[0], dtype=all_data_orig.dtype)
+            all_redshift = jnp.concatenate([all_redshift_orig, pad_z], axis=0)
         else:
-            all_data, all_noise, all_presence = all_data_orig, all_noise_orig, all_presence_orig
+            all_data, all_noise, all_presence, all_redshift = (
+                all_data_orig,
+                all_noise_orig,
+                all_presence_orig,
+                all_redshift_orig,
+            )
 
         init_keys = jax.random.split(key, n_padded)
         all_init = jnp.stack(
@@ -952,10 +993,10 @@ class _CatalogFitterOriginal:
         gal_keys = jax.random.split(jax.random.fold_in(key, 1), n_padded)
 
         def _run_one(args):
-            ini, gk, d, n, p = args
-            return run_one(ini, gk, d, n, p)
+            ini, gk, d, n, p, z = args
+            return run_one(ini, gk, d, n, p, z)
 
-        xs = (all_init, gal_keys, all_data, all_noise, all_presence)
+        xs = (all_init, gal_keys, all_data, all_noise, all_presence, all_redshift)
         if n_dev > 1:
             all_positions, all_divergent = self._sharded_vmap(run_one, xs, dev_list)
         else:

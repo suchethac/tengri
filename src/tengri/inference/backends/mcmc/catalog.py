@@ -47,6 +47,7 @@ def build_catalog_mcmc_engine(
     n_leapfrog: int = 10,
     target_accept_rate: float = 0.85,
     use_dense: bool = False,
+    thread_redshift: bool = False,
 ):
     """Build a vmap-safe per-galaxy NUTS/HMC sampling callable.
 
@@ -107,7 +108,7 @@ def build_catalog_mcmc_engine(
     )
     n_chain = n_burnin + n_samples
 
-    def run_one(init_flat, gal_key, data, noise, presence):
+    def run_one(init_flat, gal_key, data, noise, presence, redshift):
         # Substitute this galaxy's data into the shared data_args template so the
         # log-posterior receives exactly the pytree it was built for — the shared
         # _jit_inputs (SSP grid, templates) stay captured, only data/noise/presence vary.
@@ -119,6 +120,12 @@ def build_catalog_mcmc_engine(
         data_args["noise_inv"] = noise_inv
         data_args["sqrt_noise_inv"] = jnp.sqrt(noise_inv)
         data_args["presence"] = presence
+        # Per-galaxy redshift override (#1337 phase 2). ``thread_redshift`` is a
+        # build-time Python bool, so the branch resolves during tracing: the
+        # ``redshift`` arg never reaches ``data_args`` for free / shared-redshift
+        # catalogs, and only a per-galaxy Fixed-z catalog threads it.
+        if thread_redshift:
+            data_args["redshift"] = redshift
 
         warmup_key, chain_key = jax.random.split(gal_key)
         chain_keys = jax.random.split(chain_key, n_chain)
