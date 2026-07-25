@@ -56,13 +56,14 @@ _EXACT_DISCS = [
     "schartmann2005",
     "adaf_lopez2024",
     "slone_netzer",
+    "relagn",
 ]
 
 # Shape depends on L_bol; float32 reference evaluation gives the wrong shape.
 _SHAPE_CLASS_XFAIL = []
 
 # Non-finite in float32 even at the reference L_bol — a distinct internal overflow.
-_GRID_CLASS_XFAIL = ["relagn", "grahsp_sbpl"]
+_GRID_CLASS_XFAIL = ["grahsp_sbpl"]
 
 
 def _sed_agn(ssp, disc, dtype):
@@ -102,9 +103,21 @@ def _sed_agn(ssp, disc, dtype):
     return np.asarray(model.predict_state(p).derived["sed_agn"])
 
 
+#: Disc blocks backed by a large HDF5 template grid. Holding the float64 and
+#: float32 copies at once (plus their compiled executables) is enough to OOM a
+#: parallel pytest worker — the RELAGN grid alone is 26 MB — so the float64 side is
+#: released before the float32 model is built.
+_LARGE_GRID_DISCS = frozenset({"relagn", "slone_netzer"})
+
+
 def _f32_matches_f64(ssp, disc):
     with jax.enable_x64(True):
         ref = _sed_agn(ssp, disc, jnp.float64)
+    if disc in _LARGE_GRID_DISCS:
+        import gc
+
+        jax.clear_caches()
+        gc.collect()
     with jax.enable_x64(False):
         f32 = _sed_agn(ssp, disc, jnp.float32)
     if not np.all(np.isfinite(f32)):

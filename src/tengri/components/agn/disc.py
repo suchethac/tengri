@@ -50,6 +50,7 @@ from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZ,
+    bolometric_integral_nu as _bolometric_integral_nu,
     planck_lnu as _planck_lnu,
     ring_area as _ring_area,
     wavelength_to_nu as _wavelength_to_nu,
@@ -1879,6 +1880,7 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
 
     def relagn_disc(
         wavelength: jnp.ndarray,
+        agn_log_lbol: float = 11.0,
         agn_log_mbh: float = 8.0,
         agn_log_mdot: float = -1.0,
         agn_astar: float = 0.0,
@@ -1891,6 +1893,9 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
         ----------
         wavelength : ndarray, shape (n_wave,)
             Rest-frame wavelength. [Å]
+        agn_log_lbol : float
+            log₁₀(L_bol / L_sun) — the normalization the template is scaled to.
+            [dimensionless]
         agn_log_mbh : float
             log₁₀(M_BH / M_sun). [dimensionless]
         agn_log_mdot : float
@@ -1909,12 +1914,40 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
         -----
         **JIT-compatible**: yes.
         **Gradient-safe**: yes — triweight kernel, C²-continuous.
+
+        **Normalization (behavior change, #1206).** The template *shape* comes from
+        (M_BH, Ṁ, a\\*); its **normalization** is set by ``agn_log_lbol``, matching
+        every other disc in the composable menu (``multicolor``, ``kubota_done``,
+        ``slone_netzer``, …). Previously the grid's own absolute normalization was
+        used and ``agn_log_lbol`` had no effect — which both surprised users who set
+        it and made the disc unusable in float32, since the grid's absolute
+        ``λL_λ(5100 Å) ≈ 2.6e44`` erg/s exceeds the float32 maximum (3.4e38).
+
+        As with ``multicolor_disc``, the bolometric renormalization divides out any
+        wavelength-independent prefactor, so ``agn_cos_inc`` (a pure ``2 cos i``
+        scaling of this grid) no longer changes the disc's normalization; viewing
+        anisotropy enters downstream through the runner's inclination handling.
         """
         point = (agn_log_mbh, agn_log_mdot, agn_astar)
         lnu_template = _interp_nd_triweight(grid_jax, axes, edges, point, scatters=scatters)
         # Interpolate grid wavelength → observation wavelength
         lnu_interp = jnp.interp(wavelength, wave_grid, lnu_template, left=0.0, right=0.0)
         # Inclination scaling from reference cos_inc = 0.5
-        return lnu_interp * (2.0 * agn_cos_inc)
+        lnu_interp = lnu_interp * (2.0 * agn_cos_inc)
+
+        # Renormalize to the requested bolometric luminosity (#1206).
+        nu = _wavelength_to_nu(wavelength)
+        l_scale = 10.0**agn_log_lbol * _LSUN_ERG
+        if wavelength.dtype == jnp.float32:
+            # Float32: the template's own bolometric integral is ~1e45 erg/s and
+            # overflows, which would flush the disc to zero. Peak-factor and
+            # regroup — ``(l_scale / hat_int) * (lnu / peak)`` is algebraically
+            # identical to ``l_scale * lnu / (peak * hat_int)``.
+            peak = jnp.max(jnp.abs(lnu_interp))
+            peak = jnp.where(peak > 0.0, peak, 1.0)
+            hat_int = _bolometric_integral_nu(lnu_interp / peak, nu, floor=1e-30)
+            return (l_scale / hat_int) * (lnu_interp / peak)
+        integral_safe = _bolometric_integral_nu(lnu_interp, nu, floor=1e-100)
+        return l_scale * lnu_interp / integral_safe
 
     return relagn_disc

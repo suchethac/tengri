@@ -670,6 +670,7 @@ def relagn_disc_block(
     disc_fn = create_relagn_disc_from_grid(_find_relagn_grid())
     L_nu = disc_fn(
         wave_aa,
+        agn_log_lbol=agn_log_lbol,
         agn_log_mbh=agn_log_mbh,
         agn_log_mdot=agn_log_mdot,
         agn_astar=agn_astar,

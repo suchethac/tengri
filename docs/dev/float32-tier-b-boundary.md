@@ -548,7 +548,7 @@ flips to an unexpected pass):
 | `multicolor`, `kubota_done`, `adaf` | **exact** | **shape-class** — L_bol-dependent shape; log-space (or L_sun-unit) internals + the `agn_log_lbol_shape` split (true L_bol for the shape, reference for the magnitude) |
 | `powerlaw`, `richards2006`, `skirtor`, `qsogen`, `schartmann2005` | **exact** | shape-invariant (evaluated at the reference, rescaled) |
 | `adaf_lopez2024` | **exact** | shape-invariant; its CIGALE piecewise power law needed the log-space rebuild (see below) |
-| `relagn` | non-finite | **architectural** — not `agn_log_lbol`-normalized (ratio 1.000/dex — it is set by M_BH/mdot). The reference-factoring cannot shrink it, and its `L_lambda` ~2.6e42 erg/s/Å inherently exceeds float32. Worse, factoring would *rescale* it by 10^34.6 — wrong even if finite. Needs the runner to carry a log10 offset alongside `L_lambda`, or relagn normalized to `agn_log_lbol`. **Architectural** |
+| `relagn` | **exact** | normalized to `agn_log_lbol` like the other eleven discs (behavior change — see below) |
 | `grahsp_sbpl` | non-finite | blocked on a **linear erg/s parameter**: `agn_grahsp_l5100` is `LogUniform(1e42, 1e47, default=1e44)` — the parameter *value itself* is `inf` in float32, so `L_lambda_unit × inf = nan`. Its auto-normalized path (`l5100=None`, tied to `agn_log_lbol`) *does* scale ×10/dex and would work; the explicit-`l5100` path cannot (its `L_lambda` ~3e41 is out of range regardless). Needs a log-space parameter — **#1206 item 3**, an API change, not a kernel fix |
 | `slone_netzer` | **exact** | was the tractable one — two silent float32 traps in its grid closure, both now fixed (see below) |
 
@@ -578,14 +578,27 @@ branch peak-factors the integrand and regroups —
 `(l_scale / hat_int) * (sed / peak)`, algebraically identical to
 `l_scale * sed / (peak * hat_int)` — with a representable floor. Exact in float64.
 
-### Why the last two cannot be fixed in the block or the runner
+### `relagn`: normalized to `agn_log_lbol` (behavior change)
 
-`relagn` and `grahsp_sbpl` are **absolutely normalized** rather than
+`relagn` and `grahsp_sbpl` were **absolutely normalized** rather than
 reference-shrinkable: their `L_lambda` in erg/s/Å is ~1e41–1e42, past float32 max
-(3.4e38). The ten working discs are representable because the AGN component's
-reference-factoring evaluates them at `L_bol = 1e10` erg/s — `relagn` ignores
+(3.4e38). The other discs are representable because the AGN component's
+reference-factoring evaluates them at `L_bol = 1e10` erg/s — `relagn` ignored
 `agn_log_lbol` entirely (ratio 1.000/dex) and `grahsp_sbpl`'s explicit
 `agn_grahsp_l5100` overrides it.
+
+**`relagn` is now normalized to `agn_log_lbol`.** Its template *shape* still comes
+from (M_BH, Ṁ, a\*); only the normalization changed, and it now matches every other
+disc in the composable menu. This also fixed a real usability bug: `agn_log_lbol`
+was a **silent no-op** for this disc (measured ratio 1.000/dex; now exactly
+10.000/dex), so a user setting it saw no effect. Consequences, all verified:
+float32 parity 6.3e-06 (disc+torus) and 4.0e-05 (with `nlr`/`blr` active — the
+configuration that defeated the hat-form attempt below); the 41 existing relagn
+tests pass unchanged, because they pin shape and finiteness rather than the
+absolute level. As with `multicolor_disc`, the bolometric renormalization divides
+out any wavelength-independent prefactor, so `agn_cos_inc` no longer scales this
+disc's normalization — viewing anisotropy enters downstream in the runner.
+**This changes float64 relagn fluxes** and was made as an explicit decision.
 
 Peak-factoring inside the runner does **not** help: the disc arrives from the
 block already `inf`, so `max(|L|)` is `inf` and `inf / inf = nan`. The overflow has
