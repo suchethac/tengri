@@ -545,10 +545,13 @@ flips to an unexpected pass):
 
 | disc | float32 status | class |
 |---|---|---|
-| `multicolor` | **exact** (this item) | — |
+| `multicolor`, `kubota_done`, `adaf` | **exact** | **shape-class** — L_bol-dependent shape; log-space (or L_sun-unit) internals + the `agn_log_lbol_shape` split (true L_bol for the shape, reference for the magnitude) |
 | `powerlaw`, `richards2006`, `skirtor`, `qsogen`, `schartmann2005` | **exact** | shape-invariant (evaluated at the reference, rescaled) |
-| `kubota_done`, `adaf` | wrong value (finite) | **shape-class** — L_bol-dependent shape; needs the same log-space + shape/norm split threaded through their (3-zone / ADAF) internals |
-| `relagn`, `slone_netzer`, `grahsp_sbpl`, `adaf_lopez2024` | non-finite | **grid/other-class** — overflow *even at the reference L_bol* (an internal grid value or per-wavelength term, not the L_bol magnitude); needs its own float32 hardening (e.g. `adaf.py` hard-codes a `dtype=float64` that truncates under pure float32) |
+| `relagn`, `slone_netzer`, `grahsp_sbpl`, `adaf_lopez2024` | non-finite | **grid/other-class** — overflow *even at the reference L_bol* (a `0*inf` in the runner / block), NOT the L_bol magnitude; four distinct grid-dependent causes (`relagn` runner:494, `slone_netzer` disc:787, `grahsp_sbpl` a grid-dependent bolometric-normalization `l5100 = target/0 → inf`, `adaf_lopez2024` `_cigale_disc_lambda`). Each needs its own float32 hardening |
 
-The multicolor and power-law discs are the science defaults, so pure-float32 AGN
-inference works today; the six above are the scoped follow-up.
+All eight **shape-class + shape-invariant** discs are exact in pure float32 —
+including the science defaults (`multicolor`, `powerlaw`) and the physical disc
+models (`kubota_done`, `adaf`). Pure-float32 AGN inference (finite `grad(nlp)`)
+runs end-to-end for them. The four grid/other-class discs are the scoped
+follow-up; each is a distinct grid-dependent overflow, pinned `xfail(strict)` in
+`test_agn_disc_float32_inventory.py`.
