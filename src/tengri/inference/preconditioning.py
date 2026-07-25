@@ -78,26 +78,41 @@ def negative_hessian_metric(
     data_args : pytree
         Observed-data tensors, passed through to ``logdensity_fn``.
     floor : float, optional
-        Lower clip applied to the metric's eigenvalues [dimensionless]. Default
+        Lower clip applied to the eigenvalue *magnitudes* [dimensionless]. Default
         :data:`PRIOR_METRIC_FLOOR` (1.0). Pass ``0.0`` to disable clipping when
         the curvature is already known to be positive definite.
 
     Returns
     -------
     metric : ndarray, shape (D, D)
-        Symmetric metric with all eigenvalues at least ``floor``.
+        Symmetric positive-definite metric, eigenvalues ``max(|lambda|, floor)``.
 
     Notes
     -----
+    Scales by the **magnitude** of the curvature, so a direction of steep *negative*
+    curvature is treated as steep rather than flat — the saddle-free Newton choice
+    [3]_. This matters whenever the expansion point is not a true stationary point: a
+    field fit whose MAP had not converged carried a ``-51`` eigenvalue, and flooring
+    that to ``+1`` left the direction mis-scaled by 51x. Using ``|lambda|`` whitens it
+    correctly. Where the point *is* stationary, all eigenvalues are positive and this
+    is identical to a plain floor.
+
     **JIT/grad/vmap-safe**: builds the dense ``(D, D)`` Hessian via
     :func:`jax.hessian` (:math:`O(D)` backward passes) and symmetrizes it, then
-    clips the eigenvalues through an :func:`jax.numpy.linalg.eigh` reconstruction.
+    rescales the eigenvalues through an :func:`jax.numpy.linalg.eigh` reconstruction.
     Intended to be called once per fit, not inside a chain.
+
+    References
+    ----------
+    .. [3] Y. N. Dauphin et al., "Identifying and attacking the saddle point problem
+       in high-dimensional non-convex optimization," NeurIPS 27 (2014).
+       arXiv:1406.2572.
     """
     hess = jax.hessian(lambda v: logdensity_fn(v, data_args))(jnp.asarray(position))
     metric = -0.5 * (hess + hess.T)
     eigenvalues, eigenvectors = jnp.linalg.eigh(metric)
-    return (eigenvectors * jnp.maximum(eigenvalues, floor)) @ eigenvectors.T
+    scale = jnp.maximum(jnp.abs(eigenvalues), floor)
+    return (eigenvectors * scale) @ eigenvectors.T
 
 
 @dataclass(frozen=True)

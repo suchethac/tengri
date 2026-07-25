@@ -430,3 +430,23 @@ class TestMcmcAutoDispatch:
                 assert "precondition" not in seen, "raytrace must not receive the flag"
         finally:
             reg._ctx_run_raytrace = original
+
+
+def test_saddle_curvature_is_whitened_by_magnitude_not_floored_to_one():
+    """At a non-stationary point, scale by |curvature| — flooring mis-scales badly.
+
+    Found in the breadth sweep: a field fit whose MAP had not converged carried five
+    negative-curvature directions with min eigenvalue -51. Flooring those to +1 left
+    them mis-scaled by 51x, which is exactly the ``stiff@MAP = 51.04`` observed. Using
+    the magnitude instead is the saddle-free Newton choice (Dauphin et al. 2014) and
+    whitens them properly: a direction with curvature -51 is *steep*, not flat.
+    """
+    metric = np.diag([-51.0, 2.0, 0.5])
+    log_p = _gaussian_logdensity(metric)
+    pc = metric_preconditioner(negative_hessian_metric(log_p, jnp.zeros(3), 0.0))
+
+    whitened = np.asarray(pc.matrix.T @ metric @ pc.matrix)
+    stiffness = float(np.max(np.abs(np.linalg.eigvalsh(0.5 * (whitened + whitened.T)))))
+    assert stiffness == pytest.approx(1.0, abs=1e-8), (
+        f"steep negative-curvature direction left at stiffness {stiffness:.2f}"
+    )
