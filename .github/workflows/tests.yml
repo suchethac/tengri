@@ -316,15 +316,50 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Per-shard worker count and step budget — the same shape #1371 gave the
+        # `coverage` job below, for the same reason and now on the same evidence.
+        #
+        # regression runs SERIAL. On main @a05ae7b5e both jobs ran the same tests
+        # at the same commit and split on `-n` alone:
+        #
+        #   coverage (regression)  -n 1, WITH --cov   40m00s  PASSED
+        #   test     (regression)  -n 2, no --cov     18m40s  RUNNER KILLED at 93%
+        #
+        # `--cov` adds 30-50% memory on top, so the serial job carried the heavier
+        # per-worker load and still finished — the second worker is what does not
+        # fit. Same host-OOM signature as always: zero FAILED markers, "runner has
+        # received a shutdown signal", and the kill at the byte-identical 93%
+        # position seen at 17m11s / 27m11s / 28m00s / 29m02s. A fixed *position*
+        # reached at wildly different speeds is a resource cliff, not a flake, and
+        # not a timeout — #1362 raised this step's cap to 50 min and it died at 18.
+        #
+        # The wall-clock bill is small, because `--dist=loadfile` pins a whole file
+        # to one worker and this shard is dominated by a few long files: the second
+        # worker mostly idles. Serial+cov (40m) against parallel-no-cov (30m) puts
+        # serial-no-cov near 30m, though that comparison is confounded by `--cov`
+        # and the budget below is sized so it does not have to be exact.
+        #
+        # INTERIM. The cure is the retention this exposes: `test_field_latents_
+        # reach_likelihood.py` peaks at 1.87 GB for one test but 5.16 GB for six
+        # (~0.66 GB/test never released). Fix that and `-n 2` should come back —
+        # revisit with a measurement, not an assumption. See #1346.
         include:
           - shard: contract
             paths: tests/contract
+            nproc: 2
+            budget: 50
           - shard: components
             paths: tests/components
+            nproc: 2
+            budget: 50
           - shard: regression
             paths: tests/regression
+            nproc: 1
+            budget: 85
           - shard: physics
             paths: tests/physics
+            nproc: 2
+            budget: 50
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -357,19 +392,27 @@ jobs:
       # + the data-only nebular/draine parity files are ignored (they skip
       # without their grids).
       #
-      # pytest-xdist parallelism is capped at `-n 2`, NOT `-n auto`. The runner
-      # is 4 vCPU / 16 GB; `-n auto` spawns 4 workers, and when several
+      # Worker count is `${{ matrix.nproc }}`, NOT `-n auto`. The runner is
+      # 4 vCPU / 16 GB; `-n auto` spawns 4 workers, and when several
       # JAX-compile-heavy tests spike (XLA compile working set + SSP grids,
       # ~4–5 GB each) on different workers near the suite tail, peak RSS blew
       # past 16 GB and the host OOM-killed the VM — surfacing as
       # "##[error]The runner has received a shutdown signal" → "operation was
       # canceled" at 85–94 %, intermittently, with zero test failures (it hit
-      # `main`, this job, and the `coverage` job below for ~2 days). `-n 2` caps
-      # peak at ~2×5 GB + base ≈ 12 GB, which fits with headroom. The OOM kills the
-      # VM before any per-test `--timeout` thread can fire, so fewer workers — not a
-      # tighter timeout — is the fix. The wall clock this cost is recovered above,
-      # by sharding (more runners) and the compile cache (the follow-up this note
-      # used to point at) — NOT by raising -n, which would just OOM again.
+      # `main`, this job, and the `coverage` job below for ~2 days). The OOM kills
+      # the VM before any per-test `--timeout` thread can fire, so fewer workers —
+      # not a tighter timeout — is the fix. The wall clock this costs is recovered
+      # above, by sharding (more runners) and the compile cache — NOT by raising
+      # -n, which would just OOM again.
+      #
+      # This note used to end "`-n 2` caps peak at ~2×5 GB + base ≈ 12 GB, which
+      # fits with headroom." That estimate is REFUTED for `regression`, which is
+      # why the matrix now sets nproc per shard: the model assumed each worker's
+      # peak is one test's peak, but memory accumulates ACROSS tests within a file
+      # (~0.66 GB/test unreleased in the worst file, 1.87 GB for one test vs
+      # 5.16 GB for six), and `--dist=loadfile` pins that whole file to one
+      # worker. The per-worker figure is therefore a per-FILE total, not a
+      # per-test one. Do not re-derive headroom from single-test peaks. See #1346.
       #
       # `--timeout=600 --timeout-method=thread` still guards the OTHER tail
       # failure mode: a single test that genuinely hangs (cold compile / deadlock)
@@ -378,7 +421,7 @@ jobs:
       # locally) instead of a silent job-timeout.
       - run: |
           pytest ${{ matrix.paths }} -q \
-            -n 2 \
+            -n ${{ matrix.nproc }} \
             --timeout=600 --timeout-method=thread \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
@@ -419,7 +462,14 @@ jobs:
         # dies — a runner-VM OOM at ~93% with zero FAILED markers, which is
         # unrelated to wall clock (seen at 27m11s, well inside the old cap).
         # See #1346 (OOM) and #1352 (imbalance).
-        timeout-minutes: 50
+        #
+        # Now per-shard (`matrix.budget`), because the shards no longer run the
+        # same way: regression went serial (see the matrix note above), so its
+        # cap is 85 to match the coverage job's proven serial budget. The other
+        # three stay at 50 and stay at -n 2. That last paragraph called this OOM
+        # untouched by the cap — correct, and it is why raising 35 -> 50 did not
+        # save main @a05ae7b5e: the shard died at 18m40s against a 50 min cap.
+        timeout-minutes: ${{ matrix.budget }}
       - uses: actions/cache/save@v4
         if: always()
         with:
