@@ -411,8 +411,10 @@ jobs:
   # the entire fast tier in ONE process under coverage instrumentation, and it does
   # not fit in any sane cap:
   #
-  #   test shards on main:  contract ~26 min + components ~11 + regression ~9 + physics ~3
-  #                         = ~48 min of work, and --cov adds a further 30-50%
+  #   test shards on main:  contract ~23 min + components ~9 + regression ~31 + physics ~3
+  #                         (run 30147377624, 2026-07-25; regression grew with the
+  #                         compile-heavy NUTS/HMC and grid-build files — #1352)
+  #                         = ~66 min of work, and --cov adds a further 30-50%
   #
   # so it needs 70-80 min in a single job. It timed out at 35 (#1153), then at 50
   # (#1156, mine), and each bump only moved the wall — main stayed red both times.
@@ -433,15 +435,33 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Per-shard worker count and step budget (same pattern as the `slow`
+        # job's per-suite budgets). regression runs SERIAL: at -n 2 its
+        # coverage job was runner-killed 3 of 3 attempts on main c36f53d80
+        # ("runner has received a shutdown signal", ~29-31 min — #1346). Two
+        # workers each carry the 2.51 GB import floor plus the grid-build
+        # peaks (#1360: 3.5 GB), and --cov adds 30-50% on top; one worker
+        # halves the resident footprint at ~2x wall — acceptable here because
+        # this job is off the PR feedback path by construction. Interim
+        # measure: #1362 (chunked fast-grid build) shrinks the underlying
+        # allocation; revisit -n 2 once it lands.
         include:
           - shard: contract
             paths: tests/contract
+            nproc: 2
+            budget: 50
           - shard: components
             paths: tests/components
+            nproc: 2
+            budget: 50
           - shard: regression
             paths: tests/regression
+            nproc: 1
+            budget: 85
           - shard: physics
             paths: tests/physics
+            nproc: 2
+            budget: 50
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -457,13 +477,13 @@ jobs:
       # to carry the whole tier.
       - run: |
           pytest ${{ matrix.paths }} -q \
-            -n 2 \
+            -n ${{ matrix.nproc }} \
             --cov=src/tengri --cov-report=xml --cov-report=term:skip-covered \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        timeout-minutes: 50
+        timeout-minutes: ${{ matrix.budget }}
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
