@@ -272,9 +272,9 @@ def preconditioned_logdensity(
 #: negligible and the benefit is universal; above it nothing has been measured.
 #:
 #: Measured on the field model (CPU, f64): the Hessian is **flat at ~2 s** from D=25 to
-#: D=521 — ``jax.hessian`` is ``jacfwd(jacrev)``, which vectorises rather than taking D
+#: D=521 — ``jax.hessian`` is ``jacfwd(jacrev)``, which vectorizes rather than taking D
 #: sequential backward passes — and ``eigh`` + Cholesky is 0.11 s with 2.2 MB of storage
-#: at D=521. Only the ``O(D^3)`` factorisation grows, so this sits an octave above the
+#: at D=521. Only the ``O(D^3)`` factorization grows, so this sits an octave above the
 #: largest configuration measured, which already covers the default ``n_grid=256``
 #: (D=265) and twice that.
 PRECONDITION_MAX_DIM: int = 1024
