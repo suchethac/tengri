@@ -536,6 +536,7 @@ def multicolor_disc_block(
     agn_a_spin: float = 0.0,
     agn_cos_inc: float = 0.86602540378443864,
     euv_tail: str | float | None = "powerlaw",
+    agn_log_lbol_shape: float | None = None,
     **_params,
 ) -> Array:
     r"""Shakura-Sunyaev multi-color thin-disc block.
@@ -580,6 +581,7 @@ def multicolor_disc_block(
         agn_a_spin=agn_a_spin,
         agn_cos_inc=agn_cos_inc,
         euv_tail=euv_tail,
+        agn_log_lbol_shape=agn_log_lbol_shape,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 

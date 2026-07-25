@@ -35,6 +35,7 @@ References
 """
 
 import functools
+import math
 from collections.abc import Callable
 
 import h5py
@@ -64,6 +65,24 @@ from tengri.utils.physics_constants import (
     M_SUN as _MSUN_G,
     SIGMA_SB as _SIGMA_SB,
     SIGMA_T as _SIGMA_T,
+)
+from tengri.utils.scale import pow10 as _pow10
+
+# log10 of the cgs constants that make the Shakura-Sunyaev disc's bolometric /
+# Eddington / accretion-rate intermediates overflow float32 (#1206). At a
+# realistic AGN luminosity the LINEAR forms — L_bol ~1e44, L_Edd ~1e46, the
+# ``t_in**4`` numerator ~1e58 erg/s — all exceed float32 max (3.4e38), yet the
+# RESULTS (mdot ~1e24 g/s, t_in ~1e5 K, lambda_Edd ~1e-2) are representable.
+# The float32 branch of ``multicolor_disc`` forms every such quantity as a log10
+# sum and materializes it only at the representable result via ``pow10``.
+_LOG10_LSUN_ERG: float = math.log10(_LSUN_ERG)
+_LOG10_C_LIGHT: float = math.log10(_C_LIGHT)
+_LOG10_MSUN_G: float = math.log10(_MSUN_G)
+_LOG10_3G: float = math.log10(3.0 * _G_GRAV)
+_LOG10_8PI_SIGMA_SB: float = math.log10(8.0 * math.pi * _SIGMA_SB)
+# log10(L_Edd) at M_BH = 1 M_sun: L_Edd = 4*pi*G*M*m_p*c/sigma_T, linear in M_BH.
+_LOG10_L_EDD_1MSUN: float = math.log10(
+    4.0 * math.pi * _G_GRAV * _MSUN_G * _M_PROTON * _C_LIGHT / _SIGMA_T
 )
 
 # ── Model 1: Simple power-law disc + UV cutoff ────────────────────
@@ -482,9 +501,20 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
     # EUV budget is bounded regardless of slope. Integrate over frequency
     # (sort ascending; nu descends as wavelength ascends).
     sort_idx = jnp.argsort(nu)
-    disc_bol = jnp.abs(jnp.trapezoid(l_nu_wien[sort_idx], nu[sort_idx]))
     shape_bol = jnp.maximum(jnp.abs(jnp.trapezoid(shape[sort_idx], nu[sort_idx])), 1e-100)
-    tail = shape * (_EUV_TAIL_FRAC * disc_bol / shape_bol)
+    if l_nu_wien.dtype == jnp.float32:
+        # Float32 (#1206): the disc bolometric integral ``trapz(l_nu_wien, nu)`` ~
+        # 1e28 erg/s/Hz over ~1e15 Hz is ~1e43 erg/s — past float32 max (3.4e38).
+        # Peak-factor it (integrate the O(1) residual, carry the peak) and group
+        # the small factors (``frac · disc_bol/shape_bol`` ~ few·1e-4) before the
+        # ~1e28 peak so no out-of-range product materializes.
+        _peak = jnp.max(jnp.abs(l_nu_wien))
+        _peak = jnp.where(_peak > 0.0, _peak, 1.0)
+        _disc_bol_hat = jnp.abs(jnp.trapezoid(l_nu_wien[sort_idx] / _peak, nu[sort_idx]))
+        tail = shape * ((_EUV_TAIL_FRAC * _disc_bol_hat / shape_bol) * _peak)
+    else:
+        disc_bol = jnp.abs(jnp.trapezoid(l_nu_wien[sort_idx], nu[sort_idx]))
+        tail = shape * (_EUV_TAIL_FRAC * disc_bol / shape_bol)
     return jnp.maximum(l_nu_wien, tail)
 
 
@@ -498,6 +528,7 @@ def multicolor_disc(
     agn_cos_inc: float = 0.5,
     n_radii: int = 50,
     euv_tail: str | float | None = "powerlaw",
+    agn_log_lbol_shape: float | None = None,
     **_kwargs,
 ) -> jnp.ndarray:
     """Shakura-Sunyaev thin accretion disc with multi-color blackbody emission.
@@ -620,7 +651,6 @@ def multicolor_disc(
     # For a=0 (Schwarzschild): r_isco=6, eta=0.057
     # For a=0.998 (maximal spin): r_isco~1.24, eta~0.32
     eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco))
-    l_edd = _eddington_luminosity(agn_log_mbh)
     # E fix (#846): agn_log_lbol is THE luminosity knob; the Eddington ratio is
     # DERIVED from it (lambda_Edd = L_bol / L_Edd, matching RELAGN's
     # mdot = L_bol/L_edd, relagn.py:288,330), so the disc shape (T_in, r_out) is
@@ -628,21 +658,56 @@ def multicolor_disc(
     # from agn_log_ledd and then rescaled to agn_log_lbol — a decoupling that
     # left T_in / r_out corresponding to the wrong luminosity. agn_log_ledd is
     # now ignored here (a build-time warning fires if a user sets/frees it).
-    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
+    #
+    # Shape vs normalization luminosity (#1206). The disc SHAPE (T_in, r_out,
+    # lambda_Edd) is set by ``_log_lbol_shape``; the output MAGNITUDE by
+    # ``agn_log_lbol`` (the renorm target below). They coincide by default
+    # (``agn_log_lbol_shape=None``), which is the float64 path. Only float32
+    # separates them — the AGN component evaluates the SHAPE at the true L_bol
+    # but normalizes MAGNITUDE to a low reference so the runner's ~1e40 L_lambda
+    # arithmetic stays in float32 range; the true magnitude is re-applied
+    # downstream. See the float32 branch below.
+    _log_lbol_shape = agn_log_lbol if agn_log_lbol_shape is None else agn_log_lbol_shape
 
     # Outer disc radius: Laor & Netzer (1989) self-gravity (Toomre) radius.
     # Beyond r_sg the disc fragments rather than accretes; this is the
     # physically motivated outer boundary used by qsosed (Quera-Bofarull).
     # r_sg ~ 2150 * (alpha/0.1)^{2/9} * lambda_Edd^{4/9} * (M/1e8)^{-2/9} R_g.
-    l_edd_ratio = jnp.clip(l_bol_erg / l_edd, 1e-10, 1.0)  # derived: lambda_Edd
+    if wavelength.dtype == jnp.float32:
+        # Log-space so the ~1e44 L_bol, ~1e46 L_Edd and ~1e58 erg/s ``t_in**4``
+        # numerator never materialize (float32 max 3.4e38). The RESULTS —
+        # lambda_Edd ~1e-2, mdot ~1e24 g/s, t_in ~1e5 K — are all representable.
+        _log_l_bol_erg = _log_lbol_shape + _LOG10_LSUN_ERG
+        _log_l_edd = _LOG10_L_EDD_1MSUN + agn_log_mbh
+        l_edd_ratio = jnp.clip(_pow10(_log_l_bol_erg - _log_l_edd), 1e-10, 1.0)
+        _log_mdot = _log_l_bol_erg - jnp.log10(eta) - 2.0 * _LOG10_C_LIGHT
+        mdot = _pow10(_log_mdot)  # [g s^-1]
+        _log_t_in4 = (
+            _LOG10_3G
+            + agn_log_mbh
+            + _LOG10_MSUN_G
+            + _log_mdot
+            - _LOG10_8PI_SIGMA_SB
+            - 3.0 * jnp.log10(r_in)
+        )
+        t_in = _pow10(0.25 * _log_t_in4)  # [K]
+    else:
+        l_bol_erg = 10.0**_log_lbol_shape * _LSUN_ERG
+        l_edd = _eddington_luminosity(agn_log_mbh)
+        l_edd_ratio = jnp.clip(l_bol_erg / l_edd, 1e-10, 1.0)  # derived: lambda_Edd
+        mdot = l_bol_erg / (eta * _C_LIGHT**2)  # [g s^-1]
+        # Inner temperature: T_in = (3 * G * M * Mdot / (8*pi*sigma_SB * r_in^3))^(1/4)
+        t_in = (
+            3.0
+            * _G_GRAV
+            * 10.0**agn_log_mbh
+            * _MSUN_G
+            * mdot
+            / (8.0 * jnp.pi * _SIGMA_SB * r_in**3)
+        ) ** 0.25
+
     r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
     r_out = jnp.maximum(r_sg_rg, r_isco * 10.0) * r_g  # at least 10 r_isco
-    mdot = l_bol_erg / (eta * _C_LIGHT**2)  # [g s^-1]
-
-    # Inner temperature: T_in = (3 * G * M * Mdot / (8*pi*sigma_SB * r_in^3))^(1/4)
-    t_in = (
-        3.0 * _G_GRAV * 10.0**agn_log_mbh * _MSUN_G * mdot / (8.0 * jnp.pi * _SIGMA_SB * r_in**3)
-    ) ** 0.25
 
     # Radial grid (logarithmic spacing)
     log_r_min = jnp.log10(r_in)
@@ -676,15 +741,30 @@ def multicolor_disc(
     # a CIGALE-like rise below ~100 A; "wien" recovers the bare thin disc.
     l_nu_intrinsic = _apply_euv_tail(wavelength, nu, l_nu_intrinsic, euv_tail)
 
-    # Renormalize to requested L_bol * agn_frac
-    l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac
+    # Renormalize to requested L_bol * agn_frac (the MAGNITUDE is set by
+    # ``agn_log_lbol`` — the reference on the float32 path — NOT the shape
+    # luminosity above).
     # Sort by ascending frequency before integrating (nu descends when wave ascends).
     # Using jnp.abs() on a descending-x trapezoid is brittle — sort explicitly.
     _nu = _wavelength_to_nu(wavelength)
     _sort_idx = jnp.argsort(_nu)
-    l_nu_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx], _nu[_sort_idx])
-    l_nu_total_safe = jnp.maximum(jnp.abs(l_nu_total), 1e-100)
-    scale = l_bol_requested / l_nu_total_safe
+    if wavelength.dtype == jnp.float32:
+        # Log-space renorm: ``l_bol_requested`` ~1e44 and the integral
+        # ``l_nu_total`` (l_nu_intrinsic ~1e28 over ~1e15 Hz → ~1e43) both
+        # overflow float32; only their ratio (``scale`` ~1e-33 when normalizing
+        # a true-shape disc to a 1e10 erg/s reference) is needed. Peak-factor the
+        # integrand so the trapezoid stays in range, and carry the peak in log10.
+        _log_l_bol_req = agn_log_lbol + _LOG10_LSUN_ERG + jnp.log10(agn_frac)
+        _peak = jnp.max(jnp.abs(l_nu_intrinsic))
+        _peak = jnp.where(_peak > 0.0, _peak, 1.0)
+        _hat_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx] / _peak, _nu[_sort_idx])
+        _log_l_nu_total = jnp.log10(_peak) + jnp.log10(jnp.maximum(jnp.abs(_hat_total), 1e-100))
+        scale = _pow10(_log_l_bol_req - _log_l_nu_total)
+    else:
+        l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac
+        l_nu_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx], _nu[_sort_idx])
+        l_nu_total_safe = jnp.maximum(jnp.abs(l_nu_total), 1e-100)
+        scale = l_bol_requested / l_nu_total_safe
 
     return l_nu_intrinsic * scale
 
