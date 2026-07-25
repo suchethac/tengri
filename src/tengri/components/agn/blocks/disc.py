@@ -98,6 +98,7 @@ def adaf_disc_block(
     agn_adaf_alpha: float = 0.3,
     agn_adaf_beta: float = 0.5,
     agn_adaf_delta: float = 0.1,
+    agn_log_lbol_shape: float | None = None,
     **_params,
 ) -> Array:
     r"""Advection-dominated accretion flow (ADAF) — faithful Mahadevan 1997.
@@ -153,6 +154,7 @@ def adaf_disc_block(
         agn_adaf_alpha=agn_adaf_alpha,
         agn_adaf_beta=agn_adaf_beta,
         agn_adaf_delta=agn_adaf_delta,
+        agn_log_lbol_shape=agn_log_lbol_shape,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 

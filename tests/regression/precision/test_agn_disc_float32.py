@@ -116,6 +116,46 @@ def test_kubota_done_disc_finite_and_matches_f64_in_float32():
     )
 
 
+def _adaf(dtype):
+    from tengri.components.agn.adaf import adaf_spectrum
+
+    w = jnp.asarray(_WAVE, dtype=dtype)
+    return np.asarray(
+        adaf_spectrum(
+            w,
+            agn_log_lbol=jnp.asarray(11.0, dtype=dtype),
+            agn_frac=jnp.asarray(1.0, dtype=dtype),
+            agn_log_mbh=jnp.asarray(8.0, dtype=dtype),
+        )
+    )
+
+
+def test_adaf_spectrum_finite_and_matches_f64_in_float32():
+    """The Mahadevan ADAF spectrum is finite and float64-accurate in float32.
+
+    ADAF works in dimensionless units (``m``, ``mdot``), so its only float32
+    hazards are the ~1e44 erg/s ``l_bol_erg`` and the ~3e46 ``coeff`` in the mdot
+    inversion, and the ~1e43 erg/s spectral integral in the renormalization — all
+    worked in L_sun so only the ratios (mdot ~1e-2, the normalized shape) form.
+    """
+    with jax.enable_x64(True):
+        ref = _adaf(jnp.float64)
+    with jax.enable_x64(False):
+        f32 = _adaf(jnp.float32)
+    assert f32.dtype == jnp.float32
+    assert np.all(np.isfinite(f32)), (
+        "adaf_spectrum is non-finite in pure float32 — the mdot-inversion coeff "
+        "(~3e46) / l_bol_erg (~1e44) or the ~1e43 renorm integral overflowed"
+    )
+    peak = np.abs(ref).max()
+    live = np.abs(ref) > 1e-6 * peak
+    rel = np.abs(f32[live] - ref[live]) / np.abs(ref[live])
+    assert rel.max() < 1e-3, (
+        f"adaf_spectrum float32 vs float64 max rel = {rel.max():.2e} — larger than "
+        "float32 rounding, so the L_sun mdot/renorm bookkeeping diverges"
+    )
+
+
 def _composable_intrinsics(ssp, dtype):
     """Return ``(L_4400, L_2500, sed_agn_peak)`` for a multicolor-disc AGN."""
     obs = Observation(photometry=Photometry.from_names(["sdss_r", "wise_w3", "wise_w4"]))

@@ -3,19 +3,21 @@ r"""Float32 status of every composable-AGN disc block (#1206).
 
 A durable inventory: for each registered disc block, build a composable AGN
 (disc + SKIRTOR torus, CIGALE-joint norm) and compare ``sed_agn`` between
-float64 and pure float32. Two failure classes exist beyond the exact discs:
+float64 and pure float32.
 
-* **Shape-class** (``kubota_done``, ``adaf``): the disc *shape* depends on L_bol
-  (temperature), so the float32 path — which evaluates the runner at a low
-  reference L_bol to keep the ~1e40 ``L_lambda`` arithmetic in range — gives the
-  wrong (cold) shape. ``multicolor`` was in this class and is now fixed (it takes
-  the true L_bol for its shape via ``agn_log_lbol_shape`` while normalizing to
-  the reference); ``kubota_done`` / ``adaf`` need the same log-space +
-  shape/normalization split threaded through their (more involved) internals.
-* **Grid/other-class** (``relagn``, ``slone_netzer``, ``grahsp_sbpl``,
-  ``adaf_lopez2024``): non-finite in float32 *even at the reference L_bol*, so
-  the overflow is NOT the L_bol magnitude — it is an internal grid value or a
-  per-wavelength term that needs its own float32 hardening.
+The **shape-class** discs — whose spectral shape depends on L_bol (temperature),
+so the float32 path must take the TRUE L_bol for the shape while normalizing
+MAGNITUDE to a reference — are all fixed: ``multicolor``, ``kubota_done`` and
+``adaf`` carry log-space (or L_sun-unit) internals plus the
+``agn_log_lbol_shape`` split. The shape-invariant discs (``powerlaw``,
+``richards2006``, ``skirtor``, ``qsogen``, ``schartmann2005``) are exact under
+the plain reference-evaluation + rescale.
+
+One float32 failure class remains — **grid/other-class** (``relagn``,
+``slone_netzer``, ``grahsp_sbpl``, ``adaf_lopez2024``): non-finite in float32
+*even at the reference L_bol*, so the overflow is NOT the L_bol magnitude — it is
+an internal grid value or a per-wavelength term (a ``0 * inf`` in the runner)
+needing its own float32 hardening.
 
 This test pins the exact discs (regression guard) and ``xfail``\ s the rest
 (progress tracker: fixing one turns its ``xfail`` into an unexpected pass). It is
@@ -37,6 +39,7 @@ pytestmark = pytest.mark.regression_bug
 _EXACT_DISCS = [
     "multicolor",
     "kubota_done",
+    "adaf",
     "powerlaw",
     "richards2006",
     "skirtor",
@@ -45,7 +48,7 @@ _EXACT_DISCS = [
 ]
 
 # Shape depends on L_bol; float32 reference evaluation gives the wrong shape.
-_SHAPE_CLASS_XFAIL = ["adaf"]
+_SHAPE_CLASS_XFAIL = []
 
 # Non-finite in float32 even at the reference L_bol — a distinct internal overflow.
 _GRID_CLASS_XFAIL = ["relagn", "slone_netzer", "grahsp_sbpl", "adaf_lopez2024"]
