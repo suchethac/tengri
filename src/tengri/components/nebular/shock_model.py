@@ -166,15 +166,46 @@ class ShockNebular(SEDModelComponent):
         """
         nu = C_AA / wave
 
+        # Float32 (#1206): the shock Hα luminosity is ~1e41 erg/s — ``inf`` in
+        # float32 (max 3.4e38) — so ``l_shock_halpha * <line profile>`` becomes
+        # ``inf * 0 = nan`` even though the resulting SED (~1e26 erg/s/Hz) is
+        # perfectly representable. The shock SED is *exactly* linear in
+        # ``l_shock_halpha`` (verified: ×10 per dex), so on the float32 path we
+        # evaluate the shape at unit Hα and re-apply the true luminosity as a
+        # log10 offset. Float64 keeps the linear expressions, bit-identical.
+        # NB: gate on ``sed_in`` — the SED actually being accumulated — not on
+        # ``wave``, which arrives as float64 even when the pipeline runs in
+        # float32. ``sed_in`` is float32 for BOTH pure float32 and the
+        # mixed-precision ``forward_dtype="float32"`` mode, which is exactly the
+        # set of cases that need the log-space rescale.
+        _f32 = jnp.asarray(sed_in).dtype == jnp.float32
+
         if self.config.norm == "lhalpha":
-            l_shock_halpha = jnp.power(10.0, p["log_lhalpha"])
+            _log_l_shock_halpha = jnp.asarray(p["log_lhalpha"])
+            l_shock_halpha = jnp.asarray(1.0) if _f32 else jnp.power(10.0, p["log_lhalpha"])
         else:
             # Relative: fraction of the galaxy's approximate Hα. Same
             # order-of-magnitude proxy (L(Hα) ~ 1e-3 L_bol) as the legacy
             # ``shock_emission`` helper, so the two paths agree bit-for-bit.
-            l_bol = -jnp.trapezoid(sed_in, nu)
-            l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
-            l_shock_halpha = p["frac"] * l_halpha_approx
+            if _f32:
+                # ``l_bol`` ~1e44 erg/s overflows too: peak-factor the integrand
+                # so only the O(1) residual is integrated, and carry the peak in
+                # log10 along with the 1e-3 proxy and the user's fraction.
+                _peak = jnp.max(jnp.abs(sed_in))
+                _peak = jnp.where(_peak > 0.0, _peak, 1.0)
+                _hat_l_bol = -jnp.trapezoid(sed_in / _peak, nu)
+                _log_l_shock_halpha = (
+                    jnp.log10(_peak)
+                    + jnp.log10(jnp.maximum(_hat_l_bol, 1e-30))
+                    - 3.0
+                    + jnp.log10(jnp.maximum(p["frac"], 1e-30))
+                )
+                l_shock_halpha = jnp.asarray(1.0)
+            else:
+                l_bol = -jnp.trapezoid(sed_in, nu)
+                l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
+                l_shock_halpha = p["frac"] * l_halpha_approx
+                _log_l_shock_halpha = None
 
         shock_sed = compute_shock_sed(
             wave,
@@ -185,4 +216,8 @@ class ShockNebular(SEDModelComponent):
             shock_abundance=self.config.abundance,
             shock_component=self.config.component,
         )
+        if _f32:
+            from tengri.utils.scale import apply_log10_scale
+
+            shock_sed = apply_log10_scale(shock_sed, _log_l_shock_halpha)
         return sed_in + shock_sed, {"sed_shock": shock_sed}

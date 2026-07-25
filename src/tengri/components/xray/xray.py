@@ -32,6 +32,7 @@ from tengri.utils.physics_constants import (
     KEV_TO_ERG as _KEV_TO_ERG,
     KEV_TO_HZ as _KEV_TO_HZ,
 )
+from tengri.utils.scale import pow10 as _pow10
 
 # Yang+2020 reference inclination for the AGN corona. The α_ox(L_2500)
 # relations predict the L_2keV seen at 30°; ``xray_anisotropy`` satisfies
@@ -534,7 +535,6 @@ def xray_xrb_terms(
         - 1833.80 * metallicity_z**3
         + 1968.33 * metallicity_z**4
     )
-    L_hmxb_ref = 10.0**log_l_hmxb_per_sfr * sfr * 10.0**log_L_hmxb_offset
 
     # Lehmer+2014 / Yang+22 age quartic for LMXB (yang20.py:216–224).
     # Yang+22 normalizes *per 1e10 M_sun*, not per M_sun:
@@ -550,7 +550,6 @@ def xray_xrb_terms(
     log_l_lmxb_per_1e10 = (
         40.276 - 1.503 * log_t - 0.423 * log_t**2 + 0.425 * log_t**3 + 0.136 * log_t**4
     )
-    L_lmxb_ref = 10.0**log_l_lmxb_per_1e10 * (stellar_mass / 1.0e10) * 10.0**log_L_lmxb_offset
 
     # Power-law with exponential cutoff: L_nu ∝ (E/E_ref)^{-Γ+1} * exp(-E/E_cut)
     # Normalize by integrating the spectral shape over the 2-10 keV reference band
@@ -569,8 +568,28 @@ def xray_xrb_terms(
     band_int_hmxb = jnp.maximum(jnp.trapezoid(spec_hmxb_fine, nu_fine), 1e-60)
     band_int_lmxb = jnp.maximum(jnp.trapezoid(spec_lmxb_fine, nu_fine), 1e-60)
 
-    L_nu_hmxb = L_hmxb_ref / band_int_hmxb * spec_hmxb
-    L_nu_lmxb = L_lmxb_ref / band_int_lmxb * spec_lmxb
+    # Float32 (#1206): the XRB normalizations ``10**40.28`` (HMXB) and
+    # ``10**40.276`` (LMXB) already exceed the float32 maximum (3.4e38) before
+    # SFR / M_star are applied, so ``L_*_ref`` is ``inf`` and ``inf * spec`` is
+    # ``nan`` wherever the spectrum underflows — although the result ~1e22
+    # erg/s/Hz is representable. Fold the band integral into the exponent so no
+    # out-of-range intermediate forms. Float64 keeps the literal expressions.
+    if wavelength.dtype == jnp.float32:
+        L_nu_hmxb = (
+            _pow10(log_l_hmxb_per_sfr + log_L_hmxb_offset - jnp.log10(band_int_hmxb))
+            * sfr
+            * spec_hmxb
+        )
+        L_nu_lmxb = (
+            _pow10(log_l_lmxb_per_1e10 + log_L_lmxb_offset - jnp.log10(band_int_lmxb))
+            * (stellar_mass / 1.0e10)
+            * spec_lmxb
+        )
+    else:
+        L_hmxb_ref = 10.0**log_l_hmxb_per_sfr * sfr * 10.0**log_L_hmxb_offset
+        L_lmxb_ref = 10.0**log_l_lmxb_per_1e10 * (stellar_mass / 1.0e10) * 10.0**log_L_lmxb_offset
+        L_nu_hmxb = L_hmxb_ref / band_int_hmxb * spec_hmxb
+        L_nu_lmxb = L_lmxb_ref / band_int_lmxb * spec_lmxb
 
     # X-ray only (E > 0.1 keV = lambda < 124 A); mask each term independently
     xray_mask = wavelength < 124.0
@@ -897,7 +916,6 @@ def xray_hotgas(
     # L_0.5-2keV = 8.3e31 W * SFR. In erg/s: 8.3e38 = 10^38.919.
     # (yang20.py:204 shows L_hotgas_0p5to2keV = 8.3e31 * sfr)
     log_l_hotgas_per_sfr = 38.919
-    L_hotgas_ref = 10.0**log_l_hotgas_per_sfr * sfr
 
     # Thermal bremsstrahlung spectrum with exponential cutoff
     E_ref = 1.0  # keV (characteristic hot-gas energy)
@@ -909,7 +927,17 @@ def xray_hotgas(
     spec_fine = (E_fine / E_ref) ** (-gamma + 1) * jnp.exp(-E_fine / E_cut)
     band_int = jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), 1e-60)
 
-    L_nu = L_hotgas_ref / band_int * spec
+    # Float32 (#1206): ``10**38.919 = 8.3e38`` already exceeds the float32
+    # maximum (3.4e38) BEFORE ``sfr`` is applied, so ``L_hotgas_ref`` is ``inf``
+    # and ``inf * spec`` is ``nan`` wherever the spectrum underflows to zero —
+    # even though the result ``L_nu`` (~1e26 erg/s/Hz) is perfectly
+    # representable. Divide the constant by the band integral in log space so no
+    # out-of-range intermediate forms. Float64 keeps the literal expression.
+    if wavelength.dtype == jnp.float32:
+        L_nu = _pow10(log_l_hotgas_per_sfr - jnp.log10(band_int)) * sfr * spec
+    else:
+        L_hotgas_ref = 10.0**log_l_hotgas_per_sfr * sfr
+        L_nu = L_hotgas_ref / band_int * spec
 
     # Soft X-ray only (0.5-2 keV => 6-124 A)
     # but allow slightly beyond for smoothness
