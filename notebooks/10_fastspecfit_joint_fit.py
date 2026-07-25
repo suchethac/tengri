@@ -278,11 +278,13 @@ def timed_map(model, label):
     model.fit(flux_phot, n_phot, data_type="photometry", **MAP_KW)  # pays the JIT compile
     cold = time.perf_counter() - t0
     t0 = time.perf_counter()
-    # The compile cache is model-keyed, so a second fit on the same model reuses it.
+    # A second fit re-traces the step, so its wall time is ~= the first (see #1350:
+    # each fit currently clears the JAX caches, which is why the compile is not
+    # reused). The number that isolates the physics is post.wall_time_s below.
     post = model.fit(flux_phot, n_phot, data_type="photometry", **MAP_KW)
     warm = time.perf_counter() - t0
     loop = post.wall_time_s  # the compiled optimization loop, compile excluded
-    print(f"  {label:22s} run() wall {warm:5.2f}s   compiled step {loop:5.2f}s")
+    print(f"  {label:22s} fit() wall {warm:5.2f}s   compiled step {loop:5.2f}s")
     return post, cold, warm, loop
 
 
@@ -293,7 +295,7 @@ print(
     f"\n  compiled-step speedup: {loop_e / loop_f:.1f}x   (fast {loop_f * 1e3:.0f} ms vs exact {loop_e * 1e3:.0f} ms of compute)"
 )
 print(
-    f"  run() wall is ~{warm_f:.1f}s on either path — that is per-call JIT compile, not the fit."
+    f"  fit() wall is ~{warm_f:.1f}s on either path — that is per-call JIT compile, not the fit."
 )
 
 # %% [markdown]
@@ -590,7 +592,7 @@ plt.show()
 # %% [markdown]
 # ## Measured times, together
 #
-# Two columns, because they answer different questions. **`run() wall`** is the
+# Two columns, because they answer different questions. **`fit() wall`** is the
 # single-galaxy interactive cost — dominated by the per-call JIT compile, which
 # is why exact and fast are closer here than the compute alone would suggest.
 # **`compiled step`** is the optimization once compiled: the marginal per-galaxy
@@ -598,12 +600,12 @@ plt.show()
 # where the look-up table earns its keep.
 
 # %%
-print(f"{'fit':<34}{'run() wall':>13}{'compiled step':>15}")
+print(f"{'fit':<34}{'fit() wall':>13}{'compiled step':>15}")
 print("-" * 62)
 print(f"{'MAP, exact wave grid':<34}{warm_e:>10.2f} s{loop_e:>12.2f} s")
 print(f"{'MAP, WavePrecomp+FeaturePrecomp':<34}{warm_f:>10.2f} s{loop_f:>12.2f} s")
 print(
-    f"\nCompiled-step speedup: {loop_e / loop_f:.1f}x. The run() wall (~{warm_f:.0f}s) is per-call JIT"
+    f"\nCompiled-step speedup: {loop_e / loop_f:.1f}x. The fit() wall (~{warm_f:.0f}s) is per-call JIT"
 )
 print("compile, not the fit — a catalog amortizes it once with fit_batch and pays only the")
 print("compiled step per galaxy. The FeaturePrecomp line grid is likewise a one-time build")
