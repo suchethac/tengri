@@ -21,7 +21,7 @@ size on a small grid, which exercises the same multi-chunk concatenation path.
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, SEDModel, Uniform
+from tengri import FIXED, FREE, SEDModel, Uniform, WavePrecomp
 from tengri.components.nebular import nebular_grid_precompute as ngp
 
 pytestmark = pytest.mark.regression_bug
@@ -81,6 +81,41 @@ class TestChunkingDoesNotChangeTheGrid:
         assert one_shot.axis_names == chunked.axis_names
         for name, x, y in zip(one_shot.axis_names, one_shot.axes, chunked.axes):
             assert np.array_equal(np.asarray(x), np.asarray(y)), f"axis {name} changed"
+
+    def test_chunking_also_holds_for_the_photometry_channel(
+        self, ssp_data_fsps, synthetic_tophat_obs, monkeypatch
+    ):
+        """The tuple branch of ``_in_chunks`` has its own concatenation.
+
+        With ``WavePrecomp`` the build returns (line, phot) per node and takes a
+        different reassembly path than the line-only case above. A bug there
+        would scramble ``log_phot_per_qh`` — the table
+        ``predict_photometry`` actually consumes — while every line assertion
+        above still passed.
+        """
+        model = SEDModel.build(
+            ssp_data=ssp_data_fsps,
+            observation=synthetic_tophat_obs,
+            sfh={"type": "dpl", "all_params": FREE},
+            dust={"type": "none"},
+            redshift=0.05,
+            neb={"type": "cue", "all_params": FIXED, "logU": Uniform(-3.5, -1.5)},
+            approx=WavePrecomp(),
+        )
+        one_shot = _build(model, 10**9, monkeypatch)
+        chunked = _build(model, 3, monkeypatch)
+
+        assert one_shot.log_phot_per_qh is not None, (
+            "probe setup failed: no photometry channel, so the tuple branch of "
+            "_in_chunks was never exercised"
+        )
+        a = np.asarray(one_shot.log_phot_per_qh, dtype=np.float64)
+        b = np.asarray(chunked.log_phot_per_qh, dtype=np.float64)
+        assert a.shape == b.shape, f"chunking changed the phot table shape: {a.shape} vs {b.shape}"
+        assert np.allclose(a, b, rtol=1e-12, atol=0.0), (
+            f"chunked phot grid differs by {np.max(np.abs(b - a)):.3e} in log10 — "
+            "the tuple branch is not reassembling the nodes in grid order"
+        )
 
     def test_small_grids_take_the_single_call_path(self, cue_model, monkeypatch):
         """A grid at or below the chunk size must be untouched by this change.
