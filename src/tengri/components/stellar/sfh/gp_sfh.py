@@ -247,10 +247,16 @@ def drw_innovations_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
         \qquad \rho_i = \exp(-\Delta t_i / \tau),
 
     with :math:`\mathrm{var} = (\sigma \ln 10)^2`, physical times
-    :math:`t_i = 10^{u_i}` from the (ascending) log-age grid, and step gaps
-    :math:`\Delta t_i = t_i - t_{i-1} \ge 0`. Because a DRW is exactly Markov, this
+    :math:`t_i = 10^{u_i}` from the log-age grid, and step gaps
+    :math:`\Delta t_i = |t_i - t_{i-1}| \ge 0`. Because a DRW is exactly Markov, this
     recursion reproduces :math:`K_{ij} = \mathrm{var}\,\exp(-|t_i-t_j|/\tau)` to
     machine precision.
+
+    The gaps are taken as *magnitudes*, so the grid may run in either direction: a
+    DRW kernel depends only on :math:`|t_i - t_j|`, and along any monotone sequence
+    the consecutive :math:`|\Delta t|` telescope to exactly that. A descending grid
+    therefore yields a valid square root of the same :math:`K`, transposed onto the
+    reversed node order.
 
     **It is the same square root, not an alternative one.** Unrolling the recursion
     gives :math:`s = M \xi` with :math:`M` lower-triangular and positive on the
@@ -281,7 +287,9 @@ def drw_innovations_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
     psd_tau_yr : float
         Physical DRW decorrelation timescale [yr].
     log_age_grid : array_like, shape (n,)
-        ``log10(age/yr)`` grid, ascending, the SFH is represented on.
+        ``log10(age/yr)`` grid the SFH is represented on. Monotone — ascending is
+        canonical, descending is equally valid (see above). A **non-monotone** grid
+        has no DRW square root and the result is meaningless, though bounded.
 
     Returns
     -------
@@ -303,8 +311,13 @@ def drw_innovations_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
     resolution is unrepresentable there, matching :func:`drw_linear_gp_from_xi`.
 
     The innovation scale carries a ``clip(1 - rho**2, 0, None)`` floor so float
-    round-off cannot drive the argument of the square root slightly negative; the
-    grid is strictly ascending so :math:`1 - \rho_i^2 > 0` analytically.
+    round-off cannot drive the argument of the square root slightly negative. That
+    floor is safe **only because** :math:`\Delta t_i` is a magnitude, which forces
+    :math:`\rho_i \le 1` analytically. Computing the gaps as a signed
+    :math:`t_i - t_{i-1}` instead makes the clip a guard that fails open: a
+    descending grid gives :math:`\rho_i > 1`, the clip converts the resulting
+    ``NaN`` into ``innov = 0``, and the recursion grows geometrically to a finite,
+    unflagged :math:`\sim\!10^{17}\sigma` (#1370).
 
     References
     ----------
@@ -318,9 +331,19 @@ def drw_innovations_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
     var = (jnp.asarray(psd_sigma_dex) * ln10) ** 2
     sigma_s = jnp.sqrt(var)
 
-    # Per-step correlation and fresh-innovation scale on the (ascending) grid.
-    dt = jnp.diff(t)
+    # Per-step correlation and fresh-innovation scale.
+    #
+    # ``abs`` is load-bearing, not defensive (#1370). On a descending grid
+    # ``diff(t) < 0``, so ``rho > 1`` and ``1 - rho**2 < 0`` — and the clip below
+    # would turn the would-be-loud ``sqrt(negative) = NaN`` into ``innov = 0``,
+    # leaving ``s_i = rho_i s_{i-1}`` with ``rho > 1``: silent exponential growth
+    # (measured at 2.1e17 sigma_s, finite, no warning). Taking the magnitude makes
+    # any *monotone* grid a valid square root of the same K instead, because the
+    # DRW kernel depends on |t_i - t_j| and consecutive |dt| telescope to it.
+    dt = jnp.abs(jnp.diff(t))
     rho = jnp.exp(-dt / jnp.asarray(psd_tau_yr))
+    # With dt >= 0 above, rho <= 1 analytically; the clip now guards only float
+    # round-off at rho -> 1, which is what it was always documented to do.
     innov = sigma_s * jnp.sqrt(jnp.clip(1.0 - rho**2, 0.0, None))
 
     s0 = sigma_s * xi[0]
