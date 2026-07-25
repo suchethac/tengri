@@ -43,11 +43,11 @@ class TestKubotaDoneFullAgn:
         assert callable(fn)
 
     def test_agn_frac_scales_linearly(self, wavelength):
-        """agn_frac multiplies the whole SED linearly."""
+        """agn_lum_ratio multiplies the whole SED linearly."""
         from tengri.components.agn.unified import kubota_done_full_agn
 
-        l1 = kubota_done_full_agn(wavelength, agn_log_lbol=44.0, agn_frac=0.1)
-        l2 = kubota_done_full_agn(wavelength, agn_log_lbol=44.0, agn_frac=0.2)
+        l1 = kubota_done_full_agn(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.1)
+        l2 = kubota_done_full_agn(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.2)
         significant = l1 > 1e-50
         assert jnp.any(significant), "No significant SED values found"
         ratio = l2[significant] / l1[significant]
@@ -69,7 +69,7 @@ class TestKubotaDoneFullAgn:
         l_nu = kubota_done_full_agn(
             wavelength,
             agn_log_lbol=44.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_f_hard=0.1,
             agn_torus_frac=0.0,
         )
@@ -88,10 +88,10 @@ class TestKubotaDoneFullAgn:
         # which now clips at the Eddington limit under the luminosity-first
         # parameterization (ADR-0020) and saturates the f_hard effect.
         l_no_corona = kubota_done_full_agn(
-            wavelength, agn_log_lbol=12.0, agn_frac=1.0, agn_f_hard=0.0, agn_torus_frac=0.0
+            wavelength, agn_log_lbol=12.0, agn_lum_ratio=1.0, agn_f_hard=0.0, agn_torus_frac=0.0
         )
         l_corona = kubota_done_full_agn(
-            wavelength, agn_log_lbol=12.0, agn_frac=1.0, agn_f_hard=0.1, agn_torus_frac=0.0
+            wavelength, agn_log_lbol=12.0, agn_lum_ratio=1.0, agn_f_hard=0.1, agn_torus_frac=0.0
         )
         # The SEDs must differ somewhere (not identical arrays)
         assert not jnp.allclose(l_corona, l_no_corona, rtol=1e-6)

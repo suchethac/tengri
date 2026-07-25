@@ -379,7 +379,7 @@ def evaluate_grahsp_agn(
 def compute_grahsp_sed(
     wavelength: Array,
     agn_log_lbol: float = 45.0,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_grahsp_l5100: float | None = None,
     agn_grahsp_uvslope: float = _DEFAULT_UVSLOPE,
     agn_grahsp_plslope: float = _DEFAULT_PLSLOPE,
@@ -416,7 +416,7 @@ def compute_grahsp_sed(
     Mirrors the signature contract of other registered AGN models
     (e.g. :func:`tengri.components.agn.qsogen`): takes Å wavelengths,
     returns :math:`L_\nu` in erg/s/Hz, scaled by ``agn_log_lbol``
-    (log10 of bolometric luminosity in solar units) and ``agn_frac``.
+    (log10 of bolometric luminosity in solar units) and ``agn_lum_ratio``.
 
     The ``l5100`` parameter of :class:`GRAHSPParams` is set internally so
     the integrated intrinsic AGN SED matches the requested
@@ -424,7 +424,7 @@ def compute_grahsp_sed(
 
         l5100 = 10**agn_log_lbol * L_sun_erg
 
-                * agn_frac
+                * agn_lum_ratio
 
                 / (l_bol_intrinsic / l5100_unit)
 
@@ -437,7 +437,7 @@ def compute_grahsp_sed(
         Rest-frame wavelength grid [Å].
     agn_log_lbol : float, optional
         :math:`\log_{10}(L_\mathrm{bol}/L_\odot)`. Default ``45.0``.
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Fraction of bolometric luminosity carried by this AGN component.
         Default ``1.0``.
     agn_grahsp_uvslope, agn_grahsp_plslope, agn_grahsp_plbendloc_nm, \
@@ -523,7 +523,7 @@ agn_grahsp_hot_fcov
         l5100 = agn_grahsp_l5100
     else:
         l_bol_unit = sed_unit.l_bol_bbb + sed_unit.l_bol_torus
-        target_l_bol = 10.0**agn_log_lbol * LSUN_ERG * agn_frac
+        target_l_bol = 10.0**agn_log_lbol * LSUN_ERG * agn_lum_ratio
         l5100 = target_l_bol / l_bol_unit
 
     # Re-scale: GRAHSP outputs are linear in l5100, so a single multiply

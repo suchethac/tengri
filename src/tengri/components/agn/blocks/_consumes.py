@@ -45,7 +45,7 @@ from tengri.components.agn._params import PARAMS
 ALL_AGN_PARAMS: frozenset[str] = frozenset(pd.name for pd in PARAMS)
 
 #: Normalization knobs active whenever any AGN model/block is on.
-AGN_SHARED_PARAMS: frozenset[str] = frozenset({"agn_frac", "agn_log_lbol"})
+AGN_SHARED_PARAMS: frozenset[str] = frozenset({"agn_lum_ratio", "agn_log_lbol"})
 
 #: Composable block -> the agn_* params that block itself consumes.
 AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
@@ -113,13 +113,13 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     # for them (empirically ~7e-3 and ~8e-3 on a multicolor+<torus>+nlr_blr
     # config) and must be freeable under agn={'*': FREE}.
     ("torus", "nenkova"): frozenset(
-        {"agn_fracAGN", "agn_tau", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
+        {"agn_ir_frac", "agn_tau", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
     ),
     ("torus", "nenkova_agnfitter"): frozenset({"agn_cos_inc", "agn_theta_torus"}),
     ("torus", "qsogen"): frozenset(),
     ("torus", "silva04"): frozenset({"agn_cos_inc", "agn_theta_torus"}),
     ("torus", "simple"): frozenset(
-        {"agn_T_torus", "agn_fracAGN", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
+        {"agn_T_torus", "agn_ir_frac", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
     ),
     ("torus", "fritz"): frozenset(
         {
@@ -135,7 +135,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("torus", "skirtor"): frozenset(
         {
             "agn_cos_inc",
-            "agn_fracAGN",
+            "agn_ir_frac",
             "agn_oa_skirtor",
             "agn_p_skirtor",
             # Polar-dust re-emission (active by default at agn_polar_ebv=0.03):
@@ -164,7 +164,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         {
             "agn_T_hot",
             "agn_T_warm",
-            "agn_fracAGN",
+            "agn_ir_frac",
             "agn_frac_hot",
             "agn_torus_frac",
             "agn_cos_inc",
@@ -210,11 +210,11 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
 
 #: Monolithic (non-composable) AGN model -> the agn_* params it consumes.
 AGN_MODEL_CONSUMES: dict[str, frozenset[str]] = {
-    "adaf": frozenset({"agn_fracAGN", "agn_log_ledd", "agn_log_mbh", "agn_torus_frac"}),
+    "adaf": frozenset({"agn_ir_frac", "agn_log_ledd", "agn_log_mbh", "agn_torus_frac"}),
     "kubota_done": frozenset(
         {
             "agn_a_spin",
-            "agn_fracAGN",
+            "agn_ir_frac",
             "agn_log_ledd",
             "agn_log_mbh",
             "agn_torus_frac",
@@ -225,7 +225,7 @@ AGN_MODEL_CONSUMES: dict[str, frozenset[str]] = {
             "agn_a_spin",
             "agn_cos_inc",
             "agn_f_hard",
-            "agn_fracAGN",
+            "agn_ir_frac",
             "agn_gamma_hard",
             "agn_gamma_warm",
             "agn_kt_hot",
@@ -239,20 +239,20 @@ AGN_MODEL_CONSUMES: dict[str, frozenset[str]] = {
     "multicolor_agn": frozenset(
         {
             "agn_a_spin",
-            "agn_fracAGN",
+            "agn_ir_frac",
             "agn_log_ledd",
             "agn_log_mbh",
             "agn_torus_frac",
         }
     ),
     "qsogen": frozenset(),
-    "relagn": frozenset({"agn_cos_inc", "agn_fracAGN", "agn_log_mbh", "agn_torus_frac"}),
+    "relagn": frozenset({"agn_cos_inc", "agn_ir_frac", "agn_log_mbh", "agn_torus_frac"}),
     "richards2006": frozenset(),
-    "silva04": frozenset({"agn_fracAGN", "agn_torus_frac"}),
+    "silva04": frozenset({"agn_ir_frac", "agn_torus_frac"}),
     "skirtor": frozenset(
         {
             "agn_cos_inc",
-            "agn_fracAGN",
+            "agn_ir_frac",
             "agn_oa_skirtor",
             "agn_p_skirtor",
             "agn_q_skirtor",
@@ -266,7 +266,7 @@ AGN_MODEL_CONSUMES: dict[str, frozenset[str]] = {
             "agn_blr_cf",
             "agn_cos_inc",
             "agn_fe2_strength",
-            "agn_fracAGN",
+            "agn_ir_frac",
             "agn_log_ledd",
             "agn_log_mbh",
             "agn_nlr_cf",

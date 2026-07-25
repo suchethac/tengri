@@ -74,6 +74,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Electron temperature [K] for thermal free-free emission (typical 1e4)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="K",
     ),
     ParamDeclaration(
         "radio_alpha_ff",

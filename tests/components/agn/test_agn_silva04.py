@@ -128,6 +128,6 @@ def test_unified_dispatch_registered() -> None:
         fn = resolve_agn_model("silva04")
     assert callable(fn)
     wl = jnp.geomspace(1e3, 1e6, 128)
-    sed = fn(wl, agn_log_lbol=44.0, agn_frac=0.1, agn_log_nh_silva=23.0)
+    sed = fn(wl, agn_log_lbol=44.0, agn_lum_ratio=0.1, agn_log_nh_silva=23.0)
     chex.assert_equal_shape([sed, wl])
     assert float(sed.max()) > 0.0

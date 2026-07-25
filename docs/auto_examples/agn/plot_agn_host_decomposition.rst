@@ -22,19 +22,19 @@ AGN host-galaxy decomposition: disentangling Seyfert contributions
 ===================================================================
 
 A Seyfert galaxy SED is decomposed photometrically by varying the AGN
-contribution fraction ``agn_frac`` from 0 (pure host) to 1.0 (pure AGN)
+contribution fraction ``agn_lum_ratio`` from 0 (pure host) to 1.0 (pure AGN)
 to 0.5 (composite). how to isolate the AGN contribution
 from the host galaxy using a single model and varying a structural
 parameter — useful for diagnosing photometric AGN contamination.
 
 Three traces shown:
 
-- **Host only** (``agn_frac=0``): Star-forming galaxy, SFH + dust
-- **AGN only** (``agn_frac=1.0``): Bolometric luminosity fixed
-- **Composite** (``agn_frac=0.5``): 50-50 mix, physical decomposition
+- **Host only** (``agn_lum_ratio=0``): Star-forming galaxy, SFH + dust
+- **AGN only** (``agn_lum_ratio=1.0``): Bolometric luminosity fixed
+- **Composite** (``agn_lum_ratio=0.5``): 50-50 mix, physical decomposition
 
 For real data, this three-trace pattern can be extended to a suite of
-``agn_frac`` values to fit a composite Seyfert II SED photometrically.
+``agn_lum_ratio`` values to fit a composite Seyfert II SED photometrically.
 The analytic scaling is ``L_total = (1 - frac) * L_host + frac * L_AGN``.
 
 References
@@ -107,9 +107,9 @@ References
     )
 
 
-    def _build_model(agn_frac):
+    def _build_model(agn_lum_ratio):
         """Build a model with specified AGN fraction."""
-        agn_config = {**BASE_AGN, "all_params": tengri.FIXED, "frac": agn_frac}
+        agn_config = {**BASE_AGN, "all_params": tengri.FIXED, "frac": agn_lum_ratio}
         model = tengri.SEDModel.build(ssp, agn=agn_config, **COMMON)
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         out = model.predict(p)

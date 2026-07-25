@@ -34,20 +34,21 @@ and flag `data_type="joint"` so the loss splits them back into channels:
 
 ```python
 import numpy as np
-from tengri import Fitter, ForwardModel
+from tengri import ForwardModel
 
 data  = np.concatenate([phot_flux,  spec_flux])
 noise = np.concatenate([phot_noise, spec_noise])
 
 forward = ForwardModel.build(sed=model, observation=obs)
-fitter = Fitter(
-    forward, data, noise,
+posterior = forward.fit(
+    data, noise,
+    method="mcmc_hmc",
     data_type="joint",
     calibration_marginalize=True,   # analytic flux-calibration marginalization
     cal_n_poly=2,
+    n_warmup=300, n_samples=600,
+    dense_mass_matrix=False
 )
-posterior = fitter.run("mcmc_hmc", n_warmup=300, n_samples=600,
-                       dense_mass_matrix=False)
 ```
 
 **Prerequisites:** `phot_flux`, `spec_flux`, `phot_noise`, `spec_noise` are your joint photometry and spectroscopy observations. See [notebook 07 (joint_photo_spec)](spine/07_joint_photo_spec.ipynb) for a complete runnable example.

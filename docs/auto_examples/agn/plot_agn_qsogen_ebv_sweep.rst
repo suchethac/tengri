@@ -91,9 +91,9 @@ fitted, so no inference is run.
             "blr": {"type": "none", "all_params": tengri.FIXED},
             "atten": {"type": "polar_dust", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
-            "agn_frac": 1.0,
+            "agn_lum_ratio": 1.0,
             "log_lbol": 11.0,
-            "frac": 1.0,  # composable AGN is scaled by agn_frac * frac; keep both at 1
+            "frac": 1.0,  # composable AGN is scaled by agn_lum_ratio * frac; keep both at 1
         },
         redshift=tengri.Fixed(0.05),
     )

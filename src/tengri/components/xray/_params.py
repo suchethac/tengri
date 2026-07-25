@@ -48,6 +48,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Exponential cutoff energy [keV] for AGN X-ray spectrum (typical 100-500)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="keV",
     ),
     ParamDeclaration(
         "xray_log_nh",
@@ -64,6 +65,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         free_prior=Uniform(
             20.0, 24.0, "Line-of-sight hydrogen column", units="log10(cm^-2)", default=20.0
         ),
+        units="log10(cm^-2)",
     ),
     ParamDeclaration(
         "xray_alpha_irx",

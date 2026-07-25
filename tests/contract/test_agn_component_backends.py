@@ -60,7 +60,7 @@ class TestKD18DiscContract:
             "agn_gamma_hard",
             "agn_kt_hot",
             "agn_r_warm_ratio",
-            "agn_frac",
+            "agn_lum_ratio",
         }
         assert param_names == expected
 
@@ -127,7 +127,7 @@ class TestPowerLawDiscContract:
         params = component.declared_parameters()
         param_names = {p.name for p in params}
 
-        expected = {"agn_log_lbol", "agn_alpha", "agn_T_max", "agn_frac"}
+        expected = {"agn_log_lbol", "agn_alpha", "agn_T_max", "agn_lum_ratio"}
         assert param_names == expected
 
     def test_powerlaw_outputs(self):

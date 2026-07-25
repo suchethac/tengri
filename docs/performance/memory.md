@@ -37,15 +37,15 @@ re-paying compile cost.
 
 1. **One NUTS fit per notebook.** Use MAP for cheap "before" fits.
 2. Share state: same model, same observation *type*, only data changes. JIT cache survives.
-3. Drop dense mass: `fitter.run("mcmc_nuts", dense_mass_matrix=False, ...)`. Cuts
+3. Drop dense mass: `forward.fit(..., method="mcmc_nuts", dense_mass_matrix=False)`. Cuts
    compile ~3× (costs ~2× autocorrelation; run more samples).
-4. Use HMC: `fitter.run("mcmc_hmc", ...)`. Smaller JIT graph, no binary-tree expansion.
+4. Use HMC: `forward.fit(..., method="mcmc_hmc")`. Smaller JIT graph, no binary-tree expansion.
 
 ## Pattern: background compile + macOS jetsam
 
-`Fitter` pre-compiles every backend at construction so the first
-user-facing call is fast. On models with heavy template blocks, that
-background compile alone can reach several GB — on macOS enough to
+The inference engine pre-compiles every backend when a fit is set up, so
+the first user-facing call is fast. On models with heavy template blocks,
+that background compile alone can reach several GB — on macOS enough to
 trip the `jetsam` memory killer before the first call runs.
 
 **Fix:** Disable background compile before `import tengri`:

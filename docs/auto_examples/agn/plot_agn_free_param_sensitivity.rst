@@ -113,7 +113,7 @@ blocks consume. Before the registry fix this set was empty.
 
  .. code-block:: none
 
-    AGN parameters freed by agn={'all_params': FREE} (block-scoped): ['agn_a_spin', 'agn_cos_inc', 'agn_fracAGN', 'agn_log_mbh', 'agn_nlr_cf', 'agn_nlr_line_efficiency', 'agn_tau', 'agn_theta_torus', 'agn_torus_frac']
+    AGN parameters freed by agn={'all_params': FREE} (block-scoped): ['agn_a_spin', 'agn_cos_inc', 'agn_ir_frac', 'agn_log_mbh', 'agn_nlr_cf', 'agn_nlr_line_efficiency', 'agn_tau', 'agn_theta_torus', 'agn_torus_frac']
 
 
 

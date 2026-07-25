@@ -61,7 +61,7 @@ def _build_grid_qsogen(
     plslp1_grid: np.ndarray,
     ebv_grid: np.ndarray,
     agn_log_lbol: float = 45.0,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     # Fixed parameters (not varied in precomputation):
     agn_plslp2: float = 0.593,
     agn_plbrk: float = 3880.0,
@@ -86,7 +86,7 @@ def _build_grid_qsogen(
         Grid of dust reddening E(B-V) values [mag].
     agn_log_lbol : float
         Reference bolometric luminosity [log10(L_sun)].
-    agn_frac : float
+    agn_lum_ratio : float
         Fraction of luminosity emitted by QSOgen component.
     agn_plslp2 : float
         Red power-law slope (kept fixed).
@@ -129,7 +129,7 @@ def _build_grid_qsogen(
                     agn_emline_scale=float(agn_emline_scale),
                     agn_ebv=float(ebv),
                     agn_log_lbol=agn_log_lbol,
-                    agn_frac=agn_frac,
+                    agn_lum_ratio=agn_lum_ratio,
                     agn_bcnorm=float(agn_bcnorm),
                 )
             )

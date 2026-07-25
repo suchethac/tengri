@@ -26,7 +26,7 @@ __all__ = ["composable"]
 def composable(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 45.0,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_disc_block: str = "none",
     agn_nlr_block: str = "none",
     agn_blr_block: str = "none",
@@ -48,7 +48,7 @@ def composable(
         Rest-frame wavelength [Å].
     agn_log_lbol : float, optional
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`. Default ``45.0``.
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Overall AGN fraction scaling [dimensionless]. Default ``1.0``.
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
 agn_torus_block, agn_attenuation_block : str, optional
@@ -81,7 +81,7 @@ agn_torus_block, agn_attenuation_block : str, optional
     return composable_agn_l_nu(
         wavelength,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=agn_frac,
+        agn_lum_ratio=agn_lum_ratio,
         agn_disc_block=agn_disc_block,
         agn_nlr_block=agn_nlr_block,
         agn_blr_block=agn_blr_block,

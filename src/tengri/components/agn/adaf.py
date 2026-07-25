@@ -606,7 +606,7 @@ def _adaf_mdot_from_lbol(
 def adaf_spectrum(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_log_mbh: float = 8.0,
     agn_adaf_alpha: float = 0.3,
     agn_adaf_beta: float = 0.5,
@@ -635,7 +635,7 @@ def adaf_spectrum(
         Rest-frame wavelength grid [Angstrom].
     agn_log_lbol : float
         log10 of the ADAF bolometric luminosity [log10(L_sun)].
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Fraction of the bolometric assigned to the ADAF. Default 1.0.
     agn_log_mbh : float, optional
         Black hole mass [log10(M_sun)]. Default 8.0.
@@ -699,5 +699,5 @@ def adaf_spectrum(
     total = sc + brems
     # Renormalize to the canonical L_bol (nu descending -> reverse for trapezoid).
     integral = jnp.trapezoid(total[::-1], nu[::-1])
-    l_nu = l_bol_erg * agn_frac * total / jnp.maximum(integral, 1e-100)
+    l_nu = l_bol_erg * agn_lum_ratio * total / jnp.maximum(integral, 1e-100)
     return l_nu

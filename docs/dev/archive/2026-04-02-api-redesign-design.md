@@ -153,7 +153,7 @@ model = tengri.Model.from_config(
 **Key design decisions:**
 - When `sfh="tsnorm"` is provided, the `priors` dict accepts short names (`log_total_mass`) instead of the full prefix (`sfh_tsnorm_log_total_mass`). The factory expands them internally.
 - When `sfh="dpl+field"` is provided, short names cover both the DPL (`alpha`, `beta`, `log_total_mass`) and the stochastic field (`psd_sigma`, `psd_tau_myr`).
-- `agn="simple"` automatically injects `agn_frac` as a free parameter with a default prior; can be overridden in `priors`.
+- `agn="simple"` automatically injects `agn_lum_ratio` as a free parameter with a default prior; can be overridden in `priors`.
 - `redshift="free"` makes redshift a free parameter; `redshift=0.1` fixes it.
 - Returns a standard `Model` object — no new class needed.
 
@@ -187,7 +187,7 @@ _UNIVERSAL_SHORT_NAMES = {
     "tau_bc": "dust_tau_bc",
     "tau_diff": "dust_tau_diff",
     "dust_slope": "dust_slope",
-    "agn_frac": "agn_frac",
+    "agn_lum_ratio": "agn_lum_ratio",
     "neb_logU": "neb_logU",
 }
 ```

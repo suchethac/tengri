@@ -11,10 +11,12 @@ is :meth:`~tengri.ForwardModel.fit`::
     result = forward.fit(flux, noise, method="mcmc_nuts")
 
 :class:`~tengri.Fitter` is the engine underneath. ``forward.fit(...)`` is
-exactly ``Fitter(forward, flux, noise).run(...)``, so reach for ``Fitter``
-directly when you want to keep the object around — to reuse its compilation
-cache across a catalog, to inspect ``compile_signature()``, or to drive a
-backend with options the shortcut does not expose.
+exactly ``Fitter(forward, flux, noise).run(...)`` and forwards every extra
+keyword to :meth:`~tengri.Fitter.run`, so the shortcut is not a reduced
+surface. Reach for ``Fitter`` directly only to inspect engine state such as
+``compile_signature()``; holding the object is *not* what buys you compile
+reuse, because the compilation caches are keyed on that signature and shared
+across instances. For many galaxies, use :class:`~tengri.Catalog`.
 
 Pass a :class:`~tengri.ForwardModel`, not a bare :class:`~tengri.SEDModel`.
 ``Fitter(sed_model, ...)`` still runs but is deprecated; wrap the SED chain
@@ -34,12 +36,30 @@ Fitter
    :members:
    :show-inheritance:
 
+Catalog
+-------
+
+For many galaxies sharing one forward model, :class:`~tengri.Catalog` is the
+table-in/table-out surface. It validates columns, units and the redshift
+mechanism at construction — before any compile — then exposes ``.fit()`` and
+``.predict()``::
+
+    cat = Catalog(forward, table, flux_unit="cgs_fnu", redshift_col="z")
+    result = cat.fit(method="mcmc_hmc", key=jax.random.PRNGKey(0),
+                     forward_chunk_size=32)
+
+``key`` is required, not optional — every catalog fit is explicitly seeded.
+
+.. autoclass:: tengri.Catalog
+   :members:
+   :show-inheritance:
+
 Hierarchical inference
 ----------------------
 
 For a population sharing hyperparameters, build a
 :class:`~tengri.PopulationSEDModel` and pass it to ``ForwardModel.build`` as
-the ``population`` slot — the same ``Fitter`` drives it::
+the ``population`` slot — the same engine drives it::
 
     template = SEDModel.build(...)
     pop = PopulationSEDModel(
@@ -48,7 +68,7 @@ the ``population`` slot — the same ``Fitter`` drives it::
         shared=("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"),
     )
     forward = ForwardModel.build(population=pop, observation=obs)
-    result = Fitter(forward).run("vi")
+    result = forward.fit(method="vi")
 
 Constructing :class:`~tengri.PopulationFitter` directly is deprecated and will
 be removed in tengri v1.0 (issue #211); the class remains as the routed

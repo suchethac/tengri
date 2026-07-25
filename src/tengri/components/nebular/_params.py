@@ -93,6 +93,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= -4 and hi <= 0,
         "must be in [-4, 0]",
         free_prior=Uniform(-4.0, 0.0, "DIG log10(U) offset", units="dex", default=-1.0),
+        units="dex",
     ),
     ParamDeclaration(
         "neb_eline_sigma_kms",
@@ -105,6 +106,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         free_prior=Uniform(
             0.0, 2000.0, "Nebular line velocity dispersion", units="km/s", default=100.0
         ),
+        units="km/s",
     ),
 )
 
@@ -126,6 +128,7 @@ CB19_PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0 and hi <= 6,
         "must be in [0, 6] (CB_19 grid: 1–4; extrapolated outside)",
         free_prior=Uniform(1.0, 4.0, "Log hydrogen density", units="log10(cm^-3)", default=2.0),
+        units="log10(cm^-3)",
     ),
     ParamDeclaration(
         "neb_co",
@@ -134,6 +137,7 @@ CB19_PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= -3 and hi <= 2,
         "must be in [−3, 2]",
         free_prior=Uniform(-1.0, 0.15, "Log C/O abundance ratio", default=-0.36),
+        units="dex",
     ),
     ParamDeclaration(
         "neb_dno",
@@ -142,6 +146,7 @@ CB19_PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= -1 and hi <= 1,
         "must be in [−1, 1]",
         free_prior=Uniform(-0.25, 0.25, "Delta N/O offset", units="dex", default=0.0),
+        units="dex",
     ),
     ParamDeclaration(
         "neb_hbfrac",
@@ -162,11 +167,13 @@ ELINE_PARAMS: tuple[ParamDeclaration, ...] = (
         "Emission line velocity dispersion in km/s (added in quadrature to instrument resolution)",
         lambda lo, hi: lo >= 0,
         "must have lo >= 0",
+        units="km/s",
     ),
     ParamDeclaration(
         "eline_delta_v_kms",
         Fixed(0.0),  # Default: no velocity offset
         "Emission line velocity offset from systemic redshift in km/s",
+        units="km/s",
     ),
 )
 
@@ -178,6 +185,7 @@ ELINE_BROAD_PARAMS: tuple[ParamDeclaration, ...] = (
         "Broad emission line velocity dispersion in km/s",
         lambda lo, hi: lo >= 200,
         "must have lo >= 200 km/s (broad component)",
+        units="km/s",
     ),
 )
 
@@ -264,6 +272,7 @@ CUE_GAS_EXTRA_PARAMS: tuple[ParamDeclaration, ...] = (
         "Cue gas density log10(n_H/cm^-3) [dimensionless]",
         lambda lo, hi: lo >= 0 and hi <= 5,
         "must be in [0, 5]",
+        units="log10(cm^-3)",
     ),
     ParamDeclaration(
         "gas_logno",
@@ -271,6 +280,7 @@ CUE_GAS_EXTRA_PARAMS: tuple[ParamDeclaration, ...] = (
         "Cue [N/O] abundance ratio [dex]",
         lambda lo, hi: lo >= -2 and hi <= 2,
         "must be in [-2, 2]",
+        units="dex",
     ),
     ParamDeclaration(
         "gas_logco",
@@ -278,6 +288,7 @@ CUE_GAS_EXTRA_PARAMS: tuple[ParamDeclaration, ...] = (
         "Cue [C/O] abundance ratio [dex]",
         lambda lo, hi: lo >= -2 and hi <= 2,
         "must be in [-2, 2]",
+        units="dex",
     ),
 )
 
@@ -305,6 +316,7 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
         free_prior=Uniform(
             30.0, 46.0, "log10 shock Halpha luminosity", units="log10(erg/s)", default=41.0
         ),
+        units="log10(erg/s)",
     ),
     ParamDeclaration(
         "shock_velocity",
@@ -315,11 +327,13 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
         # MAPPINGS III tabulation spans 100-1000 km/s; V starts at 200. Use the
         # union bound so the prior is valid for either backend.
         free_prior=Uniform(100.0, 1000.0, "Shock velocity", units="km/s", default=300.0),
+        units="km/s",
     ),
     ParamDeclaration(
         "shock_log_density",
         Fixed(0.0),
         "Log10 pre-shock density in cm^-3; snapped to nearest grid point",
+        units="log10(cm^-3)",
     ),
     ParamDeclaration(
         "shock_b_over_sqrt_n",

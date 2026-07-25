@@ -46,7 +46,7 @@ def _compose_or_skip(torus, tf):
             agn_disc_block="powerlaw",
             agn_torus_block=torus,
             agn_norm="conserving",
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_torus_frac=tf,
         )
     except (FileNotFoundError, OSError) as exc:

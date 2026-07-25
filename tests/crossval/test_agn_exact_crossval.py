@@ -430,7 +430,7 @@ class TestDiscTemperatureProfile:
 
 
 class TestDiscEnergyConservation:
-    """∫ L_ν dν must equal L_bol × agn_frac (by normalization)."""
+    """∫ L_ν dν must equal L_bol × agn_lum_ratio (by normalization)."""
 
     @pytest.mark.parametrize(
         "model_name,model_fn_kwargs",
@@ -446,16 +446,16 @@ class TestDiscEnergyConservation:
         fn = {"powerlaw": powerlaw_disc, "multicolor": multicolor_disc}[model_name]
         wave = jnp.geomspace(10.0, 1e8, 5000)
         agn_log_lbol = 11.0
-        agn_frac = 0.5
+        agn_lum_ratio = 0.5
 
-        l_nu = fn(wave, agn_log_lbol=agn_log_lbol, agn_frac=agn_frac, **model_fn_kwargs)
+        l_nu = fn(wave, agn_log_lbol=agn_log_lbol, agn_lum_ratio=agn_lum_ratio, **model_fn_kwargs)
 
         nu = 2.99792458e18 / wave
         sort_idx = jnp.argsort(nu)
         l_bol_integrated = float(jnp.trapezoid(l_nu[sort_idx], nu[sort_idx]))
         # L_nu is erg/s/Hz (CGS), integral is erg/s → compare in erg/s
         _LSUN = 3.828e33
-        l_bol_expected = 10.0**agn_log_lbol * agn_frac * _LSUN
+        l_bol_expected = 10.0**agn_log_lbol * agn_lum_ratio * _LSUN
 
         np.testing.assert_allclose(
             l_bol_integrated,

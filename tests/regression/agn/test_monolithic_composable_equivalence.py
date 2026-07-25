@@ -15,7 +15,7 @@ compared ``resolve_agn_model(name)`` against a *hand-written* composable call �
 composable on **both** sides — so it verified nothing about the monolithic
 physics and passed as a tautology. That tautology is exactly why the #941
 ``agn_norm='independent'`` regression (which mis-scaled every disc+torus preset
-by an ``agn_frac`` factor, ~2×/99% off) merged green. Here the reference side is
+by an ``agn_lum_ratio`` factor, ~2×/99% off) merged green. Here the reference side is
 the true monolithic function, so such a divergence fails instead.
 
 Per-model tolerances
@@ -41,7 +41,7 @@ pytestmark = pytest.mark.regression_paper
 # 1000 Å – ~3 mm: spans the UV/optical disc and the mid/far-IR torus so a
 # torus-only or disc-only normalization error cannot hide off the grid.
 _WAVE = np.logspace(3.0, 5.5, 120)
-_KW = dict(agn_log_lbol=11.0, agn_frac=0.5)
+_KW = dict(agn_log_lbol=11.0, agn_lum_ratio=0.5)
 _TIGHT = 1e-5
 
 # Known block-level gaps: the composable block does not yet reproduce the

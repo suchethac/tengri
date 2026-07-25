@@ -236,7 +236,7 @@ with warnings.catch_warnings():
         dust_gamma_dl=Fixed(0.02),
         dust_qpah=Fixed(3.0),
         agn_model="simple",
-        agn_frac=Fixed(0.1),
+        agn_lum_ratio=Fixed(0.1),
         apply_igm=False,
     )
     model_agn = SEDModel(spec_agn, ssp, precompute=False, approx=False)
@@ -254,7 +254,7 @@ with warnings.catch_warnings():
         dust_gamma_dl=Fixed(0.02),
         dust_qpah=Fixed(3.0),
         agn_model="simple",
-        agn_frac=Fixed(0.1),
+        agn_lum_ratio=Fixed(0.1),
         apply_igm=True,
     )
     model_full = SEDModel(spec_full, ssp, precompute=False, approx=False)
@@ -546,7 +546,7 @@ agn_styles = {
 agn_seds = {}
 for name in sorted(AGN_MODELS.keys()):
     try:
-        agn_seds[name] = np.array(AGN_MODELS[name](wave_agn, agn_log_lbol=log_lbol, agn_frac=1.0))
+        agn_seds[name] = np.array(AGN_MODELS[name](wave_agn, agn_log_lbol=log_lbol, agn_lum_ratio=1.0))
     except (FileNotFoundError, Exception) as e:
         print(f"Skipping {name}: {e}")
         continue
@@ -706,7 +706,7 @@ sed_agn_lessdust, phot_agn_lessdust, _, _ = make_model_and_sed(
         dust_tau_bc=Fixed(0.3),
         dust_tau_diff=Fixed(0.15),
         agn_model="simple",
-        agn_frac=Fixed(0.15),
+        agn_lum_ratio=Fixed(0.15),
     )
 )
 
@@ -783,7 +783,7 @@ sed_agn_lowsfr, phot_agn_lowsfr, _, _ = make_model_and_sed(
         dust_gamma_dl=Fixed(0.02),
         dust_qpah=Fixed(3.0),
         agn_model="simple",
-        agn_frac=Fixed(0.2),
+        agn_lum_ratio=Fixed(0.2),
     )
 )
 
@@ -890,7 +890,7 @@ with warnings.catch_warnings():
         dust_gamma_dl=Fixed(0.02),
         dust_qpah=Fixed(3.0),
         agn_model="simple",
-        agn_frac=Fixed(0.15),
+        agn_lum_ratio=Fixed(0.15),
         radio=True,
         xray=True,
         redshift=Fixed(0.5),

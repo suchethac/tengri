@@ -25,7 +25,7 @@ class TestRingAreaPi:
         from tengri.components.agn.disc import multicolor_disc
 
         l_nu = multicolor_disc(
-            _WAVE, agn_log_lbol=12.0, agn_frac=1.0, agn_log_mbh=8.0, agn_cos_inc=0.5
+            _WAVE, agn_log_lbol=12.0, agn_lum_ratio=1.0, agn_log_mbh=8.0, agn_cos_inc=0.5
         )
         chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
@@ -35,7 +35,7 @@ class TestRingAreaPi:
         from tengri.components.agn.disc import kubota_done_disc
 
         l_nu = kubota_done_disc(
-            _WAVE, agn_log_lbol=12.0, agn_frac=1.0, agn_log_mbh=8.0, agn_log_ledd=-1.0
+            _WAVE, agn_log_lbol=12.0, agn_lum_ratio=1.0, agn_log_mbh=8.0, agn_log_ledd=-1.0
         )
         chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)
@@ -45,7 +45,7 @@ class TestRingAreaPi:
         from tengri.components.agn.disc import adaf_disc
 
         l_nu = adaf_disc(
-            _WAVE, agn_log_lbol=10.0, agn_frac=0.1, agn_log_mbh=8.0, agn_log_ledd=-3.0
+            _WAVE, agn_log_lbol=10.0, agn_lum_ratio=0.1, agn_log_mbh=8.0, agn_log_ledd=-3.0
         )
         chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0.0)

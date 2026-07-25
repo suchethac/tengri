@@ -211,7 +211,7 @@ class TestSpectrumAssembly:
     """
 
     def test_normalizes_to_lbol(self):
-        """The canonical contract: int L_nu dnu = agn_frac * L_bol (Eq. 49 closes it)."""
+        """The canonical contract: int L_nu dnu = agn_lum_ratio * L_bol (Eq. 49 closes it)."""
         from scipy.integrate import trapezoid
 
         from tengri.components.agn._phys import wavelength_to_nu

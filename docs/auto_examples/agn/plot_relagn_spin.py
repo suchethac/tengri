@@ -46,7 +46,7 @@ model = tengri.SEDModel.build(
     agn={
         "all_params": tengri.FIXED,
         "log_lbol": 12.5,
-        "frac": 1.0,
+        "lum_ratio": 1.0,
         "log_mbh": 8.5,
         "a_spin": tengri.Uniform(0.0, 0.998),
         "disc": {"type": "kubota_done", "all_params": tengri.FIXED},

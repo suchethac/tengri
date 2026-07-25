@@ -68,7 +68,7 @@ def test_skirtor_stalevski_is_raw_total():
         agn_oa_skirtor=40.0,
         agn_cos_inc=float(np.cos(np.radians(30.0))),
     )
-    sed = resolve_agn_model("skirtor_stalevski")(wave, agn_frac=1.0, **kw)
+    sed = resolve_agn_model("skirtor_stalevski")(wave, agn_lum_ratio=1.0, **kw)
     v4 = _find_skirtor_raw_grid()
     if v4 is not None:
         ref = create_skirtor_raw_total_from_grid(v4)(wave, frac_agn=1.0, **kw)
@@ -87,7 +87,7 @@ def test_skirtor_stalevski_disc_brighter_than_powerlaw():
     wave = np.geomspace(1e3, 1e7, 3000)
     kw = dict(
         agn_log_lbol=10.4,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_tau_skirtor=7.0,
         agn_oa_skirtor=40.0,
         agn_cos_inc=float(np.cos(np.radians(30.0))),

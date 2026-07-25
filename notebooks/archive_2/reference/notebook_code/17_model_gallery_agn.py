@@ -187,7 +187,7 @@ l_disc = np.asarray(
     multicolor_disc(
         wavelength,
         agn_log_lbol=_log_lbol,
-        agn_frac=1.0 - _torus_frac,
+        agn_lum_ratio=1.0 - _torus_frac,
         agn_log_mbh=8.0,
         agn_log_ledd=-1.0,
     )
@@ -569,14 +569,14 @@ l_adaf = np.asarray(
     adaf_disc(
         wave_xray,
         agn_log_lbol=42.0,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_log_mbh=8.0,
         agn_log_ledd=-3.0,
         agn_r_tr=100.0,
     )
 )
 l_std = np.asarray(
-    multicolor_disc(wave_xray, agn_log_lbol=42.0, agn_frac=1.0, agn_log_mbh=8.0, agn_log_ledd=-3.0)
+    multicolor_disc(wave_xray, agn_log_lbol=42.0, agn_lum_ratio=1.0, agn_log_mbh=8.0, agn_log_ledd=-3.0)
 )
 
 axes[0].loglog(
@@ -629,7 +629,7 @@ for r_tr, c in zip(r_trs, rtr_colors):
         adaf_disc(
             wave_xray,
             agn_log_lbol=42.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_log_mbh=8.0,
             agn_log_ledd=-3.0,
             agn_r_tr=r_tr,
@@ -915,7 +915,7 @@ try:
             r"Edge-on ($\cos i=0.1$, Type 2)",
         ],
     ):
-        l = np.asarray(skirtor_fn(wavelength, agn_log_lbol=44.0, agn_frac=1.0, agn_cos_inc=ci))
+        l = np.asarray(skirtor_fn(wavelength, agn_log_lbol=44.0, agn_lum_ratio=1.0, agn_cos_inc=ci))
         ax.loglog(wave_um, l, color=c, label=lb, lw=1.8)
     ax.set_title("SKIRTOR: inclination dependence (Type 1 to Type 2)")
 except Exception as e:
@@ -1248,7 +1248,7 @@ for ci, c, lb in zip(
             agn_cos_inc=ci,
             agn_theta_torus=30.0,
             agn_log_mbh=8.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
         )
     )
     axes[0].loglog(wave_um, l * nu_arr, color=c, label=lb, lw=1.8)
@@ -1322,7 +1322,7 @@ for ebv, c in zip(ebv_values, ebv_colors):
             agn_cos_inc=0.95,
             agn_theta_torus=30.0,
             agn_log_mbh=8.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_polar_ebv=ebv,
         )
     )
@@ -1398,7 +1398,7 @@ plt.show()
 #
 # | SEDModel | Components | Free Params | Best For | Reference |
 # |-------|-----------|-------------|----------|-----------|
-# | `simple` | Power-law disc + single-T torus | 3 (+agn_frac) | Quick photometric fits | - |
+# | `simple` | Power-law disc + single-T torus | 3 (+agn_lum_ratio) | Quick photometric fits | - |
 # | `standard` | Multicolor disc + two-T torus | 5-6 | Broadband UV-to-MIR | Shakura & Sunyaev 1973 |
 # | `kubota_done` | Multicolor disc (with spin) + two-T torus | 8+ | BH physics: mass, spin, Eddington | Kubota & Done 2018 |
 # | `kubota_done_full` | 3-zone K&D disc + two-T torus | 13+ | X-ray + UV + IR; soft X-ray excess | Kubota & Done 2018; Done+2012 |

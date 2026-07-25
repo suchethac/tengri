@@ -273,7 +273,10 @@ class TestDiscReshapeAffectsPredict:
             q_skirtor=1.0,
             oa_skirtor=40.0,
             cos_inc=0.9,
-            frac_agn=0.5,
+            # The component's param dict is keyed by prefix-stripped attribute
+            # names, so renaming agn_frac_agn -> agn_band_frac (#1296) renamed
+            # this key too.
+            band_frac=0.5,
             polar_ebv=0.0,
             polar_temperature=100.0,
             polar_beta=1.6,

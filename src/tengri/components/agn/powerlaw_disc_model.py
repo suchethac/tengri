@@ -118,7 +118,7 @@ class PowerLawDisc(SEDModelComponent):
         units="K",
         default=1e5,
     )
-    frac = Uniform(
+    lum_ratio = Uniform(
         0.0,
         1.0,
         description="Disc luminosity fraction of L_bol",
@@ -168,7 +168,7 @@ class PowerLawDisc(SEDModelComponent):
         sed_disc = _powerlaw_disc_fn(
             wavelength=wave,
             agn_log_lbol=p["log_lbol"],
-            agn_frac=p["frac"],
+            agn_lum_ratio=p["frac"],
             agn_alpha=p["alpha"],
             agn_T_max=p["T_max"],
         )
