@@ -72,6 +72,50 @@ def test_multicolor_disc_finite_and_matches_f64_in_float32():
     )
 
 
+def _kubota(dtype):
+    from tengri.components.agn.disc import kubota_done_disc
+
+    w = jnp.asarray(_WAVE, dtype=dtype)
+    return np.asarray(
+        kubota_done_disc(
+            w,
+            agn_log_lbol=jnp.asarray(11.0, dtype=dtype),
+            agn_frac=jnp.asarray(1.0, dtype=dtype),
+            agn_log_mbh=jnp.asarray(8.0, dtype=dtype),
+            agn_a_spin=jnp.asarray(0.0, dtype=dtype),
+        )
+    )
+
+
+def test_kubota_done_disc_finite_and_matches_f64_in_float32():
+    """The Kubota & Done three-zone disc is finite and float64-accurate in float32.
+
+    Beyond the L_bol / L_Edd / t_in overflows shared with the multicolor disc, the
+    three-zone model adds several ~1e42–1e44 erg/s intermediates that overflow
+    float32: the bisection's ``l0``, the seed-photon and zone bolometric
+    integrals, and the warm-zone ring bolometric ``p_plain * ring_area`` (~1e42,
+    though the ring L_nu ~1e27 is representable). The float32 path works these in
+    L_sun units / reordered so no out-of-range intermediate forms.
+    """
+    with jax.enable_x64(True):
+        ref = _kubota(jnp.float64)
+    with jax.enable_x64(False):
+        f32 = _kubota(jnp.float32)
+    assert f32.dtype == jnp.float32
+    assert np.all(np.isfinite(f32)), (
+        "kubota_done_disc is non-finite in pure float32 — a three-zone cgs "
+        "intermediate (l0, seed/zone bolometric integral, or the warm-ring "
+        "p_plain*area ~1e42) overflowed instead of being formed in L_sun units"
+    )
+    peak = np.abs(ref).max()
+    live = np.abs(ref) > 1e-6 * peak
+    rel = np.abs(f32[live] - ref[live]) / np.abs(ref[live])
+    assert rel.max() < 1e-3, (
+        f"kubota_done_disc float32 vs float64 max rel = {rel.max():.2e} — larger "
+        "than float32 rounding, so a zone's L_sun bookkeeping diverges"
+    )
+
+
 def _composable_intrinsics(ssp, dtype):
     """Return ``(L_4400, L_2500, sed_agn_peak)`` for a multicolor-disc AGN."""
     obs = Observation(photometry=Photometry.from_names(["sdss_r", "wise_w3", "wise_w4"]))

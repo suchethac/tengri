@@ -32,11 +32,20 @@ from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
 pytestmark = pytest.mark.regression_bug
 
 # Discs whose spectral shape is invariant under L_bol (template / power-law) OR
-# whose L_bol-dependent shape is now handled on the float32 path (multicolor).
-_EXACT_DISCS = ["multicolor", "powerlaw", "richards2006", "skirtor", "qsogen", "schartmann2005"]
+# whose L_bol-dependent shape is now handled on the float32 path (multicolor,
+# kubota_done — log-space internals + shape/normalization split).
+_EXACT_DISCS = [
+    "multicolor",
+    "kubota_done",
+    "powerlaw",
+    "richards2006",
+    "skirtor",
+    "qsogen",
+    "schartmann2005",
+]
 
 # Shape depends on L_bol; float32 reference evaluation gives the wrong shape.
-_SHAPE_CLASS_XFAIL = ["kubota_done", "adaf"]
+_SHAPE_CLASS_XFAIL = ["adaf"]
 
 # Non-finite in float32 even at the reference L_bol — a distinct internal overflow.
 _GRID_CLASS_XFAIL = ["relagn", "slone_netzer", "grahsp_sbpl", "adaf_lopez2024"]

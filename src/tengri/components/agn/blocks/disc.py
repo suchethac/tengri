@@ -469,6 +469,7 @@ def kubota_done_disc_block(
     agn_gamma_hard: float = 1.8,
     agn_kt_hot: float = 100.0,
     agn_r_warm_ratio: float = 2.0,
+    agn_log_lbol_shape: float | None = None,
     **_params,
 ) -> Array:
     r"""Kubota & Done (2018) three-zone disc + corona block.
@@ -516,6 +517,7 @@ def kubota_done_disc_block(
         agn_gamma_hard=agn_gamma_hard,
         agn_kt_hot=agn_kt_hot,
         agn_r_warm_ratio=agn_r_warm_ratio,
+        agn_log_lbol_shape=agn_log_lbol_shape,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 
