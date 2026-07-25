@@ -1268,22 +1268,27 @@ class SEDModel:
         """
         from tengri.observation.line_measurement import default_line_defs
 
+        backend = self._nebular_backend
+        # Cue-like: L_line = Q_H x l(theta), l independent of the SFH shape.
+        cue_like = backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
+
         lines = cfg.lines
         if lines is None:
             line_fluxes = getattr(observation, "line_fluxes", None) if observation else None
-            if line_fluxes is None:
+            if line_fluxes is not None:
+                lines = line_fluxes.wavelengths
+            elif cue_like:
+                lines = []
+            else:
                 raise ValueError(
                     "approx=FeaturePrecomp() has no emission lines to tabulate: the "
                     "Observation carries no line_fluxes and FeaturePrecomp(lines=...) "
                     "was not given. Either fit lines — Observation(..., "
                     "line_fluxes=LineFluxData(...)) — or name them explicitly."
                 )
-            lines = line_fluxes.wavelengths
         lines = jnp.asarray(lines)
 
-        backend = self._nebular_backend
-        if backend is not None and hasattr(backend, "predict_nebular_line_luminosities"):
-            # Cue-like: L_line = Q_H x l(theta), l independent of the SFH shape.
+        if cue_like:
             self.enable_fast_nebular(lines, n_grid=cfg.n_grid, ranges=cfg.ranges)
             return
 
