@@ -212,7 +212,7 @@ def test_agn_phot_lnu_precomp_published(ssp, synthetic_tophat_obs):
         apply_igm=False,
         agn_model="qsogen",
         agn_log_lbol=Fixed(45.0),
-        agn_frac=Fixed(0.5),
+        agn_lum_ratio=Fixed(0.5),
     )
     obs = synthetic_tophat_obs
     with warnings.catch_warnings():

@@ -359,7 +359,7 @@ class TestSKIRTORPolarDustIntegration:
         # Call composable runner twice with different polar_ebv, both Type 2
         common_params = {
             "agn_log_lbol": 12.0,
-            "agn_frac": 1.0,
+            "agn_lum_ratio": 1.0,
             "agn_attenuation_block": "polar_dust",
             "agn_torus_block": "skirtor",
             "agn_disc_block": "multicolor",

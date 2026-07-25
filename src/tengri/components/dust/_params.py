@@ -42,6 +42,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Dust temperature (K) for graybody/Casey emission",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="K",
     ),
     ParamDeclaration(
         "dust_beta_ir",
@@ -116,6 +117,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Warm birth-cloud grain temperature (K) — used by two-temp emission model (30-60K)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="K",
     ),
     ParamDeclaration(
         "dust_T_cold",
@@ -123,6 +125,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Cold ISM grain temperature (K) — used by the two-temperature emission model (15-25K)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        units="K",
     ),
     ParamDeclaration(
         "dust_f_cold",
@@ -172,6 +175,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "dust_log_ssfr",
         Fixed(-10.0),
         "log10(sSFR/yr^-1) for BOSA template selection (Boquien & Salim 2021)",
+        units="log10(1/yr)",
     ),
     ParamDeclaration(
         "dust_lgU",

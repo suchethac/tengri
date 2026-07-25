@@ -44,7 +44,7 @@ def test_agn_models_contains_grahsp():
 @_needs_grahsp
 def test_resolve_agn_model_returns_callable():
     fn = resolve_agn_model("grahsp")
-    out = fn(jnp.logspace(2, 6, 200), agn_log_lbol=45.0, agn_frac=1.0)
+    out = fn(jnp.logspace(2, 6, 200), agn_log_lbol=45.0, agn_lum_ratio=1.0)
     chex.assert_shape(out, (200,))
     chex.assert_tree_all_finite(out)
 

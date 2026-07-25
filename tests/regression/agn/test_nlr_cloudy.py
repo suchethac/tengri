@@ -111,7 +111,7 @@ def test_feltre_nlr_plugs_into_unified_nlr_blr():
         agn_cos_inc=0.95,
         agn_theta_torus=30.0,
         agn_torus_frac=0.5,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
     )
     sed_feltre = unified_nlr_blr(
         wave,
@@ -119,7 +119,7 @@ def test_feltre_nlr_plugs_into_unified_nlr_blr():
         agn_cos_inc=0.95,
         agn_theta_torus=30.0,
         agn_torus_frac=0.5,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         nlr_fn=compute_nlr_sed_feltre,
         alpha_pl=-1.7,
         neb_logU=-2.0,

@@ -146,7 +146,7 @@ class TestADAFSpectralPhysics:
         l_nu = adaf_spectrum(
             wavelength,
             agn_log_lbol=42.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_log_mbh=8.0,
             agn_log_ledd=-3.0,
             agn_r_tr=100.0,
@@ -171,7 +171,7 @@ class TestADAFSpectralPhysics:
         l_nu = adaf_spectrum(
             wavelength,
             agn_log_lbol=10.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_log_mbh=8.0,
             agn_adaf_delta=0.1,
         )

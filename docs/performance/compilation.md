@@ -127,31 +127,44 @@ caches that work together. Each handles a different reuse boundary:
 | Layer | Lives in | Reuse boundary | Cleared by |
 |-------|----------|----------------|------------|
 | L1 — structural prediction kernels | RAM, `_STRUCTURAL_KERNEL_CACHE` (LRU=4) | Across `SEDModel` instances with the same `compile_signature()` | `tengri.gc()` |
-| L2 — loss / grad / log-density / log-likelihood | RAM, `_SHARED_*_CACHE` keyed on `(compile_sig, mode)` | Across `Fitter` instances with the same fingerprint | `tengri.gc()` (kept by surgical lean) |
-| L3 — inference scan body (HMC leapfrog, NUTS tree, VI loop) | RAM, `_SHARED_ENGINE_CACHE` (LRU=2) | Across `Fitter.run` calls with the same `(compile_sig, method)` — kept by smart lean | Smart `lean()` drops only stale entries; `tengri.gc()` drops all |
+| L2 — loss / grad / log-density / log-likelihood | RAM, `_SHARED_*_CACHE` keyed on `(compile_sig, mode)` | Across `Fitter` instances with the same fingerprint | `tengri.gc()` — no cache policy touches it |
+| L3 — inference scan body (HMC leapfrog, NUTS tree, VI loop) | RAM, `_SHARED_ENGINE_CACHE` (LRU=2) | Across `Fitter.run` calls with the same `(compile_sig, method)` | `iterate` (default) drops only non-matching entries; `sweep` drops all; `tengri.gc()` drops all |
 | Disk cache | `~/.cache/tengri_jax_cache` | Across processes, notebook restarts, slurm tasks | `tengri.clear_cache()` |
 
-`Fitter.run(lean=True)` (the default) calls
-`clear_shared_caches(scope="inference_body", keep_sig=(self.compile_signature(), method))`
-*before* the run. This drops only L3 entries whose key does **not** match
-the current run — so:
+Each fit picks one of three cache policies before it runs. The default
+is **iterate**, which clears L3 with
+`keep_sig=(compile_signature(), method)` — dropping only entries whose
+key does **not** match the current run. So:
 
 - **Multi-phase notebook** (MAP → HMC → posterior-predictive): the prior
   phase's L3 entry is dropped (different `mode`), the current phase's
   entry is kept. Peak RSS stays at one inference body, never two.
-- **CatalogFitter loop** (100 galaxies, same model + method): every run
+- **Catalog loop** (100 galaxies, same model + method): every run
   has the same `(compile_sig, method)`, so the entry is preserved and
   the leapfrog compile is paid once for the whole catalog. No
   `persistent()` context needed for the common case.
+
+The other two policies are opt-in, and both are reached through a
+context manager rather than a keyword:
+
+| Policy | How to select it | L3 effect |
+|---|---|---|
+| `iterate` (default) | nothing to do | keep the matching entry, drop stale ones |
+| `sweep` | `tengri.lean()` or `TENGRI_LEAN=1` | drop every L3 entry |
+| `persistent` | `tengri.persistent()` or `TENGRI_PERSISTENT=1` | keep everything, matching or not |
+
+The older `fit(..., lean=True)` keyword is retired. It is still honored
+for back-compat (`lean=True` → `sweep`, `lean=False` → `iterate`) but
+emits a `DeprecationWarning`; prefer the context managers.
 
 `tengri.gc()` calls `clear_shared_caches(scope="all", drop_xla=True)` —
 nukes L1 + L2 + L3 + JAX's internal caches. Use between iteration loops
 that build many slightly-different SEDModel / Fitter configurations.
 
-`tengri.persistent()` is now only useful for the rare case where you
-want to keep a stale L3 entry alive across phases (e.g. running MAP and
-HMC repeatedly in alternation and reusing both compiles). The default
-smart-lean path covers the catalog and multi-phase cases without it.
+`tengri.persistent()` is only useful for the rare case where you want to
+keep a *stale* L3 entry alive across phases (e.g. running MAP and HMC
+repeatedly in alternation and reusing both compiles). The default
+keep-matching path covers the catalog and multi-phase cases without it.
 
 ### Tuning the in-memory caches
 
@@ -161,8 +174,8 @@ useful when a process is memory-bound rather than compile-bound:
 ```bash
 export TENGRI_ENGINE_CACHE_MAXSIZE=1   # default 2; L3 entries held before eviction
 export TENGRI_DISABLE_SHARED_CACHES=1  # never populate the shared caches at all
-export TENGRI_LEAN=1                   # force lean mode process-wide
-export TENGRI_PERSISTENT=1             # opt out of the lean default
+export TENGRI_LEAN=1                   # force the sweep policy process-wide
+export TENGRI_PERSISTENT=1             # keep every L3 entry, stale included
 ```
 
 Each L3 entry holds a compiled XLA executable, so lowering

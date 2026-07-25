@@ -137,11 +137,11 @@ def main():
 
     wave_agn = jnp.linspace(500, 200000, 5000)
     bench(
-        lambda: multicolor_agn(wave_agn, agn_log_lbol=11.0, agn_frac=1.0),
+        lambda: multicolor_agn(wave_agn, agn_log_lbol=11.0, agn_lum_ratio=1.0),
         "multicolor_agn (K&D disc + 2T torus, 5000 pts)",
     )
     bench(
-        lambda: kubota_done_full_agn(wave_agn, agn_log_lbol=11.0, agn_frac=1.0),
+        lambda: kubota_done_full_agn(wave_agn, agn_log_lbol=11.0, agn_lum_ratio=1.0),
         "kubota_done_full (3-zone K&D disc + 2T torus, 5000 pts)",
     )
 

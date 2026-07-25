@@ -42,7 +42,7 @@ BASE_AGN = dict(disc={"type": "multicolor", "all_params": tengri.FIXED})
 
 
 def _agn(extra_blocks=(), wave=None):
-    agn = {"all_params": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0, **BASE_AGN}
+    agn = {"all_params": tengri.FIXED, "log_lbol": 12.5, "lum_ratio": 1.0, **BASE_AGN}
     for key, value in extra_blocks:
         agn[key] = value
     model = tengri.SEDModel.build(ssp, agn=agn, **COMMON)

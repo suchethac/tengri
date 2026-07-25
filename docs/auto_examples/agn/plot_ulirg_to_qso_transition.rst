@@ -79,20 +79,20 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
     ssp = tengri.load_ssp()
 
     # ============================================================================
-    # Define the ULIRG→QSO sequence: (tau_V, agn_frac) pairs
+    # Define the ULIRG→QSO sequence: (tau_V, agn_lum_ratio) pairs
     # ============================================================================
     # tau_V governs the visual optical depth of dust attenuation (Calzetti law).
-    # agn_frac is the AGN luminosity fraction of the total bolometric output.
+    # agn_lum_ratio is the AGN luminosity fraction of the total bolometric output.
     #
     # Sequence progression:
     #  (5.0, 0.00) → (2.0, 0.40) → (0.5, 0.70) → (0.05, 0.95) → (0.00, 1.00)
 
     sequence = [
-        {"stage": "Max-Obscured ULIRG", "tau_v": 5.0, "agn_frac": 0.00},
-        {"stage": "Dust-Rich Sy2", "tau_v": 2.0, "agn_frac": 0.40},
-        {"stage": "Moderate Seyfert", "tau_v": 0.5, "agn_frac": 0.70},
-        {"stage": "Weak-Dust QSO", "tau_v": 0.05, "agn_frac": 0.95},
-        {"stage": "Bare Type-1 QSO", "tau_v": 0.00, "agn_frac": 1.00},
+        {"stage": "Max-Obscured ULIRG", "tau_v": 5.0, "agn_lum_ratio": 0.00},
+        {"stage": "Dust-Rich Sy2", "tau_v": 2.0, "agn_lum_ratio": 0.40},
+        {"stage": "Moderate Seyfert", "tau_v": 0.5, "agn_lum_ratio": 0.70},
+        {"stage": "Weak-Dust QSO", "tau_v": 0.05, "agn_lum_ratio": 0.95},
+        {"stage": "Bare Type-1 QSO", "tau_v": 0.00, "agn_lum_ratio": 1.00},
     ]
 
     # ============================================================================
@@ -100,7 +100,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
     # ============================================================================
 
 
-    def build_ulirg_qso_model(tau_v, agn_frac):
+    def build_ulirg_qso_model(tau_v, agn_lum_ratio):
         """
         Construct a SEDModel along the ULIRG→QSO sequence.
 
@@ -108,7 +108,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
         ----------
         tau_v : float
             Visual optical depth (dust attenuation) [dimensionless].
-        agn_frac : float
+        agn_lum_ratio : float
             AGN luminosity fraction [0–1].
 
         Returns
@@ -122,11 +122,11 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
         log_lbol = 12.0
 
         # SFR decreases as AGN fraction increases (energy budget constraint).
-        # At agn_frac=0 (pure starburst): high SFR; at agn_frac=1 (pure QSO): low SFR.
+        # At agn_lum_ratio=0 (pure starburst): high SFR; at agn_lum_ratio=1 (pure QSO): low SFR.
         # ``sfh.type=const`` parametrizes by total stellar mass over the default
         # window [start_gyr=0, end_gyr=13.8 Gyr]; convert via M = SFR × Δt:
         #   log_total_mass = log_sfr + log10(1.38e10 yr) ≈ log_sfr + 10.14
-        log_sfr = 1.5 - 2.0 * agn_frac
+        log_sfr = 1.5 - 2.0 * agn_lum_ratio
         log_total_mass = log_sfr + 10.14
 
         # Dust emission is computed from tau_v (via two-component reddening).
@@ -138,7 +138,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
         agn_dict = {
             "type": "composable",
             "log_lbol": log_lbol,
-            "frac": agn_frac,
+            "frac": agn_lum_ratio,
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},
             "nlr": {"type": "analytic", "all_params": tengri.FIXED},
@@ -170,7 +170,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 
     seds = []
     for item in sequence:
-        model, params = build_ulirg_qso_model(item["tau_v"], item["agn_frac"])
+        model, params = build_ulirg_qso_model(item["tau_v"], item["agn_lum_ratio"])
         out = model.predict(params)
         wave = np.asarray(model.wavelengths)
         sed = np.asarray(out.rest_sed())

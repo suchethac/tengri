@@ -407,6 +407,10 @@ def fit_batch(
 ) -> list:
     """Fit a batch of galaxies from a catalog, one row at a time.
 
+    .. deprecated:: 2026-07
+        Use :class:`Catalog` directly for new code. ``fit_batch`` will be
+        removed in a future release.
+
     Accepts pandas.DataFrame, astropy.table.Table, or list of dicts.
     Supports checkpoint resume via ``output_dir``.
 
@@ -446,6 +450,16 @@ def fit_batch(
     """
     import os
     import time
+    import warnings
+
+    # One-shot deprecation warning
+    warnings.warn(
+        "fit_batch is deprecated; use Catalog instead. "
+        "Catalog provides vectorized fitting and requires explicit flux_unit "
+        "(fit_batch assumed cgs). See #1317, #1316.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     from tengri.forward.sed_model import SEDModel as ModelClass
     from tengri.inference.fitter import Fitter
@@ -480,6 +494,53 @@ def fit_batch(
             f"Got {type(catalog)}"
         )
 
+    # ── Consolidation (#1336): unless per-galaxy checkpointing is requested,
+    # route the whole batch through Catalog — the one fitting code path. Catalog
+    # owns ingestion, unit conversion, and per-galaxy redshift; we unwrap its
+    # CatalogPosterior back to the legacy list-of-Posterior. The output_dir
+    # checkpoint/resume path below keeps the per-row loop (Catalog has no
+    # persistence layer), so every fit_batch feature is preserved.
+    if output_dir is None:
+        from tengri.forward.forward_model import ForwardModel
+        from tengri.inference.catalog import Catalog
+
+        fwd = ForwardModel.build(sed=model)
+        # Forward an explicit approx= (the legacy loop passed it to every Fitter).
+        # "auto" is the default and Catalog/Fitter already resolve it, so only a
+        # non-default value needs applying — dropping it would silently change the
+        # fit's approximation policy.
+        if approx != "auto":
+            fwd = fwd.with_approx(approx)
+        band_names = list(fwd.observation.photometry.names)
+        if len(flux_cols) != len(band_names) or len(err_cols) != len(band_names):
+            raise ValueError(
+                f"flux_cols/err_cols must have one entry per observation band "
+                f"({len(band_names)}); got {len(flux_cols)} flux, {len(err_cols)} err."
+            )
+        # fit_batch's flux_cols/err_cols are POSITIONAL (catalog column names,
+        # mapped to the model's bands in order) — the catalog columns need not be
+        # named after the bands. Rename them to the observation band names so
+        # Catalog can name-match, preserving fit_batch's positional contract.
+        table: dict = {}
+        for band, fcol, ecol in zip(band_names, flux_cols, err_cols):
+            table[band] = np.asarray([float(row[fcol]) for row in rows])
+            table[f"{band}_err"] = np.asarray([float(row[ecol]) for row in rows])
+        if redshift_col is not None:
+            table["_fit_batch_z"] = np.asarray([float(row[redshift_col]) for row in rows])
+        cat = Catalog(
+            fwd,
+            table,
+            flux_unit="cgs_fnu",  # fit_batch always assumed cgs f_nu
+            redshift_col="_fit_batch_z" if redshift_col is not None else None,
+        )
+        fit_key = kwargs.pop("key", None)
+        if fit_key is None:
+            fit_key = jax.random.PRNGKey(0)
+        # Forward verbose so fit_batch(verbose=False) still silences progress
+        # (the engine's per-galaxy "N galaxies done" line honors it).
+        post = cat.fit(method=method, key=fit_key, verbose=verbose, **kwargs)
+        return list(post.posteriors)
+
     if output_dir is not None:
         os.makedirs(output_dir, exist_ok=True)
 
@@ -490,8 +551,6 @@ def fit_batch(
 
     # Warn loudly once if redshift_col is set but catalog_z_range is not
     if redshift_col is not None and getattr(model, "_catalog_z_range", None) is None:
-        import warnings
-
         warnings.warn(
             "fit_batch(redshift_col=...) without WavePrecomp(catalog_z_range=...) "
             "recompiles the forward model for EVERY row (one compile per galaxy). "
@@ -877,11 +936,11 @@ def build_model_from_config(
         expanded.setdefault("redshift", float(redshift))
 
     # --- Inject AGN parametric mode if AGN enabled ---
-    # Default to agn_log_lbol (parametric) instead of agn_frac.
+    # Default to agn_log_lbol (parametric) instead of agn_lum_ratio.
     # Parametric mode is compatible with all kernel paths (hybrid,
     # compositional) because L_bol is specified directly, avoiding
     # the circular dependency L_AGN = f × (L_stellar + L_AGN).
-    if agn is not None and "agn_frac" not in expanded and "agn_log_lbol" not in expanded:
+    if agn is not None and "agn_lum_ratio" not in expanded and "agn_log_lbol" not in expanded:
         expanded["agn_log_lbol"] = Uniform(8.0, 12.0)
 
     # --- Build Parameters ---
@@ -1041,7 +1100,17 @@ def fit_model(
             data_type = "photometry"
 
     # --- Build fitter ---
-    fitter = Fitter(model, data, noise, data_type=data_type, approx=approx)
+    # When SEDModel.fit() delegates to fit_model(), silence the Fitter(sed_model)
+    # deprecation warning since SEDModel.fit is now un-deprecated sugar (#1322).
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Fitter\\(sed_model.*",
+            category=DeprecationWarning,
+        )
+        fitter = Fitter(model, data, noise, data_type=data_type, approx=approx)
     model.fitter_ = fitter
 
     # --- Optional MAP warm start ---

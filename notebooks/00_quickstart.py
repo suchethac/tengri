@@ -36,7 +36,7 @@ import warnings
 
 # Keep the rendered tutorial clean: silence framework notices that do not
 # change the science shown here (baked-in nebular, the WavePrecomp blue-band
-# approximation, the intentional Fitter(sed_model, ...) LUT path, and
+# approximation, the intentional sed_model.fit(...) LUT path, and
 # recipe/parameter-provenance notices). Genuine deprecations in user-facing
 # calls are fixed in the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -72,7 +72,7 @@ from tengri import (
     load_ssp_data,
     plot,
 )
-from tengri.utils.conversions import lnu_to_fnu
+from tengri.utils.conversions import lnu_to_fnu  # noqa: F401
 
 plot.setup_style()
 FIG_DIR = Path("_figs")
@@ -197,24 +197,12 @@ jax.tree.map(lambda x: x.block_until_ready(), grad_fn(p0))
 print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 
 # %% [markdown]
-# ## Build the fitter
+# ## Fit the model
 #
-# `Fitter` wraps the model + data. Each `.run(...)` JIT-compiles its loss /
+# The model's `predict_photometry` uses the fast WavePrecomp photometry path,
+# so the fit is routed through that LUT. Each fit JIT-compiles its loss /
 # sampler stack on first use and persists it to the on-disk cache
 # (`~/.cache/tengri_jax_cache`), so a fresh session reuses the compile.
-#
-# *Note*: we pass the `SEDModel` straight to `Fitter` here rather than the
-# `ForwardModel`, because the model's `predict_photometry` keeps the fast
-# WavePrecomp photometry path that the fit relies on.
-
-# %%
-from tengri.inference.fitter import Fitter
-
-fitter = Fitter(sed_model, flux_obs, noise, data_type="photometry")
-
-# Optional: persist the cache to disk. A fresh notebook session can then
-# `fitter.load_cache(...)` and skip warmup + MAP init entirely.
-# fitter.save_cache("00_quickstart_cache.pkl")
 
 # %% [markdown]
 # ## Fit
@@ -233,12 +221,21 @@ fitter = Fitter(sed_model, flux_obs, noise, data_type="photometry")
 
 # %%
 t = time.perf_counter()
-map_result = fitter.run(method="map", key=key_fit, n_restarts=8, n_steps=5000)
+map_result = sed_model.fit(
+    flux_obs, noise,
+    method="map",
+    data_type="photometry",
+    key=key_fit,
+    n_restarts=8,
+    n_steps=5000,
+)
 print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
 
 t = time.perf_counter()
-posterior = fitter.run(
+posterior = sed_model.fit(
+    flux_obs, noise,
     method="mcmc_nuts",
+    data_type="photometry",
     key=key_fit,
     init_from=map_result,  # seed all chains at the MAP point
     n_warmup=1500,

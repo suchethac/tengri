@@ -243,7 +243,7 @@ class TestGradientCorrectness:
                 # (0.1 L_sun) clips lambda_Edd to the floor, zeroing
                 # d(SED)/d(log_mbh).
                 agn_log_lbol=12.0,
-                agn_frac=1.0,
+                agn_lum_ratio=1.0,
                 agn_log_mbh=log_mbh,
                 agn_a_spin=0.0,
                 agn_cos_inc=0.5,

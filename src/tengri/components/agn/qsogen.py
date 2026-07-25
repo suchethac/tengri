@@ -35,7 +35,7 @@ Recommended Inference Strategy
 ------------------------------
 When fitting broadband photometry of AGN/quasars:
 
-1. **Always free:** ``agn_log_lbol`` (or ``agn_frac``) -- the AGN
+1. **Always free:** ``agn_log_lbol`` (or ``agn_lum_ratio``) -- the AGN
    contribution strength.  This is the minimum viable AGN model.
 2. **Optionally free:** ``agn_ebv`` -- AGN reddening is the strongest
    shape variation in real quasars and is degenerate with galaxy dust.
@@ -675,7 +675,7 @@ def compute_qsogen_sed(
     agn_emline_scale: float = _DEFAULT_EMLINE_SCALE,
     agn_ebv: float = _DEFAULT_EBV,
     agn_log_lbol: float = 45.0,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_bcnorm: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -720,7 +720,7 @@ def compute_qsogen_sed(
     agn_log_lbol : float
         log10(L_bol / Lsun). Bolometric luminosity. Default 45.0.
         [log10(L_sun)]
-    agn_frac : float
+    agn_lum_ratio : float
         Overall AGN fraction scaling. Default 1.0. [dimensionless]
     agn_bcnorm : float
         Balmer continuum normalization. Default 0.0 (disabled).
@@ -757,7 +757,7 @@ def compute_qsogen_sed(
         + components["emission_lines"]
         + components["balmer_continuum"]
     ) * components["smc_factor"]
-    return l_nu * agn_frac
+    return l_nu * agn_lum_ratio
 
 
 # ── Register in AGN_MODELS ────────────────────────────────────────
@@ -769,7 +769,7 @@ def compute_qsogen_sed(
 def qsogen(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 45.0,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_plslp1: float = _DEFAULT_PLSLP1,
     agn_plslp2: float = _DEFAULT_PLSLP2,
     agn_plbrk: float = _DEFAULT_PLBRK,
@@ -791,7 +791,7 @@ def qsogen(
         Rest-frame wavelength grid [Angstrom].
     agn_log_lbol : float, optional
         Total AGN bolometric luminosity [log10(L_sun)]. Default: 45.0.
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Fraction of bolometric luminosity emitted by this component.
         Default: 1.0. [dimensionless, 0–1]
     agn_plslp1 : float, optional
@@ -837,6 +837,6 @@ def qsogen(
         agn_emline_scale=agn_emline_scale,
         agn_ebv=agn_ebv,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=agn_frac,
+        agn_lum_ratio=agn_lum_ratio,
         agn_bcnorm=agn_bcnorm,
     )

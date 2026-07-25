@@ -68,7 +68,7 @@ BASE_AGN = {
     "torus": {"type": "skirtor", "all_params": tengri.FIXED, "tau_skirtor": 7.0},
     "all_params": tengri.FIXED,
     "log_lbol": 12.0,
-    "frac": 1.0,
+    "lum_ratio": 1.0,
 }
 
 # Type 1: face-on, unobstructed disc view → broad lines visible
@@ -166,7 +166,7 @@ for label, cos_inc, color in INCLINATIONS:
         agn={
             "all_params": tengri.FIXED,
             "log_lbol": 12.5,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
             "cos_inc": cos_inc,
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},

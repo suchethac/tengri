@@ -229,7 +229,7 @@ class TestAGNCrossval:
             simple_agn(
                 wave,
                 agn_log_lbol=11.0,
-                agn_frac=1.0,
+                agn_lum_ratio=1.0,
                 agn_torus_frac=0.5,
             )
         )
@@ -253,7 +253,7 @@ class TestAGNCrossval:
             simple_agn(
                 wave,
                 agn_log_lbol=11.0,
-                agn_frac=1.0,
+                agn_lum_ratio=1.0,
                 agn_torus_frac=0.2,
             )
         )
@@ -261,7 +261,7 @@ class TestAGNCrossval:
             simple_agn(
                 wave,
                 agn_log_lbol=11.0,
-                agn_frac=1.0,
+                agn_lum_ratio=1.0,
                 agn_torus_frac=0.8,
             )
         )

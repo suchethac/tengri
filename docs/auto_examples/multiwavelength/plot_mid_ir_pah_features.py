@@ -61,7 +61,7 @@ model_sf = tengri.SEDModel.build(
     },
     agn={
         "torus": {"type": "none"},  # No AGN torus
-        "frac": 0.0,  # No AGN contribution
+        "lum_ratio": 0.0,  # No AGN contribution
         "all_params": tengri.FIXED,
     },
     redshift=tengri.Fixed(0.05),
@@ -105,7 +105,7 @@ model_agn = tengri.SEDModel.build(
             "all_params": tengri.FIXED,
         },
         "log_lbol": 12.0,  # AGN bolometric luminosity: ~1e12 Lsun
-        "frac": 1.0,  # 100% AGN (no stellar contribution to near/mid-IR)
+        "lum_ratio": 1.0,  # 100% AGN (no stellar contribution to near/mid-IR)
         "all_params": tengri.FIXED,
     },
     redshift=tengri.Fixed(0.05),
@@ -149,7 +149,7 @@ model_composite = tengri.SEDModel.build(
             "all_params": tengri.FIXED,
         },
         "log_lbol": 11.5,  # AGN bolometric luminosity: ~3e11 Lsun
-        "frac": 0.5,  # 50% AGN, 50% stellar
+        "lum_ratio": 0.5,  # 50% AGN, 50% stellar
         "all_params": tengri.FIXED,
     },
     redshift=tengri.Fixed(0.05),

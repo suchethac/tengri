@@ -426,6 +426,7 @@ class Fitter:
         noise=None,
         data_type=None,
         data_mask=None,
+        presence=None,
         calibration_marginalize=False,
         cal_n_poly=3,
         cal_prior_sigma=1.0,
@@ -511,6 +512,13 @@ class Fitter:
                     "drop it from data/noise or inflate its noise."
                 )
         self.data_mask = data_mask
+        if presence is not None:
+            presence = jnp.asarray(presence, dtype=jnp.float32)
+            if presence.shape != self.data.shape:
+                raise ValueError(
+                    f"presence shape {presence.shape} does not match data shape {self.data.shape}"
+                )
+        self.presence = presence
         self.data_type = self._resolve_data_type(data_type, model)
         self.spec = model.spec
 
@@ -873,6 +881,8 @@ class Fitter:
         }
         if self.data_mask is not None:
             args["data_mask"] = self.data_mask
+        if self.presence is not None:
+            args["presence"] = self.presence
 
         obs = getattr(model, "observation", None)
         if obs is not None:
@@ -2152,21 +2162,62 @@ class Fitter:
         # alive (e.g. swapping back and forth between MAP and HMC and
         # wanting both compiles in RAM). Override per-call via
         # ``fitter.run(..., lean=True/False)``.
+        import warnings
+
         from tengri.inference.jit_engine import (
             clear_shared_caches as _clear_shared_caches,
             is_lean_mode as _is_lean_mode,
             is_persistent_mode as _is_persistent_mode,
         )
 
+        # --- Lean kwarg deprecation (issue #1318) ─────────────────────────
+        # The lean= kwarg is retired. Callers that pass it get a one-shot
+        # DeprecationWarning with the retire message. The behavior is still
+        # honored for back-compat. For new code, the cache policy is derived
+        # from a private _cache_policy kwarg (set by Catalog) or defaults to
+        # "iterate" (keep-matching smart-lean behavior).
         _user_lean = kwargs.pop("lean", None)
-        if _user_lean is None:
-            if _is_persistent_mode():
-                _user_lean = False
-            elif _is_lean_mode():
-                _user_lean = True
+        if _user_lean is not None:
+            warnings.warn(
+                "lean= is retired: fit() keeps your warm caches (iterate policy); "
+                "Catalog sweeps automatically. See #1318.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        # --- Cache policy derivation (2026-07) ────────────────────────────
+        # _cache_policy is a private kwarg set by Catalog (T2) when it passes
+        # _cache_policy='sweep' to trigger the drop-stale path. If not present,
+        # derive based on the deprecated lean= kwarg (for back-compat) or the
+        # context (persistent() vs lean()). Default: 'iterate' (keep-matching).
+        _cache_policy = kwargs.pop("_cache_policy", None)
+        if _cache_policy is None:
+            # Back-compat: if lean= was passed, honor it
+            if _user_lean is not None:
+                _cache_policy = "sweep" if _user_lean else "iterate"
             else:
-                _user_lean = True
-        if _user_lean:
+                # Derive from context (persistent/lean/default)
+                if _is_persistent_mode():
+                    # persistent() promises to keep ALL cached artifacts, including
+                    # non-matching L3 entries — a distinct policy, NOT "iterate"
+                    # (which drops stale non-matching entries). Mapping it to
+                    # "iterate" made persistent() a silent no-op.
+                    _cache_policy = "persistent"
+                elif _is_lean_mode():
+                    _cache_policy = "sweep"  # Drop all stale entries
+                else:
+                    _cache_policy = "iterate"  # Default: keep-matching
+
+        # Apply cache policy. The policy semantic:
+        # - "iterate": drop only L3 entries that do NOT match this fitter's
+        #   compile_signature() (smart-lean behavior, 2026-05)
+        # - "sweep": drop all L3 entries (old lean=True behavior)
+        # The compile_signature() keys on shape, not values — so identical
+        # geometry always matches, even if parameters differ.
+        if _cache_policy == "sweep":
+            _clear_shared_caches(scope="inference_body", keep_sig=None)
+        elif _cache_policy == "iterate":
+            # Keep-matching: preserve the entry matching this fitter's signature
             # Smart lean (2026-05): drop only L3 entries that do NOT match
             # this fitter's compile_signature(). The matching entry — if
             # it exists from a prior identical run — is kept, so a
@@ -2178,7 +2229,21 @@ class Fitter:
             # invalidation is unnecessary. Forward, loss, grad, and
             # logdensity caches are preserved unconditionally at this
             # scope.
-            _clear_shared_caches(scope="inference_body", keep_sig=self._lean_keep_sig)
+            # drop_xla=False (#1350): this policy's promise is "fit() keeps your
+            # warm caches". jax.clear_caches() would wipe the process-wide XLA
+            # executables, leaving the entries we deliberately keep as hollow
+            # shells that re-trace — and de-warming the caller's own
+            # predict_photometry too. The stale non-matching tengri entries are
+            # still dropped. "sweep" keeps drop_xla=True: it exists for memory
+            # relief (the notebook-OOM class) and must keep releasing executables.
+            _clear_shared_caches(
+                scope="inference_body", keep_sig=self._lean_keep_sig, drop_xla=False
+            )
+        elif _cache_policy == "persistent":
+            # persistent(): keep EVERYTHING — no L3 clear at all, even
+            # non-matching stale entries. This is what the context manager /
+            # TENGRI_PERSISTENT promise, and it is distinct from "iterate".
+            pass
 
         # --- Merge TOML method-specific defaults (caller kwargs win) ---
         try:

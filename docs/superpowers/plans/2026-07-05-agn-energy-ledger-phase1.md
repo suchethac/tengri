@@ -57,11 +57,11 @@ def test_conserving_policy_is_invariant_under_torus_frac(torus):
     light; bolometric is conserved). This is the invariant #916 violated."""
     e0 = _band_energy(
         composable(_WAVE, 45.0, agn_disc_block="powerlaw", agn_torus_block=torus,
-                   agn_norm="conserving", agn_frac=1.0, agn_torus_frac=0.0), _WAVE)
+                   agn_norm="conserving", agn_lum_ratio=1.0, agn_torus_frac=0.0), _WAVE)
     for tf in (0.3, 0.6, 0.9):
         e = _band_energy(
             composable(_WAVE, 45.0, agn_disc_block="powerlaw", agn_torus_block=torus,
-                       agn_norm="conserving", agn_frac=1.0, agn_torus_frac=tf), _WAVE)
+                       agn_norm="conserving", agn_lum_ratio=1.0, agn_torus_frac=tf), _WAVE)
         assert e == pytest.approx(e0, rel=0.02), (
             f"{torus}: energy not conserved at torus_frac={tf} "
             f"({e:.3e} vs {e0:.3e}) — disc not debited")
@@ -94,7 +94,7 @@ In `compose_l_nu`, the policy is read as `_agn_norm = params.get("agn_norm", "ci
     # The disc carries the intrinsic L_bol; reprocessors (torus) debit it.
     # disc_observed = (1 - agn_torus_frac) * disc, so
     # disc(1-f) + torus(f) conserves L_bol — reproducing the monolithic
-    # models (e.g. silva04_agn passes agn_frac=1-agn_torus_frac to the disc).
+    # models (e.g. silva04_agn passes agn_lum_ratio=1-agn_torus_frac to the disc).
     # Static Python branch on the policy string (JIT-safe); the torus block
     # already normalizes its output to agn_torus_frac * L_bol.
     if _agn_norm == "conserving" and agn_torus_block not in _SELF_CONTAINED_TORI:
@@ -162,9 +162,9 @@ _CASES = [
 @pytest.mark.parametrize("name,mono_fn,blocks", _CASES)
 def test_conserving_reproduces_monolithic_full_sed(name, mono_fn, blocks):
     for tf in (0.3, 0.5, 0.7):
-        mono = np.asarray(mono_fn(_WAVE, 45.0, agn_frac=1.0, agn_torus_frac=tf))
+        mono = np.asarray(mono_fn(_WAVE, 45.0, agn_lum_ratio=1.0, agn_torus_frac=tf))
         comp = np.asarray(composable(_WAVE, 45.0, agn_norm="conserving",
-                                     agn_frac=1.0, agn_torus_frac=tf, **blocks))
+                                     agn_lum_ratio=1.0, agn_torus_frac=tf, **blocks))
         # allclose on the whole curve, normalized to the monolithic peak
         scale = np.max(np.abs(mono))
         np.testing.assert_allclose(comp / scale, mono / scale, atol=2e-2, rtol=0,

@@ -999,7 +999,7 @@ def _integrate_warm_zone(
 def kubota_done_disc_preintegrated(
     kd_data: KDPreintegratedData,
     agn_log_lbol: float,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_log_mbh: float = 8.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
@@ -1152,7 +1152,7 @@ def kubota_done_disc_preintegrated(
     )
     hot_phot = l_hot_erg * corona_filt  # (n_filters,)
 
-    # ── Combine and normalize to L_bol * agn_frac ─────────────────
+    # ── Combine and normalize to L_bol * agn_lum_ratio ─────────────────
     # The full-wavelength code normalizes: scale = L_bol_requested / int[L_nu dnu].
     # We can't compute int[L_nu dnu] from filter photometry alone (filters miss
     # most of the bolometric SED for UV/X-ray-bright AGN). Instead, compute the
@@ -1161,7 +1161,7 @@ def kubota_done_disc_preintegrated(
     # This equals the spectral integral by energy conservation (same as the
     # full-wavelength code's trapezoid integral, to numerical precision).
     l_bol_unnorm = outer_bol + warm_bol + l_hot_erg
-    l_bol_requested = 10.0**agn_log_lbol * L_SUN * agn_frac
+    l_bol_requested = 10.0**agn_log_lbol * L_SUN * agn_lum_ratio
     scale = l_bol_requested / jnp.maximum(l_bol_unnorm, 1e-100)
 
     total_phot = outer_phot + warm_phot + hot_phot

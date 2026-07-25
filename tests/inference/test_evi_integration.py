@@ -15,8 +15,19 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform
+from tengri.inference._backend_registry import _BACKENDS
 
 jax.config.update("jax_enable_x64", True)
+
+# ``native_vi_linear`` (MGVI) is registered tier="broken" (#1287): it segfaults
+# on DPL/dense_basis photometry mocks — exactly what these tests build — so
+# ``fitter.run("native_vi_linear")`` raises ``BackendError`` by default. Skip
+# until the backend is repaired, mirroring the tier-aware skip added in #1324;
+# do NOT force it with ``allow_unvalidated=True`` (it could crash the runner).
+skip_if_broken = pytest.mark.skipif(
+    _BACKENDS["native_vi_linear"].tier == "broken",
+    reason="native_vi_linear is registered tier='broken' (#1287); skip until repaired",
+)
 
 
 # ── Fixtures ─────────────────────────────────────────────────────
@@ -53,6 +64,7 @@ def model_and_mock(simple_spec, synthetic_ssp, simple_observation):
 # ── Tests ─────────────────────────────────────────────────────────
 
 
+@skip_if_broken
 class TestEVIRuns:
     """EVI pipeline runs without errors."""
 

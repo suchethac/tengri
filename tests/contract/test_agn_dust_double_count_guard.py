@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Issue #721: AGN double-count guard (composable AGN + Dale2014 dust_frac_agn).
 
-The composable AGN's ``agn_fracAGN`` (CIGALE-joint tie) and Dale2014's embedded
+The composable AGN's ``agn_ir_frac`` (CIGALE-joint tie) and Dale2014's embedded
 quasar template ``dust_frac_agn`` are two distinct AGN surfaces, both keyed off
 the same stellar ``L_absorbed`` (ADR-0018 §5). With both > 0 the AGN mid/far-IR
 is double-counted. ``SEDModel.build`` emits a filterable
@@ -41,7 +41,7 @@ def _spec(dust_frac_agn, agn_fracagn, *, emission="dale2014", with_agn=True):
             "type": "composable",
             "disc": {"type": "multicolor"},
             "torus": {"type": "none"},
-            "agn_fracAGN": agn_fracagn,
+            "agn_ir_frac": agn_fracagn,
             "*": FIXED,
         }
     return parse_groups(**groups)
@@ -112,7 +112,7 @@ class TestGuardEndToEndAndFilterable:
                     "type": "composable",
                     "disc": {"type": "multicolor"},
                     "torus": {"type": "none"},
-                    "agn_fracAGN": Fixed(0.5),
+                    "agn_ir_frac": Fixed(0.5),
                     "*": FIXED,
                 },
                 redshift=Fixed(0.05),
@@ -135,7 +135,7 @@ class TestGuardEndToEndAndFilterable:
                     "type": "composable",
                     "disc": {"type": "multicolor"},
                     "torus": {"type": "none"},
-                    "agn_fracAGN": Fixed(0.5),
+                    "agn_ir_frac": Fixed(0.5),
                     "*": FIXED,
                 },
                 redshift=Fixed(0.05),

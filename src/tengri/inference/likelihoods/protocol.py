@@ -133,6 +133,7 @@ class GaussianLikelihood:
     name: str = "gaussian"
     obs_key: str | None = None
     err_key: str | None = None
+    presence_key: str | None = None
     data_slice: tuple[int, int] | None = None
 
     def log_prob(
@@ -144,8 +145,18 @@ class GaussianLikelihood:
         del params
         obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
         err = resolve_channel_data(self.err, self.err_key, self.data_slice, data_args)
+        # Presence mask for heterogeneous catalogs: absent bands contribute 0 to χ²
+        presence = None
+        if (
+            data_args is not None
+            and self.presence_key is not None
+            and self.presence_key in data_args
+        ):
+            presence = data_args[self.presence_key]
+            if self.data_slice is not None:
+                presence = presence[self.data_slice[0] : self.data_slice[1]]
         return diag_gaussian_log_prob(
-            prediction[self.channel], obs, err, sigma_floor=self.sigma_floor
+            prediction[self.channel], obs, err, sigma_floor=self.sigma_floor, presence=presence
         )
 
     def declared_parameters(self):
