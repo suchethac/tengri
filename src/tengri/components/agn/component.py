@@ -31,6 +31,7 @@ read directly from ``params`` as an independent free parameter.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -61,7 +62,29 @@ _LOG10_L_SUN: float = float(jnp.log10(L_SUN))
 #: ~1e-23, seven decades clear). The true 10^agn_log_lbol is re-applied afterward.
 _AGN_LBOL_REF: float = 10.0 - _LOG10_L_SUN
 
-__all__ = ["AGNSEDComponent", "AGNSEDComponentConfig"]
+#: AGN disc blocks that are NOT yet float32-safe (#1206). Each returns NaN/inf in
+#: pure float32 (JAX-Metal) or with ``forward_dtype="float32"`` from a distinct
+#: grid-dependent overflow (a ``0*inf`` in the block/runner, *not* the L_bol
+#: magnitude the shape-class fixes address). See
+#: ``docs/dev/float32-tier-b-boundary.md`` §8 and
+#: ``tests/regression/precision/test_agn_disc_float32_inventory.py``. The
+#: float32-safe discs are ``multicolor``, ``kubota_done``, ``adaf`` (physical,
+#: L_bol-dependent shape) and ``powerlaw`` / ``richards2006`` / ``skirtor`` /
+#: ``qsogen`` / ``schartmann2005`` (shape-invariant).
+_NON_FLOAT32_SAFE_DISCS: frozenset[str] = frozenset(
+    {"relagn", "slone_netzer", "grahsp_sbpl", "adaf_lopez2024"}
+)
+
+
+class Float32UnsafeAGNWarning(UserWarning):
+    """A non-float32-safe AGN disc block is being evaluated in float32 (#1206)."""
+
+
+__all__ = [
+    "AGNSEDComponent",
+    "AGNSEDComponentConfig",
+    "Float32UnsafeAGNWarning",
+]
 
 
 @dataclass(frozen=True)
@@ -434,6 +457,20 @@ class AGNSEDComponent:
         from tengri.utils.scale import apply_log10_scale
 
         _use_ref = wave.dtype == jnp.float32
+        if _use_ref and self.config.agn_disc_block in _NON_FLOAT32_SAFE_DISCS:
+            # Warns once per trace (Python side-effect at trace time). These discs
+            # produce NaN/inf in float32; the fit will silently corrupt. #1206.
+            warnings.warn(
+                f"AGN disc_block={self.config.agn_disc_block!r} is not float32-safe "
+                "(#1206): it returns NaN/inf in pure float32 (JAX-Metal) or with "
+                "forward_dtype='float32'. For float32 use a supported disc — "
+                "'multicolor', 'kubota_done', 'adaf' (physical), or 'powerlaw' / "
+                "'richards2006' / 'skirtor' / 'qsogen' / 'schartmann2005' "
+                "(shape-invariant) — or run in float64. See "
+                "docs/dev/float32-tier-b-boundary.md §8.",
+                Float32UnsafeAGNWarning,
+                stacklevel=2,
+            )
         _lbol_eval = (
             jnp.full_like(jnp.asarray(agn_log_lbol, dtype=wave.dtype), _AGN_LBOL_REF)
             if _use_ref

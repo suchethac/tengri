@@ -117,3 +117,52 @@ def test_disc_float32_pending(ssp_bare, disc):
     """Progress tracker — fixing one of these flips its xfail to an unexpected pass."""
     ok, detail = _f32_matches_f64(ssp_bare, disc)
     assert ok, f"disc '{disc}' still float32-broken: {detail}"
+
+
+@pytest.mark.parametrize("disc", _GRID_CLASS_XFAIL)
+def test_grid_class_disc_warns_in_float32(ssp_bare, disc):
+    """A non-float32-safe disc must warn (loudly) when evaluated in float32.
+
+    Until these discs are hardened they silently corrupt a float32 fit; the
+    ``Float32UnsafeAGNWarning`` makes the failure visible. It fires only in
+    float32 — never in float64.
+    """
+    import contextlib
+    import warnings
+
+    from tengri.components.agn.component import Float32UnsafeAGNWarning
+
+    # float32: must warn.
+    with jax.enable_x64(False):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with contextlib.suppress(Exception):
+                _sed_agn(ssp_bare, disc, jnp.float32)
+        assert any(issubclass(w.category, Float32UnsafeAGNWarning) for w in caught), (
+            f"disc '{disc}' is float32-broken but emitted no Float32UnsafeAGNWarning"
+        )
+
+    # float64: must NOT warn (the disc works there).
+    with jax.enable_x64(True):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            _sed_agn(ssp_bare, disc, jnp.float64)
+        assert not any(issubclass(w.category, Float32UnsafeAGNWarning) for w in caught), (
+            f"disc '{disc}' wrongly warned about float32 while running in float64"
+        )
+
+
+@pytest.mark.parametrize("disc", ["multicolor", "kubota_done", "adaf"])
+def test_float32_safe_disc_does_not_warn(ssp_bare, disc):
+    """The float32-exact discs must NOT emit the unsafe warning in float32."""
+    import warnings
+
+    from tengri.components.agn.component import Float32UnsafeAGNWarning
+
+    with jax.enable_x64(False):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            _sed_agn(ssp_bare, disc, jnp.float32)
+        assert not any(issubclass(w.category, Float32UnsafeAGNWarning) for w in caught), (
+            f"float32-exact disc '{disc}' wrongly warned as unsafe"
+        )
