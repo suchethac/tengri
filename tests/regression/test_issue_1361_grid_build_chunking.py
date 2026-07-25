@@ -14,8 +14,13 @@ into a flat array that is then reshaped onto the grid, so a wrong concatenation
 scrambles the interpolation table silently — every value present, every value in the
 wrong cell. These tests pin the chunked result against the single-call result.
 
-Deliberately cheap: rather than rebuild the 11.7 GB case, they force a small chunk
-size on a small grid, which exercises the same multi-chunk concatenation path.
+Deliberately cheap on two axes. Rather than rebuild the 11.7 GB case, they force a
+small chunk size on a small grid, which exercises the same multi-chunk concatenation
+path. And each (single-call, chunked) pair is built **once** per channel in a
+module-scoped fixture: an earlier revision rebuilt them per test and cost +1.6 GB
+peak RSS, which was enough — stacked with the #1311 file on the sibling xdist
+worker — to OOM the 16 GB `regression` runner at ~94 % of the suite (#1346).
+A memory-regression test that is itself a memory hog defeats its own fix.
 """
 
 import numpy as np
@@ -28,41 +33,90 @@ pytestmark = pytest.mark.regression_bug
 
 _LINES = (4862.68, 5008.24, 6564.61)  # Hbeta, [OIII]5007, Halpha — vacuum
 
+#: Points on the requested axis. The grid is **two**-dimensional — the model
+#: below leaves ``met_logzsol`` griddable too, and it is snapped to the SSP's
+#: own metallicity nodes (#1020), so its length is fixed by the SSP (13 for the
+#: FSPS fixture) and ignores this number. Node count is therefore ``13 x _N_GRID``.
+#: Keep this as small as the assertions allow: the single-call reference vmaps
+#: every node at once, so it is the memory floor of this module.
+_N_GRID = 2
 
-@pytest.fixture
-def cue_model(ssp_data_fsps, synthetic_tophat_obs):
-    """One free gas axis, so the grid is small but genuinely multi-node."""
+#: Forced chunk size for the chunked build. Must be < the node count, or the
+#: multi-chunk concatenation this module exists to test is never exercised.
+_CHUNK = 3
+
+
+def _cue_model(ssp, obs, **extra):
+    """A Cue model whose grid is genuinely 2-D: ``met_logzsol`` x ``neb_logU``.
+
+    Two axes matter here. The concatenation this module guards reassembles a flat
+    per-node array and *reshapes* it onto the grid, so a one-axis grid would make
+    a transposed or mis-ordered reshape indistinguishable from a correct one.
+    """
     return SEDModel.build(
-        ssp_data=ssp_data_fsps,
-        observation=synthetic_tophat_obs,
+        ssp_data=ssp,
+        observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
         dust={"type": "none"},
         redshift=0.05,
         neb={"type": "cue", "all_params": FIXED, "logU": Uniform(-3.5, -1.5)},
+        **extra,
     )
 
 
-def _build(model, chunk, monkeypatch, n_grid=4):
-    monkeypatch.setattr(ngp, "_BUILD_CHUNK_NODES", chunk)
-    return ngp.precompute_nebular_grid(model, np.asarray(_LINES), n_grid=n_grid)
+def _build_pair(model):
+    """Build the same grid twice — one vmapped call, then several chunks.
+
+    Sets ``_BUILD_CHUNK_NODES`` directly rather than via ``monkeypatch``, because
+    that fixture is function-scoped and this runs once per module.
+    """
+    saved = ngp._BUILD_CHUNK_NODES
+    try:
+        ngp._BUILD_CHUNK_NODES = 10**9  # never chunks: the reference
+        one_shot = ngp.precompute_nebular_grid(model, np.asarray(_LINES), n_grid=_N_GRID)
+        ngp._BUILD_CHUNK_NODES = _CHUNK
+        chunked = ngp.precompute_nebular_grid(model, np.asarray(_LINES), n_grid=_N_GRID)
+    finally:
+        ngp._BUILD_CHUNK_NODES = saved
+    return one_shot, chunked
+
+
+@pytest.fixture(scope="module")
+def line_pair(ssp_data_fsps, synthetic_tophat_obs):
+    """(single-call, chunked) for the line channel — built once for the module."""
+    return _build_pair(_cue_model(ssp_data_fsps, synthetic_tophat_obs))
+
+
+@pytest.fixture(scope="module")
+def phot_pair(ssp_data_fsps, synthetic_tophat_obs):
+    """(single-call, chunked) for the photometry channel — a different code path.
+
+    With ``WavePrecomp`` the build returns (line, phot) per node and takes the
+    tuple branch of ``_in_chunks``, whose concatenation is separate from the
+    line-only one.
+    """
+    return _build_pair(_cue_model(ssp_data_fsps, synthetic_tophat_obs, approx=WavePrecomp()))
 
 
 class TestChunkingDoesNotChangeTheGrid:
-    def test_chunked_matches_single_call(self, cue_model, monkeypatch):
-        """LOAD-BEARING: chunking is a memory optimization, not a numerical one.
-
-        Neuter: reverse the concatenated parts in ``_in_chunks`` and this fails —
-        every value is still present, but in the wrong grid cell.
-        """
-        one_shot = _build(cue_model, 10**9, monkeypatch)  # single vmapped call
-        chunked = _build(cue_model, 3, monkeypatch)  # several chunks
-
+    def test_the_forced_chunk_size_actually_splits_the_grid(self, line_pair):
+        """Guard the setup: if the grid fits in one chunk, everything below is vacuous."""
+        one_shot, _ = line_pair
         n_nodes = int(np.prod([a.shape[0] for a in one_shot.axes]))
-        assert n_nodes > 3, (
+        assert n_nodes > _CHUNK, (
             f"probe setup failed: {n_nodes} nodes does not exceed the forced chunk "
-            "size, so the chunked path was never taken"
+            f"size {_CHUNK}, so the chunked path was never taken"
         )
 
+    def test_chunked_matches_single_call(self, line_pair):
+        """LOAD-BEARING: chunking is a memory optimization, not a numerical one.
+
+        Neuter: swap the last two entries of ``parts`` in ``_in_chunks`` and this
+        fails — every value is still present, but in the wrong grid cell. (Reversing
+        *all* parts instead trips the builder's own first-node sanity guard, which
+        would pass this test for the wrong reason.)
+        """
+        one_shot, chunked = line_pair
         a = np.asarray(one_shot.log_line_per_qh, dtype=np.float64)
         b = np.asarray(chunked.log_line_per_qh, dtype=np.float64)
         assert a.shape == b.shape, f"chunking changed the table shape: {a.shape} vs {b.shape}"
@@ -74,37 +128,21 @@ class TestChunkingDoesNotChangeTheGrid:
             "reassembling the nodes in grid order"
         )
 
-    def test_axes_are_unchanged_by_chunking(self, cue_model, monkeypatch):
+    def test_axes_are_unchanged_by_chunking(self, line_pair):
         """The axes themselves must not depend on how the nodes were batched."""
-        one_shot = _build(cue_model, 10**9, monkeypatch)
-        chunked = _build(cue_model, 3, monkeypatch)
+        one_shot, chunked = line_pair
         assert one_shot.axis_names == chunked.axis_names
         for name, x, y in zip(one_shot.axis_names, one_shot.axes, chunked.axes):
             assert np.array_equal(np.asarray(x), np.asarray(y)), f"axis {name} changed"
 
-    def test_chunking_also_holds_for_the_photometry_channel(
-        self, ssp_data_fsps, synthetic_tophat_obs, monkeypatch
-    ):
+    def test_chunking_also_holds_for_the_photometry_channel(self, phot_pair):
         """The tuple branch of ``_in_chunks`` has its own concatenation.
 
-        With ``WavePrecomp`` the build returns (line, phot) per node and takes a
-        different reassembly path than the line-only case above. A bug there
-        would scramble ``log_phot_per_qh`` — the table
+        A bug there would scramble ``log_phot_per_qh`` — the table
         ``predict_photometry`` actually consumes — while every line assertion
         above still passed.
         """
-        model = SEDModel.build(
-            ssp_data=ssp_data_fsps,
-            observation=synthetic_tophat_obs,
-            sfh={"type": "dpl", "all_params": FREE},
-            dust={"type": "none"},
-            redshift=0.05,
-            neb={"type": "cue", "all_params": FIXED, "logU": Uniform(-3.5, -1.5)},
-            approx=WavePrecomp(),
-        )
-        one_shot = _build(model, 10**9, monkeypatch)
-        chunked = _build(model, 3, monkeypatch)
-
+        one_shot, chunked = phot_pair
         assert one_shot.log_phot_per_qh is not None, (
             "probe setup failed: no photometry channel, so the tuple branch of "
             "_in_chunks was never exercised"
@@ -117,13 +155,11 @@ class TestChunkingDoesNotChangeTheGrid:
             "the tuple branch is not reassembling the nodes in grid order"
         )
 
-    def test_small_grids_take_the_single_call_path(self, cue_model, monkeypatch):
-        """A grid at or below the chunk size must be untouched by this change.
+    def test_grids_at_or_below_the_chunk_size_are_finite(self, line_pair):
+        """The common one-axis grid must be untouched by this change.
 
-        The common one-axis grid should behave exactly as before, so the chunking
-        branch must not fire for it.
+        The reference build ran with chunking effectively disabled, so this pins
+        that the unchunked path still produces a usable table.
         """
-        table = _build(cue_model, 10**9, monkeypatch)
-        n_nodes = int(np.prod([a.shape[0] for a in table.axes]))
-        assert n_nodes <= 10**9
-        assert np.all(np.isfinite(np.asarray(table.log_line_per_qh)))
+        one_shot, _ = line_pair
+        assert np.all(np.isfinite(np.asarray(one_shot.log_line_per_qh)))
