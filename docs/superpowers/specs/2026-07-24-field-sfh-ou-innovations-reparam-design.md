@@ -81,7 +81,7 @@ by non-centering; **the τ-coupling is the rotation**, and that is the whole pro
    budget (or a documented reduction if a residual remains — with the fix-τ
    diagnostic showing the mechanism was the rotation).
 2. **The prior over SFHs is unchanged** — bit-exact, not "close." This is a
-   reparameterization of the sampler's coordinates, never a change to the modelled
+   reparameterization of the sampler's coordinates, never a change to the modeled
    distribution. Non-negotiable (the linear-time DRW physics of #865/#874 stands).
 3. **No worse, ideally cheaper.** The replacement is O(n), versus the current O(n³)
    dense Cholesky, and drops the `_DRW_CHOLESKY_JITTER` positive-definiteness hack.
@@ -126,8 +126,8 @@ correlations `ρᵢ(τ)`; the coupling between ξ and τ is sequential/banded, n
 rotation. A global mass matrix tracks a banded target far better. This is the
 standard non-centered parameterization for AR(1)/OU latent GPs.
 
-**Behaviour at the grid extremes** (matches the current model's documented
-behaviour): young ages `Δtᵢ ≪ τ` → `ρᵢ → 1`, strong correlation; old ages `Δtᵢ ≫ τ`
+**Behavior at the grid extremes** (matches the current model's documented
+behavior): young ages `Δtᵢ ≪ τ` → `ρᵢ → 1`, strong correlation; old ages `Δtᵢ ≫ τ`
 → `ρᵢ → 0`, `s` becomes independent draws of variance `var` — "effectively diagonal
 at old ages," exactly what the Cholesky path's docstring already notes.
 
@@ -208,7 +208,7 @@ process, `tengri.clear_cache()` between:
 
 ## Migration / docs
 
-- **ξ labelling changes.** The `ξ → SFH` bijection differs (a different square root
+- **ξ labeling changes.** The `ξ → SFH` bijection differs (a different square root
   of the same K), so a stored ξ vector maps to a different SFH. SFHs and posteriors
   are unaffected *in distribution*; the field is fit fresh each time and users read
   the SFH, not ξ. Note in the changelog and the `compute_field_gp` docstring; no

@@ -138,7 +138,7 @@ def test_innovations_covariance_matches_exact_drw_K(n_grid, sigma, tau_yr):
     K = _exact_drw_K(grid, sigma, tau_yr)
     cov = _implied_covariance(sigma, tau_yr, grid)
     var = (sigma * _LN10) ** 2
-    # Relative to the process variance; tolerance far tighter than any modelling
+    # Relative to the process variance; tolerance far tighter than any modeling
     # difference -- this asserts the two square roots share the SAME Gram matrix.
     assert np.max(np.abs(cov - K)) / var < 1e-10
 
