@@ -8,7 +8,7 @@ disc) is expressed as multiple :class:`Population`s. The population's
 parameter. See architecture spec §6 + ADR-0012 for the full namespace
 contract.
 
-See ``docs/dev/forward-model-architecture.md`` §5 and ADR-0012.
+See ``docs/dev/archive/forward-model-architecture.md`` §5 and ADR-0012.
 """
 
 from __future__ import annotations

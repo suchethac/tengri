@@ -1281,7 +1281,7 @@ class Fitter:
 
         Example
         -------
-        >>> fitter = Fitter(model, data, noise)
+        >>> fitter = Fitter(forward, data, noise)
         >>> fitter.compile()  # ~3s for default VI modes
         >>> fitter.compile(mcmc_methods=["nuts"])  # ~23s, then instant restarts
         >>> fitter.compile(nss=True)  # ~12s, then instant restarts
@@ -1731,7 +1731,7 @@ class Fitter:
         Examples
         --------
         >>> from tengri.inference.fitter import Fitter
-        >>> fitter = Fitter(sed_model, flux, noise, data_type="photometry")
+        >>> fitter = Fitter(forward, flux, noise, data_type="photometry")
         >>> fitter.prewarm(method="mcmc_nuts", n_chains=4)
         >>> posterior = fitter.run(method="mcmc_nuts", n_chains=4, n_samples=1000)
 
@@ -2122,7 +2122,7 @@ class Fitter:
         --------
         **Example 1: Quick exploration with MAP + geoVI**
 
-        >>> fitter = Fitter(model, data, noise)
+        >>> fitter = Fitter(forward, data, noise)
         >>> result = fitter.run("vi")  # geoVI with defaults
         >>> print(result.summary())
 
@@ -2395,7 +2395,7 @@ class Fitter:
 
         Examples
         --------
-        >>> fitter = Fitter(model, data, noise)
+        >>> fitter = Fitter(forward, data, noise)
         >>> print(fitter.summary())
         Fitter  data_type: photometry
         ──────────────────────────────────────────────────────────────
