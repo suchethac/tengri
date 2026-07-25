@@ -147,6 +147,21 @@ def validate_n_grid(n_grid):
         _check_one(n_grid, "")
 
 
+#: Grid nodes evaluated per vmapped batch at build time.
+#:
+#: The build vmaps one Cue forward per node. vmap is *batched*, not streamed, so a
+#: single call over every node holds every node's intermediates live at once, and
+#: peak memory scales with the node count: a three-axis grid at ``n_grid=8``
+#: (16 x 8 x 8 = 1024 nodes, ~11 MB of intermediates each) peaked at **11.7 GB**,
+#: enough to OOM a 16 GB CI runner or an ordinary laptop (#1361).
+#:
+#: Chunking bounds that peak at ``chunk x per-node`` while evaluating exactly the
+#: same nodes — vmap applies no cross-node reduction, so the per-node result does
+#: not depend on who else is in the batch. Grids at or below this size take the
+#: single-call path unchanged, so the common one-axis grid is untouched.
+_BUILD_CHUNK_NODES = 64
+
+
 @dataclasses.dataclass(frozen=True)
 class NebularGridTable:
     """Adaptive-axis grid of per-Q_H line luminosities for variable ionization.
@@ -354,7 +369,11 @@ def precompute_nebular_grid(
     Notes
     -----
     **Build cost**: ``n_grid ** n_free_axes`` forward evaluations, once at
-    construction (not JIT'd — a build-time loop over concrete grid points).
+    construction. They are JIT'd and vmapped over the grid — one compile, not one
+    eager forward per node — and evaluated in batches of
+    :data:`_BUILD_CHUNK_NODES` so peak memory is bounded by the chunk rather than
+    by the node count (#1361). (This note previously described a build-time loop
+    over concrete grid points; that was the pre-vmap implementation.)
 
     **Accuracy** (dense 401-point sweep inside the bounds; FSPS/MILES, dpl SFH,
     z = 0.15, met the only free axis; worst-case relative error, requires the
@@ -486,6 +505,24 @@ def precompute_nebular_grid(
 
     pts_arr = jnp.asarray([[float(v) for v in pt] for pt in points])  # (n_points, n_axes)
 
+    def _in_chunks(fn, pts, n_out):
+        """Run the vmapped ``fn`` over ``pts`` in batches of ``_BUILD_CHUNK_NODES``.
+
+        Each chunk is forced to completion before the next is dispatched. Without
+        that, JAX's async dispatch queues every chunk and holds all their
+        intermediates live anyway — which is the very thing chunking is for.
+        """
+        n = pts.shape[0]
+        if n <= _BUILD_CHUNK_NODES:
+            return fn(pts)
+        parts = []
+        for i in range(0, n, _BUILD_CHUNK_NODES):
+            part = fn(pts[i : i + _BUILD_CHUNK_NODES])
+            parts.append(jax.block_until_ready(part))
+        if n_out == 1:
+            return jnp.concatenate(parts, axis=0)
+        return tuple(jnp.concatenate([p[k] for p in parts], axis=0) for k in range(n_out))
+
     if has_phot:
 
         @jax.jit
@@ -494,7 +531,8 @@ def precompute_nebular_grid(
             line, phot = _row_traced(row, want_phot=True)
             return line, phot
 
-        line_all, phot_all = _eval_both(pts_arr)  # (n_points, n_line), (n_points, n_phot)
+        # (n_points, n_line), (n_points, n_phot)
+        line_all, phot_all = _in_chunks(_eval_both, pts_arr, 2)
     else:
 
         @jax.jit
@@ -503,7 +541,7 @@ def precompute_nebular_grid(
             line, _ = _row_traced(row, want_phot=False)
             return line
 
-        line_all = _eval_line(pts_arr)  # (n_points, n_line)
+        line_all = _in_chunks(_eval_line, pts_arr, 1)  # (n_points, n_line)
         phot_all = None
 
     # Sanity: the vmapped first node must reproduce the eager reference forward.
