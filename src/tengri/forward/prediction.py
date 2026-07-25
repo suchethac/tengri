@@ -1836,10 +1836,10 @@ class Prediction:
     -----
     This class is NOT JIT-compatible due to Python-level caching. For
     batch computations over many parameter sets (MCMC chains, mock
-    catalogs), use the JIT-compatible methods :meth:`SEDModel.predict_sfh_quantities`,
-    :meth:`SEDModel.predict_sed_quantities`, etc. instead. Those return
-    JAX pytrees (:class:`SFHQuantities`, :class:`SEDQuantities`,
-    :class:`DerivedQuantities`) suitable for :func:`jax.vmap`,
+    catalogs), use :meth:`SEDModel.predict_properties` — the one
+    JIT/vmap-safe surface for derived quantities — or
+    :meth:`SEDModel.predict_photometry` on an inference hot path. Both
+    return plain JAX values suitable for :func:`jax.vmap`,
     :func:`jax.jit`, and :func:`jax.grad`.
 
     Examples
@@ -1864,11 +1864,13 @@ class Prediction:
     **Accessing the full SED or photometry:**
 
     >>> pred.sed_array  # shape (n_wave,)
-    >>> pred.photometry  # shape (n_filters,)
+    >>> pred.photometry()  # shape (n_filters,) -- call it, it is a method
 
     **For batch computation, use JIT-compatible methods instead:**
 
-    >>> sfh_batch = jax.vmap(model.predict_sfh_quantities)(params_batch)
+    >>> batch = jax.vmap(lambda p: model.predict_properties(p, names=("stellar_mass",)))(
+    ...     params_batch
+    ... )
     """
 
     __slots__ = (
@@ -1980,11 +1982,11 @@ class Prediction:
         """
         raise TypeError(
             "Prediction objects are not JIT/vmap-compatible due to Python-level "
-            "caching. For batch computations, use the JIT-compatible methods "
-            "instead: model.predict_properties(params, names=...) for properties, "
-            "model._predict_sfh_quantities(params) for SFH, "
-            "model._predict_sed_quantities(params) for SED, etc. "
-            "These return JAX pytrees suitable for jax.vmap and jax.jit."
+            "caching. For batch computations use model.predict_properties("
+            "params, names=(...)) — the one JIT/vmap-safe surface for derived "
+            "quantities — or model.predict_photometry(params) on an inference "
+            "hot path. Both return plain JAX values suitable for jax.vmap "
+            "and jax.jit."
         )
 
     def _ensure_sfh(self):
