@@ -223,7 +223,7 @@ def test_registered_backend_accepts_precondition(name):
 
     params = inspect.signature(_BACKENDS[name].runner).parameters
     assert "precondition" in params, f"{name} runner does not accept `precondition`"
-    assert params["precondition"].default is False, f"{name}: preconditioning must be opt-in"
+    assert params["precondition"].default is None, f"{name}: default must be the auto policy"
 
 
 def test_the_signature_check_can_actually_fail():
@@ -345,11 +345,6 @@ class TestGradients:
         )
 
 
-@pytest.mark.xfail(
-    reason="PRECONDITION_MAX_DIM is set from the breadth sweep; not implemented yet",
-    raises=ImportError,
-    strict=True,
-)
 class TestAutoPolicy:
     """``precondition=None`` resolves by dimension, mirroring `dense_mass_matrix` (#319).
 
@@ -360,13 +355,13 @@ class TestAutoPolicy:
     """
 
     def test_explicit_true_and_false_round_trip(self):
-        from tengri.inference.backends.mcmc.nuts import _resolve_precondition
+        from tengri.inference.preconditioning import _resolve_precondition
 
         assert _resolve_precondition(True, 10_000) is True
         assert _resolve_precondition(False, 2) is False
 
     def test_auto_enables_below_the_threshold(self):
-        from tengri.inference.backends.mcmc.nuts import (
+        from tengri.inference.preconditioning import (
             PRECONDITION_MAX_DIM,
             _resolve_precondition,
         )
@@ -374,7 +369,7 @@ class TestAutoPolicy:
         assert _resolve_precondition(None, PRECONDITION_MAX_DIM - 1) is True
 
     def test_auto_disables_above_the_threshold(self):
-        from tengri.inference.backends.mcmc.nuts import (
+        from tengri.inference.preconditioning import (
             PRECONDITION_MAX_DIM,
             _resolve_precondition,
         )
@@ -382,7 +377,7 @@ class TestAutoPolicy:
         assert _resolve_precondition(None, PRECONDITION_MAX_DIM + 1) is False
 
     def test_threshold_is_a_measured_dimension_not_a_sentinel(self):
-        from tengri.inference.backends.mcmc.nuts import PRECONDITION_MAX_DIM
+        from tengri.inference.preconditioning import PRECONDITION_MAX_DIM
 
         assert isinstance(PRECONDITION_MAX_DIM, int)
         assert 8 <= PRECONDITION_MAX_DIM <= 2048, "threshold outside any measured regime"

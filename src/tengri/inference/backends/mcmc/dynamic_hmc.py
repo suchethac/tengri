@@ -21,7 +21,10 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
 )
-from tengri.inference.preconditioning import preconditioned_logdensity
+from tengri.inference.preconditioning import (
+    _resolve_precondition,
+    preconditioned_logdensity,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +40,7 @@ def run_dynamic_hmc(
     n_chains=1,
     target_accept_rate=0.85,
     dense_mass_matrix=True,
-    precondition: bool = False,
+    precondition: bool | None = None,
     verbose=True,
 ):
     """Dynamic HMC sampling via BlackJAX.
@@ -58,9 +61,11 @@ def run_dynamic_hmc(
         Target acceptance rate for step size adaptation.
     dense_mass_matrix : bool
         Use dense mass matrix. Set False for D>30.
-    precondition : bool, default False
+    precondition : bool or None, default None
         Sample in metric-whitened coordinates, mapping draws back afterwards.
-        A linear change of variables, so the posterior is unchanged. See
+        A linear change of variables, so the posterior is unchanged. ``None``
+        auto-enables up to
+        :data:`~tengri.inference.preconditioning.PRECONDITION_MAX_DIM`. See
         :func:`~tengri.inference.backends.mcmc.nuts.run_nuts` for the full
         rationale and :mod:`tengri.inference.preconditioning` for the math.
     verbose : bool
@@ -88,6 +93,7 @@ def run_dynamic_hmc(
 
     # Metric preconditioning (#1301) — see ``run_nuts`` for the rationale. Linear
     # change of variables, so the posterior is untouched; draws are mapped back below.
+    precondition = _resolve_precondition(precondition, len(init_flat))
     preconditioner = None
     if precondition:
         log_posterior_flat_2arg, preconditioner, init_flat = preconditioned_logdensity(

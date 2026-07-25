@@ -24,10 +24,18 @@ Notes
 This is the same metric NIFTy hands to MGVI/geoVI (``I + J^T N^-1 J``; see
 ``nifty8/re/evi.py``), the difference being that NIFTy recomputes it at every
 iteration while a Hamiltonian sampler needs one fixed metric for the whole chain.
-Measured on the field posterior, one metric evaluated at the MAP holds up across
-the region a chain visits: preconditioned condition number 1.2 at the MAP and 2.6
-with the timescale latents displaced by two prior standard deviations, against
-:math:`1.1\\times10^5` unpreconditioned.
+
+**The stiffness is not a corner case.** Measured across parametric and stochastic
+SFHs, photometry / emission lines / spectroscopy, and D = 7 to 73, the raw posterior
+condition number ran from :math:`8.5\\times10^4` to :math:`3.1\\times10^8` — every
+configuration tested. Preconditioning whitened each to exactly 1.0 at the MAP.
+
+**One fixed metric is a large improvement, not a complete one.** These posteriors are
+genuinely non-Gaussian, so the curvature changes over the region a chain explores. One
+posterior standard deviation away the whitened stiffness runs 3.7e2 to 1.7e5 —
+an improvement of 16x to 1800x on the raw problem, never a regression, but not the
+1.0 held at the expansion point. Closing that last gap needs a *position-dependent*
+metric, which is exactly what MGVI/geoVI provide and a fixed mass matrix cannot.
 
 References
 ----------
@@ -46,6 +54,7 @@ import jax
 import jax.numpy as jnp
 
 __all__ = [
+    "PRECONDITION_MAX_DIM",
     "LinearPreconditioner",
     "metric_preconditioner",
     "negative_hessian_metric",
@@ -257,3 +266,44 @@ def preconditioned_logdensity(
         preconditioner,
         preconditioner.to_latent(init_flat),
     )
+
+
+#: Largest ``D`` at which ``precondition=None`` auto-enables. Below it the cost is
+#: negligible and the benefit is universal; above it nothing has been measured.
+#:
+#: Measured on the field model (CPU, f64): the Hessian is **flat at ~2 s** from D=25 to
+#: D=521 — ``jax.hessian`` is ``jacfwd(jacrev)``, which vectorises rather than taking D
+#: sequential backward passes — and ``eigh`` + Cholesky is 0.11 s with 2.2 MB of storage
+#: at D=521. Only the ``O(D^3)`` factorisation grows, so this sits an octave above the
+#: largest configuration measured, which already covers the default ``n_grid=256``
+#: (D=265) and twice that.
+PRECONDITION_MAX_DIM: int = 1024
+
+
+def _resolve_precondition(precondition: bool | None, n_dim: int) -> bool:
+    """Resolve the ``precondition=None`` auto-policy.
+
+    Auto-enables up to :data:`PRECONDITION_MAX_DIM`. The evidence for defaulting it
+    on is that the stiffness is not a corner case: across parametric and stochastic
+    SFHs, photometry / emission lines / spectroscopy and D = 7 to 73, the raw
+    posterior condition number measured 8.5e4 to 3.1e8 — every single configuration.
+    Preconditioning whitened each one to exactly 1.0 at the MAP and improved the
+    effective stiffness one posterior sd away by 16x to 1800x, never worsening it.
+
+    Explicit ``True`` / ``False`` round-trip unchanged, so a caller can always opt out.
+
+    Parameters
+    ----------
+    precondition : bool or None
+        ``None`` (auto), ``True`` (force on), or ``False`` (force off).
+    n_dim : int
+        Number of free parameters.
+
+    Returns
+    -------
+    bool
+        Effective setting.
+    """
+    if precondition is None:
+        return n_dim <= PRECONDITION_MAX_DIM
+    return precondition

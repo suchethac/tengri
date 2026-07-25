@@ -24,7 +24,10 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
 )
-from tengri.inference.preconditioning import preconditioned_logdensity
+from tengri.inference.preconditioning import (
+    _resolve_precondition,
+    preconditioned_logdensity,
+)
 from tengri.utils.compile_log import compile_timer
 
 logger = logging.getLogger(__name__)
@@ -76,7 +79,7 @@ def run_hmc(
     target_accept_rate=0.85,
     dense_mass_matrix=True,
     chain_method="vmap",
-    precondition: bool = False,
+    precondition: bool | None = None,
     verbose=True,
 ):
     """HMC sampling via BlackJAX.
@@ -148,6 +151,7 @@ def run_hmc(
 
     # Metric preconditioning (#1301) — see ``run_nuts`` for the rationale. Linear change
     # of variables, so the posterior is untouched; draws are mapped back below.
+    precondition = _resolve_precondition(precondition, len(init_flat))
     preconditioner = None
     if precondition:
         log_posterior_flat_2arg, preconditioner, init_flat = preconditioned_logdensity(

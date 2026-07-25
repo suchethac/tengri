@@ -22,7 +22,10 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
 )
-from tengri.inference.preconditioning import preconditioned_logdensity
+from tengri.inference.preconditioning import (
+    _resolve_precondition,
+    preconditioned_logdensity,
+)
 from tengri.utils.compile_log import compile_timer
 
 logger = logging.getLogger(__name__)
@@ -110,7 +113,7 @@ def run_nuts(
     max_num_doublings=10,
     dense_mass_matrix: bool | None = None,
     pathfinder_warmstart=False,
-    precondition: bool = False,
+    precondition: bool | None = None,
     verbose=True,
 ):
     """NUTS sampling via BlackJAX.
@@ -274,11 +277,14 @@ def run_nuts(
         init_params,
     )
 
+    n_dim = len(init_flat)
+
     # Metric preconditioning (#1301). Every parameter is standardized, so the prior
     # contributes exactly I to the metric and the rest is the likelihood's — which on
-    # the correlated-field posterior spans cond ~ 1e5, far beyond what a diagonal mass
-    # matrix can cover. Sample the whitened coordinates instead and map the draws back;
-    # the map is linear, so the posterior is unchanged.
+    # every configuration measured spans cond 8.5e4 to 3.1e8, far beyond what a mass
+    # matrix estimated from warmup draws can cover. Sample the whitened coordinates
+    # instead and map the draws back; the map is linear, so the posterior is unchanged.
+    precondition = _resolve_precondition(precondition, n_dim)
     preconditioner = None
     if precondition:
         log_posterior_flat_2arg, preconditioner, init_flat = preconditioned_logdensity(
@@ -286,8 +292,6 @@ def run_nuts(
         )
         if verbose:
             logger.info("NUTS preconditioning: metric whitened at the initial point")
-
-    n_dim = len(init_flat)
 
     # Resolve auto-policy (default since #319). Explicit True/False
     # from the caller is honored as-is.
