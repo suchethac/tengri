@@ -200,3 +200,37 @@ def test_preconditioning_makes_an_ill_conditioned_gaussian_cheap_to_sample():
         f"no trajectory-cost gain: {raw_leapfrog:.1f} -> {pre_leapfrog:.1f} steps/draw"
     )
     assert pre_step / raw_step > 10.0, f"no step-size gain: {raw_step:.2e} -> {pre_step:.2e}"
+
+
+# Backends whose runner takes ``precondition``. Hamiltonian samplers only: the flag
+# whitens the metric the integrator sees, which is meaningless for the gradient-free
+# and self-tuning kernels (raytrace, ess, mclmc).
+PRECONDITIONABLE_BACKENDS = ("mcmc_nuts", "mcmc_hmc", "mcmc_dynamic_hmc")
+
+
+@pytest.mark.parametrize("name", PRECONDITIONABLE_BACKENDS)
+def test_registered_backend_accepts_precondition(name):
+    """Regression: ``mcmc_hmc`` dispatches to ``run_hmc``, not ``run_dynamic_hmc``.
+
+    Wiring the flag into ``dynamic_hmc.py`` alone left ``method="mcmc_hmc"`` raising
+    ``TypeError: run_hmc() got an unexpected keyword argument 'precondition'`` at
+    runtime — after the MAP had already been paid for. A signature check is cheap and
+    catches it before any fit starts.
+    """
+    import inspect
+
+    from tengri.inference._backend_registry import _BACKENDS
+
+    params = inspect.signature(_BACKENDS[name].runner).parameters
+    assert "precondition" in params, f"{name} runner does not accept `precondition`"
+    assert params["precondition"].default is False, f"{name}: preconditioning must be opt-in"
+
+
+def test_the_signature_check_can_actually_fail():
+    """Non-vacuity: the check above must reject a runner that lacks the kwarg."""
+    import inspect
+
+    def runner_without_it(context, *, key):
+        return None
+
+    assert "precondition" not in inspect.signature(runner_without_it).parameters

@@ -24,6 +24,7 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
 )
+from tengri.inference.preconditioning import preconditioned_logdensity
 from tengri.utils.compile_log import compile_timer
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,7 @@ def run_hmc(
     target_accept_rate=0.85,
     dense_mass_matrix=True,
     chain_method="vmap",
+    precondition: bool = False,
     verbose=True,
 ):
     """HMC sampling via BlackJAX.
@@ -143,6 +145,15 @@ def run_hmc(
         fitter,
         init_params,
     )
+
+    # Metric preconditioning (#1301) — see ``run_nuts`` for the rationale. Linear change
+    # of variables, so the posterior is untouched; draws are mapped back below.
+    preconditioner = None
+    if precondition:
+        log_posterior_flat_2arg, preconditioner, init_flat = preconditioned_logdensity(
+            log_posterior_flat_2arg, init_flat, data_args
+        )
+
     n_dim = len(init_flat)
 
     use_dense = dense_mass_matrix and n_dim <= 30
@@ -160,7 +171,7 @@ def run_hmc(
 
     t0 = time.time()
 
-    adapt_key = ("hmc", not use_dense)
+    adapt_key = ("hmc", not use_dense, bool(precondition))
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     def ld_1arg(pos):
@@ -255,6 +266,10 @@ def run_hmc(
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
+
+    # Leave the whitened coordinates before the draws are read as parameters.
+    if preconditioner is not None:
+        positions = positions @ preconditioner.matrix.T
 
     samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)
