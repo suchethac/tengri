@@ -24,8 +24,6 @@ All free parameters retain the ``agn_grahsp_*`` prefix from
 
 from __future__ import annotations
 
-import warnings
-
 import jax.numpy as jnp
 from jax import Array
 
@@ -37,14 +35,7 @@ from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.components.agn.grahsp.torus import si_feature, torus_dust_continuum
 from tengri.utils.physics_constants import L_SUN as LSUN_ERG
 
-__all__: list[str] = ["Float32L5100FallbackWarning"]
-
-
-class Float32L5100FallbackWarning(UserWarning):
-    """``agn_grahsp_l5100`` is unrepresentable in float32; ``agn_log_lbol`` used (#1206).
-
-    See ``docs/dev/float32-tier-b-boundary.md`` §8. Float64 is unaffected.
-    """
+__all__: list[str] = []  # blocks are registered via decorators; no public API
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -113,31 +104,7 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
     # corona (#1168). Below the >=91.2 nm bolometric window, so normalization
     # is unchanged.
     L_lambda_unit_nm = floor_disc_xray(wave_nm, L_lambda_unit_nm)
-    # Float32 (#1206): ``agn_grahsp_l5100`` is a LINEAR erg/s parameter
-    # (LogUniform(1e42, 1e47)), so in float32 the parameter VALUE is already ``inf``
-    # before any arithmetic runs — ``L_lambda_unit * inf = nan`` — and even a
-    # log-space form could not help, because the resulting L_lambda (~3e41 erg/s/Å)
-    # exceeds the float32 maximum (3.4e38) regardless of how it is expressed. The
-    # only representable normalization is the ``agn_log_lbol`` one this block
-    # already implements, which the AGN component shrinks to its float32 reference.
-    # Fall back to it, LOUDLY, rather than return NaN. Float64 is untouched, so
-    # GRAHSP parity is unaffected.
-    _explicit_l5100 = agn_grahsp_l5100 is not None
-    _f32_fallback = _explicit_l5100 and wave_aa.dtype == jnp.float32
-    if _f32_fallback:
-        warnings.warn(
-            "GRAHSP disc: agn_grahsp_l5100 cannot be represented in float32 "
-            "(the parameter spans 1e42-1e47 erg/s, past the float32 maximum "
-            "3.4e38), so the disc is normalized by agn_log_lbol instead (#1206). "
-            "Under the default agn_norm='cigale_joint' with agn_fracAGN>0 this is "
-            "exact — the disc is renormalized to agn_power there, so l5100 has no "
-            "effect on the composed SED either way. With agn_norm='independent' or "
-            "agn_fracAGN=0 the normalization WILL differ from float64; run those in "
-            "float64.",
-            Float32L5100FallbackWarning,
-            stacklevel=2,
-        )
-    if agn_grahsp_l5100 is None or _f32_fallback:
+    if agn_grahsp_l5100 is None:
         # Normalize by the requested bolometric luminosity above the Lyman limit.
         from tengri.components.agn.grahsp.bolometric import (
             bolometric_luminosity_bbb,

@@ -73,7 +73,7 @@ _AGN_LBOL_REF: float = 10.0 - _LOG10_L_SUN
 #: ``qsogen`` / ``schartmann2005`` / ``adaf_lopez2024`` (shape-invariant).
 #: ``grahsp_sbpl`` is blocked on a linear erg/s *parameter* (``agn_grahsp_l5100``
 #: is ``inf`` in float32), not a kernel overflow — it needs a log-space parameter.
-_NON_FLOAT32_SAFE_DISCS: frozenset[str] = frozenset()
+_NON_FLOAT32_SAFE_DISCS: frozenset[str] = frozenset({"grahsp_sbpl"})
 
 
 class Float32UnsafeAGNWarning(UserWarning):

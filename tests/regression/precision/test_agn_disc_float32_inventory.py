@@ -19,29 +19,18 @@ factors leave the float32 window in OPPOSITE directions (``wavelength**-4``
 ~1e-40 flushes to 0 while the continuity ``norm`` ~1e40 overflows) — ``0 * inf =
 nan``. It is now built as one log10 sum, peak-factored before exponentiating.
 
-The three former **grid/other-class** failures are fixed too, each by a different
-mechanism because each had a different cause:
+Three float32 failures remain — **grid/other-class** (``relagn``,
+``slone_netzer``, ``grahsp_sbpl``): non-finite in float32 *even at the reference
+L_bol*, each from a DIFFERENT cause. ``grahsp_sbpl`` is blocked on a linear erg/s
+*parameter* (``agn_grahsp_l5100``, LogUniform(1e42, 1e47) — the value itself is
+``inf`` in float32), so it needs a log-space parameter, not a kernel fix (#1206
+item 3). ``relagn`` is finite in EAGER float32 and only ``inf`` under jit — an XLA
+fusion artifact, not a range wall. ``slone_netzer`` underflows its template
+normalization to zero.
 
-* ``slone_netzer`` — its template's own bolometric integral (~1e45 erg/s)
-  overflowed and the division flushed the disc to *zero*, and its ``floor=1e-100``
-  guard was itself below the float32 minimum (a no-op). Peak-factored and
-  regrouped, with a representable floor.
-* ``relagn`` — its grid carries an *absolute* normalization whose
-  ``λL_λ(5100 Å) = 2.57e44`` erg/s cannot be represented at all, and
-  ``agn_log_lbol`` was a silent no-op for it. It is now normalized to
-  ``agn_log_lbol`` like every other disc (a deliberate float64 behavior change).
-* ``grahsp_sbpl`` — ``agn_grahsp_l5100`` is a *linear* erg/s parameter spanning
-  1e42–1e47, so the parameter **value** is ``inf`` in float32 before any
-  arithmetic runs. In float32 the block falls back to its ``agn_log_lbol``
-  normalization and says so via ``Float32L5100FallbackWarning``; float64 keeps the
-  explicit ``l5100`` untouched, so GRAHSP parity is unaffected. Under the default
-  ``agn_norm='cigale_joint'`` with ``agn_fracAGN>0`` the fallback is *exact* —
-  the disc is renormalized to ``agn_power`` there, so ``l5100`` has no effect on
-  the composed SED either way (measured ratio 1.0000).
-
-Every registered disc is now float32-exact, so the ``xfail`` progress-tracker and
-the unsafe-warning test skip themselves. The exact-disc parametrization is the
-enforced record of "checked every AGN disc component".
+This test pins the exact discs (regression guard) and ``xfail``\ s the rest
+(progress tracker: fixing one turns its ``xfail`` into an unexpected pass). It is
+the enforced record of "checked every AGN disc component".
 """
 
 import jax
@@ -68,14 +57,13 @@ _EXACT_DISCS = [
     "adaf_lopez2024",
     "slone_netzer",
     "relagn",
-    "grahsp_sbpl",
 ]
 
 # Shape depends on L_bol; float32 reference evaluation gives the wrong shape.
 _SHAPE_CLASS_XFAIL = []
 
 # Non-finite in float32 even at the reference L_bol — a distinct internal overflow.
-_GRID_CLASS_XFAIL: list[str] = []
+_GRID_CLASS_XFAIL = ["grahsp_sbpl"]
 
 
 def _sed_agn(ssp, disc, dtype):
@@ -147,11 +135,7 @@ def test_disc_is_exact_in_float32(ssp_bare, disc):
     assert ok, f"disc '{disc}' regressed on the pure-float32 path: {detail}"
 
 
-@pytest.mark.skipif(
-    not (_SHAPE_CLASS_XFAIL + _GRID_CLASS_XFAIL),
-    reason="every registered disc is float32-exact — nothing left to track",
-)
-@pytest.mark.parametrize("disc", _SHAPE_CLASS_XFAIL + _GRID_CLASS_XFAIL or ["none"])
+@pytest.mark.parametrize("disc", _SHAPE_CLASS_XFAIL + _GRID_CLASS_XFAIL)
 @pytest.mark.xfail(reason="#1206 follow-up: disc not yet float32-hardened", strict=True)
 def test_disc_float32_pending(ssp_bare, disc):
     """Progress tracker — fixing one of these flips its xfail to an unexpected pass."""
@@ -159,8 +143,7 @@ def test_disc_float32_pending(ssp_bare, disc):
     assert ok, f"disc '{disc}' still float32-broken: {detail}"
 
 
-@pytest.mark.skipif(not _GRID_CLASS_XFAIL, reason="no float32-unsafe disc remains to warn about")
-@pytest.mark.parametrize("disc", _GRID_CLASS_XFAIL or ["none"])
+@pytest.mark.parametrize("disc", _GRID_CLASS_XFAIL)
 def test_grid_class_disc_warns_in_float32(ssp_bare, disc):
     """A non-float32-safe disc must warn (loudly) when evaluated in float32.
 
@@ -206,33 +189,4 @@ def test_float32_safe_disc_does_not_warn(ssp_bare, disc):
             _sed_agn(ssp_bare, disc, jnp.float32)
         assert not any(issubclass(w.category, Float32UnsafeAGNWarning) for w in caught), (
             f"float32-exact disc '{disc}' wrongly warned as unsafe"
-        )
-
-
-def test_grahsp_l5100_fallback_warns_in_float32_only(ssp_bare):
-    """The GRAHSP l5100 fallback must announce itself — and only in float32.
-
-    ``agn_grahsp_l5100`` is unrepresentable in float32, so the block normalizes by
-    ``agn_log_lbol`` instead. That substitution is exact under the default
-    ``cigale_joint``/``fracAGN>0`` composition but not for every norm mode, so it
-    must never be silent. Float64 keeps the explicit value and must not warn.
-    """
-    import warnings
-
-    from tengri.components.agn.blocks.grahsp_blocks import Float32L5100FallbackWarning
-
-    with jax.enable_x64(False):
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            _sed_agn(ssp_bare, "grahsp_sbpl", jnp.float32)
-        assert any(issubclass(w.category, Float32L5100FallbackWarning) for w in caught), (
-            "float32 GRAHSP disc silently substituted its normalization"
-        )
-
-    with jax.enable_x64(True):
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            _sed_agn(ssp_bare, "grahsp_sbpl", jnp.float64)
-        assert not any(issubclass(w.category, Float32L5100FallbackWarning) for w in caught), (
-            "float64 GRAHSP disc wrongly reported a float32 fallback"
         )
