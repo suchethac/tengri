@@ -22,6 +22,10 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
 )
+from tengri.inference.preconditioning import (
+    _resolve_precondition,
+    preconditioned_logdensity,
+)
 from tengri.utils.compile_log import compile_timer
 
 logger = logging.getLogger(__name__)
@@ -109,6 +113,7 @@ def run_nuts(
     max_num_doublings=10,
     dense_mass_matrix: bool | None = None,
     pathfinder_warmstart=False,
+    precondition: bool | None = None,
     verbose=True,
 ):
     """NUTS sampling via BlackJAX.
@@ -215,6 +220,28 @@ def run_nuts(
         - Zhang et al. 2022, "Pathfinder: Parallel quasi-Newton variational
           inference", JMLR 23, 306, arXiv:2108.03782.
 
+    precondition : bool, default False
+        Sample in metric-whitened coordinates. Every tengri parameter is
+        standardized, so the prior contributes exactly ``I`` to the metric and
+        everything left is the likelihood's — which on the correlated-field
+        posterior spans ``cond(grad^2 H) ~ 1e5``, far beyond what any single mass
+        matrix estimated from warmup draws can cover. This builds the metric
+        analytically at the initial point instead and samples ``H(A zeta)`` with
+        ``A A^T = G^-1``, mapping draws back with ``xi = A zeta``.
+
+        The map is **linear**, so its Jacobian is constant and the posterior is
+        unchanged — only the geometry the integrator sees. Pass ``init_from`` a
+        MAP result so the metric is built where the chain will actually be.
+
+        Costs one dense ``(D, D)`` Hessian up front (``O(D)`` backward passes),
+        so it is worthwhile at moderate ``D`` and on stiff posteriors, not on
+        easy low-dimensional ones. On a rotated cond-1e6 Gaussian it cut
+        integrator steps per draw 77x and raised the step size 185x.
+
+        This is the metric NIFTy hands to MGVI/geoVI (``I + J^T N^-1 J``); the
+        difference is that NIFTy recomputes it every iteration while a
+        Hamiltonian sampler needs one fixed metric for the whole chain.
+
     verbose : bool
         Print progress.
     """
@@ -251,6 +278,20 @@ def run_nuts(
     )
 
     n_dim = len(init_flat)
+
+    # Metric preconditioning (#1301). Every parameter is standardized, so the prior
+    # contributes exactly I to the metric and the rest is the likelihood's — which on
+    # every configuration measured spans cond 8.5e4 to 3.1e8, far beyond what a mass
+    # matrix estimated from warmup draws can cover. Sample the whitened coordinates
+    # instead and map the draws back; the map is linear, so the posterior is unchanged.
+    precondition = _resolve_precondition(precondition, n_dim)
+    preconditioner = None
+    if precondition:
+        log_posterior_flat_2arg, preconditioner, init_flat = preconditioned_logdensity(
+            log_posterior_flat_2arg, init_flat, data_args
+        )
+        if verbose:
+            logger.info("NUTS preconditioning: metric whitened at the initial point")
 
     # Resolve auto-policy (default since #319). Explicit True/False
     # from the caller is honored as-is.
@@ -297,7 +338,9 @@ def run_nuts(
                 n_dim**2,
             )
 
-    adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart))
+    # ``precondition`` changes the sampled geometry, so a cached step size and mass
+    # matrix from the un-preconditioned run must not be reused.
+    adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), bool(precondition))
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     if cached is not None:
@@ -396,6 +439,12 @@ def run_nuts(
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
+
+    # Back out of the whitened coordinates before anything interprets the draws as
+    # parameters. ``positions`` is (n_draw, D), so ``zeta @ A^T`` applies ``xi = A zeta``
+    # row-wise.
+    if preconditioner is not None:
+        positions = positions @ preconditioner.matrix.T
 
     samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)
