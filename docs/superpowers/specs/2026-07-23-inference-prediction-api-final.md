@@ -263,7 +263,7 @@ fwd = ForwardModel.build(sed=sed, observation=obs,
           approx=WavePrecomp(catalog_z_range=(0.05, 1.5), n_z=200))
 
 cat  = Catalog(fwd, table, redshift_col="z", flux_unit="mJy")     # ◆ one noun
-post = cat.fit(method="native_vi_linear", key=key,
+post = cat.fit(method="mcmc_nuts", key=key,
                forward_chunk_size=64)                              # K vmapped per lax.map step ✓
 post["stellar_mass"]                                               # (N_galaxies,)
 
@@ -295,12 +295,12 @@ Catalog(fwd, galaxies).fit(method="map", forward_chunk_size=1)
 #   forward_chunk_size=1 → no vmap → ragged n_data allowed
 
 # target — vmapped via union-LUT + presence mask                      ◆
-approx = WavePrecomp(filters=union_filter_set, catalog_z_range=(0.05, 1.5))
+approx = WavePrecomp(catalog_z_range=(0.05, 1.5))   # filters come from the Observation
 fwd    = ForwardModel.build(sed=sed,
              observation=Observation(photometry=Photometry.from_names(union_filter_set)),
              approx=approx)
 cat    = Catalog(fwd, table, redshift_col="z", flux_unit="mJy")
-post   = cat.fit(method="native_vi_linear", key=key, forward_chunk_size=64)
+post   = cat.fit(method="mcmc_nuts", key=key, forward_chunk_size=64)
 ```
 
 **Shapes (union path) ◆.** Rectangular over the union: `flux`, `noise` `(N, n_union)`, plus **two distinct channels** (§3.3): `presence (N, n_union)` bool — `False` = band absent, χ² skips it — and `censor (N, n_union)` in `{0,1,−1}` for limits in bands that *were* observed. The model predicts all `n_union` bands from the single union LUT; the masks select per galaxy. A band a galaxy has but the union lacks → **raise**. (The presence mask is a **new channel**, not a reuse of `data_mask` — that name already means censoring, with boolean arrays rejected by design.)
@@ -403,7 +403,7 @@ Catalog surfaces accept **table-in** (columns, name-matched) or **arrays-in** (p
 For large N the sample cube `(N, n_samples, n_params)` (~8 GB at N=10⁵) must never be forced into memory. `CatalogPosterior` gains streaming, **configurable** summaries — arbitrary percentiles + arbitrary reducers, chunk-reduced at the `forward_chunk_size` boundary:
 
 ```python
-post = cat.fit(method="native_vi_linear", key=key, forward_chunk_size=64,
+post = cat.fit(method="mcmc_nuts", key=key, forward_chunk_size=64,
                store="summary",                              # vs "full"; default by N — switch is LOGGED
                percentiles=(2.5, 16, 50, 84, 97.5),
                reducers={"mean": jnp.mean, "std": jnp.std})

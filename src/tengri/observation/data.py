@@ -18,6 +18,48 @@ import jax.numpy as jnp
 import numpy as np
 
 
+def _bad_indices(values, predicate) -> np.ndarray:
+    """Indices where ``predicate`` flags a value as unusable."""
+    return np.flatnonzero(predicate(np.asarray(values)))
+
+
+def _describe(bad: np.ndarray, names=None, limit: int = 5) -> str:
+    """Name the offending channels — band names when known, else indices."""
+    if names is not None:
+        labels = [str(names[i]) for i in bad[:limit]]
+    else:
+        labels = [f"index {i}" for i in bad[:limit]]
+    more = f" (+{bad.size - limit} more)" if bad.size > limit else ""
+    return ", ".join(labels) + more
+
+
+def _reject_nonfinite(values, channel: str, names=None) -> None:
+    """Raise if any value is NaN or inf, naming the offending channel."""
+    bad = _bad_indices(values, lambda a: ~np.isfinite(a))
+    if bad.size:
+        raise ValueError(
+            f"NaN/inf {channel} at {_describe(bad, names)}: a single-galaxy "
+            "Data must be complete — drop the channel from the Observation "
+            "instead of passing a placeholder (spec 3.3)."
+        )
+
+
+def _reject_nonpositive_sigma(values, channel: str, names=None) -> None:
+    """Raise if any uncertainty is <= 0.
+
+    A zero sigma divides by zero; a *negative* one is worse, because ``chi^2``
+    squares the sign away — the fit then runs to completion and reports a
+    confidently wrong answer with no warning anywhere.
+    """
+    bad = _bad_indices(values, lambda a: np.isfinite(a) & (a <= 0))
+    if bad.size:
+        raise ValueError(
+            f"non-positive {channel} at {_describe(bad, names)}: uncertainties "
+            "must be > 0. A negative sigma is squared away by chi^2 and would "
+            "silently weight that channel as if the sign were positive."
+        )
+
+
 class ValidatedData(NamedTuple):
     flux: jnp.ndarray | None  # (n_filters,) [erg/s/cm^2/Hz]
     noise: jnp.ndarray | None  # (n_filters,)
@@ -77,6 +119,10 @@ class Data:
                     "must be complete — drop the filter from the "
                     "Observation instead (spec 3.3)."
                 )
+            # The uncertainties are half the record and were previously unchecked,
+            # so a NaN or sign-flipped error bar reached the likelihood untouched.
+            _reject_nonfinite(noise, "photometry uncertainty", phot_schema.names)
+            _reject_nonpositive_sigma(noise, "photometry uncertainty", phot_schema.names)
         if self.censor is not None:
             c = np.asarray(self.censor)
             if c.dtype == bool:
@@ -100,6 +146,16 @@ class Data:
                 raise ValueError(
                     f"spectrum shape {spec_flux.shape} does not match the wave grid ({npix} pix)."
                 )
+            # Only the flux length was checked before, so a short or long noise array
+            # broadcast silently against the residual instead of failing.
+            if spec_noise.shape != (npix,):
+                raise ValueError(
+                    f"spectrum noise shape {spec_noise.shape} does not match the "
+                    f"wave grid ({npix} pix); flux and uncertainty must align."
+                )
+            _reject_nonfinite(spec_flux, "spectrum flux")
+            _reject_nonfinite(spec_noise, "spectrum uncertainty")
+            _reject_nonpositive_sigma(spec_noise, "spectrum uncertainty")
         if self.lines:
             declared = getattr(observation, "lines", None)
             declared_names = set(getattr(declared, "names", []) or [])
@@ -110,4 +166,11 @@ class Data:
                     "Observation's LineList — declare WHICH lines on the "
                     "schema; supply their VALUES here (spec 3.2)."
                 )
+            # Line fluxes carry the same NaN / sign-flip exposure as the continuum,
+            # and each is named individually so the offending line is obvious.
+            for line_name, pair in self.lines.items():
+                value, err = pair
+                _reject_nonfinite([value], f"{line_name} line flux", [line_name])
+                _reject_nonfinite([err], f"{line_name} line uncertainty", [line_name])
+                _reject_nonpositive_sigma([err], f"{line_name} line uncertainty", [line_name])
         return ValidatedData(flux, noise, spec_flux, spec_noise, censor, self.lines)
