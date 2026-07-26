@@ -566,21 +566,23 @@ _USE_CASES = _Tutorial(
 
         Use case 2  ──  ONE GALAXY, joint photometry + spectroscopy
         ───────────────────────────────────────────────────────────
-        Same Fitter; pass a Spectroscopy alongside Photometry.
+        Same one-liner; declare both channels on the Observation, then pass
+        each channel's arrays by name.
 
             obs = tengri.Observation(photometry=phot, spectroscopy=spec_data)
-            fitter = tengri.Fitter(model, data=joint_flux, noise=joint_noise,
-                                   data_type="joint",
-                                   calibration_marginalize=True,
-                                   eline_marginalize=True)
+            model = tengri.SEDModel.build(ssp_data=ssp, observation=obs, ...)
+            post = model.fit(photometry=(flux_p, err_p),
+                             spectrum=(flux_s, err_s), method="mcmc_nuts")
 
         Use case 3  ──  CATALOG of N galaxies, independent fits
         ─────────────────────────────────────────────────────────
-        vmap'd across galaxies — one compile, N posteriors.
+        One noun: Catalog. Table in, posteriors out. With redshift_col and a
+        model built with approx=WavePrecomp(catalog_z_range=...), each row's
+        redshift is a runtime input to one shared compile.
 
-            from tengri import CatalogFitter
-            cat = CatalogFitter(model, data_array, noise_array)
-            posteriors = cat.run("map")            # → CatalogPosterior
+            cat = tengri.Catalog(fwd, table, flux_unit="mJy", redshift_col="z")
+            post = cat.fit(method="map", key=jax.random.PRNGKey(0))
+            post["stellar_mass"]                   # (N,) medians
 
         Use case 4  ──  HIERARCHICAL fit (e.g. shared SFH burstiness)
         ─────────────────────────────────────────────────────────────
@@ -598,14 +600,14 @@ _USE_CASES = _Tutorial(
                 sfh_field_psd_tau_myr=tengri.LogUniform(10, 500),
                 ...
             )
-            posterior = fitter.run("vi")  # geoVI scales to high-D
+            posterior = model.fit(flux, err, method="vi")  # geoVI scales to high-D
 
         Use case 6  ──  MOCK RECOVERY (validation / Paper I)
         ─────────────────────────────────────────────────────
         Synthetic galaxy → fit it back → check truth in the posterior.
 
             mock = tengri.generate_mock(model, key=jax.random.PRNGKey(0), snr=20.0)
-            posterior = fitter.run("nuts")
+            posterior = model.fit(mock["flux_obs"], mock["noise"], method="mcmc_nuts")
             posterior.plot_corner(truths=mock["params"])
 
         Use case 7  ──  MODEL COMPARISON
@@ -615,8 +617,7 @@ _USE_CASES = _Tutorial(
             for agn_model in (None, "skirtor", "kubota_done_full"):
                 spec_i = tengri.Parameters(..., agn_model=agn_model)
                 model_i = tengri.SEDModel(spec_i, ssp, observation=obs)
-                fitter_i = tengri.Fitter(model_i, data, noise)
-                results[agn_model] = fitter_i.run("nss")  # nested sampling
+                results[agn_model] = model_i.fit(data, noise, method="nss")
 
         Use case 8  ──  CUSTOM PHYSICS
         ───────────────────────────────

@@ -16,7 +16,7 @@ import time
 import warnings
 from dataclasses import dataclass, field
 
-__all__ = ["CatalogPosterior"]
+__all__ = ["CatalogFitter", "CatalogPosterior"]
 
 import jax
 import jax.numpy as jnp
@@ -1242,16 +1242,31 @@ class _CatalogFitterOriginal:
         )
 
 
-def __getattr__(name: str):
-    """Emit a one-shot deprecation warning for CatalogFitter import."""
-    if name == "CatalogFitter":
+class CatalogFitter(_CatalogFitterOriginal):
+    """Deprecated public alias of the catalog engine — use :class:`tengri.Catalog`.
+
+    .. deprecated::
+        ``Catalog`` is the one taught catalog noun (#1317, spec decision 6):
+        ``Catalog(fwd, table, flux_unit="mJy", redshift_col="z").fit(method="map",
+        key=key)``. This class keeps working per the no-removal policy (spec
+        §13) but warns at construction.
+
+    Notes
+    -----
+    ``Catalog`` itself constructs :class:`_CatalogFitterOriginal` directly, so
+    the internal path stays warning-free — only user-typed ``CatalogFitter``
+    warns. (A previous module ``__getattr__`` hook warned on direct module
+    imports, but the ``tengri.CatalogFitter`` re-export bypassed it, so the
+    taught name never warned — #1369.)
+    """
+
+    def __init__(self, model, galaxies, data_type="photometry"):
         warnings.warn(
-            "CatalogFitter is deprecated and will be removed in tengri v1.0; "
-            "use Catalog (from tengri.inference.catalog or tengri) instead. "
-            "Catalog wraps CatalogFitter with table-in/table-out access and "
-            "eager validation.",
+            "CatalogFitter is deprecated: use tengri.Catalog — "
+            "Catalog(fwd, table, flux_unit=..., redshift_col=...).fit(method=..., "
+            "key=...). CatalogFitter keeps working but is no longer taught. "
+            "See #1369.",
             DeprecationWarning,
             stacklevel=2,
         )
-        return _CatalogFitterOriginal
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+        super().__init__(model, galaxies, data_type)
