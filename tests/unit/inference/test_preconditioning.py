@@ -635,6 +635,4 @@ class TestNonFiniteExpansionPoint:
         # is a NaN matrix being reported as a definiteness problem, which sends the
         # reader to fix curvature when the defect is upstream.
         assert "finite" in msg or "nan" in msg, f"non-finiteness not named: {excinfo.value}"
-        assert "positive definite" not in msg, (
-            f"NaN metric diagnosed as non-PD: {excinfo.value}"
-        )
+        assert "positive definite" not in msg, f"NaN metric diagnosed as non-PD: {excinfo.value}"
