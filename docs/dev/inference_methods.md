@@ -165,6 +165,87 @@ where `J_full` includes derivatives of both the signal and noise model, and `H_n
 is the Hessian of the noise-model likelihood. The `variable_noise_metric_vec` function
 handles this generalization.
 
+### 2.5 The Same Metric for HMC (`precondition=True`)
+
+The metric above is what makes the VI methods work: geoVI and MGVI re-evaluate it at the
+current position on every iteration, so the geometry they see is always locally white.
+NIFTy does the same thing (`nifty8/re/evi.py`), and standardization exists precisely so
+the prior's contribution is exactly `I` and only `J^T N^{-1} J` has to be computed.
+
+A Hamiltonian sampler cannot do that. Its mass matrix is estimated once during warmup
+and then frozen, so it gets no benefit from the standardized prior when the likelihood
+curvature varies. On the correlated-field posterior the gap is wide — measured at
+n_grid=16 with emission lines (D=25):
+
+```
+cond(grad^2 H) at the MAP        1.1e5      (eigenvalues 0.81 ... 9.0e4)
+```
+
+No diagonal mass matrix covers that, and a dense one estimated from warmup draws is both
+noisy and memory-hungry.
+
+`precondition` (**opt-in — default off**; pass `True` to enable) supplies the metric
+analytically instead. It is a **linear change of variables**, not a mass matrix:
+
+```
+G = -grad^2 log p   at the initial point, eigenvalue MAGNITUDES floored at 1.0
+G = L L^T,  A = L^{-T}      so  A A^T = G^{-1}  and  A^T G A = I
+
+sample  H(A zeta)   instead of   H(xi),   then map draws back with   xi = A zeta
+```
+
+The magnitude (`max(|lambda|, 1.0)`, saddle-free Newton) matters at a non-stationary
+expansion point: a steeply *negative* direction is treated as steep, not flat — a
+signed floor left one unconverged-MAP fit mis-scaled by 51x. At a true stationary
+point all eigenvalues are positive and the two are identical.
+
+Because the map is linear its Jacobian is constant, so the posterior is unchanged — only
+the geometry the integrator sees. The eigenvalue floor of 1.0 is the prior's exact
+contribution: the Gauss-Newton likelihood term is positive semi-definite, so anything
+below 1 is residual curvature (the term Gauss-Newton drops).
+
+The metric is formally position-dependent, so a single one built at the MAP is an
+approximation. Measured, it holds across the region a chain actually visits:
+
+| point | preconditioned cond |
+|---|---|
+| at the MAP | 1.23 |
+| timescale latents at +2 sd | 2.62 (raw cond there: 1.2e4) |
+| random 1-sd jitter | 2.05 |
+
+**Practical notes.**
+
+- Pass `init_from` a MAP result so the metric is built where the chain will be.
+- Cost is not a constraint below the cap: the dense Hessian is **flat at ~2 s** from
+  D=25 to D=521 (`jax.hessian` is `jacfwd(jacrev)`, which vectorizes rather than taking
+  D sequential backward passes), and `eigh` + Cholesky is 0.11 s / 2.2 MB at D=521.
+  Only the `O(D^3)` factorization grows — hence the 1024 cap. "Easy low-dimensional"
+  posteriors turned out not to exist here: the simplest configuration measured
+  (double-power-law + photometry, D=7) already had raw cond 8.5e4.
+- **Why it is opt-in ([#1397](https://github.com/suchethac/tengri/issues/1397)).** It
+  shipped auto-on and the default broke fits that had been working. `notebooks/01`
+  stopped running entirely — a NaN MAP init makes the metric non-finite and the guard
+  turned a working fit into a hard `ValueError`. `notebooks/07`'s photometry fit went
+  from max R-hat 1.014 to **1.839** *while reporting zero divergences*: the usual
+  health signal inverts, so a divergence check scores the broken arm as the healthiest.
+- **The conditioning win is not a demonstrated sampling win.** Across 5 seeds per
+  configuration, `dpl / photometry` (D=7) gained a median **1.87x ESS/s** (better in
+  5/5 seeds), but `dpl + free metallicity / photometry` (D=8) came out at a median
+  **0.84x** — a net loss, with per-seed values spanning 0.44-1.23. No R-hat effect is
+  detectable either way: the paired differences sit at or below the spread between
+  seeds within a single arm. Treat the justification as *geometry and gradients*, which
+  are deterministic and measured everywhere, not throughput, which is not.
+- **Where it is most likely to pay.** All three HMC backends force `use_dense = False`
+  above D=30, so above that threshold the competitor is a *diagonal* mass matrix, which
+  cannot represent rotation at all. Below D=30 the competitor is an empirical dense
+  covariance from warmup — a far stronger baseline, and where the 0.84x was measured.
+- Which backends accept the flag is a **declared registry capability**
+  (`register_backend(..., accepts_precondition=True)`), not a list maintained by hand.
+  Today that is the Hamiltonian family; gradient-free and self-tuning kernels
+  (`mcmc_raytrace`, `mcmc_ess`, `mcmc_mclmc`) do not declare it, because whitening the
+  integrator's metric is meaningless for them. Passing `precondition=True` to a backend
+  that has not declared it raises at dispatch and names the ones that have.
+
 ---
 
 ## 3. geoVI: Geometric Variational Inference

@@ -28,6 +28,49 @@ _JAXOPT_SOLVERS = _SCIPY_OPTIMIZERS
 _QUASI_NEWTON = _SCIPY_OPTIMIZERS
 
 
+def _reject_nonfinite_map(params: dict) -> None:
+    """Refuse to hand a non-finite MAP point downstream (#1397).
+
+    A MAP estimate containing NaN or inf is not a usable answer, and it is not a
+    private problem either: every MCMC and VI backend takes ``init_from`` from here,
+    so one bad point poisons whatever runs next. In #1397 it produced a NUTS run whose
+    every parameter was NaN and whose ``rhat()`` was NaN — which silently disarms a
+    notebook's ``max_rhat < 1.01`` assertion, because NaN compares false against any
+    threshold. Nothing raised.
+
+    Any non-finite coordinate is rejected, not only an all-NaN point: the optimizer
+    has already failed by then, and a partially-NaN start is no more samplable than a
+    fully-NaN one.
+
+    Parameters
+    ----------
+    params : dict
+        Parameter name -> value. Values may be scalars or arrays (field latents
+        arrive as vectors).
+
+    Raises
+    ------
+    ValueError
+        If any value contains NaN or inf. The message names the offending parameters.
+    """
+    import numpy as _np
+
+    bad = sorted(
+        name
+        for name, value in params.items()
+        if not bool(_np.all(_np.isfinite(_np.asarray(value, dtype=float))))
+    )
+    if not bad:
+        return
+    raise ValueError(
+        f"MAP optimization produced a non-finite estimate for {bad} — the fit did not "
+        f"converge (a run ending in loss=nan is the usual cause). Handing this on as "
+        f"an initialization gives a posterior of NaN with NaN R-hat, which raises "
+        f"nothing and silently disarms any convergence check. Inspect data scaling "
+        f"and prior bounds, or pass an explicit finite `init_from`."
+    )
+
+
 def _build_optax_optimizer(optimizer, learning_rate):
     """Build an optax optimizer from a string name or return as-is."""
     try:
@@ -228,6 +271,7 @@ def _run_map_scipy(
     wall_time = time.time() - t0
 
     best_params = unravel_fn(jnp.asarray(result.x))
+    _reject_nonfinite_map(best_params)
     best_params_physical = context.to_physical(best_params)
     final_loss = float(result.fun)
     converged = result.success
@@ -338,6 +382,7 @@ def _run_map_multistart(context, *, key, n_restarts, n_steps, learning_rate, opt
     final_losses = losses_b[:, -1]
     best = int(jnp.argmin(final_losses))
     best_params = jax.tree.map(lambda x: x[best], params_b)
+    _reject_nonfinite_map(best_params)
     best_losses = losses_b[best]
     wall_time = time.time() - t0
     final_loss = float(best_losses[-1])
@@ -532,6 +577,7 @@ def run_map(
     wall_time = time.time() - t0
     n_actual = len(losses)
     final_loss = losses[-1] if losses else float("nan")
+    _reject_nonfinite_map(best_params)
     best_params_physical = context.to_physical(best_params)
 
     if verbose:

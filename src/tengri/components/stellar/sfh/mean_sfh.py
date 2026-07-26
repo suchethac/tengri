@@ -89,6 +89,94 @@ def _renormalize_to_mass(
     return shape * (10.0**log_total_mass) / jnp.maximum(mass_norm, 1e-30)
 
 
+def window_weight(
+    t_lookback: jnp.ndarray,
+    lo: float | jnp.ndarray = -jnp.inf,
+    hi: float | jnp.ndarray = jnp.inf,
+) -> jnp.ndarray:
+    r"""Fraction of each grid cell lying inside the window ``[lo, hi]``.
+
+    The differentiable replacement for a hard boolean window
+    ``(t >= lo) & (t <= hi)``. Point-sampling a step function makes the result a
+    **staircase** in ``lo`` and ``hi`` — it changes only when a grid node crosses
+    a boundary — so its autodiff gradient is zero almost everywhere and any
+    gradient-based sampler gets no signal from the boundary parameters (#1374).
+
+    This returns the exact cell average of the window indicator instead:
+
+    .. math::
+
+        w_i = \frac{\left|[c^-_i,\, c^+_i] \cap [\ell,\, h]\right|}{c^+_i - c^-_i},
+
+    where :math:`[c^-_i, c^+_i]` is grid cell :math:`i`, bounded by the midpoints
+    to its neighbors (:math:`c^\pm` for the end cells are mirrored outward by half
+    a spacing). :math:`w_i` is the fraction of cell :math:`i` covered [dimensionless].
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time grid [yr]. Monotone; either direction.
+    lo, hi : float or ndarray
+        Window bounds [yr], same units as ``t_lookback``. Default to
+        :math:`\mp\infty`, i.e. a one-sided window when only one is given.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Cell-covered fraction in :math:`[0, 1]` [dimensionless].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes — pure elementwise JAX, no boolean indexing.
+
+    Three properties make this the right construction rather than an arbitrary
+    smoothing:
+
+    1. **Exact, not approximate.** ``trapezoid`` weights node :math:`i` by
+       :math:`(t_{i+1} - t_{i-1})/2`, which is exactly the cell width used here.
+       So :math:`\int w \, dt` telescopes to the true window length
+       :math:`h - \ell`, and a top-hat renormalized to a target mass carries that
+       mass exactly rather than to within a grid cell.
+    2. **No free parameter.** A sigmoid window would need a width, and the grid is
+       log-spaced so no single width in years is right across the range. The cell
+       width *is* the natural scale and it is already implied by the grid.
+    3. **Continuous and piecewise-linear** in ``lo``/``hi``, hence a genuine
+       nonzero gradient: moving a boundary within a cell changes that cell's weight
+       linearly. The hard mask is recovered exactly in the limit of a boundary
+       landing on a cell edge, and as the grid refines.
+
+    Only the one or two cells straddling a boundary differ from a hard mask; every
+    interior cell is exactly 1 and every exterior cell exactly 0.
+    """
+    t = jnp.asarray(t_lookback)
+    if t.shape[0] < 2:
+        # A single node has no neighbor to define a cell; fall back to the point
+        # test, which is the only defined answer.
+        return jnp.where((t >= lo) & (t <= hi), 1.0, 0.0)
+
+    # Cells are bounded by neighbor midpoints, and the two END cells stop at
+    # their own node rather than being mirrored outward. That is not a detail:
+    # ``trapezoid`` weights the end nodes by HALF a spacing, so a mirrored
+    # full-width end cell would make the weights inconsistent with the very
+    # quadrature this function exists to be exact under.
+    mid = 0.5 * (t[1:] + t[:-1])
+    edge_lo = jnp.concatenate([t[:1], mid])
+    edge_hi = jnp.concatenate([mid, t[-1:]])
+
+    # min/max rather than assuming ascending: a descending grid is a valid
+    # representation of the same cells, and silently returning zeros for it is
+    # exactly the fail-open pattern this function exists to remove.
+    cell_lo = jnp.minimum(edge_lo, edge_hi)
+    cell_hi = jnp.maximum(edge_lo, edge_hi)
+    width = cell_hi - cell_lo
+
+    overlap = jnp.clip(jnp.minimum(cell_hi, hi) - jnp.maximum(cell_lo, lo), 0.0, None)
+    # Guard a zero-width cell (duplicated grid nodes) without perturbing any
+    # normal cell: the numerator is zero there anyway.
+    safe_width = jnp.where(width > 0.0, width, 1.0)
+    return jnp.clip(overlap / safe_width, 0.0, 1.0)
+
+
 def _clamp_age(t_lookback: jnp.ndarray) -> jnp.ndarray:
     """Clamp lookback time to [1e5, AGEMAX_YR] to avoid numerical issues.
 
@@ -664,8 +752,11 @@ def constant(
     >>> sfr.shape
     (64,)
     """
-    mask = (t_lookback >= start) & (t_lookback <= end)
-    shape = jnp.where(mask, 1.0, 0.0)
+    # Cell-averaged window, not a point-sampled step: see ``window_weight``. A
+    # hard mask makes this a staircase in ``start``/``end`` -- zero autodiff
+    # gradient everywhere, so a gradient sampler cannot fit the bounds at all
+    # (#1374) -- and mis-normalizes the mass by up to a grid cell.
+    shape = window_weight(t_lookback, start, end)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
@@ -709,8 +800,11 @@ def exponential(
     >>> sfr.shape
     (64,)
     """
-    dt = t_lookback - start
-    shape = jnp.where(dt >= 0, jnp.exp(-dt / tau), 0.0)
+    # Clamped so the exponential is finite where the window is zero, then the
+    # cell-averaged window multiplies (#1374 — a hard ``dt >= 0`` step left
+    # ``start`` with exactly zero autodiff gradient).
+    dt = jnp.maximum(t_lookback - start, 0.0)
+    shape = jnp.exp(-dt / tau) * window_weight(t_lookback, start, jnp.inf)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
@@ -754,10 +848,10 @@ def delayed_exponential(
     >>> sfr.shape
     (64,)
     """
-    dt = t_lookback - start
+    dt = jnp.maximum(t_lookback - start, 0.0)  # finite outside the window too
     ratio = dt / tau
     raw = ratio * jnp.exp(-ratio + 1.0)
-    shape = jnp.where(dt >= 0, jnp.maximum(raw, 0.0), 0.0)
+    shape = jnp.maximum(raw, 0.0) * window_weight(t_lookback, start, jnp.inf)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
@@ -834,8 +928,12 @@ def sfhdelayed(
        (2018). https://doi.org/10.1093/mnras/sty2169
     """
     dt = age - t_lookback  # cosmic time elapsed since galaxy formation
-    raw = dt * jnp.exp(-dt / tau)
-    shape = jnp.where((t_lookback >= 0) & (t_lookback <= age), raw, 0.0)
+    # Clamp before the exponential so ``raw`` is finite outside the window too:
+    # the smooth window below MULTIPLIES rather than selects, and inf * 0 = nan.
+    # Inside the window dt >= 0 already, so no in-window value changes.
+    dt_safe = jnp.maximum(dt, 0.0)
+    raw = dt_safe * jnp.exp(-dt_safe / tau)
+    shape = raw * window_weight(t_lookback, 0.0, age)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
@@ -881,8 +979,11 @@ def declining_exponential(
     **JIT-compatible**: yes — uses ``jnp`` primitives for exponential and masking.
     """
     dt = age - t_lookback  # cosmic time elapsed since galaxy formation
-    raw = jnp.exp(-dt / tau)
-    shape = jnp.where((t_lookback >= 0) & (t_lookback <= age), raw, 0.0)
+    # Clamped so ``raw`` stays finite where the window is zero (inf * 0 = nan).
+    # dt >= 0 throughout the window, so in-window values are untouched.
+    dt_safe = jnp.maximum(dt, 0.0)
+    raw = jnp.exp(-dt_safe / tau)
+    shape = raw * window_weight(t_lookback, 0.0, age)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
@@ -922,10 +1023,14 @@ def constant_then_exponential(
     -----
     **JIT-compatible**: yes — uses conditional masking via ``jnp.where``.
     """
-    dt_quench = quench_age - t_lookback
-    declining = jnp.exp(-dt_quench / tau)
-    shape_full = jnp.where(t_lookback >= quench_age, 1.0, declining)
-    shape = jnp.where((t_lookback >= 0) & (t_lookback <= age), shape_full, 0.0)
+    # ``max(dt_quench, 0)`` makes the constant era fall out of the same
+    # expression: before quenching (t_lookback >= quench_age) the clamp gives
+    # exp(0) = 1, which is exactly the branch the old ``where`` selected. This
+    # also removes an overflow — the discarded branch evaluated exp(+large),
+    # which autodiff still differentiates through.
+    dt_quench = jnp.maximum(quench_age - t_lookback, 0.0)
+    shape_full = jnp.exp(-dt_quench / tau)
+    shape = shape_full * window_weight(t_lookback, 0.0, age)
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
@@ -1083,10 +1188,11 @@ def psb_wild2020(
     **JIT-compatible**: yes — uses ``jnp`` primitives and logical masking.
     """
     # --- Old component: declining exponential between burstage and age ---
-    t_cosmic_old = age - t_lookback
-    sfr_exp = jnp.exp(-t_cosmic_old / tau)
-    mask_old = (t_lookback >= burstage) & (t_lookback <= age)
-    sfr_exp = jnp.where(mask_old, sfr_exp, 0.0)
+    # Clamped, then windowed by cell-averaged weights: the hard mask left ``age``
+    # with exactly zero autodiff gradient (#1374), and the discarded branch
+    # evaluated exp(+large) for t_lookback > age.
+    t_cosmic_old = jnp.maximum(age - t_lookback, 0.0)
+    sfr_exp = jnp.exp(-t_cosmic_old / tau) * window_weight(t_lookback, burstage, age)
 
     # --- Burst component: DPL in cosmic time, peaks at (age_universe - burstage) ---
     age_universe = AGEMAX_YR
@@ -1094,8 +1200,7 @@ def psb_wild2020(
     tau_burst = age_universe - burstage
     log_ratio = jnp.log(jnp.maximum(t_cosmic, 1.0) / jnp.maximum(tau_burst, 1.0))
     sfr_burst = jnp.exp(-jnp.logaddexp(alpha * log_ratio, -beta * log_ratio))
-    mask_burst = t_lookback <= burstage
-    sfr_burst = jnp.where(mask_burst, sfr_burst, 0.0)
+    sfr_burst = sfr_burst * window_weight(t_lookback, -jnp.inf, burstage)
 
     # --- Mass-normalize each component (per-component unit mass) ---
     # jnp.gradient gives symmetric finite-difference widths; correct for
@@ -1219,7 +1324,10 @@ def delayed_bq(
     sfr_at_bq = (t_bq / tau_main_yr) * jnp.exp(-t_bq / tau_main_yr) / tau_main_yr
     sfr_post_bq = r_sfr * sfr_at_bq
     raw = jnp.where(t_lookback >= t_bq, sfr_post_bq, sfr_delayed)
-    shape = jnp.where((t_lookback >= 0) & (t_lookback <= age_main_yr), raw, 0.0)
+    # ``raw`` is finite for every t_lookback (both branches are), so the
+    # cell-averaged window can simply multiply — restoring a real gradient for
+    # ``age_main_yr`` (#1374).
+    shape = raw * window_weight(t_lookback, 0.0, age_main_yr)
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 
@@ -1310,8 +1418,12 @@ def periodic(
         + jnp.where(burst_type == 2, rectangular, 0.0)
     )
 
-    mask = (dt >= 0) & (t_lookback[None, :] <= age_yr)
-    shape = jnp.sum(jnp.where(mask, burst, 0.0), axis=0)
+    # ``dt >= 0`` gates each burst to lookback times after its own onset and stays
+    # a hard per-burst selector; the galaxy-age cut becomes a cell-averaged window
+    # so ``age_yr`` regains a gradient (#1374). Broadcast over the burst axis.
+    shape = jnp.sum(jnp.where(dt >= 0, burst, 0.0), axis=0) * window_weight(
+        t_lookback, 0.0, age_yr
+    )
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 
@@ -1413,14 +1525,15 @@ def sfh2exp(
     (200,)
     """
     # Main population: declines from formation (t_lookback = age) to present.
-    in_main = (t_lookback >= 0.0) & (t_lookback <= age_yr)
-    t_fwd_main = jnp.where(in_main, age_yr - t_lookback, 0.0)  # finite dummy 0
-    main = jnp.where(in_main, jnp.exp(-t_fwd_main / tau_main_yr), 0.0)
+    # ``max(..., 0)`` keeps the exponent finite outside the window (the old
+    # ``where`` dummy did the same job); the cell-averaged window then
+    # multiplies, so ``age_yr`` regains a real gradient (#1374).
+    t_fwd_main = jnp.maximum(age_yr - t_lookback, 0.0)
+    main = jnp.exp(-t_fwd_main / tau_main_yr) * window_weight(t_lookback, 0.0, age_yr)
 
     # Burst: occupies the most recent burst_age_yr, declines from its onset.
-    in_burst = (t_lookback >= 0.0) & (t_lookback <= burst_age_yr)
-    t_fwd_burst = jnp.where(in_burst, burst_age_yr - t_lookback, 0.0)
-    burst = jnp.where(in_burst, jnp.exp(-t_fwd_burst / tau_burst_yr), 0.0)
+    t_fwd_burst = jnp.maximum(burst_age_yr - t_lookback, 0.0)
+    burst = jnp.exp(-t_fwd_burst / tau_burst_yr) * window_weight(t_lookback, 0.0, burst_age_yr)
 
     # Normalize each component to unit mass over the grid, then weight so the
     # burst holds exactly f_burst of the total stellar mass (CIGALE convention).
@@ -1783,7 +1896,10 @@ def snorm_burst(
     # to compete against an already-mass-scaled smooth component.
     age = _clamp_age(t_lookback)
     smooth_shape = jnp.maximum(_skewed_gaussian_kernel(age, peak_lbt, width, skew), 0.0)
-    burst_shape = jnp.where(t_lookback < burst_age, burst_sfr, 0.0)
+    # Cell-averaged window so ``burst_age`` has a gradient (#1374); the burst
+    # amplitude is a constant, so this is exactly the old step where the
+    # boundary falls on a cell edge.
+    burst_shape = burst_sfr * window_weight(t_lookback, -jnp.inf, burst_age)
     composite = jnp.maximum(smooth_shape + burst_shape, 0.0)
     return _renormalize_to_mass(composite, t_lookback, log_total_mass)
 
@@ -1883,7 +1999,10 @@ def snorm_trunc_burst(
     x = (age - peak_lbt) / (width * trunc)
     trunc_factor = 0.5 * jax.lax.erfc(x * _INV_SQRT2)
     smooth_shape = jnp.maximum(kernel * trunc_factor, 0.0)
-    burst_shape = jnp.where(t_lookback < burst_age, burst_sfr, 0.0)
+    # Cell-averaged window so ``burst_age`` has a gradient (#1374); the burst
+    # amplitude is a constant, so this is exactly the old step where the
+    # boundary falls on a cell edge.
+    burst_shape = burst_sfr * window_weight(t_lookback, -jnp.inf, burst_age)
     composite = jnp.maximum(smooth_shape + burst_shape, 0.0)
     return _renormalize_to_mass(composite, t_lookback, log_total_mass)
 

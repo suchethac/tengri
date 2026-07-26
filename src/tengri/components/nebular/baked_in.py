@@ -85,7 +85,12 @@ class BakedInBackend:
                 "— varying neb_logU or neb_fesc in your Parameters will have no "
                 "effect. Check your SSP file's nebular assumptions. Switch to "
                 "CloudyGridBackend or CueBackend to vary nebular properties. "
-                "To suppress: pass ionizing_source_warning='suppress'."
+                "To suppress when building via SEDModel.build: "
+                "warnings.filterwarnings('ignore', "
+                "message='BakedInBackend: nebular emission is baked'). "
+                "(ionizing_source_warning='suppress' also works, but it is a "
+                "BakedInBackend(...) constructor argument and the build grammar "
+                "does not forward it.)"
             )
             if ionizing_source_warning == "raise":
                 raise ValueError(msg)

@@ -160,7 +160,11 @@ import numpy as np
 
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
-from tengri.components.nebular._shared import compute_qh, render_nebular_lines
+from tengri.components.nebular._shared import (
+    _qh_bilinear,
+    compute_qh,
+    render_nebular_lines,
+)
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -245,7 +249,11 @@ def _emit_cb19_warnings(ionizing_source_warning: str, continuum_warning: str) ->
             "binary stars as the ionizing source. The 6D parameter space does NOT "
             "include variation in ionizing SED hardness. For AGN-ionized or "
             "shock-excited regions, use MappingsPhotoAGNBackend or ShockEmission. "
-            "To suppress: pass ionizing_source_warning='suppress'."
+            "To suppress when building via SEDModel.build: "
+            "warnings.filterwarnings('ignore', message='CB19Backend: the CLOUDY'). "
+            "(ionizing_source_warning='suppress' also works, but it is a "
+            "CB19Backend(...) constructor argument and the build grammar does "
+            "not forward it.)"
         )
         if ionizing_source_warning == "raise":
             raise ValueError(msg)
@@ -257,7 +265,12 @@ def _emit_cb19_warnings(ionizing_source_warning: str, continuum_warning: str) ->
             "returns zeros. For rest-frame UV continuum accuracy (e.g. z > 2 galaxies "
             "where nebular continuum contributes 10-40% of UV flux), combine with "
             "CloudyGridBackend or CueBackend for the continuum. "
-            "To suppress: pass continuum_warning='suppress'."
+            "To suppress when building via SEDModel.build: "
+            "warnings.filterwarnings('ignore', "
+            "message='CB19Backend provides no nebular continuum'). "
+            "(continuum_warning='suppress' also works, but it is a "
+            "CB19Backend(...) constructor argument and the build grammar does "
+            "not forward it.)"
         )
         if continuum_warning == "raise":
             raise ValueError(msg)
@@ -755,7 +768,10 @@ class CB19Backend:
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
 
-        self._qh_table = _compute_qh_grid(ssp_wave, ssp_flux)
+        qh_raw = _compute_qh_grid(ssp_wave, ssp_flux)
+        # Match the other backends: a non-finite Q_H from the SSP grid is
+        # scrubbed at build time rather than propagated into every lookup.
+        self._qh_table = jnp.where(jnp.isfinite(qh_raw), qh_raw, 0.0)
         # Store as JAX arrays so they can be indexed with traced integers
         # inside jax.vmap (numpy arrays fail when indexed with traced values).
         self._qh_log_met = jnp.array(ssp_data.ssp_lgmet)  # log10(Z) absolute
@@ -766,23 +782,20 @@ class CB19Backend:
         self._young_idx = np.where(young_mask)[0]
 
     def _get_qh_at(self, log_z: float, log_age_yr: float) -> float:
-        """Bilinear interpolation of the precomputed Q_H table."""
-        if self._qh_table is None:
-            return 1.0  # fallback: normalize to 1
+        """Bilinear interpolation of the precomputed Q_H table.
 
-        from .cloudy_grid import _interp_index_weight  # shared helper
-
-        iz, wz = _interp_index_weight(log_z, self._qh_log_met)
-        ia, wa = _interp_index_weight(log_age_yr, self._qh_log_age)
-
-        q00 = self._qh_table[iz, ia]
-        q01 = self._qh_table[iz, ia + 1]
-        q10 = self._qh_table[iz + 1, ia]
-        q11 = self._qh_table[iz + 1, ia + 1]
-
-        q0 = q00 * (1 - wa) + q01 * wa
-        q1 = q10 * (1 - wa) + q11 * wa
-        return q0 * (1 - wz) + q1 * wz
+        ``missing=1.0`` is the identity for a multiplicative Q_H — a CB19
+        backend without a table applies no Q_H scaling rather than zeroing
+        the lines.
+        """
+        return _qh_bilinear(
+            self._qh_table,
+            self._qh_log_met,
+            self._qh_log_age,
+            log_z,
+            log_age_yr,
+            missing=1.0,
+        )
 
     def predict_nebular_line_luminosities(
         self,

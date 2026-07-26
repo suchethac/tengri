@@ -17,6 +17,7 @@ Each model is tested for:
 import chex
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
@@ -518,10 +519,39 @@ class TestSfh2Exp:
         chex.assert_trees_all_close(sfr_eager, sfr_jit, rtol=1e-6)
 
     def test_zero_beyond_age(self):
-        """No star formation before the galaxy formed (t_lookback > age)."""
+        """No star formation before the galaxy formed (t_lookback > age).
+
+        Asserted one grid cell out, not at the node adjacent to ``age``. The SFH
+        array is a quadrature integrand — the forward model turns it into mass
+        parcels with ``trapezoid(sfr, t)`` — so each node carries its *cell's*
+        star formation, and the single cell straddling the formation time
+        legitimately holds the mass formed in the part of it after formation
+        (#1374). Discarding that partial cell is the same defect #964 fixed for
+        the DSPS histogram kernel, where annihilating a straddling segment cost
+        a +1.2 % optical bias.
+
+        Measured here: of 86 nodes beyond ``age``, exactly one is nonzero, it
+        lies within half a cell of the boundary, and it carries 4.1e-4 of the
+        total mass.
+        """
         t = jnp.linspace(0.0, 1.4e10, 300)
-        sfr = sfh2exp(t, 10.0, 4e9, 3e8, 0.1, 1e10, 5e8)
-        assert jnp.all(sfr[t > 1e10] == 0.0)
+        age = 1e10
+        sfr = sfh2exp(t, 10.0, 4e9, 3e8, 0.1, age, 5e8)
+        cell = float(t[1] - t[0])
+
+        # Beyond one full cell: exactly zero, no tolerance.
+        assert jnp.all(sfr[t > age + cell] == 0.0), (
+            "star formation leaked more than one grid cell past the formation time"
+        )
+        # Within that one cell: allowed, but it must be a boundary sliver, not a
+        # real component -- bound it by mass rather than by amplitude.
+        beyond = np.asarray(t) > age
+        mass_beyond = float(np.trapezoid(np.asarray(sfr)[beyond], np.asarray(t)[beyond]))
+        mass_total = float(np.trapezoid(np.asarray(sfr), np.asarray(t)))
+        assert mass_beyond / mass_total < 1e-3, (
+            f"mass attributed before formation is {mass_beyond / mass_total:.2e} of the "
+            "total -- far more than one straddling cell can account for"
+        )
 
     def test_registry_resolution(self):
         """sfh2exp resolves via the registry with the documented param names."""

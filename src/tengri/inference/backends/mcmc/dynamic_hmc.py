@@ -21,6 +21,7 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
 )
+from tengri.inference.preconditioning import prepare_preconditioning
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ def run_dynamic_hmc(
     n_chains=1,
     target_accept_rate=0.85,
     dense_mass_matrix=True,
+    precondition: bool | None = None,
     verbose=True,
 ):
     """Dynamic HMC sampling via BlackJAX.
@@ -56,6 +58,13 @@ def run_dynamic_hmc(
         Target acceptance rate for step size adaptation.
     dense_mass_matrix : bool
         Use dense mass matrix. Set False for D>30.
+    precondition : bool or None, default None
+        Sample in metric-whitened coordinates, mapping draws back afterwards.
+        A linear change of variables, so the posterior is unchanged. ``None``
+        auto-enables up to
+        :data:`~tengri.inference.preconditioning.PRECONDITION_MAX_DIM`. See
+        :func:`~tengri.inference.backends.mcmc.nuts.run_nuts` for the full
+        rationale and :mod:`tengri.inference.preconditioning` for the math.
     verbose : bool
         Print progress.
     """
@@ -78,6 +87,14 @@ def run_dynamic_hmc(
         fitter,
         init_params,
     )
+
+    # Metric preconditioning (#1301) — see ``run_nuts`` for the rationale. Linear
+    # change of variables, so the posterior is untouched; draws are mapped back below.
+    problem = prepare_preconditioning(
+        log_posterior_flat_2arg, init_flat, data_args, precondition=precondition
+    )
+    log_posterior_flat_2arg, init_flat = problem.logdensity, problem.init_flat
+
     n_dim = len(init_flat)
 
     use_dense = dense_mass_matrix and n_dim <= 30
@@ -97,7 +114,7 @@ def run_dynamic_hmc(
     # dynamic_hmc.init needs random_generator_arg, incompatible with
     # window_adaptation. Use HMC warmup to tune step_size/mass matrix,
     # then initialize dynamic_hmc state separately.
-    adapt_key = ("hmc", not use_dense)
+    adapt_key = ("hmc", not use_dense, problem.enabled)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     if cached is not None:
@@ -185,6 +202,9 @@ def run_dynamic_hmc(
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
+
+    # Leave the whitened coordinates before the draws are read as parameters.
+    positions = problem.restore(positions)
 
     samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)
