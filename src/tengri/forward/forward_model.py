@@ -888,7 +888,8 @@ class ForwardModel:
                 if lines_schema is None:
                     raise ValueError(
                         "Data has lines but Observation.lines is not declared. "
-                        "Declare which lines with lines=LineList([...]) in the schema."
+                        "Declare which lines with lines=LineList.from_names([...]) "
+                        "in the schema."
                     )
                 # Extract wavelengths from schema for matching line names
                 line_names = tuple(sorted(v.line_values.keys()))

@@ -114,6 +114,14 @@ INVARIANT = frozenset(
         "exercised",
         "exercises",
         "exercising",
+        # "advise" is -ise in American English too, exactly like the "exercise",
+        # "surprise" and "revise" families already listed here. It was simply
+        # missing, so the checker demanded the non-word "advized".
+        "advise",
+        "advised",
+        "advises",
+        "advising",
+        "advisable",
         "precise",
         "concise",
         "surprise",
