@@ -81,9 +81,9 @@ def _resolve_sed_approx(sed, approx, observation):
     the authoritative observation."""
     fam = _approx_family_map(approx)
     sed_obs = getattr(sed, "observation", None)
-    same_filters = sed_obs is not None and _filters_fingerprint(
-        sed_obs
-    ) == _filters_fingerprint(observation)
+    same_filters = sed_obs is not None and _filters_fingerprint(sed_obs) == _filters_fingerprint(
+        observation
+    )
     if (
         fam is not None
         and same_filters

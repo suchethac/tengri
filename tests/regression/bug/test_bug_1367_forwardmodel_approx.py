@@ -76,8 +76,9 @@ def test_build_reuses_a_matching_lut(synthetic_ssp_wide, synthetic_tophat_obs):
     assert fwd.populations[0].sed is sed
 
 
-def test_build_rebuilds_against_the_authoritative_observation(synthetic_ssp_wide,
-                                                              synthetic_tophat_obs):
+def test_build_rebuilds_against_the_authoritative_observation(
+    synthetic_ssp_wide, synthetic_tophat_obs
+):
     """Different-filter LUT + approx= → rebuild against the fwd's observation.
 
     Without approx= this exact configuration raises the #1315 mismatch guard
@@ -107,8 +108,9 @@ def test_build_rebuilds_against_the_authoritative_observation(synthetic_ssp_wide
     )
 
 
-def test_build_approx_without_sed_raises_mode_aware_error(synthetic_ssp_wide,
-                                                          synthetic_tophat_obs):
+def test_build_approx_without_sed_raises_mode_aware_error(
+    synthetic_ssp_wide, synthetic_tophat_obs
+):
     """approx= applies to the single-sed form — one clear error otherwise (§4 style)."""
     from tengri.forward.forward_model import Population
 
@@ -116,12 +118,12 @@ def test_build_approx_without_sed_raises_mode_aware_error(synthetic_ssp_wide,
     pops = [Population(name="a", sed=sed)]
 
     with pytest.raises(ValueError, match="approx"):
-        ForwardModel.build(populations=pops, observation=synthetic_tophat_obs,
-                           approx=WavePrecomp())
+        ForwardModel.build(
+            populations=pops, observation=synthetic_tophat_obs, approx=WavePrecomp()
+        )
 
 
-def test_build_approx_grammar_errors_surface_canonically(synthetic_ssp_wide,
-                                                         synthetic_tophat_obs):
+def test_build_approx_grammar_errors_surface_canonically(synthetic_ssp_wide, synthetic_tophat_obs):
     """Invalid approx members raise SEDModel's canonical TypeError, not a new one."""
     sed = _build_sed(synthetic_ssp_wide, synthetic_tophat_obs)
 
