@@ -684,26 +684,32 @@ class SEDModel:
         issue). Default True; leave it unless you know you need the legacy
         container. Set False to skip building it.
     forward_dtype : str or jnp.dtype, optional
-        Dtype for forward model computation. Default ``"float64"`` preserves
-        full precision. ``"float32"`` halves memory and gives ~1.5× speedup
-        with <0.1% accuracy loss for photometry.
+        Dtype for forward model computation. Default ``"float64"``.
 
-        Affects both fused (photometry + precomputation) and exact paths:
+        .. warning::
 
-        - **Fused path**: captured arrays (SSP grid, dust weights, effective
-          wavelengths) cast to ``forward_dtype`` at kernel build.
-        - **Exact path** (spectroscopy, non-precomputed AGN): three largest intermediates
-          — metallicity-interpolated SSP ``(n_age, n_wave)``, dust attenuation
-          ``(n_age, n_wave)``, dust age weights ``(n_age,)`` — computed in
-          ``forward_dtype``, halving the 4.5 MB memory traffic that dominates
-          exact-path dust cost.
+           **Currently inert (#1433).** ``"float32"`` casts nothing and changes
+           nothing: measured bit-for-bit identical photometry to ``"float64"`` on
+           both the exact and the ``WavePrecomp`` path. It does still enter
+           :meth:`compile_signature`, so passing it buys a second compile of an
+           identical kernel — cost without benefit.
 
-        Mixed-precision support: Multiplicative flux/distance seams (photometry,
-        spectrum, line flux projections) apply cosmological factors as range-safe
-        log offsets (see :mod:`tengri.utils.scale`), allowing float32 arrays without
-        out-of-range intermediates. Full pure-float32 output additionally requires
-        Tier B reduction reformulations (ionizing photon integral, energy-balance
-        cascades, AGN SKIRTOR table resolution) and is not yet supported.
+           The casts it names were real until ``1e57d973d`` (2026-05-20) deleted
+           ``forward/_kernels/``; the kwarg, this docstring, the state field and
+           the signature entry survived that refactor, and the six casts did not.
+           This description previously promised "halves memory and gives ~1.5x
+           speedup with <0.1% accuracy loss" — none of which has held since.
+
+           For float32 today use **pure** float32: enter a
+           ``jax.enable_x64(False)`` context. That is a different mechanism (it
+           changes JAX's default dtype rather than casting captured arrays), it is
+           the mode the float32 range protections in ``components/`` gate on, and
+           it is the one #1206 is making work end to end.
+
+        Independently of this knob, the multiplicative flux/distance seams
+        (photometry, spectrum, line flux projections) apply cosmological factors as
+        range-safe log offsets (see :mod:`tengri.utils.scale`), so float32 arrays do
+        not materialize out-of-range intermediates there.
     approx : dict or bool, optional
         Control which approximations enter the component chain. Default True enables
         all approximations (fastest). False disables all (forces exact path
@@ -3555,10 +3561,11 @@ class SEDModel:
         # Forward dtype
         forward_dtype = str(self._forward_dtype)
 
-        # Effective build precision (#1392). ``forward_dtype`` above is the
-        # *mixed*-precision knob and stays "float64" in a **pure** float32 run
-        # (which is entered with ``jax.enable_x64(False)``, not with that knob),
-        # so on its own it cannot separate a float64 model from a float32 one.
+        # Effective build precision (#1392). ``forward_dtype`` above stays
+        # "float64" in a **pure** float32 run (which is entered with
+        # ``jax.enable_x64(False)``, not with that knob), so on its own it cannot
+        # separate a float64 model from a float32 one — and since it casts nothing
+        # (#1433) it could not do so at any setting.
         # It must: ``_get_or_build_predict_observables_jit`` caches a closure that
         # captured ``self``, keyed on this signature, so without a precision entry
         # a float32 model is handed the float64 model's kernel — carrying that

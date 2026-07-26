@@ -191,11 +191,18 @@ class ShockNebular(SEDModelComponent):
         # the scale (reference 1e30, residual ~11 dex) keeps the carried array
         # (~1e18) AND the derivative (~1e11) comfortably in range. The split is
         # exact: the shock SED is linear in L_Hα (verified x10/dex).
-        # NB: gate on ``sed_in`` — the SED actually being accumulated — not on
-        # ``wave``, which arrives as float64 even when the pipeline runs in
-        # float32. ``sed_in`` is float32 for BOTH pure float32 and the
-        # mixed-precision ``forward_dtype="float32"`` mode, which is exactly the
-        # set of cases that need the log-space rescale.
+        # Gate on ``sed_in`` — the SED actually being accumulated. This is the
+        # quantity whose range is at stake, so it is the honest thing to key on.
+        #
+        # The justification here used to be that ``wave`` "arrives as float64 even
+        # when the pipeline runs in float32", and that ``sed_in`` is float32 in the
+        # mixed-precision ``forward_dtype="float32"`` mode as well. Both were
+        # measured false (#1411, #1433): ``wave`` and ``sed_in`` carry the *same*
+        # dtype at every gate-bearing component, in all four configurations
+        # (exact/WavePrecomp x float64/pure float32), and ``forward_dtype`` casts
+        # nothing so mixed mode leaves both in float64. Gating on ``sed_in`` and
+        # gating on ``wave`` are therefore equivalent today — this one is kept
+        # because it names the array whose magnitude the rescale exists to protect.
         _f32 = jnp.asarray(sed_in).dtype == jnp.float32
 
         if self.config.norm == "lhalpha":

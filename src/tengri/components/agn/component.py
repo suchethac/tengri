@@ -63,9 +63,10 @@ _LOG10_L_SUN: float = float(jnp.log10(L_SUN))
 _AGN_LBOL_REF: float = 10.0 - _LOG10_L_SUN
 
 #: AGN disc blocks that are NOT yet float32-safe (#1206). Each returns NaN/inf in
-#: pure float32 (JAX-Metal) or with ``forward_dtype="float32"`` from a distinct
-#: grid-dependent overflow (a ``0*inf`` in the block/runner, *not* the L_bol
-#: magnitude the shape-class fixes address). See
+#: pure float32 (JAX-Metal) from a distinct grid-dependent overflow (a ``0*inf`` in
+#: the block/runner, *not* the L_bol magnitude the shape-class fixes address). This
+#: used to name ``forward_dtype="float32"`` as a second way in; that knob casts
+#: nothing (#1433), so it cannot reach float32 arithmetic here. See
 #: ``docs/dev/float32-tier-b-boundary.md`` §8 and
 #: ``tests/regression/precision/test_agn_disc_float32_inventory.py``. The
 #: float32-safe discs are ``multicolor``, ``kubota_done``, ``adaf`` (physical,
@@ -465,8 +466,8 @@ class AGNSEDComponent:
             # produce NaN/inf in float32; the fit will silently corrupt. #1206.
             warnings.warn(
                 f"AGN disc_block={self.config.agn_disc_block!r} is not float32-safe "
-                "(#1206): it returns NaN/inf in pure float32 (JAX-Metal) or with "
-                "forward_dtype='float32'. For float32 use a supported disc — "
+                "(#1206): it returns NaN/inf in pure float32 (JAX-Metal). "
+                "For float32 use a supported disc — "
                 "'multicolor', 'kubota_done', 'adaf' (physical), or 'powerlaw' / "
                 "'richards2006' / 'skirtor' / 'qsogen' / 'schartmann2005' "
                 "(shape-invariant) — or run in float64. See "

@@ -7,9 +7,11 @@ That closure captured ``self``, so any model whose signature collides is served 
 *other* model's kernel — including its wavelength grid.
 
 Precision was missing from that key. ``forward_dtype`` is in the signature, but it
-is the *mixed*-precision knob and stays ``"float64"`` in a **pure** float32 run
-(entered with ``jax.enable_x64(False)``), so it could not tell a float64 model from
-a float32 one. The consequence was order-dependent and silent:
+stays ``"float64"`` in a **pure** float32 run (entered with
+``jax.enable_x64(False)``, not by setting that knob), so it could not tell a float64
+model from a float32 one — and being inert it never could have (#1433: it casts
+nothing, and the two settings give bit-identical results). The consequence was
+order-dependent and silent:
 
 1. compute any gradient in float64 — this populates the cache;
 2. build a fresh float32 model and take its gradient — it is handed the float64

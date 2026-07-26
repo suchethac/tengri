@@ -5,10 +5,14 @@ Validates that reparametrizing the ionizing-SED scale as a log offset
 prevents float32 overflow in the Cue nebular ionizing flux.
 Balmer decrement H-alpha/H-beta ≈ 2.86 (Case B, independent of total mass scale).
 
-TIER A GUARANTEE (mixed-precision, forward_dtype="float32" under x64=True):
-  - test A (test_balmer_decrement_mixed_precision_f32): PASSES.
-    Ionizing SED computed in f32; scalars remain f64. The log-offset
-    reparametrization keeps the Balmer decrement finite and correct.
+TIER A, forward_dtype="float32" under x64=True — NOT a mixed-precision guarantee:
+  - test A (test_balmer_decrement_mixed_precision_f32): PASSES, but not for the
+    reason its name gives. ``forward_dtype`` casts nothing (#1433), so the two
+    builds it compares are bit-identical (measured: both 2.788906888791338) and
+    the comparison against the f64 reference cannot fail. What the test still
+    establishes is the physics: the decrement is finite and inside the Case B
+    range. Float32 safety of the ionizing SED is established by the pure-float32
+    tests below, which use ``jax.enable_x64(False)`` — the mechanism that works.
 
 TIER B STEP 1 DELIVERED (pure-float32, jax.enable_x64(False)) — the log_nion contract (#1206):
   - test C1 (test_log_q_h_pure_float32_cue_only): PASSES.
@@ -32,12 +36,19 @@ pytestmark = pytest.mark.regression_bug
 
 
 def test_balmer_decrement_mixed_precision_f32(ssp_bare):
-    """(A) Mixed-precision: forward_dtype=float32 under x64=True (Tier A guarantee).
+    """(A) The Balmer decrement is finite and Case B, at ``forward_dtype="float32"``.
 
-    Build the model with forward_dtype="float32" while JAX x64 is enabled (default).
-    The ionizing SED is computed in float32, but scalars like stellar_mass_scale
-    remain f64. This tests that the log-offset reparametrization keeps the
-    Balmer decrement finite and correct.
+    This test used to be described as the Tier A mixed-precision guarantee: "the
+    ionizing SED is computed in float32, but scalars stay f64". It is not. The
+    ``forward_dtype`` knob casts nothing (#1433), so ``m32`` and ``m64`` below are
+    the same computation and ``assert_allclose(dec32, dec64)`` compares a float64
+    result against itself — measured bit-identical, 2.788906888791338 both.
+
+    What survives is worth keeping, so the test stays: the decrement is finite and
+    inside the Case B range, on the panchromatic model, which is a real check on
+    the log-offset reparametrization. It is just not a float32 check. For that see
+    the pure-float32 tests in this file and
+    ``tests/regression/precision/test_forward_dtype_knob.py``.
     """
     # Build f64 reference (x64=True, forward_dtype="float64")
     m64 = build_model(ssp_bare, "float64")

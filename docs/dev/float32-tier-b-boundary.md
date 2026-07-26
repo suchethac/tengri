@@ -194,8 +194,9 @@ so no value check catches them. Both are fixed with **behavior-preserving
 `jax.enable_x64(False)` and recover the injected truth, matching float64
 (log M = 10.023 MAP; 10.031 ± 0.025 NUTS vs 10.031 ± 0.023 f64), at ~15% lower
 peak RSS. Both custom_vjps are float64 bit-identical (forward *and* gradient).
-Mixed precision (`forward_dtype="float32"` with x64 on) also remains available
-and gives the identical MAP. Pinned by `test_inference_grad_float32.py`.
+A `forward_dtype="float32"` build gives the identical MAP — necessarily so, since
+that knob casts nothing (#1433) and the two builds are the same computation. Pinned
+by `test_inference_grad_float32.py`.
 
 The exact-op localization was the crux: `checkify` named the primitive
 (`dot_general`) but not the line; `jax.make_jaxpr(jax.grad(nlp)).eqns` with
@@ -206,7 +207,27 @@ The exact-op localization was the crux: `checkify` named the primitive
 
 ## Summary
 
-**Tier A is CUDA mixed-precision-ready today:** `forward_dtype="float32"` with `jax_enable_x64=True` provides production inference on V100/A100, validated against float64 (rtol ≤ 3e−3).
+> **Correction (#1433): `forward_dtype` is inert, and has been since 2026-05-20.**
+> This summary used to open "Tier A is CUDA mixed-precision-ready today:
+> `forward_dtype="float32"` with `jax_enable_x64=True` provides production inference
+> on V100/A100, validated against float64 (rtol ≤ 3e−3)."
+>
+> The knob casts nothing. Its casts lived in `forward/_kernels/` and went out with
+> `1e57d973d`; `state.forward_dtype` has had no readers since, and photometry is
+> **bit-identical** between the two settings on both the exact and the `WavePrecomp`
+> path (measured, `4.71095648058788324e-28` either way). It does still enter
+> `compile_signature`, so passing it costs an extra compile and buys nothing.
+>
+> "Validated against float64 (rtol ≤ 3e−3)" was true but vacuous: the tests behind it
+> compared float64 against float64. Everything below that says "mixed precision also
+> works" means "the float64 path also works", which it does.
+>
+> **Nothing about Tier A's real content changes.** The log-offset reparametrizations
+> are unconditional — they do not consult `forward_dtype` — so the range-safety work
+> stands exactly as described. What is withdrawn is the claim that a *distinct*
+> mixed-precision execution mode exists and is validated. The only float32 mode that
+> runs float32 arithmetic is **pure** float32, `jax.enable_x64(False)`, which is what
+> the rest of this document measures.
 
 **Tier B (pure float32 / Metal end-to-end) requires:**
 1. ~~Q_H integral reparametrization (log10 contract) and consumer update.~~ **DONE** — the
@@ -223,8 +244,8 @@ The exact-op localization was the crux: `checkify` named the primitive
    inference works for gradient-based backends — MAP and NUTS run under `jax.enable_x64(False)` and
    match float64. The three likelihood-path underflows (flux projection, noise quadrature, Gaussian
    χ²) plus two reverse-pass `custom_vjp`s (mass scale, sub-band node ratio) neutralize every
-   float32 overflow, all behavior-preserving. Mixed precision (`forward_dtype="float32"`) also
-   works and is the CUDA path.
+   float32 overflow, all behavior-preserving. (`forward_dtype="float32"` "also works" only in
+   the trivial sense that it runs the float64 path — see the correction above, #1433.)
 6. **Dust IR emission must consume `log_L_ir`** — the remaining blocker for end-to-end float32
    photometry. See "Remaining work" below.
 7. ~~Radio SED must not materialize the linear `L_ir` / `L_agn_bol`.~~ **DONE** — log-threaded
@@ -660,9 +681,10 @@ f64 GRADIENT computed first, then f32   ->  [nan, nan, nan]
 The cause is a **precision-blind cache key**, not corrupted data.
 `SEDModel._get_or_build_predict_observables_jit` memoizes the JIT'd observables
 closure in a process-global cache keyed on `SEDModel.compile_signature()`, and that
-closure captured `self`. The signature already carried `forward_dtype`, but that is
-the *mixed*-precision knob and stays `"float64"` in a **pure** float32 run (which is
-entered with `jax.enable_x64(False)`), so it could not separate the two builds. A
+closure captured `self`. The signature already carried `forward_dtype`, but that
+knob stays `"float64"` in a **pure** float32 run (which is entered with
+`jax.enable_x64(False)`, not by setting it), so it could not separate the two
+builds — and being inert (#1433) it could not have separated them at any setting. A
 float32 model therefore matched the float64 model's signature and was handed the
 float64 model's kernel — carrying that model's **float64 wavelength grid**.
 
