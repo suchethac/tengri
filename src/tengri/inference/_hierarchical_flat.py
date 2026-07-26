@@ -118,6 +118,11 @@ class FlatProblem:
     log_prob: Callable
     prior_transform: Callable
     extract_shared: Callable
+    #: ``(all_data, all_noise)`` — the observed vectors, kept OUT of the closure.
+    data_args: Any = ()
+    #: ``(flat, data_args) -> scalar``. The form samplers must use: with the data
+    #: supplied as a traced argument, one compiled program serves every catalog.
+    log_prob_with_data: Callable | None = None
 
 
 def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_steps=80):
@@ -210,16 +215,23 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     init_flat, unravel_fn = ravel_pytree(init)
     n_dim = int(init_flat.shape[0])
 
-    all_data = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in fitter.galaxies])
-    all_noise = jnp.concatenate([jnp.asarray(g["noise"]) for g in fitter.galaxies])
+    all_data_arr = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in fitter.galaxies])
+    all_noise_arr = jnp.concatenate([jnp.asarray(g["noise"]) for g in fitter.galaxies])
 
     def _predict(params):
         if data_type == "photometry":
             return model.predict_photometry(params)
         return model.predict_spectrum(params)
 
-    def log_likelihood(flat_params):
-        """Gaussian data term, -chi^2/2. No prior — see module docstring."""
+    def log_likelihood_with_data(flat_params, data_args):
+        """Gaussian data term, -chi^2/2, with the data supplied as an ARGUMENT.
+
+        Taking ``(all_data, all_noise)`` as a traced argument rather than
+        capturing them is what lets one compiled NUTS program serve different
+        galaxies. Capturing them bakes them in as constants, so every new
+        catalog is a new program — measured at one full recompile per fit.
+        """
+        all_data, all_noise = data_args
         p = unravel_fn(flat_params)
         psd_sigma = to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi)
         psd_tau = to_bounded(p["psd_tau_u"], tau_lo, tau_hi)
@@ -249,6 +261,12 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         chi2 = jnp.sum(((all_data - predictions.reshape(-1)) / all_noise) ** 2)
         return -0.5 * chi2
 
+    _data_args = (all_data_arr, all_noise_arr)
+
+    def log_likelihood(flat_params):
+        """Convenience alias with this fit's data bound. NOT for samplers."""
+        return log_likelihood_with_data(flat_params, _data_args)
+
     def log_prior(flat_params):
         """Unnormalized iid standard normal on every latent."""
         p = unravel_fn(flat_params)
@@ -261,6 +279,9 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
 
     def log_prob(flat_params):
         return log_likelihood(flat_params) + log_prior(flat_params)
+
+    def log_prob_with_data(flat_params, data_args):
+        return log_likelihood_with_data(flat_params, data_args) + log_prior(flat_params)
 
     def prior_transform(cube):
         """Unit cube -> N(0,1) latent. Exact for an iid standard normal prior.
@@ -290,6 +311,8 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         log_prob=log_prob,
         prior_transform=prior_transform,
         extract_shared=extract_shared,
+        data_args=_data_args,
+        log_prob_with_data=log_prob_with_data,
     )
 
 
@@ -411,8 +434,20 @@ def run_flat_sampler(
     key_run = jax.random.fold_in(key, 1)
     t0 = time.time()
 
-    def _ld2(pos, _data):
-        return prob.log_prob(pos)
+    # The sampler receives `_ld2` (module-level, stable identity) plus the data
+    # as a TRACED argument. Both halves are required for compile reuse, and the
+    # obvious spelling defeats it twice over. Measured with jax.log_compiles:
+    #
+    #   fresh `lambda p,_: prob.log_prob(p)`, data in closure   1 compile EVERY fit
+    #   stable module fn + data through data_args               0 compiles after the first
+    #
+    # `logdensity_fn_2arg` is a STATIC argument, so a new lambda object per call
+    # is a new compile key even when the code is identical; and capturing the
+    # data bakes it in as a constant, making each catalog its own program.
+    # `data_args` must hold ARRAYS ONLY — it is traced. The callable goes in the
+    # static slot, and is built once per problem rather than once per call.
+    ld2 = prob.log_prob_with_data
+    data_args = prob.data_args
 
     if driver in ("nuts", "nuts_pathfinder", "hmc"):
         from tengri.inference.backends.mcmc._shared import _hmc_full_scan, _nuts_full_scan
@@ -425,8 +460,8 @@ def run_flat_sampler(
                 prob.init_flat,
                 wkey,
                 chain_keys,
-                _ld2,
-                (),
+                ld2,
+                data_args,
                 n_warmup,
                 n_leapfrog,
                 dense_mass_matrix,
@@ -437,8 +472,8 @@ def run_flat_sampler(
                 prob.init_flat,
                 wkey,
                 chain_keys,
-                _ld2,
-                (),
+                ld2,
+                data_args,
                 n_warmup,
                 max_num_doublings,
                 dense_mass_matrix,
