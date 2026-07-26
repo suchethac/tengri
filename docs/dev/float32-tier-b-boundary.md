@@ -518,7 +518,7 @@ cgs intermediates overflow float32 even though every *result* is representable:
 numerator ~1e58, and the EUV-tail / renormalization bolometric integrals ~1e43.
 The float32 branch forms each as a log10 sum and materializes only the
 representable result (`mdot` ~1e24 g/s, `t_in` ~1e5 K, `lambda_Edd` ~1e-2) via
-`pow10`, peak-factoring the ~1e43 energy integrals. This is the analogue of the
+`pow10`, peak-factoring the ~1e43 energy integrals. This is the analog of the
 Q_H / L_ir log-domain reductions, applied to the disc temperature.
 
 **2. Shape vs normalization luminosity.** The disc *shape* (temperature) depends
@@ -643,3 +643,78 @@ models (`kubota_done`, `adaf`). Pure-float32 AGN inference (finite `grad(nlp)`)
 runs end-to-end for them. The four grid/other-class discs are the scoped
 follow-up; each is a distinct grid-dependent overflow, pinned `xfail(strict)` in
 `test_agn_disc_float32_inventory.py`.
+
+## The cross-precision kernel cache — how one process poisoned its own float32 gradients (#1392)
+
+A float64 gradient made every *later* float32 gradient in the same process return
+`NaN`. Nothing raised; the forward pass stayed finite throughout; and the failure
+depended only on evaluation order, which is what made it look like corrupted
+state:
+
+```text
+f32 gradient alone                     ->  [39.604, 539.985, -1106.619]  finite
+f64 MODEL built first, then f32 grad    ->  [39.604, 539.985, -1106.619]  finite
+f64 GRADIENT computed first, then f32   ->  [nan, nan, nan]
+```
+
+The cause is a **precision-blind cache key**, not corrupted data.
+`SEDModel._get_or_build_predict_observables_jit` memoizes the JIT'd observables
+closure in a process-global cache keyed on `SEDModel.compile_signature()`, and that
+closure captured `self`. The signature already carried `forward_dtype`, but that is
+the *mixed*-precision knob and stays `"float64"` in a **pure** float32 run (which is
+entered with `jax.enable_x64(False)`), so it could not separate the two builds. A
+float32 model therefore matched the float64 model's signature and was handed the
+float64 model's kernel — carrying that model's **float64 wavelength grid**.
+
+That is where it turned into `NaN`. Twelve float32 code paths gate on a dtype, and
+eleven of them read `wave`/`wavelength.dtype`. Handed a float64 grid, the AGN gate
+(`_use_ref = wave.dtype == jnp.float32`, `components/agn/component.py`) evaluated
+`False` and **switched off its own float32 protection**, so every AGN block ran at
+the true `agn_log_lbol` — `L_bol` ~ 1e44 erg/s, past the float32 maximum of 3.4e38 —
+and the reverse pass overflowed. A guard whose job is to *enable* a fix fails open:
+when its dtype probe misreads, the protection silently vanishes instead of erroring.
+
+**Fix**: `compile_signature()` gained a `build_precision` entry — the model's own
+wave-grid dtype plus `jax.config.jax_enable_x64`. `Fitter.compile_signature()`
+wraps the model's, so both cache families are covered by the one change. Float64
+results are untouched: the signature is only ever a cache key.
+
+### Why every cache-clearing experiment came back negative
+
+The search cost real time because this cache is invisible to all the usual levers.
+Each of these was tested directly and does **not** prevent the poisoning:
+`jax.clear_caches()`; all 36 `functools.cache`/`lru_cache` entries in `tengri.*`
+(none of which even *grows* during the f64 gradient); the persistent on-disk
+compile cache (`TENGRI_DISABLE_JAX_CACHE=1`); and every `jit_engine._SHARED_*`
+cache. The structural-kernel cache lives in `tengri/inference/_model_cache.py` and
+is none of those. Two traps are worth recording:
+
+* `TENGRI_DISABLE_SHARED_CACHES=1` covers only **four of the six** `_SHARED_*`
+  caches — `_SHARED_ENGINE_CACHE` and `_SHARED_SIGNAL_RESPONSE_CACHE` are outside
+  the `_SHARED_CACHES` dict the kill-switch iterates. A negative result from that
+  env var is not evidence about those two.
+* `_SHARED_LOSS_FN_CACHE` *is* precision-blind too (its size stays at 1 across both
+  precisions, i.e. the float32 fitter hits the float64 entry). It is a real hazard,
+  but clearing it does not fix this bug — a second finding that cost a wrong
+  diagnosis before the model-complexity bisect located the AGN component.
+
+The bisect that found it: build up from stellar only, one component at a time, each
+variant in a **fresh process** (the poisoning is process-global, so variants
+contaminate each other otherwise). `stellar`, `+dust` and `+dust IR` are all finite;
+adding the composable AGN is the first variant that goes `NaN`, and AGN on bare
+stellar is enough. Compare each variant against itself with no prior f64 gradient
+to tell poisoning apart from a genuine float32 defect.
+
+### Not fixed here: float32 AGN gradient *accuracy*
+
+With the kernel cache fixed, the pure-float32 AGN gradient is finite and
+order-independent, but it is **not** accurate: against float64 on identical mock
+data it is off by ~53% in norm (per-element 4%, 12%, 75%) for
+stellar+dust IR+AGN at `agn_log_lbol = 11`. The forward SED matches float64 to
+~1e-4, so this is gradient-specific and consistent with the `apply_log10_scale`
+Jacobian: the AGN reference offset is `agn_log_lbol − _AGN_LBOL_REF` ≈ 34.6 dex, so
+the reverse pass multiplies by ~10^34.6, only ~4 decades below the float32 ceiling.
+This is the same wall as #1388 (`apply_log10_scale` is gradient-unsafe above ~38.5
+dex) and needs the SED carried in scaled form; the regression test therefore
+compares float32 against **float32-with-a-cleared-cache** — both sides the same
+precision, exact equality, no tolerance to choose — rather than against float64.

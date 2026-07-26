@@ -3337,6 +3337,15 @@ class SEDModel:
         module-level _SHARED_ENGINE_CACHE. Changes to SEDModel initialization
         that affect JIT graph shape MUST be added to this method to avoid
         silent miscompilation.
+
+        "Structure" includes **precision**. The structural-kernel cache in
+        :meth:`_get_or_build_predict_observables_jit` returns a closure that
+        captured ``self``, so a signature collision hands one model's compiled
+        kernel — and its wavelength grid — to another. A float64/float32 collision
+        used to reach the components as a float64 ``wave`` under
+        ``jax.enable_x64(False)``, which switched off every dtype-keyed float32
+        path downstream and produced NaN gradients with nothing raised (#1392).
+        See ``build_precision`` below.
         """
         # SSP grid shapes (n_met, n_age, n_wave)
         ssp_flux_shape = tuple(self.ssp_data.ssp_flux.shape)
@@ -3527,6 +3536,21 @@ class SEDModel:
         # Forward dtype
         forward_dtype = str(self._forward_dtype)
 
+        # Effective build precision (#1392). ``forward_dtype`` above is the
+        # *mixed*-precision knob and stays "float64" in a **pure** float32 run
+        # (which is entered with ``jax.enable_x64(False)``, not with that knob),
+        # so on its own it cannot separate a float64 model from a float32 one.
+        # It must: ``_get_or_build_predict_observables_jit`` caches a closure that
+        # captured ``self``, keyed on this signature, so without a precision entry
+        # a float32 model is handed the float64 model's kernel — carrying that
+        # model's float64 wave grid. Every float32 gate downstream keys on a dtype
+        # and so switches itself off, silently, producing NaN gradients rather than
+        # an error (observed in the AGN block: #1392).
+        build_precision = (
+            str(self._rest_wavelength.dtype),
+            bool(jax.config.jax_enable_x64),
+        )
+
         # Metallicity interpolation mode
         met_interp = str(self._met_interp)
         z_interp = str(self._z_interp)
@@ -3707,6 +3731,7 @@ class SEDModel:
             spec_resolution_matrix,
             csp_integration,
             forward_dtype,
+            build_precision,
             met_interp,
             z_interp,
             radio_include_freefree,
