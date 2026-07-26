@@ -8,19 +8,23 @@ photometry mocks, #231):
 * ``_CatalogFitterOriginal.run`` — its own ``NotImplementedError`` branches
   already told callers to use ``mcmc_nuts``, so the default contradicted the
   class's own error messages. Now ``mcmc_nuts``.
-* ``PopulationFitter.run`` — its own ``ValueError`` for an unknown method has
+* ``PopulationFitter.run`` — its own ``ValueError`` for an unknown method
   named ``vi_nonlinear_fast`` "(default)" ever since ``b7c4fa1e2`` moved the
-  real default off it. Now ``vi_nonlinear_fast`` again, so signature and
-  message agree.
+  real default off it. Now ``vi_nonlinear_fast`` again, and the message is
+  *derived* from the dispatch tables, so it cannot disagree again.
 
 The shared cause is a *tier downgrade that never propagated to a signature*:
 both defaults were chosen for speed before #231 validated the segfault. The
 generic test below therefore asserts the invariant over **every** entry point,
 so a third one cannot appear silently.
 
-Note the two fixes differ, deliberately: ``mcmc_nuts`` is not in the
-hierarchical ``_method_map`` at all, so giving ``PopulationFitter`` the
-catalog's fix would make every hierarchical fit raise ``ValueError``.
+The two fixes differ, deliberately — and the reason has since changed, which is
+worth recording rather than quietly overwriting. At the time, ``mcmc_nuts`` was
+absent from the hierarchical ``_method_map`` entirely, so giving
+``PopulationFitter`` the catalog's fix would have made every hierarchical fit
+raise. NUTS is now reachable there (via ``FLAT_SAMPLERS``), so the defaults stay
+different for a *measured* reason instead: on a 2-galaxy D=18 problem, peak RSS
+was 5.21 GB for NUTS against 1.47-1.51 GB for ``map``/``mcmc_raytrace``.
 
 These are contract assertions on the *declared* default and on the advice
 strings — deliberately not a fit. Running a broken backend to prove it is
@@ -32,6 +36,7 @@ from __future__ import annotations
 
 import contextlib
 import inspect
+import re
 
 import pytest
 
@@ -78,30 +83,54 @@ def test_each_default_is_the_specific_agreed_choice(label, fn, expected):
     assert _default_of(fn) == expected
 
 
-def test_population_default_matches_its_own_error_message():
-    """Signature and advice string must agree — they disagreed for months.
+def test_population_advice_cannot_disagree_with_its_signature():
+    """Signature and advice must agree — they disagreed for months.
 
-    ``PopulationFitter.run`` raises ``ValueError(... 'vi_nonlinear_fast'
-    (default) ...)`` for an unknown method. That string outlived ``b7c4fa1e2``,
-    which moved the real default to ``native_vi_linear``, so the class told
-    users one thing and did another.
+    The original defect: ``PopulationFitter.run`` raised
+    ``ValueError(... 'vi_nonlinear_fast' (default) ...)`` as a hand-written
+    literal, which outlived ``b7c4fa1e2`` moving the real default to
+    ``native_vi_linear``. The class told users one thing and did another.
+
+    This asserts the *structural* cure rather than the literal. An earlier
+    version of this test required the string ``'vi_nonlinear_fast' (default)``
+    to be present — which pinned the shape of one fix instead of the property
+    that matters, and broke the moment the message was improved. A derived list
+    cannot disagree with the dispatch tables, so agreement stops being
+    something anyone has to remember.
     """
-    default = _default_of(PopulationFitter.run)
     src = inspect.getsource(PopulationFitter.run)
-    assert f"{default!r} (default)".replace('"', "'") in src.replace('"', "'"), (
-        f"the ValueError advice must name the real default ({default!r})"
+    assert "sorted(set(_method_map) | set(FLAT_SAMPLERS)" in src, (
+        "the unknown-method error must derive its list from the dispatch tables"
     )
+    # And the real default must actually be in what that derivation yields.
+    default = _default_of(PopulationFitter.run)
+    from tengri.inference._hierarchical_flat import FLAT_SAMPLERS
+
+    body = src.split("_method_map = {")[1].split("\n        }")[0]
+    derived = set(re.findall(r'"([a-z_0-9]+)":', body)) | set(FLAT_SAMPLERS)
+    assert default in derived, f"default {default!r} is not among the methods run() advertises"
 
 
-def test_population_has_no_nuts_path_so_it_must_not_claim_one():
-    """Guards the trap: the catalog fix is wrong here.
+def test_population_default_is_not_nuts_even_though_nuts_now_runs():
+    """NUTS became reachable here — the default still must not become it.
 
-    ``mcmc_nuts`` is absent from the hierarchical ``_method_map``; defaulting to
-    it would raise on every call. If NUTS is ever wired up, this test should be
-    updated deliberately, not deleted incidentally.
+    History, because the reason changed underneath this test. Originally NUTS
+    was absent from the hierarchical ``_method_map`` entirely, so defaulting to
+    it would have raised on every call. That is no longer true: NUTS runs
+    hierarchically through the flat seam (``FLAT_SAMPLERS``).
+
+    The conclusion survives on different evidence. Measured on a 2-galaxy, D=18
+    problem, peak RSS was 5.21 GB for ``mcmc_nuts`` against 1.51 GB for
+    ``mcmc_raytrace`` and 1.47 GB for ``map``, and D here grows with the number
+    of galaxies. NUTS is a legitimate *choice* on this path and a poor
+    *default*.
+
+    Kept as a distinct test rather than folded into the pinning test above
+    because it encodes a reason, not just a value.
     """
-    src = inspect.getsource(PopulationFitter.run)
-    assert '"mcmc_nuts"' not in src.split("_method_map = {")[1].split("}")[0]
+    from tengri.inference._hierarchical_flat import FLAT_SAMPLERS
+
+    assert "mcmc_nuts" in FLAT_SAMPLERS, "NUTS should be reachable hierarchically"
     assert _default_of(PopulationFitter.run) != "mcmc_nuts"
 
 
