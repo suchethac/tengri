@@ -302,6 +302,7 @@ def run_flat_sampler(
     n_burnin=100,
     n_samples=500,
     n_leapfrog=10,
+    max_num_doublings=5,
     dense_mass_matrix=False,
     target_accept_rate=0.8,
     memory_mode="low",
@@ -325,6 +326,21 @@ def run_flat_sampler(
         Window adaptation / discarded / retained chain lengths (MCMC drivers).
     n_leapfrog : int
         Leapfrog steps per HMC proposal.
+    max_num_doublings : int
+        NUTS tree depth cap; the trajectory may reach ``2**max_num_doublings``
+        leapfrog steps, each a full ``grad(log_prob)`` over every galaxy.
+
+        Defaults to **5** here against ``run_nuts``'s 10, because this is where
+        the memory is. Measured on a 2-galaxy D=18 problem, marginal peak RSS
+        over the built problem was 2.55 GB at 3, 2.58 GB at 5, then 3.95 GB at
+        7 and 3.96 GB at 10 — a ~1.4 GB step between 5 and 7 that then
+        saturates. The physics is not what costs: the SSP grid is 64 MB, the
+        whole model plus one forward is 0.7 GB, and a single ``log_prob`` adds
+        0.02 GB. Nearly all of the rest is the compiled NUTS trajectory buffer,
+        sized for the deepest tree the sampler is allowed to build.
+
+        Raise it if trajectories are hitting the cap (check ``divergent`` and
+        the step size); the cost is roughly the step above.
     dense_mass_matrix : bool
         Dense vs diagonal metric. Defaults **False** here, unlike the
         single-galaxy path: hierarchical D grows with the number of galaxies, and
@@ -424,7 +440,7 @@ def run_flat_sampler(
                 _ld2,
                 (),
                 n_warmup,
-                10,
+                max_num_doublings,
                 dense_mass_matrix,
                 target_accept_rate,
                 driver == "nuts_pathfinder",
