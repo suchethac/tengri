@@ -310,6 +310,13 @@ class DerivedState:
     # For BakedIn nebular this is None — the nebular emission is already
     # baked into the SSP grid and therefore included in stellar_phot_lnu_precomp.
     nebular_phot_lnu_precomp: jnp.ndarray | None = None
+    # NOTE (#1375): there is deliberately no ``shock_phot_lnu_precomp`` here.
+    # Adding the field silences the ADR-0007 ComponentIOError but makes the
+    # shock component sum in as an exact no-op, because the inherited
+    # ``predict_precomp`` builds its LUT from a zeros dummy SED. The field
+    # belongs with the filter-integrated LUT that would populate it; until
+    # then ``ShockNebular.predict_precomp`` raises. See that method's
+    # docstring for the full argument.
     # Dust IR re-emission per filter (rest-frame Lν, erg/s/Hz). Additive and
     # unattenuated — summed by predict_via_precomp like the other families.
     # Published by the two-component dust component under WavePrecomp (#622).

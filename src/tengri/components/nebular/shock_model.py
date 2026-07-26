@@ -186,3 +186,50 @@ class ShockNebular(SEDModelComponent):
             shock_component=self.config.component,
         )
         return sed_in + shock_sed, {"sed_shock": shock_sed}
+
+    def predict_precomp(
+        self,
+        p: dict[str, Any],
+        filter_eff_waves: jnp.ndarray,
+        **inputs: Any,
+    ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
+        """Reject the filter-wavelength LUT: it cannot represent shock emission.
+
+        The inherited :class:`~tengri.components.sed_model_component.SEDModelComponent`
+        default builds a photometric LUT by calling :meth:`predict` on a dummy
+        SED of zeros sampled at ``filter_eff_waves``. Both halves of that are
+        wrong here, and both fail silently rather than loudly (#1375):
+
+        1. **The normalization collapses.** Under ``norm="frac"`` the shock Hα
+           anchor is ``frac * max(1e-3 * L_bol, 1e-30)`` where ``L_bol`` is the
+           frequency integral of ``sed_in``. The default passes ``sed_in = 0``,
+           so ``L_bol = 0``, the ``1e-30`` epsilon guard fires, and the LUT is
+           ``frac * 1e-30`` — around 1e-44 erg/s/Hz against a true contribution
+           of order 1e29. It sums into the photometry as an exact no-op.
+        2. **The sampling misses the lines.** Shock emission is line-dominated,
+           so evaluating it at a handful of filter *effective wavelengths*
+           samples the continuum between lines instead of integrating the lines
+           through the filter response. This is wrong under ``norm="lhalpha"``
+           too, where the normalization is absolute and defect 1 does not apply.
+
+        A correct LUT has to integrate the shock SED through the filter curves
+        (as the photoionized backends do for ``nebular_phot_lnu_precomp``), and
+        under ``norm="frac"`` it additionally needs a bolometric anchor that
+        exists at filter resolution. That is a physics decision about the
+        normalization anchor, so this raises instead of guessing.
+
+        Raises
+        ------
+        NotImplementedError
+            Always. ``approx=WavePrecomp()`` is not supported with a shock
+            component; the message names the two working alternatives.
+        """
+        raise NotImplementedError(
+            "The shock component does not support approx=WavePrecomp(): the "
+            "filter-wavelength LUT would silently contribute ~0 instead of the "
+            "true shock emission (#1375). Either drop the LUT for this model "
+            "(approx=None — the exact path handles shock correctly), or drop "
+            "the shock component (shock={'type': 'none'}) if you need "
+            "WavePrecomp's speed. Tracking a filter-integrated shock LUT in "
+            "#1375."
+        )
