@@ -125,7 +125,7 @@ see #847); navigate them by section instead of scrolling:
 `WavePrecomp`/`SpectrumPrecomp` approx configs → `SEDModel.__init__` (the
 `_init_<domain>()` chain: observation, ssp, sfh, metallicity, dust, igm,
 nebular, agn, multiwavelength, instrument, cosmology) → internal param
-accessors (`_get_internal_params`, `_get_non_stellar_kwargs`) → prediction
+accessors (`_get_internal_params`, `_get_redshift`) → prediction
 methods (`predict_sfh` / `predict_rest_sed` / `predict_obs_sed` /
 `predict_photometry` / `predict_spectrum`) → the JIT kernel builder
 (`predict_observables_jit`, `_template_data_for_jit`) → component-chain
