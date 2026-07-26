@@ -204,14 +204,25 @@ class WavePrecomp:
     >>> SEDModel(..., approx=WavePrecomp(n_z=200))  # finer ztable
     >>> SEDModel(..., approx=WavePrecomp(z_min=0.01, z_max=3.0, n_z=200))
     >>>
-    >>> # Catalog fit: 10⁴ galaxies at per-galaxy Fixed(z), one compile.
-    >>> model = SEDModel.build(
+    >>> # Catalog fit: 10⁴ galaxies at per-galaxy known z.
+    >>> sed = SEDModel.build(
     ...     ...,
-    ...     redshift=Fixed(0.0),  # placeholder; injected per call
+    ...     redshift=FIXED,  # per-galaxy value supplied by the redshift column
     ...     approx=WavePrecomp(catalog_z_range=(0.05, 1.5), n_z=200),
     ... )
-    >>> for row in catalog:
-    ...     posterior = model.fit(row.data, params={"redshift": row.z})
+    >>> forward = ForwardModel.build(sed=sed, observation=obs)
+    >>> posteriors = Catalog(forward, table, flux_unit="cgs_fnu", redshift_col="z").fit(
+    ...     method="map", key=key
+    ... )
+
+    Notes
+    -----
+    This example used to read ``model.fit(row.data, params={"redshift":
+    row.z})`` in a Python loop. ``SEDModel.fit`` has no ``params=``
+    parameter, so that call raises ``TypeError`` — it was a documented
+    invocation that could never have run. ``Catalog`` is the surface for a
+    table of galaxies with a redshift column; for a single galaxy the
+    override lives on ``ForwardModel.fit``, which does take ``params=``.
     """
 
     n_z: int = 250
@@ -7519,8 +7530,11 @@ class SEDModel:
             forward = ForwardModel.build(sed=self, observation=...)
             result = forward.fit(data, noise, method=method, ...)
 
-        For full control over loss functions and iterative refinement,
-        use :class:`ForwardModel` and :class:`Fitter` directly.
+        For full control — a custom likelihood, per-fit parameter overrides,
+        iterative refinement, or anything with a non-trivial output shape —
+        build the :class:`ForwardModel` yourself and call
+        :meth:`ForwardModel.fit`, the canonical inference surface. For many
+        independent galaxies, use :class:`~tengri.Catalog`.
 
         Parameters
         ----------
@@ -7547,18 +7561,21 @@ class SEDModel:
             uses the result to warm-start the requested method. ``None`` (default)
             uses the method's own default initialization.
         **kwargs
-            Forwarded to ``Fitter.run()``.
+            Forwarded to the inference method (e.g. ``n_warmup``,
+            ``n_samples`` for MCMC).
 
         Returns
         -------
         Posterior
-            Inference results.  ``._fitter`` is set so ``.refine()`` works.
-            After this call, ``self.fitter_`` holds the ``Fitter`` instance.
+            Inference results. ``.refine()`` continues or refines the fit.
 
         Notes
         -----
-        Convenience wrapper around :class:`Fitter`. For advanced usage
-        (custom loss, multiple refinement steps), use ``Fitter`` directly.
+        Sugar over :meth:`ForwardModel.fit`, which stays the canonical
+        inference surface. The engine underneath is an internal detail: all
+        of its expensive caches are model-keyed, so it holds no state a
+        fresh instance lacks and there is never a reason to reach for it
+        directly.
 
         Examples
         --------
