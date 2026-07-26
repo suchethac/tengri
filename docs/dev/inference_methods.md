@@ -222,12 +222,14 @@ approximation. Measured, it holds across the region a chain actually visits:
   Only the `O(D^3)` factorization grows — hence the 1024 cap. "Easy low-dimensional"
   posteriors turned out not to exist here: the simplest configuration measured
   (double-power-law + photometry, D=7) already had raw cond 8.5e4.
-- **Why it is opt-in ([#1397](https://github.com/suchethac/tengri/issues/1397)).** It
-  shipped auto-on and the default broke fits that had been working. `notebooks/01`
-  stopped running entirely — a NaN MAP init makes the metric non-finite and the guard
-  turned a working fit into a hard `ValueError`. `notebooks/07`'s photometry fit went
-  from max R-hat 1.014 to **1.839** *while reporting zero divergences*: the usual
-  health signal inverts, so a divergence check scores the broken arm as the healthiest.
+- **Why it is opt-in.** Not because of [#1397](https://github.com/suchethac/tengri/issues/1397),
+  despite that being the original stated reason here. Those notebook failures were
+  caused by a **sub-band node gradient underflowing to NaN** inside the model;
+  preconditioning was the first thing to notice, not the cause, and with the root fix
+  `notebooks/07` returns to its pre-preconditioning R-hat. The reason that survives is
+  measured on the *fixed* code: on `recipes.mock_recovery_minimal()` (D=7), 4 seeds of
+  4 converge without preconditioning (R-hat 0.997-1.007) and none converge with it
+  (1.055-2.689), at 4x to 25x worse ESS/s.
 - **The conditioning win is not a demonstrated sampling win.** Across 5 seeds per
   configuration, `dpl / photometry` (D=7) gained a median **1.87x ESS/s** (better in
   5/5 seeds), but `dpl + free metallicity / photometry` (D=8) came out at a median

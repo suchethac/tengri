@@ -323,23 +323,24 @@ PRECONDITION_MAX_DIM: int = 1024
 def _resolve_precondition(precondition: bool | None, n_dim: int) -> bool:
     """Resolve ``precondition=None`` — the opt-in policy.
 
-    **Preconditioning is off unless asked for.** It shipped auto-on and the default
-    broke fits that had been working (#1397):
+    **Preconditioning is off unless asked for.**
 
-    * ``notebooks/01_why_jax.py`` stopped running entirely. A NaN MAP init makes the
-      metric non-finite, and the guard turned a working fit into a hard ``ValueError``.
-    * ``notebooks/07_joint_photo_spec.py`` regressed from max R-hat 1.014 to **1.839**
-      while reporting **zero** divergences — the health signal inverted, so a
-      divergence check scores the broken arm as the healthiest of three.
+    Note on attribution, since the first version of this docstring got it wrong: the
+    notebook failures originally blamed on preconditioning (#1397) were **not** caused
+    by it. A sub-band node gradient underflowed to NaN inside the model itself, and
+    preconditioning was merely the first thing to notice — it built a metric at the
+    poisoned point and refused. With that root cause fixed, ``notebooks/07`` returns to
+    the R-hat it had before preconditioning existed.
 
-    Set against that, no throughput win was ever demonstrated where these fits live:
-    at 5 seeds per configuration the median was 1.87x ESS/s at D=7 but 0.84x — a
-    *loss* — at D=8. The conditioning evidence (cond 8.5e4-3.1e8 whitened to 1.0 at
-    the MAP, every configuration) is real and deterministic, but conditioning is not
-    convergence, and only the latter is what a default is promising.
+    What survives, measured on the *fixed* code, is that whitening does not pay at low
+    D. On ``recipes.mock_recovery_minimal()`` (D=7), 4 seeds of 4 have the
+    unpreconditioned arm converging (R-hat 0.997-1.007) and the preconditioned arm not
+    (1.055-2.689), at 4x to 25x worse ESS/s. An earlier sweep on other configurations
+    agreed in direction: median 0.84x ESS/s at D=8.
 
-    A feature that can turn a converging fit into a non-converging one is a feature
-    the caller has to ask for.
+    The conditioning evidence (cond 8.5e4-3.1e8 whitened to 1.0 at the MAP, every
+    configuration measured) is real and deterministic. But conditioning is not
+    convergence, and only convergence is what a default would be promising.
 
     Parameters
     ----------
