@@ -457,30 +457,49 @@ class PopulationFitter:
             if n not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
         ]
 
-    def run(self, method="native_vi_linear", *, key=None, **kwargs):
+    def run(self, method="vi_nonlinear_fast", *, key=None, **kwargs):
         """Run hierarchical inference.
 
         Parameters
         ----------
         method : str
-            **Pure-JAX (lax.while_loop, no NIFTy; recommended)**
+            **NIFTy-backed (CorrelatedFieldMaker, native PSD learning)**
 
-            - ``"native_vi_linear"`` — MGVI inside ``lax.while_loop`` (default).
+            - ``"vi_nonlinear_fast"`` — geoVI via NIFTy ``optimize_kl``
+              (default).
+            - ``"vi_nonlinear"`` — geoVI; same runner as fast, kept for API symmetry.
+            - ``"vi_linear_fast"`` — MGVI via NIFTy ``optimize_kl``.
+            - ``"vi_linear"`` — MGVI; same runner as fast, kept for API symmetry.
+
+            **Pure-JAX (lax.while_loop, no NIFTy)**
+
+            - ``"native_vi_linear"`` — MGVI inside ``lax.while_loop``.
               3–4× faster than NIFTy MGVI on CPU; O(1) memory in N.
             - ``"native_vi_nonlinear"`` — geoVI inside ``lax.while_loop``.
               Comparable speed to NIFTy geoVI; prefers lower N (≤20).
 
-            **NIFTy-backed (CorrelatedFieldMaker, native PSD learning)**
-
-            - ``"vi_nonlinear_fast"`` — geoVI via NIFTy ``optimize_kl``.
-            - ``"vi_nonlinear"`` — geoVI; same runner as fast, kept for API symmetry.
-            - ``"vi_linear_fast"`` — MGVI via NIFTy ``optimize_kl``.
-            - ``"vi_linear"`` — MGVI; same runner as fast, kept for API symmetry.
+            Both native backends are registered ``tier="broken"`` — they
+            segfault on DPL/dense_basis photometry mocks (#231). They are
+            substantially faster when they run, so they are kept and remain
+            selectable, but validate per-problem before relying on one. They
+            are also **not posterior-equivalent** to the NIFTy path: the fitted
+            PSD timescale ``sfh_field_psd_tau_myr`` has been measured to differ
+            by an order of magnitude between them (82 vs 6 Myr).
 
             **MCMC**
 
             - ``"mcmc_raytrace"`` — Ray Tracing on flat vector.
             - ``"mcmc_ess"`` — Elliptical slice sampling (cheap MCMC variant).
+
+            .. note::
+               ``native_vi_linear`` was the default from ``b7c4fa1e2`` until
+               2026-07. It was chosen for speed *before* the segfault was
+               validated (#231, 2026-05-22), and the tier change never
+               propagated back to the signature — this method's own
+               ``ValueError`` for an unknown method went on naming
+               ``vi_nonlinear_fast`` "(default)" the whole time. There is no
+               NUTS option here: ``mcmc_nuts`` is not in the hierarchical
+               ``_method_map`` and raises.
 
         key : PRNGKey, optional
             Random key for reproducibility. If None, uses PRNGKey(0).
