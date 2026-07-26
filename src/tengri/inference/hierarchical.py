@@ -28,7 +28,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.inference._hierarchical_flat import FLAT_SAMPLERS, run_flat_sampler
+from tengri.inference._hierarchical_flat import (
+    FLAT_SAMPLERS,
+    FLAT_UNSUPPORTED,
+    run_flat_sampler,
+)
 from tengri.inference.fitter import resolve_method
 from tengri.utils.transforms import to_bounded, to_unbounded
 
@@ -617,6 +621,16 @@ class PopulationFitter:
             # left to special-case per backend.
             if method in FLAT_SAMPLERS:
                 return run_flat_sampler(self, method, key=key, **kwargs)
+            # Refuse the ones the seam knowingly cannot drive with a specific
+            # reason rather than a generic "unknown method". A backend that is
+            # absent because nobody wired it up and one that is absent because
+            # its naive implementation returns biased samples deserve different
+            # errors — the second is a warning to whoever tries to add it.
+            if method in FLAT_UNSUPPORTED:
+                raise NotImplementedError(
+                    f"method={method!r} is not available for hierarchical fits. "
+                    f"{FLAT_UNSUPPORTED[method]}"
+                )
             # Derive the advertised list; never hand-write it. The literal this
             # replaced named 'vi_nonlinear_fast' as "(default)" for months after
             # b7c4fa1e2 moved the default off it (#1394).
@@ -1999,143 +2013,24 @@ class PopulationFitter:
         Flattens all shared + per-galaxy params into one vector and
         runs the Ray Tracing Sampler. Works for moderate N (~10-50 gal).
         """
-        from jax.flatten_util import ravel_pytree
-
+        from tengri.inference._hierarchical_flat import build_flat_problem
         from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 
+        # ONE definition of the hierarchical posterior, shared with every other
+        # sampler. This block used to build its own `init`, its own
+        # `ravel_pytree`, and its own `log_prob` inline — ~135 lines that were
+        # textually equivalent to `build_flat_problem` but structurally
+        # independent, so nothing stopped the two from drifting apart and
+        # quietly sampling different distributions.
         n_gal = self.n_galaxies
-        spec = self._spec
-        stochastic = spec.stochastic
-        n_grid = spec.n_grid
-        free_names = self._free_names
-        bounds = {}
-        for name in free_names:
-            dist = spec.get_distribution(name)
-            bounds[name] = dist.bounds
-        fixed_values = spec.get_fixed_values()
-        sigma_lo, sigma_hi = self.psd_sigma_bounds
-        tau_lo, tau_hi = self.psd_tau_bounds
-
-        # Build initial flat vector
-        # Build init dict with stacked per-galaxy arrays for vmap
-        sigma_mid = 0.5 * (sigma_lo + sigma_hi)
-        tau_mid = 0.5 * (tau_lo + tau_hi)
-
-        # Pre-build model with midpoint PSD for MAP initialization
-        model = self.model_factory(psd_sigma=sigma_mid, psd_tau_myr=tau_mid)
-
-        # Initialize per-galaxy params via vectorized MAP (lax.map(batch_size=1)).
-        from tengri import Fitter
-        from tengri.inference.backends.map_dispatch import build_vectorized_map_solver
-
+        prob = build_flat_problem(self, key=key, memory_mode=memory_mode, verbose=verbose)
+        init_flat = prob.init_flat
+        D = prob.n_dim
+        log_prob = prob.log_prob
         keys = jax.random.split(key, n_gal + 2)
-
-        if verbose:
-            print("  Initializing per-galaxy params via vectorized MAP...")
-
-        _template_gal = self.galaxies[0]
-        _template_fitter = Fitter(
-            model,
-            _template_gal["flux_obs"],
-            _template_gal["noise"],
-            data_type=self.data_type,
-        )
-        map_solve_one = build_vectorized_map_solver(
-            _template_fitter,
-            n_steps=80,
-            learning_rate=0.05,
-        )
-
-        all_flux_init = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
-        all_noise_init = jnp.stack([jnp.asarray(g["noise"]) for g in self.galaxies])
-        gal_keys = keys[:n_gal]
-
-        all_init_unbounded = jax.lax.map(
-            lambda args: map_solve_one(args[0], args[1], args[2]),
-            (all_flux_init, all_noise_init, gal_keys),
-            batch_size=1,
-        )
-
-        if verbose:
-            print("  MAP initialization complete")
-
-        _gal_stacked = {
-            name: all_init_unbounded.get(name, jnp.zeros(n_gal)) for name in free_names
-        }
-        # Structured init: shared scalars + stacked per-galaxy arrays
-        init = {
-            "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
-            "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
-            "gal": _gal_stacked,
-        }
-        if stochastic:
-            init["gal_xi"] = all_init_unbounded.get(
-                "psd_xi",
-                jnp.zeros((n_gal, n_grid)),
-            )
-
-        init_flat, unravel_fn = ravel_pytree(init)
-        D = len(init_flat)
 
         if step_size is None:
             step_size = 0.005 if D > 100 else 0.01
-
-        # Build data
-        all_data = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
-        all_noise = jnp.concatenate([jnp.asarray(g["noise"]) for g in self.galaxies])
-
-        # Pre-build model once (PSD params will be overridden per-call)
-        model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
-        data_type = self.data_type
-
-        def _predict_rt(params):
-            """Predict data from parameters (ray-trace variant)."""
-            if data_type == "photometry":
-                return model.predict_photometry(params)
-            return model.predict_spectrum(params)
-
-        def log_prob(flat_params):
-            """Compute log posterior for hierarchical ray-tracing."""
-            p = unravel_fn(flat_params)
-            psd_sigma = to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi)
-            psd_tau = to_bounded(p["psd_tau_u"], tau_lo, tau_hi)
-
-            # Single-galaxy forward (vmapped over galaxy axis)
-            def forward_one(ub_scalars, xi):
-                """Evaluate forward model for one galaxy."""
-                params = {}
-                for name in free_names:
-                    lo, hi = bounds[name]
-                    params[name] = to_bounded(ub_scalars[name], lo, hi)
-                for name, val in fixed_values.items():
-                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
-                        params[name] = val
-                params["sfh_field_psd_sigma"] = psd_sigma
-                params["sfh_field_psd_tau_myr"] = psd_tau
-                if stochastic:
-                    params["sfh_field_xi"] = xi
-                params = spec.resolve_mirrors(params)
-                return _predict_rt(params)
-
-            # lax.map keeps compiled graph O(1) in N_gal — see _run_vi_native_linear.
-            fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
-            if stochastic:
-                gal_inputs = (p["gal"], p["gal_xi"])
-                predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), gal_inputs)
-            else:
-                predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
-
-            pred_all = predictions.reshape(-1)
-            chi2 = jnp.sum(((all_data - pred_all) / all_noise) ** 2)
-
-            # Prior: standard normal on all unbounded + xi params
-            param_penalty = p["psd_sigma_u"] ** 2 + p["psd_tau_u"] ** 2
-            for name in free_names:
-                param_penalty += jnp.sum(p["gal"][name] ** 2)
-            if stochastic:
-                param_penalty += jnp.sum(p["gal_xi"] ** 2)
-
-            return -0.5 * chi2 - 0.5 * param_penalty
 
         if verbose:
             print(
@@ -2161,18 +2056,8 @@ class PopulationFitter:
         chain = chain[n_burnin:]
         accept_prob_post = accept_prob[n_burnin:]
 
-        # Extract shared params (vectorized over chain)
-        def extract_shared(flat_params):
-            """Extract shared PSD hyperparameters from flat parameter vector."""
-            p = unravel_fn(flat_params)
-            return jnp.array(
-                [
-                    to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi),
-                    to_bounded(p["psd_tau_u"], tau_lo, tau_hi),
-                ]
-            )
-
-        shared_arr = jax.vmap(extract_shared)(chain)  # (n_samples, 2)
+        # The same latent -> physical map every other sampler uses.
+        shared_arr = jax.vmap(prob.extract_shared)(chain)  # (n_samples, 2)
         shared_samples = {
             "psd_sigma": shared_arr[:, 0],
             "psd_tau_myr": shared_arr[:, 1],
