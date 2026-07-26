@@ -10,9 +10,18 @@ The chain that broke ``notebooks/01_why_jax.py``::
 
 Metric preconditioning was the messenger, not the cause. Once it is off (the opt-in
 default), the same fit runs to completion and returns a posterior in which **every**
-free parameter is NaN, with ``rhat()`` all NaN. Nothing raises, and a notebook
-asserting ``max_rhat < 1.01`` never fires, because NaN compares false against any
-threshold — the assertion silently stops being a test.
+free parameter is NaN, with ``rhat()`` all NaN — and **nothing raises**. That is the
+hazard: a result-shaped object the caller can index, plot, summarize and publish,
+with nothing in the return path saying it is meaningless.
+
+(An earlier revision of this docstring justified that differently, claiming a notebook
+asserting ``max_rhat < 1.01`` "never fires, because NaN compares false against any
+threshold". The premise is right and the conclusion is backwards. ``nan < 1.01`` is
+``False``, so ``assert max_rhat < 1.01`` **fails**, loudly — the upper-bound form is
+NaN-safe. Only the negated form ``assert not (max_rhat > 1.01)`` passes vacuously,
+and a census of this repo found 10 threshold assertions on convergence metrics and
+**zero** in that form. The guard below is still right; it just does not need, and
+should not teach, that rule.)
 
 So the crash was doing useful work. This pins the guard that keeps it loud without
 keeping it wrong: a MAP estimate containing NaN or inf is not a usable point for any
