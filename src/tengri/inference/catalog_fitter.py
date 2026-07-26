@@ -2,8 +2,9 @@
 """Independent per-galaxy catalog inference with optional K-way parallelism.
 
 Unlike :class:`PopulationFitter`, galaxies share no parameters.
-:class:`CatalogFitter` supports every method :class:`Fitter` accepts; for
-``native_vi_linear`` and ``native_vi_nonlinear`` it vmaps K galaxies per
+:class:`CatalogFitter` supports every method :class:`Fitter` accepts; for the
+batched methods (``mcmc_nuts`` / ``mcmc_hmc``, and the ``tier="broken"``
+``native_vi_linear`` / ``native_vi_nonlinear``) it vmaps K galaxies per
 ``lax.map`` step so the compiled XLA graph stays O(1) in N while K galaxies
 execute simultaneously on-device.
 """
@@ -307,7 +308,7 @@ class CatalogPosterior:
 
     Examples
     --------
-    >>> result = cat.run("native_vi_linear", key=jax.random.PRNGKey(0))
+    >>> result = cat.run("mcmc_nuts", key=jax.random.PRNGKey(0))
     >>> result[0].params  # first galaxy
     >>> result["stellar_mass"]  # per-galaxy medians, shape (n_galaxies,)
     >>> for post in result:
@@ -593,10 +594,12 @@ class _CatalogFitterOriginal:
     """Per-galaxy catalog inference with optional K-way on-device parallelism.
 
     Wraps all :class:`~tengri.inference.fitter.Fitter` inference methods with a
-    single ``run(method, ...)`` entry point. For ``native_vi_linear`` and
-    ``native_vi_nonlinear``, setting ``forward_chunk_size=K`` vmaps K galaxies
-    per ``lax.map`` iteration so K galaxies execute in parallel on the
-    accelerator while the XLA graph remains O(1) in the catalog size N.
+    single ``run(method, ...)`` entry point. For the batched methods
+    (``mcmc_nuts`` / ``mcmc_hmc``, and the ``tier="broken"``
+    ``native_vi_linear`` / ``native_vi_nonlinear``), setting
+    ``forward_chunk_size=K`` vmaps K galaxies per ``lax.map`` iteration so K
+    galaxies execute in parallel on the accelerator while the XLA graph remains
+    O(1) in the catalog size N.
 
     Parameters
     ----------
@@ -634,7 +637,7 @@ class _CatalogFitterOriginal:
     Examples
     --------
     >>> cat = CatalogFitter(model, galaxies)
-    >>> result = cat.run("native_vi_linear", key=jax.random.PRNGKey(0), forward_chunk_size=4)
+    >>> result = cat.run("mcmc_nuts", key=jax.random.PRNGKey(0), forward_chunk_size=4)
     >>> result[0].params  # first galaxy posterior
     """
 
@@ -664,7 +667,7 @@ class _CatalogFitterOriginal:
 
     def run(
         self,
-        method="native_vi_linear",
+        method="mcmc_nuts",
         *,
         key,
         forward_chunk_size=1,
@@ -674,6 +677,7 @@ class _CatalogFitterOriginal:
         percentiles: tuple | None = None,
         reducers: dict | None = None,
         properties: tuple | None = None,
+        allow_unvalidated: bool = False,
         **kwargs,
     ):
         """Fit all galaxies independently.
@@ -682,13 +686,19 @@ class _CatalogFitterOriginal:
         ----------
         method : str
             Any method accepted by :class:`~tengri.inference.fitter.Fitter`.
-            ``native_vi_linear`` (default) and ``native_vi_nonlinear`` support
-            ``forward_chunk_size``-based on-device parallelism.
+            ``mcmc_nuts`` (default) and ``mcmc_hmc`` support
+            ``forward_chunk_size``-based on-device parallelism, are the only
+            methods honoring ``devices``, and are the only batched methods
+            supporting per-galaxy redshift and presence masks.
+            ``native_vi_linear`` / ``native_vi_nonlinear`` also honor
+            ``forward_chunk_size`` but are ``tier="broken"`` and refuse to run
+            without ``allow_unvalidated=True``.
         key : jax.random.PRNGKey
             Base random key; per-galaxy keys are derived via ``jax.random.split``.
         forward_chunk_size : int
             K galaxies evaluated in parallel per ``lax.map`` step.
-            Only applies to ``native_vi_linear`` / ``native_vi_nonlinear``.
+            Applies to the batched methods only — ``mcmc_nuts`` / ``mcmc_hmc``
+            and ``native_vi_linear`` / ``native_vi_nonlinear``.
             ``K=1`` (default) = sequential; ``K=N`` = fully vmapped.
         n_pad : int, "auto", or None
             Pad the catalog up to this many galaxies before running. The
@@ -717,6 +727,9 @@ class _CatalogFitterOriginal:
             Additional reducer functions {name: callable} to apply per property
             (e.g., {"mean": jnp.mean, "std": jnp.std}). With store="full", these
             are ignored.
+        allow_unvalidated : bool, optional
+            Run a ``tier="broken"`` method anyway — for benchmarking or backend
+            development, not for science. Default False.
         **kwargs
             Forwarded to the underlying inference method.
 
@@ -729,8 +742,12 @@ class _CatalogFitterOriginal:
         ValueError
             If ``forward_chunk_size > 1`` and galaxies have heterogeneous ``n_data``,
             or if ``n_pad`` is an int below ``n_galaxies``.
+        BackendError
+            If ``method`` is registered ``tier="broken"`` and
+            ``allow_unvalidated`` is False.
         UserWarning
-            If ``forward_chunk_size != 1`` is passed for a non-native method (ignored).
+            If ``forward_chunk_size != 1`` is passed for a method that does not
+            batch (ignored).
 
         Notes
         -----
@@ -743,6 +760,7 @@ class _CatalogFitterOriginal:
         population field couples all galaxies — there, rely on
         :func:`tengri.enable_persistent_cache` instead.
         """
+        from tengri.inference._backend_registry import refuse_if_broken
         from tengri.inference.fitter import resolve_method
 
         # Auto-select store mode based on catalog size if not specified
@@ -764,6 +782,11 @@ class _CatalogFitterOriginal:
             percentiles = DEFAULT_PERCENTILES
 
         resolved = resolve_method(method)
+        # `resolve_method` validates only that the NAME is canonical -- it never
+        # consults the registry tier. Dispatch below goes straight into the
+        # backend module, so without this call `check_usable` is not on the path
+        # and a tier="broken" method runs silently (#1394).
+        refuse_if_broken(resolved, allow_unvalidated=allow_unvalidated)
         # Per-galaxy fixed-value overrides (e.g. redshift) and presence masks are
         # threaded only through the sequential path today; the batched native/MCMC
         # paths stack flux/noise and would SILENTLY DROP per-galaxy values. Fail loudly instead.
@@ -815,19 +838,26 @@ class _CatalogFitterOriginal:
                 **kwargs,
             )
         else:
+            # Both lists are DERIVED from the dispatch frozensets above, never
+            # written out by hand: the previous hard-coded text still named only
+            # the native pair long after `_MCMC_VMAPPABLE` was added, steering
+            # callers off the working path onto the broken one (#1394).
             if devices is not None:
                 warnings.warn(
                     f"devices={devices!r} is ignored for method={method!r}. "
                     "Multi-device sharding is currently supported for "
-                    "mcmc_nuts / mcmc_hmc only.",
+                    f"{' / '.join(sorted(self._MCMC_VMAPPABLE))} only.",
                     UserWarning,
                     stacklevel=2,
                 )
             if forward_chunk_size != 1:
+                usable = " / ".join(sorted(self._MCMC_VMAPPABLE))
+                gated = " / ".join(sorted(self._NATIVE_VMAPPABLE))
                 warnings.warn(
                     f"forward_chunk_size={forward_chunk_size} is ignored for "
-                    f"method={method!r}. Only native_vi_linear and "
-                    "native_vi_nonlinear support chunked parallelism.",
+                    f"method={method!r}. Chunked parallelism is supported by "
+                    f"{usable}, and by {gated} under allow_unvalidated=True "
+                    "(those two are tier='broken').",
                     UserWarning,
                     stacklevel=2,
                 )
