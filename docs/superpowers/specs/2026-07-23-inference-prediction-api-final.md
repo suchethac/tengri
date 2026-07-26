@@ -9,22 +9,25 @@ Legend:
 - **✓ works today** — the API exists and behaves as written.
 - **◆ proposed** — the shape this spec commits to; not yet built. (This file lives under `docs/superpowers/specs/`, a design-doc location, and legitimately names not-yet-built API.)
 
-**Tracking issues:**
+**Tracking issues.** Status reconciled against `main` on 2026-07-26; the ✓/◆ markers
+throughout this document follow this table.
 
-| # | Title | Work item |
-|---|---|---|
-| [1310](https://github.com/suchethac/tengri/issues/1310) | ~~IGM silently dropped in WavePrecomp LUT path~~ **closed stale** (already fixed by #1135/#1149; verified by execution) | W1b |
-| [1329](https://github.com/suchethac/tengri/issues/1329) | `fit(params=...)` silently swallowed — the WavePrecomp docstring advertises a kwarg nothing consumes | W2 dep |
-| [1311](https://github.com/suchethac/tengri/issues/1311) | Per-axis `FeaturePrecomp.n_grid` | — |
-| [1312](https://github.com/suchethac/tengri/issues/1312) | Noisy mock predictions (`simulate`) for SBI | future |
-| [1313](https://github.com/suchethac/tengri/issues/1313) | Flexibly-summarized `CatalogPosterior` (percentiles + reducers) | future |
-| [1314](https://github.com/suchethac/tengri/issues/1314) | Photo-z uncertainties in catalogs | future |
-| [1315](https://github.com/suchethac/tengri/issues/1315) | `ForwardModel.build` inherits observation + LUT mismatch guard | W1 |
-| [1316](https://github.com/suchethac/tengri/issues/1316) | `fit_batch(redshift_col=…)` recompiles per galaxy | W2 |
-| [1317](https://github.com/suchethac/tengri/issues/1317) | `Catalog`: one noun, table-in/out, name-matching, union-LUT + presence mask | W2 |
-| [1318](https://github.com/suchethac/tengri/issues/1318) | Retire `lean=`; surface-derived cache policy; `forward.prewarm()` | W3 |
-| [1319](https://github.com/suchethac/tengri/issues/1319) | Hierarchical as `ForwardModel(mode="hierarchical", shared=…)`; Population classes dissolve | W4 |
-| [1321](https://github.com/suchethac/tengri/issues/1321) | Observation = pure instrument; introduce `Data` record | W5 |
+| # | Title | Work item | Status |
+|---|---|---|---|
+| [1310](https://github.com/suchethac/tengri/issues/1310) | ~~IGM silently dropped in WavePrecomp LUT path~~ **closed stale** (already fixed by #1135/#1149; verified by execution) | W1b | ✓ closed stale |
+| [1329](https://github.com/suchethac/tengri/issues/1329) | `fit(params=...)` silently swallowed — the WavePrecomp docstring advertises a kwarg nothing consumes | W2 dep | ✓ shipped |
+| [1311](https://github.com/suchethac/tengri/issues/1311) | Per-axis `FeaturePrecomp.n_grid` | — | ✓ shipped |
+| [1312](https://github.com/suchethac/tengri/issues/1312) | Noisy mock predictions (`simulate`) for SBI | future | ◆ open |
+| [1313](https://github.com/suchethac/tengri/issues/1313) | Flexibly-summarized `CatalogPosterior` (percentiles + reducers) | future | ✓ shipped |
+| [1314](https://github.com/suchethac/tengri/issues/1314) | Photo-z uncertainties in catalogs | future | ◆ open |
+| [1315](https://github.com/suchethac/tengri/issues/1315) | `ForwardModel.build` inherits observation + LUT mismatch guard | W1 | ✓ shipped |
+| [1316](https://github.com/suchethac/tengri/issues/1316) | `fit_batch(redshift_col=…)` recompiles per galaxy | W2 | ✓ shipped |
+| [1317](https://github.com/suchethac/tengri/issues/1317) | `Catalog`: one noun, table-in/out, name-matching, union-LUT + presence mask | W2 | ✓ shipped |
+| [1318](https://github.com/suchethac/tengri/issues/1318) | Retire `lean=`; surface-derived cache policy; `forward.prewarm()` | W3 | ✓ shipped |
+| [1319](https://github.com/suchethac/tengri/issues/1319) | Hierarchical as `ForwardModel(mode="hierarchical", shared=…)`; Population classes dissolve | W4 | ◆ deferred past Paper I |
+| [1321](https://github.com/suchethac/tengri/issues/1321) | Observation = pure instrument; introduce `Data` record | W5 | ✓ shipped |
+| [1395](https://github.com/suchethac/tengri/issues/1395) | `sfh_model="table"` slips past the fast-path guard → zero SFH, zero lines, no warning | W6 blocker | ◆ open |
+| [1396](https://github.com/suchethac/tengri/issues/1396) | `Catalog.from_histories` + `simulate`: mock catalogs from simulation SFH/Z tables | W6 | ◆ open |
 
 ---
 
@@ -47,8 +50,8 @@ ForwardModel      ONE observed scene, one joint model. Combines SED + spatial +
                   THE recommended surface for prediction AND inference.
       │  run many, independently
       ▼
-Catalog           MANY independent ForwardModel problems, vmapped/chunked.  ◆
-                  One noun, action verbs: .fit() / .predict() / .simulate()
+Catalog           MANY independent ForwardModel problems, vmapped/chunked.  ✓
+                  One noun, action verbs: .fit() ✓ / .predict() ✓ / .simulate() ◆
 ```
 
 **Rule of thumb.** Eyeballing physics with no instrument → `SEDModel`. Anything you observe, fit, or that has non-trivial output shape → `ForwardModel`. Many independent galaxies → `Catalog`.
@@ -59,9 +62,9 @@ Catalog           MANY independent ForwardModel problems, vmapped/chunked.  ◆
 
 | Surface | Predict | Fit | Output shape | Notes |
 |---|---|---|---|---|
-| `SEDModel` | ✓ (rest-frame; standalone LUT photometry) | `sed.fit()` sugar → ForwardModel ◆ | one SED | the simple object; no observation required to exist |
-| `ForwardModel` | ✓ recommended | ✓ canonical | scalar → cube → summed → `(N, …)` | authoritative observation; `mode=` inferred or asserted ◆ |
-| `Catalog` ◆ | `.predict()` mocks | `.fit()` → `CatalogPosterior` | `(N, …)` | one noun; `CatalogFitter` becomes a deprecated alias |
+| `SEDModel` | ✓ (rest-frame; standalone LUT photometry) | `sed.fit()` sugar → ForwardModel ✓ | one SED | the simple object; no observation required to exist |
+| `ForwardModel` | ✓ recommended | ✓ canonical | scalar → cube → summed → `(N, …)` | authoritative observation; `mode=` inferred or asserted ✓ |
+| `Catalog` ✓ | `.predict()` mocks ✓ · `.simulate()` ◆ | `.fit()` → `CatalogPosterior` ✓ | `(N, …)` | one noun; `CatalogFitter` is a deprecated alias |
 | `Fitter` | — | internal only | — | the cache-reuse mechanism; never taught |
 
 ---
@@ -101,7 +104,7 @@ Consequences previously conflated:
 
 Today's `Observation` is a hybrid: `photometry`/`spectroscopy`/`noise` are instrument config, but `line_fluxes`/`spectral_indices`/`line_ratios` hold **measured values**. Fitting two galaxies with different measured line fluxes therefore needs two Observations → two ForwardModels → recompiles. The engine cache key already knows the razor — it contains the line *wavelengths* (definition) but not their values; the API just never followed suit.
 
-### 3.1 Observation — the instrument schema ◆ (razor applied; all constructors ✓)
+### 3.1 Observation — the instrument schema ✓ (razor applied; all constructors ✓)
 
 None of the instrument flexibility changes — it all lives in `Photometry`/`Spectroscopy` already:
 
@@ -125,7 +128,7 @@ Spectroscopy(wave_obs=wave, resolution=1000.0)    # scalar R
 Spectroscopy(wave_obs=wave, resolution=R_array)   # R per pixel = LSF(λ), validated to n_pix
 Spectroscopy(wave_obs=wave, resolution_matrix=M)  # full banded matrix (DESI-style)
 
-# the full schema                                                     ◆ (lines= is the razor change)
+# the full schema                                                     ✓ (lines= is the razor change)
 obs = Observation(
     photometry   = Photometry.from_names(["jwst_f200w", "jwst_f356w"]),
     spectroscopy = Spectroscopy.nirspec_prism(wave_obs),
@@ -136,7 +139,7 @@ obs = Observation(
 
 `line_fluxes`/`spectral_indices`/`line_ratios` keep working with a one-shot `DeprecationWarning`; their *definitions* stay in the schema, their *values* move to `Data`.
 
-### 3.2 Data — the measurement record ◆ (adopted)
+### 3.2 Data — the measurement record ✓ (adopted; shipped in W5)
 
 `Data` is a small frozen container validated against the model's Observation at `fit()` — **one seam** for shape checks, NaN policy, censor alignment, and line-name subsetting:
 
@@ -185,7 +188,7 @@ A single-galaxy `Data` must be *complete* with respect to its schema — if you 
 
 **`SEDModel` needs no observation to exist** — a bare `SEDModel` predicts rest-frame simulation SEDs. `ForwardModel` requires one (it *is* the observed-scene layer), which is exactly why no-instrument prediction lives on `SEDModel`.
 
-**`mode=` on `ForwardModel.build` ◆ (adopted): inferred by default, assertable explicitly.**
+**`mode=` on `ForwardModel.build` ✓ (adopted; shipped): inferred by default, assertable explicitly.**
 
 ```python
 ForwardModel.build(sed=sed, observation=obs)                      # → inferred "single"
@@ -207,20 +210,20 @@ Novices never type `mode=`; explicit users get early, precise validation instead
 
 | class | accelerates | bakes | key fields |
 |---|---|---|---|
-| `WavePrecomp` | photometry | SSP × filter integral + redshift table | `n_z`, `catalog_z_range`, `n_subbands`, `filters` ◆ |
+| `WavePrecomp` | photometry | SSP × filter integral + redshift table | `n_z`, `z_min`, `z_max`, `catalog_z_range`, `n_subbands`, `taylor_correction`, `fast_dust_emission` |
 | `SpectrumPrecomp` | spectroscopy | SSP × dust × IGM at spectrum pixels | `n_z`, `taylor_correction` |
 | `FeaturePrecomp` | emission lines | Cue ionization grid / per-line window LUT | `n_grid`, `ranges` |
 
 ```python
-fwd = ForwardModel.build(sed=sed, observation=obs, approx=WavePrecomp())          # ◆ taught placement
+fwd = ForwardModel.build(sed=sed, observation=obs, approx=WavePrecomp())          # ✓ taught placement
 fwd = ForwardModel.build(..., approx=(WavePrecomp(), FeaturePrecomp(n_grid=24)))  # + lines
 fwd = ForwardModel.build(..., approx=(WavePrecomp(n_z=200), SpectrumPrecomp()))   # joint
 # SEDModel.build(..., approx=...) stays as the standalone-prediction opt-in        ✓
 ```
 
-**LUT build + reuse (W1, [#1315](https://github.com/suchethac/tengri/issues/1315)) ◆.** Built at `ForwardModel.build` against the authoritative observation, with reuse-on-match: sed carries a matching LUT → reuse; different-filter LUT → rebuild; no LUT → build.
+**LUT build + reuse (W1, [#1315](https://github.com/suchethac/tengri/issues/1315)) ✓.** Built at `ForwardModel.build` against the authoritative observation, with reuse-on-match: sed carries a matching LUT → reuse; different-filter LUT → rebuild; no LUT → build.
 
-**Mismatch guard (W1) ◆.** `observation` becomes optional on `ForwardModel.build` (inherits from the sed when omitted). The guard is scoped to the real hazard:
+**Mismatch guard (W1) ✓.** `observation` is optional on `ForwardModel.build` (inherits from the sed when omitted). The guard is scoped to the real hazard:
 
 | `ForwardModel.build(sed=sed, observation=?)` | behavior |
 |---|---|
@@ -243,16 +246,21 @@ The fingerprint exists: `compile_signature`'s `filter_trans_id` (`sed_model.py:3
 
 ```python
 sed = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
-fwd = ForwardModel.build(sed=sed, approx=WavePrecomp())        # obs inherited ◆
+fwd = ForwardModel.build(sed=sed, approx=WavePrecomp())        # obs inherited ✓
 
 post = fwd.fit(flux, err, method="mcmc_nuts", key=key)         # ✓ (bare-array sugar)
-post = fwd.fit(data, method="vi", key=key)                     # ◆ (Data record, multi-channel)
-post = sed.fit(flux, err, method="vi", key=key)                # ◆ astronomer one-liner (sugar → ForwardModel)
+post = fwd.fit(data, method="vi", key=key)                     # ✓ single-channel Data record
+post = sed.fit(flux, err, method="vi", key=key)                # ✓ astronomer one-liner (sugar → ForwardModel)
 ```
 
 **Shapes.** photometry `(n_filters,)`; spectroscopy `(n_pix,)`; joint & censored via `Data`. Units: arrays are cgs `[erg/s/cm²/Hz]` (documented); unit declaration is a table-ingestion concern (§6.2). `data_type` resolves from the observation (`fitter.py:648`).
 
-**Censored bands** (upper/lower limits): `Data(censor=flags)` with `0/1/−1` per band (§3.3) — the existing `CensoredLikelihood` machinery ✓, now with a taught home ◆.
+> **Joint channels.** A single-channel `Data` record works; the *joint*
+> `Data(photometry=…, spectrum=…)` record raises on this surface until
+> [#1393](https://github.com/suchethac/tengri/pull/1393) lands. Photometry-only
+> records passing is why the gap survived its own tests.
+
+**Censored bands** (upper/lower limits): `Data(censor=flags)` with `0/1/−1` per band (§3.3) — the existing `CensoredLikelihood` machinery ✓, now with a taught home ✓.
 
 `sed.fit()` is an *un-deprecation* — after the Bagpipes ergonomics review, the one-liner won; it re-blesses an existing method as sugar while `ForwardModel.fit` stays canonical.
 
@@ -262,28 +270,29 @@ post = sed.fit(flux, err, method="vi", key=key)                # ◆ astronomer 
 fwd = ForwardModel.build(sed=sed, observation=obs,
           approx=WavePrecomp(catalog_z_range=(0.05, 1.5), n_z=200))
 
-cat  = Catalog(fwd, table, redshift_col="z", flux_unit="mJy")     # ◆ one noun
+cat  = Catalog(fwd, table, redshift_col="z", flux_unit="mJy")     # ✓ one noun
 post = cat.fit(method="mcmc_nuts", key=key,
                forward_chunk_size=64)                              # K vmapped per lax.map step ✓
 post["stellar_mass"]                                               # (N_galaxies,)
 
-mock = cat.predict(param_table, chunk_size=4096)                   # ◆ → (N, n_filters)
+mock = cat.predict(param_table, chunk_size=4096)                   # ✓ → (N, n_filters)
 # future: cat.simulate(noise=..., key=...)                         # ◆ #1312 — noisy draws, SBI
+# future: Catalog.from_histories(...).simulate(lines=...)          # ◆ #1396 — sim SFH/Z tables, §8.1
 ```
 
-**Column matching ◆: by name, by default.** Filters have registry names, so table columns `sdss_r` / `sdss_r_err` match automatically; `flux_cols=`/`err_cols=` remain as explicit positional overrides (validated by count). The swapped-column silent failure dies. Censor flags via `censor_cols=`.
+**Column matching ✓: by name, by default.** Filters have registry names, so table columns `sdss_r` / `sdss_r_err` match automatically; `flux_cols=`/`err_cols=` remain as explicit positional overrides (validated by count). The swapped-column silent failure dies. Censor flags via `censor_cols=`.
 
-**Units ◆: `flux_unit=` required for table-in** (`"mJy"`, `"cgs_fnu"`, `"maggies"`, `"ab_mag"`) — no default, no guessing; converters exist (`conversions.py`). Arrays-in stays documented cgs.
+**Units ✓: `flux_unit=` required for table-in** (`"mJy"`, `"cgs_fnu"`, `"maggies"`, `"ab_mag"`) — no default, no guessing; converters exist (`conversions.py`). Arrays-in stays documented cgs.
 
-**NaN policy ◆: error by default**, naming rows/bands and counts; the message teaches `missing="mask"` (NaN → absent band, §3.3). Sentinels (`−99`) are never auto-interpreted.
+**NaN policy ✓: error by default**, naming rows/bands and counts; the message teaches `missing="mask"` (NaN → absent band, §3.3). Sentinels (`−99`) are never auto-interpreted.
 
-**Known redshifts are first-class ✓.** Redshift is a *column*; `catalog_z_range` makes the whole catalog **one compile** (`sed_model.py:188-212`) — each row's z flows in as a runtime ztable interpolation (~µs). `Catalog` sets the per-row Fixed z internally and validates the span at construction ◆ — no `Fixed(0.0)  # placeholder` idiom in taught examples. Free-z per galaxy: supported iff the model has `redshift=Distribution(...)` and no `redshift_col`; both given → error ◆. Photo-z uncertainties: future, [#1314](https://github.com/suchethac/tengri/issues/1314).
+**Known redshifts are first-class ✓.** Redshift is a *column*; `catalog_z_range` makes the whole catalog **one compile** (`sed_model.py:188-212`) — each row's z flows in as a runtime ztable interpolation (~µs). `Catalog` sets the per-row Fixed z internally and validates the span at construction ✓ — no `Fixed(0.0)  # placeholder` idiom in taught examples. Free-z per galaxy: supported iff the model has `redshift=Distribution(...)` and no `redshift_col`; both given → error ✓. Photo-z uncertainties: future, [#1314](https://github.com/suchethac/tengri/issues/1314).
 
 **Shapes.** Table-in or arrays-in; **internally always materialized contiguous**: flux/noise `(N, n_data)`, redshift `(N,)` (§9.1). Spectra catalogs are arrays-in `(N, n_pix)` on the shared instrument grid (table-in is n/a for spectra) ◆.
 
 **Scaling knobs ✓.** `forward_chunk_size=K` (XLA graph O(1) in N); `n_pad="auto"` (shape-bucket catalog sizes to reuse one compile).
 
-**The `fit_batch` cliff (W2, [#1316](https://github.com/suchethac/tengri/issues/1316)).** Today `fit_batch(redshift_col=…)` clones a fresh `SEDModel` per row → new signature → full recompile per galaxy, silently. `Catalog` must auto-enable/validate `catalog_z_range`; `fit_batch` becomes a deprecated alias of `Catalog.fit` ◆. Wave 0 shipped the loud warning (#1326); the zero-clone half is **blocked on [#1329](https://github.com/suchethac/tengri/issues/1329)**: `SEDModel.fit` has no `params=` parameter and validates no unknown kwargs, so the per-row override the WavePrecomp docstring advertises (`model.fit(row.data, params={"redshift": row.z})`) is silently swallowed today. The plumbing plus unknown-kwarg validation is a Wave 2 prerequisite.
+**The `fit_batch` cliff (W2, [#1316](https://github.com/suchethac/tengri/issues/1316)).** Today `fit_batch(redshift_col=…)` clones a fresh `SEDModel` per row → new signature → full recompile per galaxy, silently. `Catalog` must auto-enable/validate `catalog_z_range`; `fit_batch` is now a deprecated alias of `Catalog.fit` ✓. Wave 0 shipped the loud warning (#1326); the zero-clone half was blocked on [#1329](https://github.com/suchethac/tengri/issues/1329) — `SEDModel.fit` had no `params=` parameter and validated no unknown kwargs, so the per-row override the WavePrecomp docstring advertised (`model.fit(row.data, params={"redshift": row.z})`) was silently swallowed. Both have since shipped: the `params=` plumbing plus unknown-kwarg validation, and the runtime-redshift sequential path.
 
 ### 6.3 Catalog — heterogeneous (different filters per galaxy)
 
@@ -294,7 +303,7 @@ Contract: **a galaxy filter not in the LUT set → raise.** ([#1317](https://git
 Catalog(fwd, galaxies).fit(method="map", forward_chunk_size=1)
 #   forward_chunk_size=1 → no vmap → ragged n_data allowed
 
-# target — vmapped via union-LUT + presence mask                      ◆
+# target — vmapped via union-LUT + presence mask                      ✓
 approx = WavePrecomp(catalog_z_range=(0.05, 1.5))   # filters come from the Observation
 fwd    = ForwardModel.build(sed=sed,
              observation=Observation(photometry=Photometry.from_names(union_filter_set)),
@@ -303,7 +312,7 @@ cat    = Catalog(fwd, table, redshift_col="z", flux_unit="mJy")
 post   = cat.fit(method="mcmc_nuts", key=key, forward_chunk_size=64)
 ```
 
-**Shapes (union path) ◆.** Rectangular over the union: `flux`, `noise` `(N, n_union)`, plus **two distinct channels** (§3.3): `presence (N, n_union)` bool — `False` = band absent, χ² skips it — and `censor (N, n_union)` in `{0,1,−1}` for limits in bands that *were* observed. The model predicts all `n_union` bands from the single union LUT; the masks select per galaxy. A band a galaxy has but the union lacks → **raise**. (The presence mask is a **new channel**, not a reuse of `data_mask` — that name already means censoring, with boolean arrays rejected by design.)
+**Shapes (union path) ✓.** Rectangular over the union: `flux`, `noise` `(N, n_union)`, plus **two distinct channels** (§3.3): `presence (N, n_union)` bool — `False` = band absent, χ² skips it — and `censor (N, n_union)` in `{0,1,−1}` for limits in bands that *were* observed. The model predicts all `n_union` bands from the single union LUT; the masks select per galaxy. A band a galaxy has but the union lacks → **raise**. (The presence mask is a **new channel**, not a reuse of `data_mask` — that name already means censoring, with boolean arrays rejected by design.)
 
 ### 6.4 Hierarchical — one joint model; data at fit (W4, [#1319](https://github.com/suchethac/tengri/issues/1319), deferred)
 
@@ -368,7 +377,7 @@ tengri:    ForwardModel(sed + observation[schema + NoiseModel] + priors-in-spec)
            fwd.fit(Data, method=...)          └────── "the problem" ──────┘
 ```
 
-**Noisy mock draws for SBI (future, [#1312](https://github.com/suchethac/tengri/issues/1312)).** `fwd.simulate(params, key=…)` / `Catalog.simulate(...)` draw noisy observations using the **same** `sigma_eff` the likelihood uses — the simulate/fit loop closes on one noise definition.
+**Noisy mock draws for SBI (future, [#1312](https://github.com/suchethac/tengri/issues/1312)).** `fwd.simulate(params, key=…)` / `Catalog.simulate(...)` draw noisy observations using the **same** `sigma_eff` the likelihood uses — the simulate/fit loop closes on one noise definition. The same verb serves mock catalogs whose histories come from a simulation rather than from parameters (§8.1, [#1396](https://github.com/suchethac/tengri/issues/1396)); `noise=` is what separates a noiseless prediction from a draw.
 
 ---
 
@@ -389,6 +398,78 @@ fwd.predict_properties(params, names=("stellar_mass", "sfr"))   # the ONE jit/vm
 Preserved rules (NAMING_CONTRACT §4b): `predict()` takes `params` and nothing else; arrays don't carry their axis (`pred.wave_rest`/`pred.wave_obs`); `obs_sed()` is L_ν (a *frame*, not a flux); bare `pred.rest_sed` raises.
 
 **Shape contract for non-scalar scenes ◆:** accessors return the scene's natural shape — multi-population: summed by default, per-component via the existing `predict_*_components` surface (`forward_model.py:234` ✓); hierarchical: `(N, …)` with N from the params' leading axis; IFU: cube-shaped (detailed spec deferred with the spatial work). **Multi-population namespacing ◆:** parameters, priors, and `post.properties` keys use the dotted `"{pop}.{param}"` prefix, consistent with the `agn.L_bolometric` derived-state convention.
+
+### 8.1 Simulation catalogs — SFH/Z histories in, photometry + lines out ◆ ([#1396](https://github.com/suchethac/tengri/issues/1396))
+
+The other direction of `simulate`: you already know each galaxy's star formation
+history, because a hydrodynamic simulation, a semi-analytic model, or an empirical
+model like UniverseMachine produced it. You want observed photometry and emission
+lines for N of them, fast.
+
+```python
+sed = SEDModel.build(
+    ssp_data=ssp, observation=obs,
+    sfh={'type': 'table'},          # histories arrive at the action, not at build
+    met={'type': 'table'},
+    dust={'type': 'calzetti'}, neb={'type': 'cue'},
+)
+fwd = ForwardModel.build(
+    sed=sed,
+    approx=(WavePrecomp(catalog_z_range=(0.0, 3.0)), FeaturePrecomp()),
+)
+
+cat = Catalog.from_histories(                    # ◆
+    fwd,
+    t_gyr    = t_gyr,                # (n_t,) shared grid, or (N, n_t)  [Gyr, cosmic time]
+    sfr      = sfr,                  # (N, n_t)                         [Msun/yr]
+    met      = logzsol,              # (N, n_t)                         log10(Z/Zsun)
+    redshift = z,                    # (N,)
+    params   = {"dust_tau_v": tau},  # (N,) per-galaxy scalars
+)
+
+mock = cat.simulate(lines=("Halpha", "OIII_5007"), chunk_size=4096)   # ◆
+
+mock.photometry                  # (N, n_filters)  [erg/s/cm²/Hz]
+mock.lines["Halpha"]             # (N,)            [erg/s/cm²]
+mock.properties["stellar_mass"]  # (N,)
+mock.to_table()                  # parquet/FITS — the §9.3 table-OUT leg
+
+noisy = cat.simulate(..., noise=obs.noise, key=key)   # ◆ composes with #1312
+```
+
+`from_histories` is a classmethod, not a new noun — the result **is** a `Catalog`, so
+`.fit()` on it stays meaningful (fit dust or redshift at a known, fixed SFH: a
+genuinely useful validation mode, and the cleanest way to ask what a survey could have
+recovered from a simulated galaxy).
+
+**Histories are records, not parameters.** This falls out of §3's uniform rule rather
+than extending it: a simulation's SFH is a per-galaxy record, exactly like a flux
+vector, so it enters at the action. The physics is already built this way — the `table`
+SFH declares **zero** free parameters ("the table IS the SFH"), and the arrays arrive
+at runtime as `params["sfh_t_gyr"]`, `params["sfh_sfr"]`, `params["met_history"]`.
+
+**Why the LUT still applies — the whole speed argument.** `WavePrecomp` bakes the
+SSP × filter integral (§5), and that integral is **SFH-independent**: a tabulated SFH
+changes only the (met, age) weights the SSPs are summed with, never the per-SSP band
+fluxes. So the expensive precompute is built once and reused unchanged for every
+galaxy in the simulation; per-galaxy cost collapses to a weight computation and a
+matrix product. `FeaturePrecomp` does the same for lines. With `catalog_z_range`
+keeping per-galaxy redshift a runtime ztable lookup, the whole catalog is **one
+compile** — the §9.4 compile-reuse contract, applied to histories instead of fluxes.
+
+**Shapes.** `(N, n_t)` history channels materialize contiguously alongside `(N,)`
+scalar parameters (§9.1). Fixed `n_t` ⇒ one compile signature; ragged histories are
+padded or shape-bucketed via `n_pad`, exactly as ragged catalogs are.
+
+**Not yet true.** Four gaps, all measured ([#1396](https://github.com/suchethac/tengri/issues/1396)):
+`Catalog.predict` reads only `spec.free_params`, so the history arrays are never seen;
+its `np.stack(…, axis=1)` cannot mix `(N,)` scalars with `(N, n_t)` histories; it
+returns photometry only, with no line channel; and the `FeaturePrecomp` weight path
+silently returns a **zero** SFH for `sfh={'type':'table'}`
+([#1395](https://github.com/suchethac/tengri/issues/1395)) — photometry still looks
+correct, which makes the zero lines and zero stellar mass harder to spot. The exact
+forward handles tabulated histories correctly today; it is the fast path and the
+catalog seam that need building.
 
 ---
 
@@ -420,7 +501,7 @@ post.summary["mean"]["stellar_mass"]  # (N,)
 post["stellar_mass"]                  # median convenience, (N,)
 ```
 
-### 9.3 Results — one `Posterior` contract ◆ (section restored)
+### 9.3 Results — one `Posterior` contract ✓
 
 ```python
 post.properties["stellar_mass"]       # derived quantities (sugar: post.stellar_mass)  ✓
@@ -428,7 +509,7 @@ post.posterior_predictive(data, noise)  # predictive fluxes, residuals, chi² (d
 post.summary(); post.save(path)       # ✓ (posterior.py:1945)
 post.refine(...)                      # continue/refine a fit                          ✓
 post.shared_samples[...]              # hierarchical only: population hyperparameters
-cat_post.to_table()                   # ◆ table-OUT (parquet/FITS) — closes the CIGALE loop (#1317)
+cat_post.to_table()                   # ✓ table-OUT (parquet/FITS) — closes the CIGALE loop (#1317)
 ```
 
 ### 9.4 Caching — three tiers, and the surface-derived policy
@@ -441,14 +522,14 @@ cat_post.to_table()                   # ◆ table-OUT (parquet/FITS) — closes 
 
 Tier 2 is galaxy-agnostic by construction — `data_args` is traced, never closed over (`backends/mcmc/_shared.py:25`) — the mechanism behind both `Catalog` vmap and the hierarchical scaling contract. All expensive caches are **model-keyed** (`_model_cache.py` WeakKeyDictionary), which is why `Fitter` has no state a fresh one lacks and stays internal.
 
-**Compile-reuse contract ◆ (binding on all implementation).** Compiled galaxy models are *always* reusable across different data:
+**Compile-reuse contract (normative — binding on all implementation).** Compiled galaxy models are *always* reusable across different data:
 
 - Data enters compiled programs exclusively as **traced arguments** — never closed over, never baked. Baking a per-galaxy value into a compile signature is a bug ([#1316](https://github.com/suchethac/tengri/issues/1316) is the canonical instance).
 - Recompilation has exactly **four legitimate triggers**: model structure, data *shape* (bucketed via `n_pad`), free-parameter set, engine/method. Per-galaxy redshift is explicitly **not** a trigger (`catalog_z_range` ztable); per-galaxy data values are **never** a trigger.
 - Minimize distinct compile signatures — prefer runtime inputs over baked constants wherever the numerics allow. LUTs (tier 1) are method-agnostic: one LUT serves MAP, HMC, and VI alike.
 - Tier 3 is the only per-data artifact, and it must stay bounded (the surface-derived policy above).
 
-**W3 ([#1318](https://github.com/suchethac/tengri/issues/1318)) ◆:** `forward.prewarm()` exposed (today on the internal Fitter only). `lean=` retired — policy derives from the surface: `forward.fit()` = iterate policy (tier-3 kept, keyed by data fingerprint with cap 1 — re-running the same fit reuses it, a new galaxy replaces it, so loops never accumulate); `Catalog` = sweep policy (tiers 1–2 kept, per-galaxy tier-3 dropped). `lean=True/False` survives as a hidden deprecated alias.
+**W3 ([#1318](https://github.com/suchethac/tengri/issues/1318)) ✓:** `forward.prewarm()` exposed (it was on the internal Fitter only). `lean=` retired — policy derives from the surface: `forward.fit()` = iterate policy (tier-3 kept, keyed by data fingerprint with cap 1 — re-running the same fit reuses it, a new galaxy replaces it, so loops never accumulate); `Catalog` = sweep policy (tiers 1–2 kept, per-galaxy tier-3 dropped) — **the sweep half is not wired**: the `_cache_policy` consumer exists (`fitter.py:2291`) but nothing in `src/` ever passes `'sweep'`, so every fit today derives the iterate policy ([#1344](https://github.com/suchethac/tengri/issues/1344)). `lean=True/False` survives as a hidden deprecated alias.
 
 ---
 
@@ -468,16 +549,17 @@ Implementation ordering, absorbed-backlog mapping, and the near-term method focu
 | ID | Piece | Status | Tracks |
 |---|---|---|---|
 | — | single/catalog/hierarchical construct + predict/fit; one predict contract | ✓ | — |
-| **W1** | `observation` optional on `ForwardModel.build` + inherit + LUT reuse-on-match + scoped guard | ◆ | [#1315](https://github.com/suchethac/tengri/issues/1315) |
+| **W1** | `observation` optional on `ForwardModel.build` + inherit + LUT reuse-on-match + scoped guard | ✓ shipped | [#1315](https://github.com/suchethac/tengri/issues/1315) |
 | **W1b** | IGM applied on every LUT path — **already true**; guard tests exist | ✓ (resolved stale) | [#1310](https://github.com/suchethac/tengri/issues/1310) |
-| **W2 dep** | fit-time `params=` plumbing (per-row z injection; unknown-kwarg validation) | ◆ | [#1329](https://github.com/suchethac/tengri/issues/1329) |
-| **W2** | `Catalog` noun: table-in/out, name-matching, `flux_unit=`, NaN policy, union-LUT + presence mask, `to_table()`; `fit_batch` cliff + deprecation | ◆ | [#1316](https://github.com/suchethac/tengri/issues/1316), [#1317](https://github.com/suchethac/tengri/issues/1317) |
-| **W3** | `forward.prewarm()`; retire `lean` → surface-derived policy | ◆ | [#1318](https://github.com/suchethac/tengri/issues/1318) |
-| **W4** | hierarchical: `mode="hierarchical"` + `shared=`, data at fit, scaling contract; Population classes dissolve | ◆ deferred | [#1319](https://github.com/suchethac/tengri/issues/1319) |
-| **W5** | Observation razor + `Data` record + `mode=` validation | ◆ | [#1321](https://github.com/suchethac/tengri/issues/1321) |
-| — | per-axis `FeaturePrecomp.n_grid` | ◆ | [#1311](https://github.com/suchethac/tengri/issues/1311) |
-| — | flexibly-summarized `CatalogPosterior` | ◆ future | [#1313](https://github.com/suchethac/tengri/issues/1313) |
-| — | `simulate` for SBI | ◆ future | [#1312](https://github.com/suchethac/tengri/issues/1312) |
+| **W2 dep** | fit-time `params=` plumbing (per-row z injection; unknown-kwarg validation) | ✓ shipped | [#1329](https://github.com/suchethac/tengri/issues/1329) |
+| **W2** | `Catalog` noun: table-in/out, name-matching, `flux_unit=`, NaN policy, union-LUT + presence mask, `to_table()`; `fit_batch` cliff + deprecation | ✓ shipped | [#1316](https://github.com/suchethac/tengri/issues/1316), [#1317](https://github.com/suchethac/tengri/issues/1317) |
+| **W3** | `forward.prewarm()`; retire `lean` → surface-derived policy | ✓ shipped (Catalog sweep half open — [#1344](https://github.com/suchethac/tengri/issues/1344)) | [#1318](https://github.com/suchethac/tengri/issues/1318) |
+| **W4** | hierarchical: `mode="hierarchical"` + `shared=`, data at fit, scaling contract; Population classes dissolve | ◆ deferred past Paper I | [#1319](https://github.com/suchethac/tengri/issues/1319) |
+| **W5** | Observation razor + `Data` record + `mode=` validation | ✓ shipped | [#1321](https://github.com/suchethac/tengri/issues/1321) |
+| **W6** | simulation catalogs: `Catalog.from_histories` + `simulate(lines=…)`, LUT-fast (§8.1) | ◆ | [#1396](https://github.com/suchethac/tengri/issues/1396), [#1395](https://github.com/suchethac/tengri/issues/1395) |
+| — | per-axis `FeaturePrecomp.n_grid` | ✓ shipped | [#1311](https://github.com/suchethac/tengri/issues/1311) |
+| — | flexibly-summarized `CatalogPosterior` | ✓ shipped | [#1313](https://github.com/suchethac/tengri/issues/1313) |
+| — | `simulate` for SBI (the noise draw) | ◆ future | [#1312](https://github.com/suchethac/tengri/issues/1312) |
 | — | photo-z uncertainties in catalogs | ◆ future | [#1314](https://github.com/suchethac/tengri/issues/1314) |
 
 ---
@@ -506,6 +588,8 @@ Chronological, with rationale — the *why*, not just the *what*.
 18. **`shared=` = literal sharing (tuple of names; prior = template's prior); `pooled=` reserved** for future partial pooling — the two are never overloaded onto one kwarg.
 19. **Name-matched catalog columns by default; `flux_unit=` required for table-in; NaN → error that teaches `missing="mask"`.** Explicit over convenient; the error is the documentation.
 20. **Deliverable = this spec; implementation = the tracked issues.**
+21. **Simulation histories are records, not parameters** (§8.1) — an SFH/Z table from a hydro sim or SAM enters at the action via `Catalog.from_histories(...)`, never at model construction. This is the §3 uniform rule applied unchanged, not an extension of it: the `table` SFH already declares zero free parameters and takes its arrays at runtime. `from_histories` is a classmethod returning a `Catalog`, so `.fit()` on a simulated catalog keeps its meaning (fit dust or redshift at a known SFH).
+22. **`simulate` is one verb with two sources.** Parameters or tabulated histories supply the SFH; `noise=` is the only thing separating a noiseless prediction from a draw. Splitting these into separate nouns would duplicate the chunking, the LUT wiring, and the table-OUT leg for no conceptual gain.
 
 ---
 

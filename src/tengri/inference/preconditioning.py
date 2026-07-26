@@ -94,7 +94,12 @@ def negative_hessian_metric(
     Returns
     -------
     metric : ndarray, shape (D, D)
-        Symmetric positive-definite metric, eigenvalues ``max(|lambda|, floor)``.
+        Symmetric positive-definite metric, eigenvalues ``max(|lambda|, floor)``
+        — **provided the curvature at ``position`` is finite**. The floor cannot
+        rescue a non-finite input: ``jnp.maximum(nan, floor)`` is ``nan``, so a
+        NaN log-density or Hessian propagates through unchanged (#1397).
+        Callers that cannot guarantee a finite point should validate it first;
+        :func:`preconditioned_logdensity` does.
 
     Notes
     -----
@@ -204,11 +209,29 @@ def metric_preconditioner(metric: jnp.ndarray) -> LinearPreconditioner:
     Triangular, so both directions cost :math:`O(D^2)`.
     """
     metric = jnp.asarray(metric)
+    # Distinguish the two ways Cholesky can fail (#1397). A non-finite metric is
+    # NOT an indefiniteness problem, and reporting it as one sends the reader to
+    # fix curvature when the defect is upstream — the metric was formed at a
+    # point where the log-density or its Hessian was already NaN. The eigenvalue
+    # floor in ``negative_hessian_metric`` cannot help there: ``jnp.maximum(nan,
+    # floor)`` is ``nan``, so the floor is a no-op exactly when it is needed.
+    if not bool(jnp.all(jnp.isfinite(metric))):
+        raise ValueError(
+            "metric is non-finite (NaN or inf), so it cannot be factorized. This "
+            "is an upstream failure, not a curvature one: the metric is built at "
+            "the expansion point (normally the MAP), so a non-finite value there "
+            "— a diverged MAP, or a log-density that is NaN at that point — "
+            "propagates straight into the metric. The eigenvalue floor cannot "
+            "repair it. Check the initial point is finite, or pass "
+            "precondition=False to sample without whitening."
+        )
     lower = jnp.linalg.cholesky(metric)
     if not bool(jnp.all(jnp.isfinite(lower))):
         raise ValueError(
-            "metric is not positive definite — Cholesky failed. Build it with "
-            "`negative_hessian_metric`, whose eigenvalue floor guarantees this."
+            "metric is not positive definite — Cholesky failed on a finite "
+            "matrix. Build it with `negative_hessian_metric`, whose eigenvalue "
+            "floor guarantees positive definiteness for finite curvature, or "
+            "pass precondition=False to sample without whitening."
         )
     identity = jnp.eye(metric.shape[0], dtype=metric.dtype)
     inverse_lower = jax.scipy.linalg.solve_triangular(lower, identity, lower=True)
@@ -259,6 +282,21 @@ def preconditioned_logdensity(
     The returned ``wrapped`` callable is itself fully traceable.
     """
     init_flat = jnp.asarray(init_flat)
+    # Catch a non-finite expansion point HERE, where the point is still in hand
+    # (#1397). Downstream all that survives is a NaN matrix, and the failure
+    # arrives wearing the wrong name three layers later. The check lives in this
+    # orchestrator rather than in ``negative_hessian_metric`` because that
+    # function is documented JIT/grad/vmap-safe and reading a concrete boolean
+    # inside it would break that contract; this function is already non-JIT.
+    if not bool(jnp.all(jnp.isfinite(init_flat))):
+        n_bad = int(jnp.sum(~jnp.isfinite(init_flat)))
+        raise ValueError(
+            f"the expansion point is non-finite ({n_bad} of {init_flat.size} "
+            "coordinates are NaN or inf), so no metric can be built at it. This "
+            "normally means the MAP initialization diverged. Fix the starting "
+            "point — pass an explicit init_from=, or adjust the MAP settings — "
+            "or pass precondition=False to sample without whitening."
+        )
     metric = negative_hessian_metric(logdensity_fn, init_flat, data_args, floor=floor)
     preconditioner = metric_preconditioner(metric)
     return (

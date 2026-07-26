@@ -262,6 +262,50 @@ def _run_map_scipy(
     )
 
 
+def _best_finite_restart(final_losses) -> int:
+    """Index of the lowest **finite** loss among multi-start restarts (#1397).
+
+    Parameters
+    ----------
+    final_losses : array_like, shape (n_restarts,)
+        Each restart's loss at its last step [dimensionless].
+
+    Returns
+    -------
+    int
+        Index of the best restart that produced a usable loss.
+
+    Raises
+    ------
+    ValueError
+        If no restart finished finite, naming the count and what to change.
+
+    Notes
+    -----
+    ``jnp.argmin`` cannot be used here: every comparison against NaN is false,
+    so it returns index 0 whenever the vector contains a NaN. Multi-start exists
+    precisely because some inits diverge, so "keep the best" was keeping the
+    worst -- on ``recipes.mock_recovery_minimal()`` it discarded a converged
+    restart at loss 4.635 in favour of a NaN one. ``-inf`` is rejected for the
+    same reason in reverse: a plain ``argmin`` would rank it the best fit
+    possible.
+
+    Not JIT-safe by design — reads concrete values to decide, and runs once per
+    fit after ``block_until_ready``.
+    """
+    losses = np.asarray(final_losses, dtype=float)
+    finite = np.isfinite(losses)
+    if not finite.any():
+        raise ValueError(
+            f"all {losses.size} MAP restarts diverged to a non-finite loss "
+            "(NaN or inf), so there is no starting point to return. The "
+            "optimizer stepped outside the model's valid range from every "
+            "initialization: try a smaller learning_rate=, fewer n_steps=, or "
+            "a larger n_restarts= so at least one init survives."
+        )
+    return int(np.argmin(np.where(finite, losses, np.inf)))
+
+
 def _run_map_multistart(context, *, key, n_restarts, n_steps, learning_rate, optimizer, verbose):
     """Run ``n_restarts`` independent ADAM optimizations in parallel; keep the best.
 
@@ -336,17 +380,21 @@ def _run_map_multistart(context, *, key, n_restarts, n_steps, learning_rate, opt
     params_b, losses_b = _run_restarts(inits, data_args)
     jax.block_until_ready(losses_b)
     final_losses = losses_b[:, -1]
-    best = int(jnp.argmin(final_losses))
+    best = _best_finite_restart(final_losses)
     best_params = jax.tree.map(lambda x: x[best], params_b)
     best_losses = losses_b[best]
     wall_time = time.time() - t0
     final_loss = float(best_losses[-1])
 
     if verbose:
+        n_diverged = int(np.sum(~np.isfinite(np.asarray(final_losses, dtype=float))))
+        finite_losses = np.asarray(final_losses, dtype=float)
+        worst = float(np.max(finite_losses[np.isfinite(finite_losses)]))
+        diverged_note = f"; {n_diverged} diverged" if n_diverged else ""
         print(
             f"  MAP ({opt_name} x{n_restarts} restarts) complete in {wall_time:.1f}s, "
             f"best loss={final_loss:.4f} "
-            f"(restart {best}; worst={float(jnp.max(final_losses)):.1f})"
+            f"(restart {best}; worst finite={worst:.1f}{diverged_note})"
         )
 
     return Posterior(
