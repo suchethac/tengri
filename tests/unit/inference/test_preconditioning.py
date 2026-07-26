@@ -596,7 +596,7 @@ class TestNonFiniteExpansionPoint:
         with pytest.raises(ValueError) as excinfo:
             self._fail_at_a_nan_point()
         msg = str(excinfo.value).lower()
-        assert "not finite" in msg or "nan" in msg, (
+        assert "finite" in msg or "nan" in msg, (
             f"message does not name non-finiteness: {excinfo.value}"
         )
 
@@ -629,6 +629,12 @@ class TestNonFiniteExpansionPoint:
 
         with pytest.raises(ValueError) as excinfo:
             metric_preconditioner(jnp.full((3, 3), jnp.nan))
-        assert "not finite" in str(excinfo.value).lower(), (
+        msg = str(excinfo.value).lower()
+        # Assert the DISTINCTION, not one phrasing of it. "non-finite" and "not
+        # finite" mean the same thing and both are correct; what must never happen
+        # is a NaN matrix being reported as a definiteness problem, which sends the
+        # reader to fix curvature when the defect is upstream.
+        assert "finite" in msg or "nan" in msg, f"non-finiteness not named: {excinfo.value}"
+        assert "positive definite" not in msg, (
             f"NaN metric diagnosed as non-PD: {excinfo.value}"
         )
