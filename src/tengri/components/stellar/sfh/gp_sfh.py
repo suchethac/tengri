@@ -17,13 +17,25 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
+from tengri.utils.grid import DEFAULT_LOG_AGE_MAX, DEFAULT_LOG_AGE_MIN
+
 # Default log10(age/yr) bounds for the SFH grid: 1 Myr → ~13.8 Gyr.
 # Exposed as module constants so callers that need the static step size
 # (e.g. ``StellarSEDComponent.apply`` under JIT, where indexing a traced
 # ``jnp.linspace`` and calling ``float()`` would raise) can recompute it
 # without re-tracing the grid.
-LOG_AGE_MIN: float = 6.0
-LOG_AGE_MAX: float = 10.14
+#
+# Aliases, not literals. Unifying ``make_log_age_grid`` alone leaves the same
+# duplication one level down: ``log_age_grid_step`` below defaults off THESE
+# constants while ``make_log_age_grid`` defaults off ``utils/grid``'s, so
+# changing the canonical bounds would silently stop the analytic step size
+# describing the grid the forward model is actually evaluated on. Measured on
+# this branch before the alias: widening ``DEFAULT_LOG_AGE_MAX`` 10.14 -> 10.20
+# left ``log_age_grid_step(256)`` 1.43 % adrift from the real grid spacing, and
+# the contract test stayed green once its hardcoded 10.14 was updated — which is
+# exactly what a maintainer making that change would do.
+LOG_AGE_MIN: float = DEFAULT_LOG_AGE_MIN
+LOG_AGE_MAX: float = DEFAULT_LOG_AGE_MAX
 
 
 def log_age_grid_step(

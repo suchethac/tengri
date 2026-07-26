@@ -71,3 +71,40 @@ def test_grid_contract_is_unchanged():
 
     for n in (16, 64, 256):
         assert np.asarray(make_log_age_grid(n)).shape == (n,)
+
+
+def test_the_bounds_have_one_source_too():
+    """Unifying the function is not enough — ``log_age_grid_step`` needs the same.
+
+    ``gp_sfh`` re-declared ``LOG_AGE_MIN`` / ``LOG_AGE_MAX`` as literals while
+    ``make_log_age_grid`` defaults off ``utils/grid``'s. That is the same
+    duplication one level down, and it is the level that survives unifying the
+    function.
+    """
+    from tengri.components.stellar.sfh.gp_sfh import LOG_AGE_MAX, LOG_AGE_MIN
+    from tengri.utils.grid import DEFAULT_LOG_AGE_MAX, DEFAULT_LOG_AGE_MIN
+
+    assert LOG_AGE_MIN == DEFAULT_LOG_AGE_MIN
+    assert LOG_AGE_MAX == DEFAULT_LOG_AGE_MAX
+
+
+@pytest.mark.parametrize("n_grid", [16, 64, 256, 257])
+def test_analytic_step_matches_the_grid_it_describes(n_grid):
+    """The step must track the grid at ANY bounds, not just the current ones.
+
+    ``test_grid_contract_is_unchanged`` above pins the endpoints at 6.0 / 10.14,
+    so it catches an *accidental* bound change. It cannot catch a *deliberate*
+    one, because updating that hardcoded 10.14 is the first thing a maintainer
+    making the change would do. Measured on this branch before the bounds were
+    aliased: widening ``DEFAULT_LOG_AGE_MAX`` to 10.20 and updating that
+    assertion left the whole file green while ``log_age_grid_step(256)`` sat
+    1.43 % away from the real spacing — an error that flows straight into
+    ``StellarSEDComponent.apply``'s age weights under JIT.
+
+    This assertion is relative, so it holds whatever the bounds become.
+    """
+    from tengri.components.stellar.sfh.gp_sfh import log_age_grid_step
+    from tengri.utils.grid import make_log_age_grid
+
+    grid = np.asarray(make_log_age_grid(n_grid))
+    assert log_age_grid_step(n_grid) == pytest.approx(float(grid[1] - grid[0]), rel=1e-12)
