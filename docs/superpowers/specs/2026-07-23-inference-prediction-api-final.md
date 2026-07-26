@@ -130,7 +130,7 @@ obs = Observation(
     photometry   = Photometry.from_names(["jwst_f200w", "jwst_f356w"]),
     spectroscopy = Spectroscopy.nirspec_prism(wave_obs),
     noise        = NoiseModel(calibration_floor=Uniform(0.01, 0.15)),   # instrument noise character
-    lines        = LineList(["Halpha", "OIII_5007"]),                   # WHICH lines — not fluxes
+    lines        = LineList.from_names(["Halpha", "OIII_5007"]),        # WHICH lines — not fluxes
 )
 ```
 
@@ -144,7 +144,7 @@ obs = Observation(
 |---|---|
 | `photometry` — n named filters | `photometry=(flux, err)` — each `(n_filters,)` |
 | `spectroscopy` — wave grid, LSF | `spectrum=(flux, err)` — each `(n_pix,)` |
-| `lines=LineList([...])` — *which* lines | `lines={"Halpha": (val, err)}` — their fluxes |
+| `lines=LineList.from_names([...])` — *which* lines | `lines={"Halpha": (val, err)}` — their fluxes |
 | `noise=NoiseModel(...)` — noise *character* | `censor=flags` — this galaxy's limits `0/1/-1` |
 
 ```python
@@ -416,7 +416,7 @@ post["stellar_mass"]                  # median convenience, (N,)
 
 ```python
 post.properties["stellar_mass"]       # derived quantities (sugar: post.stellar_mass)  ✓
-post.predict()                        # posterior-predictive Prediction (same accessors as §8)
+post.posterior_predictive(data, noise)  # predictive fluxes, residuals, chi² (dict)   ✓
 post.summary(); post.save(path)       # ✓ (posterior.py:1945)
 post.refine(...)                      # continue/refine a fit                          ✓
 post.shared_samples[...]              # hierarchical only: population hyperparameters
