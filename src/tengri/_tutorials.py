@@ -577,8 +577,8 @@ _USE_CASES = _Tutorial(
         Use case 3  ──  CATALOG of N galaxies, independent fits
         ─────────────────────────────────────────────────────────
         One noun: Catalog. Table in, posteriors out. With redshift_col and a
-        model built with approx=WavePrecomp(catalog_z_range=...), each row's
-        redshift is a runtime input to one shared compile.
+        model built with approx=WavePrecomp(catalog_z_range=...), each row
+        is fit at its own redshift on one shared LUT.
 
             cat = tengri.Catalog(fwd, table, flux_unit="mJy", redshift_col="z")
             post = cat.fit(method="map", key=jax.random.PRNGKey(0))
