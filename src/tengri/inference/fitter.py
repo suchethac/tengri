@@ -273,6 +273,52 @@ def resolve_method(method: str, emit_warning: bool = True) -> str:
     )
 
 
+#: Constructor parameters the convenience fit surfaces manage themselves
+#: (positionally or via their own named parameters) — never routed from a
+#: surface's ``**kwargs``.
+_FIT_SURFACE_MANAGED = frozenset(
+    {"self", "model", "data", "noise", "data_type", "data_mask", "approx", "params_override"}
+)
+
+
+def split_fitter_kwargs(kwargs):
+    """Split a fit-surface ``**kwargs`` dict into (constructor, run) halves (#1378).
+
+    The convenience surfaces (``ForwardModel.fit``, ``SEDModel.fit``) accept one
+    ``**kwargs``; parameters declared by ``Fitter.__init__`` — e.g.
+    ``calibration_marginalize``, ``cal_n_poly``, ``eline_marginalize``,
+    ``likelihood`` — belong to construction (spec #1320 §7 teaches them at the
+    fit call), everything else to :meth:`Fitter.run`. The allowlist is derived
+    from the live constructor signature so it cannot drift when the
+    constructor gains parameters. Parameters the surfaces manage themselves
+    (``data``, ``noise``, ``data_type``, ``data_mask``, ``approx``,
+    ``params_override``) are never routed.
+
+    Parameters
+    ----------
+    kwargs : dict
+        The surface's collected ``**kwargs``. Not mutated.
+
+    Returns
+    -------
+    ctor_kwargs : dict
+        The subset belonging to ``Fitter.__init__``.
+    run_kwargs : dict
+        Everything else, for ``Fitter.run`` (unknown names still fail loudly
+        there, as before).
+    """
+    import inspect
+
+    ctor_names = {
+        name
+        for name in inspect.signature(Fitter.__init__).parameters
+        if name not in _FIT_SURFACE_MANAGED
+    }
+    ctor_kwargs = {k: v for k, v in kwargs.items() if k in ctor_names}
+    run_kwargs = {k: v for k, v in kwargs.items() if k not in ctor_names}
+    return ctor_kwargs, run_kwargs
+
+
 class Fitter:
     """Inference engine for differentiable SED fitting with flexible method dispatch.
 

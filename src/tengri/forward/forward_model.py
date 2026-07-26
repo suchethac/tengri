@@ -923,8 +923,12 @@ class ForwardModel:
         ``Fitter(forward, data, noise).run(method)`` remains the
         low-level path; ``forward.fit(...)`` is just the shortcut.
         """
-        from tengri.inference.fitter import Fitter
+        from tengri.inference.fitter import Fitter, split_fitter_kwargs
         from tengri.observation.data import Data as _Data
+
+        # Constructor-owned kwargs (calibration_marginalize, likelihood, ...)
+        # go to Fitter(...); the rest to run() — spec §7's fit-time flags (#1378).
+        ctor_kwargs, kwargs = split_fitter_kwargs(kwargs)
 
         data_mask = None
         if isinstance(data, _Data):
@@ -1002,6 +1006,7 @@ class ForwardModel:
                     data_mask=data_mask,
                     approx=approx,
                     params_override=params,
+                    **ctor_kwargs,
                 )
                 return fitter.run(method, key=key, **kwargs)
 
@@ -1012,6 +1017,7 @@ class ForwardModel:
             data_mask=data_mask,
             approx=approx,
             params_override=params,
+            **ctor_kwargs,
         )
         return fitter.run(method, key=key, **kwargs)
 
