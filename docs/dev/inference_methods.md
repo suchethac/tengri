@@ -184,8 +184,7 @@ cond(grad^2 H) at the MAP        1.1e5      (eigenvalues 0.81 ... 9.0e4)
 No diagonal mass matrix covers that, and a dense one estimated from warmup draws is both
 noisy and memory-hungry.
 
-`precondition` (default `None` = auto — **on** up to `PRECONDITION_MAX_DIM` = 1024 free
-parameters, off above, with explicit `True`/`False` honored as-is) supplies the metric
+`precondition` (**opt-in — default off**; pass `True` to enable) supplies the metric
 analytically instead. It is a **linear change of variables**, not a mass matrix:
 
 ```
@@ -223,6 +222,12 @@ approximation. Measured, it holds across the region a chain actually visits:
   Only the `O(D^3)` factorization grows — hence the 1024 cap. "Easy low-dimensional"
   posteriors turned out not to exist here: the simplest configuration measured
   (double-power-law + photometry, D=7) already had raw cond 8.5e4.
+- **Why it is opt-in ([#1397](https://github.com/suchethac/tengri/issues/1397)).** It
+  shipped auto-on and the default broke fits that had been working. `notebooks/01`
+  stopped running entirely — a NaN MAP init makes the metric non-finite and the guard
+  turned a working fit into a hard `ValueError`. `notebooks/07`'s photometry fit went
+  from max R-hat 1.014 to **1.839** *while reporting zero divergences*: the usual
+  health signal inverts, so a divergence check scores the broken arm as the healthiest.
 - **The conditioning win is not a demonstrated sampling win.** Across 5 seeds per
   configuration, `dpl / photometry` (D=7) gained a median **1.87x ESS/s** (better in
   5/5 seeds), but `dpl + free metallicity / photometry` (D=8) came out at a median
@@ -230,6 +235,10 @@ approximation. Measured, it holds across the region a chain actually visits:
   detectable either way: the paired differences sit at or below the spread between
   seeds within a single arm. Treat the justification as *geometry and gradients*, which
   are deterministic and measured everywhere, not throughput, which is not.
+- **Where it is most likely to pay.** All three HMC backends force `use_dense = False`
+  above D=30, so above that threshold the competitor is a *diagonal* mass matrix, which
+  cannot represent rotation at all. Below D=30 the competitor is an empirical dense
+  covariance from warmup — a far stronger baseline, and where the 0.84x was measured.
 - Which backends accept the flag is a **declared registry capability**
   (`register_backend(..., accepts_precondition=True)`), not a list maintained by hand.
   Today that is the Hamiltonian family; gradient-free and self-tuning kernels

@@ -206,11 +206,24 @@ def metric_preconditioner(metric: jnp.ndarray) -> LinearPreconditioner:
     Triangular, so both directions cost :math:`O(D^2)`.
     """
     metric = jnp.asarray(metric)
+    # Non-finite FIRST, and separately. A NaN metric also fails Cholesky, so folding
+    # the two together reported "not positive definite" for a matrix whose entries
+    # were NaN — and advised building it with the very function that had just built
+    # it (#1397). An eigenvalue floor cannot rescue NaN; only a finite input can.
+    if not bool(jnp.all(jnp.isfinite(metric))):
+        raise ValueError(
+            "metric is not finite — it contains NaN or inf, so no factorization "
+            "exists. The metric is the curvature at the expansion point, so this "
+            "means the log-density or its second derivatives are undefined there. "
+            "Check the point the metric was built at (a MAP fit ending in loss=nan "
+            "is the usual cause), or run with precondition=False."
+        )
     lower = jnp.linalg.cholesky(metric)
     if not bool(jnp.all(jnp.isfinite(lower))):
         raise ValueError(
-            "metric is not positive definite — Cholesky failed. Build it with "
-            "`negative_hessian_metric`, whose eigenvalue floor guarantees this."
+            "metric is not positive definite — Cholesky failed on a finite matrix. "
+            "Build it with `negative_hessian_metric`, whose eigenvalue floor "
+            "guarantees positive definiteness."
         )
     identity = jnp.eye(metric.shape[0], dtype=metric.dtype)
     inverse_lower = jax.scipy.linalg.solve_triangular(lower, identity, lower=True)
@@ -261,6 +274,23 @@ def preconditioned_logdensity(
     The returned ``wrapped`` callable is itself fully traceable.
     """
     init_flat = jnp.asarray(init_flat)
+    # Diagnose the expansion point before the metric, so the error names the actual
+    # defect. #1397: notebook 01 died reporting "not positive definite" when the real
+    # chain was ``MAP init done (loss=nan)`` -> NaN Hessian -> NaN Cholesky. The point
+    # is upstream of everything here and is the only thing the caller can act on.
+    # ``bool`` rather than ``int``: under trace this raises TracerBoolConversionError,
+    # the same signal ``metric_preconditioner``'s guard gives, so "you traced this" has
+    # one failure mode instead of two. The count is only needed for the message.
+    if bool(jnp.any(~jnp.isfinite(init_flat))):
+        n_bad = int(jnp.sum(~jnp.isfinite(init_flat)))
+        raise ValueError(
+            f"cannot build a preconditioning metric: the expansion point is not "
+            f"finite ({n_bad} of {init_flat.shape[0]} coordinates are NaN or inf). "
+            f"The curvature there is undefined, so no metric exists. This is an "
+            f"upstream initialization failure — a MAP fit ending in loss=nan is the "
+            f"usual cause. Check data scaling and prior bounds, pass a finite "
+            f"init_from, or run with precondition=False."
+        )
     metric = negative_hessian_metric(logdensity_fn, init_flat, data_args, floor=floor)
     preconditioner = metric_preconditioner(metric)
     return (
@@ -270,45 +300,55 @@ def preconditioned_logdensity(
     )
 
 
-#: Largest ``D`` at which ``precondition=None`` auto-enables. Below it the cost is
-#: negligible and the benefit is universal; above it nothing has been measured.
+#: Largest ``D`` at which preconditioning has a measured cost profile. Above it the
+#: ``O(D^3)`` factorization is untested, so an explicit request is honored but the cost
+#: is the caller's to own. This is **advisory** — it does not enable anything.
 #:
 #: Measured on the field model (CPU, f64): the Hessian is **flat at ~2 s** from D=25 to
 #: D=521 — ``jax.hessian`` is ``jacfwd(jacrev)``, which vectorizes rather than taking D
 #: sequential backward passes — and ``eigh`` + Cholesky is 0.11 s with 2.2 MB of storage
 #: at D=521. Only the ``O(D^3)`` factorization grows, so this sits an octave above the
-#: largest configuration measured, which already covers the default ``n_grid=256``
-#: (D=265) and twice that.
+#: largest configuration measured.
 PRECONDITION_MAX_DIM: int = 1024
 
 
 def _resolve_precondition(precondition: bool | None, n_dim: int) -> bool:
-    """Resolve the ``precondition=None`` auto-policy.
+    """Resolve ``precondition=None`` — the opt-in policy.
 
-    Auto-enables up to :data:`PRECONDITION_MAX_DIM`. The evidence for defaulting it
-    on is that the stiffness is not a corner case: across parametric and stochastic
-    SFHs, photometry / emission lines / spectroscopy and D = 7 to 73, the raw
-    posterior condition number measured 8.5e4 to 3.1e8 — every single configuration.
-    Preconditioning whitened each one to exactly 1.0 at the MAP and improved the
-    effective stiffness one posterior sd away by 16x to 1800x, never worsening it.
+    **Preconditioning is off unless asked for.** It shipped auto-on and the default
+    broke fits that had been working (#1397):
 
-    Explicit ``True`` / ``False`` round-trip unchanged, so a caller can always opt out.
+    * ``notebooks/01_why_jax.py`` stopped running entirely. A NaN MAP init makes the
+      metric non-finite, and the guard turned a working fit into a hard ``ValueError``.
+    * ``notebooks/07_joint_photo_spec.py`` regressed from max R-hat 1.014 to **1.839**
+      while reporting **zero** divergences — the health signal inverted, so a
+      divergence check scores the broken arm as the healthiest of three.
+
+    Set against that, no throughput win was ever demonstrated where these fits live:
+    at 5 seeds per configuration the median was 1.87x ESS/s at D=7 but 0.84x — a
+    *loss* — at D=8. The conditioning evidence (cond 8.5e4-3.1e8 whitened to 1.0 at
+    the MAP, every configuration) is real and deterministic, but conditioning is not
+    convergence, and only the latter is what a default is promising.
+
+    A feature that can turn a converging fit into a non-converging one is a feature
+    the caller has to ask for.
 
     Parameters
     ----------
     precondition : bool or None
-        ``None`` (auto), ``True`` (force on), or ``False`` (force off).
+        ``None`` (default — off), ``True`` (on), or ``False`` (off).
     n_dim : int
-        Number of free parameters.
+        Flat latent dimension. Unused by the policy; retained because callers pass it
+        and because a future cost-based warning belongs here.
 
     Returns
     -------
     bool
-        Effective setting.
+        Effective setting. ``True`` only when explicitly requested.
     """
     if precondition is None:
-        return n_dim <= PRECONDITION_MAX_DIM
-    return precondition
+        return False
+    return bool(precondition)
 
 
 @dataclass(frozen=True)
