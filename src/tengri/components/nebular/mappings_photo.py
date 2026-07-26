@@ -61,6 +61,7 @@ import numpy as np
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._shared import (
     _interp_index_weight,
+    _qh_bilinear,
     compute_qh,
     render_nebular_lines,
 )
@@ -504,17 +505,14 @@ class MappingsPhotoStellarBackend:
 
     def _get_qh_at(self, log_z: float, log_age_yr: float) -> float:
         """Bilinear interpolation of Q_H table at (log_z, log_age_yr)."""
-        if self._qh_table is None:
-            return 0.0
-        iz, wz = _interp_index_weight(log_z, self._qh_log_met)
-        ia, wa = _interp_index_weight(log_age_yr, self._qh_log_age)
-        q00 = self._qh_table[iz, ia]
-        q01 = self._qh_table[iz, ia + 1]
-        q10 = self._qh_table[iz + 1, ia]
-        q11 = self._qh_table[iz + 1, ia + 1]
-        q0 = q00 * (1 - wa) + q01 * wa
-        q1 = q10 * (1 - wa) + q11 * wa
-        return jnp.maximum(q0 * (1 - wz) + q1 * wz, 0.0)
+        return _qh_bilinear(
+            self._qh_table,
+            self._qh_log_met,
+            self._qh_log_age,
+            log_z,
+            log_age_yr,
+            missing=0.0,
+        )
 
     def predict_nebular_line_luminosities(
         self,
