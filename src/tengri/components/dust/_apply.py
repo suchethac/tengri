@@ -454,9 +454,12 @@ def two_component_dust_fast(
     both the fused kernel (at effective wavelengths) and the exact path
     (at the full wavelength grid).
 
-    The output dtype follows the input ``wavelengths`` dtype, enabling
-    mixed-precision: pass float32 arrays to halve memory traffic on the
-    ``(n_ages, n_wave)`` intermediates (~1.6x speedup on CPU).
+    The output dtype follows the input ``wavelengths`` dtype, so passing float32
+    arrays halves memory traffic on the ``(n_ages, n_wave)`` intermediates
+    (~1.6x speedup on CPU). That is a property of this function, not of the
+    model: nothing hands it float32 wavelengths unless the whole run is in pure
+    float32 (``jax.enable_x64(False)``). In particular
+    ``forward_dtype="float32"`` does not — it casts nothing (#1433).
 
     Parameters
     ----------
