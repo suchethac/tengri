@@ -172,3 +172,79 @@ class TestAmbiguousCombinationsAreLoud:
         sed, flux, err = sed_and_mock
         with pytest.raises(TypeError, match="already declares its channels"):
             _fit(sed, Data(photometry=(flux, err)), data_type="photometry")
+
+
+class TestValidateAgainstCoversBothChannels:
+    """#1365: the spectroscopy channel and every noise array were unchecked.
+
+    ``validate_against`` was half a seam. Photometry had its shapes and flux
+    finiteness checked since spec 3.3; the spectrum branch checked
+    ``spec_flux.shape`` and nothing else, and *neither* channel ever looked at the
+    values in its uncertainty array. Measured before the fix, all four of these
+    were ACCEPTED:
+
+        spec_noise of the wrong length | spec_noise all NaN
+        spec_flux containing NaN       | spec_noise negative
+
+    A non-finite sigma poisons the entire likelihood rather than just its own
+    term, and a non-positive one is a division by zero or a negative variance --
+    each yields a plausible-looking fit instead of an error, which is why these
+    have to be rejected at the seam rather than left to fail downstream.
+    """
+
+    @staticmethod
+    def _spec_obs(npix=50):
+        from tengri import NoiseModel, Observation, Spectroscopy
+
+        return Observation(
+            spectroscopy=Spectroscopy(wave_obs=np.linspace(4000.0, 7000.0, npix)),
+            noise=NoiseModel(calibration_floor=0.01, student_t_dof=None),
+        )
+
+    def test_a_valid_spectrum_is_still_accepted(self):
+        """Guards against a fix that simply rejects everything."""
+        obs = self._spec_obs()
+        Data(spectrum=(np.ones(50), np.full(50, 0.1))).validate_against(obs)
+
+    @pytest.mark.parametrize(
+        ("label", "flux", "noise", "match"),
+        [
+            ("noise wrong length", np.ones(50), np.ones(7), "noise shape"),
+            ("noise all NaN", np.ones(50), np.full(50, np.nan), "NaN/inf uncertainty"),
+            ("noise negative", np.ones(50), np.full(50, -0.1), "Non-positive uncertainty"),
+            ("noise zero", np.ones(50), np.zeros(50), "Non-positive uncertainty"),
+            (
+                "flux has NaN",
+                np.where(np.arange(50) < 3, np.nan, 1.0),
+                np.full(50, 0.1),
+                "NaN/inf in 3 of 50",
+            ),
+        ],
+    )
+    def test_bad_spectrum_is_rejected(self, label, flux, noise, match):
+        """LOAD-BEARING. Every one of these was ACCEPTED before the fix."""
+        obs = self._spec_obs()
+        with pytest.raises(ValueError, match=match):
+            Data(spectrum=(flux, noise)).validate_against(obs)
+
+    @pytest.mark.parametrize(
+        ("label", "noise", "match"),
+        [
+            ("NaN sigma", np.array([0.1, np.nan, 0.1]), "NaN/inf uncertainty"),
+            ("zero sigma", np.array([0.1, 0.0, 0.1]), "Non-positive uncertainty"),
+            ("negative sigma", np.array([0.1, -0.2, 0.1]), "Non-positive uncertainty"),
+        ],
+    )
+    def test_bad_photometry_uncertainty_is_rejected_and_names_the_band(self, label, noise, match):
+        """The same rule applies to photometry, and points at the offending band."""
+        from tengri import NoiseModel, Observation, Photometry
+
+        obs = Observation(
+            photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"]),
+            noise=NoiseModel(calibration_floor=0.01, student_t_dof=None),
+        )
+        with pytest.raises(ValueError, match=match) as err:
+            Data(photometry=(np.ones(3), noise)).validate_against(obs)
+        assert "sdss_r" in str(err.value), (
+            f"{label}: the message should name the offending band, got {err.value}"
+        )
