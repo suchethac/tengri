@@ -195,6 +195,15 @@ print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum 
 # adds a likelihood term and a gradient row — its per-evaluation cost scales
 # with the pixel count, not with the number of free parameters. The two fits
 # run sequentially in one process, per the OOM-orchestration rule.
+#
+# > **Known defect — read the joint fit's diagnostics with suspicion (#1437).**
+# > On the current release the *joint* chain does not sample: every transition
+# > diverges and all draws are identical, so its "posterior" is the starting
+# > point. Split-R-hat cannot detect this — it compares within- and
+# > between-chain variance, and both are zero for a chain that never moved, so
+# > it reports ~1.0 and looks healthy. The divergence count printed beside it is
+# > the honest signal. The photometry-only fit above is unaffected. Do not draw
+# > science conclusions from the joint panels below until #1437 is resolved.
 
 
 # %%
