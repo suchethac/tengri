@@ -43,6 +43,19 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "WavePrecomp",
         "SpectrumPrecomp",
         "FeaturePrecomp",
+        # ── Object model — the measurement record (#1321) ───────────
+        # The razor: Observation is the instrument schema, Data the
+        # per-galaxy record it is validated against at fit(). Data and the
+        # instrument-schema family are both advertised top-level (#1338).
+        "Data",
+        # ── Object model — the instrument-schema family, re-promoted (#1338) ──
+        "Observation",
+        "Photometry",
+        "Spectroscopy",
+        "NoiseModel",
+        "LineList",
+        # ── Catalog fitting — the astronomer-facing noun (#1317) ────
+        "Catalog",
         # ── Spatial profile components ──────────────────────────────
         "Exponential",
         "FilterConvention",
@@ -277,12 +290,9 @@ DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
         "NebularConfig",
         "SEDModelConfig",
         "SFHConfig",
-        # Observation classes → tengri.observation
-        "Photometry",
-        "Spectroscopy",
-        "NoiseModel",
-        "Observation",
-        "LineList",
+        # (The Observation instrument-schema family — Observation, Photometry,
+        # Spectroscopy, NoiseModel, LineList — was re-promoted to __all__ /
+        # ALLOWED_TOP_LEVEL in #1338; it is no longer demoted.)
         # LineFluxData / SpectralIndex{Def,Data} no longer resolvable at
         # the top level — import from `tengri.observation` directly. The
         # back-compat shim was removed in the alias cleanup pass.
@@ -380,19 +390,30 @@ def test_new_subpackages_resolve() -> None:
 # wrapper (model.predict(params).sed / .sfh / .lines / ...), not on
 # SEDModel.
 
-ALLOWED_PREDICT_METHODS = frozenset(
+# The 29 methods split three ways (#1290). Keeping the classification in the
+# code — rather than in a comment — lets the tests below assert each group's
+# distinct property: sanctioned ones are documented, deprecated ones warn and
+# are excluded from rendered docs, and the middle group is the actual backlog.
+
+#: The three the naming contract sanctions (NAMING_CONTRACT §4b, CLAUDE.md).
+CONTRACT_PREDICT_METHODS = frozenset(
     {
-        # core forward passes
-        "predict",
+        "predict",  # rich + cached; one forward pass
+        "predict_photometry",  # lean, JIT/vmap-safe; the inference hot path
+        "predict_properties",  # the one jit/vmap surface for derived quantities
+    }
+)
+
+#: Live, un-deprecated, but outside the sanctioned three. This is the backlog:
+#: each either earns a place in the contract or moves to the lazy Prediction
+#: wrapper. Shrinking this set is the point of the ratchet.
+UNSANCTIONED_PREDICT_METHODS = frozenset(
+    {
+        # core forward passes with production callers
         "predict_state",
-        "predict_observables",
+        "predict_observables",  # bypasses the WavePrecomp LUT: ~16.5x slower
         "predict_observables_jit",
-        # the single blessed JIT/vmap property surface (API consolidation
-        # #1045/#1043) — replaces the six predict_*_quantities NamedTuple
-        # methods, which Phase 5 deprecates then removes (net shrink).
-        "predict_properties",
         # likelihood-facing channels (inference callers)
-        "predict_photometry",
         "predict_spectrum",
         "predict_line_fluxes",
         "predict_line_ratios",
@@ -400,15 +421,23 @@ ALLOWED_PREDICT_METHODS = frozenset(
         # batch conveniences
         "predict_photometry_batch",
         "predict_spectrum_batch",
-        # interactive conveniences with production callers
+        # interactive convenience
+        "predict_sfh",
+    }
+)
+
+#: Deprecated shims: emit DeprecationWarning, removal at v1.0. Every one of
+#: these must also appear in the ``:exclude-members:`` list of the SEDModel
+#: autoclass directive — a test below binds the two together, because the
+#: correspondence is hand-maintained and was previously unguarded.
+DEPRECATED_PREDICT_METHODS = frozenset(
+    {
         "predict_rest_sed",
         "predict_obs_sed",
-        "predict_sfh",
         "predict_magnitudes",
         "predict_derived",
         "predict_sfh_quantities",
         "predict_sed_quantities",
-        # deprecated shims (DeprecationWarning; removal v1.0)
         "predict_photometry_components",
         "predict_spectrum_components",
         "predict_sfh_quantities_components",
@@ -420,6 +449,10 @@ ALLOWED_PREDICT_METHODS = frozenset(
         "predict_radio_quantities",
         "predict_xray_quantities",
     }
+)
+
+ALLOWED_PREDICT_METHODS = (
+    CONTRACT_PREDICT_METHODS | UNSANCTIONED_PREDICT_METHODS | DEPRECATED_PREDICT_METHODS
 )
 
 

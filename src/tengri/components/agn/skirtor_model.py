@@ -226,7 +226,7 @@ class SKIRTORTorus(SEDModelComponent):
         units="dimensionless",
         default=0.45,
     )
-    frac_agn = Uniform(
+    band_frac = Uniform(
         0.0,
         1.0,
         description="AGN fraction (L_AGN / L_total, CIGALE convention)",
@@ -416,7 +416,7 @@ class SKIRTORTorus(SEDModelComponent):
             agn_q_skirtor=p["q_skirtor"],
             agn_oa_skirtor=p["oa_skirtor"],
             agn_cos_inc=p["cos_inc"],
-            frac_agn=p["frac_agn"],
+            frac_agn=p["band_frac"],
         )
 
         # Unpack components

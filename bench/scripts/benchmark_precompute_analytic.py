@@ -176,7 +176,7 @@ CASES: list[BenchCase] = [
         runtime_fn_path="tengri.components.agn.disc:powerlaw_disc",
         runtime_kwargs={
             "agn_log_lbol": 45.0,
-            "agn_frac": 1.0,
+            "agn_lum_ratio": 1.0,
             "agn_alpha": -1.5,
             "agn_T_max": 1.0e5,
         },

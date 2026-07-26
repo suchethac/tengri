@@ -105,10 +105,18 @@ apply_igm = true
 
 [inference]
 # Default method for model.fit() and fitter.run()
-# Options: "auto" | "vi" | "vi_linear" | "vi_nifty_fast" | "vi_nifty_fast_linear" |
-#          "vi_native" | "vi_native_linear" |
-#          "mcmc_nuts" | "mcmc_raytrace" | "mcmc" | "mcmc_ess" |
-#          "map" | "laplace" | "pathfinder" | "nss"
+#
+# Run `tengri.list_inference_methods()` for the live list — it is generated
+# from the backend registry and cannot go stale. Four of the fifteen names
+# this comment used to advertise were never registered and raised KeyError if
+# set; they have been removed (#1289). A contract test now asserts every name
+# quoted in this section resolves in the registry, so the list cannot rot again.
+#
+# "auto" is not a backend either, but is resolved by a dispatch shim in
+# Fitter.run and is valid here.
+#
+# Commonly: "auto" | "vi" | "vi_linear" | "mcmc_nuts" | "mcmc_raytrace" |
+#           "mcmc" | "mcmc_ess" | "map" | "laplace" | "nss"
 #
 # "auto" dispatch (controlled by mcmc_auto_d below):
 #   D <= mcmc_auto_d → "mcmc_nuts"    (exact NUTS, good for low-D models)

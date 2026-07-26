@@ -3,12 +3,14 @@
 ``Fitter(forward, ...)`` — and the deprecation shims around the legacy paths.
 
 Architecture spec: inference is canonically through ``ForwardModel``
-(issue #211). Three pre-existing paths remain functional but emit
-DeprecationWarnings:
+(issue #211). One pre-existing path remains functional but emits a
+DeprecationWarning:
 
-- ``SEDModel.fit(...)``
 - ``Fitter(sed_model, data, noise).run(...)`` (when ``sed_model`` is a
   bare :class:`SEDModel`, not a :class:`ForwardModel`)
+
+``SEDModel.fit(...)`` is un-deprecated as Bagpipes-style sugar over ForwardModel.fit
+(#1322 Wave 3).
 
 This module pins the soft-deprecation contract.
 """

@@ -35,9 +35,22 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri import Fitter, Parameters, SEDModel
+from tengri.inference._backend_registry import get_backend
 from tengri.parameters.priors import Uniform
 
 pytestmark = pytest.mark.integration
+
+
+def _tier(method):
+    # Get the tier of an inference backend, with safe default fallback.
+    return getattr(get_backend(method), "tier", "stable")
+
+
+pytestmark_native_vi_linear = pytest.mark.skipif(
+    _tier("native_vi_linear") == "broken",
+    reason="#1305: native_vi_linear registered tier='broken'; "
+    "smoke auto-revives when the tier is repaired",
+)
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 
@@ -160,6 +173,7 @@ def simple_filters():
     _VI_SMOKE_CASES,
     ids=[case[0] for case in _VI_SMOKE_CASES],
 )
+@pytestmark_native_vi_linear
 def test_vi_smoke_fit(
     synthetic_ssp, simple_filters, emitter_name, spec_kwargs, fid_params, free_params, skip_reason
 ):

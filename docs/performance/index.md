@@ -75,9 +75,8 @@ tengri.clear_cache()
 
 Default `min_compile_time_secs=0.05` persists per-filter kernels and
 component precompute compiles. See
-[compilation_cache.md](https://github.com/suchethac/tengri/blob/main/docs/inference/compilation_cache.md)
-and [compilation_diagnostics.md](https://github.com/suchethac/tengri/blob/main/docs/inference/compilation_diagnostics.md)
-for full details.
+[Compilation: caching and diagnostics](compilation) for full details,
+including how to trace what is recompiling and why.
 
 ## Health check and dispatcher
 

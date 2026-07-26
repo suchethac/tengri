@@ -434,7 +434,7 @@ class TestAGNCrossval:
         l_nu = simple_agn(
             wave,
             agn_log_lbol=11.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_alpha=-1.0,
             agn_T_torus=1000.0,
         )
@@ -455,8 +455,8 @@ class TestAGNCrossval:
         from tengri.components.agn.unified import simple_agn
 
         wave = jnp.linspace(1000, 100000, 2000)
-        l_lo = simple_agn(wave, agn_log_lbol=10.0, agn_frac=1.0)
-        l_hi = simple_agn(wave, agn_log_lbol=11.0, agn_frac=1.0)
+        l_lo = simple_agn(wave, agn_log_lbol=10.0, agn_lum_ratio=1.0)
+        l_hi = simple_agn(wave, agn_log_lbol=11.0, agn_lum_ratio=1.0)
 
         # 10x L_bol should give ~10x more emission
         ratio = float(jnp.sum(l_hi)) / float(jnp.sum(l_lo))
@@ -468,8 +468,8 @@ class TestAGNCrossval:
 
         wave = jnp.linspace(500, 200000, 5000)
 
-        l_low_cf = simple_agn(wave, agn_log_lbol=11.0, agn_frac=1.0, agn_torus_frac=0.2)
-        l_high_cf = simple_agn(wave, agn_log_lbol=11.0, agn_frac=1.0, agn_torus_frac=0.8)
+        l_low_cf = simple_agn(wave, agn_log_lbol=11.0, agn_lum_ratio=1.0, agn_torus_frac=0.2)
+        l_high_cf = simple_agn(wave, agn_log_lbol=11.0, agn_lum_ratio=1.0, agn_torus_frac=0.8)
 
         uv_mask = (wave > 1000) & (wave < 3000)
         ir_mask = (wave > 30000) & (wave < 100000)

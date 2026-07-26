@@ -64,7 +64,7 @@ norm = plt.Normalize(vmin=0, vmax=1)
 
 fig, ax = plt.subplots(figsize=(10, 5.2))
 
-for agn_log_lbol, agn_frac in zip(agn_log_lbols, agn_fracs):
+for agn_log_lbol, agn_lum_ratio in zip(agn_log_lbols, agn_fracs):
     # Update the AGN log luminosity parameter
     params = dict(baseline)
     params["agn_log_lbol"] = agn_log_lbol
@@ -83,7 +83,7 @@ for agn_log_lbol, agn_frac in zip(agn_log_lbols, agn_fracs):
     ax.loglog(
         wave_um[mask],
         nu_l_nu[mask],
-        color=cmap(norm(agn_frac)),
+        color=cmap(norm(agn_lum_ratio)),
         lw=2.0,
     )
 

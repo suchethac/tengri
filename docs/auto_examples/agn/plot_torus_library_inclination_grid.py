@@ -76,7 +76,7 @@ for ax_idx, (lib_name, torus_block) in enumerate(torus_configs):
                 "torus": torus_block,
                 "all_params": tengri.FIXED,
                 "log_lbol": LOG_LBOL,
-                "frac": 1.0,
+                "lum_ratio": 1.0,
                 "cos_inc": cos_inc,
             },
             redshift=tengri.Fixed(0.0),

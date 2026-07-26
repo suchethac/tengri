@@ -177,8 +177,19 @@ EXPECTED_ALL = frozenset(
         "SEDResult",
         # Top-level convenience verbs
         "fit_batch",
+        # Catalog fitting — the astronomer-facing noun (#1317, spec §6.2)
+        "Catalog",
         # Data discovery helpers
         "data_path",
+        # Object model — the measurement record (razor: Observation is the
+        # instrument schema, Data the per-galaxy record; #1321, spec §3.2).
+        "Data",
+        # Object model — the instrument-schema family, re-promoted (#1338).
+        "Observation",
+        "Photometry",
+        "Spectroscopy",
+        "NoiseModel",
+        "LineList",
     }
 )
 

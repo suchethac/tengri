@@ -63,7 +63,7 @@ for (region, kind, label), color in zip(LINE_BACKBONES, COLORS):
             region: {"type": kind, "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
             "log_lbol": 12.5,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         },
         redshift=tengri.Fixed(0.05),
     )

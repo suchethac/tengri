@@ -68,29 +68,43 @@ class FilterConvention(StrEnum):
     ENERGY = "energy"
 
 
-def list_filter_conventions() -> dict[str, str]:
+def list_filter_conventions():
     """Return the supported photometric filter conventions and their meaning.
 
     Returns
     -------
-    dict[str, str]
-        Mapping ``{convention_name: one-line description}``.
+    _RegistryTable
+        One row per convention: ``{"name": ..., "kind": "filter_convention",
+        "short_doc": ...}``. Renders as a table in a notebook.
+
+        This used to return ``dict[str, str]``, one of only two ``list_*``
+        that did (#1285). Use ``.to_dict()`` for the old mapping.
 
     Examples
     --------
     >>> from tengri.utils.filter_convention import list_filter_conventions
-    >>> list_filter_conventions()["bessell"]
+    >>> list_filter_conventions().to_dict()["bessell"]
     'Photon-counting, weight 1/lambda (default; DSPS/FSPS/sedpy).'
 
     """
-    return {
-        FilterConvention.BESSELL.value: (
-            "Photon-counting, weight 1/lambda (default; DSPS/FSPS/sedpy)."
-        ),
-        FilterConvention.ENERGY.value: (
-            "Energy-counting, weight 1/lambda^2 / flat-in-frequency (CIGALE/bagpipes)."
-        ),
-    }
+    from tengri.registry import _RegistryTable
+
+    return _RegistryTable(
+        [
+            {
+                "name": FilterConvention.BESSELL.value,
+                "kind": "filter_convention",
+                "short_doc": "Photon-counting, weight 1/lambda (default; DSPS/FSPS/sedpy).",
+            },
+            {
+                "name": FilterConvention.ENERGY.value,
+                "kind": "filter_convention",
+                "short_doc": (
+                    "Energy-counting, weight 1/lambda^2 / flat-in-frequency (CIGALE/bagpipes)."
+                ),
+            },
+        ]
+    )
 
 
 def filter_weight(filter_wave: jnp.ndarray, convention: FilterConvention) -> jnp.ndarray:

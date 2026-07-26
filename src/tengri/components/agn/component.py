@@ -80,7 +80,7 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         (default) ties the disc, torus and polar to CIGALE's single
         ``agn_power`` reference via the fixed SKIRTOR template ratios
         (energy-conserving; only active for ``agn_torus_block="skirtor"`` +
-        ``agn_fracAGN>0``). ``"independent"`` keeps each component on its own
+        ``agn_ir_frac>0``). ``"independent"`` keeps each component on its own
         luminosity scale (disc on ``agn_log_lbol``, torus on ``agn_power``,
         polar via the legacy face-on proxy) — the GRAHSP/AGNfitter-style
         bookkeeping. A static string, read by the runner like the block
@@ -289,7 +289,7 @@ class AGNSEDComponent:
 
         # CIGALE-faithful cross-component coupling
         # ────────────────────────────────────────────────────────────
-        # When ``agn_fracAGN > 0`` we follow CIGALE skirtor2016's
+        # When ``agn_ir_frac > 0`` we follow CIGALE skirtor2016's
         # bookkeeping: the AGN dust-IR power is derived from the
         # stellar dust-absorbed luminosity via
         # ``agn_power = L_absorbed × fracAGN / (1 − fracAGN)``
@@ -300,14 +300,14 @@ class AGNSEDComponent:
         # CIGALE bit-for-bit. ``lambda_fracAGN="0/0"`` (CIGALE's
         # whole-IR default) is assumed; the alternative wavelength-
         # window flow is not yet wired.
-        agn_fracAGN = jnp.asarray(params.get("agn_fracAGN", 0.0))
+        agn_ir_frac = jnp.asarray(params.get("agn_ir_frac", 0.0))
         L_absorbed = jnp.asarray(state.derived.get("L_absorbed", 0.0))
         # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
-        _one_minus_frac = jnp.maximum(1.0 - agn_fracAGN, 1e-6)
-        agn_power_from_stellar = L_absorbed * agn_fracAGN / _one_minus_frac
+        _one_minus_frac = jnp.maximum(1.0 - agn_ir_frac, 1e-6)
+        agn_power_from_stellar = L_absorbed * agn_ir_frac / _one_minus_frac
         agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
         agn_torus_frac_effective = jnp.where(
-            agn_fracAGN > 0.0,
+            agn_ir_frac > 0.0,
             agn_power_from_stellar / jnp.maximum(L_agn_bol, 1e-30),
             agn_torus_frac_user,
         )
@@ -333,13 +333,13 @@ class AGNSEDComponent:
         #      block-specific params (skirtor, grahsp, cat3d_wind, etc.)
         #      reach the registered function via its ``**kwargs`` tail.
         agn_kwargs = {
-            "agn_frac": jnp.asarray(params.get("agn_frac", 1.0)),
+            "agn_lum_ratio": jnp.asarray(params.get("agn_lum_ratio", 1.0)),
             "agn_alpha": jnp.asarray(params.get("agn_alpha", -1.0)),
             "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
             "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
             "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
             # CIGALE-coupled override: see ``agn_torus_frac_effective``
-            # block above. When ``agn_fracAGN > 0`` this carries the
+            # block above. When ``agn_ir_frac > 0`` this carries the
             # stellar-derived agn_power; otherwise it's the user value.
             "agn_torus_frac": agn_torus_frac_effective,
             "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),

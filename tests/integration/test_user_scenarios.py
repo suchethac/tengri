@@ -651,7 +651,7 @@ class TestAGNScience:
             dust_tau_diff=Uniform(0.0, 2.0),
             agn_model="kubota_done",  # Kubota & Done disc
             agn_log_lbol=Uniform(43.0, 47.0),
-            agn_frac=Uniform(0.01, 0.3),  # Fraction of L_bol in disc
+            agn_lum_ratio=Uniform(0.01, 0.3),  # Fraction of L_bol in disc
             agn_torus_frac=Uniform(0.0, 1.0),  # Fraction seen by torus (enables SKIRTOR)
             agn_tau_skirtor=Uniform(3.0, 11.0),  # SKIRTOR optical depth
             agn_oa_skirtor=Uniform(20.0, 70.0),  # Opening angle (deg)

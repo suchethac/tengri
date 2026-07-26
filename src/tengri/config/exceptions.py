@@ -147,7 +147,7 @@ class TengriIOError(TengriError, OSError):
 class AGNDustDoubleCountWarning(UserWarning):
     """Composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
 
-    The composable AGN (``agn_fracAGN > 0``) and Dale2014's embedded quasar
+    The composable AGN (``agn_ir_frac > 0``) and Dale2014's embedded quasar
     template (``dust_frac_agn > 0``) are two distinct AGN surfaces, both keyed
     off the same stellar ``L_absorbed``. Using both with positive values
     double-counts AGN mid/far-IR (ADR-0018 §5, issue #721). Pick one surface;

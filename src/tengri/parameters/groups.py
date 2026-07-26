@@ -390,14 +390,39 @@ _IGM_TYPE_ALIASES = {
 
 
 def _valid_radio_types() -> frozenset[str]:
-    """Derive accepted ``radio.type`` values from :data:`RADIO_MODELS`."""
-    from tengri.components.radio import RADIO_MODELS
+    """Derive accepted ``radio={'type': ...}`` values from :data:`RADIO_MODELS`
+    and SEDModelComponent radio variants.
 
-    return frozenset(RADIO_MODELS.keys())
+    RADIO_MODELS contains the legacy ``radio={'type': 'condon92'|'none'}``
+    path; SEDModelComponent models like ``radio_powerlaw`` and ``radio_dpl``
+    are also valid ``type`` values and must be discoverable to users.
+    Both derive from the registry so the menu and the builder cannot drift
+    (the failure mode behind #1120).
+    """
+    from tengri.components.radio import RADIO_MODELS
+    from tengri.forward.component_factory import _REGISTRY
+
+    # Legacy function-based models: 'condon92', 'none'
+    valid_types = set(RADIO_MODELS.keys())
+
+    # SEDModelComponent models: 'radio_powerlaw', 'radio_dpl'
+    # Filter for components that start with 'radio_' to avoid including the
+    # main 'radio' dispatcher component
+    radio_component_models = {name for name in _REGISTRY if name.startswith("radio_")}
+    valid_types.update(radio_component_models)
+
+    return frozenset(valid_types)
 
 
 def _valid_xray_types() -> frozenset[str]:
-    """Derive accepted ``xray.type`` values from :data:`XRAY_MODELS`.
+    """Derive accepted ``xray={'type': ...}`` values from :data:`XRAY_MODELS`
+    and SEDModelComponent X-ray variants.
+
+    XRAY_MODELS contains the function-based models (``simple``, ``lopez24``,
+    ``yang20`` alias, ``none`` disable). SEDModelComponent models like
+    ``xray_aird`` and ``agn_xray_corona`` are also valid ``type`` values and
+    must be discoverable to users. Both derive from the registry so the menu
+    and the builder cannot drift (the failure mode behind #1120).
 
     ``"yang20"`` is registered in :data:`XRAY_MODELS` as an alias of
     ``"simple"``: tengri's X-ray component already implements the
@@ -406,8 +431,18 @@ def _valid_xray_types() -> frozenset[str]:
     missing. See ``components/xray/xray.py`` for the formulas.
     """
     from tengri.components.xray import XRAY_MODELS
+    from tengri.forward.component_factory import _REGISTRY
 
-    return frozenset(XRAY_MODELS.keys())
+    # Function-based models: 'none', 'simple', 'yang20', 'lopez24'
+    valid_types = set(XRAY_MODELS.keys())
+
+    # SEDModelComponent models: 'xray_aird', 'agn_xray_corona'
+    # Filter for components that contain 'xray_' to include both xray-prefixed
+    # and agn_xray components
+    xray_component_models = {name for name in _REGISTRY if "xray_" in name}
+    valid_types.update(xray_component_models)
+
+    return frozenset(valid_types)
 
 
 def _valid_dust_laws() -> frozenset[str]:
@@ -478,7 +513,7 @@ _VALID_AGN_ATTEN_TYPES = _agn_block_types("attenuation")
 #: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)
 _AGN_PARTITION = {
     # Shared params (no sub-block prefix)
-    "agn_frac": "agn",
+    "agn_lum_ratio": "agn",
     "agn_log_lbol": "agn",
     "agn_alpha": "agn",
     "agn_log_mbh": "agn",
@@ -1778,12 +1813,21 @@ def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[s
     Used by :func:`_validate_user_keys` to recognize per-parameter overrides
     when walking a user's group dict.
     """
+    from tengri.parameters._aliases import legacy_names_for
+
     out: set[str] = set()
     for full_name, owner in param_partition.items():
         if owner != group:
             continue
         out.add(full_name)
         out.add(_extract_short_name(full_name, {}))
+        # Legacy spellings stay accepted so a rename does not turn a working
+        # group dict into "Unknown key" (#1296). The override lookup warns
+        # when one is actually used; admitting them here only stops the
+        # validator rejecting them first.
+        for legacy_full in legacy_names_for(full_name):
+            out.add(legacy_full)
+            out.add(_extract_short_name(legacy_full, {}))
     return out
 
 
@@ -2389,6 +2433,23 @@ def _resolve_value(
         override_key = short_name
     elif param_name != short_name and param_name in group_dict:
         override_key = param_name
+    else:
+        # A renamed parameter also invalidates its *short* key: after
+        # agn_frac -> agn_lum_ratio, `agn={'frac': 0.5}` became "Unknown key"
+        # (#1296). Accept the legacy spelling, both short and full, and warn
+        # -- the full-name alias map alone does not cover the grammar's short
+        # form, because the short form is derived by stripping the prefix.
+        from tengri.parameters._aliases import _warn_once_if_legacy, legacy_names_for
+
+        for legacy_full in legacy_names_for(param_name):
+            legacy_short = _extract_short_name(legacy_full, group_dict)
+            for candidate in (legacy_short, legacy_full):
+                if candidate in group_dict:
+                    _warn_once_if_legacy(candidate, short_name)
+                    override_key = candidate
+                    break
+            if override_key is not None:
+                break
 
     # Check for per-param override
     if override_key is not None:

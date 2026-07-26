@@ -65,6 +65,17 @@ def _mcmc_auto_pick(context, *, key, init_from=None, **kw):
 
     if context.spec.n_free <= _MCMC_AUTO_D_THRESHOLD:
         return _ctx_run_nuts(context, key=key, init_from=init_from, **kw)
+
+    # Ray tracing is not a Hamiltonian sampler — there is no integrator metric to
+    # whiten, so it does not take ``precondition``. Refuse an explicit request rather
+    # than drop it: the caller would otherwise get no preconditioning and no signal.
+    if kw.pop("precondition", None):
+        raise ValueError(
+            f"precondition=True is not supported by the ray-tracing sampler, which "
+            f"method='mcmc' selects at D={context.spec.n_free} > "
+            f"{_MCMC_AUTO_D_THRESHOLD} free parameters. Request method='mcmc_nuts' or "
+            "method='mcmc_hmc' explicitly to keep metric preconditioning."
+        )
     return _ctx_run_raytrace(context, key=key, init_from=init_from, **kw)
 
 
@@ -83,7 +94,7 @@ register_backend(
     tier="primary",
     short_doc=(
         "NIFTy geoVI variational inference (cold ~100s, ~20 GB RSS at D=6-7 — "
-        "memory-heavy; consider mcmc_ghmc for faster turnaround on D<10)"
+        "memory-heavy; consider mcmc_hmc for faster turnaround on D<10)"
     ),
     aliases=("vi_nonlinear",),
     requires=("nifty8",),
@@ -144,7 +155,7 @@ register_backend(
 
 register_backend(
     "native_vi_nonlinear",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[UNSTABLE] Pure JAX geoVI — segfaults on DPL/dense_basis "
         "photometry mocks (validated 2026-05-22, issue #231). Use 'vi' instead."
@@ -161,7 +172,7 @@ register_backend(
 
 register_backend(
     "native_vi_linear",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[UNSTABLE] Pure JAX MGVI — segfaults on DPL/dense_basis "
         "photometry mocks (validated 2026-05-22, issue #231). Use 'vi_linear' instead."
@@ -242,7 +253,7 @@ register_backend(
 
 register_backend(
     "mcmc_ghmc",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[POOR MIXING] Generalized HMC — fast (cold ~17s) but R-hat ≈ "
         "2.5-3.1 and ESS ≈ 1 on D=6-7 mocks even with 1000 warmup + 2000 "
@@ -255,11 +266,12 @@ register_backend(
 
 register_backend(
     "mcmc_mclmc",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[POOR MIXING] Microcanonical Langevin MC — fast warm call (~2s) "
         "but R-hat ≈ 1.7 / 1.13 and ESS ≈ 1 on D=6-7 mocks at 4000 samples. "
-        "Do not use for science until tuning is investigated."
+        "Do not use for science until tuning is investigated. "
+        "Requires blackjax >= 1.6."
     ),
     requires=("blackjax",),
     legacy_fitter=False,
@@ -269,7 +281,10 @@ register_backend(
 register_backend(
     "mcmc_adjusted_mclmc",
     tier="experimental",
-    short_doc="Adjusted microcanonical Langevin (cold ~60s, ~3x compile premium over mclmc)",
+    short_doc=(
+        "Adjusted microcanonical Langevin (cold ~60s, ~3x compile premium over "
+        "mclmc). Requires blackjax >= 1.6."
+    ),
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_adjusted_mclmc)
@@ -297,7 +312,7 @@ register_backend(
 
 register_backend(
     "pathfinder",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[UNSTABLE] Pathfinder VI — segfaults on DPL/dense_basis photometry "
         "mocks (validated 2026-05-22, issue #231); use 'laplace' or 'vi' instead"

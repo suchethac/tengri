@@ -42,7 +42,16 @@ def _unstandardize_parameters(params_unbounded, spec, free_names, fixed_values, 
     for name, val in fixed_values.items():
         params[name] = val
     if stochastic and "psd_xi" in params_unbounded:
+        # Publish under BOTH names. The sampler's vector keys the GP latents
+        # ``psd_xi``, but ``StellarSEDComponent`` reads ``sfh_field_xi`` and
+        # silently falls back to ``jnp.zeros(n_grid)`` when it is absent
+        # (components/stellar/component.py). Attaching only ``psd_xi`` therefore
+        # pinned the GP field to zero for the whole fit: no exception, no
+        # warning, just exp(0 - K0/2) = constant and a likelihood with exactly
+        # zero gradient w.r.t. the latents. The burstiness degrees of freedom
+        # were sampled from their prior and never reached the SED.
         params["psd_xi"] = params_unbounded["psd_xi"]
+        params["sfh_field_xi"] = params_unbounded["psd_xi"]
     return spec.resolve_mirrors(params)
 
 
@@ -436,6 +445,14 @@ def build_loss_fn(fitter):
         params = _unstandardize_parameters(
             params_unbounded, spec, free_names, fixed_values, stochastic
         )
+        # Per-galaxy runtime redshift override (batched catalog path, #1337 phase 2).
+        # When the caller threads a redshift through ``data_args`` it replaces the
+        # baked fixed value, so ONE compiled program serves every per-galaxy redshift
+        # (via the ``catalog_z_range`` ztable LUT). No single-galaxy fit ever sets
+        # ``data_args["redshift"]``, so ``params`` is unchanged there and the emitted
+        # program is byte-identical.
+        if "redshift" in data_args:
+            params = {**params, "redshift": data_args["redshift"]}
         e_lh = neg_log_lik(params, data_args)
 
         # Prior contributions (IFT Hamiltonian).

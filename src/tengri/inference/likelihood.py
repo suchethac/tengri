@@ -403,7 +403,13 @@ def build_base_likelihood(context: InferenceContext):
 
     # ── Plain diagonal Gaussian cases ───────────────────────────
     if context.data_type == "photometry":
-        return PhotometryLikelihood(fnu_obs=context.data, fnu_err=context.noise)
+        # presence_key="presence" makes the adapter honor the per-band presence
+        # mask (heterogeneous catalogs, #1317) when it is threaded into data_args;
+        # it is a no-op (bit-identical) when no presence mask is present, since the
+        # adapter only applies it if the key is actually in data_args.
+        return PhotometryLikelihood(
+            fnu_obs=context.data, fnu_err=context.noise, presence_key="presence"
+        )
     if context.data_type == "spectroscopy":
         return SpectroscopyLikelihood(fnu_obs=context.data, fnu_err=context.noise)
     if context.data_type == "joint":

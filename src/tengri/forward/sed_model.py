@@ -79,6 +79,7 @@ from tengri.forward.sed_model_types import (
     PriorPredictive,
     SEDModelState,
 )
+from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.observation.photometry import ab_mag_from_flux
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
@@ -174,9 +175,10 @@ class WavePrecomp:
 
     Parameters
     ----------
-    n_z : int, default 100
+    n_z : int, default 250
         Number of grid points in the ztable. Higher → finer redshift
-        interpolation, slower precompute.
+        interpolation, slower precompute. Default 250 ensures <1% error
+        across all bands over z ∈ [0, 1.5] with ~37s build overhead (#1134).
     z_min : float or None, default None
         Lower bound of the ztable grid. ``None`` → pull from the redshift
         prior with 1 % padding. Ignored when redshift is ``Fixed`` unless
@@ -202,17 +204,30 @@ class WavePrecomp:
     >>> SEDModel(..., approx=WavePrecomp(n_z=200))  # finer ztable
     >>> SEDModel(..., approx=WavePrecomp(z_min=0.01, z_max=3.0, n_z=200))
     >>>
-    >>> # Catalog fit: 10⁴ galaxies at per-galaxy Fixed(z), one compile.
-    >>> model = SEDModel.build(
+    >>> # Catalog fit: 10⁴ galaxies at per-galaxy known z.
+    >>> sed = SEDModel.build(
     ...     ...,
-    ...     redshift=Fixed(0.0),  # placeholder; injected per call
+    ...     redshift=FIXED,  # per-galaxy value supplied by the redshift column
     ...     approx=WavePrecomp(catalog_z_range=(0.05, 1.5), n_z=200),
     ... )
-    >>> for row in catalog:
-    ...     posterior = model.fit(row.data, params={"redshift": row.z})
+    >>> forward = ForwardModel.build(sed=sed, observation=obs)
+    >>> posteriors = Catalog(forward, table, flux_unit="cgs_fnu", redshift_col="z").fit(
+    ...     method="map", key=key
+    ... )
+
+    Notes
+    -----
+    This example used to read ``model.fit(row.data, params={"redshift":
+    row.z})`` in a Python loop — a documented invocation that raised
+    ``TypeError`` until #1384 plumbed ``params=`` through ``SEDModel.fit``
+    (it now forwards to the same per-fit override ``ForwardModel.fit``
+    takes, and on a ``catalog_z_range`` model the redshift rides
+    ``data_args`` as a runtime input, #1316). ``Catalog`` remains the
+    taught surface for a table of galaxies with a redshift column: one
+    ingest, one validation, one compiled program.
     """
 
-    n_z: int = 100
+    n_z: int = 250
     z_min: float | None = None
     z_max: float | None = None
     catalog_z_range: tuple[float, float] | None = None
@@ -348,9 +363,17 @@ class FeaturePrecomp:
 
     Parameters
     ----------
-    n_grid : int, default 16
+    n_grid : int or dict, default 16
         Grid points per free ionization axis (Cue backend only; ignored for
         baked-in, whose window LUT has no ionization axes). Denser is tighter.
+
+        A scalar resolves every free axis alike. A dict ``{axis_name: n}``
+        resolves them independently — the griddable axes are ``met_logzsol``,
+        ``neb_logU`` and ``neb_logZ_gas``, omitted axes take 16, and any other
+        key raises rather than being silently ignored. Build cost is the
+        *product* over free axes, so per-axis resolution is what keeps a model
+        with several free axes affordable: spend points on the axis whose lines
+        actually move, not on the one you barely vary.
     lines : array_like or None, optional
         Rest-frame vacuum line wavelengths [Angstrom] to tabulate. ``None``
         (default) takes them from ``Observation.line_fluxes``.
@@ -391,11 +414,21 @@ class FeaturePrecomp:
     >>> # lines from the observation, photometry on the LUT path too:
     >>> SEDModel.build(..., approx=(WavePrecomp(), FeaturePrecomp()))
     >>> SEDModel.build(..., approx=FeaturePrecomp(n_grid=24))  # denser Cue grid
+    >>> # per-axis: dense where the lines move, coarse where they do not
+    >>> SEDModel.build(..., approx=FeaturePrecomp(n_grid={"met_logzsol": 24, "neb_logU": 8}))
     """
 
-    n_grid: int = 16
+    n_grid: int | dict[str, int] = 16
     lines: tuple[float, ...] | None = None
     ranges: dict | None = None
+
+    def __post_init__(self):
+        # Validate where the user typed it. The builder validates again at its own
+        # entry (it is reachable directly), but by then the traceback points at
+        # grid construction rather than at the config (#1311).
+        from tengri.components.nebular.nebular_grid_precompute import validate_n_grid
+
+        validate_n_grid(self.n_grid)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -478,7 +511,7 @@ def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
 def _warn_agn_dust_double_count(spec) -> None:
     """Warn when composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
 
-    The composable AGN's ``agn_fracAGN`` (CIGALE-joint tie) and Dale2014's
+    The composable AGN's ``agn_ir_frac`` (CIGALE-joint tie) and Dale2014's
     embedded quasar template ``dust_frac_agn`` are two distinct AGN surfaces,
     both keyed off the same stellar ``L_absorbed`` (component_factory.py:346,
     ADR-0018 §5, issue #721). With both > 0 the AGN mid/far-IR is double-counted
@@ -500,13 +533,13 @@ def _warn_agn_dust_double_count(spec) -> None:
             return True
         return float(fixed.get(name, 0.0)) > 0.0
 
-    if not (_positive_active("dust_frac_agn") and _positive_active("agn_fracAGN")):
+    if not (_positive_active("dust_frac_agn") and _positive_active("agn_ir_frac")):
         return
 
     from tengri.config.exceptions import AGNDustDoubleCountWarning
 
     warnings.warn(
-        "Both AGN surfaces are active: the composable AGN (agn_fracAGN > 0) and "
+        "Both AGN surfaces are active: the composable AGN (agn_ir_frac > 0) and "
         "Dale2014 dust emission (dust_frac_agn > 0). Both inject AGN-heated IR "
         "from the same stellar L_absorbed, so AGN mid/far-IR is DOUBLE-COUNTED. "
         "Use one surface: set dust_frac_agn=0 and let the composable AGN torus "
@@ -1266,22 +1299,27 @@ class SEDModel:
         """
         from tengri.observation.line_measurement import default_line_defs
 
+        backend = self._nebular_backend
+        # Cue-like: L_line = Q_H x l(theta), l independent of the SFH shape.
+        cue_like = backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
+
         lines = cfg.lines
         if lines is None:
             line_fluxes = getattr(observation, "line_fluxes", None) if observation else None
-            if line_fluxes is None:
+            if line_fluxes is not None:
+                lines = line_fluxes.wavelengths
+            elif cue_like:
+                lines = []
+            else:
                 raise ValueError(
                     "approx=FeaturePrecomp() has no emission lines to tabulate: the "
                     "Observation carries no line_fluxes and FeaturePrecomp(lines=...) "
                     "was not given. Either fit lines — Observation(..., "
                     "line_fluxes=LineFluxData(...)) — or name them explicitly."
                 )
-            lines = line_fluxes.wavelengths
         lines = jnp.asarray(lines)
 
-        backend = self._nebular_backend
-        if backend is not None and hasattr(backend, "predict_nebular_line_luminosities"):
-            # Cue-like: L_line = Q_H x l(theta), l independent of the SFH shape.
+        if cue_like:
             self.enable_fast_nebular(lines, n_grid=cfg.n_grid, ranges=cfg.ranges)
             return
 
@@ -2096,7 +2134,7 @@ class SEDModel:
         if self._agn_model:
             agn_dists = getattr(spec, "_distributions", {})
             agn_lbol_dist = agn_dists.get("agn_log_lbol")
-            agn_frac_dist = agn_dists.get("agn_frac")
+            agn_frac_dist = agn_dists.get("agn_lum_ratio")
             lbol_is_free = agn_lbol_dist is not None and not agn_lbol_dist.is_fixed
             frac_is_free = agn_frac_dist is not None and not agn_frac_dist.is_fixed
             self._agn_luminosity_mode = lbol_is_free and not frac_is_free
@@ -2681,7 +2719,7 @@ class SEDModel:
             kw["agn_polar_ebv"] = p.get("agn_polar_ebv", 0.0)
             kw["agn_cos_inc"] = p.get("agn_cos_inc", 0.5)
             kw["agn_polar_oa"] = p.get("agn_polar_oa", 45.0)
-            kw["agn_frac"] = p.get("agn_frac", 1.0)
+            kw["agn_lum_ratio"] = p.get("agn_lum_ratio", 1.0)
             kw["agn_a_spin"] = p.get("agn_a_spin", 0.0)
             kw["agn_log_mbh"] = p.get("agn_log_mbh", 7.0)
             kw["agn_log_ledd"] = p.get("agn_log_ledd", -1.0)
@@ -2781,7 +2819,7 @@ class SEDModel:
             or self._approx_config_feature is not None
         )
 
-    def with_approx(self, approx):
+    def with_approx(self, approx, *, observation=None):
         """Return a copy of this model built with a different ``approx`` policy.
 
         Parameters
@@ -2791,14 +2829,20 @@ class SEDModel:
             ``approx=`` constructor argument: ``None`` for the exact wave-grid
             path, a single precompute config for one LUT family, or a composite
             tuple (at most one of each) such as ``(WavePrecomp(), FeaturePrecomp())``.
+        observation : Observation, optional
+            Observation for the clone. Defaults to this model's own. Passing a
+            different one rebuilds the LUT against *its* filters — the seam
+            :meth:`ForwardModel.build` uses to make its authoritative
+            observation win (#1367, spec §5).
 
         Returns
         -------
         SEDModel
             A new model sharing this model's ``spec``, ``ssp_data``,
-            ``observation`` and build settings, differing only in ``approx``.
-            Returns ``self`` unchanged when ``approx=None`` is requested on a
-            model that is already exact (a no-op).
+            ``observation`` and build settings, differing only in ``approx``
+            (and ``observation`` when given). Returns ``self`` unchanged when
+            ``approx=None`` is requested on a model that is already exact and
+            no observation override is given (a no-op).
 
         Notes
         -----
@@ -2808,12 +2852,12 @@ class SEDModel:
         inference layer uses this to fit on the fast LUT path while leaving the
         user's (exact) model untouched. **JIT-compatible**: build-time only.
         """
-        if approx is None and not self._has_modern_approx():
+        if approx is None and observation is None and not self._has_modern_approx():
             return self
         return SEDModel(
             self.spec,
             self.ssp_data,
-            observation=self.observation,
+            observation=self.observation if observation is None else observation,
             forward_dtype=str(self._forward_dtype),
             csp_integration=str(self._csp_integration),
             wave_chunk_size=self._wave_chunk_size,
@@ -2824,8 +2868,8 @@ class SEDModel:
 
     # ── Predictions (public API) ──────────────────────────────────────
 
-    def predict_sfh(self, params, n_linear=1000):
-        """Compute SFH on uniform linear-time grid for visualization.
+    def predict_sfh(self, params, n_linear=1000, grid="linear"):
+        """Compute SFH on a uniform linear-time grid (plots) or the native log-age grid.
 
         Evaluates the SFH parameterization at ``n_linear`` evenly-spaced
         points in lookback time, returning both the smooth parametric
@@ -2843,17 +2887,23 @@ class SEDModel:
             Parameter values using public parameter names.
         n_linear : int, optional
             Number of output grid points, evenly spaced in lookback time.
-            Default 1000 (sufficient for smooth visualization).
+            Default 1000 (sufficient for smooth visualization). Ignored when
+            ``grid="native"``.
+        grid : {"linear", "native"}, optional
+            ``"linear"`` (default, backward compatible) resamples onto a uniform
+            lookback-time grid for plotting. ``"native"`` returns the SFH on the
+            model's own ``log_age_grid`` nodes, unresampled — use this for any
+            QUANTITATIVE work (residuals, coverage, chi2 against a truth).
 
         Returns
         -------
         dict with keys:
 
-            - ``"t_gyr"`` : array, shape (n_linear,).
+            - ``"t_gyr"`` : ndarray, shape (n_linear,) or (n_grid,).
               Lookback time [Gyr], from 0 (now) to ~13.8 (Big Bang).
-            - ``"sfr_mean"`` : array, shape (n_linear,).
+            - ``"sfr_mean"`` : ndarray, shape (n_linear,) or (n_grid,).
               Parametric mean SFR [M☉/yr] (no GP modulation).
-            - ``"sfr_full"`` : array, shape (n_linear,).
+            - ``"sfr_full"`` : ndarray, shape (n_linear,) or (n_grid,).
               Full SFH including GP field [M☉/yr]. Identical to ``sfr_mean``
               if stochastic SFH not enabled.
 
@@ -2863,9 +2913,22 @@ class SEDModel:
         JIT-compatible SFH evaluation, use :meth:`predict_sfh_quantities`
         to get integrated quantities (stellar mass, age, etc.).
 
-        **Time grid**: Output is on a uniform linear-time (lookback) grid,
-        not the internal log-age grid. This makes visualization cleaner
-        and suitable for plotting.
+        **Time grid**: with ``grid="linear"`` the output is resampled onto a
+        uniform linear-time (lookback) grid, not the internal log-age grid. This
+        makes visualization cleaner, but it is **lossy at young ages and must not
+        be used for quantitative scoring**. The step is
+        ``age_max / n_linear`` — at the default ``n_linear=1000`` and a 13.8 Gyr
+        span that is 13.8 Myr, so a 16-node log-age grid whose five youngest
+        nodes all lie below 15 Myr collapses into ~2 samples there. Resampling
+        also interpolates *linearly between log-age nodes*, so a log-axis plot
+        shows corners at the nodes; that is the interpolant, not the model.
+
+        Scoring an SFH residual on the linear grid silently reweights it: every
+        megayear counts equally, so 15-500 Myr swamps the <15 Myr bins where
+        emission lines carry nearly all of their information. Measured on the
+        field-SFH recovery study, that reweighting turned a real +54% improvement
+        from adding line fluxes into an apparent 0%. Pass ``grid="native"`` for
+        residuals, coverage, or any comparison against a known truth.
 
         **SFH mean vs. full**: When correlated-field (stochastic) SFH is enabled,
         ``sfr_mean`` shows the smooth parametric trend (e.g., exponential
@@ -2890,8 +2953,18 @@ class SEDModel:
         predict_sfh_quantities : Integrated SFH quantities (JIT-compatible).
         predict : Lazy access to SFH and all derived quantities.
         """
+        if grid not in ("linear", "native"):
+            raise ValueError(f"grid must be 'linear' or 'native', got {grid!r}")
+
         p = self._get_internal_params(params)
         sfr_mean, sfr_full = self._compute_sfr_mean_and_full(p)
+
+        if grid == "native":
+            return {
+                "t_gyr": jnp.asarray(10.0**self.log_age_grid) / 1e9,
+                "sfr_mean": sfr_mean,
+                "sfr_full": sfr_full,
+            }
 
         t_gyr_mean, sfr_mean_lin = interpolate_to_linear_time(
             self.log_age_grid, sfr_mean, n_linear
@@ -3516,6 +3589,25 @@ class SEDModel:
         # re-derives it can silently disagree with the physics it is caching.
         approx_n_subbands = int((self._approx or {}).get("n_subbands", 0))
 
+        # FeaturePrecomp leaves NO trace in ``self._approx`` — it sets
+        # ``_fast_line_measurement`` instead — so neither ``approx_resolved_flags``
+        # nor ``approx_n_subbands`` above can see it, and two models differing only
+        # in FeaturePrecomp produced an IDENTICAL signature. Whichever was built
+        # first won the JIT cache and the second silently reused its gradient:
+        # measured 12.4 ms vs 0.5 ms for the same objective (~25x), and the loser
+        # was whichever came second, not whichever was slower.
+        #
+        # Worse than the lost speed, it is a correctness hazard: two models with
+        # different approximations sharing one compiled gradient means the second
+        # computes the FIRST's approximation. Benign only while the two happen to
+        # be bit-identical, which is luck, not a contract.
+        #
+        # Keyed off the same resolved state the PUBLIC ``model.approx`` reports
+        # (``ApproxState.feature_precomp``), so what a user is shown and what the
+        # cache keys on cannot drift apart — they disagreed here, which is exactly
+        # how this survived.
+        approx_feature_precomp = bool(getattr(self, "_fast_line_measurement", False))
+
         def _cfg_key(cfg):
             if cfg is None:
                 return None
@@ -3642,6 +3734,7 @@ class SEDModel:
             has_sigma_v,
             compile_mode,
             approx_resolved,
+            approx_feature_precomp,
             spec_fixed_id,
             nebular_grid_sig,
         )
@@ -4271,8 +4364,12 @@ class SEDModel:
         target_wavelengths : array_like, shape (n_lines,)
             Rest-frame vacuum line wavelengths [Angstrom] the grid tabulates and
             :meth:`predict_line_fluxes` serves.
-        n_grid : int, default 16
+        n_grid : int or dict, default 16
             Grid points per free ionization axis. Denser → tighter interpolation.
+            A dict ``{axis_name: n}`` resolves ``met_logzsol`` / ``neb_logU`` /
+            ``neb_logZ_gas`` independently; omitted axes take 16 and an
+            unrecognized key raises (#1311). Build cost is the product over free
+            axes.
         ranges : dict, optional
             Override ``{param: (lo, hi)}`` grid bounds (defaults to each free
             param's prior support).
@@ -6058,6 +6155,15 @@ class SEDModel:
         an :class:`Observables` NamedTuple with one field per configured
         observation sub-block (``phot_fnu``, ``phot_rest_fnu``, ``spec_fnu``).
 
+        .. warning::
+
+           This is the **exact** wave-grid path: it bypasses the WavePrecomp
+           LUT even when the model was built with ``approx=WavePrecomp(...)``.
+           If you only need photometry, :meth:`predict_photometry` returns the
+           same ``phot_fnu`` through the LUT at roughly **16.5x** the speed.
+           Reach for this one when you need several channels from one pass, or
+           when you specifically want the exact path.
+
         Parameters
         ----------
         params : Mapping
@@ -7411,7 +7517,7 @@ class SEDModel:
         self,
         data=None,
         noise=None,
-        method: str = "vi",
+        method: str = DEFAULT_METHOD,
         data_type: str | None = None,
         *,
         photometry: tuple | None = None,
@@ -7419,24 +7525,18 @@ class SEDModel:
         init: str | None = None,
         **kwargs,
     ):
-        """Fit observed data. Deprecated — prefer ``ForwardModel.fit`` for new code.
+        """Fit observed data with a convenient one-liner.
 
-        .. deprecated:: 0.x
-            Inference is canonically through :class:`ForwardModel`
-            (issue #211). Replace::
+        A Bagpipes-style sugar over :class:`ForwardModel.fit`; equivalent to::
 
-                result = sed.fit(data, noise, method="vi")
+            forward = ForwardModel.build(sed=self, observation=...)
+            result = forward.fit(data, noise, method=method, ...)
 
-            with::
-
-                forward = ForwardModel.build(sed=sed, observation=obs)
-                result = forward.fit(data, noise, method="vi")
-
-            or the equivalent ``Fitter(forward, data, noise).run("vi")``.
-
-            ``SEDModel.fit`` keeps working until tengri v1.0; this method
-            is a thin shim around :func:`tengri.forward.convenience.fit_model`
-            and emits a one-shot DeprecationWarning.
+        For full control — a custom likelihood, per-fit parameter overrides,
+        iterative refinement, or anything with a non-trivial output shape —
+        build the :class:`ForwardModel` yourself and call
+        :meth:`ForwardModel.fit`, the canonical inference surface. For many
+        independent galaxies, use :class:`~tengri.Catalog`.
 
         Parameters
         ----------
@@ -7463,18 +7563,21 @@ class SEDModel:
             uses the result to warm-start the requested method. ``None`` (default)
             uses the method's own default initialization.
         **kwargs
-            Forwarded to ``Fitter.run()``.
+            Forwarded to the inference method (e.g. ``n_warmup``,
+            ``n_samples`` for MCMC).
 
         Returns
         -------
         Posterior
-            Inference results.  ``._fitter`` is set so ``.refine()`` works.
-            After this call, ``self.fitter_`` holds the ``Fitter`` instance.
+            Inference results. ``.refine()`` continues or refines the fit.
 
         Notes
         -----
-        Convenience wrapper around :class:`Fitter`. For advanced usage
-        (custom loss, multiple refinement steps), use ``Fitter`` directly.
+        Sugar over :meth:`ForwardModel.fit`, which stays the canonical
+        inference surface. The engine underneath is an internal detail: all
+        of its expensive caches are model-keyed, so it holds no state a
+        fresh instance lacks and there is never a reason to reach for it
+        directly.
 
         Examples
         --------
@@ -7484,17 +7587,6 @@ class SEDModel:
         >>> result = model.fit(flux_obs, noise, init="map")
         >>> result = model.fit(flux_obs, noise).refine("mcmc_raytrace")
         """
-        import warnings
-
-        warnings.warn(
-            "SEDModel.fit is deprecated and will be removed in tengri v1.0. "
-            "Use ForwardModel.fit instead: "
-            "forward = ForwardModel.build(sed=sed, observation=obs); "
-            "result = forward.fit(data, noise, method=...). "
-            "See issue #211.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
         from tengri.forward.convenience import fit_model
 
         return fit_model(

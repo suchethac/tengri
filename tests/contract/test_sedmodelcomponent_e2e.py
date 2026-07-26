@@ -294,14 +294,12 @@ def test_xray_e2e(ssp, obs, xray_type):
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
             xray={"type": xray_type, "*": FIXED},
+            dust=_fixed_dust(),
             redshift=Fixed(0.05),
         )
     except (TypeError, KeyError, ValueError) as exc:
-        # ValueError "Unknown X-ray type" fires for components that are in the
-        # SEDModelComponent _REGISTRY but not yet wired into the build type
-        # selector (e.g. ``xray_aird`` vs the register_xray_model names
-        # ``simple``/``yang20``). Skip until those registries are unified —
-        # see #331 / #355. Without this the test was a silent CI-skipped red.
+        # These X-ray types were unified into the build selector by #1120.
+        # If a ValueError still fires, it indicates a real build issue.
         pytest.skip(f"{xray_type!r} build skipped: {exc}")
     _assert_phot_ok(model.predict_photometry({}))
 

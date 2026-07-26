@@ -49,6 +49,8 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from tengri.inference._backend_registry import DEFAULT_METHOD
+
 __all__ = ["Fitter", "resolve_method"]
 
 if TYPE_CHECKING:
@@ -271,6 +273,66 @@ def resolve_method(method: str, emit_warning: bool = True) -> str:
     )
 
 
+#: Constructor parameters the convenience fit surfaces manage themselves
+#: (positionally or via their own named parameters) — never routed from a
+#: surface's ``**kwargs``.
+_FIT_SURFACE_MANAGED = frozenset(
+    {"self", "model", "data", "noise", "data_type", "data_mask", "approx", "params_override"}
+)
+
+
+def _model_catalog_z_range(model):
+    """The model's ``catalog_z_range`` (runtime-redshift LUT span), or ``None``.
+
+    Reads it from a ``ForwardModel`` (via its population's SED) or a bare
+    ``SEDModel`` — the same resolution the catalog engine uses.
+    """
+    if hasattr(model, "populations"):
+        try:
+            return model.populations[0].sed._catalog_z_range
+        except (AttributeError, IndexError):
+            return None
+    return getattr(model, "_catalog_z_range", None)
+
+
+def split_fitter_kwargs(kwargs):
+    """Split a fit-surface ``**kwargs`` dict into (constructor, run) halves (#1378).
+
+    The convenience surfaces (``ForwardModel.fit``, ``SEDModel.fit``) accept one
+    ``**kwargs``; parameters declared by ``Fitter.__init__`` — e.g.
+    ``calibration_marginalize``, ``cal_n_poly``, ``eline_marginalize``,
+    ``likelihood`` — belong to construction (spec #1320 §7 teaches them at the
+    fit call), everything else to :meth:`Fitter.run`. The allowlist is derived
+    from the live constructor signature so it cannot drift when the
+    constructor gains parameters. Parameters the surfaces manage themselves
+    (``data``, ``noise``, ``data_type``, ``data_mask``, ``approx``,
+    ``params_override``) are never routed.
+
+    Parameters
+    ----------
+    kwargs : dict
+        The surface's collected ``**kwargs``. Not mutated.
+
+    Returns
+    -------
+    ctor_kwargs : dict
+        The subset belonging to ``Fitter.__init__``.
+    run_kwargs : dict
+        Everything else, for ``Fitter.run`` (unknown names still fail loudly
+        there, as before).
+    """
+    import inspect
+
+    ctor_names = {
+        name
+        for name in inspect.signature(Fitter.__init__).parameters
+        if name not in _FIT_SURFACE_MANAGED
+    }
+    ctor_kwargs = {k: v for k, v in kwargs.items() if k in ctor_names}
+    run_kwargs = {k: v for k, v in kwargs.items() if k not in ctor_names}
+    return ctor_kwargs, run_kwargs
+
+
 class Fitter:
     """Inference engine for differentiable SED fitting with flexible method dispatch.
 
@@ -424,6 +486,7 @@ class Fitter:
         noise=None,
         data_type=None,
         data_mask=None,
+        presence=None,
         calibration_marginalize=False,
         cal_n_poly=3,
         cal_prior_sigma=1.0,
@@ -435,6 +498,7 @@ class Fitter:
         compile_modes=None,
         cache=None,
         approx="auto",
+        params_override=None,
     ):
         # ── Auto-extract batched data for hierarchical ForwardModels ─
         # When ``model`` is a ForwardModel whose SubModel publishes
@@ -508,6 +572,13 @@ class Fitter:
                     "drop it from data/noise or inflate its noise."
                 )
         self.data_mask = data_mask
+        if presence is not None:
+            presence = jnp.asarray(presence, dtype=jnp.float32)
+            if presence.shape != self.data.shape:
+                raise ValueError(
+                    f"presence shape {presence.shape} does not match data shape {self.data.shape}"
+                )
+        self.presence = presence
         self.data_type = self._resolve_data_type(data_type, model)
         self.spec = model.spec
 
@@ -553,6 +624,57 @@ class Fitter:
         self._free_names = self.spec.free_params
         self._fixed_values = self.spec.get_fixed_values()
         self._bounds = {n: self.spec.get_distribution(n).bounds for n in self._free_names}
+
+        # ── Per-fit params override (issue #1329) ──────────────────
+        # Validate params_override: keys must be fixed parameters (not free),
+        # and must be valid parameter names.
+        self._params_override = None
+        if params_override is not None:
+            self._params_override = dict(params_override)
+            for key in self._params_override:
+                if key in self._free_names:
+                    raise ValueError(
+                        f"Parameter {key!r} is free and cannot be overridden in a fit. "
+                        f"A params= key that names a free parameter (being fit) would "
+                        f"corrupt inference. Free parameters: {sorted(self._free_names)}"
+                    )
+                if key not in self._fixed_values and key not in self._free_names:
+                    all_params = sorted(set(self._free_names) | set(self._fixed_values.keys()))
+                    raise ValueError(
+                        f"Parameter {key!r} is not a valid parameter name. "
+                        f"Valid parameters: {all_params}"
+                    )
+            # Merge the override INTO the fixed-values dict — this is the single
+            # source of truth the loss closure bakes at build time
+            # (``loss_functions.build_loss_fn`` -> ``fitter._fixed_values``) and the
+            # output conversion (``_to_physical``) reads. Merging only in
+            # ``_to_physical`` is a silent relabel: the loss keeps running at the
+            # model's fixed value while the returned params echo the override.
+            # The override is part of ``_engine_cache_key`` so a second fit with a
+            # different override compiles its own loss rather than reusing this one.
+            self._fixed_values = {**self._fixed_values, **self._params_override}
+
+        # ── Runtime redshift routing (#1316, spec §9.4) ────────────
+        # On a model whose ztable spans a ``catalog_z_range``, a redshift
+        # override is a RUNTIME input to the LUT interpolation — thread it
+        # through ``data_args`` (the #1349 seam: ``build_loss_fn`` replaces the
+        # baked value with ``data_args["redshift"]``) and keep it OUT of the
+        # engine cache key, so distinct per-row redshifts share one compiled
+        # program instead of recompiling per row. The merge into
+        # ``_fixed_values`` above still happens — it keeps reporting
+        # (``_to_physical``) honest, and the baked value is dead weight in the
+        # loss because the ``data_args`` injection always overrides it.
+        # Invariant: the key omits redshift *iff* ``data_args`` carries it, so
+        # a shared loss closure can never silently run at another fit's baked z.
+        # Overrides on models without a ztable keep #1331's bake — there the
+        # redshift genuinely is a compile constant.
+        self._runtime_redshift = None
+        if (
+            self._params_override is not None
+            and "redshift" in self._params_override
+            and _model_catalog_z_range(model) is not None
+        ):
+            self._runtime_redshift = float(self._params_override["redshift"])
 
         # ── Data arguments ─────────────────────────────────────────
         self._data_args = self._build_data_args(model)
@@ -841,6 +963,12 @@ class Fitter:
         }
         if self.data_mask is not None:
             args["data_mask"] = self.data_mask
+        if self.presence is not None:
+            args["presence"] = self.presence
+        if self._runtime_redshift is not None:
+            # Runtime-routed redshift override (#1316): the loss replaces the
+            # baked fixed value with this traced input (#1349's injection).
+            args["redshift"] = jnp.asarray(self._runtime_redshift)
 
         obs = getattr(model, "observation", None)
         if obs is not None:
@@ -879,8 +1007,18 @@ class Fitter:
         import contextlib
 
         with contextlib.suppress(AttributeError, TypeError):
+            # Per-fit params override (#1329): the forward pass reads fixed values
+            # (e.g. redshift under ``catalog_z_range``) from this threaded dict at
+            # runtime, so the override MUST be merged here — not only in
+            # ``_to_physical`` (the output-conversion path). Merging only there is a
+            # silent relabel: the loss still runs at the model's fixed value while the
+            # returned ``params`` echo the override. Keys are already validated in
+            # ``__init__`` (fixed-only, real names).
+            jit_fixed_values = dict(model.spec.get_fixed_values())
+            if self._params_override is not None:
+                jit_fixed_values.update(self._params_override)
             args["_jit_inputs"] = {
-                "fixed_values": model.spec.get_fixed_values(),
+                "fixed_values": jit_fixed_values,
                 "ssp_data": model.ssp_data,
                 "template_data": model._template_data_for_jit(),
             }
@@ -1089,6 +1227,28 @@ class Fitter:
             line_ratio_cfg is not None,
             index_cfg is not None,
             self.data_mask is not None,
+            # Per-fit params override (#1329): the loss closure bakes
+            # ``fitter._fixed_values``, which now carries the override, so two
+            # fits differing only by override MUST get distinct loss functions —
+            # exactly like the feature channels above. Without this, fit #2
+            # silently reuses fit #1's baked override.
+            #
+            # EXCEPT a runtime-routed redshift (#1316): it rides ``data_args``
+            # as a traced input, so distinct z legitimately share one program.
+            # Note a routed-z-only override yields ``()``, distinct from the
+            # no-override ``None`` — a plain fit (no data_args redshift) never
+            # shares a closure whose baked z differs from its spec.
+            (
+                tuple(
+                    sorted(
+                        (k, round(float(v), 8))
+                        for k, v in self._params_override.items()
+                        if not (k == "redshift" and self._runtime_redshift is not None)
+                    )
+                )
+                if self._params_override
+                else None
+            ),
         )
 
     def _get_or_build_engine(self, pos_dict: dict) -> dict:
@@ -1614,9 +1774,18 @@ class Fitter:
             dist = self.spec.get_distribution(name)
             params[name] = dist.unstandardize(params_unbounded[name])
         for name, val in self._fixed_values.items():
+            # self._fixed_values already carries any per-fit params override
+            # (#1329, merged at construction) — no separate merge needed here.
             params[name] = jnp.array(val)
         if self.spec.stochastic and "psd_xi" in params_unbounded:
+            # Publish under both names so the returned ``Posterior.params``
+            # evaluates to the model that was actually fitted: ``psd_xi`` is the
+            # sampler's key, ``sfh_field_xi`` is the name the forward model and
+            # the docs use. Emitting only ``psd_xi`` made
+            # ``model.predict_photometry(posterior.params)`` silently score the
+            # SMOOTH model -- chi2/N 0.34 read back as 9.00 (#1271).
             params["psd_xi"] = params_unbounded["psd_xi"]
+            params["sfh_field_xi"] = params_unbounded["psd_xi"]
         return params
 
     # ── AOT pre-warm and adaptation persistence ──────────────────────
@@ -1831,7 +2000,15 @@ class Fitter:
 
     # ── Inference dispatch ────────────────────────────────────────────
 
-    def run(self, method: str = "vi_nonlinear_fast", *, init_from=None, key=None, **kwargs):
+    def run(
+        self,
+        method: str = DEFAULT_METHOD,
+        *,
+        init_from=None,
+        key=None,
+        allow_unvalidated: bool = False,
+        **kwargs,
+    ):
         """Run inference using the specified method.
 
         Dispatches to the underlying inference backend (variational, MCMC,
@@ -1855,8 +2032,9 @@ class Fitter:
             - ``"vi_linear"`` — MGVI via NIFTy (linearized Gaussian)
             - ``"vi_nonlinear_fast"`` — geoVI fast path (~35% faster, no logging)
             - ``"vi_linear_fast"`` — MGVI fast path (~35% faster, no logging)
-            - ``"native_vi_nonlinear"`` — Native JAX geoVI (experimental; ~19× faster than NIFTy)
-            - ``"native_vi_linear"`` — Native JAX MGVI (experimental)
+            - ``"native_vi_nonlinear"`` — Native JAX geoVI (**broken**: segfaults
+              on DPL/dense_basis photometry mocks, issue #231)
+            - ``"native_vi_linear"`` — Native JAX MGVI (**broken**: same segfault)
 
             **MCMC Sampling**
 
@@ -1865,8 +2043,9 @@ class Fitter:
             - ``"mcmc"`` — Auto: NUTS (D≤20) or Ray Tracing (D>20)
             - ``"mcmc_hmc"`` — Standard HMC (fixed trajectory length)
             - ``"mcmc_dynamic_hmc"`` — Dynamic HMC (adaptive trajectory)
-            - ``"mcmc_ghmc"`` — Generalized HMC (partial momentum refresh)
-            - ``"mcmc_mclmc"`` — MCLMC (O(1) grad/sample, biased)
+            - ``"mcmc_ghmc"`` — Generalized HMC (**broken**: R-hat ~ 2.5-3.1,
+              ESS ~ 1 on D=6-7 mocks)
+            - ``"mcmc_mclmc"`` — MCLMC (**broken**: R-hat ~ 1.7, ESS ~ 1)
             - ``"mcmc_adjusted_mclmc"`` — MCLMC + Metropolis correction
             - ``"mcmc_ess"`` — Elliptical Slice Sampling (gradient-free)
 
@@ -1892,6 +2071,13 @@ class Fitter:
         key : PRNGKey, optional
             JAX random key. Default ``PRNGKey(42)`` for reproducibility.
             Ignored for deterministic methods (``"map"``, ``"laplace"``).
+
+        allow_unvalidated : bool, optional
+            Run a backend registered at ``tier="broken"`` — one that reports
+            wrong answers or crashes in its own registry entry. Default
+            ``False``, which raises :class:`~tengri.BackendError` naming the
+            specific failure. Intended for benchmarking and backend
+            development, not for science (#1287).
 
         prewarm : bool, optional
             JIT-compile the loss/gradient and the predict surface
@@ -2074,21 +2260,62 @@ class Fitter:
         # alive (e.g. swapping back and forth between MAP and HMC and
         # wanting both compiles in RAM). Override per-call via
         # ``fitter.run(..., lean=True/False)``.
+        import warnings
+
         from tengri.inference.jit_engine import (
             clear_shared_caches as _clear_shared_caches,
             is_lean_mode as _is_lean_mode,
             is_persistent_mode as _is_persistent_mode,
         )
 
+        # --- Lean kwarg deprecation (issue #1318) ─────────────────────────
+        # The lean= kwarg is retired. Callers that pass it get a one-shot
+        # DeprecationWarning with the retire message. The behavior is still
+        # honored for back-compat. For new code, the cache policy is derived
+        # from a private _cache_policy kwarg (set by Catalog) or defaults to
+        # "iterate" (keep-matching smart-lean behavior).
         _user_lean = kwargs.pop("lean", None)
-        if _user_lean is None:
-            if _is_persistent_mode():
-                _user_lean = False
-            elif _is_lean_mode():
-                _user_lean = True
+        if _user_lean is not None:
+            warnings.warn(
+                "lean= is retired: fit() keeps your warm caches (iterate policy); "
+                "Catalog sweeps automatically. See #1318.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+        # --- Cache policy derivation (2026-07) ────────────────────────────
+        # _cache_policy is a private kwarg set by Catalog (T2) when it passes
+        # _cache_policy='sweep' to trigger the drop-stale path. If not present,
+        # derive based on the deprecated lean= kwarg (for back-compat) or the
+        # context (persistent() vs lean()). Default: 'iterate' (keep-matching).
+        _cache_policy = kwargs.pop("_cache_policy", None)
+        if _cache_policy is None:
+            # Back-compat: if lean= was passed, honor it
+            if _user_lean is not None:
+                _cache_policy = "sweep" if _user_lean else "iterate"
             else:
-                _user_lean = True
-        if _user_lean:
+                # Derive from context (persistent/lean/default)
+                if _is_persistent_mode():
+                    # persistent() promises to keep ALL cached artifacts, including
+                    # non-matching L3 entries — a distinct policy, NOT "iterate"
+                    # (which drops stale non-matching entries). Mapping it to
+                    # "iterate" made persistent() a silent no-op.
+                    _cache_policy = "persistent"
+                elif _is_lean_mode():
+                    _cache_policy = "sweep"  # Drop all stale entries
+                else:
+                    _cache_policy = "iterate"  # Default: keep-matching
+
+        # Apply cache policy. The policy semantic:
+        # - "iterate": drop only L3 entries that do NOT match this fitter's
+        #   compile_signature() (smart-lean behavior, 2026-05)
+        # - "sweep": drop all L3 entries (old lean=True behavior)
+        # The compile_signature() keys on shape, not values — so identical
+        # geometry always matches, even if parameters differ.
+        if _cache_policy == "sweep":
+            _clear_shared_caches(scope="inference_body", keep_sig=None)
+        elif _cache_policy == "iterate":
+            # Keep-matching: preserve the entry matching this fitter's signature
             # Smart lean (2026-05): drop only L3 entries that do NOT match
             # this fitter's compile_signature(). The matching entry — if
             # it exists from a prior identical run — is kept, so a
@@ -2100,7 +2327,21 @@ class Fitter:
             # invalidation is unnecessary. Forward, loss, grad, and
             # logdensity caches are preserved unconditionally at this
             # scope.
-            _clear_shared_caches(scope="inference_body", keep_sig=self._lean_keep_sig)
+            # drop_xla=False (#1350): this policy's promise is "fit() keeps your
+            # warm caches". jax.clear_caches() would wipe the process-wide XLA
+            # executables, leaving the entries we deliberately keep as hollow
+            # shells that re-trace — and de-warming the caller's own
+            # predict_photometry too. The stale non-matching tengri entries are
+            # still dropped. "sweep" keeps drop_xla=True: it exists for memory
+            # relief (the notebook-OOM class) and must keep releasing executables.
+            _clear_shared_caches(
+                scope="inference_body", keep_sig=self._lean_keep_sig, drop_xla=False
+            )
+        elif _cache_policy == "persistent":
+            # persistent(): keep EVERYTHING — no L3 clear at all, even
+            # non-matching stale entries. This is what the context manager /
+            # TENGRI_PERSISTENT promise, and it is distinct from "iterate".
+            pass
 
         # --- Merge TOML method-specific defaults (caller kwargs win) ---
         try:
@@ -2153,7 +2394,11 @@ class Fitter:
             method = "mcmc_nuts" if d <= threshold else "vi_nonlinear_fast"
 
         # --- Dispatch to underlying _run_* methods via registry ---
-        from tengri.inference._backend_registry import check_requires, get_backend
+        from tengri.inference._backend_registry import (
+            check_requires,
+            check_usable,
+            get_backend,
+        )
 
         if method == "auto":
             # Pre-registry semantics: low-D → NUTS (exact), high-D → geoVI (scalable).
@@ -2191,6 +2436,12 @@ class Fitter:
         # Pre-flight speed guard: steer many-evaluation samplers off the slow
         # exact forward path onto the WavePrecomp LUT (see helper above).
         _warn_if_exact_forward_path(self.model, entry.name)
+
+        # Refuse backends that declare themselves unusable, unless the caller
+        # opts in explicitly (#1287). Before check_requires, because "this
+        # sampler returns R-hat ~ 3" is a more fundamental objection than
+        # "its optional dependency is missing".
+        check_usable(entry, allow_unvalidated=allow_unvalidated)
 
         # Friendly error if the backend's optional dependency is missing,
         # before we descend into a deep third-party traceback.

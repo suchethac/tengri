@@ -148,7 +148,7 @@ def adaf_disc_block(
     L_nu = adaf_spectrum(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_log_mbh=agn_log_mbh,
         agn_adaf_alpha=agn_adaf_alpha,
         agn_adaf_beta=agn_adaf_beta,
@@ -505,7 +505,7 @@ def kubota_done_disc_block(
     L_nu = kubota_done_disc(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_log_mbh=agn_log_mbh,
         agn_log_ledd=agn_log_ledd,
         agn_a_spin=agn_a_spin,
@@ -574,7 +574,7 @@ def multicolor_disc_block(
     L_nu = multicolor_disc(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_log_mbh=agn_log_mbh,
         agn_log_ledd=agn_log_ledd,
         agn_a_spin=agn_a_spin,

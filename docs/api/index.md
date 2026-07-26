@@ -22,9 +22,10 @@ print(result.summary_table())
 ```
 
 `forward.fit(...)` is the canonical entry point. It is exactly equivalent to
-`Fitter(forward, flux, noise).run("mcmc_nuts")`, which remains available when
-you need to hold on to the fitter — to reuse its compilation cache across
-galaxies, say. Start with {doc}`core`, which covers `ForwardModel` and the
+`Fitter(forward, flux, noise).run("mcmc_nuts")`, which remains available as the
+low-level engine; you rarely need it, since the compilation caches are shared
+across fitter instances rather than held on one. For many galaxies, use
+`Catalog`. Start with {doc}`core`, which covers `ForwardModel` and the
 `SEDModel` you build to feed it.
 
 ```{toctree}

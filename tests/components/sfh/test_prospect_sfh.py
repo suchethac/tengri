@@ -188,7 +188,15 @@ class TestSnormBurstSfh:
         no_burst_kwargs = {**self._KWARGS, "burst_sfr": 0.0}
         sfr_no_burst = snorm_burst(_T, **no_burst_kwargs)
 
-        old_mask = self._KWARGS["burst_age"] <= _T
+        # Skip the ONE cell straddling ``burst_age``. The SFH array is a
+        # quadrature integrand (the forward model turns it into mass parcels via
+        # ``trapezoid``), so the cell containing the burst edge carries the burst
+        # mass formed in its covered fraction -- it is not "outside" the burst
+        # (#1374). Beyond that cell the two must agree. The one-cell step is
+        # derived from the grid, not hard-coded, so this survives editing ``_T``.
+        cell_factor = float(_T[1] / _T[0])  # _T is log-spaced
+        old_mask = self._KWARGS["burst_age"] * cell_factor < _T
+        assert int(old_mask.sum()) > 10, "probe setup failed: too few nodes past the burst edge"
         # Renormalization can redistribute mass, so use moderate tolerance
         assert_allclose(sfr_with_burst[old_mask], sfr_no_burst[old_mask], rtol=0.3)
 
@@ -255,7 +263,15 @@ class TestSnormTruncBurstSfh:
         no_burst_kwargs = {**self._KWARGS, "burst_sfr": 0.0}
         sfr_no_burst = snorm_trunc_burst(_T, **no_burst_kwargs)
 
-        old_mask = self._KWARGS["burst_age"] <= _T
+        # Skip the ONE cell straddling ``burst_age``. The SFH array is a
+        # quadrature integrand (the forward model turns it into mass parcels via
+        # ``trapezoid``), so the cell containing the burst edge carries the burst
+        # mass formed in its covered fraction -- it is not "outside" the burst
+        # (#1374). Beyond that cell the two must agree. The one-cell step is
+        # derived from the grid, not hard-coded, so this survives editing ``_T``.
+        cell_factor = float(_T[1] / _T[0])  # _T is log-spaced
+        old_mask = self._KWARGS["burst_age"] * cell_factor < _T
+        assert int(old_mask.sum()) > 10, "probe setup failed: too few nodes past the burst edge"
         assert_allclose(sfr_with_burst[old_mask], sfr_no_burst[old_mask], rtol=0.3)
 
     def test_truncation_reduces_old_sfr_vs_snorm_burst(self):

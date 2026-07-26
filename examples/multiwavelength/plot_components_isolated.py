@@ -74,7 +74,7 @@ RUNS = [
                 "blr": {"type": "none", "all_params": tengri.FIXED},
                 "all_params": tengri.FIXED,
                 "log_lbol": 11.5,
-                "frac": 0.5,
+                "lum_ratio": 0.5,
             },
         ),
     ),

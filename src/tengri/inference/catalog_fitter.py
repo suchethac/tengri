@@ -25,6 +25,192 @@ from jax.flatten_util import ravel_pytree
 
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
+DEFAULT_PERCENTILES: tuple[float, ...] = (16.0, 50.0, 84.0)
+"""Percentile levels used when ``percentiles=`` is not given."""
+
+
+def _percentile_label(level) -> str:
+    """Column-name fragment for a percentile level: ``2.5`` -> ``"2p5"``.
+
+    ``.`` is spelled ``p`` so the resulting column name stays a valid
+    identifier and survives a parquet/FITS round trip unquoted.
+    """
+    text = f"{float(level):g}"
+    return text.replace(".", "p").replace("-", "m")
+
+
+def _sample_dict_for_summary(posterior, properties=None):
+    """Everything worth summarizing for one galaxy: parameters + derived properties.
+
+    Parameters
+    ----------
+    posterior : Posterior
+        A single galaxy's fit result; must still hold its samples.
+    properties : sequence of str, ``None``, or empty
+        Derived-property names to fold in. ``None`` (default) takes every
+        property the model provides; an empty sequence takes none.
+
+    Returns
+    -------
+    dict
+        ``name -> ndarray, shape (n_samples,)``.
+
+    Notes
+    -----
+    Parameters alone are not enough. ``store="summary"`` exists so a catalog
+    of N ~ 1e5 never materializes its sample cube, and the quantity such a
+    catalog is *for* is a derived one — ``stellar_mass``, ``sfr``. Summarizing
+    only the sampled parameters left the spec's own worked example
+    (``post.percentiles["stellar_mass"]``) raising ``KeyError`` (#1313).
+
+    Property evaluation is the same work a ``store="full"`` user pays on first
+    access; it is moved earlier so it can be chunk-reduced and dropped. If it
+    fails for any reason the parameter summaries are still returned — a
+    catalog fit must not die because one derived quantity could not be
+    computed.
+    """
+    combined = dict(posterior.samples)
+    if properties is not None and len(properties) == 0:
+        return combined
+    try:
+        names = list(properties) if properties is not None else None
+        combined.update(posterior.properties.to_dict(names=names))
+    except Exception as exc:  # a summary must never take down the fit itself
+        warnings.warn(
+            f"Could not summarize derived properties ({type(exc).__name__}: {exc}); "
+            "the summary block holds sampled parameters only. Pass properties=() "
+            "to skip this step, or properties=('stellar_mass', ...) to narrow it.",
+            UserWarning,
+            stacklevel=3,
+        )
+    return combined
+
+
+def _attach_summaries(posterior, store, percentiles, reducers, properties):
+    """Summarize one galaxy in place, then drop its samples.
+
+    Parameters
+    ----------
+    posterior : Posterior
+        A single galaxy's result, still holding its samples.
+    store : str
+        ``"summary"`` to summarize; anything else is a no-op.
+    percentiles : tuple
+        Levels to compute, in the order the caller asked for them.
+    reducers : dict or None
+        Extra reducers ``{name: callable}``.
+    properties : sequence of str or None
+        Derived properties to fold in (``None`` = all, ``()`` = none).
+
+    Returns
+    -------
+    bool
+        Whether a summary block was produced. ``False`` for a sample-free
+        method (MAP), which the caller must surface rather than swallow.
+    """
+    if store != "summary" or posterior.samples is None:
+        return False
+    block, summary = _compute_summaries(
+        _sample_dict_for_summary(posterior, properties), percentiles, reducers
+    )
+    posterior._percentiles_stats_ = block
+    if summary:
+        posterior._summary_stats_ = summary
+    posterior.samples = None  # the point of store="summary"
+    return True
+
+
+def _stack_summaries(posteriors, store, method, percentiles):
+    """Stack per-galaxy summary blocks over the galaxy axis.
+
+    Returns
+    -------
+    tuple
+        ``(percentiles_dict, summary_dict, percentile_levels, effective_store)``.
+
+    Notes
+    -----
+    ``effective_store`` is the honest answer, not the request. Asking for
+    ``store="summary"`` from a method that produces no samples (MAP,
+    ``laplace``) used to leave ``.percentiles`` and ``.summary`` at ``None``
+    while ``.store`` still read ``"summary"`` — a silent no-op that looks like
+    a memory-bounded result and is not one. Now it warns and reports
+    ``"full"`` (#1313).
+    """
+    have_blocks = bool(posteriors) and hasattr(posteriors[0], "_percentiles_stats_")
+    if store != "summary":
+        return None, None, None, store
+    if not have_blocks:
+        warnings.warn(
+            f"store='summary' was requested but method={method!r} produced no posterior "
+            "samples to summarize, so no percentile or reducer block was built and the "
+            "result reports store='full'. Per-galaxy point values are still available "
+            "via post['<name>'] and post.to_table(). Use a sampling method "
+            "(e.g. 'mcmc_nuts') for percentile summaries.",
+            UserWarning,
+            stacklevel=3,
+        )
+        return None, None, None, "full"
+
+    first = posteriors[0]
+    stacked = {
+        name: np.stack([p._percentiles_stats_[name] for p in posteriors])
+        for name in first._percentiles_stats_
+    }
+    summary = None
+    if getattr(first, "_summary_stats_", None):
+        summary = {
+            reducer: {
+                name: np.array([p._summary_stats_[reducer][name] for p in posteriors])
+                for name in first._summary_stats_[reducer]
+            }
+            for reducer in first._summary_stats_
+        }
+    return stacked, summary, tuple(percentiles), store
+
+
+def _compute_summaries(samples, percentiles=None, reducers=None):
+    """Compute percentiles and reducer statistics for a sample dict.
+
+    Parameters
+    ----------
+    samples : dict
+        Samples keyed by name, values are (n_samples,) arrays. Both sampled
+        parameters and derived properties belong here — see
+        :func:`_sample_dict_for_summary`.
+    percentiles : tuple, optional
+        Percentile values to compute. Default (16, 50, 84).
+    reducers : dict, optional
+        Additional reducers {name: callable} (e.g., {"mean": jnp.mean}).
+
+    Returns
+    -------
+    percentiles_dict : dict
+        Keys are names, values are (n_pct,) arrays **in the order the levels
+        were requested** — the caller must record those levels alongside.
+    summary_dict : dict
+        Nested dict: {reducer_name: {name: scalar value}}.
+    """
+    if percentiles is None:
+        percentiles = DEFAULT_PERCENTILES
+    if reducers is None:
+        reducers = {}
+
+    percentiles_dict = {}
+    summary_dict = {}
+
+    # Compute percentiles
+    for name, samples_arr in samples.items():
+        percentiles_dict[name] = np.percentile(np.asarray(samples_arr), percentiles)
+
+    # Compute reducers
+    for reducer_name, reducer_fn in reducers.items():
+        summary_dict[reducer_name] = {}
+        for name, samples_arr in samples.items():
+            summary_dict[reducer_name][name] = float(reducer_fn(np.asarray(samples_arr)))
+
+    return percentiles_dict, summary_dict
+
 
 def _resolve_n_padded(n_gal: int, K: int, n_pad: int | str | None) -> int:
     """Resolve the padded catalog size for the catalog VI engine.
@@ -86,16 +272,44 @@ class CatalogPosterior:
         Number of galaxies.
     diagnostics : dict
         Method-specific diagnostics (e.g. ``mean_n_iterations`` for native VI).
+    percentiles : dict or None
+        Per-galaxy percentile summaries when store="summary". Keys are property
+        names, values are (n_galaxies, n_percentiles) arrays. None for store="full".
+    summary : dict or None
+        Per-galaxy summary statistics when store="summary". Keys are reducer names
+        (e.g., "mean", "std"), values are dicts mapping property names to
+        (n_galaxies,) arrays. None for store="full".
+    store : str
+        Storage mode: "full" keeps all samples, "summary" computes percentiles
+        and reducers and drops samples to save memory.
+    percentile_levels : tuple of float or None
+        The percentile levels the ``percentiles`` block holds, in column order
+        (e.g. ``(16, 50, 84)``). ``None`` when no summary was computed.
 
     Raises
     ------
     IndexError
-        If ``__getitem__`` is called with an out-of-range index.
+        If ``__getitem__`` is called with an out-of-range integer index.
+    KeyError
+        If ``__getitem__`` is called with an unknown property name, or with a
+        summarized name whose block carries no 50th percentile.
+
+    Notes
+    -----
+    ``percentile_levels`` is not bookkeeping — it is what makes the block
+    self-describing. Without it, both the median accessor and ``to_table``
+    guessed from the array's *width*: the median was hardcoded to column 1 and
+    labels were re-derived as ``[16, 50, 84]`` / ``[16, 84]`` / evenly-spaced.
+    A caller asking for the spec's ``(2.5, 16, 50, 84, 97.5)`` therefore got
+    the 16th percentile back as the "median", and an exported table whose
+    columns were named ``_p0/_p25/_p50/_p75/_p100`` over 2.5/16/50/84/97.5
+    data. Look levels up by value; never by position (#1313).
 
     Examples
     --------
     >>> result = cat.run("native_vi_linear", key=jax.random.PRNGKey(0))
     >>> result[0].params  # first galaxy
+    >>> result["stellar_mass"]  # per-galaxy medians, shape (n_galaxies,)
     >>> for post in result:
     ...     ...  # iterate over all galaxies
     """
@@ -105,9 +319,87 @@ class CatalogPosterior:
     wall_time_s: float = 0.0
     n_galaxies: int = 0
     diagnostics: dict = field(default_factory=dict)
+    percentiles: dict | None = None
+    summary: dict | None = None
+    store: str = "full"
+    percentile_levels: tuple | None = None
 
-    def __getitem__(self, i):
-        return self.posteriors[i]
+    def _effective_levels(self, n_pct: int) -> tuple | None:
+        """The levels a block of width ``n_pct`` holds, or ``None`` if unknowable.
+
+        Every path that builds a summary now records ``percentile_levels``, so
+        a block without them predates that (an old pickle, or an object built
+        by hand). For those, the only block the code could have produced at
+        width ``len(DEFAULT_PERCENTILES)`` is the documented default, and at
+        width 1 it is the median alone. Any other width is genuinely unknown,
+        and unknown must stay unknown — inferring levels from a width is the
+        bug this attribute exists to kill (#1313).
+        """
+        if self.percentile_levels is not None:
+            return tuple(float(level) for level in self.percentile_levels)
+        if n_pct == len(DEFAULT_PERCENTILES):
+            return DEFAULT_PERCENTILES
+        if n_pct == 1:
+            return (50.0,)
+        return None
+
+    def _median_column(self, n_pct: int) -> int | None:
+        """Column index of the 50th percentile, or ``None`` if it is not in the block."""
+        levels = self._effective_levels(n_pct)
+        if levels is None:
+            return None
+        for index, level in enumerate(levels):
+            if level == 50.0:
+                return index
+        return None
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            return self._property_medians(key)
+        return self.posteriors[key]
+
+    def _property_medians(self, name):
+        """Per-galaxy medians for one property, shape ``(n_galaxies,)``.
+
+        Answers from the stored percentile block under ``store="summary"``
+        (same median column :meth:`to_table` uses), else from the per-galaxy
+        posteriors via :attr:`properties`.
+
+        The block column is found by **level**, not position. Hardcoding
+        column 1 silently returned p16 for the spec's five-percentile example
+        and p84 for ``(16, 84)`` (#1313). When no 50th percentile was
+        requested there is no median to return, and refusing beats handing
+        back a neighboring quantile under the median's name.
+        """
+        if self.percentiles is not None and name in self.percentiles:
+            block = np.asarray(self.percentiles[name])
+            median_idx = self._median_column(block.shape[1])
+            if median_idx is None:
+                raise KeyError(
+                    f"No median available for {name!r}: this summary block holds "
+                    f"percentiles {self._effective_levels(block.shape[1])}, which do "
+                    "not include 50. Re-fit with a percentiles= tuple containing 50, "
+                    "or read the level you want from post.percentiles[name]."
+                )
+            return block[:, median_idx]
+        if not self.posteriors:
+            available = sorted(self.percentiles.keys()) if self.percentiles else []
+            raise KeyError(
+                f"Unknown property {name!r}: this CatalogPosterior stores no per-galaxy "
+                f"posteriors (store={self.store!r}) and its percentile block has "
+                f"{available or 'no keys'}."
+            )
+        if name not in self.properties:
+            raise KeyError(
+                f"Unknown property {name!r}. Available: {sorted(self.properties.keys())}."
+            )
+        vals = self.properties[name]
+        if isinstance(vals, list):  # ragged posteriors — per-galaxy medians
+            return np.array(
+                [np.median(np.asarray(v)) if np.ndim(v) > 0 else float(v) for v in vals]
+            )
+        vals = np.asarray(vals)
+        return np.median(vals, axis=1) if vals.ndim > 1 else vals
 
     def __iter__(self):
         return iter(self.posteriors)
@@ -138,6 +430,88 @@ class CatalogPosterior:
         (500,)
         """
         return CatalogProperties(self)
+
+    def to_table(self) -> dict:
+        """Export posteriors as a table dict (round-trips through ingest_catalog).
+
+        Returns
+        -------
+        dict[str, np.ndarray]
+            Dict mapping property names to (N,) arrays over galaxies. Percentile
+            columns are named from the levels actually computed — ``percentiles=
+            (2.5, 16, 50, 84, 97.5)`` gives ``stellar_mass_p2p5``,
+            ``stellar_mass_p16``, ``stellar_mass_p50``, ``stellar_mass_p84``,
+            ``stellar_mass_p97p5`` (``.`` is spelled ``p``, so the names stay
+            valid identifiers and survive a parquet/FITS round trip). A bare
+            ``stellar_mass`` median column appears only when 50 was requested.
+
+        Notes
+        -----
+        The returned dict is a duck-type match for the input to
+        :func:`~tengri.inference.catalog_ingest.ingest_catalog`, enabling
+        round-trip workflows: ``Catalog(..., table).fit() -> cat.to_table()``.
+
+        Column labels come from :attr:`percentile_levels`. They used to be
+        re-derived from the block's *width*, which mislabeled every non-default
+        request: the spec's five-percentile example exported as
+        ``_p0/_p25/_p50/_p75/_p100`` over 2.5/16/50/84/97.5 data. Mislabeled
+        numbers in a file that leaves the process are worse than no file
+        (#1313).
+        """
+        table = {}
+
+        # If percentiles are stored (store='summary' case), use them preferentially
+        if self.percentiles:
+            first_name = next(iter(self.percentiles.keys()))
+            n_pct = np.asarray(self.percentiles[first_name]).shape[1]
+            levels = self._effective_levels(n_pct)
+            if levels is None or len(levels) != n_pct:
+                raise ValueError(
+                    f"summary block has {n_pct} percentile column(s) but its levels "
+                    f"are {self.percentile_levels!r}. Refusing to export columns whose "
+                    "labels cannot be trusted — re-fit so percentile_levels is recorded."
+                )
+            pct_values = list(levels)
+
+            median_idx = self._median_column(n_pct)
+            for name, percentile_array in self.percentiles.items():
+                block = np.asarray(percentile_array)
+                # The bare column is the MEDIAN. With no 50 in the request there
+                # is no median, and emitting a neighboring quantile under the
+                # bare name is how a p16 ends up in a paper as a mass estimate.
+                if median_idx is not None:
+                    table[name] = block[:, median_idx]
+                for i, pct in enumerate(pct_values):
+                    table[f"{name}_p{_percentile_label(pct)}"] = block[:, i]
+
+        else:
+            # store='full' case: try to get properties, with graceful fallback
+            try:
+                props = self.properties
+                for name in props:
+                    # Get the per-galaxy values
+                    vals = props[name]
+                    if isinstance(vals, list):
+                        # Ragged posteriors — convert to array
+                        medians = [np.median(np.asarray(v)) if np.ndim(v) > 0 else v for v in vals]
+                        vals = np.array(medians)
+                    else:
+                        # Stacked posteriors
+                        if vals.ndim > 1:
+                            # Has sample axis — take median along it
+                            vals = np.median(vals, axis=1)
+                    table[name] = vals
+            except (RuntimeError, KeyError, AttributeError):
+                # No model available; fall back to parameter median
+                if self.posteriors:
+                    # Just include the parameter values as a fallback
+                    first_post = self.posteriors[0]
+                    if first_post.params:
+                        for param_name in first_post.params:
+                            vals = np.array([p.params[param_name] for p in self.posteriors])
+                            table[param_name] = np.asarray(vals)
+
+        return table
 
     def __repr__(self) -> str:
         return (
@@ -215,7 +589,7 @@ class CatalogProperties:
         )
 
 
-class CatalogFitter:
+class _CatalogFitterOriginal:
     """Per-galaxy catalog inference with optional K-way on-device parallelism.
 
     Wraps all :class:`~tengri.inference.fitter.Fitter` inference methods with a
@@ -296,6 +670,10 @@ class CatalogFitter:
         forward_chunk_size=1,
         n_pad: int | str | None = None,
         devices=None,
+        store: str | None = None,
+        percentiles: tuple | None = None,
+        reducers: dict | None = None,
+        properties: tuple | None = None,
         **kwargs,
     ):
         """Fit all galaxies independently.
@@ -328,6 +706,17 @@ class CatalogFitter:
             Only applies to native methods. Ignored with a warning for
             sequential paths (each galaxy is fit in its own jit, so
             shape-bucketing has no effect).
+        store : {"full", "summary"} or None
+            Storage mode for posterior samples. ``None`` (default) auto-selects:
+            ``"full"`` if N <= 1000, else ``"summary"`` with a warning.
+            ``"full"`` retains all samples. ``"summary"`` computes percentiles
+            and reducer statistics per property, then drops samples.
+        percentiles : tuple, optional
+            Percentiles to compute when store="summary". Default (16, 50, 84).
+        reducers : dict, optional
+            Additional reducer functions {name: callable} to apply per property
+            (e.g., {"mean": jnp.mean, "std": jnp.std}). With store="full", these
+            are ignored.
         **kwargs
             Forwarded to the underlying inference method.
 
@@ -356,13 +745,60 @@ class CatalogFitter:
         """
         from tengri.inference.fitter import resolve_method
 
+        # Auto-select store mode based on catalog size if not specified
+        if store is None:
+            if self.n_galaxies <= 1000:
+                store = "full"
+            else:
+                store = "summary"
+                warnings.warn(
+                    f"Catalog has {self.n_galaxies} galaxies > 1000; "
+                    f"automatically switching to store='summary' to save memory. "
+                    f"Samples will be dropped after computing percentiles. "
+                    f"Pass store='full' to retain all samples.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+        if percentiles is None:
+            percentiles = DEFAULT_PERCENTILES
+
         resolved = resolve_method(method)
+        # Per-galaxy fixed-value overrides (e.g. redshift) and presence masks are
+        # threaded only through the sequential path today; the batched native/MCMC
+        # paths stack flux/noise and would SILENTLY DROP per-galaxy values. Fail loudly instead.
+        _has_pg_z = any("redshift" in g for g in self.galaxies)
+        if _has_pg_z and resolved in self._NATIVE_VMAPPABLE:
+            raise NotImplementedError(
+                "Per-galaxy redshift is not supported for batched native VI methods "
+                "(experimental, off the critical path). Use method='mcmc_nuts' / "
+                "'mcmc_hmc' (batched, runtime redshift) or method='map' (sequential). "
+                "See #1337."
+            )
+        if _has_pg_z and resolved in self._MCMC_VMAPPABLE and self._catalog_z_range() is None:
+            raise ValueError(
+                "Batched per-galaxy redshift requires a catalog_z_range so ONE "
+                "compiled program serves all redshifts. Build the model with "
+                "approx=WavePrecomp(catalog_z_range=(zmin, zmax)), or use "
+                "method='map' (sequential, recompiles per redshift). See #1337."
+            )
+        if resolved in self._NATIVE_VMAPPABLE and any("presence" in g for g in self.galaxies):
+            raise NotImplementedError(
+                "Per-galaxy presence masks are not yet supported for batched "
+                "native VI methods (experimental, off the critical path). "
+                "Use method='mcmc_nuts' (batched, presence-aware) or "
+                "method='map' (sequential) for heterogeneous photometry. See #1337."
+            )
         if resolved in self._NATIVE_VMAPPABLE:
             return self._run_native(
                 resolved,
                 key=key,
                 forward_chunk_size=forward_chunk_size,
                 n_pad=n_pad,
+                store=store,
+                percentiles=percentiles,
+                reducers=reducers,
+                properties=properties,
                 **kwargs,
             )
         elif resolved in self._MCMC_VMAPPABLE:
@@ -372,6 +808,10 @@ class CatalogFitter:
                 forward_chunk_size=forward_chunk_size,
                 n_pad=n_pad,
                 devices=devices,
+                store=store,
+                percentiles=percentiles,
+                reducers=reducers,
+                properties=properties,
                 **kwargs,
             )
         else:
@@ -399,7 +839,15 @@ class CatalogFitter:
                     UserWarning,
                     stacklevel=2,
                 )
-            return self._run_sequential(method, key=key, **kwargs)
+            return self._run_sequential(
+                method,
+                key=key,
+                store=store,
+                percentiles=percentiles,
+                reducers=reducers,
+                properties=properties,
+                **kwargs,
+            )
 
     # ------------------------------------------------------------------
     # Internal: native vmapped path
@@ -414,6 +862,21 @@ class CatalogFitter:
                 self.model, g["flux_obs"], g["noise"], data_type=self.data_type, cache=self.cache
             )
         return self._dummy_fitter
+
+    def _catalog_z_range(self):
+        """The model's ``catalog_z_range`` (the runtime-redshift LUT span), or None.
+
+        A ``catalog_z_range`` is what lets a per-galaxy redshift flow as a runtime
+        input so ONE compiled program serves all z (#1337 phase 2). Reads it from a
+        ``ForwardModel`` (via its population's SED) or a bare ``SEDModel``.
+        """
+        m = self.model
+        if hasattr(m, "populations"):
+            try:
+                return m.populations[0].sed._catalog_z_range
+            except (AttributeError, IndexError):
+                return None
+        return getattr(m, "_catalog_z_range", None)
 
     def _get_catalog_linear_engine(self):
         if self._catalog_linear_engine is None:
@@ -476,6 +939,10 @@ class CatalogFitter:
         key,
         forward_chunk_size=1,
         n_pad: int | str | None = None,
+        store: str = "full",
+        percentiles: tuple = DEFAULT_PERCENTILES,
+        reducers: dict | None = None,
+        properties: tuple | None = None,
         n_iterations=20,
         n_samples=3,
         n_posterior_samples=500,
@@ -583,21 +1050,30 @@ class CatalogFitter:
             samples_phys = {k: jnp.stack([sd[k] for sd in sample_dicts]) for k in sample_dicts[0]}
             best_params = _mean_params(samples_phys)
 
-            posteriors.append(
-                Posterior(
-                    samples=samples_phys,
-                    params=best_params,
-                    method=f"CatalogFitter/{method_tag}",
-                    wall_time_s=time.time() - t0,
-                    diagnostics={"n_iterations": int(all_n_iters[i])},
-                    loss_history=None,
-                    _model=self.model,
-                )
+            # Build the Posterior FIRST: summarizing derived properties needs
+            # the model, which only the Posterior carries. Samples are dropped
+            # inside _attach_summaries once the block exists.
+            post_i = Posterior(
+                samples=samples_phys,
+                params=best_params,
+                method=f"CatalogFitter/{method_tag}",
+                wall_time_s=time.time() - t0,
+                diagnostics={"n_iterations": int(all_n_iters[i])},
+                loss_history=None,
+                _model=self.model,
             )
+            _attach_summaries(post_i, store, percentiles, reducers, properties)
+            posteriors.append(post_i)
 
         wall = time.time() - t0
         if verbose:
             print(f"  Done in {wall:.1f}s ({wall / n_gal:.2f}s/galaxy)")
+
+        # Stack per-galaxy summary blocks; record WHICH levels they hold and
+        # report the store that actually happened (see _stack_summaries).
+        cat_percentiles, cat_summary, cat_levels, store = _stack_summaries(
+            posteriors, store, method_tag, percentiles
+        )
 
         return CatalogPosterior(
             posteriors=posteriors,
@@ -605,6 +1081,10 @@ class CatalogFitter:
             wall_time_s=wall,
             n_galaxies=n_gal,
             diagnostics={"mean_n_iterations": float(jnp.mean(all_n_iters))},
+            percentiles=cat_percentiles,
+            summary=cat_summary,
+            store=store,
+            percentile_levels=cat_levels,
         )
 
     # ------------------------------------------------------------------
@@ -619,6 +1099,10 @@ class CatalogFitter:
         forward_chunk_size=1,
         n_pad: int | str | None = None,
         devices=None,
+        store: str = "full",
+        percentiles: tuple = DEFAULT_PERCENTILES,
+        reducers: dict | None = None,
+        properties: tuple | None = None,
         n_warmup=300,
         n_burnin=100,
         n_samples=1000,
@@ -668,6 +1152,10 @@ class CatalogFitter:
         n_data = self._validate_uniform_data()
 
         fitter = self._get_dummy_fitter()
+        # Per-galaxy redshift override (#1337 phase 2): only when the catalog actually
+        # carries a per-galaxy Fixed redshift. Free / shared-redshift catalogs leave
+        # thread_redshift False, so the compiled program is unchanged.
+        per_galaxy_z = any("redshift" in g for g in self.galaxies)
         run_one, unravel_fn = build_catalog_mcmc_engine(
             fitter,
             sampler,
@@ -678,6 +1166,7 @@ class CatalogFitter:
             n_leapfrog=n_leapfrog_steps,
             target_accept_rate=target_accept_rate,
             use_dense=bool(dense_mass_matrix),
+            thread_redshift=per_galaxy_z,
         )
 
         dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
@@ -693,11 +1182,37 @@ class CatalogFitter:
         # Stack per-galaxy data; pad with dummy galaxies (trimmed after).
         all_data_orig = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
         all_noise_orig = jnp.stack([jnp.asarray(g["noise"]) for g in self.galaxies])
+        # Per-galaxy presence masks (0/1) for heterogeneous catalogs; default to all-ones.
+        # Use the same dtype as data for consistent numeric behavior under multiplication.
+        all_presence_orig = jnp.stack(
+            [
+                jnp.asarray(g.get("presence", np.ones(n_data)), dtype=all_data_orig.dtype)
+                for g in self.galaxies
+            ]
+        )
+        # Per-galaxy redshift (#1337 phase 2); dummy zeros when not threaded.
+        if per_galaxy_z:
+            all_redshift_orig = jnp.stack(
+                [jnp.asarray(g["redshift"], dtype=all_data_orig.dtype) for g in self.galaxies]
+            )
+        else:
+            all_redshift_orig = jnp.zeros((n_gal,), dtype=all_data_orig.dtype)
         if n_pad_extra > 0:
             all_data = jnp.concatenate([all_data_orig, jnp.zeros((n_pad_extra, n_data))], axis=0)
             all_noise = jnp.concatenate([all_noise_orig, jnp.ones((n_pad_extra, n_data))], axis=0)
+            # Padded rows: all-ones presence (no masking, they're discarded anyway).
+            pad_presence = jnp.ones((n_pad_extra, n_data), dtype=all_data_orig.dtype)
+            all_presence = jnp.concatenate([all_presence_orig, pad_presence], axis=0)
+            # Padded rows reuse galaxy 0's redshift (a valid LUT value; discarded).
+            pad_z = jnp.full((n_pad_extra,), all_redshift_orig[0], dtype=all_data_orig.dtype)
+            all_redshift = jnp.concatenate([all_redshift_orig, pad_z], axis=0)
         else:
-            all_data, all_noise = all_data_orig, all_noise_orig
+            all_data, all_noise, all_presence, all_redshift = (
+                all_data_orig,
+                all_noise_orig,
+                all_presence_orig,
+                all_redshift_orig,
+            )
 
         init_keys = jax.random.split(key, n_padded)
         all_init = jnp.stack(
@@ -708,10 +1223,10 @@ class CatalogFitter:
         gal_keys = jax.random.split(jax.random.fold_in(key, 1), n_padded)
 
         def _run_one(args):
-            ini, gk, d, n = args
-            return run_one(ini, gk, d, n)
+            ini, gk, d, n, p, z = args
+            return run_one(ini, gk, d, n, p, z)
 
-        xs = (all_init, gal_keys, all_data, all_noise)
+        xs = (all_init, gal_keys, all_data, all_noise, all_presence, all_redshift)
         if n_dev > 1:
             all_positions, all_divergent = self._sharded_vmap(run_one, xs, dev_list)
         else:
@@ -727,21 +1242,30 @@ class CatalogFitter:
             )
             best_params = _mean_params(samples_phys)
             n_div = int(jnp.sum(all_divergent[i]))
-            posteriors.append(
-                Posterior(
-                    samples=samples_phys,
-                    params=best_params,
-                    method=f"CatalogFitter/{method_tag}",
-                    wall_time_s=time.time() - t0,
-                    diagnostics={"n_divergent": n_div, "n_samples": n_samples},
-                    loss_history=None,
-                    _model=self.model,
-                )
+
+            # Build the Posterior FIRST — summarizing derived properties needs
+            # the model, which only the Posterior carries.
+            post_i = Posterior(
+                samples=samples_phys,
+                params=best_params,
+                method=f"CatalogFitter/{method_tag}",
+                wall_time_s=time.time() - t0,
+                diagnostics={"n_divergent": n_div, "n_samples": n_samples},
+                loss_history=None,
+                _model=self.model,
             )
+            _attach_summaries(post_i, store, percentiles, reducers, properties)
+            posteriors.append(post_i)
 
         wall = time.time() - t0
         if verbose:
             print(f"  Done in {wall:.1f}s ({wall / n_gal:.2f}s/galaxy)")
+
+        # Stack per-galaxy summary blocks; record WHICH levels they hold and
+        # report the store that actually happened (see _stack_summaries).
+        cat_percentiles, cat_summary, cat_levels, store = _stack_summaries(
+            posteriors, store, method_tag, percentiles
+        )
 
         return CatalogPosterior(
             posteriors=posteriors,
@@ -757,6 +1281,10 @@ class CatalogFitter:
                 "n_warmup": n_warmup,
                 "n_samples": n_samples,
             },
+            percentiles=cat_percentiles,
+            summary=cat_summary,
+            store=store,
+            percentile_levels=cat_levels,
         )
 
     @staticmethod
@@ -798,7 +1326,18 @@ class CatalogFitter:
     # Internal: sequential fallback (all other methods)
     # ------------------------------------------------------------------
 
-    def _run_sequential(self, method, *, key, verbose=True, **kwargs):
+    def _run_sequential(
+        self,
+        method,
+        *,
+        key,
+        store: str = "full",
+        percentiles: tuple = DEFAULT_PERCENTILES,
+        reducers: dict | None = None,
+        properties: tuple | None = None,
+        verbose=True,
+        **kwargs,
+    ):
         from tengri.inference.fitter import Fitter
 
         t0 = time.time()
@@ -814,14 +1353,23 @@ class CatalogFitter:
         for i, galaxy in enumerate(self.galaxies):
             if verbose:
                 print(f"  Galaxy {i + 1}/{self.n_galaxies}...", end="\r", flush=True)
+            # Per-galaxy redshift (or any fixed-value override) reaches the forward
+            # pass via the #1329 params-override seam, not just the reported params.
+            override = {"redshift": galaxy["redshift"]} if "redshift" in galaxy else None
+            # Per-galaxy presence mask for heterogeneous catalogs (missing="mask" in ingestion)
+            presence = galaxy.get("presence", None)
             fitter_i = Fitter(
                 self.model,
                 galaxy["flux_obs"],
                 galaxy["noise"],
                 data_type=self.data_type,
+                presence=presence,
                 cache=self.cache,
+                params_override=override,
             )
             post_i = fitter_i.run(method, key=keys[i], verbose=False, **kwargs)
+
+            _attach_summaries(post_i, store, percentiles, reducers, properties)
             posteriors.append(post_i)
 
         wall = time.time() - t0
@@ -829,9 +1377,49 @@ class CatalogFitter:
             per = wall / self.n_galaxies
             print(f"  {self.n_galaxies} galaxies done in {wall:.1f}s ({per:.2f}s/galaxy)")
 
+        # Stack per-galaxy summary blocks; record WHICH levels they hold and
+        # report the store that actually happened (see _stack_summaries).
+        cat_percentiles, cat_summary, cat_levels, store = _stack_summaries(
+            posteriors, store, method, percentiles
+        )
+
         return CatalogPosterior(
             posteriors=posteriors,
             method=method,
             wall_time_s=wall,
             n_galaxies=self.n_galaxies,
+            percentiles=cat_percentiles,
+            summary=cat_summary,
+            store=store,
+            percentile_levels=cat_levels,
         )
+
+
+class CatalogFitter(_CatalogFitterOriginal):
+    """Deprecated public alias of the catalog engine — use :class:`tengri.Catalog`.
+
+    .. deprecated::
+        ``Catalog`` is the one taught catalog noun (#1317, spec decision 6):
+        ``Catalog(fwd, table, flux_unit="mJy", redshift_col="z").fit(method="map",
+        key=key)``. This class keeps working per the no-removal policy (spec
+        §13) but warns at construction.
+
+    Notes
+    -----
+    ``Catalog`` itself constructs :class:`_CatalogFitterOriginal` directly, so
+    the internal path stays warning-free — only user-typed ``CatalogFitter``
+    warns. (A previous module ``__getattr__`` hook warned on direct module
+    imports, but the ``tengri.CatalogFitter`` re-export bypassed it, so the
+    taught name never warned — #1369.)
+    """
+
+    def __init__(self, model, galaxies, data_type="photometry"):
+        warnings.warn(
+            "CatalogFitter is deprecated: use tengri.Catalog — "
+            "Catalog(fwd, table, flux_unit=..., redshift_col=...).fit(method=..., "
+            "key=...). CatalogFitter keeps working but is no longer taught. "
+            "See #1369.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        super().__init__(model, galaxies, data_type)

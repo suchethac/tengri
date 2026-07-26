@@ -47,6 +47,7 @@ def build_catalog_mcmc_engine(
     n_leapfrog: int = 10,
     target_accept_rate: float = 0.85,
     use_dense: bool = False,
+    thread_redshift: bool = False,
 ):
     """Build a vmap-safe per-galaxy NUTS/HMC sampling callable.
 
@@ -80,10 +81,11 @@ def build_catalog_mcmc_engine(
     Returns
     -------
     run_one : callable
-        ``(init_flat, key, data, noise) -> (positions, divergent)`` with
+        ``(init_flat, key, data, noise, presence) -> (positions, divergent)`` with
         ``positions`` shape ``(n_samples, D)`` and ``divergent`` shape
         ``(n_samples,)``. Safe to wrap with ``jax.vmap`` / ``jax.lax.map`` over
-        ``(init_flat, key, data, noise)``.
+        ``(init_flat, key, data, noise, presence)``. Per-galaxy presence mask (0/1)
+        is threaded into the likelihood for heterogeneous photometry.
     unravel_fn : callable
         ``1D ndarray -> pytree`` for turning flat positions back into parameter
         dicts.
@@ -106,16 +108,24 @@ def build_catalog_mcmc_engine(
     )
     n_chain = n_burnin + n_samples
 
-    def run_one(init_flat, gal_key, data, noise):
+    def run_one(init_flat, gal_key, data, noise, presence, redshift):
         # Substitute this galaxy's data into the shared data_args template so the
         # log-posterior receives exactly the pytree it was built for — the shared
-        # _jit_inputs (SSP grid, templates) stay captured, only data/noise vary.
+        # _jit_inputs (SSP grid, templates) stay captured, only data/noise/presence vary.
+        # Per-galaxy presence masks (0/1) enable heterogeneous catalogs (missing bands).
         noise_inv = 1.0 / noise**2
         data_args = dict(template_data_args)
         data_args["data"] = data
         data_args["noise"] = noise
         data_args["noise_inv"] = noise_inv
         data_args["sqrt_noise_inv"] = jnp.sqrt(noise_inv)
+        data_args["presence"] = presence
+        # Per-galaxy redshift override (#1337 phase 2). ``thread_redshift`` is a
+        # build-time Python bool, so the branch resolves during tracing: the
+        # ``redshift`` arg never reaches ``data_args`` for free / shared-redshift
+        # catalogs, and only a per-galaxy Fixed-z catalog threads it.
+        if thread_redshift:
+            data_args["redshift"] = redshift
 
         warmup_key, chain_key = jax.random.split(gal_key)
         chain_keys = jax.random.split(chain_key, n_chain)

@@ -44,7 +44,7 @@ import warnings
 
 # Keep the rendered tutorial clean: silence framework notices that do not
 # change the science shown here (baked-in nebular, the WavePrecomp blue-band
-# approximation, the intentional Fitter(sed_model, ...) LUT path, and
+# approximation, the intentional sed_model.fit(...) LUT path, and
 # recipe/parameter-provenance notices). Genuine deprecations in user-facing
 # calls are fixed in the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

@@ -25,6 +25,8 @@ from tengri.observation.spectroscopy import Spectroscopy
 from tengri.parameters.priors import Distribution
 from tengri.utils.scale import LOG10_4PI, apply_log10_scale
 
+_OBSERVATION_DEPRECATION_WARNED = False
+
 
 def _restband_lnu(state) -> jnp.ndarray:
     r"""Total rest-frame band luminosity for ``phot_rest_fnu`` (#1148).
@@ -190,8 +192,29 @@ class Observation:
     line_fluxes: LineFluxData | None = None
     spectral_indices: SpectralIndexData | None = None
     line_ratios: LineRatioData | None = None
+    lines: object | None = None
 
     def __post_init__(self):
+        # Emit one-shot deprecation warning for value-carrying fields
+        global _OBSERVATION_DEPRECATION_WARNED
+        if not _OBSERVATION_DEPRECATION_WARNED and (
+            self.line_fluxes is not None
+            or self.spectral_indices is not None
+            or self.line_ratios is not None
+        ):
+            import warnings
+
+            warnings.warn(
+                "Observation(line_fluxes=...) / spectral_indices=... / "
+                "line_ratios=... carries measured values on the instrument schema "
+                "and is deprecated: declare WHICH lines with "
+                "lines=LineList.from_names([...]) and supply the VALUES per galaxy "
+                "via Data(lines=...). See #1321.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            _OBSERVATION_DEPRECATION_WARNED = True
+
         if (
             self.photometry is None
             and self.spectroscopy is None
@@ -203,8 +226,6 @@ class Observation:
                 "Observation requires at least one of photometry, spectroscopy, "
                 "line_fluxes, line_ratios, or spectral_indices."
             )
-
-    # ── Capability queries ────────────────────────────────────────
 
     @property
     def can_do_photometry(self) -> bool:

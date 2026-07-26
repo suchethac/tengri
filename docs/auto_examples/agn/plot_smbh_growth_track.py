@@ -59,7 +59,7 @@ model = tengri.SEDModel.build(
         "type": "composable",
         "disc": {"type": "multicolor", "all_params": tengri.FIXED},
         "all_params": tengri.FIXED,
-        "agn_frac": 1.0,  # turn the composable AGN on (default 0.0 zeros it)
+        "agn_lum_ratio": 1.0,  # turn the composable AGN on (default 0.0 zeros it)
         "agn_log_ledd": -1.0,
         "agn_log_mbh": tengri.Uniform(5.0, 10.0),
         "agn_log_lbol": tengri.Uniform(8.0, 14.0),

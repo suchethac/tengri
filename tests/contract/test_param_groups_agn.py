@@ -166,7 +166,7 @@ class TestAGNParameterRouting:
             redshift=Fixed(0.1),
         )
         # At least some shared params should be free
-        # (agn_frac and/or agn_log_lbol are typical shared params)
+        # (agn_lum_ratio and/or agn_log_lbol are typical shared params)
         free_agn_shared = [
             p
             for p in params.free_params
@@ -605,7 +605,7 @@ class TestComposableAGNRuntimeWiring:
     forward model, not just the spec. Issue #258.
 
     Before this PR, ``AGNSEDComponent.apply`` called
-    ``composable_agn_l_nu(wave, agn_log_lbol=..., agn_frac=..., ...)``
+    ``composable_agn_l_nu(wave, agn_log_lbol=..., agn_lum_ratio=..., ...)``
     without the five block selectors. Every block defaulted to
     ``"none"`` and the composable AGN SED came out identically zero
     regardless of the user's spec. The bug was downstream of
@@ -745,9 +745,9 @@ class TestComposableAGNRuntimeWiring:
         """Wildcard ``'*': FIXED`` with no explicit ``frac`` must still
         produce a non-zero AGN SED (regression for #417).
 
-        Before the fix, ``agn_frac`` defaulted to ``Fixed(0.0)`` in the
+        Before the fix, ``agn_lum_ratio`` defaulted to ``Fixed(0.0)`` in the
         param registry, so a wildcard-FIXED AGN group collapsed
-        ``composable_agn_l_nu = agn_frac * compose_l_nu(...) = 0`` and
+        ``composable_agn_l_nu = agn_lum_ratio * compose_l_nu(...) = 0`` and
         the AGN contribution was silently identically zero — even though
         ``L_agn_bol`` was published correctly.
         """
@@ -785,7 +785,7 @@ class TestComposableAGNRuntimeWiring:
         assert sed_agn_max > 0.0, (
             f"composable AGN with '*: FIXED' produced zero SED "
             f"(sed_agn max = {sed_agn_max}); the registry default for "
-            "agn_frac may have regressed back to 0."
+            "agn_lum_ratio may have regressed back to 0."
         )
 
     def test_agn_norm_conserving_reachable_and_not_a_noop(self, synthetic_ssp_wide):

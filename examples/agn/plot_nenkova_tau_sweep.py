@@ -57,7 +57,7 @@ model = tengri.SEDModel.build(
         "torus": {"type": "nenkova", "all_params": tengri.FIXED, "tau": tengri.Uniform(5, 150)},
         "all_params": tengri.FIXED,
         "log_lbol": 12.5,
-        "frac": 1.0,
+        "lum_ratio": 1.0,
     },
     redshift=tengri.Fixed(0.05),
 )

@@ -70,7 +70,7 @@ Default `min_compile_time_secs=0.05` persists per-filter
 precompute compiles. Threshold history: 5.0 (≤ 2026-05-04, skipped
 the orchestrator chain), 0.5 (≤ 2026-05-22, missed per-filter
 micro-compiles), 0.05 (current). See
-`docs/inference/compilation_cache.md` for full details.
+`docs/performance/compilation.md` for full details.
 
 ## Naming contract (MANDATORY)
 
@@ -197,10 +197,14 @@ model = SEDModel.build(
   `agn_log_lbol`, torus on `agn_power`, polar via the legacy face-on proxy) —
   the GRAHSP/AGNfitter-style bookkeeping. See `AGNSEDComponentConfig.agn_norm`.
 - Sentinels (`FREE`, `FIXED`) are singletons exported from `tengri`.
-- Recipes: `tengri.recipes.*` — five curated starting points
-  (`star_forming_photometry`, `quiescent_z0`, `agn_panchromatic`,
-  `stochastic_sfh_jwst`, `mock_recovery_minimal`). Each docstring states its
-  SSP requirement (bare-stellar vs any).
+- Recipes: `tengri.recipes.*` — ten curated starting points. Five general
+  (`star_forming_photometry`, `quiescent_z0`, `stochastic_sfh_jwst`,
+  `high_z`, `photoz`), three AGN (`agn_panchromatic`, `composable_agn`,
+  `unified_agn`), and two for forward-only work (`mock_recovery_minimal`,
+  `dust_demo`). Each docstring states its SSP requirement — three values,
+  not two: bare-stellar, wNE (with-nebular-emission), or any.
+  `tengri.list_recipes()` is the live list — do not re-enumerate them
+  from memory.
 - The flat-kwarg `Parameters(...)` form is the **expert escape hatch** — still
   works, still used internally, but not the recommended user-facing path.
 
@@ -384,7 +388,7 @@ context *before* entering JAX transforms. The context's
 - Ray Tracing: step_size=0.05 for D~137; sharp viability cliff at ~0.06 (acceptance drops to 0%)
 - NIFTy geoVI: use 4-12 samples per KL iteration, not 80
 - `VIConfig.n_samples=3` doubles to 6 effective samples via `mirror_samples=True` — when tuning, think in effective samples
-- `"vi"` (NIFTy) and the pure-JAX `"native_vi_nonlinear"` / `"native_vi_linear"` target the same objective but are NOT posterior-equivalent. Native is ~19× faster warm on 7-D and ~25× on 137-D stochastic (2.8s vs 71s), but PSD timescale `sfh_field_psd_tau_myr` differs by an order of magnitude between paths (82 vs 6 Myr). Both native backends are `tier=experimental` and registry-flagged `[UNSTABLE]` (segfault on DPL/dense_basis photometry mocks) — validate per-problem before swapping. There is no `"vi_native"`; that name raises `KeyError`. See `bench/reports/2026-04-17_native_vs_nifty.md`
+- `"vi"` (NIFTy) and the pure-JAX `"native_vi_nonlinear"` / `"native_vi_linear"` target the same objective but are NOT posterior-equivalent. Native is ~19× faster warm on 7-D and ~25× on 137-D stochastic (2.8s vs 71s), but PSD timescale `sfh_field_psd_tau_myr` differs by an order of magnitude between paths (82 vs 6 Myr). Both native backends are `tier=broken` (segfault on DPL/dense_basis photometry mocks) — do NOT reach for them, and never teach them in an example. On the batched catalog path they raise `NotImplementedError` for per-galaxy redshift and for presence masks; use `method="mcmc_nuts"` / `"mcmc_hmc"` (both batched and vmappable) or `method="map"` (sequential) instead. There is no `"vi_native"`; that name raises `KeyError`. See `bench/reports/2026-04-17_native_vs_nifty.md`
 - Use `.shape[0]` instead of `len()` on JAX arrays to avoid `ConcretizationTypeError` under JIT
 - Use tolerance comparison (`abs(x - default) < 1e-6`) not `==` for float equality on traced values
 - IGM `igm_transmission(wave_obs, z)` takes **observed-frame** wavelengths (not rest-frame)

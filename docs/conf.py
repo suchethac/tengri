@@ -561,11 +561,11 @@ exclude_patterns = [
     "auto_examples/**/*.codeobj.json",
     "auto_examples/**/*.zip",
     "auto_examples/**/*.ipynb",
-    # Narrative sections superseded by repo root notebooks/ spine
+    # Narrative sections superseded by repo root notebooks/ spine.
+    # ``forward_model/`` and ``fitting/`` are gone: the former's one page is
+    # now published as ``forward_model.md``, the latter held only a toctree.
     "getting_started/**",
-    "forward_model/**",
     "inference/**",
-    "fitting/**",
     "advanced/**",
     "developer/**",
     "dev/**",
@@ -595,11 +595,12 @@ exclude_patterns = [
     # posterior, so this longer treatment is redundant. Inbound prose links
     # in 04/06/07 now point at the quickstart instead.
     "spine/05_fitting_photometry.ipynb",
-    # Guides section hidden from the published sidebar (2026-06). These four
-    # pages cross-reference only each other and index.md, so excluding them
-    # together leaves no dangling toctree entries or broken links.
+    # Guides section hidden from the published sidebar (2026-06). Two of the
+    # original four are now published: ``method_selection.md`` (README points
+    # at it) and ``known_limitations.md`` (a runtime warning in
+    # ``sed_model.py`` tells users to read it). The two below stay excluded
+    # because ``spine/07_joint_photo_spec`` and ``tengri.list_recipes()``
+    # already cover them; inbound links were repointed there.
     "recipes.md",
     "joint_fitting.md",
-    "method_selection.md",
-    "known_limitations.md",
 ]

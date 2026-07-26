@@ -103,7 +103,7 @@ model_skirtor = tengri.SEDModel.build(
     agn={
         "all_params": tengri.FIXED,
         "log_lbol": LOG_LBOL,
-        "frac": 1.0,
+        "lum_ratio": 1.0,
         "disc": {"type": "multicolor", "all_params": tengri.FIXED},
         "torus": {"type": "skirtor", "all_params": tengri.FIXED},
     },
@@ -121,7 +121,7 @@ L_nu_toy = np.asarray(
     demo_graybody_torus(
         jnp.asarray(model_skirtor.wavelengths),
         agn_log_lbol=LOG_LBOL,
-        agn_frac=1.0,
+        agn_lum_ratio=1.0,
         agn_T_torus=300.0,
         agn_torus_frac=0.5,
     )

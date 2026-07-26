@@ -245,7 +245,11 @@ def _emit_cb19_warnings(ionizing_source_warning: str, continuum_warning: str) ->
             "binary stars as the ionizing source. The 6D parameter space does NOT "
             "include variation in ionizing SED hardness. For AGN-ionized or "
             "shock-excited regions, use MappingsPhotoAGNBackend or ShockEmission. "
-            "To suppress: pass ionizing_source_warning='suppress'."
+            "To suppress when building via SEDModel.build: "
+            "warnings.filterwarnings('ignore', message='CB19Backend: the CLOUDY'). "
+            "(ionizing_source_warning='suppress' also works, but it is a "
+            "CB19Backend(...) constructor argument and the build grammar does "
+            "not forward it.)"
         )
         if ionizing_source_warning == "raise":
             raise ValueError(msg)
@@ -257,7 +261,12 @@ def _emit_cb19_warnings(ionizing_source_warning: str, continuum_warning: str) ->
             "returns zeros. For rest-frame UV continuum accuracy (e.g. z > 2 galaxies "
             "where nebular continuum contributes 10-40% of UV flux), combine with "
             "CloudyGridBackend or CueBackend for the continuum. "
-            "To suppress: pass continuum_warning='suppress'."
+            "To suppress when building via SEDModel.build: "
+            "warnings.filterwarnings('ignore', "
+            "message='CB19Backend provides no nebular continuum'). "
+            "(continuum_warning='suppress' also works, but it is a "
+            "CB19Backend(...) constructor argument and the build grammar does "
+            "not forward it.)"
         )
         if continuum_warning == "raise":
             raise ValueError(msg)

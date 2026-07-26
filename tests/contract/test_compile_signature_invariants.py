@@ -109,8 +109,12 @@ class TestCompileSignatureInvariants:
         # (11-14 added 2026-07: observation feature channels are baked into
         # the loss closure, so they must key the engine/loss cache — else a
         # joint phot+lines Fitter reuses a photometry-only compiled loss.)
-        assert len(fitter_sig) == 14, (
-            f"fitter_sig field count changed from 14 to {len(fitter_sig)}. "
+        # 15. params_override key (#1329): the per-fit fixed-value override is
+        # baked into the loss closure via fitter._fixed_values, so two fits
+        # differing only by override must compile distinct losses — else fit #2
+        # silently reuses fit #1's baked redshift. None when no override.
+        assert len(fitter_sig) == 15, (
+            f"fitter_sig field count changed from 15 to {len(fitter_sig)}. "
             "If intentional, update this assertion and the docstring."
         )
 
