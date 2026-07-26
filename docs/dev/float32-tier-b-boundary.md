@@ -198,6 +198,20 @@ A `forward_dtype="float32"` build gives the identical MAP — necessarily so, si
 that knob casts nothing (#1433) and the two builds are the same computation. Pinned
 by `test_inference_grad_float32.py`.
 
+**Scope of that result, corrected (#1436).** It was measured on stellar + dust, which
+turned out to be the one configuration with no large *positive* scale seam. Extending
+the same measurement to dust IR (+44.5 dex) and AGN (+34.6 dex) found float32
+likelihood gradients **~30% wrong** — finite, plausible, and silent, so a fit
+converged confidently to the wrong answer. Cause: eight further peak factorizations
+were missing `stop_gradient`, the #1415 defect at more sites. Fixed; the error is now
+7.7e-04 (dust IR) and 1.1e-03 (AGN), float64 bit-identical, guarded by
+`test_float32_grad_bolometric_seams.py`.
+
+The lesson generalizes past this fix: **a float32 result established on one model
+configuration says nothing about a configuration with a different scale seam.** The
+seams are what float32 is sensitive to, so coverage has to be enumerated by seam, not
+by "a representative model".
+
 The exact-op localization was the crux: `checkify` named the primitive
 (`dot_general`) but not the line; `jax.make_jaxpr(jax.grad(nlp)).eqns` with
 `source_info_util.summarize` pointed at the phot-LUT block, which `debug_nans`
