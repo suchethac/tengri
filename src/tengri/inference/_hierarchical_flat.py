@@ -6,6 +6,12 @@
 with them but because the only flat-vector formulation lived *inside*
 ``_run_raytrace`` as a set of closures, reachable by exactly one sampler.
 
+This seam drives **19 of 20**. ``nss`` is deliberately excluded — see
+:data:`FLAT_UNSUPPORTED`. The prior transform it would need is exact and is
+provided here; what is missing is a real nested sampler on top of it, and a
+blind rejection stand-in returns biased samples rather than an approximation
+(#1429).
+
 This module lifts that formulation out. Once the problem is
 ``(init_flat, log_likelihood, log_prior, prior_transform)`` on an unconstrained
 vector, every sampler in the registry is a plain function call.
@@ -73,7 +79,22 @@ FLAT_SAMPLERS: dict[str, str] = {
     "map": "map",
     "laplace": "map",
     "pathfinder": "nuts_pathfinder",
-    "nss": "nss",
+}
+
+#: Registered backends that this seam deliberately does NOT drive, and why.
+#: Listed so ``PopulationFitter`` can raise a specific error instead of a generic
+#: "unknown method", and so the reason survives longer than a commit message.
+FLAT_UNSUPPORTED: dict[str, str] = {
+    "nss": (
+        "nested sampling needs constrained exploration WITHIN the likelihood "
+        "contour (slice/MCMC steps from a surviving live point). A blind "
+        "rejection sampler drawn from the prior is not an acceptable stand-in: "
+        "measured on a 2-galaxy D=18 problem it exhausted its attempt budget "
+        "and terminated at iteration 147 of a requested 200, returning a "
+        "silently truncated -- and therefore biased -- sample set. The prior "
+        "transform this seam provides is exact and correct; what is missing is "
+        "the sampler on top of it. See #1429."
+    ),
 }
 
 
@@ -149,10 +170,16 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
 
     Notes
     -----
-    The construction mirrors what ``PopulationFitter._run_raytrace`` did inline;
-    it is lifted here verbatim in behavior so that ray tracing and every newly
-    reachable sampler are guaranteed to be sampling the *same* posterior. If the
-    two ever diverge, that is a bug in this module, not a modeling choice.
+    This is now the ONLY definition of the hierarchical posterior.
+    ``_run_raytrace`` used to build its own ``init``, ``ravel_pytree`` and
+    ``log_prob`` inline — ~135 lines textually equivalent to this function but
+    structurally independent, so nothing prevented the two from drifting into
+    sampling different distributions while every docstring claimed otherwise.
+    It calls this builder instead, verified bit-for-bit: raytrace on a fixed key
+    returned ``sigma=1.667, tau=154.89`` both before and after the change.
+
+    So "every sampler targets the same posterior" is a structural property here,
+    not a claim requiring anyone's diligence.
     """
     from tengri import Fitter
     from tengri.inference.backends.map_dispatch import build_vectorized_map_solver
@@ -331,7 +358,6 @@ def run_flat_sampler(
     memory_mode="low",
     map_steps=300,
     map_learning_rate=0.05,
-    n_live=200,
     allow_unvalidated=False,
     verbose=True,
     **_ignored,
@@ -374,8 +400,6 @@ def run_flat_sampler(
         Passed to :func:`build_flat_problem`.
     map_steps, map_learning_rate : int, float
         Gradient-ascent settings for the ``map`` / ``laplace`` drivers.
-    n_live : int
-        Live points for the ``nss`` driver.
     allow_unvalidated : bool
         Opt in to ``tier="broken"`` backends, exactly as ``Fitter.run`` does.
         Required for ``pathfinder``/``mcmc_ghmc``/``mcmc_mclmc``, which stay
@@ -504,8 +528,8 @@ def run_flat_sampler(
         chain = best[None, :]
         extra = {"n_steps": map_steps, "log_prob": float(prob.log_prob(best))}
 
-    else:  # nss
-        chain, extra = _run_nested(prob, key_run, n_live=n_live, n_samples=n_samples)
+    else:  # pragma: no cover - FLAT_SAMPLERS admits no other driver
+        raise ValueError(f"no driver for {method!r}")
 
     wall_time = time.time() - t0
     shared_arr = jax.vmap(prob.extract_shared)(chain)
@@ -532,39 +556,3 @@ def run_flat_sampler(
             **extra,
         },
     )
-
-
-def _run_nested(prob, key, *, n_live, n_samples):
-    """Nested sampling on the unit cube, via the exact probit prior transform.
-
-    Uses a rejection-based live-point update: draw from the cube, map through
-    :attr:`FlatProblem.prior_transform`, and keep points above the current
-    likelihood contour. Deliberately simple — the interesting part is that the
-    prior transform is *exact* (the hierarchical prior is iid N(0,1)), so no
-    approximate bijector is involved.
-    """
-    log_l = jax.jit(prob.log_likelihood)
-    cube = jax.random.uniform(key, (n_live, prob.n_dim))
-    live = jax.vmap(prob.prior_transform)(cube)
-    live_ll = jax.vmap(log_l)(live)
-
-    dead = []
-    k = key
-    for i in range(n_samples):
-        worst = int(jnp.argmin(live_ll))
-        dead.append(live[worst])
-        threshold = live_ll[worst]
-        # Replace the worst point with a fresh draw above the contour.
-        for _ in range(50):
-            k, sub = jax.random.split(k)
-            cand = prob.prior_transform(jax.random.uniform(sub, (prob.n_dim,)))
-            cand_ll = log_l(cand)
-            if float(cand_ll) > float(threshold):
-                live = live.at[worst].set(cand)
-                live_ll = live_ll.at[worst].set(cand_ll)
-                break
-        else:
-            # Contour became unreachable by blind sampling; stop early rather
-            # than spin. Reported so the caller can see it happened.
-            return jnp.stack(dead), {"n_live": n_live, "terminated_early_at": i}
-    return jnp.stack(dead), {"n_live": n_live, "terminated_early_at": None}

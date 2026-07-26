@@ -26,7 +26,11 @@ import re
 import pytest
 
 from tengri.inference._backend_registry import _BACKENDS
-from tengri.inference._hierarchical_flat import FLAT_SAMPLERS, build_flat_problem
+from tengri.inference._hierarchical_flat import (
+    FLAT_SAMPLERS,
+    FLAT_UNSUPPORTED,
+    build_flat_problem,
+)
 from tengri.inference.hierarchical import PopulationFitter
 
 pytestmark = pytest.mark.regression_bug
@@ -44,11 +48,53 @@ def _tier(name):
     return getattr(e, "tier", None) or (e.get("tier") if isinstance(e, dict) else None)
 
 
-def test_every_registered_backend_is_reachable_hierarchically():
-    """The headline property: no backend is refused for lack of a runner."""
-    reachable = _method_map_keys() | set(FLAT_SAMPLERS)
-    missing = sorted(set(_BACKENDS) - reachable)
-    assert not missing, f"backends with no hierarchical runner: {missing}"
+def test_every_registered_backend_is_accounted_for():
+    """No backend is silently absent: it either has a runner or a stated reason.
+
+    19 of 20 are driven. ``nss`` is in FLAT_UNSUPPORTED with an explanation,
+    which is the honest state — see the module docstring. The failure this
+    guards is a backend that is missing from BOTH tables, i.e. refused with a
+    generic error and no reason anyone can find later.
+    """
+    accounted = _method_map_keys() | set(FLAT_SAMPLERS) | set(FLAT_UNSUPPORTED)
+    missing = sorted(set(_BACKENDS) - accounted)
+    assert not missing, f"backends neither driven nor explained: {missing}"
+
+
+def test_nss_is_refused_with_a_reason_not_shipped_broken():
+    """A degenerate sampler must not be reachable just to make a count look good.
+
+    The blind-rejection nested sampler first written here exhausted its attempt
+    budget and terminated at iteration 147 of a requested 200 on a 2-galaxy
+    D=18 problem, returning silently truncated -- therefore biased -- samples.
+    Removed rather than shipped. The prior transform it needs is exact and is
+    still provided; what is missing is a real sampler on top of it (#1429).
+    """
+    assert "nss" not in FLAT_SAMPLERS
+    assert "nss" in FLAT_UNSUPPORTED
+    reason = FLAT_UNSUPPORTED["nss"]
+    assert "constrained exploration" in reason, "the reason must say what is missing"
+    assert "#1429" in reason, "the reason must point at the follow-up"
+
+
+def test_raytrace_and_the_seam_share_ONE_posterior_definition():
+    """The seam's central claim, made structural rather than asserted.
+
+    ``_run_raytrace`` used to build its own ``init``, its own ``ravel_pytree``
+    and its own ``log_prob`` inline -- ~135 lines textually equivalent to
+    ``build_flat_problem`` but structurally independent, so nothing stopped the
+    two from drifting into sampling different distributions while every
+    docstring claimed they agreed. It now calls the shared builder.
+
+    Verified bit-for-bit at the time of the change: raytrace on a fixed key
+    returned sigma=1.667, tau=154.89 both before and after.
+    """
+    src = inspect.getsource(PopulationFitter._run_raytrace)
+    assert "build_flat_problem(" in src, (
+        "raytrace must use the shared posterior, not a private copy"
+    )
+    assert "prob.extract_shared" in src, "the latent->physical map must be shared too"
+    assert "def log_prob(" not in src, "a second log_prob has reappeared in raytrace"
 
 
 def test_broken_tier_backends_stay_gated():
