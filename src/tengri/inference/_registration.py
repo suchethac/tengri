@@ -53,29 +53,34 @@ from tengri.inference.backends.vi.nifty import (
 )
 
 
-def _mcmc_auto_pick(context, *, key, init_from=None, **kw):
+def _mcmc_auto_pick(context, *, key, init_from=None, precondition=None, **kw):
     """``mcmc`` auto-dispatcher: NUTS for low-D, raytrace for high-D.
 
     Threshold is looked up at call time (not import time) so this
     module has no import dependency on ``fitter.py`` — keeps the
     package import graph one-way and lets ``inference/__init__.py``
     rely on plain alphabetical import ordering.
+
+    ``precondition`` is named explicitly rather than left in ``**kw`` because which
+    branch runs decides whether it can be honored, and the two branches disagree.
+    Which one *is* capable comes from the registry, not from a name written here.
     """
+    from tengri.inference._backend_registry import check_capabilities, get_backend
     from tengri.inference.fitter import _MCMC_AUTO_D_THRESHOLD
 
     if context.spec.n_free <= _MCMC_AUTO_D_THRESHOLD:
-        return _ctx_run_nuts(context, key=key, init_from=init_from, **kw)
-
-    # Ray tracing is not a Hamiltonian sampler — there is no integrator metric to
-    # whiten, so it does not take ``precondition``. Refuse an explicit request rather
-    # than drop it: the caller would otherwise get no preconditioning and no signal.
-    if kw.pop("precondition", None):
-        raise ValueError(
-            f"precondition=True is not supported by the ray-tracing sampler, which "
-            f"method='mcmc' selects at D={context.spec.n_free} > "
-            f"{_MCMC_AUTO_D_THRESHOLD} free parameters. Request method='mcmc_nuts' or "
-            "method='mcmc_hmc' explicitly to keep metric preconditioning."
+        return _ctx_run_nuts(
+            context, key=key, init_from=init_from, precondition=precondition, **kw
         )
+
+    # High-D branch. Ray tracing is not a Hamiltonian sampler, so today it has no
+    # integrator metric to whiten — but that is the registry's fact to state, not
+    # this function's. Refuse an explicit request rather than drop it silently; a
+    # bare ``precondition=None`` is the auto-policy and resolves to off.
+    selected = get_backend("mcmc_raytrace")
+    check_capabilities(selected, {"precondition": precondition})
+    if selected.accepts_precondition:
+        kw["precondition"] = precondition
     return _ctx_run_raytrace(context, key=key, init_from=init_from, **kw)
 
 
@@ -195,6 +200,7 @@ register_backend(
     short_doc="Auto MCMC: NUTS for low-D, raytrace for high-D",
     requires=("blackjax",),  # NUTS branch needs it; raytrace branch is pure JAX
     legacy_fitter=False,
+    accepts_precondition=True,
 )(_mcmc_auto_pick)
 
 register_backend(
@@ -206,6 +212,7 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    accepts_precondition=True,
 )(_ctx_run_nuts)
 
 register_backend(
@@ -237,6 +244,7 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    accepts_precondition=True,
 )(_ctx_run_hmc)
 
 register_backend(
@@ -249,6 +257,7 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    accepts_precondition=True,
 )(_ctx_run_dynamic_hmc)
 
 register_backend(

@@ -175,6 +175,34 @@ INVARIANT = frozenset(
         "reprise",
         "incise",
         "incised",
+        # Missing inflections of verbs already listed above. The -ise -> -ize rule is
+        # applied per *word form*, not per lemma, so a family with a gap fails on
+        # exactly the absent form and nowhere else: "promise", "promised" and
+        # "promises" were all present, so the checker passed on those and demanded
+        # the non-word "promizing" for the participle alone. Same shape as the
+        # "advise"/"advising" gap noted above, which is why the fix is the family and
+        # not the one word that happened to surface.
+        "promising",
+        "devising",
+        "disguising",
+        "premised",
+        "premising",
+        "surmises",
+        "surmising",
+        "apprises",
+        "apprising",
+        "enterprising",
+        "franchised",
+        "franchises",
+        "franchising",
+        "merchandising",
+        "chastised",
+        "chastises",
+        "chastising",
+        "reprised",
+        "reprises",
+        "incises",
+        "incising",
         "analyses",  # plural noun of 'analysis' (invariant) — protect the noun
         "four",
         "hour",
