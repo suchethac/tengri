@@ -39,6 +39,15 @@ class BackendEntry:
         :class:`InferenceContext` Protocol. The flag is removed once all
         backends migrate (see ADR-0010 / final PR of the inference-
         backend refactor).
+    accepts_precondition : bool
+        Whether the runner understands ``precondition=`` — metric preconditioning
+        of the standardized latent space (see
+        :mod:`tengri.inference.preconditioning`). True for the Hamiltonian samplers,
+        whose integrator has a metric to whiten. Declared here rather than inferred,
+        so dispatch can refuse the kwarg at one seam instead of letting it raise
+        ``TypeError`` deep inside a backend — and so the ``mcmc`` auto-dispatcher
+        can ask the registry about whichever backend it picked rather than naming
+        one in an ``if``.
     """
 
     name: str
@@ -47,6 +56,7 @@ class BackendEntry:
     short_doc: str = ""
     requires: tuple[str, ...] = field(default_factory=tuple)  # optional dep names
     legacy_fitter: bool = True
+    accepts_precondition: bool = False
     # Predicate called with whatever ``runner`` receives (Fitter or InferenceContext).
     # Returns True if this backend can run for the given target's spec/dims/dtypes.
     # Default ``None`` means "no compatibility constraint" (always usable).
@@ -93,6 +103,7 @@ def register_backend(
     aliases: tuple[str, ...] = (),
     legacy_fitter: bool = True,
     is_compatible: Callable[[Any], bool] | None = None,
+    accepts_precondition: bool = False,
 ):
     """Decorator to register an inference backend.
 
@@ -110,6 +121,10 @@ def register_backend(
         Optional dependency import names (e.g., ("blackjax",)).
     aliases : tuple[str, ...]
         Additional names that map to this backend.
+    accepts_precondition : bool
+        Declare that the runner takes ``precondition=``. See
+        :class:`BackendEntry`. Kept honest against the runner's real signature by
+        ``tests/contract/test_preconditioning_capability.py``.
 
     Raises
     ------
@@ -131,6 +146,7 @@ def register_backend(
             requires=requires,
             legacy_fitter=legacy_fitter,
             is_compatible=is_compatible,
+            accepts_precondition=accepts_precondition,
         )
         _BACKENDS[name] = entry
         for a in aliases:
@@ -289,6 +305,57 @@ def refuse_if_broken(method: str, *, allow_unvalidated: bool = False) -> None:
     entry = _BACKENDS.get(method)
     if entry is not None:
         check_usable(entry, allow_unvalidated=allow_unvalidated)
+
+
+#: Capability-gated keyword arguments: kwarg name -> :class:`BackendEntry` field.
+#:
+#: A kwarg belongs here when it names a *sampler capability* rather than a tuning
+#: knob — something a backend either implements or cannot. Gating at one seam keeps
+#: the option out of the dispatcher's control flow: ``mcmc``'s auto-pick asks the
+#: registry about the backend it chose instead of naming one in an ``if``.
+_CAPABILITY_FIELDS: dict[str, str] = {"precondition": "accepts_precondition"}
+
+
+def check_capabilities(entry: BackendEntry, kwargs: dict) -> None:
+    """Refuse a capability kwarg the backend does not implement.
+
+    Without this the kwarg travels until something rejects it: ``run_nifty_vi`` and
+    ``run_map`` take no ``**kwargs``, so ``precondition=True`` on ``method='vi'``
+    surfaces as ``TypeError: run_nifty_vi() got an unexpected keyword argument`` from
+    inside a backend the caller never named.
+
+    ``ValueError``, not ``TypeError``: the caller never called that runner, so this is
+    an unsupported *combination* of method and option rather than a malformed call.
+    ``_mcmc_auto_pick`` already made that choice for the raytrace branch (#1359); this
+    extends the same answer to every backend instead of leaving the rest on a deep
+    ``TypeError``.
+
+    Only truthy values are refused. ``precondition=False`` asks for the behavior every
+    backend already has, so rejecting it would be pedantic.
+
+    Parameters
+    ----------
+    entry : BackendEntry
+        The backend about to be dispatched.
+    kwargs : dict
+        Keyword arguments destined for ``entry.runner``.
+
+    Raises
+    ------
+    ValueError
+        If ``kwargs`` carries a truthy capability the backend does not declare.
+    """
+    for kwarg, field_name in _CAPABILITY_FIELDS.items():
+        if not kwargs.get(kwarg):
+            continue
+        if getattr(entry, field_name):
+            continue
+        capable = sorted({e.name for e in all_backends() if getattr(e, field_name)})
+        raise ValueError(
+            f"Inference method '{entry.name}' does not support {kwarg}={kwargs[kwarg]!r}. "
+            f"Backends that do: {capable}. "
+            f"Drop the argument, or choose one of those methods."
+        )
 
 
 def all_backends(*, include_broken: bool = True) -> list[BackendEntry]:

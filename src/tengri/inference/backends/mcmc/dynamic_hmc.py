@@ -21,10 +21,7 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
 )
-from tengri.inference.preconditioning import (
-    _resolve_precondition,
-    preconditioned_logdensity,
-)
+from tengri.inference.preconditioning import prepare_preconditioning
 
 logger = logging.getLogger(__name__)
 
@@ -93,12 +90,10 @@ def run_dynamic_hmc(
 
     # Metric preconditioning (#1301) — see ``run_nuts`` for the rationale. Linear
     # change of variables, so the posterior is untouched; draws are mapped back below.
-    precondition = _resolve_precondition(precondition, len(init_flat))
-    preconditioner = None
-    if precondition:
-        log_posterior_flat_2arg, preconditioner, init_flat = preconditioned_logdensity(
-            log_posterior_flat_2arg, init_flat, data_args
-        )
+    problem = prepare_preconditioning(
+        log_posterior_flat_2arg, init_flat, data_args, precondition=precondition
+    )
+    log_posterior_flat_2arg, init_flat = problem.logdensity, problem.init_flat
 
     n_dim = len(init_flat)
 
@@ -119,7 +114,7 @@ def run_dynamic_hmc(
     # dynamic_hmc.init needs random_generator_arg, incompatible with
     # window_adaptation. Use HMC warmup to tune step_size/mass matrix,
     # then initialize dynamic_hmc state separately.
-    adapt_key = ("hmc", not use_dense, bool(precondition))
+    adapt_key = ("hmc", not use_dense, problem.enabled)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     if cached is not None:
@@ -209,8 +204,7 @@ def run_dynamic_hmc(
     wall_time = time.time() - t0
 
     # Leave the whitened coordinates before the draws are read as parameters.
-    if preconditioner is not None:
-        positions = positions @ preconditioner.matrix.T
+    positions = problem.restore(positions)
 
     samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)
