@@ -17,13 +17,43 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
+from tengri.utils.grid import (
+    DEFAULT_LOG_AGE_MAX,
+    DEFAULT_LOG_AGE_MIN,
+    make_log_age_grid,
+)
+
+__all__ = [
+    "LOG_AGE_MAX",
+    "LOG_AGE_MIN",
+    "compute_sqrt_power_drw",
+    "drw_innovations_gp_from_xi",
+    "drw_linear_gp_from_xi",
+    "generate_gp_batch",
+    "generate_gp_fourier",
+    "gp_from_xi",
+    "log_age_grid_step",
+    # Re-exported from tengri.utils.grid, its single definition (#1402).
+    # Listed here so the existing ``from ...gp_sfh import make_log_age_grid``
+    # importers keep working and the re-export is explicit rather than an
+    # apparently-unused import.
+    "make_log_age_grid",
+]
+
 # Default log10(age/yr) bounds for the SFH grid: 1 Myr → ~13.8 Gyr.
 # Exposed as module constants so callers that need the static step size
 # (e.g. ``StellarSEDComponent.apply`` under JIT, where indexing a traced
 # ``jnp.linspace`` and calling ``float()`` would raise) can recompute it
 # without re-tracing the grid.
-LOG_AGE_MIN: float = 6.0
-LOG_AGE_MAX: float = 10.14
+#
+# Aliases, not literals (#1402). These are the SFH age grid's bounds, and
+# ``log_age_grid_step`` below defaults off them while ``make_log_age_grid``
+# defaults off :mod:`tengri.utils.grid`'s. Re-declaring 6.0 / 10.14 here would
+# let the analytic step size drift away from the grid it is supposed to
+# describe — the same silent desync the duplicated ``make_log_age_grid``
+# created, one level down.
+LOG_AGE_MIN: float = DEFAULT_LOG_AGE_MIN
+LOG_AGE_MAX: float = DEFAULT_LOG_AGE_MAX
 
 
 def log_age_grid_step(
@@ -50,45 +80,21 @@ def log_age_grid_step(
     return (log_age_max - log_age_min) / (n_grid - 1)
 
 
-def make_log_age_grid(
-    n_grid: int = 256, log_age_min: float = LOG_AGE_MIN, log_age_max: float = LOG_AGE_MAX
-) -> jnp.ndarray:
-    """Create uniform grid in log10(age/yr).
-
-    Default range: 1 Myr to ~13.8 Gyr (approximately the age of the universe).
-
-    Parameters
-    ----------
-    n_grid : int, optional
-        Number of grid points (should be even for FFT efficiency). Default: 256.
-    log_age_min : float, optional
-        Minimum log10(age/yr). Default: 6.0 (1 Myr).
-    log_age_max : float, optional
-        Maximum log10(age/yr). Default: 10.14 (~13.8 Gyr).
-
-    Returns
-    -------
-    ndarray, shape (n_grid,)
-        Uniform grid in log10(age/yr) [dimensionless log values].
-
-    Notes
-    -----
-    **JIT-compatible**: yes — uses ``jnp.linspace``.
-
-    This grid is used as the internal representation for age in GP-based SFH models.
-    The log-space parametrization provides better resolution at young ages and
-    maps naturally to the logarithmic timescales of stellar evolution.
-
-    Examples
-    --------
-    >>> from tengri import make_log_age_grid
-    >>> grid = make_log_age_grid(n_grid=64)
-    >>> grid.shape
-    (64,)
-    >>> float(grid[0]), float(grid[-1])
-    (6.0, 10.14)
-    """
-    return jnp.linspace(log_age_min, log_age_max, n_grid)
+# ``make_log_age_grid`` is re-exported from :mod:`tengri.utils.grid` (imported
+# at the top of this module), not defined here (#1402).
+#
+# It used to be defined in both places, byte-identical in behavior — verified
+# numerically equal at n_grid 16/64/256/257 — but as two distinct function
+# objects with live importers on opposite sides of the forward/inference
+# boundary: ``components/stellar/component.py`` and ``sfh/_prior_sampling.py``
+# took this copy, while ``inference/standardized.py`` took the other. This is
+# the SFH age grid, so a correction landing in one copy and not the other would
+# silently desync the forward model's age weights from the standardization
+# inference runs on. Nothing would raise; the fit would just be biased.
+#
+# The re-export keeps ``from ...gp_sfh import make_log_age_grid`` working for
+# existing importers, including the top-level ``tengri`` namespace, which
+# imports it from here.
 
 
 def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray, n_points: int) -> jnp.ndarray:
