@@ -28,6 +28,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.inference._hierarchical_flat import FLAT_SAMPLERS, run_flat_sampler
 from tengri.inference.fitter import resolve_method
 from tengri.utils.transforms import to_bounded, to_unbounded
 
@@ -545,14 +546,20 @@ class PopulationFitter:
         # Resolve old method names to canonical names, emitting deprecation warnings
         method = resolve_method(method, emit_warning=True)
 
-        # Hierarchical-specific overrides applied after resolve_method:
-        #   mcmc_ess → native_vi_linear  (ESS is a Fitter-only method)
-        # vi_native / vi_native_linear are already resolved to canonical names by
-        # resolve_method above, so they need no explicit entry in _method_map.
-        _HIERARCHICAL_OVERRIDES = {
-            "mcmc_ess": "native_vi_linear",
-        }
-        method = _HIERARCHICAL_OVERRIDES.get(method, method)
+        # There are no hierarchical-specific method overrides any more.
+        #
+        # There used to be one: `mcmc_ess -> native_vi_linear`, on the grounds
+        # that "ESS is a Fitter-only method". It silently substituted a
+        # DIFFERENT sampler — and after #231 a tier="broken" one — for the
+        # method the caller named, with no warning and no entry in the result's
+        # diagnostics. A user who asked for elliptical slice sampling got MGVI
+        # and had no way to notice.
+        #
+        # The premise is now false: `mcmc_ess` runs hierarchically through the
+        # flat seam like every other sampler. Silent substitution is never the
+        # right repair for an unsupported method — either support it, or raise
+        # and say so. `resolve_method` above still maps deprecated *spellings*
+        # to canonical names, which is renaming, not substitution.
 
         # 6 canonical VI methods for PopulationFitter (no CFM in this table):
         #   vi_nonlinear / vi_nonlinear_fast → _run_geovi (standard NIFTy optimize_kl)
@@ -576,13 +583,21 @@ class PopulationFitter:
         if method not in _method_map:
             if method == "evi_nifty":
                 return self._run_geovi_cfm(key=key, sample_mode="evi", **kwargs)
-            else:
-                raise ValueError(
-                    f"Unknown method: {method!r}. "
-                    f"Supported: 'vi_nonlinear_fast' (default), 'vi_nonlinear', "
-                    f"'vi_linear_fast', 'vi_linear', 'native_vi_linear', "
-                    f"'native_vi_nonlinear', 'mcmc_raytrace'."
-                )
+            # Everything the flat seam can drive. The hierarchical posterior is
+            # already a flat unconstrained vector with an iid N(0,1) prior (see
+            # _hierarchical_flat), so a sampler being "hierarchical" is a
+            # property of the problem, not of the sampler — there is nothing
+            # left to special-case per backend.
+            if method in FLAT_SAMPLERS:
+                return run_flat_sampler(self, method, key=key, **kwargs)
+            # Derive the advertised list; never hand-write it. The literal this
+            # replaced named 'vi_nonlinear_fast' as "(default)" for months after
+            # b7c4fa1e2 moved the default off it (#1394).
+            supported = sorted(set(_method_map) | set(FLAT_SAMPLERS) | {"evi_nifty"})
+            raise ValueError(
+                f"Unknown method: {method!r}. Supported "
+                f"({len(supported)}): {', '.join(supported)}."
+            )
 
         cfm_method, sample_mode = _method_map[method]
         if cfm_method == "geovi":
