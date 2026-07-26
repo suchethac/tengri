@@ -42,6 +42,16 @@ from tengri.components.nebular.shock import compute_shock_sed
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.protocols.component import SEDComponentConfig
 from tengri.utils.physics_constants import C_AA
+from tengri.utils.scale import apply_log10_scale, pow10 as _pow10
+
+#: Reference Hα luminosity the float32 path carries the shock shape at, as log10
+#: of erg/s (#1206). The shock SED is exactly linear in L_Hα, so ANY split of the
+#: scale is exact — but the split point decides whether float32 survives. Carrying
+#: at unit Hα pushes the whole ~41 dex onto ``apply_log10_scale``, whose Jacobian
+#: is ``10**offset`` and therefore ``inf`` past 38.5 dex: the forward stayed finite
+#: while the gradient became NaN. At 1e30 the carried array (~1e18) and the
+#: derivative (~1e30) both sit well inside float32.
+_SHOCK_LHA_LOG_REF: float = 30.0
 
 __all__ = ["ShockNebular", "ShockNebularConfig"]
 
@@ -171,8 +181,16 @@ class ShockNebular(SEDModelComponent):
         # ``inf * 0 = nan`` even though the resulting SED (~1e26 erg/s/Hz) is
         # perfectly representable. The shock SED is *exactly* linear in
         # ``l_shock_halpha`` (verified: ×10 per dex), so on the float32 path we
-        # evaluate the shape at unit Hα and re-apply the true luminosity as a
+        # carry the shape at a REFERENCE Hα and re-apply only the residual as a
         # log10 offset. Float64 keeps the linear expressions, bit-identical.
+        #
+        # The reference matters. Evaluating at unit Hα forces the whole ~41 dex
+        # onto ``apply_log10_scale``, whose Jacobian is exactly ``10**offset`` —
+        # 1e41, past the float32 maximum (3.4e38), so the FORWARD stayed finite
+        # while the reverse pass produced NaN and broke float32 NUTS. Splitting
+        # the scale (reference 1e30, residual ~11 dex) keeps the carried array
+        # (~1e18) AND the derivative (~1e11) comfortably in range. The split is
+        # exact: the shock SED is linear in L_Hα (verified x10/dex).
         # NB: gate on ``sed_in`` — the SED actually being accumulated — not on
         # ``wave``, which arrives as float64 even when the pipeline runs in
         # float32. ``sed_in`` is float32 for BOTH pure float32 and the
@@ -182,7 +200,11 @@ class ShockNebular(SEDModelComponent):
 
         if self.config.norm == "lhalpha":
             _log_l_shock_halpha = jnp.asarray(p["log_lhalpha"])
-            l_shock_halpha = jnp.asarray(1.0) if _f32 else jnp.power(10.0, p["log_lhalpha"])
+            l_shock_halpha = (
+                _pow10(_log_l_shock_halpha - _SHOCK_LHA_LOG_REF)
+                if _f32
+                else jnp.power(10.0, p["log_lhalpha"])
+            )
         else:
             # Relative: fraction of the galaxy's approximate Hα. Same
             # order-of-magnitude proxy (L(Hα) ~ 1e-3 L_bol) as the legacy
@@ -200,7 +222,7 @@ class ShockNebular(SEDModelComponent):
                     - 3.0
                     + jnp.log10(jnp.maximum(p["frac"], 1e-30))
                 )
-                l_shock_halpha = jnp.asarray(1.0)
+                l_shock_halpha = _pow10(_log_l_shock_halpha - _SHOCK_LHA_LOG_REF)
             else:
                 l_bol = -jnp.trapezoid(sed_in, nu)
                 l_halpha_approx = jnp.maximum(l_bol * 1e-3, 1e-30)
@@ -217,7 +239,5 @@ class ShockNebular(SEDModelComponent):
             shock_component=self.config.component,
         )
         if _f32:
-            from tengri.utils.scale import apply_log10_scale
-
-            shock_sed = apply_log10_scale(shock_sed, _log_l_shock_halpha)
+            shock_sed = apply_log10_scale(shock_sed, _SHOCK_LHA_LOG_REF)
         return sed_in + shock_sed, {"sed_shock": shock_sed}
