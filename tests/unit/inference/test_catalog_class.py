@@ -26,6 +26,22 @@ def fwd_3band(synthetic_ssp_wide, simple_observation):
 
 
 @pytest.fixture
+def fwd_3band_no_zrange(synthetic_ssp_wide, simple_observation):
+    """3-band ForwardModel WITHOUT a catalog_z_range — no runtime-z LUT."""
+    from tengri import FIXED, FREE, ForwardModel, SEDModel
+
+    sed = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=simple_observation,
+        sfh={"type": "dpl", "all_params": FREE},
+        dust={"type": "two_component", "all_params": FIXED, "tau_bc": 0.5},
+        neb={"type": "none"},
+        redshift=FIXED,
+    )
+    return ForwardModel.build(sed=sed, observation=simple_observation)
+
+
+@pytest.fixture
 def fwd_3band_zrange(synthetic_ssp_wide, simple_observation):
     """3-band ForwardModel with WavePrecomp catalog_z_range."""
     from tengri import FIXED, FREE, ForwardModel, SEDModel, WavePrecomp
@@ -185,14 +201,27 @@ def test_per_galaxy_redshift_reaches_forward_pass(fwd_3band):
     )
 
 
-def test_per_galaxy_redshift_batched_method_raises_not_drops(fwd_3band, table_3band):
-    """A batched method with per-galaxy redshift must fail loudly, not silently
-    drop z (which the batched paths would do — they stack only flux/noise)."""
+def test_per_galaxy_redshift_batched_guards(fwd_3band, fwd_3band_no_zrange, table_3band):
+    """The batched paths that cannot take per-galaxy z must fail loudly.
+
+    Two guarded combinations remain after #1349 (which made batched MCMC *with*
+    a ``catalog_z_range`` work — this test originally expected that case to
+    raise, and went stale unnoticed because ``tests/unit`` runs in no CI job):
+
+    * batched native VI never threads per-galaxy z → ``NotImplementedError``;
+    * batched MCMC without a ``catalog_z_range`` has no runtime-z LUT →
+      ``ValueError`` teaching the ``WavePrecomp(catalog_z_range=...)`` build.
+    """
     from tengri import Catalog
 
     cat = Catalog(fwd_3band, table_3band, flux_unit="cgs_fnu", redshift_col="z")
-    with pytest.raises(NotImplementedError, match="batched"):
-        cat.fit(method="mcmc_nuts", key=jax.random.PRNGKey(0), n_warmup=5, n_samples=5)
+    with pytest.raises(NotImplementedError, match="native VI"):
+        cat.fit(method="native_vi_linear", key=jax.random.PRNGKey(0))
+
+    with pytest.warns(UserWarning, match="catalog_z_range"):
+        cat_nz = Catalog(fwd_3band_no_zrange, table_3band, flux_unit="cgs_fnu", redshift_col="z")
+    with pytest.raises(ValueError, match="catalog_z_range"):
+        cat_nz.fit(method="mcmc_nuts", key=jax.random.PRNGKey(0), n_warmup=5, n_samples=5)
 
 
 def test_predict_mock_shapes(fwd_3band, param_table_3rows):
