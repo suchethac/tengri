@@ -184,15 +184,22 @@ cond(grad^2 H) at the MAP        1.1e5      (eigenvalues 0.81 ... 9.0e4)
 No diagonal mass matrix covers that, and a dense one estimated from warmup draws is both
 noisy and memory-hungry.
 
-`precondition=True` (on `mcmc_nuts`, `mcmc_hmc`, `mcmc_dynamic_hmc`) supplies the metric
-analytically instead. It is a **linear change of variables**, not a mass matrix:
+`precondition` (on `mcmc_nuts`, `mcmc_hmc`, `mcmc_dynamic_hmc`; default `None` = auto —
+**on** up to `PRECONDITION_MAX_DIM` = 1024 free parameters, off above, with explicit
+`True`/`False` honored as-is) supplies the metric analytically instead. It is a
+**linear change of variables**, not a mass matrix:
 
 ```
-G = -grad^2 log p   at the initial point, eigenvalues floored at 1.0
+G = -grad^2 log p   at the initial point, eigenvalue MAGNITUDES floored at 1.0
 G = L L^T,  A = L^{-T}      so  A A^T = G^{-1}  and  A^T G A = I
 
 sample  H(A zeta)   instead of   H(xi),   then map draws back with   xi = A zeta
 ```
+
+The magnitude (`max(|lambda|, 1.0)`, saddle-free Newton) matters at a non-stationary
+expansion point: a steeply *negative* direction is treated as steep, not flat — a
+signed floor left one unconverged-MAP fit mis-scaled by 51x. At a true stationary
+point all eigenvalues are positive and the two are identical.
 
 Because the map is linear its Jacobian is constant, so the posterior is unchanged — only
 the geometry the integrator sees. The eigenvalue floor of 1.0 is the prior's exact
@@ -211,8 +218,12 @@ approximation. Measured, it holds across the region a chain actually visits:
 **Practical notes.**
 
 - Pass `init_from` a MAP result so the metric is built where the chain will be.
-- It costs one dense `(D, D)` Hessian up front (`O(D)` backward passes) — worthwhile on
-  stiff posteriors at moderate `D`, not on easy low-dimensional ones.
+- Cost is not a constraint below the cap: the dense Hessian is **flat at ~2 s** from
+  D=25 to D=521 (`jax.hessian` is `jacfwd(jacrev)`, which vectorizes rather than taking
+  D sequential backward passes), and `eigh` + Cholesky is 0.11 s / 2.2 MB at D=521.
+  Only the `O(D^3)` factorization grows — hence the 1024 cap. "Easy low-dimensional"
+  posteriors turned out not to exist here: the simplest configuration measured
+  (double-power-law + photometry, D=7) already had raw cond 8.5e4.
 - Default is off; no existing fit changes behavior.
 - Gradient-free and self-tuning kernels (`mcmc_raytrace`, `mcmc_ess`, `mcmc_mclmc`) do
   not take the flag — whitening the integrator's metric is meaningless for them.

@@ -220,8 +220,11 @@ def run_nuts(
         - Zhang et al. 2022, "Pathfinder: Parallel quasi-Newton variational
           inference", JMLR 23, 306, arXiv:2108.03782.
 
-    precondition : bool, default False
-        Sample in metric-whitened coordinates. Every tengri parameter is
+    precondition : bool or None, default None
+        Sample in metric-whitened coordinates. ``None`` resolves by dimension —
+        **on** up to ``PRECONDITION_MAX_DIM`` (1024) free parameters, off above
+        (the same idiom ``dense_mass_matrix`` uses); explicit ``True`` /
+        ``False`` is honored as-is. Every tengri parameter is
         standardized, so the prior contributes exactly ``I`` to the metric and
         everything left is the likelihood's — which on the correlated-field
         posterior spans ``cond(grad^2 H) ~ 1e5``, far beyond what any single mass
