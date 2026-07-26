@@ -1141,13 +1141,29 @@ def fit_model(
     # deprecation warning since SEDModel.fit is now un-deprecated sugar (#1322).
     import warnings
 
+    from tengri.inference.fitter import split_fitter_kwargs
+
+    # ``params`` is the per-fit Fixed-value override (#1329); constructor-owned
+    # kwargs (calibration_marginalize, likelihood, ...) go to Fitter(...) and
+    # the rest to run() — spec §7's fit-time flags (#1378).
+    params_override = kwargs.pop("params", None)
+    ctor_kwargs, kwargs = split_fitter_kwargs(kwargs)
+
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
             message="Fitter\\(sed_model.*",
             category=DeprecationWarning,
         )
-        fitter = Fitter(model, data, noise, data_type=data_type, approx=approx)
+        fitter = Fitter(
+            model,
+            data,
+            noise,
+            data_type=data_type,
+            approx=approx,
+            params_override=params_override,
+            **ctor_kwargs,
+        )
     model.fitter_ = fitter
 
     # --- Optional MAP warm start ---
