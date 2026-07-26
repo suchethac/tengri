@@ -2,11 +2,10 @@
 """Independent per-galaxy catalog inference with optional K-way parallelism.
 
 Unlike :class:`PopulationFitter`, galaxies share no parameters.
-:class:`CatalogFitter` supports every method :class:`Fitter` accepts; for the
-batched methods (``mcmc_nuts`` / ``mcmc_hmc``, and the ``tier="broken"``
-``native_vi_linear`` / ``native_vi_nonlinear``) it vmaps K galaxies per
-``lax.map`` step so the compiled XLA graph stays O(1) in N while K galaxies
-execute simultaneously on-device.
+:class:`CatalogFitter` supports every method :class:`Fitter` accepts; for
+``mcmc_nuts``, ``mcmc_hmc`` and the two ``tier="broken"`` ``native_vi_*``
+backends it vmaps K galaxies per ``lax.map`` step so the compiled XLA graph
+stays O(1) in N while K galaxies execute simultaneously on-device.
 """
 
 from __future__ import annotations
@@ -24,6 +23,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
+from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
 DEFAULT_PERCENTILES: tuple[float, ...] = (16.0, 50.0, 84.0)
@@ -594,9 +594,8 @@ class _CatalogFitterOriginal:
     """Per-galaxy catalog inference with optional K-way on-device parallelism.
 
     Wraps all :class:`~tengri.inference.fitter.Fitter` inference methods with a
-    single ``run(method, ...)`` entry point. For the batched methods
-    (``mcmc_nuts`` / ``mcmc_hmc``, and the ``tier="broken"``
-    ``native_vi_linear`` / ``native_vi_nonlinear``), setting
+    single ``run(method, ...)`` entry point. For ``mcmc_nuts`` / ``mcmc_hmc``
+    (and the two ``tier="broken"`` ``native_vi_*`` backends), setting
     ``forward_chunk_size=K`` vmaps K galaxies per ``lax.map`` iteration so K
     galaxies execute in parallel on the accelerator while the XLA graph remains
     O(1) in the catalog size N.
@@ -686,20 +685,28 @@ class _CatalogFitterOriginal:
         ----------
         method : str
             Any method accepted by :class:`~tengri.inference.fitter.Fitter`.
-            ``mcmc_nuts`` (default) and ``mcmc_hmc`` support
-            ``forward_chunk_size``-based on-device parallelism, are the only
-            methods honoring ``devices``, and are the only batched methods
-            supporting per-galaxy redshift and presence masks.
-            ``native_vi_linear`` / ``native_vi_nonlinear`` also honor
-            ``forward_chunk_size`` but are ``tier="broken"`` and refuse to run
-            without ``allow_unvalidated=True``.
+            ``mcmc_nuts`` (default), ``mcmc_hmc`` and the two ``native_vi_*``
+            backends support ``forward_chunk_size``-based on-device
+            parallelism; every other method runs sequentially per galaxy.
+
+            The default was ``native_vi_linear`` until 2026-07. That backend is
+            registered ``tier="broken"`` — it segfaults on DPL/dense_basis
+            photometry mocks (#231) — so the documented default could not be
+            run as written. It also raises ``NotImplementedError`` for
+            per-galaxy redshift and for presence masks, which ``mcmc_nuts``
+            supports. NUTS is ``tier="primary"``, keeps ``forward_chunk_size``
+            and ``n_pad``, and is the only tier that honors ``devices``.
+
+            Both ``native_vi_*`` backends now refuse to run at all without
+            ``allow_unvalidated=True`` — changing the default alone left them
+            one keystroke away, since this path never consulted the tier.
         key : jax.random.PRNGKey
             Base random key; per-galaxy keys are derived via ``jax.random.split``.
         forward_chunk_size : int
-            K galaxies evaluated in parallel per ``lax.map`` step.
-            Applies to the batched methods only — ``mcmc_nuts`` / ``mcmc_hmc``
-            and ``native_vi_linear`` / ``native_vi_nonlinear``.
-            ``K=1`` (default) = sequential; ``K=N`` = fully vmapped.
+            K galaxies evaluated in parallel per ``lax.map`` step. Applies to
+            ``mcmc_nuts`` / ``mcmc_hmc`` and to ``native_vi_linear`` /
+            ``native_vi_nonlinear``; ignored (with a warning) for every other
+            method. ``K=1`` (default) = sequential; ``K=N`` = fully vmapped.
         n_pad : int, "auto", or None
             Pad the catalog up to this many galaxies before running. The
             extra slots are dummy galaxies whose results are discarded
@@ -787,6 +794,17 @@ class _CatalogFitterOriginal:
         # backend module, so without this call `check_usable` is not on the path
         # and a tier="broken" method runs silently (#1394).
         refuse_if_broken(resolved, allow_unvalidated=allow_unvalidated)
+        # Refusal precedes advice: warning about NUTS warmup memory for a method
+        # that is about to be refused would be noise.
+        #
+        # Pre-flight memory guard, shared with Fitter/PopulationFitter. D here is
+        # the PER-GALAXY free-parameter count: the batched MCMC path vmaps N
+        # independent chains of that size, so the per-chain mass matrix — the
+        # term that goes O(D^2) — is set by the single-galaxy spec, not by N.
+        _spec = getattr(self.model, "spec", None)
+        _warn_if_nuts_high_dim(
+            resolved, getattr(_spec, "n_free", None), surface="Catalog.fit / CatalogFitter.run"
+        )
         # Per-galaxy fixed-value overrides (e.g. redshift) and presence masks are
         # threaded only through the sequential path today; the batched native/MCMC
         # paths stack flux/noise and would SILENTLY DROP per-galaxy values. Fail loudly instead.
@@ -851,6 +869,16 @@ class _CatalogFitterOriginal:
                     stacklevel=2,
                 )
             if forward_chunk_size != 1:
+                # Name the supported methods FROM the dispatch sets, not from a
+                # hand-written list. The literal this replaces said "only
+                # native_vi_linear and native_vi_nonlinear" long after
+                # _MCMC_VMAPPABLE gave mcmc_nuts/mcmc_hmc the same capability,
+                # so the advice steered callers off the working path onto a
+                # tier="broken" one.
+                #
+                # The two sets are named SEPARATELY rather than unioned: half of
+                # a combined list cannot be reached without allow_unvalidated,
+                # and a reader picking a name out of it would hit a refusal.
                 usable = " / ".join(sorted(self._MCMC_VMAPPABLE))
                 gated = " / ".join(sorted(self._NATIVE_VMAPPABLE))
                 warnings.warn(
