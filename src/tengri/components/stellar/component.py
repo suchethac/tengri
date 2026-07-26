@@ -696,7 +696,9 @@ def _integrate_nion_log10(
     ionizing-only slice. Peak normalization and deferred 1/h keep all
     intermediates within float32 range.
     """
-    peak = jnp.max(jnp.abs(sed_lnu), initial=0.0)  # #1207 hardening pattern
+    # stop_gradient: pure factorization constant (#1436) — log10(peak) is added back
+    # below, so the peak cancels analytically.
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed_lnu), initial=0.0))  # #1207
     peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
     ell = sed_lnu / peak  # O(1) normalized L_nu
     nu = C_AA / wave

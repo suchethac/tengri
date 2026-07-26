@@ -36,6 +36,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
+import jax
 import jax.numpy as jnp
 
 from tengri.components.nebular.shock import compute_shock_sed
@@ -220,7 +221,8 @@ class ShockNebular(SEDModelComponent):
                 # ``l_bol`` ~1e44 erg/s overflows too: peak-factor the integrand
                 # so only the O(1) residual is integrated, and carry the peak in
                 # log10 along with the 1e-3 proxy and the user's fraction.
-                _peak = jnp.max(jnp.abs(sed_in))
+                # stop_gradient: factorization constant, added back as log10(_peak) (#1436).
+                _peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed_in)))
                 _peak = jnp.where(_peak > 0.0, _peak, 1.0)
                 _hat_l_bol = -jnp.trapezoid(sed_in / _peak, nu)
                 _log_l_shock_halpha = (

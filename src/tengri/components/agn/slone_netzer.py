@@ -36,6 +36,7 @@ import functools
 from collections.abc import Callable
 from pathlib import Path
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -175,7 +176,8 @@ def create_slone_netzer_from_grid(grid_path: str) -> Callable:
             # Peak-factor the integrand and regroup so only representable values
             # form: ``l_scale * sed / (peak * hat_int)`` is evaluated as
             # ``(l_scale / hat_int) * (sed / peak)`` — algebraically identical.
-            peak = jnp.max(jnp.abs(sed))
+            # stop_gradient: factorization constant; peak * hat_int == bolint(sed) (#1436).
+            peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed)))
             peak = jnp.where(peak > 0.0, peak, 1.0)
             hat_int = _bolometric_integral_nu(sed / peak, nu, floor=1e-30)
             return (l_scale / hat_int) * (sed / peak)

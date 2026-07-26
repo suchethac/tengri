@@ -538,7 +538,8 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
         # Peak-factor it (integrate the O(1) residual, carry the peak) and group
         # the small factors (``frac · disc_bol/shape_bol`` ~ few·1e-4) before the
         # ~1e28 peak so no out-of-range product materializes.
-        _peak = jnp.max(jnp.abs(l_nu_wien))
+        # stop_gradient: factorization constant, multiplied back below (#1436).
+        _peak = jax.lax.stop_gradient(jnp.max(jnp.abs(l_nu_wien)))
         _peak = jnp.where(_peak > 0.0, _peak, 1.0)
         _disc_bol_hat = jnp.abs(jnp.trapezoid(l_nu_wien[sort_idx] / _peak, nu[sort_idx]))
         tail = shape * ((_EUV_TAIL_FRAC * _disc_bol_hat / shape_bol) * _peak)
@@ -785,7 +786,8 @@ def multicolor_disc(
         # a true-shape disc to a 1e10 erg/s reference) is needed. Peak-factor the
         # integrand so the trapezoid stays in range, and carry the peak in log10.
         _log_l_bol_req = agn_log_lbol + _LOG10_LSUN_ERG + jnp.log10(agn_lum_ratio)
-        _peak = jnp.max(jnp.abs(l_nu_intrinsic))
+        # stop_gradient: factorization constant, added back as log10(_peak) (#1436).
+        _peak = jax.lax.stop_gradient(jnp.max(jnp.abs(l_nu_intrinsic)))
         _peak = jnp.where(_peak > 0.0, _peak, 1.0)
         _hat_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx] / _peak, _nu[_sort_idx])
         _log_l_nu_total = jnp.log10(_peak) + jnp.log10(jnp.maximum(jnp.abs(_hat_total), 1e-100))
@@ -1943,7 +1945,8 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
             # overflows, which would flush the disc to zero. Peak-factor and
             # regroup — ``(l_scale / hat_int) * (lnu / peak)`` is algebraically
             # identical to ``l_scale * lnu / (peak * hat_int)``.
-            peak = jnp.max(jnp.abs(lnu_interp))
+            # stop_gradient: factorization constant; peak * hat_int == bolint(lnu) (#1436).
+            peak = jax.lax.stop_gradient(jnp.max(jnp.abs(lnu_interp)))
             peak = jnp.where(peak > 0.0, peak, 1.0)
             hat_int = _bolometric_integral_nu(lnu_interp / peak, nu, floor=1e-30)
             return (l_scale / hat_int) * (lnu_interp / peak)

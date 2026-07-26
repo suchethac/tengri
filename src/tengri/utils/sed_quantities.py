@@ -198,7 +198,11 @@ def _trapz_to_lsun(integrand: jnp.ndarray, nu: jnp.ndarray) -> jnp.ndarray:
     **JIT/grad/vmap-compatible**: yes. Equal to the naive form to ~1e-14 relative
     in float64; finite in float32 whenever the :math:`L_\odot` result is.
     """
-    peak = jnp.max(jnp.abs(integrand), initial=0.0)
+    # stop_gradient: pure factorization constant (#1436). The peak divides the
+    # integrand and multiplies back through pow10(log10(peak)), so its derivative
+    # contributions cancel analytically. Left free they are two autodiff paths that
+    # cancel in float64 but not float32, leaving an uncancelled term.
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(integrand), initial=0.0))
     peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
     norm = -jnp.trapezoid(integrand / peak, nu)
     return norm * pow10(jnp.log10(peak) - LOG10_L_SUN)

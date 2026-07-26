@@ -15,6 +15,7 @@ matching CIGALE [1]_.
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 
 
@@ -53,7 +54,10 @@ def _peak_factored_trapezoid(
         False when the integrand is all-zero or genuinely non-finite; callers
         map it to the zero/``-inf`` result rather than propagating NaN.
     """
-    peak = jnp.max(jnp.abs(integrand), initial=0.0)
+    # stop_gradient: pure factorization constant (#1436). The caller re-applies this
+    # peak to signed_norm, so the product is peak-independent and the peak's
+    # derivative is analytically zero. Cancels in float64, not in float32.
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(integrand), initial=0.0))
     usable = jnp.isfinite(peak) & (peak > 0)
     safe_peak = jnp.where(usable, peak, 1.0)
     signed_norm = jnp.trapezoid(integrand / safe_peak, nu)
