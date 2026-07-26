@@ -185,6 +185,9 @@ class DerivedState:
     # they are build-time constants and cost nothing at runtime.
     stellar_restband_lnu_precomp: jnp.ndarray | None = None
     nebular_restband_lnu_precomp: jnp.ndarray | None = None
+    # Its own integral at redshift=0, not the observed-band value reused: the
+    # rest band samples the SED at its own pivot (#1148, #1375).
+    shock_restband_lnu_precomp: jnp.ndarray | None = None
     agn_restband_lnu_precomp: jnp.ndarray | None = None
     radio_restband_lnu_precomp: jnp.ndarray | None = None
     xray_restband_lnu_precomp: jnp.ndarray | None = None
@@ -310,13 +313,15 @@ class DerivedState:
     # For BakedIn nebular this is None — the nebular emission is already
     # baked into the SSP grid and therefore included in stellar_phot_lnu_precomp.
     nebular_phot_lnu_precomp: jnp.ndarray | None = None
-    # NOTE (#1375): there is deliberately no ``shock_phot_lnu_precomp`` here.
-    # Adding the field silences the ADR-0007 ComponentIOError but makes the
-    # shock component sum in as an exact no-op, because the inherited
-    # ``predict_precomp`` builds its LUT from a zeros dummy SED. The field
-    # belongs with the filter-integrated LUT that would populate it; until
-    # then ``ShockNebular.predict_precomp`` raises. See that method's
-    # docstring for the full argument.
+    # Shock (MAPPINGS V) per filter — rest-frame Lν, erg/s/Hz, intrinsic (no
+    # dust, no cosmology), exactly like ``nebular_phot_lnu_precomp``. A separate
+    # additive component from the photoionized backend (#851), so it carries its
+    # own key. ``ShockNebular.apply`` publishes it by filter-integrating the
+    # full-grid shock SED; the inherited effective-wavelength LUT cannot, because
+    # shock emission is line-dominated and its norm="frac" anchor needs the
+    # accumulated SED's bolometric (#1375). ``predict_via_precomp`` reddens this
+    # with the young-limit screen alongside the nebular bucket.
+    shock_phot_lnu_precomp: jnp.ndarray | None = None
     # Dust IR re-emission per filter (rest-frame Lν, erg/s/Hz). Additive and
     # unattenuated — summed by predict_via_precomp like the other families.
     # Published by the two-component dust component under WavePrecomp (#622).

@@ -187,49 +187,112 @@ class ShockNebular(SEDModelComponent):
         )
         return sed_in + shock_sed, {"sed_shock": shock_sed}
 
-    def predict_precomp(
+    def apply(
         self,
-        p: dict[str, Any],
-        filter_eff_waves: jnp.ndarray,
-        **inputs: Any,
-    ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
-        """Reject the filter-wavelength LUT: it cannot represent shock emission.
+        state: Any,
+        params: Any,
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
+    ) -> Any:
+        """Add shock emission, publishing a filter-integrated LUT under WavePrecomp.
 
-        The inherited :class:`~tengri.components.sed_model_component.SEDModelComponent`
-        default builds a photometric LUT by calling :meth:`predict` on a dummy
-        SED of zeros sampled at ``filter_eff_waves``. Both halves of that are
-        wrong here, and both fail silently rather than loudly (#1375):
+        Delegates to the inherited orchestration on the exact path, so
+        ``approx=None`` behavior is unchanged by construction. Under
+        ``approx=WavePrecomp()`` it takes over, because the inherited LUT is
+        wrong for this component in two independent ways (#1375):
 
-        1. **The normalization collapses.** Under ``norm="frac"`` the shock Hα
-           anchor is ``frac * max(1e-3 * L_bol, 1e-30)`` where ``L_bol`` is the
-           frequency integral of ``sed_in``. The default passes ``sed_in = 0``,
-           so ``L_bol = 0``, the ``1e-30`` epsilon guard fires, and the LUT is
-           ``frac * 1e-30`` — around 1e-44 erg/s/Hz against a true contribution
-           of order 1e29. It sums into the photometry as an exact no-op.
-        2. **The sampling misses the lines.** Shock emission is line-dominated,
-           so evaluating it at a handful of filter *effective wavelengths*
-           samples the continuum between lines instead of integrating the lines
-           through the filter response. This is wrong under ``norm="lhalpha"``
-           too, where the normalization is absolute and defect 1 does not apply.
+        1. **The normalization collapses.** The inherited
+           :meth:`~tengri.components.sed_model_component.SEDModelComponent.predict_precomp`
+           calls :meth:`predict` with a dummy SED of *zeros*. Under
+           ``norm="frac"`` the shock Hα anchor is
+           ``frac * max(1e-3 * L_bol, 1e-30)`` with ``L_bol`` the frequency
+           integral of that SED, so ``L_bol = 0``, the ``1e-30`` epsilon guard
+           fires, and the LUT lands near 1e-44 erg/s/Hz against a true ~1e29.
+           It sums into the photometry as an exact no-op.
+        2. **The sampling misses the lines.** Shock emission is line-dominated.
+           Evaluating it at a handful of filter *effective wavelengths* samples
+           the continuum between lines instead of integrating the lines through
+           the filter response — wrong under ``norm="lhalpha"`` too, where the
+           absolute normalization makes defect 1 inapplicable.
 
-        A correct LUT has to integrate the shock SED through the filter curves
-        (as the photoionized backends do for ``nebular_phot_lnu_precomp``), and
-        under ``norm="frac"`` it additionally needs a bolometric anchor that
-        exists at filter resolution. That is a physics decision about the
-        normalization anchor, so this raises instead of guessing.
+        Both are fixed the same way the photoionized backends handle
+        ``nebular_phot_lnu_precomp``: evaluate the shock SED on the full
+        wavelength grid (correct normalization *and* correct line sampling),
+        then integrate it through the filter curves with
+        :func:`~tengri.observation.photometry.lnu_filter_integral_batch`.
+
+        Publishes ``shock_phot_lnu_precomp`` (observed band) and
+        ``shock_restband_lnu_precomp`` (the same integral at ``z=0``; the rest
+        band sits at its own pivot and reusing the observed value is what made
+        the nebular LUT read 769 % high in ``des_g`` at z=0.5, #1148). Both are
+        intrinsic rest-frame Lν — no dust, no cosmology —
+        matching the precompute contract; ``predict_via_precomp`` applies the
+        young-limit dust screen and the ``(1+z)/(4 pi d_L^2)`` dimming.
+
+        Parameters
+        ----------
+        state : ForwardState
+            Current state; ``state.wave`` and ``state.sed_intrinsic`` supply the
+            full-grid context the LUT needs.
+        params : mapping
+            Full parameter dict (sliced by prefix here).
+        ssp_data, template_data : object, optional
+            Unused by this component; accepted for protocol conformance.
+
+        Returns
+        -------
+        ForwardState
+            New state with ``sed_intrinsic`` advanced and the shock keys published.
 
         Raises
         ------
-        NotImplementedError
-            Always. ``approx=WavePrecomp()`` is not supported with a shock
-            component; the message names the two working alternatives.
+        KeyError
+            If ``redshift`` is absent under WavePrecomp. The observed-band
+            integral needs it, and defaulting to 0.0 would silently place the
+            filters in the wrong frame.
+
+        Notes
+        -----
+        **JIT-compatible**: yes. The branch is on grid *presence* (static build
+        config), not on any traced value.
         """
-        raise NotImplementedError(
-            "The shock component does not support approx=WavePrecomp(): the "
-            "filter-wavelength LUT would silently contribute ~0 instead of the "
-            "true shock emission (#1375). Either drop the LUT for this model "
-            "(approx=None — the exact path handles shock correctly), or drop "
-            "the shock component (shock={'type': 'none'}) if you need "
-            "WavePrecomp's speed. Tracking a filter-integrated shock LUT in "
-            "#1375."
+        if state.derived.get("filter_eff_waves") is None:
+            # Exact path (and spectrum-only LUT models): the inherited
+            # orchestration is already correct, so do not duplicate it.
+            return super().apply(state, params, ssp_data=ssp_data, template_data=template_data)
+
+        from tengri.observation.photometry import lnu_filter_integral_batch
+
+        p = self.slice_params(params)
+        sed_in = (
+            state.sed_intrinsic if state.sed_intrinsic is not None else jnp.zeros_like(state.wave)
         )
+        # Full grid: identical call to the exact path, so the LUT is built from
+        # the same shock SED the exact path adds to sed_intrinsic.
+        sed_out, published = self.predict(p, sed_in, state.wave)
+
+        fw = state.derived.get("phot_filter_waves_padded")
+        ft = state.derived.get("phot_filter_trans_padded")
+        if fw is not None and ft is not None:
+            if "redshift" not in p:
+                raise KeyError(
+                    "ShockNebular needs 'redshift' to filter-integrate its "
+                    "WavePrecomp LUT into the observed band, but it is absent "
+                    "from the parameter dict. Defaulting to 0.0 would put the "
+                    "filters in the rest frame and silently mis-weight the "
+                    "shock lines."
+                )
+            z = jnp.asarray(p["redshift"])
+            shock_sed = published["sed_shock"]
+            published = {
+                **published,
+                "shock_phot_lnu_precomp": lnu_filter_integral_batch(
+                    shock_sed, state.wave, fw, ft, z
+                ),
+                "shock_restband_lnu_precomp": lnu_filter_integral_batch(
+                    shock_sed, state.wave, fw, ft, 0.0
+                ),
+            }
+
+        new_derived = self._merge_published(state.derived, published)
+        return state.with_(sed_intrinsic=sed_out, derived=new_derived)
