@@ -2806,7 +2806,7 @@ class SEDModel:
             or self._approx_config_feature is not None
         )
 
-    def with_approx(self, approx):
+    def with_approx(self, approx, *, observation=None):
         """Return a copy of this model built with a different ``approx`` policy.
 
         Parameters
@@ -2816,14 +2816,20 @@ class SEDModel:
             ``approx=`` constructor argument: ``None`` for the exact wave-grid
             path, a single precompute config for one LUT family, or a composite
             tuple (at most one of each) such as ``(WavePrecomp(), FeaturePrecomp())``.
+        observation : Observation, optional
+            Observation for the clone. Defaults to this model's own. Passing a
+            different one rebuilds the LUT against *its* filters — the seam
+            :meth:`ForwardModel.build` uses to make its authoritative
+            observation win (#1367, spec §5).
 
         Returns
         -------
         SEDModel
             A new model sharing this model's ``spec``, ``ssp_data``,
-            ``observation`` and build settings, differing only in ``approx``.
-            Returns ``self`` unchanged when ``approx=None`` is requested on a
-            model that is already exact (a no-op).
+            ``observation`` and build settings, differing only in ``approx``
+            (and ``observation`` when given). Returns ``self`` unchanged when
+            ``approx=None`` is requested on a model that is already exact and
+            no observation override is given (a no-op).
 
         Notes
         -----
@@ -2833,12 +2839,12 @@ class SEDModel:
         inference layer uses this to fit on the fast LUT path while leaving the
         user's (exact) model untouched. **JIT-compatible**: build-time only.
         """
-        if approx is None and not self._has_modern_approx():
+        if approx is None and observation is None and not self._has_modern_approx():
             return self
         return SEDModel(
             self.spec,
             self.ssp_data,
-            observation=self.observation,
+            observation=self.observation if observation is None else observation,
             forward_dtype=str(self._forward_dtype),
             csp_integration=str(self._csp_integration),
             wave_chunk_size=self._wave_chunk_size,

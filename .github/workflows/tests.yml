@@ -360,10 +360,50 @@ jobs:
             paths: tests/components
             nproc: 2
             budget: 50
-          - shard: regression
-            paths: tests/regression
+          # regression is split FOUR ways, each SERIAL. Two independent knobs,
+          # for two different problems:
+          #
+          #   nproc: 1  -> memory. With one worker a runner's peak is one file's
+          #                peak, so no combination of heavy files can OOM it. At
+          #                -n 2 this shard was runner-killed at a consistent
+          #                92-93% offset on four separate refs (#1346).
+          #   4 shards  -> wall clock. Serial cost the PR path 50 min (measured
+          #                on #1372, against 30 min at -n 2 when it survived).
+          #                More RUNNERS is free; more workers per runner is not.
+          #
+          # Split boundaries are MEASURED, not guessed — CI wall clock attributed
+          # to subtrees from the green #1372 run (2026-07-25, 48 min total):
+          #
+          #   synthesizer_parity 12.7  bug 11.3  top-level 10.5
+          #   paper 10.0  precision 3.5  agn 0.1
+          #
+          # giving a predicted max shard of ~16 min. Re-measure before rebalancing
+          # (the recipe is on #1346); this file's share table has gone stale twice.
+          - shard: regression-a
+            paths: tests/regression/synthesizer_parity tests/regression/precision
             nproc: 1
-            budget: 85
+            budget: 50
+          - shard: regression-b
+            paths: tests/regression/bug tests/regression/agn
+            nproc: 1
+            budget: 50
+          - shard: regression-c
+            paths: tests/regression/paper
+            nproc: 1
+            budget: 50
+          # The top-level files only — every subdirectory above is excluded so no
+          # test runs twice. This shard holds the memory-heaviest files
+          # (test_field_latents_reach_likelihood.py at 4.06 GB).
+          - shard: regression-d
+            paths: >-
+              tests/regression
+              --ignore=tests/regression/synthesizer_parity
+              --ignore=tests/regression/precision
+              --ignore=tests/regression/bug
+              --ignore=tests/regression/agn
+              --ignore=tests/regression/paper
+            nproc: 1
+            budget: 50
           - shard: physics
             paths: tests/physics
             nproc: 2
@@ -534,10 +574,50 @@ jobs:
             paths: tests/components
             nproc: 2
             budget: 50
-          - shard: regression
-            paths: tests/regression
+          # regression is split FOUR ways, each SERIAL. Two independent knobs,
+          # for two different problems:
+          #
+          #   nproc: 1  -> memory. With one worker a runner's peak is one file's
+          #                peak, so no combination of heavy files can OOM it. At
+          #                -n 2 this shard was runner-killed at a consistent
+          #                92-93% offset on four separate refs (#1346).
+          #   4 shards  -> wall clock. Serial cost the PR path 50 min (measured
+          #                on #1372, against 30 min at -n 2 when it survived).
+          #                More RUNNERS is free; more workers per runner is not.
+          #
+          # Split boundaries are MEASURED, not guessed — CI wall clock attributed
+          # to subtrees from the green #1372 run (2026-07-25, 48 min total):
+          #
+          #   synthesizer_parity 12.7  bug 11.3  top-level 10.5
+          #   paper 10.0  precision 3.5  agn 0.1
+          #
+          # giving a predicted max shard of ~16 min. Re-measure before rebalancing
+          # (the recipe is on #1346); this file's share table has gone stale twice.
+          - shard: regression-a
+            paths: tests/regression/synthesizer_parity tests/regression/precision
             nproc: 1
-            budget: 85
+            budget: 50
+          - shard: regression-b
+            paths: tests/regression/bug tests/regression/agn
+            nproc: 1
+            budget: 50
+          - shard: regression-c
+            paths: tests/regression/paper
+            nproc: 1
+            budget: 50
+          # The top-level files only — every subdirectory above is excluded so no
+          # test runs twice. This shard holds the memory-heaviest files
+          # (test_field_latents_reach_likelihood.py at 4.06 GB).
+          - shard: regression-d
+            paths: >-
+              tests/regression
+              --ignore=tests/regression/synthesizer_parity
+              --ignore=tests/regression/precision
+              --ignore=tests/regression/bug
+              --ignore=tests/regression/agn
+              --ignore=tests/regression/paper
+            nproc: 1
+            budget: 50
           - shard: physics
             paths: tests/physics
             nproc: 2
