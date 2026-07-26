@@ -286,7 +286,7 @@ def _best_finite_restart(final_losses) -> int:
     so it returns index 0 whenever the vector contains a NaN. Multi-start exists
     precisely because some inits diverge, so "keep the best" was keeping the
     worst -- on ``recipes.mock_recovery_minimal()`` it discarded a converged
-    restart at loss 4.635 in favour of a NaN one. ``-inf`` is rejected for the
+    restart at loss 4.635 in favor of a NaN one. ``-inf`` is rejected for the
     same reason in reverse: a plain ``argmin`` would rank it the best fit
     possible.
 
