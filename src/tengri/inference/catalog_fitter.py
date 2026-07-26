@@ -3,9 +3,9 @@
 
 Unlike :class:`PopulationFitter`, galaxies share no parameters.
 :class:`CatalogFitter` supports every method :class:`Fitter` accepts; for
-``native_vi_linear`` and ``native_vi_nonlinear`` it vmaps K galaxies per
-``lax.map`` step so the compiled XLA graph stays O(1) in N while K galaxies
-execute simultaneously on-device.
+``mcmc_nuts``, ``mcmc_hmc`` and the two ``native_vi_*`` backends it vmaps K
+galaxies per ``lax.map`` step so the compiled XLA graph stays O(1) in N while
+K galaxies execute simultaneously on-device.
 """
 
 from __future__ import annotations
@@ -307,7 +307,7 @@ class CatalogPosterior:
 
     Examples
     --------
-    >>> result = cat.run("native_vi_linear", key=jax.random.PRNGKey(0))
+    >>> result = cat.run("mcmc_nuts", key=jax.random.PRNGKey(0))
     >>> result[0].params  # first galaxy
     >>> result["stellar_mass"]  # per-galaxy medians, shape (n_galaxies,)
     >>> for post in result:
@@ -593,10 +593,11 @@ class _CatalogFitterOriginal:
     """Per-galaxy catalog inference with optional K-way on-device parallelism.
 
     Wraps all :class:`~tengri.inference.fitter.Fitter` inference methods with a
-    single ``run(method, ...)`` entry point. For ``native_vi_linear`` and
-    ``native_vi_nonlinear``, setting ``forward_chunk_size=K`` vmaps K galaxies
-    per ``lax.map`` iteration so K galaxies execute in parallel on the
-    accelerator while the XLA graph remains O(1) in the catalog size N.
+    single ``run(method, ...)`` entry point. For ``mcmc_nuts`` / ``mcmc_hmc``
+    (and the two experimental ``native_vi_*`` backends), setting
+    ``forward_chunk_size=K`` vmaps K galaxies per ``lax.map`` iteration so K
+    galaxies execute in parallel on the accelerator while the XLA graph remains
+    O(1) in the catalog size N.
 
     Parameters
     ----------
@@ -634,7 +635,7 @@ class _CatalogFitterOriginal:
     Examples
     --------
     >>> cat = CatalogFitter(model, galaxies)
-    >>> result = cat.run("native_vi_linear", key=jax.random.PRNGKey(0), forward_chunk_size=4)
+    >>> result = cat.run("mcmc_nuts", key=jax.random.PRNGKey(0), forward_chunk_size=4)
     >>> result[0].params  # first galaxy posterior
     """
 
@@ -664,7 +665,7 @@ class _CatalogFitterOriginal:
 
     def run(
         self,
-        method="native_vi_linear",
+        method="mcmc_nuts",
         *,
         key,
         forward_chunk_size=1,
@@ -682,14 +683,24 @@ class _CatalogFitterOriginal:
         ----------
         method : str
             Any method accepted by :class:`~tengri.inference.fitter.Fitter`.
-            ``native_vi_linear`` (default) and ``native_vi_nonlinear`` support
-            ``forward_chunk_size``-based on-device parallelism.
+            ``mcmc_nuts`` (default), ``mcmc_hmc`` and the two ``native_vi_*``
+            backends support ``forward_chunk_size``-based on-device
+            parallelism; every other method runs sequentially per galaxy.
+
+            The default was ``native_vi_linear`` until 2026-07. That backend is
+            registered ``tier="broken"`` — it segfaults on DPL/dense_basis
+            photometry mocks (#231) — so the documented default could not be
+            run as written. It also raises ``NotImplementedError`` for
+            per-galaxy redshift and for presence masks, which ``mcmc_nuts``
+            supports. NUTS is ``tier="primary"``, keeps ``forward_chunk_size``
+            and ``n_pad``, and is the only tier that honours ``devices``.
         key : jax.random.PRNGKey
             Base random key; per-galaxy keys are derived via ``jax.random.split``.
         forward_chunk_size : int
-            K galaxies evaluated in parallel per ``lax.map`` step.
-            Only applies to ``native_vi_linear`` / ``native_vi_nonlinear``.
-            ``K=1`` (default) = sequential; ``K=N`` = fully vmapped.
+            K galaxies evaluated in parallel per ``lax.map`` step. Applies to
+            ``mcmc_nuts`` / ``mcmc_hmc`` and to ``native_vi_linear`` /
+            ``native_vi_nonlinear``; ignored (with a warning) for every other
+            method. ``K=1`` (default) = sequential; ``K=N`` = fully vmapped.
         n_pad : int, "auto", or None
             Pad the catalog up to this many galaxies before running. The
             extra slots are dummy galaxies whose results are discarded
@@ -824,10 +835,17 @@ class _CatalogFitterOriginal:
                     stacklevel=2,
                 )
             if forward_chunk_size != 1:
+                # Name the supported methods FROM the dispatch sets, not from a
+                # hand-written list. The literal this replaces said "only
+                # native_vi_linear and native_vi_nonlinear" long after
+                # _MCMC_VMAPPABLE gave mcmc_nuts/mcmc_hmc the same capability,
+                # so the advice steered callers off the working path onto a
+                # tier="broken" one.
+                _chunkable = ", ".join(sorted(self._MCMC_VMAPPABLE | self._NATIVE_VMAPPABLE))
                 warnings.warn(
                     f"forward_chunk_size={forward_chunk_size} is ignored for "
-                    f"method={method!r}. Only native_vi_linear and "
-                    "native_vi_nonlinear support chunked parallelism.",
+                    f"method={method!r}. Chunked parallelism is supported by: "
+                    f"{_chunkable}.",
                     UserWarning,
                     stacklevel=2,
                 )
