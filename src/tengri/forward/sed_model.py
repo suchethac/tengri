@@ -218,11 +218,13 @@ class WavePrecomp:
     Notes
     -----
     This example used to read ``model.fit(row.data, params={"redshift":
-    row.z})`` in a Python loop. ``SEDModel.fit`` has no ``params=``
-    parameter, so that call raises ``TypeError`` — it was a documented
-    invocation that could never have run. ``Catalog`` is the surface for a
-    table of galaxies with a redshift column; for a single galaxy the
-    override lives on ``ForwardModel.fit``, which does take ``params=``.
+    row.z})`` in a Python loop — a documented invocation that raised
+    ``TypeError`` until #1384 plumbed ``params=`` through ``SEDModel.fit``
+    (it now forwards to the same per-fit override ``ForwardModel.fit``
+    takes, and on a ``catalog_z_range`` model the redshift rides
+    ``data_args`` as a runtime input, #1316). ``Catalog`` remains the
+    taught surface for a table of galaxies with a redshift column: one
+    ingest, one validation, one compiled program.
     """
 
     n_z: int = 250
