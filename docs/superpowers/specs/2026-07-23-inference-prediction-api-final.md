@@ -398,6 +398,14 @@ Preserved rules (NAMING_CONTRACT §4b): `predict()` takes `params` and nothing e
 
 Catalog surfaces accept **table-in** (columns, name-matched) or **arrays-in** (power user), but **internally always materialize contiguous arrays** before any JAX transform: flux/noise `(N, n_data)`, redshift `(N,)`, presence/censor `(N, n_union)`. That is the shape vmap wants. `list[dict]` (today's input ✓) is accepted but immediately stacked — at N=10⁵ it otherwise carries ~10× memory overhead and N× host-to-device transfers.
 
+> **Method note (#1363).** These snippets deliberately use `mcmc_nuts` (or `map`).
+> `native_vi_linear` is registered `tier="broken"` — `[UNSTABLE] … segfaults on
+> DPL/dense_basis photometry mocks (#231)` — so `run()` refuses it without
+> `allow_unvalidated=True`, *and* the batched native-VI path raises
+> `NotImplementedError` for per-galaxy redshift and for presence masks, which are
+> the exact features §6.2 and §6.3 exist to demonstrate. Do not restore it here
+> until the registry tier says otherwise.
+
 ### 9.2 Output — flexible summary, not fixed quantiles (adopted; [#1313](https://github.com/suchethac/tengri/issues/1313))
 
 For large N the sample cube `(N, n_samples, n_params)` (~8 GB at N=10⁵) must never be forced into memory. `CatalogPosterior` gains streaming, **configurable** summaries — arbitrary percentiles + arbitrary reducers, chunk-reduced at the `forward_chunk_size` boundary:
