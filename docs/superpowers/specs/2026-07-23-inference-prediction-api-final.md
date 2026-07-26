@@ -529,7 +529,7 @@ Tier 2 is galaxy-agnostic by construction — `data_args` is traced, never close
 - Minimize distinct compile signatures — prefer runtime inputs over baked constants wherever the numerics allow. LUTs (tier 1) are method-agnostic: one LUT serves MAP, HMC, and VI alike.
 - Tier 3 is the only per-data artifact, and it must stay bounded (the surface-derived policy above).
 
-**W3 ([#1318](https://github.com/suchethac/tengri/issues/1318)) ✓:** `forward.prewarm()` exposed (it was on the internal Fitter only). `lean=` retired — policy derives from the surface: `forward.fit()` = iterate policy (tier-3 kept, keyed by data fingerprint with cap 1 — re-running the same fit reuses it, a new galaxy replaces it, so loops never accumulate); `Catalog` = sweep policy (tiers 1–2 kept, per-galaxy tier-3 dropped). `lean=True/False` survives as a hidden deprecated alias.
+**W3 ([#1318](https://github.com/suchethac/tengri/issues/1318)) ✓:** `forward.prewarm()` exposed (it was on the internal Fitter only). `lean=` retired — policy derives from the surface: `forward.fit()` = iterate policy (tier-3 kept, keyed by data fingerprint with cap 1 — re-running the same fit reuses it, a new galaxy replaces it, so loops never accumulate); `Catalog` = sweep policy (tiers 1–2 kept, per-galaxy tier-3 dropped) — **the sweep half is not wired**: the `_cache_policy` consumer exists (`fitter.py:2291`) but nothing in `src/` ever passes `'sweep'`, so every fit today derives the iterate policy ([#1344](https://github.com/suchethac/tengri/issues/1344)). `lean=True/False` survives as a hidden deprecated alias.
 
 ---
 
@@ -553,7 +553,7 @@ Implementation ordering, absorbed-backlog mapping, and the near-term method focu
 | **W1b** | IGM applied on every LUT path — **already true**; guard tests exist | ✓ (resolved stale) | [#1310](https://github.com/suchethac/tengri/issues/1310) |
 | **W2 dep** | fit-time `params=` plumbing (per-row z injection; unknown-kwarg validation) | ✓ shipped | [#1329](https://github.com/suchethac/tengri/issues/1329) |
 | **W2** | `Catalog` noun: table-in/out, name-matching, `flux_unit=`, NaN policy, union-LUT + presence mask, `to_table()`; `fit_batch` cliff + deprecation | ✓ shipped | [#1316](https://github.com/suchethac/tengri/issues/1316), [#1317](https://github.com/suchethac/tengri/issues/1317) |
-| **W3** | `forward.prewarm()`; retire `lean` → surface-derived policy | ✓ shipped | [#1318](https://github.com/suchethac/tengri/issues/1318) |
+| **W3** | `forward.prewarm()`; retire `lean` → surface-derived policy | ✓ shipped (Catalog sweep half open — [#1344](https://github.com/suchethac/tengri/issues/1344)) | [#1318](https://github.com/suchethac/tengri/issues/1318) |
 | **W4** | hierarchical: `mode="hierarchical"` + `shared=`, data at fit, scaling contract; Population classes dissolve | ◆ deferred past Paper I | [#1319](https://github.com/suchethac/tengri/issues/1319) |
 | **W5** | Observation razor + `Data` record + `mode=` validation | ✓ shipped | [#1321](https://github.com/suchethac/tengri/issues/1321) |
 | **W6** | simulation catalogs: `Catalog.from_histories` + `simulate(lines=…)`, LUT-fast (§8.1) | ◆ | [#1396](https://github.com/suchethac/tengri/issues/1396), [#1395](https://github.com/suchethac/tengri/issues/1395) |
