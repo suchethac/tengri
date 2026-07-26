@@ -445,3 +445,96 @@ def test_saddle_curvature_is_whitened_by_magnitude_not_floored_to_one():
     assert stiffness == pytest.approx(1.0, abs=1e-8), (
         f"steep negative-curvature direction left at stiffness {stiffness:.2f}"
     )
+
+
+class TestPreconditionedProblem:
+    """The one seam a sampler backend touches (#1359 follow-up).
+
+    Before this, each of ``run_nuts`` / ``run_hmc`` / ``run_dynamic_hmc`` carried its
+    own copy of resolve -> wrap -> ``if preconditioner is not None: positions @ A.T``.
+    The last line is the dangerous one: omitting it returns draws in the *whitened*
+    coordinates, which are finite, correctly shaped, and wrong. Nothing downstream can
+    tell. Folding it into an object that is the identity when disabled removes the
+    branch a fourth backend could forget.
+    """
+
+    @staticmethod
+    def _problem(enabled, n=5, cond=1e4):
+        from tengri.inference.preconditioning import prepare_preconditioning
+
+        metric = _ill_conditioned_metric(n, cond)
+        log_p = _gaussian_logdensity(metric)
+        return (
+            prepare_preconditioning(log_p, jnp.zeros(n), 0.0, precondition=enabled),
+            log_p,
+        )
+
+    def test_disabled_problem_is_the_identity(self):
+        problem, log_p = self._problem(False)
+        assert problem.enabled is False
+        assert problem.preconditioner is None
+        assert problem.logdensity is log_p, "disabled must hand back the original density"
+        draws = jnp.asarray(np.random.default_rng(0).standard_normal((7, 5)))
+        np.testing.assert_array_equal(np.asarray(problem.restore(draws)), np.asarray(draws))
+
+    def test_enabled_problem_reports_itself_enabled(self):
+        problem, _ = self._problem(True)
+        assert problem.enabled is True
+        assert problem.preconditioner is not None
+
+    def test_restore_maps_a_stack_of_draws_row_wise(self):
+        problem, _ = self._problem(True)
+        draws = jnp.asarray(np.random.default_rng(1).standard_normal((11, 5)))
+        got = np.asarray(problem.restore(draws))
+        want = np.stack([np.asarray(problem.preconditioner.to_xi(d)) for d in draws])
+        np.testing.assert_allclose(got, want, rtol=0, atol=1e-12)
+
+    def test_restore_maps_a_single_draw(self):
+        problem, _ = self._problem(True)
+        draw = jnp.asarray(np.random.default_rng(2).standard_normal(5))
+        np.testing.assert_allclose(
+            np.asarray(problem.restore(draw)),
+            np.asarray(problem.preconditioner.to_xi(draw)),
+            rtol=0,
+            atol=1e-12,
+        )
+
+    def test_restore_round_trips_the_transported_start(self):
+        """``init_flat`` is handed to the sampler in zeta; restoring must undo it."""
+        from tengri.inference.preconditioning import prepare_preconditioning
+
+        metric = _ill_conditioned_metric(6, 1e5)
+        log_p = _gaussian_logdensity(metric)
+        xi0 = jnp.asarray(np.random.default_rng(3).standard_normal(6))
+        problem = prepare_preconditioning(log_p, xi0, 0.0, precondition=True)
+        np.testing.assert_allclose(
+            np.asarray(problem.restore(problem.init_flat)), np.asarray(xi0), rtol=0, atol=1e-9
+        )
+
+    def test_wrapped_density_equals_the_original_at_the_mapped_point(self):
+        problem, log_p = self._problem(True)
+        zeta = jnp.asarray(np.random.default_rng(4).standard_normal(5))
+        assert float(problem.logdensity(zeta, 0.0)) == pytest.approx(
+            float(log_p(problem.preconditioner.to_xi(zeta), 0.0)), rel=1e-12
+        )
+
+    def test_restoring_without_the_transpose_would_give_a_different_answer(self):
+        """Neuter check: the round-trip assertions must be sensitive to the transpose.
+
+        ``A`` is triangular and non-symmetric, so ``zeta @ A`` and ``zeta @ A.T`` differ.
+        If they did not, the tests above would pass on a broken ``restore``.
+        """
+        problem, _ = self._problem(True)
+        draws = jnp.asarray(np.random.default_rng(5).standard_normal((4, 5)))
+        right = np.asarray(problem.restore(draws))
+        wrong = np.asarray(draws @ problem.preconditioner.matrix)
+        assert np.max(np.abs(right - wrong)) > 1e-6, (
+            "transposed and untransposed restore agree — this guard is vacuous"
+        )
+
+    def test_auto_policy_is_honored(self):
+        """``precondition=None`` defers to the dimension policy, as before."""
+        from tengri.inference.preconditioning import PRECONDITION_MAX_DIM
+
+        problem, _ = self._problem(None, n=4)
+        assert problem.enabled is (PRECONDITION_MAX_DIM >= 4)

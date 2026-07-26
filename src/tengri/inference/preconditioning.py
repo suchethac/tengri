@@ -56,9 +56,11 @@ import jax.numpy as jnp
 __all__ = [
     "PRECONDITION_MAX_DIM",
     "LinearPreconditioner",
+    "PreconditionedProblem",
     "metric_preconditioner",
     "negative_hessian_metric",
     "preconditioned_logdensity",
+    "prepare_preconditioning",
 ]
 
 #: Smallest eigenvalue the metric may carry. The standardized prior contributes
@@ -307,3 +309,119 @@ def _resolve_precondition(precondition: bool | None, n_dim: int) -> bool:
     if precondition is None:
         return n_dim <= PRECONDITION_MAX_DIM
     return precondition
+
+
+@dataclass(frozen=True)
+class PreconditionedProblem:
+    """A log-density ready to sample, plus the map back — or a faithful identity.
+
+    The single object a sampler backend needs. When preconditioning is off this is
+    the identity in every field, so a backend has no ``if`` to write and no branch to
+    forget.
+
+    That last point is the reason this type exists. The transform is applied in one
+    place and undone in another, hundreds of lines apart, and draws left in the
+    whitened coordinates are finite, correctly shaped, and wrong — no exception, no
+    warning, a posterior silently reported in the wrong basis. Three backends each
+    carried their own copy of ``if preconditioner is not None: positions @ A.T``.
+
+    Attributes
+    ----------
+    logdensity : callable
+        ``log_p(zeta, data_args) -> scalar`` to hand the sampler. The original
+        function itself when disabled.
+    init_flat : ndarray, shape (D,)
+        Starting position in the sampled coordinates.
+    enabled : bool
+        Whether the coordinates were actually whitened. Fold this into any adaptation
+        cache key: a step size or mass matrix tuned in one basis is meaningless in
+        the other.
+    preconditioner : LinearPreconditioner or None
+        The map, or ``None`` when disabled.
+    """
+
+    logdensity: Callable
+    init_flat: jnp.ndarray
+    enabled: bool
+    preconditioner: LinearPreconditioner | None = None
+
+    def restore(self, positions: jnp.ndarray) -> jnp.ndarray:
+        """Map sampled draws back to the standardized latent space.
+
+        Call this on the sampler's output before anything interprets it as
+        parameters. Safe to call unconditionally — it is the identity when
+        preconditioning is off.
+
+        Parameters
+        ----------
+        positions : array_like, shape (D,) or (n_draw, D)
+            Draws in the sampled coordinates.
+
+        Returns
+        -------
+        ndarray, same shape as ``positions``
+            Draws as standardized latents, ``xi = A zeta`` applied row-wise.
+
+        Notes
+        -----
+        ``positions @ A.T`` is row-wise ``A @ v`` for a stack and reduces to
+        ``A @ v`` for a single vector, so one expression covers both ranks.
+
+        **JIT/grad/vmap-safe**: a single matrix product.
+        """
+        positions = jnp.asarray(positions)
+        if self.preconditioner is None:
+            return positions
+        return positions @ self.preconditioner.matrix.T
+
+
+def prepare_preconditioning(
+    logdensity_fn: Callable,
+    init_flat: jnp.ndarray,
+    data_args,
+    *,
+    precondition: bool | None = None,
+    floor: float = PRIOR_METRIC_FLOOR,
+) -> PreconditionedProblem:
+    """Resolve the auto-policy and build the whitened problem in one call.
+
+    The seam every Hamiltonian backend shares. Backends declare support with
+    ``register_backend(..., accepts_precondition=True)`` and otherwise do not
+    special-case the feature.
+
+    Parameters
+    ----------
+    logdensity_fn : callable
+        ``log_p(xi, data_args) -> scalar`` in the standardized latent space.
+    init_flat : array_like, shape (D,)
+        Starting position — normally the MAP.
+    data_args : pytree
+        Observed-data tensors, passed through to ``logdensity_fn``.
+    precondition : bool or None, optional
+        ``None`` (default) auto-enables up to :data:`PRECONDITION_MAX_DIM`;
+        ``True`` / ``False`` force the choice.
+    floor : float, optional
+        Eigenvalue floor for the metric. Default :data:`PRIOR_METRIC_FLOOR`.
+
+    Returns
+    -------
+    PreconditionedProblem
+        Whitened when enabled, a faithful identity when not.
+
+    Notes
+    -----
+    **Not JIT-safe** when enabled — see :func:`preconditioned_logdensity`. Call once
+    per fit, outside any transform.
+    """
+    init_flat = jnp.asarray(init_flat)
+    if not _resolve_precondition(precondition, init_flat.shape[0]):
+        return PreconditionedProblem(logdensity=logdensity_fn, init_flat=init_flat, enabled=False)
+    wrapped, preconditioner, init_zeta = preconditioned_logdensity(
+        logdensity_fn, init_flat, data_args, floor=floor
+    )
+    return PreconditionedProblem(
+        logdensity=wrapped,
+        init_flat=init_zeta,
+        enabled=True,
+        preconditioner=preconditioner,
+    )

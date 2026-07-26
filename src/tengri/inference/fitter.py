@@ -2395,6 +2395,7 @@ class Fitter:
 
         # --- Dispatch to underlying _run_* methods via registry ---
         from tengri.inference._backend_registry import (
+            check_capabilities,
             check_requires,
             check_usable,
             get_backend,
@@ -2446,6 +2447,13 @@ class Fitter:
         # Friendly error if the backend's optional dependency is missing,
         # before we descend into a deep third-party traceback.
         check_requires(entry)
+
+        # Refuse capability kwargs this backend cannot honor. Without it,
+        # ``precondition=True`` on a non-Hamiltonian method travels until a terminal
+        # function without ``**kwargs`` rejects it, surfacing as a TypeError naming
+        # ``run_nifty_vi`` or ``run_map`` — functions the caller never mentioned.
+        # Raises ValueError, matching the answer ``method='mcmc'`` already gave.
+        check_capabilities(entry, kwargs)
 
         # Compile the loss/grad + predict surface up front so the fit loop runs
         # warm and the persistent JAX cache is populated.
