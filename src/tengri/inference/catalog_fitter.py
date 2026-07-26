@@ -693,7 +693,7 @@ class _CatalogFitterOriginal:
             run as written. It also raises ``NotImplementedError`` for
             per-galaxy redshift and for presence masks, which ``mcmc_nuts``
             supports. NUTS is ``tier="primary"``, keeps ``forward_chunk_size``
-            and ``n_pad``, and is the only tier that honours ``devices``.
+            and ``n_pad``, and is the only tier that honors ``devices``.
         key : jax.random.PRNGKey
             Base random key; per-galaxy keys are derived via ``jax.random.split``.
         forward_chunk_size : int

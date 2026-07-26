@@ -114,7 +114,7 @@ def test_the_default_supports_the_features_the_native_path_rejects():
     default = inspect.signature(_CatalogFitterOriginal.run).parameters["method"].default
     chunkable = _CatalogFitterOriginal._MCMC_VMAPPABLE | _CatalogFitterOriginal._NATIVE_VMAPPABLE
     assert default in chunkable
-    # devices= is honoured for the MCMC set only.
+    # devices= is honored for the MCMC set only.
     assert default in _CatalogFitterOriginal._MCMC_VMAPPABLE
 
 
