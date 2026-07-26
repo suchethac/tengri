@@ -45,18 +45,39 @@ pytestmark = pytest.mark.regression_bug
 # Discs whose spectral shape is invariant under L_bol (template / power-law) OR
 # whose L_bol-dependent shape is now handled on the float32 path (multicolor,
 # kubota_done — log-space internals + shape/normalization split).
-_EXACT_DISCS = [
-    "multicolor",
+#: Discs run on every PR — one per *fix mechanism*, so a regression in any of the
+#: float32 techniques still fails fast:
+#:
+#: * ``multicolor``     — log-space disc internals + the shape/normalization split
+#:                        (and one of the two science defaults)
+#: * ``powerlaw``       — shape-invariant control: plain reference-eval + rescale
+#:                        (the other science default)
+#: * ``slone_netzer``   — peak-factored template normalization + a float32-scale floor
+#: * ``adaf_lopez2024`` — log-space piecewise power law, the kernel also used by
+#:                        ``skirtor`` and ``schartmann2005``
+#:
+#: The rest are marked ``slow``: they re-test the *same* mechanisms on further
+#: disc impls, and each costs a fresh JAX compile in both precisions (~96% of this
+#: file's runtime), so they earn their keep nightly rather than on every push.
+#: ``relagn`` is here deliberately — it is the most expensive case (26 MB grid,
+#: enough to OOM a parallel worker) and its mechanism is covered by slone_netzer.
+_PR_DISCS = ["multicolor", "powerlaw", "slone_netzer", "adaf_lopez2024"]
+_NIGHTLY_DISCS = [
     "kubota_done",
     "adaf",
-    "powerlaw",
     "richards2006",
     "skirtor",
     "qsogen",
     "schartmann2005",
-    "adaf_lopez2024",
-    "slone_netzer",
     "relagn",
+]
+_EXACT_DISCS = _PR_DISCS + _NIGHTLY_DISCS
+
+#: Full matrix for the parametrization: PR discs plain, the rest ``slow``-marked so
+#: the default run deselects them (pyproject ``addopts`` carries ``-m 'not slow'``)
+#: and the scheduled / ``run-slow-tests`` job picks them up.
+_EXACT_DISC_PARAMS = [*_PR_DISCS] + [
+    pytest.param(d, marks=pytest.mark.slow) for d in _NIGHTLY_DISCS
 ]
 
 # Shape depends on L_bol; float32 reference evaluation gives the wrong shape.
@@ -128,7 +149,7 @@ def _f32_matches_f64(ssp, disc):
     return rel.max() < 1e-3, f"max_rel={rel.max():.2e}"
 
 
-@pytest.mark.parametrize("disc", _EXACT_DISCS)
+@pytest.mark.parametrize("disc", _EXACT_DISC_PARAMS)
 def test_disc_is_exact_in_float32(ssp_bare, disc):
     """These disc blocks must match float64 to float32 eps (regression guard)."""
     ok, detail = _f32_matches_f64(ssp_bare, disc)
