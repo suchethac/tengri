@@ -287,11 +287,33 @@ def load_ssp_data(filepath: str, *, dtype=None) -> SSPData:
     **File format**: Standard DSPS HDF5 layout. See DSPS documentation
     and distributed templates on halos.as.arizona.edu for format details.
 
-    **Precision**: for a pure-float32 forward pass, pair ``dtype=jnp.float32``
-    here with a ``jax.enable_x64(False)`` context (or leave x64 off) so the
-    numpy source and the JAX compute are both 32-bit. Under the default x64
-    config a float32 grid still gives correct results — intermediates promote to
-    float64 — but only the host grid, not the compute, is halved.
+    **Precision**: this knob sets the dtype of the *host grid*. Under the default
+    x64 config a float32 grid gives correct results — intermediates promote to
+    float64 — so it halves grid memory (66.9 MB -> 33.5 MB for a typical SSP)
+    with no change to the answer.
+
+    It does **not**, on its own, buy a correct pure-float32 forward pass.
+    Overflow tracks the *compute* precision, not the storage dtype: pairing this
+    with ``jax.enable_x64(False)`` sends two published **linear** keys out of
+    range, and they return ``inf`` rather than raising. Measured on
+    ``ssp_prsc_miles`` at 1e10 Msun, where only the x64 setting differs:
+
+    .. code-block:: text
+
+        configuration                     grid dtype   stellar_mass_scale   nion
+        dtype=None,    x64 on (default)   float64      3.828e43             2.55e49
+        dtype=float32, x64 on             float32      3.828e43             2.55e49
+        dtype=None,    x64 off            float32      inf                  inf
+        dtype=float32, x64 off            float32      inf                  inf
+
+    Both exceed the float32 maximum of 3.4e38 by construction, so no grid dtype
+    can rescue them: ``stellar_mass_scale`` is ``total_mass * L_sun`` and
+    ``nion`` is an ionizing-photon rate. Their log-domain counterparts
+    (``log_stellar_mass_scale``, ``log_nion``) stay finite and are the float32-safe
+    reads — note that ``log_nion`` is finite in **every** row above, so a test that
+    asserts on it will not notice the linear key going ``inf``. The remaining linear
+    keys are issue #1206 item 3 (a breaking unit change, deliberately deferred); see
+    ``docs/dev/float32-tier-b-boundary.md``.
 
     Examples
     --------
