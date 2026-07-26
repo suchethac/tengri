@@ -71,6 +71,7 @@ from tengri import (
     FREE,
     FeaturePrecomp,
     Fixed,
+    ForwardModel,
     LineList,
     Observation,
     Photometry,
@@ -265,16 +266,19 @@ MAP_KW = dict(method="map", key=jax.random.PRNGKey(1), n_steps=200)
 
 
 def timed_map(model, label):
-    # The line likelihood is active because the Observation carries line_fluxes.
+    # The line likelihood is active because the Observation carries line_fluxes;
+    # the data passed here is photometry, and the observation says so, so there
+    # is no channel to declare.
     assert model.observation.line_fluxes is not None, "line likelihood not active"
+    forward = ForwardModel.build(sed=model)
     t0 = time.perf_counter()
-    model.fit(flux_phot, n_phot, data_type="photometry", **MAP_KW)  # pays the JIT compile
+    forward.fit(flux_phot, n_phot, **MAP_KW)  # pays the JIT compile
     cold = time.perf_counter() - t0
     t0 = time.perf_counter()
     # A second fit re-traces the step, so its wall time is ~= the first (see #1350:
     # each fit currently clears the JAX caches, which is why the compile is not
     # reused). The number that isolates the physics is post.wall_time_s below.
-    post = model.fit(flux_phot, n_phot, data_type="photometry", **MAP_KW)
+    post = forward.fit(flux_phot, n_phot, **MAP_KW)
     warm = time.perf_counter() - t0
     loop = post.wall_time_s  # the compiled optimization loop, compile excluded
     print(f"  {label:22s} fit() wall {warm:5.2f}s   compiled step {loop:5.2f}s")
@@ -311,10 +315,9 @@ print(
 # %%
 N_WARMUP, N_SAMPLES, N_CHAINS, N_LEAPFROG = 500, 300, 2, 100
 t0 = time.perf_counter()
-posterior = model_fast.fit(
+posterior = ForwardModel.build(sed=model_fast).fit(
     flux_phot,
     n_phot,
-    data_type="photometry",
     method="mcmc_hmc",
     key=jax.random.PRNGKey(7),
     n_warmup=N_WARMUP,
