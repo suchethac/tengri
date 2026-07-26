@@ -12,6 +12,7 @@ See issue #1186.
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 
 LN10 = 2.302585092994046
@@ -62,11 +63,31 @@ def apply_log10_scale(arr, log10_scale):
     -----
     JIT/grad/vmap-safe. Factors ``arr`` by its peak so the exponentiated scale
     is applied to an O(1) array; the peak's decades are folded into the exponent.
+
+    The peak is held under ``stop_gradient`` (#1415). It is a pure factorization
+    constant — ``(arr/p) * 10**(s + log10 p)`` equals ``arr * 10**s`` for *any*
+    ``p`` — so its derivative contributions cancel analytically. Left free, they
+    are two separate autodiff paths (through the numerator, and through
+    ``peak -> net -> pow10``) that must cancel numerically instead. They do in
+    float64, but in float32 one side underflows while the other survives, the
+    cancellation fails, and what is left is an uncancelled term the size of the
+    main one — gradients exactly **2x** too large. Measured on a photometry fit:
+    ``d(neg_log_posterior)/d(sfh_delayed_log_total_mass)`` was ``-5915.16``
+    against a true ``-2957.58``. Stopping the gradient leaves the single correct
+    path, ``d out/d arr = 10**log10_scale``, and float32 then tracks float64 to
+    ~1e-7.
+
+    Float64 **forward** values are untouched — ``stop_gradient`` is a no-op on the
+    forward pass. Float64 **gradients** move by at most a few ulp: measured
+    bit-identical where there is one scale seam (stellar, stellar+dust) and
+    ``<= 1.5e-15`` relative where there are several (stellar+dust IR+AGN). That is
+    the residue of a cancellation which was only ever exact to rounding, and it is
+    three orders inside the ``rtol <= 1e-12`` no-behavioral-change bar for #1206.
     """
     # initial=0.0 makes the peak of a zero-size array 0 (max over empty has no
     # identity and raises); the where() below then maps it to 1, so an empty
     # arr passes through as an empty result instead of a trace-time error.
-    peak = jnp.max(jnp.abs(arr), initial=0.0)
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(arr), initial=0.0))
     usable = peak > 0
     safe_peak = jnp.where(usable, peak, jnp.ones_like(peak))
     # With no peak to fold in, the exponent would collapse to the raw
