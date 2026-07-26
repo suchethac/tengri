@@ -36,8 +36,9 @@ class Catalog:
         Column mapping or object supporting `__getitem__[col] -> array`
         and `len()`. Required for `.fit()`; pass `None` for prediction-only.
     flux_unit : str
-        Unit of flux columns. One of: ``"cgs_fnu"`` (default), ``"mJy"``,
-        ``"uJy"``, ``"maggies"``, ``"ab_mag"``. [erg/s/cm²/Hz]
+        Unit of the flux columns — **required**, with no default, so a table
+        is never ingested under a guessed unit. One of: ``"cgs_fnu"``
+        [erg/s/cm²/Hz], ``"mJy"``, ``"uJy"``, ``"maggies"``, ``"ab_mag"``.
     redshift_col : str, optional
         Column name for per-galaxy redshifts. If given, the model must have
         a ``Fixed`` redshift and a ``catalog_z_range`` that covers the
@@ -179,6 +180,7 @@ class Catalog:
         store=None,
         percentiles=None,
         reducers=None,
+        properties=None,
         **kwargs,
     ) -> CatalogPosterior:
         """Fit all galaxies independently.
@@ -200,13 +202,26 @@ class Catalog:
             Storage mode for posterior samples. ``None`` (default) auto-selects:
             ``"full"`` if N <= 1000, else ``"summary"`` with a warning.
             ``"full"`` retains all samples. ``"summary"`` computes percentiles
-            and reducer statistics per property, then drops samples.
+            and reducer statistics per name, then drops samples. A method that
+            produces no samples (``"map"``, ``"laplace"``) has nothing to
+            summarize: it warns and the result reports ``store="full"``.
         percentiles : tuple, optional
-            Percentiles to compute when store="summary". Default (16, 50, 84).
+            Percentile levels to compute when ``store="summary"``, in the order
+            they should appear as columns. Default ``(16, 50, 84)``. The levels
+            are recorded on the result as ``percentile_levels`` and drive both
+            ``post[name]`` (which reads the 50 column) and ``to_table()``
+            labels — include 50 if you want a median.
         reducers : dict, optional
-            Additional reducer functions {name: callable} to apply per property
+            Additional reducer functions {name: callable} to apply per name
             (e.g., {"mean": np.mean, "std": np.std}). With store="full", these
             are ignored.
+        properties : tuple of str or None
+            Derived properties to include in the summary block alongside the
+            sampled parameters. ``None`` (default) includes every property the
+            model provides, so ``post.percentiles["stellar_mass"]`` works;
+            ``()`` includes none (parameters only — cheapest); an explicit
+            tuple narrows it, which is the knob to reach for on a large
+            catalog since each name costs one property evaluation per galaxy.
         **kwargs
             Forwarded to the inference method (e.g., ``n_warmup``, ``n_samples``
             for MCMC).
@@ -260,6 +275,7 @@ class Catalog:
             store=store,
             percentiles=percentiles,
             reducers=reducers,
+            properties=properties,
             **kwargs,
         )
 

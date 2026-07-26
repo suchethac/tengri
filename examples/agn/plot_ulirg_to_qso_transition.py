@@ -91,7 +91,7 @@ def build_ulirg_qso_model(tau_v, agn_lum_ratio):
     # SFR decreases as AGN fraction increases (energy budget constraint).
     # At agn_lum_ratio=0 (pure starburst): high SFR; at agn_lum_ratio=1 (pure QSO): low SFR.
     # ``sfh.type=const`` parametrizes by total stellar mass over the default
-    # window [start_gyr=0, end_gyr=13.8 Gyr]; convert via M = SFR × Δt:
+    # window [start_gyr=13.8, end_gyr=0 Gyr]; convert via M = SFR × Δt:
     #   log_total_mass = log_sfr + log10(1.38e10 yr) ≈ log_sfr + 10.14
     log_sfr = 1.5 - 2.0 * agn_lum_ratio
     log_total_mass = log_sfr + 10.14

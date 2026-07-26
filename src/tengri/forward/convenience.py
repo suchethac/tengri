@@ -1070,6 +1070,43 @@ def fit_model(
     if method is _UNSET:
         method = get_inference_defaults().get("method", "vi")
 
+    # --- A Data record goes to the canonical surface, not through here (#1366) ---
+    #
+    # ``SEDModel.fit`` is documented as sugar for
+    # ``ForwardModel.build(sed=self).fit(...)``, but only ``ForwardModel.fit``
+    # knew how to unpack a ``Data``. A record therefore fell through to the
+    # positional-argument check below and the user got a message about
+    # ``(flux, noise)`` tuples that never mentioned ``Data`` -- implying the call
+    # shape was wrong rather than that this surface did not support the type.
+    # Everything ``Data`` carries (censoring, line fluxes, joint
+    # photometry+spectrum) was unreachable from the one-liner we teach.
+    #
+    # Forwarding rather than re-implementing is deliberate: ``Data`` unpacking is
+    # ~70 lines that ends by rebuilding the Observation for line fluxes, and a
+    # second copy would drift. One record type, one validation seam
+    # (``Data.validate_against``), reached from both verbs.
+    from tengri.observation.data import Data as _Data
+
+    if isinstance(data, _Data):
+        from tengri.forward.forward_model import ForwardModel
+
+        if photometry is not None or spectrum is not None:
+            raise TypeError(
+                "fit(Data, photometry=... / spectrum=...) is ambiguous: the Data "
+                "record already carries every channel. Pass the record alone."
+            )
+        if data_type is not None:
+            # ForwardModel.fit has no data_type parameter, so forwarding it would
+            # drop it silently. It is redundant anyway -- which channels exist is
+            # already determined by which fields the record carries.
+            raise TypeError(
+                "fit(Data, data_type=...) is redundant: the Data record already "
+                "declares its channels (photometry=, spectrum=, lines=). Drop "
+                "data_type."
+            )
+        forward = ForwardModel.build(sed=model)
+        return forward.fit(data, noise, method=method, approx=approx, **kwargs)
+
     # --- Resolve data arrays ---
     if photometry is not None or spectrum is not None:
         if photometry is not None and spectrum is not None:
@@ -1104,13 +1141,29 @@ def fit_model(
     # deprecation warning since SEDModel.fit is now un-deprecated sugar (#1322).
     import warnings
 
+    from tengri.inference.fitter import split_fitter_kwargs
+
+    # ``params`` is the per-fit Fixed-value override (#1329); constructor-owned
+    # kwargs (calibration_marginalize, likelihood, ...) go to Fitter(...) and
+    # the rest to run() — spec §7's fit-time flags (#1378).
+    params_override = kwargs.pop("params", None)
+    ctor_kwargs, kwargs = split_fitter_kwargs(kwargs)
+
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
             message="Fitter\\(sed_model.*",
             category=DeprecationWarning,
         )
-        fitter = Fitter(model, data, noise, data_type=data_type, approx=approx)
+        fitter = Fitter(
+            model,
+            data,
+            noise,
+            data_type=data_type,
+            approx=approx,
+            params_override=params_override,
+            **ctor_kwargs,
+        )
     model.fitter_ = fitter
 
     # --- Optional MAP warm start ---

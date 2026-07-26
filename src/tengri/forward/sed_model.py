@@ -204,14 +204,27 @@ class WavePrecomp:
     >>> SEDModel(..., approx=WavePrecomp(n_z=200))  # finer ztable
     >>> SEDModel(..., approx=WavePrecomp(z_min=0.01, z_max=3.0, n_z=200))
     >>>
-    >>> # Catalog fit: 10⁴ galaxies at per-galaxy Fixed(z), one compile.
-    >>> model = SEDModel.build(
+    >>> # Catalog fit: 10⁴ galaxies at per-galaxy known z.
+    >>> sed = SEDModel.build(
     ...     ...,
-    ...     redshift=Fixed(0.0),  # placeholder; injected per call
+    ...     redshift=FIXED,  # per-galaxy value supplied by the redshift column
     ...     approx=WavePrecomp(catalog_z_range=(0.05, 1.5), n_z=200),
     ... )
-    >>> for row in catalog:
-    ...     posterior = model.fit(row.data, params={"redshift": row.z})
+    >>> forward = ForwardModel.build(sed=sed, observation=obs)
+    >>> posteriors = Catalog(forward, table, flux_unit="cgs_fnu", redshift_col="z").fit(
+    ...     method="map", key=key
+    ... )
+
+    Notes
+    -----
+    This example used to read ``model.fit(row.data, params={"redshift":
+    row.z})`` in a Python loop — a documented invocation that raised
+    ``TypeError`` until #1384 plumbed ``params=`` through ``SEDModel.fit``
+    (it now forwards to the same per-fit override ``ForwardModel.fit``
+    takes, and on a ``catalog_z_range`` model the redshift rides
+    ``data_args`` as a runtime input, #1316). ``Catalog`` remains the
+    taught surface for a table of galaxies with a redshift column: one
+    ingest, one validation, one compiled program.
     """
 
     n_z: int = 250
@@ -350,9 +363,17 @@ class FeaturePrecomp:
 
     Parameters
     ----------
-    n_grid : int, default 16
+    n_grid : int or dict, default 16
         Grid points per free ionization axis (Cue backend only; ignored for
         baked-in, whose window LUT has no ionization axes). Denser is tighter.
+
+        A scalar resolves every free axis alike. A dict ``{axis_name: n}``
+        resolves them independently — the griddable axes are ``met_logzsol``,
+        ``neb_logU`` and ``neb_logZ_gas``, omitted axes take 16, and any other
+        key raises rather than being silently ignored. Build cost is the
+        *product* over free axes, so per-axis resolution is what keeps a model
+        with several free axes affordable: spend points on the axis whose lines
+        actually move, not on the one you barely vary.
     lines : array_like or None, optional
         Rest-frame vacuum line wavelengths [Angstrom] to tabulate. ``None``
         (default) takes them from ``Observation.line_fluxes``.
@@ -393,11 +414,21 @@ class FeaturePrecomp:
     >>> # lines from the observation, photometry on the LUT path too:
     >>> SEDModel.build(..., approx=(WavePrecomp(), FeaturePrecomp()))
     >>> SEDModel.build(..., approx=FeaturePrecomp(n_grid=24))  # denser Cue grid
+    >>> # per-axis: dense where the lines move, coarse where they do not
+    >>> SEDModel.build(..., approx=FeaturePrecomp(n_grid={"met_logzsol": 24, "neb_logU": 8}))
     """
 
-    n_grid: int = 16
+    n_grid: int | dict[str, int] = 16
     lines: tuple[float, ...] | None = None
     ranges: dict | None = None
+
+    def __post_init__(self):
+        # Validate where the user typed it. The builder validates again at its own
+        # entry (it is reachable directly), but by then the traceback points at
+        # grid construction rather than at the config (#1311).
+        from tengri.components.nebular.nebular_grid_precompute import validate_n_grid
+
+        validate_n_grid(self.n_grid)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1268,22 +1299,27 @@ class SEDModel:
         """
         from tengri.observation.line_measurement import default_line_defs
 
+        backend = self._nebular_backend
+        # Cue-like: L_line = Q_H x l(theta), l independent of the SFH shape.
+        cue_like = backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
+
         lines = cfg.lines
         if lines is None:
             line_fluxes = getattr(observation, "line_fluxes", None) if observation else None
-            if line_fluxes is None:
+            if line_fluxes is not None:
+                lines = line_fluxes.wavelengths
+            elif cue_like:
+                lines = []
+            else:
                 raise ValueError(
                     "approx=FeaturePrecomp() has no emission lines to tabulate: the "
                     "Observation carries no line_fluxes and FeaturePrecomp(lines=...) "
                     "was not given. Either fit lines — Observation(..., "
                     "line_fluxes=LineFluxData(...)) — or name them explicitly."
                 )
-            lines = line_fluxes.wavelengths
         lines = jnp.asarray(lines)
 
-        backend = self._nebular_backend
-        if backend is not None and hasattr(backend, "predict_nebular_line_luminosities"):
-            # Cue-like: L_line = Q_H x l(theta), l independent of the SFH shape.
+        if cue_like:
             self.enable_fast_nebular(lines, n_grid=cfg.n_grid, ranges=cfg.ranges)
             return
 
@@ -2783,7 +2819,7 @@ class SEDModel:
             or self._approx_config_feature is not None
         )
 
-    def with_approx(self, approx):
+    def with_approx(self, approx, *, observation=None):
         """Return a copy of this model built with a different ``approx`` policy.
 
         Parameters
@@ -2793,14 +2829,20 @@ class SEDModel:
             ``approx=`` constructor argument: ``None`` for the exact wave-grid
             path, a single precompute config for one LUT family, or a composite
             tuple (at most one of each) such as ``(WavePrecomp(), FeaturePrecomp())``.
+        observation : Observation, optional
+            Observation for the clone. Defaults to this model's own. Passing a
+            different one rebuilds the LUT against *its* filters — the seam
+            :meth:`ForwardModel.build` uses to make its authoritative
+            observation win (#1367, spec §5).
 
         Returns
         -------
         SEDModel
             A new model sharing this model's ``spec``, ``ssp_data``,
-            ``observation`` and build settings, differing only in ``approx``.
-            Returns ``self`` unchanged when ``approx=None`` is requested on a
-            model that is already exact (a no-op).
+            ``observation`` and build settings, differing only in ``approx``
+            (and ``observation`` when given). Returns ``self`` unchanged when
+            ``approx=None`` is requested on a model that is already exact and
+            no observation override is given (a no-op).
 
         Notes
         -----
@@ -2810,12 +2852,12 @@ class SEDModel:
         inference layer uses this to fit on the fast LUT path while leaving the
         user's (exact) model untouched. **JIT-compatible**: build-time only.
         """
-        if approx is None and not self._has_modern_approx():
+        if approx is None and observation is None and not self._has_modern_approx():
             return self
         return SEDModel(
             self.spec,
             self.ssp_data,
-            observation=self.observation,
+            observation=self.observation if observation is None else observation,
             forward_dtype=str(self._forward_dtype),
             csp_integration=str(self._csp_integration),
             wave_chunk_size=self._wave_chunk_size,
@@ -4321,8 +4363,12 @@ class SEDModel:
         target_wavelengths : array_like, shape (n_lines,)
             Rest-frame vacuum line wavelengths [Angstrom] the grid tabulates and
             :meth:`predict_line_fluxes` serves.
-        n_grid : int, default 16
+        n_grid : int or dict, default 16
             Grid points per free ionization axis. Denser → tighter interpolation.
+            A dict ``{axis_name: n}`` resolves ``met_logzsol`` / ``neb_logU`` /
+            ``neb_logZ_gas`` independently; omitted axes take 16 and an
+            unrecognized key raises (#1311). Build cost is the product over free
+            axes.
         ranges : dict, optional
             Override ``{param: (lo, hi)}`` grid bounds (defaults to each free
             param's prior support).
@@ -7484,8 +7530,11 @@ class SEDModel:
             forward = ForwardModel.build(sed=self, observation=...)
             result = forward.fit(data, noise, method=method, ...)
 
-        For full control over loss functions and iterative refinement,
-        use :class:`ForwardModel` and :class:`Fitter` directly.
+        For full control — a custom likelihood, per-fit parameter overrides,
+        iterative refinement, or anything with a non-trivial output shape —
+        build the :class:`ForwardModel` yourself and call
+        :meth:`ForwardModel.fit`, the canonical inference surface. For many
+        independent galaxies, use :class:`~tengri.Catalog`.
 
         Parameters
         ----------
@@ -7512,18 +7561,21 @@ class SEDModel:
             uses the result to warm-start the requested method. ``None`` (default)
             uses the method's own default initialization.
         **kwargs
-            Forwarded to ``Fitter.run()``.
+            Forwarded to the inference method (e.g. ``n_warmup``,
+            ``n_samples`` for MCMC).
 
         Returns
         -------
         Posterior
-            Inference results.  ``._fitter`` is set so ``.refine()`` works.
-            After this call, ``self.fitter_`` holds the ``Fitter`` instance.
+            Inference results. ``.refine()`` continues or refines the fit.
 
         Notes
         -----
-        Convenience wrapper around :class:`Fitter`. For advanced usage
-        (custom loss, multiple refinement steps), use ``Fitter`` directly.
+        Sugar over :meth:`ForwardModel.fit`, which stays the canonical
+        inference surface. The engine underneath is an internal detail: all
+        of its expensive caches are model-keyed, so it holds no state a
+        fresh instance lacks and there is never a reason to reach for it
+        directly.
 
         Examples
         --------

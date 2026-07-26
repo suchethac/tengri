@@ -273,6 +273,66 @@ def resolve_method(method: str, emit_warning: bool = True) -> str:
     )
 
 
+#: Constructor parameters the convenience fit surfaces manage themselves
+#: (positionally or via their own named parameters) — never routed from a
+#: surface's ``**kwargs``.
+_FIT_SURFACE_MANAGED = frozenset(
+    {"self", "model", "data", "noise", "data_type", "data_mask", "approx", "params_override"}
+)
+
+
+def _model_catalog_z_range(model):
+    """The model's ``catalog_z_range`` (runtime-redshift LUT span), or ``None``.
+
+    Reads it from a ``ForwardModel`` (via its population's SED) or a bare
+    ``SEDModel`` — the same resolution the catalog engine uses.
+    """
+    if hasattr(model, "populations"):
+        try:
+            return model.populations[0].sed._catalog_z_range
+        except (AttributeError, IndexError):
+            return None
+    return getattr(model, "_catalog_z_range", None)
+
+
+def split_fitter_kwargs(kwargs):
+    """Split a fit-surface ``**kwargs`` dict into (constructor, run) halves (#1378).
+
+    The convenience surfaces (``ForwardModel.fit``, ``SEDModel.fit``) accept one
+    ``**kwargs``; parameters declared by ``Fitter.__init__`` — e.g.
+    ``calibration_marginalize``, ``cal_n_poly``, ``eline_marginalize``,
+    ``likelihood`` — belong to construction (spec #1320 §7 teaches them at the
+    fit call), everything else to :meth:`Fitter.run`. The allowlist is derived
+    from the live constructor signature so it cannot drift when the
+    constructor gains parameters. Parameters the surfaces manage themselves
+    (``data``, ``noise``, ``data_type``, ``data_mask``, ``approx``,
+    ``params_override``) are never routed.
+
+    Parameters
+    ----------
+    kwargs : dict
+        The surface's collected ``**kwargs``. Not mutated.
+
+    Returns
+    -------
+    ctor_kwargs : dict
+        The subset belonging to ``Fitter.__init__``.
+    run_kwargs : dict
+        Everything else, for ``Fitter.run`` (unknown names still fail loudly
+        there, as before).
+    """
+    import inspect
+
+    ctor_names = {
+        name
+        for name in inspect.signature(Fitter.__init__).parameters
+        if name not in _FIT_SURFACE_MANAGED
+    }
+    ctor_kwargs = {k: v for k, v in kwargs.items() if k in ctor_names}
+    run_kwargs = {k: v for k, v in kwargs.items() if k not in ctor_names}
+    return ctor_kwargs, run_kwargs
+
+
 class Fitter:
     """Inference engine for differentiable SED fitting with flexible method dispatch.
 
@@ -594,6 +654,28 @@ class Fitter:
             # different override compiles its own loss rather than reusing this one.
             self._fixed_values = {**self._fixed_values, **self._params_override}
 
+        # ── Runtime redshift routing (#1316, spec §9.4) ────────────
+        # On a model whose ztable spans a ``catalog_z_range``, a redshift
+        # override is a RUNTIME input to the LUT interpolation — thread it
+        # through ``data_args`` (the #1349 seam: ``build_loss_fn`` replaces the
+        # baked value with ``data_args["redshift"]``) and keep it OUT of the
+        # engine cache key, so distinct per-row redshifts share one compiled
+        # program instead of recompiling per row. The merge into
+        # ``_fixed_values`` above still happens — it keeps reporting
+        # (``_to_physical``) honest, and the baked value is dead weight in the
+        # loss because the ``data_args`` injection always overrides it.
+        # Invariant: the key omits redshift *iff* ``data_args`` carries it, so
+        # a shared loss closure can never silently run at another fit's baked z.
+        # Overrides on models without a ztable keep #1331's bake — there the
+        # redshift genuinely is a compile constant.
+        self._runtime_redshift = None
+        if (
+            self._params_override is not None
+            and "redshift" in self._params_override
+            and _model_catalog_z_range(model) is not None
+        ):
+            self._runtime_redshift = float(self._params_override["redshift"])
+
         # ── Data arguments ─────────────────────────────────────────
         self._data_args = self._build_data_args(model)
 
@@ -883,6 +965,10 @@ class Fitter:
             args["data_mask"] = self.data_mask
         if self.presence is not None:
             args["presence"] = self.presence
+        if self._runtime_redshift is not None:
+            # Runtime-routed redshift override (#1316): the loss replaces the
+            # baked fixed value with this traced input (#1349's injection).
+            args["redshift"] = jnp.asarray(self._runtime_redshift)
 
         obs = getattr(model, "observation", None)
         if obs is not None:
@@ -1146,8 +1232,20 @@ class Fitter:
             # fits differing only by override MUST get distinct loss functions —
             # exactly like the feature channels above. Without this, fit #2
             # silently reuses fit #1's baked override.
+            #
+            # EXCEPT a runtime-routed redshift (#1316): it rides ``data_args``
+            # as a traced input, so distinct z legitimately share one program.
+            # Note a routed-z-only override yields ``()``, distinct from the
+            # no-override ``None`` — a plain fit (no data_args redshift) never
+            # shares a closure whose baked z differs from its spec.
             (
-                tuple(sorted((k, round(float(v), 8)) for k, v in self._params_override.items()))
+                tuple(
+                    sorted(
+                        (k, round(float(v), 8))
+                        for k, v in self._params_override.items()
+                        if not (k == "redshift" and self._runtime_redshift is not None)
+                    )
+                )
                 if self._params_override
                 else None
             ),

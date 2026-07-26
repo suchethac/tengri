@@ -207,8 +207,9 @@ class Observation:
             warnings.warn(
                 "Observation(line_fluxes=...) / spectral_indices=... / "
                 "line_ratios=... carries measured values on the instrument schema "
-                "and is deprecated: declare WHICH lines with lines=LineList([...]) "
-                "and supply the VALUES per galaxy via Data(lines=...). See #1321.",
+                "and is deprecated: declare WHICH lines with "
+                "lines=LineList.from_names([...]) and supply the VALUES per galaxy "
+                "via Data(lines=...). See #1321.",
                 DeprecationWarning,
                 stacklevel=2,
             )
