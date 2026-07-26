@@ -210,14 +210,19 @@ class TestValidateAgainstCoversBothChannels:
         ("label", "flux", "noise", "match"),
         [
             ("noise wrong length", np.ones(50), np.ones(7), "noise shape"),
-            ("noise all NaN", np.ones(50), np.full(50, np.nan), "NaN/inf uncertainty"),
-            ("noise negative", np.ones(50), np.full(50, -0.1), "Non-positive uncertainty"),
-            ("noise zero", np.ones(50), np.zeros(50), "Non-positive uncertainty"),
+            ("noise all NaN", np.ones(50), np.full(50, np.nan), "NaN/inf spectrum uncertainty"),
+            (
+                "noise negative",
+                np.ones(50),
+                np.full(50, -0.1),
+                "non-positive spectrum uncertainty",
+            ),
+            ("noise zero", np.ones(50), np.zeros(50), "non-positive spectrum uncertainty"),
             (
                 "flux has NaN",
                 np.where(np.arange(50) < 3, np.nan, 1.0),
                 np.full(50, 0.1),
-                "NaN/inf in 3 of 50",
+                "NaN/inf spectrum flux",
             ),
         ],
     )
@@ -230,9 +235,9 @@ class TestValidateAgainstCoversBothChannels:
     @pytest.mark.parametrize(
         ("label", "noise", "match"),
         [
-            ("NaN sigma", np.array([0.1, np.nan, 0.1]), "NaN/inf uncertainty"),
-            ("zero sigma", np.array([0.1, 0.0, 0.1]), "Non-positive uncertainty"),
-            ("negative sigma", np.array([0.1, -0.2, 0.1]), "Non-positive uncertainty"),
+            ("NaN sigma", np.array([0.1, np.nan, 0.1]), "NaN/inf photometry uncertainty"),
+            ("zero sigma", np.array([0.1, 0.0, 0.1]), "non-positive photometry uncertainty"),
+            ("negative sigma", np.array([0.1, -0.2, 0.1]), "non-positive photometry uncertainty"),
         ],
     )
     def test_bad_photometry_uncertainty_is_rejected_and_names_the_band(self, label, noise, match):
