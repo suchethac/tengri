@@ -1153,9 +1153,13 @@ class Fitter:
         Notes
         -----
         Used by _get_or_build_engine to enable cross-galaxy engine reuse
-        in PopulationFitter and CatalogFitter. The signature is computed
-        ONCE per Fitter construction and cached to avoid recomputation
-        in tight loops.
+        in PopulationFitter and CatalogFitter.
+
+        Recomputed on every call — there is no memoization, despite a
+        long-standing claim here that it was "computed ONCE per Fitter
+        construction and cached". That matters: the x64 entry below has to
+        reflect the precision in effect *now*, not whatever was active when
+        the Fitter happened to be constructed.
         """
         model_sig = self.model.compile_signature()
         # Single source of truth with the engine cache: _engine_cache_key
@@ -1163,7 +1167,9 @@ class Fitter:
         # indices / censoring mask) whose presence is baked into the loss
         # closure. Keeping them out of this signature lets a joint
         # phot+lines Fitter silently reuse a photometry-only loss (line
-        # term dropped) or crash on a missing data_args key.
+        # term dropped) or crash on a missing data_args key. The x64 state
+        # rides in there too (#1392) — it is part of the engine *shape*, not
+        # of this outer tuple.
         return (model_sig, self._engine_cache_key())
 
     @property
@@ -1249,6 +1255,25 @@ class Fitter:
                 if self._params_override
                 else None
             ),
+            # x64 state (#1392). Precision changes the traced program, not
+            # just the values flowing through it, so it belongs in the engine
+            # *shape* key. Without it a Fitter built under
+            # ``jax.enable_x64(False)`` is a cache HIT for a loss/grad/engine
+            # traced under ``enable_x64(True)``: measured, the shared loss
+            # cache held one entry after a float64 gradient and gained ZERO
+            # new keys when a float32 Fitter asked for its own, so the float32
+            # caller silently ran the float64-traced program.
+            #
+            # Read live rather than at construction — ``compile_signature`` is
+            # recomputed per call, and the failing pattern builds the Fitter
+            # inside an ``enable_x64`` block.
+            #
+            # This is a correctness fix on its own terms. It is NOT a fix for
+            # the float32 NaN reported alongside it: on the model measured
+            # here float32 gradients are NaN with no float64 in the process at
+            # all, and clearing every shared cache does not change that. That
+            # NaN is a genuine float32 limit (see #1388), not contamination.
+            bool(jax.config.jax_enable_x64),
         )
 
     def _get_or_build_engine(self, pos_dict: dict) -> dict:

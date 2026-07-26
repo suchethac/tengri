@@ -113,8 +113,12 @@ class TestCompileSignatureInvariants:
         # baked into the loss closure via fitter._fixed_values, so two fits
         # differing only by override must compile distinct losses — else fit #2
         # silently reuses fit #1's baked redshift. None when no override.
-        assert len(fitter_sig) == 15, (
-            f"fitter_sig field count changed from 15 to {len(fitter_sig)}. "
+        # 16. jax_enable_x64 (#1392): precision changes the traced program, not
+        # just the values through it. Without it a float32 Fitter is a cache HIT
+        # for a float64-traced loss — measured as zero new keys in the shared
+        # loss cache when a float32 Fitter asked for its own.
+        assert len(fitter_sig) == 16, (
+            f"fitter_sig field count changed from 16 to {len(fitter_sig)}. "
             "If intentional, update this assertion and the docstring."
         )
 
