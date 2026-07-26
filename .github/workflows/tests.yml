@@ -371,24 +371,43 @@ jobs:
           #                on #1372, against 30 min at -n 2 when it survived).
           #                More RUNNERS is free; more workers per runner is not.
           #
-          # Split boundaries are MEASURED, not guessed — CI wall clock attributed
-          # to subtrees from the green #1372 run (2026-07-25, 48 min total):
+          # Boundaries are set from MEASURED shard durations. The first split used
+          # wall clock attributed to subtrees by mapping progress-percentage
+          # timestamps onto collection order, and that method UNDER-COUNTED bug/ by
+          # 2.3x — it assumes tests are evenly weighted inside each progress
+          # interval, and they are not. Predicted vs actual on #1380:
           #
-          #   synthesizer_parity 12.7  bug 11.3  top-level 10.5
-          #   paper 10.0  precision 3.5  agn 0.1
+          #   shard          predicted   ACTUAL
+          #   regression-a      16.2      6m40s
+          #   regression-b      11.4     26m24s   <- the long pole, 2.3x out
+          #   regression-c      10.0      3m03s
+          #   regression-d      10.5     15m18s
           #
-          # giving a predicted max shard of ~16 min. Re-measure before rebalancing
-          # (the recipe is on #1346); this file's share table has gone stale twice.
+          # So bug/ is now split in half at runtime (see the run step). Trust only
+          # the ACTUAL column; re-measure from a completed run's job durations
+          # rather than from progress lines. This file's timing notes have now gone
+          # stale three times — treat every number here as needing a date.
           - shard: regression-a
             paths: tests/regression/synthesizer_parity tests/regression/precision
             nproc: 1
             budget: 50
-          - shard: regression-b
-            paths: tests/regression/bug tests/regression/agn
+          # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
+          # 9.5% of the subtree), so it is halved by FILE COUNT at runtime rather
+          # than by a hardcoded list. `bug_half` triggers that in the run step;
+          # new test files are absorbed automatically instead of silently landing
+          # on whichever side a frozen glob happens to match.
+          - shard: regression-b1
+            paths: ""
+            bug_half: "1"
+            nproc: 1
+            budget: 50
+          - shard: regression-b2
+            paths: ""
+            bug_half: "2"
             nproc: 1
             budget: 50
           - shard: regression-c
-            paths: tests/regression/paper
+            paths: tests/regression/paper tests/regression/agn
             nproc: 1
             budget: 50
           # The top-level files only — every subdirectory above is excluded so no
@@ -467,8 +486,44 @@ jobs:
       # stalls its worker while the others finish; the per-test cap converts that
       # into a fast, named failure (10 min ≫ any healthy test — all run < 150 s
       # locally) instead of a silent job-timeout.
+      # Resolve the test paths. Normally that is just `matrix.paths`; for the two
+      # bug/ half-shards it is computed here so the split follows the directory
+      # instead of a frozen list -- a hardcoded half goes stale the moment someone
+      # adds a test file, and the wrong half silently grows.
+      - name: Resolve test paths
+        id: paths
+        run: |
+          set -euo pipefail
+          HALF_SEL="${{ matrix.bug_half }}"
+          if [ -z "$HALF_SEL" ]; then
+            echo "value=${{ matrix.paths }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Newline-separated + head/tail rather than `mapfile`, so this same
+          # logic can be run and verified on a dev machine (macOS ships bash 3.2,
+          # which has no mapfile). Paths here never contain spaces; assert it
+          # rather than trust it, since word-splitting would silently drop files.
+          ALL=$(find tests/regression/bug -name 'test_*.py' | sort)
+          N=$(printf '%s\n' "$ALL" | wc -l | tr -d ' ')
+          if [ "$N" -lt 2 ]; then
+            echo "::error::expected >=2 files under tests/regression/bug, found $N"
+            exit 1
+          fi
+          if printf '%s\n' "$ALL" | grep -q '[[:space:]]'; then
+            echo "::error::a test path contains whitespace; the split would drop files"
+            exit 1
+          fi
+          HALF=$(( (N + 1) / 2 ))
+          if [ "$HALF_SEL" = "1" ]; then
+            SEL=$(printf '%s\n' "$ALL" | head -n "$HALF")
+          else
+            SEL=$(printf '%s\n' "$ALL" | tail -n +$((HALF + 1)))
+          fi
+          COUNT=$(printf '%s\n' "$SEL" | wc -l | tr -d ' ')
+          echo "bug/ half $HALF_SEL: $COUNT of $N files"
+          echo "value=$(printf '%s\n' "$SEL" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
       - run: |
-          pytest ${{ matrix.paths }} -q \
+          pytest ${{ steps.paths.outputs.value }} -q \
             -n ${{ matrix.nproc }} \
             --timeout=600 --timeout-method=thread \
             --ignore=tests/crossval \
@@ -585,24 +640,43 @@ jobs:
           #                on #1372, against 30 min at -n 2 when it survived).
           #                More RUNNERS is free; more workers per runner is not.
           #
-          # Split boundaries are MEASURED, not guessed — CI wall clock attributed
-          # to subtrees from the green #1372 run (2026-07-25, 48 min total):
+          # Boundaries are set from MEASURED shard durations. The first split used
+          # wall clock attributed to subtrees by mapping progress-percentage
+          # timestamps onto collection order, and that method UNDER-COUNTED bug/ by
+          # 2.3x — it assumes tests are evenly weighted inside each progress
+          # interval, and they are not. Predicted vs actual on #1380:
           #
-          #   synthesizer_parity 12.7  bug 11.3  top-level 10.5
-          #   paper 10.0  precision 3.5  agn 0.1
+          #   shard          predicted   ACTUAL
+          #   regression-a      16.2      6m40s
+          #   regression-b      11.4     26m24s   <- the long pole, 2.3x out
+          #   regression-c      10.0      3m03s
+          #   regression-d      10.5     15m18s
           #
-          # giving a predicted max shard of ~16 min. Re-measure before rebalancing
-          # (the recipe is on #1346); this file's share table has gone stale twice.
+          # So bug/ is now split in half at runtime (see the run step). Trust only
+          # the ACTUAL column; re-measure from a completed run's job durations
+          # rather than from progress lines. This file's timing notes have now gone
+          # stale three times — treat every number here as needing a date.
           - shard: regression-a
             paths: tests/regression/synthesizer_parity tests/regression/precision
             nproc: 1
             budget: 50
-          - shard: regression-b
-            paths: tests/regression/bug tests/regression/agn
+          # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
+          # 9.5% of the subtree), so it is halved by FILE COUNT at runtime rather
+          # than by a hardcoded list. `bug_half` triggers that in the run step;
+          # new test files are absorbed automatically instead of silently landing
+          # on whichever side a frozen glob happens to match.
+          - shard: regression-b1
+            paths: ""
+            bug_half: "1"
+            nproc: 1
+            budget: 50
+          - shard: regression-b2
+            paths: ""
+            bug_half: "2"
             nproc: 1
             budget: 50
           - shard: regression-c
-            paths: tests/regression/paper
+            paths: tests/regression/paper tests/regression/agn
             nproc: 1
             budget: 50
           # The top-level files only — every subdirectory above is excluded so no
@@ -640,8 +714,44 @@ jobs:
       # same commit on different runners is a free near-controlled experiment, and
       # when one passes while the other dies the test *content* is exonerated by
       # construction. That only holds while the jobs do not diverge in how they run.
+      # Resolve the test paths. Normally that is just `matrix.paths`; for the two
+      # bug/ half-shards it is computed here so the split follows the directory
+      # instead of a frozen list -- a hardcoded half goes stale the moment someone
+      # adds a test file, and the wrong half silently grows.
+      - name: Resolve test paths
+        id: paths
+        run: |
+          set -euo pipefail
+          HALF_SEL="${{ matrix.bug_half }}"
+          if [ -z "$HALF_SEL" ]; then
+            echo "value=${{ matrix.paths }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Newline-separated + head/tail rather than `mapfile`, so this same
+          # logic can be run and verified on a dev machine (macOS ships bash 3.2,
+          # which has no mapfile). Paths here never contain spaces; assert it
+          # rather than trust it, since word-splitting would silently drop files.
+          ALL=$(find tests/regression/bug -name 'test_*.py' | sort)
+          N=$(printf '%s\n' "$ALL" | wc -l | tr -d ' ')
+          if [ "$N" -lt 2 ]; then
+            echo "::error::expected >=2 files under tests/regression/bug, found $N"
+            exit 1
+          fi
+          if printf '%s\n' "$ALL" | grep -q '[[:space:]]'; then
+            echo "::error::a test path contains whitespace; the split would drop files"
+            exit 1
+          fi
+          HALF=$(( (N + 1) / 2 ))
+          if [ "$HALF_SEL" = "1" ]; then
+            SEL=$(printf '%s\n' "$ALL" | head -n "$HALF")
+          else
+            SEL=$(printf '%s\n' "$ALL" | tail -n +$((HALF + 1)))
+          fi
+          COUNT=$(printf '%s\n' "$SEL" | wc -l | tr -d ' ')
+          echo "bug/ half $HALF_SEL: $COUNT of $N files"
+          echo "value=$(printf '%s\n' "$SEL" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
       - run: |
-          pytest ${{ matrix.paths }} -q \
+          pytest ${{ steps.paths.outputs.value }} -q \
             -n ${{ matrix.nproc }} \
             --cov=src/tengri --cov-report=xml --cov-report=term:skip-covered \
             --ignore=tests/crossval \
