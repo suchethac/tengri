@@ -2277,15 +2277,25 @@ class Fitter:
         _user_lean = kwargs.pop("lean", None)
         if _user_lean is not None:
             warnings.warn(
-                "lean= is retired: fit() keeps your warm caches (iterate policy); "
-                "Catalog sweeps automatically. See #1318.",
+                "lean= is retired: every fit keeps its warm caches (iterate "
+                "policy), including catalog fits — one inference-body compile "
+                "serves the whole catalog. See #1318, #1344.",
                 DeprecationWarning,
                 stacklevel=2,
             )
 
         # --- Cache policy derivation (2026-07) ────────────────────────────
-        # _cache_policy is a private kwarg set by Catalog (T2) when it passes
-        # _cache_policy='sweep' to trigger the drop-stale path. If not present,
+        # _cache_policy selects the L3 (inference-body) eviction policy.
+        #
+        # Catalog deliberately does NOT pass 'sweep' (#1344). ``_lean_keep_sig``
+        # is ``compile_signature()`` — data *shape*, never data values — so two
+        # galaxies of the same model and shape produce the same key. 'iterate'
+        # therefore keeps the one entry both galaxies share and the catalog pays
+        # one inference-body compile; 'sweep' passes ``keep_sig=None`` and drops
+        # that entry too, which would recompile per galaxy — the #1316 cliff the
+        # catalog path exists to avoid. 'sweep' remains reachable through
+        # ``tengri.lean()`` for memory-constrained runs that would rather pay
+        # the recompile. If not present,
         # derive based on the deprecated lean= kwarg (for back-compat) or the
         # context (persistent() vs lean()). Default: 'iterate' (keep-matching).
         _cache_policy = kwargs.pop("_cache_policy", None)
