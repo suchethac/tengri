@@ -44,6 +44,15 @@ Production code (`PopulationFitter.run("native_vi_linear")`, 12 SDSS+GALEX
 filters, n_iterations=2) with the persistent JAX cache enabled. Cold = first
 run from a fresh cache; warm = second run, same N.
 
+```{note}
+This benchmark was recorded against `native_vi_linear`, which has since been
+demoted to `tier="broken"` — the numbers below describe the compile behavior,
+not a method to reach for. For catalog work use `mcmc_nuts` / `mcmc_hmc`
+(batched and vmappable) or `map` (sequential); the compile analysis carries over
+unchanged, since it is a property of the batched forward pass rather than of the
+sampler.
+```
+
 | N    | setup_s | cold_run_s | warm_run_s | compile_proxy = cold − warm |
 |------|---------|------------|------------|-----------------------------|
 | 64   | 3.4     | 25.7       | 16.1       | 9.6                         |

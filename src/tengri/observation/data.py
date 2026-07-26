@@ -18,6 +18,48 @@ import jax.numpy as jnp
 import numpy as np
 
 
+def _bad_indices(values, predicate) -> np.ndarray:
+    """Indices where ``predicate`` flags a value as unusable."""
+    return np.flatnonzero(predicate(np.asarray(values)))
+
+
+def _describe(bad: np.ndarray, names=None, limit: int = 5) -> str:
+    """Name the offending channels — band names when known, else indices."""
+    if names is not None:
+        labels = [str(names[i]) for i in bad[:limit]]
+    else:
+        labels = [f"index {i}" for i in bad[:limit]]
+    more = f" (+{bad.size - limit} more)" if bad.size > limit else ""
+    return ", ".join(labels) + more
+
+
+def _reject_nonfinite(values, channel: str, names=None) -> None:
+    """Raise if any value is NaN or inf, naming the offending channel."""
+    bad = _bad_indices(values, lambda a: ~np.isfinite(a))
+    if bad.size:
+        raise ValueError(
+            f"NaN/inf {channel} at {_describe(bad, names)}: a single-galaxy "
+            "Data must be complete — drop the channel from the Observation "
+            "instead of passing a placeholder (spec 3.3)."
+        )
+
+
+def _reject_nonpositive_sigma(values, channel: str, names=None) -> None:
+    """Raise if any uncertainty is <= 0.
+
+    A zero sigma divides by zero; a *negative* one is worse, because ``chi^2``
+    squares the sign away — the fit then runs to completion and reports a
+    confidently wrong answer with no warning anywhere.
+    """
+    bad = _bad_indices(values, lambda a: np.isfinite(a) & (a <= 0))
+    if bad.size:
+        raise ValueError(
+            f"non-positive {channel} at {_describe(bad, names)}: uncertainties "
+            "must be > 0. A negative sigma is squared away by chi^2 and would "
+            "silently weight that channel as if the sign were positive."
+        )
+
+
 class ValidatedData(NamedTuple):
     flux: jnp.ndarray | None  # (n_filters,) [erg/s/cm^2/Hz]
     noise: jnp.ndarray | None  # (n_filters,)
@@ -25,53 +67,6 @@ class ValidatedData(NamedTuple):
     spec_noise: jnp.ndarray | None  # (n_pix,)
     censor: jnp.ndarray | None  # (n_filters,) in {0, 1, -1}
     line_values: dict | None  # name -> (value, err)
-
-
-def _check_uncertainties(sigma, channel: str, names) -> None:
-    """Reject uncertainty arrays that cannot produce a meaningful likelihood.
-
-    One rule for both channels, rather than two copies that drift: the
-    photometry branch used to check its flux and the spectroscopy branch used to
-    check neither, so a NaN or non-positive sigma reached the fit unremarked
-    (#1365).
-
-    Parameters
-    ----------
-    sigma : ndarray, shape (n,)
-        1-sigma uncertainties [same units as the channel's flux].
-    channel : str
-        ``"photometry"`` or ``"spectrum"``, used in the message.
-    names : sequence of str or None
-        Per-element labels (filter names) when the channel has them, so the
-        message can point at the offending band rather than an index.
-
-    Raises
-    ------
-    ValueError
-        If any entry is non-finite, or is <= 0 — a zero sigma divides by zero
-        and a negative one gives a negative variance. Both yield a plausible-
-        looking fit rather than an error, which is the failure mode this guards.
-    """
-
-    def _label(idx):
-        if names is not None:
-            return [names[i] for i in idx]
-        return [int(i) for i in idx]
-
-    bad = np.flatnonzero(~np.isfinite(sigma))
-    if bad.size:
-        raise ValueError(
-            f"NaN/inf uncertainty in {channel} {_label(bad)}: a non-finite sigma "
-            "poisons the whole likelihood, not just its own term."
-        )
-    nonpos = np.flatnonzero(sigma <= 0.0)
-    if nonpos.size:
-        raise ValueError(
-            f"Non-positive uncertainty in {channel} {_label(nonpos)}: sigma must "
-            "be > 0 (zero divides by zero, negative gives a negative variance). "
-            "To ignore a datum, drop it from the Observation rather than "
-            "zeroing its error."
-        )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -124,11 +119,10 @@ class Data:
                     "must be complete — drop the filter from the "
                     "Observation instead (spec 3.3)."
                 )
-            # The NOISE array was checked for shape but never for value (#1365).
-            # A NaN sigma poisons the whole likelihood, and a non-positive sigma
-            # is a division by zero or a negative variance — both produce a
-            # meaningless fit rather than an error.
-            _check_uncertainties(np.asarray(noise), "photometry", phot_schema.names)
+            # The uncertainties are half the record and were previously unchecked,
+            # so a NaN or sign-flipped error bar reached the likelihood untouched.
+            _reject_nonfinite(noise, "photometry uncertainty", phot_schema.names)
+            _reject_nonpositive_sigma(noise, "photometry uncertainty", phot_schema.names)
         if self.censor is not None:
             c = np.asarray(self.censor)
             if c.dtype == bool:
@@ -152,24 +146,16 @@ class Data:
                 raise ValueError(
                     f"spectrum shape {spec_flux.shape} does not match the wave grid ({npix} pix)."
                 )
-            # The spectroscopy channel was validated on flux SHAPE alone (#1365):
-            # a mis-shaped noise array, a NaN flux, or a non-positive sigma all
-            # passed. Photometry has checked its flux since spec 3.3; this brings
-            # the second channel to the same contract instead of leaving it to
-            # fail somewhere downstream, or not at all.
+            # Only the flux length was checked before, so a short or long noise array
+            # broadcast silently against the residual instead of failing.
             if spec_noise.shape != (npix,):
                 raise ValueError(
                     f"spectrum noise shape {spec_noise.shape} does not match the "
-                    f"wave grid ({npix} pix); the flux array is {spec_flux.shape}."
+                    f"wave grid ({npix} pix); flux and uncertainty must align."
                 )
-            n_bad = int(np.count_nonzero(~np.isfinite(np.asarray(spec_flux))))
-            if n_bad:
-                raise ValueError(
-                    f"NaN/inf in {n_bad} of {npix} spectrum flux pixels: a "
-                    "single-galaxy Data must be complete — mask the pixels out of "
-                    "the Spectroscopy wave grid instead (spec 3.3)."
-                )
-            _check_uncertainties(np.asarray(spec_noise), "spectrum", None)
+            _reject_nonfinite(spec_flux, "spectrum flux")
+            _reject_nonfinite(spec_noise, "spectrum uncertainty")
+            _reject_nonpositive_sigma(spec_noise, "spectrum uncertainty")
         if self.lines:
             declared = getattr(observation, "lines", None)
             declared_names = set(getattr(declared, "names", []) or [])
@@ -180,4 +166,11 @@ class Data:
                     "Observation's LineList — declare WHICH lines on the "
                     "schema; supply their VALUES here (spec 3.2)."
                 )
+            # Line fluxes carry the same NaN / sign-flip exposure as the continuum,
+            # and each is named individually so the offending line is obvious.
+            for line_name, pair in self.lines.items():
+                value, err = pair
+                _reject_nonfinite([value], f"{line_name} line flux", [line_name])
+                _reject_nonfinite([err], f"{line_name} line uncertainty", [line_name])
+                _reject_nonpositive_sigma([err], f"{line_name} line uncertainty", [line_name])
         return ValidatedData(flux, noise, spec_flux, spec_noise, censor, self.lines)

@@ -165,6 +165,58 @@ where `J_full` includes derivatives of both the signal and noise model, and `H_n
 is the Hessian of the noise-model likelihood. The `variable_noise_metric_vec` function
 handles this generalization.
 
+### 2.5 The Same Metric for HMC (`precondition=True`)
+
+The metric above is what makes the VI methods work: geoVI and MGVI re-evaluate it at the
+current position on every iteration, so the geometry they see is always locally white.
+NIFTy does the same thing (`nifty8/re/evi.py`), and standardization exists precisely so
+the prior's contribution is exactly `I` and only `J^T N^{-1} J` has to be computed.
+
+A Hamiltonian sampler cannot do that. Its mass matrix is estimated once during warmup
+and then frozen, so it gets no benefit from the standardized prior when the likelihood
+curvature varies. On the correlated-field posterior the gap is wide — measured at
+n_grid=16 with emission lines (D=25):
+
+```
+cond(grad^2 H) at the MAP        1.1e5      (eigenvalues 0.81 ... 9.0e4)
+```
+
+No diagonal mass matrix covers that, and a dense one estimated from warmup draws is both
+noisy and memory-hungry.
+
+`precondition=True` (on `mcmc_nuts`, `mcmc_hmc`, `mcmc_dynamic_hmc`) supplies the metric
+analytically instead. It is a **linear change of variables**, not a mass matrix:
+
+```
+G = -grad^2 log p   at the initial point, eigenvalues floored at 1.0
+G = L L^T,  A = L^{-T}      so  A A^T = G^{-1}  and  A^T G A = I
+
+sample  H(A zeta)   instead of   H(xi),   then map draws back with   xi = A zeta
+```
+
+Because the map is linear its Jacobian is constant, so the posterior is unchanged — only
+the geometry the integrator sees. The eigenvalue floor of 1.0 is the prior's exact
+contribution: the Gauss-Newton likelihood term is positive semi-definite, so anything
+below 1 is residual curvature (the term Gauss-Newton drops).
+
+The metric is formally position-dependent, so a single one built at the MAP is an
+approximation. Measured, it holds across the region a chain actually visits:
+
+| point | preconditioned cond |
+|---|---|
+| at the MAP | 1.23 |
+| timescale latents at +2 sd | 2.62 (raw cond there: 1.2e4) |
+| random 1-sd jitter | 2.05 |
+
+**Practical notes.**
+
+- Pass `init_from` a MAP result so the metric is built where the chain will be.
+- It costs one dense `(D, D)` Hessian up front (`O(D)` backward passes) — worthwhile on
+  stiff posteriors at moderate `D`, not on easy low-dimensional ones.
+- Default is off; no existing fit changes behavior.
+- Gradient-free and self-tuning kernels (`mcmc_raytrace`, `mcmc_ess`, `mcmc_mclmc`) do
+  not take the flag — whitening the integrator's metric is meaningless for them.
+
 ---
 
 ## 3. geoVI: Geometric Variational Inference

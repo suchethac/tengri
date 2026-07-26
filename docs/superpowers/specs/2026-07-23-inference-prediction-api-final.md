@@ -295,7 +295,7 @@ Catalog(fwd, galaxies).fit(method="map", forward_chunk_size=1)
 #   forward_chunk_size=1 → no vmap → ragged n_data allowed
 
 # target — vmapped via union-LUT + presence mask                      ◆
-approx = WavePrecomp(filters=union_filter_set, catalog_z_range=(0.05, 1.5))
+approx = WavePrecomp(catalog_z_range=(0.05, 1.5))   # filters come from the Observation
 fwd    = ForwardModel.build(sed=sed,
              observation=Observation(photometry=Photometry.from_names(union_filter_set)),
              approx=approx)
