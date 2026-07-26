@@ -1047,6 +1047,61 @@ class Parameters:
                     f"Parameter '{name}' ({desc}): bounds ({lo}, {hi}) "
                     f"violate physical constraint: {err_msg}"
                 )
+        self._validate_orderings()
+
+    #: Pairs that must stay ordered ``greater > lesser`` in LOOKBACK time, with the
+    #: physical reason. ``bound_check`` above is strictly per-parameter and cannot
+    #: express this, which is why an inverted pair passed validation and produced a
+    #: silent zero-mass galaxy (#1277).
+    _ORDERED_PAIRS: tuple[tuple[str, str, str], ...] = (
+        (
+            "sfh_const_start_gyr",
+            "sfh_const_end_gyr",
+            "star formation cannot stop before it starts: 'start_gyr' is the lookback "
+            "to SF ONSET and 'end_gyr' the lookback to SF CESSATION, so start_gyr must "
+            "be the LARGER number. The names read backwards on purpose (they are "
+            "chronological, the axis is lookback), which is exactly why this is easy "
+            "to invert by accident",
+        ),
+    )
+
+    def _validate_orderings(self):
+        """Reject parameter pairs whose ordering is physically contradictory.
+
+        An inverted ``const`` window makes the top-hat empty, so the requested
+        ``log_total_mass`` is silently discarded and the galaxy has zero flux — and
+        because the shape is identically zero, the gradient w.r.t. both bounds is
+        zero too, giving a gradient sampler an absorbing basin with no way out
+        (#1277). Free priors are rejected when their supports *overlap*, since an
+        overlap means the sampler can reach the dead region: measured at 21.8 % of
+        prior draws for ``start_gyr=Uniform(0.5, 10)``, ``end_gyr=Uniform(0, 5)``.
+        """
+        for greater, lesser, reason in self._ORDERED_PAIRS:
+            if greater not in self._distributions or lesser not in self._distributions:
+                continue
+            # Lowest value ``greater`` can reach vs highest ``lesser`` can reach:
+            # the only pair that can violate the ordering. ``bounds`` is a 1-tuple
+            # for Fixed and (lo, hi) for a prior, so [0]/[-1] covers both.
+            g_lo = self._distributions[greater].bounds[0]
+            l_hi = self._distributions[lesser].bounds[-1]
+            if g_lo > l_hi:
+                continue  # every reachable pair is correctly ordered
+            both_fixed = (
+                self._distributions[greater].is_fixed and self._distributions[lesser].is_fixed
+            )
+            if both_fixed:
+                raise ValueError(
+                    f"'{greater}' ({g_lo}) must be greater than '{lesser}' ({l_hi}): {reason}."
+                )
+            raise ValueError(
+                f"The priors on '{greater}' (reaching down to {g_lo}) and '{lesser}' "
+                f"(reaching up to {l_hi}) overlap, so the sampler can reach "
+                f"{greater} <= {lesser}, where {reason}. That region returns a "
+                "zero-mass galaxy with an exactly-zero gradient, which a gradient-based "
+                f"sampler cannot escape. Give them non-overlapping supports (raise the "
+                f"lower bound of '{greater}' above the upper bound of '{lesser}', or "
+                "lower the latter), or fix one of them."
+            )
 
     # ── Properties ────────────────────────────────────────────────────
 

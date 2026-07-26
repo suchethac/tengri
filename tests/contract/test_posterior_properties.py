@@ -425,6 +425,65 @@ def test_catalog_properties_stack_over_galaxies(model, samples):
     assert ci.shape == (3, 3), "expected (n_galaxies, 3) for (lo, med, hi)"
 
 
+# ── string indexing: cat["name"] is the median convenience (spec §9.2, #1368) ──
+
+
+def _three_galaxy_catalog(model, samples):
+    from tengri.inference.catalog_fitter import CatalogPosterior
+    from tengri.inference.posterior import Posterior
+
+    posts = [
+        Posterior(
+            samples={k: v + float(g) for k, v in samples.items()},
+            params={k: v[0] for k, v in samples.items()},
+            method="test",
+            wall_time_s=0.0,
+            diagnostics={},
+            _model=model,
+        )
+        for g in range(3)
+    ]
+    return posts, CatalogPosterior(posteriors=posts, method="test", n_galaxies=3)
+
+
+def test_catalog_getitem_string_is_the_median_convenience(model, samples):
+    """cat["stellar_mass"] → per-galaxy medians, shape (N,) — spec §9.2 (#1368).
+
+    Positional indexing must keep working unchanged: cat[0] is the first
+    galaxy's Posterior. The two never collide — one key type each.
+    """
+    posts, cat = _three_galaxy_catalog(model, samples)
+
+    med = cat["stellar_mass"]
+    assert np.shape(med) == (3,), "expected one median per galaxy"
+    per_galaxy = np.asarray(cat.properties["stellar_mass"])  # (3, n_samples)
+    np.testing.assert_allclose(np.asarray(med), np.median(per_galaxy, axis=1), rtol=1e-12)
+
+    assert cat[0] is posts[0]
+    assert cat[-1] is posts[-1]
+    assert cat[1:3] == posts[1:3]
+
+
+def test_catalog_getitem_string_answers_from_summary_store():
+    """store="summary" has no per-galaxy posteriors — the medians must come
+    from the stored percentile block (same median column to_table uses)."""
+    from tengri.inference.catalog_fitter import CatalogPosterior
+
+    pct = {"stellar_mass": np.array([[9.0, 10.0, 11.0], [8.0, 9.0, 10.0]])}
+    cat = CatalogPosterior(
+        posteriors=[], method="test", n_galaxies=2, store="summary", percentiles=pct
+    )
+    np.testing.assert_allclose(np.asarray(cat["stellar_mass"]), [10.0, 9.0])
+
+
+def test_catalog_getitem_unknown_name_names_the_available_keys(model, samples):
+    """An unknown property name raises KeyError that teaches what exists."""
+    _, cat = _three_galaxy_catalog(model, samples)
+
+    with pytest.raises(KeyError, match="stellar_mass"):
+        cat["definitely_not_a_property"]
+
+
 # ── observables over the sample axis (contract §3: exact by default) ──
 
 

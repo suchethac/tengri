@@ -298,23 +298,116 @@ jobs:
     # Sharded across runners, one tree per shard. The suite had grown to 22-24 min
     # against a 25 min cap — it was about to start failing on timeout rather than on
     # any test. More workers per runner is NOT the lever (that is exactly what OOM-
-    # killed the VM; see the -n 2 note below), but more RUNNERS is free: matrix jobs
-    # run concurrently, each still capped at -n 2, so peak RSS per runner is unchanged.
+    # killed the VM; see the worker-count note below), but more RUNNERS is free:
+    # matrix jobs run concurrently, so peak RSS per runner does not grow with the
+    # number of shards.
     #
-    # Shares of the old single-job wall clock, measured at -n 2:
+    # Worker count is now PER SHARD (`matrix.nproc`), not a uniform -n 2 — regression
+    # runs serial. Any statement below of the form "each shard runs at -n 2" is only
+    # true of contract/components/physics.
+    #
+    # Shares of the old single-job wall clock, measured at -n 2 — STALE, and left
+    # only as history. Re-measure before reasoning from shares; this comment has
+    # been wrong twice (it named `contract` the long pole long after `regression`
+    # took over at ~2x). See the re-measure recipe on #1346.
     #   contract 43% · components 28% · regression 22% · physics 7%
-    # so regression+physics pair into one shard and `contract` (the long pole) sets
-    # the wall clock. Wall = slowest shard, not the sum.
+    # `contract` (the long pole) sets the wall clock. Wall = slowest shard, not the
+    # sum, so splitting the small shards is free.
+    #
+    # regression and physics were ONE shard until 2026-07. They were split because
+    # the paired shard walked back into the 16 GB ceiling: it died at ~21-22 min and
+    # ~95-97% of the suite with 'The runner has received a shutdown signal' and zero
+    # test failures — the same host-OOM signature the -n 2 note below describes, on a
+    # shard that had since accumulated more compile-heavy NUTS/HMC regression files
+    # (one measured at 2.6 GB peak alone). Two runners halve the per-worker
+    # accumulation instead of paying for it in headroom. See #1346.
     strategy:
       fail-fast: false
       matrix:
+        # Per-shard worker count and step budget — the same shape #1371 gave the
+        # `coverage` job below, for the same reason and now on the same evidence.
+        #
+        # regression runs SERIAL. On main @a05ae7b5e both jobs ran the same tests
+        # at the same commit and split on `-n` alone:
+        #
+        #   coverage (regression)  -n 1, WITH --cov   40m00s  PASSED
+        #   test     (regression)  -n 2, no --cov     18m40s  RUNNER KILLED at 93%
+        #
+        # `--cov` adds 30-50% memory on top, so the serial job carried the heavier
+        # per-worker load and still finished — the second worker is what does not
+        # fit. Same host-OOM signature as always: zero FAILED markers, "runner has
+        # received a shutdown signal", and the kill at the byte-identical 93%
+        # position seen at 17m11s / 27m11s / 28m00s / 29m02s. A fixed *position*
+        # reached at wildly different speeds is a resource cliff, not a flake, and
+        # not a timeout — #1362 raised this step's cap to 50 min and it died at 18.
+        #
+        # The wall-clock bill is small, because `--dist=loadfile` pins a whole file
+        # to one worker and this shard is dominated by a few long files: the second
+        # worker mostly idles. Serial+cov (40m) against parallel-no-cov (30m) puts
+        # serial-no-cov near 30m, though that comparison is confounded by `--cov`
+        # and the budget below is sized so it does not have to be exact.
+        #
+        # INTERIM. The cure is the retention this exposes: `test_field_latents_
+        # reach_likelihood.py` peaks at 1.87 GB for one test but 5.16 GB for six
+        # (~0.66 GB/test never released). Fix that and `-n 2` should come back —
+        # revisit with a measurement, not an assumption. See #1346.
         include:
           - shard: contract
             paths: tests/contract
+            nproc: 2
+            budget: 50
           - shard: components
             paths: tests/components
-          - shard: physics-regression
-            paths: tests/physics tests/regression
+            nproc: 2
+            budget: 50
+          # regression is split FOUR ways, each SERIAL. Two independent knobs,
+          # for two different problems:
+          #
+          #   nproc: 1  -> memory. With one worker a runner's peak is one file's
+          #                peak, so no combination of heavy files can OOM it. At
+          #                -n 2 this shard was runner-killed at a consistent
+          #                92-93% offset on four separate refs (#1346).
+          #   4 shards  -> wall clock. Serial cost the PR path 50 min (measured
+          #                on #1372, against 30 min at -n 2 when it survived).
+          #                More RUNNERS is free; more workers per runner is not.
+          #
+          # Split boundaries are MEASURED, not guessed — CI wall clock attributed
+          # to subtrees from the green #1372 run (2026-07-25, 48 min total):
+          #
+          #   synthesizer_parity 12.7  bug 11.3  top-level 10.5
+          #   paper 10.0  precision 3.5  agn 0.1
+          #
+          # giving a predicted max shard of ~16 min. Re-measure before rebalancing
+          # (the recipe is on #1346); this file's share table has gone stale twice.
+          - shard: regression-a
+            paths: tests/regression/synthesizer_parity tests/regression/precision
+            nproc: 1
+            budget: 50
+          - shard: regression-b
+            paths: tests/regression/bug tests/regression/agn
+            nproc: 1
+            budget: 50
+          - shard: regression-c
+            paths: tests/regression/paper
+            nproc: 1
+            budget: 50
+          # The top-level files only — every subdirectory above is excluded so no
+          # test runs twice. This shard holds the memory-heaviest files
+          # (test_field_latents_reach_likelihood.py at 4.06 GB).
+          - shard: regression-d
+            paths: >-
+              tests/regression
+              --ignore=tests/regression/synthesizer_parity
+              --ignore=tests/regression/precision
+              --ignore=tests/regression/bug
+              --ignore=tests/regression/agn
+              --ignore=tests/regression/paper
+            nproc: 1
+            budget: 50
+          - shard: physics
+            paths: tests/physics
+            nproc: 2
+            budget: 50
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -347,19 +440,27 @@ jobs:
       # + the data-only nebular/draine parity files are ignored (they skip
       # without their grids).
       #
-      # pytest-xdist parallelism is capped at `-n 2`, NOT `-n auto`. The runner
-      # is 4 vCPU / 16 GB; `-n auto` spawns 4 workers, and when several
+      # Worker count is `${{ matrix.nproc }}`, NOT `-n auto`. The runner is
+      # 4 vCPU / 16 GB; `-n auto` spawns 4 workers, and when several
       # JAX-compile-heavy tests spike (XLA compile working set + SSP grids,
       # ~4–5 GB each) on different workers near the suite tail, peak RSS blew
       # past 16 GB and the host OOM-killed the VM — surfacing as
       # "##[error]The runner has received a shutdown signal" → "operation was
       # canceled" at 85–94 %, intermittently, with zero test failures (it hit
-      # `main`, this job, and the `coverage` job below for ~2 days). `-n 2` caps
-      # peak at ~2×5 GB + base ≈ 12 GB, which fits with headroom. The OOM kills the
-      # VM before any per-test `--timeout` thread can fire, so fewer workers — not a
-      # tighter timeout — is the fix. The wall clock this cost is recovered above,
-      # by sharding (more runners) and the compile cache (the follow-up this note
-      # used to point at) — NOT by raising -n, which would just OOM again.
+      # `main`, this job, and the `coverage` job below for ~2 days). The OOM kills
+      # the VM before any per-test `--timeout` thread can fire, so fewer workers —
+      # not a tighter timeout — is the fix. The wall clock this costs is recovered
+      # above, by sharding (more runners) and the compile cache — NOT by raising
+      # -n, which would just OOM again.
+      #
+      # This note used to end "`-n 2` caps peak at ~2×5 GB + base ≈ 12 GB, which
+      # fits with headroom." That estimate is REFUTED for `regression`, which is
+      # why the matrix now sets nproc per shard: the model assumed each worker's
+      # peak is one test's peak, but memory accumulates ACROSS tests within a file
+      # (~0.66 GB/test unreleased in the worst file, 1.87 GB for one test vs
+      # 5.16 GB for six), and `--dist=loadfile` pins that whole file to one
+      # worker. The per-worker figure is therefore a per-FILE total, not a
+      # per-test one. Do not re-derive headroom from single-test peaks. See #1346.
       #
       # `--timeout=600 --timeout-method=thread` still guards the OTHER tail
       # failure mode: a single test that genuinely hangs (cold compile / deadlock)
@@ -368,7 +469,7 @@ jobs:
       # locally) instead of a silent job-timeout.
       - run: |
           pytest ${{ matrix.paths }} -q \
-            -n 2 \
+            -n ${{ matrix.nproc }} \
             --timeout=600 --timeout-method=thread \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
@@ -387,7 +488,36 @@ jobs:
         #
         # The per-test `--timeout=600` above still guards the failure mode this
         # number does NOT: a single hung test stalling a worker.
-        timeout-minutes: 35
+        #
+        # 35 -> 50. Same story one shard over. After the #1356 four-way split
+        # `regression` became the long pole. Completed durations measured
+        # 2026-07-25, all against a 35 min cap:
+        #
+        #   main @8524a837   32m00s     #1360 branch   34m03s
+        #   #1362 branch     34m56s  <- 4 seconds of margin
+        #
+        # A four-second margin is not a margin. Whether the spread is test
+        # content or runner variance does not matter here: the observed range
+        # already reaches the cap, so the next run that drifts high is a red
+        # main, and it will carry the "passed on the branch, KILLED on main"
+        # shape described above rather than a useful failure.
+        #
+        # Raised to 50 to match the push/schedule path below rather than drop
+        # regression coverage — the precedent the #1146 note above sets.
+        #
+        # This is headroom, NOT a rebalance: physics runs 3m26s against
+        # regression's 32m. And it does not touch the OTHER way this shard
+        # dies — a runner-VM OOM at ~93% with zero FAILED markers, which is
+        # unrelated to wall clock (seen at 27m11s, well inside the old cap).
+        # See #1346 (OOM) and #1352 (imbalance).
+        #
+        # Now per-shard (`matrix.budget`), because the shards no longer run the
+        # same way: regression went serial (see the matrix note above), so its
+        # cap is 85 to match the coverage job's proven serial budget. The other
+        # three stay at 50 and stay at -n 2. That last paragraph called this OOM
+        # untouched by the cap — correct, and it is why raising 35 -> 50 did not
+        # save main @a05ae7b5e: the shard died at 18m40s against a 50 min cap.
+        timeout-minutes: ${{ matrix.budget }}
       - uses: actions/cache/save@v4
         if: always()
         with:
@@ -401,8 +531,10 @@ jobs:
   # the entire fast tier in ONE process under coverage instrumentation, and it does
   # not fit in any sane cap:
   #
-  #   test shards on main:  contract ~26 min + components ~11 + physics-regression ~11
-  #                         = ~48 min of work, and --cov adds a further 30-50%
+  #   test shards on main:  contract ~23 min + components ~9 + regression ~31 + physics ~3
+  #                         (run 30147377624, 2026-07-25; regression grew with the
+  #                         compile-heavy NUTS/HMC and grid-build files — #1352)
+  #                         = ~66 min of work, and --cov adds a further 30-50%
   #
   # so it needs 70-80 min in a single job. It timed out at 35 (#1153), then at 50
   # (#1156, mine), and each bump only moved the wall — main stayed red both times.
@@ -423,13 +555,73 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Per-shard worker count and step budget (same pattern as the `slow`
+        # job's per-suite budgets). regression runs SERIAL: at -n 2 its
+        # coverage job was runner-killed 3 of 3 attempts on main c36f53d80
+        # ("runner has received a shutdown signal", ~29-31 min — #1346). Two
+        # workers each carry the 2.51 GB import floor plus the grid-build
+        # peaks (#1360: 3.5 GB), and --cov adds 30-50% on top; one worker
+        # halves the resident footprint at ~2x wall — acceptable here because
+        # this job is off the PR feedback path by construction. Interim
+        # measure: #1362 (chunked fast-grid build) shrinks the underlying
+        # allocation; revisit -n 2 once it lands.
         include:
           - shard: contract
             paths: tests/contract
+            nproc: 2
+            budget: 50
           - shard: components
             paths: tests/components
-          - shard: physics-regression
-            paths: tests/physics tests/regression
+            nproc: 2
+            budget: 50
+          # regression is split FOUR ways, each SERIAL. Two independent knobs,
+          # for two different problems:
+          #
+          #   nproc: 1  -> memory. With one worker a runner's peak is one file's
+          #                peak, so no combination of heavy files can OOM it. At
+          #                -n 2 this shard was runner-killed at a consistent
+          #                92-93% offset on four separate refs (#1346).
+          #   4 shards  -> wall clock. Serial cost the PR path 50 min (measured
+          #                on #1372, against 30 min at -n 2 when it survived).
+          #                More RUNNERS is free; more workers per runner is not.
+          #
+          # Split boundaries are MEASURED, not guessed — CI wall clock attributed
+          # to subtrees from the green #1372 run (2026-07-25, 48 min total):
+          #
+          #   synthesizer_parity 12.7  bug 11.3  top-level 10.5
+          #   paper 10.0  precision 3.5  agn 0.1
+          #
+          # giving a predicted max shard of ~16 min. Re-measure before rebalancing
+          # (the recipe is on #1346); this file's share table has gone stale twice.
+          - shard: regression-a
+            paths: tests/regression/synthesizer_parity tests/regression/precision
+            nproc: 1
+            budget: 50
+          - shard: regression-b
+            paths: tests/regression/bug tests/regression/agn
+            nproc: 1
+            budget: 50
+          - shard: regression-c
+            paths: tests/regression/paper
+            nproc: 1
+            budget: 50
+          # The top-level files only — every subdirectory above is excluded so no
+          # test runs twice. This shard holds the memory-heaviest files
+          # (test_field_latents_reach_likelihood.py at 4.06 GB).
+          - shard: regression-d
+            paths: >-
+              tests/regression
+              --ignore=tests/regression/synthesizer_parity
+              --ignore=tests/regression/precision
+              --ignore=tests/regression/bug
+              --ignore=tests/regression/agn
+              --ignore=tests/regression/paper
+            nproc: 1
+            budget: 50
+          - shard: physics
+            paths: tests/physics
+            nproc: 2
+            budget: 50
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
@@ -438,20 +630,25 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
-      # `-n 2` (not `-n auto`): `--cov` adds ~30–50 % memory on top of the test
-      # job, so this job OOM-killed the runner even more often than `test`
+      # `${{ matrix.nproc }}` (not `-n auto`): `--cov` adds ~30–50 % memory on top of
+      # the test job, so this job OOM-killed the runner even more often than `test`
       # (the dominant cause of red `main`). Sharding does not change peak RSS per
-      # runner — each shard still runs at -n 2 — it only stops one runner from having
-      # to carry the whole tier.
+      # runner — it only stops one runner from having to carry the whole tier.
+      #
+      # regression is `-n 1` here (#1371) and now also in `test` (#1372). The two
+      # jobs are deliberately kept in the SAME shape: running the same tests at the
+      # same commit on different runners is a free near-controlled experiment, and
+      # when one passes while the other dies the test *content* is exonerated by
+      # construction. That only holds while the jobs do not diverge in how they run.
       - run: |
           pytest ${{ matrix.paths }} -q \
-            -n 2 \
+            -n ${{ matrix.nproc }} \
             --cov=src/tengri --cov-report=xml --cov-report=term:skip-covered \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        timeout-minutes: 50
+        timeout-minutes: ${{ matrix.budget }}
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
         with:
