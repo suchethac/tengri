@@ -140,12 +140,15 @@ class CatalogPosterior:
     Raises
     ------
     IndexError
-        If ``__getitem__`` is called with an out-of-range index.
+        If ``__getitem__`` is called with an out-of-range integer index.
+    KeyError
+        If ``__getitem__`` is called with an unknown property name.
 
     Examples
     --------
     >>> result = cat.run("native_vi_linear", key=jax.random.PRNGKey(0))
     >>> result[0].params  # first galaxy
+    >>> result["stellar_mass"]  # per-galaxy medians, shape (n_galaxies,)
     >>> for post in result:
     ...     ...  # iterate over all galaxies
     """
@@ -159,8 +162,40 @@ class CatalogPosterior:
     summary: dict | None = None
     store: str = "full"
 
-    def __getitem__(self, i):
-        return self.posteriors[i]
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            return self._property_medians(key)
+        return self.posteriors[key]
+
+    def _property_medians(self, name):
+        """Per-galaxy medians for one property, shape ``(n_galaxies,)``.
+
+        Answers from the stored percentile block under ``store="summary"``
+        (same median column :meth:`to_table` uses), else from the per-galaxy
+        posteriors via :attr:`properties`.
+        """
+        if self.percentiles is not None and name in self.percentiles:
+            arr = np.asarray(self.percentiles[name])
+            median_idx = min(1, arr.shape[1] - 1)  # to_table's convention for (16, 50, 84)
+            return arr[:, median_idx]
+        if not self.posteriors:
+            available = sorted(self.percentiles.keys()) if self.percentiles else []
+            raise KeyError(
+                f"Unknown property {name!r}: this CatalogPosterior stores no per-galaxy "
+                f"posteriors (store={self.store!r}) and its percentile block has "
+                f"{available or 'no keys'}."
+            )
+        if name not in self.properties:
+            raise KeyError(
+                f"Unknown property {name!r}. Available: {sorted(self.properties.keys())}."
+            )
+        vals = self.properties[name]
+        if isinstance(vals, list):  # ragged posteriors — per-galaxy medians
+            return np.array(
+                [np.median(np.asarray(v)) if np.ndim(v) > 0 else float(v) for v in vals]
+            )
+        vals = np.asarray(vals)
+        return np.median(vals, axis=1) if vals.ndim > 1 else vals
 
     def __iter__(self):
         return iter(self.posteriors)
