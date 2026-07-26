@@ -95,9 +95,20 @@ def compute_mass_weighted_age(weights: jnp.ndarray, ssp_ages_yr: jnp.ndarray) ->
     float
         Mass-weighted age in Gyr:
         ``Σ(w_i × age_i) / Σ(w_i) / 1e9``.
+        NaN when ``Σ(w_i) == 0`` — with no mass there is no mass-weighted age.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    Degenerate input returns NaN rather than 0.0 (#1404). A clamped denominator
+    alone would yield a finite ``0.0`` here, which reads as "every star just
+    formed" — a plausible-looking answer for a model with no stellar mass at all.
     """
     total = jnp.sum(weights)
-    return jnp.sum(weights * ssp_ages_yr) / jnp.maximum(total, 1e-30) / 1e9
+    return jnp.where(
+        total > 1e-20, jnp.sum(weights * ssp_ages_yr) / jnp.maximum(total, 1e-30) / 1e9, jnp.nan
+    )
 
 
 def compute_mass_weighted_metallicity(
@@ -152,7 +163,10 @@ def compute_mass_weighted_metallicity(
     log_z_per_bin = log_z_final + (log_z_initial - log_z_final) * t_frac
     z_linear = 10.0**log_z_per_bin
     total_w = jnp.sum(weights)
-    mean_z = jnp.sum(weights * z_linear) / jnp.maximum(total_w, 1e-30)
+    # NaN, not 0.0, when there is no mass to weight by (#1404).
+    mean_z = jnp.where(
+        total_w > 1e-20, jnp.sum(weights * z_linear) / jnp.maximum(total_w, 1e-30), jnp.nan
+    )
     return jnp.log10(jnp.maximum(mean_z, 1e-30))
 
 
@@ -577,7 +591,12 @@ def compute_luminosity_weighted_age(
     """
     l_per_bin = compute_per_bin_luminosity(weights, ssp_flux_at_z, wave)
     l_total = jnp.sum(l_per_bin)
-    return jnp.sum(l_per_bin * ssp_ages_yr) / jnp.maximum(l_total, 1e-30) / 1e9
+    # NaN, not 0.0, when the population emits nothing to weight by (#1404).
+    return jnp.where(
+        l_total > 1e-20,
+        jnp.sum(l_per_bin * ssp_ages_yr) / jnp.maximum(l_total, 1e-30) / 1e9,
+        jnp.nan,
+    )
 
 
 def compute_luminosity_weighted_metallicity(
@@ -622,7 +641,10 @@ def compute_luminosity_weighted_metallicity(
     log_z_per_bin = log_z_final + (log_z_initial - log_z_final) * t_frac
     z_linear = 10.0**log_z_per_bin
 
-    mean_z = jnp.sum(l_per_bin * z_linear) / jnp.maximum(l_total, 1e-30)
+    # NaN, not 0.0, when the population emits nothing to weight by (#1404).
+    mean_z = jnp.where(
+        l_total > 1e-20, jnp.sum(l_per_bin * z_linear) / jnp.maximum(l_total, 1e-30), jnp.nan
+    )
     return jnp.log10(jnp.maximum(mean_z, 1e-30))
 
 
