@@ -8,8 +8,8 @@
 from tengri.inference import _registration as _registration
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 from tengri.inference.catalog_fitter import (
+    CatalogFitter,
     CatalogPosterior,
-    _CatalogFitterOriginal as CatalogFitter,
 )
 from tengri.inference.context import InferenceContext
 from tengri.inference.fitter import Fitter, resolve_method

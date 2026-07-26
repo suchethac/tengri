@@ -49,6 +49,52 @@ def _filters_fingerprint(obs):
     return hash(tuple(np.asarray(t).tobytes() for t in obs.photometry.filter_trans))
 
 
+def _approx_family_map(approx):
+    """Split an ``approx`` grammar value into per-family configs.
+
+    Returns ``None`` when the value is not parseable (unknown member or a
+    duplicated family) — the caller then falls through to ``with_approx``,
+    whose canonical validation owns the teaching error.
+    """
+    from tengri.forward.sed_model import FeaturePrecomp, SpectrumPrecomp, WavePrecomp
+
+    items = approx if isinstance(approx, tuple) else (approx,)
+    fam = {"wave": None, "spectrum": None, "feature": None}
+    for item in items:
+        if isinstance(item, WavePrecomp):
+            key = "wave"
+        elif isinstance(item, SpectrumPrecomp):
+            key = "spectrum"
+        elif isinstance(item, FeaturePrecomp):
+            key = "feature"
+        else:
+            return None
+        if fam[key] is not None:
+            return None
+        fam[key] = item
+    return fam
+
+
+def _resolve_sed_approx(sed, approx, observation):
+    """Spec §5 reuse-on-match (#1367): reuse a sed that already carries exactly
+    the requested LUT against the same filters; otherwise rebuild it against
+    the authoritative observation."""
+    fam = _approx_family_map(approx)
+    sed_obs = getattr(sed, "observation", None)
+    same_filters = sed_obs is not None and _filters_fingerprint(sed_obs) == _filters_fingerprint(
+        observation
+    )
+    if (
+        fam is not None
+        and same_filters
+        and getattr(sed, "_approx_config_wave", None) == fam["wave"]
+        and getattr(sed, "_approx_config_spec", None) == fam["spectrum"]
+        and getattr(sed, "_approx_config_feature", None) == fam["feature"]
+    ):
+        return sed
+    return sed.with_approx(approx, observation=observation)
+
+
 @dataclass(frozen=True)
 class ForwardModel:
     """The outer shell of the forward model, and the surface inference consumes.
@@ -400,6 +446,7 @@ class ForwardModel:
         populations: Iterable[Population] | None = None,
         mode: str | None = None,
         observation: Any | None = None,
+        approx: Any | None = None,
     ) -> ForwardModel:
         """Construct a :class:`ForwardModel`.
 
@@ -440,6 +487,14 @@ class ForwardModel:
             Mutually exclusive with ``sed`` and ``population``.
         observation : object, optional
             Observation model. Inherited from ``sed`` when omitted.
+        approx : WavePrecomp or SpectrumPrecomp or FeaturePrecomp or tuple, optional
+            LUT policy, built against the **authoritative** observation
+            (spec §5, #1367). Same grammar as ``SEDModel.build(approx=...)``.
+            Reuse-on-match: a sed already carrying exactly this LUT against
+            the same filters is used as-is; a different-filter LUT is rebuilt
+            (superseding the mismatch guard below — the rebuild is the
+            guard's own suggested remedy); no LUT → built. Only valid with
+            the ``sed=`` form; ``None`` (default) leaves the sed untouched.
 
         Returns
         -------
@@ -458,6 +513,12 @@ class ForwardModel:
                 "ForwardModel.build(spatial=...) requires sed=... too. "
                 "Use populations=[...] for explicit pairing."
             )
+        if approx is not None and sed is None:
+            raise ValueError(
+                "ForwardModel.build(approx=...) applies to the single-sed form "
+                "(sed=...). For populations=[...] / population=..., build each "
+                "SEDModel with its own approx= (SEDModel.build(..., approx=...))."
+            )
         # Resolve observation: inherit from sed if omitted
         if observation is None:
             if sed is None:
@@ -471,7 +532,8 @@ class ForwardModel:
         elif sed is not None:
             sed_obs = getattr(sed, "observation", None)
             if (
-                sed_obs is not None
+                approx is None
+                and sed_obs is not None
                 and _filters_fingerprint(sed_obs) != _filters_fingerprint(observation)
                 and getattr(sed, "_approx", {}).get("wave_precomp")
             ):
@@ -479,7 +541,8 @@ class ForwardModel:
                     "This sed carries a WavePrecomp LUT integrated against different "
                     "filters than the observation passed to ForwardModel.build — its "
                     "photometry would be silently wrong (#1315). Rebuild the sed with "
-                    "this observation, or build it without approx=."
+                    "this observation, or build it without approx= — or pass approx= "
+                    "here to rebuild the LUT against this observation (#1367)."
                 )
 
         provided = sum(x is not None for x in (sed, population, populations))
@@ -490,6 +553,8 @@ class ForwardModel:
             )
 
         if sed is not None:
+            if approx is not None:
+                sed = _resolve_sed_approx(sed, approx, observation)
             pops = (Population(name="default", sed=sed, spatial=spatial),)
         elif population is not None:
             pops = (Population(name="default", sed=population),)
