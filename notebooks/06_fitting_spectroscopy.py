@@ -28,24 +28,9 @@
 # [`07_joint_photo_spec`](07_joint_photo_spec.py).
 
 # %%
-import os
+from _setup import HMC_VALIDATED, quiet
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
-import warnings
-
-# Keep the rendered tutorial clean: silence framework notices that do not
-# change the science shown here (baked-in nebular, the SpectrumPrecomp
-# approximation, the intentional sed_model.fit(...) LUT path, and
-# recipe/parameter-provenance notices). Genuine deprecations in user-facing
-# calls are fixed in the code, not hidden.
-warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
-warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
-warnings.filterwarnings("ignore", message=".*Composable AGN.*")
-warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
-warnings.filterwarnings("ignore", category=RuntimeWarning)
+quiet()
 
 import time
 from pathlib import Path
@@ -60,6 +45,7 @@ from tengri import (
     FIXED,
     FREE,
     Fixed,
+    ForwardModel,
     Observation,
     SEDModel,
     Spectroscopy,
@@ -69,6 +55,7 @@ from tengri import (
     load_ssp_data,
     plot,
 )
+
 plot.setup_style()
 FIG_DIR = Path("_figs")
 FIG_DIR.mkdir(exist_ok=True)
@@ -76,19 +63,18 @@ FIG_DIR.mkdir(exist_ok=True)
 C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 
 # %% [markdown]
-# ## Model and spectrum
+# ## Stellar library and observation
 #
 # An SDSS-like R≈2000 optical spectrum, 3800–9200 Å observed (rest-frame
 # 3620–8760 Å at z = 0.05: the 4000 Å break, Hβ, Mgb, the Fe blends, Hα, and
-# the Ca II triplet), sampled at 260 pixels to keep the demo fast. Same FSPS
-# bare-stellar model as notebooks 05 and 07:
-# truncated-skew-normal SFH (normalization + two timescales free; skew/trunc
-# fixed), free metallicity and two dust optical depths.
+# the Ca II triplet), sampled at 260 pixels to keep the demo fast, on the same
+# FSPS bare-stellar grid as notebooks 05 and 07.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
 ssp_path = Path("../data") / f"{SSP_NAME}.h5"
 if not ssp_path.exists():
+    # Public API: fetches the grid on first use and caches it under data/.
     ssp_path = Path(tengri.download_ssp(SSP_NAME))
 ssp = load_ssp_data(str(ssp_path))
 
@@ -96,6 +82,14 @@ Z_GAL = 0.05
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 260)  # SDSS spectral coverage
 obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=2000))
 
+# %% [markdown]
+# ## Build the model
+#
+# Truncated-skew-normal SFH (normalization + two timescales free; skew and
+# truncation fixed), free stellar metallicity, and two dust optical depths —
+# the same physics as notebooks 05 and 07, so the three are comparable.
+
+# %%
 # approx=SpectrumPrecomp() pre-rebins the SSP to the spectrum pixel centers and
 # projects every forward pass through that lookup table — within ~0.03% of the
 # exact wave-grid spectrum but ~30x faster per evaluation, so a converged HMC
@@ -119,10 +113,11 @@ sed_model = SEDModel.build(
     stellar={"met_logzsol": Uniform(-1.5, 0.3)},
     redshift=Fixed(Z_GAL),
 )
+forward = ForwardModel.build(sed=sed_model)
 print(f"Free parameters ({sed_model.spec.n_free}): {', '.join(sed_model.spec.free_params)}")
 
 # %% [markdown]
-# ## Mock spectrum
+# ## Mock observation
 #
 # Truth with an interior metallicity; one noisy realization at SNR = 30 per
 # pixel.
@@ -148,24 +143,16 @@ print(f"Mock: {len(flux)}-pixel R=2000 spectrum, SNR = 30/pixel")
 # %% [markdown]
 # ## Fit
 #
-# The convergence-validated fixed-length HMC recipe (dense mass, n_warmup=1000,
-# n_leapfrog=20) mixes this six-parameter posterior cleanly. With
+# `HMC_VALIDATED` is the convergence-validated fixed-length HMC recipe shared
+# by the fitting notebooks (dense mass, n_warmup=1000, n_leapfrog=20); it mixes
+# this six-parameter posterior cleanly. The data is a spectrum and the
+# observation says so, so there is no channel to declare. With
 # `SpectrumPrecomp` the forward pass is the lookup-table path, so the whole fit
 # runs in seconds rather than minutes.
 
 # %%
 t0 = time.perf_counter()
-posterior = sed_model.fit(
-    flux, noise,
-    method="mcmc_hmc",
-    data_type="spectroscopy",
-    n_warmup=1000,
-    n_samples=600,
-    n_leapfrog_steps=20,
-    dense_mass_matrix=True,
-    target_accept_rate=0.9,
-    key=jax.random.PRNGKey(1),
-)
+posterior = forward.fit(flux, noise, key=jax.random.PRNGKey(1), **HMC_VALIDATED)
 rhat = posterior.rhat()
 print(
     f"HMC: {time.perf_counter() - t0:.0f}s   "
@@ -196,7 +183,7 @@ for p in params:
 print(f"\n68% coverage: {n_cov}/{len(params)}")
 
 # %% [markdown]
-# ## Posterior spectrum fit + residuals
+# ## Posterior SED
 
 # %%
 N_DRAW = 60

@@ -38,22 +38,14 @@
 # the whole point is how fast a catalog goes through.
 
 # %%
-import os
+from _setup import quiet
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+quiet()
 
+# Notebook-specific: we pair the wNE SSP with baked-in nebular, as intended.
 import warnings
 
-# Keep the rendered tutorial clean: silence framework notices that do not change
-# the science shown here. Genuine deprecations in user-facing calls are fixed in
-# the code, not hidden.
-warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
-warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
-warnings.filterwarnings(
-    "ignore", message=".*wNE.*"
-)  # we pair the wNE SSP with baked-in neb, as intended
-warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message=".*wNE.*")
 
 import time
 from pathlib import Path
@@ -235,7 +227,7 @@ FIT_KW = dict(
 
 
 # The Catalog noun takes a table of named columns; stack the per-galaxy dicts.
-forward = ForwardModel.build(sed=model, observation=model.observation)
+forward = ForwardModel.build(sed=model)
 band_names = list(forward.observation.photometry.names)
 flux_arr = np.stack([np.asarray(g["flux_obs"]) for g in galaxies])  # (N, n_bands)
 noise_arr = np.stack([np.asarray(g["noise"]) for g in galaxies])

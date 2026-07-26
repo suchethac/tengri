@@ -46,23 +46,16 @@
 # [notebook 11](11_catalog_fits.py) for `fit_batch` at catalog scale.
 
 # %%
-import os
+from _setup import effective_wavelengths_um, quiet
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+quiet()
 
+# Notebook-specific: the dense-mass NUTS run below deliberately uses
+# dense_mass_matrix=True for convergence; its RAM caveat is discussed in the
+# summary, not repeated here.
 import warnings
 
-# Keep the rendered tutorial clean: silence framework notices that do not change
-# the science shown here. Genuine deprecations in user-facing calls are fixed in
-# the code, not hidden.
-warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
-warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
-warnings.filterwarnings("ignore", message=".*Composable AGN.*")
-# The dense-mass NUTS run below deliberately uses dense_mass_matrix=True for
-# convergence; its RAM caveat is discussed in the summary, not repeated here.
 warnings.filterwarnings("ignore", message=".*dense_mass_matrix.*")
-warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 import time
 from pathlib import Path
@@ -414,15 +407,7 @@ _fixed = model_fast.spec.get_fixed_values()
 draws = [{**_fixed, **{k: jnp.asarray(v[i]) for k, v in posterior.samples.items()}} for i in _sidx]
 
 # Effective wavelength of each band (transmission-weighted), for placing the points.
-wave_eff_um = (
-    np.array(
-        [
-            np.trapezoid(w * t, w) / np.trapezoid(t, w)
-            for w, t in zip(phot_obs.filter_waves, phot_obs.filter_trans)
-        ]
-    )
-    / 1e4
-)
+wave_eff_um = effective_wavelengths_um(phot_obs)
 
 # Model photometry per draw (the band-integrated F_nu the fit is matching).
 phot_draws = np.stack([np.asarray(model_fast.predict_photometry(d)) for d in draws])
