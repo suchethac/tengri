@@ -350,6 +350,82 @@ def _interp_index_weight(
     return idx, w
 
 
+def _qh_bilinear(
+    qh_table,
+    qh_log_met: jnp.ndarray,
+    qh_log_age: jnp.ndarray,
+    log_z: float,
+    log_age_yr: float,
+    *,
+    missing: float,
+) -> jnp.ndarray:
+    r"""Bilinear interpolation of an ionizing photon rate table, floored at zero.
+
+    The single implementation behind every nebular backend's ``_get_qh_at``.
+    It was previously copied into three backends, and the copies diverged: the
+    CB19 backend lost the non-negativity floor its siblings carried (#1405).
+
+    Parameters
+    ----------
+    qh_table : array_like, shape (n_met, n_age) or None
+        Ionizing photon rate Q_H on the (metallicity, age) grid [1/s].
+        ``None`` selects the ``missing`` fallback.
+    qh_log_met : array_like, shape (n_met,)
+        Table metallicity axis, absolute ``log10(Z)``, sorted ascending.
+    qh_log_age : array_like, shape (n_age,)
+        Table age axis, ``log10(age/yr)``, sorted ascending.
+    log_z : float
+        Query metallicity, absolute ``log10(Z)``.
+    log_age_yr : float
+        Query age, ``log10(age/yr)``.
+    missing : float
+        Value returned when ``qh_table`` is ``None``. Backend-specific and
+        deliberately not unified: Q_H is consumed multiplicatively, so ``1.0``
+        means "no Q_H scaling" and ``0.0`` means "no ionizing photons".
+
+    Returns
+    -------
+    ndarray, shape ()
+        Interpolated Q_H [1/s], clamped to be non-negative.
+
+    Notes
+    -----
+    .. math::
+
+        Q_H = (1 - w_z)\,[(1 - w_a) Q_{00} + w_a Q_{01}]
+            + w_z\,[(1 - w_a) Q_{10} + w_a Q_{11}]
+
+    with :math:`w_z, w_a \in [0, 1]` the linear weights from
+    :func:`_interp_index_weight` along the metallicity and age axes. That
+    function clips its query to the grid, so this is a convex combination of
+    four table entries and never extrapolates — a negative result is only
+    reachable from negative table entries, and is unphysical.
+
+    The result is floored with ``jnp.maximum(..., 0.0)``. **NaN is deliberately
+    not removed**: ``jnp.maximum(nan, 0.0)`` is ``nan``, and a NaN Q_H means the
+    table is broken upstream. Propagating it makes that visible where a silent
+    zero would not.
+
+    **JIT-compatible**: yes — the only Python-level branch is on ``qh_table
+    is None``, which is structural, not traced.
+
+    """
+    if qh_table is None:
+        return jnp.asarray(missing)
+
+    iz, wz = _interp_index_weight(log_z, qh_log_met)
+    ia, wa = _interp_index_weight(log_age_yr, qh_log_age)
+
+    q00 = qh_table[iz, ia]
+    q01 = qh_table[iz, ia + 1]
+    q10 = qh_table[iz + 1, ia]
+    q11 = qh_table[iz + 1, ia + 1]
+
+    q0 = q00 * (1 - wa) + q01 * wa
+    q1 = q10 * (1 - wa) + q11 * wa
+    return jnp.maximum(q0 * (1 - wz) + q1 * wz, 0.0)
+
+
 # ── Metallicity convention converters ─────────────────────────────
 
 
