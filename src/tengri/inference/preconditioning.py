@@ -438,8 +438,9 @@ def prepare_preconditioning(
     data_args : pytree
         Observed-data tensors, passed through to ``logdensity_fn``.
     precondition : bool or None, optional
-        ``None`` (default) auto-enables up to :data:`PRECONDITION_MAX_DIM`;
-        ``True`` / ``False`` force the choice.
+        ``None`` (default) resolves to **off** — the feature is opt-in
+        (#1397, :func:`_resolve_precondition`); ``True`` enables, ``False``
+        is explicit off.
     floor : float, optional
         Eigenvalue floor for the metric. Default :data:`PRIOR_METRIC_FLOOR`.
 
