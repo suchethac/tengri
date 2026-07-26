@@ -106,6 +106,38 @@ def test_compile_signature_separates_precisions(ssp_bare, shared_obs):
     )
 
 
+def test_shared_fn_caches_separate_the_two_precisions(ssp_bare, shared_obs):
+    """A float32 fitter must not be served the float64 fitter's compiled loss function.
+
+    ``jit_engine.get_or_build_cached`` keys on ``Fitter.compile_signature()``, which is
+    ``(model_signature, _engine_cache_key())``. Only the model half carries precision
+    (via ``build_precision``), so this cache's correctness rests entirely on that —
+    ``_engine_cache_key()`` has none of its own. Before the model half was fixed, the
+    loss cache measurably held **one** entry across both precisions, i.e. the float32
+    fitter hit the float64 one.
+
+    Asserted on entry *count* rather than on gradient values so the failure names the
+    cache rather than a downstream symptom.
+    """
+    from tengri.inference import jit_engine as je
+
+    loss_cache, loss_lock = je._SHARED_CACHES["loss"]
+    with loss_lock:
+        loss_cache.clear()
+
+    _gradient(ssp_bare, shared_obs, True, jnp.float64)
+    after_f64 = len(loss_cache)
+    _gradient(ssp_bare, shared_obs, False, jnp.float32)
+    after_f32 = len(loss_cache)
+
+    assert after_f64 == 1, f"expected the float64 fit to populate one loss entry, got {after_f64}"
+    assert after_f32 == 2, (
+        f"the float32 fitter reused the float64 compiled loss function (cache went "
+        f"{after_f64} -> {after_f32}, expected 2): Fitter.compile_signature() no longer "
+        "distinguishes the precisions (#1392/#1412)"
+    )
+
+
 def _gradient(ssp, obs, x64, dtype):
     """Negative-log-posterior gradient at the origin of standardized space."""
     with jax.enable_x64(x64):
