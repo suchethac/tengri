@@ -40,12 +40,24 @@ returns a finite, silent, wrong number, which is why it needs its own guard.
   float64 moves by at most a few ulp (bit-identical with one scale seam, ``<=1.5e-15``
   relative with several). Pinned by
   :func:`test_likelihood_gradient_is_accurate_in_float32`.
-* **Underflow to zero — OPEN.** With a small incoming cotangent the single correct path
-  still multiplies by ``10**(-58)`` and flushes to zero. Needs #1388.
+* **Underflow to zero — OPEN, and REVERSE MODE ONLY.** With a small incoming cotangent
+  the single correct path still multiplies by ``10**(-58)`` and flushes to zero. Needs
+  #1388.
 
 The two are easy to confuse, because both present as "the float32 gradient is wrong".
 The discriminator is whether the answer is *zero* (underflow) or a *clean multiple*
 (double-counted path).
+
+**The underflow is not a float32 limitation.** Forward mode computes the same
+gradient correctly in pure float32 — measured ``[-1.493829e-27, 7.674008e-27]`` against
+a float64 ``[-1.493829e-27, 7.673997e-27]``, while reverse mode returns ``[0.0, 0.0]``.
+Reverse mode is forced to materialize ``d(F_nu)/d(L_nu) = 10**(-58)``, a number float32
+does not have, on the way to an answer it represents fine; forward mode carries
+``d(L_nu)/d(param) ~ 1e30`` instead and never forms that ratio. So the answer is
+representable, float32 can reach it, and no local change to ``apply_log10_scale`` can
+fix reverse mode — the ratio follows from the magnitudes being related, which is what
+#1388 changes. Pinned by
+:func:`test_photometry_gradient_is_accurate_in_float32_forward_mode`.
 """
 
 import jax
@@ -60,6 +72,10 @@ pytestmark = pytest.mark.regression_bug
 #: Step in dex / optical-depth units. Well above float32 resolution (eps ~1.2e-7) so
 #: the difference is not itself noise, small enough that curvature is negligible.
 _H = 1e-3
+
+#: The point every gradient in this file is evaluated at. Shared so that a comparison
+#: between two tests here is a comparison of *modes*, never of evaluation points.
+_TRUTH = {"sfh_delayed_log_total_mass": 10.0, "dust_tau_diff": 0.5}
 
 
 def _build(ssp, obs):
@@ -97,7 +113,7 @@ def _autodiff_and_fd(ssp, obs, x64, dtype, observable):
     """
     with jax.enable_x64(x64):
         model = _build(ssp, obs)
-        truth = {"sfh_delayed_log_total_mass": 10.0, "dust_tau_diff": 0.5}
+        truth = _TRUTH
         names = sorted(truth)
 
         def scalar(values):
@@ -180,7 +196,7 @@ def test_likelihood_gradient_is_accurate_in_float32(ssp_bare, obs):
     # One mock, built in float64, so both precisions fit identical data.
     with jax.enable_x64(True):
         model = _build(ssp_bare, obs)
-        truth = {"sfh_delayed_log_total_mass": 10.0, "dust_tau_diff": 0.5}
+        truth = _TRUTH
         mock = model.mock(truth, snr=30.0, key=jax.random.PRNGKey(0))
         flux = np.asarray(mock.flux_obs, dtype=np.float64)
         noise = np.asarray(mock.noise, dtype=np.float64)
@@ -208,12 +224,16 @@ def test_likelihood_gradient_is_accurate_in_float32(ssp_bare, obs):
 
 
 @pytest.mark.xfail(
-    reason="#1415 residual: with an incoming cotangent of 1.0, the single correct path "
-    "still multiplies by 10**(-58) at the flux projection, which is below float32's "
-    "smallest subnormal, so the gradient flushes to exactly 0.0. The *wrong-value* half "
-    "of #1415 (gradients exactly 2x too large) is fixed by stop_gradient on the peak in "
-    "apply_log10_scale; this half needs #1388's scaled-SED contract, so that no step "
-    "ever applies the full dimming to a cotangent.",
+    reason="#1415 residual, and it is REVERSE MODE ONLY — see "
+    "test_photometry_gradient_is_accurate_in_float32_forward_mode just below, which "
+    "computes this same gradient correctly in pure float32. Reverse mode has to "
+    "materialize d(F_nu)/d(L_nu) = 10**(-58) at the flux projection, which is below "
+    "float32's smallest subnormal (~1.4e-45), so the cotangent flushes to exactly 0.0 "
+    "on the way to an answer (~1e-27) that float32 represents perfectly well. No local "
+    "change to apply_log10_scale can help: that ratio is a property of the magnitudes "
+    "being related (L_nu ~1e30 -> F_nu ~1e-28), not of how the scale is applied. It "
+    "needs #1388's scaled-SED contract — carry the SED already scaled, so no step ever "
+    "relates a ~1e30 quantity to a ~1e-28 one.",
     strict=True,
 )
 def test_photometry_gradient_is_accurate_in_float32(ssp_bare, obs):
@@ -234,4 +254,55 @@ def test_photometry_gradient_is_accurate_in_float32(ssp_bare, obs):
         f"float32 photometry autodiff disagrees with float32 finite differences by "
         f"{rel.max():.2e} (autodiff={auto}, finite differences={fd}) — the reverse "
         "pass underflows at the flux projection (#1415)"
+    )
+
+
+def test_photometry_gradient_is_accurate_in_float32_forward_mode(ssp_bare, obs):
+    """Forward mode gets this right in pure float32, where reverse mode returns zero.
+
+    This is what makes the xfail above a statement about **reverse mode** rather than
+    about float32. The two modes are not symmetric here:
+
+    * Reverse mode propagates output-to-input, so it must form
+      ``d(F_nu)/d(L_nu) = 10**(-58)`` explicitly. That number does not exist in
+      float32, and it flushes to zero — taking everything upstream with it.
+    * Forward mode propagates input-to-output, carrying
+      ``d(L_nu)/d(log_total_mass) ~ 1e30``, which is fine, and then applying the
+      projection to that tangent. ``apply_log10_scale`` divides the tangent by the
+      same peak it divides the primal by, so the tangent is O(1) when ``pow10(net)``
+      hits it. No intermediate is ever out of range.
+
+    Measured (pure float32 vs float64 autodiff): reverse ``[0.0, 0.0]``; forward
+    ``[-1.493829e-27, 7.674008e-27]`` against ``[-1.493829e-27, 7.673997e-27]``.
+
+    Two consequences worth keeping straight. The gradient is representable in
+    float32, so "float32 cannot do this" is the wrong diagnosis. And ``jacfwd`` is a
+    real workaround for differentiating raw flux with respect to a few parameters
+    until #1388 lands — it is not a workaround for inference, which needs reverse
+    mode over many parameters, and which already works because the likelihood's
+    incoming cotangent (~1/sigma^2) is large enough to survive the projection.
+    """
+    names = sorted(_TRUTH)
+
+    def scalar_at(model, values):
+        return _photometry_sum(model, {k: values[i] for i, k in enumerate(names)})
+
+    def forward_mode(x64, dtype):
+        with jax.enable_x64(x64):
+            model = _build(ssp_bare, obs)
+            base = [jnp.asarray(_TRUTH[k], dtype=dtype) for k in names]
+            jac = jax.jacfwd(lambda v: scalar_at(model, v))(base)
+            return np.array([float(np.asarray(g)) for g in jac])
+
+    f64 = forward_mode(True, jnp.float64)
+    f32 = forward_mode(False, jnp.float32)
+
+    assert np.all(f32 != 0.0), (
+        f"forward-mode float32 photometry gradient underflowed to zero ({f32}); the "
+        "tangent is supposed to stay in range through the projection (#1415)"
+    )
+    rel = np.abs(f32 - f64) / np.maximum(np.abs(f64), 1e-300)
+    assert rel.max() < 1e-3, (
+        f"forward-mode float32 gradient disagrees with float64 by {rel.max():.2e} "
+        f"(f32={f32}, f64={f64}); it used to agree to ~1e-6 (#1415)"
     )

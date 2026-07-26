@@ -83,6 +83,23 @@ def apply_log10_scale(arr, log10_scale):
     ``<= 1.5e-15`` relative where there are several (stellar+dust IR+AGN). That is
     the residue of a cancellation which was only ever exact to rounding, and it is
     three orders inside the ``rtol <= 1e-12`` no-behavioral-change bar for #1206.
+
+    **Float32 reverse mode still underflows at large negative scales, and forward
+    mode does not** (#1415, open as #1388). The remaining defect is a property of
+    autodiff *mode*, not of this function. With ``log10_scale`` ~ -58 (the
+    cosmological dimming), reverse mode has to form ``d out/d arr = 10**(-58)``
+    explicitly — below float32's smallest subnormal (~1.4e-45) — so the cotangent
+    flushes to exactly zero, even when the gradient it was heading for (~1e-27) is
+    perfectly representable. Forward mode carries the tangent instead, and because
+    the tangent is divided by the same ``safe_peak`` as the primal it is O(1) when
+    ``pow10(net)`` reaches it; measured correct to ~1e-6 in pure float32 where
+    reverse mode returns 0.0.
+
+    So: no local change here can fix reverse mode. The ratio follows from relating a
+    ~1e30 quantity to a ~1e-28 one, which is what carrying the SED in scaled form
+    (#1388) removes. In the meantime reverse mode is sound wherever the incoming
+    cotangent is large enough to absorb the scale — notably the likelihood, whose
+    ~1/sigma^2 keeps the product in range, which is why float32 inference works.
     """
     # initial=0.0 makes the peak of a zero-size array 0 (max over empty has no
     # identity and raises); the where() below then maps it to 1, so an empty
