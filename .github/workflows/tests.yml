@@ -81,6 +81,11 @@ jobs:
       - run: ruff format --check src/ tests/
       - run: python tools/add_spdx_headers.py --check
       - run: python tools/check_british_spelling.py
+      # Every test tree must be reachable from some job's path list. The matrix
+      # below is explicit, so a directory it stops naming goes dark silently —
+      # which is what happened to `tests/unit`. Stdlib-only by design: this job
+      # installs ruff and nothing else.
+      - run: python tools/check_test_paths_covered.py
       # NOTE: `gen_property_table.py --check` cannot live here. This job installs
       # ruff and nothing else, and the generator imports tengri (hence jax) to read
       # the property registry. It runs in `smoke`, which does `pip install -e`.
@@ -356,8 +361,17 @@ jobs:
             paths: tests/contract
             nproc: 2
             budget: 50
+          # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
+          # #148 rehome emptied the tree and the matrix was rewritten around the
+          # physics-first trees without it, so anything landing back in
+          # `tests/unit` never gated a PR. Ten of its eleven files were the
+          # #1322 API epic's, and one of them had been RED on main since #1337
+          # phase 2 while CI stayed green. 87 tests, ~2 min at -n 2 — free
+          # inside this shard's budget. `tools/check_test_paths_covered.py`
+          # (lint job) now fails the build if any test tree escapes the matrix
+          # again.
           - shard: components
-            paths: tests/components
+            paths: tests/components tests/unit
             nproc: 2
             budget: 50
           # regression is split FOUR ways, each SERIAL. Two independent knobs,
@@ -625,8 +639,17 @@ jobs:
             paths: tests/contract
             nproc: 2
             budget: 50
+          # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
+          # #148 rehome emptied the tree and the matrix was rewritten around the
+          # physics-first trees without it, so anything landing back in
+          # `tests/unit` never gated a PR. Ten of its eleven files were the
+          # #1322 API epic's, and one of them had been RED on main since #1337
+          # phase 2 while CI stayed green. 87 tests, ~2 min at -n 2 — free
+          # inside this shard's budget. `tools/check_test_paths_covered.py`
+          # (lint job) now fails the build if any test tree escapes the matrix
+          # again.
           - shard: components
-            paths: tests/components
+            paths: tests/components tests/unit
             nproc: 2
             budget: 50
           # regression is split FOUR ways, each SERIAL. Two independent knobs,

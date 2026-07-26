@@ -133,6 +133,21 @@ class Data:
                 )
             if flux is None or c.shape != flux.shape:
                 raise ValueError(f"censor must align with photometry, got shape {c.shape}.")
+            # Reject garbage flags (-99, 2, 0.5, NaN, ...) here, at the seam.
+            # ``censored_neg_log_likelihood`` dispatches with
+            # ``jnp.where(mask == 1, upper, jnp.where(mask == -1, lower, detected))``,
+            # so every unrecognized value falls through to the DETECTED branch:
+            # a sentinel-coded or mis-scaled column silently turns upper limits
+            # into detections and biases the fit. ``ingest_catalog`` has always
+            # rejected these on the catalog side; the two seams must agree.
+            in_range = np.isin(c, (-1, 0, 1))
+            if not in_range.all():
+                bad = np.unique(c[~in_range]).tolist()
+                raise ValueError(
+                    f"censor has invalid flag value(s) {bad}; allowed: 0 (detected), "
+                    "1 (upper limit), -1 (lower limit). Unrecognized values would be "
+                    "silently treated as detections by the censored likelihood."
+                )
             censor = jnp.asarray(c)
         if self.spectrum is not None:
             spec_schema = getattr(observation, "spectroscopy", None)
