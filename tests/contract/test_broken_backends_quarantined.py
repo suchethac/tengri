@@ -216,6 +216,96 @@ def test_the_batched_escape_hatch_gets_past_the_gate():
     assert not isinstance(exc.value, BackendError), "allow_unvalidated=True did not open the gate"
 
 
+#: Modules holding module-level dispatch functions (``fit_model``, ``fit_batch``).
+_DISPATCH_MODULES = ("tengri.forward.convenience",)
+
+#: Names that take a ``method`` argument and dispatch on it.
+_DISPATCH_VERBS = ("run", "fit", "fit_batch", "fit_model")
+
+
+def _discovered_method_defaults():
+    """Every ``method=`` default reachable from the public surface.
+
+    Derived, not hand-listed. ``DISPATCH_ENTRY_POINTS`` above is readable and
+    load-bearing for the behavioral tests, but a hand-maintained list cannot
+    catch the case it exists for: a *new* entry point nobody added a row for.
+    Discovery found seven surfaces past the four listed — ``fit_batch`` on
+    three classes among them.
+
+    Yields ``(qualname, default)`` for string defaults only; ``None`` /
+    sentinel defaults resolve elsewhere and are not a declared choice.
+    """
+    import importlib
+    import inspect
+    import warnings
+
+    import tengri
+
+    # THREE surfaces, unioned. `dir()` alone is not enough and the omission is
+    # not academic: `Catalog` is in `__all__` but not `dir()`, and
+    # `CatalogFitter` is in NEITHER (module `__getattr__` only, deprecated by
+    # #1369). Both are the classes #1394 was about, so a `dir()`-only scan would
+    # have missed the very bug this test exists for.
+    candidates = (
+        set(dir(tengri))
+        | set(getattr(tengri, "__all__", ()))
+        | {cls for _, _, cls in DISPATCH_ENTRY_POINTS}
+    )
+
+    seen = set()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # deprecated re-exports warn on getattr
+        targets = []
+        for name in sorted(candidates):
+            if name.startswith("_"):
+                continue
+            try:
+                obj = getattr(tengri, name)
+            except Exception:
+                continue
+            if inspect.isclass(obj):
+                targets.extend((f"{name}.{v}", getattr(obj, v, None)) for v in _DISPATCH_VERBS)
+        for mod_name in _DISPATCH_MODULES:
+            mod = importlib.import_module(mod_name)
+            targets.extend((f"{mod_name}.{v}", getattr(mod, v, None)) for v in _DISPATCH_VERBS)
+
+        for qualname, fn in targets:
+            if fn is None or not callable(fn) or id(fn) in seen:
+                continue
+            seen.add(id(fn))
+            try:
+                param = inspect.signature(fn).parameters.get("method")
+            except (ValueError, TypeError):
+                continue
+            if param is not None and isinstance(param.default, str):
+                yield qualname, param.default
+
+
+def test_no_discovered_method_default_is_a_broken_backend():
+    """The anti-drift form: DERIVED from the public surface, not hand-listed.
+
+    ``test_no_dispatch_default_names_a_broken_backend`` covers four entry points
+    someone wrote down. This one walks every public class and dispatch module
+    and finds them, so an entry point added later — with no row in any list — is
+    still gated. That is the failure mode #1394 actually was: nobody was
+    maintaining a list.
+    """
+    found = dict(_discovered_method_defaults())
+
+    # A scan that silently matches nothing would pass vacuously — the exact
+    # fail-open shape this whole file exists to prevent.
+    assert len(found) >= len(DISPATCH_ENTRY_POINTS), (
+        f"discovery found only {len(found)} method= defaults "
+        f"({sorted(found)}); the scan is broken, not the code"
+    )
+
+    broken = {name: default for name, default in found.items() if default in KNOWN_BROKEN}
+    assert not broken, (
+        "public dispatch surfaces default to a tier='broken' backend:\n  "
+        + "\n  ".join(f"{name} -> method={default!r}" for name, default in sorted(broken.items()))
+    )
+
+
 def test_refuse_if_broken_passes_unknown_names_through():
     """Name validation is ``resolve_method``'s job, not the gate's.
 
