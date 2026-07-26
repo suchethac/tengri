@@ -23,6 +23,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
+from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
 DEFAULT_PERCENTILES: tuple[float, ...] = (16.0, 50.0, 84.0)
@@ -775,6 +776,14 @@ class _CatalogFitterOriginal:
             percentiles = DEFAULT_PERCENTILES
 
         resolved = resolve_method(method)
+        # Pre-flight memory guard, shared with Fitter/PopulationFitter. D here is
+        # the PER-GALAXY free-parameter count: the batched MCMC path vmaps N
+        # independent chains of that size, so the per-chain mass matrix — the
+        # term that goes O(D^2) — is set by the single-galaxy spec, not by N.
+        _spec = getattr(self.model, "spec", None)
+        _warn_if_nuts_high_dim(
+            resolved, getattr(_spec, "n_free", None), surface="Catalog.fit / CatalogFitter.run"
+        )
         # Per-galaxy fixed-value overrides (e.g. redshift) and presence masks are
         # threaded only through the sequential path today; the batched native/MCMC
         # paths stack flux/noise and would SILENTLY DROP per-galaxy values. Fail loudly instead.
