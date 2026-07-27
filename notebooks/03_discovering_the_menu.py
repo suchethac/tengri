@@ -30,12 +30,11 @@ import warnings
 
 # Keep the rendered tutorial clean: silence framework notices that do not
 # change the science shown here (baked-in nebular, the WavePrecomp blue-band
-# approximation, the intentional sed_model.fit(...) LUT path, and
+# approximation, and
 # recipe/parameter-provenance notices). Genuine deprecations in user-facing
 # calls are fixed in the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
 warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
 warnings.filterwarnings("ignore", message=".*Composable AGN.*")
 warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
@@ -273,8 +272,10 @@ tengri.search("Calzetti")
 #   `tengri.analysis.plotting`.
 # - **`tengri.observation`** — `Photometry`, `Spectroscopy`, `Observation`,
 #   `NoiseModel`, `LineList`, filter loaders.
-# - **`tengri.inference`** — `Fitter`, `CatalogFitter`, `PopulationFitter`,
-#   `VIConfig`, `InferenceContext`.
+# - **`tengri.inference`** — `Catalog` (many galaxies, one call),
+#   `VIConfig`, `InferenceContext`. Single-galaxy fits go through
+#   `ForwardModel.fit`; `Fitter` is an internal engine, not a surface to
+#   call directly.
 # - **`tengri.results`** — `Posterior`, `CatalogPosterior`,
 #   `PopulationPosterior`, `FitResult`, `MockData`, `Provenance`,
 #   `generate_mock`.

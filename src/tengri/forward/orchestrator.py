@@ -162,6 +162,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Nebular — photometry LUT (only non-BakedIn backends
     # publish, when ``approx=WavePrecomp()`` is set).
     "nebular_phot_lnu_precomp": "erg/s/Hz",
+    # Shock (MAPPINGS V) — filter LUT. A separate additive component from the
+    # photoionized nebular backend (#851), so it carries its own key (#1375).
     "shock_phot_lnu_precomp": "erg/s/Hz",
     # Spectrum LUT (published when approx=SpectrumPrecomp() is set).
     # Per-pixel rest-frame Lν at spectrum pixel centers.

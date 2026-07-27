@@ -81,12 +81,17 @@ def _restband_lnu(state) -> jnp.ndarray:
     for c in contribs[1:]:
         total = total + c
 
-    # Dust reddens the stellar + nebular bucket, exactly as in the observed band.
-    # Everything else (AGN, radio, X-ray) carries its own attenuation already.
+    # Dust reddens the stellar + nebular + shock bucket, exactly as in the
+    # observed band. Everything else (AGN, radio, X-ray) carries its own
+    # attenuation already. Shock rides with nebular rather than in the
+    # unattenuated remainder because the exact path sums sed_shock into
+    # sed_intrinsic *before* dust, so it is reddened there too (#1375).
     stellar = state.derived.get("stellar_restband_lnu_precomp")
     nebular = state.derived.get("nebular_restband_lnu_precomp")
+    shock = state.derived.get("shock_restband_lnu_precomp")
     stellar = stellar if stellar is not None else jnp.zeros_like(total)
     nebular = nebular if nebular is not None else jnp.zeros_like(total)
+    nebular = nebular + (shock if shock is not None else jnp.zeros_like(total))
     unattenuated = total - stellar - nebular
 
     a_bc = state.derived.get("dust_bc_restband_attenuation_precomp")
@@ -1014,6 +1019,25 @@ class Observation:
         nebular_phi_for_dust = (
             nebular_phi_for_dust if nebular_phi_for_dust is not None else jnp.zeros_like(total_phi)
         )
+        # Shock joins the young-limit bucket rather than the unattenuated
+        # remainder: the exact path sums ``sed_shock`` into ``sed_intrinsic``
+        # before dust runs, so it is reddened by the same screen. Leaving it in
+        # ``unattenuated_phi`` would make the LUT read high wherever the screen
+        # bites, and only for models that enable shock (#1375, #851).
+        #
+        # KNOWN RESIDUAL. Like the nebular bucket, shock is a single number per
+        # filter, so the screen is applied at λ_eff rather than evaluated across
+        # the band the way the stellar sub-band quadrature does (#1122). That
+        # approximation is worse for shock than for a smooth continuum, because
+        # shock emission is line-dominated and the lines sit where the screen
+        # differs most from its band average. Measured LUT-vs-exact on synthetic
+        # SDSS-like bands, shock frac=1.0: 2.4 % at z=0.05/tau_bc=0.5, 5.1 % at
+        # z=0.5/tau_bc=2, 8.3 % at z=1/tau_bc=2. With tau=0 the two paths agree
+        # to roundoff, which localizes the whole residual here rather than in
+        # the filter integration. Fixing it means giving shock a sub-band LUT.
+        shock_phi_for_dust = state.derived.get("shock_phot_lnu_precomp")
+        if shock_phi_for_dust is not None:
+            nebular_phi_for_dust = nebular_phi_for_dust + shock_phi_for_dust
         dust_attenuable_phi = stellar_phi + nebular_phi_for_dust
         unattenuated_phi = total_phi - dust_attenuable_phi
 

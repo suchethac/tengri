@@ -20,13 +20,40 @@ import pytest
 pytestmark = pytest.mark.contract
 
 
+#: Domain prefixes that ``SEDModelComponent.slice_params`` strips before
+#: :meth:`predict` sees the dict. A modern component reads ``p["tau_skirtor"]``,
+#: never ``p["agn_tau_skirtor"]``, so a scan for the fully-qualified spelling
+#: alone cannot see live wiring (#1403).
+_DOMAIN_PREFIXES = ("agn_", "dust_", "neb_", "shock_", "radio_", "xray_", "igm_", "sfh_", "met_")
+
+
 def _has_param_consumer(src: str, param: str) -> bool:
-    """True if ``src`` reads ``param`` from a params dict (any common form)."""
-    return (
-        f'params.get("{param}"' in src
-        or f'params["{param}"]' in src
-        or f'p.get("{param}"' in src
-        or f'p["{param}"]' in src
+    """True if ``src`` reads ``param`` from a params dict, in any live spelling.
+
+    Accepts the prefix-stripped name as well as the fully-qualified one.
+    ``SEDModelComponent`` strips its ``parameter_prefix`` in ``slice_params``
+    before calling ``predict``, so ``skirtor_model.py`` legitimately reads
+    ``p["tau_skirtor"]`` for the parameter declared as ``agn_tau_skirtor``.
+
+    Checking only the qualified spelling used to pass for the wrong reason: the
+    sole match was ``SEDModel._get_non_stellar_kwargs``, a method that nothing
+    called. Deleting it as dead code (#1403) turned these assertions red while
+    the wiring they describe was, and still is, entirely intact — so the test
+    had been reporting on a string in a dead method rather than on the pipeline.
+    Had the real forwarding in ``skirtor_model.py`` broken, this would have
+    stayed green.
+    """
+    names = [param]
+    for prefix in _DOMAIN_PREFIXES:
+        if param.startswith(prefix):
+            names.append(param[len(prefix) :])
+            break
+    return any(
+        f'params.get("{name}"' in src
+        or f'params["{name}"]' in src
+        or f'p.get("{name}"' in src
+        or f'p["{name}"]' in src
+        for name in names
     )
 
 
@@ -37,7 +64,12 @@ def _pipeline_src() -> str:
     body, deleted in Phase B closure. Its parameter-forwarding contract now
     lives across the orchestrator's component adapters and helpers.
     """
-    from tengri.components.agn import component as agn_component, unified as agn_unified
+    from tengri.components.agn import (
+        component as agn_component,
+        kd18_disc_model as agn_kd18_disc,
+        skirtor_model as agn_skirtor,
+        unified as agn_unified,
+    )
     from tengri.components.dust import (
         component as dust_component,
         two_component as dust_two,
@@ -54,6 +86,11 @@ def _pipeline_src() -> str:
         inspect.getsource(sed_model_mod),
         inspect.getsource(agn_component),
         inspect.getsource(agn_unified),
+        # The SEDModelComponent torus/disc blocks — where the SKIRTOR and KD18
+        # parameters are actually forwarded (#1403). Without these the scan can
+        # only see the legacy fully-qualified spelling, which no live code uses.
+        inspect.getsource(agn_skirtor),
+        inspect.getsource(agn_kd18_disc),
         inspect.getsource(dust_component),
         inspect.getsource(dust_two),
         inspect.getsource(radio_component),
