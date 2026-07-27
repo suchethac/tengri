@@ -96,7 +96,12 @@ def negative_hessian_metric(
     Returns
     -------
     metric : ndarray, shape (D, D)
-        Symmetric positive-definite metric, eigenvalues ``max(|lambda|, floor)``.
+        Symmetric positive-definite metric, eigenvalues ``max(|lambda|, floor)``
+        — **provided the curvature at ``position`` is finite**. The floor cannot
+        rescue a non-finite input: ``jnp.maximum(nan, floor)`` is ``nan``, so a
+        NaN log-density or Hessian propagates through unchanged (#1397).
+        Callers that cannot guarantee a finite point should validate it first;
+        :func:`preconditioned_logdensity` does.
 
     Notes
     -----
@@ -206,24 +211,29 @@ def metric_preconditioner(metric: jnp.ndarray) -> LinearPreconditioner:
     Triangular, so both directions cost :math:`O(D^2)`.
     """
     metric = jnp.asarray(metric)
-    # Non-finite FIRST, and separately. A NaN metric also fails Cholesky, so folding
-    # the two together reported "not positive definite" for a matrix whose entries
-    # were NaN — and advised building it with the very function that had just built
-    # it (#1397). An eigenvalue floor cannot rescue NaN; only a finite input can.
+    # Distinguish the two ways Cholesky can fail (#1397). A non-finite metric is
+    # NOT an indefiniteness problem, and reporting it as one sends the reader to
+    # fix curvature when the defect is upstream — the metric was formed at a
+    # point where the log-density or its Hessian was already NaN. The eigenvalue
+    # floor in ``negative_hessian_metric`` cannot help there: ``jnp.maximum(nan,
+    # floor)`` is ``nan``, so the floor is a no-op exactly when it is needed.
     if not bool(jnp.all(jnp.isfinite(metric))):
         raise ValueError(
-            "metric is not finite — it contains NaN or inf, so no factorization "
-            "exists. The metric is the curvature at the expansion point, so this "
-            "means the log-density or its second derivatives are undefined there. "
-            "Check the point the metric was built at (a MAP fit ending in loss=nan "
-            "is the usual cause), or run with precondition=False."
+            "metric is non-finite (NaN or inf), so it cannot be factorized. This "
+            "is an upstream failure, not a curvature one: the metric is built at "
+            "the expansion point (normally the MAP), so a non-finite value there "
+            "— a diverged MAP, or a log-density that is NaN at that point — "
+            "propagates straight into the metric. The eigenvalue floor cannot "
+            "repair it. Check the initial point is finite, or pass "
+            "precondition=False to sample without whitening."
         )
     lower = jnp.linalg.cholesky(metric)
     if not bool(jnp.all(jnp.isfinite(lower))):
         raise ValueError(
-            "metric is not positive definite — Cholesky failed on a finite matrix. "
-            "Build it with `negative_hessian_metric`, whose eigenvalue floor "
-            "guarantees positive definiteness."
+            "metric is not positive definite — Cholesky failed on a finite "
+            "matrix. Build it with `negative_hessian_metric`, whose eigenvalue "
+            "floor guarantees positive definiteness for finite curvature, or "
+            "pass precondition=False to sample without whitening."
         )
     identity = jnp.eye(metric.shape[0], dtype=metric.dtype)
     inverse_lower = jax.scipy.linalg.solve_triangular(lower, identity, lower=True)
@@ -274,22 +284,20 @@ def preconditioned_logdensity(
     The returned ``wrapped`` callable is itself fully traceable.
     """
     init_flat = jnp.asarray(init_flat)
-    # Diagnose the expansion point before the metric, so the error names the actual
-    # defect. #1397: notebook 01 died reporting "not positive definite" when the real
-    # chain was ``MAP init done (loss=nan)`` -> NaN Hessian -> NaN Cholesky. The point
-    # is upstream of everything here and is the only thing the caller can act on.
-    # ``bool`` rather than ``int``: under trace this raises TracerBoolConversionError,
-    # the same signal ``metric_preconditioner``'s guard gives, so "you traced this" has
-    # one failure mode instead of two. The count is only needed for the message.
-    if bool(jnp.any(~jnp.isfinite(init_flat))):
+    # Catch a non-finite expansion point HERE, where the point is still in hand
+    # (#1397). Downstream all that survives is a NaN matrix, and the failure
+    # arrives wearing the wrong name three layers later. The check lives in this
+    # orchestrator rather than in ``negative_hessian_metric`` because that
+    # function is documented JIT/grad/vmap-safe and reading a concrete boolean
+    # inside it would break that contract; this function is already non-JIT.
+    if not bool(jnp.all(jnp.isfinite(init_flat))):
         n_bad = int(jnp.sum(~jnp.isfinite(init_flat)))
         raise ValueError(
-            f"cannot build a preconditioning metric: the expansion point is not "
-            f"finite ({n_bad} of {init_flat.shape[0]} coordinates are NaN or inf). "
-            f"The curvature there is undefined, so no metric exists. This is an "
-            f"upstream initialization failure — a MAP fit ending in loss=nan is the "
-            f"usual cause. Check data scaling and prior bounds, pass a finite "
-            f"init_from, or run with precondition=False."
+            f"the expansion point is non-finite ({n_bad} of {init_flat.size} "
+            "coordinates are NaN or inf), so no metric can be built at it. This "
+            "normally means the MAP initialization diverged. Fix the starting "
+            "point — pass an explicit init_from=, or adjust the MAP settings — "
+            "or pass precondition=False to sample without whitening."
         )
     metric = negative_hessian_metric(logdensity_fn, init_flat, data_args, floor=floor)
     preconditioner = metric_preconditioner(metric)
@@ -315,23 +323,24 @@ PRECONDITION_MAX_DIM: int = 1024
 def _resolve_precondition(precondition: bool | None, n_dim: int) -> bool:
     """Resolve ``precondition=None`` — the opt-in policy.
 
-    **Preconditioning is off unless asked for.** It shipped auto-on and the default
-    broke fits that had been working (#1397):
+    **Preconditioning is off unless asked for.**
 
-    * ``notebooks/01_why_jax.py`` stopped running entirely. A NaN MAP init makes the
-      metric non-finite, and the guard turned a working fit into a hard ``ValueError``.
-    * ``notebooks/07_joint_photo_spec.py`` regressed from max R-hat 1.014 to **1.839**
-      while reporting **zero** divergences — the health signal inverted, so a
-      divergence check scores the broken arm as the healthiest of three.
+    Note on attribution, since the first version of this docstring got it wrong: the
+    notebook failures originally blamed on preconditioning (#1397) were **not** caused
+    by it. A sub-band node gradient underflowed to NaN inside the model itself, and
+    preconditioning was merely the first thing to notice — it built a metric at the
+    poisoned point and refused. With that root cause fixed, ``notebooks/07`` returns to
+    the R-hat it had before preconditioning existed.
 
-    Set against that, no throughput win was ever demonstrated where these fits live:
-    at 5 seeds per configuration the median was 1.87x ESS/s at D=7 but 0.84x — a
-    *loss* — at D=8. The conditioning evidence (cond 8.5e4-3.1e8 whitened to 1.0 at
-    the MAP, every configuration) is real and deterministic, but conditioning is not
-    convergence, and only the latter is what a default is promising.
+    What survives, measured on the *fixed* code, is that whitening does not pay at low
+    D. On ``recipes.mock_recovery_minimal()`` (D=7), 4 seeds of 4 have the
+    unpreconditioned arm converging (R-hat 0.997-1.007) and the preconditioned arm not
+    (1.055-2.689), at 4x to 25x worse ESS/s. An earlier sweep on other configurations
+    agreed in direction: median 0.84x ESS/s at D=8.
 
-    A feature that can turn a converging fit into a non-converging one is a feature
-    the caller has to ask for.
+    The conditioning evidence (cond 8.5e4-3.1e8 whitened to 1.0 at the MAP, every
+    configuration measured) is real and deterministic. But conditioning is not
+    convergence, and only convergence is what a default would be promising.
 
     Parameters
     ----------
