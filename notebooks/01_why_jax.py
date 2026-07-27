@@ -39,12 +39,11 @@ import warnings
 
 # Keep the rendered tutorial clean: silence framework notices that do not
 # change the science shown here (baked-in nebular, the WavePrecomp blue-band
-# approximation, the intentional sed_model.fit(...) LUT path, and
-# recipe/parameter-provenance notices). Genuine deprecations in user-facing
+# approximation, and recipe/parameter-provenance notices). Genuine
+# deprecations in user-facing
 # calls are fixed in the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
 warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
 warnings.filterwarnings("ignore", message=".*Composable AGN.*")
 warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
@@ -60,6 +59,7 @@ import numpy as np
 
 import tengri
 from tengri import (
+    ForwardModel,
     Observation,
     Photometry,
     SEDModel,
@@ -238,10 +238,9 @@ _ = forward(batch_params).block_until_ready()
 t_batch = perf_counter() - t0
 
 t0 = perf_counter()
-posterior = model.fit(
+posterior = ForwardModel.build(sed=model).fit(
     flux_obs, noise,
     method="mcmc_nuts",
-    data_type="photometry",
     key=jax.random.PRNGKey(2),
     n_warmup=300,
     n_samples=300,

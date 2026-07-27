@@ -60,10 +60,9 @@ def run_dynamic_hmc(
         Use dense mass matrix. Set False for D>30.
     precondition : bool or None, default None
         Sample in metric-whitened coordinates, mapping draws back afterwards.
-        A linear change of variables, so the posterior is unchanged. ``None``
-        auto-enables up to
-        :data:`~tengri.inference.preconditioning.PRECONDITION_MAX_DIM`. See
-        :func:`~tengri.inference.backends.mcmc.nuts.run_nuts` for the full
+        A linear change of variables, so the posterior is unchanged. **Opt-in**
+        (#1397): ``None`` (default) resolves to off; pass ``True`` to enable.
+        See :func:`~tengri.inference.backends.mcmc.nuts.run_nuts` for the full
         rationale and :mod:`tengri.inference.preconditioning` for the math.
     verbose : bool
         Print progress.
