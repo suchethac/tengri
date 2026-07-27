@@ -50,6 +50,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from tengri.inference._backend_registry import DEFAULT_METHOD
+from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 
 __all__ = ["Fitter", "resolve_method"]
 
@@ -2437,6 +2438,12 @@ class Fitter:
         # Pre-flight speed guard: steer many-evaluation samplers off the slow
         # exact forward path onto the WavePrecomp LUT (see helper above).
         _warn_if_exact_forward_path(self.model, entry.name)
+
+        # Pre-flight memory guard. `auto`/`mcmc` already switch away from NUTS
+        # above D=20, but an explicit method='mcmc_nuts' overrides nothing — the
+        # caller has chosen, so tell them the cost instead of silently paying it.
+        # Same helper serves CatalogFitter and PopulationFitter (#1394 follow-up).
+        _warn_if_nuts_high_dim(entry.name, self.spec.n_free, surface="Fitter.run")
 
         # Refuse backends that declare themselves unusable, unless the caller
         # opts in explicitly (#1287). Before check_requires, because "this

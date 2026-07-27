@@ -317,13 +317,27 @@ jobs:
     # runs serial. Any statement below of the form "each shard runs at -n 2" is only
     # true of contract/components/physics.
     #
-    # Shares of the old single-job wall clock, measured at -n 2 — STALE, and left
-    # only as history. Re-measure before reasoning from shares; this comment has
-    # been wrong twice (it named `contract` the long pole long after `regression`
-    # took over at ~2x). See the re-measure recipe on #1346.
+    # Wall = slowest shard, not the sum, so splitting the small shards is free.
+    # That principle is the only durable line in this block: every NUMBER below
+    # carries a date, because each has already gone stale at least once.
+    #
+    # Shares of the OLD single-job wall clock, at -n 2. History only — do not
+    # reason from these:
     #   contract 43% · components 28% · regression 22% · physics 7%
-    # `contract` (the long pole) sets the wall clock. Wall = slowest shard, not the
-    # sum, so splitting the small shards is free.
+    #
+    # MEASURED 2026-07-26, main @1e6575588 (run 30198731485, all green) — the
+    # split as it stands after #1380 + #1385:
+    #   regression-d 19m · components 19m · contract 18m · regression-b1 17m
+    #   regression-b2 9m · regression-a 6m · regression-c 4m · physics 3m
+    #
+    # The wall clock is ~19 min and the top FOUR shards are a 17-19 min near-
+    # tie: there is no single long pole left to attack, and shaving any one of
+    # them buys nothing until its three neighbours come down too. Note what
+    # that corrects — this block used to assert "`contract` (the long pole)
+    # sets the wall clock" directly beneath a paragraph warning that naming
+    # `contract` the long pole was the error it had already made twice. Do not
+    # re-add a long-pole claim without a dated measurement beside it. See the
+    # re-measure recipe on #1346.
     #
     # regression and physics were ONE shard until 2026-07. They were split because
     # the paired shard walked back into the 16 GB ceiling: it died at ~21-22 min and
