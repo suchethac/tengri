@@ -45,6 +45,36 @@ omitted here rather than presented as current API; the migration table in
       predict_ionizing_quantities, predict_photometry_components,
       predict_spectrum_components, predict_emission_lines, fit
 
+Approximation policies
+----------------------
+
+The ``approx=`` argument to :meth:`~tengri.SEDModel.build` selects a
+build-time lookup table in place of the exact per-evaluation forward. Each
+targets a different output channel and they compose: ``WavePrecomp`` serves
+photometry, ``SpectrumPrecomp`` the spectrum, ``FeaturePrecomp`` the emission
+lines. ``approx=None`` (the default) keeps the exact wave-grid path.
+
+WavePrecomp
+~~~~~~~~~~~
+
+.. autoclass:: tengri.WavePrecomp
+   :members:
+   :show-inheritance:
+
+SpectrumPrecomp
+~~~~~~~~~~~~~~~
+
+.. autoclass:: tengri.SpectrumPrecomp
+   :members:
+   :show-inheritance:
+
+FeaturePrecomp
+~~~~~~~~~~~~~~
+
+.. autoclass:: tengri.FeaturePrecomp
+   :members:
+   :show-inheritance:
+
 Parameters
 ----------
 
@@ -106,6 +136,23 @@ Observation
    :members:
    :show-inheritance:
 
+Data
+----
+
+One galaxy's measurements, validated against the :class:`~tengri.Observation`
+that describes them.
+
+.. autoclass:: tengri.Data
+   :members:
+   :show-inheritance:
+
+Galaxy
+------
+
+.. autoclass:: tengri.Galaxy
+   :members:
+   :show-inheritance:
+
 Photometry
 ----------
 
@@ -131,5 +178,38 @@ VIConfig
 --------
 
 .. autoclass:: tengri.VIConfig
+   :members:
+   :show-inheritance:
+
+Exceptions
+----------
+
+Every exception tengri raises derives from :class:`~tengri.TengriError`, so
+``except TengriError`` catches all of them. Each also inherits the built-in
+that matches its failure mode — :class:`~tengri.ParameterError` is a
+``ValueError``, :class:`~tengri.TengriIOError` an ``OSError`` — so existing
+``except ValueError`` handlers keep working.
+
+.. autoexception:: tengri.TengriError
+   :members:
+   :show-inheritance:
+
+.. autoexception:: tengri.ParameterError
+   :members:
+   :show-inheritance:
+
+.. autoexception:: tengri.ConfigError
+   :members:
+   :show-inheritance:
+
+.. autoexception:: tengri.BackendError
+   :members:
+   :show-inheritance:
+
+.. autoexception:: tengri.InferenceError
+   :members:
+   :show-inheritance:
+
+.. autoexception:: tengri.TengriIOError
    :members:
    :show-inheritance:
