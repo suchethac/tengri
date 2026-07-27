@@ -94,6 +94,37 @@ _SEAM_MODELS = {
             "fracAGN": 0.1,
         },
     ),
+    # Every seam at once — dust IR, Cue (Q_H ~1e56), AGN, radio, X-ray, shock — which
+    # is what a science model actually looks like, and the case where a defect at one
+    # seam could compound with, or cancel against, another. Measured 1.30e-03.
+    #
+    # Kept because coverage here has to be enumerated **by seam**, not by picking a
+    # representative model: #1436 hid for as long as it did precisely because the one
+    # model under test (stellar + dust) was the only one with no large positive scale
+    # seam, so it measured 7.3e-05 and passed while dust IR and AGN were 30% wrong.
+    "panchromatic": dict(
+        dust={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "all_params": FIXED,
+            "tau_diff": Uniform(0.0, 1.5),
+            "tau_bc": 0.0,
+            "emission": {"type": "dale2014", "all_params": FIXED},
+        },
+        neb={"type": "cue", "all_params": FIXED},
+        agn={
+            "type": "composable",
+            "all_params": FIXED,
+            "disc": {"type": "multicolor", "all_params": FIXED},
+            "torus": {"type": "skirtor", "all_params": FIXED},
+            "norm": "cigale_joint",
+            "log_lbol": Uniform(9.0, 12.0),
+            "fracAGN": 0.1,
+        },
+        radio={"type": "condon92"},
+        xray={"type": "simple"},
+        shock={"frac": 0.1},
+    ),
 }
 
 
