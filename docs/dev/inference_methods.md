@@ -184,10 +184,8 @@ cond(grad^2 H) at the MAP        1.1e5      (eigenvalues 0.81 ... 9.0e4)
 No diagonal mass matrix covers that, and a dense one estimated from warmup draws is both
 noisy and memory-hungry.
 
-`precondition` (on `mcmc_nuts`, `mcmc_hmc`, `mcmc_dynamic_hmc`; default `None` = auto —
-**on** up to `PRECONDITION_MAX_DIM` = 1024 free parameters, off above, with explicit
-`True`/`False` honored as-is) supplies the metric analytically instead. It is a
-**linear change of variables**, not a mass matrix:
+`precondition` (**opt-in — default off**; pass `True` to enable) supplies the metric
+analytically instead. It is a **linear change of variables**, not a mass matrix:
 
 ```
 G = -grad^2 log p   at the initial point, eigenvalue MAGNITUDES floored at 1.0
@@ -224,9 +222,31 @@ approximation. Measured, it holds across the region a chain actually visits:
   Only the `O(D^3)` factorization grows — hence the 1024 cap. "Easy low-dimensional"
   posteriors turned out not to exist here: the simplest configuration measured
   (double-power-law + photometry, D=7) already had raw cond 8.5e4.
-- Default is off; no existing fit changes behavior.
-- Gradient-free and self-tuning kernels (`mcmc_raytrace`, `mcmc_ess`, `mcmc_mclmc`) do
-  not take the flag — whitening the integrator's metric is meaningless for them.
+- **Why it is opt-in.** Not because of [#1397](https://github.com/suchethac/tengri/issues/1397),
+  despite that being the original stated reason here. Those notebook failures were
+  caused by a **sub-band node gradient underflowing to NaN** inside the model;
+  preconditioning was the first thing to notice, not the cause, and with the root fix
+  `notebooks/07` returns to its pre-preconditioning R-hat. The reason that survives is
+  measured on the *fixed* code: on `recipes.mock_recovery_minimal()` (D=7), 4 seeds of
+  4 converge without preconditioning (R-hat 0.997-1.007) and none converge with it
+  (1.055-2.689), at 4x to 25x worse ESS/s.
+- **The conditioning win is not a demonstrated sampling win.** Across 5 seeds per
+  configuration, `dpl / photometry` (D=7) gained a median **1.87x ESS/s** (better in
+  5/5 seeds), but `dpl + free metallicity / photometry` (D=8) came out at a median
+  **0.84x** — a net loss, with per-seed values spanning 0.44-1.23. No R-hat effect is
+  detectable either way: the paired differences sit at or below the spread between
+  seeds within a single arm. Treat the justification as *geometry and gradients*, which
+  are deterministic and measured everywhere, not throughput, which is not.
+- **Where it is most likely to pay.** All three HMC backends force `use_dense = False`
+  above D=30, so above that threshold the competitor is a *diagonal* mass matrix, which
+  cannot represent rotation at all. Below D=30 the competitor is an empirical dense
+  covariance from warmup — a far stronger baseline, and where the 0.84x was measured.
+- Which backends accept the flag is a **declared registry capability**
+  (`register_backend(..., accepts_precondition=True)`), not a list maintained by hand.
+  Today that is the Hamiltonian family; gradient-free and self-tuning kernels
+  (`mcmc_raytrace`, `mcmc_ess`, `mcmc_mclmc`) do not declare it, because whitening the
+  integrator's metric is meaningless for them. Passing `precondition=True` to a backend
+  that has not declared it raises at dispatch and names the ones that have.
 
 ---
 
