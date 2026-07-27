@@ -12,6 +12,7 @@ the function's own default.
 """
 
 import inspect
+import re
 
 import pytest
 
@@ -20,14 +21,60 @@ import pytest
 pytestmark = pytest.mark.contract
 
 
+# Component ``parameter_prefix`` values. A SEDModelComponent receives its params
+# with the prefix already stripped, so ``agn_tau_skirtor`` arrives as
+# ``p["tau_skirtor"]`` — see docs/adr/0011-sed-model-component-base.md.
+_COMPONENT_PREFIXES = ("agn_", "dust_", "neb_", "radio_", "xray_", "shock_", "sfh_", "met_")
+
+# ``agn_tau_skirtor=p["tau_skirtor"]`` — reads the stripped name AND forwards
+# under the full one. Both halves are required, so this cannot be satisfied by a
+# physics function merely *declaring* ``agn_tau_skirtor: float = 7.0``.
+_FORWARD_RE = r'{full}\s*=\s*p(?:\[|\.get\()\s*["\']{stripped}["\']'
+
+
 def _has_param_consumer(src: str, param: str) -> bool:
-    """True if ``src`` reads ``param`` from a params dict (any common form)."""
-    return (
+    """True if ``src`` reads ``param`` from a params dict and forwards it.
+
+    Accepts two wiring idioms:
+
+    1. **Full-name read** — ``params.get("agn_tau_skirtor")`` / ``p["agn_..."]``.
+       Used by the orchestrator and the composable AGN block runner.
+    2. **Prefix-stripped read with full-name forward** — the
+       ``SEDModelComponent`` contract, where ``parameter_prefix = "agn_"`` means
+       the component sees ``p["tau_skirtor"]`` and forwards it as
+       ``agn_tau_skirtor=``.
+
+    Form 2 exists because consumption moved out of ``forward/sed_model.py`` into
+    the component adapters (ADR-0011). Until #1403 this test kept passing on form
+    1 alone — but only because the *dead* ``_get_non_stellar_kwargs`` in
+    sed_model.py still mentioned these names. Deleting that corpse revealed the
+    test had stopped inspecting the code that actually does the work.
+
+    **Known limitation, inherent to matching one aggregated source string:** the
+    check is "some inspected module consumes this param", not "every consumer
+    does". A param with two live readers stays green if one of them regresses.
+    Verified: hardcoding ``agn_kt_warm`` (single consumer) fails the test, while
+    hardcoding ``agn_tau_skirtor`` does not, because ``blocks.runner`` reads it
+    too. Catching per-call-site drops needs the mock-patching tests further down
+    this file, not source inspection.
+    """
+    if (
         f'params.get("{param}"' in src
         or f'params["{param}"]' in src
         or f'p.get("{param}"' in src
         or f'p["{param}"]' in src
-    )
+    ):
+        return True
+
+    for prefix in _COMPONENT_PREFIXES:
+        if not param.startswith(prefix):
+            continue
+        stripped = param[len(prefix) :]
+        if not stripped:
+            continue
+        if re.search(_FORWARD_RE.format(full=re.escape(param), stripped=re.escape(stripped)), src):
+            return True
+    return False
 
 
 def _pipeline_src() -> str:
@@ -36,8 +83,23 @@ def _pipeline_src() -> str:
     Originally pinned to the legacy ``forward.pipeline.compute_sed_components``
     body, deleted in Phase B closure. Its parameter-forwarding contract now
     lives across the orchestrator's component adapters and helpers.
+
+    **Keep this list in step with where params are actually consumed.** Under
+    ADR-0011 the per-model ``SEDModelComponent`` adapters do the reading, so a
+    module missing from this list makes every param it owns unverifiable — and
+    the failure is silent, because the aggregate string simply will not contain
+    the name. #1403 surfaced exactly that: the SKIRTOR and K&D params were only
+    "found" via the dead ``_get_non_stellar_kwargs`` in sed_model.py, and their
+    real consumers (``skirtor_model``, ``kd18_disc_model``, ``blocks.runner``)
+    were never inspected.
     """
-    from tengri.components.agn import component as agn_component, unified as agn_unified
+    from tengri.components.agn import (
+        component as agn_component,
+        kd18_disc_model as agn_kd18,
+        skirtor_model as agn_skirtor,
+        unified as agn_unified,
+    )
+    from tengri.components.agn.blocks import runner as agn_block_runner
     from tengri.components.dust import (
         component as dust_component,
         two_component as dust_two,
@@ -54,6 +116,9 @@ def _pipeline_src() -> str:
         inspect.getsource(sed_model_mod),
         inspect.getsource(agn_component),
         inspect.getsource(agn_unified),
+        inspect.getsource(agn_skirtor),
+        inspect.getsource(agn_kd18),
+        inspect.getsource(agn_block_runner),
         inspect.getsource(dust_component),
         inspect.getsource(dust_two),
         inspect.getsource(radio_component),
