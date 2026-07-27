@@ -256,6 +256,27 @@ a `cond^0.5` residual when the metric happens to be exact. Ill-conditioning here
 `MAX_METRIC_CONDITION` (1e8) is a backstop, not the mechanism: the smallest eigenvalues
 are the least reliably estimated and the most damaging when wrong.
 
+**`gamma` is measurable, and it sits just under the cliff.** Whiten fully, then evaluate
+the curvature one posterior standard deviation away in the whitened frame; were the metric
+exact that would be `I`. Inverting the law gives `gamma ~ 1 + log(S)/log(cond)`. Measured
+(median over 6 jitter directions, one seed per configuration):
+
+| config | D | cond @ MAP | whitened @ 1 sd | `gamma` | optimal `alpha` = 1/`gamma` |
+|---|---|---|---|---|---|
+| `d7` | 7 | 7.8e4 | 8.9e3 | 1.81 | 0.55 |
+| `d8dust` | 8 | 7.9e4 | 4.6e3 | 1.75 | 0.57 |
+| `d8met` | 8 | 8.0e4 | 5.1e3 | 1.76 | 0.57 |
+
+This is the quantitative account of the sign instability. At `gamma ~ 1.8` full whitening
+leaves `cond^0.8` — barely better than doing nothing — and any seed-to-seed variation in
+the effective `gamma` crosses 2, where the sign flips to amplification. Full whitening was
+not unlucky; it was parked on a knife edge. At `alpha = 0.5` the exponent is `|1 - 0.9|`
+= 0.1, well inside the safe region.
+
+It also argues **against** per-problem auto-tuning: `gamma` is stable at 1.75–1.81 across
+every configuration measured, so a tuner would return ~0.56 every time. The fixed default
+is the right shape of fix, not a simplification.
+
 **Practical notes.**
 
 - Pass `init_from` a MAP result so the metric is built where the chain will be.
@@ -271,14 +292,29 @@ are the least reliably estimated and the most damaging when wrong.
   turned a working fit into a hard `ValueError`. `notebooks/07`'s photometry fit went
   from max R-hat 1.014 to **1.839** *while reporting zero divergences*: the usual
   health signal inverts, so a divergence check scores the broken arm as the healthiest.
-- **The conditioning win is not a demonstrated sampling win.** Conditioning is
-  deterministic and improves in every configuration measured; throughput is neither.
-  Post-fix (source `ba54c3b6c`, NUTS 250/250/2, gate `max_rhat <= 1.05` on **both**
-  arms), full whitening across 6 usable pairs gave ratios 5.76, 1.60, 1.13, 0.69, 0.10,
-  0.10 — see §2.5.1 for why that spread is mechanical rather than noise. The `D=8`
-  degradation is **dimensional, not metallicity-specific**: a second `D=8` cell varying
-  the dust slope instead (`d8dust`, median 0.62) agreed with free metallicity
-  (`d8met`, 0.69). Treat the justification as *geometry and gradients*, not throughput.
+- **The conditioning win is not a demonstrated sampling win — at any strength.** Three
+  arms, one frozen source (`b17b319d8`), 3 configs x 3 seeds x {off, `alpha=1`,
+  `alpha=0.5`}, 27 fits, 0 failures. Restricted to the 8 cells where **off itself
+  converged**:
+
+  | arm | broke convergence | aggregate ESS/s vs off* |
+  |---|---|---|
+  | `alpha = 1` (full) | **5 of 8** | **0.57x** |
+  | `alpha = 0.5` (default) | **2 of 8**, both marginal (1.063, 1.064) | **0.79x** |
+
+  \* an unusable fit scores 0 rather than being dropped. **Gating on convergence and then
+  taking a median is survivorship bias**: full whitening's gated median is 1.05x, computed
+  over only the 3 cells where it did not break the fit. The gate is right for comparing
+  sampling efficiency and wrong for deciding whether to enable something.
+
+  Partial whitening is strictly better on both axes, and repairs the catastrophic cases —
+  `d8dust` seed 3 went from R-hat **1.437** at a 0.04x step size (full) to R-hat **1.004**
+  at 1.13x (half). But **neither arm beats `off`**, which converged in 8 of 9 cells and
+  had the best aggregate throughput. Even at the measured-optimal strength the geometry
+  win does not become a sampling win: NUTS's warmup adaptation is already doing that work,
+  and a frozen metric partly competes with it. This is why the feature is opt-in.
+- The `D=8` degradation is **dimensional, not metallicity-specific**: a second `D=8` cell
+  varying the dust slope instead (`d8dust`) agreed with free metallicity (`d8met`).
 - **Never benchmark this on one seed.** The pre-fix numbers in the history of this
   document (1.87x at D=7, 0.84x at D=8) came from single-arm medians on a source tree
   that still carried the sub-band gradient bug
