@@ -74,6 +74,13 @@ Constructing :class:`~tengri.PopulationFitter` directly is deprecated and will
 be removed in tengri v1.0 (issue #211); the class remains as the routed
 implementation behind the pattern above.
 
+PopulationSEDModel
+~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: tengri.PopulationSEDModel
+   :members:
+   :show-inheritance:
+
 PopulationFitter
 ~~~~~~~~~~~~~~~~
 

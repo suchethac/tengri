@@ -89,6 +89,20 @@ Prediction
    :members:
    :show-inheritance:
 
+PriorPredictive
+---------------
+
+.. autoclass:: tengri.PriorPredictive
+   :members:
+   :show-inheritance:
+
+SEDResult
+---------
+
+.. autoclass:: tengri.SEDResult
+   :members:
+   :show-inheritance:
+
 SFHQuantities
 -------------
 
@@ -164,6 +178,39 @@ Spectroscopy
 -------------
 
 .. autoclass:: tengri.Spectroscopy
+   :members:
+   :show-inheritance:
+
+LineList
+--------
+
+.. autoclass:: tengri.LineList
+   :members:
+   :show-inheritance:
+
+Spectral indices
+----------------
+
+A :class:`~tengri.SpectralIndexDef` defines one index;
+:class:`~tengri.CompositeIndexDef` combines atomic ones; and
+:class:`~tengri.SpectralIndexData` carries the observed values to fit against.
+
+.. autoclass:: tengri.SpectralIndexDef
+   :members:
+   :show-inheritance:
+
+.. autoclass:: tengri.CompositeIndexDef
+   :members:
+   :show-inheritance:
+
+.. autoclass:: tengri.SpectralIndexData
+   :members:
+   :show-inheritance:
+
+FilterConvention
+----------------
+
+.. autoclass:: tengri.FilterConvention
    :members:
    :show-inheritance:
 

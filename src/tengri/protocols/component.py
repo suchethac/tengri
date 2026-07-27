@@ -237,7 +237,7 @@ class SEDComponentState:
 
 @dataclass(frozen=True)
 class ForwardState:
-    """Threaded state passed through a chain of :class:`SEDComponent`s.
+    """Threaded state passed through a chain of :class:`SEDComponent` objects.
 
     The carrier object for the forward model: holds the SED-in-progress
     plus a typed bag of derived quantities that downstream components
