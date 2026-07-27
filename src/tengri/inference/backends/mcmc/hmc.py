@@ -76,7 +76,7 @@ def run_hmc(
     target_accept_rate=0.85,
     dense_mass_matrix=True,
     chain_method="vmap",
-    precondition: bool | None = None,
+    precondition: bool | float | None = None,
     verbose=True,
 ):
     """HMC sampling via BlackJAX.
@@ -123,13 +123,15 @@ def run_hmc(
           importing jax; falls back to ``"vmap"`` with a warning if fewer than
           ``n_chains`` devices are visible.
 
-    precondition : bool or None, default None
+    precondition : bool, float or None, default None
         Sample in metric-whitened coordinates (#1301): the metric is built
         analytically at the initial point and the chain samples ``H(A zeta)``
-        with ``A A^T = G^-1``, draws mapped back exactly — the posterior is
-        unchanged, only the integrator's geometry. ``None`` resolves by
-        dimension — **on** up to ``PRECONDITION_MAX_DIM`` (1024) free
-        parameters, off above; explicit ``True`` / ``False`` is honored as-is.
+        with ``A A^T = G^-alpha``, draws mapped back exactly — the posterior is
+        unchanged, only the integrator's geometry. **Off unless asked for**
+        (#1397): ``None`` / ``False`` are off, ``True`` uses
+        :data:`~tengri.inference.preconditioning.DEFAULT_WHITENING_STRENGTH`, and
+        a float in ``[0, 1]` sets the strength (``1.0`` is full whitening).
+        Full whitening amplifies a misspecified metric without bound (#1442).
         See :mod:`tengri.inference.preconditioning`.
     verbose : bool
         Print progress.
@@ -178,7 +180,7 @@ def run_hmc(
 
     t0 = time.time()
 
-    adapt_key = ("hmc", not use_dense, problem.enabled)
+    adapt_key = ("hmc", not use_dense, problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     def ld_1arg(pos):

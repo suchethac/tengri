@@ -110,7 +110,7 @@ def run_nuts(
     max_num_doublings=10,
     dense_mass_matrix: bool | None = None,
     pathfinder_warmstart=False,
-    precondition: bool | None = None,
+    precondition: bool | float | None = None,
     verbose=True,
 ):
     """NUTS sampling via BlackJAX.
@@ -217,26 +217,36 @@ def run_nuts(
         - Zhang et al. 2022, "Pathfinder: Parallel quasi-Newton variational
           inference", JMLR 23, 306, arXiv:2108.03782.
 
-    precondition : bool or None, default None
-        Sample in metric-whitened coordinates. ``None`` resolves by dimension —
-        **on** up to ``PRECONDITION_MAX_DIM`` (1024) free parameters, off above
-        (the same idiom ``dense_mass_matrix`` uses); explicit ``True`` /
-        ``False`` is honored as-is. Every tengri parameter is
-        standardized, so the prior contributes exactly ``I`` to the metric and
-        everything left is the likelihood's — which on the correlated-field
-        posterior spans ``cond(grad^2 H) ~ 1e5``, far beyond what any single mass
-        matrix estimated from warmup draws can cover. This builds the metric
-        analytically at the initial point instead and samples ``H(A zeta)`` with
-        ``A A^T = G^-1``, mapping draws back with ``xi = A zeta``.
+    precondition : bool, float or None, default None
+        Sample in metric-whitened coordinates. **Off unless asked for** (#1397):
+        ``None`` and ``False`` are off, ``True`` enables it at
+        :data:`~tengri.inference.preconditioning.DEFAULT_WHITENING_STRENGTH`, and
+        a float in ``[0, 1]` sets the whitening strength directly (``1.0`` is
+        full whitening, ``0.0`` is off).
+
+        Every tengri parameter is standardized, so the prior contributes exactly
+        ``I`` to the metric and everything left is the likelihood's — which on the
+        correlated-field posterior spans ``cond(grad^2 H) ~ 1e5``, far beyond what
+        any single mass matrix estimated from warmup draws can cover. This builds
+        the metric analytically at the initial point instead and samples
+        ``H(A zeta)`` with ``A A^T = G^-alpha``, mapping draws back with
+        ``xi = A zeta``.
 
         The map is **linear**, so its Jacobian is constant and the posterior is
         unchanged — only the geometry the integrator sees. Pass ``init_from`` a
         MAP result so the metric is built where the chain will actually be.
 
+        **The strength is not cosmetic.** For a true precision ``H`` and a metric
+        ``G = H^gamma``, whitening leaves ``cond = cond(H) ** |1 - alpha*gamma|``,
+        so full whitening (``alpha=1``) is worse than doing nothing as soon as
+        ``gamma > 2`` and amplifies without bound past that. Measured on
+        single-galaxy photometry fits, full whitening ranged from 0.10x to 5.76x
+        ESS/s across seeds *of the same model* (#1442). The default strength halves
+        the exponent and doubles the tolerated misspecification.
+
         Costs one dense ``(D, D)`` Hessian up front (``O(D)`` backward passes),
         so it is worthwhile at moderate ``D`` and on stiff posteriors, not on
-        easy low-dimensional ones. On a rotated cond-1e6 Gaussian it cut
-        integrator steps per draw 77x and raised the step size 185x.
+        easy low-dimensional ones.
 
         This is the metric NIFTy hands to MGVI/geoVI (``I + J^T N^-1 J``); the
         difference is that NIFTy recomputes it every iteration while a
@@ -338,7 +348,7 @@ def run_nuts(
 
     # ``precondition`` changes the sampled geometry, so a cached step size and mass
     # matrix from the un-preconditioned run must not be reused.
-    adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), problem.enabled)
+    adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     if cached is not None:
