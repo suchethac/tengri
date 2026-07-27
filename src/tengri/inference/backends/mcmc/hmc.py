@@ -24,10 +24,7 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
 )
-from tengri.inference.preconditioning import (
-    _resolve_precondition,
-    preconditioned_logdensity,
-)
+from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
 
 logger = logging.getLogger(__name__)
@@ -130,9 +127,9 @@ def run_hmc(
         Sample in metric-whitened coordinates (#1301): the metric is built
         analytically at the initial point and the chain samples ``H(A zeta)``
         with ``A A^T = G^-1``, draws mapped back exactly — the posterior is
-        unchanged, only the integrator's geometry. ``None`` resolves by
-        dimension — **on** up to ``PRECONDITION_MAX_DIM`` (1024) free
-        parameters, off above; explicit ``True`` / ``False`` is honored as-is.
+        unchanged, only the integrator's geometry. **Opt-in** (#1397): ``None``
+        (default) resolves to off — pass ``True`` to enable, ``False`` is
+        explicit off.
         See :mod:`tengri.inference.preconditioning`.
     verbose : bool
         Print progress.
@@ -159,12 +156,10 @@ def run_hmc(
 
     # Metric preconditioning (#1301) — see ``run_nuts`` for the rationale. Linear change
     # of variables, so the posterior is untouched; draws are mapped back below.
-    precondition = _resolve_precondition(precondition, len(init_flat))
-    preconditioner = None
-    if precondition:
-        log_posterior_flat_2arg, preconditioner, init_flat = preconditioned_logdensity(
-            log_posterior_flat_2arg, init_flat, data_args
-        )
+    problem = prepare_preconditioning(
+        log_posterior_flat_2arg, init_flat, data_args, precondition=precondition
+    )
+    log_posterior_flat_2arg, init_flat = problem.logdensity, problem.init_flat
 
     n_dim = len(init_flat)
 
@@ -183,7 +178,7 @@ def run_hmc(
 
     t0 = time.time()
 
-    adapt_key = ("hmc", not use_dense, bool(precondition))
+    adapt_key = ("hmc", not use_dense, problem.enabled)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     def ld_1arg(pos):
@@ -280,8 +275,7 @@ def run_hmc(
     wall_time = time.time() - t0
 
     # Leave the whitened coordinates before the draws are read as parameters.
-    if preconditioner is not None:
-        positions = positions @ preconditioner.matrix.T
+    positions = problem.restore(positions)
 
     samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)

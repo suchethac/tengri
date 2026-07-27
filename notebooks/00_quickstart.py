@@ -28,24 +28,11 @@
 # nebular, AGN, and IGM enabled.
 
 # %%
-import os
+# Shared notebook setup (see notebooks/_setup.py): quiets the framework notices
+# that do not change the science, and loads the SSP grid.
+from _setup import effective_wavelengths_um, quiet
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
-
-import warnings
-
-# Keep the rendered tutorial clean: silence framework notices that do not
-# change the science shown here (baked-in nebular, the WavePrecomp blue-band
-# approximation, the intentional sed_model.fit(...) LUT path, and
-# recipe/parameter-provenance notices). Genuine deprecations in user-facing
-# calls are fixed in the code, not hidden.
-warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
-warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
-warnings.filterwarnings("ignore", message=".*Composable AGN.*")
-warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
-warnings.filterwarnings("ignore", category=RuntimeWarning)
+quiet()
 
 from pathlib import Path
 
@@ -72,7 +59,7 @@ from tengri import (
     load_ssp_data,
     plot,
 )
-from tengri.utils.conversions import lnu_to_fnu  # noqa: F401
+from tengri.utils.conversions import lnu_to_fnu
 
 plot.setup_style()
 FIG_DIR = Path("_figs")
@@ -90,6 +77,7 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 SSP_NAME = "fsps_prsc_miles_chabrier"
 ssp_path = Path("../data") / f"{SSP_NAME}.h5"
 if not ssp_path.exists():
+    # Public API: fetches the grid on first use and caches it under data/.
     ssp_path = Path(tengri.download_ssp(SSP_NAME))
 ssp = load_ssp_data(str(ssp_path))
 
@@ -132,7 +120,11 @@ sed_model = SEDModel.build(
     neb=builders.neb.none(),
     redshift=Fixed(0.05),
 )
-forward = ForwardModel.build(sed=sed_model, observation=obs)
+
+# The model that gets fitted. `ForwardModel` pairs the SED with the instrument
+# that observed it; the observation is inherited from the SED, so there is
+# nothing to re-declare here.
+forward = ForwardModel.build(sed=sed_model)
 
 print(sed_model.summary())
 citations.print_citations(sed_model)
@@ -154,15 +146,7 @@ flux_obs = np.asarray(mock["flux_obs"])
 noise = np.asarray(mock["noise"])
 
 phot = obs.photometry
-wave_eff_um = (
-    np.array(
-        [
-            np.trapezoid(w * t, w) / np.trapezoid(t, w)
-            for w, t in zip(phot.filter_waves, phot.filter_trans)
-        ]
-    )
-    / 1e4
-)
+wave_eff_um = effective_wavelengths_um(phot)
 
 # %% [markdown]
 # ## One-time JIT compile
@@ -197,20 +181,17 @@ jax.tree.map(lambda x: x.block_until_ready(), grad_fn(p0))
 print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 
 # %% [markdown]
-# ## Fit the model
-#
-# The model's `predict_photometry` uses the fast WavePrecomp photometry path,
-# so the fit is routed through that LUT. Each fit JIT-compiles its loss /
-# sampler stack on first use and persists it to the on-disk cache
-# (`~/.cache/tengri_jax_cache`), so a fresh session reuses the compile.
-
-# %% [markdown]
 # ## Fit
+#
+# `forward.fit(flux, noise, ...)` is the whole interface: hand it the data and
+# pick a method. Which channel the data belongs to is read off the observation —
+# this one is photometry, so there is nothing to declare.
 #
 # Multi-start ADAM for the MAP point estimate, then NUTS with four parallel
 # chains via `jax.vmap` for the full posterior. Each stack JIT-compiles on first
-# use; the data and parameters are threaded through the compiled kernels as
-# runtime arguments (never baked in), so the compile is reused across calls.
+# use and persists to the on-disk cache (`~/.cache/tengri_jax_cache`); the data
+# and parameters are threaded through the compiled kernels as runtime arguments
+# (never baked in), so the compile is reused across calls.
 #
 # *Note*: the standardized prior maps an N(0,1) latent to a *genuinely uniform*
 # physical prior, so a single random init can land in a poor basin and stall a
@@ -221,10 +202,10 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 
 # %%
 t = time.perf_counter()
-map_result = sed_model.fit(
-    flux_obs, noise,
+map_result = forward.fit(
+    flux_obs,
+    noise,
     method="map",
-    data_type="photometry",
     key=key_fit,
     n_restarts=8,
     n_steps=5000,
@@ -232,10 +213,10 @@ map_result = sed_model.fit(
 print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
 
 t = time.perf_counter()
-posterior = sed_model.fit(
-    flux_obs, noise,
+posterior = forward.fit(
+    flux_obs,
+    noise,
     method="mcmc_nuts",
-    data_type="photometry",
     key=key_fit,
     init_from=map_result,  # seed all chains at the MAP point
     n_warmup=1500,
