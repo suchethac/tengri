@@ -437,12 +437,15 @@ All major components are implemented and tested:
 
 ### Partially implemented — scheduled follow-up (from 2026-04-15 restructure)
 
-- **Precompute Protocol rewiring in SEDModel.** `forward/sed_model.py`'s 200-line
-  `_precompute_dust_ir_photometry` still dispatches via a hardcoded switch on
-  `model_name`. It imports the new adapter locations and works correctly, but
-  does not yet iterate `forward/precompute/registry.py`. Rewrite is a future
-  task (see `docs/known_bugs.md:IMP-06`). The switch has a documented cost: new
-  dust-IR models require editing both the registry AND the switch.
+- ~~**Precompute Protocol rewiring in SEDModel.**~~ Done, and the entry point is
+  gone. `docs/known_bugs.md` has recorded IMP-06 as FIXED since 2026-04-15 (the
+  hardcoded switch collapsed to ~25 lines); this bullet went stale then and kept
+  describing a "200-line hardcoded switch" that no longer existed. The method it
+  named, `_precompute_dust_ir_photometry`, was subsequently deleted outright as
+  dead code (#1403) — nothing had called it. Dust-IR precompute now lives in
+  `components/dust/dust_emission_precompute.py` (template models) and
+  `dust_analytic_precompute.py` (analytic), with models mapped to their module
+  by `forward/precompute/registry.py`.
 - **K&D 3-zone disc Protocol wiring.** `components/agn/kd_precompute.py` exposes
   `AXIS_PARAMS = ()` and `precompute()` raises `NotImplementedError`. Actual
   K&D preintegration runs via the original `kubota_done_disc_preintegrated`

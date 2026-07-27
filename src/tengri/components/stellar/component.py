@@ -541,6 +541,18 @@ __all__ = [
     "StellarSEDComponentState",
 ]
 
+#: Smallest sub-band weight whose node wavelength ``sub_num / sub_phi`` still has
+#: a representable **derivative** (#1397). The value is a ratio of two tiny
+#: numbers and stays finite far below this, but the quotient rule needs
+#: ``sub_phi**2``, which underflows to zero once ``sub_phi`` drops below
+#: ``sqrt(2.2e-308) ~ 1.5e-154`` — and ``x / 0`` is the NaN that poisons the
+#: gradient. Testing ``sub_phi != 0.0`` therefore does not protect autodiff: a
+#: narrow SFH drives sub-band fluxes to 1e-250 and below while every one of them
+#: is still nonzero. Sub-bands under this floor carry no measurable flux, so
+#: their node falls back to the band effective wavelength exactly as an
+#: identically-zero sub-band does.
+_SUBBAND_LIVE_FLOOR: float = 1e-150
+
 # Lyman limit — wavelengths below this contribute to the ionizing
 # photon rate (matches :mod:`tengri.components.nebular.ionizing_spectrum`).
 _HI_LIMIT_AA: float = 911.76
@@ -2012,9 +2024,11 @@ class StellarSEDComponent:
                 derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = (
                     total_mass * sub_phi * LSUN_ERG_PER_S
                 )
-                # Zero-weight sub-bands contribute nothing, but their node still
-                # goes through the 1/λ dust law — keep it finite and positive.
-                live = sub_phi != 0.0
+                # Sub-bands with no usable weight contribute nothing, but their
+                # node still goes through the 1/λ dust law — keep it finite and
+                # positive. The floor (not ``!= 0.0``) is what keeps the node's
+                # DERIVATIVE finite; see ``_SUBBAND_LIVE_FLOOR`` (#1397).
+                live = jnp.abs(sub_phi) > _SUBBAND_LIVE_FLOOR
                 derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
                     live,
                     sub_num / jnp.where(live, sub_phi, 1.0),
@@ -2118,9 +2132,11 @@ class StellarSEDComponent:
                 derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = (
                     total_mass * sub_phi * LSUN_ERG_PER_S
                 )
-                # Zero-weight sub-bands cannot change the result, but their node
-                # still goes through the 1/λ dust law — keep it finite and positive.
-                live = sub_phi != 0.0
+                # Sub-bands with no usable weight cannot change the result, but
+                # their node still goes through the 1/λ dust law — keep it finite
+                # and positive. The floor (not ``!= 0.0``) is what keeps the
+                # node's DERIVATIVE finite; see ``_SUBBAND_LIVE_FLOOR`` (#1397).
+                live = jnp.abs(sub_phi) > _SUBBAND_LIVE_FLOOR
                 derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
                     live, sub_num / jnp.where(live, sub_phi, 1.0), eff_waves_at_z[:, None]
                 )
@@ -2167,9 +2183,11 @@ class StellarSEDComponent:
                     total_mass * rb_phi * LSUN_ERG_PER_S
                 )
                 # The node is a RATIO, so mass and L_sun cancel — take it from the
-                # unscaled sums. Zero-weight sub-bands keep a finite, positive node:
-                # a zero would go to inf through the 1/λ dust law.
-                rb_live = rb_phi != 0.0
+                # unscaled sums. Sub-bands with no usable weight keep a finite,
+                # positive node: a zero would go to inf through the 1/λ dust law.
+                # The floor (not ``!= 0.0``) is what keeps the node's DERIVATIVE
+                # finite; see ``_SUBBAND_LIVE_FLOOR`` (#1397).
+                rb_live = jnp.abs(rb_phi) > _SUBBAND_LIVE_FLOOR
                 derived_overrides["stellar_restband_subband_waves_precomp"] = jnp.where(
                     rb_live,
                     rb_num / jnp.where(rb_live, rb_phi, 1.0),

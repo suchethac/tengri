@@ -250,18 +250,30 @@ Analytic models (MBB, Casey2012) don't benefit from preintegration because they 
 
 ### Loading and Precomputation
 
-In `model.py`, the `_precompute_dust_ir_photometry()` method:
+This used to be driven by a `_precompute_dust_ir_photometry()` method on
+`SEDModel`. That method was deleted as dead code in #1403 — nothing called it —
+so the description below is of the modules themselves, which is where the
+machinery has actually lived since the Protocol/registry rewrite (IMP-06, fixed
+2026-04-15).
 
-1. Checks if dust emission model is template-based
-2. Attempts to load templates from `data/` directory
-3. If templates missing, returns `None` (falls back to full-wavelength)
-4. Calls model-specific precomputation function:
+- `components/dust/dust_emission_precompute.py` — template-based models
+  (DL07 / Draine & Li, Dale 2014, Astrodust, …).
+- `components/dust/dust_analytic_precompute.py` — analytic models.
+- `forward/precompute/registry.py` — maps a model name to the module that
+  handles it (`resolve()`), so a new dust-IR model is registered in one place.
+
+The precompute step itself:
+
+1. Checks if the dust emission model is template-based
+2. Attempts to load templates from the `data/` directory
+3. If templates are missing, returns `None` (falls back to full-wavelength)
+4. Calls the model-specific precomputation function:
    - `precompute_dl07_photometry()` → builds `single_u_phot`, `powerlaw_phot` tables
    - `precompute_template_photometry()` → generic N-D precomputation
-5. Wraps result in model-specific lookup builder:
+5. Wraps the result in a model-specific lookup builder:
    - `build_dl07_photometry_lookup()` → captures DL07-specific triweight logic
    - `build_template_photometry_lookup()` → generic N-D triweight builder
-6. Returns JIT-compiled callable or `None`
+6. Returns a JIT-compiled callable or `None`
 
 ### Storage
 

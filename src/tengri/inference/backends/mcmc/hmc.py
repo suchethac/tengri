@@ -127,9 +127,9 @@ def run_hmc(
         Sample in metric-whitened coordinates (#1301): the metric is built
         analytically at the initial point and the chain samples ``H(A zeta)``
         with ``A A^T = G^-1``, draws mapped back exactly — the posterior is
-        unchanged, only the integrator's geometry. ``None`` resolves by
-        dimension — **on** up to ``PRECONDITION_MAX_DIM`` (1024) free
-        parameters, off above; explicit ``True`` / ``False`` is honored as-is.
+        unchanged, only the integrator's geometry. **Opt-in** (#1397): ``None``
+        (default) resolves to off — pass ``True`` to enable, ``False`` is
+        explicit off.
         See :mod:`tengri.inference.preconditioning`.
     verbose : bool
         Print progress.
