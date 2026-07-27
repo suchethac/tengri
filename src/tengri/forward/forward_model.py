@@ -940,9 +940,19 @@ class ForwardModel:
             v = data.validate_against(self.observation)
             data_mask = v.censor
             if v.spec_flux is not None and v.flux is not None:
-                kwargs.setdefault("photometry", (v.flux, v.noise))
-                kwargs.setdefault("spectrum", (v.spec_flux, v.spec_noise))
-                data, noise = None, None
+                # Joint: the Fitter takes ONE concatenated vector plus
+                # ``data_type="joint"`` -- photometry first, then spectrum, the
+                # order the joint likelihood splits on. Handing it
+                # ``photometry=``/``spectrum=`` instead names ``SEDModel.fit``
+                # parameters that ``Fitter`` does not have: they fell through to
+                # ``run()`` while ``data=None`` tripped the constructor's
+                # "requires data and noise" guard, so every joint Data record
+                # raised. ``data_type`` cannot ride ``**kwargs`` here -- it is
+                # in ``_FIT_SURFACE_MANAGED``, so ``split_fitter_kwargs`` keeps
+                # it out of ``ctor_kwargs`` for the surface to set (#1366).
+                data = jnp.concatenate([jnp.asarray(v.flux), jnp.asarray(v.spec_flux)])
+                noise = jnp.concatenate([jnp.asarray(v.noise), jnp.asarray(v.spec_noise)])
+                ctor_kwargs.setdefault("data_type", "joint")
             elif v.spec_flux is not None:
                 data, noise = v.spec_flux, v.spec_noise
             else:
