@@ -380,13 +380,36 @@ def preconditioned_logdensity(
     The returned ``wrapped`` callable is itself fully traceable.
     """
     init_flat = jnp.asarray(init_flat)
-    # Diagnose the expansion point before the metric, so the error names the actual
-    # defect. #1397: notebook 01 died reporting "not positive definite" when the real
-    # chain was ``MAP init done (loss=nan)`` -> NaN Hessian -> NaN Cholesky. The point
-    # is upstream of everything here and is the only thing the caller can act on.
-    # ``bool`` rather than ``int``: under trace this raises TracerBoolConversionError,
-    # the same signal ``metric_preconditioner``'s guard gives, so "you traced this" has
-    # one failure mode instead of two. The count is only needed for the message.
+    _reject_nonfinite_expansion_point(init_flat)
+    preconditioner, _ = _preconditioner_with_conditioning(
+        logdensity_fn,
+        init_flat,
+        data_args,
+        floor=floor,
+        strength=strength,
+        max_condition=max_condition,
+    )
+    return (
+        preconditioner.wrap(logdensity_fn),
+        preconditioner,
+        preconditioner.to_latent(init_flat),
+    )
+
+
+def _reject_nonfinite_expansion_point(init_flat: jnp.ndarray) -> None:
+    """Refuse a NaN or inf expansion point, naming the actual defect.
+
+    #1397: notebook 01 died reporting "not positive definite" when the real chain was
+    ``MAP init done (loss=nan)`` -> NaN Hessian -> NaN Cholesky. The point is upstream
+    of everything here and is the only thing the caller can act on.
+
+    Notes
+    -----
+    ``bool`` rather than ``int`` on the gate: under trace this raises
+    ``TracerBoolConversionError``, the same signal ``metric_preconditioner``'s guard
+    gives, so "you traced this" has one failure mode instead of two. The count is only
+    computed for the message.
+    """
     if bool(jnp.any(~jnp.isfinite(init_flat))):
         n_bad = int(jnp.sum(~jnp.isfinite(init_flat)))
         raise ValueError(
@@ -397,13 +420,43 @@ def preconditioned_logdensity(
             f"usual cause. Check data scaling and prior bounds, pass a finite "
             f"init_from, or run with precondition=False."
         )
+
+
+def _preconditioner_with_conditioning(
+    logdensity_fn: Callable,
+    init_flat: jnp.ndarray,
+    data_args,
+    *,
+    floor: float,
+    strength: float,
+    max_condition: float,
+) -> tuple[LinearPreconditioner, tuple[float, float]]:
+    """Build the transform and measure the geometry either side of it.
+
+    Returns
+    -------
+    preconditioner : LinearPreconditioner
+    conditioning : tuple of float
+        ``(raw, whitened)`` condition numbers [dimensionless] — the metric as built,
+        and the curvature the sampler actually faces at the expansion point.
+
+    Notes
+    -----
+    The whitened value is computed from the product rather than predicted as
+    ``raw ** (1 - strength)``, because the two differ whenever ``max_condition``
+    binds. One extra ``eigvalsh`` on a ``(D, D)`` matrix is ~0.1 s at D = 521,
+    negligible against the fit it is reporting on, and an honest diagnostic is worth
+    more than a cheap one.
+    """
     metric = negative_hessian_metric(logdensity_fn, init_flat, data_args, floor=floor)
-    metric = temper_metric(metric, strength=strength, max_condition=max_condition)
-    preconditioner = metric_preconditioner(metric)
-    return (
-        preconditioner.wrap(logdensity_fn),
-        preconditioner,
-        preconditioner.to_latent(init_flat),
+    raw = jnp.linalg.eigvalsh(metric)
+    tempered = temper_metric(metric, strength=strength, max_condition=max_condition)
+    preconditioner = metric_preconditioner(tempered)
+    whitened = preconditioner.matrix.T @ metric @ preconditioner.matrix
+    whitened_eigenvalues = jnp.linalg.eigvalsh(0.5 * (whitened + whitened.T))
+    return preconditioner, (
+        float(jnp.max(raw) / jnp.min(raw)),
+        float(jnp.max(whitened_eigenvalues) / jnp.min(whitened_eigenvalues)),
     )
 
 
@@ -518,6 +571,15 @@ class PreconditionedProblem:
         The whitening exponent actually applied, or ``None`` when disabled. Report it:
         two fits whitened at different strengths are not comparable, and a number that
         is not recorded will be assumed to have been the default (#1442).
+    metric_condition : float or None
+        Condition number of the metric as built, before tempering [dimensionless].
+        ``None`` when disabled.
+    whitened_condition : float or None
+        Condition number the sampler actually faces at the expansion point
+        [dimensionless]. ``None`` when disabled. The ratio of the two is what the
+        transform bought; without them a run cannot say whether the metric was
+        excellent or useless, which is how a 58x spread in throughput stayed
+        invisible from inside a fit.
     """
 
     logdensity: Callable
@@ -525,6 +587,8 @@ class PreconditionedProblem:
     enabled: bool
     preconditioner: LinearPreconditioner | None = None
     strength: float | None = None
+    metric_condition: float | None = None
+    whitened_condition: float | None = None
 
     @property
     def cache_key(self) -> tuple:
@@ -621,7 +685,8 @@ def prepare_preconditioning(
     strength = _resolve_whitening_strength(precondition, init_flat.shape[0])
     if strength is None:
         return PreconditionedProblem(logdensity=logdensity_fn, init_flat=init_flat, enabled=False)
-    wrapped, preconditioner, init_zeta = preconditioned_logdensity(
+    _reject_nonfinite_expansion_point(init_flat)
+    preconditioner, (raw, whitened) = _preconditioner_with_conditioning(
         logdensity_fn,
         init_flat,
         data_args,
@@ -630,9 +695,11 @@ def prepare_preconditioning(
         max_condition=max_condition,
     )
     return PreconditionedProblem(
-        logdensity=wrapped,
-        init_flat=init_zeta,
+        logdensity=preconditioner.wrap(logdensity_fn),
+        init_flat=preconditioner.to_latent(init_flat),
         enabled=True,
         preconditioner=preconditioner,
         strength=strength,
+        metric_condition=raw,
+        whitened_condition=whitened,
     )

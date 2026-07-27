@@ -961,3 +961,38 @@ def test_each_mcmc_backend_owns_its_adaptation_cache_namespace():
                 prefixes.setdefault(match.group(1), []).append(path.name)
     shared = {k: v for k, v in prefixes.items() if len(set(v)) > 1}
     assert not shared, f"backends sharing an adaptation cache namespace: {shared}"
+
+
+class TestReportedConditioning:
+    """A fit that cannot say what the geometry was cannot be diagnosed (#1442).
+
+    The whole 0.10x-5.76x spread was invisible from inside a run: the log said
+    "metric whitened at the initial point" whether the metric was excellent or useless.
+    """
+
+    @staticmethod
+    def _problem(cond, precondition):
+        from tengri.inference.preconditioning import prepare_preconditioning
+
+        metric = _ill_conditioned_metric(6, cond)
+        return prepare_preconditioning(
+            _gaussian_logdensity(metric), jnp.zeros(6), 0.0, precondition=precondition
+        )
+
+    def test_reports_the_raw_metric_condition(self):
+        problem = self._problem(1e5, True)
+        assert problem.metric_condition == pytest.approx(1e5, rel=1e-3)
+
+    def test_reports_the_residual_after_tempering(self):
+        """``cond ** (1 - alpha)`` — what the sampler actually faces at the MAP."""
+        problem = self._problem(1e4, 0.5)
+        assert problem.whitened_condition == pytest.approx(1e2, rel=1e-3)
+
+    def test_full_strength_reports_a_whitened_condition_of_one(self):
+        problem = self._problem(1e6, 1.0)
+        assert problem.whitened_condition == pytest.approx(1.0, rel=1e-6)
+
+    def test_a_disabled_problem_reports_nothing_rather_than_a_wrong_number(self):
+        problem = self._problem(1e5, False)
+        assert problem.metric_condition is None
+        assert problem.whitened_condition is None

@@ -299,7 +299,15 @@ def run_nuts(
     )
     log_posterior_flat_2arg, init_flat = problem.logdensity, problem.init_flat
     if problem.enabled and verbose:
-        logger.info("NUTS preconditioning: metric whitened at the initial point")
+        # Report the geometry, not the fact that a function was called. Whether the
+        # metric was excellent or useless is the whole difference between a 5.76x
+        # speedup and a 0.10x slowdown, and it used to be invisible from the log.
+        logger.info(
+            "NUTS preconditioning: strength=%.2f, cond %.2e -> %.2e at the initial point",
+            problem.strength,
+            problem.metric_condition,
+            problem.whitened_condition,
+        )
 
     # Resolve auto-policy (default since #319). Explicit True/False
     # from the caller is honored as-is.

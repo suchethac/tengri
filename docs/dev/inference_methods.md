@@ -189,10 +189,15 @@ analytically instead. It is a **linear change of variables**, not a mass matrix:
 
 ```
 G = -grad^2 log p   at the initial point, eigenvalue MAGNITUDES floored at 1.0
-G = L L^T,  A = L^{-T}      so  A A^T = G^{-1}  and  A^T G A = I
+G_alpha = V diag(lambda^alpha) V^T        spectrum capped at MAX_METRIC_CONDITION
+G_alpha = L L^T,  A = L^{-T}              so  A A^T = G^{-alpha}
 
 sample  H(A zeta)   instead of   H(xi),   then map draws back with   xi = A zeta
 ```
+
+`alpha` is the **whitening strength** — `precondition=True` uses
+`DEFAULT_WHITENING_STRENGTH` (0.5), `precondition=1.0` is full whitening, and any float
+in `[0, 1]` is accepted. §2.5.1 is why the default is not 1.
 
 The magnitude (`max(|lambda|, 1.0)`, saddle-free Newton) matters at a non-stationary
 expansion point: a steeply *negative* direction is treated as steep, not flat — a
@@ -213,6 +218,44 @@ approximation. Measured, it holds across the region a chain actually visits:
 | timescale latents at +2 sd | 2.62 (raw cond there: 1.2e4) |
 | random 1-sd jitter | 2.05 |
 
+#### 2.5.1 Why the default strength is 0.5, not 1
+
+Full whitening has no floor under it. Measured on single-galaxy photometry fits, it
+ranged from **0.10x to 5.76x ESS/s across seeds of the same model** — a 58x spread, above
+1 in exactly half of usable pairs, with the sign flipping *within* one configuration
+across seeds. The post-warmup step size explains the outcome at **r = +0.92** (log-log),
+and 7 of 9 fits had preconditioning *lower* it.
+
+The mechanism is exact rather than statistical. Write the true precision as `H` and the
+metric actually used as `G = H^gamma`, where `gamma = 1` means a perfect metric. For any
+`A` with `A A^T = G^{-alpha}`, the eigenvalues of the whitened precision `A^T H A` are the
+generalized eigenvalues of the pencil `(H, G^alpha)` — they do not depend on which root
+was chosen — so
+
+```
+cond_whitened = cond(H) ** |1 - alpha*gamma|
+```
+
+Preconditioning is therefore worse than doing nothing exactly when `gamma > 2/alpha`:
+
+| `gamma` | `alpha = 1` (full) | `alpha = 0.5` (default) |
+|---|---|---|
+| 1 (perfect metric) | **1.0** | `cond^0.5` |
+| 2 | `cond` — *identical to no preconditioning* | **1.0** |
+| 3 | `cond^2` — *worse than the original problem* | `cond^0.5` |
+
+There is no plateau: past `gamma = 2` full whitening amplifies as `cond^(gamma-1)`,
+unbounded. And `gamma != 1` is the **normal** case, not a pathological one — a
+single-point Hessian at the MAP is a *modal* curvature estimate, and wherever the
+posterior is non-Gaussian that is not the curvature of the bulk.
+
+Halving the exponent doubles the tolerated misspecification (`gamma <= 4`) and costs only
+a `cond^0.5` residual when the metric happens to be exact. Ill-conditioning here runs
+`1e5`–`3e8`, so `cond^0.5` is still a 300x–17000x improvement on the raw problem.
+
+`MAX_METRIC_CONDITION` (1e8) is a backstop, not the mechanism: the smallest eigenvalues
+are the least reliably estimated and the most damaging when wrong.
+
 **Practical notes.**
 
 - Pass `init_from` a MAP result so the metric is built where the chain will be.
@@ -228,13 +271,20 @@ approximation. Measured, it holds across the region a chain actually visits:
   turned a working fit into a hard `ValueError`. `notebooks/07`'s photometry fit went
   from max R-hat 1.014 to **1.839** *while reporting zero divergences*: the usual
   health signal inverts, so a divergence check scores the broken arm as the healthiest.
-- **The conditioning win is not a demonstrated sampling win.** Across 5 seeds per
-  configuration, `dpl / photometry` (D=7) gained a median **1.87x ESS/s** (better in
-  5/5 seeds), but `dpl + free metallicity / photometry` (D=8) came out at a median
-  **0.84x** — a net loss, with per-seed values spanning 0.44-1.23. No R-hat effect is
-  detectable either way: the paired differences sit at or below the spread between
-  seeds within a single arm. Treat the justification as *geometry and gradients*, which
-  are deterministic and measured everywhere, not throughput, which is not.
+- **The conditioning win is not a demonstrated sampling win.** Conditioning is
+  deterministic and improves in every configuration measured; throughput is neither.
+  Post-fix (source `ba54c3b6c`, NUTS 250/250/2, gate `max_rhat <= 1.05` on **both**
+  arms), full whitening across 6 usable pairs gave ratios 5.76, 1.60, 1.13, 0.69, 0.10,
+  0.10 — see §2.5.1 for why that spread is mechanical rather than noise. The `D=8`
+  degradation is **dimensional, not metallicity-specific**: a second `D=8` cell varying
+  the dust slope instead (`d8dust`, median 0.62) agreed with free metallicity
+  (`d8met`, 0.69). Treat the justification as *geometry and gradients*, not throughput.
+- **Never benchmark this on one seed.** The pre-fix numbers in the history of this
+  document (1.87x at D=7, 0.84x at D=8) came from single-arm medians on a source tree
+  that still carried the sub-band gradient bug
+  ([#1420](https://github.com/suchethac/tengri/issues/1420)) and from too few seeds to see
+  the spread. Gate on *both* arms converging before computing any ratio, and print the
+  excluded pairs — an exclusion is often the most informative row.
 - **Where it is most likely to pay.** All three HMC backends force `use_dense = False`
   above D=30, so above that threshold the competitor is a *diagonal* mass matrix, which
   cannot represent rotation at all. Below D=30 the competitor is an empirical dense
