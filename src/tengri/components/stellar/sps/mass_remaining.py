@@ -314,6 +314,20 @@ def compute_mass_remaining_fraction(
             jnp.where(m_grid >= m_to, remnant_m * imf_weight * d_log_m, 0.0)
         )
 
-        return (living_mass + dead_remnant_mass) / jnp.maximum(total_mass, 1e-30)
+        # NaN rather than a clamped zero when the IMF integral vanishes (#1404).
+        # ``total_mass`` is the IMF mass integral over a fixed, strictly positive
+        # log-mass grid, so it cannot be zero for any real IMF. A 1e-30 floor
+        # therefore guards a state that is already broken — and guards it the
+        # wrong way: with total_mass zero, living_mass and dead_remnant_mass are
+        # zero too, so the clamp returns 0/1e-30 = 0, i.e. a surviving fraction
+        # of exactly zero. That is a plausible-looking number ("all mass lost")
+        # for a broken IMF, and it would propagate into stellar_mass silently.
+        # NaN propagates and gets noticed instead. This is the form used by
+        # ``utils/sed_quantities.py``.
+        return jnp.where(
+            total_mass > 1e-20,
+            (living_mass + dead_remnant_mass) / jnp.maximum(total_mass, 1e-30),
+            jnp.nan,
+        )
 
     return jax.vmap(_surviving_at_age)(age_gyr)
