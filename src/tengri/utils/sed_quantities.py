@@ -621,7 +621,18 @@ def _per_bin_luminosity_relative(
     **JIT/grad/vmap-compatible**: yes.
     """
     nu = C_AA / wave
-    peak = jnp.max(jnp.abs(ssp_flux_at_z), initial=0.0)
+    # stop_gradient: factorization constant (#1436). Unlike the other peak-factored
+    # reductions this one never multiplies the peak back — but both consumers
+    # (luminosity-weighted age and metallicity, the only two, and this helper is
+    # private) divide by ``sum(l_per_bin)``, so ``(sum L_i a_i / p) / (sum L_j / p)``
+    # is exactly p-independent and the peak's derivative is analytically zero.
+    # That is what the "ratios only" contract above buys.
+    #
+    # The one regime where p would survive is the degenerate ``sum < 1e-30`` clamp in
+    # those callers. It cannot arise for a real galaxy — l_total ~ 1e24 with SFH
+    # weights ~1e9 over a ~1e15 Hz span — and the clamped output is a fallback with no
+    # meaningful derivative either way.
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(ssp_flux_at_z), initial=0.0))
     peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
 
     def _lbol_one_bin(w_i, flux_i):
