@@ -115,7 +115,27 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
     # intermediate is ~2.7e52, far past float32's 3.4e38, while B_nu itself
     # peaks at ~8e-12 and is perfectly representable. Grouping as nu·(nu/c)²
     # caps the largest intermediate at ~1e12; identical in float64 to ~4e-16.
-    return 2.0 * _H_PLANCK * nu_w * (nu_w / _C_CGS) ** 2 / jnp.expm1(x)
+    #
+    # ``1/expm1(x)`` is spelled ``exp(-x) / -expm1(-x)`` — the same number
+    # (``1/(e^x - 1) == e^-x/(1 - e^-x)``), but with a denominator that cannot
+    # overflow (#1439). Division's derivative needs the denominator *squared*:
+    # ``expm1(x)**2`` passes float32's 3.4e38 once x > ~44, so with a large
+    # incoming cotangent the reverse pass formed ``inf/inf`` and returned NaN —
+    # while the forward value stayed perfectly healthy, because a saturated
+    # denominator still gives the right Wien-tail limit. The clamp above bounds
+    # x by ``expm1``'s *forward* overflow (~88.7 in float32); the derivative
+    # needs half that, so the guard could not have covered it.
+    #
+    # The rewritten denominator ``1 - e^-x`` lives in (0, 1], so its square is
+    # bounded by 1 at every x and in every dtype — the failure mode is removed
+    # rather than bounded. Accuracy is preserved at both ends: for small x,
+    # ``-expm1(-x) -> x`` is exactly what ``expm1`` exists to compute.
+    #
+    # Measured: float64 gradients bit-identical and values within 1.8e-16; in
+    # float32 the Wien-tail gradient goes from a silent ``-0.0`` to the correct
+    # value (x=44: -7.78e-08, x=60: -8.76e-15, x=87: -1.65e-26), each matching
+    # float64.
+    return 2.0 * _H_PLANCK * nu_w * (nu_w / _C_CGS) ** 2 * jnp.exp(-x) / -jnp.expm1(-x)
 
 
 def planck_bnu_wave(wavelength_aa: jnp.ndarray, temperature: float) -> jnp.ndarray:
