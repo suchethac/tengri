@@ -107,8 +107,21 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
     # still gives the right forward value (B_nu -> 0, the Wien-tail limit) but
     # its gradient is inf/inf = NaN, so a fit would fail where the forward pass
     # looked healthy. Cap at the dtype's own limit; float64 is unaffected.
+    # Grouped as ``(h/k)·nu / T``, NOT ``h·nu / (k·T)`` — associativity, but the
+    # reverse pass is not associative in float32 (#1439). Division's derivative
+    # w.r.t. its denominator is ``-g·A/den**2``. Spelled ``h·nu / (k·T)`` the
+    # denominator is ``k·T``, so that intermediate is ``-g·(h·nu)/(k·T)**2`` —
+    # measured 2e40 for a disc ring, past float32's 3.4e38 — and the small ``k``
+    # that would bring it back into range is only applied *afterwards*, by which
+    # point it is ``inf``. With ``k`` folded into the numerator the denominator is
+    # just ``T``, the same intermediate is ``-g·(h·nu/k)/T**2``, and nothing
+    # leaves range. Measured on one ring: gradient ``inf`` -> 2.7565e+24, the
+    # float64 answer.
+    #
+    # Same regrouping idea as ``nu·(nu/c)**2`` below, one level down: there it
+    # keeps a *forward* intermediate in range, here a *backward* one.
     x = jnp.clip(
-        _H_PLANCK * nu_w / (_K_BOLTZ * t_safe), _X_MIN, min(_X_MAX, max_finite_exponent())
+        (_H_PLANCK / _K_BOLTZ) * nu_w / t_safe, _X_MIN, min(_X_MAX, max_finite_exponent())
     )
 
     # Algebraically 2h·nu³/c², but never forming nu³: at λ ~ 100 Å that
