@@ -21,6 +21,11 @@
 SKIRTOR AGN torus: inclination-dependent obscuration and silicate features
 ===========================================================================
 
+.. image:: images/sphx_glr_plot_skirtor_inclination_sweep_001.png
+   :alt: plot skirtor inclination sweep
+   :class: sphx-glr-single-img
+
+
 Demonstrate how the SKIRTOR clumpy radiative-transfer torus (Stalevski+ 2012, 2016)
 reprocesses the hot accretion disc and dust as a function of viewing angle.
 
@@ -53,27 +58,6 @@ emission to absorption across the inclination range.
    Mid-Infrared Properties of Dust-Obscured Quasars. ApJ, 655, L77.
 
 .. GENERATED FROM PYTHON SOURCE LINES 36-237
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_inclination_sweep_001.png
-   :alt: (a) IR SED shape vs cos_inc, (b) Silicate 9.7 & 18 μm features, (c) UV/optical obscuration
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_inclination_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Saved plot_skirtor_inclination_sweep.png (consolidated 3-panel figure)
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -122,7 +106,7 @@ emission to absorption across the inclination range.
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
             "log_lbol": 12.0,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         },
         redshift=tengri.Fixed(0.0),
     )
@@ -146,7 +130,7 @@ emission to absorption across the inclination range.
             "blr": {"type": "none", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
             "log_lbol": 12.5,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -278,11 +262,6 @@ emission to absorption across the inclination range.
     fig.tight_layout()
     plt.savefig("plot_skirtor_inclination_sweep.png", dpi=150, bbox_inches="tight")
     print("Saved plot_skirtor_inclination_sweep.png (consolidated 3-panel figure)")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 5.365 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_inclination_sweep.py:

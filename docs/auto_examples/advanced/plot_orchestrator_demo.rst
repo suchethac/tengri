@@ -21,6 +21,11 @@
 Component Orchestrator End-to-End
 ==================================
 
+.. image:: images/sphx_glr_plot_orchestrator_demo_001.png
+   :alt: plot orchestrator demo
+   :class: sphx-glr-single-img
+
+
 TODO[examples-sweep]: This script uses low-level component orchestration
 (build_components, run_components) which is experimental Phase II-2.6 API
 intended for infrastructure use, not recommended for user-facing examples.
@@ -32,31 +37,6 @@ The orchestrator layer may change; forward-compatible SED building goes
 through the SEDModel.build() nested-dict grammar and recipes.
 
 .. GENERATED FROM PYTHON SOURCE LINES 15-137
-
-
-
-.. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_orchestrator_demo_001.png
-   :alt: plot orchestrator demo
-   :srcset: /auto_examples/advanced/images/sphx_glr_plot_orchestrator_demo_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    chain: stellar → nebular → dust → dust_emission → agn → radio → xray → igm
-    L_bol (stellar)        = 2.87e+43 erg/s
-    log_mstar              = 0.812  (6.49 Msun)
-    L_ir (dust)            = 3.92e+34 erg/s
-    L_agn_bol              = 3.83e+44 erg/s
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 

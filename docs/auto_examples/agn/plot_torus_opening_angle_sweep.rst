@@ -21,6 +21,11 @@
 SKIRTOR torus opening angle: geometry controls IR silicate and FIR bump
 ========================================================================
 
+.. image:: images/sphx_glr_plot_torus_opening_angle_sweep_001.png
+   :alt: plot torus opening angle sweep
+   :class: sphx-glr-single-img
+
+
 The SKIRTOR clumpy torus geometry is controlled by the half-opening angle
 (``agn_oa_skirtor``), which determines how much of the accretion disc the
 dusty material covers. Smaller opening angles (more pole-on geometry,
@@ -41,17 +46,6 @@ References
    — Torus covering factor and dual AGN components.
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-95
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_torus_opening_angle_sweep_001.png
-   :alt: plot torus opening angle sweep
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_torus_opening_angle_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -95,7 +89,7 @@ References
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
             "log_lbol": 12.0,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
             "cos_inc": 0.5,
         },
         redshift=tengri.Fixed(0.0),

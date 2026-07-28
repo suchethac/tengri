@@ -21,6 +21,11 @@
 Spitzer IRAC AGN Wedge Diagram
 ===============================
 
+.. image:: images/sphx_glr_plot_spitzer_irac_agn_wedge_001.png
+   :alt: plot spitzer irac agn wedge
+   :class: sphx-glr-single-img
+
+
 Color-color diagram in Spitzer IRAC bands (3.6, 4.5, 5.8, 8.0 μm) showing
 the Lacy+2007 / Donley+2012 AGN selection wedge. Population of 50 star-forming
 galaxies (z=0–2) are plotted as blue cloud; 10 AGN with varying bolometric
@@ -31,17 +36,6 @@ References: Lacy et al. (2007) ApJ 669, 54–64; Donley et al. (2012)
 ApJ 748, 142.
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-215
-
-
-
-.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_spitzer_irac_agn_wedge_001.png
-   :alt: plot spitzer irac agn wedge
-   :srcset: /auto_examples/photometry/images/sphx_glr_plot_spitzer_irac_agn_wedge_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -246,11 +240,6 @@ ApJ 748, 142.
     #
     # .. [2] Donley JL, et al. 2012, ApJ 748, 142 (arXiv:1202.3816)
     #        "Spitzer Quasar and ULIRG Evolution Study (SQUIRES)"
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (1 minutes 5.337 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_spitzer_irac_agn_wedge.py:

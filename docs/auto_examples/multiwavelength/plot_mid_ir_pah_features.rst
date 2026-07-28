@@ -21,6 +21,11 @@
 Mid-IR PAH features in star-forming, AGN, and composite galaxies
 =================================================================
 
+.. image:: images/sphx_glr_plot_mid_ir_pah_features_001.png
+   :alt: plot mid ir pah features
+   :class: sphx-glr-single-img
+
+
 The 5–30 μm rest-frame spectrum showcases distinct infrared tracers:
 dust polycyclic aromatic hydrocarbon (PAH) emission peaks at 6.2, 7.7, 8.6,
 11.3, and 12.7 μm in star-forming galaxies, while silicate absorption
@@ -36,30 +41,6 @@ References:
   Hao et al. 2007, ApJL, 655, L77 (silicate absorption in AGN).
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-272
-
-
-
-.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_mid_ir_pah_features_001.png
-   :alt: plot mid ir pah features
-   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_mid_ir_pah_features_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/parameters/parameters.py:673: RecipeWarning: Composable AGN: every block selector is 'none' — the AGN SED will be identically zero. Pick at least a disc block to produce non-trivial output.
-      validate_block_recipe(
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -108,7 +89,7 @@ References:
         },
         agn={
             "torus": {"type": "none"},  # No AGN torus
-            "frac": 0.0,  # No AGN contribution
+            "lum_ratio": 0.0,  # No AGN contribution
             "all_params": tengri.FIXED,
         },
         redshift=tengri.Fixed(0.05),
@@ -152,7 +133,7 @@ References:
                 "all_params": tengri.FIXED,
             },
             "log_lbol": 12.0,  # AGN bolometric luminosity: ~1e12 Lsun
-            "frac": 1.0,  # 100% AGN (no stellar contribution to near/mid-IR)
+            "lum_ratio": 1.0,  # 100% AGN (no stellar contribution to near/mid-IR)
             "all_params": tengri.FIXED,
         },
         redshift=tengri.Fixed(0.05),
@@ -196,7 +177,7 @@ References:
                 "all_params": tengri.FIXED,
             },
             "log_lbol": 11.5,  # AGN bolometric luminosity: ~3e11 Lsun
-            "frac": 0.5,  # 50% AGN, 50% stellar
+            "lum_ratio": 0.5,  # 50% AGN, 50% stellar
             "all_params": tengri.FIXED,
         },
         redshift=tengri.Fixed(0.05),
@@ -316,11 +297,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_mid_ir_pah_features.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 5.502 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_mid_ir_pah_features.py:

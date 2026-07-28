@@ -21,6 +21,11 @@
 AGN torus libraries across viewing angle: silicate feature and geometry
 =========================================================================
 
+.. image:: images/sphx_glr_plot_torus_library_inclination_grid_001.png
+   :alt: plot torus library inclination grid
+   :class: sphx-glr-single-img
+
+
 Different radiative-transfer and empirical torus libraries encode the
 Type-1↔Type-2 unified-model transition differently. SKIRTOR uses a 3D
 clumpy model with a smooth density distribution and produces symmetric
@@ -43,17 +48,6 @@ References
    — CLUMPY models.
 
 .. GENERATED FROM PYTHON SOURCE LINES 26-109
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_torus_library_inclination_grid_001.png
-   :alt: SKIRTOR, CAT3D-WIND, CLUMPY (Nenkova)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_torus_library_inclination_grid_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -110,7 +104,7 @@ References
                     "torus": torus_block,
                     "all_params": tengri.FIXED,
                     "log_lbol": LOG_LBOL,
-                    "frac": 1.0,
+                    "lum_ratio": 1.0,
                     "cos_inc": cos_inc,
                 },
                 redshift=tengri.Fixed(0.0),
@@ -140,11 +134,6 @@ References
 
     fig.tight_layout(rect=[0, 0, 0.90, 1])
     plt.savefig("plot_torus_library_inclination_grid.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.552 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_torus_library_inclination_grid.py:

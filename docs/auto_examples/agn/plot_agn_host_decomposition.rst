@@ -21,6 +21,11 @@
 AGN host-galaxy decomposition: disentangling Seyfert contributions
 ===================================================================
 
+.. image:: images/sphx_glr_plot_agn_host_decomposition_001.png
+   :alt: plot agn host decomposition
+   :class: sphx-glr-single-img
+
+
 A Seyfert galaxy SED is decomposed photometrically by varying the AGN
 contribution fraction ``agn_lum_ratio`` from 0 (pure host) to 1.0 (pure AGN)
 to 0.5 (composite). how to isolate the AGN contribution
@@ -43,17 +48,6 @@ References
 .. [2] Stalevski et al. 2017, MNRAS, 470, 3876 — IR torus models in composite SEDs
 
 .. GENERATED FROM PYTHON SOURCE LINES 26-114
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_host_decomposition_001.png
-   :alt: plot agn host decomposition
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_host_decomposition_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -109,7 +103,7 @@ References
 
     def _build_model(agn_lum_ratio):
         """Build a model with specified AGN fraction."""
-        agn_config = {**BASE_AGN, "all_params": tengri.FIXED, "frac": agn_lum_ratio}
+        agn_config = {**BASE_AGN, "all_params": tengri.FIXED, "lum_ratio": agn_lum_ratio}
         model = tengri.SEDModel.build(ssp, agn=agn_config, **COMMON)
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         out = model.predict(p)
@@ -145,11 +139,6 @@ References
     ax.grid(True, which="minor", alpha=0.2, linestyle=":")
 
     plt.savefig("plot_agn_host_decomposition.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.679 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_host_decomposition.py:

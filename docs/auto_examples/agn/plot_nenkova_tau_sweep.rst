@@ -21,6 +21,11 @@
 CLUMPY torus (Nenkova+2008): optical depth as a fitted parameter
 ================================================================
 
+.. image:: images/sphx_glr_plot_nenkova_tau_sweep_001.png
+   :alt: plot nenkova tau sweep
+   :class: sphx-glr-single-img
+
+
 The Nenkova et al. (2008) CLUMPY library is the AGN dusty-torus model used
 by FSPS and Prospector. tengri ships the same templates (vendored from FSPS
 as ``data/nenkova08_torus_grid.h5``) and interpolates them with a pure-JAX
@@ -46,17 +51,6 @@ Conroy, C. & Gunn, J. E. 2010, ApJ, 712, 833 (FSPS).
 Johnson, B. D. et al. 2021, ApJS, 254, 22 (Prospector).
 
 .. GENERATED FROM PYTHON SOURCE LINES 29-95
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_nenkova_tau_sweep_001.png
-   :alt: CLUMPY torus (Nenkova+2008): optical-depth sweep
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_nenkova_tau_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -91,7 +85,7 @@ Johnson, B. D. et al. 2021, ApJS, 254, 22 (Prospector).
             "torus": {"type": "nenkova", "all_params": tengri.FIXED, "tau": tengri.Uniform(5, 150)},
             "all_params": tengri.FIXED,
             "log_lbol": 12.5,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -126,11 +120,6 @@ Johnson, B. D. et al. 2021, ApJS, 254, 22 (Prospector).
 
     plt.tight_layout()
     plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (6 minutes 0.055 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_nenkova_tau_sweep.py:

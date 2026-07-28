@@ -21,6 +21,11 @@
 AGN emission-line backbones compared
 ======================================
 
+.. image:: images/sphx_glr_plot_agn_lines_compare_001.png
+   :alt: plot agn lines compare
+   :class: sphx-glr-single-img
+
+
 The renderable line backbones registered under the three composable
 line selectors — ``agn.nlr`` (narrow-line region), ``agn.blr``
 (broad-line region), and ``agn.feii`` (iron pseudo-continuum) — each
@@ -37,17 +42,6 @@ with the gallery, and the ``cue`` NLR backbone is omitted here (its
 line normalization is under review, see the tracked issue).
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-100
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_lines_compare_001.png
-   :alt: plot agn lines compare
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_lines_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -97,7 +91,7 @@ line normalization is under review, see the tracked issue).
                 region: {"type": kind, "all_params": tengri.FIXED},
                 "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
-                "frac": 1.0,
+                "lum_ratio": 1.0,
             },
             redshift=tengri.Fixed(0.05),
         )
@@ -131,11 +125,6 @@ line normalization is under review, see the tracked issue).
 
     fig.tight_layout()
     plt.savefig("plot_agn_lines_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.142 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_lines_compare.py:

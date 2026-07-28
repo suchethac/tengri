@@ -21,6 +21,11 @@
 AGN disc continuum: every registered model at fixed L_bol
 =========================================================
 
+.. image:: images/sphx_glr_plot_agn_disc_compare_001.png
+   :alt: plot agn disc compare
+   :class: sphx-glr-single-img
+
+
 All thirteen accretion-disc backbones registered under ``agn.disc.type``,
 at fixed bolometric luminosity ``log L_bol = 12.5`` (in log L_sun),
 evaluated in isolation with the host suppressed and no torus/lines/dust.
@@ -32,17 +37,6 @@ inefficient ADAF, empirical composite vs first-principles continuum.
 Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
 .. GENERATED FROM PYTHON SOURCE LINES 15-98
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_disc_compare_001.png
-   :alt: plot agn disc compare
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_disc_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -105,7 +99,7 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
                 "disc": {"type": disc, "all_params": tengri.FIXED},
                 "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
-                "frac": 1.0,
+                "lum_ratio": 1.0,
             },
             redshift=tengri.Fixed(0.05),
         )
@@ -129,11 +123,6 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
     fig.tight_layout()
     plt.savefig("plot_agn_disc_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.048 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:

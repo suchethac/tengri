@@ -21,6 +21,11 @@
 AGN parameters are free-able now — and every one moves the SED
 ==============================================================
 
+.. image:: images/sphx_glr_plot_agn_free_param_sensitivity_001.png
+   :alt: plot agn free param sensitivity
+   :class: sphx-glr-single-img
+
+
 Until recently the ``agn_*`` parameters were declared with *fixed* defaults and
 no prior range, so the build grammar's ``FREE`` controls
 (``agn={'all_params': FREE}``, ``recipes.agn_panchromatic()``) silently resolved every
@@ -83,12 +88,6 @@ disc); Feltre et al. 2016 (NLR grid).
     ssp = tengri.load_ssp()
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 63-65
 
 The headline: ``'all_params': FREE`` now frees the AGN parameters the active
@@ -98,24 +97,12 @@ blocks consume. Before the registry fix this set was empty.
 
 .. code-block:: Python
 
-    agn_free = {"all_params": tengri.FREE, "log_lbol": 12.0, "frac": 1.0, **BLOCKS}
+    agn_free = {"all_params": tengri.FREE, "log_lbol": 12.0, "lum_ratio": 1.0, **BLOCKS}
     model_free = tengri.SEDModel.build(
         ssp, sfh=SFH, dust=DUST, agn=agn_free, redshift=tengri.Fixed(0.0)
     )
     free_agn = [p for p in model_free.spec.free_params if p.startswith("agn_")]
     print(f"AGN parameters freed by agn={{'all_params': FREE}} (block-scoped): {sorted(free_agn)}")
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    AGN parameters freed by agn={'all_params': FREE} (block-scoped): ['agn_a_spin', 'agn_cos_inc', 'agn_ir_frac', 'agn_log_mbh', 'agn_nlr_cf', 'agn_nlr_line_efficiency', 'agn_tau', 'agn_theta_torus', 'agn_torus_frac']
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 73-76
@@ -128,7 +115,7 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
 
 .. code-block:: Python
 
-    agn_fixed = {"all_params": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **BLOCKS}
+    agn_fixed = {"all_params": tengri.FIXED, "log_lbol": 12.0, "lum_ratio": 1.0, **BLOCKS}
     model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn_fixed, redshift=tengri.Fixed(0.0))
     base = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
@@ -164,17 +151,6 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
     fig.suptitle("Each freed AGN parameter visibly reshapes the SED (no silent no-ops)")
     fig.tight_layout()
     plt.savefig("plot_agn_free_param_sensitivity.png", dpi=150, bbox_inches="tight")
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_free_param_sensitivity_001.png
-   :alt: Each freed AGN parameter visibly reshapes the SED (no silent no-ops), $\log_{10}(M_{\rm BH}/M_\odot)$, $\log_{10}(L/L_{\rm Edd})$, Nenkova torus $\tau_{9.7}$
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_free_param_sensitivity_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_free_param_sensitivity.py:

@@ -21,6 +21,11 @@
 Type 1 vs Type 2 AGN: Unified viewing-angle classification
 ===========================================================
 
+.. image:: images/sphx_glr_plot_type1_type2_unified_model_001.png
+   :alt: plot type1 type2 unified model
+   :class: sphx-glr-single-img
+
+
 Unified AGN models explain the Type 1/Type 2 dichotomy as a **purely geometric
 effect** — the same accretion disc + dusty torus system appears as:
 
@@ -49,44 +54,6 @@ References
    "Unified Models for Active Galactic Nuclei and Quasars"
 
 .. GENERATED FROM PYTHON SOURCE LINES 32-220
-
-
-
-.. rst-class:: sphx-glr-horizontal
-
-
-    *
-
-      .. image-sg:: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_001.png
-         :alt: Type 1 (face-on, cos θ = 1.0), Type 2 (edge-on, cos θ = 0.0)
-         :srcset: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_001.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_002.png
-         :alt: Inclination transition: Type 1 → Intermediate → Type 2
-         :srcset: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_002.png
-         :class: sphx-glr-multi-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
-    Building Type 1 (face-on, BLR) model...
-    Building Type 2 (edge-on, NLR) model...
-    Saved: plot_type1_type2_unified_model.png
-    Saved: plot_type1_type2_unified_model_transition.png
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -129,7 +96,7 @@ References
         "torus": {"type": "skirtor", "all_params": tengri.FIXED, "tau_skirtor": 7.0},
         "all_params": tengri.FIXED,
         "log_lbol": 12.0,
-        "frac": 1.0,
+        "lum_ratio": 1.0,
     }
 
     # Type 1: face-on, unobstructed disc view → broad lines visible
@@ -227,7 +194,7 @@ References
             agn={
                 "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
-                "frac": 1.0,
+                "lum_ratio": 1.0,
                 "cos_inc": cos_inc,
                 "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": {"type": "skirtor", "all_params": tengri.FIXED},
@@ -278,11 +245,6 @@ References
     plt.savefig("plot_type1_type2_unified_model.png", dpi=150, bbox_inches="tight")
     print("Saved: plot_type1_type2_unified_model.png")
     print("Saved: plot_type1_type2_unified_model_transition.png")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.591 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_type1_type2_unified_model.py:

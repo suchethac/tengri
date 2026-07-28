@@ -21,6 +21,11 @@
 AGN unification: the torus screens the disc with inclination
 =============================================================
 
+.. image:: images/sphx_glr_plot_torus_screen_disc_001.png
+   :alt: plot torus screen disc
+   :class: sphx-glr-single-img
+
+
 The composable AGN runner sums disc + broad/narrow lines + FeII + torus,
 but a real dusty torus also *obscures the central engine* along edge-on
 sightlines while its own infrared emission is not re-extinguished by that
@@ -45,28 +50,6 @@ The Type-1/Type-2 transition is a sigmoid in ``cos i`` (C^1, gradient-safe
 for HMC/VI), so a default face-on model is left unchanged.
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-102
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_torus_screen_disc_001.png
-   :alt: Torus screen on the central engine (SKIRTOR, fixed $L_{\rm bol}$)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_torus_screen_disc_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -113,7 +96,7 @@ for HMC/VI), so a default face-on model is left unchanged.
                 "torus": {"type": "skirtor", "all_params": tengri.FIXED},
                 "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
-                "frac": 1.0,
+                "lum_ratio": 1.0,
                 "cos_inc": cos_inc,
             },
             redshift=tengri.Fixed(0.05),
@@ -144,11 +127,6 @@ for HMC/VI), so a default face-on model is left unchanged.
 
     fig.tight_layout()
     plt.savefig("plot_torus_screen_disc.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.753 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_torus_screen_disc.py:

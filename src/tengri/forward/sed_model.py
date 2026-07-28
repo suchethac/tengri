@@ -686,7 +686,7 @@ class SEDModel:
     forward_dtype : str or jnp.dtype, optional
         Dtype for forward model computation. Default ``"float64"``.
 
-        .. deprecated::
+        .. deprecated:: 2026-07
 
            **Retired (#1433).** Passing anything but ``"float64"`` raises a
            ``DeprecationWarning`` and does nothing else. ``"float32"`` cast

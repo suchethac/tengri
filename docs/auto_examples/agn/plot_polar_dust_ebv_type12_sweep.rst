@@ -21,6 +21,11 @@
 Polar dust E(B-V) reddens Type 1 & 2 AGN differently
 =====================================================
 
+.. image:: images/sphx_glr_plot_polar_dust_ebv_type12_sweep_001.png
+   :alt: plot polar dust ebv type12 sweep
+   :class: sphx-glr-single-img
+
+
 Polar dust *disc attenuation* applies only to Type 1 (face-on) sightlines —
 the equatorial torus already screens the disc for Type 2. The bi-conical
 polar dust *absorbs* disc photons regardless of viewing angle, however, and
@@ -41,28 +46,6 @@ References
    https://doi.org/10.1093/mnras/stz3001
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-131
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_polar_dust_ebv_type12_sweep_001.png
-   :alt: Type 1 (face-on, cos θ = 1.0), Type 2 (edge-on, cos θ = 0.0)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_polar_dust_ebv_type12_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Building shared AGN model (polar_ebv and cos_inc FREE)...
-    Saved: plot_polar_dust_ebv_type12_sweep.png
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -105,7 +88,7 @@ References
         "atten": {"type": "polar_dust", "all_params": tengri.FIXED},
         "all_params": tengri.FIXED,
         "log_lbol": 12.0,
-        "frac": 1.0,  # without this the AGN is multiplied by 0 (default)
+        "lum_ratio": 1.0,  # without this the AGN is multiplied by 0 (default)
         # A Distribution at per-param level overrides the wildcard and makes the
         # parameter FREE (a bare FREE sentinel here is swallowed by '*: FIXED').
         "polar_ebv": tengri.Uniform(0.0, 0.5),
@@ -173,11 +156,6 @@ References
     fig.tight_layout()
     plt.savefig("plot_polar_dust_ebv_type12_sweep.png", dpi=150, bbox_inches="tight")
     print("Saved: plot_polar_dust_ebv_type12_sweep.png")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.806 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_polar_dust_ebv_type12_sweep.py:

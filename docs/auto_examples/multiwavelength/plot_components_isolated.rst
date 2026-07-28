@@ -21,6 +21,11 @@
 Each tengri SED component shown in isolation
 ==============================================
 
+.. image:: images/sphx_glr_plot_components_isolated_001.png
+   :alt: plot components isolated
+   :class: sphx-glr-single-img
+
+
 Six physics blocks added cumulatively to the same star-forming host
 so the contribution of each is visible at every wavelength.
 
@@ -30,17 +35,6 @@ into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
 The color at each wavelength tells you which block matters most.
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-111
-
-
-
-.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_components_isolated_001.png
-   :alt: plot components isolated
-   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_components_isolated_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -108,7 +102,7 @@ The color at each wavelength tells you which block matters most.
                     "blr": {"type": "none", "all_params": tengri.FIXED},
                     "all_params": tengri.FIXED,
                     "log_lbol": 11.5,
-                    "frac": 0.5,
+                    "lum_ratio": 0.5,
                 },
             ),
         ),
@@ -142,11 +136,6 @@ The color at each wavelength tells you which block matters most.
 
     fig.tight_layout()
     plt.savefig("plot_components_isolated.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 40.501 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_components_isolated.py:

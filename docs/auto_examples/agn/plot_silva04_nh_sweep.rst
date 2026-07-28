@@ -21,6 +21,11 @@
 Silva+04 torus: Obscuration and the 9.7 micron silicate feature
 ===============================================================
 
+.. image:: images/sphx_glr_plot_silva04_nh_sweep_001.png
+   :alt: plot silva04 nh sweep
+   :class: sphx-glr-single-img
+
+
 The Silva, Maiolino & Granato (2004) AGN torus templates are empirical
 reprocessed-dust SEDs binned by line-of-sight hydrogen column density
 ``agn_log_nh_silva``. As the column rises from unobscured (Type-1-like,
@@ -45,17 +50,6 @@ References
    arXiv:2405.12111. https://doi.org/10.1051/0004-6361/202449329
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-127
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_silva04_nh_sweep_001.png
-   :alt: Silva+04 torus: obscuration and the silicate feature, Full reprocessed SED, Mid-IR zoom: 9.7 $\mu$m silicate feature
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_silva04_nh_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -94,7 +88,7 @@ References
         "disc": {"type": "multicolor", "all_params": tengri.FIXED},
         "all_params": tengri.FIXED,
         "log_lbol": 12.0,
-        "frac": 1.0,
+        "lum_ratio": 1.0,
     }
 
 
@@ -158,11 +152,6 @@ References
         weight="bold",
     )
     plt.savefig("plot_silva04_nh_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.260 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_silva04_nh_sweep.py:

@@ -21,6 +21,11 @@
 Slone & Netzer 2012 disc: Black-hole mass and Eddington ratio
 =============================================================
 
+.. image:: images/sphx_glr_plot_slone_netzer_disc_sweep_001.png
+   :alt: plot slone netzer disc sweep
+   :class: sphx-glr-single-img
+
+
 The Slone & Netzer (2012) accretion-disc library (SN12, as packaged by
 AGNfitter-rX) tabulates the big-blue-bump continuum over black-hole mass and
 Eddington ratio. The disc's characteristic temperature scales as
@@ -53,17 +58,6 @@ References
    arXiv:2405.12111. https://doi.org/10.1051/0004-6361/202449329
 
 .. GENERATED FROM PYTHON SOURCE LINES 36-139
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_slone_netzer_disc_sweep_001.png
-   :alt: Slone & Netzer 2012 disc: black-hole mass vs Eddington ratio, Mass sweep  ($\log \lambda_\mathrm{Edd} = -2.5$), Eddington sweep  ($\log M_\mathrm{BH} = 8.5$)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_slone_netzer_disc_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -118,7 +112,7 @@ References
                 "log_lbol": log_lbol,
                 "log_mbh": log_mbh,
                 "log_ledd": log_ledd,
-                "frac": 1.0,
+                "lum_ratio": 1.0,
             },
             redshift=tengri.Fixed(0.05),
         )

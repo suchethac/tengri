@@ -21,6 +21,11 @@
 Quenching pathways: fast vs slow termination of star formation
 ==============================================================
 
+.. image:: images/sphx_glr_plot_quenching_pathway_compare_001.png
+   :alt: plot quenching pathway compare
+   :class: sphx-glr-single-img
+
+
 Compare three star-formation histories representing distinct quenching scenarios:
 (1) Constantly star-forming (no quenching), (2) Slowly quenched exponential decay
 (tau=4 Gyr, peak 6 Gyr ago), and (3) Rapidly quenched post-starburst (truncated
@@ -28,18 +33,7 @@ skew-normal, peak 2 Gyr ago, width 0.3 Gyr). The resulting rest-frame SEDs exhib
 markedly different colors, equivalent widths (Hα), and spectral slopes, highlighting
 how quenching timescale imprints on observable photometry and spectroscopy.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-152
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_quenching_pathway_compare_001.png
-   :alt: plot quenching pathway compare
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_quenching_pathway_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 12-158
 
 .. code-block:: Python
 
@@ -72,8 +66,14 @@ how quenching timescale imprints on observable photometry and spectroscopy.
                 "type": "const",
                 "all_params": tengri.FIXED,
                 "log_total_mass": 10.64,
-                "start_gyr": 0.1,
-                "end_gyr": 13.8,
+                # start_gyr is the lookback to SF ONSET and end_gyr to SF CESSATION,
+                # so start_gyr is the LARGER number: forming stars from 13.8 Gyr ago
+                # until 0.1 Gyr ago. Written the other way round this window is empty
+                # and the curve is identically zero -- which is what this example
+                # plotted until #1277 made the ordering an error rather than a silent
+                # zero-mass galaxy.
+                "start_gyr": 13.8,
+                "end_gyr": 0.1,
             },
             "color": "#1f77b4",
         },

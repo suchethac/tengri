@@ -21,6 +21,11 @@
 SKIRTOR torus (full X-CIGALE grid): optical depth and inclination
 =================================================================
 
+.. image:: images/sphx_glr_plot_skirtor_xcigale_sweep_001.png
+   :alt: plot skirtor xcigale sweep
+   :class: sphx-glr-single-img
+
+
 This is tengri's full-grid SKIRTOR torus (Stalevski+2012, 2016), following the
 X-CIGALE ``skirtor2016`` conventions: a 5-D clumpy two-phase library indexed by
 equatorial optical depth ``tau``, radial and polar density gradients ``p`` / ``q``,
@@ -53,17 +58,6 @@ References
    A&A 622, A103 (2019). arXiv:1811.03094.
 
 .. GENERATED FROM PYTHON SOURCE LINES 36-142
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_xcigale_sweep_001.png
-   :alt: SKIRTOR torus (full X-CIGALE grid): optical depth and inclination, Optical-depth sweep  ($\cos i = 0.85$), Inclination sweep  ($\tau = 7$)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_xcigale_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -103,7 +97,7 @@ References
         "disc": {"type": "multicolor", "all_params": tengri.FIXED},
         "all_params": tengri.FIXED,
         "log_lbol": 12.0,
-        "frac": 1.0,
+        "lum_ratio": 1.0,
     }
 
 
@@ -173,11 +167,6 @@ References
     )
     fig.tight_layout()
     plt.savefig("plot_skirtor_xcigale_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.685 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_xcigale_sweep.py:

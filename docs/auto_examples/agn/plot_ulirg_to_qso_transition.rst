@@ -21,6 +21,11 @@
 ULIRG→QSO evolutionary sequence: dust-obscured starburst to bare quasar
 =======================================================================
 
+.. image:: images/sphx_glr_plot_ulirg_to_qso_transition_001.png
+   :alt: plot ulirg to qso transition
+   :class: sphx-glr-single-img
+
+
 Sanders et al. (1988) proposed that Ultra-Luminous Infrared Galaxies (ULIRGs)
 are the dust-shrouded precursors to optical QSOs. This sequence traces
 progressive unveiling of a buried AGN through five stages:
@@ -41,17 +46,6 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 - Veilleux et al. (2009) ARA&A 47, 63: ULIRG/QSO transition review
 
 .. GENERATED FROM PYTHON SOURCE LINES 25-175
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_ulirg_to_qso_transition_001.png
-   :alt: plot ulirg to qso transition
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_ulirg_to_qso_transition_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -124,7 +118,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
         # SFR decreases as AGN fraction increases (energy budget constraint).
         # At agn_lum_ratio=0 (pure starburst): high SFR; at agn_lum_ratio=1 (pure QSO): low SFR.
         # ``sfh.type=const`` parametrizes by total stellar mass over the default
-        # window [start_gyr=0, end_gyr=13.8 Gyr]; convert via M = SFR × Δt:
+        # window [start_gyr=13.8, end_gyr=0 Gyr]; convert via M = SFR × Δt:
         #   log_total_mass = log_sfr + log10(1.38e10 yr) ≈ log_sfr + 10.14
         log_sfr = 1.5 - 2.0 * agn_lum_ratio
         log_total_mass = log_sfr + 10.14
@@ -138,7 +132,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
         agn_dict = {
             "type": "composable",
             "log_lbol": log_lbol,
-            "frac": agn_lum_ratio,
+            "lum_ratio": agn_lum_ratio,
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},
             "nlr": {"type": "analytic", "all_params": tengri.FIXED},
