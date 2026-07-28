@@ -747,6 +747,38 @@ def _stellar_only_spec(sfh_name: str, sfh_params: dict):
             free_priors[k] = Uniform(max(v * 0.1, 1e-3), max(v * 5.0, 0.5))
         else:
             free_priors[k] = Uniform(v - 1.5, v + 1.5)
+
+    # The widening above is strictly per-parameter, so it cannot see the
+    # ordered-pair constraints ``Parameters`` enforces (#1277). Widening the
+    # ``const`` window bounds independently (``start_gyr`` down by 10x,
+    # ``end_gyr`` up by 5x) made their supports overlap even though the
+    # fiducial values are correctly ordered, and every spec this helper built
+    # for ``const`` was rejected at construction (#1382 landed the guard; the
+    # slow tier that exercises this helper is deselected by default, so it went
+    # unnoticed until a schedule-gated run).
+    #
+    # The repair is DERIVED from ``Parameters._ORDERED_PAIRS`` rather than
+    # hard-coding the const window, so a pair added there later cannot silently
+    # re-break this fixture: lift the greater param's floor just above the
+    # lesser's ceiling, which is exactly the remedy the guard's message advises.
+    for greater, lesser, _reason in Parameters._ORDERED_PAIRS:
+        if greater not in free_priors or lesser not in free_priors:
+            continue
+        lesser_hi = free_priors[lesser].bounds[-1]
+        greater_lo, greater_hi = free_priors[greater].bounds[0], free_priors[greater].bounds[-1]
+        if greater_lo > lesser_hi:
+            continue  # already non-overlapping
+        new_lo = lesser_hi * (1.0 + 1e-6)
+        # Assert the fixture's own setup: the fiducial value must survive the
+        # repair, or the comparison below would run on a spec whose prior
+        # excludes the point it is meant to evaluate.
+        assert new_lo < sfh_params[greater] < greater_hi, (
+            f"repairing the {greater}/{lesser} overlap pushed the fiducial "
+            f"{greater}={sfh_params[greater]} outside its own prior "
+            f"({new_lo}, {greater_hi}) — widen the fiducial separation"
+        )
+        free_priors[greater] = Uniform(new_lo, greater_hi)
+
     return Parameters(
         mean_sfh_type=[sfh_name],
         met_logzsol=Fixed(-0.5),
