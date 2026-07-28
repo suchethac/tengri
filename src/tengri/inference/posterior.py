@@ -446,9 +446,12 @@ class Posterior:
 
         Examples
         --------
-        >>> derived = result.derived
-        >>> stellar_masses = derived["stellar_mass"]  # Shape (n_samples,)
-        >>> med, lo, hi = np.percentile(stellar_masses, [50, 16, 84])
+        Prefer :attr:`properties` — the same names, every property the model
+        publishes rather than a hardcoded five, and credible intervals
+        without a manual percentile call:
+
+        >>> stellar_masses = result.properties["stellar_mass"]  # (n_samples,)
+        >>> lo, med, hi = result.properties.ci("stellar_mass")
         """
         warnings.warn(
             "Posterior.derived is deprecated; use Posterior.properties instead. "

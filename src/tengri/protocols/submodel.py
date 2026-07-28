@@ -2,7 +2,7 @@
 """SubModel protocol: one mode of the ForwardModel (SED, spatial, joint).
 
 Defined by the forward-model architecture spec
-(``docs/dev/forward-model-architecture.md``) §4. A SubModel is the thin
+(``docs/dev/archive/forward-model-architecture.md``) §4. A SubModel is the thin
 composer over a list of components. Each population carries one SED
 SubModel and optionally one spatial SubModel; ``ForwardModel`` runs the
 populations in sequence and hands the result to ``ObservationModel``.

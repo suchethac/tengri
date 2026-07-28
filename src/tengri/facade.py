@@ -339,7 +339,7 @@ class Galaxy:
             The two backends agree on the rest-frame SED at
             ``rtol ≤ 5e-2`` for the configurations the stellar migration
             covers (stellar + dust + IGM + radio + X-ray); see
-            ``docs/dev/phase_ii_2_stellar_migration.md``.
+            ``docs/dev/archive/phase_ii_2_stellar_migration.md``.
 
         Returns
         -------
