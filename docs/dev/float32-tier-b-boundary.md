@@ -221,7 +221,7 @@ The exact-op localization was the crux: `checkify` named the primitive
 
 ## Summary
 
-> **Correction (#1433): `forward_dtype` is inert, and has been since 2026-05-20.**
+> **Correction (#1433): `forward_dtype` is retired; it had been inert since 2026-05-20.**
 > This summary used to open "Tier A is CUDA mixed-precision-ready today:
 > `forward_dtype="float32"` with `jax_enable_x64=True` provides production inference
 > on V100/A100, validated against float64 (rtol ≤ 3e−3)."
@@ -235,6 +235,12 @@ The exact-op localization was the crux: `checkify` named the primitive
 > "Validated against float64 (rtol ≤ 3e−3)" was true but vacuous: the tests behind it
 > compared float64 against float64. Everything below that says "mixed precision also
 > works" means "the float64 path also works", which it does.
+>
+> **Now retired (2026-07-28).** Passing a non-default `forward_dtype` raises a
+> `DeprecationWarning` and does nothing else, and it no longer enters the compile
+> key, so the redundant compile is gone. Retired rather than wired: pure float32
+> is what `components/` gates on and what this document measures, and reviving a
+> second float32 path would mean maintaining separate gate semantics.
 >
 > **Nothing about Tier A's real content changes.** The log-offset reparametrizations
 > are unconditional — they do not consult `forward_dtype` — so the range-safety work

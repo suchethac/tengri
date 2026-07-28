@@ -305,7 +305,7 @@ SEDModel.build(..., approx=WavePrecomp(n_z=100, z_min=0.001, z_max=3.0))
 Interpolated to current z at inference time (<0.01% error at 100 points,
 triweight kernel).
 
-### Mixed precision — withdrawn, the knob is inert (#1433)
+### Mixed precision — withdrawn, the knob is retired (#1433)
 
 ```python
 model = SEDModel.build(..., forward_dtype="float32")   # does nothing

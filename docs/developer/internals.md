@@ -114,7 +114,7 @@ on the first call. Subsequent calls reuse the compiled XLA graph.
 
 **Mixed precision — withdrawn.** This entry used to read
 "`Model(spec, ssp, forward_dtype="float32")` halves memory usage and provides
-roughly 1.5x speed with less than 0.1% error". The knob is inert: it casts
+roughly 1.5x speed with less than 0.1% error". The knob is retired: it casts
 nothing, returns bit-identical results to float64, and still enters the compile
 signature, so passing it costs an extra compile and buys nothing (#1433). For
 float32 today, run under `jax.enable_x64(False)`.

@@ -686,13 +686,21 @@ class SEDModel:
     forward_dtype : str or jnp.dtype, optional
         Dtype for forward model computation. Default ``"float64"``.
 
-        .. warning::
+        .. deprecated::
 
-           **Currently inert (#1433).** ``"float32"`` casts nothing and changes
-           nothing: measured bit-for-bit identical photometry to ``"float64"`` on
-           both the exact and the ``WavePrecomp`` path. It does still enter
-           :meth:`compile_signature`, so passing it buys a second compile of an
-           identical kernel — cost without benefit.
+           **Retired (#1433).** Passing anything but ``"float64"`` raises a
+           ``DeprecationWarning`` and does nothing else. ``"float32"`` cast
+           nothing and changed nothing — measured bit-for-bit identical
+           photometry to ``"float64"`` on both the exact and the ``WavePrecomp``
+           path. It no longer enters :meth:`compile_signature` either, so it no
+           longer costs the second compile of an identical kernel that it used to.
+
+           Retired rather than repaired because there is no second float32 mode
+           worth maintaining: pure float32 is what the range protections in
+           ``components/`` gate on, it is what #1206 delivers, and the knob sat
+           dead for two months without a single report. Wiring it instead would
+           mean reviving a distinct mixed-precision path with its own gate
+           semantics and re-earning a speed claim that was never re-measured.
 
            The casts it names were real until ``1e57d973d`` (2026-05-20) deleted
            ``forward/_kernels/``; the kwarg, this docstring, the state field and
@@ -705,6 +713,10 @@ class SEDModel:
            changes JAX's default dtype rather than casting captured arrays), it is
            the mode the float32 range protections in ``components/`` gate on, and
            it is the one #1206 is making work end to end.
+
+           The argument is still accepted so that existing callers keep working —
+           nothing they compute was ever different — and it will be removed once
+           the warning has been in a release.
 
         Independently of this knob, the multiplicative flux/distance seams
         (photometry, spectrum, line flux projections) apply cosmological factors as
@@ -949,6 +961,23 @@ class SEDModel:
         self.spec = spec
         self.ssp_data = ssp_data
         self._forward_dtype = jnp.dtype(forward_dtype)
+        if self._forward_dtype != jnp.dtype("float64"):
+            # Retired, not merely undocumented (#1433). The knob has cast nothing
+            # since ``1e57d973d`` deleted ``forward/_kernels/`` (2026-05-20), so
+            # accepting it silently hands the caller float64 arithmetic under a
+            # float32 name. Warn rather than raise: it is inert, so no result
+            # changes either way, and a hard error would break callers for whom
+            # nothing was ever different.
+            warnings.warn(
+                f"forward_dtype={str(self._forward_dtype)!r} is ignored and has been "
+                "since 2026-05-20 (#1433): it casts nothing, returns bit-identical "
+                "results to float64, and only costs an extra compile because it "
+                "still enters the model's cache key. For float32, run inside a "
+                "`with jax.enable_x64(False):` context — that is the mechanism the "
+                "float32 range protections in components/ are written against.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._wave_chunk_size = wave_chunk_size
 
         # ── Observables NamedTuple (synthesized per model) ───────
@@ -3348,10 +3377,13 @@ class SEDModel:
         # CSP integration method
         csp_integration = str(self._csp_integration)
 
-        # Forward dtype
-        forward_dtype = str(self._forward_dtype)
+        # ``forward_dtype`` is deliberately NOT part of this key (#1433). It is
+        # retired and casts nothing, so two models differing only in it compute
+        # bit-identical results — keying on it bought a second compile of an
+        # identical kernel and nothing else. Anyone who wires it must put it back
+        # here in the same change, or the two precisions will share a kernel.
 
-        # Effective build precision (#1392). ``forward_dtype`` above stays
+        # Effective build precision (#1392). ``forward_dtype`` stays
         # "float64" in a **pure** float32 run (which is entered with
         # ``jax.enable_x64(False)``, not with that knob), so on its own it cannot
         # separate a float64 model from a float32 one — and since it casts nothing
@@ -3526,7 +3558,6 @@ class SEDModel:
             spec_resample_conserving,
             spec_resolution_matrix,
             csp_integration,
-            forward_dtype,
             build_precision,
             met_interp,
             z_interp,
@@ -7189,7 +7220,9 @@ class SEDModel:
             Observation object; forwarded to ``__init__``.
         **model_kwargs
             Additional keywords forwarded to :meth:`__init__` (e.g.
-            ``precompute``, ``forward_dtype``, ``approx``).
+            ``precompute``, ``approx``). ``forward_dtype`` is deliberately absent —
+            it is retired and inert, so keying on it only forced a redundant
+            compile (#1433).
 
         Returns
         -------

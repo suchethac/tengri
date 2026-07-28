@@ -1,25 +1,33 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""``forward_dtype="float32"`` must actually compute in float32 (#1433).
+r"""``forward_dtype`` is retired, and must say so rather than pretend (#1433).
 
-The kwarg is documented as a performance knob — it used to cast the SSP grid, the
+The kwarg was documented as a performance knob — it used to cast the SSP grid, the
 dust weights and the effective wavelengths, and the three largest exact-path
 intermediates. Those casts lived in ``forward/_kernels/`` and went out with
 ``1e57d973d`` (2026-05-20, "Phase 6 — delete forward/_kernels/"). The kwarg, its
 docstring, its :class:`SEDModelState` field, its ``compile_signature`` entry and its
 ``config/display.py`` line all survived the refactor. The casts did not, and
-``state.forward_dtype`` has had **zero** readers since.
+``state.forward_dtype`` had **zero** readers for the two months that followed.
 
-So the knob is inert: identical results, plus a second compile (it is still part of
-the cache key). Worse, it is *silently* inert — a user who asks for float32 gets
-float64 arithmetic and no error.
+The damage was never the missing speedup. It was that the knob was *silently*
+inert: a caller who asked for float32 got float64 arithmetic and no signal, and the
+tests that were supposed to catch that exercised a private replica kernel and a
+``.astype`` tautology instead of the kwarg.
 
-The two tests here are a matched pair, and the pairing is the point. A lone xfail
-saying "float32 does not differ from float64" is not evidence of a bug: it is
-equally consistent with "this model is insensitive to precision" or "this
-comparison cannot resolve a precision change". The control rules that out by
-showing the *same* comparison, on the *same* model, does detect the precision change
-that pure float32 makes.
+**Retired rather than wired.** Pure float32 — ``jax.enable_x64(False)`` — is the
+mode the range protections in ``components/`` gate on and the one #1206 delivers;
+reviving a second float32 path would mean maintaining distinct gate semantics and
+re-earning a speed claim nobody had re-measured. Passing anything but the default
+now warns, and the knob no longer enters the compile key, so it no longer costs the
+redundant compile it used to.
+
+The control test below is retained deliberately. It shows that this comparison — the
+same models, the same photometry — *does* detect the change pure float32 makes. Without
+it, "float32 equals float64" would be equally consistent with "this model cannot
+resolve a precision difference", and the inertness assertion would prove nothing.
 """
+
+import warnings
 
 import jax
 import jax.numpy as jnp
@@ -95,29 +103,59 @@ def test_pure_float32_changes_the_computation(ssp_bare, obs):
     )
 
 
-@pytest.mark.xfail(
-    reason="#1433: forward_dtype casts nothing. The casts were deleted with "
-    "forward/_kernels/ in 1e57d973d (2026-05-20) and state.forward_dtype has had no "
-    "readers since, so 'float32' returns bit-identical float64 results — while still "
-    "entering compile_signature, so it costs an extra compile for nothing. When the "
-    "knob is wired (or retired) this XPASSes: update the forward_dtype docstring in "
-    "forward/sed_model.py at the same time, since it is what tells users the truth.",
-    strict=True,
-)
-def test_forward_dtype_float32_actually_computes_in_float32(ssp_bare, obs):
-    """``forward_dtype="float32"`` must change the numbers, on the path it names.
+def test_forward_dtype_is_retired_and_says_so(ssp_bare, obs):
+    """Asking for ``float32`` must warn, and must not silently pretend to comply.
 
-    Compared bit-for-bit rather than with a tolerance: any genuine float32
-    arithmetic anywhere in the forward model perturbs the last bits of a float64
-    result. Bit-identity is therefore proof that no float32 arithmetic happened at
-    all — a much sharper statement than "agrees within 0.1%", which is what the
-    knob's own test file checks (of a private replica kernel, not of this kwarg).
+    The knob was retired rather than wired (#1433): it had cast nothing since
+    ``1e57d973d`` (2026-05-20), and pure float32 — ``jax.enable_x64(False)`` — is
+    both the mode the range protections in ``components/`` gate on and the one
+    #1206 delivers. What made it dangerous was never the missing speedup; it was
+    that a caller asking for float32 got float64 arithmetic and no signal.
+
+    So the contract this file pins has changed. It used to be "float32 must change
+    the numbers" (a strict xfail). It is now "float32 must *say* it does nothing".
     """
-    ref = _photometry(ssp_bare, obs, x64=True, forward_dtype="float64", dtype=jnp.float64)
-    knob = _photometry(ssp_bare, obs, x64=True, forward_dtype="float32", dtype=jnp.float64)
+    with jax.enable_x64(True):
+        with pytest.warns(DeprecationWarning, match="forward_dtype"):
+            _build(ssp_bare, obs, "float32")
 
-    assert not np.array_equal(knob, ref), (
-        f"forward_dtype='float32' returned photometry bit-identical to "
-        f"forward_dtype='float64' ({knob[0]:.17e}), so nothing was computed in "
-        "float32 (#1433)"
+        # The default must stay silent — a warning on every model build would be
+        # noise, and would train users to filter the one that matters.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            _build(ssp_bare, obs, "float64")
+
+
+def test_forward_dtype_no_longer_forces_a_second_compile(ssp_bare, obs):
+    """Two builds differing only in ``forward_dtype`` must share a cache key.
+
+    While the knob was live in :meth:`compile_signature` it bought a second
+    compile of a kernel that computes bit-identical results — pure cost. Now that
+    it is retired the signatures must agree, and the results must still be
+    identical (which is what makes sharing the kernel correct rather than a bug).
+
+    If someone wires the knob later, this test fails — correctly, and in the same
+    change that would need to restore the signature entry.
+    """
+    with jax.enable_x64(True), warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        sig64 = _build(ssp_bare, obs, "float64").compile_signature()
+        sig32 = _build(ssp_bare, obs, "float32").compile_signature()
+
+    assert sig64 == sig32, (
+        "forward_dtype still separates two compile signatures, so it still costs a "
+        "second compile of an identical kernel (#1433)"
+    )
+
+    ref = _photometry(ssp_bare, obs, x64=True, forward_dtype="float64", dtype=jnp.float64)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        knob = _photometry(ssp_bare, obs, x64=True, forward_dtype="float32", dtype=jnp.float64)
+    np.testing.assert_array_equal(
+        knob,
+        ref,
+        err_msg=(
+            "forward_dtype='float32' now changes the result, so it is no longer inert "
+            "and must go back into compile_signature (#1433)"
+        ),
     )
