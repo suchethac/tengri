@@ -29,6 +29,8 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.utils.grid_interp import resample_template
+
 __all__ = [
     "SI_DEFAULTS",
     "si_feature",
@@ -317,7 +319,7 @@ def torus_mn12_continuum(
     spectrum_native_scaled = l_torus * spectrum_native
 
     # Interpolate onto output grid (left=0, right=0 so out-of-bounds gives 0)
-    spectrum_out = jnp.interp(wave, mn12_wave, spectrum_native_scaled, left=0.0, right=0.0)
+    spectrum_out = resample_template(wave, mn12_wave, spectrum_native_scaled, left=0.0, right=0.0)
 
     return spectrum_out
 
@@ -388,6 +390,6 @@ def torus_mn12_si(
     spectrum_native = l_torus * si_lumin_arr * si
 
     # Interpolate onto output grid
-    spectrum_out = jnp.interp(wave, si_wave, spectrum_native, left=0.0, right=0.0)
+    spectrum_out = resample_template(wave, si_wave, spectrum_native, left=0.0, right=0.0)
 
     return spectrum_out
