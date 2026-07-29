@@ -33,7 +33,7 @@ from pathlib import Path
 
 import jax.numpy as jnp
 
-from tengri.utils.grid_interp import resample_template
+from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
     C_CGS as _C_CGS,
@@ -790,8 +790,16 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
 
         # Unit-normalize each SF template so integral(L_nu, dnu) = 1.
         # nu is descending, so negate for positive integral.
+        #
+        # Integrated with ``loglog_integral``, not ``trapezoid``, because the
+        # template is put on the model grid by ``resample_template``, which
+        # interpolates each segment as a power law. Normalizing with a
+        # different interpolant than the one used to resample leaves the
+        # delivered SED integrating to something other than 1 -- energy balance
+        # then drifts with the native grid spacing, which for Dale2014 reaches
+        # dlog10(lambda) = 0.125.
         for i in range(templates_lnu.shape[0]):
-            integral = -np.trapezoid(templates_lnu[i], nu)
+            integral = -float(loglog_integral(jnp.asarray(nu), jnp.asarray(templates_lnu[i])))
             if integral > 0:
                 templates_lnu[i] /= integral
 
@@ -822,6 +830,30 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
             if integral > 0:
                 templates_qso_lnu = templates_qso_lnu / integral * qso_frac
             templates_qso_np = np.asarray(templates_qso_lnu, dtype=np.float64)
+
+    # Re-express each template's normalization in the interpolant it is
+    # actually delivered with. The stored templates integrate to their intended
+    # value under the TRAPEZOID rule (linear in nu), which is how Dale2014 and
+    # CIGALE normalize them; ``resample_template`` puts them on the model grid
+    # as power-law segments, whose integral differs by 1.27% on this grid
+    # (dlog10(lambda) reaches 0.125). Left uncorrected the delivered SED carries
+    # 0.9880 of L_absorbed -- a resolution-INDEPENDENT deficit, i.e. a
+    # normalization mismatch, not an integration error.
+    #
+    # Scaling by trapezoid/loglog preserves each template's own normalization
+    # value, so the SF templates still integrate to 1 and the QSO template still
+    # integrates to CIGALE's ~0.54 dust-grid partition (#717) -- the SF:QSO
+    # energy ratio is untouched.
+    _nu_native = _C_CGS / (tmpl_wave_np * _AA_TO_CM)
+
+    def _to_loglog_norm(row: np.ndarray) -> np.ndarray:
+        trap = -float(np.trapezoid(row, _nu_native))
+        ll = -float(loglog_integral(jnp.asarray(_nu_native), jnp.asarray(row)))
+        return row * (trap / ll) if (ll > 0.0 and trap > 0.0) else row
+
+    templates_np = np.stack([_to_loglog_norm(r) for r in templates_np])
+    if templates_qso_np is not None:
+        templates_qso_np = _to_loglog_norm(templates_qso_np)
 
     has_qso = templates_qso_np is not None
     return {

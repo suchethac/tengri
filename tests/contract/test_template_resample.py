@@ -172,3 +172,56 @@ def test_jit_and_vmap_safe():
     out = fn(batch)
     assert out.shape == (5, 64)
     assert np.all(np.isfinite(np.asarray(out)))
+
+
+@pytest.mark.limit
+def test_loglog_integral_is_exact_for_a_power_law():
+    """The integral matching ``resample_template``'s interpolant.
+
+    Templates are normalized to unit frequency integral on their native grid
+    and only then resampled. If that normalization uses ``trapezoid`` (linear
+    in nu) while the resampling is log-log, the delivered SED no longer
+    integrates to the normalized value and energy balance drifts. This is the
+    integral of the same power-law-segment interpolant, so the two agree.
+    """
+    from tengri.utils.grid_interp import loglog_integral
+
+    # f(x) = C x^s  ->  int_a^b = C (b^(s+1) - a^(s+1)) / (s+1)
+    for s in (-2.7, -1.5, -0.3, 0.0, 1.4):
+        x = np.logspace(0.0, 4.0, 9)  # deliberately coarse
+        C = 3.0
+        y = C * x**s
+        got = float(loglog_integral(jnp.asarray(x), jnp.asarray(y)))
+        want = C * (x[-1] ** (s + 1) - x[0] ** (s + 1)) / (s + 1)
+        assert abs(got / want - 1.0) < 1e-12, f"s={s}: {got} vs {want}"
+
+
+@pytest.mark.limit
+def test_loglog_integral_handles_the_s_equals_minus_one_pole():
+    """s = -1 makes the closed form 0/0; the stable branch must still be exact."""
+    from tengri.utils.grid_interp import loglog_integral
+
+    x = np.logspace(0.0, 3.0, 7)
+    y = 5.0 / x  # s = -1 exactly: int = 5 ln(b/a)
+    got = float(loglog_integral(jnp.asarray(x), jnp.asarray(y)))
+    want = 5.0 * np.log(x[-1] / x[0])
+    assert abs(got / want - 1.0) < 1e-12, f"{got} vs {want}"
+
+
+@pytest.mark.gradient
+def test_loglog_integral_finite_gradient_with_zeros():
+    """Zeros fall back to trapezoid without poisoning the VJP."""
+    from tengri.utils.grid_interp import loglog_integral
+
+    x = jnp.asarray(np.logspace(0.0, 3.0, 8))
+
+    def total(y):
+        return loglog_integral(x, y)
+
+    for y in (
+        jnp.asarray(np.logspace(0.0, -2.0, 8)),
+        jnp.asarray([0.0, 0.0, 1.0, 2.0, 3.0, 2.0, 1.0, 0.0]),
+        jnp.zeros(8),
+    ):
+        g = np.asarray(jax.grad(total)(y))
+        assert np.all(np.isfinite(g)), f"non-finite VJP: {g}"

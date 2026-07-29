@@ -976,6 +976,67 @@ def resample_template(
     return jnp.where(wave_out > wave_in[-1], right, out)
 
 
+def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
+    """Integrate ``y`` over ``x`` treating each segment as a power law.
+
+    The integral of the interpolant :func:`resample_template` builds, so a
+    template normalized with this function still integrates to the same value
+    after resampling. Over one segment, with
+    :math:`s = \\ln(y_1/y_0) / \\ln(x_1/x_0)`:
+
+    .. math::
+
+        \\int_{x_0}^{x_1} y_0 (x/x_0)^{s}\\, dx
+        = x_0 y_0 \\, a \\, \\frac{e^{u} - 1}{u},
+        \\qquad a = \\ln\\frac{x_1}{x_0}, \\quad u = a + \\ln\\frac{y_1}{y_0}
+
+    Written with ``expm1(u)/u`` rather than the textbook
+    :math:`(x_1 y_1 - x_0 y_0)/(s+1)` because that form is 0/0 at
+    :math:`s = -1` — a real case, since :math:`\\nu F_\\nu` flat is exactly
+    :math:`s = -1`.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Monotonic, strictly positive abscissa (wavelength [Angstrom] or
+        frequency [Hz]). Descending ``x`` returns a negative integral, matching
+        ``jnp.trapezoid``, so existing ``-trapezoid(lnu, nu)`` call sites keep
+        their sign convention.
+    y : array_like, shape (n,)
+        Values at ``x`` (any units).
+
+    Returns
+    -------
+    ndarray, shape ()
+        The integral, in units of ``x`` times ``y``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    **Gradient-safe**: yes — segments with a non-positive endpoint fall back to
+    the trapezoid rule under a double-``where``, so the discarded ``log``
+    branch cannot form ``0 * inf`` in the VJP.
+    """
+    x0, x1 = x[:-1], x[1:]
+    y0, y1 = y[:-1], y[1:]
+
+    positive = (y0 > 0.0) & (y1 > 0.0)
+    y0_safe = jnp.where(positive, y0, 1.0)
+    y1_safe = jnp.where(positive, y1, 1.0)
+
+    a = jnp.log(x1 / x0)
+    u = a + jnp.log(y1_safe) - jnp.log(y0_safe)
+    # expm1(u)/u, continued to its finite limit 1 + u/2 as u -> 0.
+    small = jnp.abs(u) < 1e-7
+    u_safe = jnp.where(small, 1.0, u)
+    ratio = jnp.where(small, 1.0 + 0.5 * u, jnp.expm1(u_safe) / u_safe)
+
+    power_law = x0 * y0_safe * a * ratio
+    trapezoid = 0.5 * (y0 + y1) * (x1 - x0)
+    return jnp.sum(jnp.where(positive, power_law, trapezoid))
+
+
 def slice_fixed_axes(
     preint: PreintegratedGrid | PreintegratedLines,
     fixed: dict[int, float],
