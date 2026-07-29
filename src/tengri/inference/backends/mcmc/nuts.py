@@ -87,11 +87,19 @@ def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> N
                 "the original report)"
             )
     warnings.warn(
+        # The `mcmc_hmc` recommendation is sound only because HMC now shares
+        # this same auto-policy. While HMC defaulted to `dense_mass_matrix=True`
+        # gated on `n_dim <= 30`, it used a DENSE matrix across the whole D =
+        # 8-30 band, so this advice sent an OOM-ing user to the more expensive
+        # sampler — measured at 13.47 GB and SIGKILLed at D = 9 (#1413, #1454).
+        # With both on diagonal above D = 8, HMC's fixed-length trajectory is
+        # genuinely lighter than NUTS's adaptive doubling.
         f"NUTS warmup with dense_mass_matrix=True at D={n_dim} can "
         f"peak at 20+ GB of RAM{heavy_sfh_hint}. If you're on a "
         "32 GB machine and the fit is OOM-ing, pass "
         "`dense_mass_matrix=False` (diagonal mass matrix; small "
-        "convergence cost). See issue #319.",
+        "convergence cost) or switch to `method='mcmc_hmc'` "
+        "(fixed-length trajectory; lighter warmup). See issue #319.",
         stacklevel=3,
     )
 
