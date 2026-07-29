@@ -118,6 +118,63 @@ print(tengri.cache_size_bytes() / 1024**2, "MB")
 - **Different `n_samples`** — `n_samples` is a `static_argname`, so
   changing it is a different cache key. The benchmark grid holds it
   fixed at 6.
+- **The sub-band IGM fold on a free-redshift model.** This is a
+  build-time constant, not a compile, so neither the JAX cache nor the
+  photometry z-table cache covers it — and it is re-paid on every
+  `SEDModel.build`, including repeat builds in one process.
+
+## Build cost: the free-redshift cliff
+
+Compilation is not the only cost before your first number. Building a
+free-redshift model with `approx=WavePrecomp()` folds the IGM
+transmission into the sub-band quadrature weights, and that fold
+dominates:
+
+| build | time |
+| --- | --- |
+| free redshift, `WavePrecomp()` | ~9 s (~37 s on the first build of a new SSP × filter × z-grid combination, which also pays for the z-table) |
+| free redshift, `WavePrecomp()`, `igm={'type': 'none'}` | ~0.3 s |
+| fixed redshift, `WavePrecomp()` | ~0.4 s |
+| free redshift, `approx=None` | negligible |
+
+Two consequences worth planning around:
+
+- **Fixing the redshift is the cheapest way out** when your science
+  allows it. A photometric-redshift fit does not, and pays the fold.
+- **The cost is per build, not per process.** Building the same
+  configuration three times in one session pays it three times. If you
+  are looping over models that differ only in parameters, build once and
+  vary the parameters — they are runtime inputs, not build inputs.
+
+Absolute times vary with the machine, band set, and z-grid density; the
+ratios are the durable part.
+
+> **Measuring this yourself:** omitting `redshift=` does *not* give you a
+> free redshift — see the default below — so a benchmark that leaves it
+> out measures the fixed-z path and will not reproduce any of this.
+
+## The redshift default is fixed, not free
+
+`SEDModel.build(...)` with no `redshift=` argument pins the redshift to
+`Fixed(0.1)`. It does not leave it free.
+
+```python
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...})
+# -> redshift is Fixed(0.1); the galaxy sits at z = 0.1
+
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...},
+                       redshift=Uniform(0.0, 3.0))   # free, and fitted
+```
+
+State it explicitly whenever the redshift matters — either
+`redshift=Fixed(z)` at your galaxy's known redshift, or a prior to fit
+it. Two things follow from the default that are easy to miss:
+
+- A model you meant to be free-redshift is silently at z = 0.1, so the
+  fit reports whatever the other parameters can do at that distance.
+- Build-cost measurements taken without an explicit free prior exercise
+  the fixed-z path, where the IGM fold above costs ~0.4 s instead of
+  ~9 s.
 
 ## Three-layer cache architecture
 

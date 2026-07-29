@@ -47,6 +47,7 @@ References
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -54,6 +55,8 @@ import jax
 import jax.numpy as jnp
 
 __all__ = [
+    "DEFAULT_WHITENING_STRENGTH",
+    "MAX_METRIC_CONDITION",
     "PRECONDITION_MAX_DIM",
     "LinearPreconditioner",
     "PreconditionedProblem",
@@ -61,6 +64,7 @@ __all__ = [
     "negative_hessian_metric",
     "preconditioned_logdensity",
     "prepare_preconditioning",
+    "temper_metric",
 ]
 
 #: Smallest eigenvalue the metric may carry. The standardized prior contributes
@@ -69,6 +73,30 @@ __all__ = [
 #: Gauss-Newton drops. Flooring there keeps the metric positive definite without
 #: needing the residual Jacobian.
 PRIOR_METRIC_FLOOR: float = 1.0
+
+#: Default whitening strength :math:`\alpha` in :math:`A A^\top = G^{-\alpha}`.
+#:
+#: **Not 1.0, deliberately** (#1442). Write the true precision as ``H`` and the metric
+#: actually used as ``G = H^gamma`` (``gamma = 1`` is a perfect metric). The whitened
+#: condition number is ``kappa(H) ** |1 - alpha*gamma|``, so whitening is worse than
+#: doing nothing exactly when ``gamma > 2/alpha``. Full whitening therefore tolerates
+#: only ``gamma <= 2``, and past that it *amplifies* ill-conditioning as
+#: ``kappa^(gamma-1)`` — unbounded, with no plateau.
+#:
+#: A single-point Hessian at the MAP is a *modal* curvature estimate. Wherever the
+#: posterior is not Gaussian it is not the *bulk* curvature, so ``gamma != 1`` is the
+#: normal case. Halving the exponent doubles the tolerated misspecification to
+#: ``gamma <= 4`` and costs only a ``kappa ** 0.5`` residual when the metric is exact.
+DEFAULT_WHITENING_STRENGTH: float = 0.5
+
+#: Largest condition number the metric may carry into the factorization.
+#:
+#: A backstop, not the main mechanism — :data:`DEFAULT_WHITENING_STRENGTH` does that
+#: work. This bounds the transform when the spectrum is pathological: the smallest
+#: eigenvalues are the least reliably estimated and the most damaging when wrong.
+#: Measured metrics on tengri field posteriors run ``1e5`` to ``3e8``, so this binds
+#: rarely and only on the worst-conditioned directions.
+MAX_METRIC_CONDITION: float = 1.0e8
 
 
 def negative_hessian_metric(
@@ -129,6 +157,76 @@ def negative_hessian_metric(
     eigenvalues, eigenvectors = jnp.linalg.eigh(metric)
     scale = jnp.maximum(jnp.abs(eigenvalues), floor)
     return (eigenvectors * scale) @ eigenvectors.T
+
+
+def temper_metric(
+    metric: jnp.ndarray,
+    *,
+    strength: float,
+    max_condition: float = MAX_METRIC_CONDITION,
+) -> jnp.ndarray:
+    """Raise a metric to a fractional power, capping its condition number.
+
+    The one knob that bounds how much damage a wrong metric can do. Whitening with
+    :math:`G^\\alpha` instead of :math:`G` interpolates continuously between no
+    preconditioning (:math:`\\alpha = 0`) and full whitening (:math:`\\alpha = 1`).
+
+    Parameters
+    ----------
+    metric : array_like, shape (D, D)
+        Symmetric positive-definite metric ``G``, e.g. from
+        :func:`negative_hessian_metric`.
+    strength : float
+        Exponent :math:`\\alpha \\in [0, 1]` [dimensionless]. ``1.0`` returns the
+        metric unchanged, ``0.0`` returns the identity.
+    max_condition : float, optional
+        Largest permitted ratio of the metric's eigenvalues, applied **before** the
+        exponent. Default :data:`MAX_METRIC_CONDITION`. Pass ``inf`` to disable.
+
+    Returns
+    -------
+    tempered : ndarray, shape (D, D)
+        ``G^strength`` with its spectrum clipped, symmetric positive definite.
+
+    Raises
+    ------
+    ValueError
+        If ``strength`` is NaN or outside ``[0, 1]``.
+
+    Notes
+    -----
+    .. math:: G_\\alpha = V \\, \\mathrm{diag}(\\lambda_i^\\alpha) \\, V^\\top
+
+    for the eigendecomposition :math:`G = V \\Lambda V^\\top`, with
+    :math:`\\lambda_i` first clipped below at
+    :math:`\\lambda_{\\max} / \\kappa_{\\max}`. The eigenvectors are untouched, so
+    tempering rescales the geometry without rotating it.
+
+    Whitening the result gives a transform with
+    :math:`A A^\\top = G^{-\\alpha}`. For a true precision ``H`` and a metric
+    ``G = H^\\gamma``, the eigenvalues of the whitened precision
+    :math:`A^\\top H A` are the generalized eigenvalues of the pencil
+    :math:`(H, G^\\alpha)`, hence
+
+    .. math:: \\kappa_{\\rm whitened} = \\kappa(H)^{|1 - \\alpha\\gamma|}
+
+    which exceeds :math:`\\kappa(H)` — worse than no preconditioning at all — exactly
+    when :math:`\\gamma > 2/\\alpha`. See :data:`DEFAULT_WHITENING_STRENGTH` (#1442).
+
+    **Not JIT-safe**: validates ``strength`` as a concrete Python float. The
+    eigendecomposition itself is traceable; the guard is not.
+    """
+    if not math.isfinite(strength) or not 0.0 <= strength <= 1.0:
+        raise ValueError(
+            f"whitening strength must be a finite number in [0, 1], got {strength!r}. "
+            f"0 is no preconditioning, 1 is full whitening; the default "
+            f"{DEFAULT_WHITENING_STRENGTH} bounds the damage from a misspecified metric."
+        )
+    metric = jnp.asarray(metric)
+    eigenvalues, eigenvectors = jnp.linalg.eigh(metric)
+    if math.isfinite(max_condition):
+        eigenvalues = jnp.maximum(eigenvalues, jnp.max(eigenvalues) / max_condition)
+    return (eigenvectors * eigenvalues**strength) @ eigenvectors.T
 
 
 @dataclass(frozen=True)
@@ -246,6 +344,8 @@ def preconditioned_logdensity(
     data_args,
     *,
     floor: float = PRIOR_METRIC_FLOOR,
+    strength: float = DEFAULT_WHITENING_STRENGTH,
+    max_condition: float = MAX_METRIC_CONDITION,
 ) -> tuple[Callable, LinearPreconditioner, jnp.ndarray]:
     """Re-express a log-density in coordinates where its curvature is white.
 
@@ -264,6 +364,12 @@ def preconditioned_logdensity(
         Observed-data tensors, passed through to ``logdensity_fn``.
     floor : float, optional
         Eigenvalue floor for the metric. Default :data:`PRIOR_METRIC_FLOOR`.
+    strength : float, optional
+        Whitening exponent :math:`\\alpha` in :math:`A A^\\top = G^{-\\alpha}`
+        [dimensionless]. Default :data:`DEFAULT_WHITENING_STRENGTH`. See
+        :func:`temper_metric` for why the default is not 1.
+    max_condition : float, optional
+        Condition-number cap on the metric. Default :data:`MAX_METRIC_CONDITION`.
 
     Returns
     -------
@@ -284,13 +390,43 @@ def preconditioned_logdensity(
     The returned ``wrapped`` callable is itself fully traceable.
     """
     init_flat = jnp.asarray(init_flat)
-    # Catch a non-finite expansion point HERE, where the point is still in hand
-    # (#1397). Downstream all that survives is a NaN matrix, and the failure
-    # arrives wearing the wrong name three layers later. The check lives in this
-    # orchestrator rather than in ``negative_hessian_metric`` because that
-    # function is documented JIT/grad/vmap-safe and reading a concrete boolean
-    # inside it would break that contract; this function is already non-JIT.
-    if not bool(jnp.all(jnp.isfinite(init_flat))):
+    _reject_nonfinite_expansion_point(init_flat)
+    preconditioner, _ = _preconditioner_with_conditioning(
+        logdensity_fn,
+        init_flat,
+        data_args,
+        floor=floor,
+        strength=strength,
+        max_condition=max_condition,
+    )
+    return (
+        preconditioner.wrap(logdensity_fn),
+        preconditioner,
+        preconditioner.to_latent(init_flat),
+    )
+
+
+def _reject_nonfinite_expansion_point(init_flat: jnp.ndarray) -> None:
+    """Refuse a NaN or inf expansion point, naming the actual defect.
+
+    #1397: notebook 01 died reporting "not positive definite" when the real chain was
+    ``MAP init done (loss=nan)`` -> NaN Hessian -> NaN Cholesky. The point is upstream
+    of everything here and is the only thing the caller can act on.
+
+    Notes
+    -----
+    Caught here, where the point is still in hand. Downstream all that survives is a
+    NaN matrix, and the failure arrives wearing the wrong name three layers later. The
+    check lives in this helper rather than in :func:`negative_hessian_metric` because
+    that function is documented JIT/grad/vmap-safe and reading a concrete boolean
+    inside it would break that contract; every caller of this one is already non-JIT.
+
+    ``bool`` rather than ``int`` on the gate: under trace this raises
+    ``TracerBoolConversionError``, the same signal ``metric_preconditioner``'s guard
+    gives, so "you traced this" has one failure mode instead of two. The count is only
+    computed for the message.
+    """
+    if bool(jnp.any(~jnp.isfinite(init_flat))):
         n_bad = int(jnp.sum(~jnp.isfinite(init_flat)))
         raise ValueError(
             f"the expansion point is non-finite ({n_bad} of {init_flat.size} "
@@ -299,12 +435,43 @@ def preconditioned_logdensity(
             "point — pass an explicit init_from=, or adjust the MAP settings — "
             "or pass precondition=False to sample without whitening."
         )
+
+
+def _preconditioner_with_conditioning(
+    logdensity_fn: Callable,
+    init_flat: jnp.ndarray,
+    data_args,
+    *,
+    floor: float,
+    strength: float,
+    max_condition: float,
+) -> tuple[LinearPreconditioner, tuple[float, float]]:
+    """Build the transform and measure the geometry either side of it.
+
+    Returns
+    -------
+    preconditioner : LinearPreconditioner
+    conditioning : tuple of float
+        ``(raw, whitened)`` condition numbers [dimensionless] — the metric as built,
+        and the curvature the sampler actually faces at the expansion point.
+
+    Notes
+    -----
+    The whitened value is computed from the product rather than predicted as
+    ``raw ** (1 - strength)``, because the two differ whenever ``max_condition``
+    binds. One extra ``eigvalsh`` on a ``(D, D)`` matrix is ~0.1 s at D = 521,
+    negligible against the fit it is reporting on, and an honest diagnostic is worth
+    more than a cheap one.
+    """
     metric = negative_hessian_metric(logdensity_fn, init_flat, data_args, floor=floor)
-    preconditioner = metric_preconditioner(metric)
-    return (
-        preconditioner.wrap(logdensity_fn),
-        preconditioner,
-        preconditioner.to_latent(init_flat),
+    raw = jnp.linalg.eigvalsh(metric)
+    tempered = temper_metric(metric, strength=strength, max_condition=max_condition)
+    preconditioner = metric_preconditioner(tempered)
+    whitened = preconditioner.matrix.T @ metric @ preconditioner.matrix
+    whitened_eigenvalues = jnp.linalg.eigvalsh(0.5 * (whitened + whitened.T))
+    return preconditioner, (
+        float(jnp.max(raw) / jnp.min(raw)),
+        float(jnp.max(whitened_eigenvalues) / jnp.min(whitened_eigenvalues)),
     )
 
 
@@ -320,8 +487,12 @@ def preconditioned_logdensity(
 PRECONDITION_MAX_DIM: int = 1024
 
 
-def _resolve_precondition(precondition: bool | None, n_dim: int) -> bool:
-    """Resolve ``precondition=None`` — the opt-in policy.
+def _resolve_whitening_strength(precondition: bool | float | None, n_dim: int) -> float | None:
+    """Resolve ``precondition`` into a whitening strength, or ``None`` for off.
+
+    Carries both the switch and the dial, because they are the same decision: a
+    strength of zero *is* "off", and a fit that cannot report how hard it whitened
+    cannot be compared against one that whitened differently.
 
     **Preconditioning is off unless asked for.**
 
@@ -344,20 +515,45 @@ def _resolve_precondition(precondition: bool | None, n_dim: int) -> bool:
 
     Parameters
     ----------
-    precondition : bool or None
-        ``None`` (default — off), ``True`` (on), or ``False`` (off).
+    precondition : bool, float or None
+        ``None`` / ``False`` (default — off), ``True`` (on at
+        :data:`DEFAULT_WHITENING_STRENGTH`), or a float in ``[0, 1]` naming the
+        strength directly. ``1.0`` is full whitening; ``0.0`` is off.
     n_dim : int
         Flat latent dimension. Unused by the policy; retained because callers pass it
         and because a future cost-based warning belongs here.
 
     Returns
     -------
-    bool
-        Effective setting. ``True`` only when explicitly requested.
+    float or None
+        Whitening strength, or ``None`` when preconditioning is off.
+
+    Raises
+    ------
+    ValueError
+        If a numeric ``precondition`` is NaN or outside ``[0, 1]``.
     """
-    if precondition is None:
-        return False
-    return bool(precondition)
+    if precondition is None or precondition is False:
+        return None
+    if precondition is True:
+        return DEFAULT_WHITENING_STRENGTH
+    try:
+        strength = float(precondition)
+    except (TypeError, ValueError):
+        raise ValueError(
+            f"precondition must be True, False, None, or a number in [0, 1]; got {precondition!r}"
+        ) from None
+    if not math.isfinite(strength) or not 0.0 <= strength <= 1.0:
+        raise ValueError(
+            f"precondition must be True, False, None, or a number in [0, 1]; "
+            f"got {precondition!r}. The value is the whitening strength alpha in "
+            f"A A^T = G^-alpha: 0 is off, 1 is full whitening, and the default "
+            f"{DEFAULT_WHITENING_STRENGTH} bounds the damage from a misspecified "
+            f"metric (#1442)."
+        )
+    # Zero strength is the identity transform. Returning it as "on" would build a
+    # Hessian, factorize it, and multiply by a matrix that is I -- all cost, no effect.
+    return None if strength == 0.0 else strength
 
 
 @dataclass(frozen=True)
@@ -387,12 +583,46 @@ class PreconditionedProblem:
         the other.
     preconditioner : LinearPreconditioner or None
         The map, or ``None`` when disabled.
+    strength : float or None
+        The whitening exponent actually applied, or ``None`` when disabled. Report it:
+        two fits whitened at different strengths are not comparable, and a number that
+        is not recorded will be assumed to have been the default (#1442).
+    metric_condition : float or None
+        Condition number of the metric as built, before tempering [dimensionless].
+        ``None`` when disabled.
+    whitened_condition : float or None
+        Condition number the sampler actually faces at the expansion point
+        [dimensionless]. ``None`` when disabled. The ratio of the two is what the
+        transform bought; without them a run cannot say whether the metric was
+        excellent or useless, which is how a 58x spread in throughput stayed
+        invisible from inside a fit.
     """
 
     logdensity: Callable
     init_flat: jnp.ndarray
     enabled: bool
     preconditioner: LinearPreconditioner | None = None
+    strength: float | None = None
+    metric_condition: float | None = None
+    whitened_condition: float | None = None
+
+    @property
+    def cache_key(self) -> tuple:
+        """Hashable summary of the coordinates, for an adaptation cache key.
+
+        Returns
+        -------
+        tuple
+            ``("whiten", strength)`` — distinct for every strength and for off.
+
+        Notes
+        -----
+        Fold this into any cached warmup result. A step size or mass matrix tuned in
+        one basis is meaningless in another, and the failure is silent: a stale step
+        size is a finite float that samples happily and badly. Keying on a bare
+        ``enabled`` boolean let two fits at different strengths share one (#1442).
+        """
+        return ("whiten", self.strength)
 
     def restore(self, positions: jnp.ndarray) -> jnp.ndarray:
         """Map sampled draws back to the standardized latent space.
@@ -429,8 +659,9 @@ def prepare_preconditioning(
     init_flat: jnp.ndarray,
     data_args,
     *,
-    precondition: bool | None = None,
+    precondition: bool | float | None = None,
     floor: float = PRIOR_METRIC_FLOOR,
+    max_condition: float = MAX_METRIC_CONDITION,
 ) -> PreconditionedProblem:
     """Resolve the auto-policy and build the whitened problem in one call.
 
@@ -446,12 +677,15 @@ def prepare_preconditioning(
         Starting position — normally the MAP.
     data_args : pytree
         Observed-data tensors, passed through to ``logdensity_fn``.
-    precondition : bool or None, optional
-        ``None`` (default) resolves to **off** — the feature is opt-in
-        (#1397, :func:`_resolve_precondition`); ``True`` enables, ``False``
-        is explicit off.
+    precondition : bool, float or None, optional
+        ``None`` (default) and ``False`` are off — preconditioning is opt-in
+        (#1397, :func:`_resolve_whitening_strength`). ``True`` enables it at
+        :data:`DEFAULT_WHITENING_STRENGTH`. A float in ``[0, 1]`` names the
+        whitening strength directly; ``1.0`` is full whitening and ``0.0`` is off.
     floor : float, optional
         Eigenvalue floor for the metric. Default :data:`PRIOR_METRIC_FLOOR`.
+    max_condition : float, optional
+        Condition-number cap on the metric. Default :data:`MAX_METRIC_CONDITION`.
 
     Returns
     -------
@@ -464,14 +698,24 @@ def prepare_preconditioning(
     per fit, outside any transform.
     """
     init_flat = jnp.asarray(init_flat)
-    if not _resolve_precondition(precondition, init_flat.shape[0]):
+    strength = _resolve_whitening_strength(precondition, init_flat.shape[0])
+    if strength is None:
         return PreconditionedProblem(logdensity=logdensity_fn, init_flat=init_flat, enabled=False)
-    wrapped, preconditioner, init_zeta = preconditioned_logdensity(
-        logdensity_fn, init_flat, data_args, floor=floor
+    _reject_nonfinite_expansion_point(init_flat)
+    preconditioner, (raw, whitened) = _preconditioner_with_conditioning(
+        logdensity_fn,
+        init_flat,
+        data_args,
+        floor=floor,
+        strength=strength,
+        max_condition=max_condition,
     )
     return PreconditionedProblem(
-        logdensity=wrapped,
-        init_flat=init_zeta,
+        logdensity=preconditioner.wrap(logdensity_fn),
+        init_flat=preconditioner.to_latent(init_flat),
         enabled=True,
         preconditioner=preconditioner,
+        strength=strength,
+        metric_condition=raw,
+        whitened_condition=whitened,
     )

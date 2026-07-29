@@ -18,6 +18,7 @@ import contextlib
 import functools
 import logging
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 __all__ = ["Posterior"]
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 _PROPERTY_CHUNK = 64
 
 
-class PosteriorProperties:
+class PosteriorProperties(Mapping):
     r"""The property catalog lifted over the sample axis.
 
     The topology-agnostic seam of contract §1 — **same names, more axes**. Every
@@ -105,6 +106,20 @@ class PosteriorProperties:
 
     def __iter__(self):
         return iter(sorted(self._model().available_properties))
+
+    def __len__(self) -> int:
+        """Number of available properties.
+
+        Present so the class satisfies the mapping protocol it already almost
+        implemented. ``__getitem__`` / ``__iter__`` / ``__contains__`` /
+        ``keys`` all worked, so the object read as a dict right up to ``len()``
+        and ``.items()`` — the two calls one reaches for first when inspecting
+        a fit result — which raised a bare ``TypeError`` / ``AttributeError``
+        with nothing naming the supported surface (#1459). Registering as a
+        :class:`collections.abc.Mapping` below supplies ``items``, ``values``,
+        ``get`` and equality from this method plus the two that existed.
+        """
+        return len(self._model().available_properties)
 
     def keys(self):
         """Available property names — identical to the model's."""
