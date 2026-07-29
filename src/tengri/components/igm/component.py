@@ -277,6 +277,29 @@ class IGMSEDComponent:
             zgrid = np.asarray([float(spec.get("value", 0.0))])
 
         wave_rest = jnp.asarray(wave_rest)
+
+        # Same build-time-constant story as the sub-band node table: one
+        # `igm_absorption` call per redshift, re-paid on every build. This half
+        # is the larger one once the node table is cached (#1453). Its key
+        # carries the filter curves and the convolution convention too, because
+        # unlike the node table this integrates against the bandpass.
+        from tengri.components.igm import _subband_cache
+
+        key = _subband_cache.band_factor_key(
+            wave_rest, fws, fts, zgrid, self.config.igm_model, photometry.convention
+        )
+        cached = _subband_cache.memo_get(key)
+        if cached is None:
+            cached = _subband_cache.load(key)
+            if cached is not None:
+                _subband_cache.memo_put(key, cached)
+        if cached is not None and cached.shape == (len(zgrid), n_filters):
+            return IGMSEDComponentState(
+                name=self.name,
+                band_zgrid=jnp.asarray(zgrid),
+                band_table=jnp.asarray(cached),
+            )
+
         rows = []
         for z in zgrid:
             trans = igm_absorption(
@@ -292,10 +315,13 @@ class IGMSEDComponent:
                 )[:n_filters]
             )
 
+        band_table = jnp.stack(rows)
+        _subband_cache.memo_put(key, np.asarray(band_table))
+        _subband_cache.store(key, np.asarray(band_table))
         return IGMSEDComponentState(
             name=self.name,
             band_zgrid=jnp.asarray(zgrid),
-            band_table=jnp.stack(rows),
+            band_table=band_table,
         )
 
     def precompute_spec_factors(
@@ -471,6 +497,28 @@ class IGMSEDComponent:
             # broadcast something plausible into the forward model.
             return None
 
+        # The loop below is one `igm_absorption` call per redshift and is a
+        # build-time constant, so it is re-paid on every `SEDModel.build` —
+        # ~9 s on a free-redshift model, three identical builds in one process
+        # each paying in full (#1453). Cache it on content, the way the
+        # photometry z-table computed in the same call already is.
+        from tengri.components.igm import _subband_cache
+
+        key = _subband_cache.cache_key(
+            waves,
+            zs,
+            self.config.igm_model,
+            igm_patchy=self.config.igm_patchy,
+            use_dla=self.config.use_dla,
+        )
+        cached = _subband_cache.memo_get(key)
+        if cached is None:
+            cached = _subband_cache.load(key)
+            if cached is not None:
+                _subband_cache.memo_put(key, cached)
+        if cached is not None and cached.shape == waves.shape:
+            return jnp.asarray(cached)
+
         rows = []
         for i, z in enumerate(zs):
             nodes = waves[i]
@@ -482,7 +530,10 @@ class IGMSEDComponent:
                 use_dla=False,
             )
             rows.append(np.asarray(trans).reshape(nodes.shape))
-        return jnp.asarray(np.stack(rows))
+        table = np.stack(rows)
+        _subband_cache.memo_put(key, table)
+        _subband_cache.store(key, table)
+        return jnp.asarray(table)
 
     def _interp_table(self, z, zgrid, table):
         """Interpolate a (n_z, n_col) table at ``z``; exact for a single node."""
