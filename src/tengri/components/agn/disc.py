@@ -67,7 +67,7 @@ from tengri.utils.physics_constants import (
     SIGMA_SB as _SIGMA_SB,
     SIGMA_T as _SIGMA_T,
 )
-from tengri.utils.scale import pow10 as _pow10
+from tengri.utils.scale import pow10 as _pow10, representable_floor as _representable_floor
 
 # log10 of the cgs constants that make the Shakura-Sunyaev disc's bolometric /
 # Eddington / accretion-rate intermediates overflow float32 (#1206). At a
@@ -790,12 +790,19 @@ def multicolor_disc(
         _peak = jax.lax.stop_gradient(jnp.max(jnp.abs(l_nu_intrinsic)))
         _peak = jnp.where(_peak > 0.0, _peak, 1.0)
         _hat_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx] / _peak, _nu[_sort_idx])
-        _log_l_nu_total = jnp.log10(_peak) + jnp.log10(jnp.maximum(jnp.abs(_hat_total), 1e-100))
+        # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
+        # smallest subnormal is 1.4e-45, so the literal IS 0.0 there and this
+        # branch — the float32 one — was the guard providing nothing. A zero
+        # integral would take log10 to -inf and the scale to inf. Returns
+        # ``1e-100`` unchanged under x64, so float64 is bit-identical.
+        _log_l_nu_total = jnp.log10(_peak) + jnp.log10(
+            jnp.maximum(jnp.abs(_hat_total), _representable_floor(1e-100))
+        )
         scale = _pow10(_log_l_bol_req - _log_l_nu_total)
     else:
         l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
         l_nu_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx], _nu[_sort_idx])
-        l_nu_total_safe = jnp.maximum(jnp.abs(l_nu_total), 1e-100)
+        l_nu_total_safe = jnp.maximum(jnp.abs(l_nu_total), _representable_floor(1e-100))
         scale = l_bol_requested / l_nu_total_safe
 
     return l_nu_intrinsic * scale

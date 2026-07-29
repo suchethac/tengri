@@ -45,6 +45,7 @@ from tengri.utils.physics_constants import (
     L_SUN as _LSUN_ERG,
     M_ELECTRON as _M_ELECTRON,
 )
+from tengri.utils.scale import representable_floor as _representable_floor
 
 # Fiducial self-similar constants (Mahadevan 1997, Narayan & Yi 1995b).
 _C1: float = 0.5
@@ -727,10 +728,22 @@ def adaf_spectrum(
         # work the normalization in L_sun (total/L_sun keeps the integral in
         # range) and order 10**log_lbol / integral before the ~1e28 shape.
         integral = jnp.trapezoid((total / _LSUN_ERG)[::-1], nu[::-1])
-        l_nu = (10.0**agn_log_lbol / jnp.maximum(integral, 1e-100)) * agn_lum_ratio * total
+        # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
+        # smallest subnormal is 1.4e-45, so the literal IS 0.0 there — in this,
+        # the float32 branch, the divide-by-zero guard guarded nothing. Returns
+        # ``1e-100`` unchanged under x64, so float64 is bit-identical.
+        l_nu = (
+            (10.0**agn_log_lbol / jnp.maximum(integral, _representable_floor(1e-100)))
+            * agn_lum_ratio
+            * total
+        )
     else:
         integral = jnp.trapezoid(total[::-1], nu[::-1])
         l_nu = (
-            10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio * total / jnp.maximum(integral, 1e-100)
+            10.0**agn_log_lbol
+            * _LSUN_ERG
+            * agn_lum_ratio
+            * total
+            / jnp.maximum(integral, _representable_floor(1e-100))
         )
     return l_nu
