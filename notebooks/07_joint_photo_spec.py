@@ -28,6 +28,8 @@
 # HMC), with one `Observation` carrying both channels.
 
 # %%
+import gc as python_gc
+
 from _setup import HMC_VALIDATED, effective_wavelengths_um, quiet
 
 quiet()
@@ -212,6 +214,24 @@ def run(model, data, label):
 
 print("Fitting (photometry, then joint):")
 post_phot = run(model_phot, Data(photometry=(flux_phot, n_phot)), "photometry")
+
+# Keep only the compact statistic needed for the comparison below. The full
+# photometry posterior and its compiled HMC body need not remain resident while
+# the larger joint fit compiles.
+params = model_joint.spec.free_params
+
+
+def width(post, p):
+    s = np.asarray(post.samples[p])
+    lo, hi = np.percentile(s, [16, 84])
+    return hi - lo
+
+
+w_phot = {p: width(post_phot, p) for p in params}
+del post_phot
+python_gc.collect()
+tengri.gc()
+
 post_joint = run(
     model_joint,
     Data(photometry=(flux_phot, n_phot), spectrum=(flux_spec, n_spec)),
@@ -226,7 +246,6 @@ post_joint = run(
 # The largest gains are in metallicity and the dust split.
 
 # %%
-params = model_joint.spec.free_params
 labels = {
     "met_logzsol": r"$\log Z/Z_\odot$",
     "dust_tau_bc": r"$\tau_{\rm bc}$",
@@ -239,13 +258,6 @@ labels = {
 }
 
 
-def width(post, p):
-    s = np.asarray(post.samples[p])
-    lo, hi = np.percentile(s, [16, 84])
-    return hi - lo
-
-
-w_phot = {p: width(post_phot, p) for p in params}
 w_joint = {p: width(post_joint, p) for p in params}
 
 order = sorted(params, key=lambda p: w_joint[p] / w_phot[p])
