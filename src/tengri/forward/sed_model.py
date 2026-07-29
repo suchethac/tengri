@@ -7186,6 +7186,20 @@ class SEDModel:
             :func:`tengri.parameters.parse_groups` for the full grammar.
         redshift, apply_igm : scalar, Distribution, or sentinel, optional
             Top-level kwargs forwarded into the parameter resolution.
+
+            ``redshift`` **defaults to** ``Fixed(0.1)`` — omitting it pins the
+            galaxy at z = 0.1 rather than leaving the redshift free. Pass
+            ``redshift=Fixed(z)`` for a known redshift, or a prior such as
+            ``redshift=Uniform(0.0, 3.0)`` to fit it.
+
+            Two consequences of the default are easy to miss. A model intended
+            to be free-redshift is silently at z = 0.1, and the fit then
+            reports whatever the remaining parameters can achieve at that
+            distance. And with ``approx=WavePrecomp()`` the free-redshift build
+            pays a sub-band IGM fold that the fixed-z path does not — roughly
+            9 s against 0.4 s — so a build-time measurement that omits an
+            explicit prior is measuring the cheap path. See
+            :doc:`/performance/compilation`.
         filters : list of str, optional
             Filter names; forwarded to ``__init__``.
         observation : Observation, optional
