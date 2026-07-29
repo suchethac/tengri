@@ -12,15 +12,14 @@ Run with:
   JAX_PLATFORMS=cpu python recovery_run.py
 """
 
+import os
 import sys
 import time
-import os
-import psutil
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import numpy as np
+import psutil
 
 # Enforce CPU-only mode to avoid MPS flakiness
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
@@ -28,24 +27,20 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 jax.config.update("jax_enable_x64", True)
 
 from tengri import (
-    SEDModel,
-    Uniform,
     Fixed,
-    Photometry,
     Observation,
+    Photometry,
+    SEDModel,
     load_ssp_data,
 )
 from tengri.analysis.population_mocks import (
-    make_population,
     assert_truth_is_discriminating,
+    make_population,
 )
 from tengri.inference.population import (
-    fit_interim,
     SharedGrid,
+    fit_interim,
     shared_log_posterior,
-    centered_fields,
-    credible_interval,
-    report,
 )
 
 # =============================================================================
@@ -107,6 +102,7 @@ def build_model(ssp_data):
 
     # Build model with DPL + stochastic field SFH (confirmed working config)
     from tengri import FREE
+
     model = SEDModel.build(
         ssp_data=ssp_data,
         observation=obs,
@@ -140,7 +136,7 @@ def sanity_check_chi_squared(model, mock, truth_params):
 
     # Chi-squared for photometry
     phot_resid = (phot_obs - pred_arr) / phot_err
-    phot_chi2 = np.sum(phot_resid ** 2)
+    phot_chi2 = np.sum(phot_resid**2)
 
     # Check sanity: chi-squared should be order of number of data points, not 1e60
     n_bands = len(phot_obs)
@@ -181,7 +177,7 @@ def run_recovery(n_galaxies):
             INTERIM_TAU_BOUNDS_MYR,
             name="sfh_field_psd_tau_myr",
         )
-        print(f"  ✓ Truths discriminate from prior.")
+        print("  ✓ Truths discriminate from prior.")
     except ValueError as e:
         print(f"  ✗ Validation failed: {e}")
         return None
@@ -212,11 +208,11 @@ def run_recovery(n_galaxies):
     mem_peak = max(mem_peak, get_process_memory_mb())
 
     # --- Sanity check: chi-squared at truth ---
-    print(f"  Sanity check: chi-squared at truth parameters...")
+    print("  Sanity check: chi-squared at truth parameters...")
     sanity_check_chi_squared(model, mock, mock.truth_params[0])
 
     # --- Step 3: Interim fits (per-galaxy) ---
-    print(f"[3/5] Running per-galaxy interim fits...")
+    print("[3/5] Running per-galaxy interim fits...")
     key, subkey = jax.random.split(key)
     interim = fit_interim(
         model,
@@ -232,13 +228,15 @@ def run_recovery(n_galaxies):
     print(f"  ✓ Interim fits completed in {interim.wall_time_s:.1f}s")
     print(f"    R-hat (max, excl. psd_xi): {max(interim.rhat.values()):.4f}")
     print(f"    Divergences (total): {np.sum(interim.n_divergent)}")
-    print(f"    Divergences per galaxy: min={np.min(interim.n_divergent)}, "
-          f"median={np.median(interim.n_divergent):.0f}, "
-          f"max={np.max(interim.n_divergent)}")
+    print(
+        f"    Divergences per galaxy: min={np.min(interim.n_divergent)}, "
+        f"median={np.median(interim.n_divergent):.0f}, "
+        f"max={np.max(interim.n_divergent)}"
+    )
     mem_peak = max(mem_peak, get_process_memory_mb())
 
     # --- Step 4: Shared posterior (B2 method) ---
-    print(f"[4/5] Computing shared posterior (B2 method)...")
+    print("[4/5] Computing shared posterior (B2 method)...")
     grid = SharedGrid.uniform(
         sigma_bounds=GRID_SIGMA_BOUNDS,
         tau_bounds_yr=GRID_TAU_BOUNDS_YR,
@@ -263,14 +261,16 @@ def run_recovery(n_galaxies):
     ess_at_mode_b2 = np.asarray(ess_b2.at_mode)
     ess_min_high_mass_b2 = np.asarray(ess_b2.min_high_mass)
 
-    print(f"  ✓ B2 posterior computed")
+    print("  ✓ B2 posterior computed")
     print(f"    ESS at mode: {ess_at_mode_b2}")
-    print(f"    ESS min (top 99% mass): min={np.min(ess_min_high_mass_b2):.1f}, "
-          f"median={np.median(ess_min_high_mass_b2):.1f}")
+    print(
+        f"    ESS min (top 99% mass): min={np.min(ess_min_high_mass_b2):.1f}, "
+        f"median={np.median(ess_min_high_mass_b2):.1f}"
+    )
     print(f"    Mode: σ = {sigma_mode_b2:.3f} dex, τ = {tau_mode_b2:.1f} Myr")
 
     # --- Step 5: Shared posterior (B1 method for cross-check) ---
-    print(f"[5/5] Computing shared posterior (B1 method, cross-check)...")
+    print("[5/5] Computing shared posterior (B1 method, cross-check)...")
     log_posterior_b1, ess_b1 = shared_log_posterior(
         interim.fields, interim.times_yr, grid, method="b1"
     )
@@ -282,7 +282,7 @@ def run_recovery(n_galaxies):
     sigma_mode_b1 = best_node_b1[0]
     tau_mode_b1 = best_node_b1[1] / 1e6
 
-    print(f"  ✓ B1 posterior computed")
+    print("  ✓ B1 posterior computed")
     print(f"    Mode: σ = {sigma_mode_b1:.3f} dex, τ = {tau_mode_b1:.1f} Myr")
 
     # --- Extract credible intervals ---
@@ -291,12 +291,13 @@ def run_recovery(n_galaxies):
 
     # Marginalize to 1D
     posterior_b2_sigma = np.array(
-        [np.sum(posterior_b2[i * len(grid.tau_yr) : (i + 1) * len(grid.tau_yr)])
-         for i in range(len(grid.sigma))]
+        [
+            np.sum(posterior_b2[i * len(grid.tau_yr) : (i + 1) * len(grid.tau_yr)])
+            for i in range(len(grid.sigma))
+        ]
     )
     posterior_b2_tau = np.array(
-        [np.sum(posterior_b2[i::len(grid.tau_yr)])
-         for i in range(len(grid.tau_yr))]
+        [np.sum(posterior_b2[i :: len(grid.tau_yr)]) for i in range(len(grid.tau_yr))]
     )
 
     # Normalize marginals
@@ -333,26 +334,30 @@ def run_recovery(n_galaxies):
     print("=" * 80)
     print(f"\n{'Parameter':<15} {'Truth':>10} {'Median':>10} {'68% Interval':>25} {'In CI':>8}")
     print("-" * 70)
-    print(f"{'σ [dex]':<15} {TRUTH_SIGMA:>10.3f} {sigma_med:>10.3f} "
-          f"[{sigma_16:.3f}, {sigma_84:.3f}]{'':<12} {'YES' if sigma_truth_in else 'NO':>8}")
-    print(f"{'τ [Myr]':<15} {TRUTH_TAU_MYR:>10.1f} {tau_med:>10.1f} "
-          f"[{tau_16:.1f}, {tau_84:.1f}]{'':<15} {'YES' if tau_truth_in else 'NO':>8}")
+    print(
+        f"{'σ [dex]':<15} {TRUTH_SIGMA:>10.3f} {sigma_med:>10.3f} "
+        f"[{sigma_16:.3f}, {sigma_84:.3f}]{'':<12} {'YES' if sigma_truth_in else 'NO':>8}"
+    )
+    print(
+        f"{'τ [Myr]':<15} {TRUTH_TAU_MYR:>10.1f} {tau_med:>10.1f} "
+        f"[{tau_16:.1f}, {tau_84:.1f}]{'':<15} {'YES' if tau_truth_in else 'NO':>8}"
+    )
 
-    print(f"\nEffective Sample Size (B2):")
+    print("\nEffective Sample Size (B2):")
     print(f"  At mode (median over galaxies): {float(np.median(ess_at_mode_b2)):.1f}")
     print(f"  Min (top 99% mass): {float(np.min(ess_min_high_mass_b2)):.1f}")
     print(f"  Median (top 99% mass): {float(np.median(ess_min_high_mass_b2)):.1f}")
 
-    print(f"\nConvergence:")
+    print("\nConvergence:")
     print(f"  Max R-hat (incl. psd_xi): {max(interim.rhat.values()):.4f}")
     print(f"  Total divergences: {np.sum(interim.n_divergent)}")
 
-    print(f"\nWall clock:")
+    print("\nWall clock:")
     print(f"  Total: {wall_total:.1f}s ({wall_total / 60:.1f}m)")
     print(f"  Per galaxy: {wall_per_galaxy:.1f}s")
     print(f"  Peak memory: {mem_peak:.0f} MB")
 
-    print(f"\nB1 vs B2 comparison:")
+    print("\nB1 vs B2 comparison:")
     print(f"  B1 mode: σ = {sigma_mode_b1:.3f} dex, τ = {tau_mode_b1:.1f} Myr")
     print(f"  B2 mode: σ = {sigma_mode_b2:.3f} dex, τ = {tau_mode_b2:.1f} Myr")
     sigma_b1_b2_diff = abs(sigma_mode_b1 - sigma_mode_b2)
@@ -399,7 +404,7 @@ if __name__ == "__main__":
 
 ### Configuration
 - Truth: σ = {TRUTH_SIGMA} dex, τ = {TRUTH_TAU_MYR} Myr
-- N galaxies: {result['n_galaxies']}
+- N galaxies: {result["n_galaxies"]}
 - Redshift: {REDSHIFT}
 - SFH: DPL + field, n_grid={N_GRID}, D=25
 - Photometry: 10 bands, SNR={SNR_PHOT}
@@ -410,31 +415,31 @@ if __name__ == "__main__":
 
 | Parameter | Truth | Median | 68% Interval | Truth In CI |
 |-----------|-------|--------|--------------|-------------|
-| σ [dex] | {TRUTH_SIGMA:.3f} | {result['sigma_med']:.3f} | [{result['sigma_16']:.3f}, {result['sigma_84']:.3f}] | {'✓' if result['sigma_truth_in'] else '✗'} |
-| τ [Myr] | {TRUTH_TAU_MYR:.1f} | {result['tau_med']:.1f} | [{result['tau_16']:.1f}, {result['tau_84']:.1f}] | {'✓' if result['tau_truth_in'] else '✗'} |
+| σ [dex] | {TRUTH_SIGMA:.3f} | {result["sigma_med"]:.3f} | [{result["sigma_16"]:.3f}, {result["sigma_84"]:.3f}] | {"✓" if result["sigma_truth_in"] else "✗"} |
+| τ [Myr] | {TRUTH_TAU_MYR:.1f} | {result["tau_med"]:.1f} | [{result["tau_16"]:.1f}, {result["tau_84"]:.1f}] | {"✓" if result["tau_truth_in"] else "✗"} |
 
 ### Diagnostics
 
 **Effective Sample Size (B2):**
-- At mode: {result['ess_at_mode']:.1f}
-- Min (top 99% mass): {result['ess_min_high_mass']:.1f}
-- Median (top 99% mass): {result['ess_median_high_mass']:.1f}
+- At mode: {result["ess_at_mode"]:.1f}
+- Min (top 99% mass): {result["ess_min_high_mass"]:.1f}
+- Median (top 99% mass): {result["ess_median_high_mass"]:.1f}
 
 **Convergence:**
-- Max R-hat (incl. psd_xi): {result['rhat_max']:.4f}
-- Total divergences: {result['n_divergent_total']}
+- Max R-hat (incl. psd_xi): {result["rhat_max"]:.4f}
+- Total divergences: {result["n_divergent_total"]}
 
 **Performance:**
-- Total wall clock: {result['wall_total_s']:.1f}s ({result['wall_total_s']/60:.1f}m)
-- Per galaxy: {result['wall_per_galaxy_s']:.1f}s
-- Peak RSS: {result['peak_memory_mb']:.0f} MB
+- Total wall clock: {result["wall_total_s"]:.1f}s ({result["wall_total_s"] / 60:.1f}m)
+- Per galaxy: {result["wall_per_galaxy_s"]:.1f}s
+- Peak RSS: {result["peak_memory_mb"]:.0f} MB
 
 ### B1 vs B2 Comparison
 
-- B1 mode: σ = {result['sigma_b1']:.3f} dex, τ = {result['tau_b1_myr']:.1f} Myr
-- B2 mode: σ = {result['sigma_b2']:.3f} dex, τ = {result['tau_b2_myr']:.1f} Myr
-- Δσ = {abs(result['sigma_b1'] - result['sigma_b2']):.3f} dex
-- Δτ = {abs(result['tau_b1_myr'] - result['tau_b2_myr']):.1f} Myr
+- B1 mode: σ = {result["sigma_b1"]:.3f} dex, τ = {result["tau_b1_myr"]:.1f} Myr
+- B2 mode: σ = {result["sigma_b2"]:.3f} dex, τ = {result["tau_b2_myr"]:.1f} Myr
+- Δσ = {abs(result["sigma_b1"] - result["sigma_b2"]):.3f} dex
+- Δτ = {abs(result["tau_b1_myr"] - result["tau_b2_myr"]):.1f} Myr
 """
 
         report_file.write_text(report_content)
@@ -443,5 +448,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n[FATAL] {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
