@@ -508,6 +508,28 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     # advertised ``use:`` string names the exact key SEDModel.build accepts.
     category_to_group_key = {"attenuation": "atten"}
 
+    # Accept the grammar key as well as the registry label. Five of the six
+    # slots have category == grammar key, so the mismatch showed up only for
+    # attenuation — and it was this function's own ``use:`` string that told
+    # users to type ``agn={'atten': ...}``, so ``list_agn_blocks('atten')``
+    # returned an empty table for the exact name it had just advertised
+    # (#1451). Normalize before filtering rather than at each comparison.
+    group_key_to_category = {v: k for k, v in category_to_group_key.items()}
+    if category is not None:
+        category = group_key_to_category.get(category, category)
+        # ...and fail loudly on anything else. The filter used to fall through
+        # to "no category matched", so a typo, an empty string and a valid-but-
+        # wrong key were indistinguishable from a category that genuinely has
+        # no blocks — a guard that fails open is the bug.
+        if category not in AGN_BLOCKS:
+            accepted = sorted(set(AGN_BLOCKS) | set(group_key_to_category))
+            raise ValueError(
+                f"Unknown AGN block category {category!r}. "
+                f"Accepted: {', '.join(repr(c) for c in accepted)}. "
+                "('atten' and 'attenuation' both work — the first is the "
+                "build-grammar key, the second the registry label.)"
+            )
+
     out: list[dict] = []
     for cat in AGN_BLOCKS:
         if category is not None and cat != category:
@@ -766,6 +788,18 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
             if "not builder-available" not in m["short_doc"]:
                 suffix = " [not builder-available — registered, not yet DSPS-validated]"
                 m["short_doc"] = f"{m['short_doc']}{suffix}"
+            # The status said "unvalidated" while ``use:`` still advertised
+            # ``SEDModel.build(..., sfh={'type': X})`` — a copy-pasteable call
+            # that raises ValueError. That is the "advice that raises" class
+            # (#1275) reappearing in the hint field: the sweep guarding it
+            # checked that every ``use:`` *starts with* ``SEDModel.build(``,
+            # a shape test that these eight passed while failing to run.
+            # Carry the reason and the next step instead of a call, so nothing
+            # in the menu is copy-pasteable-and-broken.
+            m["use"] = (
+                "not builder-available — SEDModel.build rejects it; "
+                "browse the buildable set with list_sfh_models(status='production')"
+            )
         # ``mixture`` (burst) and ``modulator`` (field) SFH components cannot
         # stand alone — ``sfh={'type': 'burst'}`` raises "At least one additive
         # (smooth) SFH component required". Advertise the composed list form so
