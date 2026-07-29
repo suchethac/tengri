@@ -96,6 +96,7 @@ jobs:
       # the count instead: a new one has to be justified in the PR. Stdlib-only,
       # same as the guard above.
       - run: python tools/check_zero_hiding_clamps.py
+      - run: python tools/check_representable_floors.py
       # NOTE: `gen_property_table.py --check` cannot live here. This job installs
       # ruff and nothing else, and the generator imports tengri (hence jax) to read
       # the property registry. It runs in `smoke`, which does `pip install -e`.

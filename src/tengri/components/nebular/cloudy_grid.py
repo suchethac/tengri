@@ -117,6 +117,7 @@ from tengri.components.nebular._shared import (
     _qh_bilinear,
     compute_qh,
     render_nebular_lines,
+    sanitize_qh_table,
 )
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
@@ -607,7 +608,7 @@ class CloudyGridBackend:
         # Sanitize: replace Inf/NaN with 0 (can arise from SSP grids
         # with incomplete UV coverage or numerical overflow in the
         # ionizing photon integral).
-        self._qh_table = jnp.where(jnp.isfinite(qh_raw), qh_raw, 0.0)
+        self._qh_table = sanitize_qh_table(qh_raw, backend_name="CloudyGridBackend")
         # Store as JAX arrays so dynamic indexing works inside jax.grad/vmap
         self._qh_log_met = jnp.asarray(ssp_data.ssp_lgmet)
         self._qh_log_age = jnp.asarray(ssp_data.ssp_lg_age_gyr + 9.0)  # log(age/yr)
