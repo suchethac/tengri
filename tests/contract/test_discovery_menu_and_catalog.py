@@ -91,6 +91,11 @@ def test_search_concept_aliases_reach_the_right_menu():
     assert set(tengri.search("emission lines").names()) == set(
         tengri.list_nebular_backends().names()
     )
+    # "metallicity" reached only the 5 modes whose short_doc uses the word,
+    # silently dropping the gas-regulator and per-bin ones.
+    assert set(tengri.search("metallicity").names()) == set(
+        tengri.list_metallicity_modes().names()
+    )
 
     # a normal substring query is unaffected by the alias layer
     assert "skirtor" in set(tengri.search("skirtor").names())

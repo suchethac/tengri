@@ -2231,6 +2231,12 @@ def search(query: str) -> _RegistryTable:
         "reddening": ("list_dust_laws()", list_dust_laws),
         "emission line": ("list_nebular_backends()", list_nebular_backends),
         "emission lines": ("list_nebular_backends()", list_nebular_backends),
+        # Without these, "metallicity" substring-matches only the modes whose
+        # terse short_doc happens to use the word — 5 of 10, silently omitting
+        # the gas-regulator and per-bin models.
+        "metallicity": ("list_metallicity_modes()", list_metallicity_modes),
+        "chemical evolution": ("list_metallicity_modes()", list_metallicity_modes),
+        "chemical enrichment": ("list_metallicity_modes()", list_metallicity_modes),
     }
     if q in _CONCEPT_ALIAS:
         call, fn = _CONCEPT_ALIAS[q]
