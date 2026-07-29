@@ -70,10 +70,23 @@ def ingest_catalog(
         Unit of flux columns. One of: "cgs_fnu", "mJy", "uJy", "maggies",
         "ab_mag".
     flux_cols : list[str], optional
-        Explicit flux column names. If None, use "{name}" for each band in
-        photometry.
+        Flux column names **in your table** — they need not resemble the band
+        names. If None, defaults to ``"{name}"`` for each band in photometry.
+
+        Binding is **positional**: ``flux_cols[i]`` is read as the flux for
+        ``photometry.names[i]``. That is the only possible rule once the names
+        are arbitrary, and it is why the length must equal the band count. So
+        order these to match the observation, not the table's own layout::
+
+            # bands are ("sdss_g", "sdss_r")
+            flux_cols = ["FLUX_G", "FLUX_R"]  # g -> FLUX_G, r -> FLUX_R
+            flux_cols = ["FLUX_R", "FLUX_G"]  # silently swaps the two bands
+
+        A name absent from the table raises, listing the table's actual
+        columns.
     err_cols : list[str], optional
-        Explicit error column names. If None, use "{name}_err" for each band.
+        Error column names in your table, bound positionally in the same way.
+        If None, defaults to ``"{name}_err"`` for each band.
     redshift_col : str, optional
         Column name for redshifts. If None, redshift field is None.
     censor_cols : dict[str, str], optional
@@ -115,14 +128,15 @@ def ingest_catalog(
     if flux_cols is None:
         flux_cols = [f"{name}" for name in band_names]
     else:
-        # Validate that all flux_cols are in the photometry observation
-        flux_cols = list(flux_cols)  # coerce to list if needed
-        for col in flux_cols:
-            if col not in band_names:
-                raise ValueError(
-                    f"Flux column '{col}' is not in the observation. "
-                    f"Observation bands: {band_names}"
-                )
+        # No band-name check here, deliberately. This used to require every
+        # entry to already BE a band name, which meant `flux_cols` could only
+        # ever be a permutation of its own default — it could not name a real
+        # catalog column, the only reason the parameter exists (#1458). Column
+        # existence is validated against the TABLE in step 2 below, which is
+        # the right referent and already reports the actual column list.
+        # `err_cols` never had the band-name check, and that asymmetry is what
+        # showed the check was a mistake rather than a contract.
+        flux_cols = list(flux_cols)
 
     if err_cols is None:
         err_cols = [f"{name}_err" for name in band_names]

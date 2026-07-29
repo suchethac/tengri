@@ -3318,6 +3318,15 @@ class SEDModel:
         # Radio and X-ray
         uses_radio = bool(self._uses_radio)
         uses_xray = bool(self._uses_xray)
+        # WHICH X-ray model, not merely whether one is attached. ``_xray_model``
+        # was stored at construction but never keyed, so `agn_xray_corona` and
+        # `xray_aird` shared a compiled kernel and the first one built won —
+        # the same class as the AGN block selectors (#1450) and the radio
+        # models beside it, which do carry their selector. The collision is
+        # invisible in optical/IR photometry because X-ray emission lands at
+        # keV, which is why a flux-based sweep reads this axis as "inert"
+        # rather than unkeyed; the signature shows it directly (#1462).
+        xray_model = str(getattr(self, "_xray_model", "none") or "none") if uses_xray else "none"
         uses_shock = bool(self._uses_shock)
         # Shock normalization + categorical knobs change the emitted SED, so
         # they are part of the structural fingerprint (#851).
@@ -3568,6 +3577,7 @@ class SEDModel:
             agn_norm,
             uses_radio,
             uses_xray,
+            xray_model,
             uses_shock,
             shock_cfg,
             mean_sfh_type,
@@ -7240,6 +7250,20 @@ class SEDModel:
             :func:`tengri.parameters.parse_groups` for the full grammar.
         redshift, apply_igm : scalar, Distribution, or sentinel, optional
             Top-level kwargs forwarded into the parameter resolution.
+
+            ``redshift`` **defaults to** ``Fixed(0.1)`` — omitting it pins the
+            galaxy at z = 0.1 rather than leaving the redshift free. Pass
+            ``redshift=Fixed(z)`` for a known redshift, or a prior such as
+            ``redshift=Uniform(0.0, 3.0)`` to fit it.
+
+            Two consequences of the default are easy to miss. A model intended
+            to be free-redshift is silently at z = 0.1, and the fit then
+            reports whatever the remaining parameters can achieve at that
+            distance. And with ``approx=WavePrecomp()`` the free-redshift build
+            pays a sub-band IGM fold that the fixed-z path does not — roughly
+            9 s against 0.4 s — so a build-time measurement that omits an
+            explicit prior is measuring the cheap path. See
+            :doc:`/performance/compilation`.
         filters : list of str, optional
             Filter names; forwarded to ``__init__``.
         observation : Observation, optional

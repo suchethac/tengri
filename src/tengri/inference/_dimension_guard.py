@@ -40,10 +40,23 @@ import warnings
 #: Override per-project via the ``nuts_warn_d`` inference default.
 NUTS_WARN_D: int = 30
 
-#: Methods that run a NUTS warmup and therefore carry the O(D^2) mass-matrix
-#: cost. ``"mcmc"`` is absent deliberately: it auto-switches to ray tracing above
+#: Methods that run a NUTS-style warmup and therefore carry the O(D^2)
+#: mass-matrix cost.
+#:
+#: ``"mcmc"`` is absent deliberately: it auto-switches to ray tracing above
 #: ``_MCMC_AUTO_D_THRESHOLD``, so by the time D is large it is no longer NUTS.
-NUTS_LIKE: frozenset[str] = frozenset({"mcmc_nuts"})
+#:
+#: ``"mcmc_ghmc"`` is absent for a different reason, and the distinction matters
+#: because its signature says otherwise. GHMC's momentum generator treats
+#: ``momentum_inverse_scale`` as a diagonal vector, so ``ghmc.py`` pins
+#: ``adapt_key = ("hmc", True)`` — always diagonal — regardless of the
+#: ``dense_mass_matrix=True`` default in its signature. That default is inert;
+#: GHMC never allocates a dense mass matrix and never pays O(D^2). Adding it
+#: here would emit an advisory for a cost the method does not incur (#1454).
+#:
+#: ``"mcmc_hmc"`` IS included: fixed-length HMC differs from NUTS in trajectory
+#: length, not in mass-matrix adaptation.
+NUTS_LIKE: frozenset[str] = frozenset({"mcmc_nuts", "mcmc_hmc"})
 
 
 def _threshold() -> int:
