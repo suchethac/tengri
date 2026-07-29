@@ -9,6 +9,7 @@ since a guard that cries wolf gets switched off.
 """
 
 import importlib.util
+import re
 from pathlib import Path
 
 import pytest
@@ -102,6 +103,18 @@ def test_rule_stating_files_are_excluded():
 def test_upstream_copyright_headers_are_excluded():
     """Changing someone else's copyright notice is never a style sweep's call."""
     assert "src/tengri/inference/backends/nested".startswith(guard.EXCLUDE_DIRS)
+
+
+def test_docstring_only_names_real_constants():
+    """The first draft pointed at a ``PORT_NEAR_REFERENCE`` that never existed.
+
+    A docstring that sends a reader looking for a symbol which is not there is
+    worse than no docstring, and it survives every other check in this file.
+    """
+    named = set(re.findall(r"``([A-Z_]{3,})``", guard.__doc__))
+    assert named, "docstring should reference the constants it describes"
+    missing = sorted(n for n in named if not hasattr(guard, n))
+    assert not missing, f"docstring names constants that do not exist: {missing}"
 
 
 def test_repository_is_clean():
