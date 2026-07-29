@@ -47,7 +47,7 @@ import sys
 #: NaN-propagating form or it was shown to need no clamp. Raising it needs a
 #: reason in the PR: a new clamped division is a new place a degenerate input
 #: can return a plausible zero.
-EXPECTED_SITES = 105
+EXPECTED_SITES = 101
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
