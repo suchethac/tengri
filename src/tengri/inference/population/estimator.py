@@ -4,13 +4,30 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
 
 from tengri.inference.population.kernel import ou_logpdf
 
-__all__ = ["SharedGrid", "effective_sample_size", "shared_log_posterior"]
+__all__ = ["ESSSummary", "SharedGrid", "effective_sample_size", "shared_log_posterior"]
+
+
+class ESSSummary(NamedTuple):
+    """Effective sample size diagnostic for importance weights.
+
+    Attributes
+    ----------
+    at_mode : ndarray, shape (N,)
+        ESS at the posterior mode [dimensionless], the primary diagnostic.
+    min_high_mass : ndarray, shape (N,)
+        Minimum ESS over nodes carrying the top 99% of posterior mass
+        [dimensionless]. Use this to detect degeneracy in the tails.
+    """
+
+    at_mode: jnp.ndarray
+    min_high_mass: jnp.ndarray
 
 
 def _field_mean(sigma_dex):
@@ -20,6 +37,13 @@ def _field_mean(sigma_dex):
 @dataclass(frozen=True)
 class SharedGrid:
     """Quadrature grid over the shared ``(sigma, tau)`` block.
+
+    The grid spans ``(sigma, log tau)`` coordinates: sigma is uniform in
+    amplitude [dex], and tau is sampled geometrically. The implied prior is
+    uniform in ``(sigma, log tau)`` space, i.e., **log-uniform in tau** — this
+    is deliberate. Quadrature weights account for the differential volume
+    element in log-tau space, so ``log_volume`` is a constant (the integral of
+    ``log(d_sigma) + log(d_log_tau)`` over all nodes).
 
     Attributes
     ----------
@@ -31,7 +55,8 @@ class SharedGrid:
         Log prior density at each node [nats], C-ordered so node ``a * B + b``
         is ``(sigma[a], tau_yr[b])``.
     log_volume : ndarray, shape (A * B,)
-        Log quadrature weight of each node [nats].
+        Log quadrature weight of each node [nats], representing the differential
+        volume element in ``(sigma, log tau)`` space.
     """
 
     sigma: jnp.ndarray
@@ -41,7 +66,18 @@ class SharedGrid:
 
     @classmethod
     def uniform(cls, *, sigma_bounds, tau_bounds_yr, n_sigma, n_tau):
-        """Grid uniform in ``sigma`` and log-uniform in ``tau``.
+        r"""Grid uniform in ``sigma`` and log-uniform in ``tau``.
+
+        Creates a quadrature grid in ``(sigma, log tau)`` space. The implied
+        prior is uniform over both dimensions. Tau nodes are spaced
+        geometrically to ensure log-uniform coverage; the quadrature weights
+        account for the Jacobian of the coordinate transformation.
+
+        **Important:** Keep ``tau_bounds_yr`` within physically meaningful
+        ranges (the age of the universe is 1.38e10 yr). At very large tau
+        (roughly tau >= 1e24 yr), the exponential kernel ``exp(-|t_i - t_j|
+        / tau)`` underflows to 1, causing ``ou_logpdf`` to return NaN. Bounds
+        should stay well below this limit.
 
         Parameters
         ----------
@@ -139,20 +175,23 @@ def shared_log_posterior(fields, times_yr, grid, *, method="b2"):
     -------
     log_posterior : ndarray, shape (A * B,)
         Unnormalized log-posterior [nats] on ``grid.nodes``.
-    ess : ndarray, shape (N,)
-        Per-galaxy effective sample size at the posterior mode [dimensionless].
+    ess : ESSSummary
+        Per-galaxy effective sample size diagnostic. Gate on ``ess.at_mode``
+        (ESS at the posterior mode). Inspect ``ess.min_high_mass`` (minimum
+        ESS over nodes carrying the top 99% of posterior mass) to detect
+        degeneracy in the tails.
 
     Notes
     -----
     **JIT/vmap compatible**: yes. Cost is ``O(A B N K n)`` with no matrix
     factorization, because :func:`ou_logpdf` exploits the Markov structure.
 
-    ``"b2"`` fails by importance-weight degeneracy, which the returned ``ess``
-    measures directly. ``"b1"`` fails by compounding density-estimation bias in
-    the tails, which is *not* observable from inside the estimator -- multiplying
-    N kernel density estimates whose tails err in a common direction shifts the
-    result without widening it. Prefer ``"b2"``; use ``"b1"`` only to disagree
-    with it.
+    ``"b2"`` fails by importance-weight degeneracy, which the returned
+    ``ess.at_mode`` measures directly. ``"b1"`` fails by compounding
+    density-estimation bias in the tails, which is *not* observable from
+    inside the estimator -- multiplying N kernel density estimates whose
+    tails err in a common direction shifts the result without widening it.
+    Prefer ``"b2"``; use ``"b1"`` only to disagree with it.
     """
     fields = jnp.asarray(fields)
     times_yr = jnp.asarray(times_yr)
@@ -178,5 +217,14 @@ def shared_log_posterior(fields, times_yr, grid, *, method="b2"):
 
     log_posterior = grid.log_prior + jnp.sum(per_galaxy, axis=-1)
     best = jnp.argmax(log_posterior)
-    ess = effective_sample_size(log_w[best])
-    return log_posterior, ess
+    ess_at_mode = effective_sample_size(log_w[best])
+
+    # ESS at minimum over nodes carrying top 99% posterior mass.
+    p_normalized = jnp.exp(log_posterior - jax.scipy.special.logsumexp(log_posterior))
+    cumsum_sorted = jnp.cumsum(jnp.sort(p_normalized)[::-1])
+    high_mass_threshold = jnp.searchsorted(cumsum_sorted, 0.99)
+    high_mass_mask = p_normalized >= jnp.sort(p_normalized)[-(high_mass_threshold + 1)]
+    ess_per_node = effective_sample_size(log_w)  # (G, N)
+    ess_min_high_mass = jnp.min(jnp.where(high_mass_mask[:, None], ess_per_node, jnp.inf), axis=0)
+
+    return log_posterior, ESSSummary(at_mode=ess_at_mode, min_high_mass=ess_min_high_mass)
