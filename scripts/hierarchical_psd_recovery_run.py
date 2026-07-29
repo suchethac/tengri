@@ -59,13 +59,13 @@ DENSE_MASS_MATRIX = True
 
 # Interim priors (bounds for the independent fits)
 INTERIM_SIGMA_BOUNDS = (0.1, 4.0)
-INTERIM_TAU_BOUNDS_MYR = (1.0, 250.0)
+INTERIM_TAU_BOUNDS_MYR = (10.0, 400.0)
 
 # Shared grid for hierarchical inference
 GRID_SIGMA_BOUNDS = (0.1, 4.0)
-GRID_TAU_BOUNDS_YR = (1.0 * 1e6, 250.0 * 1e6)  # Convert to years
-N_SIGMA_NODES = 20
-N_TAU_NODES = 20
+GRID_TAU_BOUNDS_YR = (10.0 * 1e6, 400.0 * 1e6)  # Convert to years
+N_SIGMA_NODES = 60
+N_TAU_NODES = 60
 
 # Output directory
 output_dir = Path(".superpowers/sdd/2026-07-29-hierarchical-psd-recovery")
@@ -224,6 +224,9 @@ def run_recovery(n_galaxies):
         },
         n_leapfrog_steps=N_LEAPFROG_STEPS,
         dense_mass_matrix=DENSE_MASS_MATRIX,
+        n_warmup=1000,
+        n_samples=1000,
+        n_chains=4,
     )
     print(f"  ✓ Interim fits completed in {interim.wall_time_s:.1f}s")
     print(f"    R-hat (max, excl. psd_xi): {max(interim.rhat.values()):.4f}")

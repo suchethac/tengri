@@ -51,6 +51,9 @@ def fit_interim(
     n_leapfrog_steps=100,
     dense_mass_matrix=True,
     forward_chunk_size=None,
+    n_warmup=None,
+    n_samples=None,
+    n_chains=None,
 ):
     """Per-galaxy interim fit over the hyperparameter space.
 
@@ -78,6 +81,12 @@ def fit_interim(
     forward_chunk_size : int, optional
         Chunk size for the forward model vmap [count]. If None, not passed
         to the fit backend (uses default).
+    n_warmup : int, optional
+        Number of warmup iterations [count]. If None, uses backend default.
+    n_samples : int, optional
+        Number of posterior samples [count]. If None, defaults to 1000.
+    n_chains : int, optional
+        Number of independent MCMC chains [count]. If None, uses backend default.
 
     Returns
     -------
@@ -151,11 +160,15 @@ def fit_interim(
         }
         if forward_chunk_size is not None:
             hmc_kwargs["forward_chunk_size"] = forward_chunk_size
+        if n_warmup is not None:
+            hmc_kwargs["n_warmup"] = n_warmup
+        if n_chains is not None:
+            hmc_kwargs["n_chains"] = n_chains
 
         post_i = fitter.run(
             "mcmc_hmc",
             key=k_i,
-            n_samples=1000,
+            n_samples=n_samples if n_samples is not None else 1000,
             **hmc_kwargs,
         )
 
@@ -187,7 +200,7 @@ def fit_interim(
     tau_yr_stacked = np.stack(all_tau_myr, axis=0) * 1e6
 
     # DEBUG: Print shapes before centered_fields
-    print(f"[DEBUG] Before centered_fields:")
+    print("[DEBUG] Before centered_fields:")
     print(f"  xi_stacked.shape = {xi_stacked.shape} (expect (N, K, 16))")
     print(f"  sigma_stacked.shape = {sigma_stacked.shape} (expect (N, K))")
     print(f"  tau_yr_stacked.shape = {tau_yr_stacked.shape} (expect (N, K))")
