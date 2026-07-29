@@ -19,6 +19,55 @@ LN10 = 2.302585092994046
 LOG10_4PI = float(jnp.log10(4.0 * jnp.pi))  # ~1.09921
 
 
+def representable_floor(value: float) -> float:
+    """Raise a guard floor to the working dtype's smallest normal if it is below it.
+
+    Parameters
+    ----------
+    value : float
+        The intended floor, as written at the call site.
+
+    Returns
+    -------
+    float
+        ``max(value, finfo(working dtype).tiny)`` — a static Python float, safe
+        as a ``jnp.maximum`` / ``jnp.clip`` bound under JIT.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — resolved at trace time from
+    ``jnp.result_type(float)``, so it is a compile-time constant.
+
+    float32's smallest normal is 1.18e-38 and its smallest subnormal 1.4e-45, so
+    a literal floor below that is **exactly 0.0** there — the guard reads as
+    protection and provides none. The tree carries 36 such floors (``1e-50``,
+    ``1e-60``, ``1e-100``, ``1e-300``), every one inert in the precision #1206
+    exists to deliver (#1492).
+
+    Perversely, the smaller the literal the worse it is: ``1e-30`` survives in
+    float32, ``1e-100`` does not, and the latter reads as the more careful
+    choice.
+
+    **float64 is unchanged by construction.** ``finfo(float64).tiny`` is
+    2.2e-308, below every floor the tree uses, so the ``max`` returns the
+    original literal and float64 results are bit-identical. Only float32, where
+    the literal was doing nothing at all, sees a different number.
+
+    A floor sized for a *value* is still not sized for a *derivative* — division's
+    VJP needs the denominator squared, so a derivative-safe bound is
+    ``sqrt(tiny)`` (~1.1e-19 in float32). See #1397, #1436, #1439.
+
+    Examples
+    --------
+    >>> import jax
+    >>> from tengri.utils.scale import representable_floor
+    >>> with jax.enable_x64(True):
+    ...     representable_floor(1e-50) == 1e-50  # float64: untouched
+    True
+    """
+    return max(float(value), float(jnp.finfo(jnp.result_type(float)).tiny))
+
+
 def pow10(x):
     """10**x, computed as ``exp(x·ln10)`` to preserve the input dtype.
 
