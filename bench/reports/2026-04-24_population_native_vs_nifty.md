@@ -145,8 +145,8 @@ vectorizes efficiently. Switching these to `lax.map` was tested and made warm ti
 
 ### Convergence parity with NIFTy
 
-Both `_cg_solve` and `_newton_cg_flat` are exact ports of NIFTy's `_static_cg` and
-`_static_newton_cg` (nifty8.re, Gordian Edenhofer, Philipp Frank, GPL-2.0+). Key
+Both `_cg_solve` and `_newton_cg_flat` implement the same algorithms as NIFTy's
+`_static_cg` and `_static_newton_cg` (nifty8.re, Gordian Edenhofer, Philipp Frank, GPL-2.0+). Key
 equivalences preserved:
 
 - `absdelta=None` → energy-diff convergence criterion is **absent** from the JIT graph

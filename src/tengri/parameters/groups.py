@@ -311,7 +311,7 @@ _LAZY_DUST_EMISSION_TYPES = frozenset(
         "dl07_tabulated",
         # AGNfitter-rX DH02_CE01 legacy cold-dust library: an engine-only
         # tabulated model registered lazily in DUST_EMISSION_MODELS (no
-        # SEDModelComponent port), so it is not discovered via the _REGISTRY
+        # SEDModelComponent), so it is not discovered via the _REGISTRY
         # scan and must be declared here to be an accepted dust.emission type.
         "dh02_ce01",
     }

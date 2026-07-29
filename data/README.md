@@ -7,7 +7,7 @@ tengri components load at runtime. Each entry records:
 - **Build path** — upstream code or script that produced this file.
 - **Usage** — redistribution terms. Most are paper-published data (citation
   required); some have formal licenses. See
-  [`docs/dev/audits/upstream-port-licensing.md`](../docs/dev/audits/upstream-port-licensing.md)
+  [`docs/dev/audits/upstream-code-licensing.md`](../docs/dev/audits/upstream-code-licensing.md)
   for source code assessment.
 
 ## Dust SED templates
@@ -73,7 +73,7 @@ publishing tengri-based work that uses any of these curves.
 ## Test / regression reference fixtures (`*.npz`)
 
 Reference outputs captured from specific upstream versions for detecting
-regressions in tengri's ports. Produced by build/audit scripts; refreshed
+regressions in tengri's implementations. Produced by build/audit scripts; refreshed
 when upstream changes.
 
 | File | Captured from | Used by |

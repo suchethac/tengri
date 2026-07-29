@@ -1,14 +1,16 @@
-# Upstream port licensing — open issue for later resolution
+# Upstream code licensing — open issue for later resolution
 
 **Status:** Open. To be revisited before the first tagged release / Zenodo DOI.
 **Owner:** Project lead.
 **Filed:** 2026-05-22.
-**Status (2026-07-10):** The wording "ported from" was replaced repo-wide — every implementation is now described as an independent implementation of the published model, validated against the reference code. Docstrings no longer claim code-level porting.
+**Status (2026-07-10):** The wording "ported from" was replaced repo-wide. Every implementation is now described as an independent implementation of the published model, validated against the reference code. Docstrings no longer claim code-level porting.
+**Status (2026-07-29):** This document was brought in line with that wording. No risk finding, license fact, or open question was changed; only the vocabulary and the action items that still referred to docstrings which no longer exist.
 
 ## Why this exists
 
-Tengri is released under **BSD-3-Clause**. Several physics modules cite "ported
-from" upstream projects. Upstream licenses (verified 2026-05-22):
+Tengri is released under **BSD-3-Clause**. Several physics modules implement
+models that these upstream projects also implement, and a few embed published
+numerical tables. Upstream licenses (verified 2026-05-22):
 
 | Upstream | License | Compatibility | Where it appears in tengri |
 | --- | --- | --- | --- |
@@ -30,29 +32,28 @@ only remaining copyleft concerns are **CIGALE (CeCILL v2)** and **ProSpect
 For the remaining two:
 
 - **CIGALE (CeCILL v2)** is the closest French equivalent of GPL. Viral if
-  the port is a substantial derivative work of CIGALE source code (not just
-  the physics CIGALE implements).
+  tengri's implementation is a substantial derivative work of CIGALE source
+  code (not just the physics CIGALE implements).
 - **ProSpect (LGPL-3)** is *linking-permissive* — calling ProSpect from
   BSD-3 code is fine, but *copying* its source into a BSD-3 codebase still
-  triggers LGPL on the copied portion. The current "Ported from ProSpect"
-  notes need to be scrutinized: if they are reimplementations from the
-  published ProSpect / massfunc papers, that is clean; if they are
-  R-to-JAX transliterations of ProSpect functions, LGPL applies.
+  triggers LGPL on the copied portion. The SFH modules listed below still
+  need scrutiny: if they are reimplementations from the published ProSpect /
+  massfunc papers, that is clean; if they are R-to-JAX transliterations of
+  ProSpect functions, LGPL applies.
 
 Resolution options remain the same: (a) re-release the affected modules
 under the upstream license, (b) replace with clean-room reimplementations
-from the original papers, or (c) demonstrate the ports fall outside the
-upstream's copyright scope (e.g. by being short, equation-driven, with
+from the original papers, or (c) demonstrate the implementations fall
+outside the upstream's copyright scope (e.g. by being short, equation-driven, with
 no carry-over of upstream control-flow or variable naming).
 
-## Current assessment (port-vs-rewrite, per file)
+## Current assessment (reimplementation vs transliteration, per file)
 
-None of the upstreams are JAX-based; every "port" required a translation
-into pure JAX (`jnp.*`, `vmap`, `lax.scan`, immutable updates). That
-translation forces structural rewriting and gives some natural distance
-from upstream code. Where the assessment lands:
+None of the upstreams are JAX-based; every tengri implementation had to be
+expressed in pure JAX (`jnp.*`, `vmap`, `lax.scan`, immutable updates). That
+forces structural rewriting and gives natural distance from upstream code. Where the assessment lands:
 
-### Low risk — algorithmic ports or clean-room from papers
+### Low risk — implemented from the published papers
 
 - **`components/igm/igm.py`** — Inoue+2014 formulae implemented from the
   paper; numerical coefficients pulled from **eazy-py** (BSD-3-Clause,
@@ -71,7 +72,7 @@ from upstream code. Where the assessment lands:
   generate the table. A custom JAX VJP wraps the trilinear interpolation
   for gradient support. No XSpec/RELAGN code copied.
 
-### Moderate risk — algorithmic ports that embed published numerical tables
+### Moderate risk — implementations that embed published numerical tables
 
 - **`components/agn/nlr.py`** — Richardson+2014 Table 3 ('a42') line
   wavelengths and flux ratios are embedded as `_RICHARDSON_WAVES` /
@@ -96,13 +97,14 @@ from upstream code. Where the assessment lands:
 
 Not assessed in depth yet. Need to check:
 
-- **CIGALE SFH ports** — `sfh_buat08`, `sfhdelayedbq`, `sfhperiodic`,
+- **CIGALE SFH modules** — `sfh_buat08`, `sfhdelayedbq`, `sfhperiodic`,
   IRX module: how much of the *structure* and parameter names are
   carried? Equations from refereed papers (Buat+2008 etc.) are clean
   but the parameter conventions tend to track CIGALE exactly.
-- **ProSpect SFH ports** — `massfunc_p4/p6`, `massfunc_snorm_burst*`:
-  ProSpect is GPL-3 in R. Need to confirm whether these are paper
-  reproductions or R-to-JAX transliterations of ProSpect source.
+- **ProSpect SFH modules** — `massfunc_p4/p6`, `massfunc_snorm_burst*`:
+  the table above records LGPL-3; an earlier note here said GPL-3. Confirm
+  the actual license, then confirm whether these are paper reproductions or
+  R-to-JAX transliterations of ProSpect source.
 - **Bundled `.h5` template files in `data/`** — `astrodust_templates.h5`,
   `dl07_templates.h5`, `dale2014_templates.h5`, `skirtor_templates_v3.h5`,
   `bosa_templates.h5`. Each carries its own provenance and license; the
@@ -123,26 +125,25 @@ Tengri's licensing posture is **defensible under BSD-3-Clause** as of today:
 
 What we are missing for a confident 1.0:
 
-1. **Per-port written justification.** A short paragraph next to each
-   "Ported from X" docstring stating either *"clean-room from paper
-   {ref}"* or *"algorithmic port of {symbol} — no upstream code text
-   carried"*.
+1. **Per-module written justification.** A short note beside each
+   reference-code credit recording either *"implemented from paper {ref}"*
+   or *"same algorithm as {symbol}; no upstream code text carried"*.
 2. **Verified upstream license tags.** This document marks several as
    "(verify upstream)" — those need to be confirmed from each project's
    `LICENSE` file and recorded.
 3. **CIGALE SFH and ProSpect SFH** — currently moderate-confidence; need
-   the same port-vs-rewrite review as the AGN files above.
+   the same reimplementation-vs-transliteration review as the AGN files.
 4. **Bundled data file licensing** — per-file table in `data/README.md`
    linking each shipped `.h5` to upstream license / data-use terms.
 5. **Optional belt-and-suspenders** — for items where the assessment
-   feels close (CIGALE SFH especially), consider a clean-room rewrite
-   from the published paper and drop the "Ported from CIGALE" wording.
+   feels close (CIGALE SFH especially), consider a fresh rewrite worked
+   only from the published paper.
 
 ## Resolution criteria
 
 This issue is closed when:
-- Every "Ported from" / "Adapted from" docstring carries one of the two
-  justification labels above.
+- Every reference-code credit carries one of the two justification
+  labels above.
 - The license table in this document has no "(verify upstream)" entries.
 - `NOTICE` and `data/README.md` agree on per-data-file provenance.
 - A short paragraph in `LICENSE`-adjacent docs (or this file linked from
@@ -175,6 +176,6 @@ What BSD-3 does *not* require:
   the same terms (each can carry its own license if needed).
 - We do not have to disclose changes (that would be Apache-2.0 §4.b).
 
-For now, the project is BSD-3 compliant. The upstream-port question
+For now, the project is BSD-3 compliant. The upstream-code question
 above is a *separate* compatibility concern (us consuming GPL/CeCILL
 inbound), not a BSD-3 obligation.

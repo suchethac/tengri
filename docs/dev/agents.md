@@ -205,7 +205,7 @@ If your code implements a model defined in another package, say so in Notes:
 
 ```
 **Upstream**: Follows the Prospector ``transforms.py`` implementation
-(Johnson et al. 2021 [2]_), adapted for JAX.
+(Johnson et al. 2021 [2]_), implemented in JAX.
 ```
 
 Include the upstream code's paper in References.

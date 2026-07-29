@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Profiling infrastructure for tengri.
 
-JAX-aware timing, memory tracking, and pipeline profiling utilities
-inspired by the Synthesizer project's comprehensive approach, adapted
-for JAX's async dispatch and JIT compilation model.
+JAX-aware timing, memory tracking, and pipeline profiling utilities.
+Follows the same approach as the Synthesizer project's profiling, in
+JAX's async dispatch and JIT compilation model.
 
 Usage
 -----
