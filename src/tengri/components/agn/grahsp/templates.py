@@ -13,7 +13,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import h5py
-import jax.numpy as jnp
+import numpy as np
 from jax import Array
 
 __all__ = ["DEFAULT_TEMPLATE_PATH", "GRAHSPTemplates", "load_grahsp_templates"]
@@ -116,19 +116,19 @@ def load_grahsp_templates(
             "`python tools/build_grahsp_hdf5.py` to regenerate."
         )
     with h5py.File(path, "r") as f:
-        feii_wave = jnp.asarray(f["feii_bruhweiler2008/wave_nm"][:])
-        feii_lumin = jnp.asarray(f["feii_bruhweiler2008/lumin"][:])
-        line_wave = jnp.asarray(f["netzer1990_lines/wave_nm"][:])
-        line_broad = jnp.asarray(f["netzer1990_lines/broad"][:])
-        line_narrow_sy2 = jnp.asarray(f["netzer1990_lines/narrow_sy2"][:])
-        line_narrow_liner = jnp.asarray(f["netzer1990_lines/narrow_liner"][:])
+        feii_wave = np.asarray(f["feii_bruhweiler2008/wave_nm"][:])
+        feii_lumin = np.asarray(f["feii_bruhweiler2008/lumin"][:])
+        line_wave = np.asarray(f["netzer1990_lines/wave_nm"][:])
+        line_broad = np.asarray(f["netzer1990_lines/broad"][:])
+        line_narrow_sy2 = np.asarray(f["netzer1990_lines/narrow_sy2"][:])
+        line_narrow_liner = np.asarray(f["netzer1990_lines/narrow_liner"][:])
         line_names = tuple(
             n.decode("utf-8") if isinstance(n, bytes) else n for n in f["netzer1990_lines/name"][:]
         )
-        torus_wave = jnp.asarray(f["torus/wave_nm"][:])
+        torus_wave = np.asarray(f["torus/wave_nm"][:])
 
         def _arr(key: str):
-            return jnp.asarray(f[key][:]) if key in f else None
+            return np.asarray(f[key][:]) if key in f else None
 
         def _strs(key: str):
             if key not in f:
