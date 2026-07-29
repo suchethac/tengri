@@ -121,3 +121,57 @@ class TestNthcompGradientStability:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+@pytest.mark.skipif(not _is_table_available(), reason="nthcomp templates not loaded")
+class TestNthcompJVPRule:
+    """The gamma rule is a ``custom_jvp``, so both autodiff modes work (#1206)."""
+
+    NU = jnp.geomspace(1e16, 1e19, 7)
+    ARGS = (jnp.array(2.0), jnp.array(100.0), jnp.array(0.01))
+
+    def _grad_gamma(self, cotangent):
+        gamma, kte, ktbb = self.ARGS
+
+        def loss(g):
+            return jnp.sum(nthcomp_lnu_interp(self.NU, g, kte, ktbb)) * cotangent
+
+        return float(jax.grad(loss)(gamma))
+
+    def test_forward_mode_autodiff_is_supported(self):
+        """``jax.jvp`` must not raise — geoVI builds its metric with forward mode.
+
+        A ``custom_vjp`` is opaque to forward mode and raised ``TypeError: can't
+        apply forward-mode autodiff (jvp) to a custom_vjp function``, taking out
+        every geoVI fit reaching an AGN model with this kernel.
+        """
+        gamma, kte, ktbb = self.ARGS
+        primals = (self.NU, gamma, kte, ktbb)
+        tangents = (jnp.zeros_like(self.NU), jnp.array(1.0), jnp.array(0.0), jnp.array(0.0))
+
+        _, tangent_out = jax.jvp(nthcomp_lnu_interp, primals, tangents)
+
+        assert tangent_out.shape == self.NU.shape
+        assert bool(jnp.all(jnp.isfinite(tangent_out)))
+        assert bool(jnp.any(tangent_out != 0.0)), "forward mode returned an all-zero tangent"
+
+    def test_large_cotangent_does_not_collapse_to_zero(self):
+        """A big incoming cotangent must scale the gradient, not zero it.
+
+        The retired reverse rule divided the cotangent by ``max|fd_grad|`` ~1e-17
+        "to avoid overflow", which sent a 1e30 cotangent to ~1e47 — past float32's
+        3.4e38 — and a trailing ``where(isfinite, ..., 0.0)`` turned the ``inf``
+        into a silent zero. Measured before the fix: exactly ``0.0``.
+
+        Gradients are linear in the cotangent, so the ratio is the invariant;
+        pinning it catches both the collapse and any rescaling that does not
+        cancel.
+        """
+        unit = self._grad_gamma(1.0)
+        assert unit != 0.0, "baseline gradient is zero — test cannot detect the collapse"
+
+        scaled = self._grad_gamma(1e30)
+
+        assert scaled != 0.0, "large cotangent collapsed to a silent zero gradient"
+        assert jnp.isfinite(scaled)
+        assert scaled / unit == pytest.approx(1e30, rel=1e-5)

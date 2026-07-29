@@ -186,7 +186,7 @@ def _nthcomp_lnu_interp_impl(
     return jnp.maximum(lnu, 0.0)
 
 
-@jax.custom_vjp
+@jax.custom_jvp
 def nthcomp_lnu_interp(
     nu: jnp.ndarray,
     gamma: jnp.ndarray,
@@ -224,10 +224,18 @@ def nthcomp_lnu_interp(
     varying features (Wien seed-BB tail), then exponentiated. Extrapolation
     beyond grid bounds is clamped to preserve monotonicity at boundaries.
 
-    **Custom VJP**: A finite-difference approximation is used for the gamma
-    gradient to work around JAX autodiff limitations with composed operations
-    involving ``jnp.interp`` and large output scalars. See _nthcomp_lnu_interp_bwd
-    (lines 234–286) for implementation details.
+    **Custom JVP**: a finite-difference approximation supplies the ``gamma``
+    derivative, because differentiating the composed ``jnp.interp`` chain
+    directly returns NaN. ``nu``, ``kTe_keV`` and ``kTbb_keV`` are held fixed
+    during fitting and carry exactly zero derivative, as before.
+
+    The rule is a ``custom_jvp``, not a ``custom_vjp`` (#1206). A ``custom_vjp``
+    is **opaque to forward mode** — ``jax.jvp`` raises ``TypeError: can't apply
+    forward-mode autodiff (jvp) to a custom_vjp function`` — which takes out
+    geoVI, whose metric is built with forward mode, for every AGN model
+    reaching this kernel. A ``custom_jvp`` serves forward mode directly and
+    reverse mode by transposition; the transpose of ``fd_grad * d_gamma`` is
+    ``sum(g * fd_grad)``, exactly the reverse pass this replaces.
 
     References
     ----------
@@ -242,80 +250,55 @@ def nthcomp_lnu_interp(
     return _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
 
 
-def _nthcomp_lnu_interp_fwd(
-    nu: jnp.ndarray,
-    gamma: jnp.ndarray,
-    kTe_keV: jnp.ndarray,
-    kTbb_keV: jnp.ndarray,
-) -> tuple[jnp.ndarray, tuple]:
-    """Forward pass for custom VJP of nthcomp_lnu_interp.
+@nthcomp_lnu_interp.defjvp
+def _nthcomp_lnu_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
+    """Forward-mode rule: a finite-difference derivative in ``gamma`` only.
 
-    Computes the function value and saves residuals for backward differentiation.
+    Parameters
+    ----------
+    primals : tuple
+        ``(nu, gamma, kTe_keV, kTbb_keV)`` -- see :func:`nthcomp_lnu_interp`.
+    tangents : tuple
+        Tangents of those same four operands. Only the ``gamma`` tangent
+        contributes; the other three are held fixed during fitting and carry
+        exactly zero derivative, matching the reverse rule this replaces.
+
+    Returns
+    -------
+    tuple
+        ``(primal_out, tangent_out)``, both ``ndarray, shape (n_nu,)``
+        [dimensionless -- a normalized spectral shape].
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes -- and, unlike the ``custom_vjp`` spelling this
+    replaces, ``jvp``-safe, which is what geoVI's forward-mode metric needs
+    (#1206).
+
+    The ``gamma`` derivative is a one-sided finite difference with an adaptive
+    step, because differentiating the composed ``jnp.interp`` chain
+    analytically returns NaN.
+
+    **No cotangent rescaling.** The previous reverse rule divided by
+    ``max|fd_grad|`` "to avoid overflow" and restored the scale with
+    ``* max * max``. That inverted the intended effect: with ``max|fd_grad|``
+    ~1e-17, an incoming cotangent of 1e30 became ``g / max`` ~1e47 -- past
+    float32's 3.4e38 -- and the trailing ``where(isfinite(g), g, 0.0)`` turned
+    the resulting ``inf`` into a **silent zero gradient**. Measured before this
+    change: ``d/d(gamma)`` came back exactly ``0.0`` at cotangent 1e30 for every
+    ``(gamma, kTe)`` tried, while being correct at cotangent 1. The unscaled
+    product ``sum(g * fd_grad)`` is ~1e13 at that cotangent -- nowhere near the
+    limit -- so dropping the rescaling removes both the overflow and the
+    fail-open that hid it.
     """
-    # Compute the actual output via the implementation function
-    result = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
+    nu, gamma, kTe_keV, kTbb_keV = primals
+    _, d_gamma, _, _ = tangents
 
-    # Save residuals for the backward pass
-    residuals = (nu, gamma, kTe_keV, kTbb_keV)
-    return result, residuals
+    primal_out = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
 
-
-def _nthcomp_lnu_interp_bwd(residuals: tuple, g_out: jnp.ndarray) -> tuple:
-    """Backward pass for custom VJP of nthcomp_lnu_interp.
-
-    Uses finite-difference approximation for gamma gradient to avoid the
-    jnp.interp gradient NaN issue (JAX autodiff limitation with interpolation
-    and extrapolation in composed operations).
-
-    To handle overflow when g_out contains very large values, we:
-    1. Compute the finite-difference gradient of the raw output
-    2. Apply the cotangent vector with care to avoid overflow
-
-    Other parameters (nu, kTe_keV, kTbb_keV) are not differentiated since they
-    are held fixed during typical inference workflows (gamma is the primary
-    Comptonization parameter tuned during fitting).
-    """
-    nu, gamma, kTe_keV, kTbb_keV = residuals
-
-    # Finite-difference approximation for gamma (the problematic parameter)
-    # Use adaptive epsilon based on gamma value
+    # Adaptive one-sided step: relative for large gamma, absolute near zero.
     eps = jnp.maximum(1e-6 * jnp.abs(gamma), 1e-6)
-    gamma_plus = gamma + eps
-    result_plus = _nthcomp_lnu_interp_impl(nu, gamma_plus, kTe_keV, kTbb_keV)
-    result = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
+    shifted = _nthcomp_lnu_interp_impl(nu, gamma + eps, kTe_keV, kTbb_keV)
+    fd_grad = (shifted - primal_out) / eps
 
-    # Finite-difference gradient w.r.t. gamma (element-wise)
-    # This gives the derivative of each output element w.r.t. gamma
-    fd_grad_per_element = (result_plus - result) / eps
-
-    # Chain rule: compute sum of g_out * fd_grad_per_element
-    # To avoid overflow: divide by max absolute gradient before accumulating,
-    # then rescale using the safe gradient pattern.
-    max_grad = jnp.max(jnp.abs(fd_grad_per_element))
-    # Safe gradient pattern: pre-mask divisor to avoid NaN from unselected branch
-    max_grad_safe = jnp.where(max_grad > 0, max_grad, 1.0)
-
-    # Normalize to unit scale to avoid overflow in multiplication
-    # Use pre-masked max_grad_safe to ensure gradient flows safely
-    fd_grad_normalized = fd_grad_per_element / max_grad_safe
-    g_out_normalized = g_out / max_grad_safe
-
-    # Compute normalized product and sum
-    g_gamma_normalized = jnp.sum(g_out_normalized * fd_grad_normalized)
-
-    # Restore the scale using the safe value
-    g_gamma = g_gamma_normalized * max_grad_safe * max_grad_safe
-
-    # Ensure result is finite
-    g_gamma = jnp.where(jnp.isfinite(g_gamma), g_gamma, 0.0)
-
-    # Return zero gradients for other parameters (held fixed in fitting)
-    g_nu = jnp.zeros_like(nu)
-    g_kTe = jnp.zeros_like(kTe_keV)
-    g_kTbb = jnp.zeros_like(kTbb_keV)
-
-    return (g_nu, g_gamma, g_kTe, g_kTbb)
-
-
-# Register the VJP rule
-nthcomp_lnu_interp.defvjp(_nthcomp_lnu_interp_fwd, _nthcomp_lnu_interp_bwd)
+    return primal_out, fd_grad * d_gamma
