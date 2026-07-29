@@ -88,6 +88,14 @@ and a one-line description.
 
 .. autofunction:: tengri.list_plots
 
+.. autofunction:: tengri.list_properties
+
+.. autofunction:: tengri.list_filter_conventions
+
+The SSP grids are listed by :func:`~tengri.list_known_ssps` and
+:func:`~tengri.list_available_ssps`, documented with the rest of the
+stellar population synthesis surface on :doc:`models`.
+
 Per-category describe
 ---------------------
 

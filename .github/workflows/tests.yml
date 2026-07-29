@@ -291,6 +291,14 @@ jobs:
       # against the real package. Like the generator above, it needs tengri
       # importable, so it lives here rather than in `lint`.
       - run: python tools/check_doc_examples.py
+      # The guard above asks whether every symbol NAMED IN THE DOCS exists. This
+      # one asks the converse — whether every symbol tengri EXPORTS is named in
+      # the docs — because the two failure modes are independent and only the
+      # first was covered. #1345 closed the class surface while 23 exported
+      # functions, both grammar sentinels and both spectral-index catalogs had
+      # no autodoc entry at all; `nitpicky` is off and Sphinx does not fail on an
+      # ABSENT page, so neither `-W` nor the guard above could see it.
+      - run: python tools/check_api_coverage.py
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
       # The `benchmark` tier: five tests that assert a wall-clock RATIO (fast path
       # vs exact path, cached vs cold). They are real regression guards — they catch

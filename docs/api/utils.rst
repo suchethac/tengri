@@ -22,6 +22,35 @@ Noise Utilities
 
 .. autofunction:: tengri.has_noise_model
 
+Correlated noise
+~~~~~~~~~~~~~~~~
+
+Spectroscopic residuals are rarely white. These build a full covariance as
+white noise plus a Gaussian-process kernel, for use with a
+:class:`~tengri.NoiseModel` that models correlated errors.
+
+.. autofunction:: tengri.gp_noise_covariance
+
+.. autofunction:: tengri.exp_squared_kernel
+
+.. autofunction:: tengri.matern32_kernel
+
+Bundled data and caches
+-----------------------
+
+tengri persists compiled JAX kernels and precomputed photometry tables
+between sessions, and resolves bundled data files by walking parent
+directories for a ``data/`` folder.
+
+.. autofunction:: tengri.data_path
+
+.. autofunction:: tengri.clear_cache
+
+Batching
+--------
+
+.. autofunction:: tengri.vmap_chunked
+
 Parameter Introspection
 -----------------------
 

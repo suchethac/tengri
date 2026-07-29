@@ -142,6 +142,14 @@ class SpectralIndexDef:
 
 # ── Standard index catalog ────────────────────────────────────────
 
+#: Catalog of the 13 single-passband spectral indices tengri ships, keyed by
+#: index name. Three kinds are represented: ``break`` ratios (``Dn4000``,
+#: ``D4000``), Lick-style equivalent widths (``HdA``, ``HdF``, ``HgA``,
+#: ``HgF``, ``Hbeta``, ``Mgb``, ``Fe4383``, ``Fe5270``, ``Fe5335``,
+#: ``Ca4227``), and one continuum ``slope`` (``uv_slope_beta``). Values are
+#: :class:`SpectralIndexDef` records carrying the passband definitions in
+#: rest-frame vacuum Angstrom. Pass a key to
+#: :func:`tengri.measure.spectral_index` or :func:`tengri.measure_index_jax`.
 STANDARD_INDICES: dict[str, SpectralIndexDef] = {
     "Dn4000": SpectralIndexDef(
         name="Dn4000",
@@ -282,6 +290,11 @@ class CompositeIndexDef:
         return max(c.wave_max for c in self.components)
 
 
+#: Catalog of the four composite indices tengri ships, keyed by index name.
+#: Each combines two or three entries of :data:`STANDARD_INDICES` into the
+#: standard abundance- and age-tracer combinations: ``[MgFe]'`` and ``<Fe>``
+#: for metallicity, ``HdA+HgA`` and ``HdF+HgF`` for the Balmer age
+#: diagnostics. Values are :class:`CompositeIndexDef` records.
 STANDARD_COMPOSITE_INDICES: dict[str, CompositeIndexDef] = {
     # Thomas, Maraston & Bender 2003, MNRAS 339, 897 — [MgFe]' is the
     # canonical [alpha/Fe]-insensitive [Fe/H] tracer.
