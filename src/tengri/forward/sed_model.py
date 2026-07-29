@@ -2645,6 +2645,34 @@ class SEDModel:
             or self._approx_config_feature is not None
         )
 
+    @property
+    def approx_configs(self) -> tuple:
+        """The **config objects** currently active, in ``approx=`` tuple form.
+
+        Companion to :attr:`approx`, which reports *whether* each LUT is live as
+        booleans. This returns the configs themselves, so a caller can add one
+        family without discarding another's settings — rebuilding from
+        ``WavePrecomp()`` because ``approx.wave_precomp`` was ``True`` would
+        silently drop a configured ``catalog_z_range``, which is a behavioral
+        change wearing a speedup's clothes.
+
+        Returns
+        -------
+        tuple
+            Active configs (``WavePrecomp`` / ``SpectrumPrecomp`` /
+            ``FeaturePrecomp``), suitable to pass straight back to
+            :meth:`with_approx`. Empty for an exact model.
+        """
+        return tuple(
+            cfg
+            for cfg in (
+                self._approx_config_wave,
+                self._approx_config_spec,
+                self._approx_config_feature,
+            )
+            if cfg is not None
+        )
+
     def with_approx(self, approx, *, observation=None):
         """Return a copy of this model built with a different ``approx`` policy.
 
