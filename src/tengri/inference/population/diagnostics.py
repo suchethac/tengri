@@ -38,9 +38,39 @@ def interval_width_scaling(widths: np.ndarray, n_values: np.ndarray) -> dict[str
             significantly different from zero at the 3-sigma level. Flat
             widths return False.
 
+    Raises
+    ------
+    ValueError
+        If fewer than 3 data points are provided (minimum needed to estimate
+        slope_err = sqrt(mse / var), with mse dividing by n-2).
+    ValueError
+        If the input contains NaN values.
+
     Notes
     -----
-    The operative half of the criterion is **excluding zero**, not matching
+    **Ordinary least squares fit.** Regresses ``log(width)`` on ``log(N)``
+    to estimate whether widths scale as a power law:
+
+    .. math::
+
+        \log(\text{width}) = \text{slope} \cdot \log(N) + \text{intercept}
+
+    The slope and its standard error are:
+
+    .. math::
+
+        \text{slope} = \frac{\sum_i (\log N_i - \overline{\log N})
+                             (\log w_i - \overline{\log w})}
+                            {\sum_i (\log N_i - \overline{\log N})^2}
+
+        \text{slope\_err} = \sqrt{\frac{\text{MSE}}{\sum_i (\log N_i - \overline{\log N})^2}}
+
+        \text{MSE} = \frac{\sum_i (\log w_i - \hat{\log w}_i)^2}{n - 2}
+
+    where :math:`\hat{\log w}_i = \text{slope} \cdot \log N_i + \text{intercept}`
+    and :math:`n` is the number of data points [dimensionless].
+
+    **The operative half of the criterion is excluding zero**, not matching
     -0.5. A previously published claim in this project said the shared-PSD
     credible intervals "shrink approximately as 1/sqrt(N)". Later measurements
     found they did not shrink at all — the intervals stayed roughly constant
@@ -52,8 +82,18 @@ def interval_width_scaling(widths: np.ndarray, n_values: np.ndarray) -> dict[str
     widths = np.asarray(widths)
     n_values = np.asarray(n_values)
 
+    # Input validation
+    if len(n_values) < 3:
+        raise ValueError(
+            f"At least 3 data points required to estimate slope_err "
+            f"(divides by n-2), got {len(n_values)}"
+        )
+
     log_widths = np.log(widths)
     log_n = np.log(n_values)
+
+    if np.any(np.isnan(log_widths)) or np.any(np.isnan(log_n)):
+        raise ValueError("NaN in input widths or n_values")
 
     # Ordinary least squares fit: log(width) = slope * log(N) + intercept
     # Using the normal equations: slope = cov(log_N, log_width) / var(log_N)
@@ -84,13 +124,14 @@ def interval_width_scaling(widths: np.ndarray, n_values: np.ndarray) -> dict[str
     }
 
 
-def credible_interval(log_posterior: np.ndarray, grid, level: float = 0.68) -> dict:
+def credible_interval(log_posterior: np.ndarray, grid: Any, level: float = 0.68) -> dict[str, Any]:
     """Compute credible intervals from a log-posterior on a 2D grid.
 
     Parameters
     ----------
     log_posterior : array_like, shape (A * B,)
-        Unnormalized log-posterior [nats] on the grid.
+        Unnormalized log-posterior [nats] on the grid (C-ordered as node
+        ``a*B + b`` is ``(sigma[a], tau_yr[b])``).
     grid : SharedGrid
         Quadrature grid with attributes ``sigma`` (A,) and ``tau_yr`` (B,).
     level : float, optional
@@ -99,9 +140,18 @@ def credible_interval(log_posterior: np.ndarray, grid, level: float = 0.68) -> d
     Returns
     -------
     intervals : dict
-        Dictionary with keys ``"sigma_lower"``, ``"sigma_upper"``,
-        ``"tau_lower_yr"``, ``"tau_upper_yr"``, and ``"credible_levels"``
-        (the two marginal levels [dimensionless]).
+        Dictionary with keys:
+
+        - ``"sigma_lower"`` : float
+            Lower bound of sigma interval [dex].
+        - ``"sigma_upper"`` : float
+            Upper bound of sigma interval [dex].
+        - ``"tau_lower_yr"`` : float
+            Lower bound of tau interval [yr].
+        - ``"tau_upper_yr"`` : float
+            Upper bound of tau interval [yr].
+        - ``"credible_levels"`` : tuple of float
+            Pair of (level, level) for the marginal probabilities [dimensionless].
     """
     log_posterior = np.asarray(log_posterior)
     grid_sigma = np.asarray(grid.sigma)
@@ -145,7 +195,7 @@ def credible_interval(log_posterior: np.ndarray, grid, level: float = 0.68) -> d
     }
 
 
-def report(interim_result, shared_posterior) -> dict:
+def report(interim_result: dict[str, Any], shared_posterior: tuple[Any, Any]) -> dict[str, Any]:
     """Bundle diagnostics from an interim result and shared posterior.
 
     Parameters
@@ -160,14 +210,22 @@ def report(interim_result, shared_posterior) -> dict:
     Returns
     -------
     diagnostics : dict
-        Bundled diagnostics including ESS checks and a zero-divergence
-        warning flag.
+        Dictionary with keys:
+
+        - ``"ess_at_mode"`` : ndarray, shape (N,)
+            ESS at the posterior mode [dimensionless]; primary diagnostic.
+        - ``"ess_min_high_mass"`` : ndarray, shape (N,)
+            Minimum ESS over nodes carrying top 99% of posterior mass
+            [dimensionless]; use to detect tail degeneracy.
+        - ``"zero_divergence_flag"`` : bool
+            True if the population reported zero divergences across all
+            galaxies (a red flag, not a pass).
 
     Notes
     -----
-    Warns if the population reports zero divergences across all galaxies.
-    This is a red flag, not a pass: a chain that traverses hard geometry
-    reports divergences, while chains frozen in separate basins have
+    Issues a `UserWarning` if the population reports zero divergences across
+    all galaxies. This is a red flag, not a pass: a chain that traverses hard
+    geometry reports divergences, while chains frozen in separate basins have
     nothing to report.
     """
     import warnings
