@@ -21,6 +21,23 @@ from tengri.inference.catalog_ingest import ingest_catalog
 __all__ = ["Catalog"]
 
 
+def _stellar_config(fwd):
+    """The StellarSEDComponent's config off a built ForwardModel, or None.
+
+    Used to tell a tabulated-SFH model from a parametric one before accepting
+    histories, so :meth:`Catalog.from_histories` can name the fix instead of
+    letting the #996 runtime check fire deep in the forward pass.
+    """
+    from tengri.components.stellar.component import StellarSEDComponent
+
+    try:
+        chain = fwd.populations[0].sed._build_component_chain()
+    except (AttributeError, IndexError):
+        return None
+    stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
+    return None if stellar is None else stellar.config
+
+
 class Catalog:
     """Astronomer-facing catalog inference interface.
 
@@ -92,6 +109,8 @@ class Catalog:
         """
         self.fwd = fwd
         self.table = table
+        # Set by from_histories; makes predict() argument-optional (#1396).
+        self._history_columns = None
 
         # Fail fast: ingest and validate at construction.
         if table is not None:
@@ -281,6 +300,138 @@ class Catalog:
 
         return result
 
+    @classmethod
+    def from_histories(
+        cls,
+        fwd,
+        *,
+        t_gyr,
+        sfr,
+        met=None,
+        redshift=None,
+        params=None,
+        flux_unit="cgs_fnu",
+    ):
+        """Build a mock catalog from tabulated SFH / metallicity histories (#1396).
+
+        The simulation-catalog entry point: a hydro sim, semi-analytic model or
+        UniverseMachine-style run supplies SFH(t) and optionally Z(t) per galaxy,
+        and the result is a :class:`Catalog` whose :meth:`predict` returns
+        photometry for the whole table.
+
+        Histories are **records, not parameters**. They enter at the action, the
+        same way fluxes do, which is why this is a classmethod rather than a
+        model-construction argument — the ``table`` SFH declares zero free
+        parameters because the table *is* the SFH.
+
+        Parameters
+        ----------
+        fwd : ForwardModel
+            Model built with ``sfh={'type': 'table'}`` (and
+            ``met={'type': 'table'}`` if ``met`` is given).
+        t_gyr : array_like, shape (n_t,) or (N, n_t)
+            Cosmic time [Gyr], strictly increasing. A 1-D grid is shared by
+            every galaxy and broadcast.
+        sfr : array_like, shape (N, n_t)
+            Star formation rate [Msun/yr] at those times. Must be non-negative.
+        met : array_like, shape (N, n_t), optional
+            Metallicity history, log10(Z/Zsun), at the same nodes. Requires the
+            model's ``metallicity_model='table'``.
+        redshift : array_like, shape (N,), optional
+            Per-galaxy redshift. Needs a ``catalog_z_range`` on the model for
+            the catalog to stay one compile (#1316).
+        params : dict, optional
+            Per-galaxy scalars, ``{name: (N,)}`` — every free parameter of the
+            model that is not supplied by the histories.
+        flux_unit : str, default "cgs_fnu"
+            Recorded for symmetry with the data-table constructor; predictions
+            are returned in [erg/s/cm²/Hz] regardless.
+
+        Returns
+        -------
+        Catalog
+            Prediction-ready. ``.predict()`` needs no argument; ``.fit()`` is
+            still meaningful (fit dust or redshift at a known, fixed SFH).
+
+        Raises
+        ------
+        ValueError
+            If the model does not declare a tabulated SFH (or a tabulated
+            metallicity when ``met`` is given), if ``t_gyr`` is not strictly
+            increasing, if any SFR is negative, or if the shapes disagree.
+
+        Examples
+        --------
+        >>> cat = Catalog.from_histories(
+        ...     fwd, t_gyr=t, sfr=sfr, redshift=z, params={"dust_tau_diff": tau}
+        ... )
+        >>> flux = cat.predict()
+        """
+        cfg = _stellar_config(fwd)
+        if cfg is None or cfg.sfh_model != "table":
+            got = "unknown" if cfg is None else repr(cfg.sfh_model)
+            raise ValueError(
+                f"from_histories needs a model built with sfh={{'type': 'table'}}, "
+                f"whose SFH arrives at runtime; this model's sfh_model is {got}. "
+                f"Rebuild with SEDModel.build(..., sfh={{'type': 'table'}})."
+            )
+
+        sfr = np.asarray(sfr)
+        if sfr.ndim != 2:
+            raise ValueError(f"sfr must be (N, n_t); got shape {sfr.shape}.")
+        n_galaxies, n_t = sfr.shape
+
+        t_gyr = np.asarray(t_gyr)
+        if t_gyr.ndim == 1:
+            t_gyr = np.broadcast_to(t_gyr, (n_galaxies, t_gyr.shape[0])).copy()
+        if t_gyr.ndim != 2:
+            raise ValueError(f"t_gyr must be (n_t,) or (N, n_t); got shape {t_gyr.shape}.")
+        if t_gyr.shape[1] != n_t:
+            raise ValueError(
+                f"t_gyr and sfr disagree on n_t: t_gyr has {t_gyr.shape[1]}, "
+                f"sfr has {n_t}. They index the same history nodes."
+            )
+
+        if not np.all(np.diff(t_gyr, axis=1) > 0.0):
+            raise ValueError(
+                "t_gyr must be strictly increasing along the time axis (cosmic "
+                "time [Gyr], not lookback). A non-monotonic grid interpolates to "
+                "garbage without raising downstream."
+            )
+        if np.any(sfr < 0.0):
+            raise ValueError(
+                "sfr has negative entries [Msun/yr]. A negative SFR subtracts "
+                "stellar mass in the age-weight integral, silently."
+            )
+
+        columns = {"sfh_t_gyr": t_gyr, "sfh_sfr": sfr}
+
+        if met is not None:
+            if cfg.metallicity_model != "table":
+                raise ValueError(
+                    f"met= needs a model built with met={{'type': 'table'}}; this "
+                    f"model's metallicity_model is {cfg.metallicity_model!r}. Either "
+                    f"rebuild with a tabulated metallicity or drop met=."
+                )
+            met = np.asarray(met)
+            if met.shape != sfr.shape:
+                raise ValueError(
+                    f"met must match sfr's shape (N, n_t); got {met.shape} vs {sfr.shape}."
+                )
+            columns["met_history"] = met
+
+        if redshift is not None:
+            columns["redshift"] = np.asarray(redshift)
+
+        for name, value in (params or {}).items():
+            columns[name] = np.asarray(value)
+
+        catalog = cls(fwd, None, flux_unit=flux_unit)
+        # Validate the assembled columns through the same gate predict() uses,
+        # so from_histories cannot accept a table predict() would then reject.
+        catalog._history_columns, _ = catalog._as_columns(columns)
+        return catalog
+
     def _as_columns(self, param_table):
         """Validate a parameter table into uniform columns keyed by name (#1396).
 
@@ -335,7 +486,7 @@ class Catalog:
 
         return columns, next(iter(lengths.values()))
 
-    def predict(self, param_table, *, chunk_size=1024) -> np.ndarray:
+    def predict(self, param_table=None, *, chunk_size=1024) -> np.ndarray:
         """Predict photometry for a catalog of parameters or histories.
 
         Evaluates the forward model on a table of per-galaxy columns, returning
@@ -343,13 +494,15 @@ class Catalog:
 
         Parameters
         ----------
-        param_table : dict-like
+        param_table : dict-like, optional
             Mapping of name → array whose **leading axis indexes galaxies**;
             the trailing shape is free. A per-galaxy scalar is ``(N,)``; a
             tabulated history (``sfh_t_gyr``, ``sfh_sfr``, ``met_history``) is
             ``(N, n_t)``. Every free parameter needs a column; names the model
             does not recognize are reported by the forward model's own
-            unknown-parameter check, so a typo cannot pass silently.
+            unknown-parameter check, so a typo cannot pass silently. Omit it
+            entirely on a catalog built by :meth:`from_histories`, which
+            already carries its columns.
         chunk_size : int, default 1024
             Galaxies evaluated per vmapped batch. Larger batches are faster
             but use more memory.
@@ -383,7 +536,17 @@ class Catalog:
         ...     }
         ... )
         """
-        columns, n_galaxies = self._as_columns(param_table)
+        if param_table is None:
+            if self._history_columns is None:
+                raise ValueError(
+                    "predict() needs a param_table. Only a catalog built by "
+                    "Catalog.from_histories(...) already carries its columns and "
+                    "can be predicted with no argument."
+                )
+            columns = self._history_columns
+            n_galaxies = next(iter(columns.values())).shape[0]
+        else:
+            columns, n_galaxies = self._as_columns(param_table)
 
         # vmap maps the leading axis of every leaf of the dict pytree, so
         # (N,) scalars and (N, n_t) histories batch through the same call —

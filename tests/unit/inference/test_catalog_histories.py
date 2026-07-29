@@ -248,3 +248,134 @@ def test_scalar_only_catalog_still_predicts(synthetic_ssp_wide, synthetic_tophat
     flux = np.asarray(cat.predict(cols))
     assert flux.shape == (3, fwd.observation.photometry.n_filters)
     assert np.all(np.isfinite(flux))
+
+
+# ── Catalog.from_histories — the simulation-catalog constructor (#1396 §8.1) ──
+
+
+def test_from_histories_predicts(fwd_table_sfh):
+    """The headline path: histories in, photometry out."""
+    from tengri import Catalog
+
+    t, sfr = _flat_histories([1.0, 5.0, 20.0])
+    cat = Catalog.from_histories(
+        fwd_table_sfh, t_gyr=t, sfr=sfr, params={"dust_tau_diff": np.full(3, 0.2)}
+    )
+
+    flux = np.asarray(cat.predict())
+    assert flux.shape == (3, fwd_table_sfh.observation.photometry.n_filters)
+    assert np.allclose(flux[2] / flux[0], 20.0, rtol=1e-6)
+
+
+def test_from_histories_broadcasts_a_shared_time_grid(fwd_table_sfh):
+    """A single (n_t,) grid shared by every galaxy must broadcast to (N, n_t)."""
+    from tengri import Catalog
+
+    _t, sfr = _flat_histories([1.0, 5.0, 20.0])
+    shared = Catalog.from_histories(
+        fwd_table_sfh, t_gyr=_T_GYR, sfr=sfr, params={"dust_tau_diff": np.full(3, 0.2)}
+    )
+    per_galaxy = Catalog.from_histories(
+        fwd_table_sfh, t_gyr=_t, sfr=sfr, params={"dust_tau_diff": np.full(3, 0.2)}
+    )
+
+    assert np.allclose(np.asarray(shared.predict()) / np.asarray(per_galaxy.predict()), 1.0)
+
+
+def test_from_histories_equals_explicit_columns(fwd_table_sfh):
+    """from_histories is sugar, not a second code path — it must agree exactly."""
+    from tengri import Catalog
+
+    t, sfr = _flat_histories([1.0, 5.0, 20.0])
+    tau = np.array([0.1, 0.2, 0.3])
+
+    sugar = np.asarray(
+        Catalog.from_histories(
+            fwd_table_sfh, t_gyr=t, sfr=sfr, params={"dust_tau_diff": tau}
+        ).predict()
+    )
+    explicit = np.asarray(
+        Catalog(fwd_table_sfh, None, flux_unit="cgs_fnu").predict(
+            {"dust_tau_diff": tau, "sfh_t_gyr": t, "sfh_sfr": sfr}
+        )
+    )
+    assert np.allclose(sugar / explicit, 1.0, rtol=1e-12)
+
+
+def test_from_histories_rejects_a_non_table_model(synthetic_ssp_wide, synthetic_tophat_obs):
+    """A parametric-SFH model cannot consume histories — say so, and name the fix."""
+    from tengri import FIXED, FREE, Catalog, ForwardModel, SEDModel
+    from tengri.parameters.priors import Fixed
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sed = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=synthetic_tophat_obs,
+            sfh={"type": "dpl", "all_params": FREE},
+            dust={"type": "two_component", "all_params": FIXED, "tau_bc": 0.5},
+            neb={"type": "none"},
+            redshift=Fixed(_Z_OBS),
+        )
+        fwd = ForwardModel.build(sed=sed, observation=synthetic_tophat_obs)
+
+    t, sfr = _flat_histories([1.0])
+    with pytest.raises(ValueError, match=r"sfh=\{'type': 'table'\}"):
+        Catalog.from_histories(fwd, t_gyr=t, sfr=sfr)
+
+
+def test_from_histories_rejects_non_monotonic_time(fwd_table_sfh):
+    """Cosmic time must increase — a scrambled grid is a silent-garbage input."""
+    from tengri import Catalog
+
+    t, sfr = _flat_histories([1.0])
+    t[0, 5], t[0, 6] = t[0, 6], t[0, 5]
+    with pytest.raises(ValueError, match="increas"):
+        Catalog.from_histories(fwd_table_sfh, t_gyr=t, sfr=sfr)
+
+
+def test_from_histories_rejects_negative_sfr(fwd_table_sfh):
+    """A negative SFR is unphysical and would quietly subtract stellar mass."""
+    from tengri import Catalog
+
+    t, sfr = _flat_histories([1.0])
+    sfr[0, 3] = -1.0
+    with pytest.raises(ValueError, match="negative"):
+        Catalog.from_histories(fwd_table_sfh, t_gyr=t, sfr=sfr)
+
+
+def test_from_histories_rejects_mismatched_n_t(fwd_table_sfh):
+    """sfr and t_gyr must agree on n_t, naming both."""
+    from tengri import Catalog
+
+    t, sfr = _flat_histories([1.0, 2.0])
+    with pytest.raises(ValueError, match="n_t"):
+        Catalog.from_histories(fwd_table_sfh, t_gyr=t, sfr=sfr[:, :-3])
+
+
+def test_from_histories_rejects_mismatched_n_galaxies(fwd_table_sfh):
+    """Per-galaxy scalars must agree with the history galaxy count."""
+    from tengri import Catalog
+
+    t, sfr = _flat_histories([1.0, 2.0, 3.0])
+    with pytest.raises(ValueError, match="same leading"):
+        Catalog.from_histories(
+            fwd_table_sfh, t_gyr=t, sfr=sfr, params={"dust_tau_diff": np.full(2, 0.2)}
+        )
+
+
+def test_from_histories_rejects_met_without_a_table_metallicity(fwd_table_sfh):
+    """met= needs metallicity_model='table'; this fixture is delta, so refuse."""
+    from tengri import Catalog
+
+    t, sfr = _flat_histories([1.0])
+    with pytest.raises(ValueError, match=r"met=\{'type': 'table'\}"):
+        Catalog.from_histories(fwd_table_sfh, t_gyr=t, sfr=sfr, met=np.zeros_like(sfr))
+
+
+def test_predict_without_columns_needs_from_histories(fwd_table_sfh):
+    """predict() with no argument is only meaningful on a from_histories catalog."""
+    from tengri import Catalog
+
+    with pytest.raises(ValueError, match="from_histories"):
+        Catalog(fwd_table_sfh, None, flux_unit="cgs_fnu").predict()
