@@ -28,16 +28,24 @@ def canonical_dsps_kwargs(**kwargs):
     Parameters
     ----------
     **kwargs
-        Float array/scalar operands to forward to a DSPS kernel.
+        Array/scalar operands to forward to a DSPS kernel. Integer and boolean
+        operands (indices, counts, masks) pass through untouched.
 
     Returns
     -------
     dict
-        The same keys, all cast to ``canonicalize_dtype(result_type(*values))``.
+        The same keys. Floating operands are cast to
+        ``canonicalize_dtype(result_type(*floating_values))``; every other
+        operand is returned as-is.
 
     Notes
     -----
     **JIT/grad/vmap-safe**: yes.
+
+    Only *floating* operands are canonicalized, and only they contribute to the
+    promotion. Folding an integer into ``result_type`` would promote it to float
+    and hand a DSPS kernel a float where it expects an index — the cast this
+    function exists to prevent, in the opposite direction.
 
     The SSP grids (``ssp_lgmet``, ``ssp_lg_age_gyr``, ``ssp_flux``) are cached
     host arrays built once at load time, so they stay float64 even inside
@@ -61,8 +69,13 @@ def canonical_dsps_kwargs(**kwargs):
     reach it without importing back into ``components/stellar/component.py``.
     """
     arrays = {key: jnp.asarray(value) for key, value in kwargs.items()}
-    dt = jax_dtypes.canonicalize_dtype(jnp.result_type(*arrays.values()))
-    return {key: value.astype(dt) for key, value in arrays.items()}
+    floating = {
+        key: value for key, value in arrays.items() if jnp.issubdtype(value.dtype, jnp.floating)
+    }
+    if not floating:
+        return arrays
+    dt = jax_dtypes.canonicalize_dtype(jnp.result_type(*floating.values()))
+    return {key: (value.astype(dt) if key in floating else value) for key, value in arrays.items()}
 
 
 class SSPData(NamedTuple):

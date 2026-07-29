@@ -33,6 +33,14 @@ from tengri.utils.physics_constants import (
 # rather than needing to be clamped short of it (#1439).
 _X_MAX: float = 500.0
 
+# ...and a floor, because the denominator vanishes at the OTHER end: the
+# occupation number goes as 1/x for small x, so x = 0 is a division by zero
+# (``exp(-0) / -expm1(-0)`` is ``1 / 0``) and the Rayleigh-Jeans limit comes
+# back ``inf`` rather than large-but-finite. Same value and same reason as
+# ``utils.blackbody._X_MIN``, which the sibling Planck closure has always
+# carried; this one clipped at 0.0 and could reach the pole (#1439).
+_X_MIN: float = 1e-10
+
 
 def modified_blackbody(
     wavelength_aa: jnp.ndarray,
@@ -200,7 +208,7 @@ def _casey_graybody_nu(
     # tiny ``k`` into the numerator makes the denominator ``lambda·T``, whose
     # square is ~1e-7 at the same point. Measured: gradient NaN -> 9.9896e+04,
     # matching float64; float64 itself bit-identical.
-    x = jnp.clip((_H_PLANCK * _C_CGS / _K_BOLTZMANN) / (wavelength_cm * T_eff), 0.0, _X_MAX)
+    x = jnp.clip((_H_PLANCK * _C_CGS / _K_BOLTZMANN) / (wavelength_cm * T_eff), _X_MIN, _X_MAX)
     tau = (_CASEY_LAMBDA0_CM / wavelength_cm) ** dust_beta_ir
     opacity = tau if optically_thin else -jnp.expm1(-tau)
     # ``nu**3`` written out reaches ~2.7e49 on a UV-to-far-IR grid, eleven
