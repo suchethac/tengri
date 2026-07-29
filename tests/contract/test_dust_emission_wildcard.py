@@ -1,11 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Contract: ``dust.emission``'s ``'*'`` must free parameters the backend reads.
 
-``dust={'emission': {'type': X, '*': FREE}}`` expands ``'*'`` against
-``_DUST_EMISSION_PARAM_NAMES`` (``parameters/groups.py``) — a static union over
-*every* dust-emission backend, computed with no reference to ``X``. So the same
-seven names are freed whichever engine is selected, and for two engines not one
-of them is a parameter that engine reads (#1482):
+``dust={'emission': {'type': X, '*': FREE}}`` frees the same seven parameters
+whichever engine ``X`` names, and for two engines not one of the seven is a
+parameter that engine reads (#1482):
 
 ===================  =============  ==============
 ``emission.type``    freed by ``*``  actually live
@@ -16,12 +14,25 @@ of them is a parameter that engine reads (#1482):
 ``themis``           7              2
 ===================  =============  ==============
 
-Nothing warns, because every freed name is a real declared parameter with real
-bounds — just one belonging to a different engine. A sampler explores up to
-seven dimensions that cannot move the likelihood by one ULP, while the knob that
-*would* have worked stays at its default: Dale+2014 reads ``dust_alpha_dale``
-(varying it moves the photometry 9x), and ``dust_alpha_dale`` is not in the
-freed set. ``dust_alpha`` is THEMIS's slope.
+Each backend *does* declare its own parameters correctly — every one is a
+:class:`SEDModelComponent` and ``Dale2014IRSEDComponent.declared_parameters()``
+returns exactly ``dust_alpha_dale`` and ``dust_frac_agn``. The wildcard does not
+consult them. ``'*': FREE`` means "use the registry default", so it can only free
+a parameter whose registry default is a *distribution*; the 15 dust-emission
+parameters defaulting to ``Fixed`` scalars stay pinned. Which 7 of the 22 carry
+distribution defaults has nothing to do with the selected engine.
+
+``_check_wildcard_freed_something`` guards precisely this failure — but it is
+scoped to the **group**, raising only when *zero* of the group's 22 parameters
+were freed. Those same 7 always free, so ``any(freed)`` is always true and the
+guard can never fire for ``dust.emission``, including when zero of the selected
+backend's parameters were freed. It is a guard that fails open.
+
+So a sampler explores up to seven dimensions that cannot move the likelihood by
+one ULP, while the knob that *would* have worked stays at its default: Dale+2014
+reads ``dust_alpha_dale`` (varying it moves the photometry 9x), and that is one
+of the 15 the wildcard cannot reach. ``dust_alpha`` — which it does free — is
+THEMIS's slope.
 
 This pins the invariant rather than the instances: **whatever** ``'*'`` expands
 to, at least one freed parameter must move the observable. Adding a backend
