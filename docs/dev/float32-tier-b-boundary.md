@@ -421,15 +421,28 @@ Tier B targets. A mitigation that only works when you don't need it.
    ~1e12. Identical in float64 to 4e-16 relative.
 2. **Follow the working dtype.** `jnp.result_type(float)` instead of a hard `float64` — float64 under
    x64, float32 without it, no silent truncation.
-3. **Dtype-aware exponent clamp** (`tengri.utils.scale.max_finite_exponent`). The clamp was a fixed
-   `x <= 500`; `expm1(500)` is 1.4e217, finite in float64 but `inf` in float32, which overflows above
-   x ~ 88.7. The forward value was still *correct* (a saturated denominator gives the right Wien-tail
-   limit of zero) but the **gradient was `inf/inf` = NaN** — a fit would have failed where the forward
-   pass looked fine. Capping at the dtype's own limit is physically free: x = 88 already puts the tail
-   at e⁻⁸⁸ ≈ 6e-39 of the peak.
+3. **Bound the reciprocal instead of clamping the exponent.** A dtype-aware clamp
+   (`tengri.utils.scale.max_finite_exponent`) shipped first: `expm1(500)` is 1.4e217, finite in
+   float64 but `inf` in float32, which overflows above x ~ 88.7, and a saturated denominator gives
+   the right Wien-tail limit of zero with an `inf/inf` = NaN **gradient**. That clamp was sized on
+   `expm1`'s *forward* overflow and so was **half** of what the derivative needed — the reverse pass
+   forms `expm1(x)²`, which passes 3.4e38 at x ≈ 44. Superseded (#1439) by spelling the occupation
+   number `exp(-x) / -expm1(-x)`: identical value, denominator in (0, 1], so neither it nor its
+   square can overflow at any x in any dtype. With that in place the clamp measured **inert** —
+   identical values *and* gradients at x = 40, 60, 87, 90, 150, 400 in both dtypes — so
+   `max_finite_exponent` was removed rather than left as a no-op with a stale justification.
 4. **A third copy.** `_casey_graybody_nu` formed `(c/λ)³` separately. It is a *shape*, normalized
    downstream by its own frequency integral, so dropping the constant `c³` and using `(1/λ)³` cancels
    exactly — both callers pick up the same factor.
+5. **The same exponent grouping, one level down** (#1439). `_casey_graybody_nu` spelled the exponent
+   `h·c / (λ·k·T)`. Division's derivative w.r.t. its denominator needs `den²`, and `(λ·k·T)²`
+   measured **2.3e-39** at the blue end of a UV-to-far-IR grid — *below* float32's smallest normal
+   1.18e-38, so the reverse pass divided by zero. The forward value was correct to seven digits
+   (9.699307e+05 in both dtypes) while `d/dT` came back **NaN**: the signature failure of this whole
+   tier. Regrouped `(h·c/k) / (λ·T)`, which puts the same square at ~1e-7. Measured gradient
+   NaN → 9.9896e+04, matching float64; float64 value and gradient both bit-identical. Note the
+   mirror symmetry with the Planck fix above — there the squared denominator *overflowed*, here it
+   *underflowed*, and `sqrt(limit)` is the safe bound in both directions.
 
 float64 cross-version parity over 96 configurations covering all four analytic closures: 4730 fields
 bit-exact, 38 moved (only `sed_dust_ir`), worst **6.55e-16**, zero NaN-status changes.

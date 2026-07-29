@@ -148,41 +148,27 @@ def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
     the sum vanishes.
     """
     larger = jnp.maximum(log_a, log_b)
-    usable = jnp.isfinite(larger)
-    offset = jnp.where(usable, larger, 0.0)
+    finite = jnp.isfinite(larger)
+    offset = jnp.where(finite, larger, 0.0)
     total = sign_a * pow10(log_a - offset) + sign_b * pow10(log_b - offset)
     magnitude = jnp.abs(total)
-    positive = usable & (magnitude > 0)
+    positive = finite & (magnitude > 0)
     safe = jnp.where(positive, magnitude, 1.0)
-    return jnp.where(positive, offset + jnp.log10(safe), -jnp.inf)
+    summed = jnp.where(positive, offset + jnp.log10(safe), -jnp.inf)
+    # ``finite`` is False for BOTH infinities, but they mean opposite things:
+    # -inf is "no term here", +inf is an overflow upstream. Folding the latter
+    # into the -inf sentinel would report an overflowed term as exactly zero —
+    # a fail-open on precisely the axis this module exists to close. Report it
+    # as +inf so it stays loud.
+    return jnp.where(jnp.isposinf(larger), jnp.inf, summed)
 
 
-def max_finite_exponent() -> float:
-    """Largest ``x`` for which ``exp(x)``/``expm1(x)`` stays finite at working precision.
-
-    Returns 500.0 under float64 — the value the Planck clamps used before —
-    and ~87.7 under float32, whose ``exp`` overflows above x ~ 88.7.
-
-    An overflowing exponential is not merely a forward-value problem. A
-    saturated ``inf`` denominator still gives the correct limit (the Wien tail
-    tends to zero), but its *gradient* is ``inf/inf`` — NaN — so a fit would
-    fail where the forward pass looked fine. Capping at the dtype's own limit
-    keeps both finite.
-
-    Physically free for a blackbody: x = 88 already puts the Wien tail at
-    ``e**-88 ~ 6e-39`` of the peak, far below anything measurable (#1206).
-
-    Returns
-    -------
-    float
-        Clamp ceiling [dimensionless]; a static Python float, safe as a
-        ``jnp.clip`` bound under JIT.
-
-    Notes
-    -----
-    **JIT-compatible**: yes — resolved at trace time from
-    ``jnp.result_type(float)``, so it is a compile-time constant.
-    """
-    import math
-
-    return float(min(500.0, math.log(float(jnp.finfo(jnp.result_type(float)).max)) - 1.0))
+# ``max_finite_exponent()`` lived here until 2026-07. It capped x at the
+# dtype's own ``exp`` overflow (~87.7 in float32) for the two Planck-family
+# closures that spelled the occupation number ``1/expm1(x)``. Both now spell it
+# ``exp(-x) / -expm1(-x)``, whose denominator lies in (0, 1] and cannot
+# overflow at any x in any dtype, so the cap became inert — measured identical
+# values and gradients with and without it at x = 40, 60, 87, 90, 150, 400 in
+# both dtypes. Removed rather than left as a no-op with a justification that no
+# longer held (#1439). Restore it only alongside a caller that needs the raw
+# ``expm1(x)`` form — and note the derivative needs ``sqrt`` of the limit.

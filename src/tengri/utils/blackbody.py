@@ -22,13 +22,16 @@ from tengri.utils.physics_constants import (
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZ,
 )
-from tengri.utils.scale import max_finite_exponent
 
 __all__ = ["planck_bnu_nu", "planck_bnu_wave"]
 
-# x = h*nu/(k_B*T) is clamped to this interval.  At x = 500, expm1(x) ~ 1.4e217
-# — finite in float64.  The clamp avoids both expm1 overflow and division by
-# zero, and keeps gradients finite everywhere.
+# x = h*nu/(k_B*T) is clamped to this interval.  The ceiling is a plain
+# constant, not a dtype-dependent one: the denominator below is ``-expm1(-x)``,
+# which lives in (0, 1] and cannot overflow at any x in any dtype, while
+# ``exp(-x)`` underflows to exactly 0.0 — the true Wien limit.  Measured
+# identical values AND gradients at x = 40, 60, 87, 90, 150, 400 in both
+# dtypes with and without a dtype-aware cap, so the cap was inert (#1439).
+# The floor is what still earns its keep: it bounds 1/x as x -> 0.
 _X_MIN: float = 1e-10
 _X_MAX: float = 500.0
 
@@ -81,11 +84,17 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
     arrays float32 even when combined with Python float scalars, so the cast
     must still be explicit.
 
-    :math:`x = h\nu/k_B T` is clamped to ``[1e-10, min(500,
-    max_finite_exponent())]`` and :math:`T` to [1 K, inf). The upper clamp
-    follows the dtype because ``expm1`` overflows above :math:`x \approx 88.7`
-    in float32; a saturated denominator gives the correct forward limit
-    (:math:`B_\nu \to 0`) but a NaN *gradient* (#1206).
+    :math:`x = h\nu/k_B T` is clamped to ``[1e-10, 500]`` and :math:`T` to
+    [1 K, inf). The reciprocal is spelled :math:`e^{-x}/(1 - e^{-x})` rather
+    than :math:`1/(e^x - 1)`; the two are the same number, but the former's
+    denominator lies in (0, 1], so neither it nor the *square* of it that the
+    reverse pass forms can overflow in any dtype. The exponent is likewise
+    grouped :math:`(h/k_B)\,\nu/T` rather than :math:`h\nu/(k_B T)`, which
+    keeps the reverse pass's :math:`1/T^2` in range where :math:`1/(k_B T)^2`
+    was not. Both rewrites are exact identities and leave float64 gradients
+    bit-identical; they exist because a guard sized for where the *value*
+    breaks is off by a square root from where the *derivative* breaks
+    (#1206, #1439).
 
     References
     ----------
@@ -102,11 +111,6 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
     nu_w = jnp.asarray(nu, dtype=dtype)
     t_safe = jnp.maximum(jnp.asarray(temperature, dtype=dtype), _T_MIN)
 
-    # ``_X_MAX`` is 500, and expm1(500) = 1.4e217 — finite in float64 but inf
-    # in float32, which overflows above x ~ 88.7. A saturated denominator
-    # still gives the right forward value (B_nu -> 0, the Wien-tail limit) but
-    # its gradient is inf/inf = NaN, so a fit would fail where the forward pass
-    # looked healthy. Cap at the dtype's own limit; float64 is unaffected.
     # Grouped as ``(h/k)·nu / T``, NOT ``h·nu / (k·T)`` — associativity, but the
     # reverse pass is not associative in float32 (#1439). Division's derivative
     # w.r.t. its denominator is ``-g·A/den**2``. Spelled ``h·nu / (k·T)`` the
@@ -120,9 +124,7 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
     #
     # Same regrouping idea as ``nu·(nu/c)**2`` below, one level down: there it
     # keeps a *forward* intermediate in range, here a *backward* one.
-    x = jnp.clip(
-        (_H_PLANCK / _K_BOLTZ) * nu_w / t_safe, _X_MIN, min(_X_MAX, max_finite_exponent())
-    )
+    x = jnp.clip((_H_PLANCK / _K_BOLTZ) * nu_w / t_safe, _X_MIN, _X_MAX)
 
     # Algebraically 2h·nu³/c², but never forming nu³: at λ ~ 100 Å that
     # intermediate is ~2.7e52, far past float32's 3.4e38, while B_nu itself
@@ -135,9 +137,12 @@ def planck_bnu_nu(nu: jnp.ndarray, temperature: float) -> jnp.ndarray:
     # ``expm1(x)**2`` passes float32's 3.4e38 once x > ~44, so with a large
     # incoming cotangent the reverse pass formed ``inf/inf`` and returned NaN —
     # while the forward value stayed perfectly healthy, because a saturated
-    # denominator still gives the right Wien-tail limit. The clamp above bounds
-    # x by ``expm1``'s *forward* overflow (~88.7 in float32); the derivative
-    # needs half that, so the guard could not have covered it.
+    # denominator still gives the right Wien-tail limit. A dtype-aware clamp
+    # used to sit above, sized on ``expm1``'s *forward* overflow (~88.7 in
+    # float32) — but the derivative breaks at half that, so no setting of that
+    # clamp could ever have covered this. That is why the fix is the rewrite
+    # below and not a tighter bound; with it in place the clamp measured inert
+    # and was removed.
     #
     # The rewritten denominator ``1 - e^-x`` lives in (0, 1], so its square is
     # bounded by 1 at every x and in every dtype — the failure mode is removed
