@@ -47,15 +47,22 @@ pytestmark = pytest.mark.regression_bug
 
 
 def test_table_sfh_is_seen_by_the_fast_path_guard():
-    """The tabulated SFH's registry fn must be a member of the guard map.
+    """The tabulated SFH's registry fn must remain in the guard map as a backstop.
 
     The CI-visible lock: needs no SSP grid, so it runs in the fast tier where a
     data-gated test would silently skip. This is the single membership fact the
     whole silent-zero failure hung on.
+
+    Since #1396 the tabulated SFH is normally **served** — routed to the runtime
+    table before the registry placeholder is ever evaluated — so this entry is no
+    longer the primary defense. It stays as the backstop for a tabulated SFH that
+    reaches the CIC branch *unrouted*, which is the only way the all-zero
+    placeholder could be evaluated again.
     """
     assert SFH_REGISTRY["table"].fn in C._FAST_PATH_UNSUPPORTED_SFH_FNS, (
-        "the tabulated SFH is invisible to compute_joint_weights' guard — it will "
-        "reach the CIC branch and evaluate the all-zero placeholder (#1395)"
+        "the tabulated SFH is invisible to compute_joint_weights' guard — an "
+        "unrouted table would reach the CIC branch and evaluate the all-zero "
+        "placeholder (#1395)"
     )
 
 
@@ -109,12 +116,33 @@ def _build(sfh, ssp, obs):
 
 
 def test_compute_joint_weights_raises_for_table_sfh(synthetic_ssp_wide, synthetic_tophat_obs):
-    """End-to-end: the fast path must refuse a tabulated SFH, not return zeros."""
+    """End-to-end: an unservable tabulated SFH raises, and never returns zeros.
+
+    The *mechanism* changed after #1396 and this test changed with it, so the
+    change is worth stating plainly. #1395 closed the hole by making the fast
+    path **refuse** a tabulated SFH ("use the exact forward"); #1396 closed it
+    the other way, by making the fast path **serve** it — which was always the
+    stated end state ("either serves the table SFH or refuses loudly").
+
+    What is asserted here is the part that did **not** change, and which is the
+    actual #1395 invariant: a tabulated SFH the fast path *cannot* evaluate —
+    here because the runtime arrays are absent, since they are records rather
+    than sampled parameters — raises, naming what is missing. It must never
+    reach the all-zero registry placeholder and launder it through the
+    normalization clamp into a finite zero.
+
+    The complementary half — a tabulated SFH *with* its arrays is served, and
+    agrees with the exact forward — is gated in
+    ``tests/contract/test_table_sfh_fast_line_parity.py``.
+    """
     model = _build({"type": "table"}, synthetic_ssp_wide, synthetic_tophat_obs)
     stellar = _stellar_of(model)
+    # sample() carries free and Fixed parameters, but not the runtime history
+    # arrays — so this is exactly the unservable case.
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    assert "sfh_sfr" not in params, "setup: the history must be absent for this case"
 
-    with pytest.raises(ValueError, match="exact forward"):
+    with pytest.raises(ValueError, match="sfh_t_gyr"):
         stellar.compute_joint_weights(params)
 
 
