@@ -452,10 +452,16 @@ class AGNSEDComponent:
         # ``10^(agn_log_lbol − _AGN_LBOL_REF)`` scale in log space via
         # apply_log10_scale. That output factoring is EXACT for shape-invariant
         # blocks — the SKIRTOR torus template and the power-law disc scale
-        # linearly with L_bol — but only APPROXIMATE for the multicolor disc,
-        # whose spectral shape (temperature) depends on L_bol; making it exact in
-        # float32 needs the internal bolometric integrals log-spaced (#1206
-        # follow-up). In **float64** we evaluate at the true ``agn_log_lbol`` and
+        # linearly with L_bol — and, since the ``agn_log_lbol_shape`` hand-off
+        # below, exact for the multicolor disc too: the true L_bol drives the
+        # temperature and geometry while only the MAGNITUDE is factored, and the
+        # magnitude is linear by construction. Measured in float64, where float32
+        # round-off cannot mask a shape error: max relative deviation from a
+        # direct evaluation at the true L_bol is 2.2e-16 (one ulp) at
+        # log L_bol = 11-14. Without the shape hand-off the same comparison is
+        # off by 100% at log L_bol = 11 and 3685% at 14 — that is what this
+        # comment used to describe. In **float64** we evaluate at the true
+        # ``agn_log_lbol`` and
         # publish the block outputs unchanged — the reference implementation,
         # bit-for-bit identical to pre-#1206 main for every disc type.
         from tengri.utils.scale import apply_log10_scale

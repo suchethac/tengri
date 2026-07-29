@@ -688,8 +688,9 @@ class SEDModel:
 
         .. deprecated:: 2026-07
 
-           **Retired (#1433).** Passing anything but ``"float64"`` raises a
-           ``DeprecationWarning`` and does nothing else. ``"float32"`` cast
+           **Retired (#1433).** Passing anything but ``"float64"`` emits a
+           ``DeprecationWarning`` — a warning, not an exception; the call
+           proceeds — and does nothing else. ``"float32"`` cast
            nothing and changed nothing — measured bit-for-bit identical
            photometry to ``"float64"`` on both the exact and the ``WavePrecomp``
            path. It no longer enters :meth:`compile_signature` either, so it no
