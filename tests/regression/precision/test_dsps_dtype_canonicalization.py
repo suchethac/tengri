@@ -92,7 +92,7 @@ def test_canonicalization_is_a_noop_under_x64():
     the invariant, so it imports the numerics of the entire SED pipeline — and
     the host's BLAS and XLA codegen — into the comparison. It held on the
     machine it was recorded on and failed in CI, which is the expected
-    behaviour of a cross-machine bit-exact assertion on a full forward pass,
+    behavior of a cross-machine bit-exact assertion on a full forward pass,
     not evidence about the canonicalization.
 
     Same-machine end-to-end float64 invariance was measured separately (both
