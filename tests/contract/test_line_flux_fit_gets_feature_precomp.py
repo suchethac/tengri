@@ -21,7 +21,7 @@ WavePrecomp explicitly made a lines fit *slower than passing nothing at all*.
 Under ``"auto"`` the build-time config is now topped up with FeaturePrecomp
 rather than bailed on, and the existing config objects are preserved — dropping
 a ``catalog_z_range`` while "helpfully" adding a LUT would be a silent
-behavioural change.
+behavioral change.
 
 Auto-activation is scoped to the ``"auto"`` policy on purpose. ``approx=None``
 means exact and stays exact; an explicit config means what it says. Both warn
@@ -152,7 +152,7 @@ def test_topping_up_preserves_the_build_time_settings(joint_setup):
     assert fitter.model.approx.feature_precomp
     assert _wave_cfg(fitter.model).catalog_z_range == (0.0, 1.5), (
         "topping up FeaturePrecomp discarded the build-time catalog_z_range — a "
-        "silent behavioural change, not a speedup"
+        "silent behavioral change, not a speedup"
     )
 
 

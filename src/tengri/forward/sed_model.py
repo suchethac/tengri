@@ -2617,7 +2617,7 @@ class SEDModel:
         booleans. This returns the configs themselves, so a caller can add one
         family without discarding another's settings — rebuilding from
         ``WavePrecomp()`` because ``approx.wave_precomp`` was ``True`` would
-        silently drop a configured ``catalog_z_range``, which is a behavioural
+        silently drop a configured ``catalog_z_range``, which is a behavioral
         change wearing a speedup's clothes.
 
         Returns

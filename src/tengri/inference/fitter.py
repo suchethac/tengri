@@ -885,7 +885,7 @@ class Fitter:
         explicit config means what it says. Both instead warn when a line
         channel is fit without the LUT, so the cost is visible rather than
         silent — the prior decision was against *silent* auto-activation, and a
-        warning is how that is honoured without leaving the cliff unmarked.
+        warning is how that is honored without leaving the cliff unmarked.
 
         ``model.with_approx`` returns a clone (or ``self`` for a no-op), so the
         user's original model object is never mutated. Models that cannot clone
