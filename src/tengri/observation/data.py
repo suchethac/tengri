@@ -80,8 +80,14 @@ class Data:
     spectrum : tuple of (flux, err) or None
         Each ``array_like, shape (n_pix,)`` [erg/s/cm^2/Hz].
     lines : dict or None
-        ``{line_name: (value, err)}`` [erg/s/cm^2]; names must be a
-        subset of the observation's ``LineList``.
+        ``{line_name: (value, err)}``, or
+        ``{line_name: (value, err, 'upper'|'lower')}`` [erg/s/cm^2]; names
+        must be a subset of the observation's ``LineList``. The optional
+        third element marks the flux as a censored limit rather than a
+        detection, using the same vocabulary as
+        :meth:`~tengri.observation.line_flux_data.LineFluxData.from_dict`.
+        Line limits belong here, not in ``censor`` — that field is
+        per-photometric-band.
     censor : array_like or None
         Per-band censoring flags, shape ``(n_filters,)``: ``0`` =
         detected, ``1`` = upper limit, ``-1`` = lower limit. Boolean
@@ -184,7 +190,25 @@ class Data:
             # Line fluxes carry the same NaN / sign-flip exposure as the continuum,
             # and each is named individually so the offending line is obvious.
             for line_name, pair in self.lines.items():
-                value, err = pair
+                value, err, *limit = pair
+                # A line is either a detection (two elements) or a censored
+                # limit carrying the same marker vocabulary as
+                # ``LineFluxData.from_dict``. Anything else would fall through
+                # to the detected branch of the censored likelihood and fit a
+                # non-detection as a measurement (#1460, the line-side twin of
+                # the #1321 photometry trap).
+                if len(limit) > 1:
+                    raise ValueError(
+                        f"line {line_name!r}: expected (flux, err) or "
+                        f"(flux, err, 'upper'|'lower'), got {len(pair)} elements."
+                    )
+                if limit and limit[0] not in ("upper", "lower"):
+                    raise ValueError(
+                        f"line {line_name!r}: limit marker must be 'upper' or "
+                        f"'lower', got {limit[0]!r}. An unrecognized marker "
+                        "would be treated as a detection, biasing the fit "
+                        "toward flux the galaxy does not have."
+                    )
                 _reject_nonfinite([value], f"{line_name} line flux", [line_name])
                 _reject_nonfinite([err], f"{line_name} line uncertainty", [line_name])
                 _reject_nonpositive_sigma([err], f"{line_name} line uncertainty", [line_name])
