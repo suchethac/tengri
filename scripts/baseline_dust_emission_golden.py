@@ -30,7 +30,12 @@ def main():
     from tengri.components.dust.emission import DUST_EMISSION_MODELS, preload_emission_model
 
     # Fixed wavelength grid (1e3 to 1e7 Angstrom)
-    wave_aa = jnp.linspace(1e3, 1e7, 512, dtype=jnp.float64)
+    # np.linspace, not jnp.linspace: the tests rebuild this grid from
+    # params.json with np.linspace, and the two disagree in the last ulp on
+    # some elements. Under linear interpolation that was invisible; log-log
+    # takes a log and an exp, which carries the ulp through to ~1e-14 in the
+    # output — enough to trip an rtol=1e-14 bit-exact assertion.
+    wave_aa = jnp.asarray(np.linspace(1e3, 1e7, 512, dtype=np.float64))
     L_ir = 1.0e44  # erg/s
 
     # Output directory
@@ -238,12 +243,12 @@ All outputs use 64-bit JAX arrays (jax_enable_x64=True).
         f.write(readme_content)
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Golden baseline capture complete.")
     print(f"  Captured: {len(captured_templates)} templates")
     print(f"  Skipped: {len(skipped_templates)} templates")
     print(f"  Output directory: {outdir}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     return 0
 
