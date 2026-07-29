@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
-from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -182,12 +181,14 @@ def create_wg00_from_grid(
 
 def _find_wg00_grid() -> str:
     """Locate the vendored WG00 grid relative to the package root or CWD."""
-    base = Path(__file__).resolve().parents[4]
-    for rel in _GRID_SEARCH_PATHS:
-        for candidate in (base / rel, Path(rel)):
-            if candidate.is_file():
-                return str(candidate)
-    raise FileNotFoundError(_NOT_FOUND_MSG)
+    from tengri._data_setup import data_path
+
+    # _GRID_SEARCH_PATHS[-1] is the bare filename; data_path searches every
+    # directory the old parents[4] walk reached, plus $TENGRI_DATA_DIR (#1431).
+    try:
+        return str(data_path(_GRID_SEARCH_PATHS[-1]))
+    except FileNotFoundError:
+        raise FileNotFoundError(_NOT_FOUND_MSG) from None
 
 
 @functools.cache
