@@ -21,15 +21,27 @@ Two halves, both pinned here:
   ``FREE`` opens up (normally the range its own ``bound_check`` enforces, which
   a drift test cross-checks). Where no range is declared, the guard still fires
   and the documented workaround is an explicit prior.
+
+A third case was left open by the original guard and closed in #1474: freeing a
+strict *subset*. The guard skipped a group as soon as one parameter freed, so a
+group holding both kinds resolved in silence — measured xray 3/9, dust 2/7,
+shock 3/5, neb 7/8. That now emits a filterable
+:class:`WildcardPartialFreeWarning`. It warns rather than raises because a
+partial free is sometimes correct (``dust_Rv`` is fixed by definition under a
+Calzetti law) and because six of the ten shipped recipes free a strict subset
+today — refusing would break all six.
 """
 
 from __future__ import annotations
+
+import re
+import warnings
 
 import pytest
 
 import tengri
 from tengri import FIXED, FREE, Uniform
-from tengri.config.exceptions import ParameterError
+from tengri.config.exceptions import ParameterError, WildcardPartialFreeWarning
 
 pytestmark = pytest.mark.contract
 
@@ -55,10 +67,16 @@ def test_guard_rejects_an_outcome_that_freed_nothing():
 
 
 def test_guard_accepts_an_outcome_that_freed_even_one():
-    """Outcome-based, not intent-based: freeing 1 of N is still freeing."""
+    """Outcome-based, not intent-based: freeing 1 of N is still freeing.
+
+    It does not *raise* — but since #1474 it does warn, because the caller wrote
+    ``all_params`` and got a strict subset. Both halves asserted here so that
+    removing either is a test failure.
+    """
     from tengri.parameters.groups import _check_wildcard_freed_something
 
-    _check_wildcard_freed_something({"neb": [("neb_logU", True), ("neb_fesc", False)]})
+    with pytest.warns(WildcardPartialFreeWarning):
+        _check_wildcard_freed_something({"neb": [("neb_logU", True), ("neb_fesc", False)]})
 
 
 def test_guard_is_per_nesting_level():
@@ -152,6 +170,118 @@ def test_builders_path_resolves_identically_to_the_dict_form():
     built = _free(sfh={"type": "dpl"}, neb=tengri.builders.neb.cue(defaults=FREE))
     dictform = _free(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE})
     assert built == dictform
+
+
+# ── A partial free must be reported, not swallowed (#1474) ────────────
+
+# The guard used to skip a group the moment *one* parameter freed, so the
+# common case — some declare `free_prior`, some do not — passed in silence.
+# Measured then: xray 3/9, dust 2/7, shock 3/5, neb 7/8, all silent.
+
+
+def test_guard_warns_when_it_frees_only_a_subset():
+    from tengri.parameters.groups import _check_wildcard_freed_something
+
+    with pytest.warns(WildcardPartialFreeWarning, match=r"freed 1 of 3 parameters"):
+        _check_wildcard_freed_something(
+            {"xray": [("xray_gamma_agn", True), ("xray_E_cut", False), ("xray_alpha_irx", False)]}
+        )
+
+
+def test_the_partial_warning_names_every_stuck_param():
+    """Naming them is the whole point — a bare count is not actionable."""
+    from tengri.parameters.groups import _check_wildcard_freed_something
+
+    with pytest.warns(WildcardPartialFreeWarning) as rec:
+        _check_wildcard_freed_something(
+            {"xray": [("xray_gamma_agn", True), ("xray_E_cut", False), ("xray_alpha_irx", False)]}
+        )
+    message = str(rec[0].message)
+    assert "xray_E_cut" in message
+    assert "xray_alpha_irx" in message
+    # The one that DID free must not be listed as stuck.
+    assert "xray_gamma_agn" not in message.split("stay pinned:")[1]
+
+
+def test_a_full_free_stays_silent():
+    """The warning must be conditional, or it is noise rather than signal."""
+    from tengri.parameters.groups import _check_wildcard_freed_something
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _check_wildcard_freed_something({"agn.torus": [("agn_oa", True), ("agn_t_torus", True)]})
+    assert not [w for w in caught if issubclass(w.category, WildcardPartialFreeWarning)]
+
+
+def test_freeing_nothing_still_raises_rather_than_warning():
+    """Zero keeps the harder response — a warning there would be a regression."""
+    from tengri.parameters.groups import _check_wildcard_freed_something
+
+    with pytest.raises(ParameterError):
+        _check_wildcard_freed_something({"neb": [("neb_logU", False), ("neb_fesc", False)]})
+
+
+def test_partial_warning_is_filterable_by_category():
+    """A deliberate partial free must be silenceable without silencing all."""
+    from tengri.parameters.groups import _check_wildcard_freed_something
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        warnings.simplefilter("ignore", WildcardPartialFreeWarning)
+        _check_wildcard_freed_something({"neb": [("neb_logU", True), ("neb_fesc", False)]})
+    assert not caught
+
+
+def test_partial_free_warns_end_to_end_through_parse_groups():
+    """Not just the decision function — the real user-facing path."""
+    with pytest.warns(WildcardPartialFreeWarning, match=r"group 'xray'"):
+        tengri.parse_groups(sfh={"type": "dpl"}, xray={"type": "simple", "all_params": FREE})
+
+
+@pytest.mark.parametrize(
+    "groups",
+    [
+        {"sfh": {"type": "dpl"}, "xray": {"type": "simple", "all_params": FREE}},
+        {"shock": {"all_params": FREE}},
+        # `sfh` carries met_* params, so the short-form prefix strip does not
+        # apply and the message must fall back to the full name. Advice that
+        # only works when the prefixes happen to line up is advice that raises.
+        {"sfh": {"type": "dpl", "all_params": FREE}},
+    ],
+    ids=["xray", "shock", "sfh-with-met-params"],
+)
+def test_the_advice_the_partial_warning_gives_actually_works(groups):
+    """Execute the remedy the message prints, rather than a hand-written twin.
+
+    The example is built by stripping a group prefix that does not always match
+    the parameter (``sfh`` holds ``met_*``), so the printed key is the thing
+    under test. Parse it back out and run it.
+    """
+    with pytest.warns(WildcardPartialFreeWarning) as rec:
+        tengri.parse_groups(**groups)
+
+    match = re.search(r"e\.g\. (\w+)=\{'([^']+)': Uniform", str(rec[0].message))
+    assert match, f"the warning no longer prints a runnable example: {rec[0].message}"
+    group_kwarg, param_key = match.group(1), match.group(2)
+
+    # Bracket each parameter's own Fixed default rather than reusing one span:
+    # `xray_E_cut` must stay > 0, so a blanket Uniform(0, 1) is inadmissible.
+    full = param_key if param_key.startswith(f"{group_kwarg}_") else f"{group_kwarg}_{param_key}"
+    try:
+        pinned = tengri.describe_parameter(full).prior.value
+    except (KeyError, AttributeError):
+        pinned = tengri.describe_parameter(param_key).prior.value
+    lo, hi = sorted((pinned * 0.5, pinned * 2.0)) if pinned else (-0.5, 0.5)
+
+    patched = {k: dict(v) for k, v in groups.items()}
+    patched.setdefault(group_kwarg, {})[param_key] = Uniform(lo, hi)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", WildcardPartialFreeWarning)
+        freed = set(tengri.parse_groups(**patched).free_params)
+
+    assert any(param_key in name for name in freed), (
+        f"the advice {group_kwarg}={{{param_key!r}: ...}} did not free anything"
+    )
 
 
 # ── Everything that legitimately works must keep working ──────────────
