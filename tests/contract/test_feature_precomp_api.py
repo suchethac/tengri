@@ -123,10 +123,20 @@ def _params(m, **override):
     return p
 
 
-def _loss_grad_flops(m):
-    """Compiled FLOPs of one gradient of the REAL fit objective — what a step pays."""
+def _loss_grad_flops(m, *, fit_approx):
+    """Compiled FLOPs of one gradient of the REAL fit objective — what a step pays.
+
+    ``fit_approx`` is passed to the ``Fitter`` explicitly, and that is now
+    load-bearing rather than incidental. Since the 2026-07 line-LUT default, the
+    ``"auto"`` policy **tops up** a build-time ``approx=WavePrecomp()`` with
+    ``FeaturePrecomp`` whenever a line channel is fit — which is the whole point
+    of that change, but it also means the slow arm of this comparison is no
+    longer slow unless it opts out. Without the explicit argument both arms come
+    back fast, the ratio collapses to ~1, and this guard fails while the code it
+    guards is working perfectly.
+    """
     n = len(BANDS)
-    f = Fitter(m, jnp.ones(n), jnp.ones(n))
+    f = Fitter(m, jnp.ones(n), jnp.ones(n), approx=fit_approx)
     loss_fn = build_loss_fn(f)
     data_args = dict(f._data_args)
     init = f._initialize_unbounded(jax.random.PRNGKey(0))
@@ -145,8 +155,11 @@ def test_the_likelihood_actually_reaches_the_fast_line_path(synthetic_ssp_wide):
     loaded machine; and against the *same* model otherwise, so it cannot go stale.
     """
     ssp = synthetic_ssp_wide
-    slow = _loss_grad_flops(_build(ssp, cue=False, approx=WavePrecomp()))
-    fast = _loss_grad_flops(_build(ssp, cue=False, approx=(WavePrecomp(), FeaturePrecomp())))
+    slow = _loss_grad_flops(_build(ssp, cue=False, approx=WavePrecomp()), fit_approx=WavePrecomp())
+    fast = _loss_grad_flops(
+        _build(ssp, cue=False, approx=(WavePrecomp(), FeaturePrecomp())),
+        fit_approx=(WavePrecomp(), FeaturePrecomp()),
+    )
     assert fast < slow / 5, (
         f"the likelihood is not using the line precompute: {fast:,.0f} FLOPs with "
         f"FeaturePrecomp vs {slow:,.0f} without — expected a large drop, since the "
@@ -313,8 +326,12 @@ def test_the_dust_ir_term_does_not_change_the_measured_lines():
 # ── the cache could not tell FeaturePrecomp apart (#1152 follow-up) ─────────
 
 
-def _grad_flops(m):
+def _grad_flops(m, *, fit_approx):
     """Compiled FLOPs of the gradient the SAMPLER calls, not build_loss_fn's.
+
+    ``fit_approx`` pins the fit-time policy: since the line-LUT default the
+    ``"auto"`` policy tops a build-time WavePrecomp up with FeaturePrecomp, so
+    the slow arm must opt out explicitly or both arms measure the fast path.
 
     MAP/HMC/VI go through ``InferenceContext.grad_fn`` →
     ``Fitter._get_or_build_grad_fn``, which is model-cached. The existing
@@ -325,7 +342,7 @@ def _grad_flops(m):
     from tengri.inference.context import InferenceContext
 
     n = len(BANDS)
-    f = Fitter(m, jnp.ones(n), jnp.ones(n))
+    f = Fitter(m, jnp.ones(n), jnp.ones(n), approx=fit_approx)
     ctx = InferenceContext.from_target(f)
     x0 = ctx.initial_params(jax.random.PRNGKey(0))
     return ctx.grad_fn.lower(x0, ctx.data_args).compile().cost_analysis()["flops"]
@@ -366,9 +383,10 @@ def test_the_sampler_gradient_reaches_the_fast_line_path(synthetic_ssp_wide):
     is machine-independent.
     """
     slow_model = _build(synthetic_ssp_wide, cue=False, approx=WavePrecomp())
-    slow = _grad_flops(slow_model)  # populate the cache with the SLOW engine first
+    slow = _grad_flops(slow_model, fit_approx=WavePrecomp())  # SLOW engine cached first
     fast = _grad_flops(
-        _build(synthetic_ssp_wide, cue=False, approx=(WavePrecomp(), FeaturePrecomp()))
+        _build(synthetic_ssp_wide, cue=False, approx=(WavePrecomp(), FeaturePrecomp())),
+        fit_approx=(WavePrecomp(), FeaturePrecomp()),
     )
     assert fast < slow / 5, (
         f"the sampler's gradient does not reach the fast line path: {fast:,.0f} vs "
