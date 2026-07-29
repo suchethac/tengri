@@ -1,76 +1,62 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Minimal two-galaxy catalog carrying per-galaxy emission-line fluxes."""
+"""Minimal two-galaxy catalog carrying per-galaxy emission-line fluxes.
+
+CRITICAL: Uses the EXISTING synthetic_ssp_wide and synthetic_tophat_obs fixtures
+from conftest.py, which have proven wavelength coverage for Halpha line flux
+prediction at z=0.05. Do NOT build custom SSPs — they risk omitting wavelength
+ranges needed for physical line predictions.
+"""
 
 from __future__ import annotations
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel
+from tengri import FIXED, FREE, Fixed, Observation, SEDModel
 from tengri.inference.catalog import Catalog
 from tengri.observation.line_flux_data import LineFluxData
-from tengri.observation.photometry import FilterCurve
 
 
-def build_two_galaxy_catalog(*, halpha, n_line_cols=None, ssp=None, obs_base=None):
+def build_two_galaxy_catalog(*, halpha, ssp, obs_base, n_line_cols=None):
     """Build a two-row catalog whose galaxies differ only in Halpha flux.
 
     Parameters
     ----------
     halpha : tuple of float
         Halpha flux for each galaxy [erg/s/cm2].
+    ssp : SSPData
+        SSP data from synthetic_ssp_wide fixture (REQUIRED, not optional).
+        Must have wavelength coverage that includes Halpha (6564.61 A) over
+        the redshift range used (z=0.05 here).
+    obs_base : Observation
+        Observation from synthetic_tophat_obs fixture (REQUIRED, not optional).
+        Provides the photometry bands.
     n_line_cols : int or None
         If specified, intentionally mismatch line column count for testing.
-    ssp : SSPData or None
-        Synthetic SSP. If None, uses synthetic_ssp_wide.
-    obs_base : Observation or None
-        Base observation. If None, uses synthetic_tophat_obs.
 
     Returns
     -------
     catalog : tengri.Catalog
     truth : dict
         The parameter dictionary both galaxies were generated from.
+
+    Raises
+    ------
+    AssertionError
+        If the model predicts zero line fluxes for the truth parameters
+        (indicating wavelength coverage or model configuration issue).
     """
-    if ssp is None:
-        n_met, n_age = 3, 25
-        wave = jnp.logspace(2.0, 7.0, 1600)
-        ages_gyr = jnp.linspace(-3.0, 1.14, n_age)
-        lgmet = jnp.array([-4.0, -2.65, -1.3])
-        base = (5000.0 / wave) ** 2
-        flux = (
-            base[None, None, :]
-            * (1.0 + 0.15 * (ages_gyr - ages_gyr.mean()))[None, :, None]
-            * (1.0 + 0.10 * (lgmet - lgmet.mean()))[:, None, None]
-        )
-        flux = jnp.abs(flux) + 1e-12
-
-        from tengri.components.stellar.sps.dsps_wrapper import SSPData
-
-        ssp = SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
-
-    if obs_base is None:
-
-        def _tophat(center, frac=0.16, n=40):
-            wave = jnp.linspace(center * (1.0 - frac), center * (1.0 + frac), n)
-            trans = jnp.sin(jnp.linspace(0.0, jnp.pi, n)) * 0.6
-            return FilterCurve(wave=wave, trans=trans, name=f"b{int(center)}")
-
-        curves = tuple(_tophat(c) for c in (3500.0, 4800.0, 6200.0, 7600.0, 9000.0))
-        obs_base = Observation(photometry=Photometry(filters=curves))
-
     # Add line flux data to the observation
     line_names = ("Halpha",)
     line_wave = (6564.61,)
-    line_fluxes_template = jnp.array([1.0e-16])  # template flux
-    line_errors = jnp.array([0.1e-16])
+    line_fluxes_template = np.array([1.0e-16])  # template flux
+    line_errors = np.array([0.1e-16])
 
     line_data = LineFluxData(
         names=line_names,
         fluxes=line_fluxes_template,
         errors=line_errors,
-        wavelengths=jnp.array(line_wave),
+        wavelengths=np.array(line_wave),
     )
     obs = Observation(
         photometry=obs_base.photometry,
@@ -78,13 +64,16 @@ def build_two_galaxy_catalog(*, halpha, n_line_cols=None, ssp=None, obs_base=Non
     )
 
     # Build the model
-    z = 0.05
+    # Use "cb19" nebular backend which actually computes line luminosities
+    # (unlike "ssp" which is BakedInBackend and returns NaN for lines).
+    # Use z=0 to keep Halpha at rest wavelength (6564.61 Å).
+    z = 0.0  # Rest frame
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FREE},
         dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
-        neb={"type": "cue", "*": FREE},
+        neb={"type": "cb19", "*": FREE},
         redshift=Fixed(z),
     )
 
@@ -92,17 +81,23 @@ def build_two_galaxy_catalog(*, halpha, n_line_cols=None, ssp=None, obs_base=Non
     key = jax.random.PRNGKey(42)
     truth_g0 = model.spec.sample(key)
 
-    # Generate data for galaxy 0
+    # CRITICAL ASSERTION: the model MUST predict non-zero line fluxes.
+    # If this fails, the SSP or redshift lacks wavelength coverage for lines.
     pred_g0 = model.predict(truth_g0)
-    flux_g0 = pred_g0.photometry()
-    noise_g0 = jnp.abs(flux_g0) * 0.05 + 1e-30
+    predicted_halpha = pred_g0.halpha
+    assert predicted_halpha > 0, (
+        f"Model predicts zero Halpha ({predicted_halpha}) for truth parameters. "
+        f"Check SSP wavelength coverage, redshift z={z}, and nebular backend. "
+        f"Without non-zero predictions, the line flux likelihood cannot constrain the fit."
+    )
 
-    # Galaxy 1: same photometry as galaxy 0, but with 4x higher Halpha.
-    # This creates a scenario where the line flux strongly suggests higher SFR
-    # than the photometry alone would indicate. The fitter must adjust
-    # nebular parameters (or other params) to produce 4x Halpha while keeping
-    # the same photometry. Higher Halpha relative to the SED should favor
-    # parameters that produce more young ionizing photons (higher SFR proxy).
+    # Generate data for galaxy 0
+    flux_g0 = pred_g0.photometry()
+    noise_g0 = np.abs(flux_g0) * 0.05 + 1e-30
+
+    # Galaxy 1: same photometry as galaxy 0, but with different Halpha.
+    # Both galaxies fitted against same photometry data, differ only in observed Halpha.
+    # If per-galaxy line fluxes reach the likelihood, the fits should differ.
     flux_g1 = flux_g0.copy()
     noise_g1 = noise_g0.copy()
 
@@ -122,9 +117,6 @@ def build_two_galaxy_catalog(*, halpha, n_line_cols=None, ssp=None, obs_base=Non
         "halpha_err": np.array([0.1e-16, 0.1e-16]),
     }
 
-    # For the test, return the first galaxy's truth
-    truth = truth_g0
-
     # Create catalog with line columns
     if n_line_cols is not None and n_line_cols != len(line_names):
         # Intentionally wrong count for testing validation
@@ -137,9 +129,10 @@ def build_two_galaxy_catalog(*, halpha, n_line_cols=None, ssp=None, obs_base=Non
         table,
         flux_unit="cgs_fnu",
         flux_cols=["flux_1", "flux_2", "flux_3", "flux_4", "flux_5"],
-        err_cols=["flux_1_err", "flux_2_err", "flux_3_err", "flux_4_err", "flux_5_err"],
+        err_cols=["flux_1_err", "flux_2_err", "flux_3_err", "flux_4_err",
+                  "flux_5_err"],
         line_cols=line_cols,
         line_err_cols=["halpha_err"],
     )
 
-    return cat, truth
+    return cat, truth_g0
