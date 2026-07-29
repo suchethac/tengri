@@ -753,7 +753,11 @@ _CURATED_DIR = (
     "recipes",
     "FeaturePrecomp",
     "WavePrecomp",
-    "Fitter",
+    # ``Fitter`` is deliberately absent: it is the cache-reuse mechanism, not a
+    # taught noun (api_migration_v0.x.md). It stays importable — no public API
+    # is removed — it just must not be what tab-completion suggests first. The
+    # canonical multi-galaxy entry point is ``Catalog``, below (#1455).
+    "Catalog",
     "fit_batch",
     "Observation",
     "Photometry",
@@ -774,7 +778,14 @@ _CURATED_DIR = (
     # 4.  Result types (+ hierarchical / spatial model classes)
     "Posterior",
     "PopulationSEDModel",
-    "PopulationFitter",
+    # ``PopulationFitter`` is deliberately absent too, and the reason is worth
+    # stating because two documents look like they disagree. It is the
+    # canonical *name* for the class (NAMING_CONTRACT, vs the retired
+    # ``HierarchicalFitter``), AND its taught construction form
+    # ``PopulationFitter(model_factory, galaxies, ...)`` raises a
+    # DeprecationWarning pointing at ForwardModel + PopulationSEDModel (#211,
+    # #1319). Both are true at different levels; a constructor that warns is
+    # not a fresh-user entry point.
     "PopulationPosterior",
     "SpatialSEDModel",
     # 5.  Convenience
