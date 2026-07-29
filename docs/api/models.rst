@@ -100,6 +100,13 @@ Energy-balanced IR dust emission models.
    :members: modified_blackbody, casey2012
    :noindex:
 
+The grain-physics templates behind the library-backed emission models are
+loaded from bundled data files.
+
+.. autofunction:: tengri.load_astrodust_hd23
+
+.. autofunction:: tengri.load_pahspec_draine2021
+
 Dust Priors
 ~~~~~~~~~~~
 
@@ -153,6 +160,29 @@ Photometry, spectroscopy, calibration, and emission line marginalization.
    :members: calibration_polynomial, marginalize_calibration
    :noindex:
 
+Instrumental broadening — the intrinsic stellar velocity dispersion and the
+spectrograph's own line-spread function — is applied to a model spectrum
+before it is compared with data.
+
+.. autofunction:: tengri.velocity_broaden
+
+.. autofunction:: tengri.apply_lsf
+
+Intergalactic Medium
+--------------------
+
+Mean IGM attenuation blueward of Lyman-alpha.
+
+.. warning::
+
+   Both functions take **observed-frame** wavelengths, not rest-frame ones.
+   Passing a rest-frame grid silently returns the wrong transmission rather
+   than raising.
+
+.. autofunction:: tengri.igm_transmission
+
+.. autofunction:: tengri.igm_transmission_madau
+
 Stellar Population Synthesis
 ----------------------------
 
@@ -167,9 +197,53 @@ effective metallicities.
 
 .. autofunction:: tengri.effective_metallicity
 
+.. autofunction:: tengri.compute_mass_remaining_fraction
+
+Acquiring an SSP grid
+~~~~~~~~~~~~~~~~~~~~~
+
+tengri does not bundle SSP grids; they are downloaded on first use. The usual
+sequence is to see what exists, fetch one, then load it.
+
+.. autofunction:: tengri.list_known_ssps
+
+.. autofunction:: tengri.list_available_ssps
+
+.. autofunction:: tengri.download_ssp
+
+.. autofunction:: tengri.load_ssp
+
 Filters
 -------
 
 Loading and managing photometric filter transmission curves.
 
 .. autofunction:: tengri.load_filter_set
+
+Spatial Profiles
+----------------
+
+Surface-brightness profiles and the sub-models that compose them. A
+:class:`~tengri.SpatialModel` runs a list of profile components;
+:class:`~tengri.SpatialSEDModel` joins a SED chain to a spatial chain so both
+are fitted together.
+
+.. autoclass:: tengri.SpatialModel
+   :members:
+   :show-inheritance:
+
+.. autoclass:: tengri.SpatialSEDModel
+   :members:
+   :show-inheritance:
+
+.. autoclass:: tengri.Sersic
+   :members:
+   :show-inheritance:
+
+.. autoclass:: tengri.Exponential
+   :members:
+   :show-inheritance:
+
+.. autoclass:: tengri.FlatSlab
+   :members:
+   :show-inheritance:

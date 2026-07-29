@@ -46,23 +46,16 @@
 # [notebook 11](11_catalog_fits.py) for `fit_batch` at catalog scale.
 
 # %%
-import os
+from _setup import effective_wavelengths_um, quiet
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+quiet()
 
+# Notebook-specific: the dense-mass NUTS run below deliberately uses
+# dense_mass_matrix=True for convergence; its RAM caveat is discussed in the
+# summary, not repeated here.
 import warnings
 
-# Keep the rendered tutorial clean: silence framework notices that do not change
-# the science shown here. Genuine deprecations in user-facing calls are fixed in
-# the code, not hidden.
-warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
-warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
-warnings.filterwarnings("ignore", message=".*Composable AGN.*")
-# The dense-mass NUTS run below deliberately uses dense_mass_matrix=True for
-# convergence; its RAM caveat is discussed in the summary, not repeated here.
 warnings.filterwarnings("ignore", message=".*dense_mass_matrix.*")
-warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 import time
 from pathlib import Path
@@ -78,6 +71,7 @@ from tengri import (
     FREE,
     FeaturePrecomp,
     Fixed,
+    ForwardModel,
     LineList,
     Observation,
     Photometry,
@@ -272,16 +266,19 @@ MAP_KW = dict(method="map", key=jax.random.PRNGKey(1), n_steps=200)
 
 
 def timed_map(model, label):
-    # The line likelihood is active because the Observation carries line_fluxes.
+    # The line likelihood is active because the Observation carries line_fluxes;
+    # the data passed here is photometry, and the observation says so, so there
+    # is no channel to declare.
     assert model.observation.line_fluxes is not None, "line likelihood not active"
+    forward = ForwardModel.build(sed=model)
     t0 = time.perf_counter()
-    model.fit(flux_phot, n_phot, data_type="photometry", **MAP_KW)  # pays the JIT compile
+    forward.fit(flux_phot, n_phot, **MAP_KW)  # pays the JIT compile
     cold = time.perf_counter() - t0
     t0 = time.perf_counter()
     # A second fit re-traces the step, so its wall time is ~= the first (see #1350:
     # each fit currently clears the JAX caches, which is why the compile is not
     # reused). The number that isolates the physics is post.wall_time_s below.
-    post = model.fit(flux_phot, n_phot, data_type="photometry", **MAP_KW)
+    post = forward.fit(flux_phot, n_phot, **MAP_KW)
     warm = time.perf_counter() - t0
     loop = post.wall_time_s  # the compiled optimization loop, compile excluded
     print(f"  {label:22s} fit() wall {warm:5.2f}s   compiled step {loop:5.2f}s")
@@ -318,10 +315,9 @@ print(
 # %%
 N_WARMUP, N_SAMPLES, N_CHAINS, N_LEAPFROG = 500, 300, 2, 100
 t0 = time.perf_counter()
-posterior = model_fast.fit(
+posterior = ForwardModel.build(sed=model_fast).fit(
     flux_phot,
     n_phot,
-    data_type="photometry",
     method="mcmc_hmc",
     key=jax.random.PRNGKey(7),
     n_warmup=N_WARMUP,
@@ -414,15 +410,7 @@ _fixed = model_fast.spec.get_fixed_values()
 draws = [{**_fixed, **{k: jnp.asarray(v[i]) for k, v in posterior.samples.items()}} for i in _sidx]
 
 # Effective wavelength of each band (transmission-weighted), for placing the points.
-wave_eff_um = (
-    np.array(
-        [
-            np.trapezoid(w * t, w) / np.trapezoid(t, w)
-            for w, t in zip(phot_obs.filter_waves, phot_obs.filter_trans)
-        ]
-    )
-    / 1e4
-)
+wave_eff_um = effective_wavelengths_um(phot_obs)
 
 # Model photometry per draw (the band-integrated F_nu the fit is matching).
 phot_draws = np.stack([np.asarray(model_fast.predict_photometry(d)) for d in draws])

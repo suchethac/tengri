@@ -70,6 +70,24 @@ run_components
 
 .. autofunction:: tengri.forward.orchestrator.run_components
 
+Extending the pipeline
+----------------------
+
+Subclassing :class:`~tengri.SEDModelComponent` is the recommended way to add
+a physics block: it registers the component for ``SEDModel.build`` dispatch
+and discovers its parameters in one step (ADR-0011). ``register_component``
+is the narrower seam for a class that cannot take that base — it wires up
+parameter discovery only.
+
+.. autofunction:: tengri.register_component
+
+``parse_groups`` is the translator underneath the nested-dict grammar,
+turning the group dicts accepted by :meth:`tengri.SEDModel.build` into a
+:class:`~tengri.Parameters` spec. Call it directly to inspect what a set of
+group dicts resolves to without building a model.
+
+.. autofunction:: tengri.parse_groups
+
 Related ADRs
 ------------
 

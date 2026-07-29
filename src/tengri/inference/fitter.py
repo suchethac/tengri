@@ -50,6 +50,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from tengri.inference._backend_registry import DEFAULT_METHOD
+from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 
 __all__ = ["Fitter", "resolve_method"]
 
@@ -1379,7 +1380,7 @@ class Fitter:
 
         Example
         -------
-        >>> fitter = Fitter(model, data, noise)
+        >>> fitter = Fitter(forward, data, noise)
         >>> fitter.compile()  # ~3s for default VI modes
         >>> fitter.compile(mcmc_methods=["nuts"])  # ~23s, then instant restarts
         >>> fitter.compile(nss=True)  # ~12s, then instant restarts
@@ -1829,7 +1830,7 @@ class Fitter:
         Examples
         --------
         >>> from tengri.inference.fitter import Fitter
-        >>> fitter = Fitter(sed_model, flux, noise, data_type="photometry")
+        >>> fitter = Fitter(forward, flux, noise, data_type="photometry")
         >>> fitter.prewarm(method="mcmc_nuts", n_chains=4)
         >>> posterior = fitter.run(method="mcmc_nuts", n_chains=4, n_samples=1000)
 
@@ -2220,7 +2221,7 @@ class Fitter:
         --------
         **Example 1: Quick exploration with MAP + geoVI**
 
-        >>> fitter = Fitter(model, data, noise)
+        >>> fitter = Fitter(forward, data, noise)
         >>> result = fitter.run("vi")  # geoVI with defaults
         >>> print(result.summary())
 
@@ -2277,15 +2278,25 @@ class Fitter:
         _user_lean = kwargs.pop("lean", None)
         if _user_lean is not None:
             warnings.warn(
-                "lean= is retired: fit() keeps your warm caches (iterate policy); "
-                "Catalog sweeps automatically. See #1318.",
+                "lean= is retired: every fit keeps its warm caches (iterate "
+                "policy), including catalog fits — one inference-body compile "
+                "serves the whole catalog. See #1318, #1344.",
                 DeprecationWarning,
                 stacklevel=2,
             )
 
         # --- Cache policy derivation (2026-07) ────────────────────────────
-        # _cache_policy is a private kwarg set by Catalog (T2) when it passes
-        # _cache_policy='sweep' to trigger the drop-stale path. If not present,
+        # _cache_policy selects the L3 (inference-body) eviction policy.
+        #
+        # Catalog deliberately does NOT pass 'sweep' (#1344). ``_lean_keep_sig``
+        # is ``compile_signature()`` — data *shape*, never data values — so two
+        # galaxies of the same model and shape produce the same key. 'iterate'
+        # therefore keeps the one entry both galaxies share and the catalog pays
+        # one inference-body compile; 'sweep' passes ``keep_sig=None`` and drops
+        # that entry too, which would recompile per galaxy — the #1316 cliff the
+        # catalog path exists to avoid. 'sweep' remains reachable through
+        # ``tengri.lean()`` for memory-constrained runs that would rather pay
+        # the recompile. If not present,
         # derive based on the deprecated lean= kwarg (for back-compat) or the
         # context (persistent() vs lean()). Default: 'iterate' (keep-matching).
         _cache_policy = kwargs.pop("_cache_policy", None)
@@ -2438,6 +2449,12 @@ class Fitter:
         # exact forward path onto the WavePrecomp LUT (see helper above).
         _warn_if_exact_forward_path(self.model, entry.name)
 
+        # Pre-flight memory guard. `auto`/`mcmc` already switch away from NUTS
+        # above D=20, but an explicit method='mcmc_nuts' overrides nothing — the
+        # caller has chosen, so tell them the cost instead of silently paying it.
+        # Same helper serves CatalogFitter and PopulationFitter (#1394 follow-up).
+        _warn_if_nuts_high_dim(entry.name, self.spec.n_free, surface="Fitter.run")
+
         # Refuse backends that declare themselves unusable, unless the caller
         # opts in explicitly (#1287). Before check_requires, because "this
         # sampler returns R-hat ~ 3" is a more fundamental objection than
@@ -2501,7 +2518,7 @@ class Fitter:
 
         Examples
         --------
-        >>> fitter = Fitter(model, data, noise)
+        >>> fitter = Fitter(forward, data, noise)
         >>> print(fitter.summary())
         Fitter  data_type: photometry
         ──────────────────────────────────────────────────────────────

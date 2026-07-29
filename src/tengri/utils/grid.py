@@ -31,19 +31,34 @@ def make_log_age_grid(
 ) -> jnp.ndarray:
     """Create uniform grid in log10(age/yr).
 
+    Default range: 1 Myr to ~13.8 Gyr (approximately the age of the universe).
+
     Parameters
     ----------
-    n_grid : int
-        Number of grid points. Should be even for FFT efficiency.
-    log_age_min : float
-        Minimum log10(age/yr).
-    log_age_max : float
-        Maximum log10(age/yr).
+    n_grid : int, optional
+        Number of grid points (should be even for FFT efficiency). Default: 256.
+    log_age_min : float, optional
+        Minimum log10(age/yr) [dimensionless log years]. Default: 6.0 (1 Myr).
+    log_age_max : float, optional
+        Maximum log10(age/yr) [dimensionless log years]. Default: 10.14 (~13.8 Gyr).
 
     Returns
     -------
-    array, shape (n_grid,)
-        Uniform grid in log10(age/yr).
+    ndarray, shape (n_grid,)
+        Uniform grid in log10(age/yr) [dimensionless log values].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.linspace``.
+
+    This grid is the internal representation for age in GP-based SFH models.
+    The log-space parametrization provides better resolution at young ages and
+    maps naturally to the logarithmic timescales of stellar evolution.
+
+    This is the single definition. ``components.stellar.sfh.gp_sfh`` re-exports
+    it under the same name; the forward model and the inference standardization
+    consume it from opposite sides of that boundary, so a second copy could
+    desync the two without any test failing (#1402).
 
     Examples
     --------

@@ -54,6 +54,12 @@ mechanism at construction — before any compile — then exposes ``.fit()`` and
    :members:
    :show-inheritance:
 
+``fit_batch`` is the lower-level alternative: it walks the rows one at a time
+without :class:`~tengri.Catalog`'s column validation, which is useful when the
+input is already in memory as arrays rather than a table.
+
+.. autofunction:: tengri.fit_batch
+
 Hierarchical inference
 ----------------------
 
@@ -73,6 +79,13 @@ the ``population`` slot — the same engine drives it::
 Constructing :class:`~tengri.PopulationFitter` directly is deprecated and will
 be removed in tengri v1.0 (issue #211); the class remains as the routed
 implementation behind the pattern above.
+
+PopulationSEDModel
+~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: tengri.PopulationSEDModel
+   :members:
+   :show-inheritance:
 
 PopulationFitter
 ~~~~~~~~~~~~~~~~

@@ -415,9 +415,9 @@ lfd = LineFluxData(
     wavelengths=line_template.wavelengths,
 )
 model_fit = build(lfd, n_grid=N_GRID)
-# Inference is canonically through ForwardModel (issue #211); passing a bare
-# SEDModel to Fitter is deprecated.
-forward = ForwardModel.build(sed=model_fit, observation=model_fit.observation)
+# Inference runs through ForwardModel, the canonical fit surface; the
+# observation is inherited from the SED model.
+forward = ForwardModel.build(sed=model_fit)
 
 # MAP budget: 10 000 steps, not 2 000. A budget scan on this exact problem gives
 # chi2/N = 3.63 at 2 000 steps and 1.21 at 10 000, against 1.41 at the truth --

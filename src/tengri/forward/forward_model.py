@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """ForwardModel — the outer shell of the forward chain.
 
-Owns a tuple of :class:`Population`s and an :class:`Observation`.
+Owns a tuple of :class:`Population` objects and an :class:`Observation`.
 Exposes a single ``.predict(params)`` method that inference calls.
 The architecture spec is at
-``docs/dev/forward-model-architecture.md`` §5–§6.
+``docs/dev/archive/forward-model-architecture.md`` §5–§6.
 
 Single-population fits use bare parameter names
 (``sfh_dpl_alpha``, ``dust_tau_v``). Multi-population fits use the
@@ -940,9 +940,19 @@ class ForwardModel:
             v = data.validate_against(self.observation)
             data_mask = v.censor
             if v.spec_flux is not None and v.flux is not None:
-                kwargs.setdefault("photometry", (v.flux, v.noise))
-                kwargs.setdefault("spectrum", (v.spec_flux, v.spec_noise))
-                data, noise = None, None
+                # Joint: the Fitter takes ONE concatenated vector plus
+                # ``data_type="joint"`` -- photometry first, then spectrum, the
+                # order the joint likelihood splits on. Handing it
+                # ``photometry=``/``spectrum=`` instead names ``SEDModel.fit``
+                # parameters that ``Fitter`` does not have: they fell through to
+                # ``run()`` while ``data=None`` tripped the constructor's
+                # "requires data and noise" guard, so every joint Data record
+                # raised. ``data_type`` cannot ride ``**kwargs`` here -- it is
+                # in ``_FIT_SURFACE_MANAGED``, so ``split_fitter_kwargs`` keeps
+                # it out of ``ctor_kwargs`` for the surface to set (#1366).
+                data = jnp.concatenate([jnp.asarray(v.flux), jnp.asarray(v.spec_flux)])
+                noise = jnp.concatenate([jnp.asarray(v.noise), jnp.asarray(v.spec_noise)])
+                ctor_kwargs.setdefault("data_type", "joint")
             elif v.spec_flux is not None:
                 data, noise = v.spec_flux, v.spec_noise
             else:
@@ -982,11 +992,45 @@ class ForwardModel:
 
                 from tengri.observation.line_flux_data import LineFluxData
 
+                # Censoring rides with the value it belongs to, so a limit
+                # cannot drift out of alignment with its line. Reading only
+                # [0] and [1] here is what silently turned a non-detection
+                # into a measurement (#1460).
+                markers = [
+                    (v.line_values[n][2] if len(v.line_values[n]) > 2 else None)
+                    for n in line_names
+                ]
+                upper = [m == "upper" for m in markers]
+                lower = [m == "lower" for m in markers]
+
+                # This rebuild replaces the schema's ``line_fluxes`` wholesale.
+                # If the user declared limits there and supplied none here,
+                # dropping them would be silent and would bias the fit, so say
+                # so instead. The deprecation on ``Observation(line_fluxes=...)``
+                # points at ``Data``, and limits have to make that trip too.
+                declared = getattr(self.observation, "line_fluxes", None)
+                declared_mask = getattr(declared, "limit_mask", None)
+                if declared_mask is not None and not any(upper) and not any(lower):
+                    flagged = [
+                        nm
+                        for nm, flag in zip(getattr(declared, "names", ()), declared_mask)
+                        if float(flag) != 0.0
+                    ]
+                    raise ValueError(
+                        f"Observation.line_fluxes marks {flagged} as censored "
+                        "limits, but Data.lines supplies no limit markers — "
+                        "those flags would be dropped and the lines fit as "
+                        "detections. Pass them with the values instead: "
+                        "Data(lines={'<line>': (flux, err, 'upper')})."
+                    )
+
                 temp_line_flux_data = LineFluxData(
                     names=line_names,
                     wavelengths=wavelengths_arr,
                     fluxes=line_fluxes_arr,
                     errors=line_errors_arr,
+                    is_upper_limit=jnp.asarray(upper) if any(upper) else None,
+                    is_lower_limit=jnp.asarray(lower) if any(lower) else None,
                 )
 
                 # Use dataclasses.replace to create a new Observation with the

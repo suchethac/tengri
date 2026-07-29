@@ -266,6 +266,47 @@ def check_usable(entry: BackendEntry, *, allow_unvalidated: bool = False) -> Non
     )
 
 
+def refuse_if_broken(method: str, *, allow_unvalidated: bool = False) -> None:
+    """Apply the :func:`check_usable` tier gate to a method *name* (#1394).
+
+    :func:`check_usable` takes a :class:`BackendEntry`, so every caller that
+    holds only a method string has to look the entry up first. Two batched
+    entry points never did — ``CatalogFitter.run`` and ``PopulationFitter.run``
+    validated the name with
+    :func:`~tengri.inference.fitter.resolve_method` and dispatched straight
+    into the backend module, so a ``tier="broken"`` method ran with no refusal
+    and no ``allow_unvalidated`` prompt. Both then *defaulted* to one.
+
+    A gate that every path must remember to call is a gate that some path will
+    forget. This is the name-keyed form so the lookup is not the caller's job.
+
+    Unknown names return silently: name validation belongs to
+    ``resolve_method``, and several canonical hierarchical methods
+    (``vi_nonlinear``) legitimately have no registry entry. Raising here would
+    turn a missing registration into a broken user call.
+
+    Parameters
+    ----------
+    method : str
+        Canonical method name, already resolved.
+    allow_unvalidated : bool, optional
+        Escape hatch, forwarded to :func:`check_usable`. Default False.
+
+    Raises
+    ------
+    BackendError
+        If ``method`` is registered ``tier="broken"`` and ``allow_unvalidated``
+        is False.
+
+    Notes
+    -----
+    Not JIT-compatible; a Python-level dispatch guard called once per fit.
+    """
+    entry = _BACKENDS.get(method)
+    if entry is not None:
+        check_usable(entry, allow_unvalidated=allow_unvalidated)
+
+
 #: Capability-gated keyword arguments: kwarg name -> :class:`BackendEntry` field.
 #:
 #: A kwarg belongs here when it names a *sampler capability* rather than a tuning

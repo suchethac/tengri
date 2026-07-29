@@ -22,10 +22,9 @@ This document consolidates and expands:
 8. [Performance Benchmarks](#8-performance-benchmarks)
 9. [Posterior Sampling](#9-posterior-sampling)
 10. [Block Gibbs for Hierarchical Models](#10-block-gibbs-for-hierarchical-models)
-11. [OptimizationSchedule API](#11-optimizationschedule-api)
-12. [Convergence Diagnostics](#12-convergence-diagnostics)
-13. [Quick Reference](#13-quick-reference)
-14. [References](#14-references)
+11. [Convergence Diagnostics](#11-convergence-diagnostics)
+12. [Quick Reference](#12-quick-reference)
+13. [References](#13-references)
 
 ---
 
@@ -286,12 +285,16 @@ is the right shape of fix, not a simplification.
   Only the `O(D^3)` factorization grows — hence the 1024 cap. "Easy low-dimensional"
   posteriors turned out not to exist here: the simplest configuration measured
   (double-power-law + photometry, D=7) already had raw cond 8.5e4.
-- **Why it is opt-in ([#1397](https://github.com/suchethac/tengri/issues/1397)).** It
-  shipped auto-on and the default broke fits that had been working. `notebooks/01`
-  stopped running entirely — a NaN MAP init makes the metric non-finite and the guard
-  turned a working fit into a hard `ValueError`. `notebooks/07`'s photometry fit went
-  from max R-hat 1.014 to **1.839** *while reporting zero divergences*: the usual
-  health signal inverts, so a divergence check scores the broken arm as the healthiest.
+- **Why it is opt-in.** Not because of [#1397](https://github.com/suchethac/tengri/issues/1397),
+  despite that being the original stated reason here. Those notebook failures were
+  caused by a **sub-band node gradient underflowing to NaN** inside the model;
+  preconditioning was the first thing to notice, not the cause, and with the root fix
+  `notebooks/07` returns to its pre-preconditioning R-hat. The reason that survives is
+  measured on the *fixed* code: on `recipes.mock_recovery_minimal()` (D=7), 4 seeds of
+  4 converge without preconditioning (R-hat 0.997-1.007) and none converge with it at
+  full strength (1.055-2.689), at 4x to 25x worse ESS/s. The whitening strength
+  ([#1442](https://github.com/suchethac/tengri/issues/1442)) bounds that damage but does
+  not overturn the conclusion — see the sweep below.
 - **The conditioning win is not a demonstrated sampling win — at any strength.** Three
   arms, one frozen source (`b17b319d8`), 3 configs x 3 seeds x {off, `alpha=1`,
   `alpha=0.5`}, 27 fits, 0 failures. Restricted to the 8 cells where **off itself
@@ -594,7 +597,7 @@ Fresh scouts every 5 iterations. Deterministic refinement in between. This gives
 - **Good posterior quality** (nonlinear curving captures banana shapes)
 
 The refresh interval of 5 is the default (`_RESAMPLE_EVERY = 5` in `fitter.py`). It can
-be adjusted via `OptimizationSchedule.vi(resample_every=N)`.
+is fixed at 5 inside `backends/vi/nifty.py`; it is not a user parameter (`OptimizationSchedule` was deleted as dead code, #1293).
 
 ---
 
@@ -1242,110 +1245,7 @@ Compile time: ~60s (one-time, cached to XLA disk cache).
 
 ---
 
-## 11. OptimizationSchedule API
-
-The `OptimizationSchedule` class provides a unified interface for controlling what
-happens at each iteration. It wraps a callable `f(iteration: int) -> BlockStep`.
-
-### 11.1 Factory Methods
-
-```python
-from tengri.vi_config import OptimizationSchedule, BlockStep, BlockSchedule
-
-# --- Recommended geoVI (default when you call fitter.run("native_geovi")) ---
-sched = OptimizationSchedule.geovi(
-    n_iterations=15,      # total iterations
-    resample_every=5,     # fresh samples every N iterations
-    n_samples=3,          # samples per iteration (doubled by mirror)
-)
-
-# --- EVI: cheap MGVI warmup, then geoVI ---
-sched = OptimizationSchedule.evi(
-    n_iterations=20,
-    transition=10,        # switch from MGVI to geoVI at iteration 10
-    resample_every=5,     # geoVI refresh rate after transition
-    n_samples=3,
-)
-
-# --- Pure MGVI (fastest, least accurate) ---
-sched = OptimizationSchedule.mgvi(
-    n_iterations=15,
-    n_samples=3,
-)
-
-# --- Block Gibbs for structured problems ---
-sched = OptimizationSchedule.gibbs(
-    blocks=(
-        BlockStep(
-            sample_mode="nonlinear_resample",
-            constants=("sfh_field_xi",),     # freeze SFH during physical param update
-        ),
-        BlockStep(
-            sample_mode="linear_resample",
-            constants=(),                     # joint update for cross-correlations
-        ),
-    ),
-    n_iterations=15,       # outer cycles (total steps = 15 * 2 blocks = 30)
-    resample_every=5,      # nonlinear blocks switch to update between refreshes
-)
-
-# --- Fully custom ---
-sched = OptimizationSchedule.custom(
-    get_step=lambda i: BlockStep(
-        sample_mode="nonlinear_resample" if i % 3 == 0 else "nonlinear_update",
-        n_samples=6 if i < 5 else 3,
-    ),
-    n_iterations=25,
-    description="custom: resample every 3, more samples early",
-)
-```
-
-### 11.2 BlockStep
-
-Each iteration is described by a `BlockStep`:
-
-```python
-@dataclass(frozen=True)
-class BlockStep:
-    sample_mode: str = "nonlinear_resample"
-    constants: tuple[str, ...] = ()           # frozen params (still sampled)
-    point_estimates: tuple[str, ...] = ()     # frozen params (residual zeroed)
-    n_samples: int | None = None              # override default n_samples
-```
-
-### 11.3 BlockSchedule
-
-For the hierarchical fitter, `BlockSchedule` provides pre-built schedules:
-
-```python
-from tengri.vi_config import BlockSchedule
-
-# Individual galaxy: 2 blocks (physical + SFH)
-sched = BlockSchedule.individual_geovi()
-
-# Hierarchical: 3 blocks (shared PSD + per-gal physical + per-gal SFH)
-sched = BlockSchedule.hierarchical()
-```
-
-### 11.4 Passing Schedules to fitter.run()
-
-The schedule is used internally by the fast/NIFTy backends to resolve the `sample_mode`
-callable. For the native backend, the schedule is consumed by `run_evi_geovi` as a
-static `sample_mode` string.
-
-```python
-# The schedule is implicit when using standard methods:
-result = fitter.run("native_geovi", n_iterations=15)
-# This internally creates OptimizationSchedule.geovi(n_iterations=15)
-
-# For explicit control, pass schedule directly:
-sched = OptimizationSchedule.geovi(resample_every=8, n_samples=6)
-result = fitter.run("native_geovi", schedule=sched)
-```
-
----
-
-## 12. Convergence Diagnostics
+## 11. Convergence Diagnostics
 
 ### 12.1 Chi-squared per Degree of Freedom
 
@@ -1428,7 +1328,7 @@ Stan/ArviZ/BlackJAX thresholds).
 
 ---
 
-## 13. Quick Reference
+## 12. Quick Reference
 
 ### Method Selection Cheat Sheet
 
@@ -1482,7 +1382,7 @@ VIConfig(
 
 ---
 
-## 14. References
+## 13. References
 
 - Frank, P., Leike, R., Ensslin, T.A. (2021). "Geometric Variational Inference."
   Entropy 23(7):853. arXiv:2105.10470

@@ -86,6 +86,12 @@ jobs:
       # which is what happened to `tests/unit`. Stdlib-only by design: this job
       # installs ruff and nothing else.
       - run: python tools/check_test_paths_covered.py
+      # `x / jnp.maximum(d, floor)` returns a plausible finite zero when the
+      # numerator is also zero — #1395 shipped that way. The class cannot be
+      # swept mechanically (some of these floors are legitimate), so this pins
+      # the count instead: a new one has to be justified in the PR. Stdlib-only,
+      # same as the guard above.
+      - run: python tools/check_zero_hiding_clamps.py
       # NOTE: `gen_property_table.py --check` cannot live here. This job installs
       # ruff and nothing else, and the generator imports tengri (hence jax) to read
       # the property registry. It runs in `smoke`, which does `pip install -e`.
@@ -285,6 +291,14 @@ jobs:
       # against the real package. Like the generator above, it needs tengri
       # importable, so it lives here rather than in `lint`.
       - run: python tools/check_doc_examples.py
+      # The guard above asks whether every symbol NAMED IN THE DOCS exists. This
+      # one asks the converse — whether every symbol tengri EXPORTS is named in
+      # the docs — because the two failure modes are independent and only the
+      # first was covered. #1345 closed the class surface while 23 exported
+      # functions, both grammar sentinels and both spectral-index catalogs had
+      # no autodoc entry at all; `nitpicky` is off and Sphinx does not fail on an
+      # ABSENT page, so neither `-W` nor the guard above could see it.
+      - run: python tools/check_api_coverage.py
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
       # The `benchmark` tier: five tests that assert a wall-clock RATIO (fast path
       # vs exact path, cached vs cold). They are real regression guards — they catch
@@ -311,13 +325,27 @@ jobs:
     # runs serial. Any statement below of the form "each shard runs at -n 2" is only
     # true of contract/components/physics.
     #
-    # Shares of the old single-job wall clock, measured at -n 2 — STALE, and left
-    # only as history. Re-measure before reasoning from shares; this comment has
-    # been wrong twice (it named `contract` the long pole long after `regression`
-    # took over at ~2x). See the re-measure recipe on #1346.
+    # Wall = slowest shard, not the sum, so splitting the small shards is free.
+    # That principle is the only durable line in this block: every NUMBER below
+    # carries a date, because each has already gone stale at least once.
+    #
+    # Shares of the OLD single-job wall clock, at -n 2. History only — do not
+    # reason from these:
     #   contract 43% · components 28% · regression 22% · physics 7%
-    # `contract` (the long pole) sets the wall clock. Wall = slowest shard, not the
-    # sum, so splitting the small shards is free.
+    #
+    # MEASURED 2026-07-26, main @1e6575588 (run 30198731485, all green) — the
+    # split as it stands after #1380 + #1385:
+    #   regression-d 19m · components 19m · contract 18m · regression-b1 17m
+    #   regression-b2 9m · regression-a 6m · regression-c 4m · physics 3m
+    #
+    # The wall clock is ~19 min and the top FOUR shards are a 17-19 min near-
+    # tie: there is no single long pole left to attack, and shaving any one of
+    # them buys nothing until its three neighbours come down too. Note what
+    # that corrects — this block used to assert "`contract` (the long pole)
+    # sets the wall clock" directly beneath a paragraph warning that naming
+    # `contract` the long pole was the error it had already made twice. Do not
+    # re-add a long-pole claim without a dated measurement beside it. See the
+    # re-measure recipe on #1346.
     #
     # regression and physics were ONE shard until 2026-07. They were split because
     # the paired shard walked back into the 16 GB ceiling: it died at ~21-22 min and

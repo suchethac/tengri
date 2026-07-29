@@ -60,10 +60,10 @@ def run_dynamic_hmc(
         Use dense mass matrix. Set False for D>30.
     precondition : bool, float or None, default None
         Sample in metric-whitened coordinates, mapping draws back afterwards.
-        A linear change of variables, so the posterior is unchanged. **Off unless
-        asked for** (#1397): ``None`` / ``False`` are off, ``True`` uses
+        A linear change of variables, so the posterior is unchanged. **Opt-in**
+        (#1397): ``None`` (default) and ``False`` are off; ``True`` uses
         :data:`~tengri.inference.preconditioning.DEFAULT_WHITENING_STRENGTH`, and
-        a float in ``[0, 1]` sets the whitening strength (``1.0`` is full
+        a float in ``[0, 1]`` sets the whitening strength (``1.0`` is full
         whitening, which amplifies a misspecified metric without bound — #1442).
         See :func:`~tengri.inference.backends.mcmc.nuts.run_nuts` for the full
         rationale and :mod:`tengri.inference.preconditioning` for the math.

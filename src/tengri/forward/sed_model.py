@@ -800,7 +800,7 @@ class SEDModel:
     """
 
     # ── SubModel Protocol surface ──────────────────────────────────────
-    # See docs/dev/forward-model-architecture.md §4. SEDModel directly
+    # See docs/dev/archive/forward-model-architecture.md §4. SEDModel directly
     # satisfies tengri.protocols.SubModel; ForwardModel's per-population
     # orchestration consumes the `run` and `declared_parameters` methods.
 
@@ -2386,129 +2386,6 @@ class SEDModel:
         # Freeze the merged map using MappingProxyType
         self._param_map = types.MappingProxyType(merged)
 
-    def _precompute_dust_ir_photometry(self):
-        """Precompute dust IR template photometry for fast hybrid kernel lookup.
-
-        Delegates to the Precompute Protocol adapter at
-        :mod:`tengri.components.dust.dust_emission_precompute` (for template-based
-        models) or :mod:`tengri.components.dust.dust_analytic_precompute` (for
-        analytic models), which handle template loading / model evaluation, filter
-        preintegration, and (per the Protocol) auto-collapse-on-Fixed for any
-        ``AXIS_PARAMS`` marked :class:`Fixed` in ``self.spec``.  Returns ``None``
-        when template data is not available on disk — callers fall back to
-        full-wavelength evaluation.
-
-        Returns
-        -------
-        tuple (lookup, grid_arrays) or (None, None)
-            Tuple of (JIT-compiled lookup, JIT-traceable grid arrays).
-            For template-based models, grid_arrays is a tuple of arrays that
-            can be passed as traced inputs to the lookup function.
-            For analytic models or data-missing cases, returns (None, None).
-        """
-        import warnings
-
-        model_name = self._dust_emission_model
-
-        # Try template-based models first (DL07, Dale2014, etc.)
-        try:
-            from tengri.components.dust.dust_emission_precompute import (
-                build_lookup as build_lookup_template,
-                extract_grid_arrays,
-                precompute_for_model,
-            )
-
-            precomp = precompute_for_model(
-                model_name,
-                filter_waves=self.filter_waves,
-                filter_trans=self.filter_trans,
-                redshift=float(self._z_fixed) if self._z_fixed is not None else 0.0,
-                parameters=self.spec,
-            )
-            if precomp is not None:
-                lookup = build_lookup_template(precomp, model_name=model_name)
-                grid_arrays = extract_grid_arrays(precomp, model_name=model_name)
-                return lookup, grid_arrays
-        except Exception as e:
-            warnings.warn(
-                f"Failed to precompute dust IR photometry (template path) for "
-                f"{model_name}: {e}. Trying analytic path.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-
-        # Try analytic models (modified_blackbody, casey2012, pah_drude)
-        if model_name in ("modified_blackbody", "casey2012", "pah_drude"):
-            try:
-                from tengri.components.dust.dust_analytic_precompute import (
-                    build_lookup as build_lookup_analytic,
-                    precompute,
-                )
-
-                precomp = precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed) if self._z_fixed is not None else 0.0,
-                    parameters=self.spec,
-                    model=model_name,
-                )
-                if precomp is not None:
-                    lookup = build_lookup_analytic(precomp, model=model_name)
-                    return lookup, None  # Analytic models don't have grid arrays
-            except Exception as e:
-                warnings.warn(
-                    f"Failed to precompute dust IR photometry (analytic path) for "
-                    f"{model_name}: {e}. Falling back to full-wavelength evaluation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                return None, None
-
-        return None, None
-
-    def _precompute_dust_analytic_photometry(self, model_name: str):
-        """Build preintegrated lookup for a specific analytic dust model.
-
-        Parameters
-        ----------
-        model_name : str
-            One of "modified_blackbody", "casey2012", "pah_drude".
-
-        Returns
-        -------
-        object or None
-            JIT-compiled lookup callable or None if precompute unavailable.
-        """
-        import warnings
-
-        if model_name not in ("modified_blackbody", "casey2012", "pah_drude"):
-            return None
-
-        try:
-            from tengri.components.dust.dust_analytic_precompute import (
-                build_lookup as build_lookup_analytic,
-                precompute,
-            )
-
-            precomp = precompute(
-                self.filter_waves,
-                self.filter_trans,
-                redshift=float(self._z_fixed) if self._z_fixed is not None else 0.0,
-                parameters=self.spec,
-                model=model_name,
-            )
-            if precomp is not None:
-                return build_lookup_analytic(precomp, model=model_name)
-        except Exception as e:
-            warnings.warn(
-                f"Failed to precompute dust analytic photometry for {model_name}: {e}",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-            return None
-
-        return None
-
     def _warm_grid_caches(self) -> None:
         """Warm @functools.cache loaders to avoid tracer leaks from HDF5 grids.
 
@@ -2676,93 +2553,6 @@ class SEDModel:
 
         return sfr_mean, sfr_full
 
-    def _get_non_stellar_kwargs(self, p):
-        """Extract non-stellar kwargs from internal params for hybrid kernel."""
-        kw = {}
-        # Nebular
-        if self._nebular_backend is not None and getattr(
-            self._nebular_backend, "has_free_params", False
-        ):
-            kw["neb_logU"] = p.get("neb_logU", -3.0)
-            kw["neb_logZ_gas"] = p.get("neb_logZ_gas", None)
-            kw["neb_fesc"] = p.get("neb_fesc", 0.0)
-            kw["neb_fesc_lya"] = p.get("neb_fesc_lya", 0.0)
-        # Shock
-        if self._uses_shock:
-            kw["shock_frac"] = p.get("shock_frac", 0.0)
-            kw["shock_velocity"] = p.get("shock_velocity", 300.0)
-            kw["shock_log_density"] = p.get("shock_log_density", 0.0)
-            kw["shock_b_over_sqrt_n"] = p.get("shock_b_over_sqrt_n", 1.0)
-        # Dust emission (all models, not just MBB)
-        if self._dust_emission_model is not None:
-            kw["dust_T"] = p.get("dust_T", 35.0)
-            kw["dust_beta_ir"] = p.get("dust_beta_ir", 1.6)
-            kw["dust_eta_balance"] = p.get("dust_eta_balance", 1.0)
-            kw["dust_alpha_mir"] = p.get("dust_alpha_mir", 2.0)
-            kw["dust_alpha_dale"] = p.get("dust_alpha_dale", 2.0)
-            kw["dust_umin"] = p.get("dust_umin", 1.0)
-            kw["dust_gamma_dl"] = p.get("dust_gamma_dl", 0.01)
-            kw["dust_qpah"] = p.get("dust_qpah", 2.5)
-            kw["dust_lgU"] = p.get("dust_lgU", 0.0)
-            # THEMIS qhac + radiation-field slope alpha, Dale AGN fraction,
-            # Schreiber PAH fraction and MBB epsilon — forwarded so they reach
-            # the emission kernel (CIGALE parity, 2026-06). Schreiber temperature
-            # rides the canonical ``dust_T`` (forwarded above); ``dust_f_pah`` is
-            # the canonical PAH-fraction name (#849).
-            kw["dust_qhac"] = p.get("dust_qhac", 0.17)
-            kw["dust_alpha"] = p.get("dust_alpha", 2.0)
-            kw["dust_frac_agn"] = p.get("dust_frac_agn", 0.0)
-            kw["dust_f_pah"] = p.get("dust_f_pah", 0.05)
-            kw["dust_epsilon_mbb"] = p.get("dust_epsilon_mbb", 1.0)
-        # AGN (full params for exact evaluation)
-        if self._agn_model is not None:
-            kw["agn_polar_ebv"] = p.get("agn_polar_ebv", 0.0)
-            kw["agn_cos_inc"] = p.get("agn_cos_inc", 0.5)
-            kw["agn_polar_oa"] = p.get("agn_polar_oa", 45.0)
-            kw["agn_lum_ratio"] = p.get("agn_lum_ratio", 1.0)
-            kw["agn_a_spin"] = p.get("agn_a_spin", 0.0)
-            kw["agn_log_mbh"] = p.get("agn_log_mbh", 7.0)
-            kw["agn_log_ledd"] = p.get("agn_log_ledd", -1.0)
-            # K&D 3-zone disc params
-            kw["agn_f_hard"] = p.get("agn_f_hard", 0.02)
-            kw["agn_gamma_warm"] = p.get("agn_gamma_warm", 2.5)
-            kw["agn_kt_warm"] = p.get("agn_kt_warm", 0.2)
-            kw["agn_gamma_hard"] = p.get("agn_gamma_hard", 1.8)
-            kw["agn_kt_hot"] = p.get("agn_kt_hot", 100.0)
-            kw["agn_r_warm_ratio"] = p.get("agn_r_warm_ratio", 2.0)
-            # Two-temperature torus
-            kw["agn_T_hot"] = p.get("agn_T_hot", 1200.0)
-            kw["agn_T_warm"] = p.get("agn_T_warm", 300.0)
-            kw["agn_frac_hot"] = p.get("agn_frac_hot", 0.3)
-            # SKIRTOR torus
-            kw["agn_tau_skirtor"] = p.get("agn_tau_skirtor", 7.0)
-            kw["agn_p_skirtor"] = p.get("agn_p_skirtor", 1.0)
-            kw["agn_q_skirtor"] = p.get("agn_q_skirtor", 1.0)
-            kw["agn_oa_skirtor"] = p.get("agn_oa_skirtor", 40.0)
-            # SKIRTOR_mean_3p (AGNfitter-rX averaged) torus
-            kw["agn_incl_skirtor"] = p.get("agn_incl_skirtor", 30.0)
-            kw["agn_tv_skirtor"] = p.get("agn_tv_skirtor", 7.0)
-            # CAT3D-Wind clumpy torus (Hönig & Kishimoto 2017)
-            kw["agn_a_cat3d"] = p.get("agn_a_cat3d", -2.0)
-            kw["agn_fwd_cat3d"] = p.get("agn_fwd_cat3d", 1.0)
-            # Silva+04 obscured-torus column density
-            kw["agn_log_nh_silva"] = p.get("agn_log_nh_silva", 23.0)
-            # Fritz+2006 torus (CIGALE fritz2006) — forwarded so the 6D grid
-            # block sees its parameters under the composable AGN path (#347).
-            kw["agn_fritz_r_ratio"] = p.get("agn_fritz_r_ratio", 60.0)
-            kw["agn_fritz_tau"] = p.get("agn_fritz_tau", 1.0)
-            kw["agn_fritz_beta"] = p.get("agn_fritz_beta", -0.5)
-            kw["agn_fritz_gamma"] = p.get("agn_fritz_gamma", 4.0)
-            kw["agn_fritz_oa"] = p.get("agn_fritz_oa", 60.0)
-            kw["agn_fritz_psy"] = p.get("agn_fritz_psy", 0.001)
-            # Nenkova+2008 CLUMPY torus (FSPS/Prospector)
-            kw["agn_tau"] = p.get("agn_tau", 30.0)
-        # Radio
-        if self._uses_radio:
-            kw["radio_loudness"] = p.get("radio_loudness", 0.0)
-            kw["log_mstar"] = jnp.log10(jnp.maximum(p.get("mstar", 1e10), 1e-10))
-        return kw
-
     # ── Clone with a different approximation policy ────────────────────
 
     @property
@@ -2878,7 +2668,7 @@ class SEDModel:
 
         **Raw forward-pass output** intended for plotting. For SFH-derived
         scalars (stellar mass, recent SFR, age), see
-        ``model.predict(params).sfh.*`` or :meth:`predict_sfh_quantities`
+        ``model.predict(params).sfh.*`` or :meth:`predict_properties`
         for the JIT-compatible form.
 
         Parameters
@@ -2910,7 +2700,7 @@ class SEDModel:
         Notes
         -----
         **JIT-compatible**: no — uses Python-side interpolation. For
-        JIT-compatible SFH evaluation, use :meth:`predict_sfh_quantities`
+        JIT-compatible SFH evaluation, use :meth:`predict_properties`
         to get integrated quantities (stellar mass, age, etc.).
 
         **Time grid**: with ``grid="linear"`` the output is resampled onto a
@@ -2950,7 +2740,7 @@ class SEDModel:
 
         See Also
         --------
-        predict_sfh_quantities : Integrated SFH quantities (JIT-compatible).
+        predict_properties : Integrated SFH quantities, JIT/vmap-safe.
         predict : Lazy access to SFH and all derived quantities.
         """
         if grid not in ("linear", "native"):
@@ -3244,10 +3034,10 @@ class SEDModel:
         for interactive exploration of a single galaxy's properties,
         trading speed for convenience.
 
-        For batch computation over posterior chains or mock catalogs,
-        use the JIT-compatible methods :meth:`predict_sfh_quantities`,
-        :meth:`predict_sed_quantities`, or :meth:`predict_line_luminosities`
-        with :func:`jax.vmap` instead (up to 1000× faster for large batches).
+        For batch computation over posterior chains or mock catalogs, use
+        :meth:`predict_properties` — the one JIT/vmap-safe surface for
+        derived quantities — with :func:`jax.vmap` instead (up to 1000×
+        faster for large batches).
 
         Parameters
         ----------
@@ -3271,8 +3061,8 @@ class SEDModel:
         **Not JIT-compatible**: Uses Python-side caching and object
         attribute access. Useful for interactive exploration, not
         for inference loops. For inference, use
-        :meth:`predict_sfh_quantities`, :meth:`predict_sed_quantities`,
-        etc. with :func:`jax.vmap`.
+        :meth:`predict_photometry` (the hot path) or
+        :meth:`predict_properties` with :func:`jax.vmap`.
 
         **Lazy evaluation**: Quantities are computed only when accessed.
         Repeated access to the same property reuses cached results.
@@ -3304,17 +3094,16 @@ class SEDModel:
 
         >>> import jax
         >>> params_batch = spec.sample(jax.random.PRNGKey(0), n=10000)
-        >>> sfh_fn = jax.vmap(model.predict_sfh_quantities)
+        >>> sfh_fn = jax.vmap(lambda p: model.predict_properties(p, names=("stellar_mass",)))
         >>> sfh_batch = sfh_fn(params_batch)
-        >>> sfh_batch.stellar_mass  # shape (10000,)
-        >>> sfh_batch.stellar_mass.mean()
+        >>> sfh_batch["stellar_mass"].shape  # (10000,)
+        >>> sfh_batch["stellar_mass"].mean()
 
         See Also
         --------
-        predict_sfh_quantities : JIT-compatible SFH quantities for batch.
-        predict_sed_quantities : JIT-compatible SED quantities for batch.
-        predict_line_luminosities : JIT-compatible emission lines for batch.
-        predict_rest_sed : Full rest-frame SED for custom analysis.
+        predict_properties : JIT/vmap-safe derived quantities for batch.
+        :meth:`Prediction.rest_sed` : Full rest-frame SED for custom analysis.
+        :attr:`Prediction.lines` : Emission-line luminosities.
         """
         from collections.abc import Mapping
 
@@ -3452,13 +3241,47 @@ class SEDModel:
         igm_model = str(self._igm_model or "none")
         uses_dla = bool(self._uses_dla)
 
-        # AGN configuration
+        # AGN configuration.
+        #
+        # ``agn_model`` carries no discriminating power on its own: the
+        # composable surface is the only non-deprecated one, so
+        # ``list_agn_models()`` returns exactly one selectable entry and every
+        # composable model hashes to the same string. The six block selectors
+        # ARE the AGN axis, and each one swaps the emitting physics (a torus
+        # library, a disc SED, an NLR/BLR line set) without changing the graph
+        # shape — so omitting them left the entire axis unkeyed and the
+        # first-built kernel won, exactly like the fixed-z case below (#1450).
+        # Measured: torus='skirtor' vs 'cat3d_wind' agreed bit-for-bit within a
+        # process and disagreed by 60% in W4 across processes, depending only
+        # on build order.
         agn_model = str(self._agn_model or "none")
         agn_luminosity_mode = bool(self._agn_luminosity_mode)
+        agn_blocks = (
+            str(getattr(self, "_agn_disc_block", "none") or "none"),
+            str(getattr(self, "_agn_torus_block", "none") or "none"),
+            str(getattr(self, "_agn_nlr_block", "none") or "none"),
+            str(getattr(self, "_agn_blr_block", "none") or "none"),
+            str(getattr(self, "_agn_feii_block", "none") or "none"),
+            str(getattr(self, "_agn_attenuation_block", "none") or "none"),
+        )
+        # Cross-block normalization policy (#556). 'cigale_joint' ties
+        # disc/torus/polar to one energy-conserving reference; 'independent'
+        # puts each on its own luminosity scale. Same graph, different emitted
+        # SED — a signature entry, not a flag.
+        agn_norm = str(getattr(self, "_agn_norm", "cigale_joint") or "cigale_joint")
 
         # Radio and X-ray
         uses_radio = bool(self._uses_radio)
         uses_xray = bool(self._uses_xray)
+        # WHICH X-ray model, not merely whether one is attached. ``_xray_model``
+        # was stored at construction but never keyed, so `agn_xray_corona` and
+        # `xray_aird` shared a compiled kernel and the first one built won —
+        # the same class as the AGN block selectors (#1450) and the radio
+        # models beside it, which do carry their selector. The collision is
+        # invisible in optical/IR photometry because X-ray emission lands at
+        # keV, which is why a flux-based sweep reads this axis as "inert"
+        # rather than unkeyed; the signature shows it directly (#1462).
+        xray_model = str(getattr(self, "_xray_model", "none") or "none") if uses_xray else "none"
         uses_shock = bool(self._uses_shock)
         # Shock normalization + categorical knobs change the emitted SED, so
         # they are part of the structural fingerprint (#851).
@@ -3630,26 +3453,6 @@ class SEDModel:
         else:
             approx_resolved = approx_resolved_flags
 
-        # Fixed-parameter values from spec. The compositional/hybrid kernels
-        # capture self via closure at build time, so two models with identical
-        # *structural* signature but different Fixed defaults must NOT share
-        # a cached kernel — otherwise the first-built kernel's Fixed values
-        # leak into the second model's predict_photometry({}) call. See
-        # https://github.com/<repo>/issues/<n> for the starburst-vs-quenched
-        # color-leak symptom (the second-built model returned the first
-        # model's u-g color at z=0.05).
-        def _fixed_value_id(name: str):
-            dist = self.spec.get_distribution(name)
-            val = dist.bounds[0] if dist.bounds is not None else getattr(dist, "value", None)
-            if val is None:
-                return ("none",)
-            if isinstance(val, str):
-                return ("str", val)
-            try:
-                return ("num", round(float(val), 12))
-            except (TypeError, ValueError):
-                return ("repr", repr(val))
-
         # 2026-05-20: drop fixed-parameter VALUES from the
         # cache key. Keep names + types-of-fixed only. Two SEDModels with
         # the same physics + same SSP + same filters + same WavePrecomp
@@ -3706,8 +3509,11 @@ class SEDModel:
             uses_dla,
             agn_model,
             agn_luminosity_mode,
+            agn_blocks,
+            agn_norm,
             uses_radio,
             uses_xray,
+            xray_model,
             uses_shock,
             shock_cfg,
             mean_sfh_type,
@@ -3799,12 +3605,12 @@ class SEDModel:
         --------
         predict : Lazy prediction object for all derived quantities.
         predict_spectrum : Spectral flux at arbitrary wavelengths.
-        predict_magnitudes : AB magnitudes (uses photometry internally).
+        :meth:`Prediction.magnitudes` : AB magnitudes (uses photometry internally).
 
         Examples
         --------
         >>> flux = model.predict_photometry(params)
-        >>> mags = model._predict_magnitudes(params)
+        >>> mags = model.predict(params).magnitudes()
         >>> # For the fast LUT path, build with ``approx=WavePrecomp()``.
 
         References
@@ -5177,7 +4983,6 @@ class SEDModel:
         --------
         available_properties : List of properties available in this model.
         predict : Lazy Prediction object with attribute-access syntax.
-        predict_sfh_quantities : Legacy SFH quantity interface.
         """
         self._ensure_property_catalog()
 
@@ -7243,22 +7048,6 @@ class SEDModel:
 
         return _fn(self, params_batch)
 
-    # ── Private prediction dispatch ───────────────────────────────────
-
-    @staticmethod
-    def _jit_safe_params(params):
-        """Strip string-typed entries so the params dict is safe to pass into JIT.
-
-        String-typed Fixed parameters (e.g. ``shock_abundance="solar"``,
-        ``shock_component="combined"``) are config enums, not values that
-        flow through the gradient computation. Including them in the dict
-        passed to a ``jax.jit``'d function makes ``tree_flatten`` reject the
-        input with ``TypeError: ... <class 'str'> ... at path params['<name>']``.
-        Strip them here; downstream code that needs them must read from
-        ``self.spec``'s fixed values, not from the JIT params dict.
-        """
-        return {k: v for k, v in params.items() if not isinstance(v, str)}
-
     @classmethod
     def from_config(
         cls,
@@ -7397,6 +7186,20 @@ class SEDModel:
             :func:`tengri.parameters.parse_groups` for the full grammar.
         redshift, apply_igm : scalar, Distribution, or sentinel, optional
             Top-level kwargs forwarded into the parameter resolution.
+
+            ``redshift`` **defaults to** ``Fixed(0.1)`` — omitting it pins the
+            galaxy at z = 0.1 rather than leaving the redshift free. Pass
+            ``redshift=Fixed(z)`` for a known redshift, or a prior such as
+            ``redshift=Uniform(0.0, 3.0)`` to fit it.
+
+            Two consequences of the default are easy to miss. A model intended
+            to be free-redshift is silently at z = 0.1, and the fit then
+            reports whatever the remaining parameters can achieve at that
+            distance. And with ``approx=WavePrecomp()`` the free-redshift build
+            pays a sub-band IGM fold that the fixed-z path does not — roughly
+            9 s against 0.4 s — so a build-time measurement that omits an
+            explicit prior is measuring the cheap path. See
+            :doc:`/performance/compilation`.
         filters : list of str, optional
             Filter names; forwarded to ``__init__``.
         observation : Observation, optional
@@ -7921,8 +7724,8 @@ class SEDModel:
 
         Notes
         -----
-        This is the grid used by :meth:`predict_rest_sed` by default when
-        no custom ``wave=`` is passed. Updated when radio/X-ray components
+        This is the grid used by :meth:`Prediction.rest_sed` by default when
+        no custom ``wave`` is passed. Updated when radio/X-ray components
         are added to the model.
 
         Examples
