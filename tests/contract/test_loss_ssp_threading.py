@@ -330,19 +330,18 @@ def test_catalog_of_n_galaxies_threads_and_reuses_one_composite(synthetic_ssp_wi
     )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Known gap, separate from SSP threading: Fitter CLONES the model, and "
-        "_model_cache keys on model IDENTITY, so two Fitters over the same "
-        "ForwardModel get separate caches and each sequential per-galaxy fit pays a "
-        "fresh compile. Engine cache keys are already identical, so only the keying "
-        "is wrong. Not fixed here because re-keying structurally is exactly where a "
-        "baked fixed-value override has slipped through before; needs its own change "
-        "with a key that covers overrides. The vmapped catalog path is unaffected -- "
-        "it uses ONE fitter for all N galaxies."
-    ),
-    strict=True,
-)
+def test_two_fitters_on_one_forward_model_share_one_compile(synthetic_ssp_wide):
+    """Sequential per-galaxy fits must reuse ONE compiled program.
+
+    Every ``Fitter`` resolves ``approx`` and clones the model, and the compile
+    caches key on model **identity** — so N sequential fits over one
+    ``ForwardModel`` produced N clones, N cache misses and N compiles, even though
+    their ``_engine_cache_key()`` values were already identical. Fixed by memoizing
+    the resolved clone per (source model, resolved config), so identity-keyed
+    caches hit without changing what any cache key means.
+    """
+
+
 def test_two_fitters_on_one_forward_model_share_the_composite(synthetic_ssp_wide):
     """Sequential per-galaxy fits should reuse one compiled composite."""
     from tengri import ForwardModel
@@ -358,9 +357,13 @@ def test_two_fitters_on_one_forward_model_share_the_composite(synthetic_ssp_wide
     assert f1._engine_cache_key() == f2._engine_cache_key()
 
     init = f1._initialize_unbounded(jax.random.PRNGKey(0))
+    assert f1.model is f2.model, (
+        "the two fitters resolved to different clone objects, so every "
+        "identity-keyed compile cache will miss and each galaxy recompiles"
+    )
     fn1, *_ = _get_flat_logdensity(f1, init)
     fn2, *_ = _get_flat_logdensity(f2, init)
-    assert fn1 is fn2
+    assert fn1 is fn2, "the flat log-density was rebuilt for the second galaxy"
 
 
 @pytest.mark.parametrize("channel", ["photometry", "spectroscopy", "joint"])
