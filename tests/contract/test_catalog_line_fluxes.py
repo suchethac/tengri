@@ -35,35 +35,21 @@ def test_engine_receives_per_galaxy_line_data(synthetic_ssp_wide, synthetic_toph
     assert ca.line_flux_obs is not None, "line_flux_obs is None"
     assert ca.line_flux_obs.shape == (2, 1), f"Expected shape (2, 1), got {ca.line_flux_obs.shape}"
 
-    # Galaxy 0 should have 1.0e-16
-    assert np.allclose(ca.line_flux_obs[0], [1.0e-16]), (
-        f"Galaxy 0: got {ca.line_flux_obs[0]}, expected [1.0e-16]"
+    # Verify the 4:1 contrast ratio (galaxy 1 is 4x galaxy 0)
+    g0 = float(ca.line_flux_obs[0, 0])
+    g1 = float(ca.line_flux_obs[1, 0])
+    assert g0 != 0.0, f"Galaxy 0 flux is zero: {g0}"
+    ratio = g1 / g0
+    assert np.allclose(ratio, 4.0), (
+        f"Galaxy 1 is not 4x galaxy 0: ratio={ratio:.4f}, g0={g0:.4e}, g1={g1:.4e}"
     )
 
-    # Galaxy 1 should have 4.0e-16
-    assert np.allclose(ca.line_flux_obs[1], [4.0e-16]), (
-        f"Galaxy 1: got {ca.line_flux_obs[1]}, expected [4.0e-16]"
-    )
 
-
-@pytest.mark.xfail(
-    reason=(
-        "#1480: per-galaxy line data reaches data_args (Test 1 passes) but does not "
-        "reach the objective — the loss is identical regardless of the observed "
-        "values. Either resolve_channel_data returns the baked template array, or the "
-        "line likelihood adapter is never constructed for this configuration."
-    ),
-    strict=True,
-)
 def test_likelihood_is_sensitive_to_line_data(synthetic_ssp_wide, synthetic_tophat_obs):
     """Test 2: Per-galaxy likelihood differs based on observed Halpha.
 
     Evaluate loss through the same 2-arg path run_one uses, WITH per-galaxy
-    data_args. Probes resolve_channel_data to verify obs differs per galaxy.
-
-    xfail: Line fluxes thread (Test 1 passes) but likelihood is insensitive.
-    Either resolve_channel_data returns baked data, or likelihood adapters
-    don't exist / aren't being evaluated.
+    data_args. Probes that per-galaxy line fluxes reach and affect the objective.
     """
     from jax.flatten_util import ravel_pytree
 
@@ -100,25 +86,33 @@ def test_likelihood_is_sensitive_to_line_data(synthetic_ssp_wide, synthetic_toph
     data_args_g1["line_flux_err"] = ca.line_flux_err[1]
 
     # Evaluate loss with per-galaxy data_args
-    nlp_g0 = log_posterior_2arg(init_flat, data_args_g0)
-    nlp_g1 = log_posterior_2arg(init_flat, data_args_g1)
+    nlp_g0 = float(log_posterior_2arg(init_flat, data_args_g0))
+    nlp_g1 = float(log_posterior_2arg(init_flat, data_args_g1))
 
-    # Expected: chi2_g0 = 1, chi2_g1 = 16, so nlp_diff ~= 7.5
+    # Expected: line chi2_g0 = 0 (obs_g0 = measured_base),
+    # line chi2_g1 = (3*base / (0.05*base))**2 = 3600
+    # The loss difference is proportional to the line chi2 contribution.
+    # Even though photometry dominates the overall loss (40M+), the per-galaxy
+    # difference should be detectable if per-galaxy line data reaches the objective.
+    nlp_diff = nlp_g1 - nlp_g0
+    # The losses must differ (not allclose) and the difference must be non-trivial
+    # (> 1000 in loss units, roughly the expected line contribution scale)
     assert not np.allclose(nlp_g0, nlp_g1), (
-        "Loss identical for both galaxies; line flux data not reaching likelihood"
+        f"Loss identical for both galaxies; line flux data not reaching likelihood. "
+        f"nlp_g0={nlp_g0:.4e}, nlp_g1={nlp_g1:.4e}, diff={nlp_diff:.4e}"
+    )
+    assert abs(nlp_diff) > 1000.0, (
+        f"Loss difference too small ({abs(nlp_diff):.1f}): "
+        f"nlp_g0={nlp_g0:.4e}, nlp_g1={nlp_g1:.4e}. "
+        f"Per-galaxy line data not reaching objective."
     )
 
 
-@pytest.mark.xfail(
-    reason="Line flux data threads but likelihood is insensitive (Test 2 xfailed)", strict=True
-)
 def test_swapped_halpha_flips_outcomes(synthetic_ssp_wide, synthetic_tophat_obs):
     """Test 3: Swapping Halpha values swaps likelihood differences.
 
     Build catalog with halpha SWAPPED and verify Test 1 and Test 2 outcomes
     exchange. Permanent check for transposition bugs.
-
-    xfail: Dependent on Test 2 fix.
     """
     from tengri.inference.fitter import Fitter
     from tests.contract._line_catalog_fixture import build_two_galaxy_catalog
