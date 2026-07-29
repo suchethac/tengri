@@ -181,7 +181,34 @@ def test_a_corrupt_entry_degrades_to_a_miss(tmp_path, monkeypatch, base):
     assert sc.load(key) is None
 
 
-def test_the_memo_is_clearable(base):
+def test_disabling_the_cache_also_silences_the_memo(monkeypatch, base):
+    """The kill-switch must be total, not just the disk half.
+
+    ``tests/conftest.py`` disables the precomp cache for hermeticity. A memo
+    that kept serving would quietly share a table between two tests that each
+    believe they built from scratch — a partial switch that reads as total.
+    """
+    sc.clear_memo()
+    key = sc.cache_key(**base)
+    monkeypatch.delenv("TENGRI_DISABLE_PRECOMP_CACHE", raising=False)
+    sc.memo_put(key, np.ones((2, 2)))
+    assert sc.memo_get(key) is not None, "memo should work when caching is enabled"
+
+    monkeypatch.setenv("TENGRI_DISABLE_PRECOMP_CACHE", "1")
+    assert sc.memo_get(key) is None, "memo served a hit while caching was disabled"
+    sc.memo_put(sc.cache_key(**dict(base, igm_model="madau")), np.zeros((2, 2)))
+    monkeypatch.delenv("TENGRI_DISABLE_PRECOMP_CACHE", raising=False)
+    assert sc.memo_get(sc.cache_key(**dict(base, igm_model="madau"))) is None, (
+        "memo stored an entry while caching was disabled"
+    )
+    sc.clear_memo()
+
+
+def test_the_memo_is_clearable(monkeypatch, base):
+    # Caching must be enabled explicitly: ``tests/conftest.py`` sets
+    # TENGRI_DISABLE_PRECOMP_CACHE suite-wide for hermeticity, and the memo
+    # honors it, so without this the puts below are correctly no-ops.
+    monkeypatch.delenv("TENGRI_DISABLE_PRECOMP_CACHE", raising=False)
     key = sc.cache_key(**base)
     sc.memo_put(key, np.ones((2, 2)))
     assert sc.memo_get(key) is not None

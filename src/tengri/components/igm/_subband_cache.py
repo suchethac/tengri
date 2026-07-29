@@ -149,13 +149,30 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
     return h.hexdigest()
 
 
+def _enabled() -> bool:
+    """Whether caching is on at all.
+
+    Both layers honor ``TENGRI_DISABLE_PRECOMP_CACHE``, not just the disk one.
+    A kill-switch that leaves an in-process memo serving is a partial switch
+    that reads as total: ``tests/conftest.py`` disables the precomp cache for
+    hermeticity, and a live memo would quietly share a table between two tests
+    that each believe they built from scratch. Read per call rather than at
+    import, so a test that sets the variable with ``monkeypatch`` takes effect.
+    """
+    return not os.environ.get("TENGRI_DISABLE_PRECOMP_CACHE")
+
+
 def memo_get(key: str):
-    """In-process lookup, or ``None``."""
+    """In-process lookup, or ``None`` (always ``None`` when caching is off)."""
+    if not _enabled():
+        return None
     return _MEMO.get(key)
 
 
 def memo_put(key: str, table) -> None:
-    """Record in the in-process memo."""
+    """Record in the in-process memo, unless caching is off."""
+    if not _enabled():
+        return
     _MEMO[key] = np.asarray(table)
 
 
