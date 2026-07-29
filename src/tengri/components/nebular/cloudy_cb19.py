@@ -164,6 +164,7 @@ from tengri.components.nebular._shared import (
     _qh_bilinear,
     compute_qh,
     render_nebular_lines,
+    sanitize_qh_table,
 )
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
@@ -771,7 +772,7 @@ class CB19Backend:
         qh_raw = _compute_qh_grid(ssp_wave, ssp_flux)
         # Match the other backends: a non-finite Q_H from the SSP grid is
         # scrubbed at build time rather than propagated into every lookup.
-        self._qh_table = jnp.where(jnp.isfinite(qh_raw), qh_raw, 0.0)
+        self._qh_table = sanitize_qh_table(qh_raw, backend_name="CloudyCB19Backend")
         # Store as JAX arrays so they can be indexed with traced integers
         # inside jax.vmap (numpy arrays fail when indexed with traced values).
         self._qh_log_met = jnp.array(ssp_data.ssp_lgmet)  # log10(Z) absolute
