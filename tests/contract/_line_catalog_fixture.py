@@ -81,9 +81,7 @@ def build_two_galaxy_catalog(*, halpha, ssp, obs_base, n_line_cols=None):
     assert np.isfinite(measured_halpha_base), (
         f"Measured Halpha base is not finite: {measured_halpha_base}"
     )
-    assert measured_halpha_base != 0.0, (
-        "Measured Halpha base is exactly zero; fixture is broken"
-    )
+    assert measured_halpha_base != 0.0, "Measured Halpha base is exactly zero; fixture is broken"
 
     # Set errors to 5% of |base|
     line_error_base = np.abs(measured_halpha_base) * 0.05
@@ -147,8 +145,7 @@ def build_two_galaxy_catalog(*, halpha, ssp, obs_base, n_line_cols=None):
     )
     # chi2_g1 should be larger but not catastrophic
     assert chi2_g1 < 1e5, (
-        f"Galaxy 1 chi2 at truth ({chi2_g1}) is astronomical; "
-        f"fixture not self-consistent"
+        f"Galaxy 1 chi2 at truth ({chi2_g1}) is astronomical; fixture not self-consistent"
     )
 
     # Build catalog table with per-galaxy line fluxes
