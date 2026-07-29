@@ -301,4 +301,17 @@ def _nthcomp_lnu_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     shifted = _nthcomp_lnu_interp_impl(nu, gamma + eps, kTe_keV, kTbb_keV)
     fd_grad = (shifted - primal_out) / eps
 
-    return primal_out, fd_grad * d_gamma
+    # The tangent dtype must MATCH the primal's, exactly — a ``custom_jvp``
+    # contract that ``custom_vjp`` did not impose, so it is the one way this
+    # conversion can regress. ``nu`` sets the primal dtype while ``gamma`` sets
+    # the tangent's: a float32 SED grid with a float64 ``gamma`` promotes the
+    # product to float64 and JAX rejects the rule outright::
+    #
+    #     TypeError: Custom JVP rule must produce primal and tangent outputs
+    #     with corresponding shapes and dtypes. Expected float32[5994]
+    #     (tangent type of float32[5994]) but got float64[5994].
+    #
+    # That is a hard error at trace time, not a wrong number, and it took out
+    # the B1_agn_disc_torus scenario — a mixed-dtype path that no unit test
+    # reaches, only the slow integration tier.
+    return primal_out, jnp.asarray(fd_grad * d_gamma, dtype=primal_out.dtype)

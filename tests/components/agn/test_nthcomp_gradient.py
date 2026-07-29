@@ -175,3 +175,40 @@ class TestNthcompJVPRule:
         assert scaled != 0.0, "large cotangent collapsed to a silent zero gradient"
         assert jnp.isfinite(scaled)
         assert scaled / unit == pytest.approx(1e30, rel=1e-5)
+
+    def test_float32_grid_with_float64_gamma_is_accepted(self):
+        """A float32 SED grid with a float64 ``gamma`` must still differentiate.
+
+        ``custom_jvp`` requires the tangent's dtype to MATCH the primal's — a
+        contract ``custom_vjp`` never imposed, so it is the one way that
+        conversion can regress. ``nu`` fixes the primal dtype while ``gamma``
+        fixes the tangent's, so this mixed pairing promotes the tangent to
+        float64 and JAX rejects the rule at trace time::
+
+            TypeError: Custom JVP rule must produce primal and tangent outputs
+            with corresponding shapes and dtypes.
+
+        It is a hard error, not a wrong number, and it reached CI as the
+        B1_agn_disc_torus scenario failing in the slow integration tier — no
+        unit test paired the dtypes this way.
+        """
+        _, kte, ktbb = self.ARGS
+        nu32 = self.NU.astype(jnp.float32)
+        args = (nu32, jnp.float64(2.0), jnp.float64(float(kte)), jnp.float64(float(ktbb)))
+        tangents = (
+            jnp.zeros_like(nu32),
+            jnp.float64(1.0),
+            jnp.float64(0.0),
+            jnp.float64(0.0),
+        )
+
+        primal_out, tangent_out = jax.jvp(nthcomp_lnu_interp, args, tangents)
+
+        assert tangent_out.dtype == primal_out.dtype
+        assert bool(jnp.all(jnp.isfinite(tangent_out)))
+
+        # Reverse mode over the same mixed pairing must also survive.
+        def loss(g):
+            return jnp.sum(nthcomp_lnu_interp(nu32, g, args[2], args[3])).astype(jnp.float64)
+
+        assert jnp.isfinite(jax.grad(loss)(args[1]))
