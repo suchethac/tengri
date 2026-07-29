@@ -1800,16 +1800,85 @@ def list_recipes() -> _RegistryTable:
         doc = inspect.getdoc(fn) or ""
         short_doc = doc.split("\n\n", 1)[0].strip().replace("\n", " ")
         ssp_req = _parse_ssp_requirement(doc)
+        # Calling the recipe is cheap — it returns a kwargs dict and builds
+        # nothing — so the table can report what each one actually needs
+        # rather than what its prose claims.
+        try:
+            data_status = _recipe_data_status(fn())
+        except Exception:
+            data_status = "unknown"
         out.append(
             {
                 "name": name,
                 "kind": "recipe",
                 "short_doc": short_doc,
                 "ssp_requirement": ssp_req,
+                "data": data_status,
                 "use": f"recipes.{name}() → SEDModel.build(ssp_data=ssp, **recipe)",
             }
         )
     return _RegistryTable(out)
+
+
+#: Component types whose data ships separately from tengri, mapped to the
+#: ``kind`` argument their loader resolves. Keyed by the value a recipe puts in
+#: a block's ``type``.
+_EXTERNAL_GRID_BLOCKS: dict[str, str] = {
+    "synthesizer": "nlr",
+    "synthesizer_spectra": "nlr",
+}
+
+
+def _recipe_data_status(kwargs: dict) -> str:
+    """Report whether a recipe's non-SSP data is present on this machine.
+
+    ``list_recipes`` presented all ten recipes as equals while one of them —
+    ``unified_agn`` — cannot produce a number without a Synthesizer AGN grid
+    that does not ship with tengri. A recipe is by definition the thing a new
+    user is told to start from, so "this one needs a download" belongs in the
+    table rather than in a traceback (#1462 §3).
+
+    The check calls the **loader's own resolver** rather than re-deriving the
+    search path. A second copy of "where does this file live" would drift, and
+    a column that says ``ready`` while the loader disagrees is worse than no
+    column at all.
+
+    Returns
+    -------
+    str
+        ``"ready"`` when nothing extra is needed, or a short note naming what
+        is missing. Never raises: an unresolvable requirement is the answer,
+        not an error.
+    """
+    needed: set[str] = set()
+
+    def _walk(node):
+        if isinstance(node, dict):
+            block_type = node.get("type")
+            if isinstance(block_type, str) and block_type in _EXTERNAL_GRID_BLOCKS:
+                needed.add(_EXTERNAL_GRID_BLOCKS[block_type])
+            for value in node.values():
+                _walk(value)
+        elif isinstance(node, (list, tuple)):
+            for value in node:
+                _walk(value)
+
+    _walk(kwargs)
+    if not needed:
+        return "ready"
+
+    from tengri.components.agn.blocks.nlr import _resolve_synthesizer_grid
+
+    missing = []
+    for kind in sorted(needed):
+        try:
+            _resolve_synthesizer_grid(kind)
+        except Exception:
+            missing.append(kind)
+    if not missing:
+        return "ready"
+    kinds = "/".join(k.upper() for k in missing)
+    return f"needs Synthesizer AGN {kinds} grid (synthesizer-download --agn-test-grids)"
 
 
 def _parse_ssp_requirement(doc: str) -> str:
