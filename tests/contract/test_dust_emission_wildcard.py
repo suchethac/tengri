@@ -22,26 +22,34 @@ selected backend's parameters were freed. A guard that fails open.
 ``_narrow_outcome_to_selected_component`` restricts the outcome to the selected
 component's ``declared_parameters()`` before the check, so the guard now fires:
 
+Composed with the three-outcome predicate from #1474, the narrowing makes every
+verdict count the selected engine's **own** declared parameters:
+
 ======================  ==================  =========================
 ``emission.type``       declares            ``'*': FREE`` outcome
 ======================  ==================  =========================
-``dale2014``            2, both unfreeable  **raises** ParameterError
-``casey2012``           3, all unfreeable   **raises** ParameterError
-``themis``              4, 2 freeable       builds
-``draine_li2014``       4, 2 freeable       builds
-``draine_li2007``       3, 1 freeable       builds
-``modified_blackbody``  3, 1 freeable       builds
-``astrodust``           1, freeable         builds
+``dale2014``            2, both unfreeable  **raises** ("0 of 2")
+``casey2012``           3, all unfreeable   **raises** ("0 of 3")
+``themis``              4, 2 freeable       **warns** ("2 of 4")
+``draine_li2014``       4, 2 freeable       **warns**
+``draine_li2007``       3, 1 freeable       **warns** ("1 of 3")
+``modified_blackbody``  3, 1 freeable       **warns**
+``astrodust``           1, freeable         silent — all of its own freed
 ======================  ==================  =========================
 
+Without the narrowing those counts are all "7 of 22", diluted by parameters the
+selected engine never reads; without #1474's predicate only the two zero cases
+are caught at all.
+
 **Residual, deliberately not fixed here.** The expansion itself is still
-backend-blind: ``themis`` builds, but alongside its own two it also frees five
-parameters it never reads (``dust_alpha_dl14``, ``dust_epsilon_mbb``,
-``dust_f_cold``, ``dust_f_pah``, ``dust_lgU``) — silent no-op dimensions a
-sampler would explore for free. Narrowing the *expansion* rather than only the
-*check* changes the free-parameter count for existing callers, so it is left to
-#1482. ``test_expansion_is_still_backend_blind`` pins that residual so it cannot
-be forgotten, and inverts when it is fixed.
+backend-blind: ``themis`` receives seven parameters and reads two, so five
+(``dust_alpha_dl14``, ``dust_epsilon_mbb``, ``dust_f_cold``, ``dust_f_pah``,
+``dust_lgU``) remain free no-op dimensions. Since #1474 that is at least *loud* —
+the warning names the two it could not free — but a sampler still explores the
+five. Narrowing the *expansion* rather than only the *check* changes the
+free-parameter count for existing callers, so it is left to #1482.
+``test_expansion_is_still_backend_blind`` pins the residual and inverts when it
+is fixed.
 
 The bands span 1500 A - 500 um so dust IR emission has somewhere to land — an
 optical-only filter set would report every dust-emission parameter as inert for

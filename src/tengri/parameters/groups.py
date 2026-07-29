@@ -93,7 +93,7 @@ from __future__ import annotations
 import difflib
 import warnings
 
-from tengri.config.exceptions import ParameterError
+from tengri.config.exceptions import ParameterError, WildcardPartialFreeWarning
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Distribution, Fixed
@@ -137,8 +137,9 @@ def _expand_free(param_name: str, registry_default: Distribution) -> Distributio
     when asked to be free, normally the same range ``bound_check`` enforces.
     When it does, ``FREE`` genuinely frees. When it does not, this returns the
     Fixed default unchanged and
-    :func:`_check_wildcard_freed_something` refuses the request loudly rather
-    than pretending it worked.
+    :func:`_check_wildcard_freed_something` says so rather than pretending it
+    worked — refusing outright when the group freed nothing, and warning with
+    :class:`WildcardPartialFreeWarning` when it freed only a subset.
 
     Parameters
     ----------
@@ -1019,16 +1020,59 @@ def _narrow_outcome_to_selected_component(
     return narrowed
 
 
+def _format_stuck(group: str, stuck: list[str]) -> tuple[str, str, str]:
+    """Render the pinned-parameter list and a short-form example for a group.
+
+    Parameters
+    ----------
+    group : str
+        Group name, possibly dotted for a sub-block (``'agn.torus'``).
+    stuck : list of str
+        Fully-prefixed names of the parameters that stayed ``Fixed``.
+
+    Returns
+    -------
+    shown : str
+        Comma-joined names, truncated with a ``(+N more)`` tail.
+    top : str
+        Top-level group name — what the caller writes as the kwarg.
+    short : str
+        First stuck name with its group prefix stripped — the short form the
+        caller writes inside the group dict.
+    """
+    # Show enough that the caller can see what they meant to free without
+    # scrolling; groups run to ~22 params at the widest (dust.emission).
+    _LIMIT = 12
+    shown = ", ".join(stuck[:_LIMIT]) + (
+        f", ... (+{len(stuck) - _LIMIT} more)" if len(stuck) > _LIMIT else ""
+    )
+    top = group.split(".")[0]
+    prefix = f"{top}_"
+    example = stuck[0]
+    short = example[len(prefix) :] if example.startswith(prefix) else example
+    return shown, top, short
+
+
 def _check_wildcard_freed_something(
     outcome: dict[str, list[tuple[str, bool]]],
 ) -> None:
-    """Raise if an ``all_params: FREE`` wildcard freed no parameter at all.
+    """Adjudicate what an ``all_params: FREE`` wildcard actually freed.
 
-    ``FREE`` means "use the registry default", and most registry defaults are
-    ``Fixed`` scalars — so the wildcard can resolve cleanly while leaving every
-    parameter in the group pinned. The fit then runs to completion with that
-    physics frozen, which is indistinguishable from success at the call site.
-    Freeing nothing is never what the caller asked for, so refuse it.
+    ``FREE`` resolves each parameter to its declared ``free_prior``. A parameter
+    with no ``free_prior`` falls back to its ``prior`` — a ``Fixed`` scalar — and
+    stays pinned. A group can therefore hold both kinds, and the wildcard frees
+    one subset while leaving the rest frozen. The fit then runs to completion
+    with that physics constant, which is indistinguishable from success at the
+    call site.
+
+    Three outcomes, three responses:
+
+    * freed everything — silent, the request was honored;
+    * freed nothing — :class:`ParameterError`, since that is never intended;
+    * freed some — :class:`WildcardPartialFreeWarning` naming what stayed pinned
+      (issue #1474). A warning rather than a refusal because a partial free is
+      sometimes correct: ``dust_Rv`` is fixed by definition under a Calzetti law,
+      and six of the ten shipped recipes free a strict subset today.
 
     Parameters
     ----------
@@ -1041,21 +1085,37 @@ def _check_wildcard_freed_something(
     ------
     ParameterError
         If any group's wildcard freed zero of the parameters it covered.
+
+    Warns
+    -----
+    WildcardPartialFreeWarning
+        If a group's wildcard freed some, but not all, of them.
     """
     for group, entries in sorted(outcome.items()):
-        if not entries or any(freed for _, freed in entries):
+        if not entries:
             continue
-        stuck = [name for name, _ in entries]
-        # Show enough that the caller can see what they meant to free without
-        # scrolling; groups run to ~22 params at the widest (dust.emission).
-        _LIMIT = 12
-        shown = ", ".join(stuck[:_LIMIT]) + (
-            f", ... (+{len(stuck) - _LIMIT} more)" if len(stuck) > _LIMIT else ""
-        )
-        # Short form is what the caller writes inside the group dict.
-        prefix = f"{group.split('.')[0]}_"
-        example = stuck[0]
-        short = example[len(prefix) :] if example.startswith(prefix) else example
+        stuck = [name for name, freed in entries if not freed]
+        if not stuck:
+            # Freed everything it covered — exactly what was asked for.
+            continue
+
+        shown, top, short = _format_stuck(group, stuck)
+
+        if len(stuck) < len(entries):
+            warnings.warn(
+                f"'all_params: FREE' freed {len(entries) - len(stuck)} of "
+                f"{len(entries)} parameters in group {group!r}. These have no "
+                f"declared prior, only Fixed defaults, so they stay pinned:\n"
+                f"  {shown}\n"
+                f"The fit will run with that physics held constant. Pass "
+                f"explicit priors for the ones you meant to vary, e.g. "
+                f"{top}={{{short!r}: Uniform(lo, hi)}}, or filter "
+                f"WildcardPartialFreeWarning if this is deliberate.",
+                WildcardPartialFreeWarning,
+                stacklevel=3,
+            )
+            continue
+
         raise ParameterError(
             f"'all_params: FREE' freed 0 of {len(stuck)} parameters in group "
             f"{group!r}. These have no declared prior, only Fixed defaults:\n"
@@ -1064,7 +1124,7 @@ def _check_wildcard_freed_something(
             f"default to Fixed — so the wildcard would leave every one of them "
             f"pinned and the fit would silently not vary this physics.\n"
             f"Pass explicit priors instead, e.g. "
-            f"{group.split('.')[0]}={{{short!r}: Uniform(lo, hi)}}."
+            f"{top}={{{short!r}: Uniform(lo, hi)}}."
         )
 
 
