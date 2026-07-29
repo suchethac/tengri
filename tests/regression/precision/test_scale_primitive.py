@@ -58,6 +58,26 @@ def test_log10_add_handles_zero_terms():
     assert float(log10_add(43.0, 43.0, sign_a=1.0, sign_b=-1.0)) == -np.inf
 
 
+def test_log10_add_does_not_report_an_overflowed_term_as_zero():
+    """``+inf`` is an overflow upstream, NOT an empty term.
+
+    Both infinities fail ``isfinite``, but they mean opposite things: ``-inf``
+    is "no term here", ``+inf`` is "something upstream left the range". Folding
+    the latter into the ``-inf`` sentinel would report an overflowed term as
+    exactly **zero** — a fail-open on precisely the axis this module exists to
+    close, and indistinguishable from a legitimately absent term.
+    """
+    from tengri.utils.scale import log10_add
+
+    assert float(log10_add(np.inf, 43.0)) == np.inf
+    assert float(log10_add(43.0, np.inf)) == np.inf
+    assert float(log10_add(np.inf, np.inf)) == np.inf
+    # A sign flip does not make an overflow disappear either.
+    assert float(log10_add(np.inf, 43.0, sign_a=-1.0)) == np.inf
+    # +inf must still beat -inf: one real (overflowed) term plus one empty one.
+    assert float(log10_add(np.inf, -np.inf)) == np.inf
+
+
 def test_log10_add_stays_finite_in_pure_float32():
     """Summing two ~1e43 terms must never materialize them (float32 max 3.4e38)."""
     from tengri.utils.scale import log10_add, pow10
