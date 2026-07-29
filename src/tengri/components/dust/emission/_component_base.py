@@ -26,6 +26,16 @@ from tengri.protocols.component import BARE_NAME_ALLOWLIST, ForwardState
 
 __all__ = ["EmissionComponent"]
 
+#: Units of the LUT-path precomp families, which live outside ``outputs()``
+#: because they exist only when a WavePrecomp model asks for them. Declared so
+#: the L_ir rescale can decide per key instead of assuming every family is
+#: luminosity-valued; ``_rescale_published`` raises on any key missing here.
+#: Produced by ``_apply_photometry_precomp`` / ``_apply_spectrum_precomp``.
+_PRECOMP_UNITS: dict[str, str] = {
+    "dust_emission_phot_lnu_precomp": "erg/s/Hz",
+    "dust_emission_spec_lnu_precomp": "erg/s/Hz",
+}
+
 
 class EmissionComponent(SEDModelComponent):
     """Abstract base for all dust IR emission models.
@@ -77,24 +87,57 @@ class EmissionComponent(SEDModelComponent):
         factored["L_ir"] = jnp.ones_like(jnp.asarray(log_l_ir))
         return factored, jnp.asarray(log_l_ir)
 
+    def _published_units(self) -> dict[str, str]:
+        """Units of every key this component can publish, keyed by name.
+
+        ``outputs()`` covers the full-grid families. The precomp families are
+        declared here as well because they are *not* in ``outputs()`` — they
+        exist only on the LUT path — and a rescale policy that cannot see a
+        key's units has to guess at it.
+        """
+        return {key.name: key.units for key in self.outputs()} | _PRECOMP_UNITS
+
+    def _rescale_published(
+        self, published: Mapping[str, Any], offset: jnp.ndarray | None
+    ) -> dict[str, Any]:
+        """Re-apply the factored-out luminosity scale to published quantities.
+
+        Only luminosity-valued outputs are rescaled — a dimensionless published
+        quantity would be corrupted by the factor. A key with no declared units
+        raises rather than defaulting either way: silently rescaling it corrupts
+        a dimensionless quantity, and silently skipping it leaves a luminosity
+        short by the factored-out scale. Both are quiet wrong answers.
+        """
+        if offset is None:
+            return dict(published)
+        from tengri.utils.scale import apply_log10_scale
+
+        units = self._published_units()
+        missing = sorted(set(published) - set(units))
+        if missing:
+            raise KeyError(
+                f"{type(self).__name__} publishes {missing} under L_ir factoring but "
+                "declares no units for them, so they cannot be rescaled correctly. "
+                "Add them to `outputs()` (full-grid families) or to `_PRECOMP_UNITS` "
+                "(LUT families) in components/dust/emission/_component_base.py."
+            )
+        return {
+            name: (apply_log10_scale(value, offset) if "erg/s" in units[name] else value)
+            for name, value in published.items()
+        }
+
     def _restore_l_ir_scale(
         self, sed: jnp.ndarray, published: Mapping[str, Any], offset: jnp.ndarray | None
     ) -> tuple[jnp.ndarray, dict[str, Any]]:
         """Re-apply the factored-out luminosity scale to a unit-``L_ir`` result.
 
-        Only luminosity-valued outputs are rescaled — a dimensionless
-        published quantity would be corrupted by the factor. ``offset`` of
-        ``-inf`` (nothing absorbed) maps to exactly zero emission.
+        ``offset`` of ``-inf`` (nothing absorbed) maps to exactly zero emission.
         """
+        rescaled = self._rescale_published(published, offset)
         if offset is None:
-            return sed, dict(published)
+            return sed, rescaled
         from tengri.utils.scale import apply_log10_scale
 
-        units = {key.name: key.units for key in self.outputs()}
-        rescaled = {
-            name: (apply_log10_scale(value, offset) if "erg/s" in units.get(name, "") else value)
-            for name, value in published.items()
-        }
         return apply_log10_scale(sed, offset), rescaled
 
     def apply(
@@ -201,14 +244,12 @@ class EmissionComponent(SEDModelComponent):
                     )
                 )
 
-            # One rescale for every L_nu-valued family produced above.
-            if log_l_ir_offset is not None:
-                from tengri.utils.scale import apply_log10_scale
-
-                published = {
-                    name: apply_log10_scale(value, log_l_ir_offset)
-                    for name, value in published.items()
-                }
+            # One rescale for every L_nu-valued family produced above, through
+            # the same units-aware policy the full-grid families use — these
+            # keys happen to be L_nu-valued today, but nothing said so, and an
+            # unconditional rescale would silently corrupt the first
+            # dimensionless precomp family anyone adds.
+            published = self._rescale_published(published, log_l_ir_offset)
             sed_ir, published_full = self._restore_l_ir_scale(
                 sed_ir, published_full, log_l_ir_offset
             )
