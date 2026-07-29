@@ -7,9 +7,11 @@ from tengri.inference.population.estimator import (
     shared_log_posterior,
 )
 from tengri.inference.population.kernel import ou_logpdf
+from tengri.inference.population.reconstruct import centered_fields
 
 __all__ = [
     "SharedGrid",
+    "centered_fields",
     "effective_sample_size",
     "ou_logpdf",
     "shared_log_posterior",
