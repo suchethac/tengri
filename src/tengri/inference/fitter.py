@@ -1113,11 +1113,16 @@ class Fitter:
         # (HMC/NUTS) see them as outer Parameters, not Constants. Stored
         # under a private "_jit_inputs" sub-dict so existing data_args
         # consumers don't have to skip new keys.
-        # Some test/dummy models don't implement the threading API —
-        # the `with` suppresses cleanly without falling through.
-        import contextlib
-
-        with contextlib.suppress(AttributeError, TypeError):
+        # Some test/dummy models don't implement the threading API. Decide that by
+        # ASKING (hasattr) rather than by catching AttributeError out of the body:
+        # a blanket ``suppress(AttributeError, TypeError)`` around the whole block
+        # also swallows an AttributeError raised *from inside* a real model, and
+        # then silently ships an un-threaded fit. That is exactly what happened —
+        # ``ForwardModel`` (the canonical surface) did not delegate ``ssp_data``, so
+        # every fit through it baked the SSP grid into the compiled program as a
+        # constant and XLA was OOM-killed on large grids. A guard that fails open
+        # turns a one-line omission into an invisible performance cliff.
+        if all(hasattr(model, attr) for attr in ("spec", "ssp_data", "_template_data_for_jit")):
             # Per-fit params override (#1329): the forward pass reads fixed values
             # (e.g. redshift under ``catalog_z_range``) from this threaded dict at
             # runtime, so the override MUST be merged here — not only in

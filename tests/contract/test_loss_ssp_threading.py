@@ -137,3 +137,255 @@ def test_threaded_and_baked_loss_agree_bit_for_bit(synthetic_ssp_wide, channel):
         f"[{channel}] threaded loss {v_threaded} != baked loss {v_baked} — "
         f"threading changed the physics"
     )
+
+
+# ---------------------------------------------------------------------------
+# The canonical surface, and a detector that can actually see the failure.
+#
+# The guards above passed for two years while a real SSP grid was inlined into
+# every fit, for two independent reasons:
+#
+# 1. They only ever build ``Fitter(SEDModel, ...)`` -- the surface NAMING_CONTRACT
+#    marks deprecated. The canonical path is ``ForwardModel``, and
+#    ``Fitter._build_data_args`` reads ``model.ssp_data``. ``ForwardModel`` did not
+#    delegate that attribute, so the read raised ``AttributeError`` inside a
+#    ``contextlib.suppress(AttributeError, TypeError)`` and the whole
+#    ``args["_jit_inputs"] = {...}`` assignment was skipped -- silently, with no
+#    threading, on the surface every user is told to use.
+# 2. ``_largest_baked_const`` inspects ``jax.make_jaxpr(...).consts``, which is
+#    TOP-LEVEL only. The grid is captured by an INNER ``jax.jit``, whose consts live
+#    on its own sub-jaxpr. Measured on a real SSP: top-level consts reported
+#    ``n=0, 0.00 MB`` while the lowered HLO carried the grid twice at 133.8 MB each
+#    (267.6 MB of a 274.6 MB program, 99.8% constants).
+#
+# So the fix needs both a threading repair and a detector that recurses.
+# ---------------------------------------------------------------------------
+
+
+def _largest_baked_const_at_any_depth(loss_fn, init, data_args):
+    """Largest array frozen as a jaxpr const at ANY nesting depth.
+
+    A ``ClosedJaxpr`` holds const VALUES in ``.consts`` while ``.jaxpr`` is the open
+    jaxpr carrying only ``constvars``. Unwrapping to ``.jaxpr`` before reading
+    ``.consts`` discards exactly what is being looked for and reports a clean bill
+    of health on a graph that is 99.8% baked data.
+    """
+    seen: set[int] = set()
+    best = 0
+
+    def walk(node):
+        nonlocal best
+        if id(node) in seen:
+            return
+        seen.add(id(node))
+        if hasattr(node, "consts") and hasattr(node, "jaxpr"):  # ClosedJaxpr
+            for c in node.consts:
+                best = max(best, int(getattr(c, "size", 0)))
+            walk(node.jaxpr)
+            return
+        for eqn in getattr(node, "eqns", []) or []:
+            for value in eqn.params.values():
+                for cand in value if isinstance(value, (tuple, list)) else [value]:
+                    if hasattr(cand, "eqns") or (
+                        hasattr(cand, "consts") and hasattr(cand, "jaxpr")
+                    ):
+                        walk(cand)
+
+    walk(jax.make_jaxpr(loss_fn)(init, data_args))
+    return best
+
+
+def _obs_and_data(channel):
+    if channel == "photometry":
+        return Observation(photometry=_PHOT), jnp.ones(len(_PHOT.filters))
+    if channel == "spectroscopy":
+        obs = Observation(spectroscopy=Spectroscopy(wave_obs=_SPEC_WAVE))
+        return obs, jnp.ones(_SPEC_WAVE.shape[0])
+    obs = Observation(photometry=_PHOT, spectroscopy=Spectroscopy(wave_obs=_SPEC_WAVE))
+    return obs, jnp.ones(len(_PHOT.filters) + _SPEC_WAVE.shape[0])
+
+
+def _fitter_on_surface(surface, ssp, channel="photometry"):
+    """One fitter per inference surface, built the way that surface really is."""
+    obs, data = _obs_and_data(channel)
+    model = _build_model(ssp, obs)
+    noise = 0.1 * jnp.ones_like(data)
+    if surface == "sed_model":
+        return Fitter(model, data, noise, data_type=channel)
+    from tengri import ForwardModel
+
+    forward = ForwardModel.build(sed=model, observation=obs)
+    # Exactly what ForwardModel.fit does internally.
+    return Fitter(forward, data, noise, data_type=channel)
+
+
+@pytest.mark.parametrize("channel", ["photometry", "spectroscopy", "joint"])
+@pytest.mark.parametrize("surface", ["sed_model", "forward_model"])
+def test_jit_inputs_are_populated_on_every_inference_surface(synthetic_ssp_wide, surface, channel):
+    """``_jit_inputs`` must carry the SSP grid on every surface AND every channel.
+
+    Asserted directly on ``_data_args`` rather than through a jaxpr: this is the
+    step that silently did nothing, and a missing dict key is unambiguous.
+    """
+    ssp = synthetic_ssp_wide
+    fitter = _fitter_on_surface(surface, ssp, channel)
+
+    args = fitter._data_args
+    assert "_jit_inputs" in args, (
+        f"[{surface}/{channel}] _data_args has no '_jit_inputs' key — JIT threading was skipped "
+        f"entirely, so every large array closure-captures into the compiled program"
+    )
+    ssp_size = int(np.asarray(ssp.ssp_flux).size)
+    leaves = jax.tree_util.tree_leaves(args["_jit_inputs"])
+    assert any(int(getattr(leaf, "size", 0)) == ssp_size for leaf in leaves), (
+        f"[{surface}/{channel}] the SSP grid (size {ssp_size}) is not among the threaded "
+        f"_jit_inputs leaves {[int(getattr(x, 'size', 0)) for x in leaves]}"
+    )
+
+
+@pytest.mark.parametrize("channel", ["photometry", "spectroscopy", "joint"])
+@pytest.mark.parametrize("surface", ["sed_model", "forward_model"])
+def test_ssp_grid_is_not_baked_at_any_depth(synthetic_ssp_wide, surface, channel):
+    """No array as large as the SSP grid may be a const at any nesting depth."""
+    ssp = synthetic_ssp_wide
+    fitter = _fitter_on_surface(surface, ssp, channel)
+
+    loss_fn = build_loss_fn(fitter)
+    init = fitter._initialize_unbounded(jax.random.PRNGKey(0))
+    ssp_size = int(np.asarray(ssp.ssp_flux).size)
+    biggest = _largest_baked_const_at_any_depth(loss_fn, init, fitter._data_args)
+    assert biggest < ssp_size, (
+        f"[{surface}/{channel}] a constant of size {biggest} >= SSP grid size {ssp_size} is "
+        f"frozen into the loss jaxpr at some depth. On a real SSP that is 134 MB of hex "
+        f"per copy; XLA then compiles a ~275 MB program and the process is OOM-killed."
+    )
+
+
+def test_forward_model_exposes_ssp_data():
+    """The delegation list must carry ``ssp_data``.
+
+    Pinned as its own test because the failure mode is one missing string in
+    ``_DELEGATED_TO_INNER_SED``, and the consequence is invisible: the read raises
+    ``AttributeError`` inside a ``suppress`` and threading turns off.
+    """
+    from tengri import ForwardModel
+
+    assert "ssp_data" in ForwardModel._DELEGATED_TO_INNER_SED
+
+
+def test_catalog_of_n_galaxies_threads_and_reuses_one_composite(synthetic_ssp_wide):
+    """N galaxies must share ONE compiled program with the SSP threaded into it.
+
+    The batched/catalog path takes its ``data_args`` template from
+    ``Fitter._data_args`` and substitutes only ``data``/``noise``/``presence`` per
+    galaxy, so it inherits both the bug and the fix. Two things must hold:
+
+    * the shared composite (SSP grid, templates) rides in as a **traced argument**,
+      so it is not re-inlined into the program -- once, let alone once per galaxy;
+    * the flat log-density is **cached on the model**, so galaxy 2 reuses galaxy 1's
+      compiled code instead of triggering a fresh compile.
+
+    Without threading, the per-galaxy program embeds the whole grid as a constant;
+    at a real grid size that is 134 MB of inlined hex per copy.
+    """
+    from tengri import ForwardModel
+    from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
+
+    ssp = synthetic_ssp_wide
+    ssp_size = int(np.asarray(ssp.ssp_flux).size)
+    obs, data = _obs_and_data("photometry")
+    model = _build_model(ssp, obs)
+    forward = ForwardModel.build(sed=model, observation=obs)
+    noise = 0.1 * jnp.ones_like(data)
+
+    # ONE fitter serves the whole catalog -- that is how the batched path works:
+    # per-galaxy data/noise/presence are substituted into this shared template.
+    fitter = Fitter(forward, data, noise, data_type="photometry")
+    init = fitter._initialize_unbounded(jax.random.PRNGKey(0))
+    fn1, _unravel, _flat, args = _get_flat_logdensity(fitter, init)
+
+    assert "_jit_inputs" in args, (
+        "the catalog data_args template has no '_jit_inputs' — every per-galaxy "
+        "program would bake the shared composite instead of receiving it"
+    )
+    leaves = jax.tree_util.tree_leaves(args["_jit_inputs"])
+    assert any(int(getattr(x, "size", 0)) == ssp_size for x in leaves), (
+        f"SSP grid (size {ssp_size}) absent from the threaded composite"
+    )
+
+    # Reuse across galaxies: the composite is fetched once and cached, so the second
+    # galaxy gets the identical callable rather than a fresh trace.
+    fn2, _u2, _f2, args2 = _get_flat_logdensity(fitter, init)
+    assert fn1 is fn2, (
+        "the flat log-density was rebuilt on a second lookup — every galaxy would "
+        "pay its own compile instead of reusing the shared composite"
+    )
+    assert "_jit_inputs" in args2
+
+    flat, _ = jax.flatten_util.ravel_pytree(init)
+    biggest = _largest_baked_const_at_any_depth(fn1, flat, args)
+    assert biggest < ssp_size, (
+        f"the catalog log-density bakes a constant of size {biggest} >= SSP grid "
+        f"{ssp_size}; per-galaxy programs must receive the composite, not embed it"
+    )
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Known gap, separate from SSP threading: Fitter CLONES the model, and "
+        "_model_cache keys on model IDENTITY, so two Fitters over the same "
+        "ForwardModel get separate caches and each sequential per-galaxy fit pays a "
+        "fresh compile. Engine cache keys are already identical, so only the keying "
+        "is wrong. Not fixed here because re-keying structurally is exactly where a "
+        "baked fixed-value override has slipped through before; needs its own change "
+        "with a key that covers overrides. The vmapped catalog path is unaffected -- "
+        "it uses ONE fitter for all N galaxies."
+    ),
+    strict=True,
+)
+def test_two_fitters_on_one_forward_model_share_the_composite(synthetic_ssp_wide):
+    """Sequential per-galaxy fits should reuse one compiled composite."""
+    from tengri import ForwardModel
+    from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
+
+    obs, data = _obs_and_data("photometry")
+    model = _build_model(synthetic_ssp_wide, obs)
+    forward = ForwardModel.build(sed=model, observation=obs)
+    noise = 0.1 * jnp.ones_like(data)
+
+    f1 = Fitter(forward, data, noise, data_type="photometry")
+    f2 = Fitter(forward, 1.7 * data, noise, data_type="photometry")
+    assert f1._engine_cache_key() == f2._engine_cache_key()
+
+    init = f1._initialize_unbounded(jax.random.PRNGKey(0))
+    fn1, *_ = _get_flat_logdensity(f1, init)
+    fn2, *_ = _get_flat_logdensity(f2, init)
+    assert fn1 is fn2
+
+
+@pytest.mark.parametrize("channel", ["photometry", "spectroscopy", "joint"])
+@pytest.mark.parametrize("surface", ["sed_model", "forward_model"])
+def test_threading_does_not_change_the_number_on_either_surface(
+    synthetic_ssp_wide, surface, channel
+):
+    """Threading moves WHERE the composite enters; it must not move the answer.
+
+    The original bit-exactness guard only ran the deprecated ``Fitter(SEDModel)``
+    surface -- the one where threading already worked. Enabling threading on
+    ``ForwardModel`` activated code that had never executed, so it needs its own
+    comparison: same loss, ``_jit_inputs`` present vs stripped.
+    """
+    fitter = _fitter_on_surface(surface, synthetic_ssp_wide, channel)
+    loss_fn = build_loss_fn(fitter)
+    init = fitter._initialize_unbounded(jax.random.PRNGKey(3))
+
+    threaded = fitter._data_args
+    baked = {k: v for k, v in threaded.items() if k != "_jit_inputs"}
+
+    v_threaded = float(loss_fn(init, threaded))
+    v_baked = float(loss_fn(init, baked))
+    assert np.isfinite(v_threaded), f"[{surface}/{channel}] threaded loss is not finite"
+    assert v_threaded == pytest.approx(v_baked, rel=1e-12, abs=1e-9), (
+        f"[{surface}/{channel}] threaded {v_threaded} != baked {v_baked} — threading "
+        f"changed the physics, not just the calling convention"
+    )
