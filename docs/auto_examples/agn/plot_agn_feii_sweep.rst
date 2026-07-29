@@ -21,11 +21,6 @@
 Fe II pseudo-continuum strength evolution
 ==========================================
 
-.. image:: images/sphx_glr_plot_agn_feii_sweep_001.png
-   :alt: plot agn feii sweep
-   :class: sphx-glr-single-img
-
-
 Iron pseudo-continuum (Fe II) emission in AGN produces characteristic humps
 in the near-UV and optical bands. The strength and shape are governed by
 the Fe II equivalent width and ionization state, parameterized in tengri
@@ -50,6 +45,17 @@ References
    arXiv:astro-ph/0601042.
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-138
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_feii_sweep_001.png
+   :alt: Full AGN SED, Fe II excess
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_feii_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -94,7 +100,7 @@ References
             "all_params": tengri.FIXED,
             "log_lbol": 12.0,
             "log_ledd": -1.0,
-            "lum_ratio": 1.0,
+            "frac": 1.0,
         },
         redshift=tengri.Fixed(0.05),
     )

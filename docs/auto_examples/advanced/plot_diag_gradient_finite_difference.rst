@@ -21,18 +21,24 @@
 Autodiff gradients vs. finite-difference derivatives: diagnostic verification
 ==============================================================================
 
-.. image:: images/sphx_glr_plot_diag_gradient_finite_difference_001.png
-   :alt: plot diag gradient finite difference
-   :class: sphx-glr-single-img
-
-
 tengri is a differentiable JAX package. Every model gradient ∂L/∂θ computed via
 `jax.grad()` should numerically match a central finite-difference approximation.
 This diagnostic builds a star-forming model with several free parameters,
 defines a chi-squared loss, and compares autodiff vs FD gradients for each
 parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-107
+.. GENERATED FROM PYTHON SOURCE LINES 11-104
+
+
+
+.. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_diag_gradient_finite_difference_001.png
+   :alt: plot diag gradient finite difference
+   :srcset: /auto_examples/advanced/images/sphx_glr_plot_diag_gradient_finite_difference_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -51,10 +57,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
     jax.config.update("jax_enable_x64", True)
 
-    # Build model with multiple free parameters (DPL SFH, two-component dust) at a
-    # free redshift. Nebular is held fixed: every Cue parameter carries a Fixed
-    # registry default, so the ``FREE`` this line used to request never freed any of
-    # them — the gradient check has always run with nebular pinned, and now says so.
+    # Build model with multiple free parameters (DPL SFH, two-component dust, Cue nebular)
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
     obs = tengri.Observation(
         photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i"]),
@@ -70,7 +73,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
             "all_params": tengri.FREE,
             "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
-        neb={"type": "cue", "all_params": tengri.FIXED},
+        neb={"type": "cue", "all_params": tengri.FREE},
         redshift=tengri.FREE,
     )
 
@@ -132,6 +135,11 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
     ax.grid(True, alpha=0.3, axis="y")
     fig.tight_layout()
     plt.savefig("plot_diag_gradient_finite_difference.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 9.630 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_gradient_finite_difference.py:

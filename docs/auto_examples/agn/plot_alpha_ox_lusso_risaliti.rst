@@ -21,11 +21,6 @@
 Lusso & Risaliti 2016: α_OX – L_UV relation for AGN discs
 =========================================================
 
-.. image:: images/sphx_glr_plot_alpha_ox_lusso_risaliti_001.png
-   :alt: plot alpha ox lusso risaliti
-   :class: sphx-glr-single-img
-
-
 The ultraviolet-to-X-ray spectral slope α_OX encodes the fundamental
 physics of accretion discs. At higher bolometric luminosities, discs
 shift toward cooler effective temperatures and steeper UV slopes,
@@ -40,6 +35,28 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154
 (α_OX–L_UV relation); Tananbaum 1979, ApJ, 234, L9 (definition of α_OX).
 
 .. GENERATED FROM PYTHON SOURCE LINES 18-132
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_alpha_ox_lusso_risaliti_001.png
+   :alt: AGN Disc: UV-to-X-ray Spectral Slope vs. Luminosity
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_alpha_ox_lusso_risaliti_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    α_OX values: min=-0.435, max=0.180
+    Log L_2500: min=28.08, max=30.71
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -72,7 +89,7 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154
             "type": "composable",
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
-            "lum_ratio": 1.0,  # Full AGN contribution
+            "frac": 1.0,  # Full AGN contribution
         },
         redshift=tengri.Fixed(0.0),  # Rest-frame only
     )

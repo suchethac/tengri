@@ -21,11 +21,6 @@
 QSOgen emission lines: Baldwin effect across AGN luminosity
 ===========================================================
 
-.. image:: images/sphx_glr_plot_agn_qsogen_emline_sweep_001.png
-   :alt: plot agn qsogen emline sweep
-   :class: sphx-glr-single-img
-
-
 The QSOgen model (Temple+2021) includes empirical UV/optical emission-line
 forest and broad Balmer continuum. The relative strength of these line
 features with respect to the continuum obeys the **Baldwin effect**:
@@ -41,6 +36,17 @@ References
    — QSOgen empirical template with Baldwin effect parametrization.
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-87
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_qsogen_emline_sweep_001.png
+   :alt: plot agn qsogen emline sweep
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_qsogen_emline_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -85,7 +91,7 @@ References
                 "nlr": {"type": "none", "all_params": tengri.FIXED},
                 "blr": {"type": "qsogen", "all_params": tengri.FIXED},
                 "all_params": tengri.FIXED,
-                "lum_ratio": 1.0,
+                "frac": 1.0,
                 "log_lbol": lbol,
             },
             redshift=tengri.Fixed(0.0),

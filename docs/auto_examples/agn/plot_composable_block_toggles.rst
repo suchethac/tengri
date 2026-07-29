@@ -21,11 +21,6 @@
 Cumulative buildup of the GRAHSP AGN recipe, one sub-block at a time
 =====================================================================
 
-.. image:: images/sphx_glr_plot_composable_block_toggles_001.png
-   :alt: plot composable block toggles
-   :class: sphx-glr-single-img
-
-
 The ``agn.disc``, ``agn.lines``, ``agn.feii``, ``agn.torus``,
 ``agn.atten`` sub-blocks of ``SEDModel.build`` are composable: turning
 one on at a time and overlaying the all-on reference (dashed gray)
@@ -41,6 +36,28 @@ log L_bol = 12.0, all built via the public nested-dict grammar:
 Reference: Buchner et al. 2024 (GRAHSP recipe).
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-112
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_composable_block_toggles_001.png
+   :alt: plot composable block toggles
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_composable_block_toggles_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -111,7 +128,7 @@ Reference: Buchner et al. 2024 (GRAHSP recipe).
 
 
     def predict_nu_lnu(blocks):
-        agn = {"all_params": tengri.FIXED, "log_lbol": 12.0, "lum_ratio": 1.0, **blocks}
+        agn = {"all_params": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **blocks}
         model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         out = model.predict(p)

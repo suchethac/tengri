@@ -21,11 +21,6 @@
 SKIRTOR torus: AGNfitter-averaged vs. X-CIGALE full grid
 =========================================================
 
-.. image:: images/sphx_glr_plot_skirtor_agnfitter_vs_cigale_001.png
-   :alt: plot skirtor agnfitter vs cigale
-   :class: sphx-glr-single-img
-
-
 SKIRTOR (Stalevski et al. 2016) is a clumpy radiative transfer torus model
 with a three-dimensional parameter space (half-opening angle, inclination,
 optical depth). Two different implementations exist in tengri:
@@ -60,6 +55,17 @@ References
    (2024). arXiv:2405.12111.
 
 .. GENERATED FROM PYTHON SOURCE LINES 38-144
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_agnfitter_vs_cigale_001.png
+   :alt: plot skirtor agnfitter vs cigale
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_agnfitter_vs_cigale_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -112,7 +118,7 @@ References
                 "torus": {"type": "skirtor", "all_params": tengri.FIXED},
                 "all_params": tengri.FIXED,
                 "log_lbol": log_lbol,
-                "lum_ratio": agn_lum_ratio,
+                "frac": agn_lum_ratio,
                 "oa_skirtor": 30.0,  # half-opening angle [deg]
                 "incl_skirtor": 45.0,  # inclination [deg]
                 "tv_skirtor": 6.0,  # optical depth at 9.7 micron
@@ -134,7 +140,7 @@ References
                 "torus": {"type": "skirtor_agnfitter", "all_params": tengri.FIXED},
                 "all_params": tengri.FIXED,
                 "log_lbol": log_lbol,
-                "lum_ratio": agn_lum_ratio,
+                "frac": agn_lum_ratio,
                 "oa_skirtor": 30.0,
                 "incl_skirtor": 45.0,
                 "tv_skirtor": 6.0,
@@ -169,6 +175,11 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_skirtor_agnfitter_vs_cigale.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.600 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_agnfitter_vs_cigale.py:

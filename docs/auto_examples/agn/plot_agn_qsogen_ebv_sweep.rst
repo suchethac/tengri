@@ -21,11 +21,6 @@
 QSO continuum: polar-dust reddening tunes UV to optical color
 ==============================================================
 
-.. image:: images/sphx_glr_plot_agn_qsogen_ebv_sweep_001.png
-   :alt: plot agn qsogen ebv sweep
-   :class: sphx-glr-single-img
-
-
 Dust-free quasar spectra are intrinsically blue in the UV and optical.
 Adding a polar-dust attenuation component reddens the accretion-disc
 continuum: increasing the polar-dust reddening ``agn_polar_ebv`` (E(B−V),
@@ -39,6 +34,17 @@ composable AGN ``atten`` block (``polar_dust``), and the swept quantity
 fitted, so no inference is run.
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-93
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_qsogen_ebv_sweep_001.png
+   :alt: plot agn qsogen ebv sweep
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_qsogen_ebv_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -87,7 +93,7 @@ fitted, so no inference is run.
             "all_params": tengri.FIXED,
             "agn_lum_ratio": 1.0,
             "log_lbol": 11.0,
-            "lum_ratio": 1.0,  # composable AGN is scaled by agn_lum_ratio * frac; keep both at 1
+            "frac": 1.0,  # composable AGN is scaled by agn_lum_ratio * frac; keep both at 1
         },
         redshift=tengri.Fixed(0.05),
     )

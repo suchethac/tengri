@@ -21,11 +21,6 @@
 Radio SED response to AGN bolometric luminosity
 ================================================
 
-.. image:: images/sphx_glr_plot_radio_vs_agn_lbol_001.png
-   :alt: plot radio vs agn lbol
-   :class: sphx-glr-single-img
-
-
 At fixed host (constant SFR = 3 M_sun/yr, Condon-92 synchrotron +
 free-free) we sweep the composable AGN's bolometric luminosity
 ``agn_log_lbol`` from 9 to 13 (in log L_sun). The host alone produces
@@ -37,6 +32,17 @@ This is the figure that motivates separating SF-driven from
 AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
 
 .. GENERATED FROM PYTHON SOURCE LINES 15-105
+
+
+
+.. image-sg:: /auto_examples/radio/images/sphx_glr_plot_radio_vs_agn_lbol_001.png
+   :alt: plot radio vs agn lbol
+   :srcset: /auto_examples/radio/images/sphx_glr_plot_radio_vs_agn_lbol_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -90,7 +96,7 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
             "log_lbol": tengri.Uniform(8.0, 14.0),
-            "lum_ratio": 1.0,
+            "frac": 1.0,
         },
         radio={"type": "condon92", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.05),
@@ -130,6 +136,11 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
 
     fig.tight_layout()
     plt.savefig("plot_radio_vs_agn_lbol.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.089 seconds)
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_vs_agn_lbol.py:

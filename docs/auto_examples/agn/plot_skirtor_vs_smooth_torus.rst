@@ -21,11 +21,6 @@
 SKIRTOR clumpy vs Silva+04 smooth-torus comparison (X-CIGALE Fig. 2)
 =====================================================================
 
-.. image:: images/sphx_glr_plot_skirtor_vs_smooth_torus_001.png
-   :alt: plot skirtor vs smooth torus
-   :class: sphx-glr-single-img
-
-
 Reproduces the SKIRTOR vs Fritz comparison from Yang et al. 2020
 (X-CIGALE Fig. 2). Both libraries re-emit the same disc-absorbed
 luminosity in the mid-IR; the mid-IR peak amplitude differs by
@@ -45,6 +40,17 @@ Stalevski et al. 2016, MNRAS 458, 2288 (SKIRTOR);
 Silva, Maiolino & Granato 2004, MNRAS 355, 973.
 
 .. GENERATED FROM PYTHON SOURCE LINES 23-96
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_vs_smooth_torus_001.png
+   :alt: plot skirtor vs smooth torus
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_vs_smooth_torus_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -82,7 +88,7 @@ Silva, Maiolino & Granato 2004, MNRAS 355, 973.
             agn={
                 "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
-                "lum_ratio": 1.0,
+                "frac": 1.0,
                 "cos_inc": 0.95,
                 "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": {"type": torus_type, "all_params": tengri.FIXED},

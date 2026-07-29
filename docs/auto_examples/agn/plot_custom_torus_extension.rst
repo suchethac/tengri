@@ -21,11 +21,6 @@
 Custom AGN torus model via SEDModelComponent and direct integration
 ====================================================================
 
-.. image:: images/sphx_glr_plot_custom_torus_extension_001.png
-   :alt: plot custom torus extension
-   :class: sphx-glr-single-img
-
-
 A toy single-temperature blackbody torus implemented as a modern
 ``SEDModelComponent`` subclass, discoverable through ``SEDModel.build``
 and composable with other AGN blocks. The SEDModelComponent pattern is
@@ -44,6 +39,28 @@ References
    3576 — SKIRTOR library and inclination effects.
 
 .. GENERATED FROM PYTHON SOURCE LINES 22-143
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_custom_torus_extension_001.png
+   :alt: plot custom torus extension
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_custom_torus_extension_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+      return load_ssp_data(str(candidate))
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -131,7 +148,7 @@ References
         agn={
             "all_params": tengri.FIXED,
             "log_lbol": LOG_LBOL,
-            "lum_ratio": 1.0,
+            "frac": 1.0,
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},
         },
@@ -168,6 +185,11 @@ References
     ax.legend(frameon=False, fontsize=9, loc="lower center")
     fig.tight_layout()
     plt.savefig("plot_custom_torus_extension.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 6.097 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_custom_torus_extension.py:

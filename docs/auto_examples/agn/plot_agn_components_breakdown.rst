@@ -21,11 +21,6 @@
 AGN composite SED: per-block decomposition
 ============================================
 
-.. image:: images/sphx_glr_plot_agn_components_breakdown_001.png
-   :alt: plot agn components breakdown
-   :class: sphx-glr-single-img
-
-
 A single ``log L_bol = 12.5`` composable AGN built up component by
 component — disc alone, +torus, +narrow lines, +broad lines — so the
 reader can see what each block contributes to the total spectrum.
@@ -38,6 +33,17 @@ fitters need ``nlr``, NIR/MIR color fitters need ``torus`` (and
 disc choice barely matters longward of 1 μm), etc.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-166
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_components_breakdown_001.png
+   :alt: plot agn components breakdown
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_components_breakdown_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -70,7 +76,7 @@ disc choice barely matters longward of 1 μm), etc.
 
 
     def _agn(extra_blocks=(), wave=None):
-        agn = {"all_params": tengri.FIXED, "log_lbol": 12.5, "lum_ratio": 1.0, **BASE_AGN}
+        agn = {"all_params": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0, **BASE_AGN}
         for key, value in extra_blocks:
             agn[key] = value
         model = tengri.SEDModel.build(ssp, agn=agn, **COMMON)
@@ -191,6 +197,11 @@ disc choice barely matters longward of 1 μm), etc.
     ax_bot.legend(frameon=False, fontsize=8, loc="lower right")
 
     plt.savefig("plot_agn_components_breakdown.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.331 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_components_breakdown.py:

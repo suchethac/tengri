@@ -21,11 +21,6 @@
 AGN archetypes: Seyfert, quasar, and LIRG/Sy across bolometric luminosity
 ==========================================================================
 
-.. image:: images/sphx_glr_plot_seyfert_quasar_blazar_archetypes_001.png
-   :alt: plot seyfert quasar blazar archetypes
-   :class: sphx-glr-single-img
-
-
 Three distinct AGN types overlaid to show how AGN morphology and obscuration
 evolve with luminosity:
 
@@ -46,6 +41,17 @@ This archetype figure is the diagnostic for understanding how AGN
 classification depends on viewing angle, accretion rate, and dust geometry.
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-243
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_seyfert_quasar_blazar_archetypes_001.png
+   :alt: plot seyfert quasar blazar archetypes
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_seyfert_quasar_blazar_archetypes_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -101,7 +107,7 @@ classification depends on viewing angle, accretion rate, and dust geometry.
         """
         agn_dict = {
             "log_lbol": log_lbol,
-            "lum_ratio": agn_lum_ratio,
+            "frac": agn_lum_ratio,
             "all_params": tengri.FIXED,
         }
         agn_dict.update(agn_blocks)
@@ -268,6 +274,11 @@ classification depends on viewing angle, accretion rate, and dust geometry.
 
     fig.tight_layout()
     plt.savefig("plot_seyfert_quasar_blazar_archetypes.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.529 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_seyfert_quasar_blazar_archetypes.py:

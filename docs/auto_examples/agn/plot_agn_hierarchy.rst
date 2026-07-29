@@ -21,11 +21,6 @@
 Building up an AGN SED: disc, then torus, then lines
 =====================================================
 
-.. image:: images/sphx_glr_plot_agn_hierarchy_001.png
-   :alt: plot agn hierarchy
-   :class: sphx-glr-single-img
-
-
 Four AGN configurations of increasing physical complexity at the same
 bolometric luminosity (log L_bol = 12.5 in L_sun units) — bare
 multicolor disc, +SKIRTOR torus, +NLR narrow-line forest, and an
@@ -39,6 +34,17 @@ Stalevski et al. 2016, MNRAS, 458, 2288 (SKIRTOR);
 Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-88
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_hierarchy_001.png
+   :alt: plot agn hierarchy
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_hierarchy_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -96,7 +102,7 @@ Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
 
     fig, ax = plt.subplots(figsize=(7.5, 4.8))
     for (label, blocks), color in zip(TIERS, colors):
-        agn = {"all_params": tengri.FIXED, "log_lbol": LOG_LBOL, "lum_ratio": 1.0, **blocks}
+        agn = {"all_params": tengri.FIXED, "log_lbol": LOG_LBOL, "frac": 1.0, **blocks}
         model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         out = model.predict(p)

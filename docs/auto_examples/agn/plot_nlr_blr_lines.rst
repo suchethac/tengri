@@ -21,11 +21,6 @@
 Narrow vs broad line region: a velocity-width contrast in two windows
 ======================================================================
 
-.. image:: images/sphx_glr_plot_nlr_blr_lines_001.png
-   :alt: plot nlr blr lines
-   :class: sphx-glr-single-img
-
-
 Identical AGN configuration (multicolor disc + SKIRTOR torus at log
 L_bol = 12.5), one with the narrow-line region (FWHM ~ a few hundred
 km/s, characteristic Type-2 spectrum) and the other with the broad-line
@@ -41,6 +36,17 @@ Reference: Osterbrock & Ferland 2006, *Astrophysics of Gaseous Nebulae
 and Active Galactic Nuclei* (line classification by FWHM).
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-98
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_nlr_blr_lines_001.png
+   :alt: plot nlr blr lines
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_nlr_blr_lines_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -87,7 +93,7 @@ and Active Galactic Nuclei* (line classification by FWHM).
             agn={
                 "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
-                "lum_ratio": 1.0,
+                "frac": 1.0,
                 "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": {"type": "skirtor", "all_params": tengri.FIXED},
                 "nlr": {"type": mapping["nlr_type"], "all_params": tengri.FIXED},
@@ -123,6 +129,11 @@ and Active Galactic Nuclei* (line classification by FWHM).
 
     fig.tight_layout()
     plt.savefig("plot_nlr_blr_lines.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.887 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_nlr_blr_lines.py:

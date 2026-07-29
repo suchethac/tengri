@@ -21,11 +21,6 @@
 AGN dusty torus: library comparison at fixed L_bol
 =====================================================
 
-.. image:: images/sphx_glr_plot_agn_torus_compare_001.png
-   :alt: plot agn torus compare
-   :class: sphx-glr-single-img
-
-
 All ten dusty-torus libraries registered under ``agn.torus.type``,
 reprocessing the same accretion-disc continuum at fixed
 ``log L_bol = 12.5`` (in log L_sun) and standard inclination. The disc
@@ -41,6 +36,17 @@ this panel isolates the smooth-vs-clumpy silicate-feature behavior
 near 9.7 and 18 micron.
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-99
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_torus_compare_001.png
+   :alt: plot agn torus compare
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_torus_compare_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -101,7 +107,7 @@ near 9.7 and 18 micron.
                 "torus": {"type": torus, "all_params": tengri.FIXED},
                 "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
-                "lum_ratio": 1.0,
+                "frac": 1.0,
             },
             redshift=tengri.Fixed(0.05),
         )
@@ -124,6 +130,11 @@ near 9.7 and 18 micron.
 
     fig.tight_layout()
     plt.savefig("plot_agn_torus_compare.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.861 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_torus_compare.py:
