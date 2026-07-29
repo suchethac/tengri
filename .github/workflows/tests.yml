@@ -338,14 +338,22 @@ jobs:
     #   regression-d 19m · components 19m · contract 18m · regression-b1 17m
     #   regression-b2 9m · regression-a 6m · regression-c 4m · physics 3m
     #
-    # The wall clock is ~19 min and the top FOUR shards are a 17-19 min near-
-    # tie: there is no single long pole left to attack, and shaving any one of
-    # them buys nothing until its three neighbours come down too. Note what
-    # that corrects — this block used to assert "`contract` (the long pole)
-    # sets the wall clock" directly beneath a paragraph warning that naming
-    # `contract` the long pole was the error it had already made twice. Do not
-    # re-add a long-pole claim without a dated measurement beside it. See the
-    # re-measure recipe on #1346.
+    # That was a 17-19 min near-tie across the top four, and the conclusion drawn
+    # from it — "no single long pole left to attack" — was correct ON ITS DATE.
+    # It stopped being correct. Re-measured 2026-07-29 (run 30438809385):
+    #
+    #   regression-d 22m41s · components 20m54s · contract 18m30s
+    #   regression-b1 14m24s · regression-b2 12m12s · regression-a 6m06s
+    #   regression-c 4m48s · physics 3m24s
+    #
+    # First-to-fourth is now 8.3 min, not 2: the tie broke, `regression-d` became
+    # a real pole, and `regression-b1` fell from 17 to 14. Hence the splits below.
+    # This block has now gone stale FOUR times; that is a property of a file list
+    # that grows, not of carelessness. Never state a long-pole claim here without
+    # the date and run id beside it, and re-measure from a completed run's job
+    # durations — never from progress percentages (see the 2.3x error below).
+    # `--durations=25` is now passed to pytest so the next re-measure has per-test
+    # numbers on a CI runner instead of a contended laptop.
     #
     # regression and physics were ONE shard until 2026-07. They were split because
     # the paired shard walked back into the 16 GB ceiling: it died at ~21-22 min and
@@ -385,8 +393,23 @@ jobs:
         # (~0.66 GB/test never released). Fix that and `-n 2` should come back —
         # revisit with a measurement, not an assumption. See #1346.
         include:
-          - shard: contract
-            paths: tests/contract
+          # Split in two (2026-07-29). Same knob as the regression split below and
+          # for the same documented reason -- more RUNNERS is free, more workers
+          # per runner is not -- applied to a shard that had never had it: 307
+          # files on one runner at 18m30s. `nproc` stays 2, so each runner's peak
+          # is unchanged; this buys wall clock only.
+          - shard: contract-1
+            paths: ""
+            split_dir: tests/contract
+            split_part: "1"
+            split_of: "2"
+            nproc: 2
+            budget: 50
+          - shard: contract-2
+            paths: ""
+            split_dir: tests/contract
+            split_part: "2"
+            split_of: "2"
             nproc: 2
             budget: 50
           # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
@@ -398,8 +421,22 @@ jobs:
           # inside this shard's budget. `tools/check_test_paths_covered.py`
           # (lint job) now fails the build if any test tree escapes the matrix
           # again.
-          - shard: components
-            paths: tests/components tests/unit
+          # Split in two (2026-07-29): 170 files on one runner at 20m54s, the
+          # second-slowest shard of the run. `tests/unit` (14 files, ~2 min) rides
+          # with part 1 rather than becoming a third runner of its own.
+          - shard: components-1
+            paths: ""
+            split_dir: tests/components
+            split_part: "1"
+            split_of: "2"
+            extra_paths: tests/unit
+            nproc: 2
+            budget: 50
+          - shard: components-2
+            paths: ""
+            split_dir: tests/components
+            split_part: "2"
+            split_of: "2"
             nproc: 2
             budget: 50
           # regression is split FOUR ways, each SERIAL. Two independent knobs,
@@ -433,19 +470,27 @@ jobs:
             paths: tests/regression/synthesizer_parity tests/regression/precision
             nproc: 1
             budget: 50
-          # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
-          # 9.5% of the subtree), so it is halved by FILE COUNT at runtime rather
-          # than by a hardcoded list. `bug_half` triggers that in the run step;
-          # new test files are absorbed automatically instead of silently landing
-          # on whichever side a frozen glob happens to match.
+          # bug/ has no hotspot to extract (its heaviest single file is 9.5% of the
+          # subtree), so it is split by FILE COUNT at runtime rather than by a
+          # hardcoded list: new test files are absorbed automatically instead of
+          # silently landing on whichever side a frozen glob happens to match.
+          # `split_dir`/`split_part`/`split_of` drive that in the run step -- one
+          # mechanism now shared by every split shard, where this was previously a
+          # bug/-only `bug_half` key. The chunk arithmetic moves at most one file
+          # across the boundary versus the old head/tail form when the count is
+          # odd; b1/b2 were 14m24s/12m12s before it and want re-measuring after.
           - shard: regression-b1
             paths: ""
-            bug_half: "1"
+            split_dir: tests/regression/bug
+            split_part: "1"
+            split_of: "2"
             nproc: 1
             budget: 50
           - shard: regression-b2
             paths: ""
-            bug_half: "2"
+            split_dir: tests/regression/bug
+            split_part: "2"
+            split_of: "2"
             nproc: 1
             budget: 50
           - shard: regression-c
@@ -455,14 +500,28 @@ jobs:
           # The top-level files only — every subdirectory above is excluded so no
           # test runs twice. This shard holds the memory-heaviest files
           # (test_field_latents_reach_likelihood.py at 4.06 GB).
-          - shard: regression-d
-            paths: >-
-              tests/regression
-              --ignore=tests/regression/synthesizer_parity
-              --ignore=tests/regression/precision
-              --ignore=tests/regression/bug
-              --ignore=tests/regression/agn
-              --ignore=tests/regression/paper
+          # Split in two (2026-07-29): 22m41s, the LONG POLE of the run. The
+          # `--ignore` list it used to carry is gone -- `-maxdepth 1` expresses
+          # "the top-level files only" directly, so adding a subdirectory under
+          # tests/regression can no longer silently double-run by being missed
+          # from that list. Still SERIAL: this holds the memory-heaviest files
+          # (test_field_latents_reach_likelihood.py at 4.06 GB), and splitting
+          # changes wall clock without changing a runner's peak, which is exactly
+          # the property that makes it safe here.
+          - shard: regression-d1
+            paths: ""
+            split_dir: tests/regression
+            split_maxdepth: "1"
+            split_part: "1"
+            split_of: "2"
+            nproc: 1
+            budget: 50
+          - shard: regression-d2
+            paths: ""
+            split_dir: tests/regression
+            split_maxdepth: "1"
+            split_part: "2"
+            split_of: "2"
             nproc: 1
             budget: 50
           - shard: physics
@@ -536,38 +595,50 @@ jobs:
         id: paths
         run: |
           set -euo pipefail
-          HALF_SEL="${{ matrix.bug_half }}"
-          if [ -z "$HALF_SEL" ]; then
-            echo "value=${{ matrix.paths }}" >> "$GITHUB_OUTPUT"
+          SPLIT_DIR="${{ matrix.split_dir }}"
+          EXTRA="${{ matrix.extra_paths }}"
+          if [ -z "$SPLIT_DIR" ]; then
+            echo "value=${{ matrix.paths }} $EXTRA" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Newline-separated + head/tail rather than `mapfile`, so this same
-          # logic can be run and verified on a dev machine (macOS ships bash 3.2,
-          # which has no mapfile). Paths here never contain spaces; assert it
-          # rather than trust it, since word-splitting would silently drop files.
-          ALL=$(find tests/regression/bug -name 'test_*.py' | sort)
+          PART="${{ matrix.split_part }}"
+          OF="${{ matrix.split_of }}"
+          MAXDEPTH="${{ matrix.split_maxdepth }}"
+          # Newline-separated + sed rather than `mapfile`, so this same logic can
+          # be run and verified on a dev machine (macOS ships bash 3.2, which has
+          # no mapfile). Paths here never contain spaces; assert it rather than
+          # trust it, since word-splitting would silently drop files.
+          if [ -n "$MAXDEPTH" ]; then
+            ALL=$(find "$SPLIT_DIR" -maxdepth "$MAXDEPTH" -name 'test_*.py' | sort)
+          else
+            ALL=$(find "$SPLIT_DIR" -name 'test_*.py' | sort)
+          fi
           N=$(printf '%s\n' "$ALL" | wc -l | tr -d ' ')
-          if [ "$N" -lt 2 ]; then
-            echo "::error::expected >=2 files under tests/regression/bug, found $N"
+          if [ "$N" -lt "$OF" ]; then
+            echo "::error::expected >=$OF files under $SPLIT_DIR, found $N"
             exit 1
           fi
           if printf '%s\n' "$ALL" | grep -q '[[:space:]]'; then
             echo "::error::a test path contains whitespace; the split would drop files"
             exit 1
           fi
-          HALF=$(( (N + 1) / 2 ))
-          if [ "$HALF_SEL" = "1" ]; then
-            SEL=$(printf '%s\n' "$ALL" | head -n "$HALF")
-          else
-            SEL=$(printf '%s\n' "$ALL" | tail -n +$((HALF + 1)))
-          fi
+          # Contiguous chunks of the SORTED list, deliberately not round-robin.
+          # Sorted order groups a directory's files together, and files sharing a
+          # directory share fixtures and compiled kernels; interleaving them would
+          # scatter that across runners and defeat the per-shard XLA cache restored
+          # above. The chunk arithmetic covers 1..N exactly once for any N and any
+          # OF, so the shards remain a partition -- verified in the guard test.
+          START=$(( (N * (PART - 1) / OF) + 1 ))
+          END=$(( N * PART / OF ))
+          SEL=$(printf '%s\n' "$ALL" | sed -n "${START},${END}p")
           COUNT=$(printf '%s\n' "$SEL" | wc -l | tr -d ' ')
-          echo "bug/ half $HALF_SEL: $COUNT of $N files"
-          echo "value=$(printf '%s\n' "$SEL" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+          echo "$SPLIT_DIR part $PART/$OF: $COUNT of $N files (lines $START-$END)"
+          echo "value=$(printf '%s\n' "$SEL" | tr '\n' ' ') $EXTRA" >> "$GITHUB_OUTPUT"
       - run: |
           pytest ${{ steps.paths.outputs.value }} -q \
             -n ${{ matrix.nproc }} \
             --timeout=600 --timeout-method=thread \
+            --durations=25 \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
@@ -663,8 +734,23 @@ jobs:
         # measure: #1362 (chunked fast-grid build) shrinks the underlying
         # allocation; revisit -n 2 once it lands.
         include:
-          - shard: contract
-            paths: tests/contract
+          # Split in two (2026-07-29). Same knob as the regression split below and
+          # for the same documented reason -- more RUNNERS is free, more workers
+          # per runner is not -- applied to a shard that had never had it: 307
+          # files on one runner at 18m30s. `nproc` stays 2, so each runner's peak
+          # is unchanged; this buys wall clock only.
+          - shard: contract-1
+            paths: ""
+            split_dir: tests/contract
+            split_part: "1"
+            split_of: "2"
+            nproc: 2
+            budget: 50
+          - shard: contract-2
+            paths: ""
+            split_dir: tests/contract
+            split_part: "2"
+            split_of: "2"
             nproc: 2
             budget: 50
           # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
@@ -676,8 +762,22 @@ jobs:
           # inside this shard's budget. `tools/check_test_paths_covered.py`
           # (lint job) now fails the build if any test tree escapes the matrix
           # again.
-          - shard: components
-            paths: tests/components tests/unit
+          # Split in two (2026-07-29): 170 files on one runner at 20m54s, the
+          # second-slowest shard of the run. `tests/unit` (14 files, ~2 min) rides
+          # with part 1 rather than becoming a third runner of its own.
+          - shard: components-1
+            paths: ""
+            split_dir: tests/components
+            split_part: "1"
+            split_of: "2"
+            extra_paths: tests/unit
+            nproc: 2
+            budget: 50
+          - shard: components-2
+            paths: ""
+            split_dir: tests/components
+            split_part: "2"
+            split_of: "2"
             nproc: 2
             budget: 50
           # regression is split FOUR ways, each SERIAL. Two independent knobs,
@@ -711,19 +811,27 @@ jobs:
             paths: tests/regression/synthesizer_parity tests/regression/precision
             nproc: 1
             budget: 50
-          # bug/ is ~20 min with no hotspot to extract (its heaviest single file is
-          # 9.5% of the subtree), so it is halved by FILE COUNT at runtime rather
-          # than by a hardcoded list. `bug_half` triggers that in the run step;
-          # new test files are absorbed automatically instead of silently landing
-          # on whichever side a frozen glob happens to match.
+          # bug/ has no hotspot to extract (its heaviest single file is 9.5% of the
+          # subtree), so it is split by FILE COUNT at runtime rather than by a
+          # hardcoded list: new test files are absorbed automatically instead of
+          # silently landing on whichever side a frozen glob happens to match.
+          # `split_dir`/`split_part`/`split_of` drive that in the run step -- one
+          # mechanism now shared by every split shard, where this was previously a
+          # bug/-only `bug_half` key. The chunk arithmetic moves at most one file
+          # across the boundary versus the old head/tail form when the count is
+          # odd; b1/b2 were 14m24s/12m12s before it and want re-measuring after.
           - shard: regression-b1
             paths: ""
-            bug_half: "1"
+            split_dir: tests/regression/bug
+            split_part: "1"
+            split_of: "2"
             nproc: 1
             budget: 50
           - shard: regression-b2
             paths: ""
-            bug_half: "2"
+            split_dir: tests/regression/bug
+            split_part: "2"
+            split_of: "2"
             nproc: 1
             budget: 50
           - shard: regression-c
@@ -733,14 +841,28 @@ jobs:
           # The top-level files only — every subdirectory above is excluded so no
           # test runs twice. This shard holds the memory-heaviest files
           # (test_field_latents_reach_likelihood.py at 4.06 GB).
-          - shard: regression-d
-            paths: >-
-              tests/regression
-              --ignore=tests/regression/synthesizer_parity
-              --ignore=tests/regression/precision
-              --ignore=tests/regression/bug
-              --ignore=tests/regression/agn
-              --ignore=tests/regression/paper
+          # Split in two (2026-07-29): 22m41s, the LONG POLE of the run. The
+          # `--ignore` list it used to carry is gone -- `-maxdepth 1` expresses
+          # "the top-level files only" directly, so adding a subdirectory under
+          # tests/regression can no longer silently double-run by being missed
+          # from that list. Still SERIAL: this holds the memory-heaviest files
+          # (test_field_latents_reach_likelihood.py at 4.06 GB), and splitting
+          # changes wall clock without changing a runner's peak, which is exactly
+          # the property that makes it safe here.
+          - shard: regression-d1
+            paths: ""
+            split_dir: tests/regression
+            split_maxdepth: "1"
+            split_part: "1"
+            split_of: "2"
+            nproc: 1
+            budget: 50
+          - shard: regression-d2
+            paths: ""
+            split_dir: tests/regression
+            split_maxdepth: "1"
+            split_part: "2"
+            split_of: "2"
             nproc: 1
             budget: 50
           - shard: physics
@@ -773,34 +895,45 @@ jobs:
         id: paths
         run: |
           set -euo pipefail
-          HALF_SEL="${{ matrix.bug_half }}"
-          if [ -z "$HALF_SEL" ]; then
-            echo "value=${{ matrix.paths }}" >> "$GITHUB_OUTPUT"
+          SPLIT_DIR="${{ matrix.split_dir }}"
+          EXTRA="${{ matrix.extra_paths }}"
+          if [ -z "$SPLIT_DIR" ]; then
+            echo "value=${{ matrix.paths }} $EXTRA" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # Newline-separated + head/tail rather than `mapfile`, so this same
-          # logic can be run and verified on a dev machine (macOS ships bash 3.2,
-          # which has no mapfile). Paths here never contain spaces; assert it
-          # rather than trust it, since word-splitting would silently drop files.
-          ALL=$(find tests/regression/bug -name 'test_*.py' | sort)
+          PART="${{ matrix.split_part }}"
+          OF="${{ matrix.split_of }}"
+          MAXDEPTH="${{ matrix.split_maxdepth }}"
+          # Newline-separated + sed rather than `mapfile`, so this same logic can
+          # be run and verified on a dev machine (macOS ships bash 3.2, which has
+          # no mapfile). Paths here never contain spaces; assert it rather than
+          # trust it, since word-splitting would silently drop files.
+          if [ -n "$MAXDEPTH" ]; then
+            ALL=$(find "$SPLIT_DIR" -maxdepth "$MAXDEPTH" -name 'test_*.py' | sort)
+          else
+            ALL=$(find "$SPLIT_DIR" -name 'test_*.py' | sort)
+          fi
           N=$(printf '%s\n' "$ALL" | wc -l | tr -d ' ')
-          if [ "$N" -lt 2 ]; then
-            echo "::error::expected >=2 files under tests/regression/bug, found $N"
+          if [ "$N" -lt "$OF" ]; then
+            echo "::error::expected >=$OF files under $SPLIT_DIR, found $N"
             exit 1
           fi
           if printf '%s\n' "$ALL" | grep -q '[[:space:]]'; then
             echo "::error::a test path contains whitespace; the split would drop files"
             exit 1
           fi
-          HALF=$(( (N + 1) / 2 ))
-          if [ "$HALF_SEL" = "1" ]; then
-            SEL=$(printf '%s\n' "$ALL" | head -n "$HALF")
-          else
-            SEL=$(printf '%s\n' "$ALL" | tail -n +$((HALF + 1)))
-          fi
+          # Contiguous chunks of the SORTED list, deliberately not round-robin.
+          # Sorted order groups a directory's files together, and files sharing a
+          # directory share fixtures and compiled kernels; interleaving them would
+          # scatter that across runners and defeat the per-shard XLA cache restored
+          # above. The chunk arithmetic covers 1..N exactly once for any N and any
+          # OF, so the shards remain a partition -- verified in the guard test.
+          START=$(( (N * (PART - 1) / OF) + 1 ))
+          END=$(( N * PART / OF ))
+          SEL=$(printf '%s\n' "$ALL" | sed -n "${START},${END}p")
           COUNT=$(printf '%s\n' "$SEL" | wc -l | tr -d ' ')
-          echo "bug/ half $HALF_SEL: $COUNT of $N files"
-          echo "value=$(printf '%s\n' "$SEL" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+          echo "$SPLIT_DIR part $PART/$OF: $COUNT of $N files (lines $START-$END)"
+          echo "value=$(printf '%s\n' "$SEL" | tr '\n' ' ') $EXTRA" >> "$GITHUB_OUTPUT"
       - run: |
           pytest ${{ steps.paths.outputs.value }} -q \
             -n ${{ matrix.nproc }} \
