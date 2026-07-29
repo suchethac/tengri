@@ -47,7 +47,7 @@ from tengri.inference.population import (
 # Configuration
 # =============================================================================
 
-TRUTH_SIGMA = 1.3  # dex
+TRUTH_SIGMA = 0.75  # dex
 TRUTH_TAU_MYR = 150.0  # Myr
 REDSHIFT = 0.1
 N_GRID = 16  # D = 25 per galaxy with DPL
@@ -58,12 +58,12 @@ N_LEAPFROG_STEPS = 100
 DENSE_MASS_MATRIX = True
 
 # Interim priors (bounds for the independent fits)
-INTERIM_SIGMA_BOUNDS = (0.1, 4.0)
-INTERIM_TAU_BOUNDS_MYR = (10.0, 400.0)
+INTERIM_SIGMA_BOUNDS = (0.01, 1.0)
+INTERIM_TAU_BOUNDS_MYR = (10.0, 500.0)
 
 # Shared grid for hierarchical inference
-GRID_SIGMA_BOUNDS = (0.1, 4.0)
-GRID_TAU_BOUNDS_YR = (10.0 * 1e6, 400.0 * 1e6)  # Convert to years
+GRID_SIGMA_BOUNDS = (0.01, 1.0)
+GRID_TAU_BOUNDS_YR = (10.0 * 1e6, 500.0 * 1e6)  # Convert to years
 N_SIGMA_NODES = 60
 N_TAU_NODES = 60
 
