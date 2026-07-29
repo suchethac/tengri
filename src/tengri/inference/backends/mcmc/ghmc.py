@@ -107,7 +107,10 @@ def run_ghmc(
     # GHMC's momentum generator treats momentum_inverse_scale as a
     # diagonal vector, so we must use diagonal mass matrix regardless
     # of the dense_mass_matrix flag.
-    adapt_key = ("hmc", True)  # always diagonal for GHMC
+    # Namespaced to this backend, not "hmc": the cache is keyed by tuple, so borrowing
+    # another sampler's prefix is a collision waiting on the next field either side
+    # adds. GHMC tunes a different kernel and must not inherit HMC's step size.
+    adapt_key = ("ghmc", True)  # always diagonal for GHMC
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     if cached is not None:
