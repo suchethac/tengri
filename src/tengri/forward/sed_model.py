@@ -3273,6 +3273,15 @@ class SEDModel:
         # Radio and X-ray
         uses_radio = bool(self._uses_radio)
         uses_xray = bool(self._uses_xray)
+        # WHICH X-ray model, not merely whether one is attached. ``_xray_model``
+        # was stored at construction but never keyed, so `agn_xray_corona` and
+        # `xray_aird` shared a compiled kernel and the first one built won —
+        # the same class as the AGN block selectors (#1450) and the radio
+        # models beside it, which do carry their selector. The collision is
+        # invisible in optical/IR photometry because X-ray emission lands at
+        # keV, which is why a flux-based sweep reads this axis as "inert"
+        # rather than unkeyed; the signature shows it directly (#1462).
+        xray_model = str(getattr(self, "_xray_model", "none") or "none") if uses_xray else "none"
         uses_shock = bool(self._uses_shock)
         # Shock normalization + categorical knobs change the emitted SED, so
         # they are part of the structural fingerprint (#851).
@@ -3504,6 +3513,7 @@ class SEDModel:
             agn_norm,
             uses_radio,
             uses_xray,
+            xray_model,
             uses_shock,
             shock_cfg,
             mean_sfh_type,
