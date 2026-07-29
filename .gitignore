@@ -157,3 +157,7 @@ _galrun/
 !data/schreiber2018_templates.h5
 !data/bpss_stars_c3k_a_chabrier.h5
 !data/flury2024_grids.h5
+
+# scratch logs from local recovery runs
+*_run.log
+run_output.log

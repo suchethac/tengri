@@ -126,6 +126,35 @@ def get_process_memory_mb():
     return process.memory_info().rss / (1024 * 1024)
 
 
+def sanity_check_chi_squared(model, mock, truth_params):
+    """Verify chi-squared at truth parameters is reasonable (order of data size).
+
+    Units mismatch or scale errors produce chi-squared > 1e30.
+    A probe must assert its own setup.
+    """
+    # Predict at truth
+    pred = model.predict_photometry(truth_params)
+    pred_arr = np.asarray(pred)
+    phot_obs = np.asarray(mock.table["phot_flux_obs"][0])
+    phot_err = np.asarray(mock.table["phot_flux_err"][0])
+
+    # Chi-squared for photometry
+    phot_resid = (phot_obs - pred_arr) / phot_err
+    phot_chi2 = np.sum(phot_resid ** 2)
+
+    # Check sanity: chi-squared should be order of number of data points, not 1e60
+    n_bands = len(phot_obs)
+    if phot_chi2 > 1e6:
+        raise ValueError(
+            f"Photometry chi-squared at truth is {phot_chi2:.2e}, "
+            f"expected ~{n_bands}. Units mismatch or scale error detected. STOP."
+        )
+
+    print(f"  Photometry chi-squared at truth: {phot_chi2:.2f} (n_bands={n_bands})")
+
+    return True
+
+
 def run_recovery(n_galaxies):
     """Run the full hierarchical PSD recovery pipeline."""
     print(f"\n{'=' * 80}")
@@ -181,6 +210,10 @@ def run_recovery(n_galaxies):
         f"Halpha absorption: {mock.n_halpha_absorption} events"
     )
     mem_peak = max(mem_peak, get_process_memory_mb())
+
+    # --- Sanity check: chi-squared at truth ---
+    print(f"  Sanity check: chi-squared at truth parameters...")
+    sanity_check_chi_squared(model, mock, mock.truth_params[0])
 
     # --- Step 3: Interim fits (per-galaxy) ---
     print(f"[3/5] Running per-galaxy interim fits...")
@@ -306,9 +339,9 @@ def run_recovery(n_galaxies):
           f"[{tau_16:.1f}, {tau_84:.1f}]{'':<15} {'YES' if tau_truth_in else 'NO':>8}")
 
     print(f"\nEffective Sample Size (B2):")
-    print(f"  At mode: {float(ess_at_mode_b2):.1f}")
-    print(f"  Min (top 99% mass): {np.min(ess_min_high_mass_b2):.1f}")
-    print(f"  Median (top 99% mass): {np.median(ess_min_high_mass_b2):.1f}")
+    print(f"  At mode (median over galaxies): {float(np.median(ess_at_mode_b2)):.1f}")
+    print(f"  Min (top 99% mass): {float(np.min(ess_min_high_mass_b2)):.1f}")
+    print(f"  Median (top 99% mass): {float(np.median(ess_min_high_mass_b2)):.1f}")
 
     print(f"\nConvergence:")
     print(f"  Max R-hat (incl. psd_xi): {max(interim.rhat.values()):.4f}")
@@ -336,7 +369,7 @@ def run_recovery(n_galaxies):
         "tau_16": float(tau_16),
         "tau_84": float(tau_84),
         "tau_truth_in": bool(tau_truth_in),
-        "ess_at_mode": float(ess_at_mode_b2),
+        "ess_at_mode": float(np.median(ess_at_mode_b2)),
         "ess_min_high_mass": float(np.min(ess_min_high_mass_b2)),
         "ess_median_high_mass": float(np.median(ess_min_high_mass_b2)),
         "rhat_max": float(max(interim.rhat.values())),

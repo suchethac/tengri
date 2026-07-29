@@ -121,11 +121,11 @@ def fit_interim(
 
     from tengri import Parameters
 
-    spec_interim = Parameters(**spec_dict)
+    spec_interim = Parameters(**spec_dict, n_grid=model.spec.n_grid)
 
     # Create interim model (same SSP, observation, n_grid as original)
-    interim_model = type(model)(spec_interim, model._ssp_data, observation=model.observation)
-    interim_model._n_grid = model.n_grid
+    # Note: spec_interim now has n_grid=model.spec.n_grid, so _n_grid is set correctly
+    interim_model = type(model)(spec_interim, model.ssp_data, observation=model.observation)
 
     # Fit each galaxy independently
     from tengri import Fitter
@@ -138,16 +138,12 @@ def fit_interim(
     all_divergent_counts = []
 
     for i, k_i in enumerate(keys):
-        # Build single-galaxy galaxy dict
-        phot_obs = mock.table["phot_flux_obs"][i]
-        phot_err = mock.table["phot_flux_err"][i]
-        galaxy_dict = {
-            "flux_obs": phot_obs,
-            "noise": phot_err,
-        }
+        # Extract photometric data for this galaxy
+        phot_obs = np.asarray(mock.table["phot_flux_obs"][i])
+        phot_err = np.asarray(mock.table["phot_flux_err"][i])
 
-        # Create Fitter and fit
-        fitter = Fitter(interim_model, [galaxy_dict])
+        # Create Fitter and fit with data and noise as arrays
+        fitter = Fitter(interim_model, phot_obs, phot_err)
 
         hmc_kwargs = {
             "n_leapfrog_steps": n_leapfrog_steps,
@@ -161,7 +157,7 @@ def fit_interim(
             key=k_i,
             n_samples=1000,
             **hmc_kwargs,
-        )[0]  # Single galaxy, so extract [0]
+        )
 
         # Extract samples
         xi_i = np.asarray(post_i.samples["psd_xi"])  # (K, n_grid)
@@ -189,6 +185,14 @@ def fit_interim(
     xi_stacked = np.stack(all_xi, axis=0)
     sigma_stacked = np.stack(all_sigma, axis=0)
     tau_yr_stacked = np.stack(all_tau_myr, axis=0) * 1e6
+
+    # DEBUG: Print shapes before centered_fields
+    print(f"[DEBUG] Before centered_fields:")
+    print(f"  xi_stacked.shape = {xi_stacked.shape} (expect (N, K, 16))")
+    print(f"  sigma_stacked.shape = {sigma_stacked.shape} (expect (N, K))")
+    print(f"  tau_yr_stacked.shape = {tau_yr_stacked.shape} (expect (N, K))")
+    print(f"  log_age_grid.shape = {log_age_grid.shape} (expect (16,))")
+    print(f"  log_age_grid last value: {log_age_grid[-1]}")
 
     # Reconstruct centered fields
     fields_centered = centered_fields(xi_stacked, sigma_stacked, tau_yr_stacked, log_age_grid)
