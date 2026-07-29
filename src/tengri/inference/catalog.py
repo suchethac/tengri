@@ -62,10 +62,20 @@ class Catalog:
         redshift span in the table. If not given, the model must have a
         free redshift parameter. Exactly one of the two conditions is required.
     flux_cols : list[str], optional
-        Explicit flux column names. If None, use ``"{name}"`` for each band in
-        the model's observation.
+        Flux column names **in your table** — they need not resemble the band
+        names. If None, use ``"{name}"`` for each band in the model's
+        observation.
+
+        Binding is **positional**: ``flux_cols[i]`` supplies the flux for
+        band ``i`` of the observation, so order them to match the observation
+        rather than the table::
+
+            # observation bands ("sdss_g", "sdss_r")
+            Catalog(model, table, flux_cols=["FLUX_G", "FLUX_R"],
+                    err_cols=["ERR_G", "ERR_R"], flux_unit="cgs_fnu")
     err_cols : list[str], optional
-        Explicit error column names. If None, use ``"{name}_err"`` for each band.
+        Error column names in your table, bound positionally the same way. If
+        None, use ``"{name}_err"`` for each band.
     censor_cols : dict[str, str], optional
         Mapping from band name to censoring flag column. Flag values: 0
         (detected), 1 (upper limit), -1 (lower limit).
