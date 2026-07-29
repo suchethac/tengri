@@ -91,8 +91,7 @@ def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> N
         f"peak at 20+ GB of RAM{heavy_sfh_hint}. If you're on a "
         "32 GB machine and the fit is OOM-ing, pass "
         "`dense_mass_matrix=False` (diagonal mass matrix; small "
-        "convergence cost) or switch to `method='mcmc_hmc'` "
-        "(less memory-intensive at warmup). See issue #319.",
+        "convergence cost). See issue #319.",
         stacklevel=3,
     )
 
