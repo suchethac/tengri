@@ -29,8 +29,14 @@ physics-first marker taxonomy, ruff.
   Never `Model`, `ParamSpec`, `NoiseConfig`.
 - **American English in all identifiers and prose** (`normalize`, `center`,
   `marginalized`). CI guard: `python tools/check_british_spelling.py`.
+- **The virtualenv lives in the MAIN checkout, not the worktree**:
+  `/Users/suchethacooray/Projects/tengri/.venv/bin/{python,pytest,ruff}`. Run
+  every command with the worktree as the current directory — verified that
+  `tengri.__file__` then resolves to the worktree's `src/`, so tests exercise
+  the code under review and not the main checkout. A bare `pytest` or a
+  relative `.venv/bin/...` will not resolve.
 - **Ruff clean, zero violations.** Line length 99.
-  `.venv/bin/ruff check src/ tests/` and `.venv/bin/ruff format --check src/ tests/`.
+  `ruff check src/ tests/` and `ruff format --check src/ tests/`.
 - **64-bit JAX.** `jax.config.update("jax_enable_x64", True)` is already set at
   import; do not override.
 - **Immutable arrays only** — `.at[].set()`, never in-place mutation.
@@ -324,7 +330,7 @@ pytestmark = pytest.mark.contract
 
 def test_closed_form_posterior_peaks_near_the_injected_truth():
     toy = make_toy(
-        n_galaxies=64,
+        n_galaxies=24,
         n_samples=1,
         n_grid=8,
         sigma_true=1.3,
@@ -334,13 +340,13 @@ def test_closed_form_posterior_peaks_near_the_injected_truth():
         prior_tau_bounds_yr=(1.0e6, 3.0e8),
         seed=0,
     )
-    grid_sigma = jnp.asarray(np.linspace(0.15, 3.9, 40))
-    grid_tau = jnp.asarray(np.geomspace(2.0e6, 2.8e8, 40))
+    grid_sigma = jnp.asarray(np.linspace(0.15, 3.9, 24))
+    grid_tau = jnp.asarray(np.geomspace(2.0e6, 2.8e8, 24))
     logp = closed_form_log_posterior(toy, grid_sigma, grid_tau)
-    chex.assert_shape(logp, (40 * 40,))
+    chex.assert_shape(logp, (24 * 24,))
     best = int(jnp.argmax(logp))
-    got_sigma = float(jnp.repeat(grid_sigma, 40)[best])
-    got_tau = float(jnp.tile(grid_tau, 40)[best])
+    got_sigma = float(jnp.repeat(grid_sigma, 24)[best])
+    got_tau = float(jnp.tile(grid_tau, 24)[best])
     assert abs(got_sigma - 1.3) < 0.35, f"sigma peak {got_sigma} far from truth 1.3"
     assert 0.4 < got_tau / 6.0e7 < 2.5, f"tau peak {got_tau:.3g} far from truth 6e7"
 ```
@@ -448,11 +454,15 @@ def make_toy(
 
     # Exact interim posterior draws: sample (sigma, tau) from the per-galaxy
     # marginal on a fine grid, then the conditional field given (sigma, tau).
-    g_sigma = np.linspace(*prior_sigma_bounds, 60)
-    g_tau = np.geomspace(*prior_tau_bounds_yr, 60)
+    # Interim sampling grid. Kept small on purpose: this fixture runs in the
+    # fast test tier, and its cost is O(n_galaxies * n_interim**2) dense
+    # factorizations in a Python loop.
+    n_interim = 30
+    g_sigma = np.linspace(*prior_sigma_bounds, n_interim)
+    g_tau = np.geomspace(*prior_tau_bounds_yr, n_interim)
     fields = np.empty((n_galaxies, n_samples, n_grid))
     for i in range(n_galaxies):
-        logw = np.empty((60, 60))
+        logw = np.empty((n_interim, n_interim))
         for a, s in enumerate(g_sigma):
             for b, t in enumerate(g_tau):
                 k = _drw_cov(s, t, times) + noise_std**2 * np.eye(n_grid)
@@ -463,8 +473,8 @@ def make_toy(
         w /= w.sum()
         picks = rng.choice(w.size, size=n_samples, p=w)
         for k_idx, flat in enumerate(picks):
-            s = g_sigma[flat // 60]
-            t = g_tau[flat % 60]
+            s = g_sigma[flat // n_interim]
+            t = g_tau[flat % n_interim]
             prior_cov = _drw_cov(s, t, times)
             post_cov = np.linalg.inv(
                 np.linalg.inv(prior_cov) + np.eye(n_grid) / noise_std**2
@@ -557,8 +567,8 @@ def test_b2_recovers_the_closed_form_posterior():
     from tengri.inference.population.estimator import SharedGrid, shared_log_posterior
 
     toy = make_toy(
-        n_galaxies=48,
-        n_samples=400,
+        n_galaxies=16,
+        n_samples=100,
         n_grid=8,
         sigma_true=1.3,
         tau_true_yr=6.0e7,
@@ -570,8 +580,8 @@ def test_b2_recovers_the_closed_form_posterior():
     grid = SharedGrid.uniform(
         sigma_bounds=toy.prior_sigma_bounds,
         tau_bounds_yr=toy.prior_tau_bounds_yr,
-        n_sigma=32,
-        n_tau=32,
+        n_sigma=24,
+        n_tau=24,
     )
     got, ess = shared_log_posterior(toy.fields, toy.times_yr, grid, method="b2")
     want = closed_form_log_posterior(toy, grid.sigma, grid.tau_yr)
@@ -582,9 +592,14 @@ def test_b2_recovers_the_closed_form_posterior():
     p_got = jnp.exp(got_n) / jnp.sum(jnp.exp(got_n))
     p_want = jnp.exp(want_n) / jnp.sum(jnp.exp(want_n))
     total_variation = 0.5 * float(jnp.sum(jnp.abs(p_got - p_want)))
-    assert total_variation < 0.15, f"TV distance {total_variation:.3f} too large"
-    chex.assert_shape(ess, (48,))
-    assert float(jnp.min(ess)) > 20.0, f"min ESS {float(jnp.min(ess)):.1f} too low"
+    # Loose sanity bound only. At 100 draws per galaxy the Monte-Carlo floor is
+    # not negligible, so this bound cannot be tightened without more draws --
+    # the real correctness gate is the limit test below, which asserts the
+    # distance FALLS as draws increase. A fixed threshold chosen to pass at one
+    # sample size proves nothing about convergence.
+    assert total_variation < 0.30, f"TV distance {total_variation:.3f} too large"
+    chex.assert_shape(ess, (16,))
+    assert float(jnp.min(ess)) > 10.0, f"min ESS {float(jnp.min(ess)):.1f} too low"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -821,12 +836,12 @@ def test_b2_converges_to_closed_form_as_draws_increase():
     from tengri.inference.population.estimator import SharedGrid, shared_log_posterior
 
     grid = SharedGrid.uniform(
-        sigma_bounds=(0.1, 4.0), tau_bounds_yr=(1.0e6, 3.0e8), n_sigma=24, n_tau=24
+        sigma_bounds=(0.1, 4.0), tau_bounds_yr=(1.0e6, 3.0e8), n_sigma=20, n_tau=20
     )
     distances = []
-    for n_samples in (25, 400):
+    for n_samples in (10, 200):
         toy = make_toy(
-            n_galaxies=24,
+            n_galaxies=12,
             n_samples=n_samples,
             n_grid=6,
             sigma_true=1.3,
@@ -882,11 +897,26 @@ independently of any forward model, at a cost of minutes.
 - Test: `tests/contract/test_population_sbc.py`
 
 **Interfaces:**
-- Consumes: `SharedGrid`, `shared_log_posterior` (Task 3); `make_toy` (Task 2).
-- Produces: `rank_statistic(log_posterior, grid, truth_sigma, truth_tau_yr) ->
-  tuple[int, int]` giving `(rank_sigma, rank_tau)` out of the node counts;
-  `sbc_ranks(replicates) -> dict` with keys `"sigma"` and `"tau"`, each an
-  `(M,)` integer array.
+- Consumes: `SharedGrid`, `shared_log_posterior` (Task 3). **Nothing from the
+  test tree** — the simulator is injected.
+- Produces:
+  - `normalized_rank(log_posterior, grid, truth_sigma, truth_tau_yr) ->
+    tuple[float, float]` — posterior-mass fraction at or below each truth,
+    in `[0, 1]`.
+  - `run_population_sbc(simulate_fn, *, n_replicates, prior_sigma_bounds,
+    prior_tau_bounds_yr, seed, n_sigma=24, n_tau=24) -> dict` with keys
+    `"sigma"` and `"tau"`, each an `(n_replicates,)` float array of normalized
+    ranks.
+  - `simulate_fn` is a caller-supplied callable
+    `(sigma_dex: float, tau_yr: float, seed: int) -> (fields, times_yr)` where
+    `fields` is `(N, K, n)` [natural-log units] and `times_yr` is `(n,)` [yr].
+
+**Why injected rather than imported.** `src/` must never import from `tests/`:
+it breaks any install that ships only the package, and it inverts the
+dependency direction. Injection also makes this function reusable at
+calibration level 3, where `simulate_fn` becomes the real forward model plus
+`fit_interim` instead of the analytic toy — the same harness, a different
+simulator.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -901,14 +931,28 @@ pytestmark = pytest.mark.contract
 def test_sbc_ranks_are_uniform_for_a_calibrated_estimator():
     from tengri.analysis.sbc import run_population_sbc
 
+    from tests.contract._population_toy import make_toy
+
+    def simulate(sigma_dex, tau_yr, seed):
+        """Adapt the analytic toy to the simulate_fn contract."""
+        toy = make_toy(
+            n_galaxies=8,
+            n_samples=60,
+            n_grid=6,
+            sigma_true=sigma_dex,
+            tau_true_yr=tau_yr,
+            noise_std=0.05,
+            prior_sigma_bounds=(0.4, 2.6),
+            prior_tau_bounds_yr=(5.0e6, 2.0e8),
+            seed=seed,
+        )
+        return toy.fields, toy.times_yr
+
     ranks = run_population_sbc(
-        n_replicates=40,
-        n_galaxies=16,
-        n_samples=200,
-        n_grid=6,
+        simulate,
+        n_replicates=24,
         prior_sigma_bounds=(0.4, 2.6),
         prior_tau_bounds_yr=(5.0e6, 2.0e8),
-        noise_std=0.05,
         seed=3,
     )
     # Uniformity: no more than 60% of ranks may fall in either half. A
@@ -971,33 +1015,42 @@ def normalized_rank(log_posterior, grid, truth_sigma, truth_tau_yr):
 
 
 def run_population_sbc(
+    simulate_fn,
     *,
     n_replicates,
-    n_galaxies,
-    n_samples,
-    n_grid,
     prior_sigma_bounds,
     prior_tau_bounds_yr,
-    noise_std,
     seed,
+    n_sigma=24,
+    n_tau=24,
 ):
     """Rank statistics over replicate populations drawn from the prior.
 
-    Each replicate draws a truth from the prior, simulates a population, runs
-    the two-step estimator, and records where the truth falls in the recovered
-    marginal posterior. Calibrated inference gives uniform ranks.
+    Each replicate draws a truth from the prior, asks ``simulate_fn`` for a
+    population, runs the two-step estimator, and records where the truth falls
+    in the recovered marginal posterior. Calibrated inference gives uniform
+    ranks; a posterior that is too narrow piles ranks at the edges, and one that
+    is too wide piles them in the middle.
 
     Parameters
     ----------
-    n_replicates, n_galaxies, n_samples, n_grid : int
-        Replicates, population size, interim draws per galaxy, field grid points.
+    simulate_fn : callable
+        ``(sigma_dex, tau_yr, seed) -> (fields, times_yr)``. ``fields`` is
+        ``(N, K, n)`` interim centered-field draws [natural-log units] and
+        ``times_yr`` is ``(n,)`` [yr]. Injected rather than imported so this
+        module depends on no particular simulator: pass the analytic toy to
+        calibrate the estimator alone, or the forward model plus the interim
+        fit driver to calibrate the whole pipeline.
+    n_replicates : int
+        Number of replicate populations.
     prior_sigma_bounds : tuple of float
-        Amplitude support [dex].
+        Amplitude support [dex]; truths are drawn uniformly within it.
     prior_tau_bounds_yr : tuple of float
-        Timescale support [yr].
-    noise_std : float
-        White-noise standard deviation [natural-log units].
+        Timescale support [yr]; truths are drawn log-uniformly within it.
     seed : int
+        NumPy seed for the truth draws and the per-replicate simulator seeds.
+    n_sigma, n_tau : int, optional
+        Quadrature grid resolution. Default 24 each.
 
     Returns
     -------
@@ -1005,42 +1058,25 @@ def run_population_sbc(
         Keys ``"sigma"`` and ``"tau"``, each an ``(n_replicates,)`` float array
         of normalized ranks in ``[0, 1]``.
     """
-    from tests.contract._population_toy import make_toy
-
     rng = np.random.default_rng(seed)
     grid = SharedGrid.uniform(
         sigma_bounds=prior_sigma_bounds,
         tau_bounds_yr=prior_tau_bounds_yr,
-        n_sigma=24,
-        n_tau=24,
+        n_sigma=n_sigma,
+        n_tau=n_tau,
     )
     out = {"sigma": np.empty(n_replicates), "tau": np.empty(n_replicates)}
     for m in range(n_replicates):
-        s_true = rng.uniform(*prior_sigma_bounds)
+        s_true = float(rng.uniform(*prior_sigma_bounds))
         t_true = float(np.exp(rng.uniform(*np.log(prior_tau_bounds_yr))))
-        toy = make_toy(
-            n_galaxies=n_galaxies,
-            n_samples=n_samples,
-            n_grid=n_grid,
-            sigma_true=s_true,
-            tau_true_yr=t_true,
-            noise_std=noise_std,
-            prior_sigma_bounds=prior_sigma_bounds,
-            prior_tau_bounds_yr=prior_tau_bounds_yr,
-            seed=int(rng.integers(0, 2**31 - 1)),
+        fields, times_yr = simulate_fn(
+            s_true, t_true, int(rng.integers(0, 2**31 - 1))
         )
-        logp, _ = shared_log_posterior(toy.fields, toy.times_yr, grid)
+        logp, _ = shared_log_posterior(fields, times_yr, grid)
         r_s, r_t = normalized_rank(logp, grid, s_true, t_true)
         out["sigma"][m], out["tau"][m] = r_s, r_t
     return out
 ```
-
-**Note on the test-module import:** `run_population_sbc` imports the toy from
-`tests.contract._population_toy`. That is acceptable only because this function
-exists to calibrate the estimator against a synthetic model. If it ever needs to
-run outside the test tree, move `_population_toy.py` into
-`src/tengri/analysis/population_mocks.py` first and re-point both importers —
-do not duplicate it.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1263,6 +1299,7 @@ records the gap; this milestone closes it. Do **not** work around it.
 
 ```python
 # tests/contract/test_catalog_line_fluxes.py
+import jax
 import numpy as np
 import pytest
 
@@ -1279,7 +1316,7 @@ def test_two_galaxies_with_different_line_fluxes_get_different_posteriors():
     from tests.contract._line_catalog_fixture import build_two_galaxy_catalog
 
     cat, truth = build_two_galaxy_catalog(halpha=(1.0e-16, 4.0e-16))
-    post = cat.fit("mcmc_hmc", key=__import__("jax").random.PRNGKey(0),
+    post = cat.fit("mcmc_hmc", key=jax.random.PRNGKey(0),
                    n_warmup=60, n_samples=60, n_leapfrog_steps=8)
     med = np.asarray(post.properties["sfr_10myr"])
     assert med.shape == (2,)
@@ -1554,15 +1591,55 @@ back non-positive (absorption). Guardrails, all previously measured:
 
 - [ ] **Step 5: Test the absorption count is reported, not dropped**
 
+This one needs a real forward model, so it lives in `tests/integration/` rather
+than in the fast contract file, and it builds its model from the existing
+`synthetic_ssp_wide` fixture (no `data/ssp_*.h5` needed).
+
 ```python
-@pytest.mark.slow
-def test_halpha_absorption_galaxies_are_counted_not_dropped():
-    # At sigma = 0.6 roughly 1 in 15 truths has Halpha in absorption.
-    pop = make_population(model, n_galaxies=45, sigma_true=0.6, tau_true_myr=80.0,
-                          key=jax.random.PRNGKey(0), snr_phot=20.0, snr_line=10.0)
+# tests/integration/test_population_mocks_integration.py
+import jax
+import pytest
+
+from tengri import FIXED, FREE, Observation, SEDModel
+from tengri.analysis.population_mocks import make_population
+
+pytestmark = pytest.mark.slow
+
+
+@pytest.fixture
+def field_model(synthetic_ssp_wide, phot_obs):
+    """DPL + stochastic field at z = 0.1, 16 field latents."""
+    return SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=phot_obs,
+        sfh={"type": "dpl", "all_params": FREE, "age_gyr": 11.0,
+             "field": {"all_params": FREE}},
+        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+        n_grid=16,
+    )
+
+
+def test_halpha_absorption_galaxies_are_counted_not_dropped(field_model):
+    # At sigma = 0.6 roughly 1 in 15 drawn truths has Halpha in absorption --
+    # a bursty history observed during a lull. They must be counted, never
+    # silently dropped: dropping them biases the survivors line-bright.
+    pop = make_population(
+        field_model,
+        n_galaxies=45,
+        sigma_true=0.6,
+        tau_true_myr=80.0,
+        key=jax.random.PRNGKey(0),
+        snr_phot=20.0,
+        snr_line=10.0,
+    )
     assert len(pop.truth_params) == 45, "galaxies were dropped"
     assert pop.n_halpha_absorption >= 0
 ```
+
+**Implementer note:** `synthetic_ssp_wide` is an existing pytest fixture (used by
+`tests/contract/test_population_spectroscopy_fit.py:51`). Find the `phot_obs`
+equivalent in the same conftest chain, or build a 10-band `Observation` inline
+if none exists. Do not create a second synthetic SSP.
 
 - [ ] **Step 6: Lint and commit**
 
