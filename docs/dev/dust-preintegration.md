@@ -250,34 +250,30 @@ Analytic models (MBB, Casey2012) don't benefit from preintegration because they 
 
 ### Loading and Precomputation
 
-Precompute is reached through the registry, not through a switch in the model.
-`forward/precompute/registry.py` maps a component identifier to the dotted module
-path of its adapter, and `resolve()` imports it:
+This used to be driven by a `_precompute_dust_ir_photometry()` method on
+`SEDModel`. That method was deleted as dead code in #1403 — nothing called it —
+so the description below is of the modules themselves, which is where the
+machinery has actually lived since the Protocol/registry rewrite (IMP-06, fixed
+2026-04-15).
 
-```python
-_REGISTRY = {"dl07": "tengri.components.dust.dust_emission_precompute", ...}
-```
+- `components/dust/dust_emission_precompute.py` — template-based models
+  (DL07 / Draine & Li, Dale 2014, Astrodust, …).
+- `components/dust/dust_analytic_precompute.py` — analytic models.
+- `forward/precompute/registry.py` — maps a model name to the module that
+  handles it (`resolve()`), so a new dust-IR model is registered in one place.
 
-Because that dispatch is a **module-path string resolved via `importlib`**, an
-adapter has no static reference from the model — a reference-counting scan will
-report it as unused. Grep the registry, not the call graph.
+The precompute step itself:
 
-Each adapter satisfies the precompute Protocol with two names:
-
-- `AXIS_PARAMS` — the parameter axes the grid is tabulated over
-- `precompute(...)` — builds the `PreintegratedGrid`, auto-collapsing axes whose
-  parameter is `Fixed` (via `_auto_collapse` / `slice_fixed_axes`)
-
-`SEDModel.build` then runs each component's `precompute()`. Within
-`dust_emission_precompute.py` the per-model work is still split the same way:
-
-- `precompute_dl07_photometry()` → builds `single_u_phot`, `powerlaw_phot` tables
-- `precompute_template_photometry()` → generic N-D precomputation
-- `build_dl07_photometry_lookup()` → DL07-specific triweight logic
-- `build_template_photometry_lookup()` → generic N-D triweight builder
-
-Templates load from `data/`; when they are missing the adapter returns `None` and
-the model falls back to full-wavelength evaluation.
+1. Checks if the dust emission model is template-based
+2. Attempts to load templates from the `data/` directory
+3. If templates are missing, returns `None` (falls back to full-wavelength)
+4. Calls the model-specific precomputation function:
+   - `precompute_dl07_photometry()` → builds `single_u_phot`, `powerlaw_phot` tables
+   - `precompute_template_photometry()` → generic N-D precomputation
+5. Wraps the result in a model-specific lookup builder:
+   - `build_dl07_photometry_lookup()` → captures DL07-specific triweight logic
+   - `build_template_photometry_lookup()` → generic N-D triweight builder
+6. Returns a JIT-compiled callable or `None`
 
 ### Storage
 

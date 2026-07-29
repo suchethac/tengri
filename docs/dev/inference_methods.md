@@ -22,10 +22,9 @@ This document consolidates and expands:
 8. [Performance Benchmarks](#8-performance-benchmarks)
 9. [Posterior Sampling](#9-posterior-sampling)
 10. [Block Gibbs for Hierarchical Models](#10-block-gibbs-for-hierarchical-models)
-11. [OptimizationSchedule API](#11-optimizationschedule-api)
-12. [Convergence Diagnostics](#12-convergence-diagnostics)
-13. [Quick Reference](#13-quick-reference)
-14. [References](#14-references)
+11. [Convergence Diagnostics](#11-convergence-diagnostics)
+12. [Quick Reference](#12-quick-reference)
+13. [References](#13-references)
 
 ---
 
@@ -184,10 +183,8 @@ cond(grad^2 H) at the MAP        1.1e5      (eigenvalues 0.81 ... 9.0e4)
 No diagonal mass matrix covers that, and a dense one estimated from warmup draws is both
 noisy and memory-hungry.
 
-`precondition` (on `mcmc_nuts`, `mcmc_hmc`, `mcmc_dynamic_hmc`; default `None` = auto —
-**on** up to `PRECONDITION_MAX_DIM` = 1024 free parameters, off above, with explicit
-`True`/`False` honored as-is) supplies the metric analytically instead. It is a
-**linear change of variables**, not a mass matrix:
+`precondition` (**opt-in — default off**; pass `True` to enable) supplies the metric
+analytically instead. It is a **linear change of variables**, not a mass matrix:
 
 ```
 G = -grad^2 log p   at the initial point, eigenvalue MAGNITUDES floored at 1.0
@@ -224,9 +221,31 @@ approximation. Measured, it holds across the region a chain actually visits:
   Only the `O(D^3)` factorization grows — hence the 1024 cap. "Easy low-dimensional"
   posteriors turned out not to exist here: the simplest configuration measured
   (double-power-law + photometry, D=7) already had raw cond 8.5e4.
-- Default is off; no existing fit changes behavior.
-- Gradient-free and self-tuning kernels (`mcmc_raytrace`, `mcmc_ess`, `mcmc_mclmc`) do
-  not take the flag — whitening the integrator's metric is meaningless for them.
+- **Why it is opt-in.** Not because of [#1397](https://github.com/suchethac/tengri/issues/1397),
+  despite that being the original stated reason here. Those notebook failures were
+  caused by a **sub-band node gradient underflowing to NaN** inside the model;
+  preconditioning was the first thing to notice, not the cause, and with the root fix
+  `notebooks/07` returns to its pre-preconditioning R-hat. The reason that survives is
+  measured on the *fixed* code: on `recipes.mock_recovery_minimal()` (D=7), 4 seeds of
+  4 converge without preconditioning (R-hat 0.997-1.007) and none converge with it
+  (1.055-2.689), at 4x to 25x worse ESS/s.
+- **The conditioning win is not a demonstrated sampling win.** Across 5 seeds per
+  configuration, `dpl / photometry` (D=7) gained a median **1.87x ESS/s** (better in
+  5/5 seeds), but `dpl + free metallicity / photometry` (D=8) came out at a median
+  **0.84x** — a net loss, with per-seed values spanning 0.44-1.23. No R-hat effect is
+  detectable either way: the paired differences sit at or below the spread between
+  seeds within a single arm. Treat the justification as *geometry and gradients*, which
+  are deterministic and measured everywhere, not throughput, which is not.
+- **Where it is most likely to pay.** All three HMC backends force `use_dense = False`
+  above D=30, so above that threshold the competitor is a *diagonal* mass matrix, which
+  cannot represent rotation at all. Below D=30 the competitor is an empirical dense
+  covariance from warmup — a far stronger baseline, and where the 0.84x was measured.
+- Which backends accept the flag is a **declared registry capability**
+  (`register_backend(..., accepts_precondition=True)`), not a list maintained by hand.
+  Today that is the Hamiltonian family; gradient-free and self-tuning kernels
+  (`mcmc_raytrace`, `mcmc_ess`, `mcmc_mclmc`) do not declare it, because whitening the
+  integrator's metric is meaningless for them. Passing `precondition=True` to a backend
+  that has not declared it raises at dispatch and names the ones that have.
 
 ---
 
@@ -490,7 +509,7 @@ Fresh scouts every 5 iterations. Deterministic refinement in between. This gives
 - **Good posterior quality** (nonlinear curving captures banana shapes)
 
 The refresh interval of 5 is the default (`_RESAMPLE_EVERY = 5` in `fitter.py`). It can
-be adjusted via `OptimizationSchedule.vi(resample_every=N)`.
+is fixed at 5 inside `backends/vi/nifty.py`; it is not a user parameter (`OptimizationSchedule` was deleted as dead code, #1293).
 
 ---
 
@@ -1138,110 +1157,7 @@ Compile time: ~60s (one-time, cached to XLA disk cache).
 
 ---
 
-## 11. OptimizationSchedule API
-
-The `OptimizationSchedule` class provides a unified interface for controlling what
-happens at each iteration. It wraps a callable `f(iteration: int) -> BlockStep`.
-
-### 11.1 Factory Methods
-
-```python
-from tengri.vi_config import OptimizationSchedule, BlockStep, BlockSchedule
-
-# --- Recommended geoVI (default when you call fitter.run("native_geovi")) ---
-sched = OptimizationSchedule.geovi(
-    n_iterations=15,      # total iterations
-    resample_every=5,     # fresh samples every N iterations
-    n_samples=3,          # samples per iteration (doubled by mirror)
-)
-
-# --- EVI: cheap MGVI warmup, then geoVI ---
-sched = OptimizationSchedule.evi(
-    n_iterations=20,
-    transition=10,        # switch from MGVI to geoVI at iteration 10
-    resample_every=5,     # geoVI refresh rate after transition
-    n_samples=3,
-)
-
-# --- Pure MGVI (fastest, least accurate) ---
-sched = OptimizationSchedule.mgvi(
-    n_iterations=15,
-    n_samples=3,
-)
-
-# --- Block Gibbs for structured problems ---
-sched = OptimizationSchedule.gibbs(
-    blocks=(
-        BlockStep(
-            sample_mode="nonlinear_resample",
-            constants=("sfh_field_xi",),     # freeze SFH during physical param update
-        ),
-        BlockStep(
-            sample_mode="linear_resample",
-            constants=(),                     # joint update for cross-correlations
-        ),
-    ),
-    n_iterations=15,       # outer cycles (total steps = 15 * 2 blocks = 30)
-    resample_every=5,      # nonlinear blocks switch to update between refreshes
-)
-
-# --- Fully custom ---
-sched = OptimizationSchedule.custom(
-    get_step=lambda i: BlockStep(
-        sample_mode="nonlinear_resample" if i % 3 == 0 else "nonlinear_update",
-        n_samples=6 if i < 5 else 3,
-    ),
-    n_iterations=25,
-    description="custom: resample every 3, more samples early",
-)
-```
-
-### 11.2 BlockStep
-
-Each iteration is described by a `BlockStep`:
-
-```python
-@dataclass(frozen=True)
-class BlockStep:
-    sample_mode: str = "nonlinear_resample"
-    constants: tuple[str, ...] = ()           # frozen params (still sampled)
-    point_estimates: tuple[str, ...] = ()     # frozen params (residual zeroed)
-    n_samples: int | None = None              # override default n_samples
-```
-
-### 11.3 BlockSchedule
-
-For the hierarchical fitter, `BlockSchedule` provides pre-built schedules:
-
-```python
-from tengri.vi_config import BlockSchedule
-
-# Individual galaxy: 2 blocks (physical + SFH)
-sched = BlockSchedule.individual_geovi()
-
-# Hierarchical: 3 blocks (shared PSD + per-gal physical + per-gal SFH)
-sched = BlockSchedule.hierarchical()
-```
-
-### 11.4 Passing Schedules to fitter.run()
-
-The schedule is used internally by the fast/NIFTy backends to resolve the `sample_mode`
-callable. For the native backend, the schedule is consumed by `run_evi_geovi` as a
-static `sample_mode` string.
-
-```python
-# The schedule is implicit when using standard methods:
-result = fitter.run("native_geovi", n_iterations=15)
-# This internally creates OptimizationSchedule.geovi(n_iterations=15)
-
-# For explicit control, pass schedule directly:
-sched = OptimizationSchedule.geovi(resample_every=8, n_samples=6)
-result = fitter.run("native_geovi", schedule=sched)
-```
-
----
-
-## 12. Convergence Diagnostics
+## 11. Convergence Diagnostics
 
 ### 12.1 Chi-squared per Degree of Freedom
 
@@ -1324,7 +1240,7 @@ Stan/ArviZ/BlackJAX thresholds).
 
 ---
 
-## 13. Quick Reference
+## 12. Quick Reference
 
 ### Method Selection Cheat Sheet
 
@@ -1378,7 +1294,7 @@ VIConfig(
 
 ---
 
-## 14. References
+## 13. References
 
 - Frank, P., Leike, R., Ensslin, T.A. (2021). "Geometric Variational Inference."
   Entropy 23(7):853. arXiv:2105.10470

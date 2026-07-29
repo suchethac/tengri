@@ -22,10 +22,7 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
 )
-from tengri.inference.preconditioning import (
-    _resolve_precondition,
-    preconditioned_logdensity,
-)
+from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
 
 logger = logging.getLogger(__name__)
@@ -221,10 +218,10 @@ def run_nuts(
           inference", JMLR 23, 306, arXiv:2108.03782.
 
     precondition : bool or None, default None
-        Sample in metric-whitened coordinates. ``None`` resolves by dimension —
-        **on** up to ``PRECONDITION_MAX_DIM`` (1024) free parameters, off above
-        (the same idiom ``dense_mass_matrix`` uses); explicit ``True`` /
-        ``False`` is honored as-is. Every tengri parameter is
+        Sample in metric-whitened coordinates. **Opt-in** (#1397): ``None``
+        (default) resolves to off — a NaN MAP init makes the metric non-finite
+        and turned working fits into hard errors, so the feature must be asked
+        for with ``True``; ``False`` is explicit off. Every tengri parameter is
         standardized, so the prior contributes exactly ``I`` to the metric and
         everything left is the likelihood's — which on the correlated-field
         posterior spans ``cond(grad^2 H) ~ 1e5``, far beyond what any single mass
@@ -287,14 +284,12 @@ def run_nuts(
     # every configuration measured spans cond 8.5e4 to 3.1e8, far beyond what a mass
     # matrix estimated from warmup draws can cover. Sample the whitened coordinates
     # instead and map the draws back; the map is linear, so the posterior is unchanged.
-    precondition = _resolve_precondition(precondition, n_dim)
-    preconditioner = None
-    if precondition:
-        log_posterior_flat_2arg, preconditioner, init_flat = preconditioned_logdensity(
-            log_posterior_flat_2arg, init_flat, data_args
-        )
-        if verbose:
-            logger.info("NUTS preconditioning: metric whitened at the initial point")
+    problem = prepare_preconditioning(
+        log_posterior_flat_2arg, init_flat, data_args, precondition=precondition
+    )
+    log_posterior_flat_2arg, init_flat = problem.logdensity, problem.init_flat
+    if problem.enabled and verbose:
+        logger.info("NUTS preconditioning: metric whitened at the initial point")
 
     # Resolve auto-policy (default since #319). Explicit True/False
     # from the caller is honored as-is.
@@ -343,7 +338,7 @@ def run_nuts(
 
     # ``precondition`` changes the sampled geometry, so a cached step size and mass
     # matrix from the un-preconditioned run must not be reused.
-    adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), bool(precondition))
+    adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), problem.enabled)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     if cached is not None:
@@ -446,8 +441,7 @@ def run_nuts(
     # Back out of the whitened coordinates before anything interprets the draws as
     # parameters. ``positions`` is (n_draw, D), so ``zeta @ A^T`` applies ``xi = A zeta``
     # row-wise.
-    if preconditioner is not None:
-        positions = positions @ preconditioner.matrix.T
+    positions = problem.restore(positions)
 
     samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)

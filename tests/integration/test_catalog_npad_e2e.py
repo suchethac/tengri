@@ -80,6 +80,10 @@ def test_n_pad_does_not_change_posteriors():
     galaxies, factory = _build_catalog(n_gal, jax.random.PRNGKey(13))
 
     cat = CatalogFitter(factory(), galaxies, data_type="photometry")
+    # These tests are about PADDING SEMANTICS on the native path, not about the
+    # backend's science quality, so the tier gate added in #1394 is opted out of
+    # rather than worked around: exercising a broken-tier backend deliberately is
+    # exactly the "benchmarking or backend development" case the hatch exists for.
     common = dict(
         n_iterations=8,
         n_samples=3,
@@ -87,6 +91,7 @@ def test_n_pad_does_not_change_posteriors():
         forward_chunk_size=4,
         kl_rtol=1e-2,
         verbose=False,
+        allow_unvalidated=True,
     )
 
     cp_default = cat.run("native_vi_linear", key=jax.random.PRNGKey(7), **common)
@@ -127,6 +132,7 @@ def test_n_pad_auto_safe_for_small_catalog():
         n_posterior_samples=12,
         kl_rtol=1e-2,
         verbose=False,
+        allow_unvalidated=True,
     )
     assert cp.n_galaxies == n_gal
     assert len(cp.posteriors) == n_gal
@@ -150,4 +156,5 @@ def test_n_pad_below_n_gal_raises():
             n_samples=3,
             n_posterior_samples=4,
             verbose=False,
+            allow_unvalidated=True,
         )

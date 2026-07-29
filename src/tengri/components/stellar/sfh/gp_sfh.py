@@ -17,14 +17,7 @@ import jax
 import jax.numpy as jnp
 from jax import random
 
-from tengri.utils.grid import (
-    DEFAULT_LOG_AGE_MAX,
-    DEFAULT_LOG_AGE_MIN,
-    # Re-export, not used in this module: ``stellar.component``,
-    # ``sfh._prior_sampling`` and ``notebooks/09_parameter_sweeps.py`` have
-    # always imported the grid from here. Do NOT let ruff --fix drop this.
-    make_log_age_grid,  # noqa: F401
-)
+from tengri.utils.grid import DEFAULT_LOG_AGE_MAX, DEFAULT_LOG_AGE_MIN
 
 # Default log10(age/yr) bounds for the SFH grid: 1 Myr → ~13.8 Gyr.
 # Exposed as module constants so callers that need the static step size
@@ -32,9 +25,15 @@ from tengri.utils.grid import (
 # ``jnp.linspace`` and calling ``float()`` would raise) can recompute it
 # without re-tracing the grid.
 #
-# Aliased from ``utils.grid`` rather than redeclared: the grid function and its
-# bounds must agree, and this module and ``inference.standardized`` read them
-# from opposite sides of the forward/inference boundary (#1402).
+# Aliases, not literals. Unifying ``make_log_age_grid`` alone leaves the same
+# duplication one level down: ``log_age_grid_step`` below defaults off THESE
+# constants while ``make_log_age_grid`` defaults off ``utils/grid``'s, so
+# changing the canonical bounds would silently stop the analytic step size
+# describing the grid the forward model is actually evaluated on. Measured on
+# this branch before the alias: widening ``DEFAULT_LOG_AGE_MAX`` 10.14 -> 10.20
+# left ``log_age_grid_step(256)`` 1.43 % adrift from the real grid spacing, and
+# the contract test stayed green once its hardcoded 10.14 was updated — which is
+# exactly what a maintainer making that change would do.
 LOG_AGE_MIN: float = DEFAULT_LOG_AGE_MIN
 LOG_AGE_MAX: float = DEFAULT_LOG_AGE_MAX
 
@@ -61,6 +60,14 @@ def log_age_grid_step(
         ``(log_age_max - log_age_min) / (n_grid - 1)``.
     """
     return (log_age_max - log_age_min) / (n_grid - 1)
+
+
+# Re-exported, not redefined. This function had a second, byte-for-byte
+# equivalent definition here until #1402; the two were consumed on opposite
+# sides of the forward/inference boundary (components/stellar/component.py
+# vs inference/standardized.py), so a fix landing in one would have silently
+# desynced the SFH age grid from the grid inference standardizes against.
+from tengri.utils.grid import make_log_age_grid as make_log_age_grid
 
 
 def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray, n_points: int) -> jnp.ndarray:
@@ -328,6 +335,212 @@ def drw_innovations_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
     _, s_rest = jax.lax.scan(_step, s0, (rho, innov, xi[1:]))
     gp_x = jnp.concatenate([jnp.reshape(s0, (1,)), s_rest])
     return gp_x, 0.5 * var
+
+
+def drw_unit_gp_from_xi(xi, psd_tau_yr, log_age_grid):
+    r"""Unit-variance DRW realization — the amplitude-free square root.
+
+    Identical to :func:`drw_innovations_gp_from_xi` with :math:`\sigma \ln 10 = 1`, so the
+    implied operator is a square root of the *correlation* matrix rather than the
+    covariance:
+
+    .. math::
+
+        C_{ij} = \exp(-|t_i - t_j| / \tau), \qquad u = \tilde{L}\,\xi,
+        \qquad \tilde{L}\tilde{L}^{\!\top} = C
+
+    with :math:`t_i = 10^{u_i}` [yr]. Factoring the amplitude out is exact because the
+    recursion is **linear** in :math:`\sigma`: every term of
+    :func:`drw_innovations_gp_from_xi` carries exactly one factor of
+    :math:`\sigma_s = \sigma \ln 10`. That is what makes partial non-centering in the
+    amplitude tractable (:func:`drw_partial_gp_from_zeta`).
+
+    Parameters
+    ----------
+    xi : array_like, shape (n,)
+        Standardized latent vector, :math:`\xi \sim \mathcal{N}(0, I)`.
+    psd_tau_yr : float
+        Damping timescale [yr].
+    log_age_grid : array_like, shape (n,)
+        ``log10(age/yr)`` grid, monotone (either direction — see
+        :func:`drw_innovations_gp_from_xi`).
+
+    Returns
+    -------
+    u : ndarray, shape (n,)
+        Unit-variance correlated field [dimensionless]; ``diag(Cov(u)) == 1``.
+
+    Notes
+    -----
+    **JIT/grad/vmap compatible**: yes. **O(n)** time and memory — no dense
+    :math:`n \times n` is ever formed.
+
+    ``abs`` on the step gaps is load-bearing for the same reason as in
+    :func:`drw_innovations_gp_from_xi` (#1370): a signed gap on a descending grid gives
+    :math:`\rho > 1`, and the round-off clip would convert the resulting ``NaN`` into
+    a silent geometric blow-up rather than an error.
+
+    References
+    ----------
+    .. [1] K. G. Iyer et al., "The star formation history and variability of
+       galaxies," MNRAS, 498, 430 (2020). [physical decorrelation timescale]
+    """
+    t = 10.0 ** jnp.asarray(log_age_grid)
+    xi = jnp.asarray(xi)
+    dt = jnp.abs(jnp.diff(t))
+    rho = jnp.exp(-dt / jnp.asarray(psd_tau_yr))
+    innov = jnp.sqrt(jnp.clip(1.0 - rho**2, 0.0, None))
+
+    u0 = xi[0]
+
+    def _step(u_prev, step_inputs):
+        rho_i, innov_i, xi_i = step_inputs
+        u_i = rho_i * u_prev + innov_i * xi_i
+        return u_i, u_i
+
+    _, u_rest = jax.lax.scan(_step, u0, (rho, innov, xi[1:]))
+    return jnp.concatenate([jnp.reshape(u0, (1,)), u_rest])
+
+
+def drw_partial_gp_from_zeta(zeta, psd_sigma_dex, psd_tau_yr, log_age_grid, centering=1.0):
+    r"""Partially non-centered DRW field (#1355).
+
+    Interpolates between the non-centered parameterization in use today and the fully
+    centered one, following Papaspiliopoulos, Roberts & Skold [2]_:
+
+    .. math::
+
+        s = \sigma_s^{a}\,\tilde{L}(\tau)\,\zeta, \qquad
+        \zeta \sim \mathcal{N}\!\left(0,\ \sigma_s^{2-2a} I\right)
+
+    where :math:`\sigma_s = \sigma \ln 10` [dex, natural-log units], :math:`\tilde{L}`
+    is the unit-variance square root (:func:`drw_unit_gp_from_xi`), and
+    :math:`a \in [0, 1]` is ``centering``. Both ends give the same marginal
+    :math:`s \sim \mathcal{N}(0, K)` with
+    :math:`K_{ij} = \sigma_s^2 \exp(-|t_i-t_j|/\tau)`:
+
+    * ``a = 1`` — non-centered. The prior on :math:`\zeta` is :math:`\mathcal{N}(0, I)`,
+      independent of :math:`\sigma`; the amplitude enters through the **likelihood**.
+      This is the standardized parameterization and today's default.
+    * ``a = 0`` — centered. The transform is amplitude-free; :math:`\sigma` enters
+      through the **prior**.
+
+    Why it matters: at ``a = 1`` the map is *multiplicative* in
+    :math:`(\sigma, \zeta)`, which is precisely Neal's funnel — a narrow neck at small
+    :math:`\sigma` and a wide mouth at large :math:`\sigma`, with one step size for
+    both. Lowering ``a`` moves amplitude dependence out of the map. PRS give the trade:
+    non-centered is preferable for a prior-dominated block, centered for a
+    data-dominated one.
+
+    Parameters
+    ----------
+    zeta : array_like, shape (n,)
+        Latent vector. Its prior is :math:`\mathcal{N}(0, \sigma_s^{2-2a} I)` — **not**
+        :math:`\mathcal{N}(0, I)` unless ``centering == 1``. Pair it with
+        :func:`drw_latent_log_prior`.
+    psd_sigma_dex : float
+        Modulation amplitude :math:`\sigma` [dex].
+    psd_tau_yr : float
+        Damping timescale [yr].
+    log_age_grid : array_like, shape (n,)
+        ``log10(age/yr)`` grid, monotone.
+    centering : float, optional
+        Exponent :math:`a \in [0, 1]`. Default ``1.0`` — today's non-centered field,
+        reproduced through the original code path so the result is unchanged.
+
+    Returns
+    -------
+    gp_x : ndarray, shape (n,)
+        Correlated log-SFR modulation [natural log units].
+    k0_over_2 : float
+        Log-normal bias correction :math:`K(0)/2 = \sigma_s^2 / 2`. Independent of
+        ``a``, since the marginal variance is.
+
+    Notes
+    -----
+    **JIT/grad/vmap compatible**: yes. **O(n)**. ``centering`` is a build-time
+    structural choice and must be a Python float, not a traced value — the ``a == 1``
+    fast path is a Python-level branch so the default stays bit-identical to
+    :func:`drw_innovations_gp_from_xi`, the production path.
+
+    The posterior is **invariant** to ``a`` only when the latent prior carries its
+    :math:`-n(1-a)\log\sigma_s` normalizer; see :func:`drw_latent_log_prior`. Omitting
+    it yields a sampler that runs cleanly while targeting a different distribution for
+    every ``a``.
+
+    References
+    ----------
+    .. [1] K. G. Iyer et al., "The star formation history and variability of
+       galaxies," MNRAS, 498, 430 (2020). [physical decorrelation timescale]
+    .. [2] O. Papaspiliopoulos, G. O. Roberts & M. Skold, "A general framework for the
+       parametrization of hierarchical models," Statistical Science, 22, 59 (2007).
+       DOI: 10.1214/088342307000000014.
+    """
+    a = float(centering)
+    if not 0.0 <= a <= 1.0:
+        raise ValueError(f"centering must lie in [0, 1], got {a}.")
+    if a == 1.0:
+        # Bit-identical default: delegate to the PRODUCTION path (registry.py), which is
+        # the jitter-free O(n) recursion. Not ``drw_linear_gp_from_xi`` — that dense
+        # Cholesky is retained only as the oracle and adds ``_DRW_CHOLESKY_JITTER``
+        # (1e-6 * var) to the diagonal, so it reproduces K only to ~1e-6 relative.
+        return drw_innovations_gp_from_xi(zeta, psd_sigma_dex, psd_tau_yr, log_age_grid)
+    sigma_s = jnp.asarray(psd_sigma_dex) * jnp.log(10.0)
+    u = drw_unit_gp_from_xi(zeta, psd_tau_yr, log_age_grid)
+    return sigma_s**a * u, 0.5 * sigma_s**2
+
+
+def drw_latent_log_prior(zeta, psd_sigma_dex, centering=1.0):
+    r"""Log-prior of the partially non-centered latent (#1355).
+
+    .. math::
+
+        \log p(\zeta \mid \sigma) =
+            -\frac{\zeta^{\!\top}\zeta}{2\,\sigma_s^{2-2a}}
+            - \frac{n}{2}\log\!\left(2\pi\,\sigma_s^{2-2a}\right)
+
+    with :math:`\sigma_s = \sigma \ln 10` and :math:`a` = ``centering``. At ``a = 1``
+    this collapses to the standardized :math:`-\tfrac{1}{2}\zeta^{\!\top}\zeta` (plus a
+    constant), which is what the rest of ``tengri`` assumes.
+
+    Parameters
+    ----------
+    zeta : array_like, shape (n,)
+        Latent vector from :func:`drw_partial_gp_from_zeta`.
+    psd_sigma_dex : float
+        Modulation amplitude :math:`\sigma` [dex].
+    centering : float, optional
+        Exponent :math:`a \in [0, 1]`. Default ``1.0``.
+
+    Returns
+    -------
+    log_prior : float
+        Log-density [nats], **fully normalized**.
+
+    Notes
+    -----
+    **JIT/grad/vmap compatible**: yes.
+
+    The :math:`-n(1-a)\log\sigma_s` half of the normalizer is not optional. It is the
+    only term that couples the latent prior to :math:`\sigma` at :math:`a < 1`, and it
+    is what makes the posterior invariant to ``a``. Drop it and the sampler still runs,
+    reports nothing, and targets a different distribution at every ``a`` — the
+    signature is a recovered :math:`\sigma` that drifts with a knob that is supposed to
+    be a change of coordinates.
+
+    References
+    ----------
+    .. [1] O. Papaspiliopoulos, G. O. Roberts & M. Skold, "A general framework for the
+       parametrization of hierarchical models," Statistical Science, 22, 59 (2007).
+       DOI: 10.1214/088342307000000014.
+    """
+    a = float(centering)
+    zeta = jnp.asarray(zeta)
+    n = zeta.shape[0]
+    sigma_s = jnp.asarray(psd_sigma_dex) * jnp.log(10.0)
+    log_var = (2.0 - 2.0 * a) * jnp.log(sigma_s)
+    var = jnp.exp(log_var)
+    return -0.5 * jnp.sum(zeta**2) / var - 0.5 * n * (jnp.log(2.0 * jnp.pi) + log_var)
 
 
 def generate_gp_fourier(key: jax.Array, sqrt_power: jnp.ndarray, n_points: int) -> jnp.ndarray:

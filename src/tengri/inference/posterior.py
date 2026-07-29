@@ -446,9 +446,12 @@ class Posterior:
 
         Examples
         --------
-        >>> derived = result.derived
-        >>> stellar_masses = derived["stellar_mass"]  # Shape (n_samples,)
-        >>> med, lo, hi = np.percentile(stellar_masses, [50, 16, 84])
+        Prefer :attr:`properties` — the same names, every property the model
+        publishes rather than a hardcoded five, and credible intervals
+        without a manual percentile call:
+
+        >>> stellar_masses = result.properties["stellar_mass"]  # (n_samples,)
+        >>> lo, med, hi = result.properties.ci("stellar_mass")
         """
         warnings.warn(
             "Posterior.derived is deprecated; use Posterior.properties instead. "
@@ -1540,10 +1543,37 @@ class Posterior:
             raise ValueError("R-hat requires samples (not a MAP result).")
         from tengri.analysis.diagnostics.autocorrelation import rhat as _rhat
 
-        return _rhat(
+        result = _rhat(
             {k: np.asarray(v) for k, v in self.samples.items()},
             exclude_prefixes=exclude_prefixes,
         )
+        # A frozen chain must not leave silently (#1438). Static parameters are
+        # dropped above -- ordinary for a pinned one, but when EVERY parameter is
+        # static the chain never moved and there is no convergence to report. The
+        # empty dict that fell out of here was the worst possible answer: split
+        # R-hat cannot see a frozen chain either (within- and between-chain
+        # variance are both zero, so it scores ~1.0), and the documented idiom
+        # ``max(rhat().values())`` then raised "max() iterable argument is empty"
+        # -- a message about a builtin, for a dead fit.
+        if not result and self.samples:
+            n_draw = max((int(np.asarray(v).size) for v in self.samples.values()), default=0)
+            n_divergent = self.diagnostics.get("n_divergent") if self.diagnostics else None
+            divergence_note = (
+                f" The sampler reported {n_divergent} divergent transition(s)."
+                if n_divergent
+                else ""
+            )
+            raise ValueError(
+                f"the chain did not move: every one of {n_draw} draws is identical "
+                f"for every parameter, so there is no split-R-hat to compute."
+                f"{divergence_note} This is a dead fit, not a converged one — R-hat "
+                "cannot detect it (both variances are zero, so it reads ~1.0). The "
+                "usual cause is an adapted step size above the model's stability "
+                "limit, where acceptance collapses to zero: re-run with a shorter "
+                "warmup, a lower target_accept_rate, or an explicit smaller "
+                "step_size, and check the divergence count."
+            )
+        return result
 
     def diagnostics_summary(self) -> str:
         """Print a diagnostics summary with ESS and credible intervals.

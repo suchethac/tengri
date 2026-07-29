@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""NUTS metric preconditioning is a coordinate change, not a model change (#1301).
+"""Metric preconditioning is a coordinate change, not a model change (#1301).
 
 ``precondition=True`` samples ``H(A zeta)`` instead of ``H(xi)`` and maps the draws
 back with ``xi = A zeta``. A linear reparametrization has a constant Jacobian, so
@@ -9,6 +9,13 @@ The failure this guards against is silent and severe: if the backend forgets to 
 positions back, every returned "posterior" is expressed in the whitened
 coordinates. The numbers still look like plausible parameter values, the fit still
 reports a step size and a divergence count, and nothing raises.
+
+The support check is parametrized over **every backend that declares
+``accepts_precondition``**, read from the live registry, so a sampler added later
+inherits the guard without anyone remembering to extend this file. It asserts bounds
+rather than comparing posteriors because bounds are deterministic: whitened draws
+ignore the priors' physical limits regardless of how well any particular sampler
+mixed, so the check does not go flaky when a new backend has different tuning needs.
 """
 
 from __future__ import annotations
@@ -60,11 +67,23 @@ def _mock(model):
     return np.asarray(mock.flux_obs), np.asarray(mock.noise)
 
 
-def _fit(model, data, noise, *, precondition):
+def _capable_backends() -> list[str]:
+    """Every backend the registry says can whiten its metric.
+
+    Read at collection time so a newly registered Hamiltonian sampler is covered
+    without editing this file — the point of making the capability a declaration.
+    """
+    import tengri  # noqa: F401  (registers the backends)
+    from tengri.inference._backend_registry import all_backends
+
+    return sorted(e.name for e in all_backends() if e.accepts_precondition)
+
+
+def _fit(model, data, noise, *, precondition, method="mcmc_nuts"):
     return ForwardModel.build(sed=model).fit(
         data,
         noise,
-        method="mcmc_nuts",
+        method=method,
         key=jax.random.PRNGKey(7),
         n_warmup=250,
         n_samples=250,
@@ -97,14 +116,20 @@ def test_preconditioning_leaves_the_posterior_unchanged(ssp_data_wne):
         )
 
 
-def test_preconditioned_samples_respect_the_prior_support(ssp_data_wne):
+def test_at_least_one_backend_declares_the_capability():
+    """Anti-vacuity: an empty parametrization would silently check nothing."""
+    assert _capable_backends(), "no backend declares accepts_precondition"
+
+
+@pytest.mark.parametrize("method", _capable_backends())
+def test_preconditioned_samples_respect_the_prior_support(method, ssp_data_wne):
     """Whitened draws mapped back must land inside the priors' physical bounds.
 
     A missing inverse map shows up here even when the means happen to agree.
     """
     model = _model(ssp_data_wne)
     data, noise = _mock(model)
-    result = _fit(model, data, noise, precondition=True)
+    result = _fit(model, data, noise, precondition=True, method=method)
 
     checked = 0
     for name in model.spec.free_params:

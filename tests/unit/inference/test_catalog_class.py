@@ -215,8 +215,12 @@ def test_per_galaxy_redshift_batched_guards(fwd_3band, fwd_3band_no_zrange, tabl
     from tengri import Catalog
 
     cat = Catalog(fwd_3band, table_3band, flux_unit="cgs_fnu", redshift_col="z")
+    # `allow_unvalidated=True` is required since #1394 put the tier gate ahead of
+    # these checks: `native_vi_linear` is tier="broken", so without the opt-in
+    # this raises BackendError and the per-galaxy-z guard below never runs. The
+    # opt-in keeps THIS test measuring what it is named for.
     with pytest.raises(NotImplementedError, match="native VI"):
-        cat.fit(method="native_vi_linear", key=jax.random.PRNGKey(0))
+        cat.fit(method="native_vi_linear", key=jax.random.PRNGKey(0), allow_unvalidated=True)
 
     with pytest.warns(UserWarning, match="catalog_z_range"):
         cat_nz = Catalog(fwd_3band_no_zrange, table_3band, flux_unit="cgs_fnu", redshift_col="z")

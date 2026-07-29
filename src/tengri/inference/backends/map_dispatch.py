@@ -28,6 +28,49 @@ _JAXOPT_SOLVERS = _SCIPY_OPTIMIZERS
 _QUASI_NEWTON = _SCIPY_OPTIMIZERS
 
 
+def _reject_nonfinite_map(params: dict) -> None:
+    """Refuse to hand a non-finite MAP point downstream (#1397).
+
+    A MAP estimate containing NaN or inf is not a usable answer, and it is not a
+    private problem either: every MCMC and VI backend takes ``init_from`` from here,
+    so one bad point poisons whatever runs next. In #1397 it produced a NUTS run whose
+    every parameter was NaN and whose ``rhat()`` was NaN — which silently disarms a
+    notebook's ``max_rhat < 1.01`` assertion, because NaN compares false against any
+    threshold. Nothing raised.
+
+    Any non-finite coordinate is rejected, not only an all-NaN point: the optimizer
+    has already failed by then, and a partially-NaN start is no more samplable than a
+    fully-NaN one.
+
+    Parameters
+    ----------
+    params : dict
+        Parameter name -> value. Values may be scalars or arrays (field latents
+        arrive as vectors).
+
+    Raises
+    ------
+    ValueError
+        If any value contains NaN or inf. The message names the offending parameters.
+    """
+    import numpy as _np
+
+    bad = sorted(
+        name
+        for name, value in params.items()
+        if not bool(_np.all(_np.isfinite(_np.asarray(value, dtype=float))))
+    )
+    if not bad:
+        return
+    raise ValueError(
+        f"MAP optimization produced a non-finite estimate for {bad} — the fit did not "
+        f"converge (a run ending in loss=nan is the usual cause). Handing this on as "
+        f"an initialization gives a posterior of NaN with NaN R-hat, which raises "
+        f"nothing and silently disarms any convergence check. Inspect data scaling "
+        f"and prior bounds, or pass an explicit finite `init_from`."
+    )
+
+
 def _build_optax_optimizer(optimizer, learning_rate):
     """Build an optax optimizer from a string name or return as-is."""
     try:
@@ -228,6 +271,7 @@ def _run_map_scipy(
     wall_time = time.time() - t0
 
     best_params = unravel_fn(jnp.asarray(result.x))
+    _reject_nonfinite_map(best_params)
     best_params_physical = context.to_physical(best_params)
     final_loss = float(result.fun)
     converged = result.success
@@ -260,6 +304,50 @@ def _run_map_scipy(
         loss_history=loss_hist,
         _model=context.model,
     )
+
+
+def _best_finite_restart(final_losses) -> int:
+    """Index of the lowest **finite** loss among multi-start restarts (#1397).
+
+    Parameters
+    ----------
+    final_losses : array_like, shape (n_restarts,)
+        Each restart's loss at its last step [dimensionless].
+
+    Returns
+    -------
+    int
+        Index of the best restart that produced a usable loss.
+
+    Raises
+    ------
+    ValueError
+        If no restart finished finite, naming the count and what to change.
+
+    Notes
+    -----
+    ``jnp.argmin`` cannot be used here: every comparison against NaN is false,
+    so it returns index 0 whenever the vector contains a NaN. Multi-start exists
+    precisely because some inits diverge, so "keep the best" was keeping the
+    worst -- on ``recipes.mock_recovery_minimal()`` it discarded a converged
+    restart at loss 4.635 in favor of a NaN one. ``-inf`` is rejected for the
+    same reason in reverse: a plain ``argmin`` would rank it the best fit
+    possible.
+
+    Not JIT-safe by design — reads concrete values to decide, and runs once per
+    fit after ``block_until_ready``.
+    """
+    losses = np.asarray(final_losses, dtype=float)
+    finite = np.isfinite(losses)
+    if not finite.any():
+        raise ValueError(
+            f"all {losses.size} MAP restarts diverged to a non-finite loss "
+            "(NaN or inf), so there is no starting point to return. The "
+            "optimizer stepped outside the model's valid range from every "
+            "initialization: try a smaller learning_rate=, fewer n_steps=, or "
+            "a larger n_restarts= so at least one init survives."
+        )
+    return int(np.argmin(np.where(finite, losses, np.inf)))
 
 
 def _run_map_multistart(context, *, key, n_restarts, n_steps, learning_rate, optimizer, verbose):
@@ -336,17 +424,22 @@ def _run_map_multistart(context, *, key, n_restarts, n_steps, learning_rate, opt
     params_b, losses_b = _run_restarts(inits, data_args)
     jax.block_until_ready(losses_b)
     final_losses = losses_b[:, -1]
-    best = int(jnp.argmin(final_losses))
+    best = _best_finite_restart(final_losses)
     best_params = jax.tree.map(lambda x: x[best], params_b)
+    _reject_nonfinite_map(best_params)
     best_losses = losses_b[best]
     wall_time = time.time() - t0
     final_loss = float(best_losses[-1])
 
     if verbose:
+        n_diverged = int(np.sum(~np.isfinite(np.asarray(final_losses, dtype=float))))
+        finite_losses = np.asarray(final_losses, dtype=float)
+        worst = float(np.max(finite_losses[np.isfinite(finite_losses)]))
+        diverged_note = f"; {n_diverged} diverged" if n_diverged else ""
         print(
             f"  MAP ({opt_name} x{n_restarts} restarts) complete in {wall_time:.1f}s, "
             f"best loss={final_loss:.4f} "
-            f"(restart {best}; worst={float(jnp.max(final_losses)):.1f})"
+            f"(restart {best}; worst finite={worst:.1f}{diverged_note})"
         )
 
     return Posterior(
@@ -532,6 +625,7 @@ def run_map(
     wall_time = time.time() - t0
     n_actual = len(losses)
     final_loss = losses[-1] if losses else float("nan")
+    _reject_nonfinite_map(best_params)
     best_params_physical = context.to_physical(best_params)
 
     if verbose:

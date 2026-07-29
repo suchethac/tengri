@@ -360,21 +360,34 @@ class TestAutoPolicy:
         assert _resolve_precondition(True, 10_000) is True
         assert _resolve_precondition(False, 2) is False
 
-    def test_auto_enables_below_the_threshold(self):
+    @pytest.mark.parametrize("n_dim", [2, 7, 8, 30, 137, 1024, 10_000])
+    def test_the_default_is_off_at_every_dimension(self, n_dim):
+        """Opt-in (#1397). Default-on shipped, and it broke fits that had worked.
+
+        Two failures, both on published notebooks:
+
+        * nb01 could not run at all — a NaN MAP init makes the metric non-finite, and
+          the Cholesky guard turned a working fit into a hard ``ValueError``.
+        * nb07's photometry fit went from max R-hat 1.014 to **1.839** while reporting
+          **zero** divergences. The usual health signal is inverted, so a divergence
+          check scores the broken arm as the healthiest of the three.
+
+        Against that, no throughput win was ever demonstrated: 5 seeds per config gave
+        a median 1.87x ESS/s at D=7 but 0.84x — a loss — at D=8. A feature that can
+        turn a converging fit into a non-converging one has to be asked for.
+        """
+        from tengri.inference.preconditioning import _resolve_precondition
+
+        assert _resolve_precondition(None, n_dim) is False
+
+    def test_explicit_true_is_honored_above_the_cost_threshold(self):
+        """The cap advises on O(D^3) cost; it must not veto an explicit request."""
         from tengri.inference.preconditioning import (
             PRECONDITION_MAX_DIM,
             _resolve_precondition,
         )
 
-        assert _resolve_precondition(None, PRECONDITION_MAX_DIM - 1) is True
-
-    def test_auto_disables_above_the_threshold(self):
-        from tengri.inference.preconditioning import (
-            PRECONDITION_MAX_DIM,
-            _resolve_precondition,
-        )
-
-        assert _resolve_precondition(None, PRECONDITION_MAX_DIM + 1) is False
+        assert _resolve_precondition(True, PRECONDITION_MAX_DIM + 1) is True
 
     def test_threshold_is_a_measured_dimension_not_a_sentinel(self):
         from tengri.inference.preconditioning import PRECONDITION_MAX_DIM
@@ -445,3 +458,181 @@ def test_saddle_curvature_is_whitened_by_magnitude_not_floored_to_one():
     assert stiffness == pytest.approx(1.0, abs=1e-8), (
         f"steep negative-curvature direction left at stiffness {stiffness:.2f}"
     )
+
+
+class TestPreconditionedProblem:
+    """The one seam a sampler backend touches (#1359 follow-up).
+
+    Before this, each of ``run_nuts`` / ``run_hmc`` / ``run_dynamic_hmc`` carried its
+    own copy of resolve -> wrap -> ``if preconditioner is not None: positions @ A.T``.
+    The last line is the dangerous one: omitting it returns draws in the *whitened*
+    coordinates, which are finite, correctly shaped, and wrong. Nothing downstream can
+    tell. Folding it into an object that is the identity when disabled removes the
+    branch a fourth backend could forget.
+    """
+
+    @staticmethod
+    def _problem(enabled, n=5, cond=1e4):
+        from tengri.inference.preconditioning import prepare_preconditioning
+
+        metric = _ill_conditioned_metric(n, cond)
+        log_p = _gaussian_logdensity(metric)
+        return (
+            prepare_preconditioning(log_p, jnp.zeros(n), 0.0, precondition=enabled),
+            log_p,
+        )
+
+    def test_disabled_problem_is_the_identity(self):
+        problem, log_p = self._problem(False)
+        assert problem.enabled is False
+        assert problem.preconditioner is None
+        assert problem.logdensity is log_p, "disabled must hand back the original density"
+        draws = jnp.asarray(np.random.default_rng(0).standard_normal((7, 5)))
+        np.testing.assert_array_equal(np.asarray(problem.restore(draws)), np.asarray(draws))
+
+    def test_enabled_problem_reports_itself_enabled(self):
+        problem, _ = self._problem(True)
+        assert problem.enabled is True
+        assert problem.preconditioner is not None
+
+    def test_restore_maps_a_stack_of_draws_row_wise(self):
+        problem, _ = self._problem(True)
+        draws = jnp.asarray(np.random.default_rng(1).standard_normal((11, 5)))
+        got = np.asarray(problem.restore(draws))
+        want = np.stack([np.asarray(problem.preconditioner.to_xi(d)) for d in draws])
+        np.testing.assert_allclose(got, want, rtol=0, atol=1e-12)
+
+    def test_restore_maps_a_single_draw(self):
+        problem, _ = self._problem(True)
+        draw = jnp.asarray(np.random.default_rng(2).standard_normal(5))
+        np.testing.assert_allclose(
+            np.asarray(problem.restore(draw)),
+            np.asarray(problem.preconditioner.to_xi(draw)),
+            rtol=0,
+            atol=1e-12,
+        )
+
+    def test_restore_round_trips_the_transported_start(self):
+        """``init_flat`` is handed to the sampler in zeta; restoring must undo it."""
+        from tengri.inference.preconditioning import prepare_preconditioning
+
+        metric = _ill_conditioned_metric(6, 1e5)
+        log_p = _gaussian_logdensity(metric)
+        xi0 = jnp.asarray(np.random.default_rng(3).standard_normal(6))
+        problem = prepare_preconditioning(log_p, xi0, 0.0, precondition=True)
+        np.testing.assert_allclose(
+            np.asarray(problem.restore(problem.init_flat)), np.asarray(xi0), rtol=0, atol=1e-9
+        )
+
+    def test_wrapped_density_equals_the_original_at_the_mapped_point(self):
+        problem, log_p = self._problem(True)
+        zeta = jnp.asarray(np.random.default_rng(4).standard_normal(5))
+        assert float(problem.logdensity(zeta, 0.0)) == pytest.approx(
+            float(log_p(problem.preconditioner.to_xi(zeta), 0.0)), rel=1e-12
+        )
+
+    def test_restoring_without_the_transpose_would_give_a_different_answer(self):
+        """Neuter check: the round-trip assertions must be sensitive to the transpose.
+
+        ``A`` is triangular and non-symmetric, so ``zeta @ A`` and ``zeta @ A.T`` differ.
+        If they did not, the tests above would pass on a broken ``restore``.
+        """
+        problem, _ = self._problem(True)
+        draws = jnp.asarray(np.random.default_rng(5).standard_normal((4, 5)))
+        right = np.asarray(problem.restore(draws))
+        wrong = np.asarray(draws @ problem.preconditioner.matrix)
+        assert np.max(np.abs(right - wrong)) > 1e-6, (
+            "transposed and untransposed restore agree — this guard is vacuous"
+        )
+
+    def test_the_default_builds_the_identity_not_a_metric(self):
+        """``precondition=None`` is off (#1397), so no Hessian is even built."""
+        problem, log_p = self._problem(None, n=4)
+        assert problem.enabled is False
+        assert problem.preconditioner is None
+        assert problem.logdensity is log_p
+
+
+class TestNonFiniteExpansionPoint:
+    """#1397: a NaN MAP init produced advice that was already in force.
+
+    ``notebooks/01_why_jax.py`` died with::
+
+        ValueError: metric is not positive definite — Cholesky failed. Build it with
+        `negative_hessian_metric`, whose eigenvalue floor guarantees this.
+
+    but ``preconditioned_logdensity`` builds the metric with ``negative_hessian_metric``
+    on the line above the raise. The remedy was already applied. The real defect was
+    upstream — ``MAP init done (loss=nan)`` — and no eigenvalue floor can make a matrix
+    positive definite when its entries are NaN.
+
+    The guard was right to refuse and wrong about why. These pin the distinction.
+    """
+
+    #: A well-behaved density. The defect in #1397 is the *point*, not the function:
+    #: ``MAP init done (loss=nan)`` means the expansion point itself is NaN, and the
+    #: Hessian evaluated there is NaN however well-conditioned the density is.
+    _NAN_POINT = None  # set in _fail_at, below
+
+    @staticmethod
+    def _quartic(xi, data_args):
+        """Curvature that DEPENDS on the point — ``-6 diag(xi^2)``.
+
+        A plain quadratic will not do: its Hessian is a constant ``-I`` evaluated
+        anywhere, so a NaN point still yields a finite metric and the failure never
+        reproduces. Real likelihoods have point-dependent curvature, which is why the
+        NaN MAP in #1397 poisoned the metric.
+        """
+        return -0.5 * jnp.sum(xi**4)
+
+    @classmethod
+    def _fail_at_a_nan_point(cls):
+        from tengri.inference.preconditioning import prepare_preconditioning
+
+        bad_init = jnp.asarray([0.0, jnp.nan, 0.0, 0.0])
+        return prepare_preconditioning(cls._quartic, bad_init, 0.0, precondition=True)
+
+    def test_a_nonfinite_expansion_point_is_named_as_the_cause(self):
+        with pytest.raises(ValueError) as excinfo:
+            self._fail_at_a_nan_point()
+        msg = str(excinfo.value).lower()
+        assert "finite" in msg or "nan" in msg, (
+            f"message does not name non-finiteness: {excinfo.value}"
+        )
+
+    def test_it_does_not_repeat_advice_that_is_already_in_force(self):
+        """The old message sent the caller to the function already being used."""
+        with pytest.raises(ValueError) as excinfo:
+            self._fail_at_a_nan_point()
+        assert "negative_hessian_metric" not in str(excinfo.value), (
+            "still telling the caller to do the thing this function just did"
+        )
+
+    def test_the_message_offers_a_reachable_next_step(self):
+        with pytest.raises(ValueError) as excinfo:
+            self._fail_at_a_nan_point()
+        msg = str(excinfo.value)
+        assert "precondition=False" in msg or "init" in msg.lower(), (
+            f"no actionable remedy offered: {msg}"
+        )
+
+    def test_a_finite_indefinite_metric_still_reports_positive_definiteness(self):
+        """The old diagnosis stays correct for the case it was actually about."""
+        from tengri.inference.preconditioning import metric_preconditioner
+
+        indefinite = jnp.asarray(np.diag([1.0, -2.0, 3.0]))
+        with pytest.raises(ValueError, match="positive definite"):
+            metric_preconditioner(indefinite)
+
+    def test_a_nonfinite_metric_is_not_blamed_on_definiteness(self):
+        from tengri.inference.preconditioning import metric_preconditioner
+
+        with pytest.raises(ValueError) as excinfo:
+            metric_preconditioner(jnp.full((3, 3), jnp.nan))
+        msg = str(excinfo.value).lower()
+        # Assert the DISTINCTION, not one phrasing of it. "non-finite" and "not
+        # finite" mean the same thing and both are correct; what must never happen
+        # is a NaN matrix being reported as a definiteness problem, which sends the
+        # reader to fix curvature when the defect is upstream.
+        assert "finite" in msg or "nan" in msg, f"non-finiteness not named: {excinfo.value}"
+        assert "positive definite" not in msg, f"NaN metric diagnosed as non-PD: {excinfo.value}"
