@@ -26,7 +26,7 @@ throughout this document follow this table.
 | [1318](https://github.com/suchethac/tengri/issues/1318) | Retire `lean=`; surface-derived cache policy; `forward.prewarm()` | W3 | ✓ shipped |
 | [1319](https://github.com/suchethac/tengri/issues/1319) | Hierarchical as `ForwardModel(mode="hierarchical", shared=…)`; Population classes dissolve | W4 | ◆ deferred past Paper I |
 | [1321](https://github.com/suchethac/tengri/issues/1321) | Observation = pure instrument; introduce `Data` record | W5 | ✓ shipped |
-| [1395](https://github.com/suchethac/tengri/issues/1395) | `sfh_model="table"` slips past the fast-path guard → zero SFH, zero lines, no warning | W6 blocker | ◆ open |
+| [1395](https://github.com/suchethac/tengri/issues/1395) | `sfh_model="table"` slips past the fast-path guard → zero SFH, zero lines, no warning | W6 blocker | ✓ shipped (now raises) |
 | [1396](https://github.com/suchethac/tengri/issues/1396) | `Catalog.from_histories` + `simulate`: mock catalogs from simulation SFH/Z tables | W6 | ◆ open |
 
 ---
@@ -465,11 +465,15 @@ padded or shape-bucketed via `n_pad`, exactly as ragged catalogs are.
 `Catalog.predict` reads only `spec.free_params`, so the history arrays are never seen;
 its `np.stack(…, axis=1)` cannot mix `(N,)` scalars with `(N, n_t)` histories; it
 returns photometry only, with no line channel; and the `FeaturePrecomp` weight path
-silently returns a **zero** SFH for `sfh={'type':'table'}`
-([#1395](https://github.com/suchethac/tengri/issues/1395)) — photometry still looks
-correct, which makes the zero lines and zero stellar mass harder to spot. The exact
-forward handles tabulated histories correctly today; it is the fast path and the
-catalog seam that need building.
+used to silently return a **zero** SFH for `sfh={'type':'table'}`
+([#1395](https://github.com/suchethac/tengri/issues/1395)) — photometry still looked
+correct, which made the zero lines and zero stellar mass harder to spot.
+
+The fourth gap is **closed**: `compute_joint_weights` now refuses a tabulated SFH
+with a reason, so the fast path falls back to the exact forward instead of laundering
+a zero. That makes the failure loud; it does **not** yet make the fast path *serve*
+tabulated histories, which is the W6 work proper. The exact forward handles tabulated
+histories correctly today; it is the fast path and the catalog seam that need building.
 
 ---
 
@@ -553,7 +557,7 @@ Implementation ordering, absorbed-backlog mapping, and the near-term method focu
 | **W1b** | IGM applied on every LUT path — **already true**; guard tests exist | ✓ (resolved stale) | [#1310](https://github.com/suchethac/tengri/issues/1310) |
 | **W2 dep** | fit-time `params=` plumbing (per-row z injection; unknown-kwarg validation) | ✓ shipped | [#1329](https://github.com/suchethac/tengri/issues/1329) |
 | **W2** | `Catalog` noun: table-in/out, name-matching, `flux_unit=`, NaN policy, union-LUT + presence mask, `to_table()`; `fit_batch` cliff + deprecation | ✓ shipped | [#1316](https://github.com/suchethac/tengri/issues/1316), [#1317](https://github.com/suchethac/tengri/issues/1317) |
-| **W3** | `forward.prewarm()`; retire `lean` → surface-derived policy | ✓ shipped (Catalog sweep half open — [#1344](https://github.com/suchethac/tengri/issues/1344)) | [#1318](https://github.com/suchethac/tengri/issues/1318) |
+| **W3** | `forward.prewarm()`; retire `lean` → surface-derived policy | ✓ shipped (Catalog sweep **withdrawn**, not pending — [#1344](https://github.com/suchethac/tengri/issues/1344) closed; see §W3 above) | [#1318](https://github.com/suchethac/tengri/issues/1318) |
 | **W4** | hierarchical: `mode="hierarchical"` + `shared=`, data at fit, scaling contract; Population classes dissolve | ◆ deferred past Paper I | [#1319](https://github.com/suchethac/tengri/issues/1319) |
 | **W5** | Observation razor + `Data` record + `mode=` validation | ✓ shipped | [#1321](https://github.com/suchethac/tengri/issues/1321) |
 | **W6** | simulation catalogs: `Catalog.from_histories` + `simulate(lines=…)`, LUT-fast (§8.1) | ◆ | [#1396](https://github.com/suchethac/tengri/issues/1396), [#1395](https://github.com/suchethac/tengri/issues/1395) |

@@ -85,12 +85,32 @@ def _sfh_bin_edges_yr(fn, sfh_kwargs):
     return sfh_bin_edges_yr(fn, sfh_kwargs)
 
 
-def _nonparametric_sfh_fns():
-    """Frozenset of the non-parametric SFH functions (#950).
+def _fast_path_unsupported_sfh_fns():
+    """Map each unsupported SFH function to *why* the fast path refuses it (#950, #1395).
 
     The SED-free :meth:`StellarSEDComponent.compute_joint_weights` fast path
-    supports parametric SFHs only; it guards against these. Imported lazily to
-    avoid import-order coupling at module load.
+    integrates a closed-form SFR on a dense age grid. Two disjoint families
+    cannot be served that way, and they are kept apart here because the reason
+    a caller sees decides what they do next:
+
+    * the non-parametric families (Leja+2019 continuity, Dirichlet, PSB) — the
+      fast path has no bin basis for them, and never did (#950);
+    * the tabulated SFH — its registry ``fn`` is an all-zero *placeholder*,
+      because the real history is wired in at
+      :meth:`StellarSEDComponent.apply`, which the fast path never reaches.
+      Evaluating the placeholder returns a zero SFH, zero mass and zero lines,
+      which the weight normalization's ``1e-300`` clamp then launders into a
+      finite zero — silent, and beside correct photometry (#1395).
+
+    Keyed on the function object rather than the model name so that a second
+    registry entry sharing one of these implementations is guarded too.
+    Imported lazily to avoid import-order coupling at module load.
+
+    Returns
+    -------
+    dict
+        ``{sfh_fn: reason_str}`` — the reason is interpolated into the
+        ``ValueError`` raised by :meth:`StellarSEDComponent.compute_joint_weights`.
     """
     from tengri.components.stellar.sfh.nonparametric import (
         continuity,
@@ -98,11 +118,23 @@ def _nonparametric_sfh_fns():
         dirichlet,
         psb_continuity,
     )
+    from tengri.components.stellar.sfh.registry import _table_sfh_placeholder
 
-    return frozenset({continuity, continuity_flex, dirichlet, psb_continuity})
+    binned = "the fast path integrates a closed-form SFR and has no bin basis for it"
+    return {
+        continuity: binned,
+        continuity_flex: binned,
+        dirichlet: binned,
+        psb_continuity: binned,
+        _table_sfh_placeholder: (
+            "the tabulated history is supplied at apply(), which the fast path never "
+            "reaches, so the fast path would evaluate an all-zero placeholder and "
+            "return zero weights, zero mass and zero lines without raising (#1395)"
+        ),
+    }
 
 
-_NONPARAMETRIC_SFH_FNS = _nonparametric_sfh_fns()
+_FAST_PATH_UNSUPPORTED_SFH_FNS = _fast_path_unsupported_sfh_fns()
 
 
 def _apply_gp_field(sfr_history, params, n_grid, log_age_grid):
@@ -2390,10 +2422,17 @@ class StellarSEDComponent:
         This is the FeaturePrecomp fast-path entry: the wNE window-LUT gets
         ``joint_weights`` in microseconds and never reconstructs the full SED.
 
-        Restricted to the supported configuration — **delta** metallicity,
-        **parametric** SFH, **no** GP field, **no** alpha-Fe SSP grid — and
-        raises for anything else, so the fast path can never silently diverge
-        from the exact forward. Callers must fall back to the exact path.
+        Restricted to the supported configuration — **delta** metallicity, a
+        **closed-form parametric** SFH (with or without the GP field, #1204),
+        **no** alpha-Fe SSP grid — and raises for anything else, so the fast
+        path can never silently diverge from the exact forward. Callers must
+        fall back to the exact path.
+
+        The non-parametric families and the **tabulated** SFH are both refused
+        via :data:`_FAST_PATH_UNSUPPORTED_SFH_FNS`, which carries a per-family
+        reason. The tabulated case is the one that used to slip through: its
+        registry ``fn`` is an all-zero placeholder, so the fast path returned
+        zero weights and zero mass, finite and unwarned (#1395).
 
         Parameters
         ----------
@@ -2414,8 +2453,9 @@ class StellarSEDComponent:
         Raises
         ------
         ValueError
-            For any configuration outside delta / parametric / non-field /
-            no-alpha-grid — the caller must use the exact forward there.
+            For any configuration outside delta metallicity / closed-form
+            parametric SFH / no alpha-Fe grid — including the tabulated SFH
+            (#1395). The caller must use the exact forward there.
         """
         from tengri.components.stellar.sfh.registry import SFH_REGISTRY
         from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
@@ -2435,10 +2475,12 @@ class StellarSEDComponent:
                 f"compute_joint_weights supports metallicity_model='delta' only "
                 f"(got {self.config.metallicity_model!r}); use the exact forward."
             )
-        if sfh_spec.fn in _NONPARAMETRIC_SFH_FNS:
+        unsupported_reason = _FAST_PATH_UNSUPPORTED_SFH_FNS.get(sfh_spec.fn)
+        if unsupported_reason is not None:
             raise ValueError(
-                f"compute_joint_weights supports parametric SFH only "
-                f"(got {self.config.sfh_model!r}); use the exact forward."
+                f"compute_joint_weights does not support "
+                f"sfh_model={self.config.sfh_model!r}: {unsupported_reason}; "
+                f"use the exact forward."
             )
         if has_alpha_grid(ssp):
             raise ValueError(
