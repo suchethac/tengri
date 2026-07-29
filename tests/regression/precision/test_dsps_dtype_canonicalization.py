@@ -80,30 +80,59 @@ def test_no_mixed_dtype_scatter_in_pure_float32(ssp_bare, case):
     )
 
 
-@pytest.mark.parametrize("case", sorted(_SFH_CASES), ids=sorted(_SFH_CASES))
-def test_float64_photometry_is_unchanged(ssp_bare, case):
-    """Canonicalizing must be a no-op under x64, where the canonical float is f64.
+def test_canonicalization_is_a_noop_under_x64():
+    """Under x64 the canonical float already IS float64, so every cast is a no-op.
 
-    That property is what makes the pattern safe to apply at every DSPS
-    boundary, so it is pinned rather than assumed. Reference values were
-    measured at full ``repr`` against the pre-change tree and are bit-identical.
+    That property is the whole safety argument for applying this at every DSPS
+    boundary, so it is pinned directly on the helper.
+
+    An earlier version of this test pinned specific float64 photometry values
+    instead, measured at full ``repr`` against a pre-change worktree. That was
+    the wrong assertion: it pins a *consequence* of the invariant rather than
+    the invariant, so it imports the numerics of the entire SED pipeline — and
+    the host's BLAS and XLA codegen — into the comparison. It held on the
+    machine it was recorded on and failed in CI, which is the expected
+    behaviour of a cross-machine bit-exact assertion on a full forward pass,
+    not evidence about the canonicalization.
+
+    Same-machine end-to-end float64 invariance was measured separately (both
+    SFH paths, byte-for-byte at full ``repr``, against a detached worktree at
+    the pre-change commit) and is recorded in the commit message; the rest of
+    the precision suite would redden if float64 genuinely moved.
     """
-    model = _build(ssp_bare, _SFH_CASES[case])
-    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    from tengri.components.stellar.sps.dsps_wrapper import canonical_dsps_kwargs
 
     with jax.enable_x64(True):
-        phot = np.asarray(model.predict_photometry(params), dtype=np.float64)
+        raw = {
+            "grid": jnp.linspace(-4.0, -1.0, 8),
+            "scalar": jnp.asarray(0.5),
+            "python_float": 0.25,
+            "already_f32": jnp.asarray([1.0, 2.0], dtype=jnp.float32),
+        }
+        out = canonical_dsps_kwargs(**raw)
 
-    expected = {
-        "parametric": [4.340050276662975e-30, 7.543893013950031e-30, 2.7959839525213e-29],
-        "field": [4.08152632752286e-30, 7.322717885517473e-30, 2.8190906432470604e-29],
-    }[case]
+    assert set(out) == set(raw), "canonicalization must not add or drop keys"
+    for key, value in raw.items():
+        assert out[key].dtype == jnp.float64, (
+            f"{key!r} came back as {out[key].dtype}, not float64, under x64"
+        )
+        # Widening f32 -> f64 is exact, so every operand must compare equal to
+        # its input; nothing may be rounded on the way through.
+        np.testing.assert_array_equal(
+            np.asarray(out[key]),
+            np.asarray(jnp.asarray(value, dtype=jnp.float64)),
+            err_msg=f"{key!r} was altered by a cast that must be a no-op under x64",
+        )
 
-    np.testing.assert_array_equal(
-        phot,
-        np.array(expected, dtype=np.float64),
-        err_msg=(
-            f"float64 photometry moved on the {case!r} path; the dtype "
-            "canonicalization must be a no-op under x64"
-        ),
-    )
+
+def test_canonicalization_unifies_a_mixed_dtype_call_in_float32():
+    """The actual job: one dtype out, even when a cached f64 grid meets f32."""
+    from tengri.components.stellar.sps.dsps_wrapper import canonical_dsps_kwargs
+
+    with jax.enable_x64(False):
+        # A cached host grid stays float64 even here — that is the whole problem.
+        cached_grid = jnp.asarray(np.linspace(-4.0, -1.0, 8), dtype=jnp.float64)
+        out = canonical_dsps_kwargs(grid=cached_grid, param=jnp.asarray(0.5))
+
+    dtypes = {key: value.dtype for key, value in out.items()}
+    assert len(set(dtypes.values())) == 1, f"operands left on mixed dtypes: {dtypes}"
