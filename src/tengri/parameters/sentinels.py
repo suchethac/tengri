@@ -119,31 +119,62 @@ class _Sentinel:
 FREE = _Sentinel("FREE")
 """Sentinel marking a parameter to use the registry's default prior.
 
-Use in the nested-dict model builder API to defer prior specification to the
-registry. Example::
+Place it inside a group dict passed to :meth:`tengri.SEDModel.build`, either
+against one parameter or against the ``'all_params'`` wildcard, to defer the
+choice of prior to the registry::
 
-    from tengri import FREE, FIXED
-    model = tengri.SEDModel({
-        "sfh_field_psd_sigma": FREE,  # use default prior
-        "dust_slope": FIXED,           # use default value
-    })
+    from tengri import SEDModel, FREE, FIXED, Uniform
+
+    model = SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1.0, 3.0)},
+        dust={"type": "two_component", "all_params": FIXED},
+    )
+
+Here the double-power-law SFH parameters become free on their registry
+default priors, with ``beta`` free on the explicit prior given instead.
 
 Identity is preserved across pickle, copy, and deepcopy operations.
+
+Notes
+-----
+``'all_params': FREE`` frees only the parameters a group declares with a
+default prior. Groups whose parameters default to :class:`tengri.Fixed`
+values — radio and shock — are unaffected by the wildcard; give those an
+explicit prior instead (e.g. ``shock={"frac": Uniform(0.0, 1.0)}``).
 """
 
 FIXED = _Sentinel("FIXED")
 """Sentinel marking a parameter to pin to the registry's default value.
 
-Use in the nested-dict model builder API, especially in the wildcard slot
-``'all_params': FIXED`` to fix all parameters not explicitly mentioned. Example::
+Place it inside a group dict passed to :meth:`tengri.SEDModel.build`. Its
+most common use is the ``'all_params'`` wildcard, which pins every parameter
+in the group that is not named explicitly::
 
-    from tengri import FREE, FIXED
-    model = tengri.SEDModel({
-        "all_params": FIXED,           # fix all parameters
-        "sfh_field_psd_sigma": FREE,   # except this one: use default prior
-    })
+    from tengri import SEDModel, FREE, FIXED
+
+    model = SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": FREE},
+    )
+
+Here the double-power-law shape parameters are held at their default values
+and ``sfh_dpl_log_total_mass`` is the one SFH parameter left free.
+``'all_params': FIXED`` is also what a group gets when it sets no wildcard at
+all, so naming it is a way to be explicit rather than a change in behavior.
 
 Identity is preserved across pickle, copy, and deepcopy operations.
+
+Notes
+-----
+The wildcard reaches only the group it appears in. Groups you do not mention
+are still built from their own defaults and may contribute free parameters of
+their own — the spec above leaves ``dust_tau_bc`` and ``dust_tau_diff`` free,
+because no ``dust`` group was given. Read
+:meth:`tengri.Parameters.summary` on the built spec rather than assuming the
+wildcard fixed everything.
 """
 
 #: Canonical wildcard key in the nested-dict grammar. Sets ``FREE``/``FIXED``

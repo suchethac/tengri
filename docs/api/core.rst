@@ -207,6 +207,23 @@ A :class:`~tengri.SpectralIndexDef` defines one index;
    :members:
    :show-inheritance:
 
+Two catalogs ship with tengri, keyed by index name, so most work needs no
+hand-built definition — look the name up rather than redefining passbands.
+
+.. autodata:: tengri.observation.spectral_indices.STANDARD_INDICES
+   :annotation:
+   :noindex:
+
+.. autodata:: tengri.observation.spectral_indices.STANDARD_COMPOSITE_INDICES
+   :annotation:
+   :noindex:
+
+:func:`tengri.measure.spectral_index` is the exploratory surface;
+``measure_index_jax`` is the JIT/vmap-safe one used inside inference. Both
+take a **rest-frame** wavelength axis.
+
+.. autofunction:: tengri.measure_index_jax
+
 FilterConvention
 ----------------
 
