@@ -432,6 +432,163 @@ class Catalog:
         catalog._history_columns, _ = catalog._as_columns(columns)
         return catalog
 
+    def _resolve_line_defs(self, lines):
+        """Named lines -> LineDef objects, in the caller's order."""
+        from tengri.observation.line_measurement import DESI_LINES
+
+        by_name = {d.name: d for d in DESI_LINES}
+        unknown = [n for n in lines if n not in by_name]
+        if unknown:
+            raise ValueError(
+                f"unknown emission line(s) {unknown}. Available: "
+                f"{sorted(by_name)}. Pass LineDef objects directly for lines "
+                f"outside this set."
+            )
+        return tuple(by_name[n] for n in lines)
+
+    def simulate(
+        self,
+        *,
+        lines=None,
+        properties=None,
+        chunk_size=1024,
+        noise=None,
+        key=None,
+    ):
+        """Simulate mock observables for the whole catalog (#1396 §8.1).
+
+        One verb, several channels: photometry always, plus emission lines and
+        derived properties on request. Intended for a catalog built by
+        :meth:`from_histories`, where the SFH/Z tables come from a simulation.
+
+        Parameters
+        ----------
+        lines : sequence of str, optional
+            Emission line names to measure, from
+            :data:`~tengri.observation.line_measurement.DESI_LINES` (e.g.
+            ``("Halpha", "OIII_5007")``). Measured through the window-LUT fast
+            path, which since #1396 serves tabulated histories.
+        properties : sequence of str, optional
+            Derived quantities to evaluate, e.g. ``("stellar_mass",)``.
+        chunk_size : int, default 1024
+            Galaxies per vmapped batch.
+        noise : optional
+            **Not implemented** — noise draws are #1312. Refused rather than
+            ignored, so a caller asking for a noisy mock never silently receives
+            a noiseless one.
+        key : optional
+            Reserved for the noise draw (#1312); refused for the same reason.
+
+        Returns
+        -------
+        MockCatalog
+            ``.photometry``, ``.lines``, ``.properties``, and ``.to_table()``.
+
+        Raises
+        ------
+        NotImplementedError
+            If ``noise`` or ``key`` is passed.
+        ValueError
+            If a line name is not recognized.
+
+        Examples
+        --------
+        >>> mock = cat.simulate(lines=("Halpha",), properties=("stellar_mass",))
+        >>> mock.lines["Halpha"].shape
+        (100,)
+        """
+        if noise is not None or key is not None:
+            raise NotImplementedError(
+                "simulate(noise=..., key=...) is not implemented — the noise draw "
+                "is tracked as #1312. simulate() currently returns noiseless "
+                "predictions; drawing from a NoiseModel will compose here once "
+                "#1312 lands."
+            )
+
+        columns, n_galaxies = self._prediction_columns(None)
+        photometry = self._map_chunks(self.fwd.predict_photometry, columns, n_galaxies, chunk_size)
+
+        line_values = {}
+        if lines:
+            line_defs = self._resolve_line_defs(tuple(lines))
+
+            def _measure(params):
+                return self.fwd.measure_line_fluxes(params, line_defs, fast=True)
+
+            measured = self._map_chunks(_measure, columns, n_galaxies, chunk_size)
+            line_values = {d.name: np.asarray(measured)[:, i] for i, d in enumerate(line_defs)}
+
+        property_values = {}
+        if properties:
+            names = tuple(properties)
+
+            def _props(params):
+                return self.fwd.predict_properties(params, names=names)
+
+            # predict_properties returns dict[str, scalar]; vmapped and joined
+            # per key that is already {name: (N,)}.
+            property_values = self._map_chunks(_props, columns, n_galaxies, chunk_size)
+
+        from tengri.inference.mock_catalog import MockCatalog
+
+        return MockCatalog(
+            photometry=np.asarray(photometry),
+            filter_names=tuple(self.fwd.observation.photometry.names),
+            lines=line_values,
+            properties=property_values,
+        )
+
+    def _prediction_columns(self, param_table):
+        """Resolve the columns to predict from — explicit table, or the stored one.
+
+        Fixed parameter values are broadcast in as ``(N,)`` columns. Not every
+        consumer merges them for itself: ``predict_photometry`` does, but the
+        window-LUT line path reaches ``compute_joint_weights``, which reads
+        ``params["met_logzsol"]`` directly and raises ``KeyError`` on a dict
+        carrying only the free parameters. Merging once here keeps every channel
+        — photometry, lines, properties — seeing the same complete dict. Caller
+        columns win, so a per-galaxy ``redshift`` still overrides a fixed one.
+        """
+        if param_table is None:
+            if self._history_columns is None:
+                raise ValueError(
+                    "predict() needs a param_table. Only a catalog built by "
+                    "Catalog.from_histories(...) already carries its columns and "
+                    "can be predicted with no argument."
+                )
+            columns = self._history_columns
+            n_galaxies = int(next(iter(columns.values())).shape[0])
+        else:
+            columns, n_galaxies = self._as_columns(param_table)
+
+        fixed = {
+            name: np.broadcast_to(np.asarray(value), (n_galaxies,)).copy()
+            for name, value in self.fwd.spec.get_fixed_values().items()
+            if np.asarray(value).ndim == 0
+        }
+        return {**fixed, **columns}, n_galaxies
+
+    @staticmethod
+    def _map_chunks(fn, columns, n_galaxies, chunk_size):
+        """vmap ``fn`` over the galaxy axis of every column, in chunks.
+
+        Handles both array-returning callables (photometry, lines) and
+        dict-returning ones (``predict_properties``), joining chunks per key.
+        """
+        batched = jax.vmap(fn)
+        n_chunks = (n_galaxies + chunk_size - 1) // chunk_size
+        results = []
+        for i in range(n_chunks):
+            start = i * chunk_size
+            end = min((i + 1) * chunk_size, n_galaxies)
+            results.append(batched({name: v[start:end] for name, v in columns.items()}))
+        if isinstance(results[0], dict):
+            return {
+                key: np.concatenate([np.asarray(r[key]) for r in results], axis=0)
+                for key in results[0]
+            }
+        return np.concatenate(results, axis=0)
+
     def _as_columns(self, param_table):
         """Validate a parameter table into uniform columns keyed by name (#1396).
 
@@ -536,29 +693,8 @@ class Catalog:
         ...     }
         ... )
         """
-        if param_table is None:
-            if self._history_columns is None:
-                raise ValueError(
-                    "predict() needs a param_table. Only a catalog built by "
-                    "Catalog.from_histories(...) already carries its columns and "
-                    "can be predicted with no argument."
-                )
-            columns = self._history_columns
-            n_galaxies = next(iter(columns.values())).shape[0]
-        else:
-            columns, n_galaxies = self._as_columns(param_table)
-
         # vmap maps the leading axis of every leaf of the dict pytree, so
         # (N,) scalars and (N, n_t) histories batch through the same call —
         # no stacking, and no shape agreement required beyond the galaxy axis.
-        compute_chunk = jax.vmap(self.fwd.predict_photometry)
-
-        n_chunks = (n_galaxies + chunk_size - 1) // chunk_size
-        results = []
-        for i in range(n_chunks):
-            start = i * chunk_size
-            end = min((i + 1) * chunk_size, n_galaxies)
-            chunk = {name: value[start:end] for name, value in columns.items()}
-            results.append(compute_chunk(chunk))
-
-        return np.concatenate(results, axis=0)
+        columns, n_galaxies = self._prediction_columns(param_table)
+        return self._map_chunks(self.fwd.predict_photometry, columns, n_galaxies, chunk_size)

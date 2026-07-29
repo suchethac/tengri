@@ -379,3 +379,118 @@ def test_predict_without_columns_needs_from_histories(fwd_table_sfh):
 
     with pytest.raises(ValueError, match="from_histories"):
         Catalog(fwd_table_sfh, None, flux_unit="cgs_fnu").predict()
+
+
+# ── Catalog.simulate — photometry + lines + properties (#1396 §8.1) ──
+
+
+def _histories_catalog(fwd, sfrs=(1.0, 5.0, 20.0)):
+    from tengri import Catalog
+
+    t, sfr = _flat_histories(list(sfrs))
+    return Catalog.from_histories(
+        fwd, t_gyr=t, sfr=sfr, params={"dust_tau_diff": np.full(len(sfrs), 0.2)}
+    )
+
+
+def test_simulate_photometry_equals_predict(fwd_table_sfh):
+    """simulate() must not be a second forward path — its photometry IS predict()."""
+    cat = _histories_catalog(fwd_table_sfh)
+    mock = cat.simulate()
+
+    assert np.allclose(mock.photometry / np.asarray(cat.predict()), 1.0, rtol=1e-12)
+    assert mock.photometry.shape == (3, fwd_table_sfh.observation.photometry.n_filters)
+
+
+def test_simulate_properties_scale_with_the_history(fwd_table_sfh):
+    """stellar_mass is exactly linear in a scaled SFH — the physics check.
+
+    Emission lines cannot carry this check on the synthetic SSP (it is a smooth
+    power law with no lines baked in, so a continuum-subtracted line flux is
+    ~0), but formed stellar mass can, and it exercises the same column channel.
+    """
+    cat = _histories_catalog(fwd_table_sfh)
+    mock = cat.simulate(properties=("stellar_mass",))
+
+    mass = np.asarray(mock.properties["stellar_mass"])
+    assert mass.shape == (3,)
+    assert np.all(mass > 0.0), f"a positive SFR must form mass, got {mass}"
+    assert np.allclose(mass[1] / mass[0], 5.0, rtol=1e-6), f"ratio {mass[1] / mass[0]}"
+    assert np.allclose(mass[2] / mass[0], 20.0, rtol=1e-6), f"ratio {mass[2] / mass[0]}"
+
+
+def test_simulate_lines_match_the_single_galaxy_measurement(fwd_table_sfh):
+    """Per-row parity for the line channel: the batching must not perturb it.
+
+    The synthetic SSP has no emission lines, so the *values* here are continuum
+    residuals rather than physics — which is exactly why this asserts agreement
+    with the single-galaxy call rather than a physical scaling.
+    """
+    import jax.numpy as jnp
+
+    cat = _histories_catalog(fwd_table_sfh)
+    mock = cat.simulate(lines=("Halpha", "OIII_5007"))
+
+    assert set(mock.lines) == {"Halpha", "OIII_5007"}
+    for name in ("Halpha", "OIII_5007"):
+        assert mock.lines[name].shape == (3,)
+        assert np.all(np.isfinite(mock.lines[name]))
+
+    t, sfr = _flat_histories([1.0, 5.0, 20.0])
+    from tengri.observation.line_measurement import DESI_LINES
+
+    defs = tuple(d for d in DESI_LINES if d.name in ("Halpha", "OIII_5007"))
+    # The single-galaxy call needs the COMPLETE params dict: the window-LUT line
+    # path reaches compute_joint_weights, which reads params["met_logzsol"]
+    # directly and does not merge Fixed values for itself. Catalog.simulate
+    # merges them once for the whole table; here we mirror that with the fixed
+    # values from the spec, so the two sides are genuinely comparable.
+    fixed = {
+        k: jnp.asarray(v)
+        for k, v in fwd_table_sfh.spec.get_fixed_values().items()
+        if np.asarray(v).ndim == 0
+    }
+    for i in range(3):
+        one = np.asarray(
+            fwd_table_sfh.measure_line_fluxes(
+                {
+                    **fixed,
+                    "dust_tau_diff": jnp.asarray(0.2),
+                    "sfh_t_gyr": jnp.asarray(t[i]),
+                    "sfh_sfr": jnp.asarray(sfr[i]),
+                },
+                defs,
+                fast=True,
+            )
+        )
+        got = np.array([mock.lines[d.name][i] for d in defs])
+        assert np.allclose(got, one, rtol=1e-9, atol=0.0) or np.allclose(got, one, atol=1e-30), (
+            f"row {i}: batched {got} vs single-galaxy {one}"
+        )
+
+
+def test_simulate_to_table_is_flat_and_named(fwd_table_sfh):
+    """to_table() must give flat (N,) columns, ingest-compatible like #1313's."""
+    cat = _histories_catalog(fwd_table_sfh)
+    table = cat.simulate(lines=("Halpha",), properties=("stellar_mass",)).to_table()
+
+    for name in fwd_table_sfh.observation.photometry.names:
+        assert name in table, f"missing flux column {name!r}"
+        assert np.asarray(table[name]).shape == (3,)
+    assert np.asarray(table["Halpha"]).shape == (3,)
+    assert np.asarray(table["stellar_mass"]).shape == (3,)
+    assert all(np.asarray(v).ndim == 1 for v in table.values()), "columns must be flat"
+
+
+def test_simulate_rejects_an_unknown_line_name(fwd_table_sfh):
+    """A typo'd line name must name the available ones, not silently drop it."""
+    cat = _histories_catalog(fwd_table_sfh)
+    with pytest.raises(ValueError, match="Halpha"):
+        cat.simulate(lines=("Halpah",))
+
+
+def test_simulate_noise_points_at_the_open_issue(fwd_table_sfh):
+    """noise= is #1312 and not implemented — refuse rather than ignore it."""
+    cat = _histories_catalog(fwd_table_sfh)
+    with pytest.raises(NotImplementedError, match="1312"):
+        cat.simulate(noise=object())

@@ -239,3 +239,113 @@ def test_table_metallicity_actually_spreads_over_the_met_axis(
         f"Z(t) histories differing only at EARLY times gave the same weights "
         f"(L1={delta:.3e}) — the per-age curve is being collapsed to a scalar"
     )
+
+
+def test_tabulated_history_reproduces_the_parametric_sfh(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Round trip: a table sampled FROM a parametric SFH reproduces its photometry.
+
+    The issue calls this "the test that proves the histories are actually being
+    used". A constant SFH is the right probe: it is piecewise-constant, so a
+    dense table carrying its exact edges represents it without curve-fitting
+    error, and any residual is machinery rather than interpolation of a
+    curve.
+
+    Both models are otherwise identical — same SSP, same dust, same redshift —
+    so the only difference is whether the SFH arrives as two scalars or as a
+    tabulated history.
+    """
+    from tengri import FIXED, SEDModel
+    from tengri.parameters.priors import Fixed, Uniform
+
+    # start_gyr is the lookback to SF ONSET and end_gyr the lookback to
+    # CESSATION, so start_gyr is the LARGER number: the names are chronological
+    # while the axis is lookback. Inverting them is caught by the #1382 ordering
+    # guard — the same inversion that reddened main in #1444.
+    start_gyr, end_gyr, log_mass = 11.0, 2.0, 9.5
+
+    def _model(sfh_group):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return SEDModel.build(
+                ssp_data=synthetic_ssp_wide,
+                observation=synthetic_tophat_obs,
+                sfh=sfh_group,
+                dust={
+                    "type": "two_component",
+                    "all_params": FIXED,
+                    "tau_bc": 0.5,
+                    "tau_diff": Uniform(0.0, 2.0),
+                },
+                neb={"type": "none"},
+                redshift=Fixed(_Z_OBS),
+            )
+
+    parametric = _model(
+        {
+            "type": "const",
+            "start_gyr": Fixed(start_gyr),
+            "end_gyr": Fixed(end_gyr),
+            "log_total_mass": Fixed(log_mass),
+        }
+    )
+    p_par = dict(parametric.spec.sample(jax.random.PRNGKey(0)))
+    p_par["dust_tau_diff"] = jnp.asarray(0.3)
+
+    # Sample that SFH onto a dense cosmic-time grid that INCLUDES its two edges,
+    # so the piecewise-constant shape is represented exactly.
+    from tengri.cosmology import age_at_z
+
+    t_obs = float(age_at_z(_Z_OBS))
+    t_nodes = np.unique(
+        np.concatenate(
+            [
+                np.linspace(0.0, t_obs, 400),
+                np.array([t_obs - start_gyr, t_obs - end_gyr]),
+            ]
+        )
+    )
+    t_nodes = t_nodes[(t_nodes >= 0.0) & (t_nodes <= t_obs)]
+
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    const_fn = SFH_REGISTRY["const"].fn
+    # ASCENDING lookback. The registry SFHs renormalize via
+    # trapezoid(shape, t_lookback) = 10**log_total_mass, so a descending grid
+    # gives a negative/zero area that hits the divisor's 1e-30 clamp — the
+    # amplitude then comes back 10^30 too large, silently. Sort first, and keep
+    # the cosmic times paired to the sorted lookbacks.
+    lookback_yr = np.sort((t_obs - t_nodes) * 1e9)
+    t_paired = t_obs - lookback_yr / 1e9
+    sfr_nodes = np.asarray(
+        const_fn(
+            jnp.asarray(lookback_yr),
+            log_total_mass=log_mass,
+            start=end_gyr * 1e9,  # registry swaps start/end: cosmic <-> lookback
+            end=start_gyr * 1e9,
+        )
+    )
+    assert 0.0 < sfr_nodes.max() < 1e3, (
+        f"setup: peak SFR {sfr_nodes.max():.3e} Msun/yr is unphysical — the "
+        f"renormalization divisor was clamped (see the ascending-grid note above)"
+    )
+
+    table = _model({"type": "table"})
+    p_tab = dict(table.spec.sample(jax.random.PRNGKey(0)))
+    p_tab["dust_tau_diff"] = jnp.asarray(0.3)
+    p_tab["sfh_t_gyr"] = jnp.asarray(t_paired)
+    p_tab["sfh_sfr"] = jnp.asarray(sfr_nodes)
+
+    f_par = np.asarray(parametric.predict_photometry(p_par))
+    f_tab = np.asarray(table.predict_photometry(p_tab))
+
+    # Ratio, not allclose: these fluxes are ~1e-13, far below allclose's atol.
+    ratio = f_tab / f_par
+    assert np.all(np.isfinite(ratio)), f"non-finite round-trip ratio {ratio}"
+    # Measured on this grid: max |ratio - 1| = 2.78e-06, set by the dense
+    # integrand's resolution rather than by anything about the table. The
+    # 1e-4 bound keeps ~36x headroom for platform variation while staying
+    # far tighter than any real failure to use the history would be.
+    assert np.allclose(ratio, 1.0, rtol=1e-4), (
+        f"a table sampled from the const SFH does not reproduce it: "
+        f"flux ratio {ratio} (parametric {f_par}, tabulated {f_tab})"
+    )
