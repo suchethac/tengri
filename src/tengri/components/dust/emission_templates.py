@@ -33,6 +33,7 @@ from pathlib import Path
 
 import jax.numpy as jnp
 
+from tengri.utils.grid_interp import resample_template
 from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
     C_CGS as _C_CGS,
@@ -243,7 +244,7 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
 
         # Interpolate template onto target wavelength grid
         # Template is in L_lambda space (integral over wavelength = 1)
-        sed_llam = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+        sed_llam = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
         # Convert L_lambda -> L_nu: L_nu = L_lambda * lambda^2 / c
         wavelength_cm = wavelength_aa * _AA_TO_CM
@@ -510,7 +511,7 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
         template_norm = template / jnp.maximum(jnp.abs(tmpl_integral), 1e-100)
 
         # Interpolate normalized template onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template_norm, left=0.0, right=0.0)
+        sed = resample_template(wavelength_aa, tmpl_wave, template_norm, left=0.0, right=0.0)
 
         return L_absorbed * sed
 
@@ -696,7 +697,7 @@ def dale2014_emission_lnu(
         template_mixed = template_sf
         scale_factor = L_absorbed
 
-    sed = jnp.interp(wavelength_aa, wavelength_grid, template_mixed, left=0.0, right=0.0)
+    sed = resample_template(wavelength_aa, wavelength_grid, template_mixed, left=0.0, right=0.0)
     return scale_factor * sed
 
 
@@ -1042,8 +1043,12 @@ def create_schreiber2018_from_grid(grid_path: str) -> Callable:
         # Resample both onto the requested grid, then mix natively (AGNfitter-rX
         # mixes the unnormalized dust/PAH L_nu, so the relative amplitude — and
         # hence the physical meaning of f_PAH — is preserved).
-        dust_on_grid = jnp.interp(wavelength_aa, tmpl_wave, dust_T_template, left=0.0, right=0.0)
-        pah_on_grid = jnp.interp(wavelength_aa, tmpl_wave, pah_T_template, left=0.0, right=0.0)
+        dust_on_grid = resample_template(
+            wavelength_aa, tmpl_wave, dust_T_template, left=0.0, right=0.0
+        )
+        pah_on_grid = resample_template(
+            wavelength_aa, tmpl_wave, pah_T_template, left=0.0, right=0.0
+        )
         f_pah = jnp.clip(dust_f_pah, 0.0, 1.0)
         mixed = (1.0 - f_pah) * dust_on_grid + f_pah * pah_on_grid
 
@@ -1518,7 +1523,9 @@ def create_dh02_ce01_from_grid(grid_path: str) -> Callable:
         template_interp = (1.0 - f) * template_grid[i] + f * template_grid[i + 1]
 
         # Resample to output wavelength grid
-        sed = jnp.interp(wavelength_aa, wavelength_grid, template_interp, left=0.0, right=0.0)
+        sed = resample_template(
+            wavelength_aa, wavelength_grid, template_interp, left=0.0, right=0.0
+        )
 
         # Normalize via frequency integral (energy balance)
         wave_cm = wavelength_aa * _AA_TO_CM
@@ -1753,7 +1760,7 @@ def create_astrodust_from_grid(
         template = jnp.where(t_integral > 0.0, template / t_integral, template)
 
         # Interpolate onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+        sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
         # No CMB contrast factor here — see the note in ``create_themis_from_grid``.
         # It is an *observational* suppression, so applying it to the emitted SED
@@ -1988,7 +1995,7 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
         )
 
         # Interpolate onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+        sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
         # No CMB contrast factor here — see the note in ``create_themis_from_grid``.
         # It is an *observational* suppression, so applying it to the emitted SED
@@ -2355,7 +2362,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         template = jnp.where(t_integral > 0.0, template / t_integral, template)
 
         # Interpolate onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+        sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
         # The da Cunha et al. (2013) CMB contrast factor is deliberately NOT
         # applied to the emitted SED.

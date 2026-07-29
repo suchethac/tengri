@@ -63,7 +63,7 @@ from tengri.components.agn._phys import (
     bolometric_integral_nu as _bolometric_integral_nu,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.utils.grid_interp import interp_nd_pchip
+from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -206,7 +206,7 @@ def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
             axes,
             (agn_oa_skirtor, agn_incl_skirtor, agn_tv_skirtor),
         )
-        sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
+        sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
         # Template is shape-only: renormalize by the frequency integral and scale
         # by L_bol * torus_frac, exactly as the cat3d_wind / silva04 torus blocks
         # and the skirtor_agnfitter precompute path do (lnu = L_SUN * T / int T dnu).
