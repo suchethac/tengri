@@ -7,18 +7,26 @@ from tengri.inference.population.diagnostics import (
     report,
 )
 from tengri.inference.population.estimator import (
+    ESSSummary,
     SharedGrid,
     effective_sample_size,
     shared_log_posterior,
+)
+from tengri.inference.population.interim import (
+    InterimResult,
+    fit_interim,
 )
 from tengri.inference.population.kernel import ou_logpdf
 from tengri.inference.population.reconstruct import centered_fields
 
 __all__ = [
+    "ESSSummary",
+    "InterimResult",
     "SharedGrid",
     "centered_fields",
     "credible_interval",
     "effective_sample_size",
+    "fit_interim",
     "interval_width_scaling",
     "ou_logpdf",
     "report",
