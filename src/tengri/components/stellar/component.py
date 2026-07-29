@@ -298,7 +298,7 @@ def _youngest_bin_lookback_multiplier(ssp_lg_age_gyr):
     return jnp.where(is_youngest, boost, 1.0)
 
 
-@jax.custom_vjp
+@jax.custom_jvp
 def _mass_scale_lnu(per_msun_lsun, total_mass):
     r"""``total_mass * per_msun_lsun * L_sun`` with a float32-safe reverse pass (#1206).
 
@@ -339,28 +339,49 @@ def _mass_scale_lnu(per_msun_lsun, total_mass):
     cotangent's magnitude. Folding L_sun into the einsum operand does not survive
     either: when the SSP grid is threaded as an XLA ``Parameter`` (the inference
     hot path) the algebraic simplifier pulls the constant back out. A
-    ``custom_vjp`` boundary is the one thing XLA reassociation cannot cross.
+    custom-rule boundary is the one thing XLA reassociation cannot cross.
     Identical in float64 (the gradient differs only at the last bit from the
-    multiply reorder).
+    multiply reorder), so this is **one path for both precisions** — float64
+    does not need the pin but is unharmed by it, and a dtype-branched
+    implementation would mean the float64 tests stopped exercising what
+    float32 actually runs.
+
+    The rule is a ``custom_jvp``, not a ``custom_vjp``. Both pin the order, but
+    a ``custom_vjp`` is **opaque to forward mode** — ``jvp`` raises
+    ``TypeError: can't apply forward-mode autodiff (jvp) to a custom_vjp
+    function`` — and geoVI builds its metric with forward-mode autodiff, so the
+    ``custom_vjp`` spelling turned ``test_geovi_mode_stable_convergence`` red.
+    A ``custom_jvp`` serves forward mode directly and reverse mode by
+    transposition, and the transpose of the groupings below is exactly the
+    hand-written VJP this replaces.
     """
     return total_mass * per_msun_lsun * LSUN_ERG_PER_S
 
 
-def _mass_scale_lnu_fwd(per_msun_lsun, total_mass):
-    return _mass_scale_lnu(per_msun_lsun, total_mass), (per_msun_lsun, total_mass)
+@_mass_scale_lnu.defjvp
+def _mass_scale_lnu_jvp(primals, tangents):
+    """Grouped so neither mode forms ``total_mass * L_sun`` (~3.8e43, inf in float32).
+
+    Transposing these two terms gives ``d/d(per_msun) = (g*total_mass)*L_sun``
+    and ``d/d(total_mass) = sum(g*(per_msun*L_sun))`` — the safe reverse pass.
+    """
+    per_msun_lsun, total_mass = primals
+    d_per_msun, d_total_mass = tangents
+    primal_out = total_mass * per_msun_lsun * LSUN_ERG_PER_S
+    # ``optimization_barrier`` is what keeps the grouping: a ``custom_jvp``'s
+    # transpose is inlined into the backward jaxpr and XLA is then free to
+    # re-associate it back into ``total_mass * L_sun`` (3.8e43, inf in float32)
+    # — measured, nine float32 gradient tests went red without these barriers.
+    # Unlike ``custom_vjp``, a barrier blocks reassociation WITHOUT making the
+    # function opaque to forward mode, so geoVI can still differentiate it.
+    barrier = jax.lax.optimization_barrier
+    tangent_out = barrier(d_per_msun * total_mass) * LSUN_ERG_PER_S + d_total_mass * barrier(
+        per_msun_lsun * LSUN_ERG_PER_S
+    )
+    return primal_out, tangent_out
 
 
-def _mass_scale_lnu_bwd(res, g):
-    per_msun_lsun, total_mass = res
-    d_per_msun = (g * total_mass) * LSUN_ERG_PER_S
-    d_total_mass = jnp.sum(g * (per_msun_lsun * LSUN_ERG_PER_S))
-    return d_per_msun, d_total_mass
-
-
-_mass_scale_lnu.defvjp(_mass_scale_lnu_fwd, _mass_scale_lnu_bwd)
-
-
-@jax.custom_vjp
+@jax.custom_jvp
 def _flux_weighted_node(num, den):
     r"""``num / den`` (a flux-weighted mean wavelength) with a float32-safe VJP (#1206).
 
@@ -391,22 +412,27 @@ def _flux_weighted_node(num, den):
     **JIT/grad/vmap-safe**: yes. The custom VJP forms ``g/den`` *first*
     (finite: the cotangent scales with ``den``, and is 0 when the node is
     unused) and only then multiplies by ``num/den`` — the standalone ``den^2``
-    is never materialized. Identical in float64.
+    is never materialized. Identical in float64, and deliberately **one path
+    for both precisions**: see :func:`_mass_scale_lnu` for why this is a
+    ``custom_jvp`` rather than a ``custom_vjp`` (forward mode, which geoVI
+    needs, cannot cross a ``custom_vjp``).
     """
     return num / den
 
 
-def _flux_weighted_node_fwd(num, den):
-    return num / den, (num, den)
+@_flux_weighted_node.defjvp
+def _flux_weighted_node_jvp(primals, tangents):
+    """``d(num/den) = (d_num - (num/den)*d_den) / den`` — never forms ``den**2``.
 
-
-def _flux_weighted_node_bwd(res, g):
-    num, den = res
-    inv = g / den  # d/d(num); = 0 when the node is unused, ~O(1) when it is
-    return inv, -inv * (num / den)  # d/d(den) = -(g/den)*(num/den), never num/den^2
-
-
-_flux_weighted_node.defvjp(_flux_weighted_node_fwd, _flux_weighted_node_bwd)
+    The naive form ``d_num/den - num*d_den/den**2`` squares the denominator;
+    factoring the ``1/den`` out leaves one division by ``den`` and reuses the
+    primal quotient, which is a well-behaved ~5000 Angstrom. Transposed, this
+    gives ``g/den`` and ``-(g/den)*(num/den)`` — the safe reverse pass.
+    """
+    num, den = primals
+    d_num, d_den = tangents
+    quotient = num / den
+    return quotient, (d_num - quotient * d_den) / den
 
 
 def _age_weights_cic(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
