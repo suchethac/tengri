@@ -19,11 +19,20 @@ __all__ = ["MockPopulation", "assert_truth_is_discriminating", "make_population"
 def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
     r"""Reject an injected truth that a prior-returning estimator could fake.
 
-    Three points in a bounded prior are indistinguishable from "the estimator
-    returned its prior": the arithmetic midpoint, the geometric mean, and the
-    lognormal median. Which one applies depends on the standardization in force,
-    and tengri's has changed more than once -- so all three are excluded rather
-    than whichever is current.
+    Two distinct points in a bounded prior are indistinguishable from "the
+    estimator returned its prior", depending on the standardization in force:
+
+    - **Arithmetic midpoint** ``0.5(lo + hi)`` — where a uniform prior or
+      sigmoid-standardized logit-normal returns nothing (prior expectation).
+    - **Geometric mean** ``sqrt(lo * hi)`` — where a log-uniform prior returns
+      nothing (same value as the lognormal median by mathematical identity).
+
+    Which applies depends on tengri's standardization, which has changed
+    historically, so both points are excluded rather than guessing which is
+    current.
+
+    Note: The geometric mean and lognormal median ``exp(0.5*(log(lo)+log(hi)))``
+    are mathematically identical.
 
     Parameters
     ----------
@@ -36,6 +45,9 @@ def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
     rel_tol : float, optional
         Fractional distance from a characteristic point that counts as too
         close [dimensionless]. Default 0.08.
+        Note: For very wide bounds (e.g. (1e6, 3e8)), the span is dominated
+        by the upper end; ``rel_tol * span`` may not scale intuitively.
+        This guard is designed for bounded priors like (10, 500) Myr.
 
     Raises
     ------
@@ -46,7 +58,6 @@ def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
     characteristic = {
         "arithmetic midpoint": 0.5 * (lo + hi),
         "geometric mean": float(np.sqrt(lo * hi)),
-        "lognormal median": float(np.exp(0.5 * (np.log(lo) + np.log(hi)))),
     }
     span = hi - lo
     for label, point in characteristic.items():
@@ -152,18 +163,23 @@ def make_population(
     halpha_absorption_count = 0
 
     # Define emission lines for measurement
+    # Strong star-forming set: drops Hgamma and [NII]_6548 (near-zero fluxes let
+    # SNR-scaled errors dominate chi-squared). Halpha/Hbeta enable Balmer decrement
+    # dust constraint; dust-SFR degeneracy is key to the study.
+    line_names = [
+        "OII_3726",
+        "OII_3729",
+        "OIII_4959",
+        "OIII_5007",
+        "Halpha",
+        "Hbeta",
+        "SII_6717",
+        "NII_6584",
+    ]
+    wavelengths = np.array([3726.0, 3729.0, 4959.0, 5007.0, 6564.61, 4861.0, 6717.0, 6584.0])
     line_defs = default_line_defs(
-        wavelengths=np.array([3726.0, 3729.0, 4959.0, 5007.0, 6548.0, 6564.61, 6584.0, 6717.0]),
-        names=[
-            "OII_3726",
-            "OII_3729",
-            "OIII_4959",
-            "OIII_5007",
-            "NII_6548",
-            "Halpha",
-            "NII_6584",
-            "SII_6717",
-        ],
+        wavelengths=wavelengths,
+        names=line_names,
     )
 
     for i, k_i in enumerate(keys):
@@ -206,8 +222,7 @@ def make_population(
         line_flux_noise_list.append(line_flux_noise)
 
         # Count Halpha absorption (non-positive predicted flux)
-        # Halpha is at index 5 in our line list
-        halpha_idx = 5
+        halpha_idx = line_names.index("Halpha")
         if line_flux_true[halpha_idx] <= 0:
             halpha_absorption_count += 1
 

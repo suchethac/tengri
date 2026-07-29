@@ -54,17 +54,19 @@ def field_model(synthetic_ssp_wide, phot_obs):
 
 
 def test_halpha_absorption_galaxies_are_counted_not_dropped(field_model):
-    """Verify that Halpha absorption events are reported, not silently dropped.
+    """Verify that no galaxies are silently dropped; tests the no-drop guarantee.
 
-    At sigma = 0.6 roughly 1 in 15 drawn truths has Halpha in absorption --
-    a bursty history observed during a lull. They must be counted, never
-    silently dropped: dropping them biases the survivors line-bright.
+    This test exercises the safety mechanism that ensures galaxies with Halpha
+    absorption are counted and retained, never silently dropped (which would
+    bias survivors toward line-bright cases). It does NOT exercise the
+    absorption-counting path because no CI-runnable fixture produces nebular
+    emission lines.
 
-    Uses synthetic_ssp_wide (no emission lines on real SSP), so line fluxes
-    will be approximately zero. This test validates the counting mechanism
-    and the fact that no galaxies are dropped, which is the critical safety
-    check. On a real SSP with nebular emission, this would track meaningful
-    Halpha absorption events from burstiness.
+    synthetic_ssp_wide has a smooth continuum with no nebular emission, so all
+    measured line fluxes are approximately zero. Therefore n_halpha_absorption
+    will be zero (no non-positive fluxes occur). A production recovery study
+    would use ssp_data_wne (data-gated, with nebular emission) to get meaningful
+    Halpha absorption events from burstiness-induced SFH lulls.
     """
     pop = make_population(
         field_model,
@@ -76,6 +78,9 @@ def test_halpha_absorption_galaxies_are_counted_not_dropped(field_model):
         snr_line=10.0,
     )
     assert len(pop.truth_params) == 45, "galaxies were dropped"
-    assert pop.n_halpha_absorption >= 0, "absorption count should be non-negative"
+    assert pop.n_halpha_absorption == 0, (
+        "synthetic_ssp_wide has no nebular emission, so no absorption events "
+        "are possible; this test covers only the no-drop guarantee"
+    )
     assert pop.table is not None, "table should be populated"
     assert len(pop.table) == 45, "table row count should match n_galaxies"
