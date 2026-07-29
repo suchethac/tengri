@@ -183,8 +183,7 @@ def make_population(
     # (select() returns lines in wavelength order, so reorder to match line_names)
     canonical_lines = LineList.default_optical().select(names=line_names)
     canonical_dict = {
-        name: wave
-        for name, wave in zip(canonical_lines.names, canonical_lines.wavelengths)
+        name: wave for name, wave in zip(canonical_lines.names, canonical_lines.wavelengths)
     }
     wavelengths = np.array([canonical_dict[name] for name in line_names])
     line_defs = default_line_defs(

@@ -111,8 +111,7 @@ def build_two_galaxy_catalog(*, halpha, ssp, obs_base, n_line_cols=None):
         table,
         flux_unit="cgs_fnu",
         flux_cols=["flux_1", "flux_2", "flux_3", "flux_4", "flux_5"],
-        err_cols=["flux_1_err", "flux_2_err", "flux_3_err", "flux_4_err",
-                  "flux_5_err"],
+        err_cols=["flux_1_err", "flux_2_err", "flux_3_err", "flux_4_err", "flux_5_err"],
         line_cols=line_cols,
         line_err_cols=["halpha_err"],
     )

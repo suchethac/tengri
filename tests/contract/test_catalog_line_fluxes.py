@@ -15,8 +15,7 @@ import pytest
 pytestmark = pytest.mark.contract
 
 
-def test_engine_receives_per_galaxy_line_data(synthetic_ssp_wide,
-                                              synthetic_tophat_obs):
+def test_engine_receives_per_galaxy_line_data(synthetic_ssp_wide, synthetic_tophat_obs):
     """Test 1: Verify catalog ingests correct per-galaxy line data.
 
     Check that the catalog's internal _catalog_arrays has the right
@@ -34,9 +33,7 @@ def test_engine_receives_per_galaxy_line_data(synthetic_ssp_wide,
 
     # Verify per-galaxy line fluxes were ingested correctly
     assert ca.line_flux_obs is not None, "line_flux_obs is None"
-    assert ca.line_flux_obs.shape == (2, 1), (
-        f"Expected shape (2, 1), got {ca.line_flux_obs.shape}"
-    )
+    assert ca.line_flux_obs.shape == (2, 1), f"Expected shape (2, 1), got {ca.line_flux_obs.shape}"
 
     # Galaxy 0 should have 1.0e-16
     assert np.allclose(ca.line_flux_obs[0], [1.0e-16]), (
@@ -49,9 +46,16 @@ def test_engine_receives_per_galaxy_line_data(synthetic_ssp_wide,
     )
 
 
-@pytest.mark.xfail(reason="Line flux data threads (Test 1 passes) but likelihood is insensitive to per-galaxy observations (Tests 2/3 show identical loss regardless of obs values). Either resolve_channel_data uses baked data or likelihood adapter not constructed/evaluated.", strict=True)
-def test_likelihood_is_sensitive_to_line_data(synthetic_ssp_wide,
-                                               synthetic_tophat_obs):
+@pytest.mark.xfail(
+    reason=(
+        "#1480: per-galaxy line data reaches data_args (Test 1 passes) but does not "
+        "reach the objective — the loss is identical regardless of the observed "
+        "values. Either resolve_channel_data returns the baked template array, or the "
+        "line likelihood adapter is never constructed for this configuration."
+    ),
+    strict=True,
+)
+def test_likelihood_is_sensitive_to_line_data(synthetic_ssp_wide, synthetic_tophat_obs):
     """Test 2: Per-galaxy likelihood differs based on observed Halpha.
 
     Evaluate loss through the same 2-arg path run_one uses, WITH per-galaxy
@@ -61,10 +65,11 @@ def test_likelihood_is_sensitive_to_line_data(synthetic_ssp_wide,
     Either resolve_channel_data returns baked data, or likelihood adapters
     don't exist / aren't being evaluated.
     """
-    from tests.contract._line_catalog_fixture import build_two_galaxy_catalog
+    from jax.flatten_util import ravel_pytree
+
     from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
     from tengri.inference.fitter import Fitter
-    from jax.flatten_util import ravel_pytree
+    from tests.contract._line_catalog_fixture import build_two_galaxy_catalog
 
     cat, truth = build_two_galaxy_catalog(
         halpha=(1.0e-16, 4.0e-16),
@@ -76,9 +81,7 @@ def test_likelihood_is_sensitive_to_line_data(synthetic_ssp_wide,
 
     # Build ONE fitter and get the 2-arg loss function (same path run_one uses)
     fitter = Fitter(cat.fwd, ca.flux[0], ca.noise[0], data_type="photometry")
-    log_posterior_2arg, _, _, template_data_args = _get_flat_logdensity(
-        fitter, truth
-    )
+    log_posterior_2arg, _, _, template_data_args = _get_flat_logdensity(fitter, truth)
     init_flat, _ = ravel_pytree(truth)
 
     # Build per-galaxy data_args for SAME loss function
@@ -102,13 +105,14 @@ def test_likelihood_is_sensitive_to_line_data(synthetic_ssp_wide,
 
     # Expected: chi2_g0 = 1, chi2_g1 = 16, so nlp_diff ~= 7.5
     assert not np.allclose(nlp_g0, nlp_g1), (
-        f"Loss identical for both galaxies; line flux data not reaching likelihood"
+        "Loss identical for both galaxies; line flux data not reaching likelihood"
     )
 
 
-@pytest.mark.xfail(reason="Line flux data threads but likelihood is insensitive (Test 2 xfailed)", strict=True)
-def test_swapped_halpha_flips_outcomes(synthetic_ssp_wide,
-                                        synthetic_tophat_obs):
+@pytest.mark.xfail(
+    reason="Line flux data threads but likelihood is insensitive (Test 2 xfailed)", strict=True
+)
+def test_swapped_halpha_flips_outcomes(synthetic_ssp_wide, synthetic_tophat_obs):
     """Test 3: Swapping Halpha values swaps likelihood differences.
 
     Build catalog with halpha SWAPPED and verify Test 1 and Test 2 outcomes
@@ -116,8 +120,8 @@ def test_swapped_halpha_flips_outcomes(synthetic_ssp_wide,
 
     xfail: Dependent on Test 2 fix.
     """
-    from tests.contract._line_catalog_fixture import build_two_galaxy_catalog
     from tengri.inference.fitter import Fitter
+    from tests.contract._line_catalog_fixture import build_two_galaxy_catalog
 
     # Original: (1x, 4x)
     cat_orig, truth_orig = build_two_galaxy_catalog(
@@ -136,10 +140,12 @@ def test_swapped_halpha_flips_outcomes(synthetic_ssp_wide,
     ca_swap = cat_swap._catalog_arrays
 
     # Likelihood differences (g0 - g1)
-    fitter_orig_g0 = Fitter(cat_orig.fwd, ca_orig.flux[0], ca_orig.noise[0],
-                             data_type="photometry")
-    fitter_orig_g1 = Fitter(cat_orig.fwd, ca_orig.flux[1], ca_orig.noise[1],
-                             data_type="photometry")
+    fitter_orig_g0 = Fitter(
+        cat_orig.fwd, ca_orig.flux[0], ca_orig.noise[0], data_type="photometry"
+    )
+    fitter_orig_g1 = Fitter(
+        cat_orig.fwd, ca_orig.flux[1], ca_orig.noise[1], data_type="photometry"
+    )
 
     nlp_fn_orig_g0 = fitter_orig_g0._get_or_build_logdensity_fn()
     nlp_fn_orig_g1 = fitter_orig_g1._get_or_build_logdensity_fn()
@@ -152,14 +158,18 @@ def test_swapped_halpha_flips_outcomes(synthetic_ssp_wide,
     data_args_orig_g1["line_flux_obs"] = ca_orig.line_flux_obs[1]
     data_args_orig_g1["line_flux_err"] = ca_orig.line_flux_err[1]
 
-    ratio_orig = float(nlp_fn_orig_g0(truth_orig, data_args_orig_g0) -
-                      nlp_fn_orig_g1(truth_orig, data_args_orig_g1))
+    ratio_orig = float(
+        nlp_fn_orig_g0(truth_orig, data_args_orig_g0)
+        - nlp_fn_orig_g1(truth_orig, data_args_orig_g1)
+    )
 
     # Same computation with swapped
-    fitter_swap_g0 = Fitter(cat_swap.fwd, ca_swap.flux[0], ca_swap.noise[0],
-                             data_type="photometry")
-    fitter_swap_g1 = Fitter(cat_swap.fwd, ca_swap.flux[1], ca_swap.noise[1],
-                             data_type="photometry")
+    fitter_swap_g0 = Fitter(
+        cat_swap.fwd, ca_swap.flux[0], ca_swap.noise[0], data_type="photometry"
+    )
+    fitter_swap_g1 = Fitter(
+        cat_swap.fwd, ca_swap.flux[1], ca_swap.noise[1], data_type="photometry"
+    )
 
     nlp_fn_swap_g0 = fitter_swap_g0._get_or_build_logdensity_fn()
     nlp_fn_swap_g1 = fitter_swap_g1._get_or_build_logdensity_fn()
@@ -172,18 +182,18 @@ def test_swapped_halpha_flips_outcomes(synthetic_ssp_wide,
     data_args_swap_g1["line_flux_obs"] = ca_swap.line_flux_obs[1]
     data_args_swap_g1["line_flux_err"] = ca_swap.line_flux_err[1]
 
-    ratio_swap = float(nlp_fn_swap_g0(truth_swap, data_args_swap_g0) -
-                      nlp_fn_swap_g1(truth_swap, data_args_swap_g1))
+    ratio_swap = float(
+        nlp_fn_swap_g0(truth_swap, data_args_swap_g0)
+        - nlp_fn_swap_g1(truth_swap, data_args_swap_g1)
+    )
 
     # Ratios should flip sign (opposite sides of 0)
     assert ratio_orig * ratio_swap < 0, (
-        f"Ratios did not flip: orig={ratio_orig:.4f}, "
-        f"swap={ratio_swap:.4f}"
+        f"Ratios did not flip: orig={ratio_orig:.4f}, swap={ratio_swap:.4f}"
     )
 
 
-def test_line_column_count_must_match_the_observation(synthetic_ssp_wide,
-                                                       synthetic_tophat_obs):
+def test_line_column_count_must_match_the_observation(synthetic_ssp_wide, synthetic_tophat_obs):
     """Validate that line column count matches observation."""
     from tests.contract._line_catalog_fixture import build_two_galaxy_catalog
 

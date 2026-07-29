@@ -124,9 +124,7 @@ def fit_interim(
     spec_interim = Parameters(**spec_dict)
 
     # Create interim model (same SSP, observation, n_grid as original)
-    interim_model = type(model)(
-        spec_interim, model._ssp_data, observation=model.observation
-    )
+    interim_model = type(model)(spec_interim, model._ssp_data, observation=model.observation)
     interim_model._n_grid = model.n_grid
 
     # Fit each galaxy independently
@@ -193,9 +191,7 @@ def fit_interim(
     tau_yr_stacked = np.stack(all_tau_myr, axis=0) * 1e6
 
     # Reconstruct centered fields
-    fields_centered = centered_fields(
-        xi_stacked, sigma_stacked, tau_yr_stacked, log_age_grid
-    )
+    fields_centered = centered_fields(xi_stacked, sigma_stacked, tau_yr_stacked, log_age_grid)
 
     # Times for the grid
     times_yr = 10.0 ** np.asarray(log_age_grid)
@@ -205,8 +201,7 @@ def fit_interim(
 
     all_keys = set().union(*[set(d.keys()) for d in all_rhat_dicts])
     rhat_combined = {
-        k: float(np.nanmax([d.get(k, np.nan) for d in all_rhat_dicts]))
-        for k in all_keys
+        k: float(np.nanmax([d.get(k, np.nan) for d in all_rhat_dicts])) for k in all_keys
     }
 
     n_divergent = np.array(all_divergent_counts, dtype=int)

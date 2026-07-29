@@ -15,9 +15,7 @@ def _dense_drw_logpdf(m, mean, sigma_dex, tau_yr, times_yr):
     var = (sigma_dex * np.log(10.0)) ** 2
     dt = np.abs(times_yr[:, None] - times_yr[None, :])
     cov = var * np.exp(-dt / tau_yr)
-    return multivariate_normal.logpdf(
-        np.asarray(m), mean=np.full(len(m), mean), cov=cov
-    )
+    return multivariate_normal.logpdf(np.asarray(m), mean=np.full(len(m), mean), cov=cov)
 
 
 def test_ou_logpdf_matches_dense_multivariate_normal():
@@ -32,9 +30,7 @@ def test_ou_logpdf_invariant_under_joint_reversal():
     times = np.logspace(6.0, 10.1, 9)
     m = np.linspace(-0.4, 0.6, 9)
     fwd = ou_logpdf(jnp.asarray(m), 0.0, 0.5, 2e8, jnp.asarray(times))
-    rev = ou_logpdf(
-        jnp.asarray(m[::-1]), 0.0, 0.5, 2e8, jnp.asarray(times[::-1])
-    )
+    rev = ou_logpdf(jnp.asarray(m[::-1]), 0.0, 0.5, 2e8, jnp.asarray(times[::-1]))
     chex.assert_trees_all_close(fwd, rev, rtol=1e-12)
 
 

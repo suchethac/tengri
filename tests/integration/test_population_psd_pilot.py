@@ -169,29 +169,26 @@ def test_ess_vs_prior_breadth_sweep():
             n_tau=5,
         )
 
-        _, ess_summary = shared_log_posterior(
-            result.fields, result.times_yr, grid, method="b2"
-        )
+        _, ess_summary = shared_log_posterior(result.fields, result.times_yr, grid, method="b2")
 
         min_ess_mode = float(np.min(ess_summary.at_mode))
         median_ess_mode = float(np.median(ess_summary.at_mode))
         max_ess_mode = float(np.max(ess_summary.at_mode))
 
-        results_table.append({
-            "width_mult": width_mult,
-            "sigma_bounds": sigma_bounds,
-            "tau_bounds_myr": tau_bounds,
-            "min_ess": min_ess_mode,
-            "median_ess": median_ess_mode,
-            "max_ess": max_ess_mode,
-            "max_rhat_all": float(np.nanmax([v for v in result.rhat.values()])),
-        })
+        results_table.append(
+            {
+                "width_mult": width_mult,
+                "sigma_bounds": sigma_bounds,
+                "tau_bounds_myr": tau_bounds,
+                "min_ess": min_ess_mode,
+                "median_ess": median_ess_mode,
+                "max_ess": max_ess_mode,
+                "max_rhat_all": float(np.nanmax([v for v in result.rhat.values()])),
+            }
+        )
 
         # Log the result for inspection
-        print(
-            f"\nWidth mult {width_mult:.1f}: "
-            f"sigma {sigma_bounds}, tau {tau_bounds} Myr"
-        )
+        print(f"\nWidth mult {width_mult:.1f}: sigma {sigma_bounds}, tau {tau_bounds} Myr")
         print(
             f"  ESS at mode: min={min_ess_mode:.1f}, "
             f"median={median_ess_mode:.1f}, max={max_ess_mode:.1f}"
@@ -210,9 +207,7 @@ def test_ess_vs_prior_breadth_sweep():
     print(f"\nESS trend across widths: {ess_trend}")
 
     # Create a markdown table for the report
-    markdown_table = (
-        "| Width | Sigma Bounds | Tau Bounds | Min ESS | Med ESS |\n"
-    )
+    markdown_table = "| Width | Sigma Bounds | Tau Bounds | Min ESS | Med ESS |\n"
     markdown_table += "|-------|------------|-----------|---------|----------|\n"
     for row in results_table:
         sigma_lo, sigma_hi = row["sigma_bounds"]

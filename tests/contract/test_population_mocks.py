@@ -67,9 +67,7 @@ def test_emission_line_wavelengths_match_canonical_catalog():
     wavelengths_in_order = np.array([canonical_dict[name] for name in line_names])
 
     # Expected vacuum wavelengths from the canonical catalog (in line_names order)
-    expected = np.array(
-        [3727.09, 3729.88, 4960.30, 5008.24, 6564.61, 4862.68, 6718.29, 6585.28]
-    )
+    expected = np.array([3727.09, 3729.88, 4960.30, 5008.24, 6564.61, 4862.68, 6718.29, 6585.28])
 
     # Verify all wavelengths match to high precision (1e-6 Å)
     np.testing.assert_allclose(
