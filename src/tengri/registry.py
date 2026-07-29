@@ -1258,6 +1258,12 @@ def cite_components(obj=None) -> _RegistryTable:
     elif agn_model and agn_model != "composable":
         _add("agn", agn_model, list_agn_models)
 
+    # Dust model — the birth-cloud + diffuse *geometry*, a separate paper from
+    # the attenuation *curve* below (Charlot & Fall 2000 vs Calzetti et al.
+    # 2000). ``two_component`` is the recommended default path, so leaving this
+    # menu out of the walk dropped that citation from nearly every fit.
+    _add("dust", getattr(spec, "dust_model", None), list_dust_models)
+
     # Dust attenuation — bc + diff (skip plain "power_law" default if both equal it)
     for attr in ("dust_law_bc", "dust_law_diff", "dust_law"):
         _add("dust_attenuation", getattr(spec, attr, None), list_dust_laws)
@@ -1269,6 +1275,49 @@ def cite_components(obj=None) -> _RegistryTable:
     nebular_mode = getattr(spec, "nebular_mode", None)
     if nebular_mode and nebular_mode != "off":
         _add("nebular", nebular_mode, list_nebular_backends)
+
+    # Radio, shock, IGM and X-ray — four menus the walk never consulted, so a
+    # spec that explicitly requested them produced no row and no warning
+    # (#1447). Each is gated on its own boolean, because the slot attributes
+    # keep real defaults ("bell2003", "yang20") while the component is switched
+    # off: an ungated walk would credit Bell 2003 and Yang+2020 to a plain
+    # stellar+dust fit. Over-citing is as wrong as under-citing here.
+
+    # Radio — two independent slots. Block names are not unique across the
+    # categories ("none" is registered in both), so each is resolved inside its
+    # own category, exactly as the composable AGN blocks are above.
+    if getattr(spec, "radio", False):
+        for attr, category in (("radio_sfr_mode", "sf"), ("radio_agn_model", "agn")):
+            block = getattr(spec, attr, None)
+            if block and block != "none":
+                _add(
+                    f"radio_{category}",
+                    block,
+                    lambda c=category: list_radio_blocks(category=c),
+                )
+
+    # Shock — the spec records only the on/off gate plus physics parameters,
+    # with no ``shock_model`` attribute, so an enabled gate implies the single
+    # selectable entry. A contract test fails loudly if a second shock model is
+    # ever registered and that inference stops holding.
+    if getattr(spec, "shock", False):
+        _add("shock", "mappings", list_shock_models)
+
+    # IGM — applied by default, so most fits genuinely ran Inoue+2014 (or the
+    # chosen alternative) and have never cited it.
+    if getattr(spec, "apply_igm", False):
+        igm_model = getattr(spec, "igm_model", None)
+        if igm_model and igm_model != "none":
+            _add("igm", igm_model, list_igm_models)
+
+    # X-ray. ``agn_xray_corona`` and ``xray_aird`` are accepted by the builder
+    # but absent from ``list_xray_models()``, so they resolve to no row until
+    # that menu derives from the same source as the builder (#1446); the walk
+    # then picks them up with no change here.
+    if getattr(spec, "xray", False):
+        xray_model = getattr(spec, "xray_model", None)
+        if xray_model and xray_model != "none":
+            _add("xray", xray_model, list_xray_models)
 
     # Inference method (from a Posterior)
     method = getattr(obj, "method", None)
