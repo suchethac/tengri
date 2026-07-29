@@ -166,6 +166,9 @@ def make_population(
     # Strong star-forming set: drops Hgamma and [NII]_6548 (near-zero fluxes let
     # SNR-scaled errors dominate chi-squared). Halpha/Hbeta enable Balmer decrement
     # dust constraint; dust-SFR degeneracy is key to the study.
+    # Wavelengths sourced from canonical catalog, not hardcoded, for consistency.
+    from tengri.observation.line_list import LineList
+
     line_names = [
         "OII_3726",
         "OII_3729",
@@ -176,7 +179,14 @@ def make_population(
         "SII_6717",
         "NII_6584",
     ]
-    wavelengths = np.array([3726.0, 3729.0, 4959.0, 5007.0, 6564.61, 4861.0, 6717.0, 6584.0])
+    # Select lines from canonical catalog (LineList.default_optical) by name
+    # (select() returns lines in wavelength order, so reorder to match line_names)
+    canonical_lines = LineList.default_optical().select(names=line_names)
+    canonical_dict = {
+        name: wave
+        for name, wave in zip(canonical_lines.names, canonical_lines.wavelengths)
+    }
+    wavelengths = np.array([canonical_dict[name] for name in line_names])
     line_defs = default_line_defs(
         wavelengths=wavelengths,
         names=line_names,
