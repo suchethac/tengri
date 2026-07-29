@@ -50,12 +50,12 @@ class ToyPopulation:
         Prior support ``(low, high)`` for timescale [yr].
     """
 
-    fields: jnp.ndarray      # (N, K, n) centered-field draws [natural-log units]
-    times_yr: jnp.ndarray    # (n,) [yr]
-    data: jnp.ndarray        # (N, n)
+    fields: jnp.ndarray  # (N, K, n) centered-field draws [natural-log units]
+    times_yr: jnp.ndarray  # (n,) [yr]
+    data: jnp.ndarray  # (N, n)
     noise_std: float
-    sigma_true: float        # [dex]
-    tau_true_yr: float       # [yr]
+    sigma_true: float  # [dex]
+    tau_true_yr: float  # [yr]
     prior_sigma_bounds: tuple
     prior_tau_bounds_yr: tuple
 
@@ -155,9 +155,7 @@ def make_toy(
             s = g_sigma[flat // n_interim]
             t = g_tau[flat % n_interim]
             prior_cov = _drw_cov(s, t, times)
-            post_cov = np.linalg.inv(
-                np.linalg.inv(prior_cov) + np.eye(n_grid) / noise_std**2
-            )
+            post_cov = np.linalg.inv(np.linalg.inv(prior_cov) + np.eye(n_grid) / noise_std**2)
             post_mean = post_cov @ (
                 np.linalg.solve(prior_cov, np.full(n_grid, float(field_mean(s))))
                 + data[i] / noise_std**2
