@@ -637,6 +637,139 @@ def _joint_weights_cic_met_table(
     return joint / jnp.maximum(jnp.sum(joint), 1e-300), total_mass
 
 
+def _tabulated_sfh(params, t_obs_gyr):
+    """Interp closure + lookback knots for a runtime tabulated SFH (#996).
+
+    **The single source** shared by :meth:`StellarSEDComponent.apply` (the exact
+    forward) and :meth:`StellarSEDComponent.compute_joint_weights` (the SED-free
+    fast path). Reading a simulation history two different ways is precisely the
+    divergence #1395 was — there, the fast path never learned to read it at all
+    and silently evaluated an all-zero placeholder — so both routes call this.
+
+    SFR is edge-clamped outside the table (the ``jnp.interp`` convention);
+    lookbacks older than ``t_obs`` are dropped later by the CIC ``t_obs`` cutoff.
+    Dict-key presence is static under jit while the array *values* stay traced,
+    so two calls with different same-length tables share one compile.
+
+    Parameters
+    ----------
+    params : Mapping
+        Must contain ``sfh_t_gyr`` (cosmic time [Gyr]) and ``sfh_sfr`` [Msun/yr].
+    t_obs_gyr : ndarray, shape ()
+        Cosmic time at the observed redshift [Gyr].
+
+    Returns
+    -------
+    sfh_fn : callable
+        ``f(t_lookback_yr, **kwargs) -> SFR [Msun/yr]``, matching the registry
+        SFH-callable signature so every downstream consumer is unchanged.
+    lbt_yr : ndarray, shape (n_t,)
+        Table nodes as ascending lookback time [yr]. Doubles as the exact-knot
+        edge set for :func:`_inject_edge_knots`.
+    order : ndarray, shape (n_t,)
+        The descending-cosmic-time argsort, so a caller can reorder a companion
+        array (e.g. ``met_history``) onto the same nodes.
+
+    Raises
+    ------
+    ValueError
+        If either runtime array is absent. Raising is required, not optional:
+        the registry ``fn`` for ``sfh_model='table'`` is an all-zero placeholder,
+        so proceeding would return zero weights and zero mass, finite and
+        unwarned (#1395).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — ``argsort`` / ``interp`` on traced values.
+    """
+    if "sfh_t_gyr" not in params or "sfh_sfr" not in params:
+        raise ValueError(
+            "sfh_model='table' requires the runtime arrays "
+            "params['sfh_t_gyr'] (cosmic time [Gyr]) and "
+            "params['sfh_sfr'] [Msun/yr] (#996)."
+        )
+    # Descending cosmic time == ascending lookback; argsort keeps the pairing
+    # under jit for any input ordering.
+    order = jnp.argsort(-jnp.asarray(params["sfh_t_gyr"]))
+    lbt_yr = jnp.maximum((t_obs_gyr - jnp.asarray(params["sfh_t_gyr"])[order]) * 1e9, 0.0)
+    sfr = jnp.asarray(params["sfh_sfr"])[order]
+
+    def sfh_fn(t_lookback_yr, **_kw):
+        return jnp.interp(t_lookback_yr, lbt_yr, sfr)
+
+    return sfh_fn, lbt_yr, order
+
+
+def _tabulated_lgmet_on_ssp_ages(params, config, ssp_lg_age_gyr, tab_lbt_yr, tab_order):
+    """Per-age log10(Z) absolute on the SSP ages, for ``metallicity_model='table'``.
+
+    The single source shared by the exact forward and the fast path, for the
+    same reason as :func:`_tabulated_sfh`. Two sources: a build-time table on
+    the component config, or the runtime ``params['met_history']`` whose time
+    axis **is** the tabulated SFH's ``sfh_t_gyr`` nodes (#996).
+
+    Parameters
+    ----------
+    params : Mapping
+        May contain ``met_history``, log10(Z/Zsun) at the SFH table's nodes.
+    config : StellarSEDComponentConfig
+        Supplies the optional build-time ``met_table_log_age_yr`` /
+        ``met_table_log_z_abs``.
+    ssp_lg_age_gyr : ndarray, shape (n_age,)
+        SSP grid log10(age/Gyr).
+    tab_lbt_yr : ndarray, shape (n_t,) or None
+        Ascending lookback nodes from :func:`_tabulated_sfh`. Required for the
+        runtime path — the Z(t) nodes have no time axis of their own.
+    tab_order : ndarray, shape (n_t,) or None
+        The matching argsort, applied to ``met_history`` so Z and SFR stay paired.
+
+    Returns
+    -------
+    lgmet_on_ssp_ages : ndarray, shape (n_age,)
+        log10(Z) **absolute** at each SSP age.
+    met_log_age_yr : ndarray, shape (n_t,)
+        The resolved table's age axis — returned so ``apply`` can reuse the very
+        same table for its SFH-grid diagnostic instead of re-resolving it.
+    met_log_z_abs : ndarray, shape (n_t,)
+        The resolved table's log10(Z) absolute values.
+
+    Raises
+    ------
+    NotImplementedError
+        If ``met_history`` is given without ``sfh_model='table'``.
+    ValueError
+        If neither the build-time table nor ``met_history`` is available.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    """
+    has_cfg_table = (
+        config.met_table_log_age_yr is not None and config.met_table_log_z_abs is not None
+    )
+    if has_cfg_table:
+        met_log_age_yr = jnp.asarray(config.met_table_log_age_yr)
+        met_log_z_abs = jnp.asarray(config.met_table_log_z_abs)
+    elif "met_history" in params:
+        if tab_lbt_yr is None:
+            raise NotImplementedError(
+                "met_history needs sfh_model='table' for its time "
+                "axis (the Z(t) nodes are the sfh_t_gyr nodes, #996)."
+            )
+        met_log_age_yr = jnp.log10(jnp.maximum(tab_lbt_yr, 1.0))
+        met_log_z_abs = jnp.asarray(params["met_history"])[tab_order] + LOG10_ZSUN
+    else:
+        raise ValueError(
+            "metallicity_model='table' requires met_table_log_age_yr "
+            "+ met_table_log_z_abs on StellarSEDComponentConfig, or "
+            "the runtime params['met_history'] array (#996)."
+        )
+    lgmet_on_ssp_ages = tabulated_metallicity_on_ssp_grid(
+        ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs
+    )
+    return lgmet_on_ssp_ages, met_log_age_yr, met_log_z_abs
+
+
 def _inject_edge_knots(fine_age_yr, edges_yr, lo_yr, hi_yr):
     """Add SFH bin edges as exact knots to a dense lookback-age integrand (#765).
 
@@ -1506,22 +1639,10 @@ class StellarSEDComponent:
                     "sfh_model='table' with field=True is not supported — the "
                     "GP field draw modulates parametric SFHs only (#996)."
                 )
-            if "sfh_t_gyr" not in params or "sfh_sfr" not in params:
-                raise ValueError(
-                    "sfh_model='table' requires the runtime arrays "
-                    "params['sfh_t_gyr'] (cosmic time [Gyr]) and "
-                    "params['sfh_sfr'] [Msun/yr] (#996)."
-                )
-            # Descending cosmic time == ascending lookback; argsort keeps
-            # the pairing under jit for any input ordering.
-            _tab_order = jnp.argsort(-jnp.asarray(params["sfh_t_gyr"]))
-            _tab_lbt_yr = jnp.maximum(
-                (t_obs_gyr - jnp.asarray(params["sfh_t_gyr"])[_tab_order]) * 1e9, 0.0
-            )
-            _tab_sfr = jnp.asarray(params["sfh_sfr"])[_tab_order]
-
-            def sfh_fn(t_lookback_yr, **_kw):
-                return jnp.interp(t_lookback_yr, _tab_lbt_yr, _tab_sfr)
+            # Shared with compute_joint_weights so the exact forward and the
+            # SED-free fast path cannot read a simulation history differently
+            # (#1395/#1396).
+            sfh_fn, _tab_lbt_yr, _tab_order = _tabulated_sfh(params, t_obs_gyr)
         elif "sfh_t_gyr" in params or "sfh_sfr" in params:
             raise NotImplementedError(
                 "sfh_t_gyr/sfh_sfr passed but sfh_model="
@@ -1702,29 +1823,10 @@ class StellarSEDComponent:
             # (b) the runtime ``met_history`` param — log10(Z/Zsun) at the
             # ``sfh_t_gyr`` nodes, the legacy simulation interface (#996).
             # (b) needs sfh_model='table' to supply the time axis.
-            _has_cfg_table = (
-                self.config.met_table_log_age_yr is not None
-                and self.config.met_table_log_z_abs is not None
-            )
-            if _has_cfg_table:
-                met_log_age_yr = jnp.asarray(self.config.met_table_log_age_yr)
-                met_log_z_abs = jnp.asarray(self.config.met_table_log_z_abs)
-            elif "met_history" in params:
-                if _tab_lbt_yr is None:
-                    raise NotImplementedError(
-                        "met_history needs sfh_model='table' for its time "
-                        "axis (the Z(t) nodes are the sfh_t_gyr nodes, #996)."
-                    )
-                met_log_age_yr = jnp.log10(jnp.maximum(_tab_lbt_yr, 1.0))
-                met_log_z_abs = jnp.asarray(params["met_history"])[_tab_order] + LOG10_ZSUN
-            else:
-                raise ValueError(
-                    "metallicity_model='table' requires met_table_log_age_yr "
-                    "+ met_table_log_z_abs on StellarSEDComponentConfig, or "
-                    "the runtime params['met_history'] array (#996)."
-                )
-            lgmet_on_ssp_ages = tabulated_metallicity_on_ssp_grid(
-                ssp.ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs
+            # Shared with compute_joint_weights (#1396) — see _tabulated_sfh
+            # for why both routes must resolve the table through one function.
+            lgmet_on_ssp_ages, met_log_age_yr, met_log_z_abs = _tabulated_lgmet_on_ssp_ages(
+                params, self.config, ssp.ssp_lg_age_gyr, _tab_lbt_yr, _tab_order
             )
             sfh_lg_age_yr = jnp.log10(jnp.maximum(sfh_lbt_grid, 1.0))
             log_metallicity_history = tabulated_metallicity_on_ssp_grid(
@@ -2542,18 +2644,24 @@ class StellarSEDComponent:
         # branch below via the shared ``_apply_gp_field`` + the same DSPS weight
         # function apply uses. The remaining guards still fall back to the exact
         # forward.
-        if self.config.metallicity_model != "delta":
+        if self.config.metallicity_model not in ("delta", "table"):
             raise ValueError(
-                f"compute_joint_weights supports metallicity_model='delta' only "
-                f"(got {self.config.metallicity_model!r}); use the exact forward."
+                f"compute_joint_weights supports metallicity_model 'delta' and "
+                f"'table' (got {self.config.metallicity_model!r}); use the exact "
+                f"forward."
             )
-        unsupported_reason = _FAST_PATH_UNSUPPORTED_SFH_FNS.get(sfh_spec.fn)
-        if unsupported_reason is not None:
-            raise ValueError(
-                f"compute_joint_weights does not support "
-                f"sfh_model={self.config.sfh_model!r}: {unsupported_reason}; "
-                f"use the exact forward."
-            )
+        # A tabulated SFH is SERVED (#1396) via the shared runtime-table closure,
+        # not refused — it is routed below before the registry placeholder is ever
+        # evaluated. The map remains the backstop for the non-parametric families,
+        # and for a tabulated SFH that somehow reached here unrouted.
+        if self.config.sfh_model != "table":
+            unsupported_reason = _FAST_PATH_UNSUPPORTED_SFH_FNS.get(sfh_spec.fn)
+            if unsupported_reason is not None:
+                raise ValueError(
+                    f"compute_joint_weights does not support "
+                    f"sfh_model={self.config.sfh_model!r}: {unsupported_reason}; "
+                    f"use the exact forward."
+                )
         if has_alpha_grid(ssp):
             raise ValueError(
                 "compute_joint_weights does not support alpha-Fe SSP grids; use the exact forward."
@@ -2580,12 +2688,35 @@ class StellarSEDComponent:
         z = jnp.asarray(params.get("redshift", 0.0))
         t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
 
-        # delta metallicity → absolute log10(Z) (matches apply §4)
-        alpha_fe = jnp.asarray(params.get("met_alpha_fe", 0.0))
-        log_z_abs_scalar = (
-            effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe) + LOG10_ZSUN
-        )
+        # Runtime tabulated SFH (#996/#1396) — the SAME closure and lookback
+        # knots the exact forward builds, from the single shared helper, so the
+        # two routes cannot read a simulation history differently.
+        sfh_fn = sfh_spec.fn
+        _tab_lbt_yr = None
+        _tab_order = None
+        if self.config.sfh_model == "table":
+            if self.config.field:
+                raise NotImplementedError(
+                    "sfh_model='table' with field=True is not supported — the "
+                    "GP field draw modulates parametric SFHs only (#996)."
+                )
+            sfh_fn, _tab_lbt_yr, _tab_order = _tabulated_sfh(params, t_obs_gyr)
+
         lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
+
+        # Metallicity — delta gives one scalar log10(Z); table gives a per-age
+        # curve that routes to the CIC met-table kernel below (matches apply §4).
+        log_z_abs_scalar = None
+        lgmet_on_ssp_ages = None
+        if self.config.metallicity_model == "table":
+            lgmet_on_ssp_ages, _met_log_age_yr, _met_log_z_abs = _tabulated_lgmet_on_ssp_ages(
+                params, self.config, ssp.ssp_lg_age_gyr, _tab_lbt_yr, _tab_order
+            )
+        else:
+            alpha_fe = jnp.asarray(params.get("met_alpha_fe", 0.0))
+            log_z_abs_scalar = (
+                effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe) + LOG10_ZSUN
+            )
 
         # GP-field CSP weights — mirrors apply's field delta path EXACTLY. The
         # field modulates the SFR on the lookback grid (``_apply_gp_field``, the
@@ -2641,12 +2772,34 @@ class StellarSEDComponent:
         # total_mass, so — unlike the DSPS histogram path — the caller must NOT
         # also multiply by ``_youngest_bin_lookback_multiplier`` here.
         _fine_age_yr = _refine_sfh_table_ages(ssp_ages_yr)
-        _edges_yr = _sfh_bin_edges_yr(sfh_spec.fn, sfh_kwargs)
+        # A tabulated SFH's own nodes ARE its exact knots — same choice apply
+        # makes, so the two integrands are identical point for point.
+        _edges_yr = (
+            _tab_lbt_yr if _tab_lbt_yr is not None else _sfh_bin_edges_yr(sfh_spec.fn, sfh_kwargs)
+        )
         if _edges_yr is not None:
             _fine_age_yr = _inject_edge_knots(
                 _fine_age_yr, _edges_yr, ssp_ages_yr[0], ssp_ages_yr[-1]
             )
-        _fine_sfr = sfh_spec.fn(_fine_age_yr, **sfh_kwargs)
+        _fine_sfr = sfh_fn(_fine_age_yr, **sfh_kwargs)
+
+        # Per-age metallicity → the joint CIC kernel apply uses (#964), which
+        # spreads each mass parcel over the metallicity axis with the MDF
+        # centered on that parcel's own Z. It normalizes internally.
+        if lgmet_on_ssp_ages is not None:
+            return (
+                *_joint_weights_cic_met_table(
+                    _fine_age_yr,
+                    _fine_sfr,
+                    ssp_ages_yr,
+                    t_obs_gyr,
+                    lgmet_on_ssp_ages,
+                    lgmet_scatter,
+                    ssp.ssp_lgmet,
+                ),
+                ssp_ages_yr,
+            )
+
         age_w_cic, total_mass = _age_weights_cic(_fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr)
         lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
         joint_weights = lgmet_w[:, None] * age_w_cic[None, :]

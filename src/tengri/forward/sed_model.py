@@ -3286,9 +3286,34 @@ class SEDModel:
         igm_model = str(self._igm_model or "none")
         uses_dla = bool(self._uses_dla)
 
-        # AGN configuration
+        # AGN configuration.
+        #
+        # ``agn_model`` carries no discriminating power on its own: the
+        # composable surface is the only non-deprecated one, so
+        # ``list_agn_models()`` returns exactly one selectable entry and every
+        # composable model hashes to the same string. The six block selectors
+        # ARE the AGN axis, and each one swaps the emitting physics (a torus
+        # library, a disc SED, an NLR/BLR line set) without changing the graph
+        # shape — so omitting them left the entire axis unkeyed and the
+        # first-built kernel won, exactly like the fixed-z case below (#1450).
+        # Measured: torus='skirtor' vs 'cat3d_wind' agreed bit-for-bit within a
+        # process and disagreed by 60% in W4 across processes, depending only
+        # on build order.
         agn_model = str(self._agn_model or "none")
         agn_luminosity_mode = bool(self._agn_luminosity_mode)
+        agn_blocks = (
+            str(getattr(self, "_agn_disc_block", "none") or "none"),
+            str(getattr(self, "_agn_torus_block", "none") or "none"),
+            str(getattr(self, "_agn_nlr_block", "none") or "none"),
+            str(getattr(self, "_agn_blr_block", "none") or "none"),
+            str(getattr(self, "_agn_feii_block", "none") or "none"),
+            str(getattr(self, "_agn_attenuation_block", "none") or "none"),
+        )
+        # Cross-block normalization policy (#556). 'cigale_joint' ties
+        # disc/torus/polar to one energy-conserving reference; 'independent'
+        # puts each on its own luminosity scale. Same graph, different emitted
+        # SED — a signature entry, not a flag.
+        agn_norm = str(getattr(self, "_agn_norm", "cigale_joint") or "cigale_joint")
 
         # Radio and X-ray
         uses_radio = bool(self._uses_radio)
@@ -3539,6 +3564,8 @@ class SEDModel:
             uses_dla,
             agn_model,
             agn_luminosity_mode,
+            agn_blocks,
+            agn_norm,
             uses_radio,
             uses_xray,
             uses_shock,

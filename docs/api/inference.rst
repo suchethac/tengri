@@ -54,6 +54,12 @@ mechanism at construction — before any compile — then exposes ``.fit()`` and
    :members:
    :show-inheritance:
 
+``fit_batch`` is the lower-level alternative: it walks the rows one at a time
+without :class:`~tengri.Catalog`'s column validation, which is useful when the
+input is already in memory as arrays rather than a table.
+
+.. autofunction:: tengri.fit_batch
+
 Hierarchical inference
 ----------------------
 

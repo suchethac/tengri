@@ -508,6 +508,28 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     # advertised ``use:`` string names the exact key SEDModel.build accepts.
     category_to_group_key = {"attenuation": "atten"}
 
+    # Accept the grammar key as well as the registry label. Five of the six
+    # slots have category == grammar key, so the mismatch showed up only for
+    # attenuation — and it was this function's own ``use:`` string that told
+    # users to type ``agn={'atten': ...}``, so ``list_agn_blocks('atten')``
+    # returned an empty table for the exact name it had just advertised
+    # (#1451). Normalize before filtering rather than at each comparison.
+    group_key_to_category = {v: k for k, v in category_to_group_key.items()}
+    if category is not None:
+        category = group_key_to_category.get(category, category)
+        # ...and fail loudly on anything else. The filter used to fall through
+        # to "no category matched", so a typo, an empty string and a valid-but-
+        # wrong key were indistinguishable from a category that genuinely has
+        # no blocks — a guard that fails open is the bug.
+        if category not in AGN_BLOCKS:
+            accepted = sorted(set(AGN_BLOCKS) | set(group_key_to_category))
+            raise ValueError(
+                f"Unknown AGN block category {category!r}. "
+                f"Accepted: {', '.join(repr(c) for c in accepted)}. "
+                "('atten' and 'attenuation' both work — the first is the "
+                "build-grammar key, the second the registry label.)"
+            )
+
     out: list[dict] = []
     for cat in AGN_BLOCKS:
         if category is not None and cat != category:
@@ -766,6 +788,18 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
             if "not builder-available" not in m["short_doc"]:
                 suffix = " [not builder-available — registered, not yet DSPS-validated]"
                 m["short_doc"] = f"{m['short_doc']}{suffix}"
+            # The status said "unvalidated" while ``use:`` still advertised
+            # ``SEDModel.build(..., sfh={'type': X})`` — a copy-pasteable call
+            # that raises ValueError. That is the "advice that raises" class
+            # (#1275) reappearing in the hint field: the sweep guarding it
+            # checked that every ``use:`` *starts with* ``SEDModel.build(``,
+            # a shape test that these eight passed while failing to run.
+            # Carry the reason and the next step instead of a call, so nothing
+            # in the menu is copy-pasteable-and-broken.
+            m["use"] = (
+                "not builder-available — SEDModel.build rejects it; "
+                "browse the buildable set with list_sfh_models(status='production')"
+            )
         # ``mixture`` (burst) and ``modulator`` (field) SFH components cannot
         # stand alone — ``sfh={'type': 'burst'}`` raises "At least one additive
         # (smooth) SFH component required". Advertise the composed list form so
@@ -1258,6 +1292,12 @@ def cite_components(obj=None) -> _RegistryTable:
     elif agn_model and agn_model != "composable":
         _add("agn", agn_model, list_agn_models)
 
+    # Dust model — the birth-cloud + diffuse *geometry*, a separate paper from
+    # the attenuation *curve* below (Charlot & Fall 2000 vs Calzetti et al.
+    # 2000). ``two_component`` is the recommended default path, so leaving this
+    # menu out of the walk dropped that citation from nearly every fit.
+    _add("dust", getattr(spec, "dust_model", None), list_dust_models)
+
     # Dust attenuation — bc + diff (skip plain "power_law" default if both equal it)
     for attr in ("dust_law_bc", "dust_law_diff", "dust_law"):
         _add("dust_attenuation", getattr(spec, attr, None), list_dust_laws)
@@ -1269,6 +1309,49 @@ def cite_components(obj=None) -> _RegistryTable:
     nebular_mode = getattr(spec, "nebular_mode", None)
     if nebular_mode and nebular_mode != "off":
         _add("nebular", nebular_mode, list_nebular_backends)
+
+    # Radio, shock, IGM and X-ray — four menus the walk never consulted, so a
+    # spec that explicitly requested them produced no row and no warning
+    # (#1447). Each is gated on its own boolean, because the slot attributes
+    # keep real defaults ("bell2003", "yang20") while the component is switched
+    # off: an ungated walk would credit Bell 2003 and Yang+2020 to a plain
+    # stellar+dust fit. Over-citing is as wrong as under-citing here.
+
+    # Radio — two independent slots. Block names are not unique across the
+    # categories ("none" is registered in both), so each is resolved inside its
+    # own category, exactly as the composable AGN blocks are above.
+    if getattr(spec, "radio", False):
+        for attr, category in (("radio_sfr_mode", "sf"), ("radio_agn_model", "agn")):
+            block = getattr(spec, attr, None)
+            if block and block != "none":
+                _add(
+                    f"radio_{category}",
+                    block,
+                    lambda c=category: list_radio_blocks(category=c),
+                )
+
+    # Shock — the spec records only the on/off gate plus physics parameters,
+    # with no ``shock_model`` attribute, so an enabled gate implies the single
+    # selectable entry. A contract test fails loudly if a second shock model is
+    # ever registered and that inference stops holding.
+    if getattr(spec, "shock", False):
+        _add("shock", "mappings", list_shock_models)
+
+    # IGM — applied by default, so most fits genuinely ran Inoue+2014 (or the
+    # chosen alternative) and have never cited it.
+    if getattr(spec, "apply_igm", False):
+        igm_model = getattr(spec, "igm_model", None)
+        if igm_model and igm_model != "none":
+            _add("igm", igm_model, list_igm_models)
+
+    # X-ray. ``agn_xray_corona`` and ``xray_aird`` are accepted by the builder
+    # but absent from ``list_xray_models()``, so they resolve to no row until
+    # that menu derives from the same source as the builder (#1446); the walk
+    # then picks them up with no change here.
+    if getattr(spec, "xray", False):
+        xray_model = getattr(spec, "xray_model", None)
+        if xray_model and xray_model != "none":
+            _add("xray", xray_model, list_xray_models)
 
     # Inference method (from a Posterior)
     method = getattr(obj, "method", None)
