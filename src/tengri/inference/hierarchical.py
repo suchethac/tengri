@@ -584,10 +584,18 @@ class PopulationFitter:
         # and say so. `resolve_method` above still maps deprecated *spellings*
         # to canonical names, which is renaming, not substitution.
 
-        # Applied AFTER the overrides, not before: `mcmc_ess` maps onto
-        # `native_vi_linear`, so gating the pre-override name would let a
-        # tier="broken" backend in through the alias. `resolve_method` above
-        # checks the name only -- it never consults the registry tier (#1394).
+        # Gate on the name the caller actually asked for. This used to have to
+        # run AFTER the override table, because `mcmc_ess` was rewritten to
+        # `native_vi_linear` and gating the pre-override name would have let a
+        # tier="broken" backend in through the alias. With the table gone there
+        # is no alias left to sneak through, so the ordering constraint is gone
+        # too -- but the gate is not. `resolve_method` above checks the *name*
+        # only; it never consults the registry tier (#1394).
+        #
+        # This is the outer of two gates. `run_flat_sampler` applies
+        # `check_usable` again on the flat path, which is deliberate
+        # redundancy: the seam is reachable enough that neither gate should
+        # depend on the other still being there.
         from tengri.inference._backend_registry import refuse_if_broken
 
         refuse_if_broken(method, allow_unvalidated=allow_unvalidated)
