@@ -17,8 +17,21 @@ pytestmark = pytest.mark.regression_bug
 class TestIssue1317UnionPresence:
     """#1317: Presence-masked likelihood for heterogeneous catalogs."""
 
-    def test_band_outside_union_raises(self):
-        """A flux column not in the observation bands must raise ValueError."""
+    def test_unresolvable_flux_column_raises(self):
+        """An unreadable flux column must raise ValueError.
+
+        The referent of this check moved in #1458. It used to assert that a
+        ``flux_cols`` entry outside the observation's bands raised "not in the
+        observation" — but that check made ``flux_cols`` unable to name a real
+        catalog column at all, which is the only reason the parameter exists,
+        so it was removed. Column names are now validated against the **table**,
+        the referent they always should have had.
+
+        The case below is unchanged in outcome and stronger in message:
+        ``sdss_i`` is in neither the observation nor the table, so it still
+        raises — now naming the table's actual columns, which is what lets a
+        user fix it.
+        """
         from tengri.inference.catalog_ingest import ingest_catalog
         from tengri.observation import Photometry
 
@@ -30,15 +43,16 @@ class TestIssue1317UnionPresence:
             "sdss_r_err": np.array([0.2, 0.2]),
         }
 
-        # Providing flux_cols with a band not in the observation should raise
-        with pytest.raises(ValueError, match="not in the observation"):
+        with pytest.raises(ValueError, match="Missing flux column") as excinfo:
             ingest_catalog(
                 table,
                 photometry=phot,
                 flux_unit="cgs_fnu",
-                flux_cols=["sdss_g", "sdss_i"],  # sdss_i not in observation
+                flux_cols=["sdss_g", "sdss_i"],  # sdss_i is in neither
                 err_cols=["sdss_g_err", "sdss_i_err"],
             )
+        # The message must name what IS available, not only what is missing.
+        assert "sdss_r" in str(excinfo.value), excinfo.value
 
     def test_absent_band_contributes_zero(self):
         """Absent bands (presence=False) must not affect the fit results.
