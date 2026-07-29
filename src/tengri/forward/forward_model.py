@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """ForwardModel — the outer shell of the forward chain.
 
-Owns a tuple of :class:`Population`s and an :class:`Observation`.
+Owns a tuple of :class:`Population` objects and an :class:`Observation`.
 Exposes a single ``.predict(params)`` method that inference calls.
 The architecture spec is at
-``docs/dev/forward-model-architecture.md`` §5–§6.
+``docs/dev/archive/forward-model-architecture.md`` §5–§6.
 
 Single-population fits use bare parameter names
 (``sfh_dpl_alpha``, ``dust_tau_v``). Multi-population fits use the

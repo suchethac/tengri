@@ -173,3 +173,31 @@ Filters
 Loading and managing photometric filter transmission curves.
 
 .. autofunction:: tengri.load_filter_set
+
+Spatial Profiles
+----------------
+
+Surface-brightness profiles and the sub-models that compose them. A
+:class:`~tengri.SpatialModel` runs a list of profile components;
+:class:`~tengri.SpatialSEDModel` joins a SED chain to a spatial chain so both
+are fitted together.
+
+.. autoclass:: tengri.SpatialModel
+   :members:
+   :show-inheritance:
+
+.. autoclass:: tengri.SpatialSEDModel
+   :members:
+   :show-inheritance:
+
+.. autoclass:: tengri.Sersic
+   :members:
+   :show-inheritance:
+
+.. autoclass:: tengri.Exponential
+   :members:
+   :show-inheritance:
+
+.. autoclass:: tengri.FlatSlab
+   :members:
+   :show-inheritance:

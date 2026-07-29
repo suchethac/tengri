@@ -46,3 +46,10 @@ Fixed
 .. autoclass:: tengri.Fixed
    :members:
    :show-inheritance:
+
+Laplace
+-------
+
+.. autoclass:: tengri.Laplace
+   :members:
+   :show-inheritance:

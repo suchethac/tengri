@@ -1613,7 +1613,7 @@ def kubota_done_disc(
     The reference QSOSED/RELAGN codes use non-differentiable operations
     (root solvers, C implementations). Tengri's JAX reimplementation makes
     key approximations documented in the code (see
-    ``docs/dev/design/agn-kd-model.md``):
+    ``docs/dev/archive/design/agn_kd_model.md``):
 
     - R_hot: 40-step JAX-compatible bisection (exact to ~10^{-12}).
     - Warm zone: precomputed nthcomp templates with (Γ_w, kT_e) interpolation

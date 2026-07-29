@@ -47,7 +47,7 @@ Three blocks per outer iteration, ordered by importance:
 - `BlockSchedule.hierarchical()` in `vi_config.py` defines the blocks
 - `HierarchicalFitter._run_evi_jit` has a flat-array JIT engine
 - `fitter.fit_batch(galaxies)` for batch fitting (default method: `native_geovi`)
-- `OptimizationSchedule` class in `vi_config.py` for custom schedules
+- (Removed) `OptimizationSchedule` in `vi_config.py` — deleted as dead code in #1293; nothing consumed it and no `schedule=` parameter exists.
 - `_simple_cg` is a module-level function for catalog engine
 
 ### What's needed

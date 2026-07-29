@@ -1733,10 +1733,29 @@ _LGMET_HI = 0.5
 
 @jax.jit
 def _tw_cuml_kern(x, m, h):
-    """Triweight kernel CDF (same as DSPS _tw_cuml_kern).
+    """Triweight kernel CDF — bit-exact mirror of DSPS ``_tw_cuml_kern``.
 
     Cumulative distribution of the triweight kernel with support |z| < 3.
     Returns 0 for z < -3, 1 for z > 3, smooth polynomial between.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    **Do not consolidate this with** :func:`tengri.utils.interpolation.tw_cuml_kern`.
+    The two evaluate the same polynomial but in different forms, deliberately:
+
+    - ``utils.interpolation`` (and ``utils.diffndhist``) use Horner's method,
+      chosen for fewer FLOPs and better conditioning.
+    - **this copy uses the direct-power form**, because it reproduces upstream
+      DSPS term-for-term so that ``compute_lgmet_weights`` stays bit-comparable
+      with ``dsps.utils._tw_cuml_kern``.
+
+    Measured difference between the two forms over ``z`` in [-4, 4]:
+    ``3.3e-16`` in float64 and ``2.4e-7`` in float32 — about 1 ulp, so either
+    form is numerically fine in isolation. Rewriting this one to Horner would
+    silently drop the upstream-parity property, which is the only reason the
+    duplicate exists (#1401).
     """
     z = (x - m) / h
     val = -5.0 * z**7 / 69984.0 + 7.0 * z**5 / 2592.0 - 35.0 * z**3 / 864.0 + 35.0 * z / 96.0 + 0.5

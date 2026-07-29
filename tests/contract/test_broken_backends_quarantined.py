@@ -18,6 +18,13 @@ runtime signal at all.
 
 The fix is a third tier. These tests hold the tier honest in both directions:
 nothing usable may be hidden, and nothing broken may be reachable by accident.
+
+Extended for #1394, which showed the second half needs its own tests. The tier
+gate was correct and every one of its own assertions passed — while
+``CatalogFitter.run`` and ``PopulationFitter.run`` *defaulted* to
+``native_vi_linear`` and never called :func:`check_usable` at all. A gate
+working and every entry point reaching it are different claims, and only the
+first was being measured.
 """
 
 from __future__ import annotations
@@ -119,6 +126,199 @@ def test_fitter_run_accepts_allow_unvalidated():
     sig = inspect.signature(tengri.Fitter.run)
     assert "allow_unvalidated" in sig.parameters
     assert sig.parameters["allow_unvalidated"].default is False
+
+
+#: Every public entry point that dispatches inference by method name.
+#: ``(label, importable, attribute)``. Add a row when a new one appears —
+#: that is the point: the gate must not be something each new entry point has
+#: to remember to call.
+DISPATCH_ENTRY_POINTS = [
+    ("Fitter.run", "tengri", "Fitter"),
+    ("CatalogFitter.run", "tengri", "CatalogFitter"),
+    ("PopulationFitter.run", "tengri", "PopulationFitter"),
+    ("Catalog.fit", "tengri", "Catalog"),
+]
+
+
+def _entry_points():
+    import importlib
+
+    for label, module, cls in DISPATCH_ENTRY_POINTS:
+        obj = getattr(importlib.import_module(module), cls)
+        yield label, getattr(obj, "fit" if label.endswith(".fit") else "run")
+
+
+@pytest.mark.parametrize("label", [row[0] for row in DISPATCH_ENTRY_POINTS])
+def test_no_dispatch_default_names_a_broken_backend(label):
+    """No public entry point may DEFAULT to a backend that cannot run (#1394).
+
+    ``CatalogFitter.run`` and ``PopulationFitter.run`` both shipped with
+    ``method="native_vi_linear"`` — ``tier="broken"``, and documented as
+    segfaulting on the DPL/dense_basis mocks this repo ships. Neither called
+    :func:`check_usable`, so the default was not even a loud refusal: it
+    dispatched straight into the backend module.
+
+    Structural, not behavioral, on purpose — it reads the signature, so it
+    reddens on the *declaration* without needing a fittable model.
+    """
+    import inspect
+
+    fn = dict(_entry_points())[label]
+    default = inspect.signature(fn).parameters["method"].default
+    assert default not in KNOWN_BROKEN, (
+        f"{label} defaults to method={default!r}, which is tier='broken'. "
+        "A default is what a user gets for not choosing; it must be a backend "
+        "that runs."
+    )
+
+
+@pytest.mark.parametrize("label", [row[0] for row in DISPATCH_ENTRY_POINTS])
+def test_every_dispatch_entry_point_exposes_the_escape_hatch(label):
+    """If a surface can refuse, it must also say how to proceed anyway."""
+    import inspect
+
+    fn = dict(_entry_points())[label]
+    params = inspect.signature(fn).parameters
+    assert "allow_unvalidated" in params or "kwargs" in params, (
+        f"{label} can refuse a broken backend but offers no allow_unvalidated route"
+    )
+
+
+def test_the_batched_paths_actually_reach_the_gate():
+    """LOAD-BEARING. Neuter: drop ``refuse_if_broken`` from ``CatalogFitter.run``.
+
+    The tier gate working and every entry point *reaching* it are different
+    claims. ``resolve_method`` validates the name only, and the batched paths
+    dispatch straight into the backend module — so before #1394 a broken method
+    ran here with no ``BackendError`` anywhere on the path.
+
+    ``CatalogFitter.__init__`` only stores its arguments, so a bare instance is
+    enough to prove the gate fires *before* any model work.
+    """
+    from tengri import CatalogFitter
+
+    fitter = CatalogFitter(None, [{}])
+    with pytest.raises(BackendError, match="allow_unvalidated=True"):
+        fitter.run("native_vi_linear", key=None)
+
+
+def test_the_batched_escape_hatch_gets_past_the_gate():
+    """A gate that never opens is as wrong as one that never closes.
+
+    Past the gate the call proceeds into real work and fails on the ``None``
+    model — any error *other* than ``BackendError`` proves the gate opened.
+    """
+    from tengri import CatalogFitter
+
+    fitter = CatalogFitter(None, [{}])
+    with pytest.raises(Exception) as exc:
+        fitter.run("native_vi_linear", key=None, allow_unvalidated=True)
+    assert not isinstance(exc.value, BackendError), "allow_unvalidated=True did not open the gate"
+
+
+#: Modules holding module-level dispatch functions (``fit_model``, ``fit_batch``).
+_DISPATCH_MODULES = ("tengri.forward.convenience",)
+
+#: Names that take a ``method`` argument and dispatch on it.
+_DISPATCH_VERBS = ("run", "fit", "fit_batch", "fit_model")
+
+
+def _discovered_method_defaults():
+    """Every ``method=`` default reachable from the public surface.
+
+    Derived, not hand-listed. ``DISPATCH_ENTRY_POINTS`` above is readable and
+    load-bearing for the behavioral tests, but a hand-maintained list cannot
+    catch the case it exists for: a *new* entry point nobody added a row for.
+    Discovery found seven surfaces past the four listed — ``fit_batch`` on
+    three classes among them.
+
+    Yields ``(qualname, default)`` for string defaults only; ``None`` /
+    sentinel defaults resolve elsewhere and are not a declared choice.
+    """
+    import importlib
+    import inspect
+    import warnings
+
+    import tengri
+
+    # THREE surfaces, unioned. `dir()` alone is not enough and the omission is
+    # not academic: `Catalog` is in `__all__` but not `dir()`, and
+    # `CatalogFitter` is in NEITHER (module `__getattr__` only, deprecated by
+    # #1369). Both are the classes #1394 was about, so a `dir()`-only scan would
+    # have missed the very bug this test exists for.
+    candidates = (
+        set(dir(tengri))
+        | set(getattr(tengri, "__all__", ()))
+        | {cls for _, _, cls in DISPATCH_ENTRY_POINTS}
+    )
+
+    seen = set()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # deprecated re-exports warn on getattr
+        targets = []
+        for name in sorted(candidates):
+            if name.startswith("_"):
+                continue
+            try:
+                obj = getattr(tengri, name)
+            except Exception:
+                continue
+            if inspect.isclass(obj):
+                targets.extend((f"{name}.{v}", getattr(obj, v, None)) for v in _DISPATCH_VERBS)
+        for mod_name in _DISPATCH_MODULES:
+            mod = importlib.import_module(mod_name)
+            targets.extend((f"{mod_name}.{v}", getattr(mod, v, None)) for v in _DISPATCH_VERBS)
+
+        for qualname, fn in targets:
+            if fn is None or not callable(fn) or id(fn) in seen:
+                continue
+            seen.add(id(fn))
+            try:
+                param = inspect.signature(fn).parameters.get("method")
+            except (ValueError, TypeError):
+                continue
+            if param is not None and isinstance(param.default, str):
+                yield qualname, param.default
+
+
+def test_no_discovered_method_default_is_a_broken_backend():
+    """The anti-drift form: DERIVED from the public surface, not hand-listed.
+
+    ``test_no_dispatch_default_names_a_broken_backend`` covers four entry points
+    someone wrote down. This one walks every public class and dispatch module
+    and finds them, so an entry point added later — with no row in any list — is
+    still gated. That is the failure mode #1394 actually was: nobody was
+    maintaining a list.
+    """
+    found = dict(_discovered_method_defaults())
+
+    # A scan that silently matches nothing would pass vacuously — the exact
+    # fail-open shape this whole file exists to prevent.
+    assert len(found) >= len(DISPATCH_ENTRY_POINTS), (
+        f"discovery found only {len(found)} method= defaults "
+        f"({sorted(found)}); the scan is broken, not the code"
+    )
+
+    broken = {name: default for name, default in found.items() if default in KNOWN_BROKEN}
+    assert not broken, (
+        "public dispatch surfaces default to a tier='broken' backend:\n  "
+        + "\n  ".join(f"{name} -> method={default!r}" for name, default in sorted(broken.items()))
+    )
+
+
+def test_refuse_if_broken_passes_unknown_names_through():
+    """Name validation is ``resolve_method``'s job, not the gate's.
+
+    Several canonical hierarchical methods (``vi_nonlinear``) have no registry
+    entry. Raising on an unregistered name would convert a missing registration
+    into a broken user call.
+    """
+    from tengri.inference._backend_registry import refuse_if_broken
+
+    refuse_if_broken("vi_nonlinear")
+    refuse_if_broken("a_method_that_was_never_registered")
+    with pytest.raises(BackendError):
+        refuse_if_broken("native_vi_linear")
 
 
 def test_an_unknown_tier_is_rejected_at_registration():

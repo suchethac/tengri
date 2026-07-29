@@ -83,27 +83,28 @@ result = fitter.run("native_geovi", n_iterations=15)
 
 ### With control
 
+The per-iteration geoVI cadence is resolved **inside** the backend
+(`inference/backends/vi/nifty.py`), not passed in: `nonlinear_resample` at
+iteration 0 and every `resample_every` (5) iterations, `nonlinear_update`
+between. What you control is `VIConfig`:
+
 ```python
-from tengri.vi_config import OptimizationSchedule
+from tengri.inference.vi_config import VIConfig
 
-# geoVI with custom refresh rate
-sched = OptimizationSchedule.geovi(
+cfg = VIConfig(
     n_iterations=25,
-    resample_every=8,   # refresh every 8 instead of 5
-    n_samples=6,        # more scouts per iteration
+    n_samples=6,             # -> 12 effective, mirror_samples=True
+    evi_linear_fraction=0.5, # EVI only: fraction of iterations run as MGVI first
 )
-result = fitter.run("geovi", schedule=sched)
+result = fitter.run("vi", vi_config=cfg)
 
-# EVI: cheap linear warmup, then geoVI
-sched = OptimizationSchedule.evi(
-    n_iterations=20,
-    transition=10,      # switch from MGVI to geoVI at iter 10
-)
-result = fitter.run("evi", schedule=sched)
-
-# Pure MGVI (fastest, least accurate)
-result = fitter.run("mgvi", n_iterations=10)
+# MGVI (linear) instead of geoVI
+result = fitter.run("vi_linear", n_iterations=10)
 ```
+
+There is no `schedule=` parameter. `OptimizationSchedule` was deleted in #1293
+as dead code — nothing ever consumed it, and the cadence it expressed is the
+one the backend already applies internally.
 
 ### Method hierarchy
 
@@ -217,20 +218,9 @@ tengri has two VI paths with the same variational objective but different driver
 | `"vi_native"` | Pure-JAX `lax.while_loop` | ~18× faster warm-run; **not posterior-equivalent to `"vi"` in general** (see benchmark below). |
 | `"vi_native_linear"` | Pure-JAX MGVI | Same as above, MGVI variant. |
 
-**Deprecated aliases** `"native_geovi"`, `"native_mgvi"`, `"native_evi"`, `"geovi"`, `"mgvi"`, `"evi"` still work (with `DeprecationWarning`) but should not be used in new code.
+**Method names.** The registered VI backends are `"vi"` (NIFTy geoVI, primary), `"vi_nonlinear_fast"` (geoVI without Python logging, primary), and `"vi_linear"` / `"vi_linear_fast"` (NIFTy MGVI, experimental). Older names — `"geovi"`, `"mgvi"`, `"evi"`, `"native_geovi"`, `"vi_native"` and friends — are **not aliases and do not resolve**; they raise. `tengri.list_inference_methods()` is the live list.
 
 **Important equivalence caveat:** A 2026-04-17 benchmark (`bench/reports/2026-04-17_native_vs_nifty.md`) compared `"vi"` vs `"vi_native"` on a 7-parameter parametric setup (15 KL iterations, 6 samples, matched `init_from="random"`). Native was 18.5× faster on warm run, but converged posterior means disagreed by up to 2.3σ on some parameters. **The two paths target the same objective with different solver details and land in different modes on multi-modal problems.** Treat `"vi_native"` as "fast but not identical" — validate per-problem with NUTS (for D ≤ 20) before trusting its posterior.
-
-### OptimizationSchedule factories
-
-`OptimizationSchedule` (in `inference/vi_config.py`) builds per-iteration control callables for the native path. Use via `fitter.run("vi_native", schedule=…)` or passing the schedule's `n_iterations` and `sample_mode_at`.
-
-| Factory | Behavior | When to use |
-|---|---|---|
-| `OptimizationSchedule.geovi(n_iterations=15, resample_every=5)` | Resample at iter 0 and every 5 iters; update between. | Recommended default for stochastic SFH fits. |
-| `OptimizationSchedule.evi(n_iterations=20, transition=10)` | MGVI (linear) for first `transition` iters, then geoVI. | Faster warm-up; good when MAP init is far from the true mode. |
-| `OptimizationSchedule.mgvi(n_iterations=15)` | Pure linear resample. | Debugging high-D problems. |
-| `OptimizationSchedule.gibbs(blocks, resample_every=5)` | Block-Gibbs cycle over `BlockStep` groups. | Hierarchical inference where you want to freeze shared vs. per-galaxy params alternately. `BlockSchedule.individual_geovi()` and `BlockSchedule.hierarchical()` provide ready-made block lists. |
 
 ### `n_samples` gotcha
 

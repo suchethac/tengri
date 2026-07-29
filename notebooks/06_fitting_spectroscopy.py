@@ -149,18 +149,25 @@ print(f"Mock: {len(flux)}-pixel R=2000 spectrum, SNR = 30/pixel")
 # observation says so, so there is no channel to declare. With
 # `SpectrumPrecomp` the forward pass is the lookup-table path, so the whole fit
 # runs in seconds rather than minutes.
-#
-# > **This notebook does not currently run on `main` (#1438).** Since #1398 the
-# > HMC chain here does not move — every draw is identical — so
-# > `posterior.rhat()` returns an empty dict (it drops zero-variance
-# > parameters) and the cell below raises `ValueError: max() iterable argument
-# > is empty`. Bisected: healthy at `883d66439`, frozen at `31f88f76f`. The
-# > outputs shown were produced immediately before that commit; they are the
-# > last reproducible ones. Re-execute once #1438 is fixed.
 
 # %%
 t0 = time.perf_counter()
-posterior = forward.fit(flux, noise, key=jax.random.PRNGKey(1), **HMC_VALIDATED)
+# `precondition=True` is load-bearing here, not decoration. This posterior has a
+# sharp step-size cliff: warmup adaptation lands on ~0.063 unpreconditioned and
+# every transition then diverges, whereas whitening the metric lands on ~0.047
+# and the chain samples cleanly. Measured, one fresh process per arm:
+#
+#     precondition  warmup   step    divergences  unique draws
+#     off             300    0.041      0            568
+#     off            1000    0.063    544              1
+#     on             1000    0.047      0            572
+#
+# Preconditioning is opt-in since #1398; this fit is one of the cases that wants
+# it. A frozen chain is no longer silent — `rhat()` refuses to report on one
+# (#1438) — but it is better not to land there.
+posterior = forward.fit(
+    flux, noise, key=jax.random.PRNGKey(1), precondition=True, **HMC_VALIDATED
+)
 rhat = posterior.rhat()
 print(
     f"HMC: {time.perf_counter() - t0:.0f}s   "
