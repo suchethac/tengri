@@ -3,45 +3,50 @@ r"""Contract: ``dust.emission``'s ``'*'`` must free parameters the backend reads
 
 ``dust={'emission': {'type': X, '*': FREE}}`` frees the same seven parameters
 whichever engine ``X`` names, and for two engines not one of the seven is a
-parameter that engine reads (#1482):
-
-===================  =============  ==============
-``emission.type``    freed by ``*``  actually live
-===================  =============  ==============
-``dale2014``         7              **0**
-``casey2012``        7              **0**
-``draine_li2007``    7              1
-``themis``           7              2
-===================  =============  ==============
+parameter that engine reads (#1482).
 
 Each backend *does* declare its own parameters correctly — every one is a
-:class:`SEDModelComponent` and ``Dale2014IRSEDComponent.declared_parameters()``
-returns exactly ``dust_alpha_dale`` and ``dust_frac_agn``. The wildcard does not
-consult them. ``'*': FREE`` means "use the registry default", so it can only free
-a parameter whose registry default is a *distribution*; the 15 dust-emission
-parameters defaulting to ``Fixed`` scalars stay pinned. Which 7 of the 22 carry
-distribution defaults has nothing to do with the selected engine.
+:class:`SEDModelComponent` and ``Dale2014IRSEDComponent`` declares exactly
+``alpha_dale`` and ``frac_agn``. The wildcard does not consult them. ``'*': FREE``
+means "use the registry default", so it can only free a parameter whose registry
+default is a *distribution*; the 15 dust-emission parameters defaulting to
+``Fixed`` scalars stay pinned. Which 7 of the 22 carry distribution defaults has
+nothing to do with the selected engine.
 
-``_check_wildcard_freed_something`` guards precisely this failure — but it is
+``_check_wildcard_freed_something`` guards precisely this failure, but it was
 scoped to the **group**, raising only when *zero* of the group's 22 parameters
-were freed. Those same 7 always free, so ``any(freed)`` is always true and the
-guard can never fire for ``dust.emission``, including when zero of the selected
-backend's parameters were freed. It is a guard that fails open.
+were freed. Those same 7 always free, so ``any(freed)`` was always true and the
+guard could never fire for ``dust.emission`` — including when zero of the
+selected backend's parameters were freed. A guard that fails open.
 
-So a sampler explores up to seven dimensions that cannot move the likelihood by
-one ULP, while the knob that *would* have worked stays at its default: Dale+2014
-reads ``dust_alpha_dale`` (varying it moves the photometry 9x), and that is one
-of the 15 the wildcard cannot reach. ``dust_alpha`` — which it does free — is
-THEMIS's slope.
+``_narrow_outcome_to_selected_component`` restricts the outcome to the selected
+component's ``declared_parameters()`` before the check, so the guard now fires:
 
-This pins the invariant rather than the instances: **whatever** ``'*'`` expands
-to, at least one freed parameter must move the observable. Adding a backend
-whose parameters the bucket does not cover fails here on the day it lands.
+======================  ==================  =========================
+``emission.type``       declares            ``'*': FREE`` outcome
+======================  ==================  =========================
+``dale2014``            2, both unfreeable  **raises** ParameterError
+``casey2012``           3, all unfreeable   **raises** ParameterError
+``themis``              4, 2 freeable       builds
+``draine_li2014``       4, 2 freeable       builds
+``draine_li2007``       3, 1 freeable       builds
+``modified_blackbody``  3, 1 freeable       builds
+``astrodust``           1, freeable         builds
+======================  ==================  =========================
+
+**Residual, deliberately not fixed here.** The expansion itself is still
+backend-blind: ``themis`` builds, but alongside its own two it also frees five
+parameters it never reads (``dust_alpha_dl14``, ``dust_epsilon_mbb``,
+``dust_f_cold``, ``dust_f_pah``, ``dust_lgU``) — silent no-op dimensions a
+sampler would explore for free. Narrowing the *expansion* rather than only the
+*check* changes the free-parameter count for existing callers, so it is left to
+#1482. ``test_expansion_is_still_backend_blind`` pins that residual so it cannot
+be forgotten, and inverts when it is fixed.
 
 The bands span 1500 A - 500 um so dust IR emission has somewhere to land — an
 optical-only filter set would report every dust-emission parameter as inert for
-the honest reason that its emission falls outside the bandpasses, which is
-filter coverage rather than a wiring defect.
+the honest reason that its emission falls outside the bandpasses, which is filter
+coverage rather than a wiring defect.
 """
 
 from __future__ import annotations
@@ -52,6 +57,7 @@ import numpy as np
 import pytest
 
 from tengri import FIXED, FREE, Fixed, SEDModel
+from tengri.config.exceptions import ParameterError
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
 
@@ -71,9 +77,13 @@ EMISSION_TYPES = (
     "astrodust",
 )
 
-#: Backends for which the wildcard currently frees *no* live parameter (#1482).
-#: ``strict=True`` so the fix cannot land without deleting these entries.
-ZERO_LIVE_PENDING_1482 = {"dale2014", "casey2012"}
+#: Backends every one of whose declared parameters defaults to a ``Fixed`` scalar,
+#: so ``'*': FREE`` can free none of them and the guard must refuse the build.
+#: Maps type -> the declared names the error is required to name.
+NOTHING_FREEABLE = {
+    "dale2014": {"dust_alpha_dale", "dust_frac_agn"},
+    "casey2012": {"dust_T", "dust_beta_ir", "dust_alpha_mir"},
+}
 
 #: Dust attenuation deep enough that L_absorbed is large and IR emission is a
 #: real term rather than a rounding error.
@@ -93,7 +103,7 @@ def panchromatic_obs():
     return Observation(photometry=Photometry(filters=tuple(_tophat(c) for c in centers)))
 
 
-def _build(ssp, obs, emission_type):
+def _build(ssp, obs, emission_type, wildcard=FREE):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
@@ -104,7 +114,7 @@ def _build(ssp, obs, emission_type):
             "*": FIXED,
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
-            "emission": {"type": emission_type, "*": FREE},
+            "emission": {"type": emission_type, "*": wildcard},
         },
         neb={"type": "none"},
         redshift=Fixed(0.5),
@@ -141,8 +151,8 @@ def test_wildcard_frees_at_least_one_live_parameter(
     synthetic_ssp_wide, panchromatic_obs, emission_type
 ):
     """``'*': FREE`` must free something the selected engine actually reads."""
-    if emission_type in ZERO_LIVE_PENDING_1482:
-        pytest.xfail(f"#1482: dust.emission '*' frees no live parameter for {emission_type}")
+    if emission_type in NOTHING_FREEABLE:
+        pytest.skip(f"{emission_type} has nothing freeable — covered by the raise test")
 
     model = _build(synthetic_ssp_wide, panchromatic_obs, emission_type)
     freed, live = _live_params(model)
@@ -154,31 +164,77 @@ def test_wildcard_frees_at_least_one_live_parameter(
     )
 
 
-def test_the_wildcard_expansion_ignores_the_selected_backend(synthetic_ssp_wide, panchromatic_obs):
-    """Pin the root cause: the freed set does not depend on ``emission.type``.
+@pytest.mark.parametrize("emission_type", sorted(NOTHING_FREEABLE))
+def test_wildcard_refuses_when_the_backend_has_nothing_freeable(
+    synthetic_ssp_wide, panchromatic_obs, emission_type
+):
+    """A backend whose every parameter is Fixed-by-default must refuse, not pretend.
 
-    Deleting this test is the signal that #1482 is fixed — once ``'*'`` resolves
-    per backend the freed sets must differ, and this assertion inverts.
+    Before #1482 this built happily and handed back seven free dimensions from
+    *other* engines, so a sampler reported a confident posterior over parameters
+    that cannot move the likelihood by one ULP.
+    """
+    with pytest.raises(ParameterError) as excinfo:
+        _build(synthetic_ssp_wide, panchromatic_obs, emission_type)
+
+    message = str(excinfo.value)
+    declared = NOTHING_FREEABLE[emission_type]
+
+    # The error must name the engine's OWN parameters — naming the 22-name group
+    # is what made the old group-scoped guard useless.
+    for name in declared:
+        assert name in message, (
+            f"the guard fired but never named {name}, which is what the caller "
+            f"needs to free: {message}"
+        )
+    assert f"0 of {len(declared)}" in message, (
+        f"the guard is still counting the whole group rather than "
+        f"{emission_type}'s {len(declared)} declared parameters: {message}"
+    )
+
+
+def test_expansion_is_still_backend_blind(synthetic_ssp_wide, panchromatic_obs):
+    """Pin the residual: the freed *set* still ignores ``emission.type`` (#1482).
+
+    Narrowing the check stopped the zero-live builds, but a backend that frees at
+    least one of its own still also frees every other backend's freeable
+    parameter. ``themis`` reads two of the seven it receives; the other five are
+    silent no-op dimensions.
+
+    This inverts once the expansion — not just the guard — resolves per backend.
     """
     freed_sets = {
-        etype: tuple(_build(synthetic_ssp_wide, panchromatic_obs, etype).spec.free_params)
-        for etype in ("dale2014", "themis", "casey2012")
+        etype: tuple(
+            p
+            for p in _build(synthetic_ssp_wide, panchromatic_obs, etype).spec.free_params
+            if p.startswith("dust_")
+        )
+        for etype in ("themis", "draine_li2007", "modified_blackbody", "astrodust")
     }
     distinct = set(freed_sets.values())
 
     assert len(distinct) == 1, (
-        "dust.emission '*' now expands per backend — #1482 is fixed. Remove this "
-        f"test and the ZERO_LIVE_PENDING_1482 xfails. Freed sets: {freed_sets}"
+        "dust.emission '*' now expands per backend — the #1482 residual is fixed. "
+        f"Remove this test and update the module docstring. Freed sets: {freed_sets}"
+    )
+
+    # And the over-freeing is real, not cosmetic: themis reads 2 of the 7.
+    themis = _build(synthetic_ssp_wide, panchromatic_obs, "themis")
+    freed, live = _live_params(themis)
+    assert len(live) < len(freed), (
+        f"themis now reads every parameter it is handed ({freed}) — the residual "
+        "is fixed, update this test"
     )
 
 
 def test_dale2014_reads_alpha_dale_not_alpha(synthetic_ssp_wide, panchromatic_obs):
-    """The knob that works is the one the wildcard omits (#1482).
+    """The knob that works is the one the wildcard cannot reach (#1482).
 
     Without this, a fix could satisfy the sweep above by freeing *any* live
     parameter while leaving Dale+2014's slope unreachable.
     """
-    model = _build(synthetic_ssp_wide, panchromatic_obs, "dale2014")
+    # Built with the wildcard FIXED, since '*': FREE now correctly refuses here.
+    model = _build(synthetic_ssp_wide, panchromatic_obs, "dale2014", wildcard=FIXED)
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
     def photometry_at(name, value):
@@ -189,25 +245,57 @@ def test_dale2014_reads_alpha_dale_not_alpha(synthetic_ssp_wide, panchromatic_ob
         "dust_alpha now moves a dale2014 model — the parameter split changed"
     )
 
-    # Dale+2014's own slope: wired correctly, but never freed by the wildcard.
+    # Dale+2014's own slope: wired correctly, but Fixed-by-default so the
+    # wildcard cannot free it. Only an explicit prior reaches it.
     spread = np.max(
         np.abs(
             photometry_at("dust_alpha_dale", 1.0625) / photometry_at("dust_alpha_dale", 2.5) - 1.0
         )
     )
     assert spread > 1e-3, f"dust_alpha_dale no longer drives dale2014 (rel change {spread:.2e})"
-    assert "dust_alpha_dale" not in model.spec.free_params, (
-        "dust_alpha_dale is now freed by the wildcard — #1482 is fixed, update this test"
+
+
+def test_an_explicit_prior_reaches_the_parameter_the_wildcard_cannot(
+    synthetic_ssp_wide, panchromatic_obs
+):
+    """The remedy the error message recommends must actually work.
+
+    The guard tells the caller to "pass explicit priors instead, e.g.
+    dust={'alpha_dale': Uniform(lo, hi)}". Advice that does not work is worse
+    than no advice.
+    """
+    from tengri import Uniform
+
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=panchromatic_obs,
+        sfh={"type": "dpl", "*": FIXED},
+        dust={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "*": FIXED,
+            "tau_bc": _TAU_BC,
+            "tau_diff": _TAU_DIFF,
+            "emission": {"type": "dale2014", "alpha_dale": Uniform(1.0625, 4.0)},
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.5),
     )
+
+    assert "dust_alpha_dale" in model.spec.free_params, (
+        "the explicit prior the guard recommends did not free dust_alpha_dale"
+    )
+    _freed, live = _live_params(model)
+    assert "dust_alpha_dale" in live, "dust_alpha_dale is free but does not move the photometry"
 
 
 def test_dust_emission_actually_contributes(synthetic_ssp_wide, panchromatic_obs):
     """Anti-vacuity: if IR emission were negligible, no parameter could be live.
 
-    The sweep above would then pass or fail for reasons unrelated to the
+    The sweeps above would then pass or fail for reasons unrelated to the
     wildcard. Pin that the far-IR bands are genuinely emission-dominated.
     """
-    with_emission = _build(synthetic_ssp_wide, panchromatic_obs, "dale2014")
+    with_emission = _build(synthetic_ssp_wide, panchromatic_obs, "dale2014", wildcard=FIXED)
     without = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=panchromatic_obs,
