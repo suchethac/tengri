@@ -338,22 +338,49 @@ jobs:
     #   regression-d 19m · components 19m · contract 18m · regression-b1 17m
     #   regression-b2 9m · regression-a 6m · regression-c 4m · physics 3m
     #
-    # That was a 17-19 min near-tie across the top four, and the conclusion drawn
-    # from it — "no single long pole left to attack" — was correct ON ITS DATE.
-    # It stopped being correct. Re-measured 2026-07-29 (run 30438809385):
+    # STOP: adding shards does not make this job finish sooner. Measured, twice.
     #
-    #   regression-d 22m41s · components 20m54s · contract 18m30s
-    #   regression-b1 14m24s · regression-b2 12m12s · regression-a 6m06s
-    #   regression-c 4m48s · physics 3m24s
+    # Every timing note in this file before 2026-07-29 quoted the duration of the
+    # SLOWEST SHARD and called it the wall clock. That is not the wall clock. Only
+    # six jobs run at once — the concurrency cap was 6 in both runs below — so
+    # shards queue, and the stage span is (time the longest shard waits for a
+    # slot) + (how long it then runs). Splitting trades one term for the other.
     #
-    # First-to-fourth is now 8.3 min, not 2: the tie broke, `regression-d` became
-    # a real pole, and `regression-b1` fell from 17 to 14. Hence the splits below.
-    # This block has now gone stale FOUR times; that is a property of a file list
-    # that grows, not of carelessness. Never state a long-pole claim here without
-    # the date and run id beside it, and re-measure from a completed run's job
+    # The A/B, same suite, same day:
+    #
+    #                        shards  slowest shard  test job-min  STAGE SPAN
+    #   run 30438809385         8       22m41s          103        40.6 min
+    #   run 30462704147        11       16m48s          113        40.7 min
+    #
+    # The slowest shard fell 6 min and the span did not move, because the queue
+    # absorbed exactly what the split gave back: the longest shard got its slot
+    # 18 min in before, 24 min in after. Total work rose 10 min — each extra job
+    # re-pays checkout, pip install and cache restore. Matrix order does not help:
+    # GitHub dispatched in neither run's declared order, so the long shards cannot
+    # be scheduled first on purpose.
+    #
+    # The 11-shard split was therefore REVERTED. What survives is what did not
+    # depend on the speed claim: one split mechanism, `-maxdepth 1` in place of a
+    # stale-able --ignore list, and `--durations=25`.
+    #
+    # The levers that DO move the span, in order of measured size:
+    #
+    #   1. Less total work. Span scales with it under a fixed cap. Two files are
+    #      13% of all test time (per-test numbers from run 30462704147):
+    #        tests/regression/test_issue_1134_ztable_accuracy.py   450 s
+    #          (a 4-point sweep; the [800] point alone is 193 s)
+    #        tests/unit/inference/test_cache_policy.py             364 s
+    #          (one test, test_forward_prewarm_*, is 257 s of it)
+    #      Per-job setup is another ~2 min x 8 jobs = ~16 min of the 103.
+    #   2. A higher concurrency cap. That is an account/plan setting, not a
+    #      workflow one, and it costs money — so it is a decision, not a patch.
+    #
+    # Historical note, kept because it is the same error one level down: this
+    # block previously asserted the top four shards were a 17-19 min near-tie.
+    # Re-measured 2026-07-29 they were 22m41s / 20m54s / 18m30s / 14m24s — an
+    # 8.3 min spread. It has now gone stale four times. State no timing claim
+    # here without its date and run id, and re-measure from a completed run's job
     # durations — never from progress percentages (see the 2.3x error below).
-    # `--durations=25` is now passed to pytest so the next re-measure has per-test
-    # numbers on a CI runner instead of a contended laptop.
     #
     # regression and physics were ONE shard until 2026-07. They were split because
     # the paired shard walked back into the 16 GB ceiling: it died at ~21-22 min and
@@ -393,23 +420,8 @@ jobs:
         # (~0.66 GB/test never released). Fix that and `-n 2` should come back —
         # revisit with a measurement, not an assumption. See #1346.
         include:
-          # Split in two (2026-07-29). Same knob as the regression split below and
-          # for the same documented reason -- more RUNNERS is free, more workers
-          # per runner is not -- applied to a shard that had never had it: 307
-          # files on one runner at 18m30s. `nproc` stays 2, so each runner's peak
-          # is unchanged; this buys wall clock only.
-          - shard: contract-1
-            paths: ""
-            split_dir: tests/contract
-            split_part: "1"
-            split_of: "2"
-            nproc: 2
-            budget: 50
-          - shard: contract-2
-            paths: ""
-            split_dir: tests/contract
-            split_part: "2"
-            split_of: "2"
+          - shard: contract
+            paths: tests/contract
             nproc: 2
             budget: 50
           # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
@@ -421,22 +433,8 @@ jobs:
           # inside this shard's budget. `tools/check_test_paths_covered.py`
           # (lint job) now fails the build if any test tree escapes the matrix
           # again.
-          # Split in two (2026-07-29): 170 files on one runner at 20m54s, the
-          # second-slowest shard of the run. `tests/unit` (14 files, ~2 min) rides
-          # with part 1 rather than becoming a third runner of its own.
-          - shard: components-1
-            paths: ""
-            split_dir: tests/components
-            split_part: "1"
-            split_of: "2"
-            extra_paths: tests/unit
-            nproc: 2
-            budget: 50
-          - shard: components-2
-            paths: ""
-            split_dir: tests/components
-            split_part: "2"
-            split_of: "2"
+          - shard: components
+            paths: tests/components tests/unit
             nproc: 2
             budget: 50
           # regression is split FOUR ways, each SERIAL. Two independent knobs,
@@ -500,28 +498,19 @@ jobs:
           # The top-level files only — every subdirectory above is excluded so no
           # test runs twice. This shard holds the memory-heaviest files
           # (test_field_latents_reach_likelihood.py at 4.06 GB).
-          # Split in two (2026-07-29): 22m41s, the LONG POLE of the run. The
-          # `--ignore` list it used to carry is gone -- `-maxdepth 1` expresses
-          # "the top-level files only" directly, so adding a subdirectory under
-          # tests/regression can no longer silently double-run by being missed
-          # from that list. Still SERIAL: this holds the memory-heaviest files
-          # (test_field_latents_reach_likelihood.py at 4.06 GB), and splitting
-          # changes wall clock without changing a runner's peak, which is exactly
-          # the property that makes it safe here.
-          - shard: regression-d1
+          # The top-level files only, expressed as `-maxdepth 1` rather than the
+          # five-entry `--ignore` list this used to carry: a new subdirectory
+          # under tests/regression can no longer double-run by being forgotten
+          # from that list. `split_of: "1"` means "no split" -- the whole
+          # directory, one shard -- so the maxdepth is available without
+          # implying a shard count. Still SERIAL: this holds the memory-heaviest
+          # files (test_field_latents_reach_likelihood.py at 4.06 GB).
+          - shard: regression-d
             paths: ""
             split_dir: tests/regression
             split_maxdepth: "1"
             split_part: "1"
-            split_of: "2"
-            nproc: 1
-            budget: 50
-          - shard: regression-d2
-            paths: ""
-            split_dir: tests/regression
-            split_maxdepth: "1"
-            split_part: "2"
-            split_of: "2"
+            split_of: "1"
             nproc: 1
             budget: 50
           - shard: physics
@@ -734,23 +723,8 @@ jobs:
         # measure: #1362 (chunked fast-grid build) shrinks the underlying
         # allocation; revisit -n 2 once it lands.
         include:
-          # Split in two (2026-07-29). Same knob as the regression split below and
-          # for the same documented reason -- more RUNNERS is free, more workers
-          # per runner is not -- applied to a shard that had never had it: 307
-          # files on one runner at 18m30s. `nproc` stays 2, so each runner's peak
-          # is unchanged; this buys wall clock only.
-          - shard: contract-1
-            paths: ""
-            split_dir: tests/contract
-            split_part: "1"
-            split_of: "2"
-            nproc: 2
-            budget: 50
-          - shard: contract-2
-            paths: ""
-            split_dir: tests/contract
-            split_part: "2"
-            split_of: "2"
+          - shard: contract
+            paths: tests/contract
             nproc: 2
             budget: 50
           # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
@@ -762,22 +736,8 @@ jobs:
           # inside this shard's budget. `tools/check_test_paths_covered.py`
           # (lint job) now fails the build if any test tree escapes the matrix
           # again.
-          # Split in two (2026-07-29): 170 files on one runner at 20m54s, the
-          # second-slowest shard of the run. `tests/unit` (14 files, ~2 min) rides
-          # with part 1 rather than becoming a third runner of its own.
-          - shard: components-1
-            paths: ""
-            split_dir: tests/components
-            split_part: "1"
-            split_of: "2"
-            extra_paths: tests/unit
-            nproc: 2
-            budget: 50
-          - shard: components-2
-            paths: ""
-            split_dir: tests/components
-            split_part: "2"
-            split_of: "2"
+          - shard: components
+            paths: tests/components tests/unit
             nproc: 2
             budget: 50
           # regression is split FOUR ways, each SERIAL. Two independent knobs,
@@ -841,28 +801,19 @@ jobs:
           # The top-level files only — every subdirectory above is excluded so no
           # test runs twice. This shard holds the memory-heaviest files
           # (test_field_latents_reach_likelihood.py at 4.06 GB).
-          # Split in two (2026-07-29): 22m41s, the LONG POLE of the run. The
-          # `--ignore` list it used to carry is gone -- `-maxdepth 1` expresses
-          # "the top-level files only" directly, so adding a subdirectory under
-          # tests/regression can no longer silently double-run by being missed
-          # from that list. Still SERIAL: this holds the memory-heaviest files
-          # (test_field_latents_reach_likelihood.py at 4.06 GB), and splitting
-          # changes wall clock without changing a runner's peak, which is exactly
-          # the property that makes it safe here.
-          - shard: regression-d1
+          # The top-level files only, expressed as `-maxdepth 1` rather than the
+          # five-entry `--ignore` list this used to carry: a new subdirectory
+          # under tests/regression can no longer double-run by being forgotten
+          # from that list. `split_of: "1"` means "no split" -- the whole
+          # directory, one shard -- so the maxdepth is available without
+          # implying a shard count. Still SERIAL: this holds the memory-heaviest
+          # files (test_field_latents_reach_likelihood.py at 4.06 GB).
+          - shard: regression-d
             paths: ""
             split_dir: tests/regression
             split_maxdepth: "1"
             split_part: "1"
-            split_of: "2"
-            nproc: 1
-            budget: 50
-          - shard: regression-d2
-            paths: ""
-            split_dir: tests/regression
-            split_maxdepth: "1"
-            split_part: "2"
-            split_of: "2"
+            split_of: "1"
             nproc: 1
             budget: 50
           - shard: physics
@@ -938,6 +889,7 @@ jobs:
           pytest ${{ steps.paths.outputs.value }} -q \
             -n ${{ matrix.nproc }} \
             --cov=src/tengri --cov-report=xml --cov-report=term:skip-covered \
+            --durations=25 \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
