@@ -74,10 +74,11 @@ class SharedGrid:
         account for the Jacobian of the coordinate transformation.
 
         **Important:** Keep ``tau_bounds_yr`` within physically meaningful
-        ranges (the age of the universe is 1.38e10 yr). At very large tau
-        (roughly tau >= 1e24 yr), the exponential kernel ``exp(-|t_i - t_j|
-        / tau)`` underflows to 1, causing ``ou_logpdf`` to return NaN. Bounds
-        should stay well below this limit.
+        ranges (the age of the universe is 1.38e10 yr). At tau >= 1e20 yr,
+        the exponential kernel ``exp(-|t_i - t_j| / tau)`` underflows to 1,
+        causing ``ou_logpdf`` to return NaN. This typically signals a units
+        error (e.g., Myr passed where years are expected). Bounds that exceed
+        1e20 yr will raise ``ValueError``.
 
         Parameters
         ----------
@@ -91,7 +92,23 @@ class SharedGrid:
         Returns
         -------
         grid : SharedGrid
+
+        Raises
+        ------
+        ValueError
+            If the upper tau bound exceeds 1e20 yr.
         """
+        tau_upper = float(tau_bounds_yr[1])
+        nan_threshold_yr = 1e20
+        if tau_upper > nan_threshold_yr:
+            age_universe_yr = 1.38e10
+            raise ValueError(
+                f"tau_bounds_yr[1]={tau_upper:.2e} yr exceeds {nan_threshold_yr:.2e} yr "
+                f"(the underflow threshold where ou_logpdf returns NaN). "
+                f"The age of the universe is {age_universe_yr:.2e} yr; bounds this large "
+                f"suggest a units error (e.g., Myr where years are expected)."
+            )
+
         sigma = jnp.linspace(sigma_bounds[0], sigma_bounds[1], n_sigma)
         tau = jnp.geomspace(tau_bounds_yr[0], tau_bounds_yr[1], n_tau)
         d_sigma = (sigma_bounds[1] - sigma_bounds[0]) / n_sigma

@@ -190,3 +190,40 @@ def test_ess_min_high_mass_detects_tail_degeneracy():
     assert jnp.all(ess_summary.min_high_mass <= ess_summary.at_mode + 1e-6), (
         "min_high_mass should not exceed at_mode"
     )
+
+
+def test_tau_bounds_too_large_raises_value_error():
+    """SharedGrid.uniform raises when tau_bounds_yr[1] exceeds underflow threshold.
+
+    At tau >= 1e20 yr, the exponential kernel underflows and ou_logpdf returns NaN,
+    which fails silently. This test confirms the guard detects and rejects it.
+    """
+    from tengri.inference.population.estimator import SharedGrid
+
+    # Bound exceeding the 1e20 yr threshold should raise.
+    with pytest.raises(ValueError, match=r"exceeds.*1.*e\+20"):
+        SharedGrid.uniform(
+            sigma_bounds=(0.1, 4.0),
+            tau_bounds_yr=(1.0e6, 1.0e25),  # Upper bound way too large
+            n_sigma=4,
+            n_tau=4,
+        )
+
+
+def test_tau_bounds_legitimate_range_constructs_fine():
+    """SharedGrid.uniform accepts physically meaningful tau bounds without error.
+
+    This confirms the guard does not creep down into the valid operating range
+    that the project actually uses.
+    """
+    from tengri.inference.population.estimator import SharedGrid
+
+    # Legitimate bounds used throughout the codebase should construct fine.
+    grid = SharedGrid.uniform(
+        sigma_bounds=(0.1, 4.0),
+        tau_bounds_yr=(1.0e6, 3.0e8),
+        n_sigma=4,
+        n_tau=4,
+    )
+    assert grid.sigma.size == 4
+    assert grid.tau_yr.size == 4

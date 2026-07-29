@@ -128,6 +128,10 @@ def make_toy(
     cov = _drw_cov(sigma_true, tau_true_yr, times)
     mean = float(field_mean(sigma_true))
 
+    # Note: The covariance matrix underflows to zero at far time separations,
+    # causing NumPy's SVD-based decomposition to emit spurious divide-by-zero
+    # warnings. The draws are sound and finite. This is a known limitation of
+    # sampling from nearly singular matrices on the geophysical timescale grid.
     truth = rng.multivariate_normal(np.full(n_grid, mean), cov, size=n_galaxies)
     data = truth + rng.normal(0.0, noise_std, size=truth.shape)
 
