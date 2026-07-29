@@ -816,6 +816,24 @@ class ForwardModel:
         state = getattr(inner, "approx", None)
         return state if isinstance(state, ApproxState) else ApproxState()
 
+    @property
+    def approx_configs(self) -> tuple:
+        """The wrapped SED's active precompute **configs**, in ``approx=`` form.
+
+        Delegates to :attr:`SEDModel.approx_configs` for the same reason
+        :attr:`approx` does: one spelling, one answer, whether asked of the SED
+        or of the wrapper. Lets a caller add a LUT family without discarding
+        another's settings.
+
+        Returns
+        -------
+        tuple
+            Active config objects; empty for an exact model.
+        """
+        inner = self._inner_sed_for_delegation()
+        configs = getattr(inner, "approx_configs", ())
+        return tuple(configs)
+
     def _has_modern_approx(self) -> bool:
         """Whether the wrapped SED carries a build-time ``approx=`` LUT."""
         inner = self._inner_sed_for_delegation()
