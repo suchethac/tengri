@@ -111,6 +111,9 @@ class Catalog:
         self.table = table
         # Set by from_histories; makes predict() argument-optional (#1396).
         self._history_columns = None
+        # Memoized jit(vmap(...)) per channel, so the XLA cache survives across
+        # calls instead of being rebuilt (and recompiled) each time.
+        self._batched_cache = {}
 
         # Fail fast: ingest and validate at construction.
         if table is not None:
@@ -452,6 +455,7 @@ class Catalog:
         lines=None,
         properties=None,
         chunk_size=1024,
+        n_pad=None,
         noise=None,
         key=None,
     ):
@@ -471,7 +475,11 @@ class Catalog:
         properties : sequence of str, optional
             Derived quantities to evaluate, e.g. ``("stellar_mass",)``.
         chunk_size : int, default 1024
-            Galaxies per vmapped batch.
+            Galaxies per vmapped batch. Chunks are padded to a uniform width,
+            so each channel costs one compile for the whole catalog.
+        n_pad : int, optional
+            Pad the catalog to at least this many galaxies, so catalogs of
+            different sizes share one XLA cache entry per channel.
         noise : optional
             **Not implemented** — noise draws are #1312. Refused rather than
             ignored, so a caller asking for a noisy mock never silently receives
@@ -506,7 +514,14 @@ class Catalog:
             )
 
         columns, n_galaxies = self._prediction_columns(None)
-        photometry = self._map_chunks(self.fwd.predict_photometry, columns, n_galaxies, chunk_size)
+        photometry = self._map_chunks(
+            self.fwd.predict_photometry,
+            columns,
+            n_galaxies,
+            chunk_size,
+            tag="photometry",
+            n_pad=n_pad,
+        )
 
         line_values = {}
         if lines:
@@ -515,7 +530,16 @@ class Catalog:
             def _measure(params):
                 return self.fwd.measure_line_fluxes(params, line_defs, fast=True)
 
-            measured = self._map_chunks(_measure, columns, n_galaxies, chunk_size)
+            # The tag carries the line set: a different set is a different
+            # program, and reusing one cache entry across them would be wrong.
+            measured = self._map_chunks(
+                _measure,
+                columns,
+                n_galaxies,
+                chunk_size,
+                tag=f"lines:{','.join(d.name for d in line_defs)}",
+                n_pad=n_pad,
+            )
             line_values = {d.name: np.asarray(measured)[:, i] for i, d in enumerate(line_defs)}
 
         property_values = {}
@@ -527,7 +551,14 @@ class Catalog:
 
             # predict_properties returns dict[str, scalar]; vmapped and joined
             # per key that is already {name: (N,)}.
-            property_values = self._map_chunks(_props, columns, n_galaxies, chunk_size)
+            property_values = self._map_chunks(
+                _props,
+                columns,
+                n_galaxies,
+                chunk_size,
+                tag=f"properties:{','.join(names)}",
+                n_pad=n_pad,
+            )
 
         from tengri.inference.mock_catalog import MockCatalog
 
@@ -568,26 +599,101 @@ class Catalog:
         }
         return {**fixed, **columns}, n_galaxies
 
-    @staticmethod
-    def _map_chunks(fn, columns, n_galaxies, chunk_size):
-        """vmap ``fn`` over the galaxy axis of every column, in chunks.
+    def _batched(self, tag, fn):
+        """A memoized ``jit(vmap(fn))``, so the XLA cache survives across calls.
 
-        Handles both array-returning callables (photometry, lines) and
-        dict-returning ones (``predict_properties``), joining chunks per key.
+        Memoization is the load-bearing part. ``jax.jit`` keys its cache on the
+        wrapped callable, so building a fresh ``jax.jit(...)`` per call would
+        give every call a fresh cache and recompile the catalog every time.
+
+        Scope is **per Catalog**, deliberately. Two Catalog objects over the same
+        model each compile their own program — one compile, not the ~236 an
+        unjitted path costs, and the persistent on-disk JAX cache absorbs it on
+        a later run. Sharing across instances would mean a module-level cache
+        keyed on the ForwardModel, which is a frozen dataclass holding JAX
+        arrays: the lifetime and hashing hazards are not worth one compile.
         """
-        batched = jax.vmap(fn)
-        n_chunks = (n_galaxies + chunk_size - 1) // chunk_size
-        results = []
-        for i in range(n_chunks):
-            start = i * chunk_size
-            end = min((i + 1) * chunk_size, n_galaxies)
-            results.append(batched({name: v[start:end] for name, v in columns.items()}))
+        cached = self._batched_cache.get(tag)
+        if cached is None:
+            cached = jax.jit(jax.vmap(fn))
+            self._batched_cache[tag] = cached
+        return cached
+
+    def _map_chunks(self, fn, columns, n_galaxies, chunk_size, *, tag, n_pad=None):
+        """Evaluate ``fn`` over the galaxy axis in **uniformly shaped** chunks.
+
+        Two things make the whole catalog cost **one** compile rather than
+        hundreds, and both are necessary:
+
+        1. **jit the vmapped call.** ``jax.vmap`` alone does not build a
+           compiled program — it dispatches op by op, so each primitive is
+           compiled separately and keyed on its own shapes. Measured on a
+           3-band tabulated-history model: 236 compiles for a bare
+           ``vmap(predict_photometry)``, versus 1 for ``jit(vmap(...))``.
+        2. **Pad the galaxy axis to a uniform chunk width.** Those caches key on
+           shape, so a ragged trailing chunk is a second shape and pays the whole
+           cost again — ``chunk_size=3`` over 8 galaxies means widths 3 and 2,
+           i.e. two compiles (and, unjitted, 472). The catalog is padded by
+           repeating its last row so every chunk is exactly ``width`` wide, and
+           the padding is discarded before returning.
+
+        Parameters
+        ----------
+        fn : callable
+            Single-galaxy callable, returning an array or a dict of scalars.
+        columns : dict
+            ``{name: (N, ...) ndarray}``.
+        n_galaxies : int
+            True galaxy count, before padding.
+        chunk_size : int
+            Maximum galaxies per batch.
+        tag : str
+            Cache key for the memoized ``jit(vmap(fn))``.
+        n_pad : int, optional
+            Pad the catalog to at least this many galaxies before chunking, so
+            catalogs of *different* sizes share one XLA cache entry (the same
+            meaning ``fit`` gives it). Must be >= ``n_galaxies``.
+
+        Returns
+        -------
+        ndarray or dict
+            Results for the real galaxies only, padding removed.
+        """
+        if n_pad is not None:
+            if int(n_pad) < n_galaxies:
+                raise ValueError(
+                    f"n_pad={n_pad} is smaller than the catalog ({n_galaxies} "
+                    f"galaxies); it pads up to a shared size, it does not truncate."
+                )
+            n_target = int(n_pad)
+        else:
+            n_target = n_galaxies
+
+        width = min(int(chunk_size), n_target)
+        n_chunks = (n_target + width - 1) // width
+        n_padded = n_chunks * width
+
+        if n_padded > n_galaxies:
+            # Repeat the last galaxy: a duplicate row is always evaluable, where
+            # zeros could be an unphysical SFH that trips a guard. Discarded below.
+            pad = n_padded - n_galaxies
+            columns = {
+                name: np.concatenate([v, np.repeat(v[-1:], pad, axis=0)], axis=0)
+                for name, v in columns.items()
+            }
+
+        batched = self._batched(tag, fn)
+        results = [
+            batched({name: v[i * width : (i + 1) * width] for name, v in columns.items()})
+            for i in range(n_chunks)
+        ]
+
         if isinstance(results[0], dict):
             return {
-                key: np.concatenate([np.asarray(r[key]) for r in results], axis=0)
+                key: np.concatenate([np.asarray(r[key]) for r in results], axis=0)[:n_galaxies]
                 for key in results[0]
             }
-        return np.concatenate(results, axis=0)
+        return np.concatenate(results, axis=0)[:n_galaxies]
 
     def _as_columns(self, param_table):
         """Validate a parameter table into uniform columns keyed by name (#1396).
@@ -643,7 +749,7 @@ class Catalog:
 
         return columns, next(iter(lengths.values()))
 
-    def predict(self, param_table=None, *, chunk_size=1024) -> np.ndarray:
+    def predict(self, param_table=None, *, chunk_size=1024, n_pad=None) -> np.ndarray:
         """Predict photometry for a catalog of parameters or histories.
 
         Evaluates the forward model on a table of per-galaxy columns, returning
@@ -662,7 +768,13 @@ class Catalog:
             already carries its columns.
         chunk_size : int, default 1024
             Galaxies evaluated per vmapped batch. Larger batches are faster
-            but use more memory.
+            but use more memory. Chunks are padded to a uniform width, so the
+            whole catalog costs **one** compile regardless of how it divides.
+        n_pad : int, optional
+            Pad the catalog to at least this many galaxies before chunking, so
+            catalogs of *different* sizes share one XLA cache entry (the same
+            meaning :meth:`fit` gives it). Padding rows are discarded from the
+            result.
 
         Returns
         -------
@@ -697,4 +809,11 @@ class Catalog:
         # (N,) scalars and (N, n_t) histories batch through the same call —
         # no stacking, and no shape agreement required beyond the galaxy axis.
         columns, n_galaxies = self._prediction_columns(param_table)
-        return self._map_chunks(self.fwd.predict_photometry, columns, n_galaxies, chunk_size)
+        return self._map_chunks(
+            self.fwd.predict_photometry,
+            columns,
+            n_galaxies,
+            chunk_size,
+            tag="photometry",
+            n_pad=n_pad,
+        )
