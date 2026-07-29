@@ -37,7 +37,7 @@ def run_dynamic_hmc(
     n_chains=1,
     target_accept_rate=0.85,
     dense_mass_matrix=True,
-    precondition: bool | None = None,
+    precondition: bool | float | None = None,
     verbose=True,
 ):
     """Dynamic HMC sampling via BlackJAX.
@@ -58,10 +58,13 @@ def run_dynamic_hmc(
         Target acceptance rate for step size adaptation.
     dense_mass_matrix : bool
         Use dense mass matrix. Set False for D>30.
-    precondition : bool or None, default None
+    precondition : bool, float or None, default None
         Sample in metric-whitened coordinates, mapping draws back afterwards.
         A linear change of variables, so the posterior is unchanged. **Opt-in**
-        (#1397): ``None`` (default) resolves to off; pass ``True`` to enable.
+        (#1397): ``None`` (default) and ``False`` are off; ``True`` uses
+        :data:`~tengri.inference.preconditioning.DEFAULT_WHITENING_STRENGTH`, and
+        a float in ``[0, 1]`` sets the whitening strength (``1.0`` is full
+        whitening, which amplifies a misspecified metric without bound — #1442).
         See :func:`~tengri.inference.backends.mcmc.nuts.run_nuts` for the full
         rationale and :mod:`tengri.inference.preconditioning` for the math.
     verbose : bool
@@ -113,7 +116,7 @@ def run_dynamic_hmc(
     # dynamic_hmc.init needs random_generator_arg, incompatible with
     # window_adaptation. Use HMC warmup to tune step_size/mass matrix,
     # then initialize dynamic_hmc state separately.
-    adapt_key = ("hmc", not use_dense, problem.enabled)
+    adapt_key = ("dynamic_hmc", not use_dense, problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     if cached is not None:
