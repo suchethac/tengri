@@ -46,7 +46,7 @@ def build_two_galaxy_catalog(*, halpha, n_line_cols=None, ssp=None, obs_base=Non
         )
         flux = jnp.abs(flux) + 1e-12
 
-        from tengri.observation.ssp import SSPData
+        from tengri.components.stellar.sps.dsps_wrapper import SSPData
 
         ssp = SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
 
@@ -84,34 +84,46 @@ def build_two_galaxy_catalog(*, halpha, n_line_cols=None, ssp=None, obs_base=Non
         observation=obs,
         sfh={"type": "dpl", "*": FREE},
         dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
-        neb={"type": "none"},
+        neb={"type": "cue", "*": FREE},
         redshift=Fixed(z),
     )
 
-    # Generate truth
+    # Generate truth parameters for galaxy 0
     key = jax.random.PRNGKey(42)
-    truth = model.spec.sample(key)
+    truth_g0 = model.spec.sample(key)
 
-    # Generate synthetic data for two galaxies with different Halpha
-    flux_g1 = model.predict_photometry(truth)
-    flux_g2 = flux_g1.copy()
-    noise = jnp.abs(flux_g1) * 0.05 + 1e-30
+    # Generate data for galaxy 0
+    pred_g0 = model.predict(truth_g0)
+    flux_g0 = pred_g0.photometry()
+    noise_g0 = jnp.abs(flux_g0) * 0.05 + 1e-30
+
+    # Galaxy 1: same photometry as galaxy 0, but with 4x higher Halpha.
+    # This creates a scenario where the line flux strongly suggests higher SFR
+    # than the photometry alone would indicate. The fitter must adjust
+    # nebular parameters (or other params) to produce 4x Halpha while keeping
+    # the same photometry. Higher Halpha relative to the SED should favor
+    # parameters that produce more young ionizing photons (higher SFR proxy).
+    flux_g1 = flux_g0.copy()
+    noise_g1 = noise_g0.copy()
 
     # Build catalog table with per-galaxy line fluxes
     table = {
-        "flux_1": np.array([flux_g1[0], flux_g2[0]]),
-        "flux_2": np.array([flux_g1[1], flux_g2[1]]),
-        "flux_3": np.array([flux_g1[2], flux_g2[2]]),
-        "flux_4": np.array([flux_g1[3], flux_g2[3]]),
-        "flux_5": np.array([flux_g1[4], flux_g2[4]]),
-        "flux_1_err": np.array([noise[0], noise[0]]),
-        "flux_2_err": np.array([noise[1], noise[1]]),
-        "flux_3_err": np.array([noise[2], noise[2]]),
-        "flux_4_err": np.array([noise[3], noise[3]]),
-        "flux_5_err": np.array([noise[4], noise[4]]),
+        "flux_1": np.array([flux_g0[0], flux_g1[0]]),
+        "flux_2": np.array([flux_g0[1], flux_g1[1]]),
+        "flux_3": np.array([flux_g0[2], flux_g1[2]]),
+        "flux_4": np.array([flux_g0[3], flux_g1[3]]),
+        "flux_5": np.array([flux_g0[4], flux_g1[4]]),
+        "flux_1_err": np.array([noise_g0[0], noise_g1[0]]),
+        "flux_2_err": np.array([noise_g0[1], noise_g1[1]]),
+        "flux_3_err": np.array([noise_g0[2], noise_g1[2]]),
+        "flux_4_err": np.array([noise_g0[3], noise_g1[3]]),
+        "flux_5_err": np.array([noise_g0[4], noise_g1[4]]),
         "halpha_flux": np.array(halpha),
         "halpha_err": np.array([0.1e-16, 0.1e-16]),
     }
+
+    # For the test, return the first galaxy's truth
+    truth = truth_g0
 
     # Create catalog with line columns
     if n_line_cols is not None and n_line_cols != len(line_names):
