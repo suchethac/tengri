@@ -281,26 +281,90 @@ class Catalog:
 
         return result
 
-    def predict(self, param_table, *, chunk_size=1024) -> np.ndarray:
-        """Predict photometry for a catalog of parameters.
+    def _as_columns(self, param_table):
+        """Validate a parameter table into uniform columns keyed by name (#1396).
 
-        Evaluates the forward model on a table of parameters, returning
+        One channel carries everything: each column's **leading axis is the
+        galaxy**, and the trailing shape is free. A per-galaxy scalar is simply
+        the ``(N,)`` case; a tabulated history is ``(N, n_t)``. This is what the
+        :meth:`predict` docstring has always promised, and what the previous
+        ``np.stack(param_arrays, axis=1)`` could not express.
+
+        Parameters
+        ----------
+        param_table : dict-like
+            Mapping of name → array whose leading axis indexes galaxies.
+
+        Returns
+        -------
+        columns : dict
+            ``{name: ndarray}``, every value at least 1-D.
+        n_galaxies : int
+            The shared leading-axis length.
+
+        Raises
+        ------
+        ValueError
+            If a free parameter has no column, if a column is 0-D (no galaxy
+            axis), or if the columns disagree on their leading-axis length.
+        """
+        missing = [name for name in self.fwd.spec.free_params if name not in param_table]
+        if missing:
+            raise ValueError(
+                f"predict() has no column for free parameter(s) {missing}. "
+                f"Every free parameter needs one value per galaxy; pass a "
+                f"(N,) array for each, or make the parameter Fixed at build time."
+            )
+
+        columns = {name: np.asarray(value) for name, value in param_table.items()}
+
+        scalars = [name for name, value in columns.items() if value.ndim == 0]
+        if scalars:
+            raise ValueError(
+                f"predict() columns {scalars} are 0-D and carry no galaxy axis. "
+                f"Every column's leading axis indexes galaxies — pass (N,) even "
+                f"when the value is the same for all N."
+            )
+
+        lengths = {name: int(value.shape[0]) for name, value in columns.items()}
+        if len(set(lengths.values())) > 1:
+            raise ValueError(
+                f"predict() columns must share the same leading axis length "
+                f"(the galaxy count); got {lengths}."
+            )
+
+        return columns, next(iter(lengths.values()))
+
+    def predict(self, param_table, *, chunk_size=1024) -> np.ndarray:
+        """Predict photometry for a catalog of parameters or histories.
+
+        Evaluates the forward model on a table of per-galaxy columns, returning
         observed-frame spectral flux density (or flux in the chosen units).
 
         Parameters
         ----------
         param_table : dict-like
-            Mapping of parameter name → array of values, shape ``(N,)`` or
-            ``(N, ...)`` for each galaxy. Parameter names must match the model's
-            free parameters.
+            Mapping of name → array whose **leading axis indexes galaxies**;
+            the trailing shape is free. A per-galaxy scalar is ``(N,)``; a
+            tabulated history (``sfh_t_gyr``, ``sfh_sfr``, ``met_history``) is
+            ``(N, n_t)``. Every free parameter needs a column; names the model
+            does not recognize are reported by the forward model's own
+            unknown-parameter check, so a typo cannot pass silently.
         chunk_size : int, default 1024
-            Batch size for vmap chunking (``jax.lax.map``). Larger batches are
-            faster but use more memory.
+            Galaxies evaluated per vmapped batch. Larger batches are faster
+            but use more memory.
 
         Returns
         -------
         ndarray, shape (N, n_filters)
             Predicted photometry [erg/s/cm²/Hz].
+
+        Notes
+        -----
+        Columns are **not** restricted to ``spec.free_params``. A tabulated SFH
+        declares zero free parameters — the table *is* the SFH — so extracting
+        only free parameters dropped the history arrays entirely and the forward
+        then refused with the #996 runtime check (#1396).
 
         Examples
         --------
@@ -308,37 +372,30 @@ class Catalog:
         >>> flux = cat.predict(params, chunk_size=64)
         >>> flux.shape
         (100, 3)
+
+        Driving a catalog from tabulated histories:
+
+        >>> flux = cat.predict(
+        ...     {
+        ...         "dust_tau_diff": tau,  # (N,)
+        ...         "sfh_t_gyr": t_gyr,  # (N, n_t)
+        ...         "sfh_sfr": sfr,  # (N, n_t)
+        ...     }
+        ... )
         """
-        # Extract parameter values in the correct order.
-        free_params = self.fwd.spec.free_params
-        param_arrays = []
-        for name in free_params:
-            param_arrays.append(param_table[name])
+        columns, n_galaxies = self._as_columns(param_table)
 
-        # Stack into a pytree (list of arrays).
-        n_samples = len(param_arrays[0])
+        # vmap maps the leading axis of every leaf of the dict pytree, so
+        # (N,) scalars and (N, n_t) histories batch through the same call —
+        # no stacking, and no shape agreement required beyond the galaxy axis.
+        compute_chunk = jax.vmap(self.fwd.predict_photometry)
 
-        # Vmap predict_photometry over the parameter table.
-        def predict_one_row(params_tuple):
-            # Reconstruct the params dict for this row.
-            params = {name: val for name, val in zip(free_params, params_tuple)}
-            return self.fwd.predict_photometry(params)
-
-        # Use jax.lax.map for chunked vmap.
-        stacked = np.stack(param_arrays, axis=1)  # (N, n_params)
-
-        def compute_chunk(chunk):
-            # chunk shape: (chunk_size, n_params)
-            return jax.vmap(predict_one_row)(tuple(chunk[:, i] for i in range(chunk.shape[1])))
-
-        # Use lax.map for chunking.
-        n_chunks = (n_samples + chunk_size - 1) // chunk_size
+        n_chunks = (n_galaxies + chunk_size - 1) // chunk_size
         results = []
         for i in range(n_chunks):
             start = i * chunk_size
-            end = min((i + 1) * chunk_size, n_samples)
-            chunk = stacked[start:end]
-            chunk_result = compute_chunk(chunk)
-            results.append(chunk_result)
+            end = min((i + 1) * chunk_size, n_galaxies)
+            chunk = {name: value[start:end] for name, value in columns.items()}
+            results.append(compute_chunk(chunk))
 
         return np.concatenate(results, axis=0)
