@@ -77,3 +77,40 @@ def test_emission_line_wavelengths_match_canonical_catalog():
         rtol=0,
         err_msg="Emission line wavelengths differ from canonical vacuum values",
     )
+
+
+def test_truth_outside_the_prior_is_rejected():
+    """Outside the support is worse than at the midpoint: it is unreachable.
+
+    A run injected sigma = 1.3 against a real prior of U(0.01, 1.0). Every fit
+    pinned just under 1.0 and three rounds read that as shrinkage.
+    """
+    from tengri.analysis.population_mocks import assert_truth_is_discriminating
+
+    with pytest.raises(ValueError, match="OUTSIDE the prior bounds"):
+        assert_truth_is_discriminating(1.3, (0.01, 1.0), name="sfh_field_psd_sigma")
+    with pytest.raises(ValueError, match="OUTSIDE the prior bounds"):
+        assert_truth_is_discriminating(0.005, (0.01, 1.0), name="sfh_field_psd_sigma")
+
+
+def test_assert_truth_against_model_reads_the_models_own_bounds():
+    """The model is the authority on its own prior, not the caller."""
+    from tengri.analysis.population_mocks import assert_truth_against_model
+
+    class _Dist:
+        bounds = (0.01, 1.0)
+
+    class _Spec:
+        _distributions = {"sfh_field_psd_sigma": _Dist()}
+
+    class _Model:
+        spec = _Spec()
+
+    m = _Model()
+    # 0.75 is inside (0.01, 1.0) and clear of midpoint 0.505 and geo-mean 0.1.
+    assert assert_truth_against_model(m, "sfh_field_psd_sigma", 0.75) == (0.01, 1.0)
+    # 1.3 was the real mistake: it passes a hand-written (0.1, 4.0) and fails here.
+    with pytest.raises(ValueError, match="OUTSIDE the prior bounds"):
+        assert_truth_against_model(m, "sfh_field_psd_sigma", 1.3)
+    with pytest.raises(KeyError, match="not a free parameter"):
+        assert_truth_against_model(m, "sfh_field_psd_tau_myr", 150.0)

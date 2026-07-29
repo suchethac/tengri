@@ -55,6 +55,23 @@ def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
         If ``value`` lies within ``rel_tol`` of any characteristic point.
     """
     lo, hi = float(bounds[0]), float(bounds[1])
+
+    # Inside the support first. A truth outside the prior is not merely
+    # indistinguishable from the prior -- it is UNREACHABLE, and every fit will
+    # pin against the nearest bound while looking like ordinary shrinkage.
+    # This is not hypothetical: a run injected sigma = 1.3 against a real prior
+    # of U(0.01, 1.0), every per-galaxy estimate pinned just under 1.0, and
+    # three rounds read that as "compression toward the prior" before the cause
+    # was found. Check support before checking discriminability.
+    if not lo < value < hi:
+        raise ValueError(
+            f"Injected truth {name}={value:g} is OUTSIDE the prior bounds "
+            f"({lo:g}, {hi:g}), so no fit can reach it — estimates will pin at "
+            f"the nearest bound and resemble shrinkage. If these bounds look "
+            f"wrong, read them off the model rather than hardcoding them: "
+            f"model.spec._distributions[{name!r}].bounds."
+        )
+
     characteristic = {
         "arithmetic midpoint": 0.5 * (lo + hi),
         "geometric mean": float(np.sqrt(lo * hi)),
@@ -69,6 +86,54 @@ def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
                 f"estimator that learned nothing returns the same number. Choose "
                 f"a truth away from {sorted(set(round(p, 4) for p in characteristic.values()))}."
             )
+
+
+def assert_truth_against_model(model, name, value, *, rel_tol=0.08):
+    """Validate an injected truth against the model's OWN prior for that parameter.
+
+    Prefer this over :func:`assert_truth_is_discriminating` with hand-written
+    bounds. Passing bounds by hand validates a belief about the model rather
+    than the model: a run once injected ``sigma = 1.3`` while checking it
+    against ``(0.1, 4.0)``, when the model's actual prior was
+    ``Uniform(0.01, 1.0)``. The guard passed, the truth was unreachable, and
+    every fit pinned just under 1.0 for three rounds.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model the mock will be generated from and fitted with. Its
+        ``spec._distributions[name].bounds`` is the authority.
+    name : str
+        Full parameter name, e.g. ``"sfh_field_psd_sigma"``.
+    value : float
+        The truth to inject, in that parameter's own units.
+    rel_tol : float, optional
+        Fractional distance from a characteristic point that counts as too
+        close. Default 0.08.
+
+    Returns
+    -------
+    bounds : tuple of float
+        The ``(lo, hi)`` read off the model, so callers can reuse it for grids
+        without re-deriving it.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` is not a free parameter of this model.
+    ValueError
+        If the truth is outside the prior, or too close to a point where a
+        prior-returning estimator would land.
+    """
+    dists = model.spec._distributions
+    if name not in dists:
+        raise KeyError(
+            f"{name!r} is not a free parameter of this model. Free parameters: "
+            f"{sorted(dists)}. A truth cannot be injected for a Fixed parameter."
+        )
+    bounds = dists[name].bounds
+    assert_truth_is_discriminating(value, bounds, name=name, rel_tol=rel_tol)
+    return bounds
 
 
 @dataclass
