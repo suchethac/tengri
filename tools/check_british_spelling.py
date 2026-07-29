@@ -70,6 +70,10 @@ ALLOWED_TOKENS = frozenset(
         "ionisation_parameter",  # Synthesizer grid HDF5 axis key
         "log10_specific_ionising_luminosity",  # Synthesizer grid HDF5 dataset key
         "Modelling",  # verbatim paper title — Temple, Hewett & Banerji 2021, MNRAS 508, 737
+        # verbatim paper title, lowercase mid-title — Tacchella, Forbes & Caplar 2020,
+        # "Stochastic modelling of star-formation histories II", MNRAS,
+        # DOI 10.1093/mnras/staa1838, arXiv:2006.09382
+        "modelling",
     }
 )
 
