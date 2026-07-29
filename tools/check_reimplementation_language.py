@@ -1,46 +1,53 @@
 #!/usr/bin/env python3
-"""CI guard for reimplementation language (CLAUDE.md "Documentation" section).
+"""CI guard: tengri implements models, it does not port them.
 
-tengri independently implements published models and validates them against the
-reference codes. It does not port, copy, or adapt anyone else's source. This
-guard keeps the prose honest: it fails when tengri's own code, docs, or
-notebooks are described as ported/copied/adapted from another codebase.
+tengri writes its own implementations of published models and checks them
+against the reference codes. It does not port, copy, or adapt anyone else's
+source. This guard fails the build when the prose says otherwise.
 
-The rule this enforces
-----------------------
-- Components and algorithms: *"Implements the same model as Prospector (Johnson
-  et al. 2021 [N]_); validated against it."* No provenance verbs, every
-  citation kept.
-- External template/SSP **data** files converted to a tengri format are
-  **repackaged**, with attribution. That is the honest word: the bytes really
-  are the reference project's published data, used as matched inputs.
-- Internally a physics block is a **component**, never a "port".
+What to write instead
+---------------------
+For code, name the model and the check, and drop the provenance verb:
+"Implements the same model as Prospector (Johnson et al. 2021 [N]_);
+validated against it." Keep every citation.
 
-Detection is two-tier, because bare "port" and "copied" have many legitimate
-uses (network ports, ``deepcopy``, an adapted MCMC step size):
+For data, the word is "repackaged". An SSP grid or template table converted
+to a tengri format really is the other project's published data, so say so.
 
-1. ``BANNED_PHRASES`` — unambiguous provenance claims ("ported from",
-   "faithful port", "copied from", ...). Flagged anywhere in scope.
-2. ``PORT_NEAR_REFERENCE`` — the bare word port/ports/ported/porting on a line
-   that also names a reference code. Catches "ProSpect port", "SKIRTOR port".
+Inside tengri a physics block is a component, not a port.
+
+How it detects
+--------------
+Bare "port" and "copied" have too many honest uses to grep for directly, so
+there are two tiers:
+
+1. ``BANNED_PHRASES`` catches unambiguous claims: "ported from", "copied
+   from", "faithful port", and friends.
+2. A proximity rule catches the bare word "port" on a line that also names
+   one of ``REFERENCE_CODES``. This is what finds "ProSpect port" and
+   "SKIRTOR port", where the phrase alone looks innocent.
+
+Every pattern is ``\\b``-anchored on the left. Without that, "ported from"
+matches inside "exported from" and "supported from", which is most of this
+codebase.
 
 Usage
 -----
     python tools/check_reimplementation_language.py           # CI mode
     python tools/check_reimplementation_language.py --root docs
 
-Exit code 0 when clean, 1 with violations listed otherwise. There is no
-``--fix``: the right replacement depends on whether the subject is code (say
-"implements") or data (say "repackaged"), and a machine cannot tell.
+Exits 0 when clean, 1 with the violations listed. There is no ``--fix``,
+because the replacement depends on whether the subject is code or data and
+only the author knows which.
 
 Allowlist
 ---------
-``EXCLUDE_FILES`` holds files that must state the banned wording: the rule
-statements themselves, the licensing audit (whose whole job is to ask the
-port-versus-reimplementation question), and files recording an *external*
-project's own lineage, which is their history to describe and not ours.
-Add new entries with a one-line justification. Never add a file to silence a
-genuine claim that tengri copied someone's work.
+``EXCLUDE_FILES`` covers the files that have to quote the banned wording: the
+rule statements themselves, the licensing audit that exists to ask this exact
+question, and files describing an external project's own history rather than
+tengri's. ``EXCLUDE_DIRS`` covers upstream copyright headers. Add to either
+with a reason. Never add a file to hide a real claim that tengri copied
+someone's work.
 """
 
 import argparse
@@ -103,8 +110,7 @@ EXCLUDE_FILES = frozenset(
 # copyright notice is the copyright holder's call, never a style sweep's.
 EXCLUDE_DIRS = ("src/tengri/inference/backends/nested",)
 
-# Every pattern is \b-anchored on the left. Without it "ported\s+from" fires
-# inside "exported from" / "supported from", which is most of this codebase.
+# See the module docstring for why every pattern is \b-anchored on the left.
 BANNED_PHRASES = (
     r"\bported\s+from",
     r"\bports\s+from",

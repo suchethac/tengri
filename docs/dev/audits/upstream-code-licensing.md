@@ -4,7 +4,7 @@
 **Owner:** Project lead.
 **Filed:** 2026-05-22.
 **Status (2026-07-10):** The wording "ported from" was replaced repo-wide. Every implementation is now described as an independent implementation of the published model, validated against the reference code. Docstrings no longer claim code-level porting.
-**Status (2026-07-29):** This document was brought in line with that wording. No risk finding, license fact, or open question was changed; only the vocabulary and the action items that still referred to docstrings which no longer exist.
+**Status (2026-07-29):** This document now uses that wording too. Nothing about the risk, the licenses, or the open questions changed. Only the vocabulary, and the action items that still pointed at docstrings which no longer exist.
 
 ## Why this exists
 
@@ -102,9 +102,9 @@ Not assessed in depth yet. Need to check:
   carried? Equations from refereed papers (Buat+2008 etc.) are clean
   but the parameter conventions tend to track CIGALE exactly.
 - **ProSpect SFH modules** — `massfunc_p4/p6`, `massfunc_snorm_burst*`:
-  the table above records LGPL-3; an earlier note here said GPL-3. Confirm
-  the actual license, then confirm whether these are paper reproductions or
-  R-to-JAX transliterations of ProSpect source.
+  the table above records LGPL-3, but an earlier note here said GPL-3, so
+  settle which it is first. Then check whether these were written from the
+  papers or transliterated from ProSpect's R source.
 - **Bundled `.h5` template files in `data/`** — `astrodust_templates.h5`,
   `dl07_templates.h5`, `dale2014_templates.h5`, `skirtor_templates_v3.h5`,
   `bosa_templates.h5`. Each carries its own provenance and license; the

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for ``tools/check_reimplementation_language.py``.
 
-The guard has to walk a narrow line: catch every claim that tengri ported or
-copied another project's source, while staying silent on the many innocent
-uses of the same words (network ports, ``deepcopy``, an adapted MCMC step
-size, ``exported from``). Both halves are tested here, because a guard that
-over-fires gets disabled and a guard that under-fires is decoration.
+The guard has two jobs and both are tested here. It has to catch the claim
+that tengri ported or copied someone else's source, and it has to stay quiet
+on the honest uses of the same words: network ports, ``deepcopy``, an adapted
+MCMC step size, ``exported from``. False positives matter as much as misses,
+since a guard that cries wolf gets switched off.
 """
 
 import importlib.util
