@@ -37,3 +37,30 @@ def test_reconstruction_carries_the_lognormal_bias_term():
     assert float(jnp.max(jnp.abs(got))) > 1.0, (
         "bias term is large here; a zero result means it was dropped"
     )
+
+
+def test_grid_mismatch_raises_instead_of_reshaping_into_garbage():
+    """A trailing axis that is not the field grid must fail loudly.
+
+    Without this guard ``xi.reshape(-1, n_grid)`` silently redistributes the
+    elements and the error surfaces much later as an unrelated vmap complaint
+    about ``sigma`` having the wrong length.
+    """
+    from tengri.inference.population.reconstruct import centered_fields
+
+    grid = jnp.asarray(np.linspace(6.0, 10.14, 16))
+    xi_wrong = jnp.zeros((4, 1000, 256))  # 256 latents against a 16-point grid
+    with pytest.raises(ValueError, match="trailing axis"):
+        centered_fields(xi_wrong, 0.9, 8.0e7, grid)
+
+
+def test_multi_axis_xi_round_trips_shape():
+    """(N, K, n) is the shape the estimator actually passes."""
+    from tengri.inference.population.reconstruct import centered_fields
+
+    n = 16
+    grid = jnp.asarray(np.linspace(6.0, 10.14, n))
+    xi = jnp.asarray(np.random.default_rng(0).normal(size=(3, 5, n)))
+    out = centered_fields(xi, 0.9, 8.0e7, grid)
+    chex.assert_shape(out, (3, 5, n))
+    chex.assert_tree_all_finite(out)

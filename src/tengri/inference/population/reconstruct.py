@@ -59,6 +59,21 @@ def centered_fields(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
     xi = jnp.asarray(xi)
     log_age_grid = jnp.asarray(log_age_grid)
     n_grid = log_age_grid.shape[0]
+
+    # The trailing axis of ``xi`` MUST be the field grid. Without this check a
+    # mismatch does not raise: ``xi.reshape(-1, n_grid)`` happily redistributes
+    # the elements, and the error surfaces far downstream as an unrelated vmap
+    # complaint about ``sigma`` having the wrong length -- which is how a
+    # 256-latent posterior paired with a 16-point grid was first seen.
+    if xi.ndim == 0 or xi.shape[-1] != n_grid:
+        raise ValueError(
+            f"xi's trailing axis is {xi.shape[-1] if xi.ndim else '(scalar)'} but "
+            f"log_age_grid has {n_grid} points; they must match, since the trailing "
+            f"axis of xi IS the field grid. Pass the same n_grid the model was built "
+            f"with (SEDModel.build(..., n_grid=N), default 256) — a posterior's "
+            f"'psd_xi' has shape (n_samples, n_grid)."
+        )
+
     d_log_age = float(log_age_grid[1] - log_age_grid[0])
 
     def one(xi_1d, sigma, tau):
