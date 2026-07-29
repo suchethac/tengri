@@ -5,6 +5,8 @@ Rejects injected truths that could be mistaken for recovered parameters
 when the estimator simply returns its prior unchanged.
 """
 
+from typing import ClassVar
+
 import pytest
 
 pytestmark = pytest.mark.contract
@@ -101,7 +103,7 @@ def test_assert_truth_against_model_reads_the_models_own_bounds():
         bounds = (0.01, 1.0)
 
     class _Spec:
-        _distributions = {"sfh_field_psd_sigma": _Dist()}
+        _distributions: ClassVar[dict] = {"sfh_field_psd_sigma": _Dist()}
 
     class _Model:
         spec = _Spec()
