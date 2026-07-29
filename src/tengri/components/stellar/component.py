@@ -60,6 +60,7 @@ from tengri.components.stellar.sfh.metallicity_history import (
 from tengri.components.stellar.sps.dsps_wrapper import (
     LSUN_ERG_PER_S,
     SSPData,
+    canonical_dsps_kwargs,
     compute_log_z_evolving,
     compute_surviving_mass,
     effective_metallicity,
@@ -531,6 +532,55 @@ def _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     return contrib, idx, f, total_mass, age
 
 
+def _lgmet_weights(log_z, lgmet_scatter, ssp_lgmet):
+    """DSPS lognormal-MDF metallicity weights, operands canonicalized to one dtype.
+
+    Parameters
+    ----------
+    log_z : array_like, scalar
+        Absolute ``log10(Z)`` of the parcel. [dex]
+    lgmet_scatter : array_like, scalar
+        Width of the lognormal MDF. [dex]
+    ssp_lgmet : array_like, shape (n_met,)
+        SSP metallicity axis, absolute ``log10(Z)``. [dex]
+
+    Returns
+    -------
+    ndarray, shape (n_met,)
+        Non-negative weights summing to 1.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes.
+
+    ``ssp_lgmet`` is the cached host SSP grid, built once at load time, so it
+    stays float64 even inside ``jax.enable_x64(False)`` while the parameters
+    arrive as float32 tracers. DSPS then sizes its ``dt`` array from the float64
+    grid and scatters an f32-derived value into it
+    (``dt.at[1:-1].set(dtmids)`` in ``dsps.sed.metallicity_weights``), which JAX
+    reports today as::
+
+        FutureWarning: scatter inputs have incompatible types: cannot safely
+        cast value from dtype=float32 to dtype=float64 ...
+        In future JAX releases this will result in an error.
+
+    Canonicalizing all three operands first removes the mixed-dtype scatter.
+    Under ``x64=True`` the canonical float *is* float64, so this is a no-op
+    there and float64 results are bit-unchanged — the property that makes the
+    pattern safe to apply broadly. Same treatment as
+    :func:`tengri.utils.interpolation.triweight_bin_weights` (#1206, #1448).
+
+    All three DSPS lognormal-MDF call sites in this module route through here so
+    the canonicalization cannot drift between them.
+    """
+    from dsps.sed.metallicity_weights import calc_lgmet_weights_from_lognormal_mdf
+
+    args = canonical_dsps_kwargs(log_z=log_z, lgmet_scatter=lgmet_scatter, ssp_lgmet=ssp_lgmet)
+    return calc_lgmet_weights_from_lognormal_mdf(
+        args["log_z"], args["lgmet_scatter"], args["ssp_lgmet"]
+    )
+
+
 def _joint_weights_cic_met_table(
     age_yr, sfr, ssp_ages_yr, t_obs_gyr, lgmet_on_ssp_ages, lgmet_scatter, ssp_lgmet
 ):
@@ -568,13 +618,11 @@ def _joint_weights_cic_met_table(
     **JIT/grad/vmap-safe**: static shapes; the met axis uses DSPS's own
     lognormal-MDF kernel vmapped over parcels.
     """
-    from dsps.sed.metallicity_weights import calc_lgmet_weights_from_lognormal_mdf
-
     contrib, idx, f, total_mass, age = _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr)
     lg_nodes = jnp.log10(jnp.maximum(ssp_ages_yr, 1e-30))
     lg_age = jnp.log10(jnp.maximum(age, 1e-30))
     lgmet_par = jnp.interp(lg_age, lg_nodes, lgmet_on_ssp_ages)
-    met_w = jax.vmap(lambda g: calc_lgmet_weights_from_lognormal_mdf(g, lgmet_scatter, ssp_lgmet))(
+    met_w = jax.vmap(lambda g: _lgmet_weights(g, lgmet_scatter, ssp_lgmet))(
         lgmet_par
     )  # (n_parcel, n_met)
     n_met = ssp_lgmet.shape[0]
@@ -1865,13 +1913,7 @@ class StellarSEDComponent:
                 age_w_cic, total_mass = _age_weights_cic(
                     _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
                 )
-                from dsps.sed.metallicity_weights import (
-                    calc_lgmet_weights_from_lognormal_mdf,
-                )
-
-                lgmet_w = calc_lgmet_weights_from_lognormal_mdf(
-                    log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet
-                )
+                lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
                 joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
                 _used_cic = True
             else:
@@ -1885,14 +1927,16 @@ class StellarSEDComponent:
                     ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
                 )
                 dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
-                    gal_t_table=gal_t_table,
-                    gal_sfr_table=gal_sfr_table,
-                    gal_lgmet=log_z_abs_scalar,
-                    gal_lgmet_scatter=lgmet_scatter,
-                    ssp_lgmet=ssp.ssp_lgmet,
-                    ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-                    ssp_flux=ssp_flux_for_csp,
-                    t_obs=t_obs_gyr,
+                    **canonical_dsps_kwargs(
+                        gal_t_table=gal_t_table,
+                        gal_sfr_table=gal_sfr_table,
+                        gal_lgmet=log_z_abs_scalar,
+                        gal_lgmet_scatter=lgmet_scatter,
+                        ssp_lgmet=ssp.ssp_lgmet,
+                        ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
+                        ssp_flux=ssp_flux_for_csp,
+                        t_obs=t_obs_gyr,
+                    )
                 )
                 joint_weights = dsps_result.weights  # (n_met, n_age)
         else:  # ramp / chem_evol — per-age metallicity table
@@ -1934,14 +1978,16 @@ class StellarSEDComponent:
                 )
                 _lgmet_k = jnp.concatenate([lgmet_on_ssp_ages[::-1], lgmet_on_ssp_ages[:1]])
                 dsps_result = calc_rest_sed_sfh_table_met_table(
-                    gal_t_table=_t_k,
-                    gal_sfr_table=_sfr_k,
-                    gal_lgmet_table=_lgmet_k,
-                    gal_lgmet_scatter=lgmet_scatter,
-                    ssp_lgmet=ssp.ssp_lgmet,
-                    ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-                    ssp_flux=ssp_flux_for_csp,
-                    t_obs=t_obs_gyr,
+                    **canonical_dsps_kwargs(
+                        gal_t_table=_t_k,
+                        gal_sfr_table=_sfr_k,
+                        gal_lgmet_table=_lgmet_k,
+                        gal_lgmet_scatter=lgmet_scatter,
+                        ssp_lgmet=ssp.ssp_lgmet,
+                        ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
+                        ssp_flux=ssp_flux_for_csp,
+                        t_obs=t_obs_gyr,
+                    )
                 )
 
                 # ``dsps_result.weights`` is the joint (n_met, n_age)
@@ -2561,14 +2607,23 @@ class StellarSEDComponent:
             gal_t, gal_sfr, _ = _build_dsps_sfh_table(
                 ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
             )
+            _dsps_args = canonical_dsps_kwargs(
+                gal_t=gal_t,
+                gal_sfr=gal_sfr,
+                gal_lgmet=log_z_abs_scalar,
+                gal_lgmet_scatter=lgmet_scatter,
+                ssp_lgmet=ssp.ssp_lgmet,
+                ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
+                t_obs=t_obs_gyr,
+            )
             weights, _, _ = calc_ssp_weights_sfh_table_lognormal_mdf(
-                gal_t,
-                gal_sfr,
-                log_z_abs_scalar,
-                lgmet_scatter,
-                ssp.ssp_lgmet,
-                ssp.ssp_lg_age_gyr,
-                t_obs_gyr,
+                _dsps_args["gal_t"],
+                _dsps_args["gal_sfr"],
+                _dsps_args["gal_lgmet"],
+                _dsps_args["gal_lgmet_scatter"],
+                _dsps_args["ssp_lgmet"],
+                _dsps_args["ssp_lg_age_gyr"],
+                _dsps_args["t_obs"],
             )
             # #821 youngest-bin edge-clip correction — apply applies this for ALL
             # DSPS-histogram-kernel paths (field / per-age metallicity); without it
@@ -2585,8 +2640,6 @@ class StellarSEDComponent:
         # applies the youngest-bin lookback correction and returns the conserved
         # total_mass, so — unlike the DSPS histogram path — the caller must NOT
         # also multiply by ``_youngest_bin_lookback_multiplier`` here.
-        from dsps.sed.metallicity_weights import calc_lgmet_weights_from_lognormal_mdf
-
         _fine_age_yr = _refine_sfh_table_ages(ssp_ages_yr)
         _edges_yr = _sfh_bin_edges_yr(sfh_spec.fn, sfh_kwargs)
         if _edges_yr is not None:
@@ -2595,9 +2648,7 @@ class StellarSEDComponent:
             )
         _fine_sfr = sfh_spec.fn(_fine_age_yr, **sfh_kwargs)
         age_w_cic, total_mass = _age_weights_cic(_fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr)
-        lgmet_w = calc_lgmet_weights_from_lognormal_mdf(
-            log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet
-        )
+        lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
         joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
         joint_weights = joint_weights / jnp.maximum(joint_weights.sum(), 1e-300)
         return joint_weights, total_mass, ssp_ages_yr

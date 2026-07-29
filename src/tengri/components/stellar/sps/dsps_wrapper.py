@@ -19,6 +19,50 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+from jax import dtypes as jax_dtypes
+
+
+def canonical_dsps_kwargs(**kwargs):
+    """Cast every float operand of a DSPS kernel call to one working dtype.
+
+    Parameters
+    ----------
+    **kwargs
+        Float array/scalar operands to forward to a DSPS kernel.
+
+    Returns
+    -------
+    dict
+        The same keys, all cast to ``canonicalize_dtype(result_type(*values))``.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes.
+
+    The SSP grids (``ssp_lgmet``, ``ssp_lg_age_gyr``, ``ssp_flux``) are cached
+    host arrays built once at load time, so they stay float64 even inside
+    ``jax.enable_x64(False)`` while fitted parameters arrive as float32
+    tracers. DSPS then sizes its internal buffers from the float64 grids and
+    scatters float32-derived values into them::
+
+        FutureWarning: scatter inputs have incompatible types: cannot safely
+        cast value from dtype=float32 to dtype=float64 ...
+        In future JAX releases this will result in an error.
+
+    Measured: a field-SFH forward pass emitted six of these in pure float32 and
+    none in float64; canonicalizing first takes it to zero.
+
+    Under ``x64=True`` the canonical float *is* float64, so this is a no-op
+    there and float64 results are bit-unchanged — the property that makes the
+    pattern safe to apply at every DSPS boundary. Same treatment as
+    :func:`tengri.utils.interpolation.triweight_bin_weights` (#1206, #1448).
+
+    This lives beside the DSPS bindings so every call site in the tree can
+    reach it without importing back into ``components/stellar/component.py``.
+    """
+    arrays = {key: jnp.asarray(value) for key, value in kwargs.items()}
+    dt = jax_dtypes.canonicalize_dtype(jnp.result_type(*arrays.values()))
+    return {key: value.astype(dt) for key, value in arrays.items()}
 
 
 class SSPData(NamedTuple):
@@ -941,14 +985,16 @@ def compute_dsps_native_weights(
     sfr_asc = jnp.where(is_invalid_pos, 0.0, sfr_asc_raw)
 
     result = calc_rest_sed_sfh_table_lognormal_mdf(
-        gal_t_table=t_cosmic_asc,
-        gal_sfr_table=sfr_asc,
-        gal_lgmet=lgmet,
-        gal_lgmet_scatter=lgmet_scatter,
-        ssp_lgmet=ssp_lgmet,
-        ssp_lg_age_gyr=ssp_lg_age_gyr,
-        ssp_flux=ssp_flux,
-        t_obs=t_obs_gyr,
+        **canonical_dsps_kwargs(
+            gal_t_table=t_cosmic_asc,
+            gal_sfr_table=sfr_asc,
+            gal_lgmet=lgmet,
+            gal_lgmet_scatter=lgmet_scatter,
+            ssp_lgmet=ssp_lgmet,
+            ssp_lg_age_gyr=ssp_lg_age_gyr,
+            ssp_flux=ssp_flux,
+            t_obs=t_obs_gyr,
+        )
     )
 
     # ``result.weights`` is the joint (n_met, n_age) probability
