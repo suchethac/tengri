@@ -350,3 +350,40 @@ DESI_LINES = (
     LineDef("NII_6584", 6585.27, ((6505.0, 6535.0), (6600.0, 6620.0)), (6577.0, 6593.0)),
     LineDef("SII_6717", 6718.29, ((6690.0, 6708.0), (6745.0, 6770.0)), (6711.0, 6725.0)),
 )
+
+
+def resolve_line_defs(line_defs, observation=None):
+    """Line windows to measure: explicit argument, else the observation's own set.
+
+    Parameters
+    ----------
+    line_defs : sequence of LineDef or None
+        Explicit windows. Returned as a tuple when given.
+    observation : Observation or None, optional
+        The model's observation. When it declares ``line_fluxes``, its line
+        identities and wavelengths are used.
+
+    Returns
+    -------
+    tuple of LineDef
+        Windows in the order the caller should interpret the returned fluxes.
+
+    Notes
+    -----
+    :meth:`SEDModel.measure_line_fluxes` used to fall back to :data:`DESI_LINES`
+    whenever ``line_defs`` was omitted, ignoring the observation entirely. A model
+    built with an eight-line :class:`LineFluxData` therefore returned **five**
+    fluxes, for different lines, in a different order -- a plausible float array of
+    the wrong length that raises nothing on its own. Zipped against the caller's
+    own list of names it yields silently mislabeled fluxes (#1500).
+
+    ``DESI_LINES`` remains the fallback only when nothing declares a line set.
+    """
+    if line_defs is not None:
+        return tuple(line_defs)
+    lfd = getattr(observation, "line_fluxes", None) if observation is not None else None
+    if lfd is None:
+        return tuple(DESI_LINES)
+    import numpy as _np
+
+    return default_line_defs(_np.asarray(lfd.wavelengths), tuple(lfd.names))

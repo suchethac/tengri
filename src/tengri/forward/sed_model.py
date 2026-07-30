@@ -729,11 +729,25 @@ class SEDModel:
         Invalid values raise ``ValueError``.
 
     csp_integration : str, optional
-        CSP age integration scheme. Default ``"trapz"`` (trapezoidal on
-        linear time). Options: ``"log_trapz"``, ``"log_interp"`` (Dopita+2005
-        interpolation), ``"dsps_native"`` (DSPS trapezoidal with automatic
-        metallicity marginalization), ``"dsps_met_table"`` (time-evolving
-        metallicity table). See Appendix A of the forward model paper [2]_.
+        CSP age integration scheme for the **SFH-derived quantities**
+        (:meth:`predict_sfh` / ``_predict_sfh_quantities`` and the compile
+        signature). Default ``"trapz"`` (trapezoidal on linear time). Options:
+        ``"log_trapz"``, ``"log_interp"`` (Dopita+2005 interpolation),
+        ``"dsps_native"`` (DSPS trapezoidal with automatic metallicity
+        marginalization), ``"dsps_met_table"`` (time-evolving metallicity table).
+        See Appendix A of the forward model paper [2]_.
+
+        .. warning::
+
+           **This does not change the predicted SED, photometry or spectrum**
+           (#1500). The stellar component builds its age weights with
+           cloud-in-cell (``_age_weights_cic`` in
+           ``components/stellar/component.py``) and never reads this setting, so
+           ``predict_photometry`` is bit-identical across every value above --
+           measured, not assumed. Only the derived-SFH path honors it. Selecting
+           ``"dsps_native"`` expecting a different SED will silently give the
+           ``"trapz"`` answer. Wiring it into the component chain is a separate
+           physics decision, tracked in #1500.
 
     Attributes
     ----------
@@ -4670,8 +4684,13 @@ class SEDModel:
             Parameter values (public names). ``redshift`` sets the luminosity
             distance for the observed flux.
         line_defs : sequence of LineDef, optional
-            Lines + continuum windows to measure. Defaults to
-            :data:`tengri.observation.line_measurement.DESI_LINES`.
+            Lines + continuum windows to measure. Defaults to the lines this
+            model's ``observation`` declares (``Observation.line_fluxes``), and
+            only to :data:`tengri.observation.line_measurement.DESI_LINES` when
+            nothing declares a set. Before #1500 the DESI list was used
+            unconditionally, so a model built with an eight-line
+            :class:`~tengri.observation.LineFluxData` silently returned **five**
+            fluxes, for different lines, in a different order.
         fast : bool, default False
             Route through the window-LUT fast path
             (:func:`~tengri.observation.line_measurement.measure_line_fluxes_from_window_lut`):
@@ -4703,12 +4722,16 @@ class SEDModel:
         from tengri.cosmology import luminosity_distance
         from tengri.forward.result import SEDResult
         from tengri.observation.line_measurement import (
-            DESI_LINES,
             measure_line_flux_jax,
             measure_line_fluxes_from_window_lut,
+            resolve_line_defs,
         )
 
-        line_defs = tuple(DESI_LINES if line_defs is None else line_defs)
+        # Omitting ``line_defs`` used to mean DESI_LINES unconditionally, ignoring
+        # the model's own Observation: a model built with an eight-line
+        # LineFluxData returned FIVE fluxes, for different lines, in a different
+        # order. Nothing raised -- the shape is only wrong downstream (#1500).
+        line_defs = resolve_line_defs(line_defs, getattr(self, "observation", None))
         # Resolve the redshift through the spec, not out of the dict. A Fixed
         # redshift is legitimately absent from ``params``, and reading it back with
         # a 0.0 default put the galaxy at 10 pc — 1e17 too bright, silently

@@ -43,6 +43,12 @@ dependencies = [
     "nifty8[re]>=8.5",
     "astroquery>=0.4",
     "tomli>=2.0; python_version < '3.11'",
+    # JAX gates `jax_compilation_cache_max_size` behind filelock: set the cap
+    # without it and JAX raises on EVERY persistent-cache read, which disables the
+    # cache instead of bounding it. tengri caps the cache by default (#1507), so
+    # this is required for that default to work. jax_cache.py still checks at
+    # runtime and degrades to unbounded rather than broken if it is absent.
+    "filelock>=3.0",
 ]
 
 [project.urls]

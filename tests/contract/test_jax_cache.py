@@ -15,7 +15,13 @@ pytestmark = pytest.mark.contract
 
 @pytest.fixture(autouse=True)
 def _reset_module_state(monkeypatch):
-    """Reset module-level state between tests."""
+    """Reset module-level state between tests.
+
+    ``_eviction_supported`` is forced True so the cap tests pin tengri's own
+    resolution logic rather than whether filelock happens to be installed in the
+    test environment; the two tests that care about that path override it.
+    """
+    monkeypatch.setattr(jax_cache, "_eviction_supported", lambda: True)
     monkeypatch.setattr(jax_cache, "_ENABLED_DIR", None)
     monkeypatch.delenv("TENGRI_DISABLE_JAX_CACHE", raising=False)
     monkeypatch.delenv("TENGRI_JAX_CACHE_DIR", raising=False)
@@ -187,3 +193,30 @@ def test_clear_cache_reports_what_it_freed(tmp_path, capsys):
     (tmp_path / "blob").write_bytes(b"x" * 4096)
     freed = jax_cache.clear_cache(tmp_path)
     assert freed >= 4096, "clear_cache should report the bytes it reclaimed"
+
+
+def test_cap_stands_down_without_filelock(monkeypatch, tmp_path):
+    """No filelock means the cap BREAKS the cache, so we must not set one.
+
+    JAX gates jax_compilation_cache_max_size behind filelock and raises
+    "Please install the `filelock` package..." on every cache read when a cap is
+    set without it. Unbounded is bad; broken is worse.
+    """
+    monkeypatch.setattr(jax_cache, "_eviction_supported", lambda: False)
+    jax_cache.enable_persistent_cache(tmp_path)
+    assert jax.config.jax_compilation_cache_max_size == jax_cache.UNBOUNDED_CACHE
+
+
+def test_cap_applies_when_filelock_is_available(monkeypatch, tmp_path):
+    monkeypatch.setattr(jax_cache, "_eviction_supported", lambda: True)
+    jax_cache.enable_persistent_cache(tmp_path)
+    assert jax.config.jax_compilation_cache_max_size == jax_cache.DEFAULT_MAX_CACHE_BYTES
+
+
+def test_filelock_is_a_declared_dependency():
+    """The default cap is inert unless filelock ships with tengri."""
+    import re
+
+    text = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text()
+    deps = re.search(r"^dependencies = \[(.*?)^\]", text, re.S | re.M).group(1)
+    assert re.search(r'"filelock[><=]', deps), "filelock must be a runtime dependency"

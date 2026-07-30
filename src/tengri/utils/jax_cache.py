@@ -52,6 +52,7 @@ periodically (e.g. after ``pip install -U jax``).
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import os
 import shutil
@@ -88,6 +89,18 @@ DEFAULT_MAX_CACHE_BYTES = 8 * 1024**3
 #: zero-byte ceiling, i.e. caching silently switched off -- the opposite of what a
 #: user asking to opt out of the cap wants.
 UNBOUNDED_CACHE = -1
+
+
+def _eviction_supported() -> bool:
+    """True if JAX can actually enforce a cache size cap here.
+
+    JAX guards ``jax_compilation_cache_max_size`` behind ``filelock``. Without it
+    the config still accepts the value and then raises on every cache read, so a
+    cap set in that environment silently disables the cache rather than bounding
+    it. Declared as a dependency, but check at runtime: an older or partial
+    install must degrade to "unbounded", never to "broken".
+    """
+    return importlib.util.find_spec("filelock") is not None
 
 
 def _resolve_max_size(explicit: int | None) -> int:
@@ -206,12 +219,28 @@ def enable_persistent_cache(
     jax.config.update("jax_persistent_cache_min_compile_time_secs", float(min_compile_time_secs))
 
     cap = _resolve_max_size(max_size_bytes)
+    if cap != UNBOUNDED_CACHE and not _eviction_supported():
+        # JAX needs filelock to enforce a size cap, and raises
+        # "Please install the `filelock` package to set
+        # jax_compilation_cache_max_size" on EVERY cache read when the cap is set
+        # without it -- which does not merely skip eviction, it breaks the cache.
+        # Leaving it unbounded is strictly better than breaking it, so say so and
+        # stand down.
+        logger.warning(
+            "Cannot bound the JAX compilation cache: the `filelock` package is "
+            "not installed, and JAX errors on every cache read if a cap is set "
+            "without it. The cache at %s is UNBOUNDED -- install filelock, or "
+            "run tengri.clear_cache() periodically (it reached 141 GB once, #1507).",
+            target,
+        )
+        cap = UNBOUNDED_CACHE
+
     try:
         jax.config.update("jax_compilation_cache_max_size", cap)
     except (AttributeError, ValueError) as exc:
-        # Older JAX without max_size support. Say so once at WARNING rather than
-        # DEBUG: on such a version the cache is unbounded and only clear_cache()
-        # will reclaim it, which is exactly how #1507 happened.
+        # Older JAX without max_size support. WARNING rather than DEBUG: on such a
+        # version the cache is unbounded and only clear_cache() reclaims it, which
+        # is exactly how #1507 happened.
         logger.warning(
             "This JAX ignores jax_compilation_cache_max_size (%s), so the "
             "persistent cache at %s is UNBOUNDED. Run tengri.clear_cache() "
