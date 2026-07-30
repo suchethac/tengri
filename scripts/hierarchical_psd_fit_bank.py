@@ -90,6 +90,14 @@ def main():
     ap.add_argument("--n-chains", type=int, default=4)
     ap.add_argument("--n-leapfrog-steps", type=int, default=100)
     ap.add_argument("--thin", type=int, default=8, help="store every thin-th draw")
+    ap.add_argument(
+        "--method",
+        default="mcmc_hmc",
+        choices=["mcmc_hmc", "laplace"],
+        help="interim backend. laplace is ~1-2 s/galaxy warm vs ~155 s for HMC, "
+        "at the cost of a Gaussian approximation to each per-galaxy posterior.",
+    )
+    ap.add_argument("--n-map-steps", type=int, default=4000, help="laplace only")
     args = ap.parse_args()
 
     import tengri
@@ -131,6 +139,7 @@ def main():
         "n_samples": args.n_samples,
         "n_chains": args.n_chains,
         "n_leapfrog_steps": args.n_leapfrog_steps,
+        "method": args.method,
         "snr_phot": SNR_PHOT,
         "snr_line": SNR_LINE,
         "thin": args.thin,
@@ -170,20 +179,37 @@ def main():
 
         t0 = time.time()
         fitter = Fitter(fit_model, flux[i], err[i])
-        post = fitter.run(
-            "mcmc_hmc",
-            key=keys[i],
-            n_warmup=args.n_warmup,
-            n_samples=args.n_samples,
-            n_chains=args.n_chains,
-            n_leapfrog_steps=args.n_leapfrog_steps,
-            dense_mass_matrix=True,
-        )
+        if args.method == "laplace":
+            post = fitter.run(
+                "laplace",
+                key=keys[i],
+                n_map_steps=args.n_map_steps,
+                n_samples=args.n_samples * args.n_chains,
+            )
+        else:
+            post = fitter.run(
+                "mcmc_hmc",
+                key=keys[i],
+                n_warmup=args.n_warmup,
+                n_samples=args.n_samples,
+                n_chains=args.n_chains,
+                n_leapfrog_steps=args.n_leapfrog_steps,
+                dense_mass_matrix=True,
+            )
 
         xi_full = np.asarray(post.samples["psd_xi"])
         sig_full = np.asarray(post.samples["sfh_field_psd_sigma"])
         tau_full = np.asarray(post.samples["sfh_field_psd_tau_myr"])
-        rhat = post.rhat(exclude_prefixes=())
+        # Laplace draws are i.i.d. from a fitted Gaussian, so R-hat is
+        # identically ~1 by construction and diagnoses nothing. Recording it as
+        # if it were a convergence check would manufacture false confidence --
+        # the Laplace failure mode is that the Gaussian is the wrong SHAPE, and
+        # no between-chain statistic can see that.
+        if args.method == "laplace":
+            rhat = {"sfh_field_psd_sigma": np.nan, "sfh_field_psd_tau_myr": np.nan}
+            rhat["psd_xi"] = np.array([np.nan])
+        else:
+            rhat = post.rhat(exclude_prefixes=())
         n_div = getattr(post, "n_divergent", 0)
         if isinstance(n_div, dict):
             n_div = n_div.get("total", 0)
@@ -197,12 +223,15 @@ def main():
         # and reading the xi number alone says "converged" about draws that are
         # not draws from the interim posterior at all. Posterior.rhat even
         # excludes psd_xi by default, so the field is invisible unless asked for.
-        m_full = centered_fields(
-            xi_full[None, :, :], sig_full[None, :], tau_full[None, :] * 1e6, model.log_age_grid
-        )[0]
-        rhat_field = np.array(
-            [split_rhat(np.asarray(m_full[:, j])) for j in range(m_full.shape[1])]
-        )
+        if args.method == "laplace":
+            rhat_field = np.full(int(model.spec.n_grid), np.nan)
+        else:
+            m_full = centered_fields(
+                xi_full[None, :, :], sig_full[None, :], tau_full[None, :] * 1e6, model.log_age_grid
+            )[0]
+            rhat_field = np.array(
+                [split_rhat(np.asarray(m_full[:, j])) for j in range(m_full.shape[1])]
+            )
 
         xi = xi_full[:: args.thin]
         sig = sig_full[:: args.thin]
@@ -235,7 +264,7 @@ def main():
         rate = (time.time() - t_start) / n_done
         left = (end - i - 1) * rate
         print(
-            f"  gal {i:4d}: {dt:5.0f}s  R-hat field max {float(np.max(rhat_field)):.2f} | "
+            f"  gal {i:4d}: {dt:5.1f}s  R-hat field max {float(np.max(rhat_field)):.2f} | "
             f"sigma {float(rhat.get('sfh_field_psd_sigma', np.nan)):.2f} "
             f"tau {float(rhat.get('sfh_field_psd_tau_myr', np.nan)):.2f}  "
             f"div {int(n_div):3d}  peak {_peak_rss_gb():.1f} GB  "

@@ -85,6 +85,17 @@ def main():
     ap.add_argument("--node-chunk", type=int, default=64)
     ap.add_argument("--n-sigma", type=int, default=60)
     ap.add_argument("--n-tau", type=int, default=60)
+    ap.add_argument(
+        "--tau-prior",
+        default="uniform",
+        choices=["uniform", "log_uniform"],
+        help="must match the interim fits' tau prior; they use Uniform(10, 500) Myr",
+    )
+    ap.add_argument(
+        "--keep-pathological",
+        action="store_true",
+        help="keep galaxies whose field scale is implausible (default: drop them)",
+    )
     ap.add_argument("--out", default="")
     args = ap.parse_args()
 
@@ -137,7 +148,12 @@ def main():
             f"Need at least 3 population sizes to fit a slope; bank has {n_have} galaxies."
         )
 
+    # tau_prior MUST match the interim fits' prior. They use Uniform(10, 500) on
+    # tau_myr -- linear-uniform -- while SharedGrid defaults to log-uniform. B2
+    # divides by the interim pushforward p_0, so a mismatch here divides by the
+    # wrong density, by a factor proportional to tau (50x across this range).
     grid = SharedGrid.uniform(
+        tau_prior=args.tau_prior,
         sigma_bounds=tuple(meta["interim_sigma_bounds"]),
         tau_bounds_yr=(
             meta["interim_tau_bounds_myr"][0] * 1e6,
@@ -146,6 +162,48 @@ def main():
         n_sigma=args.n_sigma,
         n_tau=args.n_tau,
     )
+
+    # Reject galaxies whose interim draws are not a plausible posterior at all.
+    #
+    # The field is m = L(sigma, tau) . xi with xi ~ N(0, I), so its scale is set
+    # by sigma: std(m) ~ sigma * ln(10), at most sigma_max * ln(10) plus sampling
+    # spread. A galaxy whose draws are orders of magnitude wider than that is not
+    # a narrow-vs-broad posterior, it is a broken one -- typically an
+    # ill-conditioned Laplace Hessian whose unbounded draws saturate the bound
+    # transform (observed: field std 226, 1155, 313 against an expected 1.7,
+    # with sigma piling on BOTH prior edges at once).
+    #
+    # This must be caught here because B2 cannot survive it. One such galaxy has
+    # essentially zero OU density at every node but the most extreme, so its
+    # weight dwarfs every other draw, logsumexp collapses to max, and the shared
+    # posterior pins to a grid corner -- identically at every N, which reads as
+    # "prior-dominated" but is nothing of the kind.
+    sigma_max = float(meta["interim_sigma_bounds"][1])
+    field_std_ceiling = 5.0 * sigma_max * np.log(10.0)
+    all_fields = centered_fields(xi, sig, tau_myr * 1e6, log_age)
+    per_gal_std = np.asarray(np.std(np.asarray(all_fields), axis=(1, 2)))
+    pathological = per_gal_std > field_std_ceiling
+    if pathological.any():
+        idx = np.flatnonzero(pathological)
+        print(
+            f"\n  {pathological.sum()}/{n_have} galaxies have implausible field scale "
+            f"(std > {field_std_ceiling:.1f}); worst {per_gal_std.max():.0f}. "
+            f"Indices: {idx[:12].tolist()}{' ...' if idx.size > 12 else ''}"
+        )
+        if not args.keep_pathological:
+            keep = ~pathological
+            xi, sig, tau_myr = xi[keep], sig[keep], tau_myr[keep]
+            rhat_s, rhat_t, rhat_f = rhat_s[keep], rhat_t[keep], rhat_f[keep]
+            n_have = int(keep.sum())
+            n_values = [n for n in n_values if n <= n_have]
+            print(
+                f"  dropped them; {n_have} galaxies remain. Pass --keep-pathological to include."
+            )
+            if len(n_values) < 3:
+                raise SystemExit(
+                    f"Only {n_have} usable galaxies remain -- too few for a slope. "
+                    "The interim fits, not the estimator, are what needs fixing."
+                )
 
     rows = []
     print(f"\n{'N':>5}  {'sigma (68%)':>22}  {'tau Myr (68%)':>24}  {'ESS':>7}")
@@ -203,6 +261,7 @@ def main():
             {
                 "bank": args.bank,
                 "method": args.method,
+                "tau_prior": args.tau_prior,
                 "n_galaxies_available": n_have,
                 "rows": rows,
                 "verdict": {k: dict(v) for k, v in verdict.items()},

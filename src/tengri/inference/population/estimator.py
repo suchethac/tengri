@@ -65,7 +65,7 @@ class SharedGrid:
     log_volume: jnp.ndarray
 
     @classmethod
-    def uniform(cls, *, sigma_bounds, tau_bounds_yr, n_sigma, n_tau):
+    def uniform(cls, *, sigma_bounds, tau_bounds_yr, n_sigma, n_tau, tau_prior="log_uniform"):
         r"""Grid uniform in ``sigma`` and log-uniform in ``tau``.
 
         Creates a quadrature grid in ``(sigma, log tau)`` space. The implied
@@ -88,6 +88,24 @@ class SharedGrid:
             ``(lo, hi)`` timescale support [yr].
         n_sigma, n_tau : int
             Node counts.
+        tau_prior : {"log_uniform", "uniform"}, optional
+            Prior shape in tau. Default ``"log_uniform"`` (flat in log tau).
+            Use ``"uniform"`` for a prior flat in tau itself.
+
+            **This must match the prior the interim fits ran under.**
+            ``shared_log_posterior`` uses ``log_prior`` twice: as the interim
+            pushforward inside ``p_0``, and as the shared prior on the final
+            posterior. The first is not a modelling choice -- it is a fact about
+            how the per-galaxy draws were generated, and getting it wrong makes
+            B2 divide by the wrong density. Fitting tau with
+            ``Uniform(10, 500)`` [Myr] and scoring on a ``"log_uniform"`` grid
+            mismatches the two by a factor proportional to tau, which is 50x
+            end-to-end on that range.
+
+            Neither the single-draw truth test nor the toy can catch this: with
+            one draw per galaxy ``p_0`` is a per-galaxy constant that cancels in
+            the normalization, and the toy generates and scores under the same
+            prior. It only shows up with real multi-draw interim posteriors.
 
         Returns
         -------
@@ -109,12 +127,31 @@ class SharedGrid:
                 f"suggest a units error (e.g., Myr where years are expected)."
             )
 
+        if tau_prior not in ("log_uniform", "uniform"):
+            raise ValueError(
+                f"tau_prior must be 'log_uniform' or 'uniform', got {tau_prior!r}. "
+                "It must match the prior the INTERIM fits actually ran under, or "
+                "the B2 pushforward correction divides by the wrong density."
+            )
+
         sigma = jnp.linspace(sigma_bounds[0], sigma_bounds[1], n_sigma)
         tau = jnp.geomspace(tau_bounds_yr[0], tau_bounds_yr[1], n_tau)
         d_sigma = (sigma_bounds[1] - sigma_bounds[0]) / n_sigma
         d_log_tau = (jnp.log(tau_bounds_yr[1]) - jnp.log(tau_bounds_yr[0])) / n_tau
         n_nodes = n_sigma * n_tau
-        log_prior = jnp.full((n_nodes,), -jnp.log(n_nodes))
+
+        # Quadrature runs in (sigma, log tau), so a node's weight must carry the
+        # Jacobian of whichever prior is being represented:
+        #     int f(tau) pi(tau) dtau = int f(tau) pi(tau) tau dlog(tau)
+        # A log-uniform prior (pi ∝ 1/tau) cancels the tau and leaves flat
+        # weights. A linear-uniform prior (pi = const) does not -- its node
+        # weight is proportional to tau, spanning a factor of 50 across a
+        # 10-500 Myr grid.
+        if tau_prior == "uniform":
+            log_w = jnp.log(jnp.tile(tau, n_sigma))
+        else:
+            log_w = jnp.zeros((n_nodes,))
+        log_prior = log_w - jax.scipy.special.logsumexp(log_w)
         log_volume = jnp.full((n_nodes,), jnp.log(d_sigma) + jnp.log(d_log_tau))
         return cls(sigma=sigma, tau_yr=tau, log_prior=log_prior, log_volume=log_volume)
 

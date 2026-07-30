@@ -318,3 +318,73 @@ def test_node_chunk_of_one_still_matches():
     whole, _ = shared_log_posterior(toy.fields, toy.times_yr, grid, node_chunk=10**6)
     one_at_a_time, _ = shared_log_posterior(toy.fields, toy.times_yr, grid, node_chunk=1)
     chex.assert_trees_all_close(whole, one_at_a_time, rtol=1e-12, atol=1e-12)
+
+
+def test_tau_prior_uniform_weights_nodes_in_proportion_to_tau():
+    """A linear-uniform tau prior must carry the dlog(tau) Jacobian.
+
+    Quadrature runs in (sigma, log tau). A prior flat in tau is NOT flat in
+    log tau -- it picks up a factor of tau -- so representing it on a
+    geomspaced grid means node weights proportional to tau. Across the
+    production 10-500 Myr range that is a factor of 50, so getting it wrong is
+    not a rounding error.
+
+    This matters because ``shared_log_posterior`` uses ``log_prior`` as the
+    INTERIM pushforward inside p_0, where it is not a modelling choice but a
+    fact about how the draws were generated. The interim fits use
+    ``Uniform(10, 500)`` on tau_myr, so the grid must say ``tau_prior="uniform"``.
+    """
+    from tengri.inference.population.estimator import SharedGrid
+
+    n_sigma, n_tau = 5, 7
+    bounds = (1.0e7, 5.0e8)
+    flat = SharedGrid.uniform(
+        sigma_bounds=(0.1, 1.0), tau_bounds_yr=bounds, n_sigma=n_sigma, n_tau=n_tau
+    )
+    lin = SharedGrid.uniform(
+        sigma_bounds=(0.1, 1.0),
+        tau_bounds_yr=bounds,
+        n_sigma=n_sigma,
+        n_tau=n_tau,
+        tau_prior="uniform",
+    )
+
+    # Both are normalized discrete priors over nodes.
+    for g in (flat, lin):
+        chex.assert_trees_all_close(float(jnp.sum(jnp.exp(g.log_prior))), 1.0, rtol=1e-10)
+
+    # Marginalize over sigma. Node g = a * n_tau + b, so tau varies fastest --
+    # the same ordering SharedGrid.nodes uses. If this reshape disagreed with
+    # `nodes`, the prior would be attached to the wrong (sigma, tau) pairs.
+    tau_nodes = np.asarray(jnp.tile(lin.tau_yr, n_sigma)).reshape(n_sigma, n_tau)[0]
+    np.testing.assert_allclose(tau_nodes, np.asarray(lin.tau_yr), rtol=1e-12)
+
+    p_flat = np.asarray(jnp.exp(flat.log_prior)).reshape(n_sigma, n_tau).sum(axis=0)
+    p_lin = np.asarray(jnp.exp(lin.log_prior)).reshape(n_sigma, n_tau).sum(axis=0)
+
+    # log-uniform: equal mass per node.
+    np.testing.assert_allclose(p_flat, p_flat[0], rtol=1e-10)
+    # uniform: mass proportional to tau, spanning the full 50x of the range.
+    np.testing.assert_allclose(p_lin / p_lin[0], np.asarray(lin.tau_yr) / float(lin.tau_yr[0]), rtol=1e-10)
+    assert p_lin[-1] / p_lin[0] > 40.0, (
+        f"expected ~50x weight ratio across the tau range, got {p_lin[-1] / p_lin[0]:.1f}"
+    )
+
+
+def test_tau_prior_rejects_an_unknown_name():
+    """An unrecognized tau_prior must raise, not silently pick a default.
+
+    Silently defaulting would reintroduce exactly the mismatch this parameter
+    exists to prevent, and the resulting bias is invisible from inside the
+    estimator.
+    """
+    from tengri.inference.population.estimator import SharedGrid
+
+    with pytest.raises(ValueError, match="tau_prior must be"):
+        SharedGrid.uniform(
+            sigma_bounds=(0.1, 1.0),
+            tau_bounds_yr=(1e7, 5e8),
+            n_sigma=4,
+            n_tau=4,
+            tau_prior="loguniform",
+        )
