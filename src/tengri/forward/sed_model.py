@@ -3324,6 +3324,11 @@ class SEDModel:
         met_mode = str(self._met_mode)
         stochastic = bool(self.spec.stochastic)
         n_grid = int(self._n_grid)
+        # SFH→SSP age-weight kernel (#964). "cic" and "dsps" produce different
+        # age weights on the SAME graph shape, so without this entry two models
+        # differing only in ``age_kernel`` share a compiled kernel and the
+        # second silently returns the first's photometry.
+        age_kernel = str(getattr(self.spec, "age_kernel", None) or "auto")
 
         # Alpha-Fe evolution
         alpha_fe_evolving = bool(self._alpha_fe_evolving)
@@ -3548,6 +3553,7 @@ class SEDModel:
             met_mode,
             stochastic,
             n_grid,
+            age_kernel,
             alpha_fe_evolving,
             z_fixed,
             catalog_z_range,
@@ -6709,6 +6715,7 @@ class SEDModel:
             metallicity_model=getattr(self, "_met_mode", "delta"),
             n_grid=int(getattr(self.spec, "n_grid", 256)),
             lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
+            age_kernel=getattr(self.spec, "age_kernel", None),
             nebular_backend=neb_backend_name,
             nebular_backend_instance=neb_backend_instance,
             cue_full_catalog=bool(getattr(self.spec, "cue_full_catalog", False)),

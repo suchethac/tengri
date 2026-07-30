@@ -68,6 +68,30 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
     resolves to the full prefixed name (`'beta'` in the `sfh` group →
     `sfh_dpl_beta`; `'frac'` in `shock` → `shock_frac`). The full prefixed
     name also works.
+  - **Other structural keys** — a few groups accept extra non-parameter
+    settings. The `sfh` group takes `'bin_edges_gyr'` (non-parametric bin
+    layout) and `'age_kernel'` (below).
+- **`sfh={'age_kernel': ...}`** picks how the SFH is integrated onto the SSP
+  age grid — the one place the two implementations differ numerically:
+  - `'cic'` (the default) evaluates the SFH on a 16x denser integrand and
+    splits each `SFR(t)·dt` parcel between its bracketing SSP nodes with
+    log-age cloud-in-cell weights.
+  - `'dsps'` hands the coarse per-SSP-age table to DSPS's histogram kernel.
+    It **zeroes the first SSP node older than the SFH start** (3.8 % of the
+    mass for a delayed-tau at age = 5 Gyr) and biases the optical CSP +1.2 %
+    vs FSPS / bagpipes / a dense reference ([#964]). Offered for cross-code
+    comparison against DSPS-native pipelines and pre-#964 tengri, not for
+    science.
+  - Leaving it unset auto-selects: `'cic'` on the parametric path, `'dsps'`
+    on the GP-field path (whose draw lives on its own coarse grid, so there
+    is no dense integrand to cloud-in-cell). Asking for `'cic'` together with
+    a field SFH raises rather than silently returning DSPS weights.
+  - It is **not** a speed knob. On a full `predict_photometry` gradient the
+    two are within 0.3 %, against a 1.8 % measurement noise floor — the
+    age-weight kernel is under 1 % of the work. DSPS's kernel is ~1.3x cheaper
+    *in isolation*, which does not survive contact with the SSP contraction.
+
+[#964]: https://github.com/suchethac/tengri/issues/964
 - **Sub-blocks** nest a dict with its own `'type'`/`'all_params'`/per-param keys:
   `dust.emission`, and the six composable AGN selectors `agn.disc`,
   `agn.torus`, `agn.nlr`, `agn.blr`, `agn.feii`, `agn.atten` (the deprecated

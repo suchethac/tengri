@@ -415,6 +415,10 @@ class Parameters:
         # bin_edges_gyr=...)``. Default ``None`` falls back to the
         # registry's own canonical edges. See #337.
         self.bin_edges_gyr = kwargs.pop("bin_edges_gyr", None)
+        # SFH→SSP age-weight kernel ("cic" / "dsps"), or None to auto-select.
+        # A structural setting, not a free parameter; forwarded to
+        # ``build_components(age_kernel=...)``. See #964.
+        self.age_kernel = kwargs.pop("age_kernel", None)
         # MW foreground extinction screen — applied at the
         # observed-frame SED boundary, independent of host-galaxy dust
         # (#297). ``foreground_ebmv_mw=0.0`` is the no-op default.

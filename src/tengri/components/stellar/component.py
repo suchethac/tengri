@@ -77,6 +77,77 @@ from tengri.utils.scale import pow10
 # ``_N_MET_BINS_DEFAULT``.
 _DEFAULT_MET_BIN_EDGES_LOG_YR = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
 
+#: Accepted ``age_kernel`` values — how the SFH is integrated onto the SSP age
+#: grid. See :class:`StellarSEDComponentConfig` for the accuracy/cost tradeoff.
+VALID_AGE_KERNELS = ("cic", "dsps")
+
+#: Kernel chosen on the non-field path when ``age_kernel`` is left unset
+#: (``None`` = auto). ``"cic"`` is the accuracy default: the DSPS histogram
+#: kernel zeroes the first SSP node older than the SFH start and biases the
+#: optical CSP +1.2 % vs FSPS / bagpipes / a dense reference (#964). Flipping
+#: this one name changes the default for every non-field model.
+DEFAULT_AGE_KERNEL = "cic"
+
+
+def _resolve_age_kernel(config) -> str:
+    """Which age-weight kernel this config selects — ``"cic"`` or ``"dsps"``.
+
+    Centralizes the choice so :meth:`StellarSEDComponent.apply` and the SED-free
+    :meth:`StellarSEDComponent.compute_joint_weights` fast path cannot drift
+    apart — a divergence there is invisible until the two disagree on a fit
+    (#982). Validates the value here rather than at each branch so a typo fails
+    loudly at the first prediction instead of silently selecting the default.
+
+    Parameters
+    ----------
+    config : StellarSEDComponentConfig
+        The component config; reads ``age_kernel`` and ``field``.
+
+    Returns
+    -------
+    str
+        ``"cic"`` or ``"dsps"``.
+
+    Raises
+    ------
+    ValueError
+        ``age_kernel`` is not in :data:`VALID_AGE_KERNELS`.
+    NotImplementedError
+        ``age_kernel="cic"`` was requested with ``field=True``. The GP-field
+        draw is defined on its own coarse lookback grid, so there is no dense
+        integrand to cloud-in-cell (#964). Returning DSPS weights anyway would
+        make an explicit request a silent no-op.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: returns a static Python string from static config
+    fields; never touches traced values.
+    """
+    kernel = getattr(config, "age_kernel", None)
+    if kernel is not None and kernel not in VALID_AGE_KERNELS:
+        raise ValueError(
+            f"Unknown age_kernel {kernel!r}. Valid: {', '.join(VALID_AGE_KERNELS)} "
+            f"(or None to auto-select). 'cic' is the accuracy default (dense "
+            f"cloud-in-cell integrand); 'dsps' is DSPS's histogram kernel, "
+            f"offered for cross-code comparison and known to bias the optical "
+            f"CSP +1.2 % (#964)."
+        )
+    if config.field:
+        # The field draw lives on the coarse lookback grid by construction, so
+        # DSPS is the only implemented kernel here. Auto-select resolves to it
+        # silently (that is today's behavior); an EXPLICIT 'cic' must not.
+        if kernel == "cic":
+            raise NotImplementedError(
+                "age_kernel='cic' is not supported with a GP-field SFH — the "
+                "field draw is defined on its own coarse lookback grid, so "
+                "there is no dense integrand to cloud-in-cell (#964). Drop the "
+                "field modulator to use the CIC kernel, or set "
+                "age_kernel='dsps' explicitly to acknowledge the field path's "
+                "kernel."
+            )
+        return "dsps"
+    return DEFAULT_AGE_KERNEL if kernel is None else kernel
+
 
 def _sfh_bin_edges_yr(fn, sfh_kwargs):
     """Lazy proxy to :func:`...sfh.nonparametric.sfh_bin_edges_yr` (#765)."""
@@ -839,6 +910,33 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     sps_backend : str
         Stellar population synthesis backend. Currently supports ``"dsps"``
         (DSPS native triweight-MDF CSP integration).
+    age_kernel : str or None
+        How the SFH is integrated onto the SSP age grid — ``"cic"``, ``"dsps"``,
+        or ``None`` (default) to auto-select: :data:`DEFAULT_AGE_KERNEL` on the
+        non-field path, ``"dsps"`` on the GP-field path. ``"cic"`` evaluates the
+        SFH on a
+        :func:`_refine_sfh_table_ages` dense integrand (16x the SSP nodes) and
+        splits each ``SFR(t)*dt`` parcel between its bracketing SSP nodes with
+        log-age cloud-in-cell weights. ``"dsps"`` hands the coarse per-SSP-age
+        table to DSPS's histogram kernel
+        (:func:`~tengri.components.stellar.sps.dsps_wrapper.compute_dsps_age_weights`),
+        which interpolates ``log10(M(<t))`` in ``log10(t)``.
+
+        The two are NOT equivalent: the DSPS kernel annihilates the mass of any
+        table segment straddling the SFH's maximum age, zeroing the first SSP
+        node older than the SFH start (3.8 % of the total for a delayed-tau with
+        age = 5 Gyr) and biasing the CSP +1.2 % in the optical with a blue-ward
+        tilt vs FSPS / bagpipes / a dense reference (#964). ``"cic"`` is
+        therefore the accuracy default; ``"dsps"`` is offered for cross-code
+        comparison against pre-#964 tengri and DSPS-native pipelines, and costs
+        ~1.3x less per age-weight gradient (a ~2 % effect on a full
+        ``predict_photometry`` gradient — the kernel is a small slice of it).
+
+        Only consulted on the non-field path. A GP-field SFH always uses the
+        DSPS kernel: the field draw is defined on its own coarse lookback grid,
+        so there is no dense integrand to cloud-in-cell (#964). Asking for
+        ``age_kernel="cic"`` together with ``field=True`` raises rather than
+        silently returning DSPS weights.
     use_alpha_grid : bool
         Whether the SSP grid carries an α/Fe axis. Currently ``False``.
     lgmet_scatter : float
@@ -852,6 +950,7 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     n_grid: int = 256
     metallicity_model: str = "delta"
     sps_backend: str = "dsps"
+    age_kernel: str | None = None
     use_alpha_grid: bool = False
     lgmet_scatter: float = 0.2
     # Number of bins for ``metallicity_model="bins"`` /
@@ -1794,6 +1893,7 @@ class StellarSEDComponent:
         lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
 
         _used_cic = False
+        _age_kernel = _resolve_age_kernel(self.config)
         if self.config.metallicity_model == "delta":
             # Delta metallicity: separable joint weights. The age marginal
             # comes from tengri's cloud-in-cell kernel on a dense integrand
@@ -1804,7 +1904,9 @@ class StellarSEDComponent:
             # the optical vs FSPS / bagpipes / a dense reference. The GP-field draw
             # lives on the coarse lookback grid by construction, so the field path
             # keeps DSPS — a deliberate <~1% parametric-vs-field systematic (#964).
-            if not self.config.field:
+            # ``age_kernel`` makes that choice explicit and selectable; see
+            # :func:`_resolve_age_kernel`.
+            if _age_kernel == "cic":
                 _fine_age_yr = _refine_sfh_table_ages(ssp_ages_yr)
                 # #765: inject the SFH's exact bin edges as knots so the step
                 # transitions of binned SFHs are represented sharply in the
@@ -1853,7 +1955,7 @@ class StellarSEDComponent:
                 )
                 joint_weights = dsps_result.weights  # (n_met, n_age)
         else:  # ramp / chem_evol — per-age metallicity table
-            if not self.config.field:
+            if _age_kernel == "cic":
                 # CIC joint weights on the dense integrand (#964), so the
                 # per-age metallicity modes stay consistent with the delta
                 # path and their degenerate configurations (constant table,
@@ -2511,6 +2613,8 @@ class StellarSEDComponent:
 
         lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
 
+        _age_kernel = _resolve_age_kernel(self.config)
+
         # Metallicity — delta gives one scalar log10(Z); table gives a per-age
         # curve that routes to the CIC met-table kernel below (matches apply §4).
         log_z_abs_scalar = None
@@ -2525,22 +2629,47 @@ class StellarSEDComponent:
                 effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe) + LOG10_ZSUN
             )
 
-        # GP-field CSP weights — mirrors apply's field delta path EXACTLY. The
-        # field modulates the SFR on the lookback grid (``_apply_gp_field``, the
-        # single source shared with :meth:`apply`), which is interpolated to the
-        # SSP ages; the (met, age) weights then come from the SAME DSPS function
+        # DSPS-histogram CSP weights — mirrors apply's DSPS path EXACTLY. The
+        # (met, age) weights come from the SAME DSPS function
         # (``calc_ssp_weights_sfh_table_lognormal_mdf``) that apply's SED call uses
         # internally — so the fast and exact line paths cannot diverge. ``total_mass``
         # is the conserved coarse value (no young knot), matching apply §3.
-        if self.config.field:
+        #
+        # Reached by a GP-field SFH (whose draw lives on the coarse lookback grid,
+        # so DSPS is the only implemented kernel) and by any non-field model that
+        # explicitly selects ``age_kernel="dsps"`` (#964).
+        if _age_kernel == "dsps":
+            if lgmet_on_ssp_ages is not None:
+                # The scalar-MDF DSPS call below has no per-age metallicity
+                # axis; feeding it ``log_z_abs_scalar=None`` would fail deep
+                # inside DSPS (or, worse, silently drop Z(t)). apply's
+                # ``calc_rest_sed_sfh_table_met_table`` arm covers this
+                # combination — the SED-free fast path does not.
+                raise NotImplementedError(
+                    "The SED-free fast path does not support the DSPS age "
+                    "kernel with a per-age metallicity table "
+                    f"(metallicity_model={self.config.metallicity_model!r}). "
+                    "Use age_kernel='cic' (the default), or call predict()/"
+                    "apply() instead of the line/nion fast path."
+                )
             from dsps.sed.ssp_weights import calc_ssp_weights_sfh_table_lognormal_mdf
 
-            n_grid = self.config.n_grid
-            log_age_grid = make_log_age_grid(n_grid)
-            sfh_lbt_grid = 10.0**log_age_grid
-            sfr_history = sfh_spec.fn(sfh_lbt_grid, **sfh_kwargs)
-            sfr_history = _apply_gp_field(sfr_history, params, n_grid, log_age_grid)
-            sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+            if self.config.field:
+                # The field modulates the SFR on the lookback grid
+                # (``_apply_gp_field``, the single source shared with
+                # :meth:`apply`), which is interpolated to the SSP ages.
+                n_grid = self.config.n_grid
+                log_age_grid = make_log_age_grid(n_grid)
+                sfh_lbt_grid = 10.0**log_age_grid
+                sfr_history = sfh_spec.fn(sfh_lbt_grid, **sfh_kwargs)
+                sfr_history = _apply_gp_field(sfr_history, params, n_grid, log_age_grid)
+                sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+            else:
+                # Non-field: apply evaluates the closed-form SFH directly on the
+                # SSP ages (§3) rather than through the log grid, so the fast
+                # path must do the same or the two routes read one SFH
+                # differently (#982).
+                sfr_on_ssp = sfh_fn(ssp_ages_yr, **sfh_kwargs)
             _, _, total_mass = _build_dsps_sfh_table(ssp_ages_yr, sfr_on_ssp, t_obs_gyr)
             gal_t, gal_sfr, _ = _build_dsps_sfh_table(
                 ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
