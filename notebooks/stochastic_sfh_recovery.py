@@ -54,8 +54,30 @@
 # %%
 import os
 import sys
-import time
 import warnings
+
+# _setup must be imported BEFORE jax: it sets TF_CPP_MIN_LOG_LEVEL, which XLA only
+# reads at import. Import jax first and every cell below carries a wall of
+# "PjRt-IFRT does not track XLA executable versions" into the rendered page.
+sys.path.insert(0, ".")
+from _plot_style import setup_style
+from _setup import effective_wavelengths_um, quiet
+
+quiet()
+setup_style()
+
+# Two notices that are correct, and correct to ignore *here*:
+#   - a wNE library warns that nebular emission is already in the templates and must
+#     be paired with the baked-in backend, which is exactly the pairing used below;
+#   - two_component(defaults=FREE) frees the two Calzetti optical depths and reports
+#     that Rv, delta, the bump strength and the obscured fraction stay fixed. They
+#     belong to other attenuation laws, and holding them constant is the point: this
+#     notebook varies the star-formation history, not the dust law.
+warnings.filterwarnings("ignore", message=r"(?s).*is a wNE .*")
+warnings.filterwarnings("ignore", message=r"(?s).*run with that physics held constant.*")
+
+import time
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -65,16 +87,7 @@ jax.config.update("jax_enable_x64", True)
 import matplotlib.pyplot as plt
 import numpy as np
 
-sys.path.insert(0, ".")
-from _plot_style import setup_style
-from _setup import effective_wavelengths_um, quiet
-
-setup_style()
-quiet()
-warnings.filterwarnings("ignore", message=r".*before the Big Bang.*")
 os.makedirs("figures", exist_ok=True)
-
-from pathlib import Path
 
 import tengri
 from tengri import (
@@ -268,7 +281,7 @@ print(f"A: {flux_phot.size} fluxes   "
 # %% [markdown]
 # ### What each observable sees
 #
-# The faint grey curve is the same true spectrum in all three panels. Only the
+# The faint gray curve is the same true spectrum in all three panels. Only the
 # markers change.
 
 # %%
@@ -286,8 +299,10 @@ _shown = (np.asarray(wave_wide) >= X_LO) & (np.asarray(wave_wide) <= X_HI)
 Y_LO = float(np.nanmin(sed_wide[_shown])) * TO_UJY * 0.55
 Y_HI = float(np.nanmax(sed_wide[_shown])) * TO_UJY * 2.2
 
-# The three lines worth naming; the rest are doublet partners of these.
-NAMED = {"Halpha": r"H$\alpha$", "Hbeta": r"H$\beta$", "OIII_5007": "[O III]"}
+# Three well-separated lines to name. [O III] 5007 is deliberately left unlabeled:
+# at this width its tick sits ~160 A from Hbeta and the two labels overlap into
+# nonsense. All eight are still drawn.
+NAMED = {"OII_3726": "[O II]", "Hbeta": r"H$\beta$", "Halpha": r"H$\alpha$"}
 
 fig, axes = plt.subplots(3, 1, figsize=(9.2, 7.4), sharex=True, sharey=True)
 for key, ax in zip("ABC", axes):
@@ -422,16 +437,20 @@ for key, ax in zip("ABC", axes):
     ax.plot(t_plot, sfr_map[key], color=C[key], lw=2.2, label="MAP fit", zorder=3)
     ax.set_xscale("log")
     ax.set_xlim(t_plot.min(), t_plot.max() * 1.4)
-    ax.set_ylim(0, top)
+    ax.set_ylim(0, top * 1.08)
     ax.set_xlabel("lookback time [Gyr]")
     ax.set_title(f"{key} — {LABEL[key]}\nrecent {score[key]['recent (< 15 Myr)']:.3f} dex",
                  fontsize=10)
     ax.legend(fontsize=8.5, loc="upper left", framealpha=0.92)
     ax.grid(alpha=0.22, lw=0.4)
 axes[0].set_ylabel(r"SFR [$M_\odot\,\mathrm{yr}^{-1}$]")
-axes[0].text(t_plot.min() * 1.25, top * 0.62, "recent", fontsize=8, color="#a06a10",
-             rotation=90, va="center")
-axes[0].text(2.2, top * 0.62, "old", fontsize=8, color="#5c4080", rotation=90, va="center")
+# Window labels sit at the FOOT of each shaded band: at the top they collide with
+# the legend, and the SFR curves never come near the floor on the left.
+for _ax in axes:
+    _ax.text(np.sqrt(t_plot.min() * YOUNG_GYR), top * 0.03, "recent", fontsize=8,
+             color="#a06a10", ha="center", va="bottom")
+    _ax.text(np.sqrt(MID_GYR * t_plot.max()), top * 0.03, "old", fontsize=8,
+             color="#5c4080", ha="center", va="bottom")
 fig.suptitle("Photometry alone smooths the bursts away; the lines put them back", y=1.0)
 fig.tight_layout()
 fig.savefig("figures/sfh_recovery_by_observable.png", dpi=150, bbox_inches="tight")
@@ -474,9 +493,10 @@ plt.show()
 # ## 5. A full posterior, not just a mode
 #
 # The MAP comparison above answers *where does the mode land*. It says nothing
-# about how wide the answer is — and with ~15 numbers constraining a 23-dimensional
-# model, the width is the interesting part. So we run a Hamiltonian Monte Carlo
-# posterior on case **B**, and plot it with the library helper.
+# about how wide the answer is — and with 15 measured numbers (7 fluxes, 8 lines)
+# constraining a model of the dimension printed in Section 1, the width is the
+# interesting part. So we run a Hamiltonian Monte Carlo posterior on case **B** and
+# plot it with the library helper.
 #
 # Two honest caveats. The posterior is wide and strongly correlated (mass ↔ SFR,
 # dust ↔ recent SFR), so it needs a long trajectory: `n_leapfrog_steps=100`, where
@@ -487,10 +507,15 @@ plt.show()
 # widths as indicative.**
 
 # %%
+# Cost is (n_warmup + n_samples) x n_leapfrog_steps gradient evaluations, so the
+# trajectory length is the expensive knob -- and the one that matters here, since a
+# short trajectory returns tight bands that are an artifact of not having moved.
+# This is a demonstration budget chosen to run in minutes; a result you intend to
+# publish wants several times the samples and a convergence check.
 t0 = time.perf_counter()
 posterior = ForwardModel.build(sed=model["B"], observation=OBSERVATION["B"]).fit(
     *DATA["B"], method="mcmc_hmc", init_from=fits["B"],
-    n_warmup=600, n_samples=500, n_leapfrog_steps=100, dense_mass_matrix=True,
+    n_warmup=300, n_samples=200, n_leapfrog_steps=100, dense_mass_matrix=True,
     key=jax.random.PRNGKey(SEED + 7), verbose=False,
 )
 print(f"HMC in {time.perf_counter() - t0:.0f} s")
@@ -499,32 +524,59 @@ print(f"HMC in {time.perf_counter() - t0:.0f} s")
 ax = plot_sfh(model["B"], posterior, true_params=truth_full,
               method="HMC", xscale="log", label="posterior (case B)")
 ax.set_title("Case B posterior — 7 filters + 8 emission lines")
+ax.set_xlabel("lookback time [Gyr]")
 ax.figure.savefig("figures/sfh_posterior_lines.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
+# Read that figure carefully, because it shows the failure as well as the success.
+# Below ~0.1 Gyr the posterior tracks the injected history and the band is
+# honestly narrow — that is the emission lines doing their work. Between 0.1 and
+# 1 Gyr the band is *too* narrow: the truth sits outside it at the burst peaks,
+# so those intervals under-cover rather than merely being wide.
+#
+# That is the geometry problem named above, not a budget problem, and it is the
+# concrete reason for the advice in the next section — quote integrated
+# quantities, whose errors are dominated by the well-measured part of the
+# history, rather than the star-formation rate in an individual age bin.
+
+# %% [markdown]
 # ## What to take away
 #
-# **1. Emission lines buy far more than filters do.** Going from 7 broadband
-# filters to 20 (a COSMOS-like set, medium bands included) barely moves the recent
-# history. Adding 8 optical lines to the *same 7 filters* cuts the recent-SFH error
-# by roughly a factor of four. Broadband photometry integrates over the young
-# light; the lines measure it. For an SDSS-like sample, the spectrum is the whole
-# game and extra filters add almost nothing.
+# **1. Emission lines are the biggest single win, and extra filters are not.**
+# Adding 8 optical lines to the *same* 7 filters is what fixes the recent history:
+# a factor of five below 15 Myr for the galaxy above (0.30 → 0.06 dex), and 0.37 →
+# 0.10 dex as a median over three independent realizations. Widening the *filter*
+# set instead, to
+# a COSMOS-like 20 bands with medium bands included, leaves that number essentially
+# unchanged. Broadband photometry integrates over the young light; the lines measure
+# it. For an SDSS-like sample the spectrum is the whole game and extra filters add
+# almost nothing.
 #
-# **2. The spectrum's extra value is the old mass budget, not the bursts.** Below
-# 15 Myr a spectrum and a set of line fluxes perform the same — unsurprising, since
-# the lines are the part of the spectrum carrying that information. What the
-# continuum adds is the *older* population: the 4000 Å break and Balmer absorption
-# pin the fraction of mass formed more than 1 Gyr ago to within a percent, where
-# photometry alone is off by several.
+# **2. The spectrum's distinctive contribution is the old mass budget.** The
+# fraction of mass formed more than 1 Gyr ago improves monotonically from A to C and
+# lands on the truth once the continuum is included — the same ordering as the
+# three-realization study (truth 0.798; 0.758 photometry, 0.780 with lines, 0.804
+# with a spectrum). The 4000 Å break and Balmer absorption carry that information
+# and a list of line fluxes throws it away.
 #
-# **3. Report integrals, not per-node rates.** The old population's *mass* is
-# well measured even where its per-node *SFR* is not constrained at all. Quote
-# physically defined integrals — SFR averaged over 0–10 and 0–100 Myr, $M_\star$,
-# mass-weighted age — rather than the star-formation rate in an individual age bin.
+# **3. Below 15 Myr, lines and a spectrum are equivalent — and one galaxy cannot
+# rank them.** That equivalence is expected: the lines *are* the part of the
+# spectrum carrying recent-SFH information, and over three realizations both give
+# 0.10 dex. The intermediate window (15 Myr – 1 Gyr) is noisier still. In the single
+# galaxy above the spectrum happens to score *worst* of the three there, while the
+# three-realization medians put lines and spectrum within 0.01 dex of each other and
+# both ahead of photometry alone. Read the direction of these effects, not the
+# ordering of one realization.
 #
-# **4. More age bins do not mean more resolution.** `n_grid` sets how *smooth* the
+# **4. Report integrals, not per-node rates.** The old population's *mass* is well
+# measured even where its per-node *SFR* is not constrained at all — which is why
+# the mass-fraction panel is meaningful while a per-node comparison beyond 1 Gyr is
+# not. Quote physically defined integrals — SFR averaged over 0–10 and 0–100 Myr,
+# $M_\star$, mass-weighted age — rather than the star-formation rate in an
+# individual age bin.
+#
+# **5. More age bins do not mean more resolution.** `n_grid` sets how *smooth* the
 # field is, not how much the data can say: quadrupling it from 16 to 64 leaves the
 # recovered information flat while tripling the dimension a sampler has to explore.
 # `n_grid=32` is a good default — as smooth as 64, and small enough that HMC still
