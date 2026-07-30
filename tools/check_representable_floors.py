@@ -36,11 +36,10 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # Pinned population as of #1492. Lower this when sites are migrated; never raise
 # it without saying which of the three kinds the new site is (see #1404's note).
 #
-# 46 -> 45 (#1485): ``utils/wavelength.py:interpolate_sed_to_grid`` used to floor
-# with ``jnp.maximum(sed_src, 1e-300)`` before taking a log. It now delegates to
-# ``grid_interp.resample_template``, which gates the log on ``y > 0`` with a
-# double-``where`` and falls back to linear-in-flux instead of flooring — so the
-# literal is gone rather than merely relocated.
+# 46 -> 45: #1485 replaced the hand-rolled linear template resampling with
+# ``resample_template()``, deleting the ``jnp.maximum(sed_src, 1e-300)`` that
+# had guarded the log of the source SED. The floor went away with the linear
+# path that needed it, so this is a genuine migration, not a re-pin.
 _PINNED = 45
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"

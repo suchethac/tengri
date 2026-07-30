@@ -46,6 +46,7 @@ import contextlib
 import logging
 import threading
 import time
+import weakref
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -332,6 +333,107 @@ def split_fitter_kwargs(kwargs):
     ctor_kwargs = {k: v for k, v in kwargs.items() if k in ctor_names}
     run_kwargs = {k: v for k, v in kwargs.items() if k not in ctor_names}
     return ctor_kwargs, run_kwargs
+
+
+# Fit-time approx clones, memoized per (source model, resolved config).
+#
+# Every ``Fitter`` resolves ``approx`` and clones the model, so N sequential
+# per-galaxy fits over one ``ForwardModel`` produced N distinct clone objects.
+# The compile caches (``_model_cache``, and the flat log-density built on it) key
+# on model **identity**, so each galaxy missed the cache and recompiled — even
+# though their ``_engine_cache_key()`` values were already identical. Returning
+# the *same* clone for the same (source, config) makes those identity-keyed caches
+# hit, without touching what any cache key means: same object implies same
+# structure, so this cannot introduce the wrong-reuse hazard that re-keying
+# structurally would (#1329 is what that looks like when it goes wrong).
+#
+# Safe to share because a resolved model is never mutated: nothing assigns to
+# ``self.model.*`` or ``model.spec.*`` anywhere in this module, and per-fit state
+# (``_params_override``, data, noise) lives on the Fitter.
+#
+# Keyed weakly on the source model, so the entry dies with the user's model and
+# clones are not pinned. Mirrors ``_model_cache``'s WeakKeyDictionary, which
+# already establishes that models are hashable and weak-referenceable.
+_APPROX_CLONE_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _memoized_approx_clone(model, cfg):
+    """``model.with_approx(cfg)``, returning one shared clone per distinct config.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        Source model. Never mutated; used as the weak cache key.
+    cfg : precompute config or tuple
+        The **resolved** configuration. Keyed on this rather than on the caller's
+        ``approx`` argument because resolution depends on fitter state (whether
+        the fit has a line channel), so ``approx="auto"`` can legitimately resolve
+        to different configs for different fits.
+
+    Returns
+    -------
+    SEDModel or ForwardModel
+        The clone for ``(model, cfg)`` — identical object across calls.
+
+    Notes
+    -----
+    Not JIT-related itself; it exists so that downstream identity-keyed compile
+    caches hit. A model that is unhashable or not weak-referenceable falls back to
+    cloning every time, which is the previous behavior rather than an error.
+    """
+    try:
+        bucket = _APPROX_CLONE_CACHE.setdefault(model, {})
+    except TypeError:
+        return model.with_approx(cfg)
+    # repr, not hash: the precompute configs are dataclasses whose repr covers
+    # every field, and not all of them are guaranteed hashable.
+    key = (type(cfg).__name__, repr(cfg))
+    clone = bucket.get(key)
+    if clone is None:
+        clone = model.with_approx(cfg)
+        bucket[key] = clone
+    return clone
+
+
+# Jitted predict wrappers, memoized per (model, method name).
+#
+# ``jax.jit`` caches on the callable's identity, and ``model.predict_photometry``
+# constructs a fresh bound method on every attribute access — so
+# ``jax.jit(model.predict_photometry)`` is a different function each time and
+# recompiles. Holding the wrapper keeps the identity stable across fits.
+_PREDICT_JIT_CACHE: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _memoized_predict_jit(model, name: str):
+    """``jax.jit(getattr(model, name))`` with a stable identity across calls.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        Fit model; the weak cache key.
+    name : str
+        Attribute name of the accessor to wrap, e.g. ``"predict_photometry"``.
+
+    Returns
+    -------
+    callable
+        The jitted accessor — the same object on every call for a given
+        ``(model, name)``, so JAX reuses its compiled executable.
+
+    Notes
+    -----
+    A model that is unhashable or not weak-referenceable falls back to a fresh
+    ``jax.jit`` each call, which is the previous behavior rather than an error.
+    """
+    try:
+        bucket = _PREDICT_JIT_CACHE.setdefault(model, {})
+    except TypeError:
+        return jax.jit(getattr(model, name))
+    fn = bucket.get(name)
+    if fn is None:
+        fn = jax.jit(getattr(model, name))
+        bucket[name] = fn
+    return fn
 
 
 class Fitter:
@@ -854,7 +956,7 @@ class Fitter:
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
         try:
-            return model.with_approx((*existing, FeaturePrecomp()))
+            return _memoized_approx_clone(model, (*existing, FeaturePrecomp()))
         except Exception as exc:  # broad on purpose — never break a working fit
             import warnings
 
@@ -910,9 +1012,9 @@ class Fitter:
                     resolved = self._add_feature_precomp(model)
                 return resolved
             cfg = self._auto_approx_config(model)
-            return model if cfg is None else with_approx(cfg)
+            return model if cfg is None else _memoized_approx_clone(model, cfg)
 
-        resolved = with_approx(approx)
+        resolved = _memoized_approx_clone(model, approx)
         self._warn_lines_without_lut(resolved)
         return resolved
 
@@ -1113,11 +1215,25 @@ class Fitter:
         # (HMC/NUTS) see them as outer Parameters, not Constants. Stored
         # under a private "_jit_inputs" sub-dict so existing data_args
         # consumers don't have to skip new keys.
-        # Some test/dummy models don't implement the threading API —
-        # the `with` suppresses cleanly without falling through.
-        import contextlib
-
-        with contextlib.suppress(AttributeError, TypeError):
+        # Some test/dummy models don't implement the threading API. Decide that by
+        # ASKING (hasattr) rather than by catching AttributeError out of the body:
+        # a blanket ``suppress(AttributeError, TypeError)`` around the whole block
+        # also swallows an AttributeError raised *from inside* a real model, and
+        # then silently ships an un-threaded fit. That is exactly what happened —
+        # ``ForwardModel`` (the canonical surface) did not delegate ``ssp_data``, so
+        # every fit through it baked the SSP grid into the compiled program as a
+        # constant and XLA was OOM-killed on large grids. A guard that fails open
+        # turns a one-line omission into an invisible performance cliff.
+        #
+        # The topology gate is separate and asked of the model: the threaded
+        # forward is written for a single-population SED forward and mis-broadcasts
+        # the galaxy axis on a hierarchical one. Absent on SEDModel, where threading
+        # has always been valid, so default True.
+        _supports = getattr(model, "_supports_jit_threading", None)
+        _threadable = _supports() if callable(_supports) else True
+        if _threadable and all(
+            hasattr(model, attr) for attr in ("spec", "ssp_data", "_template_data_for_jit")
+        ):
             # Per-fit params override (#1329): the forward pass reads fixed values
             # (e.g. redshift under ``catalog_z_range``) from this threaded dict at
             # runtime, so the override MUST be merged here — not only in
@@ -2003,10 +2119,15 @@ class Fitter:
             init = self._initialize_unbounded(key)
             _jax.block_until_ready(grad_fn(init, self._data_args))
         # Post-fit predict surface on the fit model (LUT-honoring accessors).
+        # The wrappers are memoized per model: ``self.model.predict_photometry``
+        # builds a NEW bound-method object on every attribute access, so a bare
+        # ``jax.jit(...)`` here got a fresh cache entry and recompiled on every
+        # fit — the warming step was the one thing that never stayed warm. It cost
+        # two compiles per galaxy on a sequential catalog.
         with contextlib.suppress(Exception):
             warm_p = self.spec.sample(key)
-            _jax.block_until_ready(_jax.jit(self.model.predict_photometry)(warm_p))
-            _jax.block_until_ready(_jax.jit(self.model.predict_properties)(warm_p))
+            for _name in ("predict_photometry", "predict_properties"):
+                _jax.block_until_ready(_memoized_predict_jit(self.model, _name)(warm_p))
 
     def save_cache(self, path) -> None:
         """Persist this model's adaptation cache (step size + mass matrix) to disk.
