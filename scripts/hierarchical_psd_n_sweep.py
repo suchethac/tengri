@@ -24,16 +24,18 @@ import time
 
 import numpy as np
 
-from tengri.inference.population.diagnostics import interval_width_scaling
-
 # Import the single-N driver so the sweep cannot drift from the run it sweeps.
-from scripts.hierarchical_psd_recovery_run import (  # noqa: E402
+from scripts.hierarchical_psd_recovery_run import (
     TRUTH_SIGMA,
     TRUTH_TAU_MYR,
     run_recovery,
 )
 
-N_VALUES = (8, 16, 32, 64)
+from tengri.inference.population.diagnostics import interval_width_scaling
+
+# Sized to what this machine finishes. Two earlier sweeps were OOM-killed
+# at N=16; a 4x range in N is enough to fit a slope.
+N_VALUES = (4, 8, 12, 16)
 OUT_JSON = "n_sweep_results.json"
 
 
@@ -71,6 +73,11 @@ def main():
             f"tau {r['tau_med']:.1f} (width {t_w:.1f})  {dt:.0f}s",
             flush=True,
         )
+        # Persist after EVERY N. Two earlier sweeps were OOM-killed partway and
+        # lost every completed point, because results were only written at the
+        # end. A long run on a machine that can kill it must checkpoint.
+        with open(OUT_JSON, "w") as fh:
+            json.dump({"rows": rows, "verdict": None}, fh, indent=2)
 
     n_arr = np.array([r["n"] for r in rows], dtype=float)
     print("\n" + "=" * 72)

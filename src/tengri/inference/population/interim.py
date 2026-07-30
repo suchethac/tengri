@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import gc
 import time
 from typing import Any, NamedTuple
 
@@ -191,6 +192,14 @@ def fit_interim(
         if isinstance(n_div_i, dict):
             n_div_i = n_div_i.get("total", 0)
         all_divergent_counts.append(int(n_div_i))
+
+        # Release the per-galaxy Posterior and Fitter before the next iteration.
+        # A Posterior holds a reference to its model, and a Fitter's data_args
+        # carry the threaded SSP grid (~62 MB). Holding N of those alive is how
+        # two sweeps were OOM-killed at N=16 with no traceback — the kernel
+        # SIGKILLs without letting Python report anything.
+        del post_i, fitter
+        gc.collect()
 
     t1 = time.time()
     wall_time = t1 - t0

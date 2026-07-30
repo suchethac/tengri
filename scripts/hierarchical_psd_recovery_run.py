@@ -106,7 +106,7 @@ def _build(ssp_data, *, line_flux_data=None, approx=None):
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=Observation(**obs_kw),
-        sfh={"type": ["dpl", "field"], "*": FREE},
+        sfh={"type": ["dpl", "field"], "*": FREE, "age_gyr": 11.0},
         dust={"type": "two_component", "law_bc": "calzetti", "*": FREE},
         neb={"type": "none"},
         redshift=Fixed(REDSHIFT),
