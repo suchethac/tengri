@@ -38,17 +38,20 @@ import time
 
 import jax
 import numpy as np
-
 from scripts.hierarchical_psd_recovery_run import (
     INTERIM_SIGMA_BOUNDS,
     INTERIM_TAU_BOUNDS_MYR,
+    SNR_LINE,
+    SNR_PHOT,
     TRUTH_SIGMA,
     TRUTH_TAU_MYR,
     build_model,
 )
 
 from tengri import Fitter, Parameters, Uniform, load_ssp_data
+from tengri.analysis.diagnostics.autocorrelation import split_rhat
 from tengri.analysis.population_mocks import make_population
+from tengri.inference.population.reconstruct import centered_fields
 
 SSP_PATH = "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
@@ -109,6 +112,8 @@ def main():
         sigma_true=TRUTH_SIGMA,
         tau_true_myr=TRUTH_TAU_MYR,
         key=jax.random.PRNGKey(0),
+        snr_phot=SNR_PHOT,
+        snr_line=SNR_LINE,
     )
     fit_model = _interim_model(model)
 
@@ -126,6 +131,8 @@ def main():
         "n_samples": args.n_samples,
         "n_chains": args.n_chains,
         "n_leapfrog_steps": args.n_leapfrog_steps,
+        "snr_phot": SNR_PHOT,
+        "snr_line": SNR_LINE,
         "thin": args.thin,
         "log_age_grid": np.asarray(model.log_age_grid).tolist(),
     }
@@ -173,13 +180,33 @@ def main():
             dense_mass_matrix=True,
         )
 
-        xi = np.asarray(post.samples["psd_xi"])[:: args.thin]
-        sig = np.asarray(post.samples["sfh_field_psd_sigma"])[:: args.thin]
-        tau = np.asarray(post.samples["sfh_field_psd_tau_myr"])[:: args.thin]
+        xi_full = np.asarray(post.samples["psd_xi"])
+        sig_full = np.asarray(post.samples["sfh_field_psd_sigma"])
+        tau_full = np.asarray(post.samples["sfh_field_psd_tau_myr"])
         rhat = post.rhat(exclude_prefixes=())
         n_div = getattr(post, "n_divergent", 0)
         if isinstance(n_div, dict):
             n_div = n_div.get("total", 0)
+
+        # R-hat on the RECONSTRUCTED FIELD, which is what the estimator consumes.
+        #
+        # R-hat on psd_xi is not the relevant gate and reads as false
+        # reassurance. The field is m = L(sigma, tau) . xi, so chains that agree
+        # on xi but disagree on sigma disagree on m. That is exactly the
+        # measured situation -- xi R-hat 0.994-0.998 against sigma R-hat 4.4 --
+        # and reading the xi number alone says "converged" about draws that are
+        # not draws from the interim posterior at all. Posterior.rhat even
+        # excludes psd_xi by default, so the field is invisible unless asked for.
+        m_full = centered_fields(
+            xi_full[None, :, :], sig_full[None, :], tau_full[None, :] * 1e6, model.log_age_grid
+        )[0]
+        rhat_field = np.array(
+            [split_rhat(np.asarray(m_full[:, j])) for j in range(m_full.shape[1])]
+        )
+
+        xi = xi_full[:: args.thin]
+        sig = sig_full[:: args.thin]
+        tau = tau_full[:: args.thin]
 
         # Write to a temporary name and rename, so a kill mid-write cannot leave
         # a truncated .npz that the analysis would later load as valid.
@@ -193,6 +220,7 @@ def main():
             rhat_sigma=np.asarray(float(rhat.get("sfh_field_psd_sigma", np.nan))),
             rhat_tau=np.asarray(float(rhat.get("sfh_field_psd_tau_myr", np.nan))),
             rhat_xi_max=np.asarray(float(np.max(np.asarray(rhat["psd_xi"])))),
+            rhat_field=rhat_field,
         )
         os.replace(tmp, path)
 
@@ -207,7 +235,8 @@ def main():
         rate = (time.time() - t_start) / n_done
         left = (end - i - 1) * rate
         print(
-            f"  gal {i:4d}: {dt:5.0f}s  R-hat sigma {float(rhat.get('sfh_field_psd_sigma', np.nan)):.2f} "
+            f"  gal {i:4d}: {dt:5.0f}s  R-hat field max {float(np.max(rhat_field)):.2f} | "
+            f"sigma {float(rhat.get('sfh_field_psd_sigma', np.nan)):.2f} "
             f"tau {float(rhat.get('sfh_field_psd_tau_myr', np.nan)):.2f}  "
             f"div {int(n_div):3d}  peak {_peak_rss_gb():.1f} GB  "
             f"ETA {left / 3600:.1f} h",

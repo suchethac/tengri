@@ -44,7 +44,7 @@ def load_bank(bank_dir, n_max=None):
     with open(os.path.join(bank_dir, "bank_meta.json")) as fh:
         meta = json.load(fh)
 
-    xi, sig, tau_myr, rhat_s, rhat_t, rhat_x, ndiv = [], [], [], [], [], [], []
+    xi, sig, tau_myr, rhat_s, rhat_t, rhat_x, rhat_f, ndiv = [], [], [], [], [], [], [], []
     i = 0
     while True:
         path = os.path.join(bank_dir, f"gal_{i:04d}.npz")
@@ -57,6 +57,8 @@ def load_bank(bank_dir, n_max=None):
             rhat_s.append(float(d["rhat_sigma"]))
             rhat_t.append(float(d["rhat_tau"]))
             rhat_x.append(float(d["rhat_xi_max"]))
+            # The field R-hat is the gate; older banks predate it.
+            rhat_f.append(float(np.max(d["rhat_field"])) if "rhat_field" in d else np.nan)
             ndiv.append(int(d["n_divergent"]))
         i += 1
 
@@ -70,6 +72,7 @@ def load_bank(bank_dir, n_max=None):
         np.array(rhat_s),
         np.array(rhat_t),
         np.array(rhat_x),
+        np.array(rhat_f),
         np.array(ndiv),
     )
 
@@ -85,7 +88,7 @@ def main():
     ap.add_argument("--out", default="")
     args = ap.parse_args()
 
-    meta, xi, sig, tau_myr, rhat_s, rhat_t, rhat_x, ndiv = load_bank(args.bank)
+    meta, xi, sig, tau_myr, rhat_s, rhat_t, rhat_x, rhat_f, ndiv = load_bank(args.bank)
     n_have = xi.shape[0]
     log_age = np.asarray(meta["log_age_grid"])
     times_yr = 10.0**log_age
@@ -101,12 +104,27 @@ def main():
     # R-hat is reported before the answer on purpose. A shared posterior built
     # from unconverged interim chains is precise and wrong, and the earlier
     # sweep railed to the prior bounds for exactly that reason.
-    frac_bad = float(np.mean(rhat_s > 1.05))
+    # The FIELD R-hat is the gate, not sigma's and certainly not xi's. The
+    # estimator consumes m = L(sigma, tau) . xi, so chains agreeing on xi while
+    # disagreeing on sigma still disagree on m -- and Posterior.rhat excludes
+    # psd_xi by default, which is how "latents converged" became false comfort.
+    if np.all(np.isfinite(rhat_f)):
+        print(
+            f"interim R-hat on the RECONSTRUCTED FIELD -- med {np.median(rhat_f):.2f} "
+            f"max {np.max(rhat_f):.2f}  ({100 * float(np.mean(rhat_f > 1.05)):.0f}% above 1.05)"
+        )
+        frac_bad = float(np.mean(rhat_f > 1.05))
+        gate = "field"
+    else:
+        print("  (bank predates the field R-hat; falling back to sigma's)")
+        frac_bad = float(np.mean(rhat_s > 1.05))
+        gate = "sigma"
     if frac_bad > 0.1:
         print(
-            f"  WARNING: {100 * frac_bad:.0f}% of galaxies have R-hat(sigma) > 1.05. "
-            "Treat the intervals below as a measurement of the SAMPLER, not of the "
-            "population."
+            f"  WARNING: {100 * frac_bad:.0f}% of galaxies have R-hat({gate}) > 1.05. "
+            "Pooling reduces variance, not bias: at large N this yields a TIGHTER "
+            "wrong answer. Treat the intervals below as a measurement of the "
+            "SAMPLER, not of the population."
         )
 
     if args.ns:
@@ -121,7 +139,10 @@ def main():
 
     grid = SharedGrid.uniform(
         sigma_bounds=tuple(meta["interim_sigma_bounds"]),
-        tau_bounds_yr=(meta["interim_tau_bounds_myr"][0] * 1e6, meta["interim_tau_bounds_myr"][1] * 1e6),
+        tau_bounds_yr=(
+            meta["interim_tau_bounds_myr"][0] * 1e6,
+            meta["interim_tau_bounds_myr"][1] * 1e6,
+        ),
         n_sigma=args.n_sigma,
         n_tau=args.n_tau,
     )
@@ -157,7 +178,11 @@ def main():
             flush=True,
         )
 
-    print(f"\n{'=' * 72}\nWIDTH SCALING — the gate  (truth sigma={truth_sigma}, tau={truth_tau_myr} Myr)\n{'=' * 72}")
+    bar = "=" * 72
+    print(
+        f"\n{bar}\nWIDTH SCALING — the gate  "
+        f"(truth sigma={truth_sigma}, tau={truth_tau_myr} Myr)\n{bar}"
+    )
     n_arr = np.array([r["n"] for r in rows], dtype=float)
     verdict = {}
     for label, key in (("sigma", "sigma_width"), ("tau", "tau_width_myr")):
