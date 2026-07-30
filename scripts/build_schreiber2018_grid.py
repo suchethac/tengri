@@ -12,7 +12,7 @@ Each table has a single row whose ``LAM`` / ``SED`` columns are 2-D arrays of
 shape ``(n_Tdust, n_wave)`` (micron, ``nu L_nu`` in L_sun), with ``TDUST`` the
 per-temperature axis. AGNFITTER-RX forms the cold-dust SED as the *native*
 mixture ``(1 - f_PAH)·dust + f_PAH·PAH`` and renormalises (see
-``MODEL_AGNfitter.STARBURST`` S17 branch). This script ports both tables onto a
+``MODEL_AGNfitter.STARBURST`` S17 branch). This script repackages both tables onto a
 common ascending-wavelength [Å] grid as ``L_nu`` so tengri's ``schreiber2018``
 emission model can reproduce that mixture at runtime.
 

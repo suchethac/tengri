@@ -107,8 +107,8 @@ def main():
         # DUST_EMISSION_MODELS entry is the retired DL07-*costume*
         # (umin/gamma/qpah over an HD23→DL07-translated grid, with a no-op
         # dust_qpah), not the faithful Hensley & Draine 2023 model. The faithful
-        # lgU port (_REGISTRY["astrodust"]) is captured + regression-tested from
-        # the port directly in tests/regression/test_dust_goldens_852.py, whose
+        # lgU component (_REGISTRY["astrodust"]) is captured + regression-tested from
+        # the component directly in tests/regression/test_dust_goldens_852.py, whose
         # frozen golden lives at
         # tests/regression/data/dust_emission_golden/astrodust.npy.
         "bosa": {
@@ -134,9 +134,9 @@ def main():
         # NOTE (#852): draine2021_pah is intentionally NOT captured here. Its
         # DUST_EMISSION_MODELS entry is a DEPRECATED ALIAS to pah_drude (a
         # different, analytic model; #693), so capturing it via this loader path
-        # would freeze the WRONG physics. The real tabulated PAHspec port
+        # would freeze the WRONG physics. The real tabulated PAHspec component
         # (_REGISTRY["draine2021_pah_ir"]) is captured + regression-tested from
-        # the port directly in tests/regression/test_dust_goldens_852.py, whose
+        # the component directly in tests/regression/test_dust_goldens_852.py, whose
         # frozen golden lives at
         # tests/regression/data/dust_emission_golden/draine2021_pah_ir.npy.
     }

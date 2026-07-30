@@ -37,9 +37,9 @@
 # | `powerlaw` | Pure power law; simple slope model | 2-3 | No |
 # | `psb_wild2020` | Post-starburst two-component (Wild+2020) | 7 | No |
 # | `triweight_burst` | Recent burst + extended base | 2 | No |
-# | `snorm_burst` | Skew-normal + flat recent burst (ProSpect port) | 6 | No |
-# | `tsnorm_burst` | Truncated skew-normal + recent burst (ProSpect port) | 7 | No |
-# | `spline_sfh` | PCHIP spline at user-defined nodes (ProSpect port) | N_nodes | No |
+# | `snorm_burst` | Skew-normal + flat recent burst (as in ProSpect) | 6 | No |
+# | `tsnorm_burst` | Truncated skew-normal + recent burst (as in ProSpect) | 7 | No |
+# | `spline_sfh` | PCHIP spline at user-defined nodes (as in ProSpect) | N_nodes | No |
 # | `periodic` | Regularly-spaced SF events; mergers/inflows | 4 | No |
 # | `buat08` | Velocity-parameterized chemical-evolution SFH | 1 | No |
 # | `continuity` | Non-parametric piecewise; flexible | N_bins | No |
@@ -1089,7 +1089,7 @@ for (label, sfr_nodes), ls in zip(scenarios.items(), lss_spl):
 
 ax.set_xlabel(XLAB_LBT_GYR)
 ax.set_ylabel("Normalised SFR")
-ax.set_title("spline_sfh: PCHIP spline (ProSpect port, Robotham+2020)")
+ax.set_title("spline_sfh: PCHIP spline (as in ProSpect, Robotham+2020)")
 ax.legend(fontsize=7, frameon=False, loc="lower left")
 ax.set_xlim(0.0, float(t_gyr[-1]))
 add_multi_sfh_inset(ax, t_gyr, series_spl, linestyles=lss_spl, ylabel="SFR")
