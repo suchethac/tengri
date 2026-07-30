@@ -33,9 +33,15 @@ _F32_SMALLEST_SUBNORMAL = 1.4e-45
 # Functions whose numeric arguments act as a floor/bound.
 _GUARD_CALLS = {"maximum", "clip", "where"}
 
-# Pinned population as of #1492. Lower this when sites are migrated; never raise
-# it without saying which of the three kinds the new site is (see #1404's note).
-_PINNED = 46
+# Pinned population. Lower this when sites are migrated; never raise it without
+# saying which of the three kinds the new site is (see #1404's note).
+#
+# 46 at #1492, when this check landed.
+# 45 after #1485 dropped ``interpolate_sed_to_grid``'s ``maximum(sed, 1e-300)``
+#    by single-sourcing that function on ``utils.grid_interp.resample_template``,
+#    which handles a non-positive endpoint by falling back to linear-in-flux
+#    instead of flooring. A real migration, so the improvement is locked in here.
+_PINNED = 45
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
