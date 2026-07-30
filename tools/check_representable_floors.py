@@ -35,7 +35,12 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 
 # Pinned population as of #1492. Lower this when sites are migrated; never raise
 # it without saying which of the three kinds the new site is (see #1404's note).
-_PINNED = 46
+#
+# 46 -> 45: #1485 replaced the hand-rolled linear template resampling with
+# ``resample_template()``, deleting the ``jnp.maximum(sed_src, 1e-300)`` that
+# had guarded the log of the source SED. The floor went away with the linear
+# path that needed it, so this is a genuine migration, not a re-pin.
+_PINNED = 45
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
