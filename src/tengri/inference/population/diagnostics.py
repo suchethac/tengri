@@ -160,9 +160,25 @@ def credible_interval(log_posterior: np.ndarray, grid: Any, level: float = 0.68)
     n_sigma = len(grid_sigma)
     n_tau = len(grid_tau)
 
-    # Reshape to (A, B) and normalize to get posterior probabilities
-    posterior_grid = np.exp(log_posterior.reshape(n_sigma, n_tau))
-    posterior_grid = posterior_grid / np.sum(posterior_grid)
+    # Reshape to (A, B) and normalize to get posterior probabilities.
+    #
+    # Subtract the max BEFORE exponentiating. ``log_posterior`` is unnormalized
+    # and sums one term per galaxy, so its magnitude grows with N: at N = 64 it
+    # is routinely in the hundreds or thousands. ``np.exp`` of that underflows
+    # every node to 0.0, and the normalization then divides 0 by 0 and returns
+    # NaN for the whole grid — silently, and only once the population is large
+    # enough to matter.
+    lp = log_posterior.reshape(n_sigma, n_tau)
+    posterior_grid = np.exp(lp - np.max(lp))
+    total = np.sum(posterior_grid)
+    if not np.isfinite(total) or total <= 0.0:
+        raise ValueError(
+            "Posterior grid did not normalize: sum is "
+            f"{total!r}. The log-posterior may contain NaN or -inf at every "
+            "node — check that the tau bounds do not reach the regime where "
+            "ou_logpdf underflows, and that the interim samples are finite."
+        )
+    posterior_grid = posterior_grid / total
 
     # Marginal posteriors
     sigma_marginal = np.sum(posterior_grid, axis=1)  # (A,)
@@ -176,15 +192,22 @@ def credible_interval(log_posterior: np.ndarray, grid: Any, level: float = 0.68)
     lower_percentile = (1.0 - level) / 2.0
     upper_percentile = 1.0 - lower_percentile
 
-    sigma_lower_idx = np.searchsorted(sigma_cdf, lower_percentile)
-    sigma_upper_idx = np.searchsorted(sigma_cdf, upper_percentile)
-    tau_lower_idx = np.searchsorted(tau_cdf, lower_percentile)
-    tau_upper_idx = np.searchsorted(tau_cdf, upper_percentile)
-
-    sigma_lower = float(grid_sigma[sigma_lower_idx])
-    sigma_upper = float(grid_sigma[sigma_upper_idx])
-    tau_lower = float(grid_tau[tau_lower_idx])
-    tau_upper = float(grid_tau[tau_upper_idx])
+    # Interpolate the CDF rather than snapping to a node.
+    #
+    # ``searchsorted`` returns a grid INDEX, so the interval endpoints could only
+    # ever be grid values and the WIDTH was quantized to whole cells. On a
+    # 60-node sigma grid over (0.01, 1.0) the spacing is 0.01678, and two
+    # different population sizes both reported a width of exactly 0.117 — seven
+    # cells, twice. That is fatal for ``interval_width_scaling``, whose entire
+    # job is to detect how the width changes: quantization both adds a
+    # +/- one-cell error and floors the width at one cell, so a genuinely
+    # shrinking interval stops shrinking as soon as it reaches the resolution.
+    # Snapping also biases the width upward, since searchsorted returns the
+    # first index at or past the target mass.
+    sigma_lower = float(np.interp(lower_percentile, sigma_cdf, grid_sigma))
+    sigma_upper = float(np.interp(upper_percentile, sigma_cdf, grid_sigma))
+    tau_lower = float(np.interp(lower_percentile, tau_cdf, grid_tau))
+    tau_upper = float(np.interp(upper_percentile, tau_cdf, grid_tau))
 
     return {
         "sigma_lower": sigma_lower,

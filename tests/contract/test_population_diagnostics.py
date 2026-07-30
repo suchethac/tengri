@@ -155,3 +155,55 @@ def test_report_accesses_ess_summary_fields():
     np.testing.assert_array_equal(result["ess_at_mode"], ess_at_mode)
     np.testing.assert_array_equal(result["ess_min_high_mass"], ess_min_high)
     assert result["zero_divergence_flag"] is False
+
+
+def test_credible_interval_survives_a_large_log_posterior():
+    """exp() without a max subtraction underflows once N is large.
+
+    log_posterior sums one term per galaxy, so its magnitude grows with the
+    population. At N ~ 64 it reaches the hundreds; np.exp of that underflows
+    every node to 0 and the normalization returns NaN for the whole grid.
+    """
+    from tengri.inference.population.diagnostics import credible_interval
+    from tengri.inference.population.estimator import SharedGrid
+
+    grid = SharedGrid.uniform(
+        sigma_bounds=(0.01, 1.0), tau_bounds_yr=(1.0e7, 5.0e8), n_sigma=20, n_tau=24
+    )
+    nodes = grid.nodes
+    # A peaked posterior offset by a huge constant, as a real sum over galaxies is.
+    peak = np.exp(-0.5 * ((np.asarray(nodes)[:, 0] - 0.5) / 0.1) ** 2)
+    lp = np.log(peak + 1e-300) - 5000.0
+    out = credible_interval(lp, grid)
+    for k, v in out.items():
+        if k == "credible_levels":
+            continue
+        assert np.isfinite(v), f"{k} is {v}; the grid failed to normalize"
+    assert out["sigma_lower"] < out["sigma_upper"]
+
+
+def test_credible_interval_is_not_quantized_to_grid_nodes():
+    """Snapping to nodes quantized the WIDTH, which breaks width scaling.
+
+    Two different population sizes both reported a sigma width of exactly
+    0.117 — seven cells of a 0.01678 grid, twice.
+    """
+    from tengri.inference.population.diagnostics import credible_interval
+    from tengri.inference.population.estimator import SharedGrid
+
+    grid = SharedGrid.uniform(
+        sigma_bounds=(0.01, 1.0), tau_bounds_yr=(1.0e7, 5.0e8), n_sigma=60, n_tau=60
+    )
+    spacing = float(np.asarray(grid.sigma)[1] - np.asarray(grid.sigma)[0])
+    sig = np.asarray(grid.nodes)[:, 0]
+    widths = []
+    for centre in (0.40, 0.42):  # shifted well under one grid cell
+        lp = -0.5 * ((sig - centre) / 0.08) ** 2
+        out = credible_interval(lp, grid)
+        widths.append(out["sigma_upper"] - out["sigma_lower"])
+    # Endpoints must not land on grid nodes for every input.
+    on_node = [abs((w / spacing) - round(w / spacing)) < 1e-9 for w in widths]
+    assert not all(on_node), (
+        f"widths {widths} are all exact multiples of the grid spacing {spacing}; "
+        "credible_interval is still snapping to nodes"
+    )
