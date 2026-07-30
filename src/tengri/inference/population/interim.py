@@ -39,10 +39,11 @@ class InterimResult(NamedTuple):
     times_yr: np.ndarray
     ess: np.ndarray
     rhat: dict[str, Any]
-    rhat_median: dict[str, Any] | None = None
-    rhat_frac_above_1p01: dict[str, Any] | None = None
     n_divergent: np.ndarray
     wall_time_s: float
+    # Defaulted fields must follow every non-default one in a NamedTuple.
+    rhat_median: dict[str, Any] | None = None
+    rhat_frac_above_1p01: dict[str, Any] | None = None
 
 
 def fit_interim(
