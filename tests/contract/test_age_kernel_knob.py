@@ -160,3 +160,38 @@ class TestAgeKernelRejectsBadInput:
         """Auto-select on the field path keeps resolving to DSPS silently."""
         w = _age_marginal(_build(synthetic_ssp_wide, field={"all_params": FIXED}))
         assert np.all(np.isfinite(w))
+
+
+class TestAgeKernelIsDiscoverable:
+    """A builder-accepted value named by no menu is undiscoverable (#1446).
+
+    The kernel is a structural axis of ``SEDModel.build`` with two valid
+    values, so it needs the same discovery surface every other axis has.
+    """
+
+    def test_menu_lists_both_kernels(self):
+        import tengri
+
+        names = [row["name"] for row in tengri.list_age_kernels()]
+        assert set(names) == {"cic", "dsps"}
+
+    def test_every_menu_name_actually_builds(self, synthetic_ssp_wide):
+        """The menu must not advertise a value the builder rejects."""
+        import tengri
+
+        for row in tengri.list_age_kernels():
+            model = _build(synthetic_ssp_wide, age_kernel=row["name"])
+            assert np.all(np.isfinite(_age_marginal(model))), row["name"]
+
+    def test_describe_resolves_each_kernel(self):
+        """The table prints `tengri.describe(<name>)` — it must not KeyError."""
+        import tengri
+
+        for row in tengri.list_age_kernels():
+            assert tengri.describe(row["name"])["kind"] == "age_kernel"
+
+    def test_only_cic_is_production_status(self):
+        """'dsps' is a comparison tool, and the menu must say so."""
+        import tengri
+
+        assert [r["name"] for r in tengri.list_age_kernels(status="production")] == ["cic"]
