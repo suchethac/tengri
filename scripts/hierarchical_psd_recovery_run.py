@@ -27,8 +27,6 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 jax.config.update("jax_enable_x64", True)
 
 from tengri import (
-    FeaturePrecomp,
-    WavePrecomp,
     Fixed,
     Observation,
     Photometry,
@@ -219,15 +217,22 @@ def run_recovery(n_galaxies):
     )
     line_template = boot_pop.line_flux_data()
 
-    # Declaring lines is also what lets FeaturePrecomp build; WavePrecomp bakes
-    # the SSP x filter integral for the photometry side.
-    model = build_model(
-        ssp, line_flux_data=line_template, approx=(WavePrecomp(), FeaturePrecomp())
-    )
+    # approx= is deliberately OFF. Declaring lines is what lets FeaturePrecomp
+    # build at all, so it was tried here — and measured a net LOSS for fitting:
+    #
+    #                    forward     gradient
+    #   no approx        0.265 ms    0.904 ms
+    #   Wave+Feature     0.193 ms    0.936 ms
+    #
+    # The forward speedup is real (1.37x) but the backward is worse, because the
+    # LUT swaps a dense contraction for a gather whose VJP is a scatter-add. A
+    # fit is ~100% backward passes — 200k gradients and zero bare forwards — so
+    # the forward win never lands. See issue #1503. Pass approx= explicitly if
+    # you want it for forward-only work such as mock generation or plotting.
+    model = build_model(ssp, line_flux_data=line_template)
     print(
         f"  ✓ Model: D = {len(model.spec.free_params)}, n_grid = {model.spec.n_grid}, "
-        f"lines = {model.observation.n_data_lines}, "
-        f"approx = WavePrecomp+FeaturePrecomp"
+        f"lines = {model.observation.n_data_lines}, approx = None (see #1503)"
     )
 
     # --- Step 2: Generate mock population ---
