@@ -57,6 +57,7 @@ def fit_interim(
     n_warmup=None,
     n_samples=None,
     n_chains=None,
+    thin=8,
 ):
     """Per-galaxy interim fit over the hyperparameter space.
 
@@ -88,6 +89,11 @@ def fit_interim(
         Number of warmup iterations [count]. If None, uses backend default.
     n_samples : int, optional
         Number of posterior samples [count]. If None, defaults to 1000.
+    thin : int, optional
+        Keep every ``thin``-th posterior draw before the population step.
+        Default 8. The estimator's (n_nodes, N, K) table is what limits the
+        population size; measured ESS is ~600 of 4000 draws, so thinning costs
+        little and buys a linear reduction in that table.
     n_chains : int, optional
         Number of independent MCMC chains [count]. If None, uses backend default.
 
@@ -218,6 +224,22 @@ def fit_interim(
     print(f"  tau_yr_stacked.shape = {tau_yr_stacked.shape} (expect (N, K))")
     print(f"  log_age_grid.shape = {log_age_grid.shape} (expect (16,))")
     print(f"  log_age_grid last value: {log_age_grid[-1]}")
+
+    # Thin the chains before reconstructing fields.
+    #
+    # The estimator materializes a (n_nodes, N, K) table: at 60x60 nodes, N=12
+    # and K=4000 that is 3600*12*4000*8 = 1.4 GB, and the importance weights are
+    # a second copy. That is what OOM-kills the sweep, not the per-galaxy state.
+    #
+    # Thinning is nearly free here because the draws are autocorrelated: measured
+    # ESS at the posterior mode is ~600 out of 4000, so keeping every 8th sample
+    # discards mostly redundant information while cutting the table 8x. Monte
+    # Carlo error scales with ESS, not with the raw sample count.
+    if thin > 1:
+        xi_stacked = xi_stacked[:, ::thin, :]
+        sigma_stacked = sigma_stacked[:, ::thin]
+        tau_yr_stacked = tau_yr_stacked[:, ::thin]
+        print(f"  thinned by {thin}: K {xi_stacked.shape[1] * thin} -> {xi_stacked.shape[1]}")
 
     # Reconstruct centered fields
     fields_centered = centered_fields(xi_stacked, sigma_stacked, tau_yr_stacked, log_age_grid)
