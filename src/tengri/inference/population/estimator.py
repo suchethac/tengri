@@ -147,8 +147,13 @@ def effective_sample_size(log_weights):
     return jnp.sum(w, axis=-1) ** 2 / jnp.sum(w**2, axis=-1)
 
 
-def _node_logpdf_table(fields, times_yr, nodes):
-    """``(n_nodes, N, K)`` field log-density at every grid node."""
+#: Grid nodes evaluated per streaming chunk. Peak memory is
+#: ``node_chunk * N * K * 8`` bytes, independent of the grid size.
+_DEFAULT_NODE_CHUNK = 128
+
+
+def _node_logpdf_chunk(fields, times_yr, nodes):
+    """``(C, N, K)`` field log-density for one chunk of ``C`` grid nodes."""
 
     def one_node(node):
         sigma, tau = node[0], node[1]
@@ -159,7 +164,27 @@ def _node_logpdf_table(fields, times_yr, nodes):
     return jax.lax.map(one_node, nodes)
 
 
-def shared_log_posterior(fields, times_yr, grid, *, method="b2"):
+def _chunk_nodes(nodes, coef, node_chunk):
+    """Split nodes and their log-coefficients into equal chunks, padding with -inf.
+
+    Returns ``(nodes_chunked, coef_chunked, n_nodes)`` with shapes
+    ``(n_chunks, C, 2)`` and ``(n_chunks, C)``. Padded slots carry a
+    coefficient of ``-inf`` so they contribute exactly zero to any
+    ``logsumexp`` over nodes, and their per-node outputs are sliced away.
+    """
+    n_nodes = nodes.shape[0]
+    chunk = int(min(node_chunk, n_nodes))
+    n_chunks = -(-n_nodes // chunk)
+    pad = n_chunks * chunk - n_nodes
+    if pad:
+        # Repeat a real node so ou_logpdf never sees a degenerate (0, 0) pair;
+        # the -inf coefficient is what actually neutralizes the padding.
+        nodes = jnp.concatenate([nodes, jnp.repeat(nodes[-1:], pad, axis=0)], axis=0)
+        coef = jnp.concatenate([coef, jnp.full((pad,), -jnp.inf)], axis=0)
+    return nodes.reshape(n_chunks, chunk, 2), coef.reshape(n_chunks, chunk), n_nodes
+
+
+def shared_log_posterior(fields, times_yr, grid, *, method="b2", node_chunk=_DEFAULT_NODE_CHUNK):
     r"""Shared ``(sigma, tau)`` log-posterior from per-galaxy interim samples.
 
     The population factorizes given the shared block, so
@@ -187,6 +212,11 @@ def shared_log_posterior(fields, times_yr, grid, *, method="b2"):
         ``"b2"`` (default) is the reweighting estimator. ``"b1"`` is the
         marginal-posterior product, retained as an independent cross-check
         whose error mode is different; see Notes.
+    node_chunk : int, optional
+        Grid nodes evaluated per streaming chunk [count]. Default 128. Peak
+        memory is ``node_chunk * N * K * 8`` bytes and does **not** grow with
+        the grid, so this is the knob that decouples population size from
+        memory; see Notes.
 
     Returns
     -------
@@ -203,6 +233,17 @@ def shared_log_posterior(fields, times_yr, grid, *, method="b2"):
     **JIT/vmap compatible**: yes. Cost is ``O(A B N K n)`` with no matrix
     factorization, because :func:`ou_logpdf` exploits the Markov structure.
 
+    **Streaming, not materialized.** The ``(A B, N, K)`` node/galaxy/sample
+    log-density table is never held whole. At a 60x60 grid with ``N = 256``
+    and ``K = 500`` it would be 3.7 GB, and the importance weights are a
+    second array of the same shape -- 7.4 GB live, which is what OOM-killed
+    earlier sweeps. Instead ``log_p0`` is accumulated by a running-max
+    ``logsumexp`` over node chunks (carrying only ``(N, K)``), and a second
+    pass reduces each chunk to its ``(C, N)`` contribution. Peak memory is
+    set by ``node_chunk``, so **population size is not memory-bounded**. The
+    price is evaluating the table twice; it is the cheap stage, and buys the
+    ceiling off the expensive one.
+
     ``"b2"`` fails by importance-weight degeneracy, which the returned
     ``ess.at_mode`` measures directly. ``"b1"`` fails by compounding
     density-estimation bias in the tails, which is *not* observable from
@@ -217,31 +258,56 @@ def shared_log_posterior(fields, times_yr, grid, *, method="b2"):
             f"method must be 'b2' (production) or 'b1' (cross-check), got {method!r}."
         )
 
-    table = _node_logpdf_table(fields, times_yr, grid.nodes)  # (G, N, K)
+    n_samples = fields.shape[1]
+    nodes_c, coef_c, n_nodes = _chunk_nodes(
+        grid.nodes, grid.log_prior + grid.log_volume, node_chunk
+    )
 
-    # Interim pushforward prior p_0(m), same quadrature as the numerator.
-    log_p0 = jax.scipy.special.logsumexp(
-        table + (grid.log_prior + grid.log_volume)[:, None, None], axis=0
-    )  # (N, K)
+    # Pass 1 -- the interim pushforward prior p_0(m), on the same quadrature as
+    # the numerator, accumulated by a running-max logsumexp over node chunks.
+    # Carrying (running_max, running_sum) of shape (N, K) is what keeps the
+    # (G, N, K) table off the heap.
+    def _p0_step(carry, xs):
+        run_max, run_sum = carry
+        nodes_i, coef_i = xs
+        t = _node_logpdf_chunk(fields, times_yr, nodes_i) + coef_i[:, None, None]
+        chunk_max = jnp.max(t, axis=0)
+        new_max = jnp.maximum(run_max, chunk_max)
+        new_sum = run_sum * jnp.exp(run_max - new_max) + jnp.sum(jnp.exp(t - new_max), axis=0)
+        return (new_max, new_sum), None
 
-    log_w = table - log_p0[None, :, :]  # (G, N, K)
-    per_galaxy = jax.scipy.special.logsumexp(log_w, axis=-1) - jnp.log(fields.shape[1])  # (G, N)
+    carry_shape = (fields.shape[0], n_samples)
+    init = (jnp.full(carry_shape, -jnp.inf), jnp.zeros(carry_shape))
+    (p0_max, p0_sum), _ = jax.lax.scan(_p0_step, init, (nodes_c, coef_c))
+    log_p0 = p0_max + jnp.log(p0_sum)  # (N, K)
 
-    if method == "b1":
-        # Marginal-posterior product: drop the pushforward correction and use
-        # the interim marginal directly. Deliberately a different estimator.
-        per_galaxy = jax.scipy.special.logsumexp(table, axis=-1) - jnp.log(fields.shape[1])
+    # Pass 2 -- reduce each chunk over samples. Only (C, N) survives per chunk,
+    # so the importance weights are never materialized across the whole grid.
+    def _weight_step(nodes_i):
+        t = _node_logpdf_chunk(fields, times_yr, nodes_i)  # (C, N, K)
+        lw = t - log_p0[None, :, :]
+        b2 = jax.scipy.special.logsumexp(lw, axis=-1) - jnp.log(n_samples)
+        # b1: the marginal-posterior product drops the pushforward correction
+        # and uses the interim marginal directly. Deliberately a different
+        # estimator, so it fails differently; see Notes.
+        b1 = jax.scipy.special.logsumexp(t, axis=-1) - jnp.log(n_samples)
+        return b2, b1, effective_sample_size(lw)
+
+    b2_c, b1_c, ess_c = jax.lax.map(_weight_step, nodes_c)
+    per_galaxy = (b2_c if method == "b2" else b1_c).reshape(-1, fields.shape[0])[:n_nodes]
+    ess_per_node = ess_c.reshape(-1, fields.shape[0])[:n_nodes]  # (G, N)
 
     log_posterior = grid.log_prior + jnp.sum(per_galaxy, axis=-1)
     best = jnp.argmax(log_posterior)
-    ess_at_mode = effective_sample_size(log_w[best])
+    # Recompute the single best node rather than retaining every node's weights.
+    log_w_best = _node_logpdf_chunk(fields, times_yr, grid.nodes[best][None, :])[0] - log_p0
+    ess_at_mode = effective_sample_size(log_w_best)
 
     # ESS at minimum over nodes carrying top 99% posterior mass.
     p_normalized = jnp.exp(log_posterior - jax.scipy.special.logsumexp(log_posterior))
     cumsum_sorted = jnp.cumsum(jnp.sort(p_normalized)[::-1])
     high_mass_threshold = jnp.searchsorted(cumsum_sorted, 0.99)
     high_mass_mask = p_normalized >= jnp.sort(p_normalized)[-(high_mass_threshold + 1)]
-    ess_per_node = effective_sample_size(log_w)  # (G, N)
     ess_min_high_mass = jnp.min(jnp.where(high_mass_mask[:, None], ess_per_node, jnp.inf), axis=0)
 
     return log_posterior, ESSSummary(at_mode=ess_at_mode, min_high_mass=ess_min_high_mass)

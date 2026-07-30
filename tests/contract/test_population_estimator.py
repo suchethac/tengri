@@ -227,3 +227,94 @@ def test_tau_bounds_legitimate_range_constructs_fine():
     )
     assert grid.sigma.size == 4
     assert grid.tau_yr.size == 4
+
+
+@pytest.mark.parametrize("method", ["b2", "b1"])
+def test_node_chunking_is_exact_not_an_approximation(method):
+    """Streaming over node chunks must reproduce the single-chunk result.
+
+    The chunked path exists so peak memory stops scaling with the grid: at a
+    60x60 grid with N=256 and K=500 the materialized (G, N, K) table is 3.7 GB
+    and the importance weights are a second copy. Streaming keeps only
+    (node_chunk, N, K). That is only a legitimate substitution if it changes
+    nothing about the answer, so this pins equality -- not a tolerance band.
+
+    Three things can silently break and all three are exercised here: the
+    running-max logsumexp that accumulates ``log_p0``, the -inf padding that
+    must neutralize the partial final chunk, and the reshape/slice that puts
+    per-node results back in grid order.
+    """
+    from tengri.inference.population.estimator import SharedGrid, shared_log_posterior
+
+    toy = make_toy(
+        n_galaxies=5,
+        n_samples=40,
+        n_grid=8,
+        sigma_true=1.3,
+        tau_true_yr=6.0e7,
+        noise_std=0.05,
+        prior_sigma_bounds=(0.1, 4.0),
+        prior_tau_bounds_yr=(1.0e6, 3.0e8),
+        seed=3,
+    )
+    # 7 x 5 = 35 nodes deliberately does not divide by 8, so the final chunk is
+    # padded. A chunk size that divided evenly would never test the padding.
+    #
+    # The bounds are chosen so the LAST node -- the one the padding repeats --
+    # lands near the injected truth (1.3 dex, 6e7 yr) and therefore carries real
+    # posterior mass. With the toy's default bounds the last node is the far
+    # corner (4.0 dex, 3e8 yr), roughly 100 nats below the mode: mis-weighting
+    # it there shifts log_p0 by ~5*exp(-100) and no tolerance can see it. A
+    # verified mutation (padding coefficient -inf -> 0) passes on those bounds
+    # and fails on these, so the stimulus, not the assertion, is what bites.
+    grid = SharedGrid.uniform(
+        sigma_bounds=(0.1, 1.4),
+        tau_bounds_yr=(1.0e6, 7.0e7),
+        n_sigma=7,
+        n_tau=5,
+    )
+    whole, ess_whole = shared_log_posterior(
+        toy.fields, toy.times_yr, grid, method=method, node_chunk=10**6
+    )
+    chunked, ess_chunked = shared_log_posterior(
+        toy.fields, toy.times_yr, grid, method=method, node_chunk=8
+    )
+
+    chex.assert_trees_all_close(whole, chunked, rtol=1e-12, atol=1e-12)
+    chex.assert_trees_all_close(ess_whole.at_mode, ess_chunked.at_mode, rtol=1e-10, atol=1e-10)
+    chex.assert_trees_all_close(
+        ess_whole.min_high_mass, ess_chunked.min_high_mass, rtol=1e-10, atol=1e-10
+    )
+
+
+def test_node_chunk_of_one_still_matches():
+    """The degenerate chunk size is the strictest test of the running-max carry.
+
+    With one node per chunk the scan runs G times and every accumulator update
+    is a fresh max comparison, so an error in the rescaling term shows up
+    immediately rather than being masked by a large within-chunk reduction.
+    """
+    from tengri.inference.population.estimator import SharedGrid, shared_log_posterior
+
+    toy = make_toy(
+        n_galaxies=4,
+        n_samples=25,
+        n_grid=6,
+        sigma_true=1.3,
+        tau_true_yr=6.0e7,
+        noise_std=0.05,
+        prior_sigma_bounds=(0.1, 4.0),
+        prior_tau_bounds_yr=(1.0e6, 3.0e8),
+        seed=4,
+    )
+    # Bounds again put the last node near the truth so the padded slot is not
+    # a negligible tail corner; see the sibling test for why that matters.
+    grid = SharedGrid.uniform(
+        sigma_bounds=(0.1, 1.4),
+        tau_bounds_yr=(1.0e6, 7.0e7),
+        n_sigma=6,
+        n_tau=6,
+    )
+    whole, _ = shared_log_posterior(toy.fields, toy.times_yr, grid, node_chunk=10**6)
+    one_at_a_time, _ = shared_log_posterior(toy.fields, toy.times_yr, grid, node_chunk=1)
+    chex.assert_trees_all_close(whole, one_at_a_time, rtol=1e-12, atol=1e-12)

@@ -254,7 +254,9 @@ def fit_interim(
     # Aggregate per-galaxy R-hat three ways, not one.
     #
     # The MAX over galaxies is structurally unable to improve with N on a nested
-    # galaxy set: make_population seeds galaxy i with fold_in(key, i), so galaxy
+    # galaxy set: make_population seeds galaxies with jax.random.split(key, N),
+    # whose first N outputs are a prefix of the longer stream (verified: the
+    # galaxy-0 and galaxy-3 keys are identical at N=4 and N=256), so galaxy
     # i is the same galaxy at every population size, and if the worst chain is
     # among the first few the max cannot move. Measured: tau's max R-hat was
     # 1.6394 at BOTH N=4 and N=8, to four decimals. That is not evidence about
