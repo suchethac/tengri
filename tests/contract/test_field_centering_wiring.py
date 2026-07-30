@@ -26,7 +26,7 @@ def _grid(n=16):
 
 
 def test_default_centering_is_bit_identical_to_the_production_path():
-    """a = 1 must not perturb a single bit of the shipped behaviour."""
+    """a = 1 must not perturb a single bit of the shipped behavior."""
     n = 16
     g = _grid(n)
     xi = jnp.asarray(np.random.default_rng(0).normal(size=n))
