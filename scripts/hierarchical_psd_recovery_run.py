@@ -229,7 +229,7 @@ def run_recovery(n_galaxies):
         n_chains=4,
     )
     print(f"  ✓ Interim fits completed in {interim.wall_time_s:.1f}s")
-    print(f"    R-hat (max, excl. psd_xi): {max(interim.rhat.values()):.4f}")
+    print(f"    R-hat (max, incl. psd_xi): {max(interim.rhat.values()):.4f}")
     print(f"    Divergences (total): {np.sum(interim.n_divergent)}")
     print(
         f"    Divergences per galaxy: min={np.min(interim.n_divergent)}, "
@@ -352,7 +352,17 @@ def run_recovery(n_galaxies):
     print(f"  Median (top 99% mass): {float(np.median(ess_min_high_mass_b2)):.1f}")
 
     print("\nConvergence:")
-    print(f"  Max R-hat (incl. psd_xi): {max(interim.rhat.values()):.4f}")
+    _rh = interim.rhat
+    _shared_rh = {k: v for k, v in _rh.items() if "psd_sigma" in k or "psd_tau" in k}
+    _xi_rh = {k: v for k, v in _rh.items() if "psd_xi" in k or "field_xi" in k}
+    _other_rh = {k: v for k, v in _rh.items() if k not in _shared_rh and k not in _xi_rh}
+    print(f"  Max R-hat (all params, incl. psd_xi): {max(_rh.values()):.4f}")
+    for _k, _v in sorted(_shared_rh.items()):
+        print(f"    SHARED  {_k:26s} R-hat {_v:.4f}")
+    if _xi_rh:
+        print(f"    latents psd_xi (max over modes)    R-hat {max(_xi_rh.values()):.4f}")
+    if _other_rh:
+        print(f"    other   (max over per-galaxy)      R-hat {max(_other_rh.values()):.4f}")
     print(f"  Total divergences: {np.sum(interim.n_divergent)}")
 
     print("\nWall clock:")
@@ -381,6 +391,8 @@ def run_recovery(n_galaxies):
         "ess_min_high_mass": float(np.min(ess_min_high_mass_b2)),
         "ess_median_high_mass": float(np.median(ess_min_high_mass_b2)),
         "rhat_max": float(max(interim.rhat.values())),
+        "rhat_shared_max": float(max(_shared_rh.values())) if _shared_rh else float("nan"),
+        "rhat_xi_max": float(max(_xi_rh.values())) if _xi_rh else float("nan"),
         "n_divergent_total": int(np.sum(interim.n_divergent)),
         "wall_total_s": float(wall_total),
         "wall_per_galaxy_s": float(wall_per_galaxy),
