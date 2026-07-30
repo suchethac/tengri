@@ -29,6 +29,8 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.utils.grid_interp import resample_template
+
 __all__ = ["netzer_disc", "select_disc_model"]
 
 
@@ -79,7 +81,7 @@ def netzer_disc(
 
     # Scale template by l5100 and interpolate onto output grid.
     # Zero padding outside disc template support.
-    spectrum = l5100 * jnp.interp(wave, disc_wave, disc_lumin, left=0.0, right=0.0)
+    spectrum = l5100 * resample_template(wave, disc_wave, disc_lumin, left=0.0, right=0.0)
     return spectrum
 
 

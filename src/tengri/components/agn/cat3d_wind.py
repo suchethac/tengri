@@ -69,7 +69,7 @@ from tengri.components.agn._phys import (
     bolometric_integral_nu as _bolometric_integral_nu,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.utils.grid_interp import interp_nd_pchip
+from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -203,7 +203,7 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
             axes,
             (agn_cos_inc, agn_a_cat3d, agn_fwd_cat3d),
         )
-        sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
+        sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
         nu = _wavelength_to_nu(wavelength)
         integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
         l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac

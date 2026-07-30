@@ -39,6 +39,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
+from tengri.utils.grid_interp import resample_template
 
 # ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
@@ -221,8 +222,8 @@ def _fe2_pseudo_continuum(
 
     # Interpolate UV and optical templates onto the common wavelength grid
     # Use linear interpolation; extrapolate with zeros outside the range
-    uv_interp = jnp.interp(wavelength, uv_wave, uv_flux, left=0.0, right=0.0)
-    opt_interp = jnp.interp(wavelength, opt_wave, opt_flux, left=0.0, right=0.0)
+    uv_interp = resample_template(wavelength, uv_wave, uv_flux, left=0.0, right=0.0)
+    opt_interp = resample_template(wavelength, opt_wave, opt_flux, left=0.0, right=0.0)
 
     # Combine: use UV where available (1200–3500 A), else optical
     # In the overlap region (2200–3500 A), UV dominates by design (Tsuzuki+06)
