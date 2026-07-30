@@ -254,6 +254,7 @@ class ForwardModel:
         "_predict_rest_sed",
         "_predict_sfh_quantities",
         "_template_data_for_jit",
+        "ssp_data",
         "mock",
         "name",
         "predict_observables_jit",
@@ -288,6 +289,56 @@ class ForwardModel:
     def available_properties(self):
         """Derived-property catalog of the inner SED. Delegated (#1300)."""
         return self._single_inner_sed("available_properties").available_properties
+
+    def _supports_jit_threading(self) -> bool:
+        """Whether the threaded (``data_args``) forward is valid for this topology.
+
+        The threaded forward — ``predict_observables_jit`` / ``predict_state`` with
+        ``ssp_data`` and ``template_data`` passed in — is written for a plain
+        single-population SED forward. On a hierarchical
+        (:class:`PopulationSEDModel`-wrapped) forward it mis-broadcasts the galaxy
+        axis against the SFH grid (``mul got incompatible shapes (256,), (3,)``).
+
+        Hierarchical and multi-population forwards were previously excluded by
+        *accident*: ``Fitter._build_data_args`` read ``model.ssp_data``, which did
+        not exist, and a ``contextlib.suppress`` swallowed the ``AttributeError``.
+        Adding that delegation turned threading on for topologies it does not
+        support. This states the exclusion instead of relying on a missing
+        attribute, and keeps the topology test next to the other topology guards.
+
+        Returns
+        -------
+        bool
+            True only for a single, non-spatial, non-``PopulationSEDModel``
+            population.
+        """
+        if len(self.populations) != 1 or self.populations[0].spatial is not None:
+            return False
+        sub = self.populations[0].sed
+        # A PopulationSEDModel wraps its template as ``.sed``; a plain SEDModel
+        # does not, so this distinguishes hierarchical from single-galaxy.
+        return getattr(sub, "sed", sub) is sub
+
+    @property
+    def ssp_data(self):
+        """SSP grid of the inner SED. Delegated.
+
+        A **property**, not one of the auto-installed method delegations: callers
+        read ``model.ssp_data`` as an attribute, so installing it via
+        :func:`_install_inner_sed_delegations` would hand them a bound method and
+        thread that instead of the grid.
+
+        Load-bearing for JIT data threading. ``Fitter._build_data_args`` reads this
+        to populate ``data_args["_jit_inputs"]``, and did so inside a
+        ``contextlib.suppress(AttributeError, TypeError)``. While this property was
+        missing, that read raised, the suppress swallowed it, and the whole
+        ``_jit_inputs`` assignment was skipped — so the SSP grid closure-captured
+        into every compiled loss on the *canonical* inference surface. On a real
+        grid (15x93x5994 float64) it inlined twice as hex, 267.6 MB of a 274.6 MB
+        program, and XLA compilation was OOM-killed. Guarded by
+        ``tests/contract/test_loss_ssp_threading.py``.
+        """
+        return self._single_inner_sed("ssp_data").ssp_data
 
     @property
     def hybrid(self):
@@ -390,9 +441,26 @@ class ForwardModel:
             params, index_defs, **kwargs
         )
 
-    def predict_state(self, params):
-        """Delegate to :meth:`SEDModel.predict_state` on the inner SED."""
-        return self._inner_sed_for_delegation().predict_state(params)
+    def predict_state(self, params, fixed_values=None, ssp_data=None, template_data=None):
+        """Delegate to :meth:`SEDModel.predict_state` on the inner SED.
+
+        The three optional arguments are the **JIT-threading** channel: when the
+        loss builder has them, it passes the SSP grid and template arrays in rather
+        than letting the forward close over them, which keeps them out of the
+        compiled program as constants.
+
+        This signature must track :meth:`SEDModel.predict_state`. It previously took
+        ``params`` only, so the threaded feature-channel call raised ``TypeError``
+        here — invisible, because the caller only reached this branch when
+        ``_jit_inputs`` was populated, and a missing ``ssp_data`` delegation meant it
+        never was. Two omissions masking each other.
+        """
+        return self._inner_sed_for_delegation().predict_state(
+            params,
+            fixed_values=fixed_values,
+            ssp_data=ssp_data,
+            template_data=template_data,
+        )
 
     def predict_derived(self, params):
         """Delegate to :meth:`SEDModel.predict_derived` on the inner SED."""
