@@ -238,12 +238,12 @@ All outputs use 64-bit JAX arrays (jax_enable_x64=True).
         f.write(readme_content)
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Golden baseline capture complete.")
     print(f"  Captured: {len(captured_templates)} templates")
     print(f"  Skipped: {len(skipped_templates)} templates")
     print(f"  Output directory: {outdir}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     return 0
 

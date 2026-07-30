@@ -103,7 +103,14 @@ def test_assert_truth_against_model_reads_the_models_own_bounds():
         bounds = (0.01, 1.0)
 
     class _Spec:
-        _distributions: ClassVar[dict] = {"sfh_field_psd_sigma": _Dist()}
+        """Mimics the PUBLIC Parameters surface: free_params + get_distribution."""
+
+        free_params: ClassVar[tuple] = ("sfh_field_psd_sigma",)
+
+        def get_distribution(self, name):
+            if name not in self.free_params:
+                raise KeyError(name)
+            return _Dist()
 
     class _Model:
         spec = _Spec()

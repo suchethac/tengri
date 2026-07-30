@@ -186,7 +186,7 @@ def run_recovery(n_galaxies):
     print("[1/5] Loading SSP data and building model...")
     ssp = load_ssp()
     model = build_model(ssp)
-    print(f"  ✓ Model: D = {len(model.spec.free_params)}, n_grid = {model._n_grid}")
+    print(f"  ✓ Model: D = {len(model.spec.free_params)}, n_grid = {model.spec.n_grid}")
 
     # --- Step 2: Generate mock population ---
     print(f"[2/5] Generating {n_galaxies} mock galaxies...")

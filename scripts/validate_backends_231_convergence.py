@@ -50,8 +50,16 @@ from tengri.inference._backend_registry import _BACKENDS
 
 DATA = Path("/Users/suchethacooray/Projects/tengri/data")
 SSP_FILE = DATA / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-FILTERS_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-                 "2mass_j", "2mass_h", "2mass_ks"]
+FILTERS_NAMES = [
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+]
 
 # Promoted MCMC backends (laplace is a Gaussian approximation, not a chain;
 # skipped here — it has no R-hat / ESS concept).
@@ -61,22 +69,30 @@ PROMOTED = ["mcmc_hmc", "mcmc_dynamic_hmc", "mcmc_ghmc", "mcmc_mclmc"]
 # from the speed sweep was about NUTS specifically, not HMC.
 KW: dict[tuple[str, str], dict] = {
     # DPL D=6 — dense mass matrix captures age-dust-met correlations
-    ("mcmc_hmc", "dpl"): dict(n_warmup=1000, n_burnin=200, n_samples=2000,
-                              verbose=False, dense_mass_matrix=True,
-                              n_leapfrog_steps=20),
-    ("mcmc_dynamic_hmc", "dpl"): dict(n_warmup=1000, n_burnin=200, n_samples=2000,
-                                       verbose=False),
-    ("mcmc_ghmc", "dpl"): dict(n_warmup=1000, n_burnin=200, n_samples=2000,
-                                verbose=False),
+    ("mcmc_hmc", "dpl"): dict(
+        n_warmup=1000,
+        n_burnin=200,
+        n_samples=2000,
+        verbose=False,
+        dense_mass_matrix=True,
+        n_leapfrog_steps=20,
+    ),
+    ("mcmc_dynamic_hmc", "dpl"): dict(n_warmup=1000, n_burnin=200, n_samples=2000, verbose=False),
+    ("mcmc_ghmc", "dpl"): dict(n_warmup=1000, n_burnin=200, n_samples=2000, verbose=False),
     ("mcmc_mclmc", "dpl"): dict(n_samples=4000, verbose=False),
     # dense_basis D=7 — same, dense is OK here too
-    ("mcmc_hmc", "dense_basis"): dict(n_warmup=1000, n_burnin=200, n_samples=2000,
-                                       verbose=False, dense_mass_matrix=True,
-                                       n_leapfrog_steps=20),
-    ("mcmc_dynamic_hmc", "dense_basis"): dict(n_warmup=1000, n_burnin=200,
-                                               n_samples=2000, verbose=False),
-    ("mcmc_ghmc", "dense_basis"): dict(n_warmup=1000, n_burnin=200, n_samples=2000,
-                                        verbose=False),
+    ("mcmc_hmc", "dense_basis"): dict(
+        n_warmup=1000,
+        n_burnin=200,
+        n_samples=2000,
+        verbose=False,
+        dense_mass_matrix=True,
+        n_leapfrog_steps=20,
+    ),
+    ("mcmc_dynamic_hmc", "dense_basis"): dict(
+        n_warmup=1000, n_burnin=200, n_samples=2000, verbose=False
+    ),
+    ("mcmc_ghmc", "dense_basis"): dict(n_warmup=1000, n_burnin=200, n_samples=2000, verbose=False),
     ("mcmc_mclmc", "dense_basis"): dict(n_samples=4000, verbose=False),
 }
 
@@ -95,8 +111,12 @@ def build_model(variant: str):
         ssp_data=ssp,
         observation=obs,
         sfh=sfh,
-        dust={"type": "two_component", "*": FIXED,
-              "law_bc": "calzetti", "tau_bc": Uniform(0.0, 1.0)},
+        dust={
+            "type": "two_component",
+            "*": FIXED,
+            "law_bc": "calzetti",
+            "tau_bc": Uniform(0.0, 1.0),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.05),
     )
@@ -139,7 +159,9 @@ def diagnose(samples: dict, truth: dict) -> dict:
             mu = float(np.mean(samples_np[k]))
             sd = float(np.std(samples_np[k]))
             recovery[k] = {
-                "truth": v_true, "mean": mu, "std": sd,
+                "truth": v_true,
+                "mean": mu,
+                "std": sd,
                 "bias_sigma": (mu - v_true) / sd if sd > 0 else None,
             }
 
@@ -220,21 +242,35 @@ def main():
                 if j.exists():
                     r = json.loads(j.read_text())
                 else:
-                    r = {"backend": backend, "variant": variant,
-                         "status": "crashed_no_output", "wall_s": wall}
+                    r = {
+                        "backend": backend,
+                        "variant": variant,
+                        "status": "crashed_no_output",
+                        "wall_s": wall,
+                    }
             except subprocess.TimeoutExpired:
-                r = {"backend": backend, "variant": variant,
-                     "status": "timeout", "wall_s": TIMEOUT}
+                r = {
+                    "backend": backend,
+                    "variant": variant,
+                    "status": "timeout",
+                    "wall_s": TIMEOUT,
+                }
             results.append(r)
             if r["status"] == "ok":
                 conv = "✓" if r["converged"] else "✗"
                 rh = r.get("rhat_max", 0) or 0
                 es = r.get("ess_min", 0) or 0
-                print(f"   wall={r['wall_s']:5.0f}s  Rhat_max={rh:.3f}  "
-                      f"ESS_min={es:.0f}  converged={conv}", flush=True)
+                print(
+                    f"   wall={r['wall_s']:5.0f}s  Rhat_max={rh:.3f}  "
+                    f"ESS_min={es:.0f}  converged={conv}",
+                    flush=True,
+                )
             else:
-                print(f"   FAIL[{r['status']}] {r.get('error_type','')} "
-                      f"{(r.get('error_msg') or '')[:60]}", flush=True)
+                print(
+                    f"   FAIL[{r['status']}] {r.get('error_type', '')} "
+                    f"{(r.get('error_msg') or '')[:60]}",
+                    flush=True,
+                )
             out_path.write_text(json.dumps(results, indent=2, default=str))
 
     print(f"\nResults written to {out_path}", flush=True)

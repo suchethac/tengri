@@ -120,7 +120,8 @@ def fit_interim(
     from tengri import Uniform
 
     spec_dict = {}
-    for name, dist in model.spec._distributions.items():
+    for name in model.spec.free_params:
+        dist = model.spec.get_distribution(name)
         if name == "sfh_field_psd_sigma":
             spec_dict[name] = Uniform(sigma_bounds[0], sigma_bounds[1])
         elif name == "sfh_field_psd_tau_myr":

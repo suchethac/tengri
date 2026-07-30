@@ -197,8 +197,8 @@ def test_credible_interval_is_not_quantized_to_grid_nodes():
     spacing = float(np.asarray(grid.sigma)[1] - np.asarray(grid.sigma)[0])
     sig = np.asarray(grid.nodes)[:, 0]
     widths = []
-    for centre in (0.40, 0.42):  # shifted well under one grid cell
-        lp = -0.5 * ((sig - centre) / 0.08) ** 2
+    for center in (0.40, 0.42):  # shifted well under one grid cell
+        lp = -0.5 * ((sig - center) / 0.08) ** 2
         out = credible_interval(lp, grid)
         widths.append(out["sigma_upper"] - out["sigma_lower"])
     # Endpoints must not land on grid nodes for every input.

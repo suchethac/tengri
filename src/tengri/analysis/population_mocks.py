@@ -13,7 +13,12 @@ from typing import Any
 import jax
 import numpy as np
 
-__all__ = ["MockPopulation", "assert_truth_is_discriminating", "make_population"]
+__all__ = [
+    "MockPopulation",
+    "assert_truth_against_model",
+    "assert_truth_is_discriminating",
+    "make_population",
+]
 
 
 def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
@@ -69,7 +74,7 @@ def assert_truth_is_discriminating(value, bounds, *, name, rel_tol=0.08):
             f"({lo:g}, {hi:g}), so no fit can reach it — estimates will pin at "
             f"the nearest bound and resemble shrinkage. If these bounds look "
             f"wrong, read them off the model rather than hardcoding them: "
-            f"model.spec._distributions[{name!r}].bounds."
+            f"model.spec.get_distribution({name!r}).bounds."
         )
 
     characteristic = {
@@ -102,7 +107,7 @@ def assert_truth_against_model(model, name, value, *, rel_tol=0.08):
     ----------
     model : SEDModel
         The model the mock will be generated from and fitted with. Its
-        ``spec._distributions[name].bounds`` is the authority.
+        ``spec.get_distribution(name).bounds`` is the authority.
     name : str
         Full parameter name, e.g. ``"sfh_field_psd_sigma"``.
     value : float
@@ -125,13 +130,14 @@ def assert_truth_against_model(model, name, value, *, rel_tol=0.08):
         If the truth is outside the prior, or too close to a point where a
         prior-returning estimator would land.
     """
-    dists = model.spec._distributions
-    if name not in dists:
+    spec = model.spec
+    if name not in spec.free_params:
         raise KeyError(
             f"{name!r} is not a free parameter of this model. Free parameters: "
-            f"{sorted(dists)}. A truth cannot be injected for a Fixed parameter."
+            f"{sorted(spec.free_params)}. A truth cannot be injected for a Fixed "
+            f"parameter."
         )
-    bounds = dists[name].bounds
+    bounds = spec.get_distribution(name).bounds
     assert_truth_is_discriminating(value, bounds, name=name, rel_tol=rel_tol)
     return bounds
 
@@ -156,6 +162,42 @@ class MockPopulation:
     table: np.ndarray
     truth_params: list[dict[str, Any]]
     n_halpha_absorption: int
+    line_names: tuple[str, ...] = ()
+    line_wavelengths: np.ndarray | None = None
+
+    def line_flux_data(self, galaxy=0):
+        """Build a :class:`LineFluxData` template matching these mock lines.
+
+        The template an ``Observation`` needs so the fit scores the SAME lines
+        the mock measured. Per-galaxy values ride through ``data_args``; this is
+        only the declaration, so which galaxy supplies it is immaterial.
+
+        Without this, a caller must re-derive the line names and wavelengths by
+        hand, and any drift makes the fit silently photometry-only.
+
+        Parameters
+        ----------
+        galaxy : int, optional
+            Row whose fluxes and errors seed the template. Default 0.
+
+        Returns
+        -------
+        LineFluxData
+        """
+        from tengri.observation.line_flux_data import LineFluxData
+
+        if not self.line_names:
+            raise ValueError(
+                "This MockPopulation carries no line metadata, so no template "
+                "can be built. It was generated before line_names was recorded, "
+                "or with a model declaring no lines."
+            )
+        return LineFluxData(
+            fluxes=np.asarray(self.table[galaxy]["line_flux_obs"], dtype=float),
+            errors=np.asarray(self.table[galaxy]["line_flux_err"], dtype=float),
+            wavelengths=np.asarray(self.line_wavelengths, dtype=float),
+            names=tuple(self.line_names),
+        )
 
 
 def make_population(
@@ -208,12 +250,11 @@ def make_population(
     """
     from tengri.observation.line_measurement import default_line_defs
 
-    # Validate the injected truths against their priors
-    sigma_bounds = model.spec._distributions["sfh_field_psd_sigma"].bounds
-    tau_bounds = model.spec._distributions["sfh_field_psd_tau_myr"].bounds
-
-    assert_truth_is_discriminating(sigma_true, sigma_bounds, name="sfh_field_psd_sigma")
-    assert_truth_is_discriminating(tau_true_myr, tau_bounds, name="sfh_field_psd_tau_myr")
+    # Validate the injected truths against the model's OWN priors, read through
+    # the public accessor. assert_truth_against_model also rejects an
+    # out-of-support truth, which hand-written bounds cannot catch.
+    assert_truth_against_model(model, "sfh_field_psd_sigma", sigma_true)
+    assert_truth_against_model(model, "sfh_field_psd_tau_myr", tau_true_myr)
 
     # Generate keys for each galaxy
     keys = jax.random.split(key, n_galaxies)
@@ -227,30 +268,47 @@ def make_population(
     line_flux_noise_list = []
     halpha_absorption_count = 0
 
-    # Define emission lines for measurement
-    # Strong star-forming set: drops Hgamma and [NII]_6548 (near-zero fluxes let
-    # SNR-scaled errors dominate chi-squared). Halpha/Hbeta enable Balmer decrement
-    # dust constraint; dust-SFR degeneracy is key to the study.
-    # Wavelengths sourced from canonical catalog, not hardcoded, for consistency.
+    # Emission lines to measure.
+    #
+    # READ THEM FROM THE MODEL when it declares any. The mock must measure the
+    # same lines the likelihood will score, or the two disagree silently: a
+    # model whose Observation carries no line_fluxes builds no line likelihood
+    # at all, so mock lines generated here are simply discarded and the fit is
+    # photometry-only while appearing to use lines. That happened — every
+    # recovery run in this study was photometry-only for exactly this reason.
+    #
+    # Falling back to a default set is only correct for generating data that
+    # will be wired into an Observation afterwards; the returned MockPopulation
+    # carries `line_names` and `line_wavelengths` so a caller can do that
+    # without re-deriving them.
     from tengri.observation.line_list import LineList
 
-    line_names = [
-        "OII_3726",
-        "OII_3729",
-        "OIII_4959",
-        "OIII_5007",
-        "Halpha",
-        "Hbeta",
-        "SII_6717",
-        "NII_6584",
-    ]
-    # Select lines from canonical catalog (LineList.default_optical) by name
-    # (select() returns lines in wavelength order, so reorder to match line_names)
-    canonical_lines = LineList.default_optical().select(names=line_names)
-    canonical_dict = {
-        name: wave for name, wave in zip(canonical_lines.names, canonical_lines.wavelengths)
-    }
-    wavelengths = np.array([canonical_dict[name] for name in line_names])
+    obs_lines = getattr(getattr(model, "observation", None), "line_fluxes", None)
+    if obs_lines is not None and getattr(obs_lines, "n_lines", 0) > 0:
+        line_names = list(obs_lines.names)
+        wavelengths = np.asarray(obs_lines.wavelengths, dtype=float)
+    else:
+        # Strong star-forming set: drops Hgamma and [NII]_6548 (near-zero fluxes
+        # let SNR-scaled errors dominate chi-squared). Halpha/Hbeta enable the
+        # Balmer decrement, hence the dust constraint the dust-SFR degeneracy
+        # needs. Wavelengths come from the canonical catalog, never hardcoded.
+        line_names = [
+            "OII_3726",
+            "OII_3729",
+            "OIII_4959",
+            "OIII_5007",
+            "Halpha",
+            "Hbeta",
+            "SII_6717",
+            "NII_6584",
+        ]
+        # select() returns wavelength-sorted, so map back to line_names order.
+        canonical_lines = LineList.default_optical().select(names=line_names)
+        canonical_dict = dict(
+            zip(canonical_lines.names, canonical_lines.wavelengths, strict=False)
+        )
+        wavelengths = np.array([canonical_dict[name] for name in line_names])
+
     line_defs = default_line_defs(
         wavelengths=wavelengths,
         names=line_names,
@@ -323,4 +381,6 @@ def make_population(
         table=table,
         truth_params=truth_params,
         n_halpha_absorption=halpha_absorption_count,
+        line_names=tuple(line_names),
+        line_wavelengths=np.asarray(wavelengths, dtype=float),
     )

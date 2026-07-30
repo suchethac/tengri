@@ -49,19 +49,24 @@ def main():
             if out_json.exists():
                 r = json.loads(out_json.read_text())
             else:
-                r = {"backend": backend, "variant": variant,
-                     "status": "crashed_no_output"}
+                r = {"backend": backend, "variant": variant, "status": "crashed_no_output"}
         except subprocess.TimeoutExpired:
-            r = {"backend": backend, "variant": variant,
-                 "status": "timeout", "wall_s": timeout}
+            r = {"backend": backend, "variant": variant, "status": "timeout", "wall_s": timeout}
         out.append(r)
         if r["status"] == "ok":
-            print(f"   cold={r['cold_s']:6.1f}s warm={r.get('warm_s',0):.1f}s rss={r['rss_gb_peak']:.2f}GB",
-                  flush=True)
+            print(
+                f"   cold={r['cold_s']:6.1f}s warm={r.get('warm_s', 0):.1f}s rss={r['rss_gb_peak']:.2f}GB",
+                flush=True,
+            )
         else:
-            print(f"   FAIL[{r['status']}] {r.get('error_type','')} "
-                  f"{(r.get('error_msg') or '')[:80]}", flush=True)
-    Path("scripts/_backend_validation_retry.json").write_text(json.dumps(out, indent=2, default=str))
+            print(
+                f"   FAIL[{r['status']}] {r.get('error_type', '')} "
+                f"{(r.get('error_msg') or '')[:80]}",
+                flush=True,
+            )
+    Path("scripts/_backend_validation_retry.json").write_text(
+        json.dumps(out, indent=2, default=str)
+    )
 
 
 if __name__ == "__main__":

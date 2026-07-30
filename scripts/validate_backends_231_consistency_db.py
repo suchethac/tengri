@@ -45,8 +45,16 @@ from tengri.inference._backend_registry import _BACKENDS
 
 DATA = Path("/Users/suchethacooray/Projects/tengri/data")
 SSP_FILE = DATA / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-FILTERS_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-                 "2mass_j", "2mass_h", "2mass_ks"]
+FILTERS_NAMES = [
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+]
 MOCK_SEED = 42
 
 
@@ -58,8 +66,12 @@ def build_model_and_mock():
         ssp_data=ssp,
         observation=obs,
         sfh=builders.sfh.dense_basis(defaults=FREE),
-        dust={"type": "two_component", "*": FIXED,
-              "law_bc": "calzetti", "tau_bc": Uniform(0.0, 1.0)},
+        dust={
+            "type": "two_component",
+            "*": FIXED,
+            "law_bc": "calzetti",
+            "tau_bc": Uniform(0.0, 1.0),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.05),
         approx=WavePrecomp(),  # photometry-only LUT — ~18× speedup
@@ -82,9 +94,17 @@ def build_model_and_mock():
 KW = {
     "map": dict(n_steps=500, verbose=False),
     "laplace": dict(verbose=False),
-    "mcmc_hmc": dict(n_warmup=300, n_burnin=50, n_samples=1000,
-                     n_leapfrog_steps=10, dense_mass_matrix=True, verbose=False),
-    "nss": dict(verbose=False),  # NSS is inherently slow; out of budget but kept for consistency check
+    "mcmc_hmc": dict(
+        n_warmup=300,
+        n_burnin=50,
+        n_samples=1000,
+        n_leapfrog_steps=10,
+        dense_mass_matrix=True,
+        verbose=False,
+    ),
+    "nss": dict(
+        verbose=False
+    ),  # NSS is inherently slow; out of budget but kept for consistency check
 }
 
 
@@ -94,8 +114,12 @@ def child_run(backend: str, out_json: str) -> None:
     entry = _BACKENDS[backend]
     kw = KW[backend]
 
-    rec = {"backend": backend, "variant": "dense_basis",
-           "n_free": model.spec.n_free, "truth": truth}
+    rec = {
+        "backend": backend,
+        "variant": "dense_basis",
+        "n_free": model.spec.n_free,
+        "truth": truth,
+    }
     t0 = time.perf_counter()
     try:
         post = entry.runner(fitter, key=jr.PRNGKey(MOCK_SEED), **kw)
@@ -117,8 +141,7 @@ def child_run(backend: str, out_json: str) -> None:
             rec["posterior"] = summary
         elif getattr(post, "params", None) is not None:
             rec["posterior"] = {
-                k: {"mean": float(v), "std": None, "p16": None,
-                    "p50": float(v), "p84": None}
+                k: {"mean": float(v), "std": None, "p16": None, "p50": float(v), "p84": None}
                 for k, v in post.params.items()
             }
         if hasattr(post, "diagnostics") and post.diagnostics:
@@ -162,27 +185,22 @@ def main():
             if j.exists():
                 r = json.loads(j.read_text())
             else:
-                r = {"backend": backend, "status": "crashed_no_output",
-                     "wall_s": wall}
+                r = {"backend": backend, "status": "crashed_no_output", "wall_s": wall}
         except subprocess.TimeoutExpired:
-            r = {"backend": backend, "status": "timeout",
-                 "wall_s": TIMEOUT[backend]}
+            r = {"backend": backend, "status": "timeout", "wall_s": TIMEOUT[backend]}
         runs[backend] = r
         if r["status"] == "ok":
             print(f"   wall={r['wall_s']:5.0f}s", flush=True)
         else:
-            print(f"   FAIL[{r['status']}] {r.get('error_type','')}", flush=True)
+            print(f"   FAIL[{r['status']}] {r.get('error_type', '')}", flush=True)
         summary["runs"] = runs
         out_path.write_text(json.dumps(summary, indent=2, default=str))
 
-    print("\n=== cross-method posterior means (truth → method mean ± std) ===",
-          flush=True)
-    ok = {b: r for b, r in runs.items() if r.get("status") == "ok"
-          and "posterior" in r}
+    print("\n=== cross-method posterior means (truth → method mean ± std) ===", flush=True)
+    ok = {b: r for b, r in runs.items() if r.get("status") == "ok" and "posterior" in r}
     if ok:
         free = sorted(truth.keys())
-        header = f"{'param':<28s} {'truth':>9s} " + " ".join(
-            f"{b:>20s}" for b in ok)
+        header = f"{'param':<28s} {'truth':>9s} " + " ".join(f"{b:>20s}" for b in ok)
         print(header, flush=True)
         for p in free:
             row = f"{p:<28s} {truth[p]:>9.3f} "
