@@ -1224,7 +1224,16 @@ class Fitter:
         # every fit through it baked the SSP grid into the compiled program as a
         # constant and XLA was OOM-killed on large grids. A guard that fails open
         # turns a one-line omission into an invisible performance cliff.
-        if all(hasattr(model, attr) for attr in ("spec", "ssp_data", "_template_data_for_jit")):
+        #
+        # The topology gate is separate and asked of the model: the threaded
+        # forward is written for a single-population SED forward and mis-broadcasts
+        # the galaxy axis on a hierarchical one. Absent on SEDModel, where threading
+        # has always been valid, so default True.
+        _supports = getattr(model, "_supports_jit_threading", None)
+        _threadable = _supports() if callable(_supports) else True
+        if _threadable and all(
+            hasattr(model, attr) for attr in ("spec", "ssp_data", "_template_data_for_jit")
+        ):
             # Per-fit params override (#1329): the forward pass reads fixed values
             # (e.g. redshift under ``catalog_z_range``) from this threaded dict at
             # runtime, so the override MUST be merged here — not only in
