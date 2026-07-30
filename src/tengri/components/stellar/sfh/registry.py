@@ -1932,6 +1932,7 @@ def compute_field_gp(
     d_log_age: float,
     field_model: str = "drw",
     log_age_grid: jnp.ndarray | None = None,
+    centering: float = 1.0,
 ) -> tuple[jnp.ndarray, float]:
     """Compute GP realization and lognormal correction for the field component.
 
@@ -2013,7 +2014,24 @@ def compute_field_gp(
         # The dense Cholesky (``drw_linear_gp_from_xi``) is retained as the oracle.
         if log_age_grid is None:
             log_age_grid = make_log_age_grid(n_grid)
-        return drw_innovations_gp_from_xi(xi, psd_sigma, psd_tau_yr, log_age_grid)
+        if float(centering) == 1.0:
+            # Bit-identical default: the production O(n) recursion, untouched.
+            return drw_innovations_gp_from_xi(xi, psd_sigma, psd_tau_yr, log_age_grid)
+        # Partial centering (#1355). ``a < 1`` moves amplitude dependence out of
+        # the xi -> SFH map, which is where the funnel lives: s = L(sigma,tau) xi
+        # is BILINEAR, and no fixed metric linearizes a multiplicative coupling,
+        # so preconditioning cannot reach it.
+        #
+        # The caller MUST pair this with the matching latent log-prior
+        # (drw_latent_log_prior). At a < 1 the prior on zeta is
+        # N(0, sigma_s^(2-2a) I), not N(0, I); omitting the -n(1-a) log sigma_s
+        # normalizer leaves a sampler that runs cleanly, reports nothing, and
+        # targets a DIFFERENT posterior at every a.
+        from tengri.components.stellar.sfh.gp_sfh import drw_partial_gp_from_zeta
+
+        return drw_partial_gp_from_zeta(
+            xi, psd_sigma, psd_tau_yr, log_age_grid, centering=centering
+        )
 
     # Other PSD models (e.g. flex-PSD) keep the Fourier/log-age construction.
     sqrt_power_fn = FIELD_MODEL_REGISTRY[field_model]
