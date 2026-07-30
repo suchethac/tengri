@@ -39,6 +39,8 @@ class InterimResult(NamedTuple):
     times_yr: np.ndarray
     ess: np.ndarray
     rhat: dict[str, Any]
+    rhat_median: dict[str, Any] | None = None
+    rhat_frac_above_1p01: dict[str, Any] | None = None
     n_divergent: np.ndarray
     wall_time_s: float
 
@@ -226,9 +228,31 @@ def fit_interim(
     # Aggregate ESS and R-hat
     ess_per_galaxy = np.ones(n_galaxies, dtype=float)
 
+    # Aggregate per-galaxy R-hat three ways, not one.
+    #
+    # The MAX over galaxies is structurally unable to improve with N on a nested
+    # galaxy set: make_population seeds galaxy i with fold_in(key, i), so galaxy
+    # i is the same galaxy at every population size, and if the worst chain is
+    # among the first few the max cannot move. Measured: tau's max R-hat was
+    # 1.6394 at BOTH N=4 and N=8, to four decimals. That is not evidence about
+    # pooling; it is the same bad galaxy reported twice.
+    #
+    # The median and the fraction above 1.01 can both respond to N, so they are
+    # what to read when asking whether adding galaxies helps.
     all_keys = set().union(*[set(d.keys()) for d in all_rhat_dicts])
+
+    def _vals(k):
+        v = np.array([d.get(k, np.nan) for d in all_rhat_dicts], dtype=float)
+        return v[np.isfinite(v)]
+
     rhat_combined = {
-        k: float(np.nanmax([d.get(k, np.nan) for d in all_rhat_dicts])) for k in all_keys
+        k: float(np.nanmax(_vals(k))) if _vals(k).size else float("nan") for k in all_keys
+    }
+    rhat_median = {
+        k: float(np.median(_vals(k))) if _vals(k).size else float("nan") for k in all_keys
+    }
+    rhat_frac_bad = {
+        k: float(np.mean(_vals(k) > 1.01)) if _vals(k).size else float("nan") for k in all_keys
     }
 
     n_divergent = np.array(all_divergent_counts, dtype=int)
@@ -238,6 +262,8 @@ def fit_interim(
         times_yr=times_yr,
         ess=ess_per_galaxy,
         rhat=rhat_combined,
+        rhat_median=rhat_median,
+        rhat_frac_above_1p01=rhat_frac_bad,
         n_divergent=n_divergent,
         wall_time_s=wall_time,
     )
