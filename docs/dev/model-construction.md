@@ -89,14 +89,17 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
   - It is **not** a speed knob, and `'dsps'` is the slower of the two.
     Measured on `predict_photometry` gradients (interleaved reps, medians, an
     A/A control to fix the noise floor): `'cic'` is **3.5 % faster on the exact
-    path** and **13 % faster under `WavePrecomp()`**. Precompute makes DSPS
-    relatively *worse*: replacing the SSP×wavelength contraction with an
-    SSP×filter LUT shrinks the denominator ~4x, which raises the age-weight
-    kernel's share — and DSPS's in-model path carries the larger fixed
-    overhead (two `_build_dsps_sfh_table` calls,
-    `enforce_increasing_cosmic_time`, the invalid-bin ramp, array reversals,
-    the #821 youngest-bin multiplier, then renormalization) against CIC's
-    dense integrand plus one scatter-add.
+    path** and **13 % faster under `WavePrecomp()`**.
+
+    The cause is **not** that DSPS does more arithmetic — by compiled-HLO cost
+    analysis it does ~1 % *fewer* FLOPs and touches fewer bytes. It compiles to
+    **twice as many `while` loops** (14 vs 7 exact, 13 vs 6 under WavePrecomp)
+    and ~40 % more fusion regions: sequential, latency-bound work that does not
+    vectorize. Precompute shrinks the vectorizable part (cic fusions 356 → 212)
+    but leaves the loops alone (dsps whiles 14 → 13), so DSPS's fixed
+    sequential share grows and the gap widens. This is a **CPU wall-clock**
+    effect driven by op structure, so the ordering is not guaranteed to hold on
+    GPU — re-measure there rather than assuming.
 
     Do **not** judge this by micro-benchmarking
     `compute_dsps_age_weights` — that helper has no call sites on the model

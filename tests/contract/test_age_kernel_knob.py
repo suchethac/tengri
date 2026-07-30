@@ -63,6 +63,32 @@ def _age_marginal(model):
     return np.asarray(state.derived["joint_weights"]).sum(axis=0)
 
 
+def _stellar(model):
+    return next(
+        c for c in model._build_component_chain() if type(c).__name__.startswith("Stellar")
+    )
+
+
+def _fixed_params(model):
+    """Every declared parameter at its fixed value.
+
+    ``apply()`` injects Fixed values from the spec; the SED-free fast path reads
+    ``params`` directly, so a parity comparison has to hand it the same values.
+    """
+    import jax.numpy as jnp
+
+    out = {}
+    for name in model.spec.all_params:
+        try:
+            dist = model.spec.get_distribution(name)
+        except Exception:  # pragma: no cover - not every name has a distribution
+            continue
+        value = getattr(dist, "default", None)
+        if value is not None:
+            out[name] = jnp.asarray(float(value))
+    return out
+
+
 class TestAgeKernelSelection:
     def test_default_is_bit_identical_to_explicit_cic(self, synthetic_ssp_wide):
         """Leaving age_kernel unset must not change any existing model."""
@@ -160,6 +186,62 @@ class TestAgeKernelRejectsBadInput:
         """Auto-select on the field path keeps resolving to DSPS silently."""
         w = _age_marginal(_build(synthetic_ssp_wide, field={"all_params": FIXED}))
         assert np.all(np.isfinite(w))
+
+
+class TestNonFieldDspsRouteIsSound:
+    """The non-field DSPS route did not exist before this knob.
+
+    Pre-#964, DSPS was reachable only through a GP-field SFH. Selecting
+    ``age_kernel='dsps'`` on a parametric SFH runs a branch in BOTH
+    :meth:`apply` and the SED-free :meth:`compute_joint_weights`, so it inherits
+    the #982 obligation that those two routes agree — and it must still conserve
+    mass. Neither was covered when the branch was written.
+    """
+
+    @pytest.mark.parametrize("kernel", ["cic", "dsps"])
+    def test_apply_and_fast_path_agree(self, synthetic_ssp_wide, kernel):
+        """#982: the exact and SED-free routes must not read one SFH differently."""
+        model = _build(synthetic_ssp_wide, age_kernel=kernel)
+        jw_apply = np.asarray(model.predict_state({}).derived["joint_weights"])
+        jw_fast, _, _ = _stellar(model).compute_joint_weights(
+            _fixed_params(model), ssp_data=model.ssp_data
+        )
+        jw_fast = np.asarray(jw_fast)
+        assert jw_apply.shape == jw_fast.shape
+        assert np.allclose(jw_apply, jw_fast, rtol=1e-10, atol=0), (
+            f"apply vs fast-path L1 = {np.abs(jw_apply - jw_fast).sum():.3e}"
+        )
+
+    @pytest.mark.parametrize("kernel", ["cic", "dsps"])
+    def test_mass_is_conserved(self, synthetic_ssp_wide, kernel):
+        """sum(age_weights) must equal 10**log_total_mass on either kernel."""
+        model = _build(synthetic_ssp_wide, age_kernel=kernel)
+        total = float(np.sum(np.asarray(model.predict_state({}).derived["age_weights"])))
+        assert total == pytest.approx(1e10, rel=1e-6)
+
+    @pytest.mark.parametrize("kernel", ["cic", "dsps"])
+    def test_non_parametric_sfh_runs_on_either_kernel(self, synthetic_ssp_wide, kernel):
+        """A binned family (continuity) must not crash or go non-finite."""
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            stellar={"logzsol": Fixed(0.0), "all_params": FIXED},
+            sfh={
+                "type": "continuity",
+                "log_total_mass": Fixed(10.0),
+                "age_kernel": kernel,
+                "all_params": FIXED,
+            },
+            dust={
+                "type": "two_component",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.0),
+                "all_params": FIXED,
+            },
+            redshift=Fixed(0.05),
+        )
+        weights = _age_marginal(model)
+        assert np.all(np.isfinite(weights))
+        assert weights.sum() == pytest.approx(1.0, rel=1e-6)
 
 
 class TestAgeKernelIsDiscoverable:
