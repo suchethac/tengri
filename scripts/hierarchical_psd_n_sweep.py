@@ -19,9 +19,11 @@ checkout, which does not carry tengri.inference.population)::
 
 from __future__ import annotations
 
+import gc
 import json
 import time
 
+import jax
 import numpy as np
 
 # Import the single-N driver so the sweep cannot drift from the run it sweeps.
@@ -78,6 +80,14 @@ def main():
         # end. A long run on a machine that can kill it must checkpoint.
         with open(OUT_JSON, "w") as fh:
             json.dump({"rows": rows, "verdict": None}, fh, indent=2)
+
+        # Drop JAX's compiled-program cache between population sizes. Every N is
+        # a distinct array shape for the estimator, so each one compiles a fresh
+        # program and the cache retains all of them. Releasing the per-galaxy
+        # Fitters was not enough on its own: RSS still climbed 2.7 -> 6.4 GB
+        # across two N values, which is what OOM-kills a long sweep.
+        jax.clear_caches()
+        gc.collect()
 
     n_arr = np.array([r["n"] for r in rows], dtype=float)
     print("\n" + "=" * 72)
