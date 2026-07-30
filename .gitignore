@@ -161,3 +161,12 @@ _galrun/
 # scratch logs from local recovery runs
 *_run.log
 run_output.log
+
+# scratch benchmark logs
+batch_bench.log
+four_cell.log
+fwd_vs_grad.log
+where_time.log
+nsweep*.log
+map_unit*.log
+mgvi_probe.log
