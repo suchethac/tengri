@@ -81,6 +81,10 @@ jobs:
       - run: ruff format --check src/ tests/
       - run: python tools/add_spdx_headers.py --check
       - run: python tools/check_british_spelling.py
+      # tengri implements published models and validates against the reference
+      # codes; it does not port or copy their source. The wording drifted back
+      # twice after being swept by hand, so it is pinned here. Stdlib-only.
+      - run: python tools/check_reimplementation_language.py
       # Every test tree must be reachable from some job's path list. The matrix
       # below is explicit, so a directory it stops naming goes dark silently —
       # which is what happened to `tests/unit`. Stdlib-only by design: this job
@@ -92,6 +96,7 @@ jobs:
       # the count instead: a new one has to be justified in the PR. Stdlib-only,
       # same as the guard above.
       - run: python tools/check_zero_hiding_clamps.py
+      - run: python tools/check_representable_floors.py
       # NOTE: `gen_property_table.py --check` cannot live here. This job installs
       # ruff and nothing else, and the generator imports tengri (hence jax) to read
       # the property registry. It runs in `smoke`, which does `pip install -e`.

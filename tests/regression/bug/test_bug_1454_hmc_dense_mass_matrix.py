@@ -86,19 +86,32 @@ def test_the_advisory_excludes_ghmc_because_ghmc_is_always_diagonal():
     """GHMC's ``dense_mass_matrix=True`` default is inert — do not warn on it.
 
     Its momentum generator treats ``momentum_inverse_scale`` as a diagonal
-    vector, so ``ghmc.py`` pins ``adapt_key = ("hmc", True)`` — always diagonal
+    vector, so ``ghmc.py`` pins ``adapt_key = ("ghmc", True)`` — always diagonal
     — regardless of the flag. Including it would advertise a cost the method
     never pays. This is the one place where reading the signature default
     rather than the code gives the wrong answer.
+
+    What is asserted is the *literal* ``True``, not the whole key. The namespace
+    prefix is orthogonal: it was ``"hmc"`` until #1442 renamed it, because sharing
+    a prefix with ``hmc.py`` at the same arity made the two samplers collide in
+    the warmup cache. Pinning the prefix here would make this test fail on a
+    change it has no opinion about — the prefix is pinned on its own by
+    ``test_each_mcmc_backend_owns_its_adaptation_cache_namespace``.
     """
     assert "mcmc_ghmc" not in NUTS_LIKE
 
     import inspect
+    import re
 
     from tengri.inference.backends.mcmc.ghmc import run_ghmc
 
     source = inspect.getsource(run_ghmc)
-    assert '("hmc", True)' in source, (
-        "ghmc no longer pins a diagonal adapt_key — if it can now allocate a "
-        "dense mass matrix, it belongs in NUTS_LIKE after all"
+    adapt_key = re.search(r"adapt_key\s*=\s*\((.*?)\)", source)
+    assert adapt_key is not None, (
+        "ghmc no longer sets an adapt_key — if it can now allocate a dense mass "
+        "matrix, it belongs in NUTS_LIKE after all"
+    )
+    assert adapt_key.group(1).split(",")[-1].strip() == "True", (
+        f"ghmc no longer pins a diagonal adapt_key (got ({adapt_key.group(1)})) — "
+        "if it can now allocate a dense mass matrix, it belongs in NUTS_LIKE after all"
     )

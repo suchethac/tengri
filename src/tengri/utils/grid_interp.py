@@ -883,6 +883,160 @@ def interp_nd_pchip(
     return reduced
 
 
+def resample_template(
+    wave_out: jnp.ndarray,
+    wave_in: jnp.ndarray,
+    flux_in: jnp.ndarray,
+    *,
+    left: float = 0.0,
+    right: float = 0.0,
+    log_flux: bool = True,
+) -> jnp.ndarray:
+    """Resample a tabulated template onto a wavelength grid, in log space.
+
+    Interpolates linearly in :math:`\\log \\lambda` and (by default) in
+    :math:`\\log F`, i.e. a power law between adjacent nodes:
+
+    .. math::
+
+        F(\\lambda) = F_i \\left(\\frac{\\lambda}{\\lambda_i}\\right)^{s_i},
+        \\qquad
+        s_i = \\frac{\\ln(F_{i+1}/F_i)}{\\ln(\\lambda_{i+1}/\\lambda_i)}
+
+    where :math:`\\lambda` is wavelength [Angstrom], :math:`F` the tabulated
+    quantity (any units; returned unchanged), and :math:`s_i` the local
+    log-log slope [dimensionless].
+
+    Template libraries are stored on coarse, log-spaced wavelength grids and
+    evaluated on a much finer model grid — SKIRTOR v3 is 136 points
+    (:math:`R \\sim 7`) against model grids oversampling it ~150x. SED tails
+    (Rayleigh-Jeans, modified blackbody, synchrotron) are power laws, which
+    this form reproduces exactly at any sampling density. Interpolating
+    linearly in linear :math:`\\lambda` instead lays a straight chord across a
+    convex curve, so it overestimates one-sidedly; that bias reaches 3.3 % in
+    the 70 and 160 micron bands for SKIRTOR v3.
+
+    Parameters
+    ----------
+    wave_out : array_like, shape (n_out,)
+        Query wavelengths [Angstrom]. Need not be sorted.
+    wave_in : array_like, shape (n_in,)
+        Native template wavelengths [Angstrom], strictly ascending.
+    flux_in : array_like, shape (n_in,)
+        Tabulated values at ``wave_in`` (any units).
+    left, right : float, optional
+        Values returned below ``wave_in[0]`` and above ``wave_in[-1]``.
+        Default 0.0 for both, matching an SED template that has no support
+        outside its tabulated range. Pass 1.0 for a multiplicative factor.
+    log_flux : bool, optional
+        Interpolate in log flux (default True). Set False for signed
+        quantities, where the log is undefined; log wavelength is still used.
+
+    Returns
+    -------
+    ndarray, shape (n_out,)
+        Resampled values, in the units of ``flux_in``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp`` ops with gathers on traced indices.
+
+    **Gradient-safe**: yes. Intervals with a non-positive endpoint fall back to
+    linear-in-flux, gated with the double-``where`` pattern so the discarded
+    ``log`` branch never forms ``0 * inf`` in the VJP.
+
+    Exact at the native nodes to floating-point precision, and never overshoots
+    the two bracketing node values.
+    """
+    n = wave_in.shape[0]
+    lx = jnp.log(wave_in)
+    lxq = jnp.log(wave_out)
+
+    i = jnp.clip(jnp.searchsorted(lx, lxq) - 1, 0, n - 2)
+    x0, x1 = lx[i], lx[i + 1]
+    y0, y1 = flux_in[i], flux_in[i + 1]
+
+    h = x1 - x0
+    t = jnp.clip((lxq - x0) / jnp.where(h > 0.0, h, 1.0), 0.0, 1.0)
+
+    linear = y0 + t * (y1 - y0)
+    if log_flux:
+        # Gate the log INPUTS on the same condition as the output (double-where):
+        # feeding a non-positive endpoint to log() yields -inf, and the outer
+        # where() would then form 0 * inf = NaN in the reverse pass.
+        both_pos = (y0 > 0.0) & (y1 > 0.0)
+        y0_safe = jnp.where(both_pos, y0, 1.0)
+        y1_safe = jnp.where(both_pos, y1, 1.0)
+        ly0 = jnp.log(y0_safe)
+        out = jnp.where(both_pos, jnp.exp(ly0 + t * (jnp.log(y1_safe) - ly0)), linear)
+    else:
+        out = linear
+
+    out = jnp.where(wave_out < wave_in[0], left, out)
+    return jnp.where(wave_out > wave_in[-1], right, out)
+
+
+def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
+    """Integrate ``y`` over ``x`` treating each segment as a power law.
+
+    The integral of the interpolant :func:`resample_template` builds, so a
+    template normalized with this function still integrates to the same value
+    after resampling. Over one segment, with
+    :math:`s = \\ln(y_1/y_0) / \\ln(x_1/x_0)`:
+
+    .. math::
+
+        \\int_{x_0}^{x_1} y_0 (x/x_0)^{s}\\, dx
+        = x_0 y_0 \\, a \\, \\frac{e^{u} - 1}{u},
+        \\qquad a = \\ln\\frac{x_1}{x_0}, \\quad u = a + \\ln\\frac{y_1}{y_0}
+
+    Written with ``expm1(u)/u`` rather than the textbook
+    :math:`(x_1 y_1 - x_0 y_0)/(s+1)` because that form is 0/0 at
+    :math:`s = -1` — a real case, since :math:`\\nu F_\\nu` flat is exactly
+    :math:`s = -1`.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Monotonic, strictly positive abscissa (wavelength [Angstrom] or
+        frequency [Hz]). Descending ``x`` returns a negative integral, matching
+        ``jnp.trapezoid``, so existing ``-trapezoid(lnu, nu)`` call sites keep
+        their sign convention.
+    y : array_like, shape (n,)
+        Values at ``x`` (any units).
+
+    Returns
+    -------
+    ndarray, shape ()
+        The integral, in units of ``x`` times ``y``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    **Gradient-safe**: yes — segments with a non-positive endpoint fall back to
+    the trapezoid rule under a double-``where``, so the discarded ``log``
+    branch cannot form ``0 * inf`` in the VJP.
+    """
+    x0, x1 = x[:-1], x[1:]
+    y0, y1 = y[:-1], y[1:]
+
+    positive = (y0 > 0.0) & (y1 > 0.0)
+    y0_safe = jnp.where(positive, y0, 1.0)
+    y1_safe = jnp.where(positive, y1, 1.0)
+
+    a = jnp.log(x1 / x0)
+    u = a + jnp.log(y1_safe) - jnp.log(y0_safe)
+    # expm1(u)/u, continued to its finite limit 1 + u/2 as u -> 0.
+    small = jnp.abs(u) < 1e-7
+    u_safe = jnp.where(small, 1.0, u)
+    ratio = jnp.where(small, 1.0 + 0.5 * u, jnp.expm1(u_safe) / u_safe)
+
+    power_law = x0 * y0_safe * a * ratio
+    trapezoid = 0.5 * (y0 + y1) * (x1 - x0)
+    return jnp.sum(jnp.where(positive, power_law, trapezoid))
+
+
 def slice_fixed_axes(
     preint: PreintegratedGrid | PreintegratedLines,
     fixed: dict[int, float],

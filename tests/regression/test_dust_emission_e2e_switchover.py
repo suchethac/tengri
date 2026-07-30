@@ -23,7 +23,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import tengri  # noqa: F401  (ensures ports register in _REGISTRY)
+import tengri  # noqa: F401  (ensures components register in _REGISTRY)
 
 pytestmark = pytest.mark.contract
 

@@ -243,6 +243,74 @@ def render_nebular_lines(
 # ── Ionizing photon rate ──────────────────────────────────────────
 
 
+class QHTableOverflowError(ValueError):
+    """The Q_H table cannot be represented in the working float dtype (#1491)."""
+
+
+def sanitize_qh_table(qh_raw, *, backend_name: str):
+    """Replace non-finite Q_H entries with zero — but only when zero is honest.
+
+    Parameters
+    ----------
+    qh_raw : array_like, shape (n_met, n_age)
+        Raw ionizing photon rate per SSP grid point. [1/s]
+    backend_name : str
+        Backend class name, for the error message.
+
+    Returns
+    -------
+    ndarray, shape (n_met, n_age)
+        ``qh_raw`` with non-finite entries set to 0.0.
+
+    Raises
+    ------
+    QHTableOverflowError
+        When the non-finite entries are dtype overflow rather than bad input.
+
+    Notes
+    -----
+    The zeroing exists for SSP grids with incomplete UV coverage, where a
+    non-finite Q_H really does mean "no usable ionizing flux here" and 0.0 is
+    the honest answer.
+
+    It is wrong for the *other* way an entry goes non-finite. Q_H reaches
+    ~1e47 photons/s, and float32 tops out at 3.4e38, so in a float32 build the
+    integral overflows on healthy input — and the guard then rewrites a real
+    ionizing budget to exactly zero, i.e. no nebular emission, silently.
+    Measured on ``fsps_prsc_miles_chabrier.h5``: **0 of 1395** entries
+    non-finite in float64, **861 of 1395 (61.7%)** in float32 (#1491).
+
+    Overflow is separable from bad input by its signature: it needs the working
+    dtype to be too narrow to hold the *finite* entries that survived. A grid
+    with patchy UV coverage loses a few bins and the survivors sit far below the
+    dtype ceiling; an overflow leaves the survivors pressed against it. This
+    checks that rather than guessing from the count.
+
+    Float64 behavior is unchanged — the condition cannot fire when the finite
+    entries are orders below 1.8e308.
+    """
+    finite = jnp.isfinite(qh_raw)
+    n_bad = int(jnp.sum(~finite))
+    if n_bad:
+        largest_finite = float(jnp.max(jnp.where(finite, jnp.abs(qh_raw), 0.0)))
+        ceiling = float(jnp.finfo(jnp.result_type(qh_raw)).max)
+        if largest_finite > 0.01 * ceiling:
+            raise QHTableOverflowError(
+                f"{backend_name}: {n_bad} of {qh_raw.size} Q_H grid entries overflowed "
+                f"{jnp.result_type(qh_raw)} (largest finite entry {largest_finite:.3e} sits "
+                f"against the {ceiling:.3e} ceiling). Q_H reaches ~1e47 photons/s, which "
+                "float32 cannot represent, so these are healthy SSP bins lost to dtype "
+                "range — not a grid with missing UV coverage. Zeroing them would remove "
+                "the ionizing budget from most of the grid and silently produce no "
+                "nebular emission. Build this backend under float64 "
+                "(the default; `jax.enable_x64(True)`). Pure-float32 support needs the "
+                "line-luminosity unit change tracked as #1206 item 3, because the line "
+                "luminosities this backend returns (~1e40 erg/s) are not float32 "
+                "numbers either. See #1491."
+            )
+    return jnp.where(finite, qh_raw, 0.0)
+
+
 @jax.jit
 def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
     r"""Compute hydrogen-ionizing photon production rate Q_H from an SSP spectrum.
