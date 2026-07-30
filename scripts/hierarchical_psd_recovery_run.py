@@ -27,6 +27,8 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 jax.config.update("jax_enable_x64", True)
 
 from tengri import (
+    FeaturePrecomp,
+    WavePrecomp,
     Fixed,
     Observation,
     Photometry,
@@ -81,39 +83,51 @@ def load_ssp():
     return load_ssp_data(ssp_path)
 
 
-def build_model(ssp_data):
-    """Build the SEDModel with configuration for hierarchical inference."""
-    obs = Observation(
-        photometry=Photometry.from_names(
-            [
-                "sdss_u",
-                "sdss_g",
-                "sdss_r",
-                "sdss_i",
-                "sdss_z",
-                "wise_w1",
-                "wise_w2",
-                "wise_w3",
-                "wise_w4",
-                "hst_f160w",
-            ]
-        )
-    )
+BANDS = [
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "wise_w1",
+    "wise_w2",
+    "wise_w3",
+    "wise_w4",
+    "hst_f160w",
+]
 
-    # Build model with DPL + stochastic field SFH (confirmed working config)
+
+def _build(ssp_data, *, line_flux_data=None, approx=None):
+    """One build path, optionally declaring lines and/or precompute."""
     from tengri import FREE
 
-    model = SEDModel.build(
+    obs_kw = {"photometry": Photometry.from_names(BANDS)}
+    if line_flux_data is not None:
+        obs_kw["line_fluxes"] = line_flux_data
+    build_kw = {} if approx is None else {"approx": approx}
+    return SEDModel.build(
         ssp_data=ssp_data,
-        observation=obs,
+        observation=Observation(**obs_kw),
         sfh={"type": ["dpl", "field"], "*": FREE},
         dust={"type": "two_component", "law_bc": "calzetti", "*": FREE},
         neb={"type": "none"},
         redshift=Fixed(REDSHIFT),
         n_grid=N_GRID,
+        **build_kw,
     )
 
-    return model
+
+def build_model(ssp_data, *, line_flux_data=None, approx=None):
+    """Build the SEDModel for hierarchical inference.
+
+    Declaring ``line_flux_data`` is what puts the emission lines INTO the
+    likelihood. Without it the Observation carries no lines, no line adapter is
+    built, and mock line fluxes are generated and then silently discarded — the
+    fit is photometry-only while appearing to use lines. It is also what lets
+    ``FeaturePrecomp`` build at all; without lines it raises "no emission lines
+    to tabulate".
+    """
+    return _build(ssp_data, line_flux_data=line_flux_data, approx=approx)
 
 
 def get_process_memory_mb():
@@ -183,10 +197,38 @@ def run_recovery(n_galaxies):
         return None
 
     # --- Step 1: Load and build model ---
+    #
+    # Two passes, because the Observation's line declaration and the mock's
+    # lines must agree and each needs the other. Pass 1 builds a photometry-only
+    # model purely to MEASURE a line template off the forward model; pass 2
+    # rebuilds declaring those lines, so make_population then reads its line set
+    # from the model rather than inventing one. Skipping pass 2 is what made
+    # every earlier run photometry-only.
     print("[1/5] Loading SSP data and building model...")
     ssp = load_ssp()
-    model = build_model(ssp)
-    print(f"  ✓ Model: D = {len(model.spec.free_params)}, n_grid = {model.spec.n_grid}")
+
+    bootstrap = build_model(ssp)
+    boot_pop = make_population(
+        bootstrap,
+        n_galaxies=1,
+        sigma_true=TRUTH_SIGMA,
+        tau_true_myr=TRUTH_TAU_MYR,
+        key=jax.random.PRNGKey(42),
+        snr_phot=SNR_PHOT,
+        snr_line=SNR_LINE,
+    )
+    line_template = boot_pop.line_flux_data()
+
+    # Declaring lines is also what lets FeaturePrecomp build; WavePrecomp bakes
+    # the SSP x filter integral for the photometry side.
+    model = build_model(
+        ssp, line_flux_data=line_template, approx=(WavePrecomp(), FeaturePrecomp())
+    )
+    print(
+        f"  ✓ Model: D = {len(model.spec.free_params)}, n_grid = {model.spec.n_grid}, "
+        f"lines = {model.observation.n_data_lines}, "
+        f"approx = WavePrecomp+FeaturePrecomp"
+    )
 
     # --- Step 2: Generate mock population ---
     print(f"[2/5] Generating {n_galaxies} mock galaxies...")
