@@ -236,7 +236,12 @@ def report(interim_result: dict[str, Any], shared_posterior: tuple[Any, Any]) ->
     n_divergent = interim_result.get("n_divergent", np.array([]))
     if int(np.sum(n_divergent)) == 0:
         warnings.warn(
-            "Zero divergences across the whole population. This is a red flag, not "
+            "Zero divergences across the whole population. Treat as a red flag only "
+            "for NUTS, where energy error is checked at every tree doubling and bad "
+            "geometry diverges readily. For STATIC HMC the blackjax default "
+            "divergence_threshold is 1000, so zero means the integrator never "
+            "exploded — NOT that the chain mixed. There, judge on R-hat and ESS. "
+            "Where it does apply, it is a red flag, not "
             "a clean bill of health: a chain that traverses hard geometry reports "
             "it, while chains frozen in separate basins have nothing to report. "
             "Check R-hat including psd_xi before trusting these intervals.",
