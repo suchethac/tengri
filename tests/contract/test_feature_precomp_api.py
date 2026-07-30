@@ -311,15 +311,30 @@ def test_the_dust_ir_term_does_not_change_the_measured_lines():
     m_on = _build(ssp, cue=False, approx=None, emission=True)
     m_off = _build(ssp, cue=False, approx=None, emission=False)
 
+    # Reference scale: the SAME lines with negligible dust. Normalizing by the
+    # attenuated flux itself is not a usable metric at high tau -- at
+    # tau_bc=4, tau_diff=3 these lines are suppressed ~1e4x and two of them
+    # measure NEGATIVE (true on main, before any resampling change), so |a| is
+    # a residual, not a signal. Dividing by it turns a 1e-21 absolute shift
+    # into a 1e-3 "bias". The quantity a catalog cares about is the shift
+    # relative to the line's own intrinsic flux, which is what this uses.
+    intrinsic = np.abs(
+        np.asarray(
+            m_on.measure_line_fluxes(_params(m_on, dust_tau_bc=0.0, dust_tau_diff=0.0), defs)
+        )
+    )
+    assert np.all(intrinsic > 0), "reference scale must be positive"
+
     for tau_bc, tau_diff in [(1.0, 0.4), (4.0, 3.0)]:
         kw = {"dust_tau_bc": tau_bc, "dust_tau_diff": tau_diff}
         a = np.asarray(m_on.measure_line_fluxes(_params(m_on, **kw), defs))
         b = np.asarray(m_off.measure_line_fluxes(_params(m_off, **kw), defs))
-        rel = np.abs(a - b) / np.abs(a)
+        rel = np.abs(a - b) / intrinsic
         assert rel.max() < 1e-5, (
-            f"dust IR shifted the measured line fluxes by {rel.max():.2e} at "
-            f"tau_bc={tau_bc}, tau_diff={tau_diff} — the continuum subtraction is no "
-            f"longer canceling it, so the window LUT must not admit dust emission"
+            f"dust IR shifted the measured line fluxes by {rel.max():.2e} of their "
+            f"intrinsic flux at tau_bc={tau_bc}, tau_diff={tau_diff} — the continuum "
+            f"subtraction is no longer canceling it, so the window LUT must not admit "
+            f"dust emission"
         )
 
 

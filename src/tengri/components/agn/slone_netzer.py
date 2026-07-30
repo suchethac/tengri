@@ -40,6 +40,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._phys import bolometric_integral_nu as _bolometric_integral_nu
+from tengri.utils.grid_interp import resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -162,7 +163,7 @@ def create_slone_netzer_from_grid(grid_path: str) -> Callable:
             + fm * (1.0 - fe) * grid_jax[i + 1, j]
             + fm * fe * grid_jax[i + 1, j + 1]
         )
-        sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
+        sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
         nu = _wavelength_to_nu(wavelength)
         l_scale = 10.0**agn_log_lbol * _LSUN_ERG
         if wavelength.dtype == jnp.float32:

@@ -30,7 +30,12 @@ def main():
     from tengri.components.dust.emission import DUST_EMISSION_MODELS, preload_emission_model
 
     # Fixed wavelength grid (1e3 to 1e7 Angstrom)
-    wave_aa = jnp.linspace(1e3, 1e7, 512, dtype=jnp.float64)
+    # np.linspace, not jnp.linspace: the tests rebuild this grid from
+    # params.json with np.linspace, and the two disagree in the last ulp on
+    # some elements. Under linear interpolation that was invisible; log-log
+    # takes a log and an exp, which carries the ulp through to ~1e-14 in the
+    # output — enough to trip an rtol=1e-14 bit-exact assertion.
+    wave_aa = jnp.asarray(np.linspace(1e3, 1e7, 512, dtype=np.float64))
     L_ir = 1.0e44  # erg/s
 
     # Output directory
@@ -107,8 +112,8 @@ def main():
         # DUST_EMISSION_MODELS entry is the retired DL07-*costume*
         # (umin/gamma/qpah over an HD23→DL07-translated grid, with a no-op
         # dust_qpah), not the faithful Hensley & Draine 2023 model. The faithful
-        # lgU port (_REGISTRY["astrodust"]) is captured + regression-tested from
-        # the port directly in tests/regression/test_dust_goldens_852.py, whose
+        # lgU component (_REGISTRY["astrodust"]) is captured + regression-tested from
+        # the component directly in tests/regression/test_dust_goldens_852.py, whose
         # frozen golden lives at
         # tests/regression/data/dust_emission_golden/astrodust.npy.
         "bosa": {
@@ -134,9 +139,9 @@ def main():
         # NOTE (#852): draine2021_pah is intentionally NOT captured here. Its
         # DUST_EMISSION_MODELS entry is a DEPRECATED ALIAS to pah_drude (a
         # different, analytic model; #693), so capturing it via this loader path
-        # would freeze the WRONG physics. The real tabulated PAHspec port
+        # would freeze the WRONG physics. The real tabulated PAHspec component
         # (_REGISTRY["draine2021_pah_ir"]) is captured + regression-tested from
-        # the port directly in tests/regression/test_dust_goldens_852.py, whose
+        # the component directly in tests/regression/test_dust_goldens_852.py, whose
         # frozen golden lives at
         # tests/regression/data/dust_emission_golden/draine2021_pah_ir.npy.
     }
@@ -238,12 +243,12 @@ All outputs use 64-bit JAX arrays (jax_enable_x64=True).
         f.write(readme_content)
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("Golden baseline capture complete.")
     print(f"  Captured: {len(captured_templates)} templates")
     print(f"  Skipped: {len(skipped_templates)} templates")
     print(f"  Output directory: {outdir}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     return 0
 

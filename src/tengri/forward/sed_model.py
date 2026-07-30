@@ -2204,22 +2204,38 @@ class SEDModel:
             if self._agn_nlr_block in ("synthesizer", "synthesizer_spectra") or (
                 self._agn_blr_block in ("synthesizer", "synthesizer_spectra")
             ):
+                from tengri.components.agn.blocks.blr import (
+                    _resolve_synthesizer_grid as _resolve_blr_grid,
+                )
+                from tengri.components.agn.blocks.nlr import (
+                    _resolve_synthesizer_grid as _resolve_nlr_grid,
+                )
+
+                # Resolving the grid path is *outside* the suppress below, so a
+                # grid that is not on disk fails the build instead of the first
+                # ``predict`` (#1462). The suppress covers pre-warming, which is
+                # an optimization: if the singleton cannot be constructed for
+                # some other reason, the lazy path is still correct. A missing
+                # file is not that — it guarantees ``predict`` raises, so
+                # swallowing it here handed the user a model object that could
+                # never produce a number, with the traceback arriving much later
+                # and far from the ``nlr='synthesizer'`` that caused it.
+                nlr_grid = blr_grid = None
+                if self._agn_nlr_block in ("synthesizer", "synthesizer_spectra"):
+                    nlr_grid = _resolve_nlr_grid("nlr")
+                if self._agn_blr_block in ("synthesizer", "synthesizer_spectra"):
+                    blr_grid = _resolve_blr_grid("blr")
+
                 with contextlib.suppress(Exception):
-                    from tengri.components.agn.blocks.blr import (
-                        _resolve_synthesizer_grid as _resolve_blr_grid,
-                    )
-                    from tengri.components.agn.blocks.nlr import (
-                        _resolve_synthesizer_grid as _resolve_nlr_grid,
-                    )
                     from tengri.components.agn.nlr_cloudy import (
                         get_synthesizer_blr_backend,
                         get_synthesizer_nlr_backend,
                     )
 
-                    if self._agn_nlr_block in ("synthesizer", "synthesizer_spectra"):
-                        get_synthesizer_nlr_backend(_resolve_nlr_grid("nlr"))
-                    if self._agn_blr_block in ("synthesizer", "synthesizer_spectra"):
-                        get_synthesizer_blr_backend(_resolve_blr_grid("blr"))
+                    if nlr_grid is not None:
+                        get_synthesizer_nlr_backend(nlr_grid)
+                    if blr_grid is not None:
+                        get_synthesizer_blr_backend(blr_grid)
 
         return delta
 

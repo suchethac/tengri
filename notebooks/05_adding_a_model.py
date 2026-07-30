@@ -67,7 +67,7 @@ from tengri.parameters.priors import Distribution
 # %% [markdown]
 # ## A worked example — your own modified blackbody
 #
-# Let's port the simplest dust IR emission model — a modified blackbody —
+# Let's take the simplest dust IR emission model, a modified blackbody,
 # from physics straight to a working tengri model. The formula is
 #
 # $$ L_\nu(\lambda, T, \beta) = N(T, \beta, L_{\rm absorbed})\,\nu^\beta\,B_\nu(T) $$
@@ -282,7 +282,7 @@ else:
 # ```
 #
 # All three are the same shape, just different bodies of `predict`. See
-# the canonical ports in `src/tengri/components/<domain>/<name>_model.py`.
+# the canonical components in `src/tengri/components/<domain>/<name>_model.py`.
 
 # %% [markdown]
 # ## Further reading
@@ -295,6 +295,6 @@ else:
 # - **The decision**: `docs/adr/0011-sed-model-component-base.md` — why
 #   the base class exists and what alternatives were considered.
 # - **The base class**: `src/tengri/components/sed_model_component.py`.
-# - **Canonical ports**: `src/tengri/components/dust/wg00_model.py`
+# - **Canonical components**: `src/tengri/components/dust/wg00_model.py`
 #   (closed-form attenuation), `src/tengri/components/dust/draine2021_pah_ir.py`
 #   (template library), `src/tengri/components/agn/skirtor_model.py` (library).

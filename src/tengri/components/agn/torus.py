@@ -40,7 +40,7 @@ from tengri.components.agn._phys import (
     planck_lnu as _planck_lnu,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.utils.grid_interp import interp_nd_triweight
+from tengri.utils.grid_interp import interp_nd_triweight, resample_template
 from tengri.utils.interpolation import edges_for_grid
 
 # ── Physical constants (CGS) ──────────────────────────────────────
@@ -369,7 +369,7 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
         differentiable, traceable parameter.
         """
         template = interp_nd_triweight(grid_jax, (tau_axis,), edges, (agn_tau,))
-        sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
+        sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
         nu = _wavelength_to_nu(wavelength)
         integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
         l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac

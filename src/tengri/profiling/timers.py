@@ -14,8 +14,8 @@ Design notes
   runtime so JIT overhead is visible but doesn't pollute benchmarks.
 - Thread-safe: uses a module-level lock for the global timer dict.
 
-Inspired by Synthesizer's ``tic``/``toc`` + ``OperationTimers`` pattern,
-adapted for JAX.
+Follows the same ``tic``/``toc`` + ``OperationTimers`` pattern as
+Synthesizer, in JAX.
 
 Examples
 --------

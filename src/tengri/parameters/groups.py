@@ -312,7 +312,7 @@ _LAZY_DUST_EMISSION_TYPES = frozenset(
         "dl07_tabulated",
         # AGNfitter-rX DH02_CE01 legacy cold-dust library: an engine-only
         # tabulated model registered lazily in DUST_EMISSION_MODELS (no
-        # SEDModelComponent port), so it is not discovered via the _REGISTRY
+        # SEDModelComponent), so it is not discovered via the _REGISTRY
         # scan and must be declared here to be an accepted dust.emission type.
         "dh02_ce01",
     }
@@ -920,7 +920,9 @@ def parse_groups(**kwargs) -> Parameters:
     # Runs after key validation so a typo is reported before this, which is
     # the more fundamental error.
     if not allow_empty_wildcard:
-        _check_wildcard_freed_something(wildcard_free_outcome)
+        _check_wildcard_freed_something(
+            _narrow_outcome_to_selected_component(wildcard_free_outcome, structural_params)
+        )
 
     # ── Construct final Parameters ────────────────────────────────────
 
@@ -933,6 +935,89 @@ def parse_groups(**kwargs) -> Parameters:
     _warn_firrc_slope_degeneracy(final_params)
 
     return final_params
+
+
+#: Sub-block group name -> the ``structural_params`` attribute naming the
+#: component selected for it. Only groups listed here are narrowed; add an
+#: entry when another sub-block's parameter partition is wider than any one
+#: component's declarations.
+_SUBBLOCK_COMPONENT_ATTR: dict[str, str] = {"dust.emission": "dust_emission"}
+
+
+def _declared_param_names(component_type: str) -> frozenset[str] | None:
+    """Prefixed parameter names a registered component declares.
+
+    Reads the class-level ``_priors`` that ``SEDModelComponent.__init_subclass__``
+    populates, so no instance is built.
+
+    Parameters
+    ----------
+    component_type : str
+        Registry key, e.g. ``"dale2014"``.
+
+    Returns
+    -------
+    frozenset of str or None
+        Prefixed names (``dust_alpha_dale``, ...), or ``None`` when the type is
+        not a registered component or declares nothing — the caller then leaves
+        that group unnarrowed rather than guessing.
+    """
+    from tengri.forward.component_factory import _REGISTRY
+
+    cls = _REGISTRY.get(component_type)
+    priors = getattr(cls, "_priors", None)
+    if not priors:
+        return None
+    prefix = getattr(cls, "parameter_prefix", "")
+    return frozenset(prefix + name for name in priors)
+
+
+def _narrow_outcome_to_selected_component(
+    outcome: dict[str, list[tuple[str, bool]]],
+    structural_params,
+) -> dict[str, list[tuple[str, bool]]]:
+    """Restrict a sub-block's wildcard outcome to its selected component's params.
+
+    A sub-block's parameter partition spans every backend it can dispatch to —
+    ``dust.emission`` covers 22 names across nine engines. Seven of those carry
+    distribution registry defaults and so are freed by ``'*': FREE`` whichever
+    engine is selected, which makes the group-level ``any(freed)`` test in
+    :func:`_check_wildcard_freed_something` unfalsifiable: it cannot fire even
+    when the selected engine got none of *its* parameters freed (#1482).
+
+    ``dale2014`` declares ``dust_alpha_dale`` and ``dust_frac_agn``; both default
+    to ``Fixed`` scalars, so ``emission={'type':'dale2014','*':FREE}`` freed seven
+    parameters belonging to THEMIS, DL07/DL14, MBB and Schreiber, and none the
+    engine reads. Narrowing to the declared set restores the guard.
+
+    Parameters
+    ----------
+    outcome : dict
+        Group name -> list of ``(param_name, was_freed)``.
+    structural_params : StructuralParams
+        Carries the selected component per sub-block.
+
+    Returns
+    -------
+    dict
+        ``outcome`` with narrowed sub-block entries; other groups pass through.
+    """
+    narrowed = dict(outcome)
+    for group, attr in _SUBBLOCK_COMPONENT_ATTR.items():
+        if group not in narrowed:
+            continue
+        component_type = getattr(structural_params, attr, None)
+        if component_type is None:
+            continue
+        declared = _declared_param_names(component_type)
+        if declared is None:
+            continue  # unregistered or declaration-free: keep the old behavior
+        freed = {name for name, was_freed in narrowed[group] if was_freed}
+        # Rebuild from the declared set, not by filtering: a declared parameter
+        # the wildcard never covered must count as not-freed, or dropping it
+        # would empty the list and skip the check entirely.
+        narrowed[group] = [(name, name in freed) for name in sorted(declared)]
+    return narrowed
 
 
 def _format_stuck(group: str, stuck: list[str]) -> tuple[str, str, str]:

@@ -55,7 +55,7 @@ from tengri.components.agn._phys import (
     ring_area as _ring_area,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight
+from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight, resample_template
 from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 from tengri.utils.physics_constants import (
     G_GRAV as _G_GRAV,
@@ -1940,7 +1940,7 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
         point = (agn_log_mbh, agn_log_mdot, agn_astar)
         lnu_template = _interp_nd_triweight(grid_jax, axes, edges, point, scatters=scatters)
         # Interpolate grid wavelength → observation wavelength
-        lnu_interp = jnp.interp(wavelength, wave_grid, lnu_template, left=0.0, right=0.0)
+        lnu_interp = resample_template(wavelength, wave_grid, lnu_template, left=0.0, right=0.0)
         # Inclination scaling from reference cos_inc = 0.5
         lnu_interp = lnu_interp * (2.0 * agn_cos_inc)
 
