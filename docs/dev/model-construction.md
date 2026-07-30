@@ -86,10 +86,21 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
     on the GP-field path (whose draw lives on its own coarse grid, so there
     is no dense integrand to cloud-in-cell). Asking for `'cic'` together with
     a field SFH raises rather than silently returning DSPS weights.
-  - It is **not** a speed knob. On a full `predict_photometry` gradient the
-    two are within 0.3 %, against a 1.8 % measurement noise floor — the
-    age-weight kernel is under 1 % of the work. DSPS's kernel is ~1.3x cheaper
-    *in isolation*, which does not survive contact with the SSP contraction.
+  - It is **not** a speed knob, and `'dsps'` is the slower of the two.
+    Measured on `predict_photometry` gradients (interleaved reps, medians, an
+    A/A control to fix the noise floor): `'cic'` is **3.5 % faster on the exact
+    path** and **13 % faster under `WavePrecomp()`**. Precompute makes DSPS
+    relatively *worse*: replacing the SSP×wavelength contraction with an
+    SSP×filter LUT shrinks the denominator ~4x, which raises the age-weight
+    kernel's share — and DSPS's in-model path carries the larger fixed
+    overhead (two `_build_dsps_sfh_table` calls,
+    `enforce_increasing_cosmic_time`, the invalid-bin ramp, array reversals,
+    the #821 youngest-bin multiplier, then renormalization) against CIC's
+    dense integrand plus one scatter-add.
+
+    Do **not** judge this by micro-benchmarking
+    `compute_dsps_age_weights` — that helper has no call sites on the model
+    path, so its timing says nothing about `apply()`.
 
 [#964]: https://github.com/suchethac/tengri/issues/964
 - **Sub-blocks** nest a dict with its own `'type'`/`'all_params'`/per-param keys:
