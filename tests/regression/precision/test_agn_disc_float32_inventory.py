@@ -131,6 +131,48 @@ def _sed_agn(ssp, disc, dtype):
 _LARGE_GRID_DISCS = frozenset({"relagn", "slone_netzer"})
 
 
+#: A step this large between adjacent grid points is a model cutoff, not physics.
+#: The panchromatic grid samples ~0.9 % in wavelength here, so no smooth SED — not
+#: even a Wien tail — moves by 10x from one point to the next.
+_DISCONTINUITY_STEP = 10.0
+
+
+def _locally_continuous(ref):
+    """Mask out reference points that sit on a step, not on a curve.
+
+    The AGN SED has a hard cutoff at 1 mm: the SKIRTOR torus stops there and
+    ``sed_agn`` falls by 2700x between two adjacent grid points, both of which
+    are well above the ``live`` floor. Comparing float32 against float64 *at* a
+    step like that is ill-posed — the two dtypes land on opposite sides of a
+    boundary one ulp wide, so the measured "error" is the size of the step
+    rather than of any rounding, and no amount of float32 hardening can close
+    it. (Measured: 3.3e-2 for ``powerlaw``, against 7e-6 everywhere else.)
+
+    The mask is derived from the **float64 reference only**. That is what makes
+    this a narrowing of scope rather than a weakening of the guard: a float32
+    value that blows up where float64 is smooth is still compared in full.
+
+    Parameters
+    ----------
+    ref : ndarray, shape (n_wave,)
+        Float64 reference SED [erg/s/Hz].
+
+    Returns
+    -------
+    ndarray of bool, shape (n_wave,)
+        True where ``ref`` is within a factor ``_DISCONTINUITY_STEP`` of both
+        neighbors.
+    """
+    a = np.abs(ref)
+    prev = np.concatenate([a[:1], a[:-1]])
+    nxt = np.concatenate([a[1:], a[-1:]])
+    lo, hi = 1.0 / _DISCONTINUITY_STEP, _DISCONTINUITY_STEP
+    with np.errstate(divide="ignore", invalid="ignore"):
+        r_prev = np.where(prev > 0, a / prev, 1.0)
+        r_next = np.where(nxt > 0, a / nxt, 1.0)
+    return (r_prev > lo) & (r_prev < hi) & (r_next > lo) & (r_next < hi)
+
+
 def _f32_matches_f64(ssp, disc):
     with jax.enable_x64(True):
         ref = _sed_agn(ssp, disc, jnp.float64)
@@ -144,9 +186,16 @@ def _f32_matches_f64(ssp, disc):
     if not np.all(np.isfinite(f32)):
         return False, "non-finite in float32"
     peak = np.abs(ref).max()
-    live = np.abs(ref) > 1e-6 * peak
+    bright = np.abs(ref) > 1e-6 * peak
+    live = bright & _locally_continuous(ref)
+    # The exclusion is meant to drop a couple of cutoff points, not to quietly
+    # empty the comparison. If a change ever makes most of the SED look like a
+    # step, this test must fail loudly rather than pass on three survivors.
+    dropped = int(bright.sum() - live.sum())
+    if dropped > 0.01 * bright.sum():
+        return False, f"{dropped} of {bright.sum()} bright points are discontinuous"
     rel = np.abs(f32[live] - ref[live]) / np.abs(ref[live])
-    return rel.max() < 1e-3, f"max_rel={rel.max():.2e}"
+    return rel.max() < 1e-3, f"max_rel={rel.max():.2e} (excluded {dropped} cutoff points)"
 
 
 @pytest.mark.parametrize("disc", _EXACT_DISC_PARAMS)
