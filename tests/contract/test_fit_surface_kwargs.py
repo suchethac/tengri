@@ -7,7 +7,9 @@
   raised ``unexpected keyword argument``.
 * ``measure_line_fluxes(params)`` silently measured a built-in DESI set of five
   lines instead of the ones the model's own ``Observation`` declares.
-* ``csp_integration`` is accepted and validated but does not reach the SED.
+* ``csp_integration`` was accepted and validated but never reached the SED --
+  while still changing the reported stellar mass. Now inert and deprecated;
+  see ``test_csp_integration_consistency.py``.
 """
 
 from __future__ import annotations
