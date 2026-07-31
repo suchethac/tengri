@@ -178,6 +178,42 @@ the estimator. Two live leads:
 
 ---
 
+## 4a. The tilt, localized
+
+Per-galaxy `log Z_i(σ,τ)` surfaces computed two ways on the identical grid, by
+running `shared_log_posterior` on one galaxy at a time (so
+`log_posterior = log_prior + log Z_i` comes out of the production path):
+
+| | median per-galaxy peak | summed over 24 | `logZ(corner) − logZ(truth)` | % favouring corner |
+|---|---|---|---|---|
+| **Truth field** (K=1) | σ 0.690, τ **132.8** | σ 0.715, τ **141.9** ✓ | **−2.433** nats/gal | 4% |
+| **Laplace** (K=1000) | σ 0.757, τ **12.2** | σ **1.000**, τ 162.0 ✗ | **+0.098** nats/gal | 38% |
+
+**The tilt is +0.098 nats per galaxy.** Multiply by N: ~+3 nats at N=32, still
+losable to noise; +6.3 at N=64, enough to overwhelm the prior. **The observed
+N≈32–64 threshold falls straight out of this number.**
+
+**The damage is entirely in τ, per galaxy, before any pooling.** Laplace gets σ
+right (median peak 0.757 vs truth 0.75) but pins τ to the grid floor — 10.0–13.0
+for six of eight galaxies, median 12.2, against truth-field peaks that scatter
+73–438 Myr but centre correctly.
+
+**Mechanism.** `log Z_i = logsumexp_k[log p(m_k|σ,τ) − log p_0(m_k)]` averages
+over the draw ensemble. A small-τ kernel is nearly white and gives moderate
+density to *every* draw; a large-τ kernel gives high density to smooth draws and
+near-zero to rough ones. An ensemble containing prior-like roughness — exactly
+what the ~12 unconstrained field directions contribute — therefore favours small
+τ. With K=1 there is no ensemble, the single true field is smooth, and large τ
+wins. That is why the truth-field test passes and the pipeline does not.
+
+Dividing by `p_0` is precisely what should cancel this. It fails because `p_0`
+is the **grid-averaged pushforward** while the draws actually came from a
+**Laplace Gaussian** — the correction is for the wrong sampling density, and a
+residual tilt survives. This is a subtlety in the estimator's assumptions, not a
+coding error, which is why every code-level remedy left it untouched.
+
+---
+
 ## 5. The funnel (not yet addressed)
 
 `s = L(σ,τ)·ξ` is **bilinear**, so the (σ, ξ) geometry is a funnel. Symptoms:
@@ -269,15 +305,21 @@ N=2048, K=4000 use 4 or less.
 
 ## 8. Next steps, ranked
 
-1. **Find the per-galaxy bias in `Z_i(σ,τ)` — everything else depends on it.**
-   It causes both the corner-railing above N≈64 and the τ bias. The sharpest
-   available test: the truth-field run recovers (σ, τ) correctly at N=256 with
-   K=1, and real fits fail with K=4000, so **compare `log Z_i(σ,τ)` computed
-   from the truth field against the same galaxy's Laplace draws, on the same
-   grid, and look at where the two surfaces differ**. That isolates whether the
-   tilt comes from the draws' spread or their centre. Do NOT reach for weight
-   removal (closed-form Gaussian marginalization): median ESS is 518–631, so
-   the weights are not the problem.
+1. **Fix the per-galaxy τ tilt — it is now localized and quantified (§4a).**
+   Do NOT reach for weight removal (closed-form Gaussian marginalization):
+   median ESS is ~550, the weights are not the problem. The tilt is
+   +0.098 nats/galaxy toward the corner and is intrinsic to averaging
+   `log p(m_k|σ,τ)` over a draw ensemble containing prior-like roughness.
+   Three routes, cheapest first:
+   (a) **Make `p_0` match the actual sampling density.** B2's derivation
+   requires dividing by the density the draws really came from. With Laplace
+   that is a known Gaussian per galaxy, not the grid-averaged pushforward the
+   code assumes — so `p_0` can be computed exactly rather than approximated.
+   This is the most likely single fix.
+   (b) Use honest posteriors (NUTS with the funnel addressed) so the
+   pushforward assumption holds again.
+   (c) Restrict the field to its data-constrained subspace (~4 of 16 modes)
+   before scoring, removing the prior-like roughness that drives the tilt.
 2. **Full covariance comparison, truth vs Laplace fields** across age nodes (not
    just lag-1). Cheapest test of the leading τ hypothesis. ~30 min.
 3. **Run `mcmc_nuts`** (`dense_mass_matrix=False`) on ~16 galaxies and compare
