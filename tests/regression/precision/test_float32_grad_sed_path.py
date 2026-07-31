@@ -66,6 +66,34 @@ def _band_gradient(ssp, obs, groups, *, lo, hi, x64, dtype):
         return names, int(mask.sum()), value, grad
 
 
+def _forward_mode_lbol_gradient(ssp, obs, groups, *, lo, hi, x64, dtype, with_value=False):
+    """``d(band sum)/d(agn_log_lbol)`` by ``jvp`` — the same quantity, other mode.
+
+    Deliberately a separate helper rather than a flag on :func:`_band_gradient`:
+    the two differ only in which autodiff mode runs, and keeping the model build
+    and masking identical is what makes the comparison attributable.
+    """
+    with jax.enable_x64(x64):
+        model = SEDModel.build(ssp_data=ssp, observation=obs, redshift=Fixed(0.1), **groups)
+        names = sorted(n for n in model.spec.free_params if n in _TRUTH)
+        wave = np.asarray(model._rest_wavelength, dtype=np.float64)
+        mask = jnp.asarray((wave >= lo) & (wave < hi))
+        idx = names.index("agn_log_lbol")
+
+        def band_sum(lbol):
+            params = {
+                k: (lbol if i == idx else jnp.asarray(_TRUTH[k], dtype=dtype))
+                for i, k in enumerate(names)
+            }
+            return jnp.sum(jnp.where(mask, model.predict(params).rest_sed(), 0.0))
+
+        base = jnp.asarray(_TRUTH["agn_log_lbol"], dtype=dtype)
+        value, tangent = jax.jvp(band_sum, (base,), (jnp.ones_like(base),))
+        if with_value:
+            return float(np.asarray(value)), float(np.asarray(tangent))
+        return float(np.asarray(tangent))
+
+
 def test_radio_sed_gradient_is_accurate_in_float32(ssp_bare, obs):
     """The radio seam, measured where it is actually visible.
 
@@ -93,16 +121,20 @@ def test_radio_sed_gradient_is_accurate_in_float32(ssp_bare, obs):
 
 
 @pytest.mark.xfail(
-    reason="#1439: with any AGN present, d(sum rest_sed)/d(agn_log_lbol) is NaN in pure "
-    "float32 — while the forward value is exact (2.2891e+32, identical to float64) and "
-    "the mass gradient is exact (3.2755e+32). Reproduces for the multicolor disc alone, "
-    "the SKIRTOR torus alone, and both together with or without cigale_joint, at every "
-    "wavelength band including the optical, and with no mask involved. "
-    "predict_photometry gradients are unaffected, so inference through photometry is "
-    "not blocked. Mechanism not yet pinned: the apply_log10_scale reference offset is "
-    "ruled out (34.583 dex, Jacobian ~3.8e34, inside float32 range). One confirmed "
-    "hazard in the area is that the 36 `1e-100` floors in src/ are exact no-ops in "
-    "float32 (1e-100 -> 0.0, log10 -> -inf), the #1404 zero-hiding clamp class.",
+    reason="#1439 residual, now narrowed to REVERSE MODE on the SHAPE-CLASS discs. "
+    "d(sum rest_sed)/d(agn_log_lbol) is NaN in pure float32 for 'multicolor' and "
+    "'kubota_done' — the discs that take agn_log_lbol_shape, so the true L_bol drives "
+    "the shape while the magnitude rides the reference. That creates two paths through "
+    "the log-space renormalization, and reverse mode fails to cancel them: measured on "
+    "multicolor_disc alone the reverse gradient is 2.14x the float64 answer (finite but "
+    "wrong), which becomes NaN once the full chain runs. Three things are NOT the cause, "
+    "each ruled out by A/B measurement: the Planck reciprocal (identical to the last "
+    "digit with and without its custom_jvp), the EUV tail (all four options give 2.13-"
+    "2.14x), and the ring count (n_radii=8 gives 2.33x, so it is not accumulation). "
+    "Scope: forward mode is EXACT (1.0000 vs float64) for every disc, and the "
+    "shape-invariant 'richards2006' disc is exact in BOTH modes — see the two passing "
+    "companions below. predict_photometry gradients are unaffected, so inference "
+    "through photometry is not blocked.",
     strict=True,
 )
 def test_agn_sed_gradient_is_finite_in_float32(ssp_bare, obs):
@@ -138,4 +170,82 @@ def test_agn_sed_gradient_is_finite_in_float32(ssp_bare, obs):
     assert np.all(np.isfinite(g32)), (
         f"float32 SED gradient is non-finite (names={names}, f32={g32}, f64={g64}) "
         "while the forward pass is exact — #1439"
+    )
+
+
+def _agn_groups(disc):
+    return dict(
+        sfh=_SFH,
+        dust=_DUST,
+        agn={
+            "type": "composable",
+            "all_params": FIXED,
+            "disc": {"type": disc, "all_params": FIXED},
+            "log_lbol": Uniform(9.0, 12.0),
+            "fracAGN": 0.1,
+        },
+    )
+
+
+def test_agn_sed_forward_mode_gradient_is_exact_in_float32(ssp_bare, obs):
+    """Forward mode gets the AGN SED gradient right where reverse mode does not.
+
+    This is what makes the xfail above a statement about **reverse mode** rather
+    than about float32: the quantity is representable and float32 computes it.
+
+    It is also the guard that the forward *value* stays finite. Until the rest
+    grid was made to follow the session precision (#1206/#1439), a composable AGN
+    with no torus left the grid float64, every ``wave.dtype == jnp.float32`` gate
+    in components/ fell through to its float64 branch, and ``sed_agn`` was NaN at
+    all 5994 points. The strict xfail above absorbed that silently — it was still
+    "failing", just for a different reason than its text claimed. A passing test
+    is what keeps the forward path honest.
+    """
+    groups = _agn_groups("multicolor")
+    kw = dict(lo=0.0, hi=1e12)
+
+    with jax.enable_x64(True):
+        _, _, v64, _ = _band_gradient(ssp_bare, obs, groups, x64=True, dtype=jnp.float64, **kw)
+    g64 = _forward_mode_lbol_gradient(ssp_bare, obs, groups, x64=True, dtype=jnp.float64, **kw)
+    v32_g32 = _forward_mode_lbol_gradient(
+        ssp_bare, obs, groups, x64=False, dtype=jnp.float32, with_value=True, **kw
+    )
+    v32, g32 = v32_g32
+
+    assert np.isfinite(v64) and np.isfinite(g64), f"setup: float64 is {v64}, {g64}"
+    assert np.isfinite(v32), (
+        f"float32 forward VALUE is non-finite ({v32}) — a dtype gate fell through "
+        "to its float64 branch (#1439)"
+    )
+    assert abs(v32 - v64) / abs(v64) < 1e-3, f"float32 value {v32:.6e} vs {v64:.6e}"
+    assert np.isfinite(g32), f"float32 forward-mode gradient is non-finite ({g32})"
+    assert abs(g32 - g64) / abs(g64) < 1e-3, (
+        f"float32 forward-mode d/d(agn_log_lbol) {g32:.6e} vs float64 {g64:.6e}"
+    )
+
+
+def test_shape_invariant_disc_sed_gradient_is_exact_in_float32(ssp_bare, obs):
+    """A shape-invariant disc is exact in BOTH modes — the xfail's other boundary.
+
+    ``richards2006`` does not take ``agn_log_lbol_shape``, so its magnitude rides the
+    reference evaluation with no second path through the renormalization. That it
+    passes in reverse mode is what localizes the residual defect to the
+    shape-class discs rather than to the AGN path as a whole.
+    """
+    groups = _agn_groups("richards2006")
+    kw = dict(lo=0.0, hi=1e12)
+
+    names, _, v64, g64 = _band_gradient(ssp_bare, obs, groups, x64=True, dtype=jnp.float64, **kw)
+    _, _, v32, g32 = _band_gradient(ssp_bare, obs, groups, x64=False, dtype=jnp.float32, **kw)
+
+    assert np.all(np.isfinite(g64)), f"setup: float64 gradient is {g64}"
+    assert np.isfinite(v32), f"float32 forward value is non-finite ({v32})"
+    assert abs(v32 - v64) / abs(v64) < 1e-3, f"float32 value {v32:.6e} vs {v64:.6e}"
+    assert np.all(np.isfinite(g32)), (
+        f"float32 reverse-mode gradient is non-finite (names={names}, f32={g32})"
+    )
+    rel = np.abs(g32 - g64) / np.maximum(np.abs(g64), 1e-300)
+    assert rel.max() < 1e-3, (
+        f"float32 reverse-mode SED gradient disagrees with float64 by {rel.max():.2e} "
+        f"(names={names}, f32={g32}, f64={g64})"
     )

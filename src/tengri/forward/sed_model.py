@@ -2331,6 +2331,28 @@ class SEDModel:
         else:
             self._rest_wavelength = ssp_data.ssp_wave
 
+        # Canonicalize to the session's working float dtype (#1206, #1439).
+        # ``make_union_grid`` already builds at the working precision, but the
+        # ``else`` branch hands back the SSP loader's float64 array verbatim —
+        # so under ``jax.enable_x64(False)`` the grid's dtype depended on
+        # whether some component happened to contribute a wing. That is not
+        # cosmetic: thirteen precision gates in ``components/`` (AGN disc x6,
+        # X-ray x2, radio, shock, ...) ask ``wave.dtype == jnp.float32`` to
+        # decide whether to take their float32-safe log-domain path, and a
+        # float64 grid makes every one of them fail *open* at once — the
+        # float64 branch runs while the arithmetic is float32. Measured: a
+        # composable AGN with no torus (nothing contributes a wing, so the
+        # grid stays float64) evaluated the multicolor disc at the true
+        # ``10**11 * L_sun`` = 3.8e44, past float32's 3.4e38, and returned
+        # ``sed_agn`` NaN at every one of 5994 points. Adding a SKIRTOR torus
+        # forced a union grid and the same model was clean — the bug was
+        # reachable only through the component list, which is why no float32
+        # test had caught it.
+        #
+        # Under x64 this is a no-op (``result_type(float)`` is float64 and the
+        # grid already is), so float64 behavior is unchanged by construction.
+        self._rest_wavelength = jnp.asarray(self._rest_wavelength, dtype=jnp.result_type(float))
+
         # Identity entries for shock_* and xray_* now come from registry
         # auto-derive in _build_param_map (Step B).
         self._uses_shock = getattr(spec, "shock", False)
