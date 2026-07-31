@@ -49,7 +49,7 @@ most important open problem.
 
 ## 3. Bugs found and fixed (each was a real defect)
 
-1. **`min_eigenvalue=1e-6` is a variance *ceiling*, not a regularizer.**
+1. **`min_eigenvalue=1e-6` is a variance *ceiling*, not a regularizer** (#1515).
    `run_laplace` floors Hessian eigenvalues then takes `cov = H⁻¹`, so the floor
    *assigns* clipped directions variance 1e6 (std 1000). Measured: galaxy 4 had
    11/26 eigenvalues clipped and ξ std 682, against an expected 1. Ten filters
@@ -207,9 +207,8 @@ N=2048, K=4000 use 4 or less.
    for a funnel. ~1 h.
 3. **Finish partial centering**: the loss-prior correction at
    `loss_functions.py:478`. The principled funnel fix.
-4. File the `min_eigenvalue=1e-6` footgun against tengri — it silently inflates
-   variance 1e6× for any model with unit-scale priors, and only warns under
-   `verbose=True`.
+4. ~~File the `min_eigenvalue=1e-6` footgun~~ — filed as **#1515**. Worked
+   around here with `--min-eigenvalue 1.0`; the library default is unchanged.
 5. Acceptance criteria 3 (two-population separation) and 6 (coverage across ≥3
    realizations) are still unrun. Criterion 2 needs multiple realizations —
    single-realization coverage was over-read earlier in this work.
