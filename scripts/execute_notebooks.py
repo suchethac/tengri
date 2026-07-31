@@ -70,7 +70,8 @@ def execute(slug: str, timeout: int) -> tuple[bool, float, int, int]:
         timeout=timeout,
         kernel_name="python3",
         allow_errors=True,
-        # cwd = notebooks/, so ../data and figures/ resolve as they do for a human.
+        # cwd = notebooks/, matching how a human opens them. Notebooks should still
+        # anchor their own paths at the repo root rather than rely on this (#1486).
         resources={"metadata": {"path": str(src.parent)}},
     )
     t0 = time.perf_counter()

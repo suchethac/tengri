@@ -52,14 +52,23 @@
 # observable and nothing else.
 
 # %%
-import os
 import sys
 import warnings
+from pathlib import Path
+
+# Every path below is anchored at the repository root rather than the working
+# directory. A notebook run from anywhere but ``notebooks/`` would otherwise miss
+# the local SSP and fall through to a 67 MB download (#1486), and scatter its
+# figures into a stray directory.
+REPO_ROOT = next(p for p in [Path.cwd(), *Path.cwd().parents] if (p / "pyproject.toml").exists())
+DATA_DIR = REPO_ROOT / "data"
+FIG_DIR = REPO_ROOT / "notebooks" / "_figs"
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # _setup must be imported BEFORE jax: it sets TF_CPP_MIN_LOG_LEVEL, which XLA only
 # reads at import. Import jax first and every cell below carries a wall of
 # "PjRt-IFRT does not track XLA executable versions" into the rendered page.
-sys.path.insert(0, ".")
+sys.path.insert(0, str(REPO_ROOT / "notebooks"))
 from _plot_style import setup_style
 from _setup import effective_wavelengths_um, quiet
 
@@ -77,7 +86,6 @@ warnings.filterwarnings("ignore", message=r"(?s).*is a wNE .*")
 warnings.filterwarnings("ignore", message=r"(?s).*run with that physics held constant.*")
 
 import time
-from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -86,8 +94,6 @@ jax.config.update("jax_enable_x64", True)
 
 import matplotlib.pyplot as plt
 import numpy as np
-
-os.makedirs("figures", exist_ok=True)
 
 import tengri
 from tengri import (
@@ -120,7 +126,7 @@ C_TRUTH = "0.05"
 
 # %%
 SSP_NAME = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0"
-ssp_path = Path("../data") / f"{SSP_NAME}.h5"
+ssp_path = DATA_DIR / f"{SSP_NAME}.h5"
 if not ssp_path.exists():
     ssp_path = Path(tengri.download_ssp(SSP_NAME))
 ssp_data = load_ssp_data(str(ssp_path))
@@ -138,7 +144,7 @@ LINE_NAMES = ["Halpha", "Hbeta", "OIII_5007", "OIII_4959",
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 260)  # rest 3455-8364 A at z = 0.1
 
 Z_GAL = 0.1
-N_GRID = 16  # field latents; the SFH dimension. D = N_GRID + 7 physical
+N_GRID = 16  # field latents; Section 1 prints the total dimension they add up to
 PHOT_SNR, LINE_SNR, SPEC_SNR = 20.0, 10.0, 30.0
 
 phot = Photometry.from_names(BANDS)
@@ -331,7 +337,7 @@ axes[-1].set_xlim(X_LO, X_HI)
 axes[-1].set_ylim(Y_LO, Y_HI)
 fig.suptitle("The same galaxy, three observables", y=0.995)
 fig.tight_layout()
-fig.savefig("figures/sfh_observables.png", dpi=150, bbox_inches="tight")
+fig.savefig(FIG_DIR / "sfh_observables.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -453,7 +459,7 @@ for _ax in axes:
              color="#5c4080", ha="center", va="bottom")
 fig.suptitle("Photometry alone smooths the bursts away; the lines put them back", y=1.0)
 fig.tight_layout()
-fig.savefig("figures/sfh_recovery_by_observable.png", dpi=150, bbox_inches="tight")
+fig.savefig(FIG_DIR / "sfh_recovery_by_observable.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -486,7 +492,7 @@ ax_mass.legend(fontsize=8.5)
 ax_mass.grid(axis="y", alpha=0.3, lw=0.4)
 
 fig.tight_layout()
-fig.savefig("figures/sfh_scorecard.png", dpi=150, bbox_inches="tight")
+fig.savefig(FIG_DIR / "sfh_scorecard.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
@@ -525,7 +531,7 @@ ax = plot_sfh(model["B"], posterior, true_params=truth_full,
               method="HMC", xscale="log", label="posterior (case B)")
 ax.set_title("Case B posterior — 7 filters + 8 emission lines")
 ax.set_xlabel("lookback time [Gyr]")
-ax.figure.savefig("figures/sfh_posterior_lines.png", dpi=150, bbox_inches="tight")
+ax.figure.savefig(FIG_DIR / "sfh_posterior_lines.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
