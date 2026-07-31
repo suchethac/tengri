@@ -108,3 +108,40 @@ def test_resolver_keeps_an_explicit_argument():
     explicit = default_line_defs(np.array([6564.61]), ("Halpha",))
     out = resolve_line_defs(explicit, _obs_with_lines(("Halpha", "Hbeta"), None))
     assert tuple(d.name for d in out) == ("Halpha",)
+
+
+def test_resolver_preserves_declaration_order():
+    """Order follows the OBSERVATION, not DESI_LINES.
+
+    The two files declare the same five lines in different orders, so a caller
+    zipping the result against DESI_LINES got every value mislabelled --
+    Halpha's flux under the key "Hbeta". Exactly the failure #1500 describes,
+    and it was live in tests/components/spectroscopy/test_line_measurement.py.
+    """
+    from tengri.observation.line_measurement import resolve_line_defs
+
+    declared = ("Halpha", "Hbeta", "OIII_5007", "NII_6584", "SII_6717")
+    defs = resolve_line_defs(None, _obs_with_lines(declared, None))
+    assert tuple(d.name for d in defs) == declared
+
+
+def test_resolver_reuses_curated_windows_where_they_exist():
+    """A line DESI defines keeps DESI's hand-chosen side-bands.
+
+    Rebuilding a generic +/-8 A window for [OIII] 5007 measures a different flux
+    -- ~19% against the direct nebular luminosity, enough to break a 10% check.
+    """
+    from tengri.observation.line_measurement import DESI_LINES, resolve_line_defs
+
+    curated = {d.name: d for d in DESI_LINES}
+    defs = resolve_line_defs(None, _obs_with_lines(tuple(curated), None))
+    assert all(d is curated[d.name] for d in defs), "curated windows were rebuilt generically"
+
+
+def test_resolver_builds_generic_windows_for_unknown_lines():
+    """Lines DESI does not define still get usable windows."""
+    from tengri.observation.line_measurement import resolve_line_defs
+
+    defs = resolve_line_defs(None, _obs_with_lines(("OII_3726", "SII_6731"), None))
+    assert tuple(d.name for d in defs) == ("OII_3726", "SII_6731")
+    assert all(d.feature[1] > d.feature[0] for d in defs)

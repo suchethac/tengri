@@ -384,6 +384,23 @@ def resolve_line_defs(line_defs, observation=None):
     lfd = getattr(observation, "line_fluxes", None) if observation is not None else None
     if lfd is None:
         return tuple(DESI_LINES)
+
     import numpy as _np
 
-    return default_line_defs(_np.asarray(lfd.wavelengths), tuple(lfd.names))
+    # Prefer the CURATED window for a line DESI already defines. default_line_defs
+    # builds generic +/-8 A feature and 17-20 A continuum side-bands from a center;
+    # DESI_LINES carries hand-chosen side-bands that dodge neighboring features.
+    # Rebuilding a generic window for, say, [OIII] 5007 measures a measurably
+    # different flux -- enough to move it ~19% against the direct nebular
+    # luminosity. Curated where available, generic only for the rest.
+    curated = {d.name: d for d in DESI_LINES}
+    waves = _np.asarray(lfd.wavelengths)
+    names = tuple(lfd.names)
+    out = []
+    for name, wave in zip(names, waves):
+        known = curated.get(name)
+        if known is not None and abs(float(known.wavelength) - float(wave)) < 1.0:
+            out.append(known)
+        else:
+            out.append(default_line_defs(_np.asarray([wave]), (name,))[0])
+    return tuple(out)
