@@ -81,7 +81,11 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
     mass for a delayed-tau at age = 5 Gyr) and biases the optical CSP +1.2 %
     vs FSPS / bagpipes / a dense reference ([#964]). Offered for cross-code
     comparison against DSPS-native pipelines and pre-#964 tengri, not for
-    science.
+    science. Pre-#964 equivalence is **exact**, verified against the pre-fix
+    source: same `sfr_on_ssp`, same `_build_dsps_sfh_table(...,
+    add_young_knot=True)`, same `.weights`, same #821 youngest-bin multiplier.
+    The one deliberate difference is a `jnp.maximum(sum, 1e-300)` floor on the
+    normalization, so a degenerate all-zero SFH yields zero instead of NaN.
   - Leaving it unset auto-selects: `'cic'` on the parametric path, `'dsps'`
     on the GP-field path (whose draw lives on its own coarse grid, so there
     is no dense integrand to cloud-in-cell). Asking for `'cic'` together with

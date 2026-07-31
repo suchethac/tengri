@@ -928,9 +928,23 @@ class StellarSEDComponentConfig(SEDComponentConfig):
         age = 5 Gyr) and biasing the CSP +1.2 % in the optical with a blue-ward
         tilt vs FSPS / bagpipes / a dense reference (#964). ``"cic"`` is
         therefore the accuracy default; ``"dsps"`` is offered for cross-code
-        comparison against pre-#964 tengri and DSPS-native pipelines, and costs
-        ~1.3x less per age-weight gradient (a ~2 % effect on a full
-        ``predict_photometry`` gradient — the kernel is a small slice of it).
+        comparison against DSPS-native pipelines and pre-#964 tengri.
+
+        **Pre-#964 equivalence is exact, verified against the pre-fix source**
+        (parent of ``d5a78433b``): on the parametric delta path this branch runs
+        the identical sequence — the same ``sfr_on_ssp`` (untouched by #964),
+        ``_build_dsps_sfh_table(..., add_young_knot=True)`` (#538),
+        ``calc_rest_sed_sfh_table_lognormal_mdf(...).weights``, the #821
+        youngest-bin multiplier, then normalization. The one deliberate
+        difference is that normalization now floors the divisor
+        (``jnp.maximum(sum, 1e-300)``) so a degenerate all-zero SFH yields zero
+        rather than NaN; on any non-degenerate input the result is unchanged.
+
+        It is **not** a speed knob, and it is the slower of the two: measured
+        end-to-end, ``"cic"`` is ~3.5 % faster on the exact path and ~13 %
+        faster under ``WavePrecomp`` — DSPS compiles to about twice as many
+        ``while`` loops, which precompute cannot shrink. (Do not judge this by
+        timing :func:`compute_dsps_age_weights`; it has no call sites here.)
 
         Only consulted on the non-field path. A GP-field SFH always uses the
         DSPS kernel: the field draw is defined on its own coarse lookback grid,
