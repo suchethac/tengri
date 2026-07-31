@@ -15,6 +15,13 @@ If the paired file is missing after sync, falls back to:
 
 4. Normalize markdown headings: exactly one H1 ``# <slug>`` (file stem); any other
    top-level ``#`` lines become ``##`` so Sphinx does not list them in the sidebar.
+   ``EXPERIMENTAL_SLUGS`` are exempt from the retitle and keep their own H1.
+
+Covers both the numbered spine (``SPINE_SLUGS`` -> ``docs/spine/``) and the
+standalone demonstrations (``EXPERIMENTAL_SLUGS`` -> ``docs/spine/experimental/``).
+The latter were published via the ``docs/index.md`` toctree while absent from this
+script, so both were hand-copied and both drifted from their sources; see #1506
+and the ``tools/check_notebook_renders.py`` guard that now pins the invariant.
 
 Run from repository root::
 
@@ -61,6 +68,21 @@ SPINE_TITLES: dict[str, str] = {
     "09_parameter_sweeps": "Parameter Sweeps",
 }
 
+# Published under docs/spine/experimental/ -- the "Experimental" toctree at the end
+# of docs/index.md. Their SOURCES live flat in notebooks/, so the output path and
+# the slug differ, which is exactly why a flat SPINE_SLUGS list missed them: both
+# renders were hand-copied and both drifted from their sources (#1506).
+#
+# Unlike the numbered spine, these keep their OWN H1. They are standalone research
+# demonstrations rather than a sequence, so the notebook's title is the useful
+# sidebar entry, and duplicating it in SPINE_TITLES would just be a second copy to
+# drift.
+EXPERIMENTAL_SLUGS = [
+    "stochastic_sfh_recovery",
+    "multimodel_bma_candels",
+]
+EXPERIMENTAL_SUBDIR = "experimental"
+
 
 def _demote_extra_h1_lines(text: str) -> str:
     """Turn ``# foo`` into ``## foo`` except the first line (already the doc title)."""
@@ -96,7 +118,11 @@ def excluded_spine_slugs(conf_path: Path) -> set[str]:
         raise RuntimeError(
             f"{conf_path}: no exclude_patterns -- cannot tell published from hidden"
         )
-    return set(re.findall(r'"spine/([^"/]+)\.ipynb"', text))
+    # Match nested paths too ("spine/experimental/foo.ipynb"), then key on the
+    # stem: callers compare against notebook slugs, which are flat. A pattern of
+    # [^"/]+ silently skipped every nested entry, so an excluded experimental
+    # notebook would have read as published and its inbound links as live (#1506).
+    return {m.rsplit("/", 1)[-1] for m in re.findall(r'"spine/([^"]+)\.ipynb"', text)}
 
 
 def normalize_spine_links(ipynb_path: Path, excluded: set[str]) -> tuple[int, int]:
@@ -178,10 +204,14 @@ def check_published_links(spine_out: Path, excluded: set[str]) -> list[str]:
     problems: list[str] = []
     link_re = re.compile(r"\]\(([^)]+)\)")
 
-    for slug in SPINE_SLUGS:
+    published = [(slug, spine_out / f"{slug}.ipynb") for slug in SPINE_SLUGS]
+    published += [
+        (slug, spine_out / EXPERIMENTAL_SUBDIR / f"{slug}.ipynb") for slug in EXPERIMENTAL_SLUGS
+    ]
+
+    for slug, nb_path in published:
         if slug in excluded:
             continue  # not published; its own links never render
-        nb_path = spine_out / f"{slug}.ipynb"
         if not nb_path.is_file():
             continue
         nb = json.loads(nb_path.read_text(encoding="utf-8"))
@@ -299,19 +329,30 @@ def main() -> int:
 
     excluded = excluded_spine_slugs(root / "docs" / "conf.py")
 
-    for slug in SPINE_SLUGS:
+    # (slug, output path, whether to force the H1 to SPINE_TITLES). The slug stays
+    # the flat notebook stem in both cases because link rewriting matches on the
+    # source filename, which is flat even for the nested renders.
+    targets = [(slug, spine_out / f"{slug}.ipynb", True) for slug in SPINE_SLUGS]
+    targets += [
+        (slug, spine_out / EXPERIMENTAL_SUBDIR / f"{slug}.ipynb", False)
+        for slug in EXPERIMENTAL_SLUGS
+    ]
+
+    for slug, out_ipynb, retitle in targets:
         py_path = nb_root / f"{slug}.py"
-        out_ipynb = spine_out / f"{slug}.ipynb"
 
         if not py_path.is_file():
             print(f"error: missing {py_path}", file=sys.stderr)
             return 1
 
+        out_ipynb.parent.mkdir(parents=True, exist_ok=True)
+
         # Preserve committed outputs (they're how nbsphinx renders figures
         # on CI, where a freshly-generated ipynb would have none).
         _merge_source_preserve_outputs(py_path, out_ipynb)
 
-        normalize_markdown_headings(out_ipynb, slug)
+        if retitle:
+            normalize_markdown_headings(out_ipynb, slug)
         n_retarget, n_delink = normalize_spine_links(out_ipynb, excluded)
 
         notes = []
