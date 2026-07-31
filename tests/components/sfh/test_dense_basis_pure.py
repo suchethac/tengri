@@ -1,8 +1,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for PCHIP interpolation and pure quantile SFH in dense_basis.py.
+"""Tests for the pure quantile-only dense_basis SFH.
 
-Covers the uncovered branches: pchip_interpolate (lines 173-214),
-_build_quantile_points_pure (481-506), and dense_basis_pure (547-582).
+``dense_basis_pure`` interpolates its cumulative-mass quantiles with the same
+george-faithful GP as :func:`dense_basis`, matching ``interpolator='gp_george'``
+— the default in Kartheik Iyer's ``dense_basis`` package. It previously used
+PCHIP, which Iyer et al. (2019) explicitly set aside in favor of GP regression.
+Contract tests for the shared PCHIP primitive now live in
+``tests/contract/test_pchip_interp_1d.py``.
+
+References
+----------
+- Iyer et al. (2019), ApJ 879, 116, Sec. 2.1. arXiv:1901.02877.
 """
 
 import chex
@@ -18,67 +26,7 @@ jax.config.update("jax_enable_x64", True)
 from tengri.components.stellar.sfh.dense_basis import (
     _build_quantile_points_pure,
     dense_basis_pure,
-    pchip_interpolate,
 )
-
-# ── pchip_interpolate ─────────────────────────────────────────────
-
-
-class TestPchipInterpolate:
-    def test_exact_at_knots(self):
-        """PCHIP passes exactly through the training points."""
-        x = jnp.linspace(0.0, 1.0, 5)
-        y = jnp.array([0.0, 0.25, 0.5, 0.75, 1.0])
-        y_pred = pchip_interpolate(x, y, x)
-        assert_allclose(y_pred, y, atol=1e-6)
-
-    def test_monotone_on_monotone_input(self):
-        """PCHIP preserves monotonicity on a strictly increasing dataset."""
-        x = jnp.linspace(0.0, 1.0, 10)
-        y = x**3  # monotone increasing
-        x_eval = jnp.linspace(0.05, 0.95, 50)
-        out = pchip_interpolate(x, y, x_eval)
-        diffs = jnp.diff(out)
-        assert jnp.all(diffs >= -1e-10), "PCHIP output is not monotone on monotone input"
-
-    def test_linear_data_exact(self):
-        """PCHIP recovers a linear function exactly."""
-        x = jnp.linspace(0.0, 1.0, 5)
-        y = 2.0 * x + 1.0
-        x_eval = jnp.linspace(0.1, 0.9, 30)
-        out = pchip_interpolate(x, y, x_eval)
-        expected = 2.0 * x_eval + 1.0
-        assert_allclose(out, expected, atol=1e-6)
-
-    def test_clamped_at_boundaries(self):
-        """x_eval outside training range is clamped (clips t to [0,1])."""
-        x = jnp.linspace(0.0, 1.0, 5)
-        y = x
-        # Evaluate at points beyond both ends
-        x_eval = jnp.array([-0.5, 1.5])
-        out = pchip_interpolate(x, y, x_eval)
-        # Should not raise and should return finite values
-        chex.assert_tree_all_finite(out)
-
-    def test_constant_data(self):
-        """Constant training data → constant output."""
-        x = jnp.linspace(0.0, 1.0, 6)
-        y = jnp.ones(6) * 3.14
-        x_eval = jnp.linspace(0.1, 0.9, 20)
-        out = pchip_interpolate(x, y, x_eval)
-        assert_allclose(out, 3.14, atol=1e-5)
-
-    def test_gradients_finite(self):
-        """Gradients through pchip_interpolate are finite."""
-        x_train = jnp.linspace(0.0, 1.0, 5)
-        x_eval = jnp.linspace(0.1, 0.9, 10)
-
-        def loss(y_train):
-            return jnp.sum(pchip_interpolate(x_train, y_train, x_eval) ** 2)
-
-        g = jax.grad(loss)(jnp.linspace(0.0, 1.0, 5))
-        chex.assert_tree_all_finite(g)
-
 
 # ── _build_quantile_points_pure ───────────────────────────────────
 
@@ -87,21 +35,21 @@ class TestBuildQuantilePointsPure:
     def test_first_point_is_zero(self):
         """First point is (0, 0)."""
         tx_fracs = jnp.array([0.4, 0.7])
-        time_q, mass_q = _build_quantile_points_pure(tx_fracs, 2)
+        time_q, mass_q, _yerr = _build_quantile_points_pure(tx_fracs, 2)
         assert float(time_q[0]) == pytest.approx(0.0)
         assert float(mass_q[0]) == pytest.approx(0.0)
 
     def test_big_bang_constraint(self):
         """Second time point is 0.01 (Big Bang constraint)."""
         tx_fracs = jnp.array([0.4, 0.7])
-        time_q, mass_q = _build_quantile_points_pure(tx_fracs, 2)
+        time_q, mass_q, _yerr = _build_quantile_points_pure(tx_fracs, 2)
         assert float(time_q[1]) == pytest.approx(0.01)
         assert float(mass_q[1]) == pytest.approx(0.0)
 
     def test_last_point_is_one(self):
         """Last point is (1, 1)."""
         tx_fracs = jnp.array([0.3, 0.5, 0.7])
-        time_q, mass_q = _build_quantile_points_pure(tx_fracs, 3)
+        time_q, mass_q, _yerr = _build_quantile_points_pure(tx_fracs, 3)
         assert float(time_q[-1]) == pytest.approx(1.0)
         assert float(mass_q[-1]) == pytest.approx(1.0)
 
@@ -109,7 +57,7 @@ class TestBuildQuantilePointsPure:
         """mass_q interior values are linspace(0, 1, n_param+2)."""
         n_param = 4
         tx_fracs = jnp.linspace(0.2, 0.8, n_param)
-        _time_q, mass_q = _build_quantile_points_pure(tx_fracs, n_param)
+        _time_q, mass_q, _yerr = _build_quantile_points_pure(tx_fracs, n_param)
         # Structure: [0, 0 (big bang), linspace(0,1,n+2)[1:]]
         # mass_q[2:] should equal linspace(0,1,n_param+2)[1:]
         expected_mass = jnp.linspace(0.0, 1.0, n_param + 2)
