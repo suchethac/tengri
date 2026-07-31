@@ -320,3 +320,72 @@ class TestDustEmissionAnalyticPorts:
             atol=0.0,
             err_msg=f"Schreiber2016 CMB parity broken at z={z}",
         )
+
+
+# ── Frozen absolute goldens ───────────────────────────────────────
+#
+# The tests above are self-consistency checks: closure vs SEDModelComponent.
+# They pass even if BOTH paths move together, so they cannot catch a change in
+# the physics itself. That is not hypothetical — `casey2012.npy` sat 2970x away
+# from the shipped model for months. #1004 fixed three real bugs in the closure
+# (a spurious Wien factor that annihilated the power law, an inverted power-law
+# slope, and an optically-thin-only graybody), the tests encoding the old
+# behavior were updated, and the golden was not, because **nothing loaded it**.
+#
+# All four analytic captures written by scripts/baseline_dust_emission_golden.py
+# were orphaned this way. Parametrizing over them is what makes them coverage
+# rather than decoration.
+
+_ANALYTIC_GOLDENS = ("casey2012", "modified_blackbody", "pah_drude", "schreiber2016")
+
+
+@pytest.mark.regression_bug
+@pytest.mark.parametrize("name", _ANALYTIC_GOLDENS)
+def test_analytic_golden_is_read_and_matches(name):
+    """Each analytic emitter reproduces its frozen golden.
+
+    Rebuilds the grid the way the capture script does — ``np.linspace``, not
+    ``jnp.linspace``. The two disagree in the last ulp on some elements, which
+    is invisible under linear arithmetic but survives a log/exp round trip.
+    """
+    import json
+    from pathlib import Path
+
+    from tengri.components.dust.emission import DUST_EMISSION_MODELS
+
+    golden_dir = Path(__file__).parent / "data" / "dust_emission_golden"
+    meta = json.loads((golden_dir / "params.json").read_text())
+    spec = meta["wave_spec"]
+    wave = jnp.asarray(
+        np.linspace(spec["min_aa"], spec["max_aa"], spec["n_wave"], dtype=np.float64)
+    )
+
+    got = np.asarray(
+        DUST_EMISSION_MODELS[name](wave, meta["L_ir_erg_s"], **meta["templates"][name]["params"]),
+        dtype=np.float64,
+    )
+    expected = np.load(golden_dir / f"{name}.npy")
+    np.testing.assert_allclose(got, expected, rtol=1e-12, atol=0.0)
+
+
+@pytest.mark.contract
+def test_every_analytic_golden_on_disk_is_covered():
+    """No analytic golden may exist without a test reading it.
+
+    A capture script that writes N files while the suite reads a hardcoded
+    subset leaves the remainder to rot unnoticed. This closes that gap for the
+    analytic set by construction.
+    """
+    from pathlib import Path
+
+    golden_dir = Path(__file__).parent / "data" / "dust_emission_golden"
+    from tengri.components.dust.emission import DUST_EMISSION_MODELS
+
+    on_disk = {p.stem for p in golden_dir.glob("*.npy")}
+    # Grid-based captures are read by test_dust_emission_grid_components.py and
+    # test_dust_goldens_852.py; this test owns the analytic ones.
+    analytic_on_disk = {n for n in on_disk if n in DUST_EMISSION_MODELS} & set(_ANALYTIC_GOLDENS)
+    assert analytic_on_disk == set(_ANALYTIC_GOLDENS), (
+        f"analytic goldens on disk {sorted(analytic_on_disk)} != "
+        f"parametrized set {sorted(_ANALYTIC_GOLDENS)}"
+    )
