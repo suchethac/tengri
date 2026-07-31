@@ -2,8 +2,9 @@
 
 **Branch:** `worktree-hierarchical-psd-spec` · **PR:** #1479
 **Status:** the estimator is correct but has a **ceiling on N around 32–64**,
-above which its importance weights collapse (ESS → 1) and both parameters pin to
-grid corners. Everything below is measured, not assumed.
+above which the shared posterior jumps to a grid corner. The cause is a small
+per-galaxy bias in `Z_i(σ,τ)` amplified linearly by N. Everything below is
+measured, not assumed.
 
 ---
 
@@ -58,20 +59,46 @@ differently-wrong cross-check.
 
 σ slope −0.672 ± 0.080 (PASS), τ slope −0.058 ± 0.127 (FAIL).
 
-**ESS rises to N=16 then collapses.** At ESS = 1.0 each galaxy's evidence is set
-by a single draw, and from N=512 on the intervals are identical to three
-decimals — pinned, not estimated.
+**The ESS column above is `min` over galaxies and is MISLEADING — do not read
+it as a collapse.** A minimum over 1024 galaxies is necessarily below a minimum
+over 4. The distribution is healthy throughout:
 
-The mechanism is structural, not a bug. `ess.at_mode` is evaluated at the
-`argmax` of the shared posterior. As N grows that posterior concentrates — the
-point of pooling — but the interim draws were generated **once**, under a wide
-prior, before the concentration was known. The population mode migrates to a
-(σ, τ) that no individual galaxy sampled densely, so every galaxy's weights
-degenerate there at once. **Fitting more galaxies cannot fix this; it causes it.**
+| N | ESS min | p10 | **median** | p90 | % < 10 | **mode σ** | **mode τ** |
+|---|---|---|---|---|---|---|---|
+| 4 | 54.6 | 78.5 | 251.4 | 2398 | 0% | 0.866 | 18.2 |
+| 8 | 89.9 | 102.1 | 179.2 | 1111 | 0% | 0.799 | 18.2 |
+| 16 | 100.7 | 266.4 | 521.0 | 1035 | 0% | 0.866 | 68.4 |
+| 32 | 81.5 | 218.5 | 631.1 | 1361 | 0% | 0.832 | 95.3 |
+| 64 | 5.1 | 304.6 | **518.3** | 1240 | 2% | **1.000** | **500.0** |
+| 128 | 5.1 | 322.2 | **530.3** | 1098 | 1% | **1.000** | **500.0** |
+| 256 | 2.9 | 345.3 | **550.4** | 1121 | 1% | **1.000** | **500.0** |
+| 512 | 1.0 | 327.5 | **550.2** | 1143 | 1% | **1.000** | **500.0** |
 
-Bears directly on the user's earlier 8192-galaxy MGVI experiment: at that scale
-B2 as implemented is fully degenerate, and flat intervals are this signature
-rather than evidence about the physics.
+**Median ESS is flat at ~550 from N=16 to N=512**, p10 never below 218, and only
+1–2% of galaxies fall under 10 — while `min` falls 100.7 → 1.0 over the same
+range. **The weights are fine.** The `min` column is pure order statistic.
+
+**The actual mechanism is in the mode column.** Between N=32 and N=64 the shared
+posterior jumps discontinuously from (σ=0.832, τ=95.3) — near the truth
+(0.75, 150) — to (σ=1.000, τ=500.0), the extreme corner with both parameters at
+their grid maximum. Min-ESS is low at N≥64 *because* ESS is evaluated at the
+mode and the mode is now in a corner where a few galaxies have degenerate
+weights. **Low ESS is a consequence of the railing, not its cause.**
+
+Since `log p = Σ_i log Z_i`, a small systematic per-galaxy tilt in `Z_i` grows
+linearly in N while noise grows as √N. At N=32 noise still dominates and the
+answer is roughly right; by N=64 the bias has won. This is "pooling reduces
+variance, not bias" playing out directly, and it is **the same root cause as the
+τ bias** rather than a separate failure.
+
+Consequence for the estimator design: eliminating the importance weights
+(e.g. by closed-form Gaussian marginalization) would **not** fix this. The
+weights were never the problem. The per-galaxy `Z_i` is biased and that must be
+found first.
+
+Bears on the user's earlier 8192-galaxy MGVI experiment: at that N a per-galaxy
+tilt this size is overwhelming, so flat/railed intervals there are this
+signature rather than evidence about the physics.
 
 ### Superseded claim — do not cite
 
@@ -220,6 +247,9 @@ N=2048, K=4000 use 4 or less.
   check coverage AND ESS.
 - **Pooling reduces variance, not bias.** Unconverged interim fits at large N
   give a *tighter* wrong answer. Report interim R̂ before the intervals.
+- **`ess.at_mode` is per-galaxy; the scaling script reports `min`.** A minimum
+  over a growing sample can only fall, so it looks like a collapse when the
+  distribution is flat. Report the median. This cost a wrong mechanism once.
 - **A single bad galaxy destroys B2.** Field std 1155 → its OU density is ~0
   everywhere but one node, its weight buries the other 499 draws, `logsumexp`
   collapses to `max`, and the posterior pins to a grid corner — *identically at
@@ -239,16 +269,15 @@ N=2048, K=4000 use 4 or less.
 
 ## 8. Next steps, ranked
 
-1. **Address the ESS collapse — this now outranks the τ bias**, because above
-   N≈64 nothing else is measurable. Standard remedies, cheapest first:
-   (a) *iterate* — refit the interim stage with a prior centred on the
-   shared posterior from the previous round, so the draws cover where the
-   population mode actually lands; (b) tighten the interim prior once the
-   rough answer is known, trading coverage for weights; (c) replace importance
-   reweighting with an analytic marginalization — with Laplace the per-galaxy
-   posterior IS Gaussian and `p(m|σ,τ)` is Gaussian, so `Z_i(σ,τ)` is a
-   closed-form Gaussian integral with no weights and no ESS at all. (c) is the
-   principled fix and is tractable.
+1. **Find the per-galaxy bias in `Z_i(σ,τ)` — everything else depends on it.**
+   It causes both the corner-railing above N≈64 and the τ bias. The sharpest
+   available test: the truth-field run recovers (σ, τ) correctly at N=256 with
+   K=1, and real fits fail with K=4000, so **compare `log Z_i(σ,τ)` computed
+   from the truth field against the same galaxy's Laplace draws, on the same
+   grid, and look at where the two surfaces differ**. That isolates whether the
+   tilt comes from the draws' spread or their centre. Do NOT reach for weight
+   removal (closed-form Gaussian marginalization): median ESS is 518–631, so
+   the weights are not the problem.
 2. **Full covariance comparison, truth vs Laplace fields** across age nodes (not
    just lag-1). Cheapest test of the leading τ hypothesis. ~30 min.
 3. **Run `mcmc_nuts`** (`dense_mass_matrix=False`) on ~16 galaxies and compare
