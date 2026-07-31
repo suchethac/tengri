@@ -123,3 +123,96 @@ def test_dust_planck_gradient_is_finite_in_float32():
         grad = float(jax.grad(total)(jnp.float32(_T_DUST)))
 
     assert np.isfinite(grad), f"float32 Planck gradient is {grad}"
+
+
+# ── The reverse pass under a caller's large cotangent (#1439) ─────────────
+#
+# A disc ring multiplies B_nu by its area, ~1e30. Autodiff's quotient rule on
+# the primal's ``/(1 - e**-x)`` needs that denominator SQUARED, and with the
+# cotangent arriving first the intermediate reaches 4.8e39 — past float32's
+# 3.4e38 — for a true answer of 1.9e27. The two factors sit on opposite sides
+# of the function boundary, so no rewrite of the expression reaches it; the
+# derivative has to be stated. See ``utils/blackbody._planck_core_jvp``.
+
+#: lambda = 1 mm, T = 1e6 K, cotangent 1e30 — the disc ring #1439 bisected to.
+_RING_LAM_AA = 1e7
+_RING_T = 1e6
+_RING_AREA = 1e30
+
+
+def _ring_sum(temperature):
+    from tengri.utils.physics_constants import AA_TO_CM, C_CGS
+
+    nu = jnp.asarray(C_CGS / (_RING_LAM_AA * AA_TO_CM), dtype=temperature.dtype)
+    return jnp.sum(_RING_AREA * _agn_lnu(nu, temperature))
+
+
+def test_planck_reverse_gradient_survives_a_large_cotangent_in_float32():
+    """``d/dT`` through a ~1e30 ring area must match float64, not overflow."""
+    with jax.enable_x64(True):
+        want = float(jax.grad(_ring_sum)(jnp.float64(_RING_T)))
+    assert np.isfinite(want) and want > 0.0, f"setup: float64 gradient is {want}"
+
+    with jax.enable_x64(False):
+        got = float(jax.grad(_ring_sum)(jnp.float32(_RING_T)))
+
+    assert np.isfinite(got), (
+        f"float32 reverse-mode Planck gradient is {got} under a {_RING_AREA:.0e} "
+        "cotangent — the quotient rule re-formed the squared denominator (#1439)"
+    )
+    assert abs(got - want) / want < 1e-5, f"float32 {got:.6e} vs float64 {want:.6e}"
+
+
+def test_planck_still_supports_forward_mode():
+    """Forward mode must keep working — a ``custom_vjp`` here would raise.
+
+    Not a formality. Forward mode computes this gradient *correctly* in pure
+    float32 even where reverse mode overflowed, and geoVI and
+    ``inference/preconditioning.py`` both differentiate forward. #1439
+    prescribed a ``custom_vjp``, which is opaque to ``jvp`` — it would have
+    turned a wrong-but-finite mode into a ``TypeError``. This is the same
+    regression ``_mass_scale_lnu`` already had to undo, so it is guarded here
+    rather than left to be rediscovered.
+    """
+    with jax.enable_x64(True):
+        want = float(jax.jvp(_ring_sum, (jnp.float64(_RING_T),), (jnp.float64(1.0),))[1])
+
+    with jax.enable_x64(False):
+        # Would raise TypeError("can't apply forward-mode autodiff (jvp) to a
+        # custom_vjp function") if the rule were ever respelled as a custom_vjp.
+        got = float(jax.jvp(_ring_sum, (jnp.float32(_RING_T),), (jnp.float32(1.0),))[1])
+
+    assert np.isfinite(got), f"float32 forward-mode Planck gradient is {got}"
+    assert abs(got - want) / want < 1e-5, f"float32 {got:.6e} vs float64 {want:.6e}"
+
+
+def test_planck_float64_gradient_is_unchanged_by_the_custom_rule():
+    """The explicit rule must not move float64: value bit-identical, grad <= 1 ulp.
+
+    Compared against autodiff of the *unmodified* expression, written out here
+    so the comparison cannot drift with the implementation.
+    """
+    from tengri.utils.blackbody import _T_MIN, _X_MAX, _X_MIN
+    from tengri.utils.physics_constants import C_CGS, H_PLANCK, K_BOLTZ
+
+    def plain(nu, temperature):
+        nu_w = jnp.asarray(nu, dtype=jnp.result_type(float))
+        t_safe = jnp.maximum(jnp.asarray(temperature, dtype=jnp.result_type(float)), _T_MIN)
+        x = jnp.clip((H_PLANCK / K_BOLTZ) * nu_w / t_safe, _X_MIN, _X_MAX)
+        return 2.0 * H_PLANCK * nu_w * (nu_w / C_CGS) ** 2 * jnp.exp(-x) / -jnp.expm1(-x)
+
+    nu = jnp.asarray(C_CGS / (_WAVE_AA * 1e-8))
+    with jax.enable_x64(True):
+        for temperature in (2.7, 35.0, 1500.0, 1e6):
+            t = jnp.asarray(temperature)
+            got_v = np.asarray(_agn_lnu(nu, t), dtype=np.float64)
+            want_v = np.asarray(plain(nu, t), dtype=np.float64)
+            assert np.array_equal(got_v, want_v), (
+                f"float64 Planck value moved at T={temperature}: the custom rule "
+                "must not touch the primal expression"
+            )
+            got_g = float(jax.grad(lambda tt: jnp.sum(_agn_lnu(nu, tt)))(t))
+            want_g = float(jax.grad(lambda tt: jnp.sum(plain(nu, tt)))(t))
+            assert abs(got_g - want_g) <= 4e-16 * abs(want_g), (
+                f"float64 gradient moved at T={temperature}: {got_g!r} vs {want_g!r}"
+            )
