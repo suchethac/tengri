@@ -89,7 +89,12 @@ def main():
     ap.add_argument("--n-samples", type=int, default=1000)
     ap.add_argument("--n-chains", type=int, default=4)
     ap.add_argument("--n-leapfrog-steps", type=int, default=100)
-    ap.add_argument("--thin", type=int, default=8, help="store every thin-th draw")
+    ap.add_argument(
+        "--thin",
+        type=int,
+        default=None,
+        help="store every thin-th draw. Default 8 for mcmc_hmc, 1 for laplace.",
+    )
     ap.add_argument(
         "--method",
         default="mcmc_hmc",
@@ -99,6 +104,16 @@ def main():
     )
     ap.add_argument("--n-map-steps", type=int, default=4000, help="laplace only")
     args = ap.parse_args()
+
+    if args.thin is None:
+        # Thinning removes MCMC autocorrelation -- measured ESS is ~600 of 4000
+        # HMC draws, so keeping every 8th costs little. Laplace draws are i.i.d.
+        # from a fitted Gaussian, so thinning them removes nothing and simply
+        # discards samples. That matters here because the importance-weight ESS
+        # scales with the draw count and is the estimator's scarcest resource:
+        # on identical galaxies, K=500 thinned vs K=4000 unthinned moved ESS
+        # from 9.4/10.3/3.8 to 25.0/92.3/46.3 for no extra fitting cost.
+        args.thin = 1 if args.method == "laplace" else 8
 
     import tengri
 

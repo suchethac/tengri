@@ -170,3 +170,9 @@ where_time.log
 nsweep*.log
 map_unit*.log
 mgvi_probe.log
+
+# hierarchical PSD measurement outputs (large, regenerable)
+psd_bank*/
+n_sweep_results*.json
+longer_chains.log
+run[0-9].log
