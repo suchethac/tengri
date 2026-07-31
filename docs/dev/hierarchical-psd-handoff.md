@@ -1,8 +1,9 @@
 # Hierarchical SFH-PSD recovery — handoff
 
 **Branch:** `worktree-hierarchical-psd-spec` · **PR:** #1479
-**Status:** estimator validated and σ recovers truth with 1/√N scaling; **τ is
-biased ~10× low and unexplained**. Everything below is measured, not assumed.
+**Status:** the estimator is correct but has a **ceiling on N around 32–64**,
+above which its importance weights collapse (ESS → 1) and both parameters pin to
+grid corners. Everything below is measured, not assumed.
 
 ---
 
@@ -33,17 +34,52 @@ differently-wrong cross-check.
 | Claim | Evidence |
 |---|---|
 | Estimator, kernel, grid, quadrature, bounds are correct | Fed the **true** fields on the production grid: σ = 0.734–0.747, τ = 143–152 Myr at N=256 |
-| Intervals scale as 1/√N | σ slope **−0.448 ± 0.053**, τ slope **−0.516 ± 0.076** (both PASS, both within 1σ of −0.5) |
-| σ recovers truth | Covers 0.75 at N = 4…64 with real Laplace fits |
+| It works where the weights survive | σ covers truth at N = 4, 8; **τ covers truth at N = 32** (61.9–153.4), where ESS is still 81.5 |
 | B2 beats B1 | Measured 4.6× closer to closed form on the toy |
 | Estimator is memory-flat in N | Streaming: 1.07 GB at N=256 vs 7.4 GB materialized |
+| High N is affordable to *fit* | Laplace 3.2 s/galaxy; a 2048-galaxy bank in ~1.8 h |
 
-### Does not work
+### Does not work — the N ceiling
 
-**τ converges to ~12 Myr against a truth of 150, and *tightens* around the wrong
-value.** Its width scales correctly (slope −0.516), so it *passes* the
-width-scaling gate while being an order of magnitude off. This is the single
-most important open problem.
+**Definitive run** (`psd_bank_fixed`, N=2048, K=4000 unthinned,
+`min_eigenvalue=1.0`, zero galaxies rejected):
+
+| N | σ (truth 0.75) | τ Myr (truth 150) | ESS |
+|---|---|---|---|
+| 4 | 0.692–0.930 OK | 11.9–29.6 | 54.6 |
+| 8 | 0.699–0.894 OK | 12.7–30.7 | 89.9 |
+| 16 | 0.757–0.944 | 39.2–112.6 | 100.7 |
+| 32 | 0.753–0.918 | **61.9–153.4 OK** | 81.5 |
+| 64 | 0.958–0.995 | 434.6–491.2 | **5.1** |
+| 128 | 0.970–0.996 | 472.1–494.7 | **5.1** |
+| 256 | 0.985–0.997 | 473.0–494.9 | **2.9** |
+| 512 | 0.986–0.997 | 473.1–494.9 | **1.0** |
+| 1024 | 0.986–0.997 | 473.1–494.9 | **1.0** |
+
+σ slope −0.672 ± 0.080 (PASS), τ slope −0.058 ± 0.127 (FAIL).
+
+**ESS rises to N=16 then collapses.** At ESS = 1.0 each galaxy's evidence is set
+by a single draw, and from N=512 on the intervals are identical to three
+decimals — pinned, not estimated.
+
+The mechanism is structural, not a bug. `ess.at_mode` is evaluated at the
+`argmax` of the shared posterior. As N grows that posterior concentrates — the
+point of pooling — but the interim draws were generated **once**, under a wide
+prior, before the concentration was known. The population mode migrates to a
+(σ, τ) that no individual galaxy sampled densely, so every galaxy's weights
+degenerate there at once. **Fitting more galaxies cannot fix this; it causes it.**
+
+Bears directly on the user's earlier 8192-galaxy MGVI experiment: at that scale
+B2 as implemented is fully degenerate, and flat intervals are this signature
+rather than evidence about the physics.
+
+### Superseded claim — do not cite
+
+An earlier partial bank (309 galaxies, K=500 thinned, `min_eigenvalue=1e-6`,
+45% of galaxies discarded, N capped at 128) gave σ slope −0.448 ± 0.053 and τ
+slope −0.516 ± 0.076, both PASS, and σ covering truth to N=64. **That does not
+survive on the clean bank at higher N.** It was measured on a contaminated
+sample over too short a lever arm.
 
 ---
 
@@ -177,8 +213,11 @@ N=2048, K=4000 use 4 or less.
 
 ## 7. Traps
 
-- **The width-scaling gate is necessary, not sufficient.** τ passes it
-  (−0.516 ± 0.076) while being 10× wrong. Always check coverage too.
+- **The width-scaling gate is necessary, not sufficient — demonstrated three
+  ways.** τ passed it at −0.516 ± 0.076 while being 10× wrong; σ passes it at
+  −0.672 ± 0.080 on the clean bank while railing into a grid corner (the
+  shrinkage IS the failure); and the two disagree within a single run. Always
+  check coverage AND ESS.
 - **Pooling reduces variance, not bias.** Unconverged interim fits at large N
   give a *tighter* wrong answer. Report interim R̂ before the intervals.
 - **A single bad galaxy destroys B2.** Field std 1155 → its OU density is ~0
@@ -200,15 +239,25 @@ N=2048, K=4000 use 4 or less.
 
 ## 8. Next steps, ranked
 
-1. **Full covariance comparison, truth vs Laplace fields** across age nodes (not
+1. **Address the ESS collapse — this now outranks the τ bias**, because above
+   N≈64 nothing else is measurable. Standard remedies, cheapest first:
+   (a) *iterate* — refit the interim stage with a prior centred on the
+   shared posterior from the previous round, so the draws cover where the
+   population mode actually lands; (b) tighten the interim prior once the
+   rough answer is known, trading coverage for weights; (c) replace importance
+   reweighting with an analytic marginalization — with Laplace the per-galaxy
+   posterior IS Gaussian and `p(m|σ,τ)` is Gaussian, so `Z_i(σ,τ)` is a
+   closed-form Gaussian integral with no weights and no ESS at all. (c) is the
+   principled fix and is tractable.
+2. **Full covariance comparison, truth vs Laplace fields** across age nodes (not
    just lag-1). Cheapest test of the leading τ hypothesis. ~30 min.
-2. **Run `mcmc_nuts`** (`dense_mass_matrix=False`) on ~16 galaxies and compare
+3. **Run `mcmc_nuts`** (`dense_mass_matrix=False`) on ~16 galaxies and compare
    field R̂ and τ against static HMC. Never tried; static HMC is the wrong tool
    for a funnel. ~1 h.
-3. **Finish partial centering**: the loss-prior correction at
+4. **Finish partial centering**: the loss-prior correction at
    `loss_functions.py:478`. The principled funnel fix.
-4. ~~File the `min_eigenvalue=1e-6` footgun~~ — filed as **#1515**. Worked
+5. ~~File the `min_eigenvalue=1e-6` footgun~~ — filed as **#1515**. Worked
    around here with `--min-eigenvalue 1.0`; the library default is unchanged.
-5. Acceptance criteria 3 (two-population separation) and 6 (coverage across ≥3
+6. Acceptance criteria 3 (two-population separation) and 6 (coverage across ≥3
    realizations) are still unrun. Criterion 2 needs multiple realizations —
    single-realization coverage was over-read earlier in this work.
