@@ -103,6 +103,14 @@ def main():
         "at the cost of a Gaussian approximation to each per-galaxy posterior.",
     )
     ap.add_argument("--n-map-steps", type=int, default=4000, help="laplace only")
+    ap.add_argument(
+        "--min-eigenvalue",
+        type=float,
+        default=1.0,
+        help="laplace only: floor on Hessian eigenvalues. The backend default of "
+        "1e-6 assigns clipped directions variance 1e6 (std 1000); 1.0 caps them at "
+        "the unit-normal prior curvature instead. See the note in main().",
+    )
     args = ap.parse_args()
 
     if args.thin is None:
@@ -155,6 +163,7 @@ def main():
         "n_chains": args.n_chains,
         "n_leapfrog_steps": args.n_leapfrog_steps,
         "method": args.method,
+        "min_eigenvalue": args.min_eigenvalue,
         "snr_phot": SNR_PHOT,
         "snr_line": SNR_LINE,
         "thin": args.thin,
@@ -195,11 +204,32 @@ def main():
         t0 = time.time()
         fitter = Fitter(fit_model, flux[i], err[i])
         if args.method == "laplace":
+            # min_eigenvalue is a variance CEILING, not a regularizer.
+            #
+            # run_laplace floors Hessian eigenvalues at min_eigenvalue to force
+            # positive-definiteness, then takes cov = H^-1 -- so the floor sets
+            # the variance of every clipped direction to 1/min_eigenvalue. At
+            # the backend default of 1e-6 that is variance 1e6, i.e. std 1000.
+            #
+            # Ten broadband filters constrain ~4 modes of a 16-node field, so
+            # ~12 field directions are unconstrained; galaxy 4 had 11 of 26
+            # eigenvalues clipped and xi std 682, against an expected 1. But an
+            # unconstrained direction is not infinitely uncertain: xi has a
+            # N(0, 1) prior, so its variance is 1 and the posterior can never be
+            # broader. Flooring at 1.0 caps posterior variance at prior variance.
+            #
+            # Measured, galaxies 0/3/4/5: xi std 1.20/108.1/682.2/85.8 at 1e-6
+            # becomes 0.98/0.94/0.96/0.95 at 1.0, and the well-conditioned
+            # galaxy 0 is unchanged. The heuristic holds because these latents
+            # are unit-normal in unbounded space; it is NOT universal, and a
+            # parameter whose unbounded prior is much wider than unit would be
+            # over-constrained by it.
             post = fitter.run(
                 "laplace",
                 key=keys[i],
                 n_map_steps=args.n_map_steps,
                 n_samples=args.n_samples * args.n_chains,
+                min_eigenvalue=args.min_eigenvalue,
             )
         else:
             post = fitter.run(
