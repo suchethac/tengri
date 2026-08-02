@@ -260,6 +260,26 @@ injected noise.
 τ is recoverable from **6** constrained modes, not 16. At 4 modes it is biased
 low by 1.1–1.9×, not by 5×.
 
+**This does NOT say τ is recoverable from the real observable.** The toy's
+per-mode noise (0.15) is a stand-in, not calibrated to the SNR=20 photometry,
+so its "4 modes" and the measured `n_eff ≈ 3.2` are not the same quantity. A
+**joint NUTS** fit on the real observable (PR #1520, N=4, D=98) returns τ at
+**0.98× the prior width** — 104.5–429.7 against a prior of 88.4–421.6 — i.e.
+τ genuinely is *not identified* by z=0.1 broadband photometry. What this section
+establishes is narrower and sharper: **the estimator is not what breaks it.**
+
+The two facts compose, and both are needed:
+
+| | τ at N=4 (truth 150) | reading |
+|---|---|---|
+| Joint NUTS | 104.5–429.7 | returns the prior — correct behavior for an unidentified parameter |
+| Two-step B2 | 12.2–30.9 | tight, excludes truth by 5–12× — **a defect** |
+
+An unidentified parameter *should* come back as its prior. B2 instead returns a
+confident wrong answer, and at N ≥ 64 rails to the grid edge. That gap is the
++0.098 nats/galaxy tilt of §4a, sitting **on top of** an identifiability wall.
+Do not let the identifiability story retire the tilt bug.
+
 **And the clean estimator does not rail.** The real bank's signature failure is
 τ pinned at 473–495 Myr against a U(10, 500) prior for every N ≥ 64. Running the
 analytic estimator over the same N (`exact_scaling.py`, two seeds per cell):
@@ -278,15 +298,16 @@ centered near truth. No railing at any N. Residual: τ coverage at 4 modes misse
 noting, and categorically different from pinning at the prior edge.
 
 **Consequence — the suspicion returns to the per-galaxy posteriors.** Given
-genuinely exact per-galaxy posteriors, B2 recovers σ and τ at this information
-content and this N. So the real bank's railing is not explained by the estimator
-and not by the sparse-information regime. What remains is whatever makes the
-real per-galaxy posteriors differ from exact ones: the **Laplace/Gaussian
-approximation**, the **D=26 nuisance-parameter coupling**, or the **nonlinear
-SED likelihood**. The toy exonerates the estimator; it does not by itself
-convict any one of those three. Note also that the biases point in *opposite*
-directions — the toy at 4 modes is biased low, the real bank rails high — which
-a pure information limit would not do.
+genuinely exact per-galaxy posteriors, B2 recovers σ and τ and does not rail out
+to N=512. So the *railing* is not a property of the estimator, and it is not
+what non-identifiability looks like either — non-identifiability returns the
+prior, as joint NUTS does. What remains is whatever makes the real per-galaxy
+posteriors differ from exact ones: the **Laplace/Gaussian approximation**, the
+**D=26 nuisance-parameter coupling**, or the **nonlinear SED likelihood**. The
+toy exonerates the estimator; it does not by itself convict any one of those
+three. Note also that the biases point in *opposite* directions — the toy at
+4 modes is biased low, the real bank rails high — which a pure information
+limit would not do.
 
 ---
 
