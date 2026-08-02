@@ -43,6 +43,8 @@ References
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.grid_interp import pchip_interp_1d
+
 # Maximum age of the universe in years — hardcoded, not fittable.
 AGEMAX_YR = 14e9
 
@@ -1634,92 +1636,6 @@ def buat08(
 # ── ProSpect spline SFH (Robotham+2020) ─────────────────────────
 
 
-def _pchip_slopes(y: jnp.ndarray, h: jnp.ndarray) -> jnp.ndarray:
-    """Fritsch-Carlson monotone slopes for PCHIP cubic spline.
-
-    Parameters
-    ----------
-    y : array_like, shape (n,)
-        Values at the n nodes (traced under JIT).
-    h : array_like, shape (n-1,)
-        Spacings between adjacent nodes (static — must be concrete).
-
-    Returns
-    -------
-    ndarray, shape (n,)
-        Slope at each node satisfying the Fritsch-Carlson monotonicity condition.
-    """
-    delta = jnp.diff(y) / h  # secant slopes
-
-    # Interior slopes: Fritsch-Carlson weighted harmonic mean
-    h0 = h[:-1]
-    h1 = h[1:]
-    w0 = 2.0 * h1 + h0
-    w1 = h1 + 2.0 * h0
-
-    safe_d0 = jnp.where(jnp.abs(delta[:-1]) > 1e-30, delta[:-1], jnp.sign(delta[:-1]) * 1e-30)
-    safe_d1 = jnp.where(jnp.abs(delta[1:]) > 1e-30, delta[1:], jnp.sign(delta[1:]) * 1e-30)
-    denom = w0 / safe_d0 + w1 / safe_d1
-    d_int = jnp.where(delta[:-1] * delta[1:] > 0.0, (w0 + w1) / denom, 0.0)
-
-    # Endpoint slopes: one-sided extrapolation (Moler 2004)
-    d0 = ((2.0 * h[0] + h[1]) * delta[0] - h[0] * delta[1]) / (h[0] + h[1])
-    d0 = jnp.where(jnp.sign(d0) * jnp.sign(delta[0]) < 0.0, 0.0, d0)
-    d0 = jnp.where(jnp.abs(d0) > 3.0 * jnp.abs(delta[0]), 3.0 * delta[0], d0)
-
-    dn = ((2.0 * h[-1] + h[-2]) * delta[-1] - h[-1] * delta[-2]) / (h[-1] + h[-2])
-    dn = jnp.where(jnp.sign(dn) * jnp.sign(delta[-1]) < 0.0, 0.0, dn)
-    dn = jnp.where(jnp.abs(dn) > 3.0 * jnp.abs(delta[-1]), 3.0 * delta[-1], dn)
-
-    return jnp.concatenate([jnp.array([d0]), d_int, jnp.array([dn])])
-
-
-def _pchip_eval(
-    x_query: jnp.ndarray,
-    x_nodes: jnp.ndarray,
-    y_nodes: jnp.ndarray,
-    d: jnp.ndarray,
-    h: jnp.ndarray,
-) -> jnp.ndarray:
-    """Evaluate PCHIP cubic Hermite pieces at query points.
-
-    Parameters
-    ----------
-    x_query : array_like, shape (n_query,)
-        Query positions.
-    x_nodes : array_like, shape (n,)
-        Node positions (static).
-    y_nodes : array_like, shape (n,)
-        Node values (traced).
-    d : array_like, shape (n,)
-        Node slopes from :func:`_pchip_slopes` (traced).
-    h : array_like, shape (n-1,)
-        Node spacings (static).
-
-    Returns
-    -------
-    ndarray, shape (n_query,)
-        Interpolated values.
-    """
-    idx = jnp.searchsorted(x_nodes, x_query, side="right") - 1
-    idx = jnp.clip(idx, 0, x_nodes.shape[0] - 2)
-
-    x0 = x_nodes[idx]
-    hi = h[idx]
-    y0 = y_nodes[idx]
-    y1 = y_nodes[idx + 1]
-    d0 = d[idx]
-    d1 = d[idx + 1]
-
-    t = (x_query - x0) / hi
-    h00 = 2.0 * t**3 - 3.0 * t**2 + 1.0
-    h10 = t**3 - 2.0 * t**2 + t
-    h01 = -2.0 * t**3 + 3.0 * t**2
-    h11 = t**3 - t**2
-
-    return h00 * y0 + h10 * hi * d0 + h01 * y1 + h11 * hi * d1
-
-
 def spline(
     t_lookback: jnp.ndarray,
     sfr_nodes: jnp.ndarray,
@@ -1808,11 +1724,10 @@ def spline(
     (100,)
     """
     x_nodes = jnp.log10(jnp.maximum(node_ages_yr, 1.0))
-    h = jnp.diff(x_nodes)  # static when node_ages_yr is concrete
-
     x_query = jnp.log10(jnp.maximum(t_lookback, 1.0))
-    d = _pchip_slopes(sfr_nodes, h)
-    sfr = _pchip_eval(x_query, x_nodes, sfr_nodes, d, h)
+    # extrapolate=True: lookback grids routinely run past the oldest node, and
+    # ProSpect lets the edge cubic continue there rather than holding it flat.
+    sfr = pchip_interp_1d(x_nodes, sfr_nodes, x_query, extrapolate=True)
     return jnp.maximum(sfr, 0.0)
 
 

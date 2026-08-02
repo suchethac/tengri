@@ -35,6 +35,7 @@ __all__ = [
     "PreintegratedLines",
     "interp_nd_pchip",
     "interp_nd_triweight",
+    "pchip_interp_1d",
     "preintegrate_grid",
     "preintegrate_lines",
     "slice_fixed_axes",
@@ -760,12 +761,18 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     return jnp.concatenate([first[None], interior, last[None]], axis=0)
 
 
-def _pchip_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq) -> jnp.ndarray:
-    """Evaluate the monotone-cubic interpolant at scalar ``xq`` over axis 0."""
+def _pchip_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq, *, extrapolate: bool = False):
+    """Evaluate the monotone-cubic interpolant at ``xq`` over axis 0.
+
+    ``extrapolate=False`` (the default, and what the tensor-product path uses)
+    clamps queries to ``[x[0], x[-1]]``, so outside the table the value is held
+    at the boundary node. ``extrapolate=True`` lets the edge cubic continue past
+    the end nodes, which is what the ProSpect ``spline`` SFH relies on.
+    """
     n = x.shape[0]
     slopes = _pchip_slopes(x, y)
 
-    xq_c = jnp.clip(xq, x[0], x[-1])
+    xq_c = xq if extrapolate else jnp.clip(xq, x[0], x[-1])
     i = jnp.clip(jnp.searchsorted(x, xq_c) - 1, 0, n - 2)
     xi = x[i]
     h = x[i + 1] - xi
@@ -799,6 +806,75 @@ def _linear_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq) -> jnp.ndarray:
 
 #: Per-axis evaluators selectable via ``interp_nd_pchip(..., kinds=...)``.
 _EVAL_AXIS0 = {"pchip": _pchip_eval_axis0, "linear": _linear_eval_axis0}
+
+
+def pchip_interp_1d(
+    x: jnp.ndarray,
+    y: jnp.ndarray,
+    xq: jnp.ndarray,
+    *,
+    extrapolate: bool = False,
+) -> jnp.ndarray:
+    """Monotone piecewise-cubic (PCHIP) interpolation of a 1-D table.
+
+    The single 1-D PCHIP entry point for the package. Shape-preserving tangents
+    follow Fritsch & Carlson (1980) [1]_ with SciPy's boundary rule, so the
+    result matches :class:`scipy.interpolate.PchipInterpolator` to round-off,
+    passes exactly through every node, and never overshoots on monotone data.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Strictly ascending node coordinates [any consistent unit].
+    y : array_like, shape (n,)
+        Node values [any unit].
+    xq : array_like, shape (m,)
+        Query coordinates, same unit as ``x``. Need not be sorted.
+    extrapolate : bool, optional
+        If ``False`` (default), queries outside ``[x[0], x[-1]]`` are clamped to
+        the boundary node value. If ``True``, the edge cubic continues past the
+        end nodes.
+
+    Returns
+    -------
+    ndarray, shape (m,)
+        Interpolated values [same unit as ``y``].
+
+    Notes
+    -----
+    **JIT/grad/vmap compatible**: yes. Interior tangents are the *weighted*
+    harmonic mean of the two bracketing secants,
+
+    .. math::
+
+        \\frac{w_0 + w_1}{w_0/\\delta_0 + w_1/\\delta_1}, \\quad
+        w_0 = 2h_1 + h_0, \\quad w_1 = h_1 + 2h_0,
+
+    where :math:`h_i` are the interval widths and :math:`\\delta_i` the secant
+    slopes. The weights matter only on a **non-uniform** grid — dropping them
+    reduces to the unweighted harmonic mean, which is a silent error wherever
+    the nodes are not equally spaced.
+
+    The division inputs are gated on the same monotonicity condition as the
+    output (the "double ``where``" pattern). Gating only the output lets the
+    denominator pass through zero on non-monotonic data, and the discarded
+    ``inf`` then forms ``0 * inf = NaN`` in the reverse pass.
+
+    References
+    ----------
+    .. [1] F. N. Fritsch and R. E. Carlson, "Monotone Piecewise Cubic
+       Interpolation," SIAM J. Numer. Anal., 17(2), 238-246 (1980).
+       https://doi.org/10.1137/0717021
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> x = jnp.array([0.0, 1.0, 2.0, 3.0])
+    >>> y = jnp.array([0.0, 1.0, 3.0, 6.0])
+    >>> pchip_interp_1d(x, y, jnp.array([0.0, 1.5, 3.0]))
+    Array([0.        , 1.86666667, 6.        ], dtype=float64)
+    """
+    return _pchip_eval_axis0(x, y, xq, extrapolate=extrapolate)
 
 
 def interp_nd_pchip(
