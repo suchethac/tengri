@@ -1,10 +1,13 @@
 # Hierarchical SFH-PSD recovery — handoff
 
 **Branch:** `worktree-hierarchical-psd-spec` · **PR:** #1479
-**Status:** the estimator is correct but has a **ceiling on N around 32–64**,
-above which the shared posterior jumps to a grid corner. The cause is a small
-per-galaxy bias in `Z_i(σ,τ)` amplified linearly by N. Everything below is
-measured, not assumed.
+**Status:** the estimator is correct — **now demonstrated against an exact
+analytic posterior** (§4b): given true per-galaxy draws it recovers σ and τ and
+shows no railing out to N=512. End-to-end it still has a **ceiling on N around
+32–64**, above which the shared posterior jumps to a grid corner. The cause is a
+small per-galaxy bias in `Z_i(σ,τ)` amplified linearly by N, traced to the
+mismatch between the true interim posterior and the Laplace draws (§4a).
+Everything below is measured, not assumed.
 
 ---
 
@@ -45,17 +48,17 @@ differently-wrong cross-check.
 **Definitive run** (`psd_bank_fixed`, N=2048, K=4000 unthinned,
 `min_eigenvalue=1.0`, zero galaxies rejected):
 
-| N | σ (truth 0.75) | τ Myr (truth 150) | ESS |
+| N | σ (truth 0.75) | τ Myr (truth 150) | ESS **min** ⚠ |
 |---|---|---|---|
 | 4 | 0.692–0.930 OK | 11.9–29.6 | 54.6 |
 | 8 | 0.699–0.894 OK | 12.7–30.7 | 89.9 |
 | 16 | 0.757–0.944 | 39.2–112.6 | 100.7 |
 | 32 | 0.753–0.918 | **61.9–153.4 OK** | 81.5 |
-| 64 | 0.958–0.995 | 434.6–491.2 | **5.1** |
-| 128 | 0.970–0.996 | 472.1–494.7 | **5.1** |
-| 256 | 0.985–0.997 | 473.0–494.9 | **2.9** |
-| 512 | 0.986–0.997 | 473.1–494.9 | **1.0** |
-| 1024 | 0.986–0.997 | 473.1–494.9 | **1.0** |
+| 64 | 0.958–0.995 | 434.6–491.2 | 5.1 |
+| 128 | 0.970–0.996 | 472.1–494.7 | 5.1 |
+| 256 | 0.985–0.997 | 473.0–494.9 | 2.9 |
+| 512 | 0.986–0.997 | 473.1–494.9 | 1.0 |
+| 1024 | 0.986–0.997 | 473.1–494.9 | 1.0 |
 
 σ slope −0.672 ± 0.080 (PASS), τ slope −0.058 ± 0.127 (FAIL).
 
@@ -197,35 +200,117 @@ either** — see §5 step (a) for the measurement. Do not report σ²τ here.
 
 ---
 
-## 4b. Why Burnham+2026 recovers and this does not — READ BEFORE MORE DEBUGGING
+## 4b. The estimator is sound — the τ bias is NOT an information limit
 
-**The τ bias is not a defect. It is the correct answer to an ill-posed question.**
-Established by an exact-posterior experiment here plus prior work on this project
-(`project_psd_z4_burnham_replication`, `project_field_sfh_neff_is_four...`).
+> **This section previously concluded the opposite** ("the τ bias is not a
+> defect, it is the correct answer to an ill-posed question"). That conclusion
+> rested on one experiment. The experiment was measured and found broken twice
+> over. The corrected experiment reverses the finding. The old text is kept
+> below, marked, because the reasoning is a trap worth recognizing again.
 
-**Decisive experiment.** With EXACT interim-posterior draws (SIR, no SED model,
-no Laplace, no HMC — exact OU for both generation and scoring), on the real
-16-node age grid, varying only how many field modes the data constrain:
+**REFUTED — the SIR exact-posterior experiment.** It obtained per-galaxy
+ensembles by sampling-importance-resampling 200k particles **from the prior**,
+weighted by a Gaussian likelihood of width 0.15. Measured after the fact
+(`sir_ess.py`), the importance weights are degenerate:
 
-| constrained modes | τ Myr (truth 150) |
-|---|---|
-| 4 | 26–34 |
-| 6 | 35–45 |
-| 8 | 36–43 |
-| 12 | 65–76 |
-| **16 of 16** | **128–150 ✓** |
+| constrained modes | Kish ESS (of 200,000) | unique particles per 800-draw ensemble | max weight |
+|---|---|---|---|
+| 4 | **4.9** [1.6, 48.7] | **15** [2, 127] | 0.365 |
+| 8 | **1.0** [1.0, 1.7] | **1** [1, 4] | 1.000 |
+| 16 | **1.0** [1.0, 1.6] | **1** [1, 2] | 1.000 |
 
-τ needs essentially **all** modes. Now set that against measured `n_eff` for real
-observables: GALEX+SDSS **3.21**, +2MASS 3.43, COSMOS 20 bands 3.95,
-GALEX+SDSS **+8 emission lines 4.17**, COSMOS-20+lines 4.40.
+At 8 and 16 modes every "800 exact posterior draws" is **800 copies of a single
+prior draw**. The collapse is structural, not tuning: the prior std along the
+leading OU modes is 4.59, 2.04, 1.74, … against a likelihood width of 0.15, so
+the proposal is 11–31× too broad *per constrained direction*, and the
+inefficiency compounds multiplicatively with each one.
 
-**Adding the emission lines will NOT rescue τ at z=0.1.** They buy ~1 mode
-(3.21 → 4.17), which this table says gives τ ≈ 30–45 against a truth of 150.
-They *are* worth adding — measured 3.8× improvement on the young (<15 Myr)
-window and they help σ — but the per-galaxy-field architecture cannot reach τ
-from a z=0.1 broadband+optical-line observable.
+It was also wrong a second, independent way: it proposed particles uniformly
+over grid **indices** — log-uniform in τ, since `SharedGrid.uniform` spaces τ
+geometrically — while scoring them against a `tau_prior="uniform"` pushforward
+in `p_0`. That is exactly the ∝τ, 50×-end-to-end prior mismatch that
+`SharedGrid.uniform`'s own docstring warns about, sitting inside the experiment
+built to isolate the estimator.
 
-**What Burnham+2026 (arXiv:2601.20930) does differently.**
+The 16-mode "recovery" was therefore circular. With ESS = 1, the surviving
+particle is the single prior draw closest to a field generated at truth, so it
+is preferentially a particle whose own generating hyperparameters are near
+truth — measured: survivors' mean (σ, τ) = (0.643, 175 Myr) against a grid
+midpoint of (0.505, 127) and a truth of (0.75, 150). B2 was reading the label
+off one particle, not recovering τ from data.
+
+**Corrected experiment — no importance sampling at all.** This toy's posterior
+is available in closed form: a Gaussian likelihood on `P @ m` against a prior
+that is a finite Gaussian mixture (one component per grid node) gives a Gaussian
+mixture posterior. `exact_post_analytic.py` draws from it directly — i.i.d.,
+ESS = `n_samples` by construction, with component weights taken from
+`grid.log_prior` itself so the proposal *cannot* disagree with `p_0`. Self-test:
+the posterior-predictive residual is 0.150 at every setting, exactly the
+injected noise.
+
+| constrained modes | τ Myr — SIR (refuted) | τ Myr — analytic (truth 150) |
+|---|---|---|
+| 4 | 26–34 | **80.0–132.3** |
+| 6 | 35–45 | **96.1–183.1 ✓** |
+| 8 | 36–43 | **128.5–189.9 ✓** |
+| 10 | 40–48 | **139.6–182.8 ✓** |
+| 12 | 65–76 | **130.3–160.3 ✓** |
+| 16 | 128–150 | **143.5–171.9 ✓** |
+
+τ is recoverable from **6** constrained modes, not 16. At 4 modes it is biased
+low by 1.1–1.9×, not by 5×.
+
+**And the clean estimator does not rail.** The real bank's signature failure is
+τ pinned at 473–495 Myr against a U(10, 500) prior for every N ≥ 64. Running the
+analytic estimator over the same N (`exact_scaling.py`, two seeds per cell):
+
+| modes | N | τ 68% Myr, seed 0 | τ 68% Myr, seed 1 |
+|---|---|---|---|
+| 4 | 16 | 141.0–384.9 | 121.2–292.2 |
+| 4 | 64 | 80.0–132.3 | 182.5–286.5 |
+| 4 | 256 | 108.2–142.0 | 157.6–197.7 |
+| 4 | 512 | **119.8–145.4** | **144.8–173.0** |
+| 8 | 512 | **129.5–151.0** | **112.1–137.3** |
+
+Intervals *tighten* with N (≈240 Myr wide at N=16 → ≈26 Myr at N=512) and stay
+centered near truth. No railing at any N. Residual: τ coverage at 4 modes misses
+5 of 8 against 2.7 expected for a 68% interval — a mild under-coverage worth
+noting, and categorically different from pinning at the prior edge.
+
+**Consequence — the suspicion returns to the per-galaxy posteriors.** Given
+genuinely exact per-galaxy posteriors, B2 recovers σ and τ at this information
+content and this N. So the real bank's railing is not explained by the estimator
+and not by the sparse-information regime. What remains is whatever makes the
+real per-galaxy posteriors differ from exact ones: the **Laplace/Gaussian
+approximation**, the **D=26 nuisance-parameter coupling**, or the **nonlinear
+SED likelihood**. The toy exonerates the estimator; it does not by itself
+convict any one of those three. Note also that the biases point in *opposite*
+directions — the toy at 4 modes is biased low, the real bank rails high — which
+a pure information limit would not do.
+
+---
+
+### Superseded reasoning (kept as a cautionary record)
+
+The following was the previous conclusion. It is **wrong**, but the failure mode
+is instructive: a single unverified experiment, whose intended property
+("exact posterior draws") was never measured, was allowed to carry a
+architectural conclusion.
+
+> **The τ bias is not a defect. It is the correct answer to an ill-posed
+> question.** τ needs essentially **all** modes. Set that against measured
+> `n_eff` for real observables: GALEX+SDSS **3.21**, +2MASS 3.43, COSMOS 20
+> bands 3.95, GALEX+SDSS **+8 emission lines 4.17**, COSMOS-20+lines 4.40.
+> **Adding the emission lines will NOT rescue τ at z=0.1** — they buy ~1 mode,
+> which gives τ ≈ 30–45 against a truth of 150.
+
+The `n_eff` numbers themselves were measured independently and **stand**. The
+conclusion drawn from them does not: on the corrected table 4 → 6 modes is the
+difference between a 1.6× low bias and covering truth, so ~1 extra mode is no
+longer obviously worthless. Whether emission lines rescue τ is **reopened**.
+
+**What Burnham+2026 (arXiv:2601.20930) does differently** (unaffected by the
+above — these are facts about their paper, not about this experiment).
 
 1. **No per-galaxy SFH fitting at all.** Population-level SBI (SNPE/MAF) on the
    *distribution* of ~5 compressed summaries (Hα, dust-corrected FUV, NUV,
@@ -246,35 +331,29 @@ from a z=0.1 broadband+optical-line observable.
 
 **Refuted here, do not re-check:** the field is generated by
 `drw_innovations_gp_from_xi`, the exact linear-time OU recursion (#865), which
-matches the estimator's `ou_logpdf` — there is **no** kernel mismatch, and the
-numpy experiment reproduces the bias using exact OU on both sides. The
-historical `log_age_ref=8.0` single-reference Jacobian issue does not apply to
-the current field model.
+matches the estimator's `ou_logpdf` — there is **no** kernel mismatch. (This
+rests on #865 and on direct comparison of the two code paths, *not* on the
+retracted SIR experiment.) The historical `log_age_ref=8.0` single-reference
+Jacobian issue does not apply to the current field model.
 
-**Two caveats on the above — read before treating §4b as closed.**
+**Status of the two caveats that prompted this rework.**
 
-1. **The estimator is OVERCONFIDENT, not merely uninformative, and that part may
-   still be a defect.** A parameter the data cannot constrain should come back
-   at roughly its prior width. At 4 constrained modes the exact-posterior
-   experiment returns τ = 26–34 Myr — an 8 Myr-wide 68% interval, centred 5×
-   from truth, against a prior U(10, 500). Returning a *tight wrong* answer
-   rather than a wide one is not explained by "the information isn't there".
-   Prior work already recorded τ's posterior at 0.98× the prior width
-   (`project_psd_sigma_is_identified_tau_is_the_prior`) and called B2's
-   12–31 Myr a *defect on top of* that non-identification. This handoff's
-   "ill-posed measurand" framing explains why τ cannot be *recovered*; it does
-   not explain why the interval is narrow. Both statements are needed.
+1. **Overconfidence — resolved in the toy, still open in the real bank.** The
+   8 Myr-wide interval centered 5× from truth was itself an SIR artifact: with
+   ~15 unique particles the ensemble is far under-dispersed, and B2 reads a
+   near-degenerate "posterior" as sharp information. With exact draws the same
+   4-mode case returns 80.0–132.3 Myr — 52 Myr wide, an interval commensurate
+   with the information. But the **real bank** still returns a narrow interval
+   pinned at 473–495, and prior work records τ's posterior at 0.98× the prior
+   width (`project_psd_sigma_is_identified_tau_is_the_prior`). That remains
+   unexplained and is now the live defect.
 
-2. **The exact-posterior experiment has an unquantified caveat.** Its draws come
-   from sampling-importance-resampling with 200k particles over a 16-D field
-   where the likelihood constrains 4 directions at noise 0.15. SIR particle
-   degeneracy in that setting was not measured, so "exact posterior draws" is
-   an *intended* property, not a verified one. Before building on §4b, check the
-   SIR effective sample size per galaxy; if it is small, the experiment inherits
-   the same weight-degeneracy it was designed to rule out.
+2. **SIR degeneracy — confirmed, and it was fatal.** Measured above. This is why
+   §4b's conclusion inverted. Recorded as a standing lesson in §7.
 
-**Consequences for the plan.** Chasing the τ bias inside this architecture is
-not worth further effort. The real choices are:
+**Consequences for the plan.** Chasing the τ bias *is* now worth effort, and it
+has a specific target: the per-galaxy posteriors, not the estimator. The
+options below remain on the table but are no longer forced:
 (a) **change the measurand — report σ alone. NOT σ²τ.** Measured pushforward of
     the 2-D grid posterior onto v = σ²τ, fractional 68% widths at N=32:
     **σ 0.202, τ 0.962, σ²τ 1.237** — the product is the *worst* constrained of
@@ -302,7 +381,7 @@ Per-galaxy `log Z_i(σ,τ)` surfaces computed two ways on the identical grid, by
 running `shared_log_posterior` on one galaxy at a time (so
 `log_posterior = log_prior + log Z_i` comes out of the production path):
 
-| | median per-galaxy peak | summed over 24 | `logZ(corner) − logZ(truth)` | % favouring corner |
+| | median per-galaxy peak | summed over 24 | `logZ(corner) − logZ(truth)` | % favoring corner |
 |---|---|---|---|---|
 | **Truth field** (K=1) | σ 0.690, τ **132.8** | σ 0.715, τ **141.9** ✓ | **−2.433** nats/gal | 4% |
 | **Laplace** (K=1000) | σ 0.757, τ **12.2** | σ **1.000**, τ 162.0 ✗ | **+0.098** nats/gal | 38% |
@@ -314,13 +393,13 @@ N≈32–64 threshold falls straight out of this number.**
 **The damage is entirely in τ, per galaxy, before any pooling.** Laplace gets σ
 right (median peak 0.757 vs truth 0.75) but pins τ to the grid floor — 10.0–13.0
 for six of eight galaxies, median 12.2, against truth-field peaks that scatter
-73–438 Myr but centre correctly.
+73–438 Myr but center correctly.
 
 **Mechanism.** `log Z_i = logsumexp_k[log p(m_k|σ,τ) − log p_0(m_k)]` averages
 over the draw ensemble. A small-τ kernel is nearly white and gives moderate
 density to *every* draw; a large-τ kernel gives high density to smooth draws and
 near-zero to rough ones. An ensemble containing prior-like roughness — exactly
-what the ~12 unconstrained field directions contribute — therefore favours small
+what the ~12 unconstrained field directions contribute — therefore favors small
 τ. With K=1 there is no ensemble, the single true field is smooth, and large τ
 wins. That is why the truth-field test passes and the pipeline does not.
 
@@ -329,6 +408,16 @@ is the **grid-averaged pushforward** while the draws actually came from a
 **Laplace Gaussian** — the correction is for the wrong sampling density, and a
 residual tilt survives. This is a subtlety in the estimator's assumptions, not a
 coding error, which is why every code-level remedy left it untouched.
+
+**§4b's corrected experiment confirms this mechanism.** In
+`exact_post_analytic.py` the draws come from the exact posterior under the
+grid-mixture prior, so `p_0` — the grid-averaged pushforward — *is* the true
+interim density, by construction rather than by approximation. In that setting
+the estimator recovers σ and τ and shows no railing out to N=512. The
+sampling-density mismatch identified here is therefore the leading explanation
+for the real bank's failure, and §4a and §4b now agree. (For a while they did
+not: §4b's superseded "ill-posed measurand" reading contradicted this section
+and was the weaker of the two.)
 
 ---
 
@@ -374,6 +463,18 @@ PYTHONPATH=src:. JAX_PLATFORMS=cpu python scripts/hierarchical_psd_subset_scalin
 `--node-chunk` is the memory knob: peak ≈ `chunk × N × K × 8 × ~15` bytes. At
 N=2048, K=4000 use 4 or less.
 
+```bash
+# Validate the estimator itself against an EXACT analytic posterior (§4b).
+# No SED model, no Laplace, no importance sampling -- closed-form Gaussian
+# mixture, so the draws are i.i.d. exact and p_0 is correct by construction.
+PYTHONPATH=src:. JAX_PLATFORMS=cpu python \
+    scripts/hierarchical_psd_estimator_validation.py --bank psd_bank_fixed \
+    --modes 4 8 16 --n-galaxies 64 512 --seeds 0 1
+```
+
+The `resid` column is a self-test: it must equal `--noise` (0.150). Anything
+else means the draws are not posterior draws.
+
 ### Files
 
 | Path | Role |
@@ -386,6 +487,7 @@ N=2048, K=4000 use 4 or less.
 | `src/tengri/analysis/population_mocks.py` | `make_population`, truth guards |
 | `scripts/hierarchical_psd_fit_bank.py` | fit the bank (laplace or mcmc_hmc) |
 | `scripts/hierarchical_psd_subset_scaling.py` | the scaling curve + gate |
+| `scripts/hierarchical_psd_estimator_validation.py` | estimator vs exact analytic posterior (§4b) |
 | `scripts/run_psd_bank.sh` | restart-to-completion wrapper |
 
 40+ contract tests under `tests/contract/test_population_*.py`.
@@ -414,6 +516,19 @@ N=2048, K=4000 use 4 or less.
 - **Truth-field and toy tests cannot see interim/pushforward mismatches.** With
   K=1 `p_0` is a per-galaxy constant that cancels; the toy generates and scores
   under the same prior.
+- **An *intended* property is not a *measured* one — this cost the biggest wrong
+  conclusion in this work.** §4b rested on draws described as "exact posterior
+  draws". They were obtained by importance sampling, whose ESS was never
+  checked; measured, it was 1–5 out of 200,000, and at 8+ modes every ensemble
+  was 800 copies of one particle. The conclusion inverted once fixed. **Any
+  time an ensemble is produced by reweighting or resampling, report its ESS
+  next to the result** — and prefer a closed form when one exists (this toy's
+  posterior was an analytic Gaussian mixture all along).
+- **Importance sampling from a prior dies exponentially in constrained
+  dimensions.** Prior std 4.59, 2.04, 1.74, … against likelihood width 0.15 is
+  11–31× too broad *per direction*, and the cost multiplies. Four such
+  directions is already fatal at 200k particles. This is structural, not a
+  tuning failure — do not try to fix it by adding particles.
 - **Shared machine.** A total-RSS guard SIGKILLs python largest-first at 15 GB
   across *all* sessions (log: `/tmp/oom_guard_15gb.log`). Silent death with no
   traceback is this, not your bug — read the guard log first. Hence the
@@ -423,19 +538,30 @@ N=2048, K=4000 use 4 or less.
 
 ## 8. Next steps, ranked
 
-1. **Fix the per-galaxy τ tilt — it is now localized and quantified (§4a).**
-   Do NOT reach for weight removal (closed-form Gaussian marginalization):
-   median ESS is ~550, the weights are not the problem. The tilt is
-   +0.098 nats/galaxy toward the corner and is intrinsic to averaging
-   `log p(m_k|σ,τ)` over a draw ensemble containing prior-like roughness.
-   Three routes, cheapest first:
-   (a) **Make `p_0` match the actual sampling density.** B2's derivation
-   requires dividing by the density the draws really came from. With Laplace
-   that is a known Gaussian per galaxy, not the grid-averaged pushforward the
-   code assumes — so `p_0` can be computed exactly rather than approximated.
-   This is the most likely single fix.
-   (b) Use honest posteriors (NUTS with the funnel addressed) so the
-   pushforward assumption holds again.
+1. **Fix the per-galaxy draws — NOT `p_0`.** §4b now shows the estimator is
+   sound given exact per-galaxy posteriors, and §4a localizes the damage to the
+   mismatch between the true interim posterior `q_i` and the Laplace Gaussian
+   `q̂` the draws actually come from. Do NOT reach for weight removal
+   (closed-form Gaussian marginalization): median ESS is ~550, the weights are
+   not the problem.
+
+   **Correction to an earlier version of this list — do not do this.** It
+   previously ranked "make `p_0` match the actual sampling density" as the most
+   likely single fix. That is degenerate. B2 requires dividing by the interim
+   **prior** with draws from the interim **posterior**:
+   `Z_i = C_i E_{q_i}[p(m|σ,τ)/p_0(m)]`. Substituting the Laplace density gives
+   `E_{q̂}[p(m|σ,τ)/q̂(m)] = ∫ p(m|σ,τ) dm = 1` for every (σ,τ) — a perfectly
+   flat surface carrying no information at all. `p_0` as coded (the
+   grid-averaged pushforward) is **correct**; `q_i` is what is wrong.
+
+   Routes, cheapest first:
+   (a) **Importance-correct the Laplace draws back to `q_i`.** Weight draw `m_k`
+   by `w_k ∝ p(d_i|m_k) p_0(m_k) / q̂(m_k)` and use the self-normalized estimate.
+   Legitimate and cheap. **Measure the per-galaxy ESS of these weights before
+   trusting any result** — this is the same correction, in the same geometry,
+   that collapsed to ESS ≈ 1 in §4b.
+   (b) Use honest posteriors (NUTS with the funnel addressed) so `q_i` is right
+   and no correction is needed.
    (c) Restrict the field to its data-constrained subspace (~4 of 16 modes)
    before scoring, removing the prior-like roughness that drives the tilt.
 2. **Full covariance comparison, truth vs Laplace fields** across age nodes (not
