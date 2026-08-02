@@ -97,6 +97,14 @@ jobs:
       # same as the guard above.
       - run: python tools/check_zero_hiding_clamps.py
       - run: python tools/check_representable_floors.py
+      # `nbsphinx_execute = "never"`, so the committed docs/spine/**/*.ipynb IS
+      # the published page and nothing else checks it still matches the
+      # notebooks/*.py it came from. Two ways of losing that have shipped: a
+      # hand-copied render drifting from its source (docs/spine/experimental/ was
+      # not in the sync script), and executing under MPLBACKEND=Agg, which makes
+      # plt.show() a no-op so the page renders with no plots. Stdlib-only, same
+      # as the guards above.
+      - run: python tools/check_notebook_renders.py
       # NOTE: `gen_property_table.py --check` cannot live here. This job installs
       # ruff and nothing else, and the generator imports tengri (hence jax) to read
       # the property registry. It runs in `smoke`, which does `pip install -e`.

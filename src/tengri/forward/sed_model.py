@@ -633,6 +633,14 @@ def _fold_igm_into_subbands(igm_comp, stellar_state):
     return stellar_state
 
 
+#: Accepted ``csp_integration`` values. All are equivalent (#1500): the stellar
+#: component integrates the CSP with cloud-in-cell age weights for every
+#: configuration, so none of these reaches the SED. Kept so existing calls keep
+#: working; non-default values warn and are slated for removal in v1.0.
+_VALID_CSP_INTEGRATION = ("trapz", "log_trapz", "log_interp", "dsps_native", "dsps_met_table")
+_DEFAULT_CSP_INTEGRATION = "trapz"
+
+
 class SEDModel:
     """Differentiable SED forward model with modular physics and clean API.
 
@@ -748,11 +756,31 @@ class SEDModel:
         Invalid values raise ``ValueError``.
 
     csp_integration : str, optional
-        CSP age integration scheme. Default ``"trapz"`` (trapezoidal on
-        linear time). Options: ``"log_trapz"``, ``"log_interp"`` (Dopita+2005
-        interpolation), ``"dsps_native"`` (DSPS trapezoidal with automatic
-        metallicity marginalization), ``"dsps_met_table"`` (time-evolving
-        metallicity table). See Appendix A of the forward model paper [2]_.
+        **Deprecated and inert** (#1500); accepted so existing calls keep
+        working, and slated for removal in v1.0. Any non-default value raises a
+        :class:`DeprecationWarning`. Accepted: ``"trapz"`` (default),
+        ``"log_trapz"``, ``"log_interp"``, ``"dsps_native"``,
+        ``"dsps_met_table"``.
+
+        .. warning::
+
+           **No value changes any output.** The stellar component integrates the
+           CSP with cloud-in-cell age weights (``_age_weights_cic`` in
+           ``components/stellar/component.py``) for every configuration —
+           ``sps_backend="dsps"`` is the only backend — so this never reached the
+           SED. ``predict_photometry`` is bit-identical across all five values;
+           measured, not assumed.
+
+           It formerly changed ``_predict_sfh_quantities`` alone, which meant the
+           *reported stellar mass came from a different integration than the
+           spectrum it was fitted to*: 0.32% off for ``"log_interp"`` and
+           ``"dsps_native"``, and **NaN** for ``"dsps_met_table"`` — a NaN that
+           :class:`~tengri.inference.posterior.Posterior` then vmapped over every
+           sample. Derived quantities are now computed from the SED's own age
+           weights, so every value agrees to machine precision.
+
+           To change how the CSP is integrated, change the stellar component;
+           there is no user-facing knob for it.
 
     Attributes
     ----------
@@ -1781,10 +1809,29 @@ class SEDModel:
         self.ssp_log_ages_yr = ssp_data.ssp_lg_age_gyr + 9.0
         self.ssp_ages_yr = 10.0**self.ssp_log_ages_yr
 
-        _valid_csp = ("trapz", "log_trapz", "log_interp", "dsps_native", "dsps_met_table")
-        if csp_integration not in _valid_csp:
+        if csp_integration not in _VALID_CSP_INTEGRATION:
             raise ValueError(
-                f"csp_integration must be one of {_valid_csp}, got {csp_integration!r}"
+                f"csp_integration must be one of {_VALID_CSP_INTEGRATION}, got {csp_integration!r}"
+            )
+        if csp_integration != _DEFAULT_CSP_INTEGRATION:
+            # Say it at construction, where the user can act on it. The stellar
+            # component builds age weights with cloud-in-cell for every
+            # configuration (sps_backend="dsps" is the only backend), so this
+            # cannot reach the SED -- photometry is bit-identical across all five
+            # values. It used to change _predict_sfh_quantities alone, which meant
+            # the reported stellar mass came from a different integration than the
+            # spectrum it was fitted to (#1500).
+            warnings.warn(
+                f"csp_integration={csp_integration!r} has no effect and is deprecated. "
+                "The stellar component integrates the CSP with cloud-in-cell age "
+                "weights regardless of this setting, so the predicted SED, "
+                "photometry and derived quantities are identical to "
+                f"{_DEFAULT_CSP_INTEGRATION!r}. It previously changed the reported "
+                "stellar mass without changing the SED (0.32% for 'log_interp' / "
+                "'dsps_native', NaN for 'dsps_met_table'); that inconsistency is "
+                "fixed, and the argument will be removed in tengri v1.0.",
+                DeprecationWarning,
+                stacklevel=3,
             )
         self._csp_integration = csp_integration
         if csp_integration == "log_interp":
@@ -3474,8 +3521,10 @@ class SEDModel:
             spec_resample_conserving = False
             spec_resolution_matrix = None
 
-        # CSP integration method
-        csp_integration = str(self._csp_integration)
+        # csp_integration is deliberately NOT part of the signature. Every value
+        # produces an identical program (#1500), so including it split the compile
+        # cache five ways and recompiled the whole model to compute the same
+        # numbers. Measured: 5 distinct signatures, 0 differing outputs.
 
         # ``forward_dtype`` is deliberately NOT part of this key (#1433). It is
         # retired and casts nothing, so two models differing only in it compute
@@ -3660,7 +3709,6 @@ class SEDModel:
             calibration_order,
             spec_resample_conserving,
             spec_resolution_matrix,
-            csp_integration,
             build_precision,
             met_interp,
             z_interp,
@@ -4756,8 +4804,13 @@ class SEDModel:
             Parameter values (public names). ``redshift`` sets the luminosity
             distance for the observed flux.
         line_defs : sequence of LineDef, optional
-            Lines + continuum windows to measure. Defaults to
-            :data:`tengri.observation.line_measurement.DESI_LINES`.
+            Lines + continuum windows to measure. Defaults to the lines this
+            model's ``observation`` declares (``Observation.line_fluxes``), and
+            only to :data:`tengri.observation.line_measurement.DESI_LINES` when
+            nothing declares a set. Before #1500 the DESI list was used
+            unconditionally, so a model built with an eight-line
+            :class:`~tengri.observation.LineFluxData` silently returned **five**
+            fluxes, for different lines, in a different order.
         fast : bool, default False
             Route through the window-LUT fast path
             (:func:`~tengri.observation.line_measurement.measure_line_fluxes_from_window_lut`):
@@ -4789,12 +4842,16 @@ class SEDModel:
         from tengri.cosmology import luminosity_distance
         from tengri.forward.result import SEDResult
         from tengri.observation.line_measurement import (
-            DESI_LINES,
             measure_line_flux_jax,
             measure_line_fluxes_from_window_lut,
+            resolve_line_defs,
         )
 
-        line_defs = tuple(DESI_LINES if line_defs is None else line_defs)
+        # Omitting ``line_defs`` used to mean DESI_LINES unconditionally, ignoring
+        # the model's own Observation: a model built with an eight-line
+        # LineFluxData returned FIVE fluxes, for different lines, in a different
+        # order. Nothing raised -- the shape is only wrong downstream (#1500).
+        line_defs = resolve_line_defs(line_defs, getattr(self, "observation", None))
         # Resolve the redshift through the spec, not out of the dict. A Fixed
         # redshift is legitimately absent from ``params``, and reading it back with
         # a 0.0 default put the galaxy at 10 pc — 1e17 too bright, silently
@@ -5255,65 +5312,23 @@ class SEDModel:
         p = self._get_internal_params(params)
         sfr = self._compute_sfr(p)
 
-        sfr_on_ssp = jnp.interp(self.ssp_log_ages_yr, self.log_age_grid, sfr)
-        if self._csp_integration == "log_interp":
-            weights = self._csp_matrix @ sfr_on_ssp
-        elif self._csp_integration == "dsps_native":
-            # For stellar_mass(), only age_weights matter (not ssp_flux_at_z).
-            from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_native_weights
-
-            z_val = p.get("redshift", 0.1)
-            t_obs_gyr = self._t_universe_gyr(z_val)
-            lgmet = p.get("log_z_abs", -1.8477)
-            lgmet_scatter = float(p.get("lgmet_scatter", self._lgmet_scatter))
-            weights, _ = compute_dsps_native_weights(
-                sfr_on_ssp,
-                self.ssp_ages_yr,
-                self.ssp_data.ssp_lgmet,
-                self.ssp_data.ssp_lg_age_gyr,
-                self.ssp_data.ssp_flux,
-                t_obs_gyr,
-                lgmet,
-                lgmet_scatter,
-            )
-        elif self._csp_integration == "dsps_met_table":
-            from tengri.components.stellar.sps.dsps_wrapper import compute_dsps_met_table_weights
-
-            z_val = p.get("redshift", 0.1)
-            t_obs_gyr = self._t_universe_gyr(z_val)
-            lgmet_scatter = float(p.get("lgmet_scatter", self._lgmet_scatter))
-            if self._met_mode == "ramp":
-                from tengri.components.stellar.sps.dsps_wrapper import compute_log_z_evolving
-
-                lgmet_per_age = compute_log_z_evolving(
-                    self.ssp_data.ssp_lg_age_gyr,
-                    p["log_z_abs_initial"],
-                    p["log_z_abs_final"],
-                    t_obs_gyr,
-                )
-            else:
-                lgmet_per_age = jnp.full_like(self.ssp_ages_yr, p.get("log_z_abs", -1.8477))
-            weights, _ = compute_dsps_met_table_weights(
-                sfr_on_ssp,
-                lgmet_per_age,
-                self.ssp_ages_yr,
-                self.ssp_data.ssp_lgmet,
-                self.ssp_data.ssp_lg_age_gyr,
-                self.ssp_data.ssp_flux,
-                t_obs_gyr,
-                lgmet_scatter,
-            )
-        else:
-            # Closure-A consistency: route through the orchestrator so
-            # ``predict_sfh_quantities`` returns the same stellar_mass /
-            # weights as ``predict_derived`` (which uses
-            # ``predict_state`` internally via
-            # ``Prediction._ensure_sfh``). Was 4.1% apart with the
-            # legacy rectangle rule (``sfr_on_ssp * _csp_age_dt``).
-            # See ``tests/integration/test_derived_quantities.py::
-            # test_mstar_consistent_between_methods``.
-            state_orch = self.predict_state(params)
-            weights = jnp.asarray(state_orch.derived["age_weights"])
+        # ONE definition of the age weights: the ones the SED was built from.
+        #
+        # This used to branch on ``csp_integration`` and compute its own weights
+        # for 'log_interp' / 'dsps_native' / 'dsps_met_table'. Since the stellar
+        # component always integrates with cloud-in-cell (``sps_backend="dsps"``
+        # is the only backend), those branches changed the reported mass without
+        # changing the spectrum it was fitted to: 0.32% for 'log_interp' and
+        # 'dsps_native', and NaN for 'dsps_met_table' -- which ``Posterior`` then
+        # vmapped over every sample. Measured in #1500.
+        #
+        # The default already routed here "so predict_sfh_quantities returns the
+        # same stellar_mass / weights as predict_derived ... was 4.1% apart with
+        # the legacy rectangle rule". That consistency fix was applied to the
+        # values someone happened to test; the rest kept the divergent path. Now
+        # there is no path to diverge.
+        state_orch = self.predict_state(params)
+        weights = jnp.asarray(state_orch.derived["age_weights"])
         mass_formed = jnp.sum(weights)
 
         # Surviving mass

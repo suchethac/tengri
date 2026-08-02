@@ -48,7 +48,15 @@ worker subprocesses all skip the expensive first compile (geoVI ~75 s, MGVI
 ```bash
 export TENGRI_JAX_CACHE_DIR=/scratch/$USER/jax_cache  # custom location
 export TENGRI_DISABLE_JAX_CACHE=1                     # opt out
+export TENGRI_JAX_CACHE_MAX_GB=8                      # size cap; 0 = unbounded
 ```
+
+**The cache is capped at 8 GiB** (`jax_compilation_cache_max_size`, so JAX
+evicts). Before #1507 nothing passed a cap — `import tengri` left it at JAX's
+`-1` (unlimited) — and combined with `min_compile_time_secs=0.05` below, which
+deliberately persists every per-filter micro-kernel, the directory was measured
+at **141 GB** on a 48 GB machine. `tengri.clear_cache()` now returns the bytes
+it reclaimed.
 
 A sibling cache at `~/.cache/tengri_precomp` persists the WavePrecomp
 photometry z-table (the dominant numpy cost of a free-redshift

@@ -278,9 +278,24 @@ def resolve_method(method: str, emit_warning: bool = True) -> str:
 #: Constructor parameters the convenience fit surfaces manage themselves
 #: (positionally or via their own named parameters) — never routed from a
 #: surface's ``**kwargs``.
-_FIT_SURFACE_MANAGED = frozenset(
-    {"self", "model", "data", "noise", "data_type", "data_mask", "approx", "params_override"}
-)
+# Names the fit surface supplies from its own call signature. These can never be
+# taken from ``**kwargs`` -- ``fit(data, noise, ...)`` already owns them.
+_FIT_SURFACE_POSITIONAL = frozenset({"self", "model", "data", "noise"})
+
+# Names the surface may DERIVE (e.g. ``data_type="joint"`` for a joint ``Data``
+# record) but which are still ordinary ``Fitter.__init__`` parameters a caller may
+# set explicitly. They must land in ``ctor_kwargs``.
+#
+# These used to sit in one undifferentiated set with the positional names, and
+# ``split_fitter_kwargs`` excluded the whole set from ``ctor_names``. The effect
+# was that passing any of them routed the value to ``Fitter.run()``, which hands
+# it to the backend runner -- so a documented kwarg raised
+# ``run_map() got an unexpected keyword argument 'data_type'`` (#1500). The
+# derivation still wins by ``setdefault``, so an explicit value takes precedence
+# without the surface losing its default.
+_FIT_SURFACE_DERIVED = frozenset({"data_type", "data_mask", "approx", "params_override"})
+
+_FIT_SURFACE_MANAGED = _FIT_SURFACE_POSITIONAL | _FIT_SURFACE_DERIVED
 
 
 def _model_catalog_z_range(model):
@@ -328,7 +343,7 @@ def split_fitter_kwargs(kwargs):
     ctor_names = {
         name
         for name in inspect.signature(Fitter.__init__).parameters
-        if name not in _FIT_SURFACE_MANAGED
+        if name not in _FIT_SURFACE_POSITIONAL
     }
     ctor_kwargs = {k: v for k, v in kwargs.items() if k in ctor_names}
     run_kwargs = {k: v for k, v in kwargs.items() if k not in ctor_names}
