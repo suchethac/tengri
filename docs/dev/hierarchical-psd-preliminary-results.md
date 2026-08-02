@@ -32,16 +32,35 @@ photometry-only. This matters for §4.
 
 ## 2. Headline
 
-**σ is constrained. τ is not, and neither is σ²τ.**
+**σ is constrained. τ is not, and neither is σ²τ. And the two-step estimator's
+τ answer is a defect, not merely an unidentified quantity.**
 
 The population identifies one number — the burst amplitude σ. The correlation
 time τ slides almost freely at fixed σ, and because it does, the product σ²τ
 inherits that freedom rather than curing it.
 
-This is a statement about the *observable*, not about any one estimator: it
-falls out of the shared posterior's own geometry (§3.2) and is consistent with
-the independently-measured `n_eff ≈ 3.2` data-constrained field modes for
-GALEX+SDSS.
+Three independent routes agree that τ is not identified by this observable:
+
+| route | evidence | §|
+|---|---|---|
+| Posterior geometry | tight direction is σ¹ τ^−0.09 — pure σ | 3.3 |
+| Mode counting | `n_eff ≈ 3.2` constrained modes; τ needs ~16 | 4 |
+| **Joint NUTS vs its own prior** | **τ posterior width is 0.98× the prior** | **5** |
+
+**But the two estimators fail differently, and the difference matters.** On the
+same four galaxies:
+
+| | τ / Myr (truth 150) | verdict |
+|---|---|---|
+| Two-step B2 | **12.2 – 30.9** | confidently **wrong** — excludes truth by 5–12× |
+| Joint NUTS | 104.5 – 429.7 | uninformative — returns ≈ the prior |
+
+An unidentified parameter *should* come back as its prior, which is what the
+joint fit does. B2 instead returns a tight interval that excludes the truth.
+That is strictly worse than saying nothing, and it confirms the handoff's own
+§4a tilt diagnosis while **correcting its §4b framing** — the τ bias is not
+"the correct answer to an ill-posed question". The correct answer to an
+ill-posed question is the prior.
 
 ---
 
@@ -134,9 +153,7 @@ the posterior geometry saying the same thing directly.
 
 ---
 
-## 5. Joint inference
-
-*(§5 is completed below once the joint run lands — see the joint-fit section.)*
+## 5. Joint inference — the control
 
 The two-step estimator's dominant failure is a **+0.098 nats/galaxy tilt**
 toward the grid corner, traced in handoff §4a to dividing by `p_0`, the
@@ -145,15 +162,69 @@ per-galaxy Laplace Gaussian. Multiplied by N this reaches ~6 nats by N = 64 —
 which is exactly where §3.2 sees the posterior leave the grid.
 
 A **joint** fit has no interim prior, no importance weights and no `p_0`, so
-that mechanism cannot occur. It is therefore the control that separates two
-hypotheses the two-step alone cannot:
+that mechanism cannot occur. It separates two hypotheses the two-step alone
+cannot: *the estimator is biased* vs *the observable does not identify τ*.
 
-- **H1 — the estimator is biased.** Joint recovers τ where two-step does not.
-- **H2 — the observable does not identify τ.** Joint fails the same way, and
-  §3.3/§4 stand as the explanation.
+**Both turn out to be true.**
 
-Driver: `scripts/hierarchical_psd_joint_fit.py`, same `build_model`, same
-truth, same `PRNGKey(0)` stream.
+### 5.1 The run
+
+`scripts/hierarchical_psd_joint_fit.py`, same `build_model`, same truth, same
+`PRNGKey(0)` stream — so these are the **same four galaxies** as the N = 4 row
+of §3.1. Single joint Hamiltonian, D = 98 (σ and τ scalar and shared;
+`psd_xi` (4, 16); eight per-galaxy physical parameters).
+
+    mcmc_nuts, N = 4, dense_mass_matrix=False
+    2 chains x (50 warmup + 50 samples)
+    MAP init loss 25.89 -> 20551 s wall (5.7 h), peak RSS 6.25 GB
+
+### 5.2 Result — measured against the prior, not just against truth
+
+This comparison is the whole point. "Covers truth" is worthless for a parameter
+whose *prior* covers truth; the width ratio is what says whether anything was
+learned.
+
+| | posterior 68% | median | prior 68% | prior median | **width / prior** |
+|---|---|---|---|---|---|
+| σ (truth 0.75) | 0.497 – 0.897 | **0.725** | 0.168 – 0.842 | 0.505 | **0.59×** |
+| τ / Myr (truth 150) | 104.5 – 429.7 | 184.7 | 88.4 – 421.6 | 255.0 | **0.98×** |
+
+- **σ is genuinely measured.** The interval is 0.59× the prior width and the
+  median moves 0.505 → 0.725 against a truth of 0.75. That is information from
+  the data, at N = 4.
+- **τ is not.** The interval is **0.98× the prior width** — the posterior is the
+  prior. The median drifts 255 → 185, a weak pull in the right direction, but
+  nothing was constrained. It covers truth only because U(10, 500) covers truth.
+
+### 5.3 What this settles
+
+1. **τ is not identified** by z = 0.1 broadband photometry. Third independent
+   confirmation, and the most direct one: an unbiased estimator handed this
+   observable returns the prior.
+2. **B2's τ is a real defect on top of that.** Faced with the same
+   non-identifiability, B2 reports 12–31 Myr — tight, and excluding the truth
+   by 5–12×. Handoff §4b calls the τ bias "the correct answer to an ill-posed
+   question"; it is not. The correct answer is the prior, and B2 does not give
+   it. §4a's tilt is a genuine bug worth its own fix, independent of whether τ
+   is ever identifiable.
+3. **B2 is also overconfident on σ**, where truth *is* recoverable: B2's N = 4
+   interval (0.698–0.933, width 0.235) is narrower than joint's (0.497–0.897,
+   width 0.400) while sitting higher. Narrower-and-biased is the expected
+   signature of "pooling reduces variance, not bias".
+
+### 5.4 Limits of this run — read before quoting it
+
+- **N = 4, one realization, short chains** (50 warmup / 50 samples × 2). Enough
+  to separate "returns the prior" from "returns 12–31 Myr"; **not** enough to
+  quote as a calibrated σ constraint.
+- **No convergence number.** The first run printed `Posterior.rhat` without
+  calling it — a bound method formats fine and reports nothing. Fixed in the
+  script; the R-hat for *this* run was not captured, so treat the intervals as
+  indicative.
+- **5.7 h and 6.25 GB at N = 4.** Hierarchical fits still bake the SSP grid
+  (handoff §9), so this is compile-bound and scales badly. **N ≥ 8 is not worth
+  running until #211 lands** — fixing the batched forward is cheaper than
+  paying ~11 h for the next rung.
 
 ---
 

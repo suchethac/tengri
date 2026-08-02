@@ -216,11 +216,15 @@ def main():
             continue
         rows.append(summarize(draws, name, truth))
 
+    # ``Posterior.rhat`` is a METHOD, not a property. Printing it bare formats
+    # the bound method and reads as a diagnostic while reporting nothing --
+    # which is how the first N=4 run finished with no convergence number at all.
     try:
-        rhat = result.rhat
-        print(f"\nR-hat: {rhat}")
+        rhat = result.rhat()
+        shared_rhat = {k: float(v) for k, v in dict(rhat).items() if k in _SHARED}
+        print(f"\nR-hat on the shared block: {shared_rhat}")
     except Exception as exc:
-        print(f"\nR-hat unavailable: {exc}")
+        print(f"\nR-hat unavailable: {type(exc).__name__}: {exc}")
 
     if args.out:
         os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)

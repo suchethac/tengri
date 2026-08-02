@@ -186,6 +186,17 @@ the estimator. Two live leads:
 
 ## 4b. Why Burnham+2026 recovers and this does not — READ BEFORE MORE DEBUGGING
 
+> **Half-corrected 2026-08-02 by a joint-NUTS control.** The *identifiability*
+> claim below is confirmed — a third independent route agrees τ is not
+> identified here (`docs/dev/hierarchical-psd-preliminary-results.md` §5). The
+> *framing* is wrong. On the same four galaxies, joint NUTS returns
+> τ = 104–430 Myr, a posterior **0.98× the prior width** — i.e. it correctly
+> reports that it learned nothing. B2 returns 12–31 Myr, excluding the truth by
+> 5–12×. **The correct answer to an ill-posed question is the prior, and B2 does
+> not give it.** So the τ bias *is* a defect (§4a's tilt), sitting on top of a
+> genuine identifiability wall. Both are real; do not let this section retire
+> the tilt.
+
 **The τ bias is not a defect. It is the correct answer to an ill-posed question.**
 Established by an exact-posterior experiment here plus prior work on this project
 (`project_psd_z4_burnham_replication`, `project_field_sfh_neff_is_four...`).

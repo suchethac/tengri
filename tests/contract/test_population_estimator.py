@@ -365,7 +365,9 @@ def test_tau_prior_uniform_weights_nodes_in_proportion_to_tau():
     # log-uniform: equal mass per node.
     np.testing.assert_allclose(p_flat, p_flat[0], rtol=1e-10)
     # uniform: mass proportional to tau, spanning the full 50x of the range.
-    np.testing.assert_allclose(p_lin / p_lin[0], np.asarray(lin.tau_yr) / float(lin.tau_yr[0]), rtol=1e-10)
+    np.testing.assert_allclose(
+        p_lin / p_lin[0], np.asarray(lin.tau_yr) / float(lin.tau_yr[0]), rtol=1e-10
+    )
     assert p_lin[-1] / p_lin[0] > 40.0, (
         f"expected ~50x weight ratio across the tau range, got {p_lin[-1] / p_lin[0]:.1f}"
     )
