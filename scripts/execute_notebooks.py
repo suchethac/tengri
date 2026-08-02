@@ -24,9 +24,24 @@ Usage::
     python scripts/execute_notebooks.py 00_quickstart stochastic_sfh_recovery
     python scripts/execute_notebooks.py --all --timeout 1800
 
-Writes ``notebooks/<slug>.ipynb``. Run
-``python scripts/sync_spine_notebooks_for_docs.py`` afterwards to copy sources
-into ``docs/spine/`` (it preserves the outputs this script produced).
+Writes the executed notebook to **both** ``notebooks/<slug>.ipynb`` (gitignored,
+handy for inspection) and the published render under ``docs/spine/``, which is
+the file that actually ships.
+
+Writing the render here is not a convenience. ``sync_spine_notebooks_for_docs``
+deliberately takes code from ``notebooks/<slug>.py`` and **outputs from the
+render it finds already committed** -- on CI ``notebooks/*.ipynb`` is gitignored
+and absent, so trusting it would replace real outputs with an empty notebook.
+That is correct for the sync and a trap for everything else: executing a
+notebook and then syncing publishes the *new source* grafted onto the *old
+outputs*, with nothing to indicate it. It shipped exactly once, in #1516, where
+the page ended up quoting timings from a run of the previous code. This script
+is the only step that knows fresh outputs were just produced, so it is the one
+that writes them.
+
+Run ``python scripts/sync_spine_notebooks_for_docs.py`` afterwards for markdown
+normalization and link retargeting; it will now find, and preserve, the outputs
+written here.
 """
 
 from __future__ import annotations
@@ -40,13 +55,34 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from sync_spine_notebooks_for_docs import EXPERIMENTAL_SLUGS, SPINE_SLUGS
+from sync_spine_notebooks_for_docs import (
+    EXPERIMENTAL_SLUGS,
+    EXPERIMENTAL_SUBDIR,
+    SPINE_SLUGS,
+)
 
 ALL_SLUGS = list(SPINE_SLUGS) + list(EXPERIMENTAL_SLUGS)
 
 
+def docs_render_path(slug: str) -> Path:
+    """Return the published render for ``slug``.
+
+    Mirrors the routing in :mod:`sync_spine_notebooks_for_docs`: the numbered
+    spine publishes to ``docs/spine/``, the standalone demonstrations to
+    ``docs/spine/<EXPERIMENTAL_SUBDIR>/``.
+    """
+    spine = ROOT / "docs" / "spine"
+    if slug in EXPERIMENTAL_SLUGS:
+        return spine / EXPERIMENTAL_SUBDIR / f"{slug}.ipynb"
+    return spine / f"{slug}.ipynb"
+
+
 def execute(slug: str, timeout: int) -> tuple[bool, float, int, int]:
-    """Execute ``notebooks/<slug>.py`` in place.
+    """Execute ``notebooks/<slug>.py`` and publish the result.
+
+    On success the executed notebook is written to both ``notebooks/<slug>.ipynb``
+    and the published render. A run that raised or died writes only the former,
+    so a failed execution can be inspected without shipping it.
 
     Returns
     -------
@@ -93,6 +129,10 @@ def execute(slug: str, timeout: int) -> tuple[bool, float, int, int]:
     errs = sum(
         1 for c in nb.cells for o in (c.get("outputs") or []) if o.get("output_type") == "error"
     )
+    if errs == 0:
+        render = docs_render_path(slug)
+        render.parent.mkdir(parents=True, exist_ok=True)
+        nbformat.write(nb, render)
     return errs == 0, dt, figs, errs
 
 
