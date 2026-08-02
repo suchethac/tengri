@@ -96,9 +96,15 @@ Consequence for the estimator design: eliminating the importance weights
 weights were never the problem. The per-galaxy `Z_i` is biased and that must be
 found first.
 
-Bears on the user's earlier 8192-galaxy MGVI experiment: at that N a per-galaxy
-tilt this size is overwhelming, so flat/railed intervals there are this
-signature rather than evidence about the physics.
+**Does NOT bear on the earlier 8192-galaxy MGVI experiment** (corrected
+2026-08-02; an earlier revision of this section claimed it did). The +0.098
+nats/galaxy tilt is a property of B2 specifically — it arises from dividing by
+`p_0`, the interim pushforward, in §4a. A joint MGVI fit has no interim prior,
+no importance weights and no `p_0`, so the mechanism cannot occur there. The
+railing seen in that experiment has a separate, already-documented cause: the
+`sigma^2 tau` degeneracy of a single DRW below its break frequency, plus
+Gaussian-VI miscalibration (SBC gave 0/20 coverage on sigma). Attributing both
+to one cause would retire the wrong hypothesis.
 
 ### Superseded claim — do not cite
 
@@ -234,9 +240,16 @@ the current field model.
 
 **Consequences for the plan.** Chasing the τ bias inside this architecture is
 not worth further effort. The real choices are:
-(a) **change the measurand** — report σ, or the integrated short-timescale power
-    σ²τ ("how bursty overall"), which is what is actually identified and is the
-    FIRE-2/Illustris distinction Burnham makes;
+(a) **change the measurand** — report **σ**. *Corrected 2026-08-02:* an earlier
+    revision also offered σ²τ ("how bursty overall") as an identified fallback.
+    It is not, and this was never measured before being written down.
+    Eigendecomposing the mass-weighted covariance of this very posterior in
+    (log σ, log τ) gives a tight direction of **σ¹ τ^−0.09**, stable across
+    N = 4–32 — i.e. essentially **pure σ**, not the σ¹ τ^0.5 a power degeneracy
+    requires. The σ²τ interval is correspondingly unstable, sweeping 7–23 at
+    N=4 to 40–126 at N=32. σ²τ is the right measurand where the data resolve
+    the PSD break; at z=0.1 with 10 broadbands they do not, and it simply
+    inherits τ's freedom. See `scripts/hierarchical_psd_identified_combination.py`;
 (b) **change the observable** — z≈4 rest-UV + Hα, where the prior replication
     got σ to separate cleanly and recover at N=256;
 (c) **change the architecture** — flex-PSD bins and/or population-level
@@ -372,6 +385,14 @@ N=2048, K=4000 use 4 or less.
 
 ## 8. Next steps, ranked
 
+> **Read §4b before this list.** These items were written *before* §4b
+> concluded that τ is an ill-posed measurand for this observable, and item 1
+> below directly contradicts it: §4b says stop chasing the τ bias, item 1 says
+> fix it. **§4b wins.** Item 1 is retained only because routes (a) and (c) are
+> also the cheapest way to *test* §4b's claim, not because recovering τ at
+> z=0.1 is expected to work. Do not start here without reading §4b first —
+> that is a week of work §4b was written to prevent.
+
 1. **Fix the per-galaxy τ tilt — it is now localized and quantified (§4a).**
    Do NOT reach for weight removal (closed-form Gaussian marginalization):
    median ESS is ~550, the weights are not the problem. The tilt is
@@ -391,7 +412,13 @@ N=2048, K=4000 use 4 or less.
    just lag-1). Cheapest test of the leading τ hypothesis. ~30 min.
 3. **Run `mcmc_nuts`** (`dense_mass_matrix=False`) on ~16 galaxies and compare
    field R̂ and τ against static HMC. Never tried; static HMC is the wrong tool
-   for a funnel. ~1 h.
+   for a funnel. *Corrected 2026-08-02: this is not the ~1 h job it was billed
+   as.* `PopulationFitter.run` has **no NUTS** — its `_method_map` holds only
+   the geoVI variants, the two `tier=broken` `native_vi_*`, and
+   `mcmc_raytrace`; its own docstring says so. The flat seam that would open
+   the other backends (#1394) is unmerged. NUTS on the shared block is
+   reachable only through the canonical `Fitter(ForwardModel.build(
+   population=...))` path — which this branch had broken (§9).
 4. **Finish partial centering**: the loss-prior correction at
    `loss_functions.py:478`. The principled funnel fix.
 5. ~~File the `min_eigenvalue=1e-6` footgun~~ — filed as **#1515**. Worked
@@ -399,3 +426,49 @@ N=2048, K=4000 use 4 or less.
 6. Acceptance criteria 3 (two-population separation) and 6 (coverage across ≥3
    realizations) are still unrun. Criterion 2 needs multiple realizations —
    single-realization coverage was over-read earlier in this work.
+
+---
+
+## 9. Regression this branch introduced, and the fix (2026-08-02)
+
+**This branch broke the canonical joint hierarchical fit.** Measured on the
+same file, same command:
+
+    tests/contract/test_single_hamiltonian_path_probe.py
+      main            3 passed
+      this branch     2 failed   TypeError: mul got incompatible shapes
+                                 for broadcasting: (256,), (3,)
+
+PR #1479 has **zero CI checks**, which is why it went unseen.
+
+**Cause — two fail-open omissions masking each other, and fixing one exposed a
+third.** On main, `ForwardModel` did not delegate `ssp_data`, so
+`Fitter._build_data_args` raised `AttributeError`, a blanket
+`contextlib.suppress` swallowed it, and `_jit_inputs` was never built. Every
+fit therefore took the *eager* `predict_photometry` fallback in
+`_build_prediction`. That fallback is the only path the population model has
+ever supported.
+
+This branch correctly fixes the delegation (#1496 — without it the SSP grid
+inlines as 267.6 MB of a 274.6 MB program and XLA is OOM-killed). But
+`_jit_inputs` is now built for **every** model, so hierarchical fits route into
+`threaded_impl`, the **single-galaxy** orchestrator. Per-galaxy parameters
+carry a leading `(N,)` axis, reach scalar component code, and die broadcasting
+`(N,)` against `(n_grid,)`.
+
+**Fix**: `_build_data_args` skips `_jit_inputs` when the model wraps a
+`PopulationSEDModel`, via a new `_population_sed(model)` predicate that
+`_maybe_extract_batched_data` now shares. Single-galaxy fits keep the #1496
+threading win; hierarchical fits return to the eager path. Verified: 31 passed
+across `test_single_hamiltonian_path_probe.py` and
+`test_loss_ssp_threading.py`.
+
+**What the fix does NOT do.** Hierarchical fits still closure-capture the SSP
+grid, so they keep paying the baking cost #1496 removed for single-galaxy fits.
+Removing it needs the batched-vmap forward (#211), not a wider gate. Anyone
+running a large joint fit should expect the compile-memory cliff until then.
+
+**Standing lesson.** A guard that fails open converts a one-line omission into
+an invisible cliff, and the population path passed its own contract tests for
+as long as the fallback happened to carry it. The tests were not wrong — they
+were green on a path nobody intended to be load-bearing.

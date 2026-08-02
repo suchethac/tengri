@@ -205,6 +205,35 @@ def _maybe_warn_legacy_sedmodel(model) -> None:
         )
 
 
+def _population_sed(model):
+    """The :class:`PopulationSEDModel` inside ``model``, or ``None``.
+
+    Parameters
+    ----------
+    model : object
+        Candidate forward model.
+
+    Returns
+    -------
+    PopulationSEDModel or None
+        The population SubModel when ``model`` is a ``ForwardModel`` wrapping
+        exactly one, otherwise ``None``.
+    """
+    try:
+        from tengri.forward.forward_model import ForwardModel
+        from tengri.forward.population_sed_model import PopulationSEDModel
+    except ImportError:
+        return None
+
+    if not isinstance(model, ForwardModel):
+        return None
+    populations = getattr(model, "populations", ())
+    if len(populations) != 1:
+        return None
+    pop_sed = getattr(populations[0], "sed", None)
+    return pop_sed if isinstance(pop_sed, PopulationSEDModel) else None
+
+
 def _maybe_extract_batched_data(model):
     """Auto-extract ``(data, noise)`` from a ForwardModel's population.
 
@@ -216,21 +245,9 @@ def _maybe_extract_batched_data(model):
     Explicit ``data=`` and ``noise=`` always override this default —
     auto-extraction only fires when both are ``None``.
     """
-    try:
-        from tengri.forward.forward_model import ForwardModel
-        from tengri.forward.population_sed_model import PopulationSEDModel
-    except ImportError:
+    pop_sed = _population_sed(model)
+    if pop_sed is None:
         return None, None
-
-    if not isinstance(model, ForwardModel):
-        return None, None
-    populations = getattr(model, "populations", ())
-    if len(populations) != 1:
-        return None, None
-    pop_sed = getattr(populations[0], "sed", None)
-    if not isinstance(pop_sed, PopulationSEDModel):
-        return None, None
-
     return pop_sed.batched_data()
 
 
@@ -1224,7 +1241,22 @@ class Fitter:
         # every fit through it baked the SSP grid into the compiled program as a
         # constant and XLA was OOM-killed on large grids. A guard that fails open
         # turns a one-line omission into an invisible performance cliff.
-        if all(hasattr(model, attr) for attr in ("spec", "ssp_data", "_template_data_for_jit")):
+        # Hierarchical fits are excluded until the batched forward lands (#211).
+        # ``threaded_impl`` is the SINGLE-galaxy orchestrator; a population fit
+        # carries per-galaxy parameters with a leading (N,) axis, which reach
+        # scalar component code and die broadcasting (N,) against (n_grid,).
+        # This is not hypothetical — it is why
+        # ``tests/contract/test_single_hamiltonian_path_probe.py`` went red when
+        # the ``ssp_data`` delegation above first populated ``_jit_inputs`` for
+        # every model. The population path has only ever run through the eager
+        # fallback in ``_build_prediction``; that fallback closure-captures the
+        # SSP grid, so hierarchical fits keep paying the baking cost that #1496
+        # removed for single-galaxy fits. Removing that cost needs the batched
+        # forward, not a wider gate here.
+        _threadable = _population_sed(model) is None
+        if _threadable and all(
+            hasattr(model, attr) for attr in ("spec", "ssp_data", "_template_data_for_jit")
+        ):
             # Per-fit params override (#1329): the forward pass reads fixed values
             # (e.g. redshift under ``catalog_z_range``) from this threaded dict at
             # runtime, so the override MUST be merged here — not only in
