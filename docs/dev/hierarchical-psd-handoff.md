@@ -264,7 +264,7 @@ Per-galaxy `log Z_i(σ,τ)` surfaces computed two ways on the identical grid, by
 running `shared_log_posterior` on one galaxy at a time (so
 `log_posterior = log_prior + log Z_i` comes out of the production path):
 
-| | median per-galaxy peak | summed over 24 | `logZ(corner) − logZ(truth)` | % favouring corner |
+| | median per-galaxy peak | summed over 24 | `logZ(corner) − logZ(truth)` | % favoring corner |
 |---|---|---|---|---|
 | **Truth field** (K=1) | σ 0.690, τ **132.8** | σ 0.715, τ **141.9** ✓ | **−2.433** nats/gal | 4% |
 | **Laplace** (K=1000) | σ 0.757, τ **12.2** | σ **1.000**, τ 162.0 ✗ | **+0.098** nats/gal | 38% |
@@ -276,13 +276,13 @@ N≈32–64 threshold falls straight out of this number.**
 **The damage is entirely in τ, per galaxy, before any pooling.** Laplace gets σ
 right (median peak 0.757 vs truth 0.75) but pins τ to the grid floor — 10.0–13.0
 for six of eight galaxies, median 12.2, against truth-field peaks that scatter
-73–438 Myr but centre correctly.
+73–438 Myr but center correctly.
 
 **Mechanism.** `log Z_i = logsumexp_k[log p(m_k|σ,τ) − log p_0(m_k)]` averages
 over the draw ensemble. A small-τ kernel is nearly white and gives moderate
 density to *every* draw; a large-τ kernel gives high density to smooth draws and
 near-zero to rough ones. An ensemble containing prior-like roughness — exactly
-what the ~12 unconstrained field directions contribute — therefore favours small
+what the ~12 unconstrained field directions contribute — therefore favors small
 τ. With K=1 there is no ensemble, the single true field is smooth, and large τ
 wins. That is why the truth-field test passes and the pipeline does not.
 
