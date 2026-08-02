@@ -306,12 +306,23 @@ The exact-op localization was the crux: `checkify` named the primitive
 
 Each fix is a distinct pull request with targeted tests. Coordinate the unit-change PRs (item 3) to avoid breaking the public API across multiple releases.
 
-**What is actually left, therefore, is item 3 and only item 3** — the breaking unit change. Every
-other numbered item is delivered, and the two remaining pure-float32 `xfail`s both name item 3 as
-their blocker: `test_linear_observables_pure_float32_cue_only` (linear `q_h` ~1e56 and the erg/s
-`line_lums` behind `balmer_decrement`) and `test_disc_float32_pending[grahsp_sbpl]`. Separately —
-*not* a range problem and so not part of item 3 — reverse-mode **gradient accuracy** through the
-projection seam remains open under #1388; see "Not fixed here: float32 AGN gradient *accuracy*".
+**What is left, then, is item 3 plus one latent residue.** Item 3 — the breaking unit change — is
+the only item that still blocks a *test*: both surviving pure-float32 `xfail`s name it, namely
+`test_linear_observables_pure_float32_cue_only` (linear `q_h` ~1e56 and the erg/s `line_lums` behind
+`balmer_decrement`) and `test_disc_float32_pending[grahsp_sbpl]` (the linear `agn_grahsp_l5100`).
+
+The residue is #1206 item 2's second half: five files still *return* a raw `4π d_L²` (~1e57) and
+remain on the allow-list in `test_no_raw_flux_scale.py` — `utils/grid_interp.py`,
+`components/stellar/sps/precompute.py`, `measure.py`, `components/nebular/line_precompute.py`,
+`forward/sed_model.py`. It is latent rather than live: the *immediate-application* sites were
+converted, and a pure-float32 four-band prediction of a delayed-τ + two-component-dust + Dale 2014
+galaxy at z = 0.5 is finite and within **8.3e-6** relative of float64. So nothing on the measured
+photometry path materializes them — but the scalar is still f32-unrepresentable wherever a caller
+does, and clearing the five entries is what closes item 2.
+
+Separately — *not* a range problem, so item 3 will not close it — reverse-mode **gradient accuracy**
+through the projection seam remains open under #1388; see "Not fixed here: float32 AGN gradient
+*accuracy*".
 
 ---
 
