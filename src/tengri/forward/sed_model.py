@@ -746,10 +746,10 @@ class SEDModel:
         .. warning::
 
            **No value changes any output.** The stellar component integrates the
-           CSP with cloud-in-cell age weights (``_age_weights_cic`` in
-           ``components/stellar/component.py``) for every configuration —
-           ``sps_backend="dsps"`` is the only backend — so this never reached the
-           SED. ``predict_photometry`` is bit-identical across all five values;
+           CSP with the age-weight kernel named by ``sfh={'age_kernel': ...}``
+           (``components/stellar/component.py``), which this argument does not
+           feed — so it never reached the SED under any configuration.
+           ``predict_photometry`` is bit-identical across all five values;
            measured, not assumed.
 
            It formerly changed ``_predict_sfh_quantities`` alone, which meant the
@@ -760,8 +760,10 @@ class SEDModel:
            sample. Derived quantities are now computed from the SED's own age
            weights, so every value agrees to machine precision.
 
-           To change how the CSP is integrated, change the stellar component;
-           there is no user-facing knob for it.
+           To change how the CSP is integrated, use the knob that does reach it:
+           ``sfh={'age_kernel': 'cic' | 'dsps'}`` (#964). ``tengri.list_age_kernels()``
+           is the live menu. Unlike this argument, that one measurably moves the
+           SED — 0.19% across SDSS *ugriz* for a double-power-law history.
 
     Attributes
     ----------
@@ -1787,8 +1789,9 @@ class SEDModel:
             # spectrum it was fitted to (#1500).
             warnings.warn(
                 f"csp_integration={csp_integration!r} has no effect and is deprecated. "
-                "The stellar component integrates the CSP with cloud-in-cell age "
-                "weights regardless of this setting, so the predicted SED, "
+                "The stellar component integrates the CSP with the kernel named by "
+                "sfh={'age_kernel': ...} (cloud-in-cell by default), which this "
+                "argument does not feed, so the predicted SED, "
                 "photometry and derived quantities are identical to "
                 f"{_DEFAULT_CSP_INTEGRATION!r}. It previously changed the reported "
                 "stellar mass without changing the SED (0.32% for 'log_interp' / "

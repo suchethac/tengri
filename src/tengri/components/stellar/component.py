@@ -930,6 +930,14 @@ class StellarSEDComponentConfig(SEDComponentConfig):
         therefore the accuracy default; ``"dsps"`` is offered for cross-code
         comparison against DSPS-native pipelines and pre-#964 tengri.
 
+        **How large the error is depends on the SSP age grid**, since what is
+        lost is one node's share of the mass. The 3.8 % above is for the grid
+        that measurement used; on the finer 93-node ProGeny/MILES grid the same
+        delayed-tau at age = 5 Gyr relocates 0.64 %, and a double power law
+        0.13-0.29 % (rising with ``age_gyr``), which moves ``ugriz`` photometry
+        by 0.14-0.19 %. Re-measure on your own grid rather than quoting a
+        number; the mechanism is grid-independent, the magnitude is not.
+
         **Pre-#964 equivalence is exact, verified against the pre-fix source**
         (parent of ``d5a78433b``): on the parametric delta path this branch runs
         the identical sequence — the same ``sfr_on_ssp`` (untouched by #964),
