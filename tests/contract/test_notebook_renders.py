@@ -123,3 +123,56 @@ def test_experimental_notebooks_are_checked():
     assert {"stochastic_sfh_recovery", "multimodel_bma_candels"} <= slugs
     paths = {ipynb for _slug, _py, ipynb in tool.published()}
     assert any("experimental" in str(p) for p in paths)
+
+
+# ------------------------------------------------- who publishes the outputs
+#
+# The sync script takes code from ``notebooks/<slug>.py`` and outputs from the
+# render already committed under ``docs/spine/`` -- correct on CI, where
+# ``notebooks/*.ipynb`` is gitignored and absent, and a trap everywhere else:
+# execute-then-sync publishes new source grafted onto stale outputs. It shipped
+# once (#1516), putting timings from a run of the previous code on the page.
+# ``execute_notebooks`` is the only step that knows outputs are fresh, so it is
+# the one that must write the render.
+
+
+def _load_executor():
+    spec = importlib.util.spec_from_file_location(
+        "execute_notebooks", ROOT / "scripts" / "execute_notebooks.py"
+    )
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["execute_notebooks"] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_executor_routes_experimental_slugs_to_the_experimental_subdir():
+    """A render written to the wrong path leaves the real one stale."""
+    ex = _load_executor()
+    got = ex.docs_render_path("stochastic_sfh_recovery")
+    assert got == ROOT / "docs" / "spine" / "experimental" / "stochastic_sfh_recovery.ipynb"
+
+
+def test_executor_routes_spine_slugs_to_docs_spine():
+    ex = _load_executor()
+    assert ex.docs_render_path("00_quickstart") == ROOT / "docs" / "spine" / "00_quickstart.ipynb"
+
+
+def test_every_published_slug_routes_to_an_existing_render():
+    """Routing must agree with what the sync script actually publishes."""
+    ex = _load_executor()
+    missing = [s for s in ex.ALL_SLUGS if not ex.docs_render_path(s).is_file()]
+    assert not missing, f"executor routes these slugs to a non-existent render: {missing}"
+
+
+def test_executor_writes_the_render_on_success_only():
+    """A failed execution must not overwrite a good published render.
+
+    ``execute`` writes ``notebooks/<slug>.ipynb`` unconditionally so a failure can
+    be inspected, but the render only when no cell raised.
+    """
+    src = (ROOT / "scripts" / "execute_notebooks.py").read_text()
+    body = src[src.index("def execute(") : src.index("def main(")]
+    write_render = body.index("docs_render_path(slug)")
+    guard = body.index("if errs == 0:")
+    assert guard < write_render, "the render is written without checking for cell errors"
