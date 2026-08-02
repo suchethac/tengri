@@ -330,7 +330,7 @@ def test_tau_prior_uniform_weights_nodes_in_proportion_to_tau():
     not a rounding error.
 
     This matters because ``shared_log_posterior`` uses ``log_prior`` as the
-    INTERIM pushforward inside p_0, where it is not a modelling choice but a
+    INTERIM pushforward inside p_0, where it is not a modeling choice but a
     fact about how the draws were generated. The interim fits use
     ``Uniform(10, 500)`` on tau_myr, so the grid must say ``tau_prior="uniform"``.
     """

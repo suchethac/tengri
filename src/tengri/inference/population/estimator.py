@@ -95,7 +95,7 @@ class SharedGrid:
             **This must match the prior the interim fits ran under.**
             ``shared_log_posterior`` uses ``log_prior`` twice: as the interim
             pushforward inside ``p_0``, and as the shared prior on the final
-            posterior. The first is not a modelling choice -- it is a fact about
+            posterior. The first is not a modeling choice -- it is a fact about
             how the per-galaxy draws were generated, and getting it wrong makes
             B2 divide by the wrong density. Fitting tau with
             ``Uniform(10, 500)`` [Myr] and scoring on a ``"log_uniform"`` grid

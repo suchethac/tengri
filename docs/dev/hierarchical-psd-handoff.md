@@ -132,7 +132,7 @@ sample over too short a lever arm.
 2. **Interim/grid prior mismatch on τ.** Interim fits use `Uniform(10, 500)` on
    `tau_myr` (linear-uniform); `SharedGrid` geomspaced τ with flat weights
    (log-uniform). B2 divides by the interim pushforward, which is a *fact* about
-   how draws were made, not a modelling choice — mismatched by a factor ∝ τ,
+   how draws were made, not a modeling choice — mismatched by a factor ∝ τ,
    50× end-to-end. Fixed via `SharedGrid.uniform(tau_prior=...)`. **Did not cure
    the railing on its own.**
 
