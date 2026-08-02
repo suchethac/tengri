@@ -184,6 +184,25 @@ the estimator. Two live leads:
 
 ---
 
+## 4a-bis. What σ and τ mean, and what is identified
+
+`SFR(t) = SFR_smooth(t) · exp(gp(t) − K(0)/2)` with
+`K_ij = (σ·ln10)² exp(−|tᵢ−tⱼ|/τ)`.
+
+- **σ [dex]** — RMS scatter of log₁₀(SFR) about the secular track. σ = 0.75
+  means factor-5.6 swings at 1σ. It is `sqrt(K(0))/ln10`, the field's marginal
+  standard deviation. The `−K(0)/2` term keeps the modulation mean-preserving.
+- **τ [Myr]** — e-folding time of the autocorrelation; how long a burst
+  remembers itself.
+- **PSD**: `S(f) = 2σ²τ / (1 + (2πfτ)²)`. Flat at `2σ²τ` below the break
+  `f ≈ 1/2πτ`, falling as f⁻² above it. Only if the data lie entirely below the
+  break does the product σ²τ become the sole identified combination.
+
+**In this setup σ is identified and τ is not, and the product is worse than
+either** — see §5 step (a) for the measurement. Do not report σ²τ here.
+
+---
+
 ## 4b. Why Burnham+2026 recovers and this does not — READ BEFORE MORE DEBUGGING
 
 > **Half-corrected 2026-08-02 by a joint-NUTS control.** The *identifiability*
@@ -251,16 +270,29 @@ the current field model.
 
 **Consequences for the plan.** Chasing the τ bias inside this architecture is
 not worth further effort. The real choices are:
-(a) **change the measurand** — report **σ**. *Corrected 2026-08-02:* an earlier
-    revision also offered σ²τ ("how bursty overall") as an identified fallback.
-    It is not, and this was never measured before being written down.
-    Eigendecomposing the mass-weighted covariance of this very posterior in
-    (log σ, log τ) gives a tight direction of **σ¹ τ^−0.09**, stable across
-    N = 4–32 — i.e. essentially **pure σ**, not the σ¹ τ^0.5 a power degeneracy
-    requires. The σ²τ interval is correspondingly unstable, sweeping 7–23 at
-    N=4 to 40–126 at N=32. σ²τ is the right measurand where the data resolve
-    the PSD break; at z=0.1 with 10 broadbands they do not, and it simply
-    inherits τ's freedom. See `scripts/hierarchical_psd_identified_combination.py`;
+(a) **change the measurand — report σ alone. NOT σ²τ.** Measured pushforward of
+    the 2-D grid posterior onto v = σ²τ, fractional 68% widths at N=32:
+    **σ 0.202, τ 0.962, σ²τ 1.237** — the product is the *worst* constrained of
+    the three. A genuine σ²τ degeneracy would leave both marginals broad and the
+    product tight, along a ridge of constant σ²τ; here σ is 5× tighter than the
+    product. Reason: σ² = K(0) is the field's marginal *variance*, which the ~4
+    smooth low-frequency modes photometry constrains do carry, while τ needs
+    correlation structure across time separations that those modes miss. The two
+    are constrained by disjoint features, so multiplying them only imports τ's
+    noise. (The σ²τ framing is correct in the z≈4 regime recorded in
+    `project_psd_z4_burnham_replication`, where the data probed only *below* the
+    break frequency and the plateau 2σ²τ was all that was identified. It does
+    **not** transfer here — verified, not assumed.)
+
+    *Independently corroborated by a second method* — eigendecomposing the
+    mass-weighted covariance of the same posterior in (log σ, log τ) gives a
+    tight direction of **σ¹ τ^−0.09**, stable across N = 4–32, against the
+    σ¹ τ^+0.5 a power degeneracy requires. Two different statistics of the same
+    grid, same conclusion. See
+    `scripts/hierarchical_psd_identified_combination.py`, which also reports
+    **edge mass** (posterior mass on the grid boundary) — 0.02–0.07 through
+    N=32, **0.79 at N=64**, 0.99 at N=128, localizing the N ceiling to one sharp
+    truncation event;
 (b) **change the observable** — z≈4 rest-UV + Hα, where the prior replication
     got σ to separate cleanly and recover at N=256;
 (c) **change the architecture** — flex-PSD bins and/or population-level
