@@ -211,7 +211,8 @@ either** — see §5 step (a) for the measurement. Do not report σ²τ here.
 **REFUTED — the SIR exact-posterior experiment.** It obtained per-galaxy
 ensembles by sampling-importance-resampling 200k particles **from the prior**,
 weighted by a Gaussian likelihood of width 0.15. Measured after the fact
-(`sir_ess.py`), the importance weights are degenerate:
+(throwaway probe, reproducing the SIR loop verbatim), the importance weights
+are degenerate:
 
 | constrained modes | Kish ESS (of 200,000) | unique particles per 800-draw ensemble | max weight |
 |---|---|---|---|
@@ -242,7 +243,7 @@ off one particle, not recovering τ from data.
 **Corrected experiment — no importance sampling at all.** This toy's posterior
 is available in closed form: a Gaussian likelihood on `P @ m` against a prior
 that is a finite Gaussian mixture (one component per grid node) gives a Gaussian
-mixture posterior. `exact_post_analytic.py` draws from it directly — i.i.d.,
+mixture posterior. `scripts/hierarchical_psd_estimator_validation.py` draws from it directly — i.i.d.,
 ESS = `n_samples` by construction, with component weights taken from
 `grid.log_prior` itself so the proposal *cannot* disagree with `p_0`. Self-test:
 the posterior-predictive residual is 0.150 at every setting, exactly the
@@ -282,7 +283,7 @@ Do not let the identifiability story retire the tilt bug.
 
 **And the clean estimator does not rail.** The real bank's signature failure is
 τ pinned at 473–495 Myr against a U(10, 500) prior for every N ≥ 64. Running the
-analytic estimator over the same N (`exact_scaling.py`, two seeds per cell):
+analytic estimator over the same N (same script, `--n-galaxies`/`--seeds`):
 
 | modes | N | τ 68% Myr, seed 0 | τ 68% Myr, seed 1 |
 |---|---|---|---|
@@ -431,7 +432,7 @@ residual tilt survives. This is a subtlety in the estimator's assumptions, not a
 coding error, which is why every code-level remedy left it untouched.
 
 **§4b's corrected experiment confirms this mechanism.** In
-`exact_post_analytic.py` the draws come from the exact posterior under the
+`scripts/hierarchical_psd_estimator_validation.py` the draws come from the exact posterior under the
 grid-mixture prior, so `p_0` — the grid-averaged pushforward — *is* the true
 interim density, by construction rather than by approximation. In that setting
 the estimator recovers σ and τ and shows no railing out to N=512. The
