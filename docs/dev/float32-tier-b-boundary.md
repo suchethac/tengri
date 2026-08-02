@@ -290,16 +290,28 @@ The exact-op localization was the crux: `checkify` named the primitive
    χ²) plus two `custom_jvp` rules (mass scale, sub-band node ratio) neutralize every
    float32 overflow, all behavior-preserving. (`forward_dtype="float32"` "also works" only in
    the trivial sense that it runs the float64 path — see the correction above, #1433.)
-6. **Dust IR emission must consume `log_L_ir`** — the remaining blocker for end-to-end float32
-   photometry. See "Remaining work" below.
+6. ~~Dust IR emission must consume `log_L_ir`.~~ **DONE** (§"Item 6") — `EmissionComponent.apply`
+   evaluates `predict` at `L_ir = 1` and re-applies the true scale with `apply_log10_scale`, so the
+   ~2.4e43 linear value is never materialized. All eleven template models plus the *affine*
+   `energy_balance_split` (which assembles its two-term budget with `log10_add` inside `predict`);
+   `NOT_YET_FLOAT32` in `test_dust_ir_float32.py` is empty and guarded against repopulating.
 7. ~~Radio SED must not materialize the linear `L_ir` / `L_agn_bol`.~~ **DONE** — log-threaded
    luminosities (§7). Also fixed a float64 regression the AGN output-factoring introduced.
 8. ~~Multicolor accretion disc (L_bol-dependent shape) in pure float32.~~ **DONE** (§8) — log-space
-   disc internals + shape/normalization split. Follow-up: five more disc blocks (`kubota_done`,
-   `adaf` shape-class; `relagn`, `slone_netzer`, `grahsp_sbpl`, `adaf_lopez2024` grid-class) — see
-   the inventory table in §8. `multicolor`/`powerlaw` (the science defaults) are exact.
+   disc internals + shape/normalization split. The follow-up list this entry used to carry
+   (`kubota_done`, `adaf`, `relagn`, `slone_netzer`, `adaf_lopez2024`) has since closed: **eleven of
+   twelve** registered discs are float32-exact, pinned by the inventory table in §8. The one
+   remaining, `grahsp_sbpl`, is not a kernel problem — it is blocked on the linear erg/s parameter
+   `agn_grahsp_l5100` (`LogUniform(1e42, 1e47)`, `inf` in float32), i.e. on **item 3**.
 
 Each fix is a distinct pull request with targeted tests. Coordinate the unit-change PRs (item 3) to avoid breaking the public API across multiple releases.
+
+**What is actually left, therefore, is item 3 and only item 3** — the breaking unit change. Every
+other numbered item is delivered, and the two remaining pure-float32 `xfail`s both name item 3 as
+their blocker: `test_linear_observables_pure_float32_cue_only` (linear `q_h` ~1e56 and the erg/s
+`line_lums` behind `balmer_decrement`) and `test_disc_float32_pending[grahsp_sbpl]`. Separately —
+*not* a range problem and so not part of item 3 — reverse-mode **gradient accuracy** through the
+projection seam remains open under #1388; see "Not fixed here: float32 AGN gradient *accuracy*".
 
 ---
 
