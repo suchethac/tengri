@@ -251,6 +251,28 @@ numpy experiment reproduces the bias using exact OU on both sides. The
 historical `log_age_ref=8.0` single-reference Jacobian issue does not apply to
 the current field model.
 
+**Two caveats on the above — read before treating §4b as closed.**
+
+1. **The estimator is OVERCONFIDENT, not merely uninformative, and that part may
+   still be a defect.** A parameter the data cannot constrain should come back
+   at roughly its prior width. At 4 constrained modes the exact-posterior
+   experiment returns τ = 26–34 Myr — an 8 Myr-wide 68% interval, centred 5×
+   from truth, against a prior U(10, 500). Returning a *tight wrong* answer
+   rather than a wide one is not explained by "the information isn't there".
+   Prior work already recorded τ's posterior at 0.98× the prior width
+   (`project_psd_sigma_is_identified_tau_is_the_prior`) and called B2's
+   12–31 Myr a *defect on top of* that non-identification. This handoff's
+   "ill-posed measurand" framing explains why τ cannot be *recovered*; it does
+   not explain why the interval is narrow. Both statements are needed.
+
+2. **The exact-posterior experiment has an unquantified caveat.** Its draws come
+   from sampling-importance-resampling with 200k particles over a 16-D field
+   where the likelihood constrains 4 directions at noise 0.15. SIR particle
+   degeneracy in that setting was not measured, so "exact posterior draws" is
+   an *intended* property, not a verified one. Before building on §4b, check the
+   SIR effective sample size per galaxy; if it is small, the experiment inherits
+   the same weight-degeneracy it was designed to rule out.
+
 **Consequences for the plan.** Chasing the τ bias inside this architecture is
 not worth further effort. The real choices are:
 (a) **change the measurand — report σ alone. NOT σ²τ.** Measured pushforward of
