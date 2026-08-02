@@ -124,8 +124,12 @@ def _resolve_registry_component(
     Raises
     ------
     ValueError
-        If ``type_str`` (after aliasing) is not found in ``_REGISTRY``.
-        The error message lists available names for that domain.
+        If ``type_str`` (after aliasing) is not found in ``_REGISTRY``. The
+        error message lists every registered name, **not** only those valid for
+        ``domain`` — so a mistyped ``dust_emission`` type is answered with
+        ``igm``, ``radio`` and ``xray`` among the suggestions. Narrowing it
+        needs a domain-to-base-class map covering all seven domains; tracked
+        separately rather than guessed at here.
 
     Notes
     -----
