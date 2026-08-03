@@ -35,6 +35,7 @@ import inspect
 
 import pytest
 
+from tengri.inference import hierarchical
 from tengri.inference._backend_registry import _BACKENDS
 from tengri.inference.catalog_fitter import _CatalogFitterOriginal
 from tengri.inference.hierarchical import PopulationFitter
@@ -81,15 +82,27 @@ def test_each_default_is_the_specific_agreed_choice(label, fn, expected):
 def test_population_default_matches_its_own_error_message():
     """Signature and advice string must agree — they disagreed for months.
 
-    ``PopulationFitter.run`` raises ``ValueError(... 'vi_nonlinear_fast'
-    (default) ...)`` for an unknown method. That string outlived ``b7c4fa1e2``,
-    which moved the real default to ``native_vi_linear``, so the class told
-    users one thing and did another.
+    ``PopulationFitter.run`` raises ``ValueError`` for an unknown method and
+    names the default in the advice. That string outlived ``b7c4fa1e2``, which
+    moved the real default to ``native_vi_linear``, so the class told users one
+    thing and did another.
+
+    Asserted structurally, not by matching the message text. This test
+    previously pinned the literal ``'vi_nonlinear_fast' (default)`` and so
+    failed the moment the message started *deriving* the default — pinning the
+    shape of one fix rather than the invariant it was defending. The invariant
+    is that a single name feeds both the signature and the message, which is
+    what makes drift impossible rather than merely currently-absent.
     """
     default = _default_of(PopulationFitter.run)
-    src = inspect.getsource(PopulationFitter.run)
-    assert f"{default!r} (default)".replace('"', "'") in src.replace('"', "'"), (
-        f"the ValueError advice must name the real default ({default!r})"
+    assert default == hierarchical.DEFAULT_HIERARCHICAL_METHOD, (
+        "the signature default must be the module constant, so the advice "
+        "string cannot name a different method"
+    )
+    raise_block = inspect.getsource(PopulationFitter.run).split("Unknown method")[1][:600]
+    assert "DEFAULT_HIERARCHICAL_METHOD" in raise_block, (
+        "the ValueError advice must interpolate the shared constant rather "
+        f"than hardcode a method name (currently {default!r})"
     )
 
 

@@ -31,6 +31,16 @@ import numpy as np
 from tengri.inference.fitter import resolve_method
 from tengri.utils.transforms import to_bounded, to_unbounded
 
+#: Default backend for :meth:`PopulationFitter.run`.
+#:
+#: Named once so the signature default and the unsupported-method message
+#: cannot disagree — #1394 shipped exactly that drift, with the message
+#: calling ``vi_nonlinear_fast`` "(default)" long after the signature had
+#: moved off it. Must be a key of the ``_method_map`` in :meth:`run` and
+#: must not be a ``tier="broken"`` backend; both are pinned by
+#: ``tests/regression/bug/test_bug_1394_catalog_default_method.py``.
+DEFAULT_HIERARCHICAL_METHOD: str = "vi_nonlinear_fast"
+
 
 @dataclass
 class PopulationPosterior:
@@ -457,7 +467,14 @@ class PopulationFitter:
             if n not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
         ]
 
-    def run(self, method="vi_nonlinear_fast", *, key=None, allow_unvalidated=False, **kwargs):
+    def run(
+        self,
+        method=DEFAULT_HIERARCHICAL_METHOD,
+        *,
+        key=None,
+        allow_unvalidated=False,
+        **kwargs,
+    ):
         """Run hierarchical inference.
 
         Parameters
@@ -564,19 +581,18 @@ class PopulationFitter:
         # Resolve old method names to canonical names, emitting deprecation warnings
         method = resolve_method(method, emit_warning=True)
 
-        # Hierarchical-specific overrides applied after resolve_method:
-        #   mcmc_ess → native_vi_linear  (ESS is a Fitter-only method)
-        # vi_native / vi_native_linear are already resolved to canonical names by
-        # resolve_method above, so they need no explicit entry in _method_map.
-        _HIERARCHICAL_OVERRIDES = {
-            "mcmc_ess": "native_vi_linear",
-        }
-        method = _HIERARCHICAL_OVERRIDES.get(method, method)
-
-        # Applied AFTER the overrides, not before: `mcmc_ess` maps onto
-        # `native_vi_linear`, so gating the pre-override name would let a
-        # tier="broken" backend in through the alias. `resolve_method` above
-        # checks the name only -- it never consults the registry tier (#1394).
+        # No method substitution happens here, deliberately. A table that
+        # rewrote `mcmc_ess` -> `native_vi_linear` used to sit at this point:
+        # a caller who asked for elliptical slice sampling got MGVI, a
+        # different algorithm registered tier="broken" after #231, with
+        # nothing in `diagnostics` recording the swap. Renaming a deprecated
+        # *spelling* is fine and `resolve_method` above does it with a
+        # warning; swapping the *algorithm* is not. A method this path does
+        # not implement falls through to the raise below, which names what
+        # the caller actually asked for.
+        #
+        # vi_native / vi_native_linear are already resolved to canonical
+        # names by resolve_method, so they need no entry in _method_map.
         from tengri.inference._backend_registry import refuse_if_broken
 
         refuse_if_broken(method, allow_unvalidated=allow_unvalidated)
@@ -604,11 +620,18 @@ class PopulationFitter:
             if method == "evi_nifty":
                 return self._run_geovi_cfm(key=key, sample_mode="evi", **kwargs)
             else:
+                # Derived from the dispatch table, never hand-written: an
+                # enumeration maintained by hand drifts from what the code
+                # accepts, and then actively steers callers wrong (#1394).
+                supported = ", ".join(repr(m) for m in sorted(_method_map))
                 raise ValueError(
-                    f"Unknown method: {method!r}. "
-                    f"Supported: 'vi_nonlinear_fast' (default), 'vi_nonlinear', "
-                    f"'vi_linear_fast', 'vi_linear', 'native_vi_linear', "
-                    f"'native_vi_nonlinear', 'mcmc_raytrace'."
+                    f"Unknown method: {method!r}. PopulationFitter implements "
+                    f"a subset of the registered backends; supported here: "
+                    f"{supported} (default {DEFAULT_HIERARCHICAL_METHOD!r}). "
+                    f"For a method outside this list — MAP, NUTS, Laplace, "
+                    f"nested sampling — build the population through "
+                    f"ForwardModel.build(population=...) and use Fitter.run, "
+                    f"which dispatches the full registry."
                 )
 
         cfm_method, sample_mode = _method_map[method]
