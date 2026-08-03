@@ -68,6 +68,48 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
     resolves to the full prefixed name (`'beta'` in the `sfh` group →
     `sfh_dpl_beta`; `'frac'` in `shock` → `shock_frac`). The full prefixed
     name also works.
+  - **Other structural keys** — a few groups accept extra non-parameter
+    settings. The `sfh` group takes `'bin_edges_gyr'` (non-parametric bin
+    layout) and `'age_kernel'` (below).
+- **`sfh={'age_kernel': ...}`** picks how the SFH is integrated onto the SSP
+  age grid — the one place the two implementations differ numerically:
+  - `'cic'` (the default) evaluates the SFH on a 16x denser integrand and
+    splits each `SFR(t)·dt` parcel between its bracketing SSP nodes with
+    log-age cloud-in-cell weights.
+  - `'dsps'` hands the coarse per-SSP-age table to DSPS's histogram kernel.
+    It **zeroes the first SSP node older than the SFH start** (3.8 % of the
+    mass for a delayed-tau at age = 5 Gyr) and biases the optical CSP +1.2 %
+    vs FSPS / bagpipes / a dense reference ([#964]). Offered for cross-code
+    comparison against DSPS-native pipelines and pre-#964 tengri, not for
+    science. Pre-#964 equivalence is **exact**, verified against the pre-fix
+    source: same `sfr_on_ssp`, same `_build_dsps_sfh_table(...,
+    add_young_knot=True)`, same `.weights`, same #821 youngest-bin multiplier.
+    The one deliberate difference is a `jnp.maximum(sum, 1e-300)` floor on the
+    normalization, so a degenerate all-zero SFH yields zero instead of NaN.
+  - Leaving it unset auto-selects: `'cic'` on the parametric path, `'dsps'`
+    on the GP-field path (whose draw lives on its own coarse grid, so there
+    is no dense integrand to cloud-in-cell). Asking for `'cic'` together with
+    a field SFH raises rather than silently returning DSPS weights.
+  - It is **not** a speed knob, and `'dsps'` is the slower of the two.
+    Measured on `predict_photometry` gradients (interleaved reps, medians, an
+    A/A control to fix the noise floor): `'cic'` is **3.5 % faster on the exact
+    path** and **13 % faster under `WavePrecomp()`**.
+
+    The cause is **not** that DSPS does more arithmetic — by compiled-HLO cost
+    analysis it does ~1 % *fewer* FLOPs and touches fewer bytes. It compiles to
+    **twice as many `while` loops** (14 vs 7 exact, 13 vs 6 under WavePrecomp)
+    and ~40 % more fusion regions: sequential, latency-bound work that does not
+    vectorize. Precompute shrinks the vectorizable part (cic fusions 356 → 212)
+    but leaves the loops alone (dsps whiles 14 → 13), so DSPS's fixed
+    sequential share grows and the gap widens. This is a **CPU wall-clock**
+    effect driven by op structure, so the ordering is not guaranteed to hold on
+    GPU — re-measure there rather than assuming.
+
+    Do **not** judge this by micro-benchmarking
+    `compute_dsps_age_weights` — that helper has no call sites on the model
+    path, so its timing says nothing about `apply()`.
+
+[#964]: https://github.com/suchethac/tengri/issues/964
 - **Sub-blocks** nest a dict with its own `'type'`/`'all_params'`/per-param keys:
   `dust.emission`, and the six composable AGN selectors `agn.disc`,
   `agn.torus`, `agn.nlr`, `agn.blr`, `agn.feii`, `agn.atten` (the deprecated

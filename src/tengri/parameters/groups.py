@@ -1342,6 +1342,41 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     if "bin_edges_gyr" in sfh_dict:
         result["bin_edges_gyr"] = sfh_dict["bin_edges_gyr"]
 
+    # ``age_kernel`` is likewise a structural setting, not a free parameter:
+    # which kernel integrates the SFH onto the SSP age grid ("cic" / "dsps").
+    # Validated here so a typo fails at build time with the valid set, rather
+    # than silently falling back to the default at the first prediction (#964).
+    if "age_kernel" in sfh_dict:
+        from tengri.components.stellar.component import VALID_AGE_KERNELS
+
+        age_kernel = sfh_dict["age_kernel"]
+        if age_kernel is not None and age_kernel not in VALID_AGE_KERNELS:
+            raise ValueError(
+                f"Unknown sfh age_kernel {age_kernel!r}. "
+                f"Valid: {', '.join(repr(k) for k in VALID_AGE_KERNELS)} "
+                f"(or None to auto-select). 'cic' is the accuracy default; "
+                f"'dsps' selects DSPS's histogram kernel for cross-code "
+                f"comparison (biases the optical CSP +1.2 %, #964)."
+            )
+        # Pass 0b has already folded any ``sfh={'field': {...}}`` sub-block into
+        # the type list, so the incompatible pair is knowable HERE — at
+        # ``SEDModel.build`` — rather than at the first prediction, which for a
+        # fit means after warmup has already started. The component-level
+        # ``_resolve_age_kernel`` still guards direct construction.
+        _types = sfh_dict.get("type") or []
+        if age_kernel == "cic" and "field" in (
+            _types if isinstance(_types, (list, tuple)) else [_types]
+        ):
+            raise NotImplementedError(
+                "sfh age_kernel='cic' is not supported with a GP-field SFH — "
+                "the field draw is defined on its own coarse lookback grid, so "
+                "there is no dense integrand to cloud-in-cell (#964). Drop the "
+                "field modulator to use the CIC kernel, or set "
+                "age_kernel='dsps' explicitly to acknowledge the field path's "
+                "kernel."
+            )
+        result["age_kernel"] = age_kernel
+
     if sfh_type is None:
         result["mean_sfh_type"] = ["dpl", "field"]
         return
@@ -1889,7 +1924,7 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 #: Per-group structural keys the grammar accepts on top of declared params.
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
-    "sfh": frozenset({"type", "*", "bin_edges_gyr"}),
+    "sfh": frozenset({"type", "*", "bin_edges_gyr", "age_kernel"}),
     "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset(
         {
