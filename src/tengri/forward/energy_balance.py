@@ -34,7 +34,7 @@ def _absorbed_integrand(
 
 def _peak_factored_trapezoid(
     integrand: jnp.ndarray, nu: jnp.ndarray
-) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Integrate ``integrand/peak`` over ``nu``, returning the factored pieces.
 
     The absorbed luminosity is a product of two individually representable
@@ -51,38 +51,38 @@ def _peak_factored_trapezoid(
     peak : ndarray, shape ()
         The factored-out scale (1.0 when the integrand is zero or non-finite).
     ok : ndarray, shape (), bool
-        True when the result is a usable number: the integrand is finite and
-        not identically zero.
-    corrupt : ndarray, shape (), bool
-        True when a non-finite value reached the reduction. Reported separately
-        from ``ok`` because the two degenerate cases are *not* the same answer,
-        and collapsing them is a fail-open.
+        False when the integrand is all-zero or genuinely non-finite; callers
+        map it to the zero/``-inf`` result rather than propagating NaN.
 
     Notes
     -----
-    ``ok`` used to be the only degenerate flag, so an all-zero integrand ("no
-    light was absorbed", a true zero) and a NaN one ("something upstream is
-    broken") both mapped to the same result — and both callers turned that into
-    ``0.0`` / ``-inf``, i.e. *no dust absorption*. One non-finite pixel anywhere
-    in the intrinsic SED silently zeroed the entire IR budget.
+    ``ok`` deliberately merges two situations that are *not* the same answer: an
+    all-zero integrand (nothing absorbed — a true zero) and a non-finite one
+    (something upstream produced Inf or NaN). Both callers turn it into ``0.0``
+    / ``-inf``, so one bad pixel reports "no dust absorption".
 
-    :func:`tengri.utils.scale.log10_add`, added in the same change, argues the
-    opposite case in its own comment: folding an overflowed term into the zero
-    sentinel "would report an overflowed term as exactly zero — a fail-open on
-    precisely the axis this module exists to close". The docstring of
-    :func:`bolometric_absorbed` below says the same thing about this very
-    integral. Splitting the flag is what makes all three agree.
+    That is a fail-open, and it is inherited rather than chosen: #922's table
+    lists the finite-guard as a property of the retired compositional kernel,
+    preserved through the consolidation to avoid changing behavior. It exists
+    for a real artifact class — Inf·0 from extreme-metallicity SSP fluxes
+    (BUG-NSS-02) — and is pinned by
+    ``tests/physics/conservation/test_lyc_mask_energy_balance.py::TestFiniteGuard``.
+
+    It also contradicts :func:`tengri.utils.scale.log10_add`, whose own comment
+    argues that folding a non-finite term into the zero sentinel "would report
+    an overflowed term as exactly zero — a fail-open on precisely the axis this
+    module exists to close". Both conventions ship today. Reconciling them
+    changes dust IR for corrupt inputs and is tracked separately (#1527) rather
+    than settled here.
     """
     # stop_gradient: pure factorization constant (#1436). The caller re-applies this
     # peak to signed_norm, so the product is peak-independent and the peak's
     # derivative is analytically zero. Cancels in float64, not in float32.
     peak = jax.lax.stop_gradient(jnp.max(jnp.abs(integrand), initial=0.0))
-    finite_peak = jnp.isfinite(peak)
-    usable = finite_peak & (peak > 0)
+    usable = jnp.isfinite(peak) & (peak > 0)
     safe_peak = jnp.where(usable, peak, 1.0)
     signed_norm = jnp.trapezoid(integrand / safe_peak, nu)
-    corrupt = ~finite_peak | ~jnp.isfinite(signed_norm)
-    return signed_norm, safe_peak, usable & jnp.isfinite(signed_norm), corrupt
+    return signed_norm, safe_peak, usable & jnp.isfinite(signed_norm)
 
 
 def bolometric_absorbed_log10(
@@ -151,15 +151,11 @@ def bolometric_absorbed_log10(
     pure-float32 (JAX-Metal) forward pass must consume (#1206).
     """
     integrand = _absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
-    signed_norm, peak, ok, corrupt = _peak_factored_trapezoid(integrand, nu)
+    signed_norm, peak, ok = _peak_factored_trapezoid(integrand, nu)
     magnitude = jnp.abs(signed_norm)
     positive = ok & (magnitude > 0)
     safe = jnp.where(positive, magnitude, 1.0)
     log_magnitude = jnp.where(positive, jnp.log10(safe) + jnp.log10(peak), -jnp.inf)
-    # +inf, not -inf, when the integrand was corrupt: -inf exponentiates to 0.0 and
-    # would report "no dust absorption" for a broken SED. Same convention as
-    # ``log10_add``, which reports an overflowed term as +inf for the same reason.
-    log_magnitude = jnp.where(corrupt, jnp.inf, log_magnitude)
     return log_magnitude, jnp.where(positive, jnp.sign(signed_norm), 0.0)
 
 
@@ -247,8 +243,5 @@ def bolometric_absorbed(
 
     """
     integrand = _absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
-    signed_norm, peak, ok, corrupt = _peak_factored_trapezoid(integrand, nu)
-    # NaN, not 0.0, on a corrupt integrand — 0.0 is a legitimate answer ("nothing
-    # absorbed") and using it here is exactly the silent switch-off this docstring
-    # warns about above.
-    return jnp.where(corrupt, jnp.nan, jnp.where(ok, signed_norm * peak, 0.0))
+    signed_norm, peak, ok = _peak_factored_trapezoid(integrand, nu)
+    return jnp.where(ok, signed_norm * peak, 0.0)

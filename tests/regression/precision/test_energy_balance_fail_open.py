@@ -1,23 +1,28 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""A corrupt SED must not be reported as "no dust absorption" (#1206).
+r"""The log energy-balance contract on degenerate input — currently a fail-open.
 
-``_peak_factored_trapezoid`` used to return a single degenerate flag, so two
-different situations produced the same answer:
+``bolometric_absorbed_log10`` is the float32-safe spelling of the absorbed-
+luminosity integral (#1206). Its behavior on a *corrupt* integrand was pinned
+nowhere: ``TestFiniteGuard`` in
+``tests/physics/conservation/test_lyc_mask_energy_balance.py`` covers only the
+linear :func:`bolometric_absorbed`. These tests close that gap.
 
-* the integrand is identically zero — nothing was absorbed, a true ``0.0``;
-* the integrand contains a NaN or ``inf`` — something upstream is broken.
+**What is pinned here is the current behavior, and it is a fail-open.** A single
+non-finite pixel makes ``peak`` non-finite, which clears ``ok``, which returns
+``-inf`` — and ``pow10(-inf)`` is ``0.0``, i.e. *no dust absorption*. The entire
+IR budget is silently zeroed and the model emits a plausible dust-free galaxy
+rather than an error.
 
-Both mapped to ``ok=False``, and both callers turned that into ``0.0`` (linear)
-or ``-inf`` (log, which exponentiates to ``0.0``). So a single non-finite pixel
-anywhere in the intrinsic SED silently zeroed the whole IR budget, and the model
-went on to emit no dust IR at all — a plausible-looking galaxy, not an error.
+That is inherited, not chosen. #922's table lists the finite-guard as a property
+of the retired compositional kernel, carried through the consolidation to avoid
+changing behavior, and it does protect against a real artifact class (Inf·0 from
+extreme-metallicity SSP fluxes, BUG-NSS-02).
 
-Two other places in the same codebase already argue the opposite convention:
-:func:`tengri.utils.scale.log10_add` reports an overflowed term as ``+inf``
-because folding it into the zero sentinel would be "a fail-open on precisely the
-axis this module exists to close", and :func:`bolometric_absorbed`'s own
-docstring describes this failure mode as something to avoid. These tests pin the
-agreement.
+It nonetheless contradicts :func:`tengri.utils.scale.log10_add`, which reports an
+overflowed term as ``+inf`` precisely so it cannot be mistaken for zero. Both
+conventions ship. Changing this one alters dust IR for corrupt inputs and is a
+policy call, tracked in **#1527** — so these tests assert what the code does
+today and will fail loudly when that is deliberately changed.
 """
 
 import jax.numpy as jnp
@@ -57,8 +62,14 @@ def test_setup_a_clean_sed_absorbs_something():
 
 @pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
 @pytest.mark.parametrize("where", ["intrinsic", "attenuated"])
-def test_a_corrupt_pixel_is_not_reported_as_zero_absorption(bad, where):
-    """One bad pixel must be loud, not a silent zero IR budget."""
+def test_a_corrupt_pixel_currently_reports_zero_absorption(bad, where):
+    """Pins the fail-open on the log path, which nothing else covered.
+
+    Deliberately asserts the *undesirable* behavior. The point is that it is now
+    visible and versioned: if #1527 changes the convention this test fails, and
+    whoever changes it is told here, in one place, what the old contract was and
+    which other test (``TestFiniteGuard``) encodes the linear half of it.
+    """
     intrinsic, attenuated = _seds()
     if where == "intrinsic":
         intrinsic = intrinsic.copy()
@@ -67,32 +78,25 @@ def test_a_corrupt_pixel_is_not_reported_as_zero_absorption(bad, where):
         attenuated = attenuated.copy()
         attenuated[100] = bad
 
-    log_l, _ = bolometric_absorbed_log10(
-        jnp.asarray(intrinsic), jnp.asarray(attenuated), jnp.asarray(_NU), wave=jnp.asarray(_WAVE)
-    )
-    linear = bolometric_absorbed(
+    log_l, sign = bolometric_absorbed_log10(
         jnp.asarray(intrinsic), jnp.asarray(attenuated), jnp.asarray(_NU), wave=jnp.asarray(_WAVE)
     )
 
-    assert not np.isneginf(float(log_l)), (
-        f"a {bad} in the {where} SED returned log_L_absorbed = -inf, which is "
-        "pow10 -> 0.0, i.e. 'no dust absorption' — the fail-open this test exists "
-        "to prevent"
+    assert np.isneginf(float(log_l)), (
+        f"a {bad} in the {where} SED no longer returns -inf but {float(log_l)}. If this "
+        "is #1527 landing, update this file and TestFiniteGuard together — they are "
+        "the two halves of one convention"
     )
-    assert float(pow10(log_l)) != 0.0, "corrupt integrand still exponentiates to zero"
-    # NaN satisfies this too, which is the point: anything but a clean 0.0.
-    assert float(linear) != 0.0, (
-        f"a {bad} in the {where} SED returned exactly 0.0 erg/s absorbed — "
-        "indistinguishable from a genuinely unattenuated galaxy"
-    )
+    assert float(pow10(log_l)) == 0.0, "the -inf sentinel no longer exponentiates to zero"
+    assert float(sign) == 0.0
 
 
-def test_a_genuinely_zero_integrand_is_still_exactly_zero():
-    """The other half: a true zero must NOT become loud.
+def test_a_genuinely_zero_integrand_is_also_exactly_zero():
+    """The case the sentinel is *right* for — and why the two are hard to separate.
 
-    Making corruption loud is only correct if it does not also make the
-    legitimate "nothing absorbed" case loud. Unattenuated means zero, and zero
-    is the right answer.
+    An unattenuated galaxy absorbs nothing, and ``-inf`` -> ``0.0`` is the
+    correct answer. It is indistinguishable in the output from the corrupt case
+    above, which is the whole substance of #1527.
     """
     intrinsic, _ = _seds()
     log_l, sign = bolometric_absorbed_log10(
@@ -108,17 +112,13 @@ def test_a_genuinely_zero_integrand_is_still_exactly_zero():
     assert float(sign) == 0.0
 
 
-def test_the_clean_path_is_numerically_unchanged():
-    """The split must be invisible whenever the integrand is well-behaved.
-
-    Compares the log form against the linear one, which is the independent
-    spelling of the same integral — so this is a statement about the two
-    contracts agreeing, not about the previous implementation.
+def test_the_log_and_linear_forms_agree_on_a_clean_sed():
+    """The two spellings of one integral must not drift apart.
 
     Both are *signed* and follow grid orientation: ``_WAVE`` ascends, so ``nu``
     descends and ``trapezoid`` returns a negative value. That sign is a property
-    of the axis, not of the physics, so the magnitudes are what must match — and
-    the two forms must at least agree with each other about it.
+    of the axis, not the physics, so magnitudes are what must match — and the
+    two forms must agree with each other about the sign.
     """
     intrinsic, attenuated = _seds()
     log_l, sign = bolometric_absorbed_log10(
