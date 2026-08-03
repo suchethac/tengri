@@ -98,9 +98,12 @@ def main():
     ap.add_argument(
         "--method",
         default="mcmc_hmc",
-        choices=["mcmc_hmc", "laplace"],
+        choices=["mcmc_hmc", "mcmc_nuts", "laplace"],
         help="interim backend. laplace is ~1-2 s/galaxy warm vs ~155 s for HMC, "
-        "at the cost of a Gaussian approximation to each per-galaxy posterior.",
+        "at the cost of a Gaussian approximation to each per-galaxy posterior. "
+        "mcmc_nuts adapts its trajectory length, which static HMC cannot do on "
+        "the bilinear (sigma, xi) funnel; it runs with dense_mass_matrix=False "
+        "because a dense matrix at D=26 risks the 20+ GB warmup in CLAUDE.md.",
     )
     ap.add_argument("--n-map-steps", type=int, default=4000, help="laplace only")
     ap.add_argument(
@@ -230,6 +233,20 @@ def main():
                 n_map_steps=args.n_map_steps,
                 n_samples=args.n_samples * args.n_chains,
                 min_eigenvalue=args.min_eigenvalue,
+            )
+        elif args.method == "mcmc_nuts":
+            # No n_leapfrog_steps: NUTS chooses its own trajectory length, which
+            # is the point of running it here. dense_mass_matrix=False because a
+            # dense matrix at D=26 risks the 20+ GB warmup documented in
+            # CLAUDE.md, and this backend exists to measure the xi covariance
+            # SHAPE without a Gaussian approximation, not to be fast.
+            post = fitter.run(
+                "mcmc_nuts",
+                key=keys[i],
+                n_warmup=args.n_warmup,
+                n_samples=args.n_samples,
+                n_chains=args.n_chains,
+                dense_mass_matrix=False,
             )
         else:
             post = fitter.run(
