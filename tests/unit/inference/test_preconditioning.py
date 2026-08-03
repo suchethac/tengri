@@ -22,6 +22,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri import Uniform
 from tengri.inference.preconditioning import (
     metric_preconditioner,
     negative_hessian_metric,
@@ -1000,3 +1001,56 @@ class TestReportedConditioning:
         problem = self._problem(1e5, False)
         assert problem.metric_condition is None
         assert problem.whitened_condition is None
+
+
+class TestBoundsCannotGuardTheMapping:
+    """A bounds check cannot see draws left in the whitened basis (#1498).
+
+    ``tests/integration/test_preconditioning_roundtrip.py`` guards the inverse map
+    by asking whether preconditioned draws *explain the data*, which looks
+    over-elaborate next to "are they inside the priors?" until you notice that
+    bounds are structurally incapable of the job. Every prior standardizes through
+    a constrained bijection — ``Uniform.unstandardize(xi) = lo + (hi - lo) *
+    Phi(xi)`` — so a whitened coordinate, an ordinary unbounded real, still lands
+    in ``[lo, hi]``. Draws in the wrong basis do not escape the prior box; they
+    pile up against its walls.
+
+    Pinned here, in the fast tier, on purpose. The reasoning otherwise lives only
+    in a slow-tier docstring that no pull request runs, and "simplify this to a
+    bounds check" is exactly the change that would read as correct in review and
+    leave the invariant unguarded.
+    """
+
+    PRIOR = Uniform(0.0, 4.0)
+
+    @pytest.mark.parametrize("xi", [-1e3, -50.0, -7.4, 0.0, 7.4, 50.0, 1e3])
+    def test_every_real_lands_inside_the_prior_box(self, xi):
+        """Including values no posterior would ever produce."""
+        theta = float(self.PRIOR.unstandardize(jnp.asarray(xi)))
+        assert self.PRIOR.lo - 1e-8 <= theta <= self.PRIOR.hi + 1e-8, (
+            f"xi={xi} escaped the box at {theta} — if this ever becomes true, a "
+            "bounds check would be a viable mapping guard and the integration "
+            "test could be simplified"
+        )
+
+    def test_a_leak_collapses_onto_the_bound_instead_of_escaping_it(self):
+        """The actual failure signature: the spread vanishes, the bounds hold.
+
+        ``-7.4`` is the offset measured on a real tengri fit for ``dust_tau_bc``
+        when the inverse map is dropped, and ``Phi(-7.4) ~ 1e-13``.
+        """
+        healthy = jnp.linspace(-2.0, 2.0, 64)
+        leaked = healthy - 7.4
+
+        good = np.asarray(self.PRIOR.unstandardize(healthy))
+        bad = np.asarray(self.PRIOR.unstandardize(leaked))
+
+        assert bad.min() >= self.PRIOR.lo - 1e-8
+        assert bad.max() <= self.PRIOR.hi + 1e-8, (
+            "the leak escaped the prior box, so bounds would have caught it"
+        )
+        assert np.ptp(bad) < np.ptp(good) / 1e3, (
+            f"the leaked posterior kept a spread of {np.ptp(bad):.3g} against the "
+            f"healthy {np.ptp(good):.3g} — the collapse-onto-the-bound signature "
+            "this documents is not what happens"
+        )
