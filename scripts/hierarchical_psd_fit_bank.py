@@ -235,14 +235,26 @@ def main():
                 min_eigenvalue=args.min_eigenvalue,
             )
         elif args.method == "mcmc_nuts":
+            # The explicit per-galaxy MAP is NOT an optimization -- it is a
+            # correctness requirement. Every sampler backend routes its
+            # initialization through _maybe_map_init, which caches the MAP point
+            # on the MODEL. This loop reuses one model and varies only the data,
+            # so from the second galaxy onward every fit would silently start at
+            # the PREVIOUS galaxy's MAP. Measured, galaxies 2-7 of this bank:
+            # 5.1 s each instead of ~200 s, R-hat field max up to 10.74, and
+            # zero divergences to mask it -- chains that never moved. Passing
+            # init_from short-circuits the cache lookup. See issue #1529.
+            #
             # No n_leapfrog_steps: NUTS chooses its own trajectory length, which
             # is the point of running it here. dense_mass_matrix=False because a
             # dense matrix at D=26 risks the 20+ GB warmup documented in
             # CLAUDE.md, and this backend exists to measure the xi covariance
             # SHAPE without a Gaussian approximation, not to be fast.
+            map_post = fitter.run("map", key=keys[i], n_steps=args.n_map_steps, verbose=False)
             post = fitter.run(
                 "mcmc_nuts",
                 key=keys[i],
+                init_from=map_post,
                 n_warmup=args.n_warmup,
                 n_samples=args.n_samples,
                 n_chains=args.n_chains,

@@ -9,8 +9,10 @@ which the shared posterior jumps to a grid corner. **The cause is now
 identified and proven sufficient (§4e): the anisotropy of the per-galaxy ξ
 covariance.** Matching its eigenvalue spectrum alone — random eigenvectors —
 reproduces the railing to three significant figures; isotropic ξ does not rail.
-One question remains open and it decides the fix: whether that anisotropy is a
-Laplace artifact or a real feature of the posterior (§4e, §8).
+That anisotropy is **real, not a Laplace artifact** (§4f): a converged NUTS
+posterior has the same shape and the estimator does worse on it. So the fix is
+not a better sampler, and not more draws — the tilt is converged in K. The
+remaining suspect is `p_0` (§8).
 
 Everything below is measured, not assumed. Several sections record conclusions
 that were later **refuted by measurement**; they are kept, marked, because the
@@ -27,6 +29,7 @@ reasoning errors recur.
 | **4c** | four suspects eliminated: funnel, nonlinearity, nuisance coupling, reconstruction |
 | **4d** | `corr(tilt, interim τ) = +0.856` — a real diagnostic, but **refuted as the cause** |
 | **4e** | **the cause: the ξ covariance spectrum, proven necessary and sufficient** |
+| **4f** | the anisotropy is **real** — NUTS confirms it; the sampler is not the fix |
 
 ---
 
@@ -616,7 +619,67 @@ a re-fit of the bank.
 
 ---
 
-## 4e. THE CAUSE — the ξ covariance spectrum, proven sufficient
+## 4f. The anisotropy is REAL — NUTS confirms it, so the sampler is not the fix
+
+§4e proved the ξ covariance spectrum sufficient for the railing and left one
+question: is that anisotropy a Laplace artifact, or a real feature of the
+posterior? **It is real.** NUTS — converged, R̂ ≤ 1.05, zero divergences —
+produces a spectrum as anisotropic as Laplace's, slightly more so.
+
+Same 8 galaxies, uniform K=1000 in both arms (median across galaxies; the ξ
+prior is N(0, I), so isotropic would be all 1.00):
+
+```
+laplace  1.19 1.11 1.09 1.04 1.01 0.97 0.94 0.91 0.87 0.86 0.81 0.77 0.68 0.63 0.50 0.25   total 13.6/16
+nuts     1.34 1.30 1.23 1.16 1.07 1.03 1.00 0.92 0.88 0.84 0.79 0.74 0.67 0.62 0.56 0.28   total 14.4/16
+```
+
+And the estimator does **worse** on the NUTS posteriors, not better:
+
+| arm | mean tilt | pooled τ 68% (truth 150) | mode | ESS |
+|---|---|---|---|---|
+| laplace | −1.540 | 13.4–30.9 | (0.849, 19) | 45 |
+| **nuts** | −1.018 | **10.0–15.2** | (0.883, **10.0**) | **14** |
+
+NUTS pins τ to the grid floor. (At N=8 both arms are biased *low* — this is the
+small-N end of the §2 sweep, where the per-galaxy `Z_i` peaks dominate; the
+railing *high* emerges at N ≥ 64 as the accumulated tilt takes over. The mean
+tilt over only 8 galaxies is noisy given the −9 to +5 spread, so the **spectrum**
+comparison is the robust result here, not the tilt.)
+
+**The tilt is not a finite-K artifact either.** A natural hypothesis: `Z_i` is
+estimated by Monte Carlo and then logged, and `log Ẑ` is biased low by Jensen,
+by roughly the relative weight variance (1/ESS) — which is (σ,τ)-shaped and so
+would not cancel. That predicts a tilt shrinking like 1/K. Measured on the real
+bank, it does the opposite — it **grows and saturates**:
+
+| K | 125 | 250 | 500 | 1000 | 2000 | 4000 |
+|---|---|---|---|---|---|---|
+| mean tilt | +0.146 | +0.167 | +0.246 | +0.314 | +0.318 | +0.318 |
+| tilt × K | +18 | +42 | +123 | +314 | +637 | +1273 |
+
+`tilt × K` grows monotonically — definitively not 1/K. The tilt is **converged**
+by K ≈ 1000. More draws do not help.
+
+**What this rules out.** The entire "fix the per-galaxy fits" direction, which
+§4e ranked first. Laplace is exonerated: a converged NUTS posterior has the same
+shape and the estimator fails on it identically. Combined with the K-sweep, the
+position is uncomfortable and worth stating plainly:
+
+* `Z_i = C_i E_{q_i}[p(m|σ,τ)/p_0(m)]` is exact for **any** `q_i`.
+* `q_i` is now known to be right (NUTS).
+* The Monte Carlo estimate has **converged** (flat in K past ~1000).
+* And the answer is still wrong.
+
+Those four cannot all hold, so one of the identity's assumptions is violated in
+the implementation. The most likely candidate is `p_0`: it must be the *exact*
+marginal interim prior on `m` that the per-galaxy fits actually ran under, and
+it is currently a 60×60 grid quadrature of that integral. That is the next thing
+to test — not another sampler.
+
+---
+
+## 4e. The cause — the ξ covariance spectrum, proven sufficient
 
 **Matching the ξ covariance eigenvalue spectrum alone reproduces the railing to
 three significant figures.** Holding `(σ_k, τ_k)` fixed at the bank's stored
@@ -949,13 +1012,22 @@ else means the draws are not posterior draws.
    three significant figures; isotropic ξ does not rail. One question decides
    the fix:
 
-   (a) **Compare the ξ covariance spectrum, Laplace vs NUTS, on ~8 galaxies**
-   (`dense_mass_matrix=False`; watch the 20+ GB warmup in CLAUDE.md). A
-   different spectrum means Laplace is at fault and the estimator is fine as
-   written; the same spectrum means the anisotropy is real and — since
-   `Z_i = C_i E_{q_i}[·]` is exact for any `q_i` — the fault is in how the
-   estimator handles it. Everything downstream depends on which. Not a bank
-   re-fit: one spectrum per galaxy, 16 numbers each.
+   **§4f has since run this**: the anisotropy is **real**. NUTS gives the same
+   spectrum (slightly more anisotropic) and the estimator does worse on it. The
+   sampler is not the fix, and the tilt is converged in K, so more draws are not
+   either. What is left:
+
+   (a) **Verify `p_0` against the interim prior it is supposed to represent.**
+   Four things cannot all be true at once (§4f): the B2 identity is exact for
+   any `q_i`; `q_i` is right; the Monte Carlo has converged; the answer is
+   wrong. The remaining suspect is `p_0` — it must be the *exact* marginal
+   interim prior on `m` under which the fits ran, and it is currently a 60×60
+   grid quadrature of that integral. Test it directly: draw `m` from the interim
+   prior by ancestral sampling (draw σ, τ from their `Uniform` priors, then the
+   OU field) and check that the estimator's `p_0` matches a kernel-density or
+   analytic evaluation on those draws. A quadrature error, a normalization
+   dropped, or a τ-Jacobian mismatch would all show up here and all produce a
+   (σ,τ)-shaped distortion of exactly the kind observed.
    (b) **Importance-correct the Laplace draws back to `q_i`.** Weight draw `m_k`
    by `w_k ∝ p(d_i|m_k) p_0(m_k) / q̂(m_k)` and use the self-normalized estimate.
    **Measure the per-galaxy ESS of these weights before trusting any result** —
