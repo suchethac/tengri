@@ -232,7 +232,44 @@ class WavePrecomp:
     z_max: float | None = None
     catalog_z_range: tuple[float, float] | None = None
 
-    n_subbands: int = 5
+    band_integration: str | None = None
+    """How the multiplicative dust screen is integrated through each bandpass.
+
+    One of:
+
+    ``"quadrature"`` (default)
+        The screen is *evaluated* at :attr:`n_subbands` quadrature nodes per
+        band and summed against the sub-band SSP x filter tensors (#1122).
+        Converges as 1/K^2. This is the accurate scheme and the one to use
+        for science.
+    ``"taylor"``
+        First-order spectral-moment expansion about the filter effective
+        wavelength, ``A(lam_eff)*Phi + A'(lam_eff)*Psi`` (Zacharegkas+2025,
+        #617). Retained for reproducing pre-#1122 published results and for
+        comparison work. Biases the rest-UV badly — see
+        :attr:`taylor_correction`.
+    ``"effective_wavelength"``
+        Zeroth order, ``A(lam_eff)*Phi``. The cheapest and least accurate.
+
+    ``None`` (the default) resolves to ``"quadrature"``, or to whichever
+    scheme the legacy :attr:`n_subbands` / :attr:`taylor_correction` pair
+    describes when either was passed explicitly.
+
+    Naming the scheme here is the supported way to pick one. The legacy pair
+    selected it only *implicitly*, through an interaction that was easy to get
+    wrong in one direction specifically: ``taylor_correction=True`` alone left
+    the quadrature on and the flag inert, so a caller who asked for Taylor by
+    name silently received quadrature unless they also knew to set
+    ``n_subbands=0``.
+
+    Examples
+    --------
+    >>> WavePrecomp()                                  # quadrature, K=5
+    >>> WavePrecomp(band_integration="taylor")         # actually Taylor
+    >>> WavePrecomp(band_integration="quadrature", n_subbands=8)
+    """
+
+    n_subbands: int | None = None
     """Sub-bands per filter for the multiplicative dust quadrature (#1122).
 
     The dust screen is *evaluated* at ``n_subbands`` quadrature nodes per band
@@ -246,15 +283,16 @@ class WavePrecomp:
     the Taylor form it replaces (0.93× its gradient at K=5), because that form
     carries a second tensor and a ``pow`` with a traced exponent.
 
-    ``0`` disables the quadrature and falls back to the effective-wavelength form
-    (plus ``taylor_correction`` if set) — kept for comparison, not recommended:
-    that path reads the GALEX FUV band +45 % high at z=0.05, rising to +215 % at z=1.
+    Defaults to 5 when :attr:`band_integration` is ``"quadrature"``, and to 0
+    otherwise. Setting it to ``0`` explicitly is the legacy spelling of
+    ``band_integration="effective_wavelength"`` (or ``"taylor"``, if
+    ``taylor_correction=True`` accompanies it); prefer naming the scheme.
 
     Only the *multiplicative* stellar + nebular screen needs this. Additive emitters
     (dust IR, radio, X-ray, AGN) factorize exactly through the rank-1/rank-K band
     response of #1107/#1117 and are unaffected."""
 
-    taylor_correction: bool = False
+    taylor_correction: bool | None = None
     """First-order spectral-moment (Ψ) correction to the effective-wavelength dust
     attenuation (Zacharegkas+2025, #617). **Superseded by** ``n_subbands`` and off by
     default since #1122.
@@ -264,7 +302,10 @@ class WavePrecomp:
     in the rest-UV where the curve steepens: the residual is not the ~0.3 % once
     claimed here but **+45 % (z=0.05) to +215 % (z=1)** in GALEX FUV.
 
-    Only consulted when ``n_subbands=0``. Set both to reproduce the pre-#1122 path."""
+    .. deprecated::
+        Use ``band_integration="taylor"``. This flag selected the scheme only in
+        combination with ``n_subbands=0``; on its own it was silently inert,
+        which meant asking for Taylor returned quadrature."""
 
     fast_dust_emission: bool = False
     """Approximate the dust IR re-emission *band projection* when its exact, fast
@@ -280,6 +321,155 @@ class WavePrecomp:
     band-shape approximation (smooth on a modified blackbody; up to a few percent
     on a band crossing a steep IR rise or a PAH complex). The energy balance is
     unaffected either way."""
+
+    _VALID_BAND_INTEGRATION: ClassVar[tuple[str, ...]] = (
+        "quadrature",
+        "taylor",
+        "effective_wavelength",
+    )
+
+    def __post_init__(self):
+        """Resolve the band-integration scheme once, in one place.
+
+        Three source-level defaults used to disagree (this class said K=5 /
+        taylor off; ``SEDModel._DEFAULT_APPROX`` said K=0 / taylor on;
+        ``sps/precompute.py`` said taylor on), so which scheme ran depended on
+        the constructor path taken. Resolving here means every consumer reads
+        the same answer, and :attr:`n_subbands` / :attr:`taylor_correction`
+        are left holding the concrete values that scheme implies.
+        """
+        scheme = self.band_integration
+        legacy_passed = self.n_subbands is not None or self.taylor_correction is not None
+
+        if scheme is not None:
+            if scheme not in self._VALID_BAND_INTEGRATION:
+                raise ValueError(
+                    f"band_integration={scheme!r} is not a legal value. "
+                    f"Choose one of {', '.join(map(repr, self._VALID_BAND_INTEGRATION))}. "
+                    "'quadrature' (the default) evaluates the dust screen at "
+                    "n_subbands nodes per band and is the accurate choice; "
+                    "'taylor' and 'effective_wavelength' are kept for "
+                    "reproducing pre-#1122 results and for comparison work."
+                )
+            # ``n_subbands`` is NOT redundant with an explicit scheme: it sets
+            # K for the quadrature, so ``band_integration="quadrature",
+            # n_subbands=8`` is correct usage and must stay silent. Warn only
+            # for the genuinely meaningless combinations.
+            if self.taylor_correction is not None:
+                warnings.warn(
+                    f"taylor_correction is ignored when band_integration is given "
+                    f"explicitly (={scheme!r}). Drop it; the scheme name is the "
+                    "selector.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+            if self.n_subbands is not None and scheme != "quadrature":
+                warnings.warn(
+                    f"n_subbands={self.n_subbands} has no effect under "
+                    f"band_integration={scheme!r} — it sets the node count for the "
+                    "quadrature only.",
+                    UserWarning,
+                    stacklevel=3,
+                )
+        else:
+            # Derive from the legacy pair, preserving its documented meaning.
+            if legacy_passed:
+                n_sub = 5 if self.n_subbands is None else int(self.n_subbands)
+                taylor = bool(self.taylor_correction)
+                if n_sub > 0 and taylor:
+                    # The contradiction. Previously resolved silently toward
+                    # quadrature, which made the flag read as a choice while
+                    # doing nothing.
+                    warnings.warn(
+                        "taylor_correction=True has no effect while the "
+                        f"quadrature is on (n_subbands={n_sub}); the quadrature "
+                        "supersedes it. Pass band_integration='taylor' to select "
+                        "the Taylor scheme, or n_subbands=0 alongside it for the "
+                        "legacy spelling.",
+                        UserWarning,
+                        stacklevel=3,
+                    )
+                    scheme = "quadrature"
+                elif n_sub > 0:
+                    scheme = "quadrature"
+                elif taylor:
+                    scheme = "taylor"
+                else:
+                    scheme = "effective_wavelength"
+                warnings.warn(
+                    "n_subbands / taylor_correction select the band-integration "
+                    f"scheme implicitly (resolved here to {scheme!r}). Prefer "
+                    f"band_integration={scheme!r}, which says so directly; pass "
+                    "n_subbands only to set K for the quadrature.",
+                    DeprecationWarning,
+                    stacklevel=3,
+                )
+            else:
+                scheme = "quadrature"
+
+        # Write back the concrete values this scheme implies, so every
+        # downstream consumer of n_subbands / taylor_correction agrees with
+        # band_integration by construction rather than by convention.
+        if scheme == "quadrature":
+            if self.band_integration is not None and self.n_subbands == 0:
+                # Contradictory: a quadrature needs at least one node. Silently
+                # substituting K=5 here would be the same class of defect this
+                # selector exists to remove — honoring a request nobody made.
+                raise ValueError(
+                    "band_integration='quadrature' with n_subbands=0 is "
+                    "contradictory: the quadrature evaluates the dust screen at "
+                    "n_subbands nodes per band, so it needs at least one. Pass "
+                    "n_subbands>=1, or band_integration='effective_wavelength' "
+                    "if you wanted the single-point form."
+                )
+            n_sub = 5 if self.n_subbands is None else int(self.n_subbands)
+            if n_sub < 1:
+                raise ValueError(f"n_subbands must be >= 1 for the quadrature, got {n_sub}.")
+            taylor = False
+        elif scheme == "taylor":
+            n_sub, taylor = 0, True
+        else:
+            n_sub, taylor = 0, False
+
+        object.__setattr__(self, "band_integration", scheme)
+        object.__setattr__(self, "n_subbands", n_sub)
+        object.__setattr__(self, "taylor_correction", taylor)
+
+
+#: The band-projection knobs that :class:`WavePrecomp` owns.
+#:
+#: Anything that needs their default values reads them from here rather than
+#: writing its own copy, so there is exactly one place that decides what
+#: "no band-projection preference expressed" means.
+_BAND_PROJECTION_KEYS: tuple[str, ...] = (
+    "band_integration",
+    "taylor_correction",
+    "n_subbands",
+    "fast_dust_emission",
+)
+
+
+def _band_projection_defaults() -> dict:
+    """Default band-projection knobs, read off a default ``WavePrecomp``.
+
+    ``SEDModel._DEFAULT_APPROX`` used to spell these out a second time, and the
+    two copies disagreed — it said ``taylor_correction=True, n_subbands=0``
+    where :class:`WavePrecomp` resolves to ``False, 5``. Which scheme actually
+    ran therefore depended on which constructor path the model took, and the
+    difference is a silent accuracy change of up to 42 % in the rest-UV rather
+    than a cosmetic one.
+
+    Sourcing them here means the two cannot drift apart again: there is one
+    definition, and ``WavePrecomp.__post_init__`` has already resolved it into
+    internal agreement.
+
+    Returns
+    -------
+    dict
+        ``{key: value}`` for each of :data:`_BAND_PROJECTION_KEYS`.
+    """
+    defaults = WavePrecomp()
+    return {key: getattr(defaults, key) for key in _BAND_PROJECTION_KEYS}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -843,14 +1033,27 @@ class SEDModel:
     # the hybrid kernel at fixed z. Default True matches the historic behavior
     # before the ``approx=`` flag was introduced (``_build_precomputed_data``
     # always computed ``igm_eff`` when ``_uses_igm`` and ``_z_fixed`` were set).
+    # Structural switches only. The band-projection knobs are NOT written out
+    # here — they are read off a default-constructed :class:`WavePrecomp`, which
+    # owns them.
+    #
+    # They used to be a second, hand-maintained copy, and the copy disagreed:
+    # this dict said ``taylor_correction=True, n_subbands=0`` while WavePrecomp
+    # said ``False, 5``. That divergence is not cosmetic — it is a silent
+    # accuracy change, and it shipped once. Before the ``or WavePrecomp()``
+    # fallback below existed, ``approx=SpectrumPrecomp()`` on a joint
+    # observation reached the projector with a live photometry LUT and picked
+    # these values up, so the photometry silently ran the pre-#1122
+    # effective-wavelength path.
+    #
+    # Deriving them means the two cannot drift apart again. Pinned by
+    # ``tests/regression/bug/test_band_integration_is_explicit.py``.
     _DEFAULT_APPROX: ClassVar[dict] = {
         "wave_precomp": False,
         "ztable": False,
         "spectrum_precomp": False,
         "igm": True,
-        "taylor_correction": True,
-        "n_subbands": 0,
-        "fast_dust_emission": False,
+        **_band_projection_defaults(),
     }
 
     #: Maximum spectral resolution R = λ/Δλ for which the SpectrumPrecomp
@@ -1068,9 +1271,13 @@ class SEDModel:
         # pre-#1122 effective-wavelength path: several percent out in the rest-UV.
         if self._approx_config is not None:
             screen = self._approx_config_wave or WavePrecomp()
-            self._approx["taylor_correction"] = screen.taylor_correction
-            self._approx["fast_dust_emission"] = screen.fast_dust_emission
-            self._approx["n_subbands"] = int(screen.n_subbands)
+            # ``screen`` has already resolved these into mutual agreement in
+            # ``WavePrecomp.__post_init__``; copy them as a SET, keyed off the
+            # same tuple the defaults are built from. Copying field-by-field is
+            # how a knob gets forgotten here and silently keeps a default that
+            # contradicts the others.
+            for key in _BAND_PROJECTION_KEYS:
+                self._approx[key] = getattr(screen, key)
 
         # Part A (joint precompute): on a joint photometry+spectroscopy
         # observation, any precompute opt-in builds BOTH LUT families. The
