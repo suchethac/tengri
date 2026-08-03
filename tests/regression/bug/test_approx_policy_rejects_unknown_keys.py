@@ -139,3 +139,70 @@ def test_sedmodel_default_approx_is_a_policy_not_a_dict():
     from tengri import SEDModel
 
     assert isinstance(SEDModel._DEFAULT_APPROX, ApproxPolicy)
+
+
+def test_policy_is_hashable_despite_being_a_mapping():
+    """``collections.abc.Mapping`` sets ``__hash__ = None``.
+
+    Only the ``@dataclass(frozen=True)`` decorator regenerating ``__hash__``
+    on the subclass saves this — subtle enough that a future refactor (say,
+    switching to ``eq=False``, or hand-writing ``__eq__``) could silently make
+    the policy unhashable. It feeds ``compile_signature``, which is a cache
+    key, so that failure would surface far from its cause.
+    """
+    from collections.abc import Mapping
+
+    assert Mapping.__hash__ is None, "premise changed; this test guards the override"
+    assert hash(ApproxPolicy()) == hash(ApproxPolicy())
+    assert hash(ApproxPolicy(n_subbands=8)) != hash(ApproxPolicy(n_subbands=5))
+
+
+def test_every_policy_field_reaches_the_compile_signature():
+    """A knob that does not key the cache lets two models share one kernel.
+
+    ``compile_signature`` collected bools generically but singled out
+    ``n_subbands`` by name, so ``band_integration`` — a string — was captured
+    by neither. It distinguished kernels only *incidentally*, because
+    resolving it happens to write n_subbands and taylor_correction to
+    per-scheme values. This asserts the property directly, so a future field
+    that leaves those two alone cannot silently collide.
+    """
+    import dataclasses
+
+    import tengri
+    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+
+    ssp = tengri.load_ssp_data("data/fsps_mist_c3k_a_chabrier.h5")
+    obs = Observation(photometry=Photometry.from_names(["galex_fuv", "sdss_r"]))
+    common = dict(
+        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
+        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+        neb={"type": "none"},
+        redshift=Fixed(0.05),
+    )
+
+    def sig(**precomp):
+        model = SEDModel.build(
+            ssp_data=ssp, observation=obs, approx=WavePrecomp(**precomp), **common
+        )
+        return model.compile_signature()
+
+    schemes = ["quadrature", "taylor", "effective_wavelength"]
+    sigs = {s: sig(band_integration=s) for s in schemes}
+    for a, b in ((0, 1), (0, 2), (1, 2)):
+        assert sigs[schemes[a]] != sigs[schemes[b]], (
+            f"{schemes[a]} and {schemes[b]} share a compile signature — the "
+            "second silently reuses the first's compiled kernel"
+        )
+
+    # The node count must key it too (#1122).
+    assert sig(n_subbands=3) != sig(n_subbands=8)
+
+    # And the guard against the next field: every non-bool policy field must
+    # be representable in the signature's scalar capture.
+    for field in dataclasses.fields(ApproxPolicy):
+        value = getattr(ApproxPolicy(), field.name)
+        assert isinstance(value, (str, int, float, bool, type(None))), (
+            f"{field.name} is a {type(value).__name__}, which compile_signature's "
+            "scalar capture will drop. Add it explicitly or widen the capture."
+        )

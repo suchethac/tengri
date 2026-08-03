@@ -3674,6 +3674,25 @@ class SEDModel:
         # re-derives it can silently disagree with the physics it is caching.
         approx_n_subbands = int((self._approx or {}).get("n_subbands", 0))
 
+        # ...and the same hazard generalized. ``band_integration`` is a *string*,
+        # so it is invisible to ``approx_resolved_flags`` (bools only) and to
+        # ``approx_n_subbands`` (that one key). It currently distinguishes kernels
+        # only *incidentally*, because resolving it writes n_subbands and
+        # taylor_correction to values that differ per scheme — which is exactly
+        # the kind of accident that stops holding the moment someone adds a
+        # scheme that leaves those two alone.
+        #
+        # Capturing every non-bool field generically means the next knob added to
+        # ApproxPolicy is covered on the day it is added, rather than after two
+        # models silently share a kernel. Cheap: the policy has 8 fields.
+        approx_scalar_fields = tuple(
+            sorted(
+                (k, v)
+                for k, v in (self._approx or {}).items()
+                if not isinstance(v, bool) and isinstance(v, (str, int, float, type(None)))
+            )
+        )
+
         # FeaturePrecomp leaves NO trace in ``self._approx`` — it sets
         # ``_fast_line_measurement`` instead — so neither ``approx_resolved_flags``
         # nor ``approx_n_subbands`` above can see it, and two models differing only
@@ -3711,9 +3730,13 @@ class SEDModel:
                 ("primary", _cfg_key(self._approx_config)),
                 ("spec", _cfg_key(self._approx_config_spec)),
                 ("n_subbands", approx_n_subbands),
+                approx_scalar_fields,
             )
         else:
-            approx_resolved = approx_resolved_flags
+            # The scalar fields ride BOTH branches. Carrying them only on the
+            # first would make the band-integration scheme invisible to the
+            # signature on exactly the models that took the other path.
+            approx_resolved = (approx_resolved_flags, approx_scalar_fields)
 
         # 2026-05-20: drop fixed-parameter VALUES from the
         # cache key. Keep names + types-of-fixed only. Two SEDModels with
