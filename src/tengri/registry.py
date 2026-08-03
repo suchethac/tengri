@@ -1043,6 +1043,76 @@ def list_igm_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
+#: The SFH→SSP age-weight kernels, as a menu. Not a registry-backed dispatch
+#: (there are exactly two, hand-written in the stellar component), but a
+#: structural axis of ``SEDModel.build`` all the same — and a builder-accepted
+#: value named by no menu is undiscoverable by construction (#1446).
+_AGE_KERNELS: tuple[tuple[str, str, str], ...] = (
+    (
+        "cic",
+        "production",
+        "Cloud-in-cell on a 16x dense integrand — the accuracy default (#964)",
+    ),
+    (
+        "dsps",
+        "comparison",
+        "DSPS histogram kernel — cross-code parity only; biases optical CSP +1.2 %",
+    ),
+)
+
+
+def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
+    """List the SFH→SSP age-weight kernels selectable via ``sfh={'age_kernel': ...}``.
+
+    The kernel decides how the star-formation history is integrated onto the SSP
+    age grid. ``'cic'`` splits each ``SFR(t)*dt`` parcel between its bracketing
+    SSP nodes with log-age cloud-in-cell weights on a dense integrand;
+    ``'dsps'`` hands the coarse per-SSP-age table to DSPS's histogram kernel,
+    which interpolates ``log10(M(<t))`` in ``log10(t)``.
+
+    They are not interchangeable. The DSPS kernel annihilates the mass of any
+    table segment straddling the SFH's maximum age — the first SSP node older
+    than the SFH start keeps ~1e-5 of its share — which biases the optical CSP
+    +1.2 % versus FSPS / bagpipes / a dense reference (#964). It is offered for
+    comparison against DSPS-native pipelines, not for science.
+
+    Leaving ``age_kernel`` unset auto-selects: ``'cic'`` on the parametric path,
+    ``'dsps'`` on the GP-field path (whose draw lives on its own coarse lookback
+    grid, so there is no dense integrand to cloud-in-cell).
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter to one status — ``"production"`` or ``"comparison"``.
+
+    Returns
+    -------
+    _RegistryTable
+        One row per kernel: ``name``, ``status``, ``short_doc``.
+
+    See also: :func:`list_sfh_models`, :mod:`tengri.builders.sfh`.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.list_age_kernels()  # doctest: +SKIP
+    """
+    out = [
+        {
+            "name": name,
+            "kind": "age_kernel",
+            "status": st,
+            "citation": "hearin2021" if name == "dsps" else "",
+            "short_doc": doc,
+            "use": f"SEDModel.build(sfh={{'age_kernel': {name!r}}})",
+        }
+        for name, st, doc in _AGE_KERNELS
+    ]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
 _COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
     (
         "stellar",
@@ -1688,6 +1758,7 @@ def _menu_listers() -> tuple:
         list_dust_laws,
         list_dust_emission_models,
         list_sfh_models,
+        list_age_kernels,
         list_nebular_backends,
         list_xray_models,
         list_radio_models,

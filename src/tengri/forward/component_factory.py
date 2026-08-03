@@ -233,6 +233,9 @@ def build_components(
     metallicity_model: str = "delta",
     n_grid: int = 256,
     lgmet_scatter: float = 0.2,
+    # SFH -> SSP age-weight kernel: "cic" (dense cloud-in-cell integrand),
+    # "dsps" (DSPS's histogram kernel), or None to auto-select (#964).
+    age_kernel: str | None = None,
     # Nebular
     nebular_backend: str | None = "baked_in",
     nebular_backend_instance: Any | None = None,
@@ -329,6 +332,11 @@ def build_components(
         SFH lookback-time grid resolution.
     lgmet_scatter : float
         Gaussian σ in log10(Z) for the DSPS triweight kernel [dex].
+    age_kernel : str or None
+        SFH→SSP age-weight kernel: ``"cic"`` (dense cloud-in-cell integrand),
+        ``"dsps"`` (DSPS's histogram kernel), or ``None`` (default) to
+        auto-select. See :class:`~tengri.components.stellar.component.StellarSEDComponentConfig`
+        for the accuracy/cost tradeoff (#964).
     nebular_backend : str | None
         ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cb19"``,
         ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit
@@ -379,6 +387,7 @@ def build_components(
                 metallicity_model=metallicity_model,
                 n_grid=n_grid,
                 lgmet_scatter=lgmet_scatter,
+                age_kernel=age_kernel,
             ),
             ssp_data=ssp_data,
         )

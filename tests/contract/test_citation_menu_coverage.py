@@ -183,6 +183,14 @@ _NOT_WALKED = {
     # ``radio_model`` attribute at all, so ``condon92`` is unreachable from
     # any spec. Tracked on #1447.
     "list_radio_models": "no spec attribute selects it (radio_model does not exist)",
+    # Both kernels are already covered by the stellar component's unconditional
+    # ``citations() -> ("dsps",)``. Selecting ``age_kernel='dsps'`` uses DSPS's
+    # histogram kernel (Hearin+2021 Eq. 9) and cites DSPS; selecting ``'cic'``
+    # uses tengri's own cloud-in-cell kernel (#964), which has no separate
+    # reference, and DSPS is still cited for the SSP/MDF machinery around it.
+    # So no citation is lost either way and there is nothing kernel-specific to
+    # add to the walk.
+    "list_age_kernels": "stellar already cites dsps unconditionally; cic is tengri's own (#964)",
 }
 
 
