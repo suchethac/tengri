@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 import chex
 import jax
 import jax.numpy as jnp
