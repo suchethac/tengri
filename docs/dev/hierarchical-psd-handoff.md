@@ -99,9 +99,15 @@ Consequence for the estimator design: eliminating the importance weights
 weights were never the problem. The per-galaxy `Z_i` is biased and that must be
 found first.
 
-Bears on the user's earlier 8192-galaxy MGVI experiment: at that N a per-galaxy
-tilt this size is overwhelming, so flat/railed intervals there are this
-signature rather than evidence about the physics.
+**Does NOT bear on the earlier 8192-galaxy MGVI experiment** (corrected
+2026-08-02; an earlier revision of this section claimed it did). The +0.098
+nats/galaxy tilt is a property of B2 specifically — it arises from dividing by
+`p_0`, the interim pushforward, in §4a. A joint MGVI fit has no interim prior,
+no importance weights and no `p_0`, so the mechanism cannot occur there. The
+railing seen in that experiment has a separate, already-documented cause: the
+`sigma^2 tau` degeneracy of a single DRW below its break frequency, plus
+Gaussian-VI miscalibration (SBC gave 0/20 coverage on sigma). Attributing both
+to one cause would retire the wrong hypothesis.
 
 ### Superseded claim — do not cite
 
@@ -129,7 +135,7 @@ sample over too short a lever arm.
 2. **Interim/grid prior mismatch on τ.** Interim fits use `Uniform(10, 500)` on
    `tau_myr` (linear-uniform); `SharedGrid` geomspaced τ with flat weights
    (log-uniform). B2 divides by the interim pushforward, which is a *fact* about
-   how draws were made, not a modelling choice — mismatched by a factor ∝ τ,
+   how draws were made, not a modeling choice — mismatched by a factor ∝ τ,
    50× end-to-end. Fixed via `SharedGrid.uniform(tau_prior=...)`. **Did not cure
    the railing on its own.**
 
@@ -207,6 +213,18 @@ either** — see §5 step (a) for the measurement. Do not report σ²τ here.
 > rested on one experiment. The experiment was measured and found broken twice
 > over. The corrected experiment reverses the finding. The old text is kept
 > below, marked, because the reasoning is a trap worth recognizing again.
+>
+> **Corroborated on the real observable by a joint-NUTS control** (2026-08-02,
+> `docs/dev/hierarchical-psd-preliminary-results.md` §5). The refutation below
+> is a *toy* whose per-mode noise (0.15) is not calibrated to SNR = 20
+> photometry, so it establishes "the estimator is not what breaks τ" but cannot
+> speak to whether the real observable identifies τ. The joint fit can, and
+> does: on the same four galaxies as the N = 4 row, joint NUTS returns
+> τ = 104–430 Myr — a posterior **0.98× the prior width**, i.e. it correctly
+> reports learning nothing — while B2 returns 12–31 Myr, excluding truth by
+> 5–12×. **The correct answer to an unidentified parameter is its prior, and B2
+> does not give it.** Same verdict as this section, reached without a toy:
+> the wall and the tilt are both real.
 
 **REFUTED — the SIR exact-posterior experiment.** It obtained per-galaxy
 ensembles by sampling-importance-resampling 200k particles **from the prior**,
@@ -388,7 +406,17 @@ options below remain on the table but are no longer forced:
     noise. (The σ²τ framing is correct in the z≈4 regime recorded in
     `project_psd_z4_burnham_replication`, where the data probed only *below* the
     break frequency and the plateau 2σ²τ was all that was identified. It does
-    **not** transfer here — verified, not assumed.);
+    **not** transfer here — verified, not assumed.)
+
+    *Independently corroborated by a second method* — eigendecomposing the
+    mass-weighted covariance of the same posterior in (log σ, log τ) gives a
+    tight direction of **σ¹ τ^−0.09**, stable across N = 4–32, against the
+    σ¹ τ^+0.5 a power degeneracy requires. Two different statistics of the same
+    grid, same conclusion. See
+    `scripts/hierarchical_psd_identified_combination.py`, which also reports
+    **edge mass** (posterior mass on the grid boundary) — 0.02–0.07 through
+    N=32, **0.79 at N=64**, 0.99 at N=128, localizing the N ceiling to one sharp
+    truncation event;
 (b) **change the observable** — z≈4 rest-UV + Hα, where the prior replication
     got σ to separate cleanly and recover at N=256;
 (c) **change the architecture** — flex-PSD bins and/or population-level
@@ -590,7 +618,13 @@ else means the draws are not posterior draws.
    just lag-1). Cheapest test of the leading τ hypothesis. ~30 min.
 3. **Run `mcmc_nuts`** (`dense_mass_matrix=False`) on ~16 galaxies and compare
    field R̂ and τ against static HMC. Never tried; static HMC is the wrong tool
-   for a funnel. ~1 h.
+   for a funnel. *Corrected 2026-08-02: this is not the ~1 h job it was billed
+   as.* `PopulationFitter.run` has **no NUTS** — its `_method_map` holds only
+   the geoVI variants, the two `tier=broken` `native_vi_*`, and
+   `mcmc_raytrace`; its own docstring says so. The flat seam that would open
+   the other backends (#1394) is unmerged. NUTS on the shared block is
+   reachable only through the canonical `Fitter(ForwardModel.build(
+   population=...))` path — which this branch had broken (§9).
 4. **Finish partial centering**: the loss-prior correction at
    `loss_functions.py:478`. The principled funnel fix.
 5. ~~File the `min_eigenvalue=1e-6` footgun~~ — filed as **#1515**. Worked
@@ -598,3 +632,49 @@ else means the draws are not posterior draws.
 6. Acceptance criteria 3 (two-population separation) and 6 (coverage across ≥3
    realizations) are still unrun. Criterion 2 needs multiple realizations —
    single-realization coverage was over-read earlier in this work.
+
+---
+
+## 9. Regression this branch introduced, and the fix (2026-08-02)
+
+**This branch broke the canonical joint hierarchical fit.** Measured on the
+same file, same command:
+
+    tests/contract/test_single_hamiltonian_path_probe.py
+      main            3 passed
+      this branch     2 failed   TypeError: mul got incompatible shapes
+                                 for broadcasting: (256,), (3,)
+
+PR #1479 has **zero CI checks**, which is why it went unseen.
+
+**Cause — two fail-open omissions masking each other, and fixing one exposed a
+third.** On main, `ForwardModel` did not delegate `ssp_data`, so
+`Fitter._build_data_args` raised `AttributeError`, a blanket
+`contextlib.suppress` swallowed it, and `_jit_inputs` was never built. Every
+fit therefore took the *eager* `predict_photometry` fallback in
+`_build_prediction`. That fallback is the only path the population model has
+ever supported.
+
+This branch correctly fixes the delegation (#1496 — without it the SSP grid
+inlines as 267.6 MB of a 274.6 MB program and XLA is OOM-killed). But
+`_jit_inputs` is now built for **every** model, so hierarchical fits route into
+`threaded_impl`, the **single-galaxy** orchestrator. Per-galaxy parameters
+carry a leading `(N,)` axis, reach scalar component code, and die broadcasting
+`(N,)` against `(n_grid,)`.
+
+**Fix**: `_build_data_args` skips `_jit_inputs` when the model wraps a
+`PopulationSEDModel`, via a new `_population_sed(model)` predicate that
+`_maybe_extract_batched_data` now shares. Single-galaxy fits keep the #1496
+threading win; hierarchical fits return to the eager path. Verified: 31 passed
+across `test_single_hamiltonian_path_probe.py` and
+`test_loss_ssp_threading.py`.
+
+**What the fix does NOT do.** Hierarchical fits still closure-capture the SSP
+grid, so they keep paying the baking cost #1496 removed for single-galaxy fits.
+Removing it needs the batched-vmap forward (#211), not a wider gate. Anyone
+running a large joint fit should expect the compile-memory cliff until then.
+
+**Standing lesson.** A guard that fails open converts a one-line omission into
+an invisible cliff, and the population path passed its own contract tests for
+as long as the fallback happened to carry it. The tests were not wrong — they
+were green on a path nobody intended to be load-bearing.
