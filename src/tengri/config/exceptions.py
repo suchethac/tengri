@@ -176,3 +176,29 @@ class WildcardPartialFreeWarning(UserWarning):
         Raised instead when the wildcard frees *nothing*, which is never
         intended.
     """
+
+
+class DeadGradientParameterWarning(UserWarning):
+    """A freed parameter whose gradient is identically zero (#1206).
+
+    The parameter reaches the SED only through a kernel whose derivative rule
+    does not differentiate it, so every gradient-based backend (MAP, NUTS, VI)
+    sees exactly ``0.0``. The sampler never moves it, and the reported posterior
+    is the prior — which is indistinguishable, in the output, from a parameter
+    the data genuinely failed to constrain.
+
+    That ambiguity is the reason this warns at build time rather than being left
+    to inspection: "the posterior equals the prior" is a result a user can
+    reasonably expect to see, so nothing downstream can flag it for them.
+
+    Warns rather than raises: pinning the parameter is a legitimate
+    configuration, the forward model is correct either way, and a gradient-free
+    sampler can still fit it. Filter this category if you are sampling without
+    gradients.
+
+    See Also
+    --------
+    tengri.components.agn.component.Float32UnsafeAGNWarning
+        The same discipline for a block that is numerically unsafe rather than
+        gradient-dead.
+    """

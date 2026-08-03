@@ -508,6 +508,54 @@ def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
     )
 
 
+#: Free parameters that reach the SED only through a kernel whose derivative
+#: rule does not differentiate them, so every gradient backend sees exactly
+#: zero. Maps parameter name -> the reason, for the warning below.
+#:
+#: ``agn_kt_warm`` (`kd18_disc_model.py`, ``Uniform(0.1, 0.5)``) reaches the SED
+#: solely via ``_nthcomp_lnu_interp`` (`disc.py:1263`), whose ``custom_jvp``
+#: supplies a ``gamma`` tangent only — the ``kTe`` tangent is discarded, as a
+#: deliberate cost trade-off (a second kernel evaluation per JVP). Measured: the
+#: rule returns exactly ``0.0`` where a central difference gives
+#: ``d ln f / d ln kTe`` ~ -0.24, so the sensitivity is real and order-unity.
+_DEAD_GRADIENT_PARAMS: dict[str, str] = {
+    "agn_kt_warm": (
+        "it reaches the SED only through the nthcomp interpolation kernel, whose "
+        "derivative rule supplies a gamma tangent but no kTe tangent"
+    ),
+}
+
+
+def _warn_dead_gradient_params(spec) -> None:
+    """Warn when a freed parameter has an identically-zero gradient.
+
+    Reads the **final** free-parameter list rather than any one group's, because
+    a group-scoped version of this check would miss exactly the case that
+    matters — see #1482, where a guard scoped to its own group never fired.
+
+    Not an error: pinning the parameter is a legitimate configuration and the
+    forward model is correct either way. The failure is silent, not wrong — the
+    sampler leaves the parameter at its initial value and the posterior returns
+    the prior, which reads as a fitted result. Making it loud is the whole fix.
+    """
+    freed = [name for name in _DEAD_GRADIENT_PARAMS if name in set(spec.free_params)]
+    if not freed:
+        return
+
+    from tengri.config.exceptions import DeadGradientParameterWarning
+
+    for name in freed:
+        warnings.warn(
+            f"{name!r} is a free parameter but its gradient is identically zero: "
+            f"{_DEAD_GRADIENT_PARAMS[name]}. Every gradient-based backend (MAP, "
+            "NUTS, VI) will leave it at its initial value, and the posterior will "
+            "report the prior back as though it had been fitted. Pin it with "
+            f"Fixed(...), or sample it with a gradient-free method. See #1206.",
+            DeadGradientParameterWarning,
+            stacklevel=2,
+        )
+
+
 def _warn_agn_dust_double_count(spec) -> None:
     """Warn when composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
 
@@ -5527,9 +5575,8 @@ class SEDModel:
         # ``csp_integration='trapz'``, the only field that drifts
         # noticeably (~12%) is ``luminosity_weighted_age_gyr`` — the
         # orchestrator integrates the actual ``lnu_age`` cube whose
-        # sum-over-age IS ``sed_intrinsic``, while legacy's
-        # ``compute_per_bin_luminosity(weights, ssp_flux_at_z)``
-        # reconstruction has a hidden DSPS-joint-weight discrepancy
+        # sum-over-age IS ``sed_intrinsic``, while legacy's per-bin
+        # luminosity reconstruction has a hidden DSPS-joint-weight discrepancy
         # under trapz. The orchestrator value is the physically correct
         # one (energy-conserving by construction).
         from tengri.forward import state_to_sed_quantities
@@ -7426,6 +7473,7 @@ class SEDModel:
 
         spec = parse_groups(**groups)
         _warn_agn_dust_double_count(spec)
+        _warn_dead_gradient_params(spec)
         return cls(
             spec,
             ssp_data,

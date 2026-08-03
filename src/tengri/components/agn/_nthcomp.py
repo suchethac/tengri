@@ -260,8 +260,8 @@ def _nthcomp_lnu_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
         ``(nu, gamma, kTe_keV, kTbb_keV)`` -- see :func:`nthcomp_lnu_interp`.
     tangents : tuple
         Tangents of those same four operands. Only the ``gamma`` tangent
-        contributes; the other three are held fixed during fitting and carry
-        exactly zero derivative, matching the reverse rule this replaces.
+        contributes; the other three are discarded, matching the reverse rule
+        this replaces.
 
     Returns
     -------
@@ -278,6 +278,23 @@ def _nthcomp_lnu_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     The ``gamma`` derivative is a one-sided finite difference with an adaptive
     step, because differentiating the composed ``jnp.interp`` chain
     analytically returns NaN.
+
+    **``kTe_keV`` carries a real derivative that this rule deliberately drops.**
+    The wording here used to be that the other three operands "are held fixed
+    during fitting and carry exactly zero derivative". The first half is a
+    configuration choice, not a fact — ``kd18_disc_model.py`` declares
+    ``kt_warm = Uniform(0.1, 0.5, ...)``, so a user can and does free it — and
+    the second half is false: a central difference gives
+    ``d ln f / d ln kTe`` ~ -0.24, an order-unity sensitivity, where this rule
+    returns exactly ``0.0``.
+
+    Supplying it would cost a second :func:`_nthcomp_lnu_interp_impl` call on
+    *every* AGN JVP (~+50% on this kernel), paid by the majority of fits that
+    leave ``kt_warm`` pinned. So the trade-off stands, but it is a trade-off and
+    is now documented as one. The silent half is handled at build time:
+    ``_warn_dead_gradient_params`` in ``forward/sed_model.py`` emits a
+    :class:`~tengri.config.exceptions.DeadGradientParameterWarning` when
+    ``agn_kt_warm`` is freed, so a fit cannot quietly return the prior.
 
     **No cotangent rescaling.** The previous reverse rule divided by
     ``max|fd_grad|`` "to avoid overflow" and restored the scale with
@@ -297,7 +314,25 @@ def _nthcomp_lnu_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     primal_out = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
 
     # Adaptive one-sided step: relative for large gamma, absolute near zero.
-    eps = jnp.maximum(1e-6 * jnp.abs(gamma), 1e-6)
+    #
+    # 1e-3, not the 1e-6 carried over from the custom_vjp spelling. The impl is a
+    # composed ``jnp.interp`` chain, so the finite difference is a subtraction of two
+    # nearly equal ~1e-16 values: at 1e-6 the surviving digits are cancellation
+    # remainder, not slope. Measured against a converged central difference at three
+    # off-node gammas (2.37/2.53/2.64 — 2.5 is a grid node where the derivative is
+    # genuinely undefined and any FD comparison is meaningless)::
+    #
+    #     h        2.37      2.53      2.64
+    #     1e-7     -100%     -100%     -100%     <- differences to exactly 0.0
+    #     ~2.5e-6   -21%      +47%      +5.9%    <- the old step
+    #     1e-4      +0.6%     +0.0%     -1.3%
+    #     1e-3      -0.1%     +0.0%     -0.2%    <- plateau
+    #     1e-2      +0.6%     +0.3%     +0.3%
+    #
+    # The old step was not uniformly biased — it was wrong by -10% to +54% depending
+    # on where in the grid gamma sat, which is why a single-step check never caught
+    # it. The plateau is two decades wide; 1e-3 sits in its middle.
+    eps = jnp.maximum(1e-3 * jnp.abs(gamma), 1e-3)
     shifted = _nthcomp_lnu_interp_impl(nu, gamma + eps, kTe_keV, kTbb_keV)
     fd_grad = (shifted - primal_out) / eps
 
