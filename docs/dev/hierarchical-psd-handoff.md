@@ -471,6 +471,79 @@ and was the weaker of the two.)
 
 ---
 
+## 4c. Two suspects eliminated — the railing is still unexplained
+
+§4b left three candidates for what makes real per-galaxy posteriors differ from
+exact ones: the Laplace approximation, the D=26 nuisance coupling, and the
+likelihood nonlinearity. Two are now measured and **neither reproduces the
+railing**. Each test is an A/B in the §4b toy with one ingredient added and
+everything else — grid, estimator, `p_0` — held fixed.
+
+**1. Laplace + the funnel is NOT sufficient.** Interim fit over (ξ, σ, τ) done
+exactly as the pipeline does it (MAP in unconstrained space, Hessian,
+eigenvalues floored at 1.0, `cov = H⁻¹`, draw, reconstruct
+`m = mean(σ) + L(σ,τ)ξ`), against exact draws on the same galaxies:
+
+| N | exact | Laplace |
+|---|---|---|
+| 16 | 176.0–370.9 | 162.3–280.3 |
+| 64 | 148.6–236.3 ✓ | 150.1–197.3 |
+| 256 | **132.9–171.0 ✓** | **144.3–167.4 ✓** |
+
+Laplace tracks exact and recovers τ at N=256. Its *per-galaxy* τ is biased high
+(median 247.6 vs truth 150 — the same direction as the real railing), but that
+bias does **not** propagate: B2 reweights fields, not per-galaxy τ.
+
+**2. Likelihood nonlinearity is NOT sufficient either.** The toy above is unfair
+to reality in one specific way — conditional on (σ, τ) its posterior over ξ is
+*exactly* Gaussian, so Laplace is near-perfect and only the funnel stresses it.
+Real photometry is Gaussian in flux, and flux is linear in SFR while `m` is
+log-SFR: `f = W exp(m)`. Swapping in that observable (5 nonneg age kernels,
+SNR 20) and changing nothing else:
+
+| N | σ (truth 0.75) | τ Myr (truth 150) |
+|---|---|---|
+| 16 | 0.610–0.692 | 85.9–161.4 ✓ |
+| 64 | 0.617–0.659 | 116.7–156.3 ✓ |
+| 256 | 0.612–0.630 | 110.8–129.0 |
+
+Still no railing. It biases σ **low** (field std 1.25 against an expected 1.73 —
+under-dispersed) and τ mildly low. **Both toys bias low; the real bank rails
+high.** Whatever is missing does not merely amplify these effects, it reverses
+their sign.
+
+**3. The real field ensembles are only mildly anomalous.** Reconstructed
+`centered_fields` for 64 bank galaxies (256k draws), against the interim prior
+mixture — the distribution `p_0` itself represents:
+
+| | bank | prior mix | truth OU |
+|---|---|---|---|
+| field std | **1.810** | 1.562 | 1.726 |
+| implied τ from correlation-vs-lag | 6364 Myr | 6914 Myr | 153.6 Myr |
+
+The bank is **over-dispersed** relative to the prior mixture (+16%) and
+modestly over-correlated at 0.5–4 Gyr lags (+0.05 to +0.17 in correlation).
+Both push toward high σ and high τ, which is the railing direction, and both are
+small — the right magnitude for §4a's +0.098 nats/galaxy rather than a gross
+reconstruction error. **No gross defect in the field reconstruction exists to
+find.**
+
+> ⚠ **A trap that nearly produced a false smoking gun here.** Comparing the bank
+> to a *fixed*-σ truth-OU control shows implied τ = 6364 Myr against 153.6 — a
+> 42× discrepancy that looks damning. It is entirely an artifact: the bank pools
+> draws whose σ varies across the posterior, and a scale mixture inflates
+> long-lag correlation. The interim prior mixture shows the **same** inflation
+> (6914 Myr), and `p_0` is that mixture, so the estimator divides it out.
+> **A posterior mixture must be compared against the prior mixture, never
+> against a fixed-parameter draw.**
+
+**What is left:** the **D=26 nuisance coupling** — mass, dust, metallicity and
+the smooth SFH competing with the field to explain the same photometry. It is
+the one ingredient neither toy has, and the only remaining candidate that could
+flip the bias sign. That is the next test, not more estimator debugging.
+
+---
+
 ## 5. The funnel (not yet addressed)
 
 `s = L(σ,τ)·ξ` is **bilinear**, so the (σ, ξ) geometry is a funnel. Symptoms:
@@ -574,6 +647,12 @@ else means the draws are not posterior draws.
   time an ensemble is produced by reweighting or resampling, report its ESS
   next to the result** — and prefer a closed form when one exists (this toy's
   posterior was an analytic Gaussian mixture all along).
+- **A posterior mixture must be compared against the PRIOR MIXTURE, never
+  against a fixed-parameter draw.** The bank's draws carry a varying σ; a scale
+  mixture inflates long-lag correlation on its own. Against a fixed-σ control
+  the bank's implied τ is 6364 Myr vs 153.6 — a 42× "smoking gun" that
+  evaporates once the interim prior mixture (6914 Myr) is used instead, which is
+  what `p_0` actually divides out. §4c.
 - **Importance sampling from a prior dies exponentially in constrained
   dimensions.** Prior std 4.59, 2.04, 1.74, … against likelihood width 0.15 is
   11–31× too broad *per direction*, and the cost multiplies. Four such
@@ -604,15 +683,23 @@ else means the draws are not posterior draws.
    flat surface carrying no information at all. `p_0` as coded (the
    grid-averaged pushforward) is **correct**; `q_i` is what is wrong.
 
-   Routes, cheapest first:
-   (a) **Importance-correct the Laplace draws back to `q_i`.** Weight draw `m_k`
+   **§4c has since eliminated two of the three candidates.** Laplace + the
+   funnel does not rail, and neither does adding the likelihood nonlinearity;
+   both bias *low* while the real bank rails *high*. Start from the survivor:
+
+   (a) **Add nuisance parameters to the §4b toy** — a free total mass and a dust
+   attenuation competing with the field for the same photometry. This is the one
+   ingredient neither toy has and the only remaining candidate that can flip the
+   bias sign. Cheapest decisive test; the harness already exists in
+   `scripts/hierarchical_psd_estimator_validation.py`.
+   (b) **Importance-correct the Laplace draws back to `q_i`.** Weight draw `m_k`
    by `w_k ∝ p(d_i|m_k) p_0(m_k) / q̂(m_k)` and use the self-normalized estimate.
-   Legitimate and cheap. **Measure the per-galaxy ESS of these weights before
-   trusting any result** — this is the same correction, in the same geometry,
-   that collapsed to ESS ≈ 1 in §4b.
-   (b) Use honest posteriors (NUTS with the funnel addressed) so `q_i` is right
+   **Measure the per-galaxy ESS of these weights before trusting any result** —
+   this is the same correction, in the same geometry, that collapsed to ESS ≈ 1
+   in §4b.
+   (c) Use honest posteriors (NUTS with the funnel addressed) so `q_i` is right
    and no correction is needed.
-   (c) Restrict the field to its data-constrained subspace (~4 of 16 modes)
+   (d) Restrict the field to its data-constrained subspace (~4 of 16 modes)
    before scoring, removing the prior-like roughness that drives the tilt.
 2. **Full covariance comparison, truth vs Laplace fields** across age nodes (not
    just lag-1). Cheapest test of the leading τ hypothesis. ~30 min.
