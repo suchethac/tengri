@@ -20,10 +20,20 @@ step ``h``   γ=2.37   γ=2.53   γ=2.64
 1e-2          +0.6%    +0.3%    +0.3%
 ===========  =======  =======  =======
 
-At ``h=1e-7`` the two evaluations are bit-identical and the difference is
-*exactly* zero. The old step's error was not a fixed bias but ran from -10% to
-+54% depending on where ``gamma`` sat, which is why checking a single step never
-caught it.
+``h=1e-7`` is below the *representation* floor, not merely a noisy step. The
+interpolant's table is float32, so ``_total`` is float32 at ~8.6e-16 where one
+ULP is ~5.3e-23; the true change over that step is ``|f'| * h`` ~ 2.7e-23, i.e.
+**less than half a ULP**. The subtraction cannot resolve it at all, and what
+comes back is whichever way the two roundings happened to fall — exactly 0.0 on
+macOS/ARM, ±1 ULP (a *300%* wrong slope, with the wrong sign) on Linux/x86.
+
+That platform split is why the assertion below is written against ``|f'| * h``
+versus one ULP rather than against an observed value: an earlier version
+asserted the difference was exactly ``0.0``, which held on the machine it was
+measured on and failed on CI while the property it meant to pin was untouched.
+
+The old step's error was not a fixed bias but ran from -10% to +54% depending on
+where ``gamma`` sat, which is why checking a single step never caught it.
 
 **Probe off grid nodes.** ``gamma = 2.5`` is a node of the interpolant, where the
 derivative is genuinely undefined and any FD comparison is meaningless.
@@ -93,10 +103,34 @@ def test_the_old_step_really_was_in_the_cancellation_floor(gamma):
     """The regression this guards against, stated as a measurement.
 
     Documents *why* 1e-6 was wrong so nobody restores it as a "smaller step is
-    more accurate" tidy-up. At 1e-7 the two evaluations are bit-identical.
+    more accurate" tidy-up. Two assertions: the step is below the representation
+    floor (the mechanism), and the slope it yields is therefore worthless (the
+    consequence). Neither depends on which way the rounding falls, so both hold
+    on ARM (difference exactly 0.0) and on x86 (difference ±1 ULP).
     """
+    h = 1e-7
     base = _total(gamma)
-    assert float(_total(gamma + 1e-7) - base) == 0.0, (
-        f"gamma={gamma}: a 1e-7 step no longer collapses to an exactly zero "
-        "difference — the cancellation floor has moved, so re-derive the step"
+    reference = _central(gamma)
+    assert reference != 0.0, f"setup: central difference is zero at gamma={gamma}"
+
+    ulp = float(np.spacing(np.float32(float(base))))
+    expected_change = abs(reference) * h
+    assert expected_change < ulp, (
+        f"gamma={gamma}: the true change over h={h:.0e} is {expected_change:.3e}, no longer "
+        f"below one ULP of the value ({ulp:.3e}). The step is now representable, so this "
+        "is not a cancellation-floor demonstration any more — re-derive it"
+    )
+
+    difference = float(_total(gamma + h) - base)
+    assert abs(difference) <= 2 * ulp, (
+        f"gamma={gamma}: the h={h:.0e} difference is {difference:.3e}, more than 2 ULP "
+        f"({2 * ulp:.3e}) — the subtraction is resolving real slope where it used to "
+        "resolve only rounding"
+    )
+
+    rel = abs(difference / h - reference) / abs(reference)
+    assert rel > 0.5, (
+        f"gamma={gamma}: the h={h:.0e} one-sided FD is now only {rel:.1%} from the "
+        f"converged derivative {reference:.4e}. It used to be useless there, which is the "
+        "whole reason the shipped step is 1e-3 — re-measure the sweep in the docstring"
     )

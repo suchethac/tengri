@@ -45,10 +45,12 @@ def _weights(scale=1.0):
 #: The **weights** are the knob that moves ``l_total``, and the only one.
 #:
 #: Scaling ``ssp_flux_at_z`` cannot: :func:`_per_bin_luminosity_relative` divides
-#: by the peak of that very array, so ``l_total`` came back *bit-identical*
-#: (1.4134e+16) at flux scales of 1e-25, 1.0 and 1e+25. A first version of this
-#: file swept the flux and passed with the old unit-bearing threshold restored —
-#: green for a reason that had nothing to do with what it claimed to test.
+#: by the peak of that very array, so ``l_total`` came back as 1.4134e+16 at flux
+#: scales of 1e-25, 1.0 and 1e+25 — bit-identical on macOS/ARM, and within 1 ULP
+#: (~1e-16 relative) on Linux/x86, where the peak division rounds differently.
+#: A first version of this file swept the flux and passed with the old
+#: unit-bearing threshold restored — green for a reason that had nothing to do
+#: with what it claimed to test.
 #:
 #: Measured against the old ``l_total > 1e-20``: w=1e-36 gives l_total=1.41e-20
 #: (still passes), w=1e-40 gives 1.41e-24 (NaN). So 1e-40 is inside the flip
@@ -103,15 +105,39 @@ def test_rescaling_the_flux_cannot_reach_the_guard_at_all(flux_scale):
     Pins the peak-division invariance directly: ``l_total`` is independent of
     the flux normalization, so a flux sweep can never exercise the threshold no
     matter how many decades it spans.
-    """
-    from tengri.utils.sed_quantities import _per_bin_luminosity_relative
 
-    reference = float(jnp.sum(_per_bin_luminosity_relative(_weights(1.0), _flux(1.0), _WAVE)))
+    Stated as a margin rather than as bit-equality. The peak division is not
+    bit-exact on every platform — it is exact on macOS/ARM and 1 ULP off on
+    Linux/x86 — and an earlier ``got == reference`` here failed on CI for that
+    reason alone, while the property it meant to pin was untouched. The claim
+    that matters is quantitative: reaching the guard needs ``l_total`` to fall
+    ~4.8e12x relative to the peak bin, so a ~1e-16 rounding wobble is some
+    twenty-eight orders of magnitude short of being able to.
+    """
+    from tengri.utils.sed_quantities import _WEIGHT_SUM_REL_FLOOR, _per_bin_luminosity_relative
+
+    ref_bins = _per_bin_luminosity_relative(_weights(1.0), _flux(1.0), _WAVE)
+    reference = float(jnp.sum(ref_bins))
     got = float(jnp.sum(_per_bin_luminosity_relative(_weights(1.0), _flux(flux_scale), _WAVE)))
-    assert got == reference, (
-        f"l_total moved from {reference:.6e} to {got:.6e} under a flux rescaling — "
-        "the peak factorization is no longer exact, and a flux-swept threshold "
-        "test would now be meaningful where it previously was not"
+
+    rel = abs(got - reference) / abs(reference)
+    assert rel < 1e-12, (
+        f"l_total moved from {reference:.6e} to {got:.6e} ({rel:.3e} relative) under a flux "
+        "rescaling — the peak factorization is no longer scale-free, and a flux-swept "
+        "threshold test would now be meaningful where it previously was not"
+    )
+
+    # The setup half: reaching the guard needs l_total to fall by essentially its
+    # whole magnitude (a factor ~4.8e12), i.e. a *relative* change of ~1. The
+    # assertion above caps the flux sweep's effect at 1e-12 relative, so the two
+    # together say rounding is twelve decades short. Deliberately not phrased as a
+    # product of the two numbers: that had ~1.5x headroom and would have failed on
+    # a platform that rounded 2 ULP instead of 1 — the very trap this file is fixing.
+    margin = (reference / float(jnp.max(jnp.abs(ref_bins)))) / _WEIGHT_SUM_REL_FLOOR
+    assert margin > 1e6, (
+        f"this configuration now sits only {margin:.3e}x clear of the emptiness guard. "
+        "The sweep above is no longer testing an unreachable threshold, so pick weights "
+        "that put l_total back in the live regime"
     )
 
 
