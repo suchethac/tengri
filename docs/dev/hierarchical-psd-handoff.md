@@ -1,13 +1,32 @@
 # Hierarchical SFH-PSD recovery — handoff
 
 **Branch:** `worktree-hierarchical-psd-spec` · **PR:** #1479
-**Status:** the estimator is correct — **now demonstrated against an exact
-analytic posterior** (§4b): given true per-galaxy draws it recovers σ and τ and
-shows no railing out to N=512. End-to-end it still has a **ceiling on N around
-32–64**, above which the shared posterior jumps to a grid corner. The cause is a
-small per-galaxy bias in `Z_i(σ,τ)` amplified linearly by N, traced to the
-mismatch between the true interim posterior and the Laplace draws (§4a).
-Everything below is measured, not assumed.
+
+**Status.** The estimator is correct — demonstrated against an exact analytic
+posterior (§4b): given true per-galaxy draws it recovers σ and τ with no railing
+out to N=512. End-to-end it still has a **ceiling on N around 32–64**, above
+which the shared posterior jumps to a grid corner. **The cause is now
+identified and proven sufficient (§4e): the anisotropy of the per-galaxy ξ
+covariance.** Matching its eigenvalue spectrum alone — random eigenvectors —
+reproduces the railing to three significant figures; isotropic ξ does not rail.
+One question remains open and it decides the fix: whether that anisotropy is a
+Laplace artifact or a real feature of the posterior (§4e, §8).
+
+Everything below is measured, not assumed. Several sections record conclusions
+that were later **refuted by measurement**; they are kept, marked, because the
+reasoning errors recur.
+
+**Reading order** (the §4 lettering accreted; this is the sequence):
+
+| § | Says |
+|---|---|
+| **4** | the open problem, and what is ruled out |
+| **4a-bis** | what σ and τ mean; what is identified |
+| **4b** | the estimator is sound (exact-posterior test) — supersedes an "ill-posed measurand" claim |
+| **4a** | the per-galaxy tilt, localized — its *mechanism* is superseded by §4e |
+| **4c** | four suspects eliminated: funnel, nonlinearity, nuisance coupling, reconstruction |
+| **4d** | `corr(tilt, interim τ) = +0.856` — a real diagnostic, but **refuted as the cause** |
+| **4e** | **the cause: the ξ covariance spectrum, proven necessary and sufficient** |
 
 ---
 
@@ -597,11 +616,95 @@ a re-fit of the bank.
 
 ---
 
-## 4d. THE MECHANISM — `Z_i` reads the interim posterior's τ straight back
+## 4e. THE CAUSE — the ξ covariance spectrum, proven sufficient
+
+**Matching the ξ covariance eigenvalue spectrum alone reproduces the railing to
+three significant figures.** Holding `(σ_k, τ_k)` fixed at the bank's stored
+values and varying *only* the ξ ensemble:
+
+| N | real ξ | synthetic, **matched spectrum, random eigenvectors** | synthetic isotropic |
+|---|---|---|---|
+| 16 | 38.5–91.1 | 132.0–429.4 ✓ | 52.1–139.1 |
+| 64 | 433.3–490.9 **RAILED** | **437.4–491.5 RAILED** | 108.0–174.8 ✓ |
+| 256 | 473.0–494.9 **RAILED** | **472.9–494.8 RAILED** | 154.2–196.8 |
+
+The eigenvectors are random — only the spectrum is matched — and it rails
+identically. Isotropic ξ does not rail. **The ξ covariance spectrum is necessary
+and sufficient.**
+
+**The spectrum** (median across galaxies; the ξ prior is N(0, I), so isotropic
+would be all 1.00):
+
+```
+1.27  1.19  1.13  1.06  1.01  0.96  0.92  0.87  0.83  0.78  0.73  0.67  0.61  0.55  0.42  0.20
+```
+
+Total variance 13.2 against 16. Two features matter: the data shrinks the
+constrained directions (down to 0.20), and **four to five directions sit ABOVE
+the unit prior**. The latter is the signature of marginalizing over correlated
+nuisances — `cov = H⁻¹` is formed on the full D=26 Hessian, and the ξ-block of
+the inverse is not the inverse of the ξ-block. Degeneracy with mass, dust and
+(σ, τ) inflates those directions past the prior.
+
+The reconstructed field ensemble then has a covariance that **no single
+OU(σ, τ) can represent**, and the estimator settles on whichever grid point fits
+least badly — the corner. Per-galaxy that is +0.27 to +0.32 nats; times N it
+beats the prior between N=32 and N=64, exactly where the jump is.
+
+**How the elimination converged.** Holding everything else fixed and swapping
+only the ξ ensemble:
+
+| ξ | (σ, τ) | τ at N=256 | |
+|---|---|---|---|
+| real, paired with own (σ,τ) | real | 473.0–494.9 | RAILED |
+| real, **shuffled** within galaxy | real | 473.0–494.9 | RAILED |
+| fresh N(0, I) | real | 154.1–197.6 | not railed |
+| synthetic, matched spectrum | real | 472.9–494.8 | RAILED |
+
+Shuffling changes nothing, and the within-galaxy `corr(mean|ξ|, τ)` is +0.018 —
+so the ξ–(σ,τ) *coupling* is irrelevant. Only the ξ *distribution* matters.
+
+**Why the earlier self-consistency check missed it.** §4c compared per-draw
+`std(m)` against synthetic draws and got a ratio of 0.994 — reassuring, and
+useless here. Total ξ variance is 13.2 vs 16, a std ratio of 0.96, which that
+test cannot distinguish from noise. The defect is in the **shape** of the
+covariance, not its scale, and a scalar summary is blind to shape.
+
+**What is NOT yet established.** Whether this anisotropy is a faithful feature
+of the true posterior or an artifact of Laplace. Marginalizing over nuisances
+*can* legitimately inflate a marginal variance above its prior, so the spectrum
+is not self-evidently wrong. This matters for the fix:
+
+* **If NUTS gives a different spectrum** → Laplace artifact → fix the per-galaxy
+  fits and the estimator is fine as written.
+* **If NUTS gives the same spectrum** → the anisotropy is real, `q_i` is
+  genuinely this shape, and since `Z_i = C_i E_{q_i}[p(m|σ,τ)/p_0(m)]` is exact
+  for *any* `q_i`, the fault would lie in how the estimator handles it.
+
+That is now a single, precisely scoped measurement on ~8 galaxies: **compare the
+ξ covariance spectrum, Laplace vs NUTS.** Not a bank re-fit.
+
+---
+
+## 4d. The correlation — a symptom, not the cause
+
+> ⚠ **This section's claim to be "THE MECHANISM" is REFUTED — see §4e.** The
+> correlation below is real and reproducible, but it is a **symptom**. The
+> decisive test: rebuild the ensembles from the bank's own `(σ_k, τ_k)` with
+> fresh isotropic ξ, preserving the entire hyperparameter distribution this
+> section blames. Result: **τ 154.1–197.6 at N=256, no railing** — against the
+> real 473.0–494.9. The (σ, τ) spread is *not sufficient*. §4e finds what is:
+> the ξ covariance spectrum, which reproduces the railing to three significant
+> figures on its own.
+>
+> Kept because the correlation is a genuine, cheap, pre-pooling diagnostic, and
+> because the reasoning error is worth seeing: a strong correlation plus a
+> plausible mechanical story is not causation, and the positive control that
+> would have caught it took twenty minutes.
 
 **`corr(per-galaxy tilt, per-galaxy interim posterior τ) = +0.856`**, measured
-on 64 galaxies of `psd_bank_fixed`. This is the driver, and it is not the
-roughness story of §4a.
+on 64 galaxies of `psd_bank_fixed`. A real and useful diagnostic — but §4e shows
+it is downstream of the ξ spectrum, not the cause.
 
 **The tilt is not a uniform bias — it is a heavy tail.** §4a's "+0.098
 nats/galaxy" is reproduced on the current bank (+0.102, 38% favoring the corner
@@ -780,6 +883,15 @@ else means the draws are not posterior draws.
   time an ensemble is produced by reweighting or resampling, report its ESS
   next to the result** — and prefer a closed form when one exists (this toy's
   posterior was an analytic Gaussian mixture all along).
+- **A scalar summary is blind to the shape of a covariance.** The per-draw
+  `std(m)` check passed at ratio 0.994 while the ξ covariance was anisotropic
+  enough to rail the whole estimator (§4e) — total variance 13.2 vs 16 is a
+  0.96 std ratio, indistinguishable from noise. When the suspect is a
+  covariance, compare **spectra**, not scalars.
+- **A strong correlation plus a plausible mechanism is not causation.** §4d had
+  `corr = +0.856` and a mechanical story, and was wrong: the positive control
+  (rebuild from the blamed quantity alone) did not rail. Twenty minutes. Run the
+  positive control *before* writing the mechanism up.
 - **Any statistic computed by POOLING across a mixture needs a mixture-matched
   control.** This confound produced two separate false leads in one session: a
   42× "over-smoothing" signal (below), and an apparent σ contradiction
@@ -832,13 +944,18 @@ else means the draws are not posterior draws.
    galaxies carries the whole effect, and dropping the worst 5 of 64 flips the
    sign. Start there:
 
-   (a) **Test the fix against the mechanism §4d names.** No remedy has been
-   tried against it yet. The per-galaxy `Z_i` peak landing on a grid bound is a
-   pre-pooling red flag, and it correlates 0.856 with the stored interim τ that
-   is already in every checkpoint — so a diagnostic is available before any
-   re-fitting. Quantify how much of the railing survives once the heavy tail is
-   handled (down-weighted, or the interim τ range tightened), and report what
-   tightening the range assumes.
+   **§4e has since found the cause and proven it sufficient**: the ξ covariance
+   spectrum. Matching it alone — random eigenvectors — reproduces the railing to
+   three significant figures; isotropic ξ does not rail. One question decides
+   the fix:
+
+   (a) **Compare the ξ covariance spectrum, Laplace vs NUTS, on ~8 galaxies**
+   (`dense_mass_matrix=False`; watch the 20+ GB warmup in CLAUDE.md). A
+   different spectrum means Laplace is at fault and the estimator is fine as
+   written; the same spectrum means the anisotropy is real and — since
+   `Z_i = C_i E_{q_i}[·]` is exact for any `q_i` — the fault is in how the
+   estimator handles it. Everything downstream depends on which. Not a bank
+   re-fit: one spectrum per galaxy, 16 numbers each.
    (b) **Importance-correct the Laplace draws back to `q_i`.** Weight draw `m_k`
    by `w_k ∝ p(d_i|m_k) p_0(m_k) / q̂(m_k)` and use the self-normalized estimate.
    **Measure the per-galaxy ESS of these weights before trusting any result** —
