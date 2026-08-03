@@ -1043,6 +1043,76 @@ def list_igm_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
+#: The SFH→SSP age-weight kernels, as a menu. Not a registry-backed dispatch
+#: (there are exactly two, hand-written in the stellar component), but a
+#: structural axis of ``SEDModel.build`` all the same — and a builder-accepted
+#: value named by no menu is undiscoverable by construction (#1446).
+_AGE_KERNELS: tuple[tuple[str, str, str], ...] = (
+    (
+        "cic",
+        "production",
+        "Cloud-in-cell on a 16x dense integrand — the accuracy default (#964)",
+    ),
+    (
+        "dsps",
+        "comparison",
+        "DSPS histogram kernel — cross-code parity only; biases optical CSP +1.2 %",
+    ),
+)
+
+
+def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
+    """List the SFH→SSP age-weight kernels selectable via ``sfh={'age_kernel': ...}``.
+
+    The kernel decides how the star-formation history is integrated onto the SSP
+    age grid. ``'cic'`` splits each ``SFR(t)*dt`` parcel between its bracketing
+    SSP nodes with log-age cloud-in-cell weights on a dense integrand;
+    ``'dsps'`` hands the coarse per-SSP-age table to DSPS's histogram kernel,
+    which interpolates ``log10(M(<t))`` in ``log10(t)``.
+
+    They are not interchangeable. The DSPS kernel annihilates the mass of any
+    table segment straddling the SFH's maximum age — the first SSP node older
+    than the SFH start keeps ~1e-5 of its share — which biases the optical CSP
+    +1.2 % versus FSPS / bagpipes / a dense reference (#964). It is offered for
+    comparison against DSPS-native pipelines, not for science.
+
+    Leaving ``age_kernel`` unset auto-selects: ``'cic'`` on the parametric path,
+    ``'dsps'`` on the GP-field path (whose draw lives on its own coarse lookback
+    grid, so there is no dense integrand to cloud-in-cell).
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter to one status — ``"production"`` or ``"comparison"``.
+
+    Returns
+    -------
+    _RegistryTable
+        One row per kernel: ``name``, ``status``, ``short_doc``.
+
+    See also: :func:`list_sfh_models`, :mod:`tengri.builders.sfh`.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.list_age_kernels()  # doctest: +SKIP
+    """
+    out = [
+        {
+            "name": name,
+            "kind": "age_kernel",
+            "status": st,
+            "citation": "hearin2021" if name == "dsps" else "",
+            "short_doc": doc,
+            "use": f"SEDModel.build(sfh={{'age_kernel': {name!r}}})",
+        }
+        for name, st, doc in _AGE_KERNELS
+    ]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
 _COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
     (
         "stellar",
@@ -1688,6 +1758,7 @@ def _menu_listers() -> tuple:
         list_dust_laws,
         list_dust_emission_models,
         list_sfh_models,
+        list_age_kernels,
         list_nebular_backends,
         list_xray_models,
         list_radio_models,
@@ -1800,16 +1871,85 @@ def list_recipes() -> _RegistryTable:
         doc = inspect.getdoc(fn) or ""
         short_doc = doc.split("\n\n", 1)[0].strip().replace("\n", " ")
         ssp_req = _parse_ssp_requirement(doc)
+        # Calling the recipe is cheap — it returns a kwargs dict and builds
+        # nothing — so the table can report what each one actually needs
+        # rather than what its prose claims.
+        try:
+            data_status = _recipe_data_status(fn())
+        except Exception:
+            data_status = "unknown"
         out.append(
             {
                 "name": name,
                 "kind": "recipe",
                 "short_doc": short_doc,
                 "ssp_requirement": ssp_req,
+                "data": data_status,
                 "use": f"recipes.{name}() → SEDModel.build(ssp_data=ssp, **recipe)",
             }
         )
     return _RegistryTable(out)
+
+
+#: Component types whose data ships separately from tengri, mapped to the
+#: ``kind`` argument their loader resolves. Keyed by the value a recipe puts in
+#: a block's ``type``.
+_EXTERNAL_GRID_BLOCKS: dict[str, str] = {
+    "synthesizer": "nlr",
+    "synthesizer_spectra": "nlr",
+}
+
+
+def _recipe_data_status(kwargs: dict) -> str:
+    """Report whether a recipe's non-SSP data is present on this machine.
+
+    ``list_recipes`` presented all ten recipes as equals while one of them —
+    ``unified_agn`` — cannot produce a number without a Synthesizer AGN grid
+    that does not ship with tengri. A recipe is by definition the thing a new
+    user is told to start from, so "this one needs a download" belongs in the
+    table rather than in a traceback (#1462 §3).
+
+    The check calls the **loader's own resolver** rather than re-deriving the
+    search path. A second copy of "where does this file live" would drift, and
+    a column that says ``ready`` while the loader disagrees is worse than no
+    column at all.
+
+    Returns
+    -------
+    str
+        ``"ready"`` when nothing extra is needed, or a short note naming what
+        is missing. Never raises: an unresolvable requirement is the answer,
+        not an error.
+    """
+    needed: set[str] = set()
+
+    def _walk(node):
+        if isinstance(node, dict):
+            block_type = node.get("type")
+            if isinstance(block_type, str) and block_type in _EXTERNAL_GRID_BLOCKS:
+                needed.add(_EXTERNAL_GRID_BLOCKS[block_type])
+            for value in node.values():
+                _walk(value)
+        elif isinstance(node, (list, tuple)):
+            for value in node:
+                _walk(value)
+
+    _walk(kwargs)
+    if not needed:
+        return "ready"
+
+    from tengri.components.agn.blocks.nlr import _resolve_synthesizer_grid
+
+    missing = []
+    for kind in sorted(needed):
+        try:
+            _resolve_synthesizer_grid(kind)
+        except Exception:
+            missing.append(kind)
+    if not missing:
+        return "ready"
+    kinds = "/".join(k.upper() for k in missing)
+    return f"needs Synthesizer AGN {kinds} grid (synthesizer-download --agn-test-grids)"
 
 
 def _parse_ssp_requirement(doc: str) -> str:

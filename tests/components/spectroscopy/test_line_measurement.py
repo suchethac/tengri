@@ -28,7 +28,7 @@ jax.config.update("jax_enable_x64", True)
 from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, Uniform, load_ssp_data
 from tengri.cosmology import luminosity_distance
 from tengri.observation.line_flux_data import LineFluxData
-from tengri.observation.line_measurement import DESI_LINES, LineDef
+from tengri.observation.line_measurement import DESI_LINES, LineDef, resolve_line_defs
 
 pytestmark = pytest.mark.contract
 
@@ -132,7 +132,8 @@ def test_measured_works_for_cue_backend(real_ssp_only):
     """Measure-as-catalog works on Cue's total SED; a clean line ([OIII]) recovers
     the direct nebular luminosity to ~10% (dust off)."""
     m, p = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
-    measured = {ld.name: float(v) for ld, v in zip(DESI_LINES, m.measure_line_fluxes(p))}
+    defs = resolve_line_defs(None, m.observation)
+    measured = {ld.name: float(v) for ld, v in zip(defs, m.measure_line_fluxes(p))}
     direct = {
         n: float(v)
         for n, v in zip(
@@ -149,8 +150,10 @@ def test_measured_includes_dust_reddening():
     catalog-observable behavior the intrinsic predict_line_fluxes lacks."""
     m0, p0 = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
     m1, p1 = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.6)
-    f0 = {ld.name: float(v) for ld, v in zip(DESI_LINES, m0.measure_line_fluxes(p0))}
-    f1 = {ld.name: float(v) for ld, v in zip(DESI_LINES, m1.measure_line_fluxes(p1))}
+    d0 = resolve_line_defs(None, m0.observation)
+    f0 = {ld.name: float(v) for ld, v in zip(d0, m0.measure_line_fluxes(p0))}
+    d1 = resolve_line_defs(None, m1.observation)
+    f1 = {ld.name: float(v) for ld, v in zip(d1, m1.measure_line_fluxes(p1))}
     # reddening lowers observed flux, and Hbeta (bluer) more than Halpha (redder)
     assert f1["Halpha"] < f0["Halpha"] and f1["Hbeta"] < f0["Hbeta"]
     assert (f1["Hbeta"] / f0["Hbeta"]) < (f1["Halpha"] / f0["Halpha"])

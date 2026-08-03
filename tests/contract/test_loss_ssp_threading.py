@@ -392,3 +392,58 @@ def test_threading_does_not_change_the_number_on_either_surface(
         f"[{surface}/{channel}] threaded {v_threaded} != baked {v_baked} — threading "
         f"changed the physics, not just the calling convention"
     )
+
+
+def test_hierarchical_forwards_are_excluded_from_threading(synthetic_ssp, simple_observation):
+    """A hierarchical forward must NOT get ``_jit_inputs``.
+
+    The threaded forward is written for a single-population SED forward; on a
+    :class:`PopulationSEDModel` it mis-broadcasts the galaxy axis against the SFH
+    grid (``mul got incompatible shapes (256,), (3,)``).
+
+    This exclusion used to happen by ACCIDENT: ``_build_data_args`` read
+    ``model.ssp_data``, ``ForwardModel`` did not delegate it, and a
+    ``contextlib.suppress`` ate the ``AttributeError``. Adding that delegation to
+    fix single-galaxy threading turned threading *on* for hierarchical fits and
+    broke two of them in CI. The exclusion is now stated via
+    ``_supports_jit_threading``, and this pins it.
+    """
+    from tengri import FIXED, SEDModel, Uniform
+    from tengri.forward.population_sed_model import PopulationSEDModel
+
+    template = SEDModel.build(
+        ssp_data=synthetic_ssp,
+        observation=simple_observation,
+        sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(8, 12)},
+        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        neb={"type": "none"},
+        redshift=Fixed(0.5),
+    )
+    from tengri import ForwardModel
+
+    pop = PopulationSEDModel(
+        sed=template,
+        galaxies=[
+            {"flux_obs": jnp.ones(3) * 1e-18, "noise": jnp.ones(3) * 1e-19} for _ in range(3)
+        ],
+    )
+    forward = ForwardModel.build(population=pop, observation=simple_observation)
+    assert forward._supports_jit_threading() is False, (
+        "a hierarchical forward reports itself threadable; the threaded forward "
+        "mis-broadcasts the galaxy axis there"
+    )
+
+    fitter = Fitter(forward)
+    assert "_jit_inputs" not in fitter._data_args, (
+        "a hierarchical fit built _jit_inputs — the threaded forward will raise "
+        "TypeError on the galaxy axis"
+    )
+
+
+def test_single_population_forwards_are_still_threadable(synthetic_ssp_wide):
+    """Neuter for the exclusion above: it must not switch threading off generally."""
+    from tengri import ForwardModel
+
+    obs = Observation(photometry=_PHOT)
+    forward = ForwardModel.build(sed=_build_model(synthetic_ssp_wide, obs), observation=obs)
+    assert forward._supports_jit_threading() is True

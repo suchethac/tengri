@@ -295,9 +295,24 @@ def resolve_method(method: str, emit_warning: bool = True) -> str:
 #: Constructor parameters the convenience fit surfaces manage themselves
 #: (positionally or via their own named parameters) — never routed from a
 #: surface's ``**kwargs``.
-_FIT_SURFACE_MANAGED = frozenset(
-    {"self", "model", "data", "noise", "data_type", "data_mask", "approx", "params_override"}
-)
+# Names the fit surface supplies from its own call signature. These can never be
+# taken from ``**kwargs`` -- ``fit(data, noise, ...)`` already owns them.
+_FIT_SURFACE_POSITIONAL = frozenset({"self", "model", "data", "noise"})
+
+# Names the surface may DERIVE (e.g. ``data_type="joint"`` for a joint ``Data``
+# record) but which are still ordinary ``Fitter.__init__`` parameters a caller may
+# set explicitly. They must land in ``ctor_kwargs``.
+#
+# These used to sit in one undifferentiated set with the positional names, and
+# ``split_fitter_kwargs`` excluded the whole set from ``ctor_names``. The effect
+# was that passing any of them routed the value to ``Fitter.run()``, which hands
+# it to the backend runner -- so a documented kwarg raised
+# ``run_map() got an unexpected keyword argument 'data_type'`` (#1500). The
+# derivation still wins by ``setdefault``, so an explicit value takes precedence
+# without the surface losing its default.
+_FIT_SURFACE_DERIVED = frozenset({"data_type", "data_mask", "approx", "params_override"})
+
+_FIT_SURFACE_MANAGED = _FIT_SURFACE_POSITIONAL | _FIT_SURFACE_DERIVED
 
 
 def _model_catalog_z_range(model):
@@ -345,7 +360,7 @@ def split_fitter_kwargs(kwargs):
     ctor_names = {
         name
         for name in inspect.signature(Fitter.__init__).parameters
-        if name not in _FIT_SURFACE_MANAGED
+        if name not in _FIT_SURFACE_POSITIONAL
     }
     ctor_kwargs = {k: v for k, v in kwargs.items() if k in ctor_names}
     run_kwargs = {k: v for k, v in kwargs.items() if k not in ctor_names}
@@ -1241,19 +1256,19 @@ class Fitter:
         # every fit through it baked the SSP grid into the compiled program as a
         # constant and XLA was OOM-killed on large grids. A guard that fails open
         # turns a one-line omission into an invisible performance cliff.
-        # Hierarchical fits are excluded until the batched forward lands (#211).
-        # ``threaded_impl`` is the SINGLE-galaxy orchestrator; a population fit
-        # carries per-galaxy parameters with a leading (N,) axis, which reach
-        # scalar component code and die broadcasting (N,) against (n_grid,).
-        # This is not hypothetical — it is why
-        # ``tests/contract/test_single_hamiltonian_path_probe.py`` went red when
-        # the ``ssp_data`` delegation above first populated ``_jit_inputs`` for
-        # every model. The population path has only ever run through the eager
-        # fallback in ``_build_prediction``; that fallback closure-captures the
-        # SSP grid, so hierarchical fits keep paying the baking cost that #1496
-        # removed for single-galaxy fits. Removing that cost needs the batched
-        # forward, not a wider gate here.
-        _threadable = _population_sed(model) is None
+        #
+        # The topology gate is separate and asked of the model: the threaded
+        # forward is written for a single-population SED forward and mis-broadcasts
+        # the galaxy axis on a hierarchical one. Absent on SEDModel, where threading
+        # has always been valid, so default True.
+        #
+        # Consequence worth stating: excluded topologies fall back to the eager
+        # ``_build_prediction`` path, which closure-captures the SSP grid — so
+        # hierarchical fits keep paying the baking cost #1496 removed for
+        # single-galaxy ones (measured 5.7 h / 6.25 GB for a joint NUTS at N=4,
+        # D=98). Fixing that needs the batched forward (#211), not a wider gate.
+        _supports = getattr(model, "_supports_jit_threading", None)
+        _threadable = _supports() if callable(_supports) else True
         if _threadable and all(
             hasattr(model, attr) for attr in ("spec", "ssp_data", "_template_data_for_jit")
         ):

@@ -13,6 +13,8 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.grid_interp import resample_template
+
 # Wavelength ranges (Angstrom)
 # 0.0413 Angstrom = hc / (300 keV) with hc = 12.398 keV.Angstrom: the hard edge
 # is set at 300 keV so the Yang+2020 / X-CIGALE corona exponential cutoff
@@ -175,18 +177,10 @@ def interpolate_sed_to_grid(
     array (n_tgt,)
         Interpolated SED. Zero outside source range.
     """
-    # Clamp to positive before log (SED can have zeros at grid edges)
-    sed_safe = jnp.maximum(sed_src, 1e-300)
-    log_wave_src = jnp.log10(wave_src)
-    log_sed_src = jnp.log10(sed_safe)
-    log_wave_tgt = jnp.log10(wave_target)
-
-    # Interpolate in log-log space
-    log_sed_tgt = jnp.interp(log_wave_tgt, log_wave_src, log_sed_src)
-    sed_tgt = 10.0**log_sed_tgt
-
-    # Zero outside source range (no extrapolation)
-    outside = (wave_target < wave_src[0]) | (wave_target > wave_src[-1])
-    sed_tgt = jnp.where(outside, 0.0, sed_tgt)
-
-    return sed_tgt
+    # Single-sourced on ``resample_template`` so there is one log-log resampler
+    # in the codebase, not two. That helper falls back to linear-in-flux on any
+    # interval with a non-positive endpoint, which is better than this function's
+    # previous ``maximum(sed, 1e-300)`` floor: flooring makes the interval
+    # between a zero and a real value a near-vertical geometric ramp, whereas
+    # the fallback interpolates it sensibly.
+    return resample_template(wave_target, wave_src, sed_src, left=0.0, right=0.0)

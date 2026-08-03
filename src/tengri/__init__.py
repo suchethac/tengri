@@ -427,6 +427,7 @@ from tengri.registry import (
     describe_recipe,
     describe_sfh_model,
     help,
+    list_age_kernels,
     list_agn_blocks,
     list_agn_models,
     list_all,
@@ -589,6 +590,7 @@ __all__ = [  # noqa: RUF022
     "examples",
     "tutorial",
     # Component discovery
+    "list_age_kernels",
     "list_agn_blocks",
     "list_agn_models",
     "list_all",
@@ -712,6 +714,7 @@ _CURATED_DIR = (
     "help",
     "summary",
     "describe",
+    "list_age_kernels",
     "list_agn_blocks",
     "list_agn_models",
     "list_dust_emission_models",

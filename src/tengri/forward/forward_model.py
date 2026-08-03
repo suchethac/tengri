@@ -290,6 +290,35 @@ class ForwardModel:
         """Derived-property catalog of the inner SED. Delegated (#1300)."""
         return self._single_inner_sed("available_properties").available_properties
 
+    def _supports_jit_threading(self) -> bool:
+        """Whether the threaded (``data_args``) forward is valid for this topology.
+
+        The threaded forward — ``predict_observables_jit`` / ``predict_state`` with
+        ``ssp_data`` and ``template_data`` passed in — is written for a plain
+        single-population SED forward. On a hierarchical
+        (:class:`PopulationSEDModel`-wrapped) forward it mis-broadcasts the galaxy
+        axis against the SFH grid (``mul got incompatible shapes (256,), (3,)``).
+
+        Hierarchical and multi-population forwards were previously excluded by
+        *accident*: ``Fitter._build_data_args`` read ``model.ssp_data``, which did
+        not exist, and a ``contextlib.suppress`` swallowed the ``AttributeError``.
+        Adding that delegation turned threading on for topologies it does not
+        support. This states the exclusion instead of relying on a missing
+        attribute, and keeps the topology test next to the other topology guards.
+
+        Returns
+        -------
+        bool
+            True only for a single, non-spatial, non-``PopulationSEDModel``
+            population.
+        """
+        if len(self.populations) != 1 or self.populations[0].spatial is not None:
+            return False
+        sub = self.populations[0].sed
+        # A PopulationSEDModel wraps its template as ``.sed``; a plain SEDModel
+        # does not, so this distinguishes hierarchical from single-galaxy.
+        return getattr(sub, "sed", sub) is sub
+
     @property
     def ssp_data(self):
         """SSP grid of the inner SED. Delegated.

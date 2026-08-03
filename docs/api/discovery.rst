@@ -56,6 +56,8 @@ and a one-line description.
 
 .. autofunction:: tengri.list_sfh_models
 
+.. autofunction:: tengri.list_age_kernels
+
 .. autofunction:: tengri.list_dust_models
 
 .. autofunction:: tengri.list_dust_laws

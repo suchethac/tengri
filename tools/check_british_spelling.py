@@ -424,9 +424,38 @@ YSE_SUFFIX = [
 ]
 
 
+# Invariant ``-ise`` words, longest first, for the suffix test in ``_is_invariant``.
+# Deliberately NOT the whole INVARIANT set: it also protects ``-our`` nouns
+# (``our``, ``hour``, ``four``), and matching those as tails would exempt
+# ``colour`` from the OUR -> OR rule. ``-yse`` is left out for the same reason —
+# ``analyses`` is invariant, but ``catalyses`` must still become ``catalyzes``.
+_ISE_TAILS = tuple(
+    sorted(
+        (w for w in INVARIANT if any(w.endswith(suf) for suf, _ in ISE_SUFFIX) and len(w) >= 4),
+        key=len,
+        reverse=True,
+    )
+)
+
+
+def _is_invariant(word: str) -> bool:
+    """True if ``word`` is American-invariant, including prefixed forms.
+
+    The ISE rule is decided by the *tail* of a word, so the exemption has to be
+    decided by the tail too. An exact-match table leaves a fresh gap at every
+    prefixed and inflected form, which is how this checker came to demand the
+    non-words ``advized``, ``promizing`` and ``unsurprizing`` — three one-word
+    patches to one missing rule. Matching on the tail covers ``unsurprising``
+    from ``surprising`` and ``sunrise`` from ``rise`` without a new entry.
+    """
+    if word in INVARIANT:
+        return True
+    return any(word != tail and word.endswith(tail) for tail in _ISE_TAILS)
+
+
 def to_american(word: str) -> str | None:
     """American spelling of lowercase British ``word``, or None if not British."""
-    if word in INVARIANT:
+    if _is_invariant(word):
         return None
     for table in (OUR, TRE, OGUE, DLL, GREY, MISC):
         if word in table:

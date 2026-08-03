@@ -153,3 +153,26 @@ class AGNDustDoubleCountWarning(UserWarning):
     double-counts AGN mid/far-IR (ADR-0018 §5, issue #721). Pick one surface;
     filter this category if the overlap is deliberate.
     """
+
+
+class WildcardPartialFreeWarning(UserWarning):
+    """``all_params: FREE`` freed only some of the parameters it covered.
+
+    ``FREE`` resolves each parameter to its declared ``free_prior``. A parameter
+    with no ``free_prior`` falls back to its ``prior`` — a ``Fixed`` scalar — and
+    stays pinned. When a group holds both kinds, the wildcard frees one subset
+    and silently leaves the rest frozen, and the fit reports a posterior with
+    that physics held constant (issue #1474).
+
+    A partial result is not always a defect: ``dust_Rv`` is fixed by definition
+    for a Calzetti law, and ``dust_delta`` applies only to the Noll-modified
+    variant. Whether a parameter *should* be freeable is a per-parameter physics
+    question — so this warns rather than raising. Filter this category when the
+    partial free is deliberate.
+
+    See Also
+    --------
+    tengri.config.exceptions.ParameterError
+        Raised instead when the wildcard frees *nothing*, which is never
+        intended.
+    """
