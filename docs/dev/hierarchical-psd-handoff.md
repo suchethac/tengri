@@ -445,13 +445,19 @@ right (median peak 0.757 vs truth 0.75) but pins τ to the grid floor — 10.0�
 for six of eight galaxies, median 12.2, against truth-field peaks that scatter
 73–438 Myr but center correctly.
 
-**Mechanism.** `log Z_i = logsumexp_k[log p(m_k|σ,τ) − log p_0(m_k)]` averages
-over the draw ensemble. A small-τ kernel is nearly white and gives moderate
-density to *every* draw; a large-τ kernel gives high density to smooth draws and
-near-zero to rough ones. An ensemble containing prior-like roughness — exactly
-what the ~12 unconstrained field directions contribute — therefore favors small
-τ. With K=1 there is no ensemble, the single true field is smooth, and large τ
-wins. That is why the truth-field test passes and the pipeline does not.
+**Mechanism — SUPERSEDED, see §4d.** The reading below (prior-like roughness
+from unconstrained directions drives a small-τ preference) is **refuted**:
+sweeping the toy's information content from `n_eff` 4.0 down to 1.0 leaves the
+tilt flat at −0.88 to −0.98 and moves the peak *up*, not toward the floor. The
+actual driver is measured in §4d and it is not roughness.
+
+> `log Z_i = logsumexp_k[log p(m_k|σ,τ) − log p_0(m_k)]` averages over the draw
+> ensemble. A small-τ kernel is nearly white and gives moderate density to
+> *every* draw; a large-τ kernel gives high density to smooth draws and
+> near-zero to rough ones. An ensemble containing prior-like roughness — exactly
+> what the ~12 unconstrained field directions contribute — therefore favors
+> small τ. With K=1 there is no ensemble, the single true field is smooth, and
+> large τ wins.
 
 Dividing by `p_0` is precisely what should cancel this. It fails because `p_0`
 is the **grid-averaged pushforward** while the draws actually came from a
@@ -588,6 +594,86 @@ real galaxies with `mcmc_nuts` (`dense_mass_matrix=False`) and compare their
 Laplace surfaces and the +0.098 nats/galaxy tilt; the missing half is a
 trustworthy reference for the same galaxies. That is a small, targeted run — not
 a re-fit of the bank.
+
+---
+
+## 4d. THE MECHANISM — `Z_i` reads the interim posterior's τ straight back
+
+**`corr(per-galaxy tilt, per-galaxy interim posterior τ) = +0.856`**, measured
+on 64 galaxies of `psd_bank_fixed`. This is the driver, and it is not the
+roughness story of §4a.
+
+**The tilt is not a uniform bias — it is a heavy tail.** §4a's "+0.098
+nats/galaxy" is reproduced on the current bank (+0.102, 38% favoring the corner
+— so §4a is *not* stale), but the mean hides the structure. Per-galaxy tilts run
+**−9.14 to +5.05**, and the `Z_i` peak spans the entire grid, 10 to 500 Myr:
+
+| gal | tilt | `Z_i` peak τ | interim τ | σ |
+|---|---|---|---|---|
+| 0035 | **+5.88** | 500.0 | 309.0 | 0.605 |
+| 0050 | +5.46 | 500.0 | 349.8 | 0.627 |
+| 0019 | +5.05 | 500.0 | 350.4 | 0.650 |
+| 0042 | +4.97 | 500.0 | 363.5 | 0.663 |
+| 0036 | +4.32 | 500.0 | 402.3 | 0.633 |
+| … | | | | |
+| 0028 | −3.39 | 10.0 | 56.5 | 0.750 |
+| 0037 | −4.07 | 15.9 | 41.4 | 0.844 |
+| 0001 | **−9.14** | 13.0 | 21.3 | 0.875 |
+
+**Dropping the worst 5 of 64 flips the sign of the total** (+20.4 → −5.3 nats).
+A handful of galaxies carries the entire effect.
+
+**Why.** The stored draws are built as `m_k = mean(σ_k) + L(σ_k, τ_k) ξ_k`. A
+galaxy whose interim posterior put τ high produces a *smooth* ensemble by
+construction, and `ou_logpdf` then scores that ensemble highest at large τ — so
+`Z_i` peaks at the grid maximum. `Z_i` is reading the interim posterior's own τ
+back out. Dividing by `p_0` cannot undo this: `p_0` is the shared interim
+**prior**, identical for every galaxy, while what leaks in is each galaxy's
+**posterior** position. The identity `Z_i = C_i E_{q_i}[p(m|σ,τ)/p_0(m)]` is
+exact only when `q_i` is the true posterior; with `q̂` Laplace, the residual is
+proportional to how far that galaxy's τ wandered.
+
+**Why it rails, and why at N≈64.** τ is not identified per galaxy (joint NUTS
+returns the prior, §4b), so per-galaxy interim τ scatters across the whole prior
+range — measured 21 to 407 Myr. The resulting tilt distribution is asymmetric
+(τ is compressed against its floor at 10 and stretched toward 500), leaving a
+positive mean of +0.318 nats/galaxy on this sample. Multiplied by N that beats
+the prior somewhere between N=32 and N=64, exactly where the jump is observed.
+
+**Why every toy missed it — measured, not assumed.** Per-galaxy interim τ,
+toy vs bank:
+
+| | median | min | max | IQR |
+|---|---|---|---|---|
+| toy (21-param nuisance) | 246.3 | 156.0 | 265.5 | 41.0 |
+| bank | 246.4 | **21.3** | **406.8** | **73.6** |
+
+The medians are identical to 0.1 Myr — this is purely a **spread** difference,
+1.80× by IQR, and far larger in range. The toy's τ never leaves 156–266, so the
+galaxies that carry the entire tilt (interim τ 309–407 at the top, 21–79 at the
+bottom) *do not exist in it*. Its tilts are correspondingly tight and negative,
+0% favoring the corner, at every information content tested.
+
+The toys reproduce the *estimator*; they do not reproduce the *spread of
+per-galaxy τ posteriors* that real, τ-unidentified fits produce. **That spread,
+not the estimator, is the disease.** It also explains the sign flip that puzzled
+§4c: the toys bias low because they lack the high-τ tail entirely.
+
+**What this implies for the fix.**
+1. The heavy tail is diagnosable *before* pooling — the per-galaxy `Z_i` peak
+   sitting at a grid bound is a per-galaxy red flag, and it correlates 0.856
+   with the stored interim τ, which is already in every checkpoint.
+2. Reducing the interim prior's τ range would shrink the leak directly, at the
+   cost of assuming what you are trying to measure. Worth quantifying, not
+   worth shipping silently.
+3. The principled fix remains importance-correcting `q̂ → q_i` (§8b), and this
+   section says exactly where the correction has to bite: on the galaxies whose
+   τ wandered furthest.
+
+**Status.** Every number in this section is measured on `psd_bank_fixed`. The
+one supporting claim that was initially assumed — the toy/bank τ-spread
+difference — has since been measured too (table above). What is *not* yet
+established is the fix: no remedy has been tried against this mechanism.
 
 ---
 
@@ -741,13 +827,18 @@ else means the draws are not posterior draws.
    caricature recovers τ, and the toys bias *low* while the real bank rails
    *high*. Do not build a fourth toy — start here instead:
 
-   (a) **Fit ~8 real bank galaxies with `mcmc_nuts` (`dense_mass_matrix=False`)
-   and compare their `log Z_i(σ,τ)` surfaces to the Laplace ones.** This is the
-   only remaining route that exercises the real forward model, which is now the
-   only place the difference can live. §4a already has the Laplace surfaces and
-   the +0.098 nats/galaxy tilt; what is missing is a trustworthy reference for
-   the same galaxies. Small and targeted — not a bank re-fit. Watch the 20+ GB
-   NUTS warmup documented in CLAUDE.md.
+   **§4d has since found the mechanism** — `corr(tilt, per-galaxy interim τ) =
+   +0.856`; `Z_i` reads the interim posterior's τ back out, a handful of
+   galaxies carries the whole effect, and dropping the worst 5 of 64 flips the
+   sign. Start there:
+
+   (a) **Test the fix against the mechanism §4d names.** No remedy has been
+   tried against it yet. The per-galaxy `Z_i` peak landing on a grid bound is a
+   pre-pooling red flag, and it correlates 0.856 with the stored interim τ that
+   is already in every checkpoint — so a diagnostic is available before any
+   re-fitting. Quantify how much of the railing survives once the heavy tail is
+   handled (down-weighted, or the interim τ range tightened), and report what
+   tightening the range assumes.
    (b) **Importance-correct the Laplace draws back to `q_i`.** Weight draw `m_k`
    by `w_k ∝ p(d_i|m_k) p_0(m_k) / q̂(m_k)` and use the self-normalized estimate.
    **Measure the per-galaxy ESS of these weights before trusting any result** —

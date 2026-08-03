@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 r"""Validate the two-step PSD estimator against an EXACT analytic posterior.
 
 The population estimator ``shared_log_posterior`` is only correct given draws
