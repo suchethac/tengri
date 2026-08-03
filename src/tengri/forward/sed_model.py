@@ -70,6 +70,7 @@ from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import ParameterMapError
 from tengri.cosmology import age_at_z, luminosity_distance
+from tengri.forward.approx_policy import BAND_PROJECTION_KEYS, ApproxPolicy
 from tengri.forward.pipeline import (
     interp_metallicity,
     interp_metallicity_evolving,
@@ -374,7 +375,9 @@ class WavePrecomp:
         else:
             # Derive from the legacy pair, preserving its documented meaning.
             if legacy_passed:
-                n_sub = 5 if self.n_subbands is None else int(self.n_subbands)
+                n_sub = (
+                    ApproxPolicy().n_subbands if self.n_subbands is None else int(self.n_subbands)
+                )
                 taylor = bool(self.taylor_correction)
                 if n_sub > 0 and taylor:
                     # The contradiction. Previously resolved silently toward
@@ -434,42 +437,6 @@ class WavePrecomp:
         object.__setattr__(self, "band_integration", scheme)
         object.__setattr__(self, "n_subbands", n_sub)
         object.__setattr__(self, "taylor_correction", taylor)
-
-
-#: The band-projection knobs that :class:`WavePrecomp` owns.
-#:
-#: Anything that needs their default values reads them from here rather than
-#: writing its own copy, so there is exactly one place that decides what
-#: "no band-projection preference expressed" means.
-_BAND_PROJECTION_KEYS: tuple[str, ...] = (
-    "band_integration",
-    "taylor_correction",
-    "n_subbands",
-    "fast_dust_emission",
-)
-
-
-def _band_projection_defaults() -> dict:
-    """Default band-projection knobs, read off a default ``WavePrecomp``.
-
-    ``SEDModel._DEFAULT_APPROX`` used to spell these out a second time, and the
-    two copies disagreed — it said ``taylor_correction=True, n_subbands=0``
-    where :class:`WavePrecomp` resolves to ``False, 5``. Which scheme actually
-    ran therefore depended on which constructor path the model took, and the
-    difference is a silent accuracy change of up to 42 % in the rest-UV rather
-    than a cosmetic one.
-
-    Sourcing them here means the two cannot drift apart again: there is one
-    definition, and ``WavePrecomp.__post_init__`` has already resolved it into
-    internal agreement.
-
-    Returns
-    -------
-    dict
-        ``{key: value}`` for each of :data:`_BAND_PROJECTION_KEYS`.
-    """
-    defaults = WavePrecomp()
-    return {key: getattr(defaults, key) for key in _BAND_PROJECTION_KEYS}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -1048,13 +1015,7 @@ class SEDModel:
     #
     # Deriving them means the two cannot drift apart again. Pinned by
     # ``tests/regression/bug/test_band_integration_is_explicit.py``.
-    _DEFAULT_APPROX: ClassVar[dict] = {
-        "wave_precomp": False,
-        "ztable": False,
-        "spectrum_precomp": False,
-        "igm": True,
-        **_band_projection_defaults(),
-    }
+    _DEFAULT_APPROX: ClassVar[ApproxPolicy] = ApproxPolicy()
 
     #: Maximum spectral resolution R = λ/Δλ for which the SpectrumPrecomp
     #: per-pixel effective-wavelength LUT is trusted. Above this the model
@@ -1093,7 +1054,7 @@ class SEDModel:
                 f"'bessell' convention, got convention={_conv!r}. Use the exact path "
                 f"(approx=None) for the energy/CIGALE convention."
             )
-        self._approx["wave_precomp"] = True
+        self._approx = self._approx.replace(wave_precomp=True)
 
     def _resolve_spectrum_precomp(self, cfg, observation) -> None:
         """Activate the per-pixel spectrum LUT for one ``SpectrumPrecomp`` config.
@@ -1121,10 +1082,10 @@ class SEDModel:
                 f"to silence this, or down-bin the spectrum.",
                 stacklevel=3,
             )
-            self._approx["spectrum_precomp"] = False
+            self._approx = self._approx.replace(spectrum_precomp=False)
             self._approx_config_spec = None
         else:
-            self._approx["spectrum_precomp"] = True
+            self._approx = self._approx.replace(spectrum_precomp=True)
             self._approx_config_spec = cfg
             # #1166: the SpectrumPrecomp LUT point-interpolates the SSP onto the
             # pixel grid at build time, so it does NOT honor a flux-conserving
@@ -1209,9 +1170,9 @@ class SEDModel:
         self._approx_config_wave: WavePrecomp | None = None
         self._approx_config_feature: FeaturePrecomp | None = None
         if approx is None:
-            self._approx = dict(self._DEFAULT_APPROX)
-            self._approx["wave_precomp"] = False
-            self._approx["ztable"] = False
+            self._approx = self._DEFAULT_APPROX
+            self._approx = self._approx.replace(wave_precomp=False)
+            self._approx = self._approx.replace(ztable=False)
         else:
             # Accept a single config or a composite ``(WavePrecomp, SpectrumPrecomp,
             # FeaturePrecomp)`` sequence (order-independent, at most one of each).
@@ -1239,7 +1200,7 @@ class SEDModel:
                     "bool / string forms (e.g. approx={'wave_precomp': True}, "
                     "approx=True, approx='wave_precomp') were removed."
                 )
-            self._approx = dict(self._DEFAULT_APPROX)
+            self._approx = self._DEFAULT_APPROX
             if wave_cfgs:
                 self._resolve_wave_precomp(wave_cfgs[0])
             if spec_cfgs:
@@ -1276,8 +1237,9 @@ class SEDModel:
             # same tuple the defaults are built from. Copying field-by-field is
             # how a knob gets forgotten here and silently keeps a default that
             # contradicts the others.
-            for key in _BAND_PROJECTION_KEYS:
-                self._approx[key] = getattr(screen, key)
+            self._approx = self._approx.replace(
+                **{key: getattr(screen, key) for key in BAND_PROJECTION_KEYS}
+            )
 
         # Part A (joint precompute): on a joint photometry+spectroscopy
         # observation, any precompute opt-in builds BOTH LUT families. The
@@ -1293,8 +1255,8 @@ class SEDModel:
             and getattr(observation, "is_joint", False)
             and (self._approx.get("wave_precomp") or self._approx.get("spectrum_precomp"))
         ):
-            self._approx["wave_precomp"] = True
-            self._approx["spectrum_precomp"] = True
+            self._approx = self._approx.replace(wave_precomp=True)
+            self._approx = self._approx.replace(spectrum_precomp=True)
 
         # Free-redshift ztable auto-extension. ``ztable`` is an internal
         # extension of ``wave_precomp`` (free-z interpolation on the same LUT),
@@ -1319,15 +1281,15 @@ class SEDModel:
             cz = self._approx_config_wave.catalog_z_range if self._approx_config_wave else None
             if cz is not None:
                 if redshift_dist.is_fixed:
-                    self._approx["ztable"] = True
+                    self._approx = self._approx.replace(ztable=True)
                     self._catalog_z_range = (float(cz[0]), float(cz[1]))
                 # Free-redshift case: catalog_z_range is harmless (ztable already on)
                 # but record it so the compile_signature still distinguishes ranges.
                 else:
-                    self._approx["ztable"] = True
+                    self._approx = self._approx.replace(ztable=True)
                     self._catalog_z_range = (float(cz[0]), float(cz[1]))
             elif not redshift_dist.is_fixed:
-                self._approx["ztable"] = True
+                self._approx = self._approx.replace(ztable=True)
 
         # ── Stellar populations ───────────────────────────────────
         self._init_ssp(spec, ssp_data, csp_integration)

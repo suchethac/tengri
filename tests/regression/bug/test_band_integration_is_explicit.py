@@ -188,13 +188,10 @@ def test_default_approx_does_not_carry_its_own_copy_of_the_band_knobs():
     the difference is a silent accuracy change of up to 42 % in the rest-UV
     (see the module docstring) rather than a cosmetic one.
     """
-    from tengri.forward.sed_model import (
-        _BAND_PROJECTION_KEYS,
-        _band_projection_defaults,
-    )
+    from tengri.forward.approx_policy import BAND_PROJECTION_KEYS, ApproxPolicy
 
-    defaults = _band_projection_defaults()
-    for key in _BAND_PROJECTION_KEYS:
+    defaults = ApproxPolicy()
+    for key in BAND_PROJECTION_KEYS:
         assert SEDModel._DEFAULT_APPROX[key] == defaults[key], (
             f"_DEFAULT_APPROX[{key!r}] has drifted from WavePrecomp's default. "
             "Derive it from _band_projection_defaults() rather than restating it."
@@ -207,25 +204,27 @@ def test_the_derived_defaults_are_the_accurate_scheme():
     Pins the value too, so a future change to WavePrecomp's default silently
     flipping every no-preference model onto a worse scheme fails here.
     """
-    from tengri.forward.sed_model import _band_projection_defaults
+    from tengri.forward.approx_policy import ApproxPolicy
 
-    assert _band_projection_defaults()["band_integration"] == "quadrature"
-    assert _band_projection_defaults()["n_subbands"] >= 1
-    assert _band_projection_defaults()["taylor_correction"] is False
+    assert ApproxPolicy().band_integration == "quadrature"
+    assert ApproxPolicy().n_subbands >= 1
+    assert ApproxPolicy().taylor_correction is False
 
 
 def test_every_band_knob_is_copied_from_the_config(ssp, obs):
     """No knob may be forgotten at the copy site.
 
-    Field-by-field copying is how one gets dropped and silently keeps a
-    default contradicting the rest; both ends key off the same tuple.
+    Naming the fields one at a time is how one gets dropped and silently
+    keeps a default contradicting the rest; both ends key off the same tuple.
     """
-    from tengri.forward.sed_model import _BAND_PROJECTION_KEYS
+    from tengri.forward.approx_policy import BAND_PROJECTION_KEYS
 
     cfg = WavePrecomp(band_integration="taylor", fast_dust_emission=True)
     m = _model(ssp, obs, dust_type="two_component", approx=cfg)
-    for key in _BAND_PROJECTION_KEYS:
-        assert m._approx[key] == getattr(cfg, key), f"{key} was not copied from the config"
+    for key in BAND_PROJECTION_KEYS:
+        assert m._approx[key] == getattr(cfg, key), (
+            f"{key} did not reach the policy from the config"
+        )
 
 
 # ── backward compatibility: the legacy pair still resolves as before ─────
