@@ -306,7 +306,8 @@ The exact-op localization was the crux: `checkify` named the primitive
 
 Each fix is a distinct pull request with targeted tests. Coordinate the unit-change PRs (item 3) to avoid breaking the public API across multiple releases.
 
-**What is left, then, is item 3 plus one latent residue.** Item 3 — the breaking unit change — is
+**What is left of the eight items above is item 3 plus one latent residue** — two further open
+threads that are *not* on that list follow after. Item 3 — the breaking unit change — is
 the only item that still blocks a *test*: both surviving pure-float32 `xfail`s name it, namely
 `test_linear_observables_pure_float32_cue_only` (linear `q_h` ~1e56 and the erg/s `line_lums` behind
 `balmer_decrement`) and `test_disc_float32_pending[grahsp_sbpl]` (the linear `agn_grahsp_l5100`).
@@ -323,6 +324,19 @@ does, and clearing the five entries is what closes item 2.
 Separately — *not* a range problem, so item 3 will not close it — reverse-mode **gradient accuracy**
 through the projection seam remains open under #1388; see "Not fixed here: float32 AGN gradient
 *accuracy*".
+
+**One fail-open in this module is deliberately still open (#1527).** This work is named for stopping
+the energy balance failing open to zero, so it has to say which one it did not stop.
+`_peak_factored_trapezoid` merges "nothing was absorbed" and "the integrand is non-finite" into a
+single `ok=False`, and both callers turn that into `0.0` / `-inf` — one corrupt pixel reports a
+dust-free galaxy. Closing it was implemented and reverted: it breaks
+`test_lyc_mask_energy_balance.py::TestFiniteGuard`, which pins the clamp on purpose for Inf·0
+artifacts from extreme-metallicity SSP fluxes (BUG-NSS-02), inherited from the kernel #922 retired.
+The convention contradicts `utils.scale.log10_add`, which reports an overflowed term as `+inf`
+precisely so it cannot be read as zero; both ship. Which one wins changes dust IR for corrupt inputs,
+so it is a physics-policy call under #1527, not a float32 change. The log path's half of the
+behavior — previously pinned nowhere — is now pinned by
+`tests/regression/precision/test_energy_balance_fail_open.py`.
 
 ---
 
