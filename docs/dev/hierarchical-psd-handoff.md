@@ -537,10 +537,57 @@ find.**
 > **A posterior mixture must be compared against the prior mixture, never
 > against a fixed-parameter draw.**
 
-**What is left:** the **D=26 nuisance coupling** — mass, dust, metallicity and
-the smooth SFH competing with the field to explain the same photometry. It is
-the one ingredient neither toy has, and the only remaining candidate that could
-flip the bias sign. That is the next test, not more estimator debugging.
+**4. Nuisance coupling is NOT sufficient either.** The third increment adds the
+degeneracies the real D=26 fit has and the toys lacked, each aimed at a
+different part of the field: a free log-normalization (degenerate with the
+**mean** of `m`), a smooth SFH slope (degenerate with the lowest-frequency
+**ramp** mode), and dust attenuation (mimics age through **color**, competing
+with the low-frequency structure the ~4 constrained modes carry). 21 parameters
+against the real fit's 26; everything else unchanged.
+
+| N | σ (truth 0.75) | τ Myr (truth 150) |
+|---|---|---|
+| 16 | 0.603–0.712 | 116.3–224.2 ✓ |
+| 64 | 0.620–0.675 | 110.0–150.6 ✓ |
+| 256 | 0.637–0.664 | **127.8–150.3 ✓** |
+
+τ *covers truth at every N*. Still no railing.
+
+**5. The field reconstruction is sound — the draws are self-consistent.** For
+each stored draw, a synthetic OU field was generated at that draw's own
+`(σ_k, τ_k)` and the per-draw statistics compared. Matched by construction in
+σ, τ, node count and correlation, so any offset is a property of the draws:
+
+| per-draw statistic | bank | synthetic at same (σ_k, τ_k) | ratio |
+|---|---|---|---|
+| std(m) | 1.146 | 1.153 | **0.994** |
+| lag-1 correlation | 0.251 | 0.270 | 0.927 |
+| corr of std(m) with own σ·ln10 | 0.767 | 0.763 | — |
+
+`centered_fields` is not the problem, and the draws genuinely carry the
+amplitude and smoothness their own hyperparameters imply.
+
+> ⚠ **The same mixture confound, a second time.** This test was motivated by an
+> apparent contradiction — per-galaxy posterior mean σ = 0.639, but pooled field
+> std 1.810 implying σ ≈ 0.786. There is no contradiction: pooling draws over a
+> *varying* σ raises the pooled std above the median σ. Any statistic computed
+> by pooling across a mixture needs a mixture-matched control, not a
+> point-estimate comparison.
+
+**Where this leaves the search.** Six things are now measured and cleared: the
+estimator (§4b), the importance weights (median ESS ~550), the field
+reconstruction, the funnel, the likelihood nonlinearity, and the nuisance
+coupling. Every caricature recovers τ; only the real pipeline rails. The
+difference is therefore **specific to the real forward model or the real
+`run_laplace` fit**, not to the generic structure — so more toy-building has hit
+diminishing returns.
+
+The one route left that uses the real forward model: **fit the same handful of
+real galaxies with `mcmc_nuts` (`dense_mass_matrix=False`) and compare their
+`log Z_i(σ,τ)` surfaces against the Laplace ones directly.** §4a already has the
+Laplace surfaces and the +0.098 nats/galaxy tilt; the missing half is a
+trustworthy reference for the same galaxies. That is a small, targeted run — not
+a re-fit of the bank.
 
 ---
 
@@ -647,6 +694,11 @@ else means the draws are not posterior draws.
   time an ensemble is produced by reweighting or resampling, report its ESS
   next to the result** — and prefer a closed form when one exists (this toy's
   posterior was an analytic Gaussian mixture all along).
+- **Any statistic computed by POOLING across a mixture needs a mixture-matched
+  control.** This confound produced two separate false leads in one session: a
+  42× "over-smoothing" signal (below), and an apparent σ contradiction
+  (per-galaxy mean 0.639 vs pooled-implied 0.786) that is just pooling over a
+  varying σ. Neither survived a matched control. §4c.
 - **A posterior mixture must be compared against the PRIOR MIXTURE, never
   against a fixed-parameter draw.** The bank's draws carry a varying σ; a scale
   mixture inflates long-lag correlation on its own. Against a fixed-σ control
@@ -683,23 +735,25 @@ else means the draws are not posterior draws.
    flat surface carrying no information at all. `p_0` as coded (the
    grid-averaged pushforward) is **correct**; `q_i` is what is wrong.
 
-   **§4c has since eliminated two of the three candidates.** Laplace + the
-   funnel does not rail, and neither does adding the likelihood nonlinearity;
-   both bias *low* while the real bank rails *high*. Start from the survivor:
+   **§4c has since eliminated ALL THREE candidates**, plus the field
+   reconstruction. Laplace + the funnel does not rail; adding the likelihood
+   nonlinearity does not; adding the nuisance coupling does not. Every
+   caricature recovers τ, and the toys bias *low* while the real bank rails
+   *high*. Do not build a fourth toy — start here instead:
 
-   (a) **Add nuisance parameters to the §4b toy** — a free total mass and a dust
-   attenuation competing with the field for the same photometry. This is the one
-   ingredient neither toy has and the only remaining candidate that can flip the
-   bias sign. Cheapest decisive test; the harness already exists in
-   `scripts/hierarchical_psd_estimator_validation.py`.
+   (a) **Fit ~8 real bank galaxies with `mcmc_nuts` (`dense_mass_matrix=False`)
+   and compare their `log Z_i(σ,τ)` surfaces to the Laplace ones.** This is the
+   only remaining route that exercises the real forward model, which is now the
+   only place the difference can live. §4a already has the Laplace surfaces and
+   the +0.098 nats/galaxy tilt; what is missing is a trustworthy reference for
+   the same galaxies. Small and targeted — not a bank re-fit. Watch the 20+ GB
+   NUTS warmup documented in CLAUDE.md.
    (b) **Importance-correct the Laplace draws back to `q_i`.** Weight draw `m_k`
    by `w_k ∝ p(d_i|m_k) p_0(m_k) / q̂(m_k)` and use the self-normalized estimate.
    **Measure the per-galaxy ESS of these weights before trusting any result** —
    this is the same correction, in the same geometry, that collapsed to ESS ≈ 1
    in §4b.
-   (c) Use honest posteriors (NUTS with the funnel addressed) so `q_i` is right
-   and no correction is needed.
-   (d) Restrict the field to its data-constrained subspace (~4 of 16 modes)
+   (c) Restrict the field to its data-constrained subspace (~4 of 16 modes)
    before scoring, removing the prior-like roughness that drives the tilt.
 2. **Full covariance comparison, truth vs Laplace fields** across age nodes (not
    just lag-1). Cheapest test of the leading τ hypothesis. ~30 min.
