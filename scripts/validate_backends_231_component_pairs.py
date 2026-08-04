@@ -48,19 +48,38 @@ from tengri.inference._backend_registry import _BACKENDS
 
 DATA = Path("/Users/suchethacooray/Projects/tengri/data")
 SSP_FILE = DATA / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-FILTERS_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-                 "2mass_j", "2mass_h", "2mass_ks"]
-HMC_KW = dict(n_warmup=300, n_burnin=50, n_samples=1000,
-              n_leapfrog_steps=10, dense_mass_matrix=True, verbose=False)
+FILTERS_NAMES = [
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+]
+HMC_KW = dict(
+    n_warmup=300,
+    n_burnin=50,
+    n_samples=1000,
+    n_leapfrog_steps=10,
+    dense_mass_matrix=True,
+    verbose=False,
+)
 
 
 # ── model factories ────────────────────────────────────────────────────────
 
+
 def model_dpl_calzetti():
     return dict(
         sfh=builders.sfh.dpl(defaults=FREE),
-        dust={"type": "two_component", "*": FIXED,
-              "law_bc": "calzetti", "tau_bc": Uniform(0.0, 1.0)},
+        dust={
+            "type": "two_component",
+            "*": FIXED,
+            "law_bc": "calzetti",
+            "tau_bc": Uniform(0.0, 1.0),
+        },
         neb={"type": "none"},
     )
 
@@ -68,8 +87,12 @@ def model_dpl_calzetti():
 def model_dense_basis_calzetti():
     return dict(
         sfh=builders.sfh.dense_basis(defaults=FREE),
-        dust={"type": "two_component", "*": FIXED,
-              "law_bc": "calzetti", "tau_bc": Uniform(0.0, 1.0)},
+        dust={
+            "type": "two_component",
+            "*": FIXED,
+            "law_bc": "calzetti",
+            "tau_bc": Uniform(0.0, 1.0),
+        },
         neb={"type": "none"},
     )
 
@@ -77,8 +100,12 @@ def model_dense_basis_calzetti():
 def model_tsnorm_calzetti():
     return dict(
         sfh=builders.sfh.tsnorm(defaults=FREE),
-        dust={"type": "two_component", "*": FIXED,
-              "law_bc": "calzetti", "tau_bc": Uniform(0.0, 1.0)},
+        dust={
+            "type": "two_component",
+            "*": FIXED,
+            "law_bc": "calzetti",
+            "tau_bc": Uniform(0.0, 1.0),
+        },
         neb={"type": "none"},
     )
 
@@ -86,8 +113,7 @@ def model_tsnorm_calzetti():
 def model_dpl_smc():
     return dict(
         sfh=builders.sfh.dpl(defaults=FREE),
-        dust={"type": "two_component", "*": FIXED,
-              "law_bc": "smc", "tau_bc": Uniform(0.0, 1.0)},
+        dust={"type": "two_component", "*": FIXED, "law_bc": "smc", "tau_bc": Uniform(0.0, 1.0)},
         neb={"type": "none"},
     )
 
@@ -95,18 +121,22 @@ def model_dpl_smc():
 def model_dexp_calzetti():
     return dict(
         sfh=builders.sfh.dexp(defaults=FREE),
-        dust={"type": "two_component", "*": FIXED,
-              "law_bc": "calzetti", "tau_bc": Uniform(0.0, 1.0)},
+        dust={
+            "type": "two_component",
+            "*": FIXED,
+            "law_bc": "calzetti",
+            "tau_bc": Uniform(0.0, 1.0),
+        },
         neb={"type": "none"},
     )
 
 
 SCENARIOS = {
-    "dpl+calzetti":         model_dpl_calzetti,
+    "dpl+calzetti": model_dpl_calzetti,
     "dense_basis+calzetti": model_dense_basis_calzetti,
-    "tsnorm+calzetti":      model_tsnorm_calzetti,
-    "dpl+smc":              model_dpl_smc,
-    "dexp+calzetti":        model_dexp_calzetti,
+    "tsnorm+calzetti": model_tsnorm_calzetti,
+    "dpl+smc": model_dpl_smc,
+    "dexp+calzetti": model_dexp_calzetti,
 }
 
 
@@ -115,7 +145,8 @@ def build(scenario_factory):
     _, _, filters = load_filter_set(FILTERS_NAMES)
     obs = Observation(photometry=Photometry(filters=tuple(filters)))
     return SEDModel.build(
-        ssp_data=ssp, observation=obs,
+        ssp_data=ssp,
+        observation=obs,
         redshift=Fixed(0.05),
         approx=WavePrecomp(),
         **scenario_factory(),
@@ -153,10 +184,16 @@ def posterior_derived(post, model) -> dict:
         # MAP/Laplace point
         pred = model.predict(post.params)
         return {
-            "log_stellar_mass": {"median": float(np.log10(float(pred.sfh.stellar_mass))),
-                                 "p16": None, "p84": None},
-            "log_sfr_100myr": {"median": float(np.log10(max(float(pred.sfh.sfr_100myr), 1e-30))),
-                               "p16": None, "p84": None},
+            "log_stellar_mass": {
+                "median": float(np.log10(float(pred.sfh.stellar_mass))),
+                "p16": None,
+                "p84": None,
+            },
+            "log_sfr_100myr": {
+                "median": float(np.log10(max(float(pred.sfh.sfr_100myr), 1e-30))),
+                "p16": None,
+                "p84": None,
+            },
         }
     # Compute per-sample
     free = list(samples.keys())
@@ -170,8 +207,8 @@ def posterior_derived(post, model) -> dict:
         pred = model.predict(params)
         sm_log[j] = float(np.log10(float(pred.sfh.stellar_mass)))
         sfr_log[j] = float(np.log10(max(float(pred.sfh.sfr_100myr), 1e-30)))
-    sm_log = sm_log[:len(idx)]
-    sfr_log = sfr_log[:len(idx)]
+    sm_log = sm_log[: len(idx)]
+    sfr_log = sfr_log[: len(idx)]
     return {
         "log_stellar_mass": {
             "median": float(np.median(sm_log)),
@@ -188,6 +225,7 @@ def posterior_derived(post, model) -> dict:
 
 # ── child entry: one (truth, fit) pair ────────────────────────────────────
 
+
 def child_run(truth_key: str, fit_key: str, out_json: str) -> None:
     rec = {"truth_model": truth_key, "fit_model": fit_key}
     try:
@@ -199,7 +237,8 @@ def child_run(truth_key: str, fit_key: str, out_json: str) -> None:
                 truth_derived = derived_truth(truth_model, truth)
             except Exception as e:
                 truth_derived = {
-                    "log_stellar_mass": None, "log_sfr_100myr": None,
+                    "log_stellar_mass": None,
+                    "log_sfr_100myr": None,
                     "_error": f"{type(e).__name__}: {str(e)[:200]}",
                 }
         else:
@@ -210,14 +249,17 @@ def child_run(truth_key: str, fit_key: str, out_json: str) -> None:
             if sidecar.exists():
                 truth_derived = json.loads(sidecar.read_text())
             else:
-                truth_derived = {"log_stellar_mass": None,
-                                 "log_sfr_100myr": None,
-                                 "_error": "no sidecar"}
+                truth_derived = {
+                    "log_stellar_mass": None,
+                    "log_sfr_100myr": None,
+                    "_error": "no sidecar",
+                }
         mock = truth_model.mock(truth, snr=20.0, key=jr.PRNGKey(42))
 
         # Drop the truth model so the fit_model has a clean slate.
         del truth_model
         import gc
+
         gc.collect()
         jax.clear_caches()
 
@@ -240,19 +282,17 @@ def child_run(truth_key: str, fit_key: str, out_json: str) -> None:
             }
         rec["fit_derived"] = fit_derived
 
-        if (truth_derived.get("log_stellar_mass") is not None and
-                fit_derived["log_stellar_mass"]["median"] is not None):
+        if (
+            truth_derived.get("log_stellar_mass") is not None
+            and fit_derived["log_stellar_mass"]["median"] is not None
+        ):
             rec["bias_dex"] = {
-                "log_stellar_mass":
-                    fit_derived["log_stellar_mass"]["median"]
-                    - truth_derived["log_stellar_mass"],
-                "log_sfr_100myr":
-                    fit_derived["log_sfr_100myr"]["median"]
-                    - truth_derived["log_sfr_100myr"],
+                "log_stellar_mass": fit_derived["log_stellar_mass"]["median"]
+                - truth_derived["log_stellar_mass"],
+                "log_sfr_100myr": fit_derived["log_sfr_100myr"]["median"]
+                - truth_derived["log_sfr_100myr"],
             }
-            rec["within_0.5_dex"] = {
-                k: abs(v) < 0.5 for k, v in rec["bias_dex"].items()
-            }
+            rec["within_0.5_dex"] = {k: abs(v) < 0.5 for k, v in rec["bias_dex"].items()}
         else:
             rec["bias_dex"] = None
             rec["within_0.5_dex"] = None
@@ -266,6 +306,7 @@ def child_run(truth_key: str, fit_key: str, out_json: str) -> None:
 
 
 # ── orchestrator ──────────────────────────────────────────────────────────
+
 
 def main():
     out_path = Path(__file__).parent / "_backend_component_pairs_results.json"
@@ -299,8 +340,11 @@ def main():
         if side_path.exists():
             td = json.loads(side_path.read_text())
             truth_derived_cache[k] = td
-            print(f"  {k:24s} M*={td.get('log_stellar_mass'):.2f}  "
-                  f"SFR={td.get('log_sfr_100myr'):.2f}", flush=True)
+            print(
+                f"  {k:24s} M*={td.get('log_stellar_mass'):.2f}  "
+                f"SFR={td.get('log_sfr_100myr'):.2f}",
+                flush=True,
+            )
         else:
             print(f"  {k:24s} FAILED", flush=True)
 
@@ -323,20 +367,26 @@ def main():
             if j.exists():
                 r = json.loads(j.read_text())
             else:
-                r = {"truth_model": truth_key, "fit_model": fit_key,
-                     "status": "crashed_no_output"}
+                r = {"truth_model": truth_key, "fit_model": fit_key, "status": "crashed_no_output"}
         except subprocess.TimeoutExpired:
-            r = {"truth_model": truth_key, "fit_model": fit_key,
-                 "status": "timeout", "wall_s": TIMEOUT}
+            r = {
+                "truth_model": truth_key,
+                "fit_model": fit_key,
+                "status": "timeout",
+                "wall_s": TIMEOUT,
+            }
         results.append(r)
         if r["status"] == "ok":
             b = r["bias_dex"]
             ok = r["within_0.5_dex"]
             mark = "✓" if (ok["log_stellar_mass"] and ok["log_sfr_100myr"]) else "✗"
-            print(f"  {r['wall_s']:5.1f}s  Δlog M*={b['log_stellar_mass']:+.2f}dex  "
-                  f"ΔlogSFR={b['log_sfr_100myr']:+.2f}dex  {mark}", flush=True)
+            print(
+                f"  {r['wall_s']:5.1f}s  Δlog M*={b['log_stellar_mass']:+.2f}dex  "
+                f"ΔlogSFR={b['log_sfr_100myr']:+.2f}dex  {mark}",
+                flush=True,
+            )
         else:
-            print(f"  FAIL[{r['status']}] {r.get('error_type','')}", flush=True)
+            print(f"  FAIL[{r['status']}] {r.get('error_type', '')}", flush=True)
         out_path.write_text(json.dumps(results, indent=2, default=str))
 
     print(f"\nWritten to {out_path}", flush=True)
@@ -355,9 +405,7 @@ def mock_only(model_key: str, out_npz: str) -> None:
     model = build(SCENARIOS[model_key])
     truth = truth_at_midpoint(model)
     mock = model.mock(truth, snr=20.0, key=jr.PRNGKey(42))
-    np.savez(out_npz,
-             flux_obs=np.asarray(mock.flux_obs),
-             noise=np.asarray(mock.noise))
+    np.savez(out_npz, flux_obs=np.asarray(mock.flux_obs), noise=np.asarray(mock.noise))
 
 
 def fit_only(fit_key: str, mock_npz: str, out_json: str) -> None:

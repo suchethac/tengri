@@ -79,6 +79,15 @@ class Catalog:
     censor_cols : dict[str, str], optional
         Mapping from band name to censoring flag column. Flag values: 0
         (detected), 1 (upper limit), -1 (lower limit).
+    line_cols : list[str], optional
+        Emission-line flux column names in your table, bound positionally to the
+        observation's line order (from ``observation.line_fluxes.names``).
+        If None and the model carries line fluxes, raises ValueError.
+        If None and the model has no line fluxes, this parameter is ignored.
+    line_err_cols : list[str], optional
+        Emission-line error column names, bound positionally the same way.
+        If None, use ``"{name}_err"`` for each line, matching the ``err_cols``
+        convention.
     missing : {"error", "mask"}, default "error"
         Policy for NaN flux values. ``"error"`` raises with guidance on
         ``missing="mask"``; ``"mask"`` sets presence to False for that cell.
@@ -111,6 +120,8 @@ class Catalog:
         flux_cols=None,
         err_cols=None,
         censor_cols=None,
+        line_cols=None,
+        line_err_cols=None,
         missing="error",
     ):
         """Initialize a Catalog with eager ingestion and validation.
@@ -135,6 +146,8 @@ class Catalog:
                 err_cols=err_cols,
                 redshift_col=redshift_col,
                 censor_cols=censor_cols,
+                line_cols=line_cols,
+                line_err_cols=line_err_cols,
                 missing=missing,
             )
             self._catalog_arrays = ca
@@ -199,6 +212,16 @@ class Catalog:
                 # model's shared redshift (e.g. a cluster at known z, or the
                 # fit_batch shared-redshift case). Nothing to validate here.
                 pass
+
+            # Fail loud on line flux mismatch (#1480): prevent silent substitution.
+            if fwd.observation.has_line_fluxes and ca.line_flux_obs is None:
+                raise ValueError(
+                    "The model's Observation carries line_fluxes but this Catalog "
+                    "has no line columns, so every galaxy would be scored against the "
+                    "template galaxy's line fluxes. Pass line_cols=/line_err_cols= to "
+                    "Catalog(...), or build the model without line_fluxes for a "
+                    "photometry-only fit."
+                )
         else:
             self._catalog_arrays = None
 
@@ -295,6 +318,10 @@ class Catalog:
             # blocking MCMC/VI on catalogs with no masking at all.
             if ca.presence is not None and not bool(np.all(ca.presence[i])):
                 galaxy_dict["presence"] = ca.presence[i].astype(np.float32)
+            # Per-galaxy emission-line fluxes (#1480); thread if available.
+            if ca.line_flux_obs is not None:
+                galaxy_dict["line_flux_obs"] = ca.line_flux_obs[i]
+                galaxy_dict["line_flux_err"] = ca.line_flux_err[i]
             galaxies.append(galaxy_dict)
 
         # Delegate to the existing engine.

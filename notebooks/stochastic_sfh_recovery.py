@@ -52,25 +52,18 @@
 # observable and nothing else.
 
 # %%
-import sys
 import warnings
-from pathlib import Path
-
-# Every path below is anchored at the repository root rather than the working
-# directory. A notebook run from anywhere but ``notebooks/`` would otherwise miss
-# the local SSP and fall through to a 67 MB download (#1486), and scatter its
-# figures into a stray directory.
-REPO_ROOT = next(p for p in [Path.cwd(), *Path.cwd().parents] if (p / "pyproject.toml").exists())
-DATA_DIR = REPO_ROOT / "data"
-FIG_DIR = REPO_ROOT / "notebooks" / "_figs"
-FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # _setup must be imported BEFORE jax: it sets TF_CPP_MIN_LOG_LEVEL, which XLA only
 # reads at import. Import jax first and every cell below carries a wall of
 # "PjRt-IFRT does not track XLA executable versions" into the rendered page.
-sys.path.insert(0, str(REPO_ROOT / "notebooks"))
+#
+# FIG_DIR arrives anchored on _setup's own location, so figures land in
+# notebooks/_figs wherever this was started from. The SSP goes through
+# tengri.load_ssp for the same reason: a working-directory-relative grid path
+# misses silently and falls through to a 67 MB download (#1486).
 from _plot_style import setup_style
-from _setup import effective_wavelengths_um, quiet
+from _setup import FIG_DIR, effective_wavelengths_um, quiet
 
 quiet()
 setup_style()
@@ -106,7 +99,6 @@ from tengri import (
     SEDModel,
     Spectroscopy,
     builders,
-    load_ssp_data,
 )
 from tengri.observation import LineFluxData
 from tengri.observation.line_measurement import default_line_defs
@@ -126,10 +118,7 @@ C_TRUTH = "0.05"
 
 # %%
 SSP_NAME = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0"
-ssp_path = DATA_DIR / f"{SSP_NAME}.h5"
-if not ssp_path.exists():
-    ssp_path = Path(tengri.download_ssp(SSP_NAME))
-ssp_data = load_ssp_data(str(ssp_path))
+ssp_data = tengri.load_ssp(SSP_NAME)
 
 # An SDSS-like galaxy: GALEX ultraviolet (which is where dust bites) through the
 # SDSS optical.

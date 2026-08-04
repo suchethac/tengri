@@ -1214,6 +1214,8 @@ class _CatalogFitterOriginal:
         # carries a per-galaxy Fixed redshift. Free / shared-redshift catalogs leave
         # thread_redshift False, so the compiled program is unchanged.
         per_galaxy_z = any("redshift" in g for g in self.galaxies)
+        # Per-galaxy emission-line fluxes (#1480): only when the catalog carries them
+        per_galaxy_lines = any("line_flux_obs" in g for g in self.galaxies)
         run_one, unravel_fn = build_catalog_mcmc_engine(
             fitter,
             sampler,
@@ -1225,6 +1227,7 @@ class _CatalogFitterOriginal:
             target_accept_rate=target_accept_rate,
             use_dense=bool(dense_mass_matrix),
             thread_redshift=per_galaxy_z,
+            thread_line_fluxes=per_galaxy_lines,
         )
 
         dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
@@ -1255,6 +1258,19 @@ class _CatalogFitterOriginal:
             )
         else:
             all_redshift_orig = jnp.zeros((n_gal,), dtype=all_data_orig.dtype)
+        # Per-galaxy emission-line fluxes (#1480); dummy zeros when not threaded.
+        # Stack using the same n_padded and K as data/noise to avoid recompilation.
+        if per_galaxy_lines:
+            # Stack per-galaxy line flux arrays using the same n_padded and K
+            all_line_flux_orig = jnp.stack(
+                [jnp.asarray(g["line_flux_obs"], dtype=all_data_orig.dtype) for g in self.galaxies]
+            )
+            all_line_err_orig = jnp.stack(
+                [jnp.asarray(g["line_flux_err"], dtype=all_data_orig.dtype) for g in self.galaxies]
+            )
+        else:
+            all_line_flux_orig = jnp.zeros((n_gal, 0), dtype=all_data_orig.dtype)
+            all_line_err_orig = jnp.zeros((n_gal, 0), dtype=all_data_orig.dtype)
         if n_pad_extra > 0:
             all_data = jnp.concatenate([all_data_orig, jnp.zeros((n_pad_extra, n_data))], axis=0)
             all_noise = jnp.concatenate([all_noise_orig, jnp.ones((n_pad_extra, n_data))], axis=0)
@@ -1264,6 +1280,15 @@ class _CatalogFitterOriginal:
             # Padded rows reuse galaxy 0's redshift (a valid LUT value; discarded).
             pad_z = jnp.full((n_pad_extra,), all_redshift_orig[0], dtype=all_data_orig.dtype)
             all_redshift = jnp.concatenate([all_redshift_orig, pad_z], axis=0)
+            # Padded rows for line fluxes: zeros (discarded after).
+            n_line_cols = all_line_flux_orig.shape[1] if all_line_flux_orig.ndim > 1 else 0
+            if n_line_cols > 0:
+                pad_line = jnp.zeros((n_pad_extra, n_line_cols), dtype=all_data_orig.dtype)
+                all_line_flux = jnp.concatenate([all_line_flux_orig, pad_line], axis=0)
+                all_line_err = jnp.concatenate([all_line_err_orig, pad_line], axis=0)
+            else:
+                all_line_flux = all_line_flux_orig
+                all_line_err = all_line_err_orig
         else:
             all_data, all_noise, all_presence, all_redshift = (
                 all_data_orig,
@@ -1271,6 +1296,8 @@ class _CatalogFitterOriginal:
                 all_presence_orig,
                 all_redshift_orig,
             )
+            all_line_flux = all_line_flux_orig
+            all_line_err = all_line_err_orig
 
         init_keys = jax.random.split(key, n_padded)
         all_init = jnp.stack(
@@ -1281,10 +1308,19 @@ class _CatalogFitterOriginal:
         gal_keys = jax.random.split(jax.random.fold_in(key, 1), n_padded)
 
         def _run_one(args):
-            ini, gk, d, n, p, z = args
-            return run_one(ini, gk, d, n, p, z)
+            ini, gk, d, n, p, z, lf, le = args
+            return run_one(ini, gk, d, n, p, z, lf, le)
 
-        xs = (all_init, gal_keys, all_data, all_noise, all_presence, all_redshift)
+        xs = (
+            all_init,
+            gal_keys,
+            all_data,
+            all_noise,
+            all_presence,
+            all_redshift,
+            all_line_flux,
+            all_line_err,
+        )
         if n_dev > 1:
             all_positions, all_divergent = self._sharded_vmap(run_one, xs, dev_list)
         else:

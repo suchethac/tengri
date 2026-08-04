@@ -62,20 +62,68 @@ MDMH = {
 
 # U_min values in the grid (as strings matching directory names)
 UMIN_STRS = [
-    "0.100", "0.120", "0.150", "0.170", "0.200", "0.250",
-    "0.300", "0.350", "0.400", "0.500", "0.600", "0.700",
-    "0.800", "1.000", "1.200", "1.500", "1.700", "2.000",
-    "2.500", "3.000", "3.500", "4.000", "5.000", "6.000",
-    "7.000", "8.000", "10.00", "12.00", "15.00", "17.00",
-    "20.00", "25.00", "30.00", "35.00", "40.00", "50.00",
+    "0.100",
+    "0.120",
+    "0.150",
+    "0.170",
+    "0.200",
+    "0.250",
+    "0.300",
+    "0.350",
+    "0.400",
+    "0.500",
+    "0.600",
+    "0.700",
+    "0.800",
+    "1.000",
+    "1.200",
+    "1.500",
+    "1.700",
+    "2.000",
+    "2.500",
+    "3.000",
+    "3.500",
+    "4.000",
+    "5.000",
+    "6.000",
+    "7.000",
+    "8.000",
+    "10.00",
+    "12.00",
+    "15.00",
+    "17.00",
+    "20.00",
+    "25.00",
+    "30.00",
+    "35.00",
+    "40.00",
+    "50.00",
 ]
 UMIN_VALUES = [float(u) for u in UMIN_STRS]
 
 # Alpha values (power-law slope of radiation field distribution)
 ALPHA_STRS = [
-    "1.0", "1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7",
-    "1.8", "1.9", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5",
-    "2.6", "2.7", "2.8", "2.9", "3.0",
+    "1.0",
+    "1.1",
+    "1.2",
+    "1.3",
+    "1.4",
+    "1.5",
+    "1.6",
+    "1.7",
+    "1.8",
+    "1.9",
+    "2.0",
+    "2.1",
+    "2.2",
+    "2.3",
+    "2.4",
+    "2.5",
+    "2.6",
+    "2.7",
+    "2.8",
+    "2.9",
+    "3.0",
 ]
 ALPHA_VALUES = [float(a) for a in ALPHA_STRS]
 
@@ -255,8 +303,7 @@ def convert(input_dir: str, output_path: str) -> None:
 
         f.create_dataset("alpha_grid", data=np.array(ALPHA_VALUES))
         f["alpha_grid"].attrs["description"] = (
-            "Power-law slope of radiation field distribution "
-            "(dM/dU ~ U^{-alpha}, range 1.0-3.0)"
+            "Power-law slope of radiation field distribution (dM/dU ~ U^{-alpha}, range 1.0-3.0)"
         )
 
         f.create_dataset("single_u", data=single_u)
@@ -304,9 +351,7 @@ def convert(input_dir: str, output_path: str) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Convert DL14 dust templates to tengri HDF5"
-    )
+    parser = argparse.ArgumentParser(description="Convert DL14 dust templates to tengri HDF5")
     parser.add_argument(
         "--input-dir",
         default=None,

@@ -28,7 +28,7 @@
 # [`07_joint_photo_spec`](07_joint_photo_spec.py).
 
 # %%
-from _setup import HMC_VALIDATED, quiet
+from _setup import FIG_DIR, HMC_VALIDATED, quiet
 
 quiet()
 
@@ -52,13 +52,10 @@ from tengri import (
     SpectrumPrecomp,
     Uniform,
     builders,
-    load_ssp_data,
     plot,
 )
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 
@@ -72,11 +69,7 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
-ssp_path = Path("../data") / f"{SSP_NAME}.h5"
-if not ssp_path.exists():
-    # Public API: fetches the grid on first use and caches it under data/.
-    ssp_path = Path(tengri.download_ssp(SSP_NAME))
-ssp = load_ssp_data(str(ssp_path))
+ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 Z_GAL = 0.05
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 260)  # SDSS spectral coverage

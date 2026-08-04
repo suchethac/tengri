@@ -105,9 +105,7 @@ def log_prob_traceable(position):
 
 # Warmup
 for _ in range(3):
-    _ = log_prob_traceable(
-        init_flat + jax.random.normal(rng_key, (len(init_flat),)) * 0.01
-    )
+    _ = log_prob_traceable(init_flat + jax.random.normal(rng_key, (len(init_flat),)) * 0.01)
 
 # Measure
 t0 = time.perf_counter()
@@ -117,9 +115,7 @@ time_traceable_ms = (t1 - t0) * 1000
 
 grad_fn_traceable = jax.grad(log_prob_traceable)
 for _ in range(3):
-    _ = grad_fn_traceable(
-        init_flat + jax.random.normal(rng_key, (len(init_flat),)) * 0.01
-    )
+    _ = grad_fn_traceable(init_flat + jax.random.normal(rng_key, (len(init_flat),)) * 0.01)
 t0 = time.perf_counter()
 grad = grad_fn_traceable(init_flat)
 t1 = time.perf_counter()
@@ -275,12 +271,12 @@ print("=" * 70)
 print(f"\nlog_prob evaluation:")
 print(f"  _traceable: {time_traceable_ms:.3f} ms")
 print(f"  auto:       {time_auto_ms:.3f} ms")
-print(f"  Speedup:    {time_traceable_ms/time_auto_ms:.1f}x")
+print(f"  Speedup:    {time_traceable_ms / time_auto_ms:.1f}x")
 
 print(f"\nGradient evaluation:")
 print(f"  _traceable: {time_traceable_grad_ms:.3f} ms")
 print(f"  auto:       {time_auto_grad_ms:.3f} ms")
-print(f"  Speedup:    {time_traceable_grad_ms/time_auto_grad_ms:.1f}x")
+print(f"  Speedup:    {time_traceable_grad_ms / time_auto_grad_ms:.1f}x")
 
 print(f"\nNumerical agreement:")
 print(f"  log_prob diff: {abs(log_p - log_p_auto):.2e}")
@@ -302,9 +298,7 @@ print("=" * 70)
 if time_auto_ms < time_traceable_ms:
     speedup = time_traceable_ms / time_auto_ms
     print(f"✓ mode='auto' is {speedup:.1f}x FASTER than mode='_traceable'")
-    print(
-        f"  BlackJAX NUTS could potentially use mode='auto' for better performance"
-    )
+    print(f"  BlackJAX NUTS could potentially use mode='auto' for better performance")
     print(f"  without the memory bloat issue (NIFTy-specific problem).")
 else:
     print(f"✗ mode='auto' is slower than mode='_traceable' (unexpected)")

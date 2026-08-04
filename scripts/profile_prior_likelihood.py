@@ -188,12 +188,14 @@ print(f"\n  Likelihood function timing:")
 print(f"    Mean: {loglik_stats['mean_ms']:.3f} ± {loglik_stats['std_ms']:.3f} ms")
 print(f"    Median: {loglik_stats['median_ms']:.3f} ms")
 
+
 # Break down likelihood: prediction vs chi-square
 @jax.jit
 def just_chi_square(flux_model, flux_obs, flux_err):
     """Just the chi-square computation."""
     residual = (flux_obs - flux_model) / flux_err
     return -0.5 * jnp.sum(residual**2)
+
 
 # Get predicted flux
 flux_model = model.predict_photometry(param_dict_bounded, mode="_traceable")
@@ -271,14 +273,12 @@ if dist_types == {"Uniform"}:
     _ = vectorized_uniform_prior(param_values, lower_bounds, upper_bounds)
 
     # Time it
-    vec_stats = time_function(
-        vectorized_uniform_prior, param_values, lower_bounds, upper_bounds
-    )
+    vec_stats = time_function(vectorized_uniform_prior, param_values, lower_bounds, upper_bounds)
 
     print(f"\n  Vectorized prior timing:")
     print(f"    Mean: {vec_stats['mean_ms']:.3f} ± {vec_stats['std_ms']:.3f} ms")
 
-    speedup = prior_stats['mean_ms'] / vec_stats['mean_ms']
+    speedup = prior_stats["mean_ms"] / vec_stats["mean_ms"]
     print(f"\n  Speedup: {speedup:.2f}×")
 
     if speedup > 1.5:
@@ -300,8 +300,8 @@ print("SUMMARY: Prior & Likelihood Performance")
 print("=" * 80)
 
 total_loss_time = 2.208  # from previous profiling
-prior_pct = (prior_stats['mean_ms'] / total_loss_time) * 100
-loglik_pct = (loglik_stats['mean_ms'] / total_loss_time) * 100
+prior_pct = (prior_stats["mean_ms"] / total_loss_time) * 100
+loglik_pct = (loglik_stats["mean_ms"] / total_loss_time) * 100
 
 print(f"\n  Component breakdown:")
 print(f"    Prior:      {prior_stats['mean_ms']:.3f} ms ({prior_pct:.1f}% of loss)")
@@ -311,7 +311,9 @@ print(f"    Total loss: {total_loss_time:.3f} ms (from previous profiling)")
 print(f"\n  Optimization opportunities:")
 if dist_types == {"Uniform"}:
     print(f"    1. Vectorize uniform priors → potential {speedup:.1f}× speedup on prior")
-    print(f"       (Would reduce loss time by ~{(prior_stats['mean_ms'] - vec_stats['mean_ms']):.2f}ms)")
+    print(
+        f"       (Would reduce loss time by ~{(prior_stats['mean_ms'] - vec_stats['mean_ms']):.2f}ms)"
+    )
 else:
     print(f"    1. Prior vectorization limited (mixed distribution types)")
 
