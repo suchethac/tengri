@@ -93,6 +93,37 @@ def test_vi_nonlinear_the_regressing_case() -> None:
     assert record["alias_of"] == "vi"
 
 
+@pytest.mark.parametrize("name", _registered_names())
+def test_the_generic_describe_resolves_them_too(name: str) -> None:
+    """``tengri.describe()`` must answer for every name the per-kind function does.
+
+    The generic lookup sweeps the curated menus, so it inherited the same
+    blindness: it saw neither the hidden tier nor the aliases. Fixing only
+    ``describe_inference_method`` would have left half the surface wrong.
+    """
+    assert tengri.describe(name)["kind"] == "inference_method"
+
+
+def test_the_use_hint_for_a_broken_backend_does_not_raise() -> None:
+    """A ``use:`` line must be runnable — advice that raises is the bug (#1364).
+
+    Surfacing broken backends in ``describe`` newly exposed their usage hint,
+    and the plain ``fitter.run("pathfinder")`` form is exactly what the tier
+    gate refuses.
+    """
+    broken = [n for n, e in _BACKENDS.items() if e.tier == "broken"]
+    assert broken, "no broken backend to check; test would be vacuous"
+    for name in broken:
+        use = tengri.describe_inference_method(name)["use"]
+        assert "allow_unvalidated=True" in use, (
+            f"{name}: use hint {use!r} is refused by the tier gate"
+        )
+
+    # ...and the working tiers must NOT carry the escape hatch.
+    ok = tengri.describe_inference_method("map")["use"]
+    assert "allow_unvalidated" not in ok, ok
+
+
 def test_unregistered_name_still_raises() -> None:
     """The fix must not make ``describe`` fail open on a genuine typo."""
     assert lookup_backend("mcmc_nutz") is None

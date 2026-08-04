@@ -1694,6 +1694,13 @@ def _inference_method_row(entry, target: object | None = None) -> dict:
     """
     from tengri.inference._strategy import resolve_status
 
+    use = _usage_hint(entry.name, "inference_method")
+    if entry.tier == "broken":
+        # Advice that raises is the bug, not the help (#1364). The plain
+        # ``fitter.run("pathfinder")`` hint is refused by the tier gate, and
+        # a broken backend only became visible here at all once describe
+        # stopped hiding it (#1560) — so ship the invocation that works.
+        use = f'fitter.run("{entry.name}", allow_unvalidated=True)  # tier=broken'
     return {
         "name": entry.name,
         "kind": "inference_method",
@@ -1701,7 +1708,7 @@ def _inference_method_row(entry, target: object | None = None) -> dict:
         "short_doc": entry.short_doc,
         "requires": list(entry.requires),
         "status": resolve_status(entry, target).value,
-        "use": _usage_hint(entry.name, "inference_method"),
+        "use": use,
     }
 
 
@@ -1865,6 +1872,17 @@ def describe(name: str) -> _DescribeRecord:
                 f"({_how(matches[0])}). The others: {others}."
             )
         return _DescribeRecord(record)
+
+    # The sweep above walks the *curated* menus, so it cannot see a name the
+    # menu hides by design: a ``tier="broken"`` backend, or an alias that
+    # rows under its canonical name. Both are still dispatchable, and this
+    # generic entry point must answer for them exactly as
+    # :func:`describe_inference_method` does (#1560).
+    from tengri.inference._backend_registry import lookup_backend
+
+    if lookup_backend(name) is not None:
+        return describe_inference_method(name)
+
     raise KeyError(
         f"Unknown name '{name}'.  Try tengri.summary() for a menu of every "
         "core class, AGN model, dust law, SFH variant, nebular backend, "
