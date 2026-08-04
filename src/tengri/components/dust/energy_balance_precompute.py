@@ -304,14 +304,13 @@ def lut_l_absorbed_stellar_log10(
     stellar absorbed luminosity silently became ``-inf`` — i.e. exactly 0.0 —
     on a corrupt contraction.
     """
+    from tengri.utils.scale import _not_computable, log10_magnitude
+
     contracted = _lut_contract(lut, joint_weights, tau_bc, tau_diff)
-    magnitude = jnp.abs(contracted)
-    finite = jnp.isfinite(contracted)
-    positive = finite & (magnitude > 0)
-    safe = jnp.where(positive, magnitude, 1.0)
-    log_magnitude = jnp.where(positive, jnp.log10(safe) + log10_mass_scale, -jnp.inf)
-    log_magnitude = jnp.where(finite, log_magnitude, jnp.inf)
-    return log_magnitude, jnp.where(finite, jnp.sign(contracted), jnp.nan)
+    log_relative = log10_magnitude(contracted)
+    corrupt = _not_computable(log_relative)
+    log_mag = jnp.where(corrupt, jnp.inf, log_relative + log10_mass_scale)
+    return log_mag, jnp.where(corrupt, jnp.nan, jnp.sign(contracted))
 
 
 def lut_l_absorbed_stellar(

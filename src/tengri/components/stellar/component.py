@@ -70,7 +70,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_mass_remaining,
 )
 from tengri.parameters.translate import LOG10_ZSUN
-from tengri.utils.scale import pow10
+from tengri.utils.scale import _not_computable, log10_magnitude, pow10
 
 # Default time bins for ``metallicity_model="bins"`` /
 # ``"bins_continuity"`` — log-spaced from 1 Myr to 13.7 Gyr,
@@ -1036,10 +1036,17 @@ def _integrate_nion_log10(
     rectangle_correct = integrand_below * jnp.abs(nu[idx_below] - nu_edge)
     nion_bulk = jnp.abs(jnp.trapezoid(integrand_masked, nu))
     norm = nion_bulk - triangle_overcount + rectangle_correct  # #537 correction BEFORE the log
-    pos = norm > 0
-    safe = jnp.where(pos, norm, 1.0)  # where-dummy: grad-safe log at zero flux
-    log10_norm = jnp.where(pos, jnp.log10(safe), -jnp.inf)
-    return log10_norm + jnp.log10(peak) - jnp.log10(H_PLANCK) + log10_scale
+    # log10_magnitude keeps "no ionizing flux" (-inf) apart from "the SED was
+    # corrupt" (+inf). The hand-rolled ``norm > 0`` here was False for NaN, so a
+    # non-finite ionizing SED gave log_nion = -inf, pow10 -> 0, and nebular
+    # emission silently switched off entirely — the #1001 fail-open class, in
+    # the quantity Tier B introduced to avoid it (#1527).
+    log10_norm = log10_magnitude(norm)
+    offsets = jnp.log10(peak) - jnp.log10(H_PLANCK) + log10_scale
+    # -inf + finite is -inf (true zero) and +inf + finite is +inf (corrupt), so
+    # both sentinels survive the offset addition unchanged; only a +inf peak
+    # could turn one into NaN, and that is itself corrupt.
+    return jnp.where(_not_computable(log10_norm), jnp.inf, log10_norm + offsets)
 
 
 def _integrate_nion(sed_lnu: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:

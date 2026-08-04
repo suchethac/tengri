@@ -89,6 +89,74 @@ def pow10(x):
     return jnp.exp(x * LN10)
 
 
+def _not_computable(log_value, sign=1.0):
+    """True where a log-domain term is ``+inf``/``NaN`` rather than a usable value.
+
+    ``-inf`` is excluded on purpose: it is the legitimate "this term is exactly
+    zero" sentinel, not a failure.
+    """
+    bad_log = ~jnp.isfinite(log_value) & ~jnp.isneginf(log_value)
+    return bad_log | ~jnp.isfinite(jnp.asarray(sign))
+
+
+def log10_magnitude(value):
+    r"""``log10|value|`` with "exactly zero" and "not computable" kept apart.
+
+    The single spelling of the log-domain magnitude contract. Every producer of
+    a ``log_*`` quantity re-derived this by hand, and four of them independently
+    got the same half of it wrong (#1527).
+
+    .. math::
+
+        \mathrm{log10\_magnitude}(v) = \begin{cases}
+            \log_{10}|v| & v \ne 0,\ v \ \mathrm{finite} \\
+            -\infty      & v = 0 \\
+            +\infty      & v \ \mathrm{non\text{-}finite}
+        \end{cases}
+
+    Parameters
+    ----------
+    value : array_like
+        A signed or unsigned magnitude in linear space.
+
+    Returns
+    -------
+    ndarray
+        ``log10`` of the magnitude [dex], with the sentinels above.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe. The where-dummy keeps the backward pass free of NaN at
+    ``value == 0``.
+
+    **The two sentinels are not interchangeable, and that is the point.**
+    ``-inf`` powers back through :func:`pow10` to exactly ``0.0``, so it is a
+    *value*: "this quantity really is zero". ``+inf`` does not survive as a
+    number and is not meant to — it says "no answer exists here". Folding a
+    non-finite input into ``-inf`` reports a corrupt computation as a true zero,
+    which is the failure mode that let one bad pixel silently switch off an
+    entire dust IR budget or all nebular emission.
+
+    ``+inf`` covers ``NaN`` as well as ``Inf`` deliberately: downstream there is
+    nothing useful to do differently with the two, and one sentinel for "do not
+    trust this" is far easier to test and to check for than two.
+
+    See Also
+    --------
+    log10_add
+        Sums two such quantities, preserving both sentinels.
+    tengri.config.exceptions.CorruptEnergyBalanceWarning
+        Attributes a ``+inf`` to the component that produced it.
+    """
+    value = jnp.asarray(value)
+    magnitude = jnp.abs(value)
+    finite = jnp.isfinite(value)
+    positive = finite & (magnitude > 0)
+    safe = jnp.where(positive, magnitude, 1.0)
+    zero_or_log = jnp.where(positive, jnp.log10(safe), -jnp.inf)
+    return jnp.where(finite, zero_or_log, jnp.inf)
+
+
 def apply_log10_scale(arr, log10_scale):
     """Return ``arr * 10**log10_scale`` without out-of-range intermediates.
 
@@ -207,9 +275,16 @@ def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
     # ``finite`` is False for BOTH infinities, but they mean opposite things:
     # -inf is "no term here", +inf is an overflow upstream. Folding the latter
     # into the -inf sentinel would report an overflowed term as exactly zero —
-    # a fail-open on precisely the axis this module exists to close. Report it
-    # as +inf so it stays loud.
-    return jnp.where(jnp.isposinf(larger), jnp.inf, summed)
+    # a fail-open on precisely the axis this module exists to close.
+    #
+    # This used to test ``isposinf(larger)`` alone, which caught +inf and missed
+    # NaN entirely: ``maximum(43.0, nan)`` is NaN, ``isposinf(nan)`` is False,
+    # and the result fell through to the -inf branch. A NaN term vanished as
+    # though it were zero — the same fail-open, in the function whose comment
+    # argues against it (#1527). Signs are checked too: a NaN sign with a finite
+    # magnitude poisons ``total`` and lands in the same place.
+    corrupt = _not_computable(log_a, sign_a) | _not_computable(log_b, sign_b)
+    return jnp.where(corrupt, jnp.inf, summed)
 
 
 # ``max_finite_exponent()`` lived here until 2026-07. It capped x at the

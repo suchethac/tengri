@@ -226,19 +226,18 @@ def bolometric_absorbed_log10(
     ceiling — so this log form, not :func:`bolometric_absorbed`, is what a
     pure-float32 (JAX-Metal) forward pass must consume (#1206).
     """
+    from tengri.utils.scale import log10_magnitude
+
     integrand = _absorbed_integrand(sed_intrinsic, sed_attenuated, wave, lyman_cutoff_aa)
     signed_norm, peak, ok, corrupt = _peak_factored_trapezoid(integrand, nu)
-    magnitude = jnp.abs(signed_norm)
-    positive = ok & (magnitude > 0)
-    safe = jnp.where(positive, magnitude, 1.0)
-    log_magnitude = jnp.where(positive, jnp.log10(safe) + jnp.log10(peak), -jnp.inf)
+    log_norm = log10_magnitude(jnp.where(ok, signed_norm, 0.0))
     # Corrupt beats the -inf sentinel: -inf powers back to exactly 0.0, so
     # reporting it here would say "nothing absorbed" about an input nobody can
-    # integrate. +inf survives log10_add (its ``isposinf`` branch) and reaches
-    # L_ir, where it is visible. The sign of an uncomputable integral is NaN,
-    # not 0.0 — 0.0 already means "no absorption" in this contract.
-    log_magnitude = jnp.where(corrupt, jnp.inf, log_magnitude)
-    sign = jnp.where(positive, jnp.sign(signed_norm), 0.0)
+    # integrate. +inf survives log10_add and reaches L_ir, where it is visible.
+    # The sign of an uncomputable integral is NaN, not 0.0 — 0.0 already means
+    # "no absorption" in this contract.
+    log_magnitude = jnp.where(corrupt, jnp.inf, log_norm + jnp.log10(peak))
+    sign = jnp.where(ok, jnp.sign(signed_norm), 0.0)
     return log_magnitude, jnp.where(corrupt, jnp.nan, sign)
 
 

@@ -31,10 +31,12 @@ def _log10_nonneg(value: jnp.ndarray) -> jnp.ndarray:
         ``log10(value)`` [dex], or ``-inf`` where ``value == 0``. The
         where-dummy keeps the backward pass free of NaN at ``value == 0``.
     """
-    value = jnp.asarray(value)
-    positive = value > 0
-    safe = jnp.where(positive, value, 1.0)
-    return jnp.where(positive, jnp.log10(safe), -jnp.inf)
+    from tengri.utils.scale import log10_magnitude
+
+    # Delegates so the corrupt/zero contract has one definition (#1527). The
+    # hand-rolled version here tested ``value > 0``, which is False for NaN, so
+    # a corrupt L_absorbed became -inf and powered back to exactly 0.0.
+    return log10_magnitude(value)
 
 
 class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
