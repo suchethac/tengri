@@ -85,6 +85,7 @@ def _forbid_network(request, monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
 
+
 # ─────────────────────────────────────────────────────────────────────
 # Skip-tally hook: surface how many parity-sweep tests actually ran
 # vs. skipped due to missing data. Without this, the test report says
