@@ -4,8 +4,11 @@ running the whole 1200-line notebook.
 """
 
 import os
+
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
-import warnings; warnings.filterwarnings("ignore")
+import warnings
+
+warnings.filterwarnings("ignore")
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
@@ -26,63 +29,118 @@ TAU_BC_FIDUCIAL = 0.0
 
 STELLAR_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL_FIDUCIAL), "*": FIXED}
 
-_sfh_args_d = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
-                                  age_burst=20, f_burst=0.0, sfr_A=1.0,
-                                  normalise=True))
+_sfh_args_d = (
+    "sfhdelayed",
+    dict(
+        tau_main=1000,
+        age_main=5000,
+        tau_burst=50,
+        age_burst=20,
+        f_burst=0.0,
+        sfr_A=1.0,
+        normalise=True,
+    ),
+)
 
 # CIGALE: stellar+dust (no AGN) baseline
-sed_c_base = C.run_chain([
-    _sfh_args_d, ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
-    ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
-])
+sed_c_base = C.run_chain(
+    [
+        _sfh_args_d,
+        ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+        ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+    ]
+)
 w_base, L_base = C.to_lnu(sed_c_base)
 
 # tengri: stellar+dust baseline
 m_agn_base = SEDModel.build(
     ssp_data=ssp,
     stellar=STELLAR_FIDUCIAL,
-    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-         "log_total_mass": Fixed(0.0), "*": FIXED},
-    dust={"type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
-          "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED,
-          "emission": {"type": "dale2014", "*": FIXED}},
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(1.0),
+        "age_gyr": Fixed(5.0),
+        "log_total_mass": Fixed(0.0),
+        "*": FIXED,
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "leitherer02",
+        "law_diff": "leitherer02",
+        "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+        "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+        "*": FIXED,
+        "emission": {"type": "dale2014", "*": FIXED},
+    },
     redshift=Fixed(0.0),
 )
 s_agn_base = m_agn_base.predict_state({})
 
 # CIGALE: full chain + SKIRTOR
-sed_skirtor = C.run_chain([
-    _sfh_args_d, ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
-    ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
-    ("dale2014", dict(alpha=2.0)),
-    ("skirtor2016", dict(t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=30,
-                         disk_type=1, delta=0, fracAGN=0.3,
-                         lambda_fracAGN="0/0", law=0, EBV=0.03,
-                         temperature=100.0, emissivity=1.6)),
-])
+sed_skirtor = C.run_chain(
+    [
+        _sfh_args_d,
+        ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+        ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+        ("dale2014", dict(alpha=2.0)),
+        (
+            "skirtor2016",
+            dict(
+                t=7,
+                pl=1.0,
+                q=1.0,
+                oa=40,
+                R=20,
+                Mcl=0.97,
+                i=30,
+                disk_type=1,
+                delta=0,
+                fracAGN=0.3,
+                lambda_fracAGN="0/0",
+                law=0,
+                EBV=0.03,
+                temperature=100.0,
+                emissivity=1.6,
+            ),
+        ),
+    ]
+)
 w_skirt, L_skirt = C.to_lnu(sed_skirtor)
 
 # tengri: full chain + AGN
 m_agn = SEDModel.build(
     ssp_data=ssp,
     stellar=STELLAR_FIDUCIAL,
-    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-         "log_total_mass": Fixed(0.0), "*": FIXED},
-    dust={"type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
-          "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED,
-          "emission": {"type": "dale2014", "*": FIXED}},
-    agn={"type": "composable",
-         "disc": {"type": "schartmann2005", "*": FIXED},
-         "torus": {"type": "skirtor", "*": FIXED},
-         "agn_log_lbol": Fixed(-0.42),
-         "agn_fracAGN": Fixed(0.3),
-         "*": FIXED},
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(1.0),
+        "age_gyr": Fixed(5.0),
+        "log_total_mass": Fixed(0.0),
+        "*": FIXED,
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "leitherer02",
+        "law_diff": "leitherer02",
+        "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+        "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+        "*": FIXED,
+        "emission": {"type": "dale2014", "*": FIXED},
+    },
+    agn={
+        "type": "composable",
+        "disc": {"type": "schartmann2005", "*": FIXED},
+        "torus": {"type": "skirtor", "*": FIXED},
+        "agn_log_lbol": Fixed(-0.42),
+        "agn_fracAGN": Fixed(0.3),
+        "*": FIXED,
+    },
     redshift=Fixed(0.0),
 )
 s_agn = m_agn.predict_state({})
 
-print(f"tengri L_absorbed = {float(s_agn.derived['L_absorbed'])/3.828e33:.4f} L_sun")
-print(f"tengri L_agn_bol = {float(s_agn.derived['L_agn_bol'])/3.828e33:.4f} L_sun")
+print(f"tengri L_absorbed = {float(s_agn.derived['L_absorbed']) / 3.828e33:.4f} L_sun")
+print(f"tengri L_agn_bol = {float(s_agn.derived['L_agn_bol']) / 3.828e33:.4f} L_sun")
 
 # Two-panel figure
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(14, 5), sharey=True)
@@ -105,20 +163,27 @@ ax_l.grid(True, alpha=0.3)
 
 # tengri side
 L_t_agn_only = np.maximum(np.asarray(s_agn.derived["sed_agn"]), 1e-50)
-ax_r.plot(s_agn_base.wave, s_agn_base.sed_intrinsic, "k--",
-          linewidth=1.0, alpha=0.5, label="stellar + dust")
-ax_r.plot(s_agn.wave, s_agn.sed_intrinsic, "C1-", linewidth=1.5, alpha=0.7,
-          label="stellar + dust + AGN")
-ax_r.plot(s_agn.wave, L_t_agn_only, "C1:", linewidth=1.5,
-          label="composable disc + SKIRTOR torus only")
+ax_r.plot(
+    s_agn_base.wave,
+    s_agn_base.sed_intrinsic,
+    "k--",
+    linewidth=1.0,
+    alpha=0.5,
+    label="stellar + dust",
+)
+ax_r.plot(
+    s_agn.wave, s_agn.sed_intrinsic, "C1-", linewidth=1.5, alpha=0.7, label="stellar + dust + AGN"
+)
+ax_r.plot(
+    s_agn.wave, L_t_agn_only, "C1:", linewidth=1.5, label="composable disc + SKIRTOR torus only"
+)
 ax_r.legend(fontsize=9, loc="lower left")
 ax_r.grid(True, alpha=0.3)
 
 # Bound axes consistently
 _xmin = float(min(w_skirt.min(), float(np.asarray(s_agn.wave).min())))
 _xmax = float(max(w_skirt.max(), float(np.asarray(s_agn.wave).max())))
-_ymax = max(float(np.asarray(L_skirt).max()),
-            float(np.asarray(s_agn.sed_intrinsic).max()))
+_ymax = max(float(np.asarray(L_skirt).max()), float(np.asarray(s_agn.sed_intrinsic).max()))
 for ax in (ax_l, ax_r):
     ax.set_xlim(_xmin, _xmax)
     ax.set_ylim(_ymax * 1e-6, _ymax * 2)

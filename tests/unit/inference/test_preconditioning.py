@@ -1003,17 +1003,89 @@ class TestReportedConditioning:
         assert problem.whitened_condition is None
 
 
+#: Standardized coordinates far outside anything a converged posterior visits.
+#:
+#: ``xi`` is ``~N(0,1)`` by construction, so these stand in for a whitened
+#: coordinate ``zeta`` leaking through in its place. ``-7.4`` is the offset
+#: measured on a real tengri fit for ``dust_tau_bc``; the rest bracket it.
+_EXTREME_XI = jnp.asarray([-1e3, -50.0, -7.4, 7.4, 50.0, 1e3])
+
+
+def _instantiable_priors() -> list[tuple[str, object]]:
+    """Every concrete prior in ``parameters.priors``, discovered rather than listed.
+
+    Discovered for the same reason ``_capable_backends()`` reads the registry: a
+    prior added later must inherit the claim below without anyone remembering to
+    extend this file. A prior whose constructor does not match either shape is
+    dropped, and the count assertion catches it if that ever hides most of them.
+    """
+    import inspect
+
+    import tengri.parameters.priors as priors_module
+    from tengri.parameters.priors import Distribution
+
+    found = []
+    for name, cls in sorted(vars(priors_module).items()):
+        if not (inspect.isclass(cls) and issubclass(cls, Distribution)):
+            continue
+        if cls is Distribution:
+            continue
+        for args in ((1.0, 4.0), (1.0,)):
+            try:
+                found.append((name, cls(*args)))
+                break
+            except Exception:  # wrong constructor arity — try the next shape
+                continue
+    return found
+
+
+_PRIORS = _instantiable_priors()
+
+
+def _why_bounds_cannot_fail(prior) -> str | None:
+    """Why a prior-support assertion is unfalsifiable for ``prior``, or None.
+
+    Returns the route, so the taxonomy is visible in the test rather than implied.
+    ``None`` means a bounds check *could* fail for this prior — which would be
+    news, and is what the assertion is watching for.
+    """
+    lo, hi = getattr(prior, "lo", None), getattr(prior, "hi", None)
+
+    if lo is None or hi is None:
+        return "no lo/hi, so the bounds loop skips it entirely"
+
+    if not (np.isfinite(float(lo)) and np.isfinite(float(hi))):
+        return f"bounds are infinite ({lo}, {hi}), so the assertion reads x >= -inf"
+
+    theta = np.asarray(prior.unstandardize(_EXTREME_XI))
+    if theta.min() >= float(lo) - 1e-8 and theta.max() <= float(hi) + 1e-8:
+        return "unstandardize is a saturating bijection onto [lo, hi]"
+
+    return None
+
+
 class TestBoundsCannotGuardTheMapping:
     """A bounds check cannot see draws left in the whitened basis (#1498).
 
     ``tests/integration/test_preconditioning_roundtrip.py`` guards the inverse map
     by asking whether preconditioned draws *explain the data*, which looks
     over-elaborate next to "are they inside the priors?" until you notice that
-    bounds are structurally incapable of the job. Every prior standardizes through
-    a constrained bijection — ``Uniform.unstandardize(xi) = lo + (hi - lo) *
-    Phi(xi)`` — so a whitened coordinate, an ordinary unbounded real, still lands
-    in ``[lo, hi]``. Draws in the wrong basis do not escape the prior box; they
-    pile up against its walls.
+    bounds are structurally incapable of the job.
+
+    Standardization is unconditional in tengri — every parameter reaches physical
+    units through its prior's inverse CDF, whether or not preconditioning is on —
+    so this incapacity is universal, not a quirk of one prior or one model. There
+    are three routes to it and **every** prior tengri ships takes one of them:
+
+    * **saturating bijection** — ``Uniform``, ``LogUniform``. ``lo + (hi - lo) *
+      Phi(xi)`` maps all of the reals into ``[lo, hi]``, so the assertion holds
+      for any finite input whatsoever.
+    * **infinite bounds** — ``Gaussian`` exposes ``lo=-inf, hi=inf``, so the
+      assertion reads ``x >= -inf`` and is true by inspection.
+    * **no bounds at all** — ``Laplace``, ``LogNormal``, ``StudentT``, ``Fixed``
+      expose no ``lo``/``hi``, so the bounds loop skips them. Note these are the
+      heavy-tailed ones, where a leak would be *most* visible: the check declines
+      to look precisely where it could have worked.
 
     Pinned here, in the fast tier, on purpose. The reasoning otherwise lives only
     in a slow-tier docstring that no pull request runs, and "simplify this to a
@@ -1021,32 +1093,63 @@ class TestBoundsCannotGuardTheMapping:
     leave the invariant unguarded.
     """
 
-    PRIOR = Uniform(0.0, 4.0)
+    def test_the_prior_sweep_is_not_empty(self):
+        """Anti-vacuity: a discovery that found nothing would assert nothing."""
+        assert len(_PRIORS) >= 5, (
+            f"only {len(_PRIORS)} priors were instantiable ({[n for n, _ in _PRIORS]}) "
+            "— the sweep below is no longer covering the prior surface"
+        )
 
-    @pytest.mark.parametrize("xi", [-1e3, -50.0, -7.4, 0.0, 7.4, 50.0, 1e3])
-    def test_every_real_lands_inside_the_prior_box(self, xi):
-        """Including values no posterior would ever produce."""
-        theta = float(self.PRIOR.unstandardize(jnp.asarray(xi)))
-        assert self.PRIOR.lo - 1e-8 <= theta <= self.PRIOR.hi + 1e-8, (
-            f"xi={xi} escaped the box at {theta} — if this ever becomes true, a "
-            "bounds check would be a viable mapping guard and the integration "
-            "test could be simplified"
+    @pytest.mark.parametrize("name,prior", _PRIORS, ids=[n for n, _ in _PRIORS])
+    def test_no_prior_makes_a_bounds_check_falsifiable(self, name, prior):
+        """The rule, over every prior tengri ships — not one example of it."""
+        assert _why_bounds_cannot_fail(prior) is not None, (
+            f"{name} is the first prior for which a prior-support assertion could "
+            "actually fail. That would be genuinely new: it would make a bounds "
+            "check a viable guard against a whitened-coordinate leak, and the "
+            "integration test's deficit statistic could be reconsidered. Until "
+            "then the deficit is the only thing that can see one."
+        )
+
+    def test_the_sweep_would_notice_a_prior_that_broke_the_pattern(self):
+        """Negative control for the classifier itself.
+
+        Every branch of :func:`_why_bounds_cannot_fail` that runs on a real prior
+        returns a reason, so the sweep above would be green on *any* input unless
+        the classifier can also answer "this one could fail". A stub with finite
+        bounds and a non-saturating map is that case, and it must come back
+        ``None`` — otherwise the sweep is asserting a tautology about tautologies.
+        """
+
+        class _EscapingPrior:
+            lo, hi = 0.0, 4.0
+
+            @staticmethod
+            def unstandardize(xi):
+                return xi  # unbounded: leaves [0, 4] on the first extreme value
+
+        assert _why_bounds_cannot_fail(_EscapingPrior()) is None, (
+            "the classifier called an escaping prior unfalsifiable, so the sweep "
+            "above cannot distinguish a real prior from a broken one"
         )
 
     def test_a_leak_collapses_onto_the_bound_instead_of_escaping_it(self):
-        """The actual failure signature: the spread vanishes, the bounds hold.
+        """The failure signature, on the prior the measured leak actually used.
 
-        ``-7.4`` is the offset measured on a real tengri fit for ``dust_tau_bc``
-        when the inverse map is dropped, and ``Phi(-7.4) ~ 1e-13``.
+        What a basis error does downstream of a saturating map is destroy the
+        posterior's *width*, not its range — so if you must detect one on the far
+        side of a bijection, test the spread and never the bounds. ``-7.4`` is the
+        offset measured on a real tengri fit for ``dust_tau_bc`` when the inverse
+        map is dropped, and ``Phi(-7.4) ~ 1e-13``.
         """
+        prior = Uniform(0.0, 4.0)
         healthy = jnp.linspace(-2.0, 2.0, 64)
-        leaked = healthy - 7.4
 
-        good = np.asarray(self.PRIOR.unstandardize(healthy))
-        bad = np.asarray(self.PRIOR.unstandardize(leaked))
+        good = np.asarray(prior.unstandardize(healthy))
+        bad = np.asarray(prior.unstandardize(healthy - 7.4))
 
-        assert bad.min() >= self.PRIOR.lo - 1e-8
-        assert bad.max() <= self.PRIOR.hi + 1e-8, (
+        assert bad.min() >= prior.lo - 1e-8
+        assert bad.max() <= prior.hi + 1e-8, (
             "the leak escaped the prior box, so bounds would have caught it"
         )
         assert np.ptp(bad) < np.ptp(good) / 1e3, (

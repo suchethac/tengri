@@ -42,9 +42,28 @@ DUST_MODELS = {
 # U_min values present in the grid
 # U_min values that actually exist as directories in the DL07 tarball
 UMIN_VALUES = [
-    0.10, 0.15, 0.20, 0.30, 0.40, 0.50, 0.70, 0.80,
-    1.00, 1.20, 1.50, 2.00, 2.50, 3.00, 4.00, 5.00, 7.00,
-    8.00, 12.0, 15.0, 20.0, 25.0,
+    0.10,
+    0.15,
+    0.20,
+    0.30,
+    0.40,
+    0.50,
+    0.70,
+    0.80,
+    1.00,
+    1.20,
+    1.50,
+    2.00,
+    2.50,
+    3.00,
+    4.00,
+    5.00,
+    7.00,
+    8.00,
+    12.0,
+    15.0,
+    20.0,
+    25.0,
 ]
 
 # U_max values (power-law upper bound)
@@ -112,7 +131,16 @@ def read_dl07_template(filepath: str) -> dict:
         if len(parts) < 3:
             continue
         # Skip broadband photometry lines (have 4+ columns with band name)
-        if len(parts) >= 4 and not parts[3].replace(".", "").replace("-", "").replace("+", "").replace("E", "").replace("e", "").isdigit():
+        if (
+            len(parts) >= 4
+            and not parts[3]
+            .replace(".", "")
+            .replace("-", "")
+            .replace("+", "")
+            .replace("E", "")
+            .replace("e", "")
+            .isdigit()
+        ):
             continue
         try:
             wl = float(parts[0])
@@ -306,15 +334,15 @@ def convert(input_dir: str, output_path: str) -> None:
     print(f"  q_PAH: {qpah_values} ({n_qpah} values)")
     print(f"  U_min: {UMIN_VALUES} ({n_umin} values)")
     print(f"  Wavelength: {n_wave} points ({wave_um[0]:.3f} - {wave_um[-1]:.3f} um)")
-    print(f"  Grid size: {single_u.nbytes / 1e6:.1f} MB (single) + "
-          f"{powerlaw.nbytes / 1e6:.1f} MB (power-law)")
+    print(
+        f"  Grid size: {single_u.nbytes / 1e6:.1f} MB (single) + "
+        f"{powerlaw.nbytes / 1e6:.1f} MB (power-law)"
+    )
     print(f"\nWrote: {output_path}")
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Convert DL07 dust templates to tengri HDF5"
-    )
+    parser = argparse.ArgumentParser(description="Convert DL07 dust templates to tengri HDF5")
     parser.add_argument(
         "--input-dir",
         default=None,

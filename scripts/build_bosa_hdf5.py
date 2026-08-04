@@ -41,7 +41,7 @@ BOSA_FITS_URL = "https://salims.pages.iu.edu/bosa/bosa_LTIR-sSFR.fits"
 BOSA_FITS_NAME = "bosa_LTIR-sSFR.fits"
 
 # Published grid axes (Boquien & Salim 2021).
-LOG_LTIR_GRID = np.round(np.arange(8.5, 12.5 + 0.05, 0.1), 1)   # 41 values
+LOG_LTIR_GRID = np.round(np.arange(8.5, 12.5 + 0.05, 0.1), 1)  # 41 values
 LOG_SSFR_GRID = np.round(np.arange(-11.0, -8.4 + 0.05, 0.2), 1)  # 14 values
 
 
@@ -55,12 +55,17 @@ def download_fits(raw_dir: Path, force: bool = False) -> Path:
         [
             "curl",
             "-fL",
-            "--retry", "5",
+            "--retry",
+            "5",
             "--retry-connrefused",
-            "--retry-delay", "5",
-            "--connect-timeout", "30",
-            "-C", "-",
-            "-o", str(target),
+            "--retry-delay",
+            "5",
+            "--connect-timeout",
+            "30",
+            "-C",
+            "-",
+            "-o",
+            str(target),
             BOSA_FITS_URL,
         ],
         check=True,
@@ -94,7 +99,7 @@ def parse_fits(fits_path: Path) -> dict:
         raise ValueError(f"unexpected first column {names[0]!r}; expected 'wavelength'")
 
     wave_nm = np.asarray(tbl["wavelength"], dtype=np.float64)
-    wave_aa = wave_nm * 10.0   # nm -> Å
+    wave_aa = wave_nm * 10.0  # nm -> Å
     wave_um = wave_nm / 1.0e3  # nm -> μm
 
     n_wave = wave_nm.size
@@ -178,10 +183,10 @@ def write_hdf5(out_path: Path, grid: dict) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__,
-                                formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--raw-dir", type=Path,
-                   default=Path("~/.cache/tengri/bosa_raw").expanduser())
+    p = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    p.add_argument("--raw-dir", type=Path, default=Path("~/.cache/tengri/bosa_raw").expanduser())
     p.add_argument("--output", type=Path, default=Path("data/bosa_templates.h5"))
     p.add_argument("--download", action="store_true")
     p.add_argument("--force-download", action="store_true")
