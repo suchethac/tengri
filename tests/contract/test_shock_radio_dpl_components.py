@@ -100,6 +100,11 @@ class TestRadioDPL:
         sed_in = jnp.zeros_like(wave)
         comp = RadioDPL()
         p = {
+            # Radio emission is observed-frame, so predict() needs a redshift.
+            # The framework supplies it in the sliced dict; a direct call must
+            # too. Stated explicitly rather than leaning on a default, so the
+            # test says which frame it is asserting in (#1432).
+            "redshift": jnp.asarray(0.0),
             "q_ir": jnp.asarray(2.64),
             "alpha_sf": jnp.asarray(0.8),
             "alpha_thin": jnp.asarray(-0.75),
