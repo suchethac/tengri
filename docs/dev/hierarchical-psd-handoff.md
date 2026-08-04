@@ -699,7 +699,45 @@ the small-τ preference §4a measured for healthy galaxies, not a new defect.
 > galaxies at 200–500 s each, roughly 24 h — or much less once #1537 is fixed
 > and Laplace is trustworthy everywhere.
 
-**Partial confirmation, with 4 of 9 repaired.** Replacing only galaxies 10, 12,
+**Repair progress and what the trend actually shows.** Every successful refit
+turns a collapsed spectrum into a normal one — 6 for 6 so far:
+
+| gal | Laplace ξ total | refit | note |
+|---|---|---|---|
+| 10, 12 | 5.75, 4.65 | 14.55, 15.43 | |
+| 19, 35 | 3.49, 2.81 | 12.87, 13.93 | |
+| 13 | 5.06 | 13.55 | R̂ 1.09 |
+| **39** | 4.32 | **14.70** | needed **3× warmup** |
+| 42, 50, 61 | 3.11, 2.46, 2.63 | — | resist; retrying at 6× warmup |
+
+Pooling at N=64 as the repairs land (all arms K=400):
+
+| repaired | σ 68% (0.75) | τ 68% Myr (150) |
+|---|---|---|
+| 0 of 9 (all-laplace) | 0.959–0.995 | 274.4–424.3 (high) |
+| 4 of 9 | 0.908–0.991 | 134.6–219.6 ✓ |
+| **6 of 9** | **0.812–0.953** | **72.3–139.9** (low) |
+| exclusion, for reference | 0.712–0.853 ✓ | 40.0–68.1 (low) |
+
+> ⚠ **τ is passing THROUGH truth, not converging to it.** An earlier revision of
+> this section read the 4-of-9 row as "repair recovers τ". It does not: as more
+> fits are repaired the answer moves monotonically toward the healthy-only
+> value, which is biased *low*. Crossing 150 on the way from high to low is
+> a coincidence of partial repair, and quoting it would be cherry-picking a
+> midpoint. **σ** is genuinely converging toward truth (0.959 → 0.908 → 0.812,
+> against 0.75). What repair removes is the **railing**; what remains
+> underneath is the τ-low preference of §4a on healthy fits, sitting on the
+> identifiability wall of §4b.
+
+**These galaxies are hard for NUTS too.** The resistant fits complete in ~6.5 s
+with 4 unique draws out of 4000 — one per chain, every chain frozen at its start
+— consistent with warmup adapting the step size down against curvature of order
+10⁶ until trees terminate at depth 0. Longer warmup rescued gal 39 (3×, R̂ 1.00)
+but not 42, 50 or 61. **"Refit with NUTS" is therefore not a complete fix**; a
+subset of galaxies needs more than a sampler swap, and the FD Hessian of #1537
+is reporting absurd curvature on posteriors whose geometry is genuinely bad.
+
+**Superseded partial reading (4 of 9):** Replacing only galaxies 10, 12,
 19 and 35 (the four that already have clean NUTS refits) and leaving the other
 five collapsed:
 
