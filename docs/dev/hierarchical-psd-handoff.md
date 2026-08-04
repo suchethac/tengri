@@ -16,7 +16,7 @@ component now checks out individually while the composite fails, which leaves
 one premise: **the real per-galaxy ensembles are not posteriors under the prior
 `p_0` assumes** (§4g, §8).
 
-Everything below is measured, not assumed. Several sections record conclusions
+**ROOT CAUSE FOUND (§4i, #1537): `run_laplace`'s finite-difference Hessian collapses ~13% of per-galaxy posteriors to near-singular; those galaxies carry the entire railing.** Everything below is measured, not assumed. Several sections record conclusions
 that were later **refuted by measurement**; they are kept, marked, because the
 reasoning errors recur.
 
@@ -34,6 +34,7 @@ reasoning errors recur.
 | **4f** | the anisotropy is **real** — NUTS confirms it; the sampler is not the fix |
 | **4g** | **`p_0` is correct; §4e's cause is refuted** — B2 recovers on *more* anisotropic true posteriors |
 | **4h** | **the driver: 13% of galaxies have a COLLAPSED ξ posterior and carry the whole tilt** |
+| **4i** | **ROOT CAUSE: `run_laplace`'s finite-difference Hessian (#1537)** |
 
 ---
 
@@ -620,6 +621,66 @@ real galaxies with `mcmc_nuts` (`dense_mass_matrix=False`) and compare their
 Laplace surfaces and the +0.098 nats/galaxy tilt; the missing half is a
 trustworthy reference for the same galaxies. That is a small, targeted run — not
 a re-fit of the bank.
+
+---
+
+## 4i. ROOT CAUSE — `run_laplace`'s finite-difference Hessian (#1537)
+
+**The collapse of §4h is a Laplace artifact, and it is the root cause of the
+railing.** NUTS on the two worst-collapsed galaxies (R̂ ≤ 1.01, 0 divergences):
+
+| gal | method | ξ total | min eigenvalue | tilt | `Z_i` peak τ |
+|---|---|---|---|---|---|
+| **19** | laplace | 3.49 | **0.000** | **+5.05** | 500.0 |
+| **19** | **nuts** | **12.87** | 0.220 | **−0.21** | 10.7 |
+| **35** | laplace | 2.81 | **0.001** | **+5.88** | 500.0 |
+| **35** | **nuts** | **13.93** | 0.459 | **+0.32** | 73.1 |
+| 7 (healthy) | laplace | 12.70 | 0.237 | −0.91 | 13.9 |
+| 7 (healthy) | **nuts** | **12.68** | 0.242 | −0.40 | 10.0 |
+
+For collapsed galaxies NUTS returns a normal spectrum and the tilt falls from
++5 to ≈0. For a healthy galaxy the two methods agree to three digits — which is
+precisely why §4f, which sampled only galaxies 0–7, concluded there was no
+difference.
+
+**Mechanism.** `run_laplace` builds its Hessian by central finite differences on
+the compiled gradient (`backends/laplace.py:27`) with step
+`h = 1e-5 · max(|θ|, 1)`. The forward model contains piecewise interpolations
+(PCHIP, `jnp.interp`) whose **gradients are discontinuous at knots**; a step
+straddling a kink produces an enormous spurious second derivative, and since
+`cov = H⁻¹` the variance in that direction collapses to ~0. A minimum posterior
+variance of 0.000 implies a Hessian eigenvalue of order 10⁶ — impossible when
+the data constrain 3–4 modes. An exact `jax.hessian` path exists in the same
+function but is only taken when `grad_fn is None`, and `map_dispatch.py:783`
+always supplies one. Filed as **#1537**.
+
+**This closes the investigation.** The chain, end to end:
+
+1. the FD Hessian blows up for ~13% of galaxies → near-singular posterior;
+2. those ensembles are not posteriors, so B2's identity does not apply to them;
+3. their `Z_i` pins to the grid corner (peak τ = 500) with tilt ≈ +5;
+4. 17 such galaxies contribute +73.1 nats against 111 healthy ones at −17.0;
+5. multiplied by N, that beats the prior between N=32 and N=64 — exactly the
+   observed threshold.
+
+Everything else was correctly exonerated along the way: the B2 identity,
+`ou_logpdf` (exact to 5e-13), `p_0` and its quadrature (0.005 nats), the implied
+interim prior (σ, τ flat; ξ isotropic), Monte Carlo convergence in K, nuisance
+degeneracy, and the field reconstruction.
+
+**The fix, in order of cost.**
+1. **Detect and refit** — the cheapest, and it needs no library change.
+   `eigvalsh(cov(psd_xi)).sum() < 0.4·n_params` or `min < 1e-2` flags the
+   collapsed fits from stored draws alone, before any pooling. Refit those with
+   `mcmc_nuts` (~200–500 s each; at 13% of a 2048 bank that is ~270 galaxies).
+2. **Fix the Hessian** (#1537) — validate FD against `jax.hessian`, or expose
+   the exact path through the public API.
+3. Re-run the scaling curve on the repaired bank and re-check the N ceiling.
+
+**Not yet done:** the repaired bank has not been built, so the claim that the
+railing disappears once collapsed fits are replaced is **predicted, not
+measured**. That is the next task, and it is the one that decides whether the
+two-step estimator is usable.
 
 ---
 
