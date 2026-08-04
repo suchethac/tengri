@@ -489,12 +489,20 @@ removed.
    z=0 and an exponentially-declining one loses **46%**; the photometry carries the same
    factor. Clean for z ≳ 0.09, where cosmic age falls below the oldest bin. Parametric
    SFHs are unaffected — they renormalize to `log_total_mass`.
-2. **The parametric round-trip test was never written.** #1396's acceptance list calls
-   for "a tabulated history that reproduces a parametric SFH gives photometry matching
-   the parametric model's — the test that proves the histories are actually being used."
-   Every shipped test compares table against table, on a *synthetic* SSP, with
-   ratio-only assertions. Truncation is a common factor, and a ratio divides it out —
-   which is exactly why (1) shipped green. This is the open half of #1396.
+2. **The parametric round-trip test was never written** — now written in
+   [#1538](https://github.com/suchethac/tengri/pull/1538), not yet on `main`. #1396's
+   acceptance list calls for "a tabulated history that reproduces a parametric SFH gives
+   photometry matching the parametric model's — the test that proves the histories are
+   actually being used." Every previously shipped test compares table against table, on a
+   *synthetic* SSP, with ratio-only assertions. Truncation is a common factor, and a ratio
+   divides it out — which is exactly why (1) shipped green. This is the open half of #1396.
+   Measured agreement between the two arms: 1.9e-4 in color, 1.8e-5 in formed mass.
+
+   Writing it surfaced a second blind spot in the fixture, not the code: `synthetic_ssp_wide`
+   is **separable** — `base(wave) * f(age) * g(met)` — so its wavelength shape is identical
+   at every age and the SED shape cannot respond to the SFH at all. Doubling τ moves its
+   colors by 3.6e-14. Any color assertion written against that fixture is unfalsifiable,
+   which is a trap for more than this section.
 3. `simulate(lines=…)` accepts only the five `DESI_LINES` names, and the error advising
    "pass `LineDef` objects directly" raises that same error when you do — `by_name` is
    keyed by string. [OII]λ3727 and Lyα are unreachable.
