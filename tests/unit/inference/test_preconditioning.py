@@ -1067,7 +1067,7 @@ def _why_bounds_cannot_fail(prior) -> str | None:
 class TestBoundsCannotGuardTheMapping:
     """A bounds check cannot see draws left in the whitened basis (#1498).
 
-    ``tests/integration/test_preconditioning_roundtrip.py`` guards the inverse map
+    ``tests/contract/test_preconditioning_roundtrip.py`` guards the inverse map
     by asking whether preconditioned draws *explain the data*, which looks
     over-elaborate next to "are they inside the priors?" until you notice that
     bounds are structurally incapable of the job.

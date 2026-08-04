@@ -36,6 +36,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+import tengri
 from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
 pytestmark = pytest.mark.regression_bug
@@ -46,19 +47,17 @@ pytestmark = pytest.mark.regression_bug
 _BANDS = ["galex_fuv", "sdss_u", "sdss_g", "sdss_r"]
 
 
-# ``synthetic_ssp_wide`` (tests/conftest.py) rather than a real SSP file.
-# This file originally called ``load_ssp_data("data/fsps_mist_...h5")``. That
-# path is gitignored (114 MB), so on a CI runner the loader falls through to a
-# network download — which reddened main with
-# ``urlopen error [Errno -3] Temporary failure in name resolution`` and, on the
-# runs where DNS did work, silently fetched 114 MB per job. The band-integration
-# schemes are a property of the *screen* integral, not of any particular
-# library, so a synthetic grid exercises them exactly as well.
-
-
 @pytest.fixture(scope="module")
-def ssp(synthetic_ssp_wide):
-    return synthetic_ssp_wide
+def ssp():
+    """The committed bare-stellar grid, resolved without a working directory.
+
+    Nothing below is C3K-specific — the assertions pin that the three schemes
+    are *distinct* and *ordered*, not any grid's numbers. Measured on both:
+    the schemes separate by 3.6e-3 here versus 3.7e-3 on C3K, against a 1e-6
+    threshold, and the error ordering is identical. ``load_ssp()`` resolves
+    ``data/`` from any ancestor directory and never downloads (#1486).
+    """
+    return tengri.load_ssp()
 
 
 @pytest.fixture(scope="module")

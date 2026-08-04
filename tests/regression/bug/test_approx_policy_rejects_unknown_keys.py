@@ -157,7 +157,7 @@ def test_policy_is_hashable_despite_being_a_mapping():
     assert hash(ApproxPolicy(n_subbands=8)) != hash(ApproxPolicy(n_subbands=5))
 
 
-def test_every_policy_field_reaches_the_compile_signature(synthetic_ssp_wide):
+def test_every_policy_field_reaches_the_compile_signature():
     """A knob that does not key the cache lets two models share one kernel.
 
     ``compile_signature`` collected bools generically but singled out
@@ -169,9 +169,12 @@ def test_every_policy_field_reaches_the_compile_signature(synthetic_ssp_wide):
     """
     import dataclasses
 
+    import tengri
     from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
-    ssp = synthetic_ssp_wide
+    # Committed grid, resolved without a working directory (#1486). This test
+    # compares compile signatures, so the grid is immaterial to what it pins.
+    ssp = tengri.load_ssp()
     obs = Observation(photometry=Photometry.from_names(["galex_fuv", "sdss_r"]))
     common = dict(
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
