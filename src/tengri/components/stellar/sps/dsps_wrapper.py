@@ -77,6 +77,7 @@ def canonical_dsps_kwargs(**kwargs):
     dt = jax_dtypes.canonicalize_dtype(jnp.result_type(*floating.values()))
     return {key: (value.astype(dt) if key in floating else value) for key, value in arrays.items()}
 
+
 # Imported at module scope, not inside ``load_ssp``, so the fetch is a visible
 # dependency of this module rather than a hidden one. ``_data_setup`` imports
 # only the standard library, so there is no cycle to avoid.
