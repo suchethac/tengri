@@ -6,19 +6,45 @@ back with ``xi = A zeta``. A linear reparametrization has a constant Jacobian, s
 the posterior is untouched — only the sampler's geometry changes.
 
 The failure this guards against is silent and severe: if the backend forgets to map
-positions back, every returned "posterior" is expressed in the whitened
-coordinates. The numbers still look like plausible parameter values, the fit still
-reports a step size and a divergence count, and nothing raises.
+positions back (in ``nuts.py``, ``positions = problem.restore(positions)``), every
+returned "posterior" is expressed in the whitened coordinates. The numbers still
+look like plausible parameter values, the fit still reports a step size and a
+divergence count, and nothing raises.
 
-The support check is parametrized over **every backend that declares
-``accepts_precondition``**, read from the live registry, so a sampler added later
-inherits the guard without anyone remembering to extend this file. It asserts bounds
-rather than comparing posteriors because bounds are deterministic: whitened draws
-ignore the priors' physical limits regardless of how well any particular sampler
-mixed, so the check does not go flaky when a new backend has different tuning needs.
+**Bounds cannot see that failure, and this file used to claim they could.** Every
+prior standardizes through a constrained bijection —
+``Uniform.unstandardize(xi) = lo + (hi - lo) * Phi(xi)`` — and the Gaussian CDF maps
+all of the reals into ``(lo, hi)``. So draws left in the whitened basis remain *in
+range*: they do not overflow the prior box, they **collapse against its edges**
+(measured on this model, ``dust_tau_bc`` goes from a healthy ``[0.21, 3.72]`` spread
+to exactly ``[0.0, 0.0]``, because ``Phi(-7.4) ~ 1e-13``). A bounds check is blind to
+a basis error by construction, not by accident.
+
+What does see it is asking whether the draws **explain the data**. Draws in the wrong
+basis were never evaluated against the photometry in that basis, so their
+log-posterior is catastrophically low — and that stays true however badly or well the
+chain mixed. The measured separation is ~2500x (:data:`_DEFICIT_GATE`). Unlike a mean
+comparison it needs neither a second chain nor a usable effective sample size, which
+matters here: 250 draws buy an ESS of about 2.5.
+
+The tests divide the work by what each statistic can actually resolve:
+
+* :func:`test_preconditioned_samples_respect_the_prior_support` — the primary guard,
+  unconditional, run against **every** backend that declares
+  ``accepts_precondition``, read from the live registry so a sampler added later
+  inherits it. Checks the deficit (a basis error) *and* the bounds (a missing
+  standardization), and carries its own negative control: it undoes the inverse map
+  on the same draws it just passed and requires the bar to notice. A guard whose
+  threshold has never been shown to be reachable is not a guard.
+* :func:`test_preconditioning_leaves_the_posterior_unchanged` — a second, weaker
+  angle, gated on convergence. Kept because it is sensitive to a *partial* mapping
+  error that still lands in the typical set; it is no longer the only thing standing
+  between a whitened posterior and a published number.
 """
 
 from __future__ import annotations
+
+from types import SimpleNamespace
 
 import jax
 import jax.numpy as jnp
@@ -94,104 +120,62 @@ def _fit(model, data, noise, *, precondition, method="mcmc_nuts"):
     )
 
 
+# ── Thresholds. Every one of these was measured, not chosen. ─────────────────
+
+#: Largest median log-posterior deficit a healthy posterior may show, as a multiple
+#: of the ``D/2`` a correct sampler produces by construction.
+#:
+#: Where ``D/2`` comes from: near the mode the log-density is locally quadratic, so a
+#: draw's shortfall below it is distributed as ``0.5 * chi2_D`` — median ``~D/2``, and
+#: a 99th percentile of about ``9.3`` at ``D = 7``. Measured on this model: a real
+#: preconditioned fit sits at **1.06x D/2**, and the *same draws* with the inverse map
+#: undone sit at **2527x**. Any bar from 20 to 1000 separates them. 20 is ~2x above
+#: the theoretical p99 and still 126x below the failure.
+_DEFICIT_GATE = 20.0
+
 #: Split-R-hat above which a chain is not converged enough for its posterior mean
 #: to mean anything. The usual 1.05.
 _RHAT_GATE = 1.05
 
+#: Largest gap between the two arms' posterior means, in units of the Monte Carlo
+#: standard error *of that gap* (#1498).
+#:
+#: The previous form divided by the posterior **width**, which is the wrong scale. It
+#: asked "did the mean move a lot?" when the question is "did it move further than
+#: two finite chains could have moved it by chance?". Dividing by the MCSE is better
+#: on both sides at once: a badly-mixed chain has a large MCSE and so *widens* the bar
+#: instead of tripping it, while a real basis error clears any bar by an order of
+#: magnitude. Measured: **0.58** between two healthy arms, **31.2** against a
+#: forgotten inverse map, and ~3.2 for the historical CI failure that opened #1498 —
+#: which the old ``< 1.0`` bar reported as a bug at 2.13 sd.
+_Z_GATE = 5.0
 
-def test_preconditioning_leaves_the_posterior_unchanged(ssp_data_wne):
-    """Same posterior, different coordinates — the invariant a mapping bug breaks.
-
-    Gated on convergence (#1498). Comparing the means of two independent 250/250
-    NUTS runs only probes the inverse map when **both** chains have converged. If
-    one has not, the means differ because that chain is somewhere else, not
-    because the draws are still whitened — and preconditioning is documented to
-    mix *worse* on exactly this configuration (D=8 dust, median ESS/s ratio 0.62,
-    range 0.10–1.13). Ungated, this failed deterministically on the CI runner at
-    2.13 sd while passing on macOS, and the difference was mixing, not a bug.
-
-    The invariant itself is guarded unconditionally by
-    :func:`test_preconditioned_samples_respect_the_prior_support`, which checks
-    bounds rather than means and so does not depend on how well anything mixed.
-    """
-    model = _model(ssp_data_wne)
-    data, noise = _mock(model)
-
-    plain = _fit(model, data, noise, precondition=False)
-    preconditioned = _fit(model, data, noise, precondition=True)
-
-    unconverged = {
-        arm: {k: round(v, 3) for k, v in fit.rhat().items() if v > _RHAT_GATE}
-        for arm, fit in (("plain", plain), ("preconditioned", preconditioned))
-    }
-    if any(unconverged.values()):
-        pytest.skip(
-            "posterior means are not comparable — split-R-hat above "
-            f"{_RHAT_GATE} in: { {k: v for k, v in unconverged.items() if v} }. "
-            "A mean shift here would be mixing, not a whitening-mapping bug; the "
-            "mapping itself is covered by the prior-support test."
-        )
-
-    for name in plain.samples:
-        a = np.asarray(plain.samples[name])
-        b = np.asarray(preconditioned.samples[name])
-        if a.ndim != 1:
-            continue
-        spread = max(float(np.std(a)), 1e-3)
-        shift = abs(float(np.mean(a) - np.mean(b))) / spread
-        assert shift < 1.0, (
-            f"{name}: posterior mean moved {shift:.2f} sd between the plain and "
-            f"preconditioned runs ({np.mean(a):.4f} vs {np.mean(b):.4f}) — "
-            "the draws are probably still in whitened coordinates"
-        )
+#: Minimum number of free parameters the mean comparison must actually reach.
+#:
+#: The model has 7. This loop used to iterate ``plain.samples``, which is 19 entries
+#: of which **13 are ``Fixed`` constants** — zero variance, scoring ``0 / 1e-3 = 0``
+#: and passing for free. It looked like broad coverage and was six parameters. There
+#: was no counter at all, so a loop that reached nothing would have passed silently.
+_MIN_COMPARED = 5
 
 
-def test_at_least_one_backend_declares_the_capability():
-    """Anti-vacuity: an empty parametrization would silently check nothing."""
-    assert _capable_backends(), "no backend declares accepts_precondition"
+@pytest.fixture(scope="module")
+def objective(ssp_data_wne):
+    """Model, data, and the standardized objective a backend actually sees.
 
-
-@pytest.mark.parametrize("method", _capable_backends())
-def test_preconditioned_samples_respect_the_prior_support(method, ssp_data_wne):
-    """Whitened draws mapped back must land inside the priors' physical bounds.
-
-    A missing inverse map shows up here even when the means happen to agree.
-    """
-    model = _model(ssp_data_wne)
-    data, noise = _mock(model)
-    result = _fit(model, data, noise, precondition=True, method=method)
-
-    checked = 0
-    for name in model.spec.free_params:
-        if name not in result.samples:
-            continue
-        dist = model.spec.get_distribution(name)
-        low, high = getattr(dist, "lo", None), getattr(dist, "hi", None)
-        if low is None or high is None:
-            continue
-        draws = np.asarray(result.samples[name])
-        assert draws.min() >= float(low) - 1e-8, f"{name} below prior support"
-        assert draws.max() <= float(high) + 1e-8, f"{name} above prior support"
-        checked += 1
-    assert checked > 0, "no bounded priors were checked — the guard would pass vacuously"
-
-
-def test_gradients_through_the_real_model_are_exact_and_finite(ssp_data_wne):
-    """The chain rule and finiteness, on the actual SED likelihood.
-
-    The synthetic-Gaussian unit tests prove the algebra; this proves it survives the
-    real forward model, where the Jacobian comes from SSP interpolation, dust
-    attenuation and filter projection rather than a matrix multiply. A wrong-but-finite
-    gradient raises nothing and would simply sample the wrong distribution.
-
-    Reaches the objective the way a backend does (``InferenceContext`` over a
-    ``Fitter``) because that *is* the internal seam under test.
+    Module-scoped because the MAP expansion point costs a few seconds and several
+    tests need it. Sharing it also pins them to the *same* point, which is what
+    makes their numbers comparable to one another.
     """
     from jax.flatten_util import ravel_pytree
 
     from tengri.inference.context import InferenceContext
     from tengri.inference.fitter import Fitter
-    from tengri.inference.preconditioning import metric_preconditioner, negative_hessian_metric
+    from tengri.inference.preconditioning import (
+        metric_preconditioner,
+        negative_hessian_metric,
+        prepare_preconditioning,
+    )
 
     model = _model(ssp_data_wne)
     data, noise = _mock(model)
@@ -213,7 +197,218 @@ def test_gradients_through_the_real_model_are_exact_and_finite(ssp_data_wne):
     def log_p(flat, args):
         return -nlp(unravel(flat), args)
 
-    pc = metric_preconditioner(negative_hessian_metric(log_p, flat0, data_args))
+    return SimpleNamespace(
+        model=model,
+        data=data,
+        noise=noise,
+        log_p=log_p,
+        data_args=data_args,
+        flat0=flat0,
+        unravel=unravel,
+        # The objective's own parameter order — not spec.free_params, which need not
+        # agree with how ravel_pytree laid the vector out.
+        names=list(unravel(flat0).keys()),
+        # log-density at the mode: the reference every deficit is measured from.
+        lp_mode=float(log_p(flat0, data_args)),
+        # As deployed: partial whitening at DEFAULT_WHITENING_STRENGTH, which is what
+        # a backend actually applies and therefore what a bug would fail to undo.
+        preconditioner=prepare_preconditioning(
+            log_p, flat0, data_args, precondition=True
+        ).preconditioner,
+        # Full strength, so ``A A^T = G^-1`` exactly — the Laplace covariance. Used to
+        # *generate* typical-set draws, not to whiten anything.
+        laplace=metric_preconditioner(negative_hessian_metric(log_p, flat0, data_args)),
+    )
+
+
+def _standardize(model, samples, names) -> jnp.ndarray:
+    """Physical draws → the standardized latents the objective is written in.
+
+    ``Distribution.standardize`` is the documented inverse of the ``unstandardize``
+    the sampler's output already went through, so this reconstructs the ``xi`` the
+    backend was holding — the vector the log-posterior can be evaluated at.
+    """
+    missing = [n for n in names if not hasattr(model.spec.get_distribution(n), "standardize")]
+    assert not missing, (
+        f"priors for {missing} do not implement standardize(), so their draws cannot "
+        "be mapped back into the objective's coordinates — the deficit guard would "
+        "silently cover fewer parameters than it claims"
+    )
+    return jnp.stack(
+        [
+            model.spec.get_distribution(n).standardize(jnp.asarray(np.asarray(samples[n])))
+            for n in names
+        ],
+        axis=1,
+    )
+
+
+def _median_deficit_ratio(obj, xi_stack) -> float:
+    """Median log-posterior shortfall below the mode, in units of ``D / 2``.
+
+    ``~1.0`` is what a correct sampler produces by construction; see
+    :data:`_DEFICIT_GATE`.
+    """
+    lp = jax.vmap(lambda flat: obj.log_p(flat, obj.data_args))
+    deficit = obj.lp_mode - np.asarray(lp(jnp.asarray(xi_stack)))
+    finite = deficit[np.isfinite(deficit)]
+    assert finite.size, "every draw scored a non-finite log-posterior"
+    return float(np.median(finite)) / (len(obj.names) / 2.0)
+
+
+def test_at_least_one_backend_declares_the_capability():
+    """Anti-vacuity: an empty parametrization would silently check nothing."""
+    assert _capable_backends(), "no backend declares accepts_precondition"
+
+
+@pytest.mark.parametrize("method", _capable_backends())
+def test_preconditioned_samples_respect_the_prior_support(method, objective):
+    """Whitened draws mapped back must explain the data *and* lie inside the priors.
+
+    The primary guard, and the only unconditional one. Two assertions, because the
+    transform can be dropped at two different places and the two failures do not
+    look alike:
+
+    * **deficit** — catches a forgotten ``restore()``, i.e. draws reported in the
+      whitened basis. Bounds are blind to this (see the module docstring): the
+      constrained bijection keeps such draws in range and merely collapses them onto
+      the prior edges. Asking whether they explain the photometry resolves it, with
+      no reference to a second chain or to how well anything mixed.
+    * **bounds** — catches a missing *standardization*, i.e. raw ``xi`` returned as
+      though it were physical. ``xi`` is an unconstrained real, so it does overflow.
+
+    Parametrized over the live registry so all four Hamiltonian backends carry the
+    same guarantee, rather than only the one this file happened to name.
+    """
+    model = objective.model
+    result = _fit(model, objective.data, objective.noise, precondition=True, method=method)
+
+    xi = _standardize(model, result.samples, objective.names)
+    ratio = _median_deficit_ratio(objective, xi)
+    assert ratio < _DEFICIT_GATE, (
+        f"{method}: posterior draws sit {ratio:.0f}x D/2 below the mode (healthy is "
+        f"~1x, bar is {_DEFICIT_GATE:g}x) — they do not explain the data, which is "
+        "what a posterior still expressed in whitened coordinates looks like"
+    )
+
+    # Negative control, on the very draws just checked. Undo the inverse map the
+    # backend applied and confirm the bar above notices. Without this the gate could
+    # be any number no posterior could reach and the assertion would still be green
+    # — which is exactly how the bounds check below spent this file's whole history
+    # looking like a mapping test while being unable to fail.
+    leaked = _median_deficit_ratio(objective, jax.vmap(objective.preconditioner.to_latent)(xi))
+    assert leaked > _DEFICIT_GATE, (
+        f"{method}: undoing the inverse map left the deficit at {leaked:.1f}x D/2, "
+        f"under the {_DEFICIT_GATE:g}x bar — the guard cannot see a "
+        "whitened-coordinate leak, so passing it means nothing"
+    )
+
+    checked = 0
+    for name in model.spec.free_params:
+        if name not in result.samples:
+            continue
+        dist = model.spec.get_distribution(name)
+        low, high = getattr(dist, "lo", None), getattr(dist, "hi", None)
+        if low is None or high is None:
+            continue
+        draws = np.asarray(result.samples[name])
+        assert draws.min() >= float(low) - 1e-8, f"{name} below prior support"
+        assert draws.max() <= float(high) + 1e-8, f"{name} above prior support"
+        checked += 1
+    assert checked > 0, "no bounded priors were checked — the guard would pass vacuously"
+
+
+def test_preconditioning_leaves_the_posterior_unchanged(objective):
+    """Same posterior, different coordinates — a second angle on the invariant.
+
+    Weaker than the deficit guard, and deliberately secondary. Two independent
+    250/250 NUTS runs buy an effective sample size of about **2.5** on this model, so
+    a comparison of their means has little power however it is scaled — and a *skip*
+    here now costs nothing that matters, because the mapping is guarded
+    unconditionally by :func:`test_preconditioned_samples_respect_the_prior_support`.
+    It is kept because it is sensitive to a different failure: a *partial* mapping
+    error that still lands the draws in the typical set, which the deficit would not
+    notice.
+
+    Two changes make it stable where #1498 was not:
+
+    * the gap is scaled by its **Monte Carlo standard error** rather than by the
+      posterior width, so poor mixing widens the bar instead of tripping it
+      (:data:`_Z_GATE`);
+    * it stays gated on convergence, because an unconverged chain is somewhere else
+      entirely and the MCSE does not describe that.
+
+    Preconditioning is documented to mix *worse* on exactly this configuration
+    (D=8 dust, median ESS/s ratio 0.62, range 0.10–1.13), so both matter.
+    """
+    model = objective.model
+    plain = _fit(model, objective.data, objective.noise, precondition=False)
+    preconditioned = _fit(model, objective.data, objective.noise, precondition=True)
+
+    unconverged = {
+        arm: {k: round(v, 3) for k, v in fit.rhat().items() if v > _RHAT_GATE}
+        for arm, fit in (("plain", plain), ("preconditioned", preconditioned))
+    }
+    if any(unconverged.values()):
+        pytest.skip(
+            "posterior means are not comparable — split-R-hat above "
+            f"{_RHAT_GATE} in: { {k: v for k, v in unconverged.items() if v} }. "
+            "A mean shift here would be mixing, not a whitening-mapping bug; the "
+            "mapping itself is covered unconditionally by the deficit guard."
+        )
+
+    ess_plain = plain.effective_sample_size()
+    ess_pre = preconditioned.effective_sample_size()
+
+    def _ess(table, name):
+        """ESS, floored at 1. An unknown ESS must widen the bar, never narrow it."""
+        value = float(table.get(name, 1.0))
+        return value if np.isfinite(value) and value >= 1.0 else 1.0
+
+    compared = 0
+    for name in model.spec.free_params:
+        if name not in plain.samples or name not in preconditioned.samples:
+            continue
+        a = np.asarray(plain.samples[name])
+        b = np.asarray(preconditioned.samples[name])
+        if a.ndim != 1:
+            continue
+        # MCSE of the difference between two independent chain means.
+        mcse = float(np.sqrt(a.var() / _ess(ess_plain, name) + b.var() / _ess(ess_pre, name)))
+        if not np.isfinite(mcse) or mcse <= 0.0:
+            continue
+        z = abs(float(np.mean(a) - np.mean(b))) / mcse
+        compared += 1
+        assert z < _Z_GATE, (
+            f"{name}: posterior means differ by {z:.1f} Monte Carlo standard errors "
+            f"({np.mean(a):.4f} vs {np.mean(b):.4f}, ESS {_ess(ess_plain, name):.0f} "
+            f"and {_ess(ess_pre, name):.0f}) — too large to be sampling noise, so the "
+            "draws are probably still in whitened coordinates"
+        )
+
+    assert compared >= _MIN_COMPARED, (
+        f"only {compared} free parameters were compared, below the {_MIN_COMPARED} "
+        f"this model should reach ({len(model.spec.free_params)} are free) — the "
+        "comparison has quietly stopped covering the posterior"
+    )
+
+
+def test_gradients_through_the_real_model_are_exact_and_finite(objective):
+    """The chain rule and finiteness, on the actual SED likelihood.
+
+    The synthetic-Gaussian unit tests prove the algebra; this proves it survives the
+    real forward model, where the Jacobian comes from SSP interpolation, dust
+    attenuation and filter projection rather than a matrix multiply. A wrong-but-finite
+    gradient raises nothing and would simply sample the wrong distribution.
+
+    Reaches the objective the way a backend does (``InferenceContext`` over a
+    ``Fitter``) because that *is* the internal seam under test.
+    """
+    log_p, data_args, flat0 = objective.log_p, objective.data_args, objective.flat0
+
+    # The full-strength preconditioner from the fixture. Any invertible A exercises
+    # the chain rule; reusing this one avoids a second Hessian at the same point.
+    pc = objective.laplace
     wrapped = pc.wrap(log_p)
 
     # Chain rule on the real likelihood.
