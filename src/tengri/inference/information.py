@@ -129,6 +129,71 @@ class ParameterInformation:
         """Number of free parameters, i.e. the ceiling on ``n_eff``."""
         return len(self.names)
 
+    def precision(self) -> np.ndarray:
+        """Rebuild the precision matrix this decomposition came from.
+
+        Returns
+        -------
+        ndarray, shape (n_free, n_free)
+            :math:`V \\Lambda V^T` [dimensionless]. Exact to floating point —
+            the eigendecomposition of a symmetric matrix loses nothing.
+        """
+        return (self.directions * self.eigenvalues) @ self.directions.T
+
+    def restrict(self, prefix: str) -> ParameterInformation:
+        """Information content of one block of parameters, on its own.
+
+        Parameters
+        ----------
+        prefix : str
+            Name prefix selecting the block, e.g. ``"psd_xi"`` for the
+            stochastic field or ``"dust_"`` for the attenuation parameters.
+
+        Returns
+        -------
+        ParameterInformation
+            Decomposition of the corresponding **sub-block** of the precision
+            matrix.
+
+        Raises
+        ------
+        ValueError
+            If no parameter name starts with ``prefix``.
+
+        Notes
+        -----
+        This takes the sub-block of the precision matrix and re-diagonalizes it.
+        It is **not** a slice of the full decomposition, and the two answer
+        different questions:
+
+        * ``n_eff`` of the whole model counts every measured direction,
+          including ones that mix the block with everything else;
+        * ``restrict(...).n_eff`` counts what the data measured about this block
+          **with the rest of the model held fixed** — the conditional, not the
+          marginal, so it is an upper bound on the block's own information.
+
+        Comparing the two across papers without saying which was used is how
+        "the SFH has 4 modes" and "the fit has 5 modes" turn into an argument.
+        For the field the block is ``psd_xi``: components spell the same
+        quantity ``sfh_field_xi``, but the *latent* dict — which is what gets
+        raveled — keys it ``psd_xi`` (the #1271 two-spelling seam).
+
+        Examples
+        --------
+        >>> info = posterior.information()  # doctest: +SKIP
+        >>> info.n_eff, info.restrict("psd_xi").n_eff  # doctest: +SKIP
+        (4.91, 3.21)
+        """
+        keep = [i for i, name in enumerate(self.names) if name.startswith(prefix)]
+        if not keep:
+            raise ValueError(
+                f"No parameter starts with {prefix!r}. Available: "
+                f"{sorted({n.split('[')[0] for n in self.names})}"
+            )
+        index = np.asarray(keep)
+        block = self.precision()[np.ix_(index, index)]
+        return information_from_precision(block, names=tuple(self.names[i] for i in keep))
+
     def by_parameter(self) -> dict[str, float]:
         """Attribute the measured directions back to named parameters.
 

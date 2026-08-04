@@ -360,6 +360,20 @@ jobs:
     # re-add a long-pole claim without a dated measurement beside it. See the
     # re-measure recipe on #1346.
     #
+    # RE-MEASURED 2026-08-04, main @dd2da7acf (run 30864997361, all green). The
+    # near-tie above is GONE and the numbers have gone stale exactly as this block
+    # warns they do — `contract` leads the next shard by 7.3 min:
+    #   contract 30.2m · components 22.9m · regression-d 21.5m · regression-b1 15.7m
+    #   regression-b2 12.6m · regression-a 6.2m · regression-c 5.2m · physics 3.3m
+    #
+    # Dated, per this block's own rule, and not a standing claim. `contract` sits at
+    # 60% of its 50-min budget and sets a ~30 min wall clock, so work landing there
+    # is no longer free. That is why #1498's preconditioning guard was SPLIT rather
+    # than moved in whole: the 53 s four-backend deficit sweep went to
+    # `tests/contract/`, and the 155 s posterior-mean comparison stayed in the
+    # nightly tier as `tests/integration/test_preconditioning_posterior_invariance.py`.
+    # Re-measure before adding to `contract`; `physics` at 3.3m has the headroom.
+    #
     # regression and physics were ONE shard until 2026-07. They were split because
     # the paired shard walked back into the 16 GB ceiling: it died at ~21-22 min and
     # ~95-97% of the suite with 'The runner has received a shutdown signal' and zero
