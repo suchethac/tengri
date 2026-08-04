@@ -93,18 +93,18 @@ def _compute_one(args: tuple) -> tuple[tuple[int, int, int], np.ndarray]:
     try:
         mod = relagn(
             M=10**log_mbh,
-            dist=100.0,       # arbitrary; we store luminosity not flux
+            dist=100.0,  # arbitrary; we store luminosity not flux
             log_mdot=log_mdot,
             a=float(astar),
-            cos_inc=0.5,      # reference inclination
+            cos_inc=0.5,  # reference inclination
             kTe_hot=100.0,
             kTe_warm=0.2,
             gamma_hot=1.7,
             gamma_warm=2.7,
-            r_hot=-1,         # no hot corona (set to r_isco)
-            r_warm=-1,        # no warm Comptonisation (set to r_isco)
-            log_rout=-1,      # self-gravity outer radius
-            fcol=-1,          # Done+2012 colour correction
+            r_hot=-1,  # no hot corona (set to r_isco)
+            r_warm=-1,  # no warm Comptonisation (set to r_isco)
+            log_rout=-1,  # self-gravity outer radius
+            fcol=-1,  # Done+2012 colour correction
             h_max=10.0,
             z=0.0,
         )
@@ -211,13 +211,13 @@ def build_grid(
                 rate = done / elapsed
                 eta = (total - done) / rate if rate > 0 else 0
                 print(
-                    f"  {done}/{total} ({100*done/total:.0f}%) "
+                    f"  {done}/{total} ({100 * done / total:.0f}%) "
                     f"elapsed {elapsed:.0f}s ETA {eta:.0f}s",
                     flush=True,
                 )
 
     elapsed = time.time() - t0
-    print(f"Completed {total} SEDs in {elapsed:.0f}s ({elapsed/total:.1f}s/SED)", flush=True)
+    print(f"Completed {total} SEDs in {elapsed:.0f}s ({elapsed / total:.1f}s/SED)", flush=True)
 
     return {
         "grid": grid,

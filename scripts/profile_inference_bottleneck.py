@@ -26,9 +26,9 @@ from tengri.parameters.priors import Fixed, Uniform
 
 def profile_loss_function(fitter, n_evals=100):
     """Profile raw loss function evaluation time."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("LOSS FUNCTION PROFILING")
-    print("="*80)
+    print("=" * 80)
 
     # Get loss function
     loss_fn = fitter._get_or_build_loss_fn(mode="auto")
@@ -65,9 +65,9 @@ def profile_loss_function(fitter, n_evals=100):
 
     print(f"\n  Steady-state loss function timing:")
     print(f"    Mean: {mean_time_ms:.3f} ± {std_time_ms:.3f} ms")
-    print(f"    Min: {np.min(times_arr)*1000:.3f} ms")
-    print(f"    Max: {np.max(times_arr)*1000:.3f} ms")
-    print(f"    Median: {np.median(times_arr)*1000:.3f} ms")
+    print(f"    Min: {np.min(times_arr) * 1000:.3f} ms")
+    print(f"    Max: {np.max(times_arr) * 1000:.3f} ms")
+    print(f"    Median: {np.median(times_arr) * 1000:.3f} ms")
 
     return {
         "compile_time_s": compile_time,
@@ -78,9 +78,9 @@ def profile_loss_function(fitter, n_evals=100):
 
 def check_preintegration_status(model):
     """Check if DL07 preintegration is active."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("PREINTEGRATION STATUS")
-    print("="*80)
+    print("=" * 80)
 
     has_precomputed = hasattr(model, "_precomputed")
     print(f"\n  model._precomputed exists: {has_precomputed}")
@@ -110,9 +110,9 @@ def estimate_mcmc_overhead(n_steps, loss_eval_ms, total_time_s):
     overhead_s = total_time_s - pure_loss_time_s
     overhead_pct = (overhead_s / total_time_s) * 100
 
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("MCMC OVERHEAD ANALYSIS")
-    print("="*80)
+    print("=" * 80)
 
     print(f"\n  Total MCMC steps: {n_steps}")
     print(f"  Loss eval time: {loss_eval_ms:.3f} ms/step")
@@ -134,13 +134,17 @@ def estimate_mcmc_overhead(n_steps, loss_eval_ms, total_time_s):
 
 
 def main():
-    print("="*80)
+    print("=" * 80)
     print("INFERENCE BOTTLENECK PROFILING")
-    print("="*80)
+    print("=" * 80)
 
     # Load SSP data
     print("\nLoading SSP data...")
-    ssp_path = Path(__file__).parent.parent / "data" / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    ssp_path = (
+        Path(__file__).parent.parent
+        / "data"
+        / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    )
     if not ssp_path.exists():
         print(f"  ❌ SSP data not found at {ssp_path}")
         return
@@ -149,9 +153,9 @@ def main():
     print(f"  ✓ Loaded {ssp_path.name}")
 
     # Create test_a2 model (DL07 case)
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("TEST A2: FIR-Constrained Fit with DL07")
-    print("="*80)
+    print("=" * 80)
 
     params = Parameters(
         mean_sfh_type="tsnorm",
@@ -174,10 +178,18 @@ def main():
     )
 
     filter_names = [
-        "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp",
-        "hst_f125w", "hst_f140w", "hst_f160w",
-        "vista_ks", "irac_36", "irac_45",
-        "herschel_160", "herschel_250",
+        "hst_f606w",
+        "hst_f775w",
+        "hst_f814w",
+        "hst_f850lp",
+        "hst_f125w",
+        "hst_f140w",
+        "hst_f160w",
+        "vista_ks",
+        "irac_36",
+        "irac_45",
+        "herschel_160",
+        "herschel_250",
     ]
     filters = load_filter_set(filter_names)
     observation = Observation(photometry=Photometry.from_filter_set(filters))
@@ -212,9 +224,9 @@ def main():
     )
 
     # Compare to expected performance
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("EXPECTED VS ACTUAL PERFORMANCE")
-    print("="*80)
+    print("=" * 80)
 
     expected_loss_ms = 12.6  # From dust-preintegration.md
 
@@ -227,9 +239,11 @@ def main():
     print(f"    Preintegration active: {preint_active}")
 
     if preint_active:
-        if loss_timing['mean_eval_ms'] > 2 * expected_loss_ms:
+        if loss_timing["mean_eval_ms"] > 2 * expected_loss_ms:
             print(f"\n  ❌ SLOW despite preintegration")
-            print(f"     {loss_timing['mean_eval_ms']/expected_loss_ms:.1f}x slower than expected")
+            print(
+                f"     {loss_timing['mean_eval_ms'] / expected_loss_ms:.1f}x slower than expected"
+            )
             print("\n  Possible causes:")
             print("    1. Preintegration not working correctly")
             print("    2. Additional components not in baseline (nebular, IGM)")
@@ -246,22 +260,26 @@ def main():
         print(f"  Expected loss eval: ~{expected_loss_ms * expected_slowdown:.1f} ms")
 
     # MCMC time budget
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("MCMC TIME BUDGET (500 steps)")
-    print("="*80)
+    print("=" * 80)
 
     print(f"\n  If loss eval is {loss_timing['mean_eval_ms']:.3f} ms:")
     print(f"    Pure loss: {n_mcmc_steps * loss_timing['mean_eval_ms'] / 1000:.1f}s")
-    print(f"    + Gradients (~2x loss): {2 * n_mcmc_steps * loss_timing['mean_eval_ms'] / 1000:.1f}s")
-    print(f"    + NUTS overhead (~20%): {0.2 * 3 * n_mcmc_steps * loss_timing['mean_eval_ms'] / 1000:.1f}s")
+    print(
+        f"    + Gradients (~2x loss): {2 * n_mcmc_steps * loss_timing['mean_eval_ms'] / 1000:.1f}s"
+    )
+    print(
+        f"    + NUTS overhead (~20%): {0.2 * 3 * n_mcmc_steps * loss_timing['mean_eval_ms'] / 1000:.1f}s"
+    )
     print(f"    ≈ Total: {3.6 * n_mcmc_steps * loss_timing['mean_eval_ms'] / 1000:.1f}s")
 
     print(f"\n  Observed total: {observed_total_time:.1f}s")
 
     # Recommendations
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("RECOMMENDATIONS")
-    print("="*80)
+    print("=" * 80)
 
     if not preint_active:
         print("\n  🔧 Fix #1: Enable DL07 preintegration")
@@ -269,16 +287,16 @@ def main():
         print("       - Are DL07 templates in data/?")
         print("       - Is redshift Fixed?")
         print("       - Are there exceptions preventing precompute?")
-        print(f"     Expected speedup: {16.3:.1f}x → {observed_total_time/16.3:.1f}s total")
+        print(f"     Expected speedup: {16.3:.1f}x → {observed_total_time / 16.3:.1f}s total")
 
-    if loss_timing['mean_eval_ms'] > expected_loss_ms:
+    if loss_timing["mean_eval_ms"] > expected_loss_ms:
         print("\n  🔧 Fix #2: Optimize loss function")
         print("     Current bottlenecks:")
         print("       - Filter convolution")
         print("       - Parameter transforms")
         print("       - Gradient overhead")
 
-    if overhead['overhead_pct'] > 60:
+    if overhead["overhead_pct"] > 60:
         print("\n  🔧 Fix #3: Reduce MCMC overhead")
         print("     Try:")
         print("       - Fewer warmup steps (250 → 100)")

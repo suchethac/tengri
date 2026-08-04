@@ -49,22 +49,72 @@ import numpy as np
 
 CIGALE_REPO = "https://gitlab.lam.fr/cigale/cigale.git"
 QHAC_VALUES: tuple[float, ...] = (
-    0.02, 0.06, 0.10, 0.14, 0.17, 0.20, 0.24, 0.28, 0.32, 0.36, 0.40,
+    0.02,
+    0.06,
+    0.10,
+    0.14,
+    0.17,
+    0.20,
+    0.24,
+    0.28,
+    0.32,
+    0.36,
+    0.40,
 )
 QHAC_TAGS: tuple[str, ...] = (
-    "000", "010", "020", "030", "040", "050", "060", "070", "080", "090", "100",
+    "000",
+    "010",
+    "020",
+    "030",
+    "040",
+    "050",
+    "060",
+    "070",
+    "080",
+    "090",
+    "100",
 )
 UMIN_TAGS: tuple[str, ...] = (
-    "0.100", "0.120", "0.150", "0.170", "0.200", "0.250", "0.300", "0.350",
-    "0.400", "0.500", "0.600", "0.700", "0.800", "1.000", "1.200", "1.500",
-    "1.700", "2.000", "2.500", "3.000", "3.500", "4.000", "5.000", "6.000",
-    "7.000", "8.000", "10.00", "12.00", "15.00", "17.00", "20.00", "25.00",
-    "30.00", "35.00", "40.00", "50.00", "80.00",
+    "0.100",
+    "0.120",
+    "0.150",
+    "0.170",
+    "0.200",
+    "0.250",
+    "0.300",
+    "0.350",
+    "0.400",
+    "0.500",
+    "0.600",
+    "0.700",
+    "0.800",
+    "1.000",
+    "1.200",
+    "1.500",
+    "1.700",
+    "2.000",
+    "2.500",
+    "3.000",
+    "3.500",
+    "4.000",
+    "5.000",
+    "6.000",
+    "7.000",
+    "8.000",
+    "10.00",
+    "12.00",
+    "15.00",
+    "17.00",
+    "20.00",
+    "25.00",
+    "30.00",
+    "35.00",
+    "40.00",
+    "50.00",
+    "80.00",
 )
 UMIN_VALUES = np.asarray([float(s) for s in UMIN_TAGS])
-ALPHA_TAGS: tuple[str, ...] = tuple(
-    f"{x:.1f}" for x in np.round(np.arange(1.0, 3.05, 0.1), 1)
-)
+ALPHA_TAGS: tuple[str, ...] = tuple(f"{x:.1f}" for x in np.round(np.arange(1.0, 3.05, 0.1), 1))
 ALPHA_VALUES = np.asarray([float(s) for s in ALPHA_TAGS])
 UMAX_POWERLAW_TAG = "1e7"
 
@@ -85,7 +135,8 @@ def clone_cigale(raw_dir: Path) -> Path:
         return target
     print(f"[clone] {CIGALE_REPO}  ->  {target}")
     subprocess.run(
-        ["git", "clone", "--depth", "1", CIGALE_REPO, str(target)], check=True,
+        ["git", "clone", "--depth", "1", CIGALE_REPO, str(target)],
+        check=True,
     )
     return target
 
@@ -203,9 +254,9 @@ def parse_grid(repo_root: Path) -> dict:
         "qhac_grid": np.asarray(QHAC_VALUES, dtype=np.float64),
         "umin_grid": UMIN_VALUES.astype(np.float64),
         "alpha_grid": ALPHA_VALUES.astype(np.float64),
-        "single_u": single_u.astype(np.float64),                # (qhac, umin, wave)
-        "powerlaw": powerlaw_alpha2.astype(np.float64),         # (qhac, umin, wave) at alpha=2.0
-        "powerlaw_alpha": powerlaw.astype(np.float64),          # (qhac, umin, alpha, wave) full
+        "single_u": single_u.astype(np.float64),  # (qhac, umin, wave)
+        "powerlaw": powerlaw_alpha2.astype(np.float64),  # (qhac, umin, wave) at alpha=2.0
+        "powerlaw_alpha": powerlaw.astype(np.float64),  # (qhac, umin, alpha, wave) full
     }
 
 
@@ -231,12 +282,14 @@ def main(argv: list[str] | None = None) -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument(
-        "--raw-dir", type=Path,
+        "--raw-dir",
+        type=Path,
         default=Path("~/.cache/tengri/themis_raw").expanduser(),
     )
     p.add_argument("--output", type=Path, default=Path("data/themis_templates.h5"))
     p.add_argument(
-        "--clone", action="store_true",
+        "--clone",
+        action="store_true",
         help="git-clone CIGALE if missing",
     )
     args = p.parse_args(argv)
@@ -246,8 +299,7 @@ def main(argv: list[str] | None = None) -> int:
     if not (repo / "database_builder/themis/data").is_dir():
         if not args.clone:
             print(
-                f"[error] {repo}/database_builder/themis/data not present. "
-                f"Re-run with --clone.",
+                f"[error] {repo}/database_builder/themis/data not present. Re-run with --clone.",
                 file=sys.stderr,
             )
             return 1

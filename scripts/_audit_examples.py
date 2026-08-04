@@ -10,6 +10,7 @@ A downstream grep can flag:
 Usage:
     python scripts/_audit_examples.py examples/agn/plot_agn_hierarchy.py
 """
+
 from __future__ import annotations
 
 import os

@@ -63,8 +63,10 @@ def read_fsps_grid(filepath: str) -> dict:
     wavelength = np.array(lines[1].split(), dtype=np.float64)
     # Header n_cols can be stale in newer FSPS versions; use actual count
     if len(wavelength) != n_cols:
-        print(f"  Note: header says {n_cols} cols but file has "
-              f"{len(wavelength)} wavelengths; using actual count")
+        print(
+            f"  Note: header says {n_cols} cols but file has "
+            f"{len(wavelength)} wavelengths; using actual count"
+        )
         n_cols = len(wavelength)
 
     # Lines 3+: alternating parameter line + data line
@@ -95,8 +97,7 @@ def read_fsps_grid(filepath: str) -> dict:
                 # Data line
                 values = np.array(lines[line_idx].split(), dtype=np.float64)
                 assert len(values) == n_cols, (
-                    f"Data count mismatch at ({iz},{ia},{iu}): "
-                    f"{len(values)} != {n_cols}"
+                    f"Data count mismatch at ({iz},{ia},{iu}): {len(values)} != {n_cols}"
                 )
                 data[iz, ia, iu, :] = values
                 line_idx += 1
@@ -171,8 +172,7 @@ def convert(
         and np.allclose(lines_grid["logU"], cont_grid["logU"])
     )
     if not axes_match:
-        print("  Note: lines and continuum have different grid axes "
-              "(stored independently)")
+        print("  Note: lines and continuum have different grid axes (stored independently)")
 
     # Read line names if available
     line_names = []
@@ -205,34 +205,24 @@ def convert(
         lines_axes.create_dataset("log_age_yr", data=log_age_lines)
         lines_axes["log_age_yr"].attrs["description"] = "log10(age / yr)"
         lines_axes.create_dataset("log_met", data=lines_grid["logZ"])
-        lines_axes["log_met"].attrs["description"] = (
-            "log10(Z), absolute metallicity"
-        )
+        lines_axes["log_met"].attrs["description"] = "log10(Z), absolute metallicity"
         lines_axes.create_dataset("log_U", data=lines_grid["logU"])
-        lines_axes["log_U"].attrs["description"] = (
-            "log10(ionization parameter U)"
-        )
+        lines_axes["log_U"].attrs["description"] = "log10(ionization parameter U)"
 
-        lines_grp.create_dataset(
-            "wavelength", data=lines_grid["wavelength"]
-        )
+        lines_grp.create_dataset("wavelength", data=lines_grid["wavelength"])
         lines_grp["wavelength"].attrs["units"] = "Angstrom"
         lines_grp["wavelength"].attrs["description"] = (
             "Rest-frame vacuum wavelength of emission lines"
         )
 
         dt = h5py.special_dtype(vlen=str)
-        names_ds = lines_grp.create_dataset(
-            "names", (len(line_names),), dtype=dt
-        )
+        names_ds = lines_grp.create_dataset("names", (len(line_names),), dtype=dt)
         for i, name in enumerate(line_names):
             names_ds[i] = name
 
         lines_grp.create_dataset("luminosity", data=lines_grid["data"])
         lines_grp["luminosity"].attrs["units"] = "Lsun / Q_H"
-        lines_grp["luminosity"].attrs["shape"] = (
-            "(n_met, n_age, n_logU, n_lines)"
-        )
+        lines_grp["luminosity"].attrs["shape"] = "(n_met, n_age, n_logU, n_lines)"
         lines_grp["luminosity"].attrs["description"] = (
             "Line luminosity per ionizing photon rate. "
             "Multiply by Q_H(age, Z) to get L_line in Lsun."
@@ -246,27 +236,17 @@ def convert(
         cont_axes.create_dataset("log_age_yr", data=log_age_cont)
         cont_axes["log_age_yr"].attrs["description"] = "log10(age / yr)"
         cont_axes.create_dataset("log_met", data=cont_grid["logZ"])
-        cont_axes["log_met"].attrs["description"] = (
-            "log10(Z), absolute metallicity"
-        )
+        cont_axes["log_met"].attrs["description"] = "log10(Z), absolute metallicity"
         cont_axes.create_dataset("log_U", data=cont_grid["logU"])
-        cont_axes["log_U"].attrs["description"] = (
-            "log10(ionization parameter U)"
-        )
+        cont_axes["log_U"].attrs["description"] = "log10(ionization parameter U)"
 
-        cont_grp.create_dataset(
-            "wavelength", data=cont_grid["wavelength"]
-        )
+        cont_grp.create_dataset("wavelength", data=cont_grid["wavelength"])
         cont_grp["wavelength"].attrs["units"] = "Angstrom"
-        cont_grp["wavelength"].attrs["description"] = (
-            "Nebular continuum wavelength grid"
-        )
+        cont_grp["wavelength"].attrs["description"] = "Nebular continuum wavelength grid"
 
         cont_grp.create_dataset("luminosity", data=cont_grid["data"])
         cont_grp["luminosity"].attrs["units"] = "Lsun_Hz / Q_H"
-        cont_grp["luminosity"].attrs["shape"] = (
-            "(n_met, n_age, n_logU, n_wave)"
-        )
+        cont_grp["luminosity"].attrs["shape"] = "(n_met, n_age, n_logU, n_wave)"
         cont_grp["luminosity"].attrs["description"] = (
             "Nebular continuum luminosity density per ionizing photon rate. "
             "Multiply by Q_H(age, Z) to get L_nu in Lsun/Hz."
@@ -289,12 +269,18 @@ def convert(
 
     # Print summary
     print(f"\nGrid summary:")
-    print(f"  Metallicities: {len(lines_grid['logZ'])} "
-          f"[{lines_grid['logZ'][0]:.2f} to {lines_grid['logZ'][-1]:.2f}]")
-    print(f"  Ages: {len(lines_grid['age_yr'])} "
-          f"[{lines_grid['age_yr'][0]:.0e} to {lines_grid['age_yr'][-1]:.0e} yr]")
-    print(f"  log U: {len(lines_grid['logU'])} "
-          f"[{lines_grid['logU'][0]:.1f} to {lines_grid['logU'][-1]:.1f}]")
+    print(
+        f"  Metallicities: {len(lines_grid['logZ'])} "
+        f"[{lines_grid['logZ'][0]:.2f} to {lines_grid['logZ'][-1]:.2f}]"
+    )
+    print(
+        f"  Ages: {len(lines_grid['age_yr'])} "
+        f"[{lines_grid['age_yr'][0]:.0e} to {lines_grid['age_yr'][-1]:.0e} yr]"
+    )
+    print(
+        f"  log U: {len(lines_grid['logU'])} "
+        f"[{lines_grid['logU'][0]:.1f} to {lines_grid['logU'][-1]:.1f}]"
+    )
     print(f"  Emission lines: {len(lines_grid['wavelength'])}")
     print(f"  Continuum wavelengths: {len(cont_grid['wavelength'])}")
     print(f"\nKey lines:")
@@ -316,9 +302,7 @@ def convert(
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Convert FSPS CLOUDY grids to tengri HDF5"
-    )
+    parser = argparse.ArgumentParser(description="Convert FSPS CLOUDY grids to tengri HDF5")
     parser.add_argument(
         "--input-dir",
         default=None,
@@ -365,9 +349,7 @@ def main():
         input_dir = str(repo_root / "data" / "cloudy_raw")
 
     dust_suffix = f"_{args.dust.lower()}" if args.dust != "ND" else ""
-    output_path = os.path.join(
-        args.output_dir, f"cloudy_grid_{args.isoc}{dust_suffix}.h5"
-    )
+    output_path = os.path.join(args.output_dir, f"cloudy_grid_{args.isoc}{dust_suffix}.h5")
 
     convert(input_dir, output_path, args.isoc, args.dust)
 
