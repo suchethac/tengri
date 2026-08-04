@@ -325,6 +325,30 @@ Separately — *not* a range problem, so item 3 will not close it — reverse-mo
 through the projection seam remains open under #1388; see "Not fixed here: float32 AGN gradient
 *accuracy*".
 
+**Two more threads that item 3 will not close either**, both found by sweeping rather than by
+reading, and both open:
+
+- **#1534 — `L_age` and `line_lums` overflow with no `log_` companion.** This document's rule is that
+  a linear key past the ceiling leaves a usable alternative. Two published keys don't. `L_age` is 92%
+  non-finite in pure float32 (float64 max 5.7e45); `line_lums` is the same class. They survived
+  because every test in `test_float32_boundary_inventory.py` iterated a hand-maintained list, so a
+  key named by neither list was green by construction — `test_no_unlisted_key_overflows_float32` now
+  sweeps what the model publishes instead.
+- **#1535 — XLA constant-folds `1/σ²` to `inf` under float32.** `diag_gaussian_chi2` groups
+  `r = (d−μ)/σ` before squaring precisely so the reciprocal is never formed; under `jit`, with the
+  data as *closure constants*, XLA re-associates and folds it, and `0·inf` is NaN. Measured: eager
+  float32 fine, traced-argument float32 fine, float64 fine, closure float32 **NaN**. tengri's own
+  path passes data as a traced argument and is immune, so this is a trap rather than a live bug —
+  but it is the one that will bite anyone wrapping a likelihood by hand. The lesson generalizes past
+  this function: a mitigation expressed as an *association order in source* is not binding on the
+  compiler, only a data dependency is, so any "group it this way for range safety" guard needs a
+  `jit` arm whose assertion reads the compiled HLO.
+
+Both were surfaced by an independent float32 audit pass and reproduced before being recorded. That
+audit also measured the delivered items end-to-end against a real SSP — photometry, spectroscopy,
+likelihood and gradients all finite in pure float32 at ~1e-5 agreement with float64 — which is
+consistent with items 1, 2 and 4–8 being closed above.
+
 **The last fail-open in this module is now closed on the live path (#1527).**
 `_peak_factored_trapezoid` used to merge "nothing was absorbed" and "the integrand is non-finite"
 into a single `ok=False`, and both callers turned that into `0.0` / `-inf` — one corrupt pixel
