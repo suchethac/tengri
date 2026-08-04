@@ -30,7 +30,7 @@ reasoning errors recur.
 | **4a** | the per-galaxy tilt, localized — its *mechanism* is superseded by §4e |
 | **4c** | four suspects eliminated: funnel, nonlinearity, nuisance coupling, reconstruction |
 | **4d** | `corr(tilt, interim τ) = +0.856` — a real diagnostic, but **refuted as the cause** |
-| **4e** | **the cause: the ξ covariance spectrum, proven necessary and sufficient** |
+| **4e** | ~~the ξ covariance spectrum~~ — **RETRACTED, method invalid** (synthetic ensembles are not posteriors) |
 | **4f** | the anisotropy is **real** — NUTS confirms it; the sampler is not the fix |
 | **4g** | **`p_0` is correct; §4e's cause is refuted** — B2 recovers on *more* anisotropic true posteriors |
 
@@ -698,8 +698,15 @@ prior.
 > is a genuine data constraint. **Always calibrate a spectrum against the
 > spectrum of the same number of draws from the known-isotropic prior.**
 
-**Remaining candidates**, cheapest first:
-1. The SFH truncation. The forward model warns
+**Remaining candidates**, cheapest first. Note that the synthetic-substitution
+route is now closed (§4e retracted): any future test must compare against
+*genuine posteriors*, and must be validated by handing it the truth first.
+
+1. **Nuisance parameters with EXACT posteriors** — the one untested combination.
+   §4b used exact draws with no nuisances and recovers; §4c added nuisances but
+   with Laplace draws. The real fit has ~8 nuisances alongside 16 field latents,
+   and the §4b analytic machinery can be extended to carry them.
+2. The SFH truncation. The forward model warns
    `SFHBeforeBigBangWarning: forms 3% of its stellar mass before the Big Bang …
    that mass is truncated` — so the likelihood does not see all of `m`.
 2. Nuisance parameters. The §4b toy that recovers has **none**; the real fit has
@@ -776,24 +783,36 @@ to test — not another sampler.
 
 ## 4e. The ξ covariance spectrum — SUPERSEDED by §4g
 
-> ⚠ **This section's claim to have found "the cause" is REFUTED — see §4g.** Its
-> sufficiency demonstration used **synthetic** ensembles (a Gaussian with a
-> matched eigenvalue spectrum and random eigenvectors), which are the posterior
-> of no likelihood. `Z_i = C_i E_{q_i}[p/p_0]` is exact only when `q_i` IS a
-> posterior under `p_0`, so B2 owes such an ensemble nothing. Measured on the
-> §4b toy's **exact** posteriors, the spectrum is *more* anisotropic than the
+> ⚠ **RETRACTED — this section's method is invalid, not merely its conclusion.**
+> Every experiment here (and in the follow-ups that used the same trick) built
+> ensembles **synthetically**: OU draws at per-draw `(σ_k, τ_k)`, sometimes with
+> a shaped ξ covariance. Such an ensemble is the posterior of no likelihood, and
+> `Z_i = C_i E_{q_i}[p/p_0]` is exact only when `q_i` IS a posterior under
+> `p_0`.
+>
+> **The control that settles it.** Build every galaxy's ensemble as OU draws at
+> *exactly the truth* (σ=0.75, τ=150). B2 returns **τ = 105.3–119.0 at N=256** —
+> it does not recover the very value it was handed. The reason is elementary:
+> `E_q[p_θ/p_0]` for `q = p_{θ₀}` is `∫ p_{θ₀} p_θ / p_0`, and the `1/p_0`
+> reweighting moves the maximum off `θ₀`. **B2 is biased on prior-like ensembles
+> by construction.**
+>
+> So a synthetic ensemble railing proves nothing about the real one, and a
+> 2×2 factorial over {isotropic, anisotropic} × {wide, narrow τ spread} confirms
+> it: **all four cells are biased** at N=256 (154–198, 194–224, 388–483,
+> 255–302). There is no clean arm to compare against.
+>
+> Positively: B2 **recovers** on genuine posteriors — §4b's analytic exact
+> posteriors, and §4g's measurement that those are *more* anisotropic than the
 > real bank's (total 8.8/16 at 8 modes, seven directions below 0.5, against the
-> bank's one) and B2 **recovers**. Anisotropy of a true posterior does not break
-> B2.
+> bank's one).
 >
-> What survives is the substitution result: swapping the real ξ ensemble for an
-> isotropic one removes the railing. That still localizes the failure to the ξ
-> ensemble. It does not establish that anisotropy is the mechanism.
->
-> Kept because the reasoning error is the sharpest of this investigation: a
-> synthetic construct reproduced the symptom to three significant figures, which
-> reads as proof, but reproducing a symptom with an object outside the
-> estimator's domain of validity proves nothing about the real object.
+> Kept because the reasoning error is the sharpest of this investigation. A
+> synthetic construct reproduced the symptom **to three significant figures**,
+> which reads as proof. Reproducing a symptom with an object outside the
+> estimator's domain of validity proves nothing — and the check that would have
+> caught it (feed the construct the truth and see whether it comes back) was one
+> line away the whole time.
 
 **Matching the ξ covariance eigenvalue spectrum alone reproduces the railing to
 three significant figures.** Holding `(σ_k, τ_k)` fixed at the bank's stored
@@ -1060,6 +1079,12 @@ else means the draws are not posterior draws.
   time an ensemble is produced by reweighting or resampling, report its ESS
   next to the result** — and prefer a closed form when one exists (this toy's
   posterior was an analytic Gaussian mixture all along).
+- **Feed a diagnostic construct the truth and check it comes back.** Every
+  synthetic-ensemble experiment in §4e was void because B2 is only defined for
+  posteriors: handed OU draws at *exactly* (0.75, 150) it returns 105–119, not
+  150. One line, and it would have caught a construct that reproduced the
+  symptom to three significant figures. **Reproducing a symptom with an object
+  outside the method's domain of validity proves nothing.**
 - **Calibrate a spectrum against the same number of draws from the KNOWN
   prior.** The prior ξ covariance is the identity by construction, yet 2000
   draws return `1.17 … 0.74`. §4e read the bank's eigenvalues above 1.0 as
