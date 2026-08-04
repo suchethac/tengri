@@ -677,10 +677,31 @@ degeneracy, and the field reconstruction.
    the exact path through the public API.
 3. Re-run the scaling curve on the repaired bank and re-check the N ceiling.
 
-**Not yet done:** the repaired bank has not been built, so the claim that the
-railing disappears once collapsed fits are replaced is **predicted, not
-measured**. That is the next task, and it is the one that decides whether the
-two-step estimator is usable.
+**Confirmed end-to-end.** Excluding the flagged fits (71 of 512, 14%) removes
+the railing, and **σ recovers to cover truth**:
+
+| N kept | arm | σ 68% (truth 0.75) | τ 68% Myr (truth 150) |
+|---|---|---|---|
+| 64 | all | 0.958–0.995 | 434.6–491.2 **RAILED** |
+| **55** | **healthy** | **0.708–0.811 ✓** | 36.6–64.7 |
+| 128 | all | 0.970–0.996 | 472.1–494.7 **RAILED** |
+| **109** | **healthy** | **0.702–0.776 ✓** | 42.1–70.7 |
+
+τ stops railing high and instead sits low — which is the *pre-existing*
+non-identifiability (§4b: joint NUTS returns τ at 0.98× the prior width) plus
+the small-τ preference §4a measured for healthy galaxies, not a new defect.
+
+> ⚠ **Exclusion is not a valid estimator.** Selecting galaxies on an inferred
+> quantity biases the population. This is a *mechanism* test — it shows the
+> collapsed fits cause the railing. The shipping fix is **refit, not drop**:
+> flag with `eigvalsh(cov(psd_xi)).sum() < 0.4·n_params or min < 1e-2`, then
+> re-run those galaxies under `mcmc_nuts`. At 14% of a 2048 bank that is ~290
+> galaxies at 200–500 s each, roughly 24 h — or much less once #1537 is fixed
+> and Laplace is trustworthy everywhere.
+
+**Not yet done:** the repaired bank (collapsed galaxies *refit* rather than
+dropped) has not been built. That is the remaining task before the two-step
+estimator can be trusted for production, and it is now a mechanical one.
 
 ---
 
