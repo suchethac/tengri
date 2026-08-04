@@ -60,6 +60,16 @@ differently-wrong cross-check.
 
 ## 2. Where it stands
 
+> **RESOLVED 2026-08-05 — the N ceiling below was a fitting bug, not a
+> statistical one.** The bank was fit at `--n-map-steps 4000`, which leaves ~14%
+> of galaxies at a **non-stationary** point; `run_laplace` then inverted the
+> Hessian there and returned a far-too-narrow posterior with nothing raised.
+> Refitting the N=64 bank at 40 000 steps repairs **9 of 9** collapsed fits and
+> σ recovers to **0.743–0.812** (truth 0.75) with no railing. §4i-bis has the
+> measurement; the tables below are the pre-fix record. **τ remains
+> unidentified at z≈0.1 — that part is a real information limit (§4b) and is
+> unchanged.**
+
 ### Works
 
 | Claim | Evidence |
@@ -624,7 +634,16 @@ a re-fit of the bank.
 
 ---
 
-## 4i. ROOT CAUSE — `run_laplace`'s finite-difference Hessian (#1537)
+## 4i. ROOT CAUSE — `run_laplace` expands about non-modes (#1537)
+
+> **The mechanism named in this section's first draft was wrong.** It blamed
+> `_finite_diff_hessian`. Measured against `jax.hessian` on all nine affected
+> galaxies, FD agrees to five or more digits and **both** report the collapse —
+> see §4i-bis, which supersedes the "Mechanism" paragraph below. The *symptom*,
+> the *downstream consequence* and the *exclusion test* in this section all
+> stand; only the attribution changed. The corrected cause is that `run_map`
+> returns an under-converged point and `run_laplace` inverts the Hessian there
+> without checking that the gradient is zero.
 
 **The collapse of §4h is a Laplace artifact, and it is the root cause of the
 railing.** NUTS on the two worst-collapsed galaxies (R̂ ≤ 1.01, 0 divergences):
@@ -698,6 +717,118 @@ the small-τ preference §4a measured for healthy galaxies, not a new defect.
 > re-run those galaxies under `mcmc_nuts`. At 14% of a 2048 bank that is ~290
 > galaxies at 200–500 s each, roughly 24 h — or much less once #1537 is fixed
 > and Laplace is trustworthy everywhere.
+
+## 4i-bis. The corrected mechanism — and it is much cheaper to fix
+
+§4i's attribution to the finite-difference Hessian did not survive being
+measured. The verdict rule was written into the probe before it ran: *the fix
+is warranted iff the exact Hessian recovers the collapsed galaxies and FD
+asymmetry separates the two groups.* Both failed.
+
+| gal | group | FD asym. | exact asym. | **FD covtot** | **exact covtot** | max rel. diff |
+|---|---|---|---|---|---|---|
+| 1 | healthy | 7.6e-09 | 4.5e-15 | 16.597 | 16.597 | 4.4e-06 |
+| 3 | healthy | 7.3e-07 | 5.7e-13 | 20.126 | 20.126 | 9.4e-05 |
+| 19 | collapsed | 2.3e-08 | 1.1e-13 | **5.151** | **5.151** | 5.8e-05 |
+| 35 | collapsed | 8.1e-07 | 9.0e-13 | **5.591** | **5.591** | 2.9e-04 |
+| 61 | collapsed | 2.0e-06 | 4.4e-12 | **5.087** | **5.087** | 1.6e-03 |
+
+FD and `jax.hessian` agree to five digits, and both report the collapse. The
+curvature genuinely is that high. Two incidental corrections: `jax.hessian`
+costs **0.05 s** on this model, not the 55 s its docstring claims, and the FD
+error is small enough that the symmetrization on `laplace.py:135` discards
+nothing.
+
+**The real cause: the expansion point is not a mode.** `cov = H⁻¹` is a
+covariance only at a stationary point. `run_map` takes a fixed number of Adam
+steps with no convergence test, and `run_laplace` accepted whatever came back.
+
+| gal | group | \|grad\| at MAP | loss along tightest eigendirection, −2σ/−1σ/+1σ/+2σ |
+|---|---|---|---|
+| 1 | healthy | 8.6e-02 | 2.057 / 0.507 / 0.493 / 1.945 |
+| 2 | healthy | 1.1e-01 | 1.946 / 0.493 / 0.507 / 2.055 |
+| 10 | collapsed | 5.4e+03 | −17.69 / −9.33 / +10.33 / +21.69 |
+| 13 | collapsed | 6.0e+04 | −105.4 / −53.2 / +54.2 / +109.4 |
+| 19 | collapsed | 3.0e+05 | −245.6 / −123.3 / +124.3 / +249.6 |
+
+A parabola gives 2.0 / 0.5 / 0.5 / 2.0 — the healthy rows match it. The
+collapsed rows are pure slope: the loss still *falls* by 245 nats going one way,
+so there is no minimum there at all. The high curvature is real, and it is the
+curvature of a hillside.
+
+The MAP location is otherwise sound. MAP σ is 0.58–0.72 for collapsed galaxies
+against 0.52–0.88 for healthy ones, agrees with the NUTS σ posterior within 2σ
+in every case, and has seed-to-seed spread 0.005–0.10. Only convergence differs.
+
+**Raising `n_map_steps` fixes it — no NUTS required.**
+
+| gal | steps | \|grad\| | Newton decrement | ξ covtot |
+|---|---|---|---|---|
+| 10 | 4 000 | 5.42e+03 | 843.3 | 8.04 |
+| 10 | **40 000** | 3.15e-01 | **0.0097** | **16.70** |
+| 13 | 4 000 | 6.02e+04 | 179 760 | 7.51 |
+| 13 | **40 000** | 4.31e-01 | **0.0219** | **16.57** |
+| 19 | 4 000 | 3.02e+05 | 21 219 111 | 5.15 |
+| 19 | **40 000** | 2.25e-01 | **0.0125** | **17.15** |
+| 35 | 4 000 | 7.75e+04 | 3 073 568 | 5.59 |
+| 35 | **40 000** | 5.44e-01 | **0.0008** | **17.70** |
+
+Seconds per galaxy against ~600 s for a NUTS refit. This **replaces** the repair
+plan in §4i step 1 and in the box above: the ~24 h estimate for a 2048 bank
+becomes minutes. Galaxy 3, nominally healthy, also sat at decrement 1.30 at
+4 000 steps — the failure is a continuum, not a category, so the ξ-spectrum flag
+was always a proxy for it rather than the thing itself.
+
+**Shipped fix.** `run_laplace` reports the **Newton decrement**
+`d = ½ gᵀH⁻¹g` in `Posterior.diagnostics` and warns above 0.1 nat via
+`LaplaceNotAtModeWarning`. The decrement rather than `|grad|`: it is invariant
+under affine reparameterization, so one threshold means the same thing in every
+parameterization, and it is in nats — an offset of δ standard deviations gives
+`d = δ²/2`, so 0.1 nat is ≈0.45σ. Measured separation: converged fits score
+0.0005–0.075, non-converged ones 1.3 upward. Detection only, never
+auto-correction — a Newton step from these points overshoots catastrophically
+(galaxy 13's raised the loss by ~1e79).
+
+Pinned by `tests/regression/bug/test_bug_1537_laplace_expansion_point_not_a_mode.py`
+on an analytic loss whose curvature grows away from its mode, so the test runs
+in the PR gate rather than in the SSP-gated tier.
+
+### The population-level confirmation
+
+The whole N=64 bank refit at `--n-map-steps 40000` (≈7 s per galaxy, ~7 min
+total), pooled against the two repair arms and the exclusion reference. Same 64
+galaxies in every arm except `healthy-only`, so nothing here is a population
+difference.
+
+**Per-galaxy, before pooling: 9 collapsed fits → 0.** Converging the MAP repairs
+every one, including galaxy 61, which resisted NUTS at 12× warmup.
+
+| arm | n | σ 68% (truth 0.75) | τ 68% Myr (truth 150) | mode |
+|---|---|---|---|---|
+| laplace-4k — the bank as measured | 64 | 0.959–0.995 **MISS** | 274.4–424.3 **RAILED** | (1.000, 384) |
+| **laplace-40k** | 64 | **0.743–0.812 ✓** | 21.8–34.6 | (0.782, 29) |
+| nuts-repaired (8 of 9) | 64 | 0.806–0.905 MISS | 41.0–66.2 | (0.883, 52) |
+| healthy-only (biased ref) | 55 | 0.712–0.853 ✓ | 40.0–68.1 | (0.799, 56) |
+
+The railing is gone, and `laplace-40k` gives the **tightest σ interval of any
+arm** while covering truth. It beats `nuts-repaired`, which still misses — that
+arm carries galaxy 61's unrepaired collapsed fit, the one NUTS could not rescue.
+So the cheap fix is not merely as good as the expensive one here; it is better,
+because it converges on galaxies NUTS does not.
+
+**Where the arms disagree, stated plainly.** τ is 21.8–34.6 for `laplace-40k`
+against 40.0–68.1 for `healthy-only` — all arms miss τ = 150, but they do not
+agree with each other either. That is the pre-existing non-identifiability
+(§4b: joint NUTS returns τ at 0.98× the prior width), so the τ interval is
+largely reading the prior plus the small-τ preference of §4a, and small
+differences in the fits move it freely. **Do not read the τ column as a
+measurement in any arm.** σ is the identified parameter; see §4a-bis.
+
+**Method note.** The FD accusation was written, argued and filed as an issue
+before it was measured. Writing the verdict rule into the probe *first* is what
+caught it: had the fix been written before the measurement, swapping in the
+exact Hessian would have run clean, changed nothing about the railing, and
+shipped a slower default plus a false root-cause note in the paper.
 
 **Repair progress and what the trend actually shows.** Every successful refit
 turns a collapsed spectrum into a normal one — 6 for 6 so far:
@@ -1391,6 +1522,15 @@ else means the draws are not posterior draws.
 ---
 
 ## 8. Next steps, ranked
+
+> **0. DONE (2026-08-05) — converge the MAP.** §4i-bis: the per-galaxy draws
+> were bad because `run_map` returned a non-stationary point and `run_laplace`
+> inverted the Hessian there. `--n-map-steps 40000` fixes every affected fit at
+> seconds per galaxy. `run_laplace` now reports the Newton decrement and warns
+> above 0.1 nat (#1537), and the MAP-init cache is keyed on the data (#1529).
+> **Everything below item 0 was written before that was known.** The list is
+> kept as a record of the search — several entries chase mechanisms that the
+> measurement has since eliminated, and are marked where they do.
 
 1. **Fix the per-galaxy draws — NOT `p_0`.** §4b now shows the estimator is
    sound given exact per-galaxy posteriors, and §4a localizes the damage to the
