@@ -49,8 +49,8 @@
 # its keep is the case that looks like it should not need it: the **same model
 # fit to photometry alone**, where every likelihood evaluation re-runs Cue and
 # the grid is worth an order of magnitude. "I am not fitting lines" is the
-# opposite of a reason to skip it — see
-# [the precompute notes](../docs/dev/api_migration_v0.x.md) for that measurement.
+# opposite of a reason to skip it — the `FeaturePrecomp` docstring carries that
+# measurement, as does `docs/dev/api_migration_v0.x.md`.
 #
 # The catalog-scale argument is separate and survives either way: the look-up is
 # shared work across galaxies, so it is amortized once and reused — see
