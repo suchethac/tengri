@@ -35,20 +35,25 @@
 # not a window-integrated `measure_line_fluxes` (the latter would carry the
 # stellar absorption and mis-deblend [N II], biasing the Balmer decrement).
 #
-# **Why it is fast.** Two build-time opt-ins, and they do *not* split one per
-# data channel. `WavePrecomp` is the photometry lookup — the SSP × filter table
-# that replaces a full SSP × wavelength integration with a table look-up.
+# **What the two build-time opt-ins do.** They do *not* split one per data
+# channel. `WavePrecomp` is the photometry lookup — the SSP × filter table that
+# replaces a full SSP × wavelength integration with a table look-up.
 # `FeaturePrecomp` is the **nebular** lookup: a per-Q_H grid that keeps the Cue
 # emulator off the per-gradient path. The lines do ride it, but what it caches is
-# the *gas* calculation, and this model leaves `neb_logU` and `neb_logZ_gas`
-# free — so without it every likelihood evaluation re-runs Cue. That is a cost a
-# **photometry-only** fit with a Cue block pays in full, lines or no lines, which
-# is why "I am not fitting lines" is not a reason to skip it.
+# the *gas* calculation, which is why the name misleads.
 #
-# Rather than assert that split we measure it, with three builds that change one
-# thing at a time. On a single galaxy the win is diluted by the fixed per-fit
-# overhead; the real payoff is at catalog scale, where the look-up is shared work
-# across galaxies and the exact wave-grid forward would be prohibitive — see
+# **And on this fit neither one buys you much** — we measure that below rather
+# than claim otherwise. An observation carrying a line channel already keeps the
+# nebular work off the per-gradient path, so the exact forward is *already* fast
+# here and the opt-ins have little left to remove. Where `FeaturePrecomp` earns
+# its keep is the case that looks like it should not need it: the **same model
+# fit to photometry alone**, where every likelihood evaluation re-runs Cue and
+# the grid is worth an order of magnitude. "I am not fitting lines" is the
+# opposite of a reason to skip it — see
+# [the precompute notes](../docs/dev/api_migration_v0.x.md) for that measurement.
+#
+# The catalog-scale argument is separate and survives either way: the look-up is
+# shared work across galaxies, so it is amortized once and reused — see
 # [notebook 11](11_catalog_fits.py) for `fit_batch` at catalog scale.
 
 # %%
@@ -145,9 +150,9 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 # (photometry LUT, Cue still evaluated every step), and the **fast**
 # `(WavePrecomp, FeaturePrecomp)` path that adds the per-Q_H nebular grid. The
 # line wavelengths for the feature grid default to those in the observation.
-# Three arms, one knob each, so the speedup below can be *attributed* — a
-# two-arm exact-vs-fast comparison moves both knobs at once and can only ever
-# measure the bundle.
+# Three arms, one knob each, so whatever the timing below shows can be
+# *attributed* — a two-arm exact-vs-fast comparison moves both knobs at once and
+# can only ever measure the bundle, never which half earned it.
 
 
 # %%
@@ -260,6 +265,10 @@ print(
 #   **once**, and each further galaxy costs only this (dropping further still
 #   under `vmap`). The often-quoted sub-100 ms/galaxy figure is *this* amortized
 #   compute — not the single-shot wall below.
+#
+# Read the **compiled step** column across the three rows: that is the honest
+# per-galaxy compute, and the only column in which an `approx=` choice can show
+# up at all.
 
 # %%
 model_exact = build(line_data, approx=None)
@@ -300,6 +309,11 @@ print(
 print("  attributed, one knob at a time:")
 print(f"    WavePrecomp        {loop_e:6.3f}s -> {loop_w:6.3f}s   {loop_e / loop_w:5.1f}x")
 print(f"    + FeaturePrecomp   {loop_w:6.3f}s -> {loop_f:6.3f}s   {loop_w / loop_f:5.1f}x")
+if loop_e / loop_f < 1.5:
+    print("  -> all three within noise: with a line channel in the Observation the")
+    print("     nebular work is already off the per-gradient path, so there is little")
+    print("     left for either lookup to remove. Fit this model to photometry alone")
+    print("     and FeaturePrecomp is worth ~an order of magnitude.")
 print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT compile, not the fit.")
 
 # %% [markdown]
@@ -602,7 +616,7 @@ print(f"{'MAP, exact wave grid':<34}{warm_e:>10.2f} s{loop_e:>12.2f} s")
 print(f"{'MAP, WavePrecomp only':<34}{warm_w:>10.2f} s{loop_w:>12.2f} s")
 print(f"{'MAP, WavePrecomp+FeaturePrecomp':<34}{warm_f:>10.2f} s{loop_f:>12.2f} s")
 print(
-    f"\nCompiled-step speedup: {loop_e / loop_f:.1f}x overall — {loop_e / loop_w:.1f}x from WavePrecomp,"
+    f"\nCompiled-step ratio: {loop_e / loop_f:.1f}x overall — {loop_e / loop_w:.1f}x from WavePrecomp,"
 )
 print(
     f"a further {loop_w / loop_f:.1f}x from FeaturePrecomp. The fit() wall (~{warm_f:.0f}s) is per-call JIT"
@@ -626,15 +640,19 @@ print(
 #   absorption and mis-deblends [N II]) and should not be compared to a catalog.
 # - The **`(WavePrecomp, FeaturePrecomp)`** fast path turns each likelihood
 #   evaluation into a table look-up, reproducing the exact forward to sub-percent
-#   on the strong lines. Single-galaxy that is a steady few-fold speedup (measured
-#   above); the dramatic win is at catalog scale, batched over galaxies
-#   (`fit_batch`), where the exact wave-grid forward would be prohibitive.
-# - The two opt-ins are **not one per data channel**, and the three-arm timing
-#   above says which one is doing the work. `FeaturePrecomp` caches the *nebular*
-#   calculation, not the line channel: with `neb_logU` and `neb_logZ_gas` free,
-#   every likelihood evaluation without it re-runs the Cue emulator. A
-#   photometry-only fit with a Cue block therefore wants it just as much as this
-#   joint one — "I am not fitting lines" is not a reason to leave it off.
+#   on the strong lines. Its win at catalog scale is real and separate: batched
+#   over galaxies with `fit_batch`, the look-up is built once and shared.
+# - **On this particular fit it buys almost nothing, and the timing above says
+#   so.** Do not assume an `approx=` choice is helping — measure it. An
+#   observation carrying a line channel already keeps the nebular work off the
+#   per-gradient path, so the exact forward starts out fast and the lookups have
+#   little left to remove.
+# - The two opt-ins are **not one per data channel**. `FeaturePrecomp` caches the
+#   *nebular* calculation, not the line channel: with `neb_logU` and
+#   `neb_logZ_gas` free, a likelihood evaluation without it can re-run the Cue
+#   emulator. That is why the case it rescues is the counter-intuitive one — the
+#   same model fit to **photometry alone**, where it is worth roughly an order of
+#   magnitude. "I am not fitting lines" is not a reason to leave it off.
 # - **The truth lands inside the 68% interval for five of the six reported
 #   parameters** (one just outside — exactly what a well-calibrated 68% credible
 #   interval should do), with stellar mass and SFR the tightest. Metallicity /
