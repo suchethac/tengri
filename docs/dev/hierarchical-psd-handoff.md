@@ -673,18 +673,44 @@ are not posteriors under the interim prior `p_0` assumes** — despite NUTS
 reporting R̂ ≤ 1.05. R̂ is necessary, not sufficient; it certifies that chains
 agree, not that they sample the intended target.
 
-**Next, and this is now a narrow question.** Find where the fitted model's
-implied prior on `m` departs from `p_0`. Candidates, cheapest first:
-1. The `Uniform` prior's implied density in the *physical* parameter — a
-   transform whose prior is flat in the unbounded coordinate is **not** flat in
-   τ, and a τ-shaped prior mismatch is already bug #2 in §3 of this document.
-   Sample the interim prior directly (fit with the likelihood switched off) and
-   compare the recovered (σ, τ) density against `Uniform`.
-2. The SFH truncation. The forward model warns
+**The implied prior is correct — candidate 1 eliminated.** Measured by running
+a fit with the likelihood switched off (flux errors inflated 1e6x, so the
+posterior *is* the prior) and sampling it with the same NUTS backend, 2000
+draws:
+
+| | measured | KS vs `Uniform` | |
+|---|---|---|---|
+| σ | mean 0.50 (expect 0.51) | D=0.029, p=0.072 | FLAT |
+| τ | mean 257.1 Myr (expect 255.0) | D=0.017, p=0.59 | FLAT |
+| ξ covariance | total 15.8/16, mean 0.989, std 0.995 | — | ISOTROPIC |
+
+So the fits do run under exactly the prior `p_0` assumes: flat in σ, flat in τ
+*itself* (no unbounded-coordinate Jacobian leak), and a unit-isotropic field
+prior.
+
+> ⚠ **This run also calibrates the ξ spectrum, and corrects an over-reading in
+> §4e.** The *prior* ξ spectrum — which is the identity by construction — comes
+> back as `1.17 1.17 1.13 … 0.85 0.77 0.74` from 2000 draws. That spread is pure
+> sampling noise on a 16×16 covariance. §4e read the bank's four-to-five
+> eigenvalues above 1.0 as "the signature of marginalizing over correlated
+> nuisances"; at K=1000 those values sit **within the noise floor** and support
+> no such reading. The bank's *low* tail (0.25–0.28) is far below the floor and
+> is a genuine data constraint. **Always calibrate a spectrum against the
+> spectrum of the same number of draws from the known-isotropic prior.**
+
+**Remaining candidates**, cheapest first:
+1. The SFH truncation. The forward model warns
    `SFHBeforeBigBangWarning: forms 3% of its stellar mass before the Big Bang …
    that mass is truncated` — so the likelihood does not see all of `m`.
-3. Nuisance parameters. The §4b toy that recovers has **none**; the real fit has
-   ~8 alongside the 16 field latents.
+2. Nuisance parameters. The §4b toy that recovers has **none**; the real fit has
+   ~8 alongside the 16 field latents. Note the combination "exact posteriors
+   **and** nuisances" has never been tested: §4c added nuisances but with
+   Laplace draws, and §4b used exact draws with no nuisances.
+3. The interaction between the ξ ensemble and the per-galaxy (σ, τ) *spread*.
+   §4e's synthetic anisotropic ξ was paired with the bank's wide τ spread
+   (21–407 Myr) and railed; the toy's exact posteriors carry a narrow spread
+   (156–266) and recover. Pair §4e's synthetic ξ with a narrow spread to
+   separate the two.
 
 ---
 
@@ -1034,6 +1060,11 @@ else means the draws are not posterior draws.
   time an ensemble is produced by reweighting or resampling, report its ESS
   next to the result** — and prefer a closed form when one exists (this toy's
   posterior was an analytic Gaussian mixture all along).
+- **Calibrate a spectrum against the same number of draws from the KNOWN
+  prior.** The prior ξ covariance is the identity by construction, yet 2000
+  draws return `1.17 … 0.74`. §4e read the bank's eigenvalues above 1.0 as
+  evidence of nuisance marginalization; they are inside that noise floor. Only
+  the low tail (0.25) clears it. §4g.
 - **A scalar summary is blind to the shape of a covariance.** The per-draw
   `std(m)` check passed at ratio 0.994 while the ξ covariance was anisotropic
   enough to rail the whole estimator (§4e) — total variance 13.2 vs 16 is a
