@@ -33,6 +33,7 @@ reasoning errors recur.
 | **4e** | ~~the ξ covariance spectrum~~ — **RETRACTED, method invalid** (synthetic ensembles are not posteriors) |
 | **4f** | the anisotropy is **real** — NUTS confirms it; the sampler is not the fix |
 | **4g** | **`p_0` is correct; §4e's cause is refuted** — B2 recovers on *more* anisotropic true posteriors |
+| **4h** | **the driver: 13% of galaxies have a COLLAPSED ξ posterior and carry the whole tilt** |
 
 ---
 
@@ -622,6 +623,82 @@ a re-fit of the bank.
 
 ---
 
+## 4h. THE DRIVER — 13% of galaxies have a COLLAPSED ξ posterior
+
+**The railing is carried by a small subset of broken per-galaxy fits, and the
+medians hid it.** Across 128 bank galaxies, split by the total of the ξ
+covariance spectrum (the ξ prior is N(0, I), so the prior total is 16):
+
+| group | n | mean tilt | % favoring corner | **sum tilt** |
+|---|---|---|---|---|
+| **collapsed** (ξ total < 6) | 17 | **+4.301** | **100%** | **+73.1** |
+| normal (ξ total ≥ 6) | 111 | −0.153 | 33% | **−17.0** |
+| all | 128 | +0.439 | 42% | +56.1 |
+
+`corr(tilt, ξ total) = −0.775`. **Drop the collapsed 17 and the total flips
+sign** — the remaining 111 galaxies push *away* from the corner. The
+distribution is bimodal: a healthy bulk (median ξ total 13.2, p75 14.0) and a
+broken tail reaching **1.9 of 16**.
+
+**The collapse cannot be physical.** A ξ total of 1.9 means the data would have
+to constrain ~14 of 16 field directions to well below the unit prior. Ten
+broadband filters constrain `n_eff ≈ 3–4` (§4b). So these are not posteriors —
+they are a Hessian or MAP artifact of the Laplace fit.
+
+**The bank itself is clean.** Refitting with a **fresh model instance per
+galaxy**, which defeats any model-level cache (the failure mode of #1529),
+reproduces the stored draws **bit-identically** — σ, τ, ξ std, field std and the
+ξ spectrum total all agree to every printed digit for galaxies 3, 7, 19 and 35.
+So the collapse is a genuine property of the Laplace fit for those galaxies, not
+contamination across the loop.
+
+| gal | σ | τ | ξ total | tilt (§4d) |
+|---|---|---|---|---|
+| 3 | 0.628 | 238 | 13.72 | — |
+| 7 | 0.749 | 180 | 12.70 | — |
+| **19** | 0.650 | 350 | **3.49** | **+5.05** |
+| **35** | 0.605 | 309 | **2.81** | **+5.88** |
+
+> ⚠ **This invalidates §4f's NUTS comparison, and the reason is worth keeping.**
+> §4f concluded "the anisotropy is real, NUTS confirms it" from galaxies 0–7.
+> Those galaxies are almost all *normal* — gal 3 is 13.72, gal 7 is 12.70. With
+> 13% affected, eight consecutive galaxies had a good chance of containing none
+> of the pathology, and they did. **The decisive comparison was run on precisely
+> the galaxies where nothing is wrong.**
+>
+> The medians compounded it. §4e and §4f quoted median spectra throughout;
+> a median of 13.2 looks healthy and averages the broken tail away. §4d had
+> already reported that a handful of galaxies carries the effect — that finding
+> was recorded and then not acted on. **When a diagnostic says a minority drives
+> the outcome, sample the minority, not the population.**
+
+**Also eliminated this round: nuisance degeneracy.** The one untested
+combination — nuisances *with exact posteriors* — was run by letting the
+nuisances enter linearly with a Gaussian prior, so marginalizing them
+analytically leaves the likelihood Gaussian in `m` and the posterior a
+closed-form mixture. Nuisance directions were a constant offset (degenerate with
+total mass) and a log-age ramp (degenerate with the smooth SFH slope):
+
+| `s_nu` | residual | τ 68% at N=256 (truth 150) | ξ spectrum total |
+|---|---|---|---|
+| 0.0 | 0.150 | 155.7–193.6 | 8.8 |
+| 0.5 | 0.288 | 158.7–197.3 | 8.9 |
+| 2.0 | 0.940 | 150.5–194.2 | 9.3 |
+| **8.0** | **3.255** | **139.2–196.0 ✓** | **10.2** |
+
+At `s_nu = 8` the nuisances dominate the error budget (residual 3.255 against a
+noise of 0.15) and the posterior is measurably more anisotropic — and τ *covers
+truth*. Nuisance degeneracy does not break B2; it mildly helps. (`s_nu = 0`
+reproduces §4b, the known-answer validation this construct had to pass first.)
+
+**Next.** Whether the collapse is a Laplace artifact is a two-galaxy question:
+fit 19 and 35 with `mcmc_nuts` and compare their ξ spectra. A normal spectrum
+means Laplace is at fault, and the fix is concrete — **the ξ spectrum total is a
+per-galaxy red flag computable before any pooling, from data already in every
+checkpoint.** Detect, refit, and the pooled estimate may come back.
+
+---
+
 ## 4g. `p_0` is correct — and §4e's "cause" does not survive contact with posteriors
 
 Two results, and together they undo §4e while narrowing the problem to one
@@ -1079,6 +1156,12 @@ else means the draws are not posterior draws.
   time an ensemble is produced by reweighting or resampling, report its ESS
   next to the result** — and prefer a closed form when one exists (this toy's
   posterior was an analytic Gaussian mixture all along).
+- **When a diagnostic says a MINORITY drives the outcome, sample the minority.**
+  13% of galaxies carry the entire railing (§4h); §4f's decisive NUTS
+  comparison used galaxies 0-7, which contain none of them, and concluded the
+  opposite. Medians made it worse — a median ξ total of 13.2 looks healthy while
+  the tail reaches 1.9. §4d reported the minority effect and it was recorded,
+  then not acted on.
 - **Feed a diagnostic construct the truth and check it comes back.** Every
   synthetic-ensemble experiment in §4e was void because B2 is only defined for
   posteriors: handed OU draws at *exactly* (0.75, 150) it returns 105–119, not
