@@ -304,7 +304,7 @@ post_exact, cold_e, warm_e, loop_e = timed_map(model_exact, "exact (approx=None)
 post_wave, cold_w, warm_w, loop_w = timed_map(model_wave, "WavePrecomp only")
 post_fast, cold_f, warm_f, loop_f = timed_map(model_fast, "fast (Wave+Feature)")
 print(
-    f"\n  compiled-step speedup: {loop_e / loop_f:.1f}x   (fast {loop_f * 1e3:.0f} ms vs exact {loop_e * 1e3:.0f} ms of compute)"
+    f"\n  compiled-step ratio: {loop_e / loop_f:.1f}x   (fast {loop_f * 1e3:.0f} ms vs exact {loop_e * 1e3:.0f} ms of compute)"
 )
 print("  attributed, one knob at a time:")
 print(f"    WavePrecomp        {loop_e:6.3f}s -> {loop_w:6.3f}s   {loop_e / loop_w:5.1f}x")
