@@ -867,11 +867,11 @@ their older siblings `list_agn_models()` / `describe_agn_model()`;
 
 ---
 
-## `FeaturePrecomp` — the emission-line precompute (2026-07)
+## `FeaturePrecomp` — the nebular precompute (2026-07)
 
 `approx=` gains a third member, alongside `WavePrecomp` (photometry) and
-`SpectrumPrecomp` (spectroscopy). `FeaturePrecomp` serves **emission-line
-fluxes** from a build-time lookup instead of re-running the forward on every
+`SpectrumPrecomp` (spectroscopy). `FeaturePrecomp` serves the **nebular
+calculation** from a build-time lookup instead of re-running the forward on every
 likelihood evaluation, and composes with the other two:
 
 ```python
@@ -889,6 +889,20 @@ catalog that is linear in the ionizing photon rate, so a grid over the free
 ionization axes replaces the forward; the **baked-in / wNE** backend has no
 catalog — its lines are inside the SSP templates — so it gets a per-line window
 LUT and the fluxes are *measured* off the reconstructed spectrum.
+
+**It is not a line-channel-only optimization, and the name misleads.** For
+**Cue**, the grid replaces the emulator call itself, so the saving lands on every
+likelihood evaluation that touches the nebular block — including a fit with **no
+line channel at all**. Measured on a 10-parameter Cue model with free `neb_logU`
+/ `neb_logZ_gas` (2026-08, `origin/main`), a **photometry-only** gradient goes
+**5.10 ms → 0.49 ms (10.4x)** on adding `FeaturePrecomp` to `WavePrecomp`; the
+emission-line channel itself costs only a further ~22%. So "I am not fitting
+lines" is not a reason to leave it off — with a Cue block it is the single
+largest per-gradient lever. Notebook
+[`10_fastspecfit_joint_fit`](../../notebooks/10_fastspecfit_joint_fit.py) times
+the three arms (`None` / `WavePrecomp` / `+FeaturePrecomp`) on every render.
+For the **baked-in / wNE** backend the saving really is line-only, because there
+the lookup is a per-line window LUT rather than a replacement for a forward.
 
 This is an **opt-in approximation**. It never activates on its own, and an
 observation that merely contains lines does not switch it on.

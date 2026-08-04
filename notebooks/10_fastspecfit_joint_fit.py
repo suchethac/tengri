@@ -35,14 +35,20 @@
 # not a window-integrated `measure_line_fluxes` (the latter would carry the
 # stellar absorption and mis-deblend [N II], biasing the Balmer decrement).
 #
-# **Why it is fast.** Photometry rides the `WavePrecomp` SSP × filter lookup
-# table; the emission lines ride the `FeaturePrecomp` per-Q_H grid. Each turns a
-# likelihood evaluation that would otherwise integrate the full SSP × wavelength
-# forward into a table look-up. We measure the wall time of every fit below and
-# compare the fast path to the exact forward. On a single galaxy the win is a
-# steady few-fold (the fixed per-fit overhead dilutes it); the fast path's real
-# payoff is at catalog scale, where the look-up is shared work across galaxies
-# and the exact wave-grid forward would be prohibitive — see
+# **Why it is fast.** Two build-time opt-ins, and they do *not* split one per
+# data channel. `WavePrecomp` is the photometry lookup — the SSP × filter table
+# that replaces a full SSP × wavelength integration with a table look-up.
+# `FeaturePrecomp` is the **nebular** lookup: a per-Q_H grid that keeps the Cue
+# emulator off the per-gradient path. The lines do ride it, but what it caches is
+# the *gas* calculation, and this model leaves `neb_logU` and `neb_logZ_gas`
+# free — so without it every likelihood evaluation re-runs Cue. That is a cost a
+# **photometry-only** fit with a Cue block pays in full, lines or no lines, which
+# is why "I am not fitting lines" is not a reason to skip it.
+#
+# Rather than assert that split we measure it, with three builds that change one
+# thing at a time. On a single galaxy the win is diluted by the fixed per-fit
+# overhead; the real payoff is at catalog scale, where the look-up is shared work
+# across galaxies and the exact wave-grid forward would be prohibitive — see
 # [notebook 11](11_catalog_fits.py) for `fit_batch` at catalog scale.
 
 # %%
@@ -134,10 +140,14 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 # are free — a real catalog spans the metallicity–ionization plane, so a
 # fixed-condition baked-in grid cannot follow it.
 #
-# We build the model twice with the *same* physics and free parameters, changing
-# only `approx=`: the **exact** wave-grid path, and the **fast**
-# `(WavePrecomp, FeaturePrecomp)` path (photometry LUT + per-Q_H line grid). The
+# We build the model three times with the *same* physics and free parameters,
+# changing only `approx=`: the **exact** wave-grid path, **`WavePrecomp` alone**
+# (photometry LUT, Cue still evaluated every step), and the **fast**
+# `(WavePrecomp, FeaturePrecomp)` path that adds the per-Q_H nebular grid. The
 # line wavelengths for the feature grid default to those in the observation.
+# Three arms, one knob each, so the speedup below can be *attributed* — a
+# two-arm exact-vs-fast comparison moves both knobs at once and can only ever
+# measure the bundle.
 
 
 # %%
@@ -233,10 +243,10 @@ print(
 )
 
 # %% [markdown]
-# ## Measure the fit time: exact vs fast
+# ## Measure the fit time: exact vs WavePrecomp vs fast
 #
 # A MAP fit (200 Adam steps) on the joint photometry + line likelihood, timed on
-# both paths. One `fitter.run()` bundles two very different costs, and it is
+# all three paths. One `fitter.run()` bundles two very different costs, and it is
 # worth pulling them apart:
 #
 # - **`run()` wall** — the end-to-end cost of one call. It is dominated by a
@@ -253,6 +263,7 @@ print(
 
 # %%
 model_exact = build(line_data, approx=None)
+model_wave = build(line_data, approx=WavePrecomp())
 model_fast = build(line_data, approx=(WavePrecomp(), FeaturePrecomp()))
 print(f"Free parameters ({model_fast.spec.n_free}): {', '.join(model_fast.spec.free_params)}")
 
@@ -281,13 +292,15 @@ def timed_map(model, label):
 
 print("MAP fit (photometry + 10 lines):")
 post_exact, cold_e, warm_e, loop_e = timed_map(model_exact, "exact (approx=None)")
+post_wave, cold_w, warm_w, loop_w = timed_map(model_wave, "WavePrecomp only")
 post_fast, cold_f, warm_f, loop_f = timed_map(model_fast, "fast (Wave+Feature)")
 print(
     f"\n  compiled-step speedup: {loop_e / loop_f:.1f}x   (fast {loop_f * 1e3:.0f} ms vs exact {loop_e * 1e3:.0f} ms of compute)"
 )
-print(
-    f"  fit() wall is ~{warm_f:.1f}s on either path — that is per-call JIT compile, not the fit."
-)
+print("  attributed, one knob at a time:")
+print(f"    WavePrecomp        {loop_e:6.3f}s -> {loop_w:6.3f}s   {loop_e / loop_w:5.1f}x")
+print(f"    + FeaturePrecomp   {loop_w:6.3f}s -> {loop_f:6.3f}s   {loop_w / loop_f:5.1f}x")
+print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT compile, not the fit.")
 
 # %% [markdown]
 # ## Posterior on the fast path
@@ -579,18 +592,23 @@ plt.show()
 # is why exact and fast are closer here than the compute alone would suggest.
 # **`compiled step`** is the optimization once compiled: the marginal per-galaxy
 # compute a catalog pays after amortizing the compile (via `fit_batch`), and
-# where the look-up table earns its keep.
+# where the look-up table earns its keep. Three rows, so the middle one shows
+# how the total splits between the two opt-ins on *this* model.
 
 # %%
 print(f"{'fit':<34}{'fit() wall':>13}{'compiled step':>15}")
 print("-" * 62)
 print(f"{'MAP, exact wave grid':<34}{warm_e:>10.2f} s{loop_e:>12.2f} s")
+print(f"{'MAP, WavePrecomp only':<34}{warm_w:>10.2f} s{loop_w:>12.2f} s")
 print(f"{'MAP, WavePrecomp+FeaturePrecomp':<34}{warm_f:>10.2f} s{loop_f:>12.2f} s")
 print(
-    f"\nCompiled-step speedup: {loop_e / loop_f:.1f}x. The fit() wall (~{warm_f:.0f}s) is per-call JIT"
+    f"\nCompiled-step speedup: {loop_e / loop_f:.1f}x overall — {loop_e / loop_w:.1f}x from WavePrecomp,"
+)
+print(
+    f"a further {loop_w / loop_f:.1f}x from FeaturePrecomp. The fit() wall (~{warm_f:.0f}s) is per-call JIT"
 )
 print("compile, not the fit — a catalog amortizes it once with fit_batch and pays only the")
-print("compiled step per galaxy. The FeaturePrecomp line grid is likewise a one-time build")
+print("compiled step per galaxy. The FeaturePrecomp nebular grid is likewise a one-time build")
 print(
     f"({model_fast.spec.n_free}-parameter model), reused across every fit that shares the model."
 )
@@ -611,6 +629,12 @@ print(
 #   on the strong lines. Single-galaxy that is a steady few-fold speedup (measured
 #   above); the dramatic win is at catalog scale, batched over galaxies
 #   (`fit_batch`), where the exact wave-grid forward would be prohibitive.
+# - The two opt-ins are **not one per data channel**, and the three-arm timing
+#   above says which one is doing the work. `FeaturePrecomp` caches the *nebular*
+#   calculation, not the line channel: with `neb_logU` and `neb_logZ_gas` free,
+#   every likelihood evaluation without it re-runs the Cue emulator. A
+#   photometry-only fit with a Cue block therefore wants it just as much as this
+#   joint one — "I am not fitting lines" is not a reason to leave it off.
 # - **The truth lands inside the 68% interval for five of the six reported
 #   parameters** (one just outside — exactly what a well-calibrated 68% credible
 #   interval should do), with stellar mass and SFR the tightest. Metallicity /
