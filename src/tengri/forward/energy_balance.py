@@ -3,9 +3,19 @@ r"""Canonical dust energy-balance integral (``L_absorbed``).
 
 Single source of truth for the bolometric absorbed luminosity that feeds
 dust IR re-emission (#922). Every exact-path computation of ``L_absorbed``
-goes through :func:`bolometric_absorbed`; the build-time LUT in
+goes through :func:`_peak_factored_trapezoid` here; the build-time LUT in
 :mod:`tengri.components.dust.energy_balance_precompute` is the precomputed
 factorization of the *same* integral and must agree with it.
+
+The two public spellings are **not** equally travelled. Measured 2026-08-04,
+every call site in ``src/`` — ``dust/two_component.py`` (twice),
+``dust/component.py``, ``dust/wg00_model.py`` — calls
+:func:`bolometric_absorbed_log10`. :func:`bolometric_absorbed` has no live
+caller and is not re-exported; it survives as the linear statement of the
+contract the LUT is checked against, and is exercised only by tests. This
+paragraph used to say the opposite, naming the linear form as the path
+everything took, which is worth knowing when reading either function's guard
+semantics — see :func:`_peak_factored_trapezoid` and #1527.
 
 Physics convention: Lyman-continuum photons (:math:`\lambda < 912` Å) ionize
 hydrogen — their energy re-emerges as nebular line and continuum emission,
@@ -74,6 +84,15 @@ def _peak_factored_trapezoid(
     module exists to close". Both conventions ship today. Reconciling them
     changes dust IR for corrupt inputs and is tracked separately (#1527) rather
     than settled here.
+
+    One asymmetry matters for that decision and is easy to miss: this helper has
+    exactly two callers, and only one of them is live.
+    :func:`bolometric_absorbed_log10` is on every production path;
+    :func:`bolometric_absorbed` has no caller in ``src/``. So ``TestFiniteGuard``,
+    which is what blocks tightening the semantics here, pins the *linear*
+    function — the one nothing calls. Splitting the two rather than changing the
+    shared flag is therefore an option #1527 should weigh, not only the
+    all-or-nothing choice between the two conventions.
     """
     # stop_gradient: pure factorization constant (#1436). The caller re-applies this
     # peak to signed_norm, so the product is peak-independent and the peak's
