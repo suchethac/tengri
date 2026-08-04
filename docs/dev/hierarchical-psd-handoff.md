@@ -708,16 +708,27 @@ turns a collapsed spectrum into a normal one — 6 for 6 so far:
 | 19, 35 | 3.49, 2.81 | 12.87, 13.93 | |
 | 13 | 5.06 | 13.55 | R̂ 1.09 |
 | **39** | 4.32 | **14.70** | needed **3× warmup** |
-| 42, 50, 61 | 3.11, 2.46, 2.63 | — | resist; retrying at 6× warmup |
+| **42** | 3.11 | R̂ 1.01 | needed **6× warmup** |
+| 50, 61 | 2.46, 2.63 | — | resist at 6×; retrying at 12× |
+
+The warmup ladder is itself a finding: default settings repaired five of nine,
+3× warmup rescued one more, 6× another. Two still resist. Budget for it — a
+production repair pass cannot assume one configuration fits every galaxy.
 
 Pooling at N=64 as the repairs land (all arms K=400):
 
 | repaired | σ 68% (0.75) | τ 68% Myr (150) |
 |---|---|---|
 | 0 of 9 (all-laplace) | 0.959–0.995 | 274.4–424.3 (high) |
-| 4 of 9 | 0.908–0.991 | 134.6–219.6 ✓ |
-| **6 of 9** | **0.812–0.953** | **72.3–139.9** (low) |
+| 4 of 9 | 0.908–0.991 | 134.6–219.6 |
+| 6 of 9 | 0.812–0.953 | 72.3–139.9 |
+| **7 of 9** | **0.817–0.929** | **53.6–105.1** |
 | exclusion, for reference | 0.712–0.853 ✓ | 40.0–68.1 (low) |
+
+**Repair converges to exclusion.** That is the consistency check that matters:
+the unbiased fix (refit) and the biased shortcut (drop) agree, which confirms
+the collapsed galaxies were the entire railing story and that nothing else
+distinguishes them from the healthy population.
 
 > ⚠ **τ is passing THROUGH truth, not converging to it.** An earlier revision of
 > this section read the 4-of-9 row as "repair recovers τ". It does not: as more

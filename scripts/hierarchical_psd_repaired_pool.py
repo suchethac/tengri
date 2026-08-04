@@ -47,6 +47,7 @@ gs, gt = np.asarray(grid.sigma), np.asarray(grid.tau_yr)
 N = 64
 # repair sources, in priority order; healthy galaxies fall through to the bank
 SOURCES = [
+    "psd_bank_repair64c",
     "psd_bank_repair64b",
     "psd_bank_repair64",
     "psd_bank_nuts",
