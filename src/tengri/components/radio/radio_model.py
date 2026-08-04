@@ -45,6 +45,7 @@ import jax.numpy as jnp
 from tengri.components.radio.radio import radio_total
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Fixed, Uniform
+from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
     ParamDeclaration,
     SEDComponentConfig,
@@ -183,7 +184,7 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
         L_ir = jnp.asarray(inputs.get("L_ir", 0.0))
         L_agn_bol = jnp.asarray(inputs.get("L_agn_bol", 0.0))
         log_mstar = jnp.asarray(inputs.get("log_mstar", 10.0))
-        redshift = jnp.asarray(p.get("redshift", 0.0))
+        redshift = jnp.asarray(require_redshift(p, "components.radio.radio_model.predict"))
 
         # Call radio_total (power-law path)
         L_radio = radio_total(

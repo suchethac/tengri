@@ -33,6 +33,8 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
+from tengri.parameters.resolve import require_redshift
+
 
 class SFHBeforeBigBangWarning(UserWarning):
     """Part of the SFH forms stars before the Big Bang at the given redshift.
@@ -1510,7 +1512,7 @@ class StellarSEDComponent:
         # ``age_at_z`` is JIT-compatible (pure JAX under the hood).
         from tengri.cosmology import age_at_z as _age_at_z
 
-        z = jnp.asarray(params.get("redshift", 0.0))
+        z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
         t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
 
         # ── 2. Evaluate mean SFH on grid (registry-driven) ──────────────
@@ -2331,7 +2333,7 @@ class StellarSEDComponent:
             from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
             ztable = self._state.ssp_phot_ztable
-            z = jnp.asarray(params.get("redshift", 0.0))
+            z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
             z_grid = ztable.z_grid
             z_edges = edges_for_grid(z_grid)
             # Match grid-cell width for the kernel bandwidth (Hearin 2023
@@ -2486,7 +2488,7 @@ class StellarSEDComponent:
             # n_wave) cube already used for the full-grid CSP einsum above.
             from jax import vmap
 
-            z = jnp.asarray(params.get("redshift", 0.0))
+            z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
             wave_obs_pix = jnp.asarray(self._state.ssp_spec_ztable.wave_obs_pixels)
             wave_rest = wave_obs_pix / (1.0 + z)
             n_met_s, n_age_s = ssp_flux_for_csp.shape[0], ssp_flux_for_csp.shape[1]
@@ -2616,7 +2618,9 @@ class StellarSEDComponent:
             age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
             sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
 
-        z = jnp.asarray(params.get("redshift", 0.0))
+        z = jnp.asarray(
+            require_redshift(params, "components.stellar.component.compute_joint_weights")
+        )
         t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
 
         # Runtime tabulated SFH (#996/#1396) — the SAME closure and lookback

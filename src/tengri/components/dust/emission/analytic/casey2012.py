@@ -12,6 +12,7 @@ import jax.numpy as jnp
 
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
+from tengri.parameters.resolve import require_redshift
 
 __all__ = ["Casey2012IRSEDComponent"]
 
@@ -104,7 +105,7 @@ class Casey2012IRSEDComponent(EmissionComponent):
         """
         from tengri.components.dust.emission import casey2012 as casey_fn
 
-        z = jnp.asarray(p.get("redshift", 0.0))
+        z = jnp.asarray(require_redshift(p, "components.dust.emission.analytic.casey2012.predict"))
         sed = casey_fn(
             wave,
             L_ir,
