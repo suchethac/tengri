@@ -164,23 +164,18 @@ def test_parametric_arm_conserves_mass_on_the_same_truncating_grid(
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "#1522 — mass older than the oldest SSP age bin is dropped, not "
-        "accumulated into that bin. Measured here: 27.5 % of the requested "
-        "1e10 Msun vanishes, silently."
-    ),
-)
 def test_tabulated_sfh_conserves_mass_across_the_grid_edge(truncating_ssp, synthetic_tophat_obs):
     """The conservation law: sum(age_weights) must equal the table's own integral.
 
     ``stellar_mass`` IS the age-weight quadrature (``log_mstar_formed =
     log10(sum(age_weights))``), and the SED is that same weighted sum — so this
-    is not a bookkeeping label that happens to disagree. The photometry assert
-    below records that the missing mass is missing light too: every band falls
-    by the same 0.7246, so a caller sees a galaxy 1.4x lighter than the one
-    they simulated, with no diagnostic of any kind.
+    was never a bookkeeping label that happened to disagree: before the fix
+    every band fell by the same 0.7246 as the mass, and a caller got a galaxy
+    1.4x lighter than the one they simulated with no diagnostic of any kind.
+
+    Fixed by extending the CIC integrand past the oldest template
+    (:func:`_extend_integrand_to_history`), so those parcels land on the oldest
+    template instead of falling off the grid.
     """
     from tengri import Catalog
 
@@ -198,9 +193,65 @@ def test_tabulated_sfh_conserves_mass_across_the_grid_edge(truncating_ssp, synth
         f"{10**_LOG_MASS:.6e} — {100 * (1 - mass / 10**_LOG_MASS):.1f} % lost"
     )
 
+    # The photometry must no longer carry the deficit either. It does not come
+    # back exactly equal to the parametric arm, and should not: the two adopt
+    # different — both defensible — policies for mass the grid cannot represent.
+    # The table accumulates it onto the oldest template; the parametric family
+    # drops it and renormalizes the rest. Measured, that policy gap is 0.72 %
+    # here with 27.5 % of the mass relocated, and it collapses to 0.0022 % on a
+    # grid where nothing falls off the end (the round-trip in
+    # tests/unit/inference/test_catalog_histories.py measures exactly that), so
+    # it scales with the relocated fraction rather than being a residual defect.
+    # Before the fix this ratio was 0.7246 — the mass deficit, in light.
     import jax.numpy as jnp
 
     p_par = {k: jnp.asarray(v) for k, v in par_fwd.spec.get_fixed_values().items()}
     f_par = np.asarray(par_fwd.predict_photometry(p_par))
     f_tab = np.asarray(mock.photometry)[0]
-    assert np.allclose(f_tab / f_par, 1.0, rtol=1e-3), f"flux ratio {f_tab / f_par}"
+    assert np.allclose(f_tab / f_par, 1.0, rtol=2e-2), f"flux ratio {f_tab / f_par}"
+
+
+def test_the_remaining_approximation_is_announced(truncating_ssp, synthetic_tophat_obs):
+    """Mass is conserved, but those stars wear the oldest template's colors — say so.
+
+    The fix removes the mass loss; it cannot invent templates older than the
+    grid. What is left is a color approximation, and #1522's original sin was
+    silence, so it must not stay invisible.
+
+    Eager paths only. The check casts to ``float``, which raises
+    ``ConcretizationTypeError`` under jit/vmap — so ``Catalog.simulate``, being
+    jitted, does not warn. That is the same limitation
+    :class:`SFHBeforeBigBangWarning` carries at the other end of this axis, and
+    the reason this test drives ``predict_photometry`` directly.
+    """
+    import jax.numpy as jnp
+
+    from tengri.components.stellar.component import SFHBeyondSSPGridWarning
+
+    tab_fwd, _sed = _build(truncating_ssp, synthetic_tophat_obs, {"type": "table"})
+    t_gyr, sfr = _history()
+    params = {"sfh_t_gyr": jnp.asarray(t_gyr), "sfh_sfr": jnp.asarray(sfr)}
+
+    with pytest.warns(SFHBeyondSSPGridWarning, match="older than the oldest SSP template"):
+        tab_fwd.predict_photometry(params)
+
+
+def test_a_history_inside_the_grid_does_not_warn(synthetic_ssp_wide, synthetic_tophat_obs):
+    """The negative control: no warning when nothing falls off the end.
+
+    Without this the guard above passes on a warning that fires unconditionally,
+    which would be its own silent-failure mode — every table catalog crying wolf.
+    Same history, same redshift; only the SSP grid's oldest bin moves (13.80 Gyr,
+    past cosmic time at z=0.05, so the extension is a no-op).
+    """
+    import jax.numpy as jnp
+
+    from tengri.components.stellar.component import SFHBeyondSSPGridWarning
+
+    tab_fwd, _sed = _build(synthetic_ssp_wide, synthetic_tophat_obs, {"type": "table"})
+    t_gyr, sfr = _history()
+    params = {"sfh_t_gyr": jnp.asarray(t_gyr), "sfh_sfr": jnp.asarray(sfr)}
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", SFHBeyondSSPGridWarning)
+        tab_fwd.predict_photometry(params)
