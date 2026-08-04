@@ -83,9 +83,16 @@ NOT_FLOAT32_AND_NO_COMPANION: dict[str, str] = {}
 
 #: ``line_lums`` (~1e41 erg/s) also gained ``log_line_lums`` in #1534, but cannot
 #: be exercised here: this fixture's model has no nebular block, so neither key is
-#: published. Recorded so the omission stays a known fixture limit rather than a
-#: silent pass.
-UNMEASURABLE_HERE = ("line_lums",)
+#: published.
+#:
+#: **An entry here is only acceptable if another test covers it**, and that is now
+#: enforced by convention rather than hope: ``test_log_companion_is_upstream.py``
+#: builds a Cue model precisely so this pair is swept. It had to — the companion
+#: shipped broken (``log10_magnitude`` applied *after* the value had already
+#: overflowed, so 100% of the overflowing entries stayed ``+inf``) and this tuple
+#: was the entire reason nothing noticed. Do not add a name here without naming
+#: the test that covers it on the same line.
+UNMEASURABLE_HERE = ("line_lums",)  # covered by test_log_companion_is_upstream.py
 
 #: log10 tolerance between the float64 and pure-float32 evaluations. float32
 #: carries ~7 decimal digits, so a value near 1e43 resolves to ~1e36 absolute —
