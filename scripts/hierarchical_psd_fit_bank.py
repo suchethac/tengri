@@ -337,11 +337,25 @@ def main():
         # variance underflowed. Writing those would poison the bank silently, so
         # skip and let the caller retry rather than record a fit that is not one.
         flat_xi = np.asarray(xi).reshape(-1, np.asarray(xi).shape[-1])
-        min_node_var = float(np.min(np.var(flat_xi, axis=0)))
-        if not np.isfinite(min_node_var) or min_node_var < 1e-8:
+        n_draw, n_node = flat_xi.shape
+        # Count DISTINCT draws, not a variance threshold. A variance floor is the
+        # wrong instrument: chains frozen at their four starting points still
+        # jitter by ~1e-7 in float64, which cleared an earlier 1e-8 cutoff while
+        # the ensemble held four unique rows out of four thousand. The covariance
+        # total is the second check because it is the statistic the estimator
+        # actually consumes -- a healthy fit returns ~13-15 of 16, a dead one 0.00.
+        n_unique = len(np.unique(flat_xi, axis=0))
+        cov_total = float(np.linalg.eigvalsh(np.cov(flat_xi, rowvar=False)).sum())
+        degenerate = (
+            not np.isfinite(cov_total)
+            or n_unique < max(10, 0.01 * n_draw)
+            or cov_total < 0.05 * n_node
+        )
+        if degenerate:
             print(
-                f"  gal {i:4d}: REJECTED — degenerate draws (min per-node xi "
-                f"variance {min_node_var:.2e}); the chains never moved. "
+                f"  gal {i:4d}: REJECTED — degenerate draws "
+                f"({n_unique} unique of {n_draw}, xi covariance total "
+                f"{cov_total:.3f} of {n_node}); the chains never moved. "
                 "Not checkpointed.",
                 flush=True,
             )
