@@ -46,10 +46,21 @@ pytestmark = pytest.mark.regression_bug
 # well under a percent and the test would be vacuous.
 _BANDS = ["galex_fuv", "sdss_u", "sdss_g", "sdss_r"]
 
+# Committed to the repo, so a fresh checkout does not reach the network. This
+# tier gates every PR, and `load_ssp_data` falls through to a 67 MB
+# `download_ssp` for any grid that is absent -- one DNS failure on the runner
+# then reds a shard for reasons that have nothing to do with the diff. A
+# skipif would be worse here than the download: it turns a flaky gate into a
+# permanently dead one. Measured 2026-08-04, the taylor-vs-quadrature
+# separation in GALEX FUV is 3.6e-3 on this grid against 3.7e-3 on
+# fsps_mist_c3k_a_chabrier -- a 2% difference, still ~3600x the 1e-6 floor
+# asserted below, so the swap costs the test none of its discriminating power.
+_SSP_GRID = "data/fsps_prsc_miles_chabrier.h5"
+
 
 @pytest.fixture(scope="module")
 def ssp():
-    return tengri.load_ssp_data("data/fsps_mist_c3k_a_chabrier.h5")
+    return tengri.load_ssp_data(_SSP_GRID)
 
 
 @pytest.fixture(scope="module")
