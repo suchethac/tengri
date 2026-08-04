@@ -57,17 +57,12 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # pragma: no
 # the compilation machinery clear this env var themselves.
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
-# No test may reach the network.  ``load_ssp_data`` fails *open*: given a path
-# that does not exist whose basename is in the known-SSP catalog, it fetches
-# the grid rather than raising.  That turns "this test names a grid the repo
-# does not ship" into a silent tens-of-megabytes download on a dev machine,
-# and into a DNS failure 800 s into a CI shard — which is how #1528's tests
-# reddened main.  Disabling it makes the real defect surface immediately, as
-# a FileNotFoundError naming the file.  The one test that exercises the
-# auto-download path clears this itself and fakes the fetch
-# (tests/contract/test_ssp_nebular_metadata.py), mirroring how
-# TENGRI_DISABLE_PRECOMP_CACHE is disabled globally and opted back into.
-os.environ.setdefault("TENGRI_DISABLE_SSP_AUTODOWNLOAD", "1")
+# TENGRI_DISABLE_SSP_AUTODOWNLOAD used to be set here, to stop a test that
+# named an absent grid from silently fetching it (#1528 reddened main that
+# way).  ``load_ssp_data`` no longer fetches unless asked — ``download=False``
+# is the library default — so the suite is protected by the API rather than by
+# an env var this file remembers to set, and a test that names a grid the repo
+# does not ship now fails immediately with the path in the message.
 
 from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
