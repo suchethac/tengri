@@ -9,10 +9,12 @@ which the shared posterior jumps to a grid corner. **The cause is now
 identified and proven sufficient (§4e): the anisotropy of the per-galaxy ξ
 covariance.** Matching its eigenvalue spectrum alone — random eigenvectors —
 reproduces the railing to three significant figures; isotropic ξ does not rail.
-That anisotropy is **real, not a Laplace artifact** (§4f): a converged NUTS
-posterior has the same shape and the estimator does worse on it. So the fix is
-not a better sampler, and not more draws — the tilt is converged in K. The
-remaining suspect is `p_0` (§8).
+That anisotropy is **real, not a Laplace artifact** (§4f) — but §4g then shows
+anisotropy is **not the mechanism**: B2 recovers on exact posteriors that are
+*more* anisotropic still. `p_0` is verified correct to 0.005 nats. Every
+component now checks out individually while the composite fails, which leaves
+one premise: **the real per-galaxy ensembles are not posteriors under the prior
+`p_0` assumes** (§4g, §8).
 
 Everything below is measured, not assumed. Several sections record conclusions
 that were later **refuted by measurement**; they are kept, marked, because the
@@ -30,6 +32,7 @@ reasoning errors recur.
 | **4d** | `corr(tilt, interim τ) = +0.856` — a real diagnostic, but **refuted as the cause** |
 | **4e** | **the cause: the ξ covariance spectrum, proven necessary and sufficient** |
 | **4f** | the anisotropy is **real** — NUTS confirms it; the sampler is not the fix |
+| **4g** | **`p_0` is correct; §4e's cause is refuted** — B2 recovers on *more* anisotropic true posteriors |
 
 ---
 
@@ -619,7 +622,73 @@ a re-fit of the bank.
 
 ---
 
-## 4f. The anisotropy is REAL — NUTS confirms it, so the sampler is not the fix
+## 4g. `p_0` is correct — and §4e's "cause" does not survive contact with posteriors
+
+Two results, and together they undo §4e while narrowing the problem to one
+statement.
+
+**`p_0` is exonerated, four ways.**
+
+| test | result |
+|---|---|
+| `ou_logpdf` vs explicit multivariate normal, 16 (σ,τ) points | **4.9e-13** — exact |
+| p_0 quadrature, 60×60 vs a 240×240 reference | mean **+0.0024** nats |
+| p_0 vs 40 000 Monte Carlo draws from the **continuous** interim prior | mean **+0.0047** nats |
+| railing vs grid resolution 30 / 60 / 120 | 411–487 / 435–491 / 441–493 — **unmoved** |
+
+Against a tilt of +0.318 nats/galaxy, a 0.005-nat quadrature error is three
+orders of magnitude too small. The grid quadrature, the density, and the
+normalization are all right, and refining the grid does not move the answer.
+
+**§4e's sufficiency demonstration does not apply to posteriors.** §4e built its
+anisotropic ensembles synthetically — a Gaussian with a matched eigenvalue
+spectrum and *random* eigenvectors. Such an ensemble is the posterior of no
+likelihood, and `Z_i = C_i E_{q_i}[p/p_0]` is exact only when `q_i` *is* a
+posterior under `p_0`. B2 owes an arbitrary distribution nothing. Measured on
+the §4b toy's **exact** posteriors, in the same ξ convention the bank stores:
+
+| ensemble | spectrum total | above 1.05 | below 0.5 | B2 |
+|---|---|---|---|---|
+| toy exact posterior, 4 modes | 12.8/16 | 5 | 3 | **recovers** |
+| toy exact posterior, 8 modes | **8.8/16** | 3 | **7** | **recovers** |
+| real bank (laplace) | 13.6/16 | 2 | 1 | rails |
+| real bank (nuts) | 14.4/16 | 4 | 1 | rails |
+
+The toy's genuine posteriors are **more** anisotropic than the real bank's — at
+8 modes, seven of sixteen directions below 0.5 against the bank's one — and B2
+recovers there. **Anisotropy of a true posterior does not break B2.** §4e
+therefore identified a property of non-posterior ensembles, not the cause.
+
+**What that leaves.** Every component is now verified individually:
+
+* the B2 identity is exact for any true `q_i` (algebra);
+* `ou_logpdf` is exact to 5e-13;
+* `p_0` matches the continuous interim prior to 0.005 nats;
+* the Monte Carlo has converged (flat in K past ~1000, §4f);
+* B2 recovers on exact posteriors that are *more* anisotropic than the real ones.
+
+And the composite still fails. The only remaining possibility is the one
+premise that is measured rather than derived: **the real per-galaxy ensembles
+are not posteriors under the interim prior `p_0` assumes** — despite NUTS
+reporting R̂ ≤ 1.05. R̂ is necessary, not sufficient; it certifies that chains
+agree, not that they sample the intended target.
+
+**Next, and this is now a narrow question.** Find where the fitted model's
+implied prior on `m` departs from `p_0`. Candidates, cheapest first:
+1. The `Uniform` prior's implied density in the *physical* parameter — a
+   transform whose prior is flat in the unbounded coordinate is **not** flat in
+   τ, and a τ-shaped prior mismatch is already bug #2 in §3 of this document.
+   Sample the interim prior directly (fit with the likelihood switched off) and
+   compare the recovered (σ, τ) density against `Uniform`.
+2. The SFH truncation. The forward model warns
+   `SFHBeforeBigBangWarning: forms 3% of its stellar mass before the Big Bang …
+   that mass is truncated` — so the likelihood does not see all of `m`.
+3. Nuisance parameters. The §4b toy that recovers has **none**; the real fit has
+   ~8 alongside the 16 field latents.
+
+---
+
+## 4f. The anisotropy is real — NUTS confirms it, so the sampler is not the fix
 
 §4e proved the ξ covariance spectrum sufficient for the railing and left one
 question: is that anisotropy a Laplace artifact, or a real feature of the
@@ -679,7 +748,26 @@ to test — not another sampler.
 
 ---
 
-## 4e. The cause — the ξ covariance spectrum, proven sufficient
+## 4e. The ξ covariance spectrum — SUPERSEDED by §4g
+
+> ⚠ **This section's claim to have found "the cause" is REFUTED — see §4g.** Its
+> sufficiency demonstration used **synthetic** ensembles (a Gaussian with a
+> matched eigenvalue spectrum and random eigenvectors), which are the posterior
+> of no likelihood. `Z_i = C_i E_{q_i}[p/p_0]` is exact only when `q_i` IS a
+> posterior under `p_0`, so B2 owes such an ensemble nothing. Measured on the
+> §4b toy's **exact** posteriors, the spectrum is *more* anisotropic than the
+> real bank's (total 8.8/16 at 8 modes, seven directions below 0.5, against the
+> bank's one) and B2 **recovers**. Anisotropy of a true posterior does not break
+> B2.
+>
+> What survives is the substitution result: swapping the real ξ ensemble for an
+> isotropic one removes the railing. That still localizes the failure to the ξ
+> ensemble. It does not establish that anisotropy is the mechanism.
+>
+> Kept because the reasoning error is the sharpest of this investigation: a
+> synthetic construct reproduced the symptom to three significant figures, which
+> reads as proof, but reproducing a symptom with an object outside the
+> estimator's domain of validity proves nothing about the real object.
 
 **Matching the ξ covariance eigenvalue spectrum alone reproduces the railing to
 three significant figures.** Holding `(σ_k, τ_k)` fixed at the bank's stored
@@ -1017,7 +1105,22 @@ else means the draws are not posterior draws.
    sampler is not the fix, and the tilt is converged in K, so more draws are not
    either. What is left:
 
-   (a) **Verify `p_0` against the interim prior it is supposed to represent.**
+   **§4g has since verified `p_0` and refuted §4e's mechanism.** `p_0` matches
+   the continuous interim prior to 0.005 nats, `ou_logpdf` is exact to 5e-13,
+   and refining the grid does not move the answer. B2 recovers on exact
+   posteriors *more* anisotropic than the real ones. Every component checks out
+   while the composite fails, leaving one premise to test:
+
+   (a) **Find where the fitted model's implied prior on `m` departs from
+   `p_0`.** Cheapest first: (i) sample the interim prior directly, with the
+   likelihood switched off, and compare the recovered (σ, τ) density against
+   `Uniform` — a prior flat in an unbounded coordinate is *not* flat in τ, and a
+   τ-shaped prior mismatch is already bug #2 in §3; (ii) the SFH truncation, the
+   forward model warns it discards ~3% of the stellar mass before the Big Bang,
+   so the likelihood does not see all of `m`; (iii) nuisance parameters — the
+   §4b toy that recovers has none, the real fit has ~8.
+
+   (b) ~~Verify `p_0` against the interim prior it is supposed to represent.~~
    Four things cannot all be true at once (§4f): the B2 identity is exact for
    any `q_i`; `q_i` is right; the Monte Carlo has converged; the answer is
    wrong. The remaining suspect is `p_0` — it must be the *exact* marginal
