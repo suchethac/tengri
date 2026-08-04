@@ -202,3 +202,33 @@ class DeadGradientParameterWarning(UserWarning):
         The same discipline for a block that is numerically unsafe rather than
         gradient-dead.
     """
+
+
+class CorruptEnergyBalanceWarning(UserWarning):
+    """The dust energy-balance integrand was non-finite (#1527).
+
+    ``L_absorbed`` came back ``+inf`` because the intrinsic or attenuated SED
+    reaching the energy balance contained ``Inf`` or ``NaN`` — most often the
+    ``Inf * 0`` product of an extreme-metallicity SSP flux (the BUG-NSS-02
+    artifact class), or an attenuation curve whose far-UV extrapolation
+    amplified without bound.
+
+    The ``+inf`` is deliberate and replaces a silent ``0.0``: before #1527 a
+    single corrupt pixel made the whole IR budget vanish and the model emitted
+    a plausible dust-free galaxy, which is a wrong answer that looks like a
+    right one. ``+inf`` instead propagates to ``L_ir`` and shows up as a NaN
+    fit — loud, but on its own it says nothing about *where* the corruption
+    entered, which is what this warning supplies.
+
+    Fires only on the eager forward path. Under ``jit``/``grad``/``vmap`` there
+    is no concrete value to inspect, so nothing is emitted and the ``+inf``
+    travels on its own — exploring corrupt draws during inference is expected
+    and warning per-sample would be unusable.
+
+    See Also
+    --------
+    tengri.forward.energy_balance.bolometric_absorbed_log10
+        The strict producer that emits the ``+inf``.
+    tengri.forward.energy_balance.bolometric_absorbed
+        The linear form, which deliberately keeps the old clamp.
+    """

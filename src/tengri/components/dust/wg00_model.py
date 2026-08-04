@@ -244,7 +244,7 @@ class WG00AttenuationSEDComponent:
 
         # Energy balance: L_ir = ∫ (L_nu_intrinsic − L_nu_attenuated) dν,
         # LyC-masked (λ < 912 Å ionizes H, it does not heat dust — #922).
-        from tengri.forward.energy_balance import bolometric_absorbed_log10
+        from tengri.forward.energy_balance import bolometric_absorbed_log10, warn_if_corrupt
         from tengri.utils.physics_constants import C_AA
         from tengri.utils.scale import pow10
 
@@ -253,6 +253,7 @@ class WG00AttenuationSEDComponent:
         log_l_ir, _ = bolometric_absorbed_log10(
             state.sed_intrinsic, attenuated, nu, wave=state.wave
         )
+        warn_if_corrupt(log_l_ir, component="wg00")
         l_ir = pow10(log_l_ir)
 
         derived_overrides = dict(

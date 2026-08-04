@@ -281,23 +281,37 @@ def lut_l_absorbed_stellar_log10(
     Returns
     -------
     log_magnitude : ndarray, shape ()
-        :math:`\log_{10}|L_{\rm abs}^\star / (\mathrm{erg/s})|` [dex], or
-        ``-inf`` when nothing is absorbed.
+        :math:`\log_{10}|L_{\rm abs}^\star / (\mathrm{erg/s})|` [dex]. ``-inf``
+        when nothing is absorbed; ``+inf`` when the contraction is non-finite.
     sign : ndarray, shape ()
         Sign of the signed luminosity (follows the grid orientation), so the
         caller can combine it with other terms via
-        :func:`tengri.utils.scale.log10_add`.
+        :func:`tengri.utils.scale.log10_add`. ``NaN`` when the contraction is
+        non-finite.
 
     Notes
     -----
     JIT/grad/vmap-safe; the where-dummy keeps the zero case NaN-free.
+
+    Carries the same corrupt/zero split as
+    :func:`tengri.forward.energy_balance.bolometric_absorbed_log10` (#1527),
+    and must: this is the **stellar** half of the LUT branch in
+    ``two_component.py``, the path taken whenever ``approx=WavePrecomp(...)``
+    is set. Leaving it fail-open while the exact form is strict would tighten
+    only the nebular term on the configuration most fits actually use.
+
+    ``positive = magnitude > 0`` is False for NaN, so before this the whole
+    stellar absorbed luminosity silently became ``-inf`` — i.e. exactly 0.0 —
+    on a corrupt contraction.
     """
     contracted = _lut_contract(lut, joint_weights, tau_bc, tau_diff)
     magnitude = jnp.abs(contracted)
-    positive = magnitude > 0
+    finite = jnp.isfinite(contracted)
+    positive = finite & (magnitude > 0)
     safe = jnp.where(positive, magnitude, 1.0)
     log_magnitude = jnp.where(positive, jnp.log10(safe) + log10_mass_scale, -jnp.inf)
-    return log_magnitude, jnp.sign(contracted)
+    log_magnitude = jnp.where(finite, log_magnitude, jnp.inf)
+    return log_magnitude, jnp.where(finite, jnp.sign(contracted), jnp.nan)
 
 
 def lut_l_absorbed_stellar(

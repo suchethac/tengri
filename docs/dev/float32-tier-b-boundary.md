@@ -325,17 +325,34 @@ Separately — *not* a range problem, so item 3 will not close it — reverse-mo
 through the projection seam remains open under #1388; see "Not fixed here: float32 AGN gradient
 *accuracy*".
 
-**One fail-open in this module is deliberately still open (#1527).** This work is named for stopping
-the energy balance failing open to zero, so it has to say which one it did not stop.
-`_peak_factored_trapezoid` merges "nothing was absorbed" and "the integrand is non-finite" into a
-single `ok=False`, and both callers turn that into `0.0` / `-inf` — one corrupt pixel reports a
-dust-free galaxy. Closing it was implemented and reverted: it breaks
+**The last fail-open in this module is now closed on the live path (#1527).**
+`_peak_factored_trapezoid` used to merge "nothing was absorbed" and "the integrand is non-finite"
+into a single `ok=False`, and both callers turned that into `0.0` / `-inf` — one corrupt pixel
+reported a dust-free galaxy, which is a wrong answer wearing the shape of a right one.
+
+Closing it uniformly was tried first and reverted: it breaks
 `test_lyc_mask_energy_balance.py::TestFiniteGuard`, which pins the clamp on purpose for Inf·0
 artifacts from extreme-metallicity SSP fluxes (BUG-NSS-02), inherited from the kernel #922 retired.
-The convention contradicts `utils.scale.log10_add`, which reports an overflowed term as `+inf`
-precisely so it cannot be read as zero; both ship. Which one wins changes dust IR for corrupt inputs,
-so it is a physics-policy call under #1527, not a float32 change. The log path's half of the
-behavior — previously pinned nowhere — is now pinned by
+What made it tractable was measuring which caller is live. All four production call sites —
+`dust/two_component.py` (twice), `dust/component.py`, `dust/wg00_model.py` — use
+`bolometric_absorbed_log10`; the linear `bolometric_absorbed` has **no caller in `src/`** and is not
+re-exported. `TestFiniteGuard` guards the function nothing calls.
+
+So the two forms now answer differently, on purpose:
+
+| form | live callers | corrupt integrand |
+|---|---|---|
+| `bolometric_absorbed_log10` | 4 | `+inf` (matches `utils.scale.log10_add`) |
+| `bolometric_absorbed` | 0 | `0.0`, the #922 clamp, untouched |
+
+`lut_l_absorbed_stellar_log10` carries the same split — it is the **stellar** half of the LUT branch,
+i.e. the path taken under `approx=WavePrecomp(...)`, and leaving it fail-open would have tightened
+only the nebular term on the configuration most fits actually use. Its `positive = magnitude > 0`
+test is False for NaN, so a corrupt contraction previously became `-inf` there too.
+
+`+inf` is loud but not self-explanatory, so `warn_if_corrupt` fires `CorruptEnergyBalanceWarning` on
+the eager path naming the component — silent under `jit`/`grad`/`vmap`, where inference explores
+corrupt draws routinely and a per-sample warning would be unusable. Contract pinned by
 `tests/regression/precision/test_energy_balance_fail_open.py`.
 
 ---

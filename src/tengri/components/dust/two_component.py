@@ -666,6 +666,9 @@ class DustSEDComponent:
                 wave=wave,
                 lyman_cutoff_aa=_eb_cutoff,
             )
+        from tengri.forward.energy_balance import warn_if_corrupt
+
+        warn_if_corrupt(log_L_absorbed, component="two_component")
         eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
         # ``eta_balance`` relaxes energy balance multiplicatively, so it is a
         # log offset. A non-positive factor means no re-emitted energy at all,

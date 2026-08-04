@@ -127,8 +127,15 @@ def test_energy_balance_zero_absorption():
     assert float(10.0 ** bolometric_absorbed_log10(sed_i, sed_i, nu, wave=wave)[0]) == 0.0
 
 
-def test_energy_balance_non_finite_input_still_clamps():
-    """The guard survives for genuinely non-finite inputs (its original purpose).
+def test_energy_balance_non_finite_input_clamps_linearly_but_not_in_log():
+    """Non-finite input: the linear form clamps, the log form reports ``+inf`` (#1527).
+
+    The two spellings agree everywhere except here, deliberately.
+    :func:`bolometric_absorbed` keeps the #922 clamp — BUG-NSS-02 behavior, still
+    pinned by ``TestFiniteGuard`` — while
+    :func:`bolometric_absorbed_log10`, the form every production call site uses,
+    refuses to report a corrupt integrand as zero absorption. The full contract
+    lives in ``test_energy_balance_fail_open.py``.
 
     The poisoned index must sit *above* the Lyman cutoff: a non-finite value
     below 912 A is masked out before the integral, so it legitimately does not
@@ -145,7 +152,11 @@ def test_energy_balance_non_finite_input_still_clamps():
         frozen = float(_frozen_bolometric_absorbed(sed_bad, sed_a, nu, wave=wave))
         assert frozen == 0.0, f"setup: frozen form should clamp {bad} to 0.0, got {frozen}"
         assert float(bolometric_absorbed(sed_bad, sed_a, nu, wave=wave)) == 0.0
-        assert float(bolometric_absorbed_log10(sed_bad, sed_a, nu, wave=wave)[0]) == -np.inf
+        log_bad = float(bolometric_absorbed_log10(sed_bad, sed_a, nu, wave=wave)[0])
+        assert log_bad == np.inf, (
+            f"a {bad} in the intrinsic SED gave log10 form {log_bad}, not +inf. -inf here "
+            "powers back to exactly 0.0 and silently zeroes the whole IR budget (#1527)"
+        )
 
 
 def test_energy_balance_non_finite_below_lyman_cutoff_is_masked():

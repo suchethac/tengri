@@ -257,7 +257,7 @@ class DustAttenuationSEDComponent:
         # amplitude via the FIR-radio correlation). LyC photons ionize H
         # rather than heat dust, so the canonical integral masks λ < 912 Å
         # (#922).
-        from tengri.forward.energy_balance import bolometric_absorbed_log10
+        from tengri.forward.energy_balance import bolometric_absorbed_log10, warn_if_corrupt
         from tengri.utils.physics_constants import C_AA
         from tengri.utils.scale import pow10
 
@@ -268,6 +268,7 @@ class DustAttenuationSEDComponent:
         log_l_ir, _ = bolometric_absorbed_log10(
             state.sed_intrinsic, attenuated, nu, wave=state.wave
         )
+        warn_if_corrupt(log_l_ir, component=type(self).__name__)
         l_ir = pow10(log_l_ir)  # erg/s
 
         # Filter-level A(λ_eff) and A'(λ_eff) LUTs.
