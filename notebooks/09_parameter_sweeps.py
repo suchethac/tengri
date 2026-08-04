@@ -40,26 +40,6 @@ import sys
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 
-# Locate _plot_style and the data directory regardless of cwd.
-import importlib.util
-
-_repo_data_root = None
-_spec_tengri = importlib.util.find_spec("tengri")
-if _spec_tengri is not None and _spec_tengri.origin:
-    _walk = os.path.dirname(os.path.abspath(_spec_tengri.origin))
-    for _ in range(12):
-        _candidate = os.path.join(_walk, "notebooks", "_plot_style.py")
-        if os.path.isfile(_candidate):
-            sys.path.insert(0, os.path.dirname(_candidate))
-            _repo_data_root = os.path.dirname(os.path.dirname(os.path.abspath(_candidate)))
-            break
-        _parent = os.path.dirname(_walk)
-        if _parent == _walk:
-            break
-        _walk = _parent
-if _repo_data_root and os.path.isdir(os.path.join(_repo_data_root, "data")):
-    os.chdir(_repo_data_root)
-
 import jax
 import jax.numpy as jnp
 import matplotlib
@@ -78,7 +58,6 @@ from tengri import (
     Parameters,
     SEDModel,
     Uniform,
-    load_ssp_data,
 )
 from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
 from tengri.components.stellar.sfh import sample_sfh_prior
@@ -87,7 +66,7 @@ setup_style()
 print(f"tengri {tengri.__version__}")
 
 # %%
-ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
+ssp = tengri.load_ssp("ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0", download=True)
 
 # %% [markdown]
 # ## 1-D sweep with `sweep_parameter`

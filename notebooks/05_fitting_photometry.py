@@ -31,7 +31,7 @@
 #    credible interval means something.
 
 # %%
-from _setup import effective_wavelengths_um, quiet
+from _setup import FIG_DIR, effective_wavelengths_um, quiet
 
 quiet()
 
@@ -57,14 +57,11 @@ from tengri import (
     builders,
     cosmology,
     generate_mock,
-    load_ssp_data,
     plot,
 )
 from tengri.utils.conversions import lnu_to_fnu
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 
@@ -75,11 +72,7 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
-ssp_path = Path("../data") / f"{SSP_NAME}.h5"
-if not ssp_path.exists():
-    # Public API: fetches the grid on first use and caches it under data/.
-    ssp_path = Path(tengri.download_ssp(SSP_NAME))
-ssp = load_ssp_data(str(ssp_path))
+ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 FILTERS = [
     "galex_fuv",
