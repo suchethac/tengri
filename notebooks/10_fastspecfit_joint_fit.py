@@ -655,12 +655,14 @@ print(
 #   emulator. That is why the case it rescues is the counter-intuitive one — the
 #   same model fit to **photometry alone**, where it is worth roughly an order of
 #   magnitude. "I am not fitting lines" is not a reason to leave it off.
-# - **The truth lands inside the 68% interval for five of the six reported
-#   parameters** (one just outside — exactly what a well-calibrated 68% credible
-#   interval should do), with stellar mass and SFR the tightest. Metallicity /
-#   dust / gas conditions are the broad, degenerate sector — the posterior
-#   *width* is the honest statement of that. More information (a full spectrum —
-#   notebook 06 — an auroral line, or the UV slope) narrows it, not a faster fit.
+# - **The truth lands inside the 68% interval for the reported parameters** —
+#   the coverage line printed above is the measurement, and on six parameters at
+#   68% nominal coverage both five and six are what a calibrated interval should
+#   give, so do not read a single miss as a failure (or a clean sweep as proof).
+#   Stellar mass and SFR are the tightest. Metallicity / dust / gas conditions
+#   are the broad, degenerate sector — the posterior *width* is the honest
+#   statement of that. More information (a full spectrum — notebook 06 — an
+#   auroral line, or the UV slope) narrows it, not a faster fit.
 # - Two residual systematics matter when fitting a *real* catalog: the nebular
 #   model floor (Cue reproduces FSPS's Cloudy to ~10%, ~30% for [S II]), and the
 #   fiber aperture (line fluxes are aperture-limited; photometry is total — apply
