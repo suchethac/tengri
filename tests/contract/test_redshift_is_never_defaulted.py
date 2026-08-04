@@ -57,9 +57,7 @@ def _docstring_lines(tree: ast.AST) -> set[int]:
     """Line numbers occupied by docstrings, so prose is not mistaken for code."""
     out: set[int] = set()
     for node in ast.walk(tree):
-        if not isinstance(
-            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
-        ):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
             continue
         body = node.body
         if (
