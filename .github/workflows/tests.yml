@@ -71,7 +71,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -121,7 +121,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -247,7 +247,7 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -255,7 +255,7 @@ jobs:
       - run: pip install -e ".[dev]"
       # Every grid the examples need is committed (#1146), so there is no download
       # step and a fresh clone behaves exactly like CI.
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         id: gallery_jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -266,7 +266,7 @@ jobs:
           JAX_PLATFORMS: cpu
           MPLBACKEND: Agg
         run: python tools/run_gallery_examples.py --shard ${{ matrix.shard }}/4
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         # `actions/cache` skips its implicit post-save when a job fails, so a cache
         # can never warm on a job that is ever red (the trap from #1055). Save
         # explicitly, and always.
@@ -281,7 +281,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -484,7 +484,7 @@ jobs:
             budget: 50
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -501,7 +501,7 @@ jobs:
       # `if: always()` writes regardless of outcome. Keyed per shard (each sees a
       # different slice of the compile graph) with a run-id key + prefix restore-keys,
       # so each run restores the newest snapshot and saves its own superset.
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -628,7 +628,7 @@ jobs:
         # untouched by the cap — correct, and it is why raising 35 -> 50 did not
         # save main @a05ae7b5e: the shard died at 18m40s against a 50 min cap.
         timeout-minutes: ${{ matrix.budget }}
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         if: always()
         with:
           path: ~/.cache/tengri_jax_cache
@@ -762,7 +762,7 @@ jobs:
             budget: 50
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -876,7 +876,7 @@ jobs:
     timeout-minutes: 185
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -897,7 +897,7 @@ jobs:
       # and this tier is red (#1031). A cache meant to speed up a failing
       # suite can never warm if warming requires the suite to pass — the
       # same trap that made the `test` job's cache a no-op (see its comment).
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -912,7 +912,7 @@ jobs:
       # would OOM the 16 GB runner (the reason this tier was never parallelized).
       - run: pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0
         timeout-minutes: ${{ matrix.timeout }}
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         if: always()
         with:
           path: ~/.cache/tengri_jax_cache
