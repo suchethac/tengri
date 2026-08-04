@@ -84,8 +84,16 @@ KW = {
 }
 
 # 8 SDSS+2MASS filters.
-FILTERS_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-                 "2mass_j", "2mass_h", "2mass_ks"]
+FILTERS_NAMES = [
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+]
 
 
 def rss_gb() -> float:
@@ -113,8 +121,12 @@ def build_model(variant: str):
         ssp_data=ssp,
         observation=obs,
         sfh=sfh,
-        dust={"type": "two_component", "*": FIXED,
-              "law_bc": "calzetti", "tau_bc": Uniform(0.0, 1.0)},
+        dust={
+            "type": "two_component",
+            "*": FIXED,
+            "law_bc": "calzetti",
+            "tau_bc": Uniform(0.0, 1.0),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.05),
     )
@@ -160,8 +172,7 @@ def recovery_quality(posterior, truth: dict) -> dict:
         mu = float(jnp.mean(s))
         sd = float(jnp.std(s))
         bias = (mu - v_true) / sd if sd > 0 else None
-        out[k] = {"mean": mu, "std": sd, "truth": v_true,
-                  "bias_sigma": bias}
+        out[k] = {"mean": mu, "std": sd, "truth": v_true, "bias_sigma": bias}
     return out
 
 
@@ -173,8 +184,12 @@ def run_one(backend: str, model, obs, truth) -> dict:
     fitter = Fitter(model, obs.flux_obs, obs.noise)
     key = jr.PRNGKey(0)
 
-    rec = {"backend": backend, "tier_before": entry.tier,
-           "n_free": model.spec.n_free, "kwargs": kw}
+    rec = {
+        "backend": backend,
+        "tier_before": entry.tier,
+        "n_free": model.spec.n_free,
+        "kwargs": kw,
+    }
 
     gc.collect()
     rss_before = rss_gb()
@@ -235,25 +250,51 @@ def main():
 
     # Filter order: cheap first. Pathfinder last (known fragile in BlackJAX).
     order = [
-        "map", "laplace",
-        "native_vi_linear", "native_vi_nonlinear",
-        "vi_nonlinear_fast", "vi_nonlinear", "vi", "vi_linear_fast", "vi_linear",
-        "mcmc_hmc", "mcmc_nuts", "mcmc_dynamic_hmc", "mcmc_ghmc",
-        "mcmc_mclmc", "mcmc_adjusted_mclmc", "mcmc_ess", "mcmc_raytrace", "mcmc",
-        "nss", "pathfinder",
+        "map",
+        "laplace",
+        "native_vi_linear",
+        "native_vi_nonlinear",
+        "vi_nonlinear_fast",
+        "vi_nonlinear",
+        "vi",
+        "vi_linear_fast",
+        "vi_linear",
+        "mcmc_hmc",
+        "mcmc_nuts",
+        "mcmc_dynamic_hmc",
+        "mcmc_ghmc",
+        "mcmc_mclmc",
+        "mcmc_adjusted_mclmc",
+        "mcmc_ess",
+        "mcmc_raytrace",
+        "mcmc",
+        "nss",
+        "pathfinder",
     ]
     order = [b for b in order if b in _BACKENDS]
 
     # Per-backend wall-clock cap (seconds). Anything slower we declare unfit.
     TIMEOUT = {
-        "map": 60, "laplace": 60,
-        "native_vi_linear": 180, "native_vi_nonlinear": 180,
-        "vi": 300, "vi_nonlinear": 300, "vi_linear": 300,
-        "vi_nonlinear_fast": 300, "vi_linear_fast": 300,
-        "mcmc_hmc": 300, "mcmc_nuts": 300, "mcmc_dynamic_hmc": 300,
-        "mcmc_ghmc": 300, "mcmc_mclmc": 300, "mcmc_adjusted_mclmc": 300,
-        "mcmc_ess": 300, "mcmc_raytrace": 300, "mcmc": 300,
-        "nss": 600, "pathfinder": 300,
+        "map": 60,
+        "laplace": 60,
+        "native_vi_linear": 180,
+        "native_vi_nonlinear": 180,
+        "vi": 300,
+        "vi_nonlinear": 300,
+        "vi_linear": 300,
+        "vi_nonlinear_fast": 300,
+        "vi_linear_fast": 300,
+        "mcmc_hmc": 300,
+        "mcmc_nuts": 300,
+        "mcmc_dynamic_hmc": 300,
+        "mcmc_ghmc": 300,
+        "mcmc_mclmc": 300,
+        "mcmc_adjusted_mclmc": 300,
+        "mcmc_ess": 300,
+        "mcmc_raytrace": 300,
+        "mcmc": 300,
+        "nss": 600,
+        "pathfinder": 300,
     }
 
     for variant in ("dpl", "dense_basis"):
@@ -277,26 +318,38 @@ def main():
                 if out_json.exists():
                     r = json.loads(out_json.read_text())
                 else:
-                    r = {"backend": backend, "variant": variant,
-                         "status": "crashed_no_output",
-                         "wall_s": wall,
-                         "error_type": "SegfaultOrAbort",
-                         "error_msg": "child died without writing JSON"}
+                    r = {
+                        "backend": backend,
+                        "variant": variant,
+                        "status": "crashed_no_output",
+                        "wall_s": wall,
+                        "error_type": "SegfaultOrAbort",
+                        "error_msg": "child died without writing JSON",
+                    }
             except subprocess.TimeoutExpired:
-                r = {"backend": backend, "variant": variant,
-                     "status": "timeout",
-                     "wall_s": TIMEOUT[backend],
-                     "error_type": "TimeoutExpired",
-                     "error_msg": f"exceeded {TIMEOUT[backend]}s budget"}
+                r = {
+                    "backend": backend,
+                    "variant": variant,
+                    "status": "timeout",
+                    "wall_s": TIMEOUT[backend],
+                    "error_type": "TimeoutExpired",
+                    "error_msg": f"exceeded {TIMEOUT[backend]}s budget",
+                }
 
             results.append(r)
             if r["status"] == "ok":
                 w = r.get("warm_s")
-                print(f"   cold={r['cold_s']:6.1f}s  warm={('%.1f' % w) if w else 'NA':>6}s  "
-                      f"rss={r['rss_gb_peak']:.2f}GB", flush=True)
+                print(
+                    f"   cold={r['cold_s']:6.1f}s  warm={('%.1f' % w) if w else 'NA':>6}s  "
+                    f"rss={r['rss_gb_peak']:.2f}GB",
+                    flush=True,
+                )
             else:
-                print(f"   FAIL[{r['status']}]: {r.get('error_type', '?')} "
-                      f"{(r.get('error_msg') or '')[:80]}", flush=True)
+                print(
+                    f"   FAIL[{r['status']}]: {r.get('error_type', '?')} "
+                    f"{(r.get('error_msg') or '')[:80]}",
+                    flush=True,
+                )
             out_path.write_text(json.dumps(results, indent=2, default=str))
 
     print(f"\nResults written to {out_path}", flush=True)
@@ -304,6 +357,7 @@ def main():
 
 if __name__ == "__main__":
     import sys
+
     if len(sys.argv) >= 5 and sys.argv[1] == "--child":
         _child_run(sys.argv[2], sys.argv[3], sys.argv[4])
     else:

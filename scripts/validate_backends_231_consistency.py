@@ -51,8 +51,16 @@ from tengri.inference._backend_registry import _BACKENDS
 
 DATA = Path("/Users/suchethacooray/Projects/tengri/data")
 SSP_FILE = DATA / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-FILTERS_NAMES = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-                 "2mass_j", "2mass_h", "2mass_ks"]
+FILTERS_NAMES = [
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+]
 MOCK_SEED = 42  # used for mock generation AND inference, so all methods see the same mock + key
 
 
@@ -64,8 +72,12 @@ def build_model_and_mock():
         ssp_data=ssp,
         observation=obs,
         sfh=builders.sfh.dpl(defaults=FREE),
-        dust={"type": "two_component", "*": FIXED,
-              "law_bc": "calzetti", "tau_bc": Uniform(0.0, 1.0)},
+        dust={
+            "type": "two_component",
+            "*": FIXED,
+            "law_bc": "calzetti",
+            "tau_bc": Uniform(0.0, 1.0),
+        },
         neb={"type": "none"},
         redshift=Fixed(0.05),
         approx=WavePrecomp(),  # photometry-only LUT — ~18× speedup
@@ -84,6 +96,7 @@ def build_model_and_mock():
 
 
 # ── (a) gradient-flow probe ──────────────────────────────────────────────
+
 
 def gradient_probe(model, mock):
     """Probe forward-model + likelihood gradient flow.
@@ -147,8 +160,14 @@ def gradient_probe(model, mock):
 KW = {
     "map": dict(n_steps=1000, verbose=False),
     "laplace": dict(verbose=False),
-    "mcmc_hmc": dict(n_warmup=1000, n_burnin=200, n_samples=2000,
-                     n_leapfrog_steps=20, dense_mass_matrix=True, verbose=False),
+    "mcmc_hmc": dict(
+        n_warmup=1000,
+        n_burnin=200,
+        n_samples=2000,
+        n_leapfrog_steps=20,
+        dense_mass_matrix=True,
+        verbose=False,
+    ),
     "nss": dict(verbose=False),
 }
 
@@ -201,6 +220,7 @@ def child_run(backend: str, out_json: str) -> None:
 
 # ── orchestrator ─────────────────────────────────────────────────────────
 
+
 def main():
     out_dir = Path("/tmp/validate_231_consistency")
     out_dir.mkdir(exist_ok=True)
@@ -216,9 +236,12 @@ def main():
         if "error" in info:
             print(f"  {label}: ERROR {info['error']}", flush=True)
         else:
-            print(f"  {label}: loss={info['loss']:.3e} finite={info['finite']} "
-                  f"any_zero={info['any_zero']} |grad| in [{info['abs_min']:.2e}, "
-                  f"{info['abs_max']:.2e}]", flush=True)
+            print(
+                f"  {label}: loss={info['loss']:.3e} finite={info['finite']} "
+                f"any_zero={info['any_zero']} |grad| in [{info['abs_min']:.2e}, "
+                f"{info['abs_max']:.2e}]",
+                flush=True,
+            )
     summary["truth"] = truth
     out_path.write_text(json.dumps(summary, indent=2, default=str))
 
@@ -246,12 +269,15 @@ def main():
         if r["status"] == "ok":
             print(f"   wall={r['wall_s']:5.0f}s", flush=True)
         else:
-            print(f"   FAIL[{r['status']}] {r.get('error_type','')}", flush=True)
+            print(f"   FAIL[{r['status']}] {r.get('error_type', '')}", flush=True)
         summary["runs"] = runs
         out_path.write_text(json.dumps(summary, indent=2, default=str))
 
     # Cross-method comparison table
-    print("\n=== cross-method posterior means (truth → method posterior_mean (± std)) ===", flush=True)
+    print(
+        "\n=== cross-method posterior means (truth → method posterior_mean (± std)) ===",
+        flush=True,
+    )
     ok = {b: r for b, r in runs.items() if r.get("status") == "ok" and "posterior" in r}
     if ok:
         free = sorted(truth.keys())

@@ -29,8 +29,17 @@ jax.config.update("jax_log_compiles", True)  # Log XLA compilations
 # SSP and filter setup
 SSP_PATH = Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 FILTER_NAMES = [
-    "hst_f435w", "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp",
-    "hst_f125w", "hst_f140w", "hst_f160w", "vista_ks", "irac_36", "irac_45",
+    "hst_f435w",
+    "hst_f606w",
+    "hst_f775w",
+    "hst_f814w",
+    "hst_f850lp",
+    "hst_f125w",
+    "hst_f140w",
+    "hst_f160w",
+    "vista_ks",
+    "irac_36",
+    "irac_45",
 ]
 
 print("Loading SSP data...")
@@ -66,9 +75,9 @@ params = Parameters(
 model = SEDModel(params, ssp_data, observation=obs)
 fitter = Fitter(model, data=flux_obs, noise=noise)
 
-print("="*60)
+print("=" * 60)
 print("CACHE INSTABILITY DIAGNOSTIC")
-print("="*60)
+print("=" * 60)
 
 # Test 1: Baseline (no GC control)
 print("\n1. Baseline (no intervention)")
@@ -90,12 +99,12 @@ for i in range(10):
     _ = fitter.run("map", key=key_i)
     t = time.perf_counter() - t0
     times_baseline.append(t)
-    print(f"  Run {i+1}: {t:.3f}s")
+    print(f"  Run {i + 1}: {t:.3f}s")
 
 mean_baseline = np.mean(times_baseline)
 std_baseline = np.std(times_baseline)
 print(f"  Mean: {mean_baseline:.3f}s ± {std_baseline:.3f}s")
-print(f"  Variance: {std_baseline/mean_baseline:.1%}")
+print(f"  Variance: {std_baseline / mean_baseline:.1%}")
 
 # Test 2: With explicit GC before each run
 print("\n2. Explicit GC before each run")
@@ -117,12 +126,12 @@ for i in range(10):
     _ = fitter.run("map", key=key_i)
     t = time.perf_counter() - t0
     times_gc.append(t)
-    print(f"  Run {i+1}: {t:.3f}s (post-GC)")
+    print(f"  Run {i + 1}: {t:.3f}s (post-GC)")
 
 mean_gc = np.mean(times_gc)
 std_gc = np.std(times_gc)
 print(f"  Mean: {mean_gc:.3f}s ± {std_gc:.3f}s")
-print(f"  Variance: {std_gc/mean_gc:.1%}")
+print(f"  Variance: {std_gc / mean_gc:.1%}")
 
 # Test 3: Reuse same key (eliminate RNG variance)
 print("\n3. Same key every run (eliminate RNG variance)")
@@ -143,12 +152,12 @@ for i in range(10):
     _ = fitter.run("map", key=fixed_key)
     t = time.perf_counter() - t0
     times_fixed.append(t)
-    print(f"  Run {i+1}: {t:.3f}s (same key)")
+    print(f"  Run {i + 1}: {t:.3f}s (same key)")
 
 mean_fixed = np.mean(times_fixed)
 std_fixed = np.std(times_fixed)
 print(f"  Mean: {mean_fixed:.3f}s ± {std_fixed:.3f}s")
-print(f"  Variance: {std_fixed/mean_fixed:.1%}")
+print(f"  Variance: {std_fixed / mean_fixed:.1%}")
 
 # Test 4: Check for cache directory corruption
 print("\n4. Cache directory check")
@@ -164,18 +173,22 @@ else:
     print(f"  Cache directory not found: {cache_dir}")
 
 # Summary
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("SUMMARY")
-print("="*60)
-print(f"Baseline:      {mean_baseline:.3f}s ± {std_baseline:.3f}s ({std_baseline/mean_baseline:.1%} variance)")
-print(f"With GC:       {mean_gc:.3f}s ± {std_gc:.3f}s ({std_gc/mean_gc:.1%} variance)")
-print(f"Fixed key:     {mean_fixed:.3f}s ± {std_fixed:.3f}s ({std_fixed/mean_fixed:.1%} variance)")
+print("=" * 60)
+print(
+    f"Baseline:      {mean_baseline:.3f}s ± {std_baseline:.3f}s ({std_baseline / mean_baseline:.1%} variance)"
+)
+print(f"With GC:       {mean_gc:.3f}s ± {std_gc:.3f}s ({std_gc / mean_gc:.1%} variance)")
+print(
+    f"Fixed key:     {mean_fixed:.3f}s ± {std_fixed:.3f}s ({std_fixed / mean_fixed:.1%} variance)"
+)
 
 # Determine root cause
-if std_gc/mean_gc < std_baseline/mean_baseline * 0.5:
+if std_gc / mean_gc < std_baseline / mean_baseline * 0.5:
     print("\n✓ GC pauses are the primary cause of variance")
     print("  Recommendation: Call gc.collect() before critical inference runs")
-elif std_fixed/mean_fixed < std_baseline/mean_baseline * 0.5:
+elif std_fixed / mean_fixed < std_baseline / mean_baseline * 0.5:
     print("\n✓ RNG key generation causes variance")
     print("  Recommendation: This variance is expected and benign")
 else:
@@ -184,9 +197,9 @@ else:
     print("  Recommendation: Accept 10-20% variance as normal for JAX inference")
 
 # Outlier analysis
-outliers_baseline = [t for t in times_baseline if t > mean_baseline + 2*std_baseline]
-outliers_gc = [t for t in times_gc if t > mean_gc + 2*std_gc]
-outliers_fixed = [t for t in times_fixed if t > mean_fixed + 2*std_fixed]
+outliers_baseline = [t for t in times_baseline if t > mean_baseline + 2 * std_baseline]
+outliers_gc = [t for t in times_gc if t > mean_gc + 2 * std_gc]
+outliers_fixed = [t for t in times_fixed if t > mean_fixed + 2 * std_fixed]
 
 print(f"\nOutliers (>2σ):")
 print(f"  Baseline: {len(outliers_baseline)}/10 runs")

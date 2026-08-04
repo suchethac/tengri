@@ -40,8 +40,13 @@ for method in ["mcmc_nuts", "mcmc_hmc", "mcmc_ghmc", "mcmc_dynamic_hmc"]:
     print(f"\n--- {method} ---")
     t0 = time.time()
     results = fitter.fit_batch(
-        batch, method=method, key=jax.random.PRNGKey(42),
-        n_warmup=50, n_burnin=10, n_samples=50, verbose=False,
+        batch,
+        method=method,
+        key=jax.random.PRNGKey(42),
+        n_warmup=50,
+        n_burnin=10,
+        n_samples=50,
+        verbose=False,
     )
     t_total = time.time() - t0
     print(f"  {n_gal} galaxies in {t_total:.1f}s ({t_total / n_gal:.2f}s/galaxy)")
@@ -61,8 +66,13 @@ print("\n--- Comparison: vmap NUTS vs sequential ---")
 
 t0 = time.time()
 vmap_results = fitter.fit_batch(
-    batch, method="mcmc_nuts", key=jax.random.PRNGKey(42),
-    n_warmup=50, n_burnin=10, n_samples=100, verbose=False,
+    batch,
+    method="mcmc_nuts",
+    key=jax.random.PRNGKey(42),
+    n_warmup=50,
+    n_burnin=10,
+    n_samples=100,
+    verbose=False,
 )
 t_vmap = time.time() - t0
 
@@ -71,8 +81,12 @@ seq_results = []
 for i, gal in enumerate(batch):
     f = Fitter(model, gal["flux_obs"], gal["noise"])
     r = f.run(
-        "mcmc_nuts", key=jax.random.fold_in(jax.random.PRNGKey(42), i),
-        n_warmup=50, n_burnin=10, n_samples=100, verbose=False,
+        "mcmc_nuts",
+        key=jax.random.fold_in(jax.random.PRNGKey(42), i),
+        n_warmup=50,
+        n_burnin=10,
+        n_samples=100,
+        verbose=False,
     )
     seq_results.append(r)
 t_seq = time.time() - t0

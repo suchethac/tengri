@@ -47,6 +47,7 @@ import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
+from _setup import FIG_DIR
 import tengri
 from tengri import (
     FIXED,
@@ -55,14 +56,11 @@ from tengri import (
     SEDModel,
     builders,
     citations,
-    load_ssp_data,
     plot,
     recipes,
 )
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 # %% [markdown]
 # ## Bird's eye
@@ -82,10 +80,7 @@ tengri.summary()
 tengri.list_known_ssps()
 
 # %%
-SSP = Path("../data/fsps_prsc_miles_chabrier.h5")
-if not SSP.exists():
-    SSP = Path(tengri.download_ssp("fsps_prsc_miles_chabrier"))
-ssp = load_ssp_data(str(SSP))
+ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
 
 # %% [markdown]
 # ## Star-formation history variants
