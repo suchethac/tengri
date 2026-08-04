@@ -2336,29 +2336,33 @@ class StellarSEDComponent:
         # frequency Jacobian gives ∫ L_ν dν per age.
         wave = ssp.ssp_wave
         nu_jac = C_AA / (wave**2)
-        # Peak-factored per age bin so `log_L_age` never materializes the ~1e46 erg/s
-        # product that overflows float32 (#1534).
+        # `log_L_age` must not materialize the ~1e46 erg/s product that overflows
+        # float32 (#1534) — and must not cost an extra pass over the cube to avoid it.
         #
-        # The factoring must happen **before** the multiply, not after. `lnu_age` is
-        # ~5.6e30 erg/s/Hz and `nu_jac` peaks at ~3e14 Hz/Angstrom, so their product is
-        # ~1.7e45 — already `inf` in float32, which would make a peak taken from it
-        # `inf` too and the normalization `nan`. Same ordering as
-        # `_integrate_nion_log10`, which divides by the peak before the 1/(h*nu) step.
+        # `ssp_flux_at_age` is the per-Msun cube and `lnu_age = total_mass *
+        # ssp_flux_at_age`, so the offending scale is already factored out upstream.
+        # Integrating the per-Msun cube and re-applying `total_mass` in log space
+        # needs the *same single trapezoid* as before, plus a log over an (n_age,)
+        # vector. Being per-Msun, its headroom does not vary with galaxy mass:
+        # `ssp_flux_at_age * nu_jac` peaks ~1.7e35 against the 3.4e38 ceiling at any
+        # total_mass.
         #
-        # Publishing `log10(L_age)` instead would be useless for the same reason: by
-        # then the value is `inf`, and the log of `inf` is `inf`. The inventory sweep
-        # caught exactly that, which is what it is for.
-        _lnu_peak = jnp.max(jnp.abs(lnu_age), axis=1)
-        _lnu_peak_safe = jnp.where(_lnu_peak > 0, _lnu_peak, 1.0)
-        _age_norm = jnp.trapezoid(
-            (lnu_age / _lnu_peak_safe[:, None]) * nu_jac[None, :], wave, axis=1
-        )
-        L_age = _age_norm * _lnu_peak_safe
-        _log_age_norm = log10_magnitude(_age_norm)
+        # Two earlier attempts were wrong and the inventory sweep caught both:
+        # `log10_magnitude(L_age)` is useless (L_age is already inf in float32, and
+        # log of inf is inf), and peak-factoring `lnu_age * nu_jac` after forming it
+        # is too late (the product is already inf, so its peak is inf). A third,
+        # peak-factoring `lnu_age` by its own per-row max, was correct but cost +19%
+        # of a full predict_state (287 -> 343 us) for a value most callers never read.
+        #
+        # log10(total_mass), not log10_mass_scale: L_sun is already folded into
+        # ssp_flux_at_age, and log10_mass_scale carries it a second time.
+        _per_msun_L = jnp.trapezoid(ssp_flux_at_age * nu_jac[None, :], wave, axis=1)
+        L_age = total_mass * _per_msun_L
+        _log_per_msun = log10_magnitude(_per_msun_L)
         log_L_age = jnp.where(
-            _not_computable(_log_age_norm),
+            _not_computable(_log_per_msun),
             jnp.inf,
-            _log_age_norm + jnp.log10(_lnu_peak_safe),
+            _log_per_msun + jnp.log10(total_mass.astype(jnp.result_type(float))),
         )
 
         # ── 11. Ionizing photon production rate (λ < 911.76 Å) ──────────

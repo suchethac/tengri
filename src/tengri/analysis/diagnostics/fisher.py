@@ -41,8 +41,16 @@ def compute_jacobian(predict_fn, params, param_keys):
     -------
     array, shape (n_data, n_params)
         Jacobian matrix.
+
+    Notes
+    -----
+    Forward mode, deliberately. ``jax.jacobian`` is ``jacrev``, and in float32
+    the reverse-mode Jacobian of a raw flux is *exactly all zeros* (#1388/#1415,
+    measured in #1542) — a silent, plausible-looking answer rather than a loud
+    one. ``jacfwd`` is alive on the same model and, for ``n_params << n_data``,
+    is also the cheaper mode. Identical in float64 up to accumulation order.
     """
-    return jax.jacobian(predict_fn)(params)
+    return jax.jacfwd(predict_fn)(params)
 
 
 def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", param_names=None):
@@ -113,11 +121,30 @@ def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", 
     # Current parameter values as flat array
     flat = jnp.array([float(params[n]) for n in param_names])
 
-    # FIM = J^T N^{-1} J with N^{-1} = diag(1/sigma^2).
-    jac = jax.jacobian(predict_from_flat)(flat)
-    noise_inv = 1.0 / noise**2
-    weighted_jac = jac * noise_inv[:, None]
-    fim = jac.T @ weighted_jac
+    # FIM = J^T N^{-1} J with N^{-1} = diag(1/sigma^2), computed as (J/sigma)^T
+    # (J/sigma) — algebraically identical, and the only spelling that survives
+    # float32 (#1542).
+    #
+    # Two independent float32 defects lived here, and the first hid the second:
+    #
+    # 1. ``jax.jacobian`` is ``jacrev``. In float32 the reverse-mode Jacobian of a
+    #    raw flux is *exactly all zeros* (#1388/#1415) — measured, not inferred.
+    #    ``jacfwd`` is alive on the same model. Mathematically the same Jacobian;
+    #    for n_params << n_bands it is also the cheaper mode.
+    # 2. ``1.0 / noise**2`` is ``inf`` for the sigma ~ 5e-32 of a real flux, so
+    #    the product was ``0 * inf = NaN``.
+    #
+    # Removing only the ``inf`` yields a finite, entirely-zero Fisher matrix,
+    # which is far more dangerous than the NaN: NaN propagates loudly, whereas a
+    # zero FIM inverts to *infinite confidence*. ``assert isfinite`` is not a
+    # sufficient check here — the test also asserts the matrix is non-zero.
+    #
+    # The barrier is the same measure as ``standardized_residual`` (#1535): the
+    # divide-before-square grouping is only binding on XLA as a data dependency,
+    # never as a source order.
+    jac = jax.jacfwd(predict_from_flat)(flat)
+    scaled_jac = jax.lax.optimization_barrier(jac / noise[:, None])
+    fim = scaled_jac.T @ scaled_jac
 
     return fim, param_names
 
