@@ -699,7 +699,27 @@ the small-τ preference §4a measured for healthy galaxies, not a new defect.
 > galaxies at 200–500 s each, roughly 24 h — or much less once #1537 is fixed
 > and Laplace is trustworthy everywhere.
 
-**Not yet done — and it is one command.** The repaired bank (collapsed galaxies
+**Partial confirmation, with 4 of 9 repaired.** Replacing only galaxies 10, 12,
+19 and 35 (the four that already have clean NUTS refits) and leaving the other
+five collapsed:
+
+| arm | σ 68% (0.75) | τ 68% Myr (150) | mode |
+|---|---|---|---|
+| all-laplace | 0.959–0.995 | 274.4–424.3 | (1.000, 384) |
+| **repaired (4 of 9)** | 0.908–0.991 | **134.6–219.6 ✓** | (1.000, 198) |
+| healthy-only (excluded) | 0.712–0.853 ✓ | 40.0–68.1 | (0.799, 56) |
+
+Repairing fewer than half the collapsed fits already moves τ from missing high
+to **covering truth**. σ remains railed, as expected while five broken fits are
+still in the pool. Run `scripts/hierarchical_psd_repaired_pool.py` — it reports
+which collapsed galaxies are still unrepaired rather than pooling them silently.
+
+> These three arms share `K=400` and so are comparable to each other, but **not**
+> to the `K=4000` numbers in §2 (all-laplace reads 274–424 here against 435–491
+> there). That is the K-dependence of §4f: the tilt grows with K and saturates
+> near K≈1000. Compare within a run, never across.
+
+**Remaining — and it is one command.** The repaired bank (collapsed galaxies
 *refit* rather than dropped) has not been built. Blocked on machine contention,
 not on anything unknown: a 4-chain `mcmc_nuts` fit peaks at **6.7 GB**, and the
 shared-machine guard SIGKILLs at a 15 GB total that other sessions were already

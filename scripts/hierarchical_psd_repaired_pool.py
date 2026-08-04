@@ -26,7 +26,8 @@ from tengri.inference.population.diagnostics import credible_interval
 from tengri.inference.population.estimator import SharedGrid, shared_log_posterior
 from tengri.inference.population.reconstruct import centered_fields
 
-meta = json.load(open("psd_bank_fixed/bank_meta.json"))
+with open("psd_bank_fixed/bank_meta.json") as fh:
+    meta = json.load(fh)
 LOG_AGE = np.asarray(meta["log_age_grid"])
 TIMES = np.asarray(10.0**LOG_AGE)
 SIG, TAU = meta["truth_sigma"], meta["truth_tau_myr"] * 1e6
@@ -101,9 +102,11 @@ for name, arr in arms.items():
     ok_s = "ok" if ci["sigma_lower"] <= SIG <= ci["sigma_upper"] else "MISS"
     ok_t = "ok" if ci["tau_lower_yr"] <= TAU <= ci["tau_upper_yr"] else "MISS"
     rail = "  RAILED" if ci["tau_lower_yr"] > 400e6 else ""
+    lo_s, hi_s = ci["sigma_lower"], ci["sigma_upper"]
+    lo_t, hi_t = ci["tau_lower_yr"] / 1e6, ci["tau_upper_yr"] / 1e6
     print(
-        f"{name:>14} {arr.shape[0]:4d}  {ci['sigma_lower']:8.3f}-{ci['sigma_upper']:<8.3f} {ok_s:>4} "
-        f"{ci['tau_lower_yr'] / 1e6:8.1f}-{ci['tau_upper_yr'] / 1e6:<8.1f} {ok_t:>4}{rail}"
+        f"{name:>14} {arr.shape[0]:4d}  {lo_s:8.3f}-{hi_s:<8.3f} {ok_s:>4} "
+        f"{lo_t:8.1f}-{hi_t:<8.1f} {ok_t:>4}{rail}"
         f"   mode ({gs[a]:.3f}, {gt[b] / 1e6:.0f})",
         flush=True,
     )
