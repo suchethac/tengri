@@ -112,9 +112,26 @@ class InferenceContext:
         i.e. the sum of the negative log-likelihood and the negative log-prior.
         Astronomers familiar with χ²-minimization can think of this as a
         prior-regularized χ² (up to a constant). Cached on the Fitter; safe
-        to call repeatedly. The compiled callable takes parameters in
-        **unbounded** space and closes over ``data_args`` and the
-        parameter spec.
+        to call repeatedly.
+
+        The compiled callable has signature ``(params_u, data_args)``:
+        parameters in **unbounded** space, and the data passed **as a traced
+        argument**. It closes over the parameter spec only. This docstring
+        previously said it closed over ``data_args`` too — it does not
+        (``fn(params_u)`` raises ``TypeError``), and the difference is
+        load-bearing rather than cosmetic.
+
+        .. warning::
+
+           **Do not re-wrap this to close over the data.** Under
+           ``jax.enable_x64(False)``, XLA constant-folds ``1/sigma**2`` to
+           ``inf`` when ``sigma`` is a compile-time constant, and
+           ``diag_gaussian_chi2`` then evaluates ``0 * inf = NaN`` — defeating
+           the ``r = (d - mu) / sigma`` grouping that function uses precisely to
+           stay in range. Onset is ``sigma`` ~ 1e-19; real photometric fluxes
+           are ~1e-30, so every float32 fit written that way returns NaN. The
+           traced-argument form is immune, float64 is immune, and eager float32
+           is immune. Tracked in #1535.
 
         See Also
         --------
