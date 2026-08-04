@@ -699,9 +699,43 @@ the small-τ preference §4a measured for healthy galaxies, not a new defect.
 > galaxies at 200–500 s each, roughly 24 h — or much less once #1537 is fixed
 > and Laplace is trustworthy everywhere.
 
-**Not yet done:** the repaired bank (collapsed galaxies *refit* rather than
-dropped) has not been built. That is the remaining task before the two-step
-estimator can be trusted for production, and it is now a mechanical one.
+**Not yet done — and it is one command.** The repaired bank (collapsed galaxies
+*refit* rather than dropped) has not been built. Blocked on machine contention,
+not on anything unknown: a 4-chain `mcmc_nuts` fit peaks at **6.7 GB**, and the
+shared-machine guard SIGKILLs at a 15 GB total that other sessions were already
+holding at 14–14.9 GB.
+
+The cheapest decisive version needs **five fits**. The railing first appears at
+N=64, nine galaxies below index 64 are collapsed
+(`10 12 13 19 35 39 42 50 61`), and four already have good refits — 19 and 35 in
+`psd_bank_nuts`, 10 and 12 in `psd_bank_repair`. So:
+
+```bash
+# when the machine is quiet (needs ~7 GB free; check /tmp/oom_guard_15gb.log)
+PYTHONPATH=src:. JAX_PLATFORMS=cpu python scripts/hierarchical_psd_fit_bank.py \
+    --n 2048 --out psd_bank_repair64 --only 13 39 42 50 61 \
+    --method mcmc_nuts --n-samples 1000 --n-chains 4 --thin 1
+```
+
+Then re-pool at N=64 replacing only the nine collapsed fits, keeping every
+healthy galaxy on its original Laplace fit, so the comparison isolates the
+repair rather than confounding it with a change of method. The all-Laplace arm
+gives τ = 434.6–491.2 (railed); the prediction is that the repaired arm does not
+rail and σ covers truth, matching the exclusion result.
+
+> ⚠ **Use 4 chains × 1000, not 2 × 2000.** The 2-chain variant was a memory
+> workaround and produced **seven dead fits out of nine** — every draw
+> bit-identical, zero divergences, full sample count, sane-looking marginals
+> (σ 0.62–0.70, |ξ|max 2.3–4.8), and only the ξ covariance total exposed it at
+> **0.00** against a healthy ~14. Galaxies 19 and 35 fit cleanly at 4 chains
+> (R̂ 1.01, 1.00) and died at 2. The bank script now refuses to checkpoint a
+> degenerate fit, so this fails loudly rather than silently — but the
+> configuration still matters.
+>
+> That is the **third** silent dead-chain failure in this work (#1529's MAP
+> cache, the first NUTS batch, and this). In all three `n_divergent` was **0**.
+> **A zero divergence count is equally consistent with a sampler that took no
+> steps at all.**
 
 ---
 
