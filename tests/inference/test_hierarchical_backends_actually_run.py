@@ -64,7 +64,13 @@ def population():
     "field"]``; ``field`` alone raises "At least one additive (smooth) SFH
     component required".
     """
-    ssp = tengri.load_ssp_data("data/fsps_mist_c3k_a_chabrier.h5")
+    # ``load_ssp()``, not ``load_ssp_data("data/...")``. A hardcoded path whose
+    # basename is in the known-SSP catalog used to *fetch* the grid when absent;
+    # that is what reddened main from #1528, and conftest now disables the
+    # autodownload globally (#1548), so the hardcoded form raises
+    # FileNotFoundError on any runner. ``load_ssp()`` resolves whatever grid is
+    # actually present.
+    ssp = tengri.load_ssp()
     obs = Observation(photometry=Photometry.from_names(_BANDS))
 
     def factory(psd_sigma, psd_tau_myr):
