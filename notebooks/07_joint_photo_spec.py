@@ -28,7 +28,7 @@
 # HMC), with one `Observation` carrying both channels.
 
 # %%
-from _setup import HMC_VALIDATED, effective_wavelengths_um, quiet
+from _setup import FIG_DIR, HMC_VALIDATED, effective_wavelengths_um, quiet
 
 quiet()
 
@@ -55,15 +55,12 @@ from tengri import (
     SpectrumPrecomp,
     WavePrecomp,
     builders,
-    load_ssp_data,
     cosmology,
     plot,
 )
 from tengri.utils.conversions import lnu_to_fnu
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 C_POST, C_TRUTH, C_DATA, C_SPEC = "#3a76d9", "0.15", "#c3372a", "#d98a3a"
 
@@ -80,11 +77,7 @@ C_POST, C_TRUTH, C_DATA, C_SPEC = "#3a76d9", "0.15", "#c3372a", "#d98a3a"
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
-ssp_path = Path("../data") / f"{SSP_NAME}.h5"
-if not ssp_path.exists():
-    # Public API: fetches the grid on first use and caches it under data/.
-    ssp_path = Path(tengri.download_ssp(SSP_NAME))
-ssp = load_ssp_data(str(ssp_path))
+ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 Z_GAL = 0.05
 FILTERS = [
