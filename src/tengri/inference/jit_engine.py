@@ -24,6 +24,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
+from tengri.inference.likelihoods.gaussian import standardized_residual
 
 __all__ = [
     "CompileCache",
@@ -826,7 +827,7 @@ def build_jit_engine(fitter, pos_dict):
             data = data_args["data"]
             noise = data_args["noise"]
             pred = signal_response(unflatten(xi))
-            chi2 = jnp.sum(((data - pred) / noise) ** 2)
+            chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
             return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
 
     def H_vg(xi, data_args):

@@ -121,17 +121,15 @@ class InferenceContext:
         (``fn(params_u)`` raises ``TypeError``), and the difference is
         load-bearing rather than cosmetic.
 
-        .. warning::
-
-           **Do not re-wrap this to close over the data.** Under
-           ``jax.enable_x64(False)``, XLA constant-folds ``1/sigma**2`` to
-           ``inf`` when ``sigma`` is a compile-time constant, and
-           ``diag_gaussian_chi2`` then evaluates ``0 * inf = NaN`` — defeating
-           the ``r = (d - mu) / sigma`` grouping that function uses precisely to
-           stay in range. Onset is ``sigma`` ~ 1e-19; real photometric fluxes
-           are ~1e-30, so every float32 fit written that way returns NaN. The
-           traced-argument form is immune, float64 is immune, and eager float32
-           is immune. Tracked in #1535.
+        Wrapping it to close over the data is now safe, but was not always.
+        Under ``jax.enable_x64(False)``, XLA used to constant-fold ``1/sigma**2``
+        to ``inf`` whenever ``sigma`` was a compile-time constant, and the χ²
+        then evaluated ``0 * inf = NaN`` — defeating the ``r = (d - mu) / sigma``
+        grouping that exists precisely to stay in range. Onset was ``sigma`` ~
+        1e-19 against real photometric fluxes of ~1e-30, so every float32 fit
+        written that way returned NaN. Fixed in #1535 by
+        :func:`~tengri.inference.likelihoods.gaussian.standardized_residual`,
+        which makes the grouping a data dependency the compiler must respect.
 
         See Also
         --------

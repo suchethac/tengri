@@ -27,12 +27,61 @@ computation in tengri goes through here.
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 
 __all__ = [
     "diag_gaussian_chi2",
     "diag_gaussian_log_prob",
+    "standardized_residual",
 ]
+
+
+def standardized_residual(
+    observed: jnp.ndarray,
+    predicted: jnp.ndarray,
+    sigma_eff: jnp.ndarray,
+) -> jnp.ndarray:
+    r""":math:`(d - \mu) / \sigma`, with the grouping made binding on the compiler.
+
+    Every χ² in tengri divides *before* squaring, because at real photometric
+    scales :math:`\sigma \sim 10^{-31}` both :math:`\sigma^2 \sim 10^{-62}` and
+    :math:`(d-\mu)^2` underflow float32 to zero while the ratio :math:`r` is
+    O(1) and perfectly representable.
+
+    Writing it in that order is not sufficient. Under ``jax.jit``, when the data
+    are compile-time constants, XLA re-associates
+    :math:`((d-\mu)/\sigma)^2` back into :math:`(d-\mu)^2 \cdot (1/\sigma^2)`
+    and constant-folds the reciprocal to ``inf``; ``0 * inf`` is ``NaN`` (#1535).
+    The ``optimization_barrier`` turns the intended order into a *data
+    dependency*, which the compiler must respect — a source-level grouping is
+    only a suggestion.
+
+    Parameters
+    ----------
+    observed : array_like
+        Data :math:`d`.
+    predicted : array_like
+        Model prediction :math:`\mu`.
+    sigma_eff : array_like
+        Effective 1-σ uncertainty, already combined with any floor.
+
+    Returns
+    -------
+    ndarray
+        The standardized residual, same shape as the inputs.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, and it is only under JIT that it does anything.
+    Safe under ``grad``/``vmap``: ``optimization_barrier`` is semantically the
+    identity, so values and derivatives are unchanged — verified bit-exact in
+    float64 and gradient-identical.
+
+    Costs nothing measurable: -1.6% against a 2.2% A/A noise floor on a 30-band
+    χ², i.e. inside the measurement error.
+    """
+    return jax.lax.optimization_barrier((observed - predicted) / sigma_eff)
 
 
 def diag_gaussian_chi2(
@@ -82,7 +131,7 @@ def diag_gaussian_chi2(
     float64 to the last bit.
     """
     sigma_eff = jnp.hypot(sigma, sigma_floor * observed)
-    r = (observed - predicted) / sigma_eff
+    r = standardized_residual(observed, predicted, sigma_eff)
     chi2_summand = r * r
     if presence is not None:
         chi2_summand = presence * chi2_summand

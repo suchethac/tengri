@@ -253,6 +253,7 @@ class NebularSEDComponent:
             DerivedKey("sed_nebular", "erg/s/Hz", "Photoionized continuum + lines"),
             DerivedKey("line_waves", "Angstrom", "Line vacuum wavelengths"),
             DerivedKey("line_lums", "erg/s", "Line luminosities"),
+            DerivedKey("log_line_lums", "dex", "log10(line luminosities / (erg/s)); float32-safe"),
             DerivedKey(
                 "lyc_transmission",
                 "",
@@ -689,8 +690,17 @@ class NebularSEDComponent:
                     converted = jnp.where(in_optical, line_waves * n_refr, line_waves)
                     line_waves = jnp.where(looks_air, converted, line_waves)
 
+                from tengri.utils.scale import log10_magnitude
+
+                # log companion (#1534). Line luminosities are ~1e41 erg/s and
+                # read as `inf` in pure float32; log10_magnitude keeps a line
+                # with no flux (-inf) distinct from a corrupt one (+inf), #1527.
                 state = state.with_(
-                    derived=state.derived.with_(line_waves=line_waves, line_lums=line_lums)
+                    derived=state.derived.with_(
+                        line_waves=line_waves,
+                        line_lums=line_lums,
+                        log_line_lums=log10_magnitude(line_lums),
+                    )
                 )
             except Exception as exc:
                 # Backend's line-luminosity path may fail (e.g. when

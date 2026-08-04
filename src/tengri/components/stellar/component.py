@@ -1357,6 +1357,7 @@ class StellarSEDComponent:
             DerivedKey("sfr_10myr", "Msun/yr", "Time-weighted SFR over last 10 Myr"),
             DerivedKey("sfr_100myr", "Msun/yr", "Time-weighted SFR over last 100 Myr"),
             DerivedKey("L_age", "erg/s", "Bolometric L per SSP age bin"),
+            DerivedKey("log_L_age", "dex", "log10(L per SSP age bin / (erg/s)); float32-safe"),
             DerivedKey("lnu_age", "erg/s/Hz", "Per-age L_nu cube, shape (n_age, n_wave)"),
             DerivedKey(
                 "joint_weights",
@@ -2335,7 +2336,30 @@ class StellarSEDComponent:
         # frequency Jacobian gives ∫ L_ν dν per age.
         wave = ssp.ssp_wave
         nu_jac = C_AA / (wave**2)
-        L_age = jnp.trapezoid(lnu_age * nu_jac[None, :], wave, axis=1)
+        # Peak-factored per age bin so `log_L_age` never materializes the ~1e46 erg/s
+        # product that overflows float32 (#1534).
+        #
+        # The factoring must happen **before** the multiply, not after. `lnu_age` is
+        # ~5.6e30 erg/s/Hz and `nu_jac` peaks at ~3e14 Hz/Angstrom, so their product is
+        # ~1.7e45 — already `inf` in float32, which would make a peak taken from it
+        # `inf` too and the normalization `nan`. Same ordering as
+        # `_integrate_nion_log10`, which divides by the peak before the 1/(h*nu) step.
+        #
+        # Publishing `log10(L_age)` instead would be useless for the same reason: by
+        # then the value is `inf`, and the log of `inf` is `inf`. The inventory sweep
+        # caught exactly that, which is what it is for.
+        _lnu_peak = jnp.max(jnp.abs(lnu_age), axis=1)
+        _lnu_peak_safe = jnp.where(_lnu_peak > 0, _lnu_peak, 1.0)
+        _age_norm = jnp.trapezoid(
+            (lnu_age / _lnu_peak_safe[:, None]) * nu_jac[None, :], wave, axis=1
+        )
+        L_age = _age_norm * _lnu_peak_safe
+        _log_age_norm = log10_magnitude(_age_norm)
+        log_L_age = jnp.where(
+            _not_computable(_log_age_norm),
+            jnp.inf,
+            _log_age_norm + jnp.log10(_lnu_peak_safe),
+        )
 
         # ── 11. Ionizing photon production rate (λ < 911.76 Å) ──────────
         # photons/s = ∫_{ν > c/λ_HI} L_ν / (hν) dν, summed over all ages.
@@ -2422,6 +2446,9 @@ class StellarSEDComponent:
             sfr_10myr=sfr_10myr,
             sfr_100myr=sfr_100myr,
             L_age=L_age,
+            # log companion (#1534), peak-factored at the source above rather than
+            # taken from the overflowed linear value.
+            log_L_age=log_L_age,
             lnu_age=lnu_age,
             # Per-(met, age) DSPS weights and the total_mass x L_sun scaling,
             # published so DustSEDComponent can evaluate the energy-balance

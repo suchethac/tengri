@@ -91,6 +91,10 @@ class DerivedState:
 
     # Stellar — age-resolved tensors and ionizing rate
     L_age: jnp.ndarray | None = None
+    #: float32-safe companion to ``L_age`` (#1534). ``L_age`` is ~1e42-1e46
+    #: erg/s and reads as ``inf`` in pure float32; ``-inf`` here means a bin
+    #: genuinely emits nothing, ``+inf`` that the input was corrupt (#1527).
+    log_L_age: jnp.ndarray | None = None
     lnu_age: jnp.ndarray | None = None
     # DSPS joint (metallicity, age) weights and the total_mass x L_sun scaling,
     # published so DustSEDComponent can evaluate L_ir from a precomputed
@@ -315,6 +319,9 @@ class DerivedState:
     sed_shock: jnp.ndarray | None = None
     line_waves: jnp.ndarray | None = None
     line_lums: jnp.ndarray | None = None
+    #: float32-safe companion to ``line_lums`` (#1534); ~1e41 erg/s is ``inf``
+    #: in pure float32. Same sentinel convention as ``log_L_age``.
+    log_line_lums: jnp.ndarray | None = None
     # Stellar Lyman-continuum survival fraction where(λ<912, neb_fesc, 1),
     # published by photoionized backends so two-component dust can honor the
     # fesc absorption on the per-age lnu_age path (#824).

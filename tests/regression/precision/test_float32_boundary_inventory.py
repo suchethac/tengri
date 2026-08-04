@@ -63,29 +63,28 @@ KNOWN_NOT_FLOAT32 = {
     "nion": "log_nion",
     "L_ir": "log_L_ir",
     "L_absorbed": "log_L_ir",
+    # Added by #1534, which is also what emptied NOT_FLOAT32_AND_NO_COMPANION.
+    "L_age": "log_L_age",
 }
 
 #: Keys that overflow float32 and have **no** log companion — i.e. they violate
 #: the rule this file states, and are recorded here rather than left invisible.
 #:
-#: This category exists because the inventory above was a hand-maintained list
-#: of four, and every test consumed *that list* rather than sweeping what the
-#: model actually publishes. ``L_age`` was 92% non-finite in pure float32
-#: (float64 max 5.7e45) and named by nothing — measured with this file's own
-#: fixture, so it was always in reach; no test ever looked.
-#: :func:`test_no_unlisted_key_overflows_float32` is the sweep that closes that.
+#: **Currently empty, and that is the goal state.** It held ``L_age`` until
+#: #1534: 92% non-finite in pure float32 (float64 max 5.7e45), named by nothing,
+#: and measurable with this file's own fixture the whole time — no test ever
+#: looked, because every test iterated a hand-maintained list.
+#: :func:`test_no_unlisted_key_overflows_float32` is the sweep that closed that,
+#: and it is what will populate this dict again if a new key appears.
 #:
-#: A pure-float32 consumer reaching for one of these finds ``inf`` and has
-#: nowhere to go. Giving each a ``log_`` companion is real work on the publishing
-#: component, tracked in **#1534** — not something to slip into a test file.
-NOT_FLOAT32_AND_NO_COMPANION = {
-    "L_age": "per-age-bin luminosity [erg/s], ~1e42-1e46; needs log_L_age (#1534)",
-}
+#: A pure-float32 consumer reaching for an entry here finds ``inf`` and has
+#: nowhere to go, so an entry is a defect with a deadline, not a category.
+NOT_FLOAT32_AND_NO_COMPANION: dict[str, str] = {}
 
-#: ``line_lums`` belongs in the dict above on physics grounds (~1e41 erg/s, no
-#: log form) but cannot be measured here: this fixture's model has no nebular
-#: block, so the key is never published. Recorded so the omission is a known
-#: fixture limit rather than a silent pass — see #1534.
+#: ``line_lums`` (~1e41 erg/s) also gained ``log_line_lums`` in #1534, but cannot
+#: be exercised here: this fixture's model has no nebular block, so neither key is
+#: published. Recorded so the omission stays a known fixture limit rather than a
+#: silent pass.
 UNMEASURABLE_HERE = ("line_lums",)
 
 #: log10 tolerance between the float64 and pure-float32 evaluations. float32
@@ -199,10 +198,28 @@ def test_every_unrepresentable_key_has_a_log_companion(derived_pair, linear, log
     and has nowhere else to go — which is exactly how the energy balance came
     to fail open to zero.
     """
-    _, f32 = derived_pair
+    f64, f32 = derived_pair
     assert log_key in f32, f"{linear} has no float32-safe companion {log_key!r}"
-    assert np.isfinite(float(np.asarray(f32[log_key]))), (
-        f"{linear}'s companion {log_key} is itself non-finite in float32"
+    # Companions are not all scalars — ``log_L_age`` is per age bin — so this checks
+    # the whole array. A companion that is itself non-finite is not a companion: it
+    # is the same overflow one log deeper, which is what happens when it is computed
+    # from the already-overflowed linear value instead of peak-factored at the source.
+    # ``-inf`` is a value here, not a failure: it is the log-domain spelling of
+    # "this bin emits exactly nothing", and it powers back through ``pow10`` to 0.0.
+    # Only ``+inf``/NaN mean no answer exists (#1527). ``log_L_age`` carries two
+    # -inf entries for the two genuinely dark age bins, matching float64 exactly.
+    companion = np.asarray(f32[log_key], dtype=np.float64)
+    reference = np.asarray(f64[log_key], dtype=np.float64)
+    unusable = np.isposinf(companion) | np.isnan(companion)
+    assert not unusable.any(), (
+        f"{linear}'s companion {log_key} is {unusable.mean():.0%} +inf/NaN in float32, so "
+        "it leaves a float32 consumer exactly where it started — a companion computed "
+        "from the already-overflowed linear value does this"
+    )
+    lost = np.isneginf(companion) & np.isfinite(reference)
+    assert not lost.any(), (
+        f"{log_key} is -inf in float32 at {int(lost.sum())} positions where float64 is "
+        "finite — float32 underflowed a real value into the zero sentinel"
     )
 
 
@@ -237,14 +254,18 @@ def test_no_unlisted_key_overflows_float32(derived_pair):
         array = np.asarray(value, dtype=np.float64)
         if array.size == 0 or key in declared:
             continue
-        bad_fraction = float(np.mean(~np.isfinite(array)))
-        if bad_fraction == 0.0:
-            continue
         reference = np.asarray(f64.get(key, np.nan), dtype=np.float64)
-        finite = reference[np.isfinite(reference)] if reference.size else reference
-        if getattr(finite, "size", 0) == 0:
-            continue  # non-finite in float64 too: not a precision boundary
-        undeclared[key] = (bad_fraction, float(np.max(np.abs(finite))))
+        if reference.shape != array.shape:
+            continue  # cannot compare elementwise; the pair is not the same quantity
+        # The rule is "float32 lost something float64 had" — elementwise, not in
+        # aggregate. A key can be legitimately non-finite in both (``-inf`` for a
+        # dark age bin, NaN for the #1131 unknown-mass sentinel) without that being
+        # a precision boundary; only positions where float64 is finite count.
+        lost = ~np.isfinite(array) & np.isfinite(reference)
+        if not lost.any():
+            continue
+        finite = reference[np.isfinite(reference)]
+        undeclared[key] = (float(lost.mean()), float(np.max(np.abs(finite))))
 
     assert not undeclared, (
         "published keys go non-finite in pure float32 and are named by no category "
@@ -269,9 +290,10 @@ def test_the_no_companion_category_is_not_quietly_growing(derived_pair):
     would mean the gap closed and the record is now misinformation.
     """
     _, f32 = derived_pair
-    assert set(NOT_FLOAT32_AND_NO_COMPANION) == {"L_age"}, (
-        "the no-companion gap list changed. Growing it is allowed but must be "
-        "deliberate: update this assertion and #1534 together"
+    assert NOT_FLOAT32_AND_NO_COMPANION == {}, (
+        "the no-companion gap list is no longer empty. An entry means a published key "
+        "overflows float32 with nothing a float32 consumer can read instead — allowed "
+        "only as a tracked defect: update this assertion and #1534 together"
     )
     for key in NOT_FLOAT32_AND_NO_COMPANION:
         if key not in f32:

@@ -29,6 +29,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.inference.fitter import resolve_method
+from tengri.inference.likelihoods.gaussian import standardized_residual
 from tengri.utils.transforms import to_bounded, to_unbounded
 
 
@@ -2111,7 +2112,7 @@ class PopulationFitter:
                 predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
 
             pred_all = predictions.reshape(-1)
-            chi2 = jnp.sum(((all_data - pred_all) / all_noise) ** 2)
+            chi2 = jnp.sum(standardized_residual(all_data, pred_all, all_noise) ** 2)
 
             # Prior: standard normal on all unbounded + xi params
             param_penalty = p["psd_sigma_u"] ** 2 + p["psd_tau_u"] ** 2
