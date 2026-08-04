@@ -492,12 +492,25 @@ class SpectrumPrecomp:
 
 @dataclasses.dataclass(frozen=True)
 class FeaturePrecomp:
-    r"""Configuration for the emission-line precompute (the *feature* LUT path).
+    r"""Configuration for the nebular precompute (the *feature* LUT path).
 
-    Pass this to :class:`SEDModel` via ``approx=`` to serve emission-line fluxes
-    from a build-time lookup instead of the per-evaluation forward. It is the
-    line-channel sibling of :class:`WavePrecomp` (photometry) and
-    :class:`SpectrumPrecomp` (spectroscopy), and composes with either.
+    Pass this to :class:`SEDModel` via ``approx=`` to serve the nebular
+    calculation from a build-time lookup instead of the per-evaluation forward.
+    It composes with :class:`WavePrecomp` (photometry) and
+    :class:`SpectrumPrecomp` (spectroscopy).
+
+    .. warning::
+
+       **The name misleads: this is not a line-channel-only optimization.** For
+       the Cue backend the grid replaces the *emulator call itself*, so a fit
+       with **no line channel at all** benefits — often the most, because a
+       photometry-only Cue fit otherwise re-runs Cue on every likelihood
+       evaluation. Measured on a 10-parameter Cue model with free ``neb_logU``
+       / ``neb_logZ_gas``, a photometry-only gradient goes 4.65 ms to 0.33 ms
+       (14x) on adding this to :class:`WavePrecomp`. With a line channel
+       present the same model already sits near 0.43 ms and this buys close to
+       nothing. Measure before assuming either way; see
+       ``docs/dev/api_migration_v0.x.md`` for the full grid.
 
     The line wavelengths default to those of ``Observation.line_fluxes`` — the
     model already knows which lines it is being fitted against — so the common
