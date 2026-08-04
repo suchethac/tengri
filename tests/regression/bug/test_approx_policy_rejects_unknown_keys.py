@@ -172,7 +172,9 @@ def test_every_policy_field_reaches_the_compile_signature():
     import tengri
     from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
-    ssp = tengri.load_ssp_data("data/fsps_mist_c3k_a_chabrier.h5")
+    # Committed grid, resolved without a working directory (#1486). This test
+    # compares compile signatures, so the grid is immaterial to what it pins.
+    ssp = tengri.load_ssp()
     obs = Observation(photometry=Photometry.from_names(["galex_fuv", "sdss_r"]))
     common = dict(
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
