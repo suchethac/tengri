@@ -254,10 +254,10 @@ print(
 # all three paths. One `fitter.run()` bundles two very different costs, and it is
 # worth pulling them apart:
 #
-# - **`run()` wall** — the end-to-end cost of one call. It is dominated by a
-#   one-off **JIT compile** of the optimizer step (~1–2 s here). That compile
-#   recurs on each independent `run()`, so a second call is *not* much cheaper —
-#   the persistent cache spares the XLA backend compile, not the Python-level
+# - **`run()` wall** — the end-to-end cost of one call. A good part of it is a
+#   one-off **JIT compile** of the optimizer step, and that compile recurs on
+#   each independent `run()`, so a second call is *not* much cheaper — the
+#   persistent cache spares the XLA backend compile, not the Python-level
 #   re-trace. This is the honest cost of an *interactive, single-galaxy* fit.
 # - **compiled step** (`post.wall_time_s`) — the optimization loop *after* the
 #   compile. This is the marginal compute, and the number that matters at
@@ -602,12 +602,14 @@ plt.show()
 # ## Measured times, together
 #
 # Two columns, because they answer different questions. **`fit() wall`** is the
-# single-galaxy interactive cost — dominated by the per-call JIT compile, which
-# is why exact and fast are closer here than the compute alone would suggest.
+# single-galaxy interactive cost, which carries the per-call JIT compile.
 # **`compiled step`** is the optimization once compiled: the marginal per-galaxy
-# compute a catalog pays after amortizing the compile (via `fit_batch`), and
-# where the look-up table earns its keep. Three rows, so the middle one shows
-# how the total splits between the two opt-ins on *this* model.
+# compute a catalog pays after amortizing the compile (via `fit_batch`), and the
+# only place an `approx=` choice can show up. Three rows, so the middle one
+# separates the two opt-ins instead of bundling them.
+#
+# On this fit the three rows are the same to within noise. That is the result,
+# not a failed measurement — see the note under the timing cell above.
 
 # %%
 print(f"{'fit':<34}{'fit() wall':>13}{'compiled step':>15}")
@@ -619,7 +621,7 @@ print(
     f"\nCompiled-step ratio: {loop_e / loop_f:.1f}x overall — {loop_e / loop_w:.1f}x from WavePrecomp,"
 )
 print(
-    f"a further {loop_w / loop_f:.1f}x from FeaturePrecomp. The fit() wall (~{warm_f:.0f}s) is per-call JIT"
+    f"a further {loop_w / loop_f:.1f}x from FeaturePrecomp. The fit() wall (~{warm_f:.1f}s) is per-call JIT"
 )
 print("compile, not the fit — a catalog amortizes it once with fit_batch and pays only the")
 print("compiled step per galaxy. The FeaturePrecomp nebular grid is likewise a one-time build")
