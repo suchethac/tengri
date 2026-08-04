@@ -172,9 +172,10 @@ def test_every_policy_field_reaches_the_compile_signature():
     import tengri
     from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
-    # Committed to the repo -- an absent grid sends `load_ssp_data` through a
-    # 67 MB `download_ssp`, and this tier gates every PR.
-    ssp = tengri.load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+    # Committed to the repo, via `load_ssp` (download=False by default), so a
+    # missing grid raises instead of pulling 67 MB (#1486). This tier gates
+    # every PR; it must not depend on a third-party host being reachable.
+    ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
     obs = Observation(photometry=Photometry.from_names(["galex_fuv", "sdss_r"]))
     common = dict(
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
