@@ -225,6 +225,49 @@ learned.
   (handoff §9), so this is compile-bound and scales badly. **N ≥ 8 is not worth
   running until #211 lands** — fixing the batched forward is cheaper than
   paying ~11 h for the next rung.
+- **The four galaxies are 0–3, not a random draw.** `build_joint` takes
+  `range(n_galaxies)` off the same `PRNGKey(0)` stream as the bank, so this run
+  used its first four. Handoff §4h shows that prefix is almost entirely free of
+  the collapsed-ξ pathology. Why that does not invalidate the result — and what
+  it does leave untested — is §5.5.
+
+### 5.5 The galaxy prefix — why it is safe here but was not in handoff §4f
+
+Handoff §4h found that 17 of 128 bank galaxies have a **collapsed ξ posterior**
+(spectrum total below 6 against a prior total of 16, the tail reaching 1.9),
+that these carry the corner-railing, and that dropping them flips the pooled
+tilt from +56.1 to −17.0. It then invalidated §4f's NUTS comparison for sampling galaxies 0–7,
+which are almost all healthy: *"the decisive comparison was run on precisely the
+galaxies where nothing is wrong."*
+
+This run used galaxies 0–3. The same objection therefore has to be answered, and
+it resolves for two independent reasons:
+
+1. **The joint path cannot express the artifact.** §4h attributes the collapse
+   to "a Hessian or MAP artifact of the Laplace fit" — it is a property of the
+   *interim* step. Joint NUTS has no interim step: it samples the full
+   hierarchical posterior over (σ, τ, ξ) directly and never forms that Hessian.
+   The pathology is not merely absent from this sample, it is unavailable to
+   this estimator.
+2. **The bias runs the wrong way to rescue the conclusion.** A collapsed ξ
+   posterior manufactures *false constraint* — that is precisely what drives
+   B2's spuriously tight τ of 12–31 Myr. The claim here is that τ is
+   **un**constrained (0.98× the prior width). Contaminating the sample could
+   only have made τ look better determined than it is. The healthy prefix
+   yields the conservative answer, not the flattering one.
+
+**The asymmetry is the point.** §4f's conclusion required the pathology to be
+absent in order to be *correct*, so a healthy prefix silently broke it. This
+conclusion requires the pathology to be absent in order to be *conservative*, so
+a healthy prefix can only understate the constraint. Same sampling choice,
+opposite consequence — and the direction has to be checked, never assumed.
+
+**What this does leave untested:** galaxies 0–3 sit in the healthy bulk (§4h
+reports gal 3 at ξ total 13.72 against a bulk median of 13.2), so they represent
+the 111/128 ≈ 87% majority and say nothing about how the *joint* path behaves on
+a galaxy whose Laplace fit collapses. Whether joint NUTS recovers a sane ξ
+posterior for gal 19 or 35 — where the interim total falls to 3.49 and 2.81 — is
+a one-galaxy run that would test claim 1 directly, and it is unrun.
 
 ---
 
@@ -257,6 +300,10 @@ different checkout, which may lack `tengri.inference.population`.
 - **Laplace interim posteriors.** The bank is Gaussian per galaxy. R-hat is
   stored as NaN for it by design (i.i.d. draws make it vacuous), so the
   interim quality gate is the field-scale guard, not a between-chain statistic.
+- **Joint behavior on a collapsed-ξ galaxy.** This run drew galaxies 0–3, which
+  handoff §4h places in the healthy 87% bulk. The argument that joint NUTS is
+  immune to the collapse (§5.5, claim 1) is structural, not measured. A single
+  joint fit on gal 19 or 35 would test it directly.
 - **No σ two-population separation** (bursty vs smooth) has been run at z = 0.1.
   That, not single-truth recovery, is the FIRE-2/Illustris-style claim the
   companion paper would want.
