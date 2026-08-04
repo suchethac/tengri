@@ -24,8 +24,17 @@ jax.config.update("jax_enable_x64", True)
 # SSP and filter setup (matching test fixtures)
 SSP_PATH = Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 FILTER_NAMES = [
-    "hst_f435w", "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp",
-    "hst_f125w", "hst_f140w", "hst_f160w", "vista_ks", "irac_36", "irac_45",
+    "hst_f435w",
+    "hst_f606w",
+    "hst_f775w",
+    "hst_f814w",
+    "hst_f850lp",
+    "hst_f125w",
+    "hst_f140w",
+    "hst_f160w",
+    "vista_ks",
+    "irac_36",
+    "irac_45",
 ]
 
 # Load SSP data
@@ -44,9 +53,9 @@ noise_cgs = flux_cgs / 10.0
 flux_obs = jnp.array(flux_cgs + rng.normal(0, noise_cgs))
 noise = jnp.array(noise_cgs)
 
-print("="*60)
+print("=" * 60)
 print("JIT CACHE VERIFICATION")
-print("="*60)
+print("=" * 60)
 
 # Test 1: Simple model (stellar + dust)
 print("\n1. Simple model (stellar + dust)")
@@ -80,26 +89,26 @@ print(f"  First call (JIT): {t_jit:.2f}s")
 # Subsequent calls (should NOT recompile)
 times = []
 for i in range(5):
-    key_i = jax.random.fold_in(rng_key, i+100)
+    key_i = jax.random.fold_in(rng_key, i + 100)
     t0 = time.perf_counter()
     _ = fitter_simple.run("map", key=key_i)
     t = time.perf_counter() - t0
     times.append(t)
-    print(f"  Call {i+2}: {t:.3f}s")
+    print(f"  Call {i + 2}: {t:.3f}s")
 
 mean_t = np.mean(times)
 std_t = np.std(times)
 print(f"  Mean runtime: {mean_t:.3f}s ± {std_t:.3f}s")
-print(f"  Variance: {std_t/mean_t:.1%}")
+print(f"  Variance: {std_t / mean_t:.1%}")
 
-if std_t/mean_t > 0.1:
+if std_t / mean_t > 0.1:
     print("  ⚠️  WARNING: High variance - possible recompilation!")
 else:
     print("  ✓ Cache working correctly")
 
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("COMPONENT COMPARISON")
-print("="*60)
+print("=" * 60)
 
 # Test 2: Stochastic model
 print("\n2. Stochastic model (dense_basis + field)")
@@ -136,27 +145,27 @@ print(f"  First call (JIT): {t_jit_stoch:.2f}s")
 # Subsequent calls
 times_stoch = []
 for i in range(3):
-    key_i = jax.random.fold_in(rng_key, i+200)
+    key_i = jax.random.fold_in(rng_key, i + 200)
     t0 = time.perf_counter()
     _ = fitter_stoch.run("map", key=key_i)
     t = time.perf_counter() - t0
     times_stoch.append(t)
-    print(f"  Call {i+2}: {t:.3f}s")
+    print(f"  Call {i + 2}: {t:.3f}s")
 
 mean_t_stoch = np.mean(times_stoch)
 print(f"  Mean runtime: {mean_t_stoch:.3f}s")
 
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("SUMMARY")
-print("="*60)
+print("=" * 60)
 print(f"Simple model:")
 print(f"  JIT: {t_jit:.2f}s")
 print(f"  Runtime: {mean_t:.3f}s")
-print(f"  Speedup after JIT: {t_jit/mean_t:.1f}x")
+print(f"  Speedup after JIT: {t_jit / mean_t:.1f}x")
 print(f"\nStochastic model:")
 print(f"  JIT: {t_jit_stoch:.2f}s")
 print(f"  Runtime: {mean_t_stoch:.3f}s")
-print(f"  Speedup after JIT: {t_jit_stoch/mean_t_stoch:.1f}x")
+print(f"  Speedup after JIT: {t_jit_stoch / mean_t_stoch:.1f}x")
 print(f"\nStochastic overhead:")
-print(f"  JIT: {t_jit_stoch/t_jit:.1f}x slower")
-print(f"  Runtime: {mean_t_stoch/mean_t:.1f}x slower")
+print(f"  JIT: {t_jit_stoch / t_jit:.1f}x slower")
+print(f"  Runtime: {mean_t_stoch / mean_t:.1f}x slower")

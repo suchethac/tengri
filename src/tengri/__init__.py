@@ -681,6 +681,7 @@ from tengri.inference.catalog import Catalog
 from tengri.inference.catalog_fitter import CatalogFitter
 from tengri.inference.fitter import Fitter
 from tengri.inference.hierarchical import PopulationFitter
+from tengri.inference.information import ParameterInformation, parameter_information
 from tengri.inference.vi_config import VIConfig
 from tengri.observation.data import Data
 from tengri.observation.instrument import Instrument, list_instruments
@@ -780,6 +781,8 @@ _CURATED_DIR = (
     "StudentT",
     # 4.  Result types (+ hierarchical / spatial model classes)
     "Posterior",
+    "ParameterInformation",
+    "parameter_information",
     "PopulationSEDModel",
     # ``PopulationFitter`` is deliberately absent too, and the reason is worth
     # stating because two documents look like they disagree. It is the

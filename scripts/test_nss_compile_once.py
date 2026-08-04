@@ -33,8 +33,12 @@ mock_b = generate_mock(model, params_b, snr=15.0, key=jax.random.PRNGKey(43))
 fitter_a = Fitter(model, mock_a["flux_obs"], mock_a["noise"])
 t0 = time.time()
 result_a = fitter_a.run(
-    "nss", key=jax.random.PRNGKey(10),
-    n_live=50, num_delete=5, max_iterations=20, verbose=False,
+    "nss",
+    key=jax.random.PRNGKey(10),
+    n_live=50,
+    num_delete=5,
+    max_iterations=20,
+    verbose=False,
 )
 t_cold = time.time() - t0
 print(f"NSS Galaxy A (cold):  {t_cold:.1f}s  logZ={result_a.log_evidence:.2f}")
@@ -43,8 +47,12 @@ print(f"NSS Galaxy A (cold):  {t_cold:.1f}s  logZ={result_a.log_evidence:.2f}")
 fitter_b = Fitter(model, mock_b["flux_obs"], mock_b["noise"])
 t0 = time.time()
 result_b = fitter_b.run(
-    "nss", key=jax.random.PRNGKey(20),
-    n_live=50, num_delete=5, max_iterations=20, verbose=False,
+    "nss",
+    key=jax.random.PRNGKey(20),
+    n_live=50,
+    num_delete=5,
+    max_iterations=20,
+    verbose=False,
 )
 t_cached = time.time() - t0
 print(f"NSS Galaxy B (cached): {t_cached:.1f}s  logZ={result_b.log_evidence:.2f}")

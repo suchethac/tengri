@@ -46,7 +46,7 @@
 # [notebook 11](11_catalog_fits.py) for `fit_batch` at catalog scale.
 
 # %%
-from _setup import effective_wavelengths_um, quiet
+from _setup import FIG_DIR, effective_wavelengths_um, quiet
 
 quiet()
 
@@ -79,15 +79,12 @@ from tengri import (
     Uniform,
     WavePrecomp,
     cosmology,
-    load_ssp_data,
     plot,
 )
 from tengri.observation import LineFluxData
 from tengri.utils.conversions import lnu_to_fnu
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 C_POST, C_TRUTH, C_DATA, C_LINE = "#3a76d9", "0.15", "#c3372a", "#2e8b57"
 
@@ -103,10 +100,7 @@ C_POST, C_TRUTH, C_DATA, C_LINE = "#3a76d9", "0.15", "#c3372a", "#2e8b57"
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"  # bare-stellar SSP (Cue adds the nebular emission)
-ssp_path = Path("../data") / f"{SSP_NAME}.h5"
-if not ssp_path.exists():
-    ssp_path = Path(tengri.download_ssp(SSP_NAME))
-ssp = load_ssp_data(str(ssp_path))
+ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 Z_GAL = 0.1
 FILTERS = ["des_g", "des_r", "des_z", "wise_w1", "wise_w2", "wise_w3", "wise_w4"]

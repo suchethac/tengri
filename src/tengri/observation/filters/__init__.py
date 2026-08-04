@@ -42,7 +42,39 @@ from tengri.observation.photometry import FilterCurve
 _REGISTRY_PATH = Path(__file__).parent.parent / "data" / "filters_registry.json"
 FILTER_REGISTRY: dict[str, str] = json.loads(_REGISTRY_PATH.read_text())
 
-_DEFAULT_CACHE_DIR = "data/filters"
+
+def default_filter_cache_dir() -> Path:
+    """Where SVO filter curves are cached, independent of the working directory.
+
+    Returns
+    -------
+    pathlib.Path
+        The first ``<data-dir>/filters`` that already exists, searching
+        :func:`~tengri._data_setup.data_dirs`; otherwise
+        ``download_dir()/"filters"``, which is always a directory the loaders
+        search, so a curve fetched now is found later.
+
+    Notes
+    -----
+    Resolved per call rather than frozen in a module constant. A constant would
+    capture whatever the working directory was when ``tengri`` was first
+    imported, and would not see a later ``$TENGRI_DATA_DIR``.
+
+    This replaces the literal ``"data/filters"``, which
+    :func:`download_filter` passed straight to ``Path(...).mkdir(parents=True)``.
+    Run from anywhere but the repository root, that created a stray
+    ``data/filters/`` beside the caller and re-fetched every curve from the SVO
+    service, because the populated cache was never consulted. Neither symptom
+    raised (#1486).
+    """
+    from tengri._data_setup import data_dirs, download_dir
+
+    for directory in data_dirs():
+        candidate = directory / "filters"
+        if candidate.is_dir():
+            return candidate
+    return download_dir() / "filters"
+
 
 # Speed of light in Å/s — used for GHz ↔ Å conversion.
 from tengri.utils.physics_constants import C_AA as _C_AA_S
@@ -401,7 +433,7 @@ def _warn_if_energy_detector(svo_id: str) -> None:
 
 def download_filter(
     svo_id: str,
-    cache_dir: str = _DEFAULT_CACHE_DIR,
+    cache_dir: str | Path | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Download a single filter from the SVO Filter Profile Service.
 
@@ -412,8 +444,10 @@ def download_filter(
     ----------
     svo_id : str
         SVO filter identifier (e.g. ``"JWST/NIRCam.F200W"``).
-    cache_dir : str
-        Directory for cached filter files.
+    cache_dir : str or pathlib.Path or None, optional
+        Directory for cached filter files. ``None`` (default) resolves through
+        :func:`default_filter_cache_dir`, which is independent of the working
+        directory.
 
     Returns
     -------
@@ -436,8 +470,12 @@ def download_filter(
     normalized — the absolute scale cancels in the photometry integral
     ``∫fλTλdλ / ∫Tλdλ``.
 
+    This is the only entry point that touches the filesystem; ``load_filter``
+    and ``load_filter_set`` pass ``cache_dir`` down unchanged, so ``None``
+    is resolved here once rather than in each of them.
+
     """
-    cache_path = Path(cache_dir)
+    cache_path = Path(cache_dir) if cache_dir is not None else default_filter_cache_dir()
     cache_path.mkdir(parents=True, exist_ok=True)
     filepath = cache_path / _svo_id_to_filename(svo_id)
 
@@ -456,7 +494,7 @@ def download_filter(
 
 def load_filter(
     name: str,
-    cache_dir: str = _DEFAULT_CACHE_DIR,
+    cache_dir: str | Path | None = None,
 ) -> FilterCurve:
     """Load a filter by its short registry name.
 
@@ -468,8 +506,9 @@ def load_filter(
         Either a short ``FILTER_REGISTRY`` alias (e.g. ``"jwst_f200w"``) or
         the SVO-style display name shown by :func:`tengri.list_filters`
         (e.g. ``"JWST_NIRCam_F200W"``); both resolve to the same curve.
-    cache_dir : str
-        Directory for cached filter files.
+    cache_dir : str or pathlib.Path or None, optional
+        Directory for cached filter files. ``None`` (default) resolves through
+        :func:`default_filter_cache_dir`.
 
     Returns
     -------
@@ -508,7 +547,7 @@ def load_filter(
 
 def load_filter_set(
     names: list[str],
-    cache_dir: str = _DEFAULT_CACHE_DIR,
+    cache_dir: str | Path | None = None,
 ) -> tuple[list[jnp.ndarray], list[jnp.ndarray], list[FilterCurve]]:
     """Load multiple filters by short name.
 
@@ -516,8 +555,9 @@ def load_filter_set(
     ----------
     names : list of str
         Short names from ``FILTER_REGISTRY``.
-    cache_dir : str
-        Directory for cached filter files. Default: ``"data/filters"``.
+    cache_dir : str or pathlib.Path or None, optional
+        Directory for cached filter files. ``None`` (default) resolves through
+        :func:`default_filter_cache_dir`.
 
     Returns
     -------

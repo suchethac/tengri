@@ -59,9 +59,9 @@ def time_function(fn, *args, n_warmup=10, n_evals=50, **kwargs):
 
 def profile_model_photometry(model, fitter):
     """Profile predict_photometry with different modes."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("MODEL.PREDICT_PHOTOMETRY PROFILING")
-    print("="*80)
+    print("=" * 80)
 
     from tengri.utils.transforms import to_bounded
 
@@ -92,11 +92,11 @@ def profile_model_photometry(model, fitter):
     print(f"    Mean: {timing_traceable['mean_ms']:.3f} ± {timing_traceable['std_ms']:.3f} ms")
     print(f"    Median: {timing_traceable['median_ms']:.3f} ms")
 
-    if timing_auto['mean_ms'] < timing_traceable['mean_ms']:
-        speedup = timing_traceable['mean_ms'] / timing_auto['mean_ms']
+    if timing_auto["mean_ms"] < timing_traceable["mean_ms"]:
+        speedup = timing_traceable["mean_ms"] / timing_auto["mean_ms"]
         print(f"\n  ✓ mode='auto' is {speedup:.2f}x FASTER")
     else:
-        speedup = timing_auto['mean_ms'] / timing_traceable['mean_ms']
+        speedup = timing_auto["mean_ms"] / timing_traceable["mean_ms"]
         print(f"\n  ✓ mode='_traceable' is {speedup:.2f}x FASTER")
 
     return timing_auto, timing_traceable
@@ -104,9 +104,9 @@ def profile_model_photometry(model, fitter):
 
 def profile_loss_components(fitter):
     """Profile loss function components separately."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("LOSS FUNCTION COMPONENT PROFILING")
-    print("="*80)
+    print("=" * 80)
 
     from tengri.utils.transforms import to_bounded
 
@@ -163,13 +163,19 @@ def profile_loss_components(fitter):
     print(f"    Mean: {timing_chisq['mean_ms']:.3f} ± {timing_chisq['std_ms']:.3f} ms")
 
     # Overhead breakdown
-    chisq_overhead = timing_chisq['mean_ms'] - timing_predict['mean_ms']
-    prior_overhead = timing_loss['mean_ms'] - timing_chisq['mean_ms']
+    chisq_overhead = timing_chisq["mean_ms"] - timing_predict["mean_ms"]
+    prior_overhead = timing_loss["mean_ms"] - timing_chisq["mean_ms"]
 
     print("\n  Overhead breakdown:")
-    print(f"    Prediction: {timing_predict['mean_ms']:.3f} ms ({timing_predict['mean_ms']/timing_loss['mean_ms']*100:.1f}%)")
-    print(f"    Chi-square: {chisq_overhead:.3f} ms ({chisq_overhead/timing_loss['mean_ms']*100:.1f}%)")
-    print(f"    Prior eval: {prior_overhead:.3f} ms ({prior_overhead/timing_loss['mean_ms']*100:.1f}%)")
+    print(
+        f"    Prediction: {timing_predict['mean_ms']:.3f} ms ({timing_predict['mean_ms'] / timing_loss['mean_ms'] * 100:.1f}%)"
+    )
+    print(
+        f"    Chi-square: {chisq_overhead:.3f} ms ({chisq_overhead / timing_loss['mean_ms'] * 100:.1f}%)"
+    )
+    print(
+        f"    Prior eval: {prior_overhead:.3f} ms ({prior_overhead / timing_loss['mean_ms'] * 100:.1f}%)"
+    )
     print(f"    Total: {timing_loss['mean_ms']:.3f} ms")
 
     return timing_loss, timing_predict, timing_chisq
@@ -177,9 +183,9 @@ def profile_loss_components(fitter):
 
 def profile_model_components(model, param_dict):
     """Profile individual model components."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("MODEL COMPONENT PROFILING")
-    print("="*80)
+    print("=" * 80)
 
     # We'll call internal components directly to see where time is spent
     # This requires accessing model internals
@@ -221,16 +227,28 @@ def profile_model_components(model, param_dict):
     )
 
     from tengri.observation.filters import load_filter_set
-    filters = load_filter_set([
-        "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp",
-        "hst_f125w", "hst_f140w", "hst_f160w",
-        "vista_ks", "irac_36", "irac_45",
-    ])
+
+    filters = load_filter_set(
+        [
+            "hst_f606w",
+            "hst_f775w",
+            "hst_f814w",
+            "hst_f850lp",
+            "hst_f125w",
+            "hst_f140w",
+            "hst_f160w",
+            "vista_ks",
+            "irac_36",
+            "irac_45",
+        ]
+    )
     observation = Observation(photometry=Photometry.from_filter_set(filters))
     model_no_dust_em = SEDModel(params_no_dust_em, model._ssp_data, observation=observation)
 
     print("\n  SEDModel without dust emission...")
-    timing_no_dust_em = time_function(model_no_dust_em.predict, param_dict, mode="_traceable", n_evals=30)
+    timing_no_dust_em = time_function(
+        model_no_dust_em.predict, param_dict, mode="_traceable", n_evals=30
+    )
     print(f"    Mean: {timing_no_dust_em['mean_ms']:.3f} ± {timing_no_dust_em['std_ms']:.3f} ms")
 
     # Variant 2: No nebular
@@ -286,23 +304,27 @@ def profile_model_components(model, param_dict):
 
     # Component cost estimates
     print("\n  Component cost estimates:")
-    dust_em_cost = timing_full['mean_ms'] - timing_no_dust_em['mean_ms']
-    neb_cost = timing_no_dust_em['mean_ms'] - timing_no_neb['mean_ms']
-    igm_cost = timing_no_neb['mean_ms'] - timing_no_igm['mean_ms']
-    base_cost = timing_no_igm['mean_ms']
+    dust_em_cost = timing_full["mean_ms"] - timing_no_dust_em["mean_ms"]
+    neb_cost = timing_no_dust_em["mean_ms"] - timing_no_neb["mean_ms"]
+    igm_cost = timing_no_neb["mean_ms"] - timing_no_igm["mean_ms"]
+    base_cost = timing_no_igm["mean_ms"]
 
-    print(f"    Base (SFH + stellar + dust atten): {base_cost:.3f} ms ({base_cost/timing_full['mean_ms']*100:.1f}%)")
-    print(f"    IGM: {igm_cost:.3f} ms ({igm_cost/timing_full['mean_ms']*100:.1f}%)")
-    print(f"    Nebular: {neb_cost:.3f} ms ({neb_cost/timing_full['mean_ms']*100:.1f}%)")
-    print(f"    Dust emission (DL07): {dust_em_cost:.3f} ms ({dust_em_cost/timing_full['mean_ms']*100:.1f}%)")
+    print(
+        f"    Base (SFH + stellar + dust atten): {base_cost:.3f} ms ({base_cost / timing_full['mean_ms'] * 100:.1f}%)"
+    )
+    print(f"    IGM: {igm_cost:.3f} ms ({igm_cost / timing_full['mean_ms'] * 100:.1f}%)")
+    print(f"    Nebular: {neb_cost:.3f} ms ({neb_cost / timing_full['mean_ms'] * 100:.1f}%)")
+    print(
+        f"    Dust emission (DL07): {dust_em_cost:.3f} ms ({dust_em_cost / timing_full['mean_ms'] * 100:.1f}%)"
+    )
     print(f"    Total: {timing_full['mean_ms']:.3f} ms")
 
 
 def analyze_jit_fusion_opportunities(fitter):
     """Analyze JIT compilation and fusion opportunities."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("JIT FUSION ANALYSIS")
-    print("="*80)
+    print("=" * 80)
 
     loss_fn = fitter._get_or_build_loss_fn(mode="auto")
     data_args = fitter._data_args
@@ -326,10 +348,10 @@ def analyze_jit_fusion_opportunities(fitter):
     hlo_text = lowered.as_text()
 
     # Extract some stats
-    n_ops = hlo_text.count('\n')
-    n_calls = hlo_text.count('call')
-    n_dots = hlo_text.count('dot')
-    n_broadcasts = hlo_text.count('broadcast')
+    n_ops = hlo_text.count("\n")
+    n_calls = hlo_text.count("call")
+    n_dots = hlo_text.count("dot")
+    n_broadcasts = hlo_text.count("broadcast")
 
     print(f"\n  HLO statistics:")
     print(f"    Lines: {n_ops}")
@@ -354,21 +376,25 @@ def analyze_jit_fusion_opportunities(fitter):
 
     times_arr = np.array(times)
     if times_arr.std() / times_arr.mean() > 0.5:
-        print(f"    ⚠️  HIGH VARIANCE detected ({times_arr.std()*1000:.2f}ms std)")
+        print(f"    ⚠️  HIGH VARIANCE detected ({times_arr.std() * 1000:.2f}ms std)")
         print(f"    Possible recompilation on different inputs")
     else:
-        print(f"    ✓ Stable timing ({times_arr.std()*1000:.2f}ms std)")
+        print(f"    ✓ Stable timing ({times_arr.std() * 1000:.2f}ms std)")
         print(f"    No recompilation detected")
 
 
 def main():
-    print("="*80)
+    print("=" * 80)
     print("JIT OPTIMIZATION OPPORTUNITY PROFILER")
-    print("="*80)
+    print("=" * 80)
 
     # Load SSP data
     print("\nLoading SSP data...")
-    ssp_path = Path(__file__).parent.parent / "data" / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    ssp_path = (
+        Path(__file__).parent.parent
+        / "data"
+        / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    )
     if not ssp_path.exists():
         print(f"  ❌ SSP data not found at {ssp_path}")
         return
@@ -398,10 +424,18 @@ def main():
     )
 
     filter_names = [
-        "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp",
-        "hst_f125w", "hst_f140w", "hst_f160w",
-        "vista_ks", "irac_36", "irac_45",
-        "herschel_160", "herschel_250",
+        "hst_f606w",
+        "hst_f775w",
+        "hst_f814w",
+        "hst_f850lp",
+        "hst_f125w",
+        "hst_f140w",
+        "hst_f160w",
+        "vista_ks",
+        "irac_36",
+        "irac_45",
+        "herschel_160",
+        "herschel_250",
     ]
     filters = load_filter_set(filter_names)
     observation = Observation(photometry=Photometry.from_filter_set(filters))
@@ -427,19 +461,21 @@ def main():
     analyze_jit_fusion_opportunities(fitter)
 
     # Final summary
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("ANSWERING: 'SEDModel eval takes milliseconds, why does loss take longer?'")
-    print("="*80)
+    print("=" * 80)
 
     print(f"\n  1. Pure model.predict_photometry (mode='auto'): {timing_auto['mean_ms']:.3f} ms")
-    print(f"  2. Pure model.predict_photometry (mode='_traceable'): {timing_traceable['mean_ms']:.3f} ms")
+    print(
+        f"  2. Pure model.predict_photometry (mode='_traceable'): {timing_traceable['mean_ms']:.3f} ms"
+    )
     print(f"  3. Just prediction (in loss context): {timing_predict['mean_ms']:.3f} ms")
     print(f"  4. Prediction + chi-square: {timing_chisq['mean_ms']:.3f} ms")
     print(f"  5. Full loss (predict + chi² + prior): {timing_loss['mean_ms']:.3f} ms")
 
-    pred_overhead = timing_predict['mean_ms'] - timing_traceable['mean_ms']
-    chisq_overhead = timing_chisq['mean_ms'] - timing_predict['mean_ms']
-    prior_overhead = timing_loss['mean_ms'] - timing_chisq['mean_ms']
+    pred_overhead = timing_predict["mean_ms"] - timing_traceable["mean_ms"]
+    chisq_overhead = timing_chisq["mean_ms"] - timing_predict["mean_ms"]
+    prior_overhead = timing_loss["mean_ms"] - timing_chisq["mean_ms"]
 
     print(f"\n  Overhead breakdown:")
     print(f"    Base model eval: {timing_traceable['mean_ms']:.3f} ms")
@@ -453,17 +489,25 @@ def main():
 
     print(f"\n  Question: 'Why does loss eval take longer?'")
     print(f"  Answer: Loss = model eval + chi² + prior")
-    print(f"          The {timing_loss['mean_ms'] - timing_traceable['mean_ms']:.3f}ms overhead comes from:")
-    print(f"          - Chi-square: {chisq_overhead:.3f}ms ({chisq_overhead/timing_loss['mean_ms']*100:.1f}%)")
-    print(f"          - Prior: {prior_overhead:.3f}ms ({prior_overhead/timing_loss['mean_ms']*100:.1f}%)")
-    print(f"          - Loss context: {pred_overhead:.3f}ms ({pred_overhead/timing_loss['mean_ms']*100:.1f}%)")
+    print(
+        f"          The {timing_loss['mean_ms'] - timing_traceable['mean_ms']:.3f}ms overhead comes from:"
+    )
+    print(
+        f"          - Chi-square: {chisq_overhead:.3f}ms ({chisq_overhead / timing_loss['mean_ms'] * 100:.1f}%)"
+    )
+    print(
+        f"          - Prior: {prior_overhead:.3f}ms ({prior_overhead / timing_loss['mean_ms'] * 100:.1f}%)"
+    )
+    print(
+        f"          - Loss context: {pred_overhead:.3f}ms ({pred_overhead / timing_loss['mean_ms'] * 100:.1f}%)"
+    )
 
     print(f"\n  JIT optimization opportunities:")
-    if timing_auto['mean_ms'] < timing_traceable['mean_ms']:
-        speedup = timing_traceable['mean_ms'] / timing_auto['mean_ms']
+    if timing_auto["mean_ms"] < timing_traceable["mean_ms"]:
+        speedup = timing_traceable["mean_ms"] / timing_auto["mean_ms"]
         print(f"    1. ✓ mode='auto' already used, {speedup:.2f}x faster than traceable")
     else:
-        speedup = timing_auto['mean_ms'] / timing_traceable['mean_ms']
+        speedup = timing_auto["mean_ms"] / timing_traceable["mean_ms"]
         print(f"    1. ⚠️  Switch to mode='_traceable' for {speedup:.2f}x speedup")
 
     print(f"    2. Check variance in timing (see fusion analysis above)")

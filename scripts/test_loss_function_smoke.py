@@ -216,9 +216,9 @@ def test_loss_with_different_priors():
         assert loss > 0, f"{name}: loss should be positive"
 
         grad_norms = {k: float(jnp.linalg.norm(v)) for k, v in grads.items()}
-        assert all(
-            jnp.isfinite(v) for v in grad_norms.values()
-        ), f"{name}: some gradients are not finite"
+        assert all(jnp.isfinite(v) for v in grad_norms.values()), (
+            f"{name}: some gradients are not finite"
+        )
 
         print(f"    ✓ loss = {loss:.2f}")
         print(f"    ✓ max |grad| = {max(grad_norms.values()):.2e}")

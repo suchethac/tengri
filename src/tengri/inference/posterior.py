@@ -1068,6 +1068,51 @@ class Posterior:
 
     # ── Summary statistics ────────────────────────────────────────
 
+    def information(self, params=None):
+        """How much of this posterior the data measured, mode by mode.
+
+        A flexible model always *returns* a posterior; this reports how much of
+        it the data determined and how much is the prior reflected back.
+
+        Parameters
+        ----------
+        params : dict of str to float, optional
+            Point to expand around, in physical units. Default ``None`` uses
+            this fit's own point estimate.
+
+        Returns
+        -------
+        ParameterInformation
+            ``n_eff``, per-mode shrinkage, and the per-parameter attribution.
+            ``print(info.summary())`` is the intended first look.
+
+        Warns
+        -----
+        RuntimeWarning
+            If the expansion point is not a mode, in which case the curvature
+            is not the posterior precision and ``n_eff`` means nothing. This
+            fires more often than expected: on a 25-parameter field model an
+            under-converged MAP reported ``n_eff`` 17.6 where the converged fit
+            gives 4.9.
+
+        See Also
+        --------
+        tengri.parameter_information : the same measurement as a free function.
+
+        Notes
+        -----
+        Costs one dense Hessian of the log-posterior, i.e. :math:`O(D)` gradient
+        evaluations. Not JIT-compatible; call it on a finished fit.
+
+        Examples
+        --------
+        >>> post = model.fit(data, noise, method="map")  # doctest: +SKIP
+        >>> print(post.information().summary())  # doctest: +SKIP
+        """
+        from tengri.inference.information import parameter_information
+
+        return parameter_information(self, params)
+
     def stats(self) -> dict:
         """Median and 68% credible intervals for all parameters.
 

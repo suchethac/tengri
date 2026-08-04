@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Execute notebooks with timing and memory metrics."""
+
 import subprocess
 import os
 import json
@@ -11,16 +12,18 @@ import sys
 NOTEBOOKS_DIR = Path("notebooks")
 METRICS_FILE = Path("notebook_metrics.json")
 
+
 def get_memory_usage():
     """Get current process memory in MB."""
     process = psutil.Process(os.getpid())
     return process.memory_info().rss / 1024 / 1024
 
+
 def execute_notebook(nb_path: Path) -> dict:
     """Execute a single notebook and capture metrics."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Executing: {nb_path.name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     mem_before = get_memory_usage()
     start_time = time.time()
@@ -28,12 +31,16 @@ def execute_notebook(nb_path: Path) -> dict:
     try:
         result = subprocess.run(
             [
-                sys.executable, "-m", "jupyter", "nbconvert",
-                "--to", "notebook",
+                sys.executable,
+                "-m",
+                "jupyter",
+                "nbconvert",
+                "--to",
+                "notebook",
                 "--execute",
                 "--inplace",
                 "--ExecutePreprocessor.timeout=600",
-                str(nb_path)
+                str(nb_path),
             ],
             capture_output=True,
             text=True,
@@ -61,7 +68,9 @@ def execute_notebook(nb_path: Path) -> dict:
             metrics["stdout"] = result.stdout[-500:] if result.stdout else ""
 
         print(f"✓ {nb_path.name}")
-        print(f"  Time: {elapsed:.1f}s | Memory: {mem_before:.0f}MB → {mem_after:.0f}MB (Δ {mem_delta:+.0f}MB)")
+        print(
+            f"  Time: {elapsed:.1f}s | Memory: {mem_before:.0f}MB → {mem_after:.0f}MB (Δ {mem_delta:+.0f}MB)"
+        )
 
         return metrics
 
@@ -81,6 +90,7 @@ def execute_notebook(nb_path: Path) -> dict:
             "success": False,
             "error": str(e),
         }
+
 
 def main():
     """Run all notebooks with metrics."""
@@ -108,9 +118,9 @@ def main():
         metrics.append(metric)
 
     # Summary
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("SUMMARY")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     successful = [m for m in metrics if m.get("success", False)]
     failed = [m for m in metrics if not m.get("success", False)]
@@ -131,6 +141,7 @@ def main():
     print(f"\nMetrics saved to {METRICS_FILE}")
 
     return 0 if not failed else 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

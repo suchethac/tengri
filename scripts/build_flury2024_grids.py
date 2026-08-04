@@ -142,7 +142,7 @@ def _download_csv(url: str, cache_path: Path) -> list[dict]:
             print(f"\nERROR downloading {url}: {exc}")
             sys.exit(1)
         cache_path.write_bytes(data)
-        print(f"    Saved to {cache_path} ({len(data)/1e6:.1f} MB)")
+        print(f"    Saved to {cache_path} ({len(data) / 1e6:.1f} MB)")
 
     text = cache_path.read_text(encoding="utf-8")
     reader = csv.DictReader(io.StringIO(text))
@@ -185,14 +185,18 @@ def _build_stellar_grid(
     z_vals = sorted({float(r["z"]) for r in rows})
     logu_vals = sorted({float(r["logu"]) for r in rows})
     age_vals = sorted({float(r["age"]) for r in rows})  # Myr
-    sfh_vals = sorted({r["sfh"] for r in rows})         # "inst", "cont"
+    sfh_vals = sorted({r["sfh"] for r in rows})  # "inst", "cont"
     logn_vals = sorted({float(r["logn"]) for r in rows})
 
     # Convert age Myr → log10(yr)
     log_age_yr_vals = np.log10(np.array(age_vals) * 1e6)
 
     n_z, n_u, n_a, n_s, n_n = (
-        len(z_vals), len(logu_vals), len(age_vals), len(sfh_vals), len(logn_vals)
+        len(z_vals),
+        len(logu_vals),
+        len(age_vals),
+        len(sfh_vals),
+        len(logn_vals),
     )
     n_lines = len(line_cols)
 
@@ -266,12 +270,16 @@ def _build_agn_grid(
 
     z_vals = sorted({float(r["z"]) for r in rows})
     logu_vals = sorted({float(r["logu"]) for r in rows})
-    mbh_vals = sorted({float(r["mbh"]) for r in rows})   # log10(M_BH/Msun)
-    edd_vals = sorted({float(r["edd"]) for r in rows})   # log10(L/L_Edd)
+    mbh_vals = sorted({float(r["mbh"]) for r in rows})  # log10(M_BH/Msun)
+    edd_vals = sorted({float(r["edd"]) for r in rows})  # log10(L/L_Edd)
     logn_vals = sorted({float(r["logn"]) for r in rows})
 
     n_z, n_u, n_m, n_e, n_n = (
-        len(z_vals), len(logu_vals), len(mbh_vals), len(edd_vals), len(logn_vals)
+        len(z_vals),
+        len(logu_vals),
+        len(mbh_vals),
+        len(edd_vals),
+        len(logn_vals),
     )
     n_lines = len(line_cols)
 
@@ -384,11 +392,11 @@ def _write_hdf5(
             # key: "sb99-cpr", "bpass-cdn", "agn-oxaf-cpr", ...
             parts = key.split("-")
             if parts[0] == "agn":
-                model = "agn_oxaf"        # "agn-oxaf-cpr" → "agn_oxaf"
+                model = "agn_oxaf"  # "agn-oxaf-cpr" → "agn_oxaf"
                 density = parts[2]
             else:
-                model = parts[0]          # "sb99" or "bpass"
-                density = parts[1]        # "cpr" or "cdn"
+                model = parts[0]  # "sb99" or "bpass"
+                density = parts[1]  # "cpr" or "cdn"
 
             if model not in f:
                 f.create_group(model)
@@ -460,10 +468,10 @@ def main() -> None:
 
     print("\nDone. Verify with:")
     print(
-        "  python -c \""
+        '  python -c "'
         "from tengri.nebular import MappingsPhotoStellarBackend; "
         "b = MappingsPhotoStellarBackend('data/flury2024_grids.h5', 'sb99', 'cpr'); "
-        "print(b.line_names[:5])\""
+        'print(b.line_names[:5])"'
     )
 
 

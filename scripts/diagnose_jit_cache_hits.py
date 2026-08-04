@@ -108,9 +108,7 @@ def main():
 
         if ok1 and ok2:
             speedup = t1 / t2
-            print(
-                f"{label:<15} {t1:>9.2f}s {t2:>9.2f}s {t3:>9.2f}s {speedup:>9.1f}×"
-            )
+            print(f"{label:<15} {t1:>9.2f}s {t2:>9.2f}s {t3:>9.2f}s {speedup:>9.1f}×")
         elif ok1:
             print(f"{label:<15} {t1:>9.2f}s  FAIL  FAIL")
         else:
