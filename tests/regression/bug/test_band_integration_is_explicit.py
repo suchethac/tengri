@@ -36,7 +36,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-import tengri
 from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
 pytestmark = pytest.mark.regression_bug
@@ -47,9 +46,19 @@ pytestmark = pytest.mark.regression_bug
 _BANDS = ["galex_fuv", "sdss_u", "sdss_g", "sdss_r"]
 
 
+# ``synthetic_ssp_wide`` (tests/conftest.py) rather than a real SSP file.
+# This file originally called ``load_ssp_data("data/fsps_mist_...h5")``. That
+# path is gitignored (114 MB), so on a CI runner the loader falls through to a
+# network download — which reddened main with
+# ``urlopen error [Errno -3] Temporary failure in name resolution`` and, on the
+# runs where DNS did work, silently fetched 114 MB per job. The band-integration
+# schemes are a property of the *screen* integral, not of any particular
+# library, so a synthetic grid exercises them exactly as well.
+
+
 @pytest.fixture(scope="module")
-def ssp():
-    return tengri.load_ssp_data("data/fsps_mist_c3k_a_chabrier.h5")
+def ssp(synthetic_ssp_wide):
+    return synthetic_ssp_wide
 
 
 @pytest.fixture(scope="module")

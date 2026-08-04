@@ -157,7 +157,7 @@ def test_policy_is_hashable_despite_being_a_mapping():
     assert hash(ApproxPolicy(n_subbands=8)) != hash(ApproxPolicy(n_subbands=5))
 
 
-def test_every_policy_field_reaches_the_compile_signature():
+def test_every_policy_field_reaches_the_compile_signature(synthetic_ssp_wide):
     """A knob that does not key the cache lets two models share one kernel.
 
     ``compile_signature`` collected bools generically but singled out
@@ -169,10 +169,9 @@ def test_every_policy_field_reaches_the_compile_signature():
     """
     import dataclasses
 
-    import tengri
     from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
-    ssp = tengri.load_ssp_data("data/fsps_mist_c3k_a_chabrier.h5")
+    ssp = synthetic_ssp_wide
     obs = Observation(photometry=Photometry.from_names(["galex_fuv", "sdss_r"]))
     common = dict(
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
