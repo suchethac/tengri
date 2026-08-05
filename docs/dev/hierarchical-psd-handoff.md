@@ -979,22 +979,28 @@ bad enough for my chosen threshold to notice."
 | 64 | **0.958–0.995 MISS** | **0.741–0.813 ok** | 13.2–25.6 | 65.8 |
 | 128 | **0.970–0.996 MISS** | **0.741–0.795 ok** | 12.5–20.2 | 53.9 |
 | 256 | **0.985–0.997 MISS** | **0.765–0.803 MISS** | 12.5–17.7 | 45.0 |
+| 512 | **0.986–0.997 MISS** | **0.771–0.798 MISS** | 11.2–14.5 | 30.7 |
 
-σ slope **−0.438 ± 0.009** (PASS, near the ideal −0.5 for √N pooling). The
+σ slope **−0.444 ± 0.008** (PASS, near the ideal −0.5 for √N pooling). The
 railing that defined §2's "N ceiling" is gone — σ moves from 0.96–0.99 to
 0.74–0.80 — and it covers truth at N = 4…128.
 
-**It misses at N=256**, by 0.015 on a 0.038-wide interval, centering on ~0.784
-or about 4% high. That is the signature of a *biased but consistent* estimator:
-coverage survives while the interval is wide enough to swallow the bias, then
-fails as pooling tightens it.
+**It misses at N=256 and again at N=512**, converging on a stable centre of
+**~0.784, about 4.5% high**. At N=512 truth sits 0.021 outside a 0.027-wide
+interval — **0.8 interval-widths away, and receding**. That is the signature of
+a *biased but consistent* estimator: coverage survives while the interval is
+wide enough to swallow the bias, then fails as pooling tightens it.
 
-> ⚠ **One miss in seven is not evidence.** These are **68%** credible intervals
-> on a **single** population realization, and a well-calibrated 68% interval is
-> supposed to miss about a third of the time. The nesting and the consistent
-> centering above truth are *suggestive*, not conclusive. Settling it requires
-> coverage across ≥3 realizations — acceptance criterion 6, still unrun. Do not
-> quote "σ is biased 4% high" from this table.
+> ⚠ **Do not score this as "two misses in eight trials".** The N values are
+> nested subsets of the *same* galaxies, so they are not independent draws and
+> no binomial argument applies. What makes it convincing is the *convergence on
+> a fixed wrong value*: a sampling fluctuation does not tighten around 0.784,
+> a bias does. The **magnitude** still rests on one realization — coverage
+> across ≥3 realizations is acceptance criterion 6 and remains unrun — so quote
+> the direction and the mechanism, not "4.5%" as a calibrated number.
+
+An earlier revision of this section called the single N=256 miss "suggestive,
+not conclusive" and said not to quote a bias at all. N=512 supersedes that.
 
 ### τ: the correction this document owes
 
@@ -1092,9 +1098,15 @@ knowing before spending the compute: NUTS is ~600 s/galaxy against ~10 s.
 
 σ high *and* τ short is exactly the degeneracy direction of the OU kernel
 `(σ ln10)² exp(−|Δt|/τ)`: more variance with a shorter correlation time
-reproduces the same short-lag power. The σ miss at N=256 and τ's bias are
+reproduces the same short-lag power. The σ misses at N=256/512 and τ's bias are
 plausibly the same slide along one ridge, which would explain why σ's error
 appears only once the interval is tight enough to resolve 4%.
+
+The two displacements are consistent in size and sign with a single slide:
+**σ +4.5%, τ −92%**, both measured on the converged bank at N=512. Testing that
+directly — does the pooled posterior lie along the constant-short-lag-power
+locus through truth? — is the cheapest next diagnostic, and it needs no new
+fits.
 
 Not purely a ridge effect, though: at **fixed** truth σ the pooled surface
 still prefers τ=15 over τ=150 by 19.4 nats. Both a genuine short-τ preference
