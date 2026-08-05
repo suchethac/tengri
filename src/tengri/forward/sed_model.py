@@ -6705,7 +6705,13 @@ class SEDModel:
 
             fixed = dict(self.spec.get_fixed_values())
             wave = self._rest_wavelength
-            z = jnp.asarray(fixed.get("redshift", 0.0))
+            # Direct lookup, not .get(..., 0.0): ``shape_free`` above already
+            # required ``"redshift" not in free``, and redshift is always in
+            # exactly one of free/fixed (it defaults to Fixed when omitted), so
+            # a fixed value is guaranteed here. A 0.0 fallback would be
+            # unreachable — and if the gate above is ever weakened, it would
+            # silently build R at z=0 instead of failing (#1432).
+            z = jnp.asarray(fixed["redshift"])
             # Slice with the component's OWN rule — the same one apply() uses. A
             # precompute that slices differently silently builds R from default
             # template parameters and returns confidently wrong IR photometry.
@@ -6844,7 +6850,11 @@ class SEDModel:
 
             fixed = {k: jnp.asarray(v) for k, v in self.spec.get_fixed_values().items()}
             wave = self._rest_wavelength
-            z = jnp.asarray(fixed.get("redshift", 0.0))
+            # Direct lookup, not .get(..., 0.0): ``gate_ok`` above already
+            # required ``"redshift" not in free``, and redshift is always in
+            # exactly one of free/fixed, so a fixed value is guaranteed. See the
+            # matching note on the band-response path (#1432).
+            z = jnp.asarray(fixed["redshift"])
 
             probe_a, probe_b = comp.EMITTER_PROBE_INPUTS
             terms_a = comp.emission_terms(fixed, wave, **probe_a)
