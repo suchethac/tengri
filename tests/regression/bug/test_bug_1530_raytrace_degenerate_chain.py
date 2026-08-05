@@ -5,7 +5,7 @@ A 2-galaxy hierarchical fit at D=516 returned 500 draws collapsing to **one
 unique point**, acceptance 3.4e-10, with no exception and no warning.
 
 What makes that worse than a crash is that the numbers look right. The draws
-are the MAP initialisation repeated, so the run reported ``sigma_PSD = 2.05``
+are the MAP initialization repeated, so the run reported ``sigma_PSD = 2.05``
 next to MAP's ``2.13`` — which reads as two independent estimators agreeing and
 is in fact one number echoed back. Anyone using Ray Tracing to cross-check MAP
 would have received silent self-confirmation. ``mcmc_raytrace`` is

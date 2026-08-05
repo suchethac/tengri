@@ -42,7 +42,7 @@ _DEGENERATE_ACCEPT_RATE: float = 1e-4
 
 
 class DegenerateChainError(RuntimeError):
-    """A sampler returned draws that never moved from their initialisation.
+    """A sampler returned draws that never moved from their initialization.
 
     Distinct from a convergence warning. This is not a chain that mixed badly;
     it is a chain that did not sample. Raised rather than warned because the
@@ -2209,15 +2209,15 @@ class PopulationFitter:
             )
 
         # A chain that accepted nothing has not sampled (#1530). Its draws are
-        # the initialisation repeated n_steps times — and because that
-        # initialisation is a MAP solve, the numbers look *reasonable*. Measured
+        # the initialization repeated n_steps times — and because that
+        # initialization is a MAP solve, the numbers look *reasonable*. Measured
         # at D=516: acceptance 3.4e-10, all 500 draws collapsing to one point,
         # reporting sigma_PSD=2.05 beside MAP's 2.13. That reads as two
         # estimators agreeing; it is one number echoed back. Nothing raised, and
         # `tier="primary"` means `check_usable` does not gate this backend, so
         # using Ray Tracing to cross-check MAP was silently self-confirming.
         #
-        # Tested on the realised chain, not on `accept_rate` alone: acceptance is
+        # Tested on the realized chain, not on `accept_rate` alone: acceptance is
         # an expectation, so a chain can carry a small mean acceptance while
         # never actually having moved.
         _accept_rate = float(jnp.mean(accept_prob_post))
@@ -2227,7 +2227,7 @@ class PopulationFitter:
                 f"Ray Tracing accepted essentially nothing at D={D}: acceptance "
                 f"{_accept_rate:.3g}, and the {int(chain.shape[0])} post-burn-in "
                 f"draws collapse to {_n_unique} unique point(s). Those draws are "
-                f"the MAP initialisation repeated, not a posterior — and they "
+                f"the MAP initialization repeated, not a posterior — and they "
                 f"look plausible, which is exactly why returning them is unsafe.\n\n"
                 f"step_size={float(step_size):.3g} is too large for this "
                 f"dimension. Acceptance falls off a cliff rather than degrading "
