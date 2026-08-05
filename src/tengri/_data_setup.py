@@ -241,8 +241,13 @@ _KNOWN_SSPS = {
     "fsps_prsc_c3k_a_salpeter": "fsps_prsc_c3k_a_salpeter.h5",
 }
 
-# Reverse lookup used by ``load_ssp_data`` to auto-fetch a missing local
-# file when the basename matches a known catalog entry.
+# Reverse lookup used by ``load_ssp_data`` to fetch a missing local file when
+# the basename matches a known catalog entry *and* the caller passed
+# ``download=True``.  It also selects which of the two FileNotFoundError
+# messages that function raises: a name in here is recoverable by fetching, a
+# name outside it must already be on disk.  The fetch is opt-in because the
+# match is on the basename only, so an unconditional one answers a mistyped
+# directory by writing the grid into it (#1553).
 KNOWN_SSP_FILENAMES = frozenset(_KNOWN_SSPS.values())
 
 
