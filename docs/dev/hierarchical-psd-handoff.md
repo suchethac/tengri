@@ -70,9 +70,16 @@ differently-wrong cross-check.
 >
 > **τ, however, is now a sharper problem than this document has been calling
 > it.** "Unidentified — it reads the prior" is no longer accurate: on the
-> converged bank τ *tightens* with N toward ~15 Myr against a truth of 150,
-> excluding truth and getting more confident. That is a **biased** estimator,
-> not an uninformative one, and it is the open problem. See §4i-ter.
+> converged bank at N=1024 τ is **11.5–13.7 Myr** against a truth of 150 —
+> excluding truth and tightening with N. That is a **biased** estimator, not an
+> uninformative one. σ carries a smaller version of the same problem (~3.7%
+> high, missing at N ≥ 256). Both width-scaling slopes PASS, so **pooling works
+> mechanically and converges to the wrong point.**
+>
+> §4i-ter has the full curve and, more usefully, the elimination: the MAP, the
+> Gaussian approximation, weight degeneracy, collapsed ξ posteriors and the
+> fields' own correlation structure are all now excluded **by measurement**.
+> What is left is the estimator's reading of the fields.
 
 ### Works
 
@@ -980,16 +987,22 @@ bad enough for my chosen threshold to notice."
 | 128 | **0.970–0.996 MISS** | **0.741–0.795 ok** | 12.5–20.2 | 53.9 |
 | 256 | **0.985–0.997 MISS** | **0.765–0.803 MISS** | 12.5–17.7 | 45.0 |
 | 512 | **0.986–0.997 MISS** | **0.771–0.798 MISS** | 11.2–14.5 | 30.7 |
+| 1024 | **0.986–0.997 MISS** | **0.768–0.789 MISS** | 11.5–13.7 | 30.5 |
 
-σ slope **−0.444 ± 0.008** (PASS, near the ideal −0.5 for √N pooling). The
-railing that defined §2's "N ceiling" is gone — σ moves from 0.96–0.99 to
-0.74–0.80 — and it covers truth at N = 4…128.
+σ slope **−0.439 ± 0.007**, τ slope **−0.373 ± 0.050** — both PASS the
+width-scaling gate. **Pooling works mechanically; it converges to the wrong
+point.** That is the one-line summary of this whole section: the widths shrink
+as ~1/√N exactly as they should, around a centre that is not truth.
 
-**It misses at N=256 and again at N=512**, converging on a stable centre of
-**~0.784, about 4.5% high**. At N=512 truth sits 0.021 outside a 0.027-wide
-interval — **0.8 interval-widths away, and receding**. That is the signature of
-a *biased but consistent* estimator: coverage survives while the interval is
-wide enough to swallow the bias, then fails as pooling tightens it.
+The railing that defined §2's "N ceiling" is gone — σ moves from 0.96–0.99 to
+0.74–0.79 — and σ covers truth at N = 4…128.
+
+**It misses at N=256, 512 and 1024**, converging on **~0.778, about 3.7%
+high**. At N=1024 truth sits 0.018 outside a 0.021-wide interval. That is the
+signature of a *biased but consistent* estimator: coverage survives while the
+interval is wide enough to swallow the bias, then fails as pooling tightens it.
+
+τ misses at **all nine** N, converging on ~12.6 Myr against a truth of 150.
 
 > ⚠ **Do not score this as "two misses in eight trials".** The N values are
 > nested subsets of the *same* galaxies, so they are not independent draws and
