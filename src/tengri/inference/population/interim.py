@@ -141,7 +141,16 @@ def fit_interim(
 
     from tengri import Parameters
 
-    spec_interim = Parameters(**spec_dict, n_grid=model.spec.n_grid)
+    # ``field_centering`` rides along explicitly: this spec is rebuilt from the
+    # free-parameter distributions alone, so any structural setting not named
+    # here is silently reset to its default — and an interim fit that quietly
+    # reverts to the non-centered map is exactly the null result #1355's A/B
+    # would misread as "the knob does nothing" (#1355).
+    spec_interim = Parameters(
+        **spec_dict,
+        n_grid=model.spec.n_grid,
+        field_centering=getattr(model.spec, "field_centering", 1.0),
+    )
 
     # Create interim model (same SSP, observation, n_grid as original)
     # Note: spec_interim now has n_grid=model.spec.n_grid, so _n_grid is set correctly
@@ -243,7 +252,13 @@ def fit_interim(
         print(f"  thinned by {thin}: K {xi_stacked.shape[1] * thin} -> {xi_stacked.shape[1]}")
 
     # Reconstruct centered fields
-    fields_centered = centered_fields(xi_stacked, sigma_stacked, tau_yr_stacked, log_age_grid)
+    fields_centered = centered_fields(
+        xi_stacked,
+        sigma_stacked,
+        tau_yr_stacked,
+        log_age_grid,
+        centering=getattr(model.spec, "field_centering", 1.0),
+    )
 
     # Times for the grid
     times_yr = 10.0 ** np.asarray(log_age_grid)

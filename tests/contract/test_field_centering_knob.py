@@ -283,6 +283,46 @@ class TestTheLatentPriorTravelsWithTheMap:
         )
 
 
+class TestReconstructionUsesTheSameMap:
+    """The fourth ``compute_field_gp`` call site — posterior reconstruction.
+
+    ``centered_fields`` turns stored latents back into a field. Its own
+    docstring says it delegates rather than reimplementing because "two
+    implementations of one transform is how a reconstruction silently stops
+    matching the fit that produced it" — which is precisely what a hardcoded
+    ``a = 1`` would reintroduce for any fit run at ``a < 1``.
+    """
+
+    def test_reconstruction_follows_the_centering(self):
+        import jax.numpy as jnp
+
+        from tengri.inference.population.reconstruct import centered_fields
+
+        grid = jnp.asarray(np.linspace(6.0, 10.14, 16))
+        xi = jnp.asarray(np.random.default_rng(3).normal(size=16))
+
+        one = np.asarray(centered_fields(xi, 0.8, 1.5e8, grid))
+        zero = np.asarray(centered_fields(xi, 0.8, 1.5e8, grid, centering=0.0))
+
+        assert not np.allclose(one, zero), (
+            "centered_fields ignores centering — an a<1 fit would be "
+            "reconstructed with the non-centered map"
+        )
+
+    def test_default_reconstruction_is_unchanged(self):
+        """Existing callers pass four arguments and must be untouched."""
+        import jax.numpy as jnp
+
+        from tengri.inference.population.reconstruct import centered_fields
+
+        grid = jnp.asarray(np.linspace(6.0, 10.14, 16))
+        xi = jnp.asarray(np.random.default_rng(4).normal(size=16))
+        assert np.array_equal(
+            np.asarray(centered_fields(xi, 0.8, 1.5e8, grid)),
+            np.asarray(centered_fields(xi, 0.8, 1.5e8, grid, centering=1.0)),
+        )
+
+
 class TestFieldCenteringIsDiscoverable:
     """A builder-accepted axis named by no menu is undiscoverable (#1446).
 
