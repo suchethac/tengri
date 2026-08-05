@@ -163,6 +163,7 @@ from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_fact
 from tengri.components.nebular._shared import (
     _qh_bilinear,
     compute_qh,
+    compute_qh_log10,
     render_nebular_lines,
     sanitize_qh_table,
 )
@@ -173,6 +174,7 @@ from tengri.utils.grid_interp import (
     slice_fixed_axes,
 )
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
+from tengri.utils.scale import pow10
 
 # ── Physical and grid constants ───────────────────────────────────
 
@@ -492,6 +494,14 @@ _compute_qh_grid = jax.vmap(
     in_axes=(None, 0),
 )  # vmap over (n_met, n_age)
 
+#: Log-domain sibling of ``_compute_qh_grid``. The linear form overflows float32
+#: on healthy input (Q_H ~ 1e46 against a 3.4e38 ceiling), so the table is built
+#: from this and stored normalized (#1568).
+_compute_log_qh_grid = jax.vmap(
+    jax.vmap(compute_qh_log10, in_axes=(None, 0)),
+    in_axes=(None, 0),
+)
+
 
 # ── Main backend class ────────────────────────────────────────────
 
@@ -564,6 +574,13 @@ class CB19Backend:
     #: Cue overrides this with its own training convention; see CueBackend.
     lsun_erg: float = _LSUN_ERG
 
+    #: log10 of the scalar ``_qh_table`` is normalized by (#1568). Declared on
+    #: the class, not only in ``__init__``, so an instance built without the
+    #: normal constructor path — the mocked backends in the test suite do
+    #: exactly this — still has the identity value rather than an
+    #: ``AttributeError``. 0.0 means "table already in photons/s".
+    _log_qh_scale: float = 0.0
+
     def __init__(
         self,
         sed_type: str = "SSP",
@@ -602,6 +619,10 @@ class CB19Backend:
         self._qh_log_met = None
         self._qh_log_age = None
         self._young_idx = None
+        #: log10 of the scalar the Q_H table is normalized by (#1568). 0.0 with
+        #: no table, which makes ``_get_qh_at``'s ``missing=1.0`` the identity
+        #: it documents itself to be.
+        self._log_qh_scale = 0.0
 
         if ssp_data is not None:
             self._precompute_qh(ssp_data)
@@ -774,10 +795,28 @@ class CB19Backend:
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
 
-        qh_raw = _compute_qh_grid(ssp_wave, ssp_flux)
+        # Build in the log domain and store the table *normalized* by its own
+        # peak (#1568). Q_H reaches ~1e46 photons/s/Msun, which float32 cannot
+        # hold: the linear build overflowed every entry to ``inf``, and
+        # ``sanitize_qh_table`` then rewrote the lot to 0.0 — every CB19 line
+        # silently zero in pure float32.
+        #
+        # Bilinear interpolation is a linear operator, so interpolating
+        # ``table / scale`` is exactly interpolating ``table`` and dividing;
+        # float64 values are unchanged. Storing ``log10(Q_H)`` and interpolating
+        # *that* would instead be a geometric interpolation — a different
+        # physical answer — which is why the scale is a scalar, not a log table.
+        log_qh_raw = _compute_log_qh_grid(ssp_wave, ssp_flux)
+        finite = jnp.isfinite(log_qh_raw)
+        self._log_qh_scale = float(jnp.max(jnp.where(finite, log_qh_raw, -jnp.inf)))
+        if not np.isfinite(self._log_qh_scale):
+            # No usable ionizing flux anywhere: keep the identity scale so the
+            # normalized table stays meaningful and Q_H comes out zero.
+            self._log_qh_scale = 0.0
+        qh_norm = pow10(log_qh_raw - self._log_qh_scale)  # (0, 1], float32-safe
         # Match the other backends: a non-finite Q_H from the SSP grid is
         # scrubbed at build time rather than propagated into every lookup.
-        self._qh_table = sanitize_qh_table(qh_raw, backend_name="CloudyCB19Backend")
+        self._qh_table = sanitize_qh_table(qh_norm, backend_name="CloudyCB19Backend")
         # Store as JAX arrays so they can be indexed with traced integers
         # inside jax.vmap (numpy arrays fail when indexed with traced values).
         self._qh_log_met = jnp.array(ssp_data.ssp_lgmet)  # log10(Z) absolute
@@ -787,8 +826,23 @@ class CB19Backend:
         young_mask = ssp_log_ages <= self._max_neb_log_age
         self._young_idx = np.where(young_mask)[0]
 
+    @property
+    def _lum_scale(self) -> float:
+        r"""The one in-range constant the line chain needs [Lsun per unit ratio].
+
+        ``10**_log_hb_per_qh`` is 1.2e-46 and ``10**_log_qh_scale`` is ~1e46 —
+        one below float32's smallest subnormal, the other above its ceiling.
+        Their product is order unity, and evaluating it here in Python float64
+        means neither ever exists as a float32 array (#1568).
+        """
+        return 10.0 ** (self._log_hb_per_qh + self._log_qh_scale)
+
     def _get_qh_at(self, log_z: float, log_age_yr: float) -> float:
         """Bilinear interpolation of the precomputed Q_H table.
+
+        Returns the **peak-normalized** Q_H in (0, 1]; the ``10**_log_qh_scale``
+        that reconstructs photons/s is folded into :attr:`_lum_scale` rather
+        than materialized, because it does not fit in float32 (#1568).
 
         ``missing=1.0`` is the identity for a multiplicative Q_H — a CB19
         backend without a table applies no Q_H scaling rather than zeroing
@@ -929,13 +983,22 @@ class CB19Backend:
                 grids_6d,
                 (log_oh, log_age_i, neb_logU, neb_log_nH, neb_co, neb_dno),
             )
-            # Convert: ratio → L_line/Q_H → L_line
-            # log(L/Q_H) = log_ratio + log(_HB_PER_QH_LSUN)
-            # Cast to float64 before exponentiation: _log_hb_per_qh ≈ -45.9 and
-            # log_ratios_i is stored as float32 in the grid, so the sum ≈ -45.9
-            # underflows to 0.0 in float32 (subnormal min ≈ 1.4e-45 > 10^-45.9).
-            lum_per_qh = 10.0 ** (log_ratios_i.astype(jnp.float64) + self._log_hb_per_qh)
-            return weight_i * qh_i * lum_per_qh * k_factor
+            # Convert: ratio → L_line/Q_H → L_line.
+            #
+            # The two constants that used to appear separately are both outside
+            # float32 range and cancel each other into one that is not (#1568):
+            #
+            #   10**_log_hb_per_qh = 1.2487e-46   (below float32's 1.4e-45
+            #                                      smallest subnormal -> 0.0)
+            #   10**_log_qh_scale  ~ 1.06e+46     (above float32's 3.4e38 -> inf)
+            #   product            ~ 1.3          (evaluated once, in float64)
+            #
+            # ``qh_i`` is the peak-normalized Q_H in (0, 1], so every factor
+            # below is order unity and nothing needs a dtype cast. The previous
+            # spelling reached for ``.astype(jnp.float64)``, which is a no-op
+            # under ``jax.enable_x64(False)`` — inert in the mode it guarded.
+            lum_per_qh_ratio = 10.0**log_ratios_i
+            return weight_i * qh_i * lum_per_qh_ratio * self._lum_scale * k_factor
 
         # vmap over young age bins, then sum
         all_contribs = jax.vmap(_line_contrib_one_age)(
