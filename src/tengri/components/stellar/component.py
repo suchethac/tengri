@@ -228,7 +228,7 @@ def _fast_path_unsupported_sfh_fns():
 _FAST_PATH_UNSUPPORTED_SFH_FNS = _fast_path_unsupported_sfh_fns()
 
 
-def _apply_gp_field(sfr_history, params, n_grid, log_age_grid):
+def _apply_gp_field(sfr_history, params, n_grid, log_age_grid, centering: float = 1.0):
     """Apply the multiplicative GP-field modulation to a smooth SFR history.
 
     :math:`\\mathrm{SFR}(t) = \\mathrm{SFR}_{\\rm mean}(t)\\,\\exp(x(t) - K_0/2)`,
@@ -249,6 +249,12 @@ def _apply_gp_field(sfr_history, params, n_grid, log_age_grid):
         SFH grid resolution (the field latent dimension).
     log_age_grid : ndarray, shape (n_grid,)
         ``log10(age/yr)`` grid the field lives on.
+    centering : float, optional
+        Parameterization of the field latent, in ``[0, 1]`` [dimensionless].
+        ``1.0`` (default) is the non-centered map ``s = L(sigma, tau) xi``;
+        ``a < 1`` moves amplitude dependence out of it (#1355). Must be paired
+        with the matching latent prior — see
+        :func:`~tengri.components.stellar.sfh.gp_sfh.drw_latent_log_prior`.
 
     Returns
     -------
@@ -279,6 +285,7 @@ def _apply_gp_field(sfr_history, params, n_grid, log_age_grid):
         log_age_grid_step(n_grid),
         field_model="drw",
         log_age_grid=log_age_grid,
+        centering=centering,
     )
     return sfr_history * jnp.exp(gp_x - k0_half)
 
@@ -1186,6 +1193,7 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     metallicity_model: str = "delta"
     sps_backend: str = "dsps"
     age_kernel: str | None = None
+    field_centering: float = 1.0
     use_alpha_grid: bool = False
     lgmet_scatter: float = 0.2
     # Number of bins for ``metallicity_model="bins"`` /
@@ -1806,7 +1814,9 @@ class StellarSEDComponent:
         # ensemble mean equals SFR_mean. ``compute_field_gp`` lives in
         # the SFH registry next to the prior on ``sfh_field_xi``.
         if self.config.field:
-            sfr_history = _apply_gp_field(sfr_history, params, n_grid, log_age_grid)
+            sfr_history = _apply_gp_field(
+                sfr_history, params, n_grid, log_age_grid, self.config.field_centering
+            )
 
         # ── 3. Resample to SSP age grid for CSP integration ─────────────
         # For deterministic (non-GP) parametric SFHs, evaluate the analytic
@@ -2883,7 +2893,9 @@ class StellarSEDComponent:
                 log_age_grid = make_log_age_grid(n_grid)
                 sfh_lbt_grid = 10.0**log_age_grid
                 sfr_history = sfh_spec.fn(sfh_lbt_grid, **sfh_kwargs)
-                sfr_history = _apply_gp_field(sfr_history, params, n_grid, log_age_grid)
+                sfr_history = _apply_gp_field(
+                    sfr_history, params, n_grid, log_age_grid, self.config.field_centering
+                )
                 sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
             else:
                 # Non-field: apply evaluates the closed-form SFH directly on the

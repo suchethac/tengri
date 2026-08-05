@@ -1697,7 +1697,10 @@ _register(
         },
         composition_type="modulator",
     ),
-    short_doc="GP field modulator with DRW power spectrum",
+    short_doc=(
+        "GP field modulator with DRW power spectrum; sampling coordinates "
+        "selectable via sfh={'field_centering': a}"
+    ),
 )
 
 
