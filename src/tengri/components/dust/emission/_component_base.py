@@ -22,6 +22,7 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.sed_model_component import SEDModelComponent
+from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import BARE_NAME_ALLOWLIST, ForwardState
 
 __all__ = ["EmissionComponent"]
@@ -228,7 +229,11 @@ class EmissionComponent(SEDModelComponent):
             if fw_pad is not None:
                 from tengri.observation.photometry import lnu_filter_integral_batch
 
-                redshift = jnp.asarray(p.get("redshift", 0.0))
+                redshift = jnp.asarray(
+                    require_redshift(
+                        p, "components.dust.emission._component_base._apply_photometry_precomp"
+                    )
+                )
                 phot_lnu = lnu_filter_integral_batch(sed_ir, state.wave, fw_pad, ft_pad, redshift)
             else:
                 # Fallback: effective wavelength sample (no padded curves)

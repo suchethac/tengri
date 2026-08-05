@@ -12,6 +12,7 @@ import jax.numpy as jnp
 
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
+from tengri.parameters.resolve import require_redshift
 
 __all__ = ["Schreiber2016AnalyticIRSEDComponent"]
 
@@ -121,7 +122,9 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionComponent):
         """
         from tengri.components.dust.emission import schreiber2016 as sch_fn
 
-        z = jnp.asarray(p.get("redshift", 0.0))
+        z = jnp.asarray(
+            require_redshift(p, "components.dust.emission.analytic.schreiber2016.predict")
+        )
         # Canonical f_pah maps straight to the closure's dust_f_pah arg (#849)
         sed = sch_fn(
             wave,

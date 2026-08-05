@@ -1685,6 +1685,33 @@ def list_components() -> _RegistryTable:
     return _RegistryTable(out)
 
 
+def _inference_method_row(entry, target: object | None = None) -> dict:
+    """Build the table row for one backend entry.
+
+    Shared by :func:`list_inference_methods` and
+    :func:`describe_inference_method` so the menu and the per-name lookup
+    can never disagree about what a backend is.
+    """
+    from tengri.inference._strategy import resolve_status
+
+    use = _usage_hint(entry.name, "inference_method")
+    if entry.tier == "broken":
+        # Advice that raises is the bug, not the help (#1364). The plain
+        # ``fitter.run("pathfinder")`` hint is refused by the tier gate, and
+        # a broken backend only became visible here at all once describe
+        # stopped hiding it (#1560) — so ship the invocation that works.
+        use = f'fitter.run("{entry.name}", allow_unvalidated=True)  # tier=broken'
+    return {
+        "name": entry.name,
+        "kind": "inference_method",
+        "tier": entry.tier,
+        "short_doc": entry.short_doc,
+        "requires": list(entry.requires),
+        "status": resolve_status(entry, target).value,
+        "use": use,
+    }
+
+
 def list_inference_methods(
     *, tier: str | None = None, target: object | None = None
 ) -> _RegistryTable:
@@ -1712,24 +1739,14 @@ def list_inference_methods(
         (see :class:`tengri.inference._strategy.BackendStatus`).
     """
     from tengri.inference._backend_registry import all_backends
-    from tengri.inference._strategy import resolve_status
 
     # Broken backends are listed only on explicit request. Offering a sampler
     # that returns R-hat ~ 3 in the same table as one that works is what let
     # users pick it on the strength of its speed (#1287).
-    out = []
-    for entry in all_backends(include_broken=tier == "broken"):
-        out.append(
-            {
-                "name": entry.name,
-                "kind": "inference_method",
-                "tier": entry.tier,
-                "short_doc": entry.short_doc,
-                "requires": list(entry.requires),
-                "status": resolve_status(entry, target).value,
-                "use": _usage_hint(entry.name, "inference_method"),
-            }
-        )
+    out = [
+        _inference_method_row(entry, target)
+        for entry in all_backends(include_broken=tier == "broken")
+    ]
     if tier:
         out = [m for m in out if m["tier"] == tier]
     return _RegistryTable(out)
@@ -1855,6 +1872,17 @@ def describe(name: str) -> _DescribeRecord:
                 f"({_how(matches[0])}). The others: {others}."
             )
         return _DescribeRecord(record)
+
+    # The sweep above walks the *curated* menus, so it cannot see a name the
+    # menu hides by design: a ``tier="broken"`` backend, or an alias that
+    # rows under its canonical name. Both are still dispatchable, and this
+    # generic entry point must answer for them exactly as
+    # :func:`describe_inference_method` does (#1560).
+    from tengri.inference._backend_registry import lookup_backend
+
+    if lookup_backend(name) is not None:
+        return describe_inference_method(name)
+
     raise KeyError(
         f"Unknown name '{name}'.  Try tengri.summary() for a menu of every "
         "core class, AGN model, dust law, SFH variant, nebular backend, "
@@ -2177,10 +2205,59 @@ def describe_nebular_backend(name: str) -> _DescribeRecord:
 
 
 def describe_inference_method(name: str) -> _DescribeRecord:
-    """Return the descriptor row for one inference backend (MAP / VI / NUTS / NSS / …)."""
-    return _describe_from_list(
-        name, list_inference_methods, "inference method", "list_inference_methods"
-    )
+    """Return the descriptor row for one inference backend (MAP / VI / NUTS / NSS / …).
+
+    Resolves any name the fitter dispatches: every tier — including
+    ``"broken"``, which :func:`list_inference_methods` hides by default
+    (#1287) — and every registered alias.
+
+    ``list`` and ``describe`` answer different questions. ``list`` asks
+    "what should I pick?", so it curates. ``describe`` asks "what is this
+    name?", so it must not: a name the fitter accepts is never "unknown".
+    Deriving this lookup from the curated listing reported six dispatchable
+    names as unknown (#1560) — the five broken backends, plus
+    ``"vi_nonlinear"``, a ``tier="primary"`` alias named in ``fit()``'s own
+    docstring. A confidently wrong answer is worse than a warning (#1446).
+
+    Parameters
+    ----------
+    name : str
+        A method name or alias, as passed to ``fit(method=...)``.
+
+    Returns
+    -------
+    _DescribeRecord
+        Fields: ``{name, kind, tier, short_doc, requires, status, use}``,
+        plus ``alias_of`` when ``name`` is an alias. Check ``tier`` before
+        acting on the result — ``"broken"`` backends resolve here but are
+        refused by ``Fitter.run`` without ``allow_unvalidated=True``.
+
+    Raises
+    ------
+    KeyError
+        If no backend is registered under ``name``.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.describe_inference_method("vi_nonlinear")["alias_of"]
+    'vi'
+    """
+    from tengri.inference._backend_registry import lookup_backend
+
+    entry = lookup_backend(name)
+    if entry is None:
+        from tengri.inference._backend_registry import _BACKENDS
+
+        known = sorted(_BACKENDS)
+        raise KeyError(
+            f"Unknown inference method '{name}'. Known names: {known}. "
+            "See list_inference_methods() for the full menu."
+        )
+    row = _inference_method_row(entry)
+    if name != entry.name:
+        row = {**row, "name": name, "alias_of": entry.name}
+    return _DescribeRecord(row)
 
 
 def suggest_parameters(

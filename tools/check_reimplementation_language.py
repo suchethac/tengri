@@ -31,6 +31,14 @@ Every pattern is ``\\b``-anchored on the left. Without that, "ported from"
 matches inside "exported from" and "supported from", which is most of this
 codebase.
 
+Both tiers also read across a single line break. Docstrings here wrap at 99
+columns and markdown at about 79, so "ported" ends one line and "from CIGALE"
+starts the next often enough to matter, and a scan that reads one line at a
+time sees two innocent halves. Only evidence that actually crosses the break
+is reported that way, so nothing is counted twice. A blank line is a
+paragraph break rather than a wrap, and for the fuzzier proximity tier a line
+ending in a full stop is not a wrap either.
+
 Usage
 -----
     python tools/check_reimplementation_language.py           # CI mode
@@ -51,6 +59,7 @@ someone's work.
 """
 
 import argparse
+import itertools
 import re
 import sys
 from pathlib import Path
@@ -154,17 +163,69 @@ REFERENCE_RE = re.compile("|".join(REFERENCE_CODES), re.IGNORECASE)
 NETWORK_PORT_RE = re.compile(r"port\s*[=:]|\.port\.|_PORT\b", re.IGNORECASE)
 
 
+def _scan_line(line: str):
+    """Return a reason if this one line states provenance, else None."""
+    match = BANNED_RE.search(line)
+    if match:
+        return f'banned phrase "{match.group(0)}"'
+    if NETWORK_PORT_RE.search(line):
+        return None
+    if PORT_WORD_RE.search(line) and REFERENCE_RE.search(line):
+        return '"port" on a line naming a reference code'
+    return None
+
+
+def _scan_wrap(first: str, second: str):
+    """Return a reason if a claim straddles the break between two lines.
+
+    Docstrings here wrap at 99 columns and markdown at about 79, so a phrase
+    as short as "ported from" lands on a line break often. Read one line at a
+    time, "ported" and "from CIGALE" are both innocent.
+
+    Only evidence that actually crosses the break is reported; anything
+    contained in one line is the caller's job. A blank line is a paragraph
+    break rather than a wrap, and so is a line that ends its sentence.
+    """
+    if not first.strip() or not second.strip():
+        return None
+    head, tail = first.rstrip(), second.lstrip()
+    joined = f"{head} {tail}"
+    boundary = len(head)
+
+    match = BANNED_RE.search(joined)
+    if match and match.start() < boundary < match.end():
+        return f'banned phrase "{match.group(0)}" wrapped across lines'
+
+    # A finished sentence is not a wrap. This matters only for the proximity
+    # rule, whose two halves are ordinary words that co-occur by chance;
+    # a split banned phrase cannot span a full stop in the first place.
+    if head.endswith((".", "!", "?", ":", ";")) or NETWORK_PORT_RE.search(joined):
+        return None
+    across = (PORT_WORD_RE.search(head) and REFERENCE_RE.search(tail)) or (
+        REFERENCE_RE.search(head) and PORT_WORD_RE.search(tail)
+    )
+    if across:
+        return '"port" wrapped onto a line naming a reference code'
+    return None
+
+
 def scan_text(text: str):
     """Yield (line_no, line, reason) for each violation in one file's text."""
-    for i, line in enumerate(text.splitlines(), start=1):
-        match = BANNED_RE.search(line)
-        if match:
-            yield i, line.strip(), f'banned phrase "{match.group(0)}"'
-            continue
-        if NETWORK_PORT_RE.search(line):
-            continue
-        if PORT_WORD_RE.search(line) and REFERENCE_RE.search(line):
-            yield i, line.strip(), '"port" on a line naming a reference code'
+    lines = text.splitlines()
+    flagged = set()
+
+    for i, line in enumerate(lines, start=1):
+        reason = _scan_line(line)
+        if reason:
+            flagged.add(i)
+            yield i, line.strip(), reason
+
+    for i, (first, second) in enumerate(itertools.pairwise(lines), start=1):
+        if i in flagged or i + 1 in flagged:
+            continue  # already reported on one of the two lines
+        reason = _scan_wrap(first, second)
+        if reason:
+            yield i, f"{first.strip()} / {second.strip()}", reason
 
 
 def iter_files(roots):

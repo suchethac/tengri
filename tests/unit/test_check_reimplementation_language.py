@@ -91,6 +91,60 @@ def test_bare_port_without_a_reference_code_is_not_flagged():
     assert _reasons("bind the CIGALE port")
 
 
+# --- prose wrapped across a line break ---------------------------------------
+#
+# Docstrings here wrap at 99 columns and markdown at about 79, so a phrase as
+# short as "ported from" straddles a line break often. A scan that reads one
+# line at a time cannot see it: "ported" ends one line, "from CIGALE" starts
+# the next, and neither half trips anything on its own.
+
+WRAPPED_VIOLATIONS = [
+    # The reference code sits on the second line, so the proximity rule on the
+    # first line has nothing to pair with either.
+    "The tabulated torus grid was ported\nfrom CIGALE's bundled library.\n",
+    # No reference code anywhere: only the split phrase can catch this.
+    "The attenuation coefficients were copied\nfrom the published tables.\n",
+    "The birth-cloud treatment is adapted\nfrom the reference code.\n",
+    # Indented continuation, the usual docstring shape.
+    '"""Torus grid.\n\n    The grid was translated\n    from the original Fortran.\n    """\n',
+]
+
+
+@pytest.mark.parametrize("text", WRAPPED_VIOLATIONS)
+def test_flags_provenance_claims_wrapped_across_lines(text):
+    assert _reasons(text), f"guard missed a wrapped provenance claim: {text!r}"
+
+
+WRAPPED_INNOCENT = [
+    # 'exported'/'supported' contain the letters of 'ported'. The \b anchor has
+    # to survive the join, or module plumbing lights up the whole build.
+    "Sentinels FREE / FIXED are singletons exported\nfrom `tengri`.\n",
+    "Multi-population is supported\nfrom day one.\n",
+    # A blank line is a paragraph break, not a wrap. Joining across it would
+    # invent "ported from-scratch" out of two unrelated sentences.
+    "the grid was ported\n\nfrom-scratch rewrites are welcome\n",
+    # A finished sentence is not a wrap either.
+    "bind the server to a free port.\nCIGALE needs one too.\n",
+    # The approved framing, wrapped.
+    "CIGALE's bundled Chabrier-IMF grid, repackaged\nin the DSPS HDF5 layout.\n",
+]
+
+
+@pytest.mark.parametrize("text", WRAPPED_INNOCENT)
+def test_wrapping_does_not_invent_violations(text):
+    assert not _reasons(text), f"guard false-positived on wrapped prose: {text!r}"
+
+
+def test_wrapped_hit_is_reported_once_with_a_usable_line_number():
+    """One wrapped phrase is one finding, anchored on the line it starts."""
+    text = "intro line\nThe torus grid was ported\nfrom CIGALE.\ntrailing line\n"
+    hits = list(guard.scan_text(text))
+    assert len(hits) == 1, f"expected exactly one finding, got {hits}"
+    line_no, _, reason = hits[0]
+    assert line_no == 2, f"should point at the line the phrase starts on, got {line_no}"
+    assert "ported" in reason.lower()
+
+
 # --- allowlist plumbing ------------------------------------------------------
 
 
