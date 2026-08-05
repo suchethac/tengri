@@ -36,9 +36,15 @@ class BackendEntry:
     legacy_fitter : bool
         If ``True`` (default), ``Fitter.run`` passes the full Fitter to
         the runner. Set to ``False`` for backends migrated to the
-        :class:`InferenceContext` Protocol. The flag is removed once all
-        backends migrate (see ADR-0010 / final PR of the inference-
-        backend refactor).
+        :class:`InferenceContext` Protocol (ADR-0010).
+
+        Every in-tree backend is migrated — ``test_backend_conformance``
+        asserts ``legacy_fitter is False`` for all of them, so the ``True``
+        branch in ``Fitter.run`` is reachable only from an out-of-tree
+        backend that registers without passing the flag. That is what the
+        default is *for*, which is why the flag outlived the migration it
+        was named after. It is a compatibility shim for third-party
+        backends, not unfinished work.
     accepts_precondition : bool
         Whether the runner understands ``precondition=`` — metric preconditioning
         of the standardized latent space (see
@@ -281,9 +287,16 @@ def refuse_if_broken(method: str, *, allow_unvalidated: bool = False) -> None:
     forget. This is the name-keyed form so the lookup is not the caller's job.
 
     Unknown names return silently: name validation belongs to
-    ``resolve_method``, and several canonical hierarchical methods
-    (``vi_nonlinear``) legitimately have no registry entry. Raising here would
-    turn a missing registration into a broken user call.
+    ``resolve_method``, and a hierarchical method can legitimately have no
+    registry entry — ``evi_nifty`` is dispatched by
+    :func:`~tengri.inference.hierarchical.fit_hierarchical` but registered
+    nowhere. Raising here would turn a missing registration into a broken
+    user call.
+
+    (This paragraph long cited ``vi_nonlinear`` as the unregistered example.
+    It is registered — a ``tier="primary"`` alias of ``vi`` — so the
+    justification named a case that never reaches this branch; ``evi_nifty``
+    is the one that does.)
 
     Parameters
     ----------
@@ -356,6 +369,37 @@ def check_capabilities(entry: BackendEntry, kwargs: dict) -> None:
             f"Backends that do: {capable}. "
             f"Drop the argument, or choose one of those methods."
         )
+
+
+def lookup_backend(name: str) -> BackendEntry | None:
+    """Return the entry ``name`` dispatches to, or ``None`` if unregistered.
+
+    Resolves aliases (``"vi_nonlinear"`` -> the ``"vi"`` entry) and every
+    tier, including ``"broken"``. This is the *identification* question —
+    "what does this name run?" — as opposed to :func:`all_backends`, which
+    answers the *curation* question and is filtered for presentation.
+
+    Answering identification through a curated listing is what made
+    ``describe_inference_method`` report six dispatchable names as unknown
+    (#1560): five ``tier="broken"`` backends, hidden from the menu by
+    design, plus ``"vi_nonlinear"``, a ``tier="primary"`` alias that the
+    public ``fit()`` docstring teaches.
+
+    Parameters
+    ----------
+    name : str
+        A method name or alias, as passed to ``fit(method=...)``.
+
+    Returns
+    -------
+    BackendEntry or None
+        The backend, or ``None`` if no such name is registered.
+
+    Notes
+    -----
+    Not JIT-compatible; a Python-level registry lookup.
+    """
+    return _BACKENDS.get(name)
 
 
 def all_backends(*, include_broken: bool = True) -> list[BackendEntry]:
