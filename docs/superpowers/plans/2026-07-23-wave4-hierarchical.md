@@ -1,4 +1,4 @@
-# Wave 4 Hierarchical Implementation Plan (epic #1322 — #1319 + #1303; deferred past Paper I)
+# Wave 4 Hierarchical Implementation Plan (epic #1322 — #1319 + #1303; Track A of the two-track W4)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Depends on:** Waves 1–2 merged (`mode=` exists reserved; `Data`/ingestion exist; `catalog_z_range` validated helpers exist).
 
-**Timing:** deferred past Paper I (epic #1322). Do not start without the orchestrator's explicit go.
+**Timing/scope:** Two-track decision (2026-08-05; spec decisions log 23). This plan is **Track A — standardization, a must**: the `mode="hierarchical"`/`shared=` construction and the Population-class dissolution. Track B — the realistic-N production path — is the *two-step* estimator (MAP/Laplace-fit each galaxy, then fit the population over the interim posteriors); its first instance is merged (PR #1479, shared SFH-PSD σ/τ) and its status, ceiling, and traps live in `docs/dev/hierarchical-psd-handoff.md` and `docs/superpowers/plans/2026-07-29-hierarchical-psd-recovery.md` — NOT in this plan. Sequencing unchanged: do not start T1–T4 without the orchestrator's explicit go.
 
 ## Global Constraints
 

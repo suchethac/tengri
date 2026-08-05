@@ -49,7 +49,15 @@ _BANDS = ["galex_fuv", "sdss_u", "sdss_g", "sdss_r"]
 
 @pytest.fixture(scope="module")
 def ssp():
-    return tengri.load_ssp_data("data/fsps_mist_c3k_a_chabrier.h5")
+    """The committed bare-stellar grid, resolved without a working directory.
+
+    Nothing below is C3K-specific — the assertions pin that the three schemes
+    are *distinct* and *ordered*, not any grid's numbers. Measured on both:
+    the schemes separate by 3.6e-3 here versus 3.7e-3 on C3K, against a 1e-6
+    threshold, and the error ordering is identical. ``load_ssp()`` resolves
+    ``data/`` from any ancestor directory and never downloads (#1486).
+    """
+    return tengri.load_ssp()
 
 
 @pytest.fixture(scope="module")
