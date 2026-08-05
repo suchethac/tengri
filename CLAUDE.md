@@ -377,8 +377,15 @@ Every inference backend (MAP, MCMC, VI, NSS, …) receives an
    ```
 
 The parametrised conformance suite
-(`tests/unit/inference/test_backend_conformance.py`) picks up the new
-entry automatically — no test-file edits required.
+(`tests/inference/test_backend_conformance.py`) picks up the new entry
+automatically — no test-file edits required. But `tests/inference/` is
+auto-marked `slow` (`_SLOW_TREES` in `tests/conftest.py`) and so is
+**deselected from the default run and from the PR gate**. Adding a
+backend and seeing green tells you nothing; run it explicitly:
+
+```bash
+.venv/bin/pytest tests/inference/test_backend_conformance.py -q -m slow
+```
 
 **JIT rule** (non-negotiable): `InferenceContext` must never be hashed
 into a JIT key or passed through `jax.jit` / `jax.vmap` / `jax.lax.scan`
@@ -484,6 +491,7 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 - `docs/known_bugs.md` — bug tracking (all currently fixed)
 - `docs/dev/notebook_orchestration_oom.md` — operational rules for OOM-safe notebook authoring (multi-fit, subagent zombies, watchdog)
 - `tools/check_param_prefixes.py` — CI guard for free-parameter prefix rule (NAMING_CONTRACT §3.2)
+- `tools/check_param_defaults.py` — CI guard that no signature default falls outside its parameter's declared prior. Such a default is unreachable by any fit and is usually a unit confusion: nine AGN entry points shipped `agn_log_lbol=45.0` (the `log10(erg/s)` magnitude) against a declaration in `log10(L/L_sun)`, so a bare call was ~1e33 too luminous. Read defaults off the declaration with `declared_default(PARAMS, name)` instead of repeating the number (ADR-0011)
 - `tools/check_british_spelling.py` — CI guard for American-English spelling (NAMING_CONTRACT §10); `--fix` to auto-rewrite
 - `tools/check_reimplementation_language.py` — CI guard for the credit rule above: fails on "ported from" / "copied from" / "adapted from" and on "port" beside a reference-code name. Code "implements"; data is "repackaged". Files that must quote the banned wording are allowlisted in `EXCLUDE_FILES`
 - `tools/check_doc_examples.py` — CI guard that every symbol named in a `src/` docstring or published doc actually exists (`docs/api/*.rst` are autodoc stubs, so docstrings *are* the API reference, and no doctest runner executes them). Runs in the `smoke` job. `docs/dev/` is out of scope by design: design notes and parity audits legitimately name removed or not-yet-built API

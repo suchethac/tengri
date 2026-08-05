@@ -208,6 +208,7 @@ testpaths = ["tests"]
 addopts = "--tb=short -m 'not crossval and not slow and not benchmark' -n auto --dist=loadfile"
 markers = [
     "slow: heavy end-to-end tests (inference/integration trees); excluded from the default run",
+    "network: test genuinely exercises a network path; exempt from the conftest network guard (#1546)",
     "crossval: cross-validation tests against community SED codes (bagpipes, etc.)",
     "benchmark: asserts a wall-clock ratio; run serially (`-m benchmark -n 0`), never under -n auto",
     "conservation: energy/mass/photon balance across a transformation",

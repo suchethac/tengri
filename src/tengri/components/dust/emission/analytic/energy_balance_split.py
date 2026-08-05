@@ -11,6 +11,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 
 from tengri.components.dust.emission._component_base import EmissionComponent
+from tengri.parameters.resolve import require_redshift
 
 __all__ = ["EnergyBalanceSplitIRSEDComponent"]
 
@@ -76,7 +77,9 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
         """
         from tengri.components.dust.emission.emission import energy_balance_split as ebs_fn
 
-        z = jnp.asarray(p.get("redshift", 0.0))
+        z = jnp.asarray(
+            require_redshift(p, "components.dust.emission.analytic.energy_balance_split.predict")
+        )
         sed = ebs_fn(
             wave,
             L_ir,

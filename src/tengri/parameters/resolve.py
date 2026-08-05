@@ -92,3 +92,77 @@ def resolve_fixed_params(model, params):
         # skip it — reintroducing the very drop this function exists to prevent.
         resolved[name] = jnp.asarray(value)
     return resolved
+
+
+def require_redshift(params, where):
+    r"""Read ``redshift`` from a params dict that is guaranteed to carry it.
+
+    Parameters
+    ----------
+    params : dict
+        Parameter dict. Must contain ``"redshift"``.
+    where : str
+        Caller identification for the error message, e.g.
+        ``"observation.observation.project_photometry"``. Shown verbatim, so
+        make it the thing a reader would grep for.
+
+    Returns
+    -------
+    float or jnp.ndarray
+        The redshift exactly as stored — no coercion, so a traced value stays
+        traced and JIT/vmap are unaffected.
+
+    Raises
+    ------
+    KeyError
+        If ``redshift`` is absent, naming *where* and the boundaries that are
+        supposed to guarantee it.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — a dict lookup on a static key, no tracing.
+
+    Replaces ``params.get("redshift", 0.0)``. That idiom predates
+    :func:`resolve_fixed_params` and is now a fossil: every dict reaching these
+    call sites has already passed one of two boundaries that inject a ``Fixed``
+    redshift —
+
+    * :class:`~tengri.forward.prediction.Prediction`, which sets ``_params =
+      resolve_fixed_params(model, params)``, and
+    * the forward pipeline, which merges ``{**fixed_values, **params}`` before
+      any component runs.
+
+    So the ``0.0`` was unreachable — which is exactly why it was dangerous. A
+    default that cannot be reached is not a safety net; it is a silencer for the
+    one condition worth hearing about. Should a future caller bypass both
+    boundaries, ``0.0`` places the galaxy at 10 pc and the flux is wrong by ~16
+    orders of magnitude, silently. :func:`resolve_fixed_params` exists because
+    precisely that shipped once. This raises instead.
+
+    Verified before the conversion: with ``redshift=Fixed(0.5)`` and a params
+    dict that correctly omits it, **no** site reached its default across
+    ``predict_photometry``, ``predict``, ``photometry``, ``magnitudes``,
+    ``spectrum``, ``obs_sed``, ``rest_sed``, the property catalog and
+    ``measure.from_prediction``.
+
+    Not every redshift lookup should use this. Two kinds legitimately have no
+    key and keep an explicit fallback:
+
+    * dicts from ``spec.get_fixed_values()`` — ``redshift`` is absent whenever
+      it is a *free* parameter, by construction;
+    * caller-supplied precompute reference params, which want a documented
+      reference redshift rather than an exception.
+    """
+    try:
+        return params["redshift"]
+    except KeyError:
+        raise KeyError(
+            f"{where}: 'redshift' is missing from the params dict.\n"
+            "Every dict reaching here should already carry it: Prediction "
+            "applies resolve_fixed_params(), and the forward pipeline merges "
+            "{**fixed_values, **params} before components run.\n"
+            "If you are calling this directly, pass a dict that includes "
+            "'redshift' (resolve_fixed_params(model, params) fills a Fixed one "
+            "in). Defaulting to 0.0 would put the galaxy at 10 pc — wrong by "
+            "~16 orders of magnitude, with no warning."
+        ) from None

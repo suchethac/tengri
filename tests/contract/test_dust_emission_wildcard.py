@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Contract: ``dust.emission``'s ``'*'`` must free parameters the backend reads.
 
-``dust={'emission': {'type': X, '*': FREE}}`` frees the same seven parameters
-whichever engine ``X`` names, and for two engines not one of the seven is a
+``dust={'emission': {'type': X, '*': FREE}}`` freed the same seven parameters
+whichever engine ``X`` named, and for two engines not one of the seven was a
 parameter that engine reads (#1482).
 
 Each backend *does* declare its own parameters correctly — every one is a
@@ -41,15 +41,24 @@ Without the narrowing those counts are all "7 of 22", diluted by parameters the
 selected engine never reads; without #1474's predicate only the two zero cases
 are caught at all.
 
-**Residual, deliberately not fixed here.** The expansion itself is still
-backend-blind: ``themis`` receives seven parameters and reads two, so five
-(``dust_alpha_dl14``, ``dust_epsilon_mbb``, ``dust_f_cold``, ``dust_f_pah``,
-``dust_lgU``) remain free no-op dimensions. Since #1474 that is at least *loud* —
-the warning names the two it could not free — but a sampler still explores the
-five. Narrowing the *expansion* rather than only the *check* changes the
-free-parameter count for existing callers, so it is left to #1482.
-``test_expansion_is_still_backend_blind`` pins the residual and inverts when it
-is fixed.
+**The expansion now resolves per backend too.** Narrowing only the *check* left
+the freed *set* backend-blind: ``themis`` received seven parameters and read two,
+so five (``dust_alpha_dl14``, ``dust_epsilon_mbb``, ``dust_f_cold``,
+``dust_f_pah``, ``dust_lgU``) stayed free no-op dimensions — loud since #1474,
+but still explored by every sampler. ``parse_groups`` now scopes the sub-block
+wildcard to the selected engine's declared parameters, the same block scoping the
+AGN and radio sub-blocks have always used: a parameter outside the set resolves
+to ``wildcard_fixed_inactive`` and stays declared-but-``Fixed``. Under
+``schreiber2016`` that is measured to be the difference between six inert free
+dimensions and none, with its own ``dust_T`` — worth 94% of the dust IR SED —
+correctly reported as the pinned one.
+
+Two engines keep the unscoped behavior by design, because an empty ``_priors``
+does not distinguish them: ``pah_drude`` is genuinely parameter-free, while
+``energy_balance_split`` reads six parameters declared in
+``components/dust/_params.py`` rather than on its class. Narrowing the latter to
+the empty set would pin all six — the failure this scoping exists to prevent — so
+``_declared_param_names`` returns ``None`` and the wildcard is left alone.
 
 The bands span 1500 A - 500 um so dust IR emission has somewhere to land — an
 optical-only filter set would report every dust-emission parameter as inert for
@@ -201,15 +210,12 @@ def test_wildcard_refuses_when_the_backend_has_nothing_freeable(
     )
 
 
-def test_expansion_is_still_backend_blind(synthetic_ssp_wide, panchromatic_obs):
-    """Pin the residual: the freed *set* still ignores ``emission.type`` (#1482).
+def test_the_freed_set_depends_on_the_backend(synthetic_ssp_wide, panchromatic_obs):
+    """The expansion resolves per backend, not once for the whole sub-block (#1482).
 
-    Narrowing the check stopped the zero-live builds, but a backend that frees at
-    least one of its own still also frees every other backend's freeable
-    parameter. ``themis`` reads two of the seven it receives; the other five are
-    silent no-op dimensions.
-
-    This inverts once the expansion — not just the guard — resolves per backend.
+    The inversion of the old ``test_expansion_is_still_backend_blind``. While the
+    expansion ignored ``emission.type``, these four engines received a byte-identical
+    seven-name set; each must now receive its own.
     """
     freed_sets = {
         etype: tuple(
@@ -219,19 +225,34 @@ def test_expansion_is_still_backend_blind(synthetic_ssp_wide, panchromatic_obs):
         )
         for etype in ("themis", "draine_li2007", "modified_blackbody", "astrodust")
     }
-    distinct = set(freed_sets.values())
 
-    assert len(distinct) == 1, (
-        "dust.emission '*' now expands per backend — the #1482 residual is fixed. "
-        f"Remove this test and update the module docstring. Freed sets: {freed_sets}"
+    assert len(set(freed_sets.values())) > 1, (
+        "dust.emission '*' expands to one backend-blind set again — the engine's "
+        f"own declarations are not being consulted (#1482). Freed sets: {freed_sets}"
     )
 
-    # And the over-freeing is real, not cosmetic: themis reads 2 of the 7.
-    themis = _build(synthetic_ssp_wide, panchromatic_obs, "themis")
-    freed, live = _live_params(themis)
-    assert len(live) < len(freed), (
-        f"themis now reads every parameter it is handed ({freed}) — the residual "
-        "is fixed, update this test"
+
+@pytest.mark.parametrize("emission_type", EMISSION_TYPES)
+def test_no_freed_parameter_is_inert(synthetic_ssp_wide, panchromatic_obs, emission_type):
+    """Every parameter ``'*': FREE`` hands the sampler must move the prediction.
+
+    Stronger than :func:`test_wildcard_frees_at_least_one_live_parameter`, which
+    only requires *one* live parameter and so passed throughout the era when
+    ``themis`` was handed seven and read two. A free dimension the selected engine
+    never reads is a flat direction: the sampler explores it at full cost, the
+    posterior comes back matching the prior, and nothing in the fit says why.
+    """
+    if emission_type in NOTHING_FREEABLE:
+        pytest.skip(f"{emission_type} has nothing freeable — covered by the raise test")
+
+    model = _build(synthetic_ssp_wide, panchromatic_obs, emission_type)
+    freed, live = _live_params(model)
+    inert = sorted(set(freed) - set(live))
+
+    assert not inert, (
+        f"dust.emission {{'type': '{emission_type}', '*': FREE}} freed {inert}, "
+        f"which do not move predict_photometry — they belong to other engines "
+        f"(freed={freed}, live={live}) (#1482)"
     )
 
 

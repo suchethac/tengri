@@ -757,6 +757,23 @@ def parse_groups(**kwargs) -> Parameters:
         structural_kwargs.get("radio_agn_model"), frozenset()
     )
 
+    # Which dust.emission params the selected IR engine actually reads. The
+    # sub-block's partition spans every engine it can dispatch to — 22 names
+    # across nine — so an unscoped ``emission={'*': FREE}`` frees whichever of
+    # those carry free registry defaults, whichever engine is selected. Under
+    # ``schreiber2016`` (a two-parameter model) that freed six parameters
+    # belonging to DL07/DL14/MBB/THEMIS, each provably inert — sweeping one
+    # across its full support leaves the dust IR SED bit-identical — while the
+    # engine's own ``dust_T`` stayed pinned, though it moves that SED by 94%
+    # (#1482). Scoping mirrors the AGN and radio blocks above. ``None`` when the
+    # engine declares nothing introspectable; the wildcard then keeps its
+    # unscoped behavior rather than guessing which names are live.
+    dust_emission_wildcard_params = (
+        _declared_param_names(structural_params.dust_emission)
+        if structural_params.dust_emission is not None
+        else None
+    )
+
     # Outcome of every *active* ``all_params: FREE`` wildcard, keyed by the
     # group it was written in. ``FREE`` resolves to the registry default, which
     # for most parameters is a ``Fixed`` scalar — so a wildcard can legally
@@ -851,6 +868,8 @@ def parse_groups(**kwargs) -> Parameters:
             wildcard_active = param_name in radio_sf_active
         elif group == "radio.agn":
             wildcard_active = param_name in radio_agn_active
+        elif group == "dust.emission" and dust_emission_wildcard_params is not None:
+            wildcard_active = param_name in dust_emission_wildcard_params
         final_dist, tag = _resolve_value(
             param_name,
             group_dict,
@@ -953,7 +972,12 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
     Parameters
     ----------
     component_type : str
-        Registry key, e.g. ``"dale2014"``.
+        Grammar type name as written in the spec, e.g. ``"dale2014"`` or
+        ``"dl07"``. Grammar names that are aliases (``dl07`` -> ``draine_li2007``,
+        ``mbb`` -> ``modified_blackbody``) are resolved through
+        ``_EMISSION_TYPE_ALIASES`` first; looking them up raw misses the class
+        and reports the engine as declaration-free, which silently disables both
+        the guard and the wildcard scoping for five production engines.
 
     Returns
     -------
@@ -961,10 +985,23 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
         Prefixed names (``dust_alpha_dale``, ...), or ``None`` when the type is
         not a registered component or declares nothing — the caller then leaves
         that group unnarrowed rather than guessing.
-    """
-    from tengri.forward.component_factory import _REGISTRY
 
-    cls = _REGISTRY.get(component_type)
+    Notes
+    -----
+    An empty ``_priors`` must stay ``None`` (unnarrowed), **not** an empty
+    frozenset. The two are not the same question, and two registered engines
+    sit on opposite sides of it: ``pah_drude`` is genuinely parameter-free (a
+    pure template shape), while ``energy_balance_split`` reads six real knobs
+    (``dust_T_warm``, ``dust_f_cold``, ``dust_L_agn_ir``, ...) that are declared
+    in ``components/dust/_params.py`` rather than on the class, because
+    re-declaring them alongside the attenuator's would raise a duplicate
+    declaration. Nothing introspectable separates the two cases, so returning an
+    empty set here would silently pin all six of the latter's parameters — the
+    very failure this narrowing exists to prevent.
+    """
+    from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES, _REGISTRY
+
+    cls = _REGISTRY.get(_EMISSION_TYPE_ALIASES.get(component_type, component_type))
     priors = getattr(cls, "_priors", None)
     if not priors:
         return None
