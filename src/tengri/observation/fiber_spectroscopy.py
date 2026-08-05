@@ -45,6 +45,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.observation.fiber_aperture import aperture_fraction, arcsec_to_kpc
+from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import ForwardState
 
 __all__ = ["FiberSpectroscopyObservation"]
@@ -108,7 +109,7 @@ class FiberSpectroscopyObservation:
         profile = state.derived["spatial_profile_2d"]
         grid = state.derived["spatial_grid_xy_kpc"]
 
-        z = jnp.asarray(params.get("redshift", 0.0))
+        z = jnp.asarray(require_redshift(params, "observation.fiber_spectroscopy.predict"))
         radius_kpc = arcsec_to_kpc(self.fiber_radius_arcsec, z)
         center_kpc = (
             float(arcsec_to_kpc(self.fiber_center_arcsec[0], z)),

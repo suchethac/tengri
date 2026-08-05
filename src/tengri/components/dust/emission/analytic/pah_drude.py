@@ -11,6 +11,7 @@ from typing import ClassVar
 import jax.numpy as jnp
 
 from tengri.components.dust.emission._component_base import EmissionComponent
+from tengri.parameters.resolve import require_redshift
 
 __all__ = ["PAHDrudeIRSEDComponent"]
 
@@ -93,6 +94,6 @@ class PAHDrudeIRSEDComponent(EmissionComponent):
         """
         from tengri.components.dust.emission import pah_drude as pah_fn
 
-        z = jnp.asarray(p.get("redshift", 0.0))
+        z = jnp.asarray(require_redshift(p, "components.dust.emission.analytic.pah_drude.predict"))
         sed = pah_fn(wave, L_ir, redshift=z)
         return sed_in + sed, {"sed_dust_ir": sed}
