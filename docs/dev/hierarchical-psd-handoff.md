@@ -1055,6 +1055,51 @@ is not §4i's non-stationary expansion.
 > anomaly, not yet a proven estimator bug. It is, however, now the **only**
 > open problem, and it is much better localized than "τ is unidentified".
 
+### Where τ's pull comes from — Laplace amplifies it ~2.8×, but does not create it
+
+Per-galaxy tilt toward the short-τ corner, at truth σ, for the 17 galaxies
+that have **both** a converged Laplace fit and an `mcmc_nuts` fit:
+
+    tilt_i = log Z_i(sigma_truth, 15 Myr) - log Z_i(sigma_truth, 150 Myr)
+
+| draws | mean tilt [nats/galaxy] | × N=256 |
+|---|---|---|
+| Laplace | **+1.044** | +267 |
+| `mcmc_nuts` | **+0.377** | +97 |
+
+Positive = prefers 15 Myr. **Both do.** The Gaussian approximation roughly
+triples the pull but is not its origin — so **refitting the bank with NUTS
+would cut τ's bias by about two-thirds and still rail low.** That is worth
+knowing before spending the compute: NUTS is ~600 s/galaxy against ~10 s.
+
+> ⚠ **The raw numbers from this probe were −1.258 and −1.925 — the opposite
+> sign.** `SharedGrid.log_prior` carries the **quadrature weight**, and the τ
+> grid is log-spaced, so that weight scales as τ: `log_prior(15) −
+> log_prior(150) = log(15/150) = −2.3026` exactly. Calling
+> `shared_log_posterior` once per galaxy adds it once per galaxy instead of
+> once, which for 17 galaxies is 16 spurious copies — enough to flip the sign.
+> A consistency check (sum of individual tilts vs the pooled surface at the
+> same nodes) caught it: −21.39 against +15.45, reconciling exactly as
+> 16 × (−2.3026). **Never read a per-galaxy `shared_log_posterior` value
+> without subtracting `grid.log_prior`.**
+
+### σ and τ are probably ONE displacement, not two biases
+
+| | σ | τ Myr |
+|---|---|---|
+| pooled mode (17 galaxies, full grid) | **0.832** | **11.4** |
+| truth | 0.750 | 150 |
+
+σ high *and* τ short is exactly the degeneracy direction of the OU kernel
+`(σ ln10)² exp(−|Δt|/τ)`: more variance with a shorter correlation time
+reproduces the same short-lag power. The σ miss at N=256 and τ's bias are
+plausibly the same slide along one ridge, which would explain why σ's error
+appears only once the interval is tight enough to resolve 4%.
+
+Not purely a ridge effect, though: at **fixed** truth σ the pooled surface
+still prefers τ=15 over τ=150 by 19.4 nats. Both a genuine short-τ preference
+at fixed σ *and* a ridge that carries σ upward.
+
 ---
 
 ## 4h. THE DRIVER — 13% of galaxies have a COLLAPSED ξ posterior
