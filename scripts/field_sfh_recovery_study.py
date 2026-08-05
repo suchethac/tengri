@@ -88,12 +88,26 @@ from tengri.observation.line_measurement import default_line_defs
 
 SSP_NAME = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0"
 PHOT_BANDS = [
-    "galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r",
-    "sdss_i", "sdss_z", "2mass_j", "2mass_h", "2mass_ks",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
 ]
 LINE_NAMES = [
-    "Halpha", "Hbeta", "OIII_5007", "OIII_4959",
-    "SII_6717", "SII_6731", "OII_3726", "OII_3729",
+    "Halpha",
+    "Hbeta",
+    "OIII_5007",
+    "OIII_4959",
+    "SII_6717",
+    "SII_6731",
+    "OII_3726",
+    "OII_3729",
 ]
 # Rising, still-star-forming backbone -- not quiescent.
 DPL = {"sfh_dpl_alpha": 2.0, "sfh_dpl_beta": 1.5, "sfh_dpl_age_gyr": 12.0, "sfh_dpl_tau_gyr": 13.0}
@@ -124,12 +138,16 @@ def build(ssp, observation):
     else:
         approx = WavePrecomp()
     return SEDModel.build(
-        ssp_data=ssp, observation=observation,
+        ssp_data=ssp,
+        observation=observation,
         sfh={"type": ["dpl", "field"], "*": FREE},
         stellar={"met_logzsol": Fixed(-0.3)},
         dust=builders.dust.two_component(defaults=FREE, law_bc="calzetti"),
-        neb=builders.neb.ssp(), redshift=Fixed(Z_GAL), apply_igm=False,
-        n_grid=N_GRID, approx=approx,
+        neb=builders.neb.ssp(),
+        redshift=Fixed(Z_GAL),
+        apply_igm=False,
+        n_grid=N_GRID,
+        approx=approx,
     )
 
 
@@ -140,14 +158,22 @@ def sfr_on_nodes(model, params):
 
 def make_truth(ssp, seed, sigma, noise_model, line_template):
     """One realization: truth, photometry, line fluxes. Shared by every arm."""
-    model = build(ssp, Observation(photometry=Photometry.from_names(PHOT_BANDS),
-                                   line_fluxes=line_template, noise=noise_model))
+    model = build(
+        ssp,
+        Observation(
+            photometry=Photometry.from_names(PHOT_BANDS),
+            line_fluxes=line_template,
+            noise=noise_model,
+        ),
+    )
     fixed = model.spec.get_fixed_values()
     truth = {
         **model.spec.sample(jax.random.PRNGKey(seed)),
         **{k: jnp.array(v) for k, v in DPL.items()},
-        "met_logzsol": jnp.array(-0.3), "dust_tau_bc": jnp.array(0.3),
-        "dust_tau_diff": jnp.array(0.15), "sfh_field_psd_sigma": jnp.array(sigma),
+        "met_logzsol": jnp.array(-0.3),
+        "dust_tau_bc": jnp.array(0.3),
+        "dust_tau_diff": jnp.array(0.15),
+        "sfh_field_psd_sigma": jnp.array(sigma),
         "sfh_field_psd_tau_myr": jnp.array(TAU_MYR),
         "sfh_dpl_log_total_mass": jnp.array(11.0),
     }
@@ -174,25 +200,51 @@ def make_truth(ssp, seed, sigma, noise_model, line_template):
     lines = LineFluxData(
         names=tuple(LINE_NAMES),
         fluxes=jnp.asarray(lf_true + lf_err * rng.standard_normal(lf_true.shape)),
-        errors=jnp.asarray(lf_err), wavelengths=line_template.wavelengths,
+        errors=jnp.asarray(lf_err),
+        wavelengths=line_template.wavelengths,
     )
     t_nod = np.asarray(model.predict_sfh(tf, grid="native")["t_gyr"])
-    return dict(model=model, fixed=fixed, tf=tf, flux=flux, noise=noise, lines=lines,
-                t_nod=t_nod, sfr_true=sfr_on_nodes(model, tf))
+    return dict(
+        model=model,
+        fixed=fixed,
+        tf=tf,
+        flux=flux,
+        noise=noise,
+        lines=lines,
+        t_nod=t_nod,
+        sfr_true=sfr_on_nodes(model, tf),
+    )
 
 
 def _fit(model, observation, data, noise, seed, data_type=None, **kw):
     """MAP through the canonical ForwardModel surface (Fitter(SEDModel) is deprecated)."""
     forward = ForwardModel.build(sed=model, observation=observation)
     extra = {"data_type": data_type} if data_type else {}
-    return forward.fit(data, noise, method="map", n_steps=10_000, n_restarts=6,
-                       key=jax.random.PRNGKey(seed), verbose=False, **extra, **kw)
+    return forward.fit(
+        data,
+        noise,
+        method="map",
+        n_steps=10_000,
+        n_restarts=6,
+        key=jax.random.PRNGKey(seed),
+        verbose=False,
+        **extra,
+        **kw,
+    )
 
 
 def _dex(pred, truth, mask):
-    return float(np.sqrt(np.mean(
-        (np.log10(np.clip(pred[mask], 1e-8, None)) - np.log10(np.clip(truth[mask], 1e-8, None))) ** 2
-    )))
+    return float(
+        np.sqrt(
+            np.mean(
+                (
+                    np.log10(np.clip(pred[mask], 1e-8, None))
+                    - np.log10(np.clip(truth[mask], 1e-8, None))
+                )
+                ** 2
+            )
+        )
+    )
 
 
 def sign_test(k, n):
@@ -217,33 +269,50 @@ def run_paired(ssp, seeds, noise_model, line_template, with_spectrum):
             mid = (r["t_nod"] >= YOUNG_GYR) & (r["t_nod"] < MID_GYR)
 
             cfg = {
-                "phot": (Observation(photometry=phot, noise=noise_model),
-                         r["flux"], r["noise"], None),
-                "lines": (Observation(photometry=phot, line_fluxes=r["lines"], noise=noise_model),
-                          r["flux"], r["noise"], None),
+                "phot": (
+                    Observation(photometry=phot, noise=noise_model),
+                    r["flux"],
+                    r["noise"],
+                    None,
+                ),
+                "lines": (
+                    Observation(photometry=phot, line_fluxes=r["lines"], noise=noise_model),
+                    r["flux"],
+                    r["noise"],
+                    None,
+                ),
             }
             if with_spectrum:
                 spec_obs = Spectroscopy(wave_obs=WAVE_OBS, resolution=2000)
-                m_spec = build(ssp, Observation(photometry=phot, spectroscopy=spec_obs,
-                                                noise=noise_model))
+                m_spec = build(
+                    ssp, Observation(photometry=phot, spectroscopy=spec_obs, noise=noise_model)
+                )
                 p_spec = np.asarray(m_spec.predict_spectrum(r["tf"], wave_obs=WAVE_OBS))
                 n_spec = np.abs(p_spec) / 30.0
-                f_spec = p_spec + np.random.default_rng(seed + 30_000).normal(
-                    size=p_spec.shape) * n_spec
-                cfg["spec"] = (Observation(photometry=phot, spectroscopy=spec_obs,
-                                           noise=noise_model),
-                               np.concatenate([r["flux"], f_spec]),
-                               np.concatenate([r["noise"], n_spec]), "joint")
+                f_spec = (
+                    p_spec
+                    + np.random.default_rng(seed + 30_000).normal(size=p_spec.shape) * n_spec
+                )
+                cfg["spec"] = (
+                    Observation(photometry=phot, spectroscopy=spec_obs, noise=noise_model),
+                    np.concatenate([r["flux"], f_spec]),
+                    np.concatenate([r["noise"], n_spec]),
+                    "joint",
+                )
 
             for arm in arms:
                 observation, data, noise, dtype = cfg[arm]
                 model = build(ssp, observation)
                 post = _fit(model, observation, data, noise, seed, data_type=dtype)
                 pred = sfr_on_nodes(model, {**r["fixed"], **post.params})
-                res[arm][sigma].append((_dex(pred, r["sfr_true"], young),
-                                        _dex(pred, r["sfr_true"], mid)))
-        print(f"  sigma={sigma}: {len(res['phot'][sigma])} realizations, "
-              f"{len(skipped[sigma])} skipped (Halpha in absorption)", flush=True)
+                res[arm][sigma].append(
+                    (_dex(pred, r["sfr_true"], young), _dex(pred, r["sfr_true"], mid))
+                )
+        print(
+            f"  sigma={sigma}: {len(res['phot'][sigma])} realizations, "
+            f"{len(skipped[sigma])} skipped (Halpha in absorption)",
+            flush=True,
+        )
     return res, skipped, arms
 
 
@@ -262,8 +331,12 @@ def report(res, arms, label, idx):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--stage", choices=["paired", "spectrum", "cells"], default="paired")
-    ap.add_argument("--n-seeds", type=int, default=15,
-                    help="realizations per sigma (n=3 is NOT enough; see module docstring)")
+    ap.add_argument(
+        "--n-seeds",
+        type=int,
+        default=15,
+        help="realizations per sigma (n=3 is NOT enough; see module docstring)",
+    )
     ap.add_argument("--seed0", type=int, default=101)
     args = ap.parse_args()
 
@@ -274,9 +347,12 @@ def main():
             "n for a fraction of the cost."
         )
     if args.n_seeds < 8:
-        print(f"WARNING: n={args.n_seeds} realizations. The paired difference this measures "
-              f"is ~0.1 dex against ~0.15 dex realization scatter; n=3 produced a spurious "
-              f"sigma-dependence that n=15 refuted.", flush=True)
+        print(
+            f"WARNING: n={args.n_seeds} realizations. The paired difference this measures "
+            f"is ~0.1 dex against ~0.15 dex realization scatter; n=3 produced a spurious "
+            f"sigma-dependence that n=15 refuted.",
+            flush=True,
+        )
 
     OUTDIR.mkdir(parents=True, exist_ok=True)
     ssp = _ssp()
@@ -285,8 +361,11 @@ def main():
     seeds = list(range(args.seed0, args.seed0 + args.n_seeds))
     with_spectrum = args.stage == "spectrum"
 
-    print(f"stage={args.stage}  n={args.n_seeds} realizations per sigma  "
-          f"scoring on the native log-age grid", flush=True)
+    print(
+        f"stage={args.stage}  n={args.n_seeds} realizations per sigma  "
+        f"scoring on the native log-age grid",
+        flush=True,
+    )
     res, skipped, arms = run_paired(ssp, seeds, noise_model, line_template, with_spectrum)
 
     print("\n" + "=" * 78, flush=True)
@@ -294,19 +373,31 @@ def main():
     print("=" * 78, flush=True)
     report(res, arms, f"YOUNG (< {YOUNG_GYR * 1e3:.0f} Myr) -- where the LINES act", 0)
     if with_spectrum:
-        report(res, arms,
-               f"INTERMEDIATE ({YOUNG_GYR * 1e3:.0f} Myr - {MID_GYR:.0f} Gyr) -- "
-               "where the CONTINUUM should act", 1)
+        report(
+            res,
+            arms,
+            f"INTERMEDIATE ({YOUNG_GYR * 1e3:.0f} Myr - {MID_GYR:.0f} Gyr) -- "
+            "where the CONTINUUM should act",
+            1,
+        )
 
     out = OUTDIR / f"paired_{args.stage}_n{args.n_seeds}.npz"
-    np.savez(out, seeds=np.array(seeds), sigmas=np.array(SIGMAS), arms=np.array(arms),
-             **{f"{a}_{s}": np.array(res[a][s]) for a in arms for s in SIGMAS},
-             **{f"skipped_{s}": np.array(skipped[s]) for s in SIGMAS})
+    np.savez(
+        out,
+        seeds=np.array(seeds),
+        sigmas=np.array(SIGMAS),
+        arms=np.array(arms),
+        **{f"{a}_{s}": np.array(res[a][s]) for a in arms for s in SIGMAS},
+        **{f"skipped_{s}": np.array(skipped[s]) for s in SIGMAS},
+    )
     print(f"\nwrote {out}", flush=True)
     total_skipped = sum(len(v) for v in skipped.values())
     if total_skipped:
-        print(f"NOTE: {total_skipped} realization(s) dropped for Halpha in absorption "
-              f"(counted, not silently discarded).", flush=True)
+        print(
+            f"NOTE: {total_skipped} realization(s) dropped for Halpha in absorption "
+            f"(counted, not silently discarded).",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

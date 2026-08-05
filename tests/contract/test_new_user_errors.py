@@ -357,13 +357,80 @@ def test_model_menu_use_strings_teach_sedmodel_build():
         tengri.list_xray_models,
         tengri.list_igm_models,
     ]
+    # Status-aware, deliberately. The unconditional form of this check asserted
+    # that EVERY row starts with ``SEDModel.build(`` — a test of the hint's
+    # SHAPE, not of whether it runs. The eight ``UNVALIDATED_SFH_TYPES`` passed
+    # it while ``SEDModel.build(..., sfh={'type': 'top_hat'})`` raised
+    # ValueError, which is why the "advice that raises" class (#1275) read as
+    # holding across 153 hints. A row the builder rejects must not advertise a
+    # call at all; see ``test_unbuildable_rows_do_not_advertise_a_build_call``.
     offenders = [
         (fn.__name__, row["name"], row["use"])
         for fn in menus
         for row in fn()
-        if not row["use"].startswith("SEDModel.build(")
+        if row.get("status") != "unvalidated" and not row["use"].startswith("SEDModel.build(")
     ]
     assert not offenders, offenders
+
+
+def test_unbuildable_rows_do_not_advertise_a_build_call():
+    """A row the builder rejects must not hand the user a call that raises.
+
+    The complement of the check above: ``status='unvalidated'`` rows are kept
+    in the menu on purpose — delisting them recreates the invisibility of #1120
+    — but their ``use:`` field must carry the reason and the next step rather
+    than a copy-pasteable ``SEDModel.build(...)`` that fails.
+    """
+    import tengri
+
+    offenders = [
+        (row["name"], row["use"])
+        for fn in (tengri.list_sfh_models,)
+        for row in fn()
+        if row.get("status") == "unvalidated" and row["use"].startswith("SEDModel.build(")
+    ]
+    assert not offenders, (
+        f"unbuildable rows advertise a build call that raises: {offenders}. "
+        "Put the reason in `use:`, not a call the builder refuses."
+    )
+
+
+def test_every_advertised_sfh_use_hint_actually_builds(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Execute the hints rather than pattern-matching them.
+
+    The shape check above cannot tell a working call from a failing one, which
+    is the gap that let the unvalidated eight through. This runs every ``use:``
+    string the SFH menu advertises. Scoped to SFH because these models build on
+    the synthetic grid — component menus whose libraries are data-gated cannot
+    be executed in CI without turning a contract test into a data-gated one
+    that silently skips.
+    """
+    import warnings
+
+    import tengri
+    from tengri import FIXED, Fixed, SEDModel
+
+    failures = []
+    for row in tengri.list_sfh_models(status="production"):
+        assert row["use"].startswith("SEDModel.build("), row["use"]
+        # Mixture/modulator rows advertise the composed ``['const', name]``
+        # form; parse whichever shape the row carries rather than assuming one.
+        spec = ["const", row["name"]] if "['const', " in row["use"] else row["name"]
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                SEDModel.build(
+                    ssp_data=synthetic_ssp_wide,
+                    observation=synthetic_tophat_obs,
+                    sfh={"type": spec, "all_params": FIXED},
+                    redshift=Fixed(0.1),
+                )
+        except Exception as exc:
+            failures.append((row["name"], row["use"], f"{type(exc).__name__}: {exc}"))
+
+    assert not failures, "menu rows advertise `use:` hints that do not build:\n" + "\n".join(
+        f"  {n}: {u}\n    -> {e}" for n, u, e in failures
+    )
 
 
 def test_list_components_use_hints_reference_real_functions():

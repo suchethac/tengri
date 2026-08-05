@@ -52,6 +52,7 @@ import jax.numpy as jnp
 import numpy as np
 import matplotlib.pyplot as plt
 
+import tengri
 from tengri import (
     FIXED,
     Fixed,
@@ -59,7 +60,6 @@ from tengri import (
     Photometry,
     SEDModel,
     Uniform,
-    load_ssp_data,
 )
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Distribution
@@ -67,7 +67,7 @@ from tengri.parameters.priors import Distribution
 # %% [markdown]
 # ## A worked example — your own modified blackbody
 #
-# Let's port the simplest dust IR emission model — a modified blackbody —
+# Let's take the simplest dust IR emission model, a modified blackbody,
 # from physics straight to a working tengri model. The formula is
 #
 # $$ L_\nu(\lambda, T, \beta) = N(T, \beta, L_{\rm absorbed})\,\nu^\beta\,B_\nu(T) $$
@@ -147,12 +147,19 @@ for d in MyModifiedBlackbody().declared_parameters():
 # declared above is reachable from the standard nested-dict grammar:
 
 # %%
-# A small synthetic SSP for the demo (replace with a real grid for science)
-# Skip the actual model construction here if no SSP is on disk.
-SSP_PATH = "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+# `load_ssp` resolves the grid wherever it lives, so this demo does not depend
+# on the working directory. The gate here used to test a working-directory-
+# relative path with os.path.exists, which *silently* took the else-branch
+# whenever the notebook ran from anywhere but the repository root — publishing
+# "skipping the build demo" in place of the content it exists to show.
+SSP_NAME = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0"
 
-if os.path.exists(SSP_PATH):
-    ssp = load_ssp_data(SSP_PATH)
+try:
+    ssp = tengri.load_ssp(SSP_NAME)
+except FileNotFoundError as exc:
+    ssp = None
+    _why = exc
+if ssp is not None:
     obs = Observation(
         photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i"]),
     )
@@ -171,8 +178,8 @@ if os.path.exists(SSP_PATH):
     )
     model.spec.summary()
 else:
-    print(f"SSP file {SSP_PATH} not found — skipping the build demo.")
-    print("Place a real SSP file under data/ to run end-to-end.")
+    print(f"Skipping the build demo: {_why}")
+    print("Fetch a grid with tengri.download_ssp(), or set $TENGRI_DATA_DIR.")
 
 # %% [markdown]
 # ## What the framework gives you for free
@@ -282,7 +289,7 @@ else:
 # ```
 #
 # All three are the same shape, just different bodies of `predict`. See
-# the canonical ports in `src/tengri/components/<domain>/<name>_model.py`.
+# the canonical components in `src/tengri/components/<domain>/<name>_model.py`.
 
 # %% [markdown]
 # ## Further reading
@@ -295,6 +302,6 @@ else:
 # - **The decision**: `docs/adr/0011-sed-model-component-base.md` — why
 #   the base class exists and what alternatives were considered.
 # - **The base class**: `src/tengri/components/sed_model_component.py`.
-# - **Canonical ports**: `src/tengri/components/dust/wg00_model.py`
+# - **Canonical components**: `src/tengri/components/dust/wg00_model.py`
 #   (closed-form attenuation), `src/tengri/components/dust/draine2021_pah_ir.py`
 #   (template library), `src/tengri/components/agn/skirtor_model.py` (library).

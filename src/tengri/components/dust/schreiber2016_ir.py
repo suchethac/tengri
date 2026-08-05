@@ -25,6 +25,7 @@ import jax.numpy as jnp
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig
+from tengri.utils.grid_interp import resample_template
 
 __all__ = ["Schreiber2016IRConfig", "Schreiber2016IRSEDComponent"]
 
@@ -231,7 +232,7 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
         template = (1.0 - f_pah_c) * continuum_interp + f_pah_c * pah_interp
 
         # Interpolate onto target wavelength grid
-        sed = jnp.interp(wave, tmpl_wave, template, left=0.0, right=0.0)
+        sed = resample_template(wave, tmpl_wave, template, left=0.0, right=0.0)
 
         # Scale by absorbed luminosity
         sed_emission = L_ir * sed

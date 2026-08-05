@@ -22,6 +22,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri import Uniform
 from tengri.inference.preconditioning import (
     metric_preconditioner,
     negative_hessian_metric,
@@ -122,14 +123,34 @@ class TestPreconditionedLogdensity:
         _, pc, zeta0 = preconditioned_logdensity(log_p, xi0, 0.0)
         assert np.max(np.abs(np.asarray(pc.to_xi(zeta0) - xi0))) < 1e-8
 
-    def test_curvature_at_the_expansion_point_is_whitened(self):
+    def test_full_strength_whitens_the_curvature_at_the_expansion_point(self):
+        """``strength=1.0`` is exact whitening — the property the transform is named for."""
         M = _ill_conditioned_metric(cond=1e6)
         log_p = _gaussian_logdensity(M)
         xi0 = jnp.zeros(6)
-        wrapped, _, zeta0 = preconditioned_logdensity(log_p, xi0, 0.0)
+        wrapped, _, zeta0 = preconditioned_logdensity(log_p, xi0, 0.0, strength=1.0)
         H = np.asarray(negative_hessian_metric(wrapped, zeta0, 0.0, floor=0.0))
         assert np.linalg.cond(np.asarray(M)) > 1e5
         assert abs(np.linalg.cond(H) - 1.0) < 1e-6
+
+    def test_the_default_strength_deliberately_leaves_residual_curvature(self):
+        """The default is partial (#1442): it must improve conditioning, not erase it.
+
+        Erasing it is what full whitening does, and full whitening is what amplifies a
+        misspecified metric without bound. The residual is the price of that bound, and
+        for an exact metric it is exactly ``sqrt(cond)``.
+        """
+        from tengri.inference.preconditioning import DEFAULT_WHITENING_STRENGTH
+
+        M = _ill_conditioned_metric(cond=1e6)
+        log_p = _gaussian_logdensity(M)
+        wrapped, _, zeta0 = preconditioned_logdensity(log_p, jnp.zeros(6), 0.0)
+        got = np.linalg.cond(np.asarray(negative_hessian_metric(wrapped, zeta0, 0.0, floor=0.0)))
+        assert 1.0 < got < np.linalg.cond(np.asarray(M)), (
+            f"default strength left cond={got:.3e}; expected a strict improvement short of 1"
+        )
+        want = np.linalg.cond(np.asarray(M)) ** (1.0 - DEFAULT_WHITENING_STRENGTH)
+        assert got == pytest.approx(want, rel=1e-4)
 
 
 def _run_nuts(logdensity, init, *, seed, n_warmup=400, n_samples=600):
@@ -355,10 +376,13 @@ class TestAutoPolicy:
     """
 
     def test_explicit_true_and_false_round_trip(self):
-        from tengri.inference.preconditioning import _resolve_precondition
+        from tengri.inference.preconditioning import (
+            DEFAULT_WHITENING_STRENGTH,
+            _resolve_whitening_strength,
+        )
 
-        assert _resolve_precondition(True, 10_000) is True
-        assert _resolve_precondition(False, 2) is False
+        assert _resolve_whitening_strength(True, 10_000) == DEFAULT_WHITENING_STRENGTH
+        assert _resolve_whitening_strength(False, 2) is None
 
     @pytest.mark.parametrize("n_dim", [2, 7, 8, 30, 137, 1024, 10_000])
     def test_the_default_is_off_at_every_dimension(self, n_dim):
@@ -376,18 +400,20 @@ class TestAutoPolicy:
         a median 1.87x ESS/s at D=7 but 0.84x — a loss — at D=8. A feature that can
         turn a converging fit into a non-converging one has to be asked for.
         """
-        from tengri.inference.preconditioning import _resolve_precondition
+        from tengri.inference.preconditioning import _resolve_whitening_strength
 
-        assert _resolve_precondition(None, n_dim) is False
+        assert _resolve_whitening_strength(None, n_dim) is None
 
     def test_explicit_true_is_honored_above_the_cost_threshold(self):
         """The cap advises on O(D^3) cost; it must not veto an explicit request."""
         from tengri.inference.preconditioning import (
+            DEFAULT_WHITENING_STRENGTH,
             PRECONDITION_MAX_DIM,
-            _resolve_precondition,
+            _resolve_whitening_strength,
         )
 
-        assert _resolve_precondition(True, PRECONDITION_MAX_DIM + 1) is True
+        got = _resolve_whitening_strength(True, PRECONDITION_MAX_DIM + 1)
+        assert got == DEFAULT_WHITENING_STRENGTH
 
     def test_threshold_is_a_measured_dimension_not_a_sentinel(self):
         from tengri.inference.preconditioning import PRECONDITION_MAX_DIM
@@ -636,3 +662,498 @@ class TestNonFiniteExpansionPoint:
         # reader to fix curvature when the defect is upstream.
         assert "finite" in msg or "nan" in msg, f"non-finiteness not named: {excinfo.value}"
         assert "positive definite" not in msg, f"NaN metric diagnosed as non-PD: {excinfo.value}"
+
+
+def _powered_metric(metric, gamma):
+    """``M^gamma`` through the eigenbasis — a metric misspecified by exponent ``gamma``."""
+    eigenvalues, eigenvectors = np.linalg.eigh(np.asarray(metric))
+    return (eigenvectors * eigenvalues**gamma) @ eigenvectors.T
+
+
+def _condition(matrix):
+    """Condition number of the symmetric part [dimensionless]."""
+    eigenvalues = np.linalg.eigvalsh(0.5 * (np.asarray(matrix) + np.asarray(matrix).T))
+    return float(eigenvalues.max() / eigenvalues.min())
+
+
+class TestTemperMetric:
+    """``G -> G^alpha``, capped — the spectral shaping that bounds whitening (#1442).
+
+    Kept separate from :func:`metric_preconditioner` because it is a pure function of
+    the spectrum and is where the entire robustness argument lives. The factorization
+    that follows it is unchanged.
+    """
+
+    def test_full_strength_returns_the_metric_unchanged(self):
+        from tengri.inference.preconditioning import temper_metric
+
+        metric = _ill_conditioned_metric(5, 1e4)
+        got = np.asarray(temper_metric(metric, strength=1.0, max_condition=np.inf))
+        np.testing.assert_allclose(got, metric, rtol=1e-10, atol=1e-10)
+
+    def test_zero_strength_returns_the_identity(self):
+        """``alpha = 0`` must be exactly "no preconditioning", not "nearly"."""
+        from tengri.inference.preconditioning import temper_metric
+
+        metric = _ill_conditioned_metric(5, 1e6)
+        got = np.asarray(temper_metric(metric, strength=0.0, max_condition=np.inf))
+        np.testing.assert_allclose(got, np.eye(5), rtol=0, atol=1e-10)
+
+    def test_half_strength_is_the_matrix_square_root(self):
+        from tengri.inference.preconditioning import temper_metric
+
+        metric = _ill_conditioned_metric(4, 1e3)
+        root = np.asarray(temper_metric(metric, strength=0.5, max_condition=np.inf))
+        np.testing.assert_allclose(root @ root, metric, rtol=1e-8, atol=1e-8)
+
+    def test_preserves_the_eigenvectors(self):
+        """Tempering rescales the spectrum; it must not rotate the basis."""
+        from tengri.inference.preconditioning import temper_metric
+
+        metric = _ill_conditioned_metric(5, 1e4)
+        tempered = np.asarray(temper_metric(metric, strength=0.4, max_condition=np.inf))
+        _, want = np.linalg.eigh(metric)
+        _, got = np.linalg.eigh(tempered)
+        # Eigenvectors are defined up to sign; compare the projectors instead.
+        np.testing.assert_allclose(np.abs(got.T @ want), np.eye(5), rtol=0, atol=1e-7)
+
+    def test_caps_the_condition_number_before_exponentiating(self):
+        from tengri.inference.preconditioning import temper_metric
+
+        metric = _ill_conditioned_metric(5, 1e12)
+        tempered = temper_metric(metric, strength=1.0, max_condition=1e6)
+        assert _condition(tempered) <= 1e6 * (1 + 1e-9)
+
+    def test_an_uncapped_metric_keeps_its_full_spread(self):
+        """Neuter check: the cap test above must not pass because the input was tame."""
+        from tengri.inference.preconditioning import temper_metric
+
+        metric = _ill_conditioned_metric(5, 1e12)
+        assert _condition(temper_metric(metric, strength=1.0, max_condition=np.inf)) > 1e11
+
+    @pytest.mark.parametrize("bad", [-0.1, 1.5, np.nan])
+    def test_refuses_a_strength_outside_the_unit_interval(self, bad):
+        from tengri.inference.preconditioning import temper_metric
+
+        with pytest.raises(ValueError, match="strength"):
+            temper_metric(_ill_conditioned_metric(3, 10.0), strength=bad)
+
+
+class TestWhiteningStrengthBoundsTheDamage:
+    """#1442: whitening with a wrong metric amplifies rather than degrading gracefully.
+
+    Write the true precision as ``H`` and the metric actually used as ``G = H^gamma``
+    (``gamma = 1`` is a perfect metric). For any ``A`` with ``A A^T = G^-alpha`` the
+    eigenvalues of the whitened precision ``A^T H A`` are the generalized eigenvalues of
+    the pencil ``(H, G^alpha)``, so
+
+    .. math:: \\kappa_{\\rm whitened} = \\kappa(H)^{|1 - \\alpha\\gamma|}
+
+    Preconditioning is therefore worse than doing nothing exactly when
+    ``|1 - alpha*gamma| > 1``, i.e. when ``gamma > 2/alpha``. Full whitening
+    (``alpha = 1``) tolerates only ``gamma <= 2``.
+    """
+
+    @staticmethod
+    def _whitened_precision(true_precision, gamma, strength):
+        from tengri.inference.preconditioning import metric_preconditioner, temper_metric
+
+        metric = _powered_metric(true_precision, gamma)
+        tempered = temper_metric(metric, strength=strength, max_condition=np.inf)
+        a = np.asarray(metric_preconditioner(tempered).matrix)
+        return a.T @ np.asarray(true_precision) @ a
+
+    def test_full_whitening_is_exactly_as_bad_as_nothing_at_gamma_two(self):
+        """The headline failure: alpha=1 buys *nothing* when the metric is squared."""
+        h = _ill_conditioned_metric(6, 1e4)
+        got = _condition(self._whitened_precision(h, gamma=2.0, strength=1.0))
+        assert got == pytest.approx(_condition(h), rel=1e-4), (
+            f"expected full whitening to reproduce kappa(H)={_condition(h):.3e}, got {got:.3e}"
+        )
+
+    def test_half_strength_repairs_the_case_full_whitening_ruins(self):
+        """Same misspecification, alpha=0.5: perfectly conditioned instead of untouched."""
+        h = _ill_conditioned_metric(6, 1e4)
+        got = _condition(self._whitened_precision(h, gamma=2.0, strength=0.5))
+        assert got == pytest.approx(1.0, abs=1e-6), f"kappa after half-strength = {got:.3e}"
+
+    def test_full_whitening_amplifies_ill_conditioning_beyond_gamma_two(self):
+        """Past gamma=2 the transform is worse than the problem it was meant to fix."""
+        h = _ill_conditioned_metric(6, 1e4)
+        full = _condition(self._whitened_precision(h, gamma=3.0, strength=1.0))
+        half = _condition(self._whitened_precision(h, gamma=3.0, strength=0.5))
+        assert full > 100 * _condition(h), f"expected amplification, got {full:.3e}"
+        assert half < _condition(h), f"half strength should still help, got {half:.3e}"
+
+    @pytest.mark.parametrize("gamma", [0.5, 1.0, 2.0])
+    @pytest.mark.parametrize("strength", [0.25, 0.5, 1.0])
+    def test_whitened_condition_follows_the_exponent_law(self, gamma, strength):
+        h = _ill_conditioned_metric(6, 1e4)
+        got = _condition(self._whitened_precision(h, gamma=gamma, strength=strength))
+        want = _condition(h) ** abs(1.0 - strength * gamma)
+        assert got == pytest.approx(want, rel=1e-4), (
+            f"gamma={gamma} alpha={strength}: got {got:.4e}, law predicts {want:.4e}"
+        )
+
+    def test_the_default_strength_tolerates_a_squared_metric(self):
+        """Whatever the default is, it must survive the gamma=2 case that broke fits."""
+        from tengri.inference.preconditioning import DEFAULT_WHITENING_STRENGTH
+
+        h = _ill_conditioned_metric(6, 1e4)
+        got = _condition(
+            self._whitened_precision(h, gamma=2.0, strength=DEFAULT_WHITENING_STRENGTH)
+        )
+        assert got < _condition(h), (
+            f"default strength {DEFAULT_WHITENING_STRENGTH} is no better than nothing at gamma=2"
+        )
+
+
+class TestResolveWhiteningStrength:
+    """``precondition`` carries both the switch and the strength (#1442)."""
+
+    def test_true_selects_the_default_strength(self):
+        from tengri.inference.preconditioning import (
+            DEFAULT_WHITENING_STRENGTH,
+            _resolve_whitening_strength,
+        )
+
+        assert _resolve_whitening_strength(True, 10) == DEFAULT_WHITENING_STRENGTH
+
+    def test_none_and_false_are_off(self):
+        from tengri.inference.preconditioning import _resolve_whitening_strength
+
+        assert _resolve_whitening_strength(None, 10) is None
+        assert _resolve_whitening_strength(False, 10) is None
+
+    def test_a_float_selects_that_strength(self):
+        from tengri.inference.preconditioning import _resolve_whitening_strength
+
+        assert _resolve_whitening_strength(0.25, 10) == pytest.approx(0.25)
+        assert _resolve_whitening_strength(1.0, 10) == pytest.approx(1.0)
+
+    def test_zero_strength_is_off_rather_than_an_identity_transform(self):
+        """``alpha=0`` is a no-op, so skip the Hessian entirely instead of building one."""
+        from tengri.inference.preconditioning import _resolve_whitening_strength
+
+        assert _resolve_whitening_strength(0.0, 10) is None
+
+    @pytest.mark.parametrize("bad", [-0.5, 1.01, 7.0])
+    def test_a_strength_outside_the_unit_interval_is_refused(self, bad):
+        from tengri.inference.preconditioning import _resolve_whitening_strength
+
+        with pytest.raises(ValueError, match="precondition"):
+            _resolve_whitening_strength(bad, 10)
+
+    def test_the_default_is_a_partial_whitening(self):
+        """A default of 1.0 would reinstate the unbounded-damage behavior of #1442."""
+        from tengri.inference.preconditioning import DEFAULT_WHITENING_STRENGTH
+
+        assert 0.0 < DEFAULT_WHITENING_STRENGTH < 1.0
+
+
+class TestPrepareHonorsTheStrength:
+    def test_a_float_precondition_whitens_partially(self):
+        from tengri.inference.preconditioning import prepare_preconditioning
+
+        metric = _ill_conditioned_metric(5, 1e4)
+        problem = prepare_preconditioning(
+            _gaussian_logdensity(metric), jnp.zeros(5), 0.0, precondition=0.5
+        )
+        assert problem.enabled is True
+        a = np.asarray(problem.preconditioner.matrix)
+        # A A^T = G^-alpha  =>  (A A^T)^-1 = G^0.5, whose square is G.
+        g_half = np.linalg.inv(a @ a.T)
+        np.testing.assert_allclose(g_half @ g_half, metric, rtol=1e-6, atol=1e-6)
+
+    def test_zero_precondition_is_the_untouched_problem(self):
+        from tengri.inference.preconditioning import prepare_preconditioning
+
+        log_p = _gaussian_logdensity(_ill_conditioned_metric(5, 1e4))
+        problem = prepare_preconditioning(log_p, jnp.zeros(5), 0.0, precondition=0.0)
+        assert problem.enabled is False
+        assert problem.logdensity is log_p
+
+    def test_the_strength_is_reported_on_the_problem(self):
+        """A fit that cannot say how hard it whitened cannot be compared to another."""
+        from tengri.inference.preconditioning import prepare_preconditioning
+
+        metric = _ill_conditioned_metric(5, 1e4)
+        problem = prepare_preconditioning(
+            _gaussian_logdensity(metric), jnp.zeros(5), 0.0, precondition=0.25
+        )
+        assert problem.strength == pytest.approx(0.25)
+
+
+class TestAdaptationCacheKey:
+    """A step size tuned in one basis is meaningless in another (#1442).
+
+    ``run_nuts`` / ``run_hmc`` / ``run_dynamic_hmc`` each cache the warmup result on a
+    per-fitter key. That key recorded *whether* the coordinates were whitened but not
+    *how hard*, so two fits differing only in strength shared a step size — silently,
+    since a step size is a plain float and any value "works".
+
+    The knowledge of what makes two adaptations incompatible belongs to the transform,
+    not to three copies in three backends.
+    """
+
+    @staticmethod
+    def _problem(precondition):
+        from tengri.inference.preconditioning import prepare_preconditioning
+
+        metric = _ill_conditioned_metric(5, 1e4)
+        return prepare_preconditioning(
+            _gaussian_logdensity(metric), jnp.zeros(5), 0.0, precondition=precondition
+        )
+
+    def test_two_strengths_do_not_share_a_key(self):
+        assert self._problem(0.25).cache_key != self._problem(0.75).cache_key
+
+    def test_enabled_and_disabled_do_not_share_a_key(self):
+        assert self._problem(0.5).cache_key != self._problem(False).cache_key
+
+    def test_the_same_strength_shares_a_key(self):
+        """Otherwise the cache never hits and every fit re-runs warmup."""
+        assert self._problem(0.5).cache_key == self._problem(0.5).cache_key
+
+    def test_true_and_the_default_strength_agree(self):
+        from tengri.inference.preconditioning import DEFAULT_WHITENING_STRENGTH
+
+        assert self._problem(True).cache_key == self._problem(DEFAULT_WHITENING_STRENGTH).cache_key
+
+    def test_the_key_is_hashable(self):
+        assert isinstance(hash(self._problem(0.5).cache_key), int)
+        assert isinstance(hash(self._problem(False).cache_key), int)
+
+
+def test_every_hamiltonian_backend_keys_its_adaptation_on_the_strength():
+    """Guard: a fourth backend must not reintroduce the copy-pasted boolean key.
+
+    Grep-based on purpose. The failure it prevents is invisible at runtime — a stale
+    step size is a finite float that samples happily and badly.
+    """
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[3] / "src/tengri/inference/backends/mcmc"
+    offenders = []
+    for path in sorted(root.glob("*.py")):
+        text = path.read_text()
+        if "prepare_preconditioning" not in text:
+            continue
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if "adapt_key" in line and "problem.enabled" in line:
+                offenders.append(f"{path.name}:{lineno}: {line.strip()}")
+    assert not offenders, "adaptation key ignores whitening strength:\n" + "\n".join(offenders)
+
+
+def test_each_mcmc_backend_owns_its_adaptation_cache_namespace():
+    """Two samplers must not share a warmup cache entry.
+
+    Found while wiring the strength into the key: ``hmc.py`` and ``dynamic_hmc.py``
+    both opened their tuple with the literal ``"hmc"`` and carried the same arity, so a
+    process running both handed the second whatever the first had tuned. Dynamic HMC
+    randomizes trajectory length, so it is a different sampler with a different optimal
+    step size — the collision was silent and the draws were merely worse.
+    """
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parents[3] / "src/tengri/inference/backends/mcmc"
+    prefixes = {}
+    for path in sorted(root.glob("*.py")):
+        for line in path.read_text().splitlines():
+            match = re.search(r'adapt_key\s*=\s*\(\s*"([^"]+)"', line)
+            if match:
+                prefixes.setdefault(match.group(1), []).append(path.name)
+    shared = {k: v for k, v in prefixes.items() if len(set(v)) > 1}
+    assert not shared, f"backends sharing an adaptation cache namespace: {shared}"
+
+
+class TestReportedConditioning:
+    """A fit that cannot say what the geometry was cannot be diagnosed (#1442).
+
+    The whole 0.10x-5.76x spread was invisible from inside a run: the log said
+    "metric whitened at the initial point" whether the metric was excellent or useless.
+    """
+
+    @staticmethod
+    def _problem(cond, precondition):
+        from tengri.inference.preconditioning import prepare_preconditioning
+
+        metric = _ill_conditioned_metric(6, cond)
+        return prepare_preconditioning(
+            _gaussian_logdensity(metric), jnp.zeros(6), 0.0, precondition=precondition
+        )
+
+    def test_reports_the_raw_metric_condition(self):
+        problem = self._problem(1e5, True)
+        assert problem.metric_condition == pytest.approx(1e5, rel=1e-3)
+
+    def test_reports_the_residual_after_tempering(self):
+        """``cond ** (1 - alpha)`` — what the sampler actually faces at the MAP."""
+        problem = self._problem(1e4, 0.5)
+        assert problem.whitened_condition == pytest.approx(1e2, rel=1e-3)
+
+    def test_full_strength_reports_a_whitened_condition_of_one(self):
+        problem = self._problem(1e6, 1.0)
+        assert problem.whitened_condition == pytest.approx(1.0, rel=1e-6)
+
+    def test_a_disabled_problem_reports_nothing_rather_than_a_wrong_number(self):
+        problem = self._problem(1e5, False)
+        assert problem.metric_condition is None
+        assert problem.whitened_condition is None
+
+
+#: Standardized coordinates far outside anything a converged posterior visits.
+#:
+#: ``xi`` is ``~N(0,1)`` by construction, so these stand in for a whitened
+#: coordinate ``zeta`` leaking through in its place. ``-7.4`` is the offset
+#: measured on a real tengri fit for ``dust_tau_bc``; the rest bracket it.
+_EXTREME_XI = jnp.asarray([-1e3, -50.0, -7.4, 7.4, 50.0, 1e3])
+
+
+def _instantiable_priors() -> list[tuple[str, object]]:
+    """Every concrete prior in ``parameters.priors``, discovered rather than listed.
+
+    Discovered for the same reason ``_capable_backends()`` reads the registry: a
+    prior added later must inherit the claim below without anyone remembering to
+    extend this file. A prior whose constructor does not match either shape is
+    dropped, and the count assertion catches it if that ever hides most of them.
+    """
+    import inspect
+
+    import tengri.parameters.priors as priors_module
+    from tengri.parameters.priors import Distribution
+
+    found = []
+    for name, cls in sorted(vars(priors_module).items()):
+        if not (inspect.isclass(cls) and issubclass(cls, Distribution)):
+            continue
+        if cls is Distribution:
+            continue
+        for args in ((1.0, 4.0), (1.0,)):
+            try:
+                found.append((name, cls(*args)))
+                break
+            except Exception:  # wrong constructor arity — try the next shape
+                continue
+    return found
+
+
+_PRIORS = _instantiable_priors()
+
+
+def _why_bounds_cannot_fail(prior) -> str | None:
+    """Why a prior-support assertion is unfalsifiable for ``prior``, or None.
+
+    Returns the route, so the taxonomy is visible in the test rather than implied.
+    ``None`` means a bounds check *could* fail for this prior — which would be
+    news, and is what the assertion is watching for.
+    """
+    lo, hi = getattr(prior, "lo", None), getattr(prior, "hi", None)
+
+    if lo is None or hi is None:
+        return "no lo/hi, so the bounds loop skips it entirely"
+
+    if not (np.isfinite(float(lo)) and np.isfinite(float(hi))):
+        return f"bounds are infinite ({lo}, {hi}), so the assertion reads x >= -inf"
+
+    theta = np.asarray(prior.unstandardize(_EXTREME_XI))
+    if theta.min() >= float(lo) - 1e-8 and theta.max() <= float(hi) + 1e-8:
+        return "unstandardize is a saturating bijection onto [lo, hi]"
+
+    return None
+
+
+class TestBoundsCannotGuardTheMapping:
+    """A bounds check cannot see draws left in the whitened basis (#1498).
+
+    ``tests/contract/test_preconditioning_roundtrip.py`` guards the inverse map
+    by asking whether preconditioned draws *explain the data*, which looks
+    over-elaborate next to "are they inside the priors?" until you notice that
+    bounds are structurally incapable of the job.
+
+    Standardization is unconditional in tengri — every parameter reaches physical
+    units through its prior's inverse CDF, whether or not preconditioning is on —
+    so this incapacity is universal, not a quirk of one prior or one model. There
+    are three routes to it and **every** prior tengri ships takes one of them:
+
+    * **saturating bijection** — ``Uniform``, ``LogUniform``. ``lo + (hi - lo) *
+      Phi(xi)`` maps all of the reals into ``[lo, hi]``, so the assertion holds
+      for any finite input whatsoever.
+    * **infinite bounds** — ``Gaussian`` exposes ``lo=-inf, hi=inf``, so the
+      assertion reads ``x >= -inf`` and is true by inspection.
+    * **no bounds at all** — ``Laplace``, ``LogNormal``, ``StudentT``, ``Fixed``
+      expose no ``lo``/``hi``, so the bounds loop skips them. Note these are the
+      heavy-tailed ones, where a leak would be *most* visible: the check declines
+      to look precisely where it could have worked.
+
+    Pinned here, in the fast tier, on purpose. The reasoning otherwise lives only
+    in a slow-tier docstring that no pull request runs, and "simplify this to a
+    bounds check" is exactly the change that would read as correct in review and
+    leave the invariant unguarded.
+    """
+
+    def test_the_prior_sweep_is_not_empty(self):
+        """Anti-vacuity: a discovery that found nothing would assert nothing."""
+        assert len(_PRIORS) >= 5, (
+            f"only {len(_PRIORS)} priors were instantiable ({[n for n, _ in _PRIORS]}) "
+            "— the sweep below is no longer covering the prior surface"
+        )
+
+    @pytest.mark.parametrize("name,prior", _PRIORS, ids=[n for n, _ in _PRIORS])
+    def test_no_prior_makes_a_bounds_check_falsifiable(self, name, prior):
+        """The rule, over every prior tengri ships — not one example of it."""
+        assert _why_bounds_cannot_fail(prior) is not None, (
+            f"{name} is the first prior for which a prior-support assertion could "
+            "actually fail. That would be genuinely new: it would make a bounds "
+            "check a viable guard against a whitened-coordinate leak, and the "
+            "integration test's deficit statistic could be reconsidered. Until "
+            "then the deficit is the only thing that can see one."
+        )
+
+    def test_the_sweep_would_notice_a_prior_that_broke_the_pattern(self):
+        """Negative control for the classifier itself.
+
+        Every branch of :func:`_why_bounds_cannot_fail` that runs on a real prior
+        returns a reason, so the sweep above would be green on *any* input unless
+        the classifier can also answer "this one could fail". A stub with finite
+        bounds and a non-saturating map is that case, and it must come back
+        ``None`` — otherwise the sweep is asserting a tautology about tautologies.
+        """
+
+        class _EscapingPrior:
+            lo, hi = 0.0, 4.0
+
+            @staticmethod
+            def unstandardize(xi):
+                return xi  # unbounded: leaves [0, 4] on the first extreme value
+
+        assert _why_bounds_cannot_fail(_EscapingPrior()) is None, (
+            "the classifier called an escaping prior unfalsifiable, so the sweep "
+            "above cannot distinguish a real prior from a broken one"
+        )
+
+    def test_a_leak_collapses_onto_the_bound_instead_of_escaping_it(self):
+        """The failure signature, on the prior the measured leak actually used.
+
+        What a basis error does downstream of a saturating map is destroy the
+        posterior's *width*, not its range — so if you must detect one on the far
+        side of a bijection, test the spread and never the bounds. ``-7.4`` is the
+        offset measured on a real tengri fit for ``dust_tau_bc`` when the inverse
+        map is dropped, and ``Phi(-7.4) ~ 1e-13``.
+        """
+        prior = Uniform(0.0, 4.0)
+        healthy = jnp.linspace(-2.0, 2.0, 64)
+
+        good = np.asarray(prior.unstandardize(healthy))
+        bad = np.asarray(prior.unstandardize(healthy - 7.4))
+
+        assert bad.min() >= prior.lo - 1e-8
+        assert bad.max() <= prior.hi + 1e-8, (
+            "the leak escaped the prior box, so bounds would have caught it"
+        )
+        assert np.ptp(bad) < np.ptp(good) / 1e3, (
+            f"the leaked posterior kept a spread of {np.ptp(bad):.3g} against the "
+            f"healthy {np.ptp(good):.3g} — the collapse-onto-the-bound signature "
+            "this documents is not what happens"
+        )

@@ -122,10 +122,10 @@ def create_simple_params(redshift):
 
 def measure_compilation_and_runtime(fitter, method, rng_key, n_warmup=5, **kwargs):
     """Measure JIT compilation time and post-JIT runtime."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Method: {method}")
     print(f"Parameters: {kwargs}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Clear JAX cache to measure cold-start compilation
     print("Clearing JAX cache...")
@@ -152,7 +152,7 @@ def measure_compilation_and_runtime(fitter, method, rng_key, n_warmup=5, **kwarg
         _ = fitter.run(method, key=key_i, **kwargs)
         t_runtime = time.perf_counter() - t_start
         runtimes.append(t_runtime)
-        print(f"  Run {i+1}: {t_runtime:.3f}s")
+        print(f"  Run {i + 1}: {t_runtime:.3f}s")
 
     mean_runtime = float(np.mean(runtimes))
     std_runtime = float(np.std(runtimes))
@@ -160,13 +160,15 @@ def measure_compilation_and_runtime(fitter, method, rng_key, n_warmup=5, **kwarg
     print(f"\nSummary:")
     print(f"  JIT (first call): {t_jit:.1f}s")
     print(f"  Runtime (mean ± std): {mean_runtime:.3f}s ± {std_runtime:.3f}s")
-    print(f"  Runtime/JIT ratio: {mean_runtime/t_jit:.2%}")
+    print(f"  Runtime/JIT ratio: {mean_runtime / t_jit:.2%}")
 
     # Check if runtimes are similar (cache working)
     if std_runtime / mean_runtime > 0.1:
-        print(f"  ⚠️  WARNING: High variance in runtime ({std_runtime/mean_runtime:.1%}) - possible recompilation!")
+        print(
+            f"  ⚠️  WARNING: High variance in runtime ({std_runtime / mean_runtime:.1%}) - possible recompilation!"
+        )
     else:
-        print(f"  ✓ Cache working (variance {std_runtime/mean_runtime:.1%})")
+        print(f"  ✓ Cache working (variance {std_runtime / mean_runtime:.1%})")
 
     return {
         "jit_sec": t_jit,
@@ -178,66 +180,78 @@ def measure_compilation_and_runtime(fitter, method, rng_key, n_warmup=5, **kwarg
 
 def profile_component_breakdown(ssp_data, obs, mock_data):
     """Profile component-by-component to find bottlenecks."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("COMPONENT BREAKDOWN PROFILING")
-    print("="*60)
+    print("=" * 60)
 
     redshift = mock_data["redshift"]
 
     # Test configurations with increasing complexity
     configs = [
-        ("Stellar only", {
-            "mean_sfh_type": "tsnorm",
-            "sfh_tsnorm_log_total_mass": Uniform(-1.0, 2.5),
-            "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
-            "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
-            "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
-            "sfh_tsnorm_trunc": Uniform(1.0, 10.0),
-            "met_logzsol": Uniform(-2.0, 0.2),
-            "redshift": Fixed(redshift),
-        }),
-        ("Stellar + Dust", {
-            "mean_sfh_type": "tsnorm",
-            "sfh_tsnorm_log_total_mass": Uniform(-1.0, 2.5),
-            "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
-            "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
-            "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
-            "sfh_tsnorm_trunc": Uniform(1.0, 10.0),
-            "met_logzsol": Uniform(-2.0, 0.2),
-            "dust_law_bc": "salim_sbl18",
-            "dust_tau_bc": Uniform(0.0, 3.0),
-            "dust_tau_diff": Uniform(0.0, 2.0),
-            "redshift": Fixed(redshift),
-        }),
-        ("Stellar + Dust + Nebular", {
-            "mean_sfh_type": "tsnorm",
-            "sfh_tsnorm_log_total_mass": Uniform(-1.0, 2.5),
-            "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
-            "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
-            "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
-            "sfh_tsnorm_trunc": Uniform(1.0, 10.0),
-            "met_logzsol": Uniform(-2.0, 0.2),
-            "dust_law_bc": "salim_sbl18",
-            "dust_tau_bc": Uniform(0.0, 3.0),
-            "dust_tau_diff": Uniform(0.0, 2.0),
-            "nebular_ssp": True,
-            "redshift": Fixed(redshift),
-        }),
-        ("Full (+ IGM)", {
-            "mean_sfh_type": "tsnorm",
-            "sfh_tsnorm_log_total_mass": Uniform(-1.0, 2.5),
-            "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
-            "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
-            "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
-            "sfh_tsnorm_trunc": Uniform(1.0, 10.0),
-            "met_logzsol": Uniform(-2.0, 0.2),
-            "dust_law_bc": "salim_sbl18",
-            "dust_tau_bc": Uniform(0.0, 3.0),
-            "dust_tau_diff": Uniform(0.0, 2.0),
-            "nebular_ssp": True,
-            "apply_igm": True,
-            "redshift": Fixed(redshift),
-        }),
+        (
+            "Stellar only",
+            {
+                "mean_sfh_type": "tsnorm",
+                "sfh_tsnorm_log_total_mass": Uniform(-1.0, 2.5),
+                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
+                "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
+                "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
+                "sfh_tsnorm_trunc": Uniform(1.0, 10.0),
+                "met_logzsol": Uniform(-2.0, 0.2),
+                "redshift": Fixed(redshift),
+            },
+        ),
+        (
+            "Stellar + Dust",
+            {
+                "mean_sfh_type": "tsnorm",
+                "sfh_tsnorm_log_total_mass": Uniform(-1.0, 2.5),
+                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
+                "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
+                "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
+                "sfh_tsnorm_trunc": Uniform(1.0, 10.0),
+                "met_logzsol": Uniform(-2.0, 0.2),
+                "dust_law_bc": "salim_sbl18",
+                "dust_tau_bc": Uniform(0.0, 3.0),
+                "dust_tau_diff": Uniform(0.0, 2.0),
+                "redshift": Fixed(redshift),
+            },
+        ),
+        (
+            "Stellar + Dust + Nebular",
+            {
+                "mean_sfh_type": "tsnorm",
+                "sfh_tsnorm_log_total_mass": Uniform(-1.0, 2.5),
+                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
+                "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
+                "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
+                "sfh_tsnorm_trunc": Uniform(1.0, 10.0),
+                "met_logzsol": Uniform(-2.0, 0.2),
+                "dust_law_bc": "salim_sbl18",
+                "dust_tau_bc": Uniform(0.0, 3.0),
+                "dust_tau_diff": Uniform(0.0, 2.0),
+                "nebular_ssp": True,
+                "redshift": Fixed(redshift),
+            },
+        ),
+        (
+            "Full (+ IGM)",
+            {
+                "mean_sfh_type": "tsnorm",
+                "sfh_tsnorm_log_total_mass": Uniform(-1.0, 2.5),
+                "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
+                "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
+                "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
+                "sfh_tsnorm_trunc": Uniform(1.0, 10.0),
+                "met_logzsol": Uniform(-2.0, 0.2),
+                "dust_law_bc": "salim_sbl18",
+                "dust_tau_bc": Uniform(0.0, 3.0),
+                "dust_tau_diff": Uniform(0.0, 2.0),
+                "nebular_ssp": True,
+                "apply_igm": True,
+                "redshift": Fixed(redshift),
+            },
+        ),
     ]
 
     results = []
@@ -252,20 +266,20 @@ def profile_component_breakdown(ssp_data, obs, mock_data):
         rng_key = jax.random.PRNGKey(42)
 
         # Just measure MAP (fastest inference method)
-        result = measure_compilation_and_runtime(
-            fitter, "map", rng_key, n_warmup=3
-        )
+        result = measure_compilation_and_runtime(fitter, "map", rng_key, n_warmup=3)
         result["name"] = name
         results.append(result)
 
     # Print comparison table
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("COMPONENT BREAKDOWN SUMMARY")
-    print("="*60)
+    print("=" * 60)
     print(f"{'Component':<25} {'JIT (s)':<10} {'Runtime (ms)':<15} {'RAM (MB)':<10}")
     print("-" * 60)
     for r in results:
-        print(f"{r['name']:<25} {r['jit_sec']:>8.1f}  {r['mean_runtime_sec']*1000:>12.1f}  {r['peak_ram_mb']:>8.1f}")
+        print(
+            f"{r['name']:<25} {r['jit_sec']:>8.1f}  {r['mean_runtime_sec'] * 1000:>12.1f}  {r['peak_ram_mb']:>8.1f}"
+        )
 
     return results
 
@@ -279,9 +293,9 @@ def main():
     component_results = profile_component_breakdown(ssp_data, obs, mock_data)
 
     # 2. Stochastic vs simple comparison
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("STOCHASTIC VS SIMPLE SFH COMPARISON")
-    print("="*60)
+    print("=" * 60)
 
     for name, param_fn in [
         ("Simple parametric (tsnorm)", create_simple_params),
@@ -305,13 +319,11 @@ def main():
             method = "map"
             kwargs = {}
 
-        result = measure_compilation_and_runtime(
-            fitter, method, rng_key, n_warmup=3, **kwargs
-        )
+        result = measure_compilation_and_runtime(fitter, method, rng_key, n_warmup=3, **kwargs)
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("PROFILING COMPLETE")
-    print("="*60)
+    print("=" * 60)
 
 
 if __name__ == "__main__":

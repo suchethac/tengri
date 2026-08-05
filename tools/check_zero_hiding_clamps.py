@@ -47,7 +47,15 @@ import sys
 #: NaN-propagating form or it was shown to need no clamp. Raising it needs a
 #: reason in the PR: a new clamped division is a new place a degenerate input
 #: can return a plausible zero.
-EXPECTED_SITES = 105
+#:
+#: 101 -> 98: deleting the two duplicate PCHIP copies took three clamped
+#: divisions with them — ``jnp.maximum(h, 1e-30)`` and
+#: ``jnp.maximum(d_left + d_right, 1e-30)`` and ``jnp.maximum(dx, 1e-30)`` in
+#: ``sfh/dense_basis.py``. The middle one was the fail-open guard that sent
+#: decreasing data to +/-6e28. The surviving implementation in
+#: ``utils/grid_interp`` gates the division *inputs* on the monotonicity
+#: condition instead, so no clamp is needed.
+EXPECTED_SITES = 98
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

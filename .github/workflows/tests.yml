@@ -71,7 +71,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -81,6 +81,10 @@ jobs:
       - run: ruff format --check src/ tests/
       - run: python tools/add_spdx_headers.py --check
       - run: python tools/check_british_spelling.py
+      # tengri implements published models and validates against the reference
+      # codes; it does not port or copy their source. The wording drifted back
+      # twice after being swept by hand, so it is pinned here. Stdlib-only.
+      - run: python tools/check_reimplementation_language.py
       # Every test tree must be reachable from some job's path list. The matrix
       # below is explicit, so a directory it stops naming goes dark silently —
       # which is what happened to `tests/unit`. Stdlib-only by design: this job
@@ -92,6 +96,15 @@ jobs:
       # the count instead: a new one has to be justified in the PR. Stdlib-only,
       # same as the guard above.
       - run: python tools/check_zero_hiding_clamps.py
+      - run: python tools/check_representable_floors.py
+      # `nbsphinx_execute = "never"`, so the committed docs/spine/**/*.ipynb IS
+      # the published page and nothing else checks it still matches the
+      # notebooks/*.py it came from. Two ways of losing that have shipped: a
+      # hand-copied render drifting from its source (docs/spine/experimental/ was
+      # not in the sync script), and executing under MPLBACKEND=Agg, which makes
+      # plt.show() a no-op so the page renders with no plots. Stdlib-only, same
+      # as the guards above.
+      - run: python tools/check_notebook_renders.py
       # NOTE: `gen_property_table.py --check` cannot live here. This job installs
       # ruff and nothing else, and the generator imports tengri (hence jax) to read
       # the property registry. It runs in `smoke`, which does `pip install -e`.
@@ -108,7 +121,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -234,7 +247,7 @@ jobs:
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -242,7 +255,7 @@ jobs:
       - run: pip install -e ".[dev]"
       # Every grid the examples need is committed (#1146), so there is no download
       # step and a fresh clone behaves exactly like CI.
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         id: gallery_jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -253,7 +266,7 @@ jobs:
           JAX_PLATFORMS: cpu
           MPLBACKEND: Agg
         run: python tools/run_gallery_examples.py --shard ${{ matrix.shard }}/4
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         # `actions/cache` skips its implicit post-save when a job fails, so a cache
         # can never warm on a job that is ever red (the trap from #1055). Save
         # explicitly, and always.
@@ -268,7 +281,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -291,6 +304,14 @@ jobs:
       # against the real package. Like the generator above, it needs tengri
       # importable, so it lives here rather than in `lint`.
       - run: python tools/check_doc_examples.py
+      # The guard above asks whether every symbol NAMED IN THE DOCS exists. This
+      # one asks the converse — whether every symbol tengri EXPORTS is named in
+      # the docs — because the two failure modes are independent and only the
+      # first was covered. #1345 closed the class surface while 23 exported
+      # functions, both grammar sentinels and both spectral-index catalogs had
+      # no autodoc entry at all; `nitpicky` is off and Sphinx does not fail on an
+      # ABSENT page, so neither `-W` nor the guard above could see it.
+      - run: python tools/check_api_coverage.py
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
       # The `benchmark` tier: five tests that assert a wall-clock RATIO (fast path
       # vs exact path, cached vs cold). They are real regression guards — they catch
@@ -338,6 +359,20 @@ jobs:
     # `contract` the long pole was the error it had already made twice. Do not
     # re-add a long-pole claim without a dated measurement beside it. See the
     # re-measure recipe on #1346.
+    #
+    # RE-MEASURED 2026-08-04, main @dd2da7acf (run 30864997361, all green). The
+    # near-tie above is GONE and the numbers have gone stale exactly as this block
+    # warns they do — `contract` leads the next shard by 7.3 min:
+    #   contract 30.2m · components 22.9m · regression-d 21.5m · regression-b1 15.7m
+    #   regression-b2 12.6m · regression-a 6.2m · regression-c 5.2m · physics 3.3m
+    #
+    # Dated, per this block's own rule, and not a standing claim. `contract` sits at
+    # 60% of its 50-min budget and sets a ~30 min wall clock, so work landing there
+    # is no longer free. That is why #1498's preconditioning guard was SPLIT rather
+    # than moved in whole: the 53 s four-backend deficit sweep went to
+    # `tests/contract/`, and the 155 s posterior-mean comparison stayed in the
+    # nightly tier as `tests/integration/test_preconditioning_posterior_invariance.py`.
+    # Re-measure before adding to `contract`; `physics` at 3.3m has the headroom.
     #
     # regression and physics were ONE shard until 2026-07. They were split because
     # the paired shard walked back into the 16 GB ceiling: it died at ~21-22 min and
@@ -463,7 +498,7 @@ jobs:
             budget: 50
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -480,7 +515,7 @@ jobs:
       # `if: always()` writes regardless of outcome. Keyed per shard (each sees a
       # different slice of the compile graph) with a run-id key + prefix restore-keys,
       # so each run restores the newest snapshot and saves its own superset.
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -607,7 +642,7 @@ jobs:
         # untouched by the cap — correct, and it is why raising 35 -> 50 did not
         # save main @a05ae7b5e: the shard died at 18m40s against a 50 min cap.
         timeout-minutes: ${{ matrix.budget }}
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         if: always()
         with:
           path: ~/.cache/tengri_jax_cache
@@ -741,7 +776,7 @@ jobs:
             budget: 50
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -855,7 +890,7 @@ jobs:
     timeout-minutes: 185
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -876,7 +911,7 @@ jobs:
       # and this tier is red (#1031). A cache meant to speed up a failing
       # suite can never warm if warming requires the suite to pass — the
       # same trap that made the `test` job's cache a no-op (see its comment).
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         id: jax_cache
         with:
           path: ~/.cache/tengri_jax_cache
@@ -891,7 +926,7 @@ jobs:
       # would OOM the 16 GB runner (the reason this tier was never parallelized).
       - run: pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval -m 'not crossval' -n 0
         timeout-minutes: ${{ matrix.timeout }}
-      - uses: actions/cache/save@v4
+      - uses: actions/cache/save@v6
         if: always()
         with:
           path: ~/.cache/tengri_jax_cache

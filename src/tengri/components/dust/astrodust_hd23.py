@@ -32,6 +32,8 @@ from pathlib import Path
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.grid_interp import resample_template
+
 __all__ = [
     "ASTRODUST_HD23_DEFAULT_PATH",
     "ASTRODUST_HD23_PATH_ENV",
@@ -318,6 +320,6 @@ def resample_lnu_on_aa_grid(
     template_wave_aa = wave_um * _UM_TO_AA
 
     def _interp_one(row: jnp.ndarray) -> jnp.ndarray:
-        return jnp.interp(wave_aa, template_wave_aa, row, left=0.0, right=0.0)
+        return resample_template(wave_aa, template_wave_aa, row, left=0.0, right=0.0)
 
     return jax.vmap(_interp_one)(L_nu_um)

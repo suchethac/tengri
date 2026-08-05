@@ -427,6 +427,7 @@ from tengri.registry import (
     describe_recipe,
     describe_sfh_model,
     help,
+    list_age_kernels,
     list_agn_blocks,
     list_agn_models,
     list_all,
@@ -590,6 +591,7 @@ __all__ = [  # noqa: RUF022
     "examples",
     "tutorial",
     # Component discovery
+    "list_age_kernels",
     "list_agn_blocks",
     "list_agn_models",
     "list_all",
@@ -681,6 +683,7 @@ from tengri.inference.catalog import Catalog
 from tengri.inference.catalog_fitter import CatalogFitter
 from tengri.inference.fitter import Fitter
 from tengri.inference.hierarchical import PopulationFitter
+from tengri.inference.information import ParameterInformation, parameter_information
 from tengri.inference.vi_config import VIConfig
 from tengri.observation.data import Data
 from tengri.observation.instrument import Instrument, list_instruments
@@ -714,6 +717,7 @@ _CURATED_DIR = (
     "help",
     "summary",
     "describe",
+    "list_age_kernels",
     "list_agn_blocks",
     "list_agn_models",
     "list_dust_emission_models",
@@ -756,7 +760,11 @@ _CURATED_DIR = (
     "recipes",
     "FeaturePrecomp",
     "WavePrecomp",
-    "Fitter",
+    # ``Fitter`` is deliberately absent: it is the cache-reuse mechanism, not a
+    # taught noun (api_migration_v0.x.md). It stays importable — no public API
+    # is removed — it just must not be what tab-completion suggests first. The
+    # canonical multi-galaxy entry point is ``Catalog``, below (#1455).
+    "Catalog",
     "fit_batch",
     "Observation",
     "Photometry",
@@ -776,8 +784,17 @@ _CURATED_DIR = (
     "StudentT",
     # 4.  Result types (+ hierarchical / spatial model classes)
     "Posterior",
+    "ParameterInformation",
+    "parameter_information",
     "PopulationSEDModel",
-    "PopulationFitter",
+    # ``PopulationFitter`` is deliberately absent too, and the reason is worth
+    # stating because two documents look like they disagree. It is the
+    # canonical *name* for the class (NAMING_CONTRACT, vs the retired
+    # ``HierarchicalFitter``), AND its taught construction form
+    # ``PopulationFitter(model_factory, galaxies, ...)`` raises a
+    # DeprecationWarning pointing at ForwardModel + PopulationSEDModel (#211,
+    # #1319). Both are true at different levels; a constructor that warns is
+    # not a fresh-user entry point.
     "PopulationPosterior",
     "SpatialSEDModel",
     # 5.  Convenience

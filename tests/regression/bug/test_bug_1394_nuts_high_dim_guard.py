@@ -41,10 +41,37 @@ def test_threshold_is_strict_greater_than():
     assert _warns("mcmc_nuts", NUTS_WARN_D + 1)[0] is True
 
 
-def test_only_nuts_warns():
-    """Other samplers do not carry the O(D^2) mass matrix, so they stay quiet."""
-    for method in ("mcmc_hmc", "mcmc_raytrace", "vi", "vi_nonlinear_fast", "map", "nss"):
+def test_only_nuts_like_samplers_warn():
+    """Samplers without the O(D^2) mass matrix stay quiet.
+
+    ``mcmc_hmc`` moved out of this list in #1454. It runs the same warmup and
+    adapts the same mass matrix — it differs from NUTS in trajectory length,
+    not in mass-matrix adaptation — so excluding it meant the advisory was
+    unreachable for the method CLAUDE.md recommends as the remedy for this
+    exact OOM. See ``test_hmc_warns_because_it_shares_the_mass_matrix`` below.
+    """
+    for method in ("mcmc_raytrace", "vi", "vi_nonlinear_fast", "map", "nss"):
         assert _warns(method, 10_000)[0] is False, f"{method} must not warn"
+
+
+def test_hmc_warns_because_it_shares_the_mass_matrix():
+    """``mcmc_hmc`` carries the same O(D^2) cost and must be reachable (#1454)."""
+    assert "mcmc_hmc" in NUTS_LIKE
+    assert _warns("mcmc_hmc", 10_000)[0] is True, "mcmc_hmc must warn at high D"
+
+
+def test_ghmc_stays_quiet_because_it_is_always_diagonal():
+    """``mcmc_ghmc`` looks like it belongs here and does not (#1454).
+
+    Its signature carries ``dense_mass_matrix=True``, but the flag is inert:
+    GHMC's momentum generator treats ``momentum_inverse_scale`` as a diagonal
+    vector, so ``ghmc.py`` pins ``adapt_key = ("hmc", True)`` — always diagonal
+    — regardless. It never pays O(D^2), so warning would advertise a cost that
+    does not exist. Reading the signature instead of the code gives the wrong
+    answer here, which is why this case is pinned explicitly.
+    """
+    assert "mcmc_ghmc" not in NUTS_LIKE
+    assert _warns("mcmc_ghmc", 10_000)[0] is False
 
 
 def test_mcmc_auto_does_not_warn():

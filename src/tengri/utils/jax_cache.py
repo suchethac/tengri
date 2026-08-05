@@ -52,6 +52,7 @@ periodically (e.g. after ``pip install -U jax``).
 
 from __future__ import annotations
 
+import importlib.util
 import logging
 import os
 import shutil
@@ -67,6 +68,65 @@ _ENABLED_DIR: Path | None = None
 
 _ENV_DIR = "TENGRI_JAX_CACHE_DIR"
 _ENV_DISABLE = "TENGRI_DISABLE_JAX_CACHE"
+_ENV_MAX_GB = "TENGRI_JAX_CACHE_MAX_GB"
+
+#: Default ceiling for the on-disk compilation cache [bytes].
+#:
+#: JAX does not evict unless ``jax_compilation_cache_max_size`` is set, and
+#: nothing used to set it: ``enable_persistent_cache`` accepted the argument but
+#: the auto-enable in ``tengri/__init__.py`` never passed one. Combined with
+#: ``min_compile_time_secs=0.05`` -- which deliberately persists every per-filter
+#: micro-kernel -- the cache grew without bound and was measured at **141 GB** on
+#: a 48 GB machine (#1507).
+#:
+#: 8 GiB is comfortably more than a working set of compiled kernels while staying
+#: small next to a laptop disk. Override with ``TENGRI_JAX_CACHE_MAX_GB``; set it
+#: to ``0`` for the old unbounded behavior.
+DEFAULT_MAX_CACHE_BYTES = 8 * 1024**3
+
+#: JAX's sentinel for "no limit" is -1, not 0. Measured on jax 0.9.1: an unbounded
+#: cache reports ``jax_compilation_cache_max_size == -1``. Passing 0 would mean a
+#: zero-byte ceiling, i.e. caching silently switched off -- the opposite of what a
+#: user asking to opt out of the cap wants.
+UNBOUNDED_CACHE = -1
+
+
+def _eviction_supported() -> bool:
+    """True if JAX can actually enforce a cache size cap here.
+
+    JAX guards ``jax_compilation_cache_max_size`` behind ``filelock``. Without it
+    the config still accepts the value and then raises on every cache read, so a
+    cap set in that environment silently disables the cache rather than bounding
+    it. Declared as a dependency, but check at runtime: an older or partial
+    install must degrade to "unbounded", never to "broken".
+    """
+    return importlib.util.find_spec("filelock") is not None
+
+
+def _resolve_max_size(explicit: int | None) -> int:
+    """Cache ceiling in bytes: explicit argument, else env, else the default.
+
+    ``TENGRI_JAX_CACHE_MAX_GB=0`` maps to :data:`UNBOUNDED_CACHE`, restoring the
+    pre-#1507 behavior for anyone who wants it.
+    """
+    if explicit is not None:
+        return int(explicit)
+    raw = os.environ.get(_ENV_MAX_GB, "").strip()
+    if not raw:
+        return DEFAULT_MAX_CACHE_BYTES
+    try:
+        gb = float(raw)
+    except ValueError:
+        logger.warning(
+            "%s=%r is not a number; using the default %.1f GiB cap",
+            _ENV_MAX_GB,
+            raw,
+            DEFAULT_MAX_CACHE_BYTES / 1024**3,
+        )
+        return DEFAULT_MAX_CACHE_BYTES
+    if gb <= 0:
+        return UNBOUNDED_CACHE
+    return int(gb * 1024**3)
 
 
 def _default_cache_dir() -> Path:
@@ -158,20 +218,48 @@ def enable_persistent_cache(
     jax.config.update("jax_compilation_cache_dir", str(target))
     jax.config.update("jax_persistent_cache_min_compile_time_secs", float(min_compile_time_secs))
 
-    if max_size_bytes is not None:
-        try:
-            jax.config.update("jax_compilation_cache_max_size", int(max_size_bytes))
-        except (AttributeError, ValueError) as exc:
-            # Older JAX without max_size support — surface as debug only.
-            logger.debug("jax_compilation_cache_max_size unavailable: %s", exc)
+    cap = _resolve_max_size(max_size_bytes)
+    if cap != UNBOUNDED_CACHE and not _eviction_supported():
+        # JAX needs filelock to enforce a size cap, and raises
+        # "Please install the `filelock` package to set
+        # jax_compilation_cache_max_size" on EVERY cache read when the cap is set
+        # without it -- which does not merely skip eviction, it breaks the cache.
+        # Leaving it unbounded is strictly better than breaking it, so say so and
+        # stand down.
+        logger.warning(
+            "Cannot bound the JAX compilation cache: the `filelock` package is "
+            "not installed, and JAX errors on every cache read if a cap is set "
+            "without it. The cache at %s is UNBOUNDED -- install filelock, or "
+            "run tengri.clear_cache() periodically (it reached 141 GB once, #1507).",
+            target,
+        )
+        cap = UNBOUNDED_CACHE
 
-    if _ENABLED_DIR is None:
+    try:
+        jax.config.update("jax_compilation_cache_max_size", cap)
+    except (AttributeError, ValueError) as exc:
+        # Older JAX without max_size support. WARNING rather than DEBUG: on such a
+        # version the cache is unbounded and only clear_cache() reclaims it, which
+        # is exactly how #1507 happened.
+        logger.warning(
+            "This JAX ignores jax_compilation_cache_max_size (%s), so the "
+            "persistent cache at %s is UNBOUNDED. Run tengri.clear_cache() "
+            "periodically or set %s=0 to acknowledge.",
+            exc,
+            target,
+            _ENV_MAX_GB,
+        )
+
+    if _ENABLED_DIR is None and logger.isEnabledFor(logging.INFO):
+        # Only measured for this log line, and the walk is O(files) stat calls
+        # (~3.5 us each) on every import. Skip it when nobody is listening.
         size_mb = cache_size_bytes(target) / (1024**2)
         logger.info(
             "tengri JAX persistent cache enabled at %s "
-            "(min_compile_time=%.1fs, current size=%.1f MB)",
+            "(min_compile_time=%.1fs, cap=%.1f GiB, current size=%.1f MB)",
             target,
             min_compile_time_secs,
+            cap / 1024**3,
             size_mb,
         )
     else:
@@ -218,7 +306,7 @@ def cache_size_bytes(cache_dir: str | os.PathLike[str] | None = None) -> int:
     return total
 
 
-def clear_cache(cache_dir: str | os.PathLike[str] | None = None) -> None:
+def clear_cache(cache_dir: str | os.PathLike[str] | None = None) -> int:
     """Remove all entries from the persistent cache directory.
 
     The directory itself is preserved (the cache stays enabled). Use
@@ -230,10 +318,17 @@ def clear_cache(cache_dir: str | os.PathLike[str] | None = None) -> None:
     cache_dir : str or PathLike or None
         Directory to clear. Defaults to the currently enabled cache,
         falling back to :func:`_default_cache_dir`.
+
+    Returns
+    -------
+    int
+        Bytes reclaimed. Reported because the cache is otherwise invisible:
+        it reached 141 GB before anyone looked (#1507).
     """
     target = _resolve_dir(cache_dir)
     if not target.exists():
-        return
+        return 0
+    freed = cache_size_bytes(target)
     for child in target.iterdir():
         if child.is_dir():
             shutil.rmtree(child, ignore_errors=True)
@@ -242,7 +337,12 @@ def clear_cache(cache_dir: str | os.PathLike[str] | None = None) -> None:
                 child.unlink()
             except OSError:
                 continue
-    logger.info("Cleared tengri JAX persistent cache at %s", target)
+    logger.info(
+        "Cleared tengri JAX persistent cache at %s (%.1f MB reclaimed)",
+        target,
+        freed / 1024**2,
+    )
+    return freed
 
 
 def _resolve_dir(cache_dir: str | os.PathLike[str] | None) -> Path:

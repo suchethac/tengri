@@ -18,6 +18,7 @@ import contextlib
 import functools
 import logging
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 __all__ = ["Posterior"]
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 _PROPERTY_CHUNK = 64
 
 
-class PosteriorProperties:
+class PosteriorProperties(Mapping):
     r"""The property catalog lifted over the sample axis.
 
     The topology-agnostic seam of contract §1 — **same names, more axes**. Every
@@ -105,6 +106,20 @@ class PosteriorProperties:
 
     def __iter__(self):
         return iter(sorted(self._model().available_properties))
+
+    def __len__(self) -> int:
+        """Number of available properties.
+
+        Present so the class satisfies the mapping protocol it already almost
+        implemented. ``__getitem__`` / ``__iter__`` / ``__contains__`` /
+        ``keys`` all worked, so the object read as a dict right up to ``len()``
+        and ``.items()`` — the two calls one reaches for first when inspecting
+        a fit result — which raised a bare ``TypeError`` / ``AttributeError``
+        with nothing naming the supported surface (#1459). Registering as a
+        :class:`collections.abc.Mapping` below supplies ``items``, ``values``,
+        ``get`` and equality from this method plus the two that existed.
+        """
+        return len(self._model().available_properties)
 
     def keys(self):
         """Available property names — identical to the model's."""
@@ -1052,6 +1067,51 @@ class Posterior:
         return result
 
     # ── Summary statistics ────────────────────────────────────────
+
+    def information(self, params=None):
+        """How much of this posterior the data measured, mode by mode.
+
+        A flexible model always *returns* a posterior; this reports how much of
+        it the data determined and how much is the prior reflected back.
+
+        Parameters
+        ----------
+        params : dict of str to float, optional
+            Point to expand around, in physical units. Default ``None`` uses
+            this fit's own point estimate.
+
+        Returns
+        -------
+        ParameterInformation
+            ``n_eff``, per-mode shrinkage, and the per-parameter attribution.
+            ``print(info.summary())`` is the intended first look.
+
+        Warns
+        -----
+        RuntimeWarning
+            If the expansion point is not a mode, in which case the curvature
+            is not the posterior precision and ``n_eff`` means nothing. This
+            fires more often than expected: on a 25-parameter field model an
+            under-converged MAP reported ``n_eff`` 17.6 where the converged fit
+            gives 4.9.
+
+        See Also
+        --------
+        tengri.parameter_information : the same measurement as a free function.
+
+        Notes
+        -----
+        Costs one dense Hessian of the log-posterior, i.e. :math:`O(D)` gradient
+        evaluations. Not JIT-compatible; call it on a finished fit.
+
+        Examples
+        --------
+        >>> post = model.fit(data, noise, method="map")  # doctest: +SKIP
+        >>> print(post.information().summary())  # doctest: +SKIP
+        """
+        from tengri.inference.information import parameter_information
+
+        return parameter_information(self, params)
 
     def stats(self) -> dict:
         """Median and 68% credible intervals for all parameters.

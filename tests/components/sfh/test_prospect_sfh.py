@@ -27,11 +27,11 @@ pytestmark = pytest.mark.bounds
 jax.config.update("jax_enable_x64", True)
 
 from tengri.components.stellar.sfh.mean_sfh import (
-    _pchip_slopes,
     snorm_burst,
     snorm_trunc_burst,
     spline,
 )
+from tengri.utils.grid_interp import _pchip_slopes
 
 _T = jnp.logspace(7, 10.14, 128)  # lookback times 10 Myr – 13.8 Gyr
 
@@ -55,9 +55,9 @@ class TestPchipSlopes:
 
         Monotonicity preservation: if y_{i-1} < y_i < y_{i+1}, then d_i ≥ 0.
         """
+        x = jnp.array([0.0, 1.0, 2.0, 3.0])
         y = jnp.array([0.0, 1.0, 3.0, 6.0])
-        h = jnp.diff(jnp.array([0.0, 1.0, 2.0, 3.0]))
-        d = _pchip_slopes(y, h)
+        d = _pchip_slopes(x, y)
         assert jnp.all(d >= 0.0)
 
     def test_monotone_decreasing_slopes_nonpositive(self):
@@ -65,9 +65,9 @@ class TestPchipSlopes:
 
         Monotonicity preservation: if y_{i-1} > y_i > y_{i+1}, then d_i ≤ 0.
         """
+        x = jnp.array([0.0, 1.0, 2.0, 3.0])
         y = jnp.array([6.0, 3.0, 1.0, 0.0])
-        h = jnp.diff(jnp.array([0.0, 1.0, 2.0, 3.0]))
-        d = _pchip_slopes(y, h)
+        d = _pchip_slopes(x, y)
         assert jnp.all(d <= 0.0)
 
     def test_local_extremum_gets_zero_slope(self):
@@ -75,9 +75,9 @@ class TestPchipSlopes:
 
         Interior extrema force zero slope to prevent overshoot.
         """
+        x = jnp.array([0.0, 1.0, 2.0])
         y = jnp.array([0.0, 1.0, 0.5])
-        h = jnp.diff(jnp.array([0.0, 1.0, 2.0]))
-        d = _pchip_slopes(y, h)
+        d = _pchip_slopes(x, y)
         # Interior slope at index 1 (local max) must be zero
         assert float(d[1]) == pytest.approx(0.0, abs=1e-12)
 

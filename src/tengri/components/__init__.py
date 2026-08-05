@@ -48,22 +48,39 @@ def register_component(cls: type) -> type:
     :class:`tengri.Parameters` without editing
     ``tengri.parameters.translate``.
 
-    Usage::
+    Parameters
+    ----------
+    cls : type
+        A class conforming to the :class:`SEDComponent` protocol. It must
+        expose ``name``, ``parameter_prefix``, and a
+        ``declared_parameters()`` method returning the parameter
+        declarations the component contributes.
 
-        from tengri import register_component
+    Returns
+    -------
+    type
+        The same class, unchanged, so the decorator is transparent.
 
+    Notes
+    -----
+    Registration is idempotent: the class is appended once and
+    re-decorating an already-registered class is a no-op. This function
+    is the parameter-discovery seam only. Subclassing
+    :class:`tengri.SEDModelComponent` registers a component for
+    ``SEDModel.build`` dispatch as well and is the recommended path for
+    new physics blocks (ADR-0011); reach for this decorator when a class
+    cannot take that base.
 
-        @register_component
-        class MyAGNSEDComponent:
-            name = "my_agn"
-            parameter_prefix = "my_agn_"
-            ...
-
-            def declared_parameters(self):
-                return [ParamDeclaration("my_agn_param", ...)]
-
-    The class is appended once; re-decorating is a no-op. Returns the
-    class unchanged so the decorator is transparent.
+    Examples
+    --------
+    >>> from tengri import register_component
+    >>> @register_component
+    ... class MyAGNSEDComponent:
+    ...     name = "my_agn"
+    ...     parameter_prefix = "my_agn_"
+    ...
+    ...     def declared_parameters(self):
+    ...         return [ParamDeclaration("my_agn_param", ...)]  # doctest: +SKIP
     """
     if cls not in _REGISTERED_COMPONENTS:
         _REGISTERED_COMPONENTS.append(cls)

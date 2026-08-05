@@ -33,6 +33,7 @@ from pathlib import Path
 
 import jax.numpy as jnp
 
+from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
     C_CGS as _C_CGS,
@@ -243,7 +244,7 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
 
         # Interpolate template onto target wavelength grid
         # Template is in L_lambda space (integral over wavelength = 1)
-        sed_llam = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+        sed_llam = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
         # Convert L_lambda -> L_nu: L_nu = L_lambda * lambda^2 / c
         wavelength_cm = wavelength_aa * _AA_TO_CM
@@ -510,7 +511,7 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
         template_norm = template / jnp.maximum(jnp.abs(tmpl_integral), 1e-100)
 
         # Interpolate normalized template onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template_norm, left=0.0, right=0.0)
+        sed = resample_template(wavelength_aa, tmpl_wave, template_norm, left=0.0, right=0.0)
 
         return L_absorbed * sed
 
@@ -696,7 +697,7 @@ def dale2014_emission_lnu(
         template_mixed = template_sf
         scale_factor = L_absorbed
 
-    sed = jnp.interp(wavelength_aa, wavelength_grid, template_mixed, left=0.0, right=0.0)
+    sed = resample_template(wavelength_aa, wavelength_grid, template_mixed, left=0.0, right=0.0)
     return scale_factor * sed
 
 
@@ -789,8 +790,16 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
 
         # Unit-normalize each SF template so integral(L_nu, dnu) = 1.
         # nu is descending, so negate for positive integral.
+        #
+        # Integrated with ``loglog_integral``, not ``trapezoid``, because the
+        # template is put on the model grid by ``resample_template``, which
+        # interpolates each segment as a power law. Normalizing with a
+        # different interpolant than the one used to resample leaves the
+        # delivered SED integrating to something other than 1 -- energy balance
+        # then drifts with the native grid spacing, which for Dale2014 reaches
+        # dlog10(lambda) = 0.125.
         for i in range(templates_lnu.shape[0]):
-            integral = -np.trapezoid(templates_lnu[i], nu)
+            integral = -float(loglog_integral(jnp.asarray(nu), jnp.asarray(templates_lnu[i])))
             if integral > 0:
                 templates_lnu[i] /= integral
 
@@ -821,6 +830,30 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
             if integral > 0:
                 templates_qso_lnu = templates_qso_lnu / integral * qso_frac
             templates_qso_np = np.asarray(templates_qso_lnu, dtype=np.float64)
+
+    # Re-express each template's normalization in the interpolant it is
+    # actually delivered with. The stored templates integrate to their intended
+    # value under the TRAPEZOID rule (linear in nu), which is how Dale2014 and
+    # CIGALE normalize them; ``resample_template`` puts them on the model grid
+    # as power-law segments, whose integral differs by 1.27% on this grid
+    # (dlog10(lambda) reaches 0.125). Left uncorrected the delivered SED carries
+    # 0.9880 of L_absorbed -- a resolution-INDEPENDENT deficit, i.e. a
+    # normalization mismatch, not an integration error.
+    #
+    # Scaling by trapezoid/loglog preserves each template's own normalization
+    # value, so the SF templates still integrate to 1 and the QSO template still
+    # integrates to CIGALE's ~0.54 dust-grid partition (#717) -- the SF:QSO
+    # energy ratio is untouched.
+    _nu_native = _C_CGS / (tmpl_wave_np * _AA_TO_CM)
+
+    def _to_loglog_norm(row: np.ndarray) -> np.ndarray:
+        trap = -float(np.trapezoid(row, _nu_native))
+        ll = -float(loglog_integral(jnp.asarray(_nu_native), jnp.asarray(row)))
+        return row * (trap / ll) if (ll > 0.0 and trap > 0.0) else row
+
+    templates_np = np.stack([_to_loglog_norm(r) for r in templates_np])
+    if templates_qso_np is not None:
+        templates_qso_np = _to_loglog_norm(templates_qso_np)
 
     has_qso = templates_qso_np is not None
     return {
@@ -1042,8 +1075,12 @@ def create_schreiber2018_from_grid(grid_path: str) -> Callable:
         # Resample both onto the requested grid, then mix natively (AGNfitter-rX
         # mixes the unnormalized dust/PAH L_nu, so the relative amplitude — and
         # hence the physical meaning of f_PAH — is preserved).
-        dust_on_grid = jnp.interp(wavelength_aa, tmpl_wave, dust_T_template, left=0.0, right=0.0)
-        pah_on_grid = jnp.interp(wavelength_aa, tmpl_wave, pah_T_template, left=0.0, right=0.0)
+        dust_on_grid = resample_template(
+            wavelength_aa, tmpl_wave, dust_T_template, left=0.0, right=0.0
+        )
+        pah_on_grid = resample_template(
+            wavelength_aa, tmpl_wave, pah_T_template, left=0.0, right=0.0
+        )
         f_pah = jnp.clip(dust_f_pah, 0.0, 1.0)
         mixed = (1.0 - f_pah) * dust_on_grid + f_pah * pah_on_grid
 
@@ -1518,7 +1555,9 @@ def create_dh02_ce01_from_grid(grid_path: str) -> Callable:
         template_interp = (1.0 - f) * template_grid[i] + f * template_grid[i + 1]
 
         # Resample to output wavelength grid
-        sed = jnp.interp(wavelength_aa, wavelength_grid, template_interp, left=0.0, right=0.0)
+        sed = resample_template(
+            wavelength_aa, wavelength_grid, template_interp, left=0.0, right=0.0
+        )
 
         # Normalize via frequency integral (energy balance)
         wave_cm = wavelength_aa * _AA_TO_CM
@@ -1753,7 +1792,7 @@ def create_astrodust_from_grid(
         template = jnp.where(t_integral > 0.0, template / t_integral, template)
 
         # Interpolate onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+        sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
         # No CMB contrast factor here — see the note in ``create_themis_from_grid``.
         # It is an *observational* suppression, so applying it to the emitted SED
@@ -1988,7 +2027,7 @@ def create_bosa_from_grid(template_data: dict | str) -> Callable:
         )
 
         # Interpolate onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+        sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
         # No CMB contrast factor here — see the note in ``create_themis_from_grid``.
         # It is an *observational* suppression, so applying it to the emitted SED
@@ -2355,7 +2394,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         template = jnp.where(t_integral > 0.0, template / t_integral, template)
 
         # Interpolate onto target wavelength grid
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
+        sed = resample_template(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
 
         # The da Cunha et al. (2013) CMB contrast factor is deliberately NOT
         # applied to the emitted SED.

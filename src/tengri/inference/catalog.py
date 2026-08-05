@@ -21,6 +21,23 @@ from tengri.inference.catalog_ingest import ingest_catalog
 __all__ = ["Catalog"]
 
 
+def _stellar_config(fwd):
+    """The StellarSEDComponent's config off a built ForwardModel, or None.
+
+    Used to tell a tabulated-SFH model from a parametric one before accepting
+    histories, so :meth:`Catalog.from_histories` can name the fix instead of
+    letting the #996 runtime check fire deep in the forward pass.
+    """
+    from tengri.components.stellar.component import StellarSEDComponent
+
+    try:
+        chain = fwd.populations[0].sed._build_component_chain()
+    except (AttributeError, IndexError):
+        return None
+    stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
+    return None if stellar is None else stellar.config
+
+
 class Catalog:
     """Astronomer-facing catalog inference interface.
 
@@ -45,13 +62,32 @@ class Catalog:
         redshift span in the table. If not given, the model must have a
         free redshift parameter. Exactly one of the two conditions is required.
     flux_cols : list[str], optional
-        Explicit flux column names. If None, use ``"{name}"`` for each band in
-        the model's observation.
+        Flux column names **in your table** — they need not resemble the band
+        names. If None, use ``"{name}"`` for each band in the model's
+        observation.
+
+        Binding is **positional**: ``flux_cols[i]`` supplies the flux for
+        band ``i`` of the observation, so order them to match the observation
+        rather than the table::
+
+            # observation bands ("sdss_g", "sdss_r")
+            Catalog(model, table, flux_cols=["FLUX_G", "FLUX_R"],
+                    err_cols=["ERR_G", "ERR_R"], flux_unit="cgs_fnu")
     err_cols : list[str], optional
-        Explicit error column names. If None, use ``"{name}_err"`` for each band.
+        Error column names in your table, bound positionally the same way. If
+        None, use ``"{name}_err"`` for each band.
     censor_cols : dict[str, str], optional
         Mapping from band name to censoring flag column. Flag values: 0
         (detected), 1 (upper limit), -1 (lower limit).
+    line_cols : list[str], optional
+        Emission-line flux column names in your table, bound positionally to the
+        observation's line order (from ``observation.line_fluxes.names``).
+        If None and the model carries line fluxes, raises ValueError.
+        If None and the model has no line fluxes, this parameter is ignored.
+    line_err_cols : list[str], optional
+        Emission-line error column names, bound positionally the same way.
+        If None, use ``"{name}_err"`` for each line, matching the ``err_cols``
+        convention.
     missing : {"error", "mask"}, default "error"
         Policy for NaN flux values. ``"error"`` raises with guidance on
         ``missing="mask"``; ``"mask"`` sets presence to False for that cell.
@@ -84,6 +120,8 @@ class Catalog:
         flux_cols=None,
         err_cols=None,
         censor_cols=None,
+        line_cols=None,
+        line_err_cols=None,
         missing="error",
     ):
         """Initialize a Catalog with eager ingestion and validation.
@@ -92,6 +130,11 @@ class Catalog:
         """
         self.fwd = fwd
         self.table = table
+        # Set by from_histories; makes predict() argument-optional (#1396).
+        self._history_columns = None
+        # Memoized jit(vmap(...)) per channel, so the XLA cache survives across
+        # calls instead of being rebuilt (and recompiled) each time.
+        self._batched_cache = {}
 
         # Fail fast: ingest and validate at construction.
         if table is not None:
@@ -103,6 +146,8 @@ class Catalog:
                 err_cols=err_cols,
                 redshift_col=redshift_col,
                 censor_cols=censor_cols,
+                line_cols=line_cols,
+                line_err_cols=line_err_cols,
                 missing=missing,
             )
             self._catalog_arrays = ca
@@ -167,6 +212,16 @@ class Catalog:
                 # model's shared redshift (e.g. a cluster at known z, or the
                 # fit_batch shared-redshift case). Nothing to validate here.
                 pass
+
+            # Fail loud on line flux mismatch (#1480): prevent silent substitution.
+            if fwd.observation.has_line_fluxes and ca.line_flux_obs is None:
+                raise ValueError(
+                    "The model's Observation carries line_fluxes but this Catalog "
+                    "has no line columns, so every galaxy would be scored against the "
+                    "template galaxy's line fluxes. Pass line_cols=/line_err_cols= to "
+                    "Catalog(...), or build the model without line_fluxes for a "
+                    "photometry-only fit."
+                )
         else:
             self._catalog_arrays = None
 
@@ -263,6 +318,10 @@ class Catalog:
             # blocking MCMC/VI on catalogs with no masking at all.
             if ca.presence is not None and not bool(np.all(ca.presence[i])):
                 galaxy_dict["presence"] = ca.presence[i].astype(np.float32)
+            # Per-galaxy emission-line fluxes (#1480); thread if available.
+            if ca.line_flux_obs is not None:
+                galaxy_dict["line_flux_obs"] = ca.line_flux_obs[i]
+                galaxy_dict["line_flux_err"] = ca.line_flux_err[i]
             galaxies.append(galaxy_dict)
 
         # Delegate to the existing engine.
@@ -281,26 +340,490 @@ class Catalog:
 
         return result
 
-    def predict(self, param_table, *, chunk_size=1024) -> np.ndarray:
-        """Predict photometry for a catalog of parameters.
+    @classmethod
+    def from_histories(
+        cls,
+        fwd,
+        *,
+        t_gyr,
+        sfr,
+        met=None,
+        redshift=None,
+        params=None,
+        flux_unit="cgs_fnu",
+    ):
+        """Build a mock catalog from tabulated SFH / metallicity histories (#1396).
 
-        Evaluates the forward model on a table of parameters, returning
-        observed-frame spectral flux density (or flux in the chosen units).
+        The simulation-catalog entry point: a hydro sim, semi-analytic model or
+        UniverseMachine-style run supplies SFH(t) and optionally Z(t) per galaxy,
+        and the result is a :class:`Catalog` whose :meth:`predict` returns
+        photometry for the whole table.
+
+        Histories are **records, not parameters**. They enter at the action, the
+        same way fluxes do, which is why this is a classmethod rather than a
+        model-construction argument — the ``table`` SFH declares zero free
+        parameters because the table *is* the SFH.
+
+        Parameters
+        ----------
+        fwd : ForwardModel
+            Model built with ``sfh={'type': 'table'}`` (and
+            ``met={'type': 'table'}`` if ``met`` is given).
+        t_gyr : array_like, shape (n_t,) or (N, n_t)
+            Cosmic time [Gyr], strictly increasing. A 1-D grid is shared by
+            every galaxy and broadcast.
+        sfr : array_like, shape (N, n_t)
+            Star formation rate [Msun/yr] at those times. Must be non-negative.
+        met : array_like, shape (N, n_t), optional
+            Metallicity history, log10(Z/Zsun), at the same nodes. Requires the
+            model's ``metallicity_model='table'``.
+        redshift : array_like, shape (N,), optional
+            Per-galaxy redshift. Needs a ``catalog_z_range`` on the model for
+            the catalog to stay one compile (#1316).
+        params : dict, optional
+            Per-galaxy scalars, ``{name: (N,)}`` — every free parameter of the
+            model that is not supplied by the histories.
+        flux_unit : str, default "cgs_fnu"
+            Recorded for symmetry with the data-table constructor; predictions
+            are returned in [erg/s/cm²/Hz] regardless.
+
+        Returns
+        -------
+        Catalog
+            Prediction-ready. ``.predict()`` needs no argument; ``.fit()`` is
+            still meaningful (fit dust or redshift at a known, fixed SFH).
+
+        Raises
+        ------
+        ValueError
+            If the model does not declare a tabulated SFH (or a tabulated
+            metallicity when ``met`` is given), if ``t_gyr`` is not strictly
+            increasing, if any SFR is negative, or if the shapes disagree.
+
+        Examples
+        --------
+        >>> cat = Catalog.from_histories(
+        ...     fwd, t_gyr=t, sfr=sfr, redshift=z, params={"dust_tau_diff": tau}
+        ... )
+        >>> flux = cat.predict()
+        """
+        cfg = _stellar_config(fwd)
+        if cfg is None or cfg.sfh_model != "table":
+            got = "unknown" if cfg is None else repr(cfg.sfh_model)
+            raise ValueError(
+                f"from_histories needs a model built with sfh={{'type': 'table'}}, "
+                f"whose SFH arrives at runtime; this model's sfh_model is {got}. "
+                f"Rebuild with SEDModel.build(..., sfh={{'type': 'table'}})."
+            )
+
+        sfr = np.asarray(sfr)
+        if sfr.ndim != 2:
+            raise ValueError(f"sfr must be (N, n_t); got shape {sfr.shape}.")
+        n_galaxies, n_t = sfr.shape
+
+        t_gyr = np.asarray(t_gyr)
+        if t_gyr.ndim == 1:
+            t_gyr = np.broadcast_to(t_gyr, (n_galaxies, t_gyr.shape[0])).copy()
+        if t_gyr.ndim != 2:
+            raise ValueError(f"t_gyr must be (n_t,) or (N, n_t); got shape {t_gyr.shape}.")
+        if t_gyr.shape[1] != n_t:
+            raise ValueError(
+                f"t_gyr and sfr disagree on n_t: t_gyr has {t_gyr.shape[1]}, "
+                f"sfr has {n_t}. They index the same history nodes."
+            )
+
+        if not np.all(np.diff(t_gyr, axis=1) > 0.0):
+            raise ValueError(
+                "t_gyr must be strictly increasing along the time axis (cosmic "
+                "time [Gyr], not lookback). A non-monotonic grid interpolates to "
+                "garbage without raising downstream."
+            )
+        if np.any(sfr < 0.0):
+            raise ValueError(
+                "sfr has negative entries [Msun/yr]. A negative SFR subtracts "
+                "stellar mass in the age-weight integral, silently."
+            )
+
+        columns = {"sfh_t_gyr": t_gyr, "sfh_sfr": sfr}
+
+        if met is not None:
+            if cfg.metallicity_model != "table":
+                raise ValueError(
+                    f"met= needs a model built with met={{'type': 'table'}}; this "
+                    f"model's metallicity_model is {cfg.metallicity_model!r}. Either "
+                    f"rebuild with a tabulated metallicity or drop met=."
+                )
+            met = np.asarray(met)
+            if met.shape != sfr.shape:
+                raise ValueError(
+                    f"met must match sfr's shape (N, n_t); got {met.shape} vs {sfr.shape}."
+                )
+            columns["met_history"] = met
+
+        if redshift is not None:
+            columns["redshift"] = np.asarray(redshift)
+
+        for name, value in (params or {}).items():
+            columns[name] = np.asarray(value)
+
+        catalog = cls(fwd, None, flux_unit=flux_unit)
+        # Validate the assembled columns through the same gate predict() uses,
+        # so from_histories cannot accept a table predict() would then reject.
+        catalog._history_columns, _ = catalog._as_columns(columns)
+        return catalog
+
+    def _resolve_line_defs(self, lines):
+        """Named lines -> LineDef objects, in the caller's order."""
+        from tengri.observation.line_measurement import DESI_LINES
+
+        by_name = {d.name: d for d in DESI_LINES}
+        unknown = [n for n in lines if n not in by_name]
+        if unknown:
+            raise ValueError(
+                f"unknown emission line(s) {unknown}. Available: "
+                f"{sorted(by_name)}. Pass LineDef objects directly for lines "
+                f"outside this set."
+            )
+        return tuple(by_name[n] for n in lines)
+
+    def simulate(
+        self,
+        *,
+        lines=None,
+        properties=None,
+        chunk_size=1024,
+        n_pad=None,
+        noise=None,
+        key=None,
+    ):
+        """Simulate mock observables for the whole catalog (#1396 §8.1).
+
+        One verb, several channels: photometry always, plus emission lines and
+        derived properties on request. Intended for a catalog built by
+        :meth:`from_histories`, where the SFH/Z tables come from a simulation.
+
+        Parameters
+        ----------
+        lines : sequence of str, optional
+            Emission line names to measure, from
+            :data:`~tengri.observation.line_measurement.DESI_LINES` (e.g.
+            ``("Halpha", "OIII_5007")``). Measured through the window-LUT fast
+            path, which since #1396 serves tabulated histories.
+        properties : sequence of str, optional
+            Derived quantities to evaluate, e.g. ``("stellar_mass",)``.
+        chunk_size : int, default 1024
+            Galaxies per vmapped batch. Chunks are padded to a uniform width,
+            so each channel costs one compile for the whole catalog.
+        n_pad : int, optional
+            Pad the catalog to at least this many galaxies, so catalogs of
+            different sizes share one XLA cache entry per channel.
+        noise : optional
+            **Not implemented** — noise draws are #1312. Refused rather than
+            ignored, so a caller asking for a noisy mock never silently receives
+            a noiseless one.
+        key : optional
+            Reserved for the noise draw (#1312); refused for the same reason.
+
+        Returns
+        -------
+        MockCatalog
+            ``.photometry``, ``.lines``, ``.properties``, and ``.to_table()``.
+
+        Raises
+        ------
+        NotImplementedError
+            If ``noise`` or ``key`` is passed.
+        ValueError
+            If a line name is not recognized.
+
+        Examples
+        --------
+        >>> mock = cat.simulate(lines=("Halpha",), properties=("stellar_mass",))
+        >>> mock.lines["Halpha"].shape
+        (100,)
+        """
+        if noise is not None or key is not None:
+            raise NotImplementedError(
+                "simulate(noise=..., key=...) is not implemented — the noise draw "
+                "is tracked as #1312. simulate() currently returns noiseless "
+                "predictions; drawing from a NoiseModel will compose here once "
+                "#1312 lands."
+            )
+
+        columns, n_galaxies = self._prediction_columns(None)
+        photometry = self._map_chunks(
+            self.fwd.predict_photometry,
+            columns,
+            n_galaxies,
+            chunk_size,
+            tag="photometry",
+            n_pad=n_pad,
+        )
+
+        line_values = {}
+        if lines:
+            line_defs = self._resolve_line_defs(tuple(lines))
+
+            def _measure(params):
+                return self.fwd.measure_line_fluxes(params, line_defs, fast=True)
+
+            # The tag carries the line set: a different set is a different
+            # program, and reusing one cache entry across them would be wrong.
+            measured = self._map_chunks(
+                _measure,
+                columns,
+                n_galaxies,
+                chunk_size,
+                tag=f"lines:{','.join(d.name for d in line_defs)}",
+                n_pad=n_pad,
+            )
+            line_values = {d.name: np.asarray(measured)[:, i] for i, d in enumerate(line_defs)}
+
+        property_values = {}
+        if properties:
+            names = tuple(properties)
+
+            def _props(params):
+                return self.fwd.predict_properties(params, names=names)
+
+            # predict_properties returns dict[str, scalar]; vmapped and joined
+            # per key that is already {name: (N,)}.
+            property_values = self._map_chunks(
+                _props,
+                columns,
+                n_galaxies,
+                chunk_size,
+                tag=f"properties:{','.join(names)}",
+                n_pad=n_pad,
+            )
+
+        from tengri.inference.mock_catalog import MockCatalog
+
+        return MockCatalog(
+            photometry=np.asarray(photometry),
+            filter_names=tuple(self.fwd.observation.photometry.names),
+            lines=line_values,
+            properties=property_values,
+        )
+
+    def _prediction_columns(self, param_table):
+        """Resolve the columns to predict from — explicit table, or the stored one.
+
+        Fixed parameter values are broadcast in as ``(N,)`` columns. Not every
+        consumer merges them for itself: ``predict_photometry`` does, but the
+        window-LUT line path reaches ``compute_joint_weights``, which reads
+        ``params["met_logzsol"]`` directly and raises ``KeyError`` on a dict
+        carrying only the free parameters. Merging once here keeps every channel
+        — photometry, lines, properties — seeing the same complete dict. Caller
+        columns win, so a per-galaxy ``redshift`` still overrides a fixed one.
+        """
+        if param_table is None:
+            if self._history_columns is None:
+                raise ValueError(
+                    "predict() needs a param_table. Only a catalog built by "
+                    "Catalog.from_histories(...) already carries its columns and "
+                    "can be predicted with no argument."
+                )
+            columns = self._history_columns
+            n_galaxies = int(next(iter(columns.values())).shape[0])
+        else:
+            columns, n_galaxies = self._as_columns(param_table)
+
+        fixed = {
+            name: np.broadcast_to(np.asarray(value), (n_galaxies,)).copy()
+            for name, value in self.fwd.spec.get_fixed_values().items()
+            if np.asarray(value).ndim == 0
+        }
+        return {**fixed, **columns}, n_galaxies
+
+    def _batched(self, tag, fn):
+        """A memoized ``jit(vmap(fn))``, so the XLA cache survives across calls.
+
+        Memoization is the load-bearing part. ``jax.jit`` keys its cache on the
+        wrapped callable, so building a fresh ``jax.jit(...)`` per call would
+        give every call a fresh cache and recompile the catalog every time.
+
+        Scope is **per Catalog**, deliberately. Two Catalog objects over the same
+        model each compile their own program — one compile, not the ~236 an
+        unjitted path costs, and the persistent on-disk JAX cache absorbs it on
+        a later run. Sharing across instances would mean a module-level cache
+        keyed on the ForwardModel, which is a frozen dataclass holding JAX
+        arrays: the lifetime and hashing hazards are not worth one compile.
+        """
+        cached = self._batched_cache.get(tag)
+        if cached is None:
+            cached = jax.jit(jax.vmap(fn))
+            self._batched_cache[tag] = cached
+        return cached
+
+    def _map_chunks(self, fn, columns, n_galaxies, chunk_size, *, tag, n_pad=None):
+        """Evaluate ``fn`` over the galaxy axis in **uniformly shaped** chunks.
+
+        Two things make the whole catalog cost **one** compile rather than
+        hundreds, and both are necessary:
+
+        1. **jit the vmapped call.** ``jax.vmap`` alone does not build a
+           compiled program — it dispatches op by op, so each primitive is
+           compiled separately and keyed on its own shapes. Measured on a
+           3-band tabulated-history model: 236 compiles for a bare
+           ``vmap(predict_photometry)``, versus 1 for ``jit(vmap(...))``.
+        2. **Pad the galaxy axis to a uniform chunk width.** Those caches key on
+           shape, so a ragged trailing chunk is a second shape and pays the whole
+           cost again — ``chunk_size=3`` over 8 galaxies means widths 3 and 2,
+           i.e. two compiles (and, unjitted, 472). The catalog is padded by
+           repeating its last row so every chunk is exactly ``width`` wide, and
+           the padding is discarded before returning.
+
+        Parameters
+        ----------
+        fn : callable
+            Single-galaxy callable, returning an array or a dict of scalars.
+        columns : dict
+            ``{name: (N, ...) ndarray}``.
+        n_galaxies : int
+            True galaxy count, before padding.
+        chunk_size : int
+            Maximum galaxies per batch.
+        tag : str
+            Cache key for the memoized ``jit(vmap(fn))``.
+        n_pad : int, optional
+            Pad the catalog to at least this many galaxies before chunking, so
+            catalogs of *different* sizes share one XLA cache entry (the same
+            meaning ``fit`` gives it). Must be >= ``n_galaxies``.
+
+        Returns
+        -------
+        ndarray or dict
+            Results for the real galaxies only, padding removed.
+        """
+        if n_pad is not None:
+            if int(n_pad) < n_galaxies:
+                raise ValueError(
+                    f"n_pad={n_pad} is smaller than the catalog ({n_galaxies} "
+                    f"galaxies); it pads up to a shared size, it does not truncate."
+                )
+            n_target = int(n_pad)
+        else:
+            n_target = n_galaxies
+
+        width = min(int(chunk_size), n_target)
+        n_chunks = (n_target + width - 1) // width
+        n_padded = n_chunks * width
+
+        if n_padded > n_galaxies:
+            # Repeat the last galaxy: a duplicate row is always evaluable, where
+            # zeros could be an unphysical SFH that trips a guard. Discarded below.
+            pad = n_padded - n_galaxies
+            columns = {
+                name: np.concatenate([v, np.repeat(v[-1:], pad, axis=0)], axis=0)
+                for name, v in columns.items()
+            }
+
+        batched = self._batched(tag, fn)
+        results = [
+            batched({name: v[i * width : (i + 1) * width] for name, v in columns.items()})
+            for i in range(n_chunks)
+        ]
+
+        if isinstance(results[0], dict):
+            return {
+                key: np.concatenate([np.asarray(r[key]) for r in results], axis=0)[:n_galaxies]
+                for key in results[0]
+            }
+        return np.concatenate(results, axis=0)[:n_galaxies]
+
+    def _as_columns(self, param_table):
+        """Validate a parameter table into uniform columns keyed by name (#1396).
+
+        One channel carries everything: each column's **leading axis is the
+        galaxy**, and the trailing shape is free. A per-galaxy scalar is simply
+        the ``(N,)`` case; a tabulated history is ``(N, n_t)``. This is what the
+        :meth:`predict` docstring has always promised, and what the previous
+        ``np.stack(param_arrays, axis=1)`` could not express.
 
         Parameters
         ----------
         param_table : dict-like
-            Mapping of parameter name → array of values, shape ``(N,)`` or
-            ``(N, ...)`` for each galaxy. Parameter names must match the model's
-            free parameters.
+            Mapping of name → array whose leading axis indexes galaxies.
+
+        Returns
+        -------
+        columns : dict
+            ``{name: ndarray}``, every value at least 1-D.
+        n_galaxies : int
+            The shared leading-axis length.
+
+        Raises
+        ------
+        ValueError
+            If a free parameter has no column, if a column is 0-D (no galaxy
+            axis), or if the columns disagree on their leading-axis length.
+        """
+        missing = [name for name in self.fwd.spec.free_params if name not in param_table]
+        if missing:
+            raise ValueError(
+                f"predict() has no column for free parameter(s) {missing}. "
+                f"Every free parameter needs one value per galaxy; pass a "
+                f"(N,) array for each, or make the parameter Fixed at build time."
+            )
+
+        columns = {name: np.asarray(value) for name, value in param_table.items()}
+
+        scalars = [name for name, value in columns.items() if value.ndim == 0]
+        if scalars:
+            raise ValueError(
+                f"predict() columns {scalars} are 0-D and carry no galaxy axis. "
+                f"Every column's leading axis indexes galaxies — pass (N,) even "
+                f"when the value is the same for all N."
+            )
+
+        lengths = {name: int(value.shape[0]) for name, value in columns.items()}
+        if len(set(lengths.values())) > 1:
+            raise ValueError(
+                f"predict() columns must share the same leading axis length "
+                f"(the galaxy count); got {lengths}."
+            )
+
+        return columns, next(iter(lengths.values()))
+
+    def predict(self, param_table=None, *, chunk_size=1024, n_pad=None) -> np.ndarray:
+        """Predict photometry for a catalog of parameters or histories.
+
+        Evaluates the forward model on a table of per-galaxy columns, returning
+        observed-frame spectral flux density (or flux in the chosen units).
+
+        Parameters
+        ----------
+        param_table : dict-like, optional
+            Mapping of name → array whose **leading axis indexes galaxies**;
+            the trailing shape is free. A per-galaxy scalar is ``(N,)``; a
+            tabulated history (``sfh_t_gyr``, ``sfh_sfr``, ``met_history``) is
+            ``(N, n_t)``. Every free parameter needs a column; names the model
+            does not recognize are reported by the forward model's own
+            unknown-parameter check, so a typo cannot pass silently. Omit it
+            entirely on a catalog built by :meth:`from_histories`, which
+            already carries its columns.
         chunk_size : int, default 1024
-            Batch size for vmap chunking (``jax.lax.map``). Larger batches are
-            faster but use more memory.
+            Galaxies evaluated per vmapped batch. Larger batches are faster
+            but use more memory. Chunks are padded to a uniform width, so the
+            whole catalog costs **one** compile regardless of how it divides.
+        n_pad : int, optional
+            Pad the catalog to at least this many galaxies before chunking, so
+            catalogs of *different* sizes share one XLA cache entry (the same
+            meaning :meth:`fit` gives it). Padding rows are discarded from the
+            result.
 
         Returns
         -------
         ndarray, shape (N, n_filters)
             Predicted photometry [erg/s/cm²/Hz].
+
+        Notes
+        -----
+        Columns are **not** restricted to ``spec.free_params``. A tabulated SFH
+        declares zero free parameters — the table *is* the SFH — so extracting
+        only free parameters dropped the history arrays entirely and the forward
+        then refused with the #996 runtime check (#1396).
 
         Examples
         --------
@@ -308,37 +831,26 @@ class Catalog:
         >>> flux = cat.predict(params, chunk_size=64)
         >>> flux.shape
         (100, 3)
+
+        Driving a catalog from tabulated histories:
+
+        >>> flux = cat.predict(
+        ...     {
+        ...         "dust_tau_diff": tau,  # (N,)
+        ...         "sfh_t_gyr": t_gyr,  # (N, n_t)
+        ...         "sfh_sfr": sfr,  # (N, n_t)
+        ...     }
+        ... )
         """
-        # Extract parameter values in the correct order.
-        free_params = self.fwd.spec.free_params
-        param_arrays = []
-        for name in free_params:
-            param_arrays.append(param_table[name])
-
-        # Stack into a pytree (list of arrays).
-        n_samples = len(param_arrays[0])
-
-        # Vmap predict_photometry over the parameter table.
-        def predict_one_row(params_tuple):
-            # Reconstruct the params dict for this row.
-            params = {name: val for name, val in zip(free_params, params_tuple)}
-            return self.fwd.predict_photometry(params)
-
-        # Use jax.lax.map for chunked vmap.
-        stacked = np.stack(param_arrays, axis=1)  # (N, n_params)
-
-        def compute_chunk(chunk):
-            # chunk shape: (chunk_size, n_params)
-            return jax.vmap(predict_one_row)(tuple(chunk[:, i] for i in range(chunk.shape[1])))
-
-        # Use lax.map for chunking.
-        n_chunks = (n_samples + chunk_size - 1) // chunk_size
-        results = []
-        for i in range(n_chunks):
-            start = i * chunk_size
-            end = min((i + 1) * chunk_size, n_samples)
-            chunk = stacked[start:end]
-            chunk_result = compute_chunk(chunk)
-            results.append(chunk_result)
-
-        return np.concatenate(results, axis=0)
+        # vmap maps the leading axis of every leaf of the dict pytree, so
+        # (N,) scalars and (N, n_t) histories batch through the same call —
+        # no stacking, and no shape agreement required beyond the galaxy axis.
+        columns, n_galaxies = self._prediction_columns(param_table)
+        return self._map_chunks(
+            self.fwd.predict_photometry,
+            columns,
+            n_galaxies,
+            chunk_size,
+            tag="photometry",
+            n_pad=n_pad,
+        )

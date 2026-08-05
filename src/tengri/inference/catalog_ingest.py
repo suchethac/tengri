@@ -35,6 +35,10 @@ class CatalogArrays(NamedTuple):
         Number of galaxies (N).
     band_names : tuple[str, ...]
         Band identifiers in order.
+    line_flux_obs : ndarray, shape (N, n_lines) or None
+        Per-galaxy observed emission-line fluxes [erg/s/cm²].
+    line_flux_err : ndarray, shape (N, n_lines) or None
+        Per-galaxy emission-line flux uncertainties [erg/s/cm²].
     """
 
     flux: np.ndarray
@@ -44,6 +48,8 @@ class CatalogArrays(NamedTuple):
     presence: np.ndarray
     n_galaxies: int
     band_names: tuple[str, ...]
+    line_flux_obs: np.ndarray | None = None
+    line_flux_err: np.ndarray | None = None
 
 
 def ingest_catalog(
@@ -55,6 +61,8 @@ def ingest_catalog(
     err_cols=None,
     redshift_col=None,
     censor_cols=None,
+    line_cols=None,
+    line_err_cols=None,
     missing="error",
 ) -> CatalogArrays:
     """Convert a heterogeneous table into contiguous validated arrays.
@@ -70,15 +78,37 @@ def ingest_catalog(
         Unit of flux columns. One of: "cgs_fnu", "mJy", "uJy", "maggies",
         "ab_mag".
     flux_cols : list[str], optional
-        Explicit flux column names. If None, use "{name}" for each band in
-        photometry.
+        Flux column names **in your table** — they need not resemble the band
+        names. If None, defaults to ``"{name}"`` for each band in photometry.
+
+        Binding is **positional**: ``flux_cols[i]`` is read as the flux for
+        ``photometry.names[i]``. That is the only possible rule once the names
+        are arbitrary, and it is why the length must equal the band count. So
+        order these to match the observation, not the table's own layout::
+
+            # bands are ("sdss_g", "sdss_r")
+            flux_cols = ["FLUX_G", "FLUX_R"]  # g -> FLUX_G, r -> FLUX_R
+            flux_cols = ["FLUX_R", "FLUX_G"]  # silently swaps the two bands
+
+        A name absent from the table raises, listing the table's actual
+        columns.
     err_cols : list[str], optional
-        Explicit error column names. If None, use "{name}_err" for each band.
+        Error column names in your table, bound positionally in the same way.
+        If None, defaults to ``"{name}_err"`` for each band.
     redshift_col : str, optional
         Column name for redshifts. If None, redshift field is None.
     censor_cols : dict[str, str], optional
         Mapping from band name to censoring flag column. Flag values: 0
         (detected), 1 (upper limit), -1 (lower limit).
+    line_cols : list[str], optional
+        Emission-line flux column names in your table, bound positionally to the
+        observation's line order. If None and the observation carries line fluxes,
+        raises ValueError with guidance. If None and no line fluxes are configured,
+        this parameter is ignored.
+    line_err_cols : list[str], optional
+        Emission-line error column names, bound positionally the same way.
+        If None, defaults to ``"{name}_err"`` for each line, matching the
+        ``err_cols`` convention.
     missing : {"error", "mask"}, default "error"
         Policy for NaN flux values. "error" raises with guidance on
         `missing="mask"`; "mask" sets presence to False for that cell.
@@ -115,14 +145,15 @@ def ingest_catalog(
     if flux_cols is None:
         flux_cols = [f"{name}" for name in band_names]
     else:
-        # Validate that all flux_cols are in the photometry observation
-        flux_cols = list(flux_cols)  # coerce to list if needed
-        for col in flux_cols:
-            if col not in band_names:
-                raise ValueError(
-                    f"Flux column '{col}' is not in the observation. "
-                    f"Observation bands: {band_names}"
-                )
+        # No band-name check here, deliberately. This used to require every
+        # entry to already BE a band name, which meant `flux_cols` could only
+        # ever be a permutation of its own default — it could not name a real
+        # catalog column, the only reason the parameter exists (#1458). Column
+        # existence is validated against the TABLE in step 2 below, which is
+        # the right referent and already reports the actual column list.
+        # `err_cols` never had the band-name check, and that asymmetry is what
+        # showed the check was a mistake rather than a contract.
+        flux_cols = list(flux_cols)
 
     if err_cols is None:
         err_cols = [f"{name}_err" for name in band_names]
@@ -244,6 +275,90 @@ def ingest_catalog(
     else:
         censor = None
 
+    # Step 9: Read emission-line fluxes if requested
+    line_flux_obs = None
+    line_flux_err = None
+    if line_cols is not None:
+        # User explicitly provided line columns
+        line_cols = list(line_cols)
+        if line_err_cols is None:
+            # Infer error column names from line names
+            # We need the line names from the table structure, but we don't have
+            # them here. Fall back to assuming "{col}_err" pattern for each.
+            line_err_cols = [f"{col}_err" for col in line_cols]
+        else:
+            line_err_cols = list(line_err_cols)
+
+        # Validate counts match
+        if len(line_cols) != len(line_err_cols):
+            raise ValueError(
+                f"line_cols count ({len(line_cols)}) != line_err_cols count ({len(line_err_cols)})"
+            )
+
+        # Extract line flux arrays
+        line_flux_arrays = []
+        try:
+            for col_name in line_cols:
+                line_flux_arrays.append(np.asarray(table[col_name]))
+        except (KeyError, TypeError) as e:
+            actual_cols = list(table.keys()) if hasattr(table, "keys") else "unknown"
+            raise ValueError(
+                f"Missing line flux column '{col_name}'. Table columns: {actual_cols}"
+            ) from e
+
+        line_err_arrays = []
+        try:
+            for col_name in line_err_cols:
+                line_err_arrays.append(np.asarray(table[col_name]))
+        except (KeyError, TypeError) as e:
+            actual_cols = list(table.keys()) if hasattr(table, "keys") else "unknown"
+            raise ValueError(
+                f"Missing line error column '{col_name}'. Table columns: {actual_cols}"
+            ) from e
+
+        # Stack into (N, n_lines) arrays
+        line_flux_obs = np.column_stack(line_flux_arrays)
+        line_flux_err = np.column_stack(line_err_arrays)
+
+        # Validate shapes
+        if line_flux_obs.shape[0] != n_galaxies:
+            raise ValueError(
+                f"line flux array has {line_flux_obs.shape[0]} rows, "
+                f"but flux has {n_galaxies} rows"
+            )
+        if line_flux_err.shape[0] != n_galaxies:
+            raise ValueError(
+                f"line error array has {line_flux_err.shape[0]} rows, "
+                f"but flux has {n_galaxies} rows"
+            )
+
+        # Handle NaN in line fluxes (same policy as photometric flux)
+        line_presence = np.isfinite(line_flux_obs)
+        if missing == "error":
+            if not line_presence.all():
+                i, j = np.where(~line_presence)
+                raise ValueError(
+                    f"NaN line flux detected at row(s) {i.tolist()}, "
+                    f"line(s) {j.tolist()}. Use missing='mask' to ignore absent lines, "
+                    f"or convert sentinels before ingestion."
+                )
+        elif missing == "mask":
+            # Set NaN line flux to finite placeholder
+            line_flux_obs = np.nan_to_num(line_flux_obs, nan=0.0)
+
+        # Check error NaN – ALWAYS an error
+        line_err_has_nan = ~np.isfinite(line_flux_err)
+        if line_err_has_nan.any():
+            bad_mask = line_err_has_nan & line_presence
+            if bad_mask.any():
+                i, j = np.where(bad_mask)
+                raise ValueError(
+                    f"NaN line error with finite flux at row(s) {i.tolist()}, "
+                    f"line(s) {j.tolist()}. This is always an error; an unknown "
+                    f"uncertainty is not an absent line."
+                )
+        line_flux_err = np.nan_to_num(line_flux_err, nan=0.0)
+
     return CatalogArrays(
         flux=flux,
         noise=err,
@@ -252,6 +367,8 @@ def ingest_catalog(
         presence=presence,
         n_galaxies=n_galaxies,
         band_names=band_names,
+        line_flux_obs=line_flux_obs,
+        line_flux_err=line_flux_err,
     )
 
 

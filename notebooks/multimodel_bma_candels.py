@@ -103,6 +103,8 @@ jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore")
 
 # --- Current tengri public API ---
+import tengri
+from _setup import FIG_DIR, REPO_ROOT
 from tengri import (
     FIXED,
     FREE,
@@ -112,33 +114,24 @@ from tengri import (
     SEDModel,
     Uniform,
     WavePrecomp,
-    load_ssp_data,
 )
 from tengri.units import ab_mag_to_fnu
 
 
 # %% [markdown]
-# ## 0. Locate the repository root
+# ## 0. Locate the inputs
 #
-# Anchored on ``pyproject.toml`` so the notebook runs from any working
-# directory (nbconvert executes it from ``notebooks/``).
+# `REPO_ROOT` and `FIG_DIR` come from `_setup`, anchored on that module's own
+# location, so this notebook runs from any working directory without
+# rediscovering the repository for itself. The SSP grids are *not* addressed
+# through `REPO_ROOT`: `tengri.load_ssp` finds them wherever they live,
+# including a `$TENGRI_DATA_DIR` scratch filesystem.
 
 
 # %%
-def find_repo_root(start: Path) -> Path:
-    """Walk upward until a directory containing ``pyproject.toml`` is found."""
-    for parent in [start, *start.parents]:
-        if (parent / "pyproject.toml").exists() and (parent / "src" / "tengri").exists():
-            return parent
-    raise RuntimeError("Could not locate tengri repo root from " + str(start))
-
-
-ROOT = find_repo_root(Path.cwd().resolve())
-DATA_DIR = ROOT / "data"
-CANDELS_DIR = ROOT / "analysis" / "hst_proposal" / "data"
-FIG_DIR = ROOT / "notebooks" / "_figs"
-FIG_DIR.mkdir(parents=True, exist_ok=True)
-print(f"Repo root : {ROOT}")
+DATA_DIR = REPO_ROOT / "data"
+CANDELS_DIR = REPO_ROOT / "analysis" / "hst_proposal" / "data"
+print(f"Repo root : {REPO_ROOT}")
 print(f"SSP grids : {DATA_DIR}")
 print(f"CANDELS   : {CANDELS_DIR}")
 
@@ -283,14 +276,10 @@ t0 = time.time()
 # parameter, so it is served from the precompute LUT at no extra cost. MIST and
 # PARSEC are at logU = -3; Padova and BaSTI at logU = -2 (the FSPS default).
 SSP = {
-    "mist": load_ssp_data(str(DATA_DIR / "ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")),
-    "padova": load_ssp_data(
-        str(DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-    ),
-    "pdva": load_ssp_data(str(DATA_DIR / "ssp_pdva_miles_chabrier_wNE_logGasU-2.0_logGasZ0.0.h5")),
-    "basti": load_ssp_data(
-        str(DATA_DIR / "ssp_bsti_miles_chabrier_wNE_logGasU-2.0_logGasZ0.0.h5")
-    ),
+    "mist": tengri.load_ssp("ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0"),
+    "padova": tengri.load_ssp("ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0"),
+    "pdva": tengri.load_ssp("ssp_pdva_miles_chabrier_wNE_logGasU-2.0_logGasZ0.0"),
+    "basti": tengri.load_ssp("ssp_bsti_miles_chabrier_wNE_logGasU-2.0_logGasZ0.0"),
 }
 print(f"4 SSP libraries loaded in {time.time() - t0:.1f}s")
 

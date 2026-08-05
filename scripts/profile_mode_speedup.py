@@ -108,7 +108,11 @@ def main():
 
     # Load SSP data
     print("\nLoading SSP data...")
-    ssp_path = Path(__file__).parent.parent / "data" / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    ssp_path = (
+        Path(__file__).parent.parent
+        / "data"
+        / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    )
     if not ssp_path.exists():
         print(f"  ❌ SSP data not found at {ssp_path}")
         return
@@ -139,9 +143,16 @@ def main():
     )
 
     filter_names = [
-        "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp",
-        "hst_f125w", "hst_f140w", "hst_f160w",
-        "vista_ks", "irac_36", "irac_45",
+        "hst_f606w",
+        "hst_f775w",
+        "hst_f814w",
+        "hst_f850lp",
+        "hst_f125w",
+        "hst_f140w",
+        "hst_f160w",
+        "vista_ks",
+        "irac_36",
+        "irac_45",
     ]
     filters = load_filter_set(filter_names)
     observation = Observation(photometry=Photometry.from_filter_set(filters))
@@ -180,13 +191,17 @@ def main():
     print(f"\nCompile time:")
     print(f"  _traceable: {results_traceable['compile_time']:.3f}s")
     print(f"  auto:       {results_auto['compile_time']:.3f}s")
-    compile_ratio = results_traceable['compile_time'] / results_auto['compile_time']
+    compile_ratio = results_traceable["compile_time"] / results_auto["compile_time"]
     print(f"  Ratio:      {compile_ratio:.2f}x")
 
     print(f"\nRuntime:")
-    print(f"  _traceable: {results_traceable['mean_runtime_ms']:.3f} ± {results_traceable['std_runtime_ms']:.3f} ms")
-    print(f"  auto:       {results_auto['mean_runtime_ms']:.3f} ± {results_auto['std_runtime_ms']:.3f} ms")
-    speedup = results_traceable['mean_runtime_ms'] / results_auto['mean_runtime_ms']
+    print(
+        f"  _traceable: {results_traceable['mean_runtime_ms']:.3f} ± {results_traceable['std_runtime_ms']:.3f} ms"
+    )
+    print(
+        f"  auto:       {results_auto['mean_runtime_ms']:.3f} ± {results_auto['std_runtime_ms']:.3f} ms"
+    )
+    speedup = results_traceable["mean_runtime_ms"] / results_auto["mean_runtime_ms"]
     print(f"  Speedup:    {speedup:.2f}x")
 
     # Component-level profiling

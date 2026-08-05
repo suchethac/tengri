@@ -48,7 +48,15 @@ worker subprocesses all skip the expensive first compile (geoVI ~75 s, MGVI
 ```bash
 export TENGRI_JAX_CACHE_DIR=/scratch/$USER/jax_cache  # custom location
 export TENGRI_DISABLE_JAX_CACHE=1                     # opt out
+export TENGRI_JAX_CACHE_MAX_GB=8                      # size cap; 0 = unbounded
 ```
+
+**The cache is capped at 8 GiB** (`jax_compilation_cache_max_size`, so JAX
+evicts). Before #1507 nothing passed a cap — `import tengri` left it at JAX's
+`-1` (unlimited) — and combined with `min_compile_time_secs=0.05` below, which
+deliberately persists every per-filter micro-kernel, the directory was measured
+at **141 GB** on a 48 GB machine. `tengri.clear_cache()` now returns the bytes
+it reclaimed.
 
 A sibling cache at `~/.cache/tengri_precomp` persists the WavePrecomp
 photometry z-table (the dominant numpy cost of a free-redshift
@@ -396,6 +404,7 @@ context *before* entering JAX transforms. The context's
 - AGN torus in `torus.py` are **toy models** — use SKIRTOR for science
 - `agn_torus_frac`: do NOT auto-derive from `cos(theta_torus)` in forward pass (gradient discontinuity)
 - Inference internals use `mode="_traceable"` (safe inside JIT). User-facing defaults to `mode="auto"`
+- **`sfh={'age_kernel': ...}` is NOT a speed knob — and `'dsps'` is the SLOWER one** (2026-07-31, #964). Selects how the SFH is integrated onto the SSP age grid: `'cic'` (default, dense cloud-in-cell integrand) or `'dsps'` (DSPS's histogram kernel). Menu: `tengri.list_age_kernels()`. Measured end-to-end on `predict_photometry` gradients (quiet box, interleaved reps, A/A control): **`'cic'` is 3.5% faster on the exact path and 13% faster under `WavePrecomp()`** — precompute makes DSPS relatively *worse*. The cause is **not** arithmetic: by compiled-HLO cost analysis DSPS uses ~1% **fewer** FLOPs and fewer bytes. It compiles to **2x as many `while` loops** (14 vs 7 exact; 13 vs 6 precomp) and ~40% more fusion regions — sequential, latency-bound, unfusable work. Precompute shrinks the vectorizable part (cic fusions 356→212) but not the loops (dsps whiles 14→13), so DSPS's fixed sequential share grows. Caveat: that is a **CPU wall-clock** effect from op structure, so the ordering is not guaranteed on GPU — re-measure there rather than assuming. **Do not micro-benchmark `compute_dsps_age_weights` to judge any of this — it has no call sites on the model path**; timing it says nothing about `apply()`. `'dsps'` is also not equivalent: it interpolates `log10(M(<t))` in `log10(t)`, annihilating the first SSP node older than the SFH start (3.8% of the mass, +1.2% optical CSP bias vs FSPS/bagpipes — **on the grid that was measured**; the magnitude is one node's share of the mass, so it is SSP-grid dependent: 0.64% on the 93-node ProGeny/MILES grid for the same delayed-tau, 0.13-0.29% for a dpl. Re-measure, do not quote) and shifting the `sfh_*_age_gyr` **gradient by 43%**. Use `'dsps'` only for cross-code parity. `'cic'` + a GP-field SFH raises (the field draw has no dense integrand).
 - **Build-time `approx=WavePrecomp(...)` is the speed knob** (2026-05-20). Opting in publishes the SSP × filter LUT and routes `predict_photometry` through `observation.predict_via_precomp`. Default `approx=None` uses the exact wave-grid path. The dict / bool / string forms (e.g. `approx={'wave_precomp': True}`, `approx=True`, `approx='wave_precomp'`) were removed — `TypeError` at construction. Override ztable sampling via `WavePrecomp(n_z=200, z_min=0.0, z_max=3.0)`.
 - **One NUTS fit per notebook process.** Each warmup peaks at 3–6 GB on small models (D ≤ 7 photometry) but can hit 20+ GB on D ≈ 8 with `mean_sfh_type="dense_basis"` — observed 22.78 GB peak on nb00 with default `dense_mass_matrix=True`. Multi-fit notebooks (and any single fit on D ≥ 8) need `dense_mass_matrix=False` or `mcmc_hmc`. See `docs/dev/notebook_orchestration_oom.md`
 - **Subagent rejection ≠ child kill.** A rejected subagent's `python notebook.py` keeps running. After rejecting, run `ps -axo pid,rss,comm | grep python` and `kill -9` zombies
@@ -476,4 +485,5 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 - `docs/dev/notebook_orchestration_oom.md` — operational rules for OOM-safe notebook authoring (multi-fit, subagent zombies, watchdog)
 - `tools/check_param_prefixes.py` — CI guard for free-parameter prefix rule (NAMING_CONTRACT §3.2)
 - `tools/check_british_spelling.py` — CI guard for American-English spelling (NAMING_CONTRACT §10); `--fix` to auto-rewrite
+- `tools/check_reimplementation_language.py` — CI guard for the credit rule above: fails on "ported from" / "copied from" / "adapted from" and on "port" beside a reference-code name. Code "implements"; data is "repackaged". Files that must quote the banned wording are allowlisted in `EXCLUDE_FILES`
 - `tools/check_doc_examples.py` — CI guard that every symbol named in a `src/` docstring or published doc actually exists (`docs/api/*.rst` are autodoc stubs, so docstrings *are* the API reference, and no doctest runner executes them). Runs in the `smoke` job. `docs/dev/` is out of scope by design: design notes and parity audits legitimately name removed or not-yet-built API

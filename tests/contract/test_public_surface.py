@@ -92,6 +92,7 @@ EXPECTED_ALL = frozenset(
         "examples",
         "explain",
         "help",
+        "list_age_kernels",
         "list_agn_blocks",
         "list_agn_models",
         "list_all",

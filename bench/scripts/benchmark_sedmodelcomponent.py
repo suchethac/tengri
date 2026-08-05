@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-"""SEDModelComponent benchmark: exact vs WavePrecomp under the new ports.
+"""SEDModelComponent benchmark: exact vs WavePrecomp under the new components.
 
 The new single-file authoring base class (`SEDModelComponent`, 2026-05)
 auto-dispatches `predict()` at filter effective wavelengths when
 `approx=WavePrecomp()` is active. This benchmark quantifies the speedup
-on a representative model that uses the newly ported components.
+on a representative model that uses the newly migrated components.
 
 What's measured
 ---------------
@@ -76,7 +76,7 @@ def _time_call(fn, *args, n_warmup: int = 5, n_iter: int = 200) -> float:
 
 
 def _build_model(ssp, obs, approx):
-    """Stellar + Calzetti dust + modified-blackbody IR — all SEDModelComponent ports."""
+    """Stellar + Calzetti dust + modified-blackbody IR — all SEDModelComponent implementations."""
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,

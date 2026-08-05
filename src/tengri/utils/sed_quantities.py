@@ -79,6 +79,20 @@ are summed by :func:`extract_line_luminosity`.
 # ── SFH-based quantities (no SED needed) ──────────────────────────
 
 
+def _FLOOR() -> float:
+    """The ``1e-50`` guard floor these quantities use, made representable (#1492).
+
+    ``1e-50`` is below float32's smallest subnormal (1.4e-45), so every floor
+    in this module was **exactly 0.0** in float32 — ``log(0) = -inf``, and the
+    UV-slope regression came back NaN where float64 returned a finite (wrong
+    but survivable) number. ``representable_floor`` raises it to the working
+    dtype's smallest normal; float64 keeps ``1e-50`` unchanged.
+    """
+    from tengri.utils.scale import representable_floor
+
+    return representable_floor(1e-50)
+
+
 def compute_mass_weighted_age(weights: jnp.ndarray, ssp_ages_yr: jnp.ndarray) -> jnp.ndarray:
     """Mass-weighted stellar age.
 
@@ -95,9 +109,20 @@ def compute_mass_weighted_age(weights: jnp.ndarray, ssp_ages_yr: jnp.ndarray) ->
     float
         Mass-weighted age in Gyr:
         ``Σ(w_i × age_i) / Σ(w_i) / 1e9``.
+        NaN when ``Σ(w_i) == 0`` — with no mass there is no mass-weighted age.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    Degenerate input returns NaN rather than 0.0 (#1404). A clamped denominator
+    alone would yield a finite ``0.0`` here, which reads as "every star just
+    formed" — a plausible-looking answer for a model with no stellar mass at all.
     """
     total = jnp.sum(weights)
-    return jnp.sum(weights * ssp_ages_yr) / jnp.maximum(total, 1e-30) / 1e9
+    return jnp.where(
+        total > 1e-20, jnp.sum(weights * ssp_ages_yr) / jnp.maximum(total, 1e-30) / 1e9, jnp.nan
+    )
 
 
 def compute_mass_weighted_metallicity(
@@ -152,7 +177,10 @@ def compute_mass_weighted_metallicity(
     log_z_per_bin = log_z_final + (log_z_initial - log_z_final) * t_frac
     z_linear = 10.0**log_z_per_bin
     total_w = jnp.sum(weights)
-    mean_z = jnp.sum(weights * z_linear) / jnp.maximum(total_w, 1e-30)
+    # NaN, not 0.0, when there is no mass to weight by (#1404).
+    mean_z = jnp.where(
+        total_w > 1e-20, jnp.sum(weights * z_linear) / jnp.maximum(total_w, 1e-30), jnp.nan
+    )
     return jnp.log10(jnp.maximum(mean_z, 1e-30))
 
 
@@ -362,7 +390,7 @@ def compute_uv_slope_beta(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     mask = (wave >= 1250.0) & (wave <= 2600.0)
     w = mask.astype(sed.dtype)
     log_wave = jnp.log(jnp.maximum(wave, 1.0))
-    log_fnu = jnp.log(jnp.maximum(sed, 1e-50))
+    log_fnu = jnp.log(jnp.maximum(sed, _FLOOR()))
 
     # Weighted linear regression: slope = (Σwxy - ΣwxΣwy/Σw) / (Σwx² - (Σwx)²/Σw)
     sw = jnp.sum(w)
@@ -486,7 +514,7 @@ def compute_irx(l_tir_lsun: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.ndarray:
         IRX (dimensionless log ratio).
     """
     l_tir_erg = l_tir_lsun * L_SUN
-    return jnp.log10(jnp.maximum(l_tir_erg, 1e-50) / jnp.maximum(l_uv_erg, 1e-50))
+    return jnp.log10(jnp.maximum(l_tir_erg, _FLOOR()) / jnp.maximum(l_uv_erg, _FLOOR()))
 
 
 def compute_rest_uv_color(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -577,7 +605,12 @@ def compute_luminosity_weighted_age(
     """
     l_per_bin = compute_per_bin_luminosity(weights, ssp_flux_at_z, wave)
     l_total = jnp.sum(l_per_bin)
-    return jnp.sum(l_per_bin * ssp_ages_yr) / jnp.maximum(l_total, 1e-30) / 1e9
+    # NaN, not 0.0, when the population emits nothing to weight by (#1404).
+    return jnp.where(
+        l_total > 1e-20,
+        jnp.sum(l_per_bin * ssp_ages_yr) / jnp.maximum(l_total, 1e-30) / 1e9,
+        jnp.nan,
+    )
 
 
 def compute_luminosity_weighted_metallicity(
@@ -622,7 +655,10 @@ def compute_luminosity_weighted_metallicity(
     log_z_per_bin = log_z_final + (log_z_initial - log_z_final) * t_frac
     z_linear = 10.0**log_z_per_bin
 
-    mean_z = jnp.sum(l_per_bin * z_linear) / jnp.maximum(l_total, 1e-30)
+    # NaN, not 0.0, when the population emits nothing to weight by (#1404).
+    mean_z = jnp.where(
+        l_total > 1e-20, jnp.sum(l_per_bin * z_linear) / jnp.maximum(l_total, 1e-30), jnp.nan
+    )
     return jnp.log10(jnp.maximum(mean_z, 1e-30))
 
 
@@ -815,8 +851,8 @@ def compute_q_ir(l_tir_lsun: jnp.ndarray, l_1p4ghz: jnp.ndarray) -> jnp.ndarray:
     """
     l_tir_w = l_tir_lsun * L_SUN * 1e-7  # erg/s → W
     l_radio_w = l_1p4ghz * 1e-7  # erg/s/Hz → W/Hz
-    return jnp.log10(jnp.maximum(l_tir_w, 1e-50) / 3.75e12) - jnp.log10(
-        jnp.maximum(l_radio_w, 1e-50)
+    return jnp.log10(jnp.maximum(l_tir_w, _FLOOR()) / 3.75e12) - jnp.log10(
+        jnp.maximum(l_radio_w, _FLOOR())
     )
 
 
@@ -874,7 +910,7 @@ def compute_l_x_agn(l_bol_agn_erg: jnp.ndarray) -> jnp.ndarray:
     float
         AGN 2–10 keV luminosity in erg/s.
     """
-    log_l_sol = jnp.log10(jnp.maximum(l_bol_agn_erg, 1e-50) / L_SUN)
+    log_l_sol = jnp.log10(jnp.maximum(l_bol_agn_erg, _FLOOR()) / L_SUN)
     # Duras+2020 Eq. 6, Table 2 (2-10 keV)
     a, b, c = 15.33, 11.48, 16.20
     k_bol = a * (1.0 + (log_l_sol / b) ** c)
@@ -910,4 +946,4 @@ def compute_ionizing_efficiency(q_h: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.
     float
         log10(ξ_ion) in Hz/erg.
     """
-    return jnp.log10(jnp.maximum(q_h, 1e-50) / jnp.maximum(l_uv_erg, 1e-50))
+    return jnp.log10(jnp.maximum(q_h, _FLOOR()) / jnp.maximum(l_uv_erg, _FLOOR()))

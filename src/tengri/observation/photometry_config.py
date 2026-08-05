@@ -146,7 +146,7 @@ class Photometry:
     @staticmethod
     def from_names(
         names: Sequence[str],
-        cache_dir: str = "data/filters",
+        cache_dir: str | None = None,
         convention: FilterConvention | str = FilterConvention.BESSELL,
     ) -> Photometry:
         """Create Photometry from filter registry short names.
@@ -156,8 +156,13 @@ class Photometry:
         names : sequence[str]
             Short names from ``FILTER_REGISTRY`` (e.g. ``"sdss_r"``,
             ``"jwst_f200w"``).
-        cache_dir : str, optional
-            Directory for cached SVO filter files. Default: ``"data/filters"``.
+        cache_dir : str or None, optional
+            Directory for cached SVO filter files. ``None`` (default) resolves
+            through :func:`tengri.observation.filters.default_filter_cache_dir`,
+            which is independent of the working directory. The former default,
+            the literal ``"data/filters"``, was relative to wherever the process
+            started: from any other directory it silently missed the populated
+            cache and re-fetched every curve from SVO (#1486).
         convention : FilterConvention or str, optional
             Filter-convolution convention: ``"bessell"`` (default,
             photon-counting 1/lambda; DSPS/FSPS) or ``"energy"`` (1/lambda^2;

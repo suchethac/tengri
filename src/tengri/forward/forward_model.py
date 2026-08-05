@@ -254,6 +254,7 @@ class ForwardModel:
         "_predict_rest_sed",
         "_predict_sfh_quantities",
         "_template_data_for_jit",
+        "ssp_data",
         "mock",
         "name",
         "predict_observables_jit",
@@ -288,6 +289,56 @@ class ForwardModel:
     def available_properties(self):
         """Derived-property catalog of the inner SED. Delegated (#1300)."""
         return self._single_inner_sed("available_properties").available_properties
+
+    def _supports_jit_threading(self) -> bool:
+        """Whether the threaded (``data_args``) forward is valid for this topology.
+
+        The threaded forward — ``predict_observables_jit`` / ``predict_state`` with
+        ``ssp_data`` and ``template_data`` passed in — is written for a plain
+        single-population SED forward. On a hierarchical
+        (:class:`PopulationSEDModel`-wrapped) forward it mis-broadcasts the galaxy
+        axis against the SFH grid (``mul got incompatible shapes (256,), (3,)``).
+
+        Hierarchical and multi-population forwards were previously excluded by
+        *accident*: ``Fitter._build_data_args`` read ``model.ssp_data``, which did
+        not exist, and a ``contextlib.suppress`` swallowed the ``AttributeError``.
+        Adding that delegation turned threading on for topologies it does not
+        support. This states the exclusion instead of relying on a missing
+        attribute, and keeps the topology test next to the other topology guards.
+
+        Returns
+        -------
+        bool
+            True only for a single, non-spatial, non-``PopulationSEDModel``
+            population.
+        """
+        if len(self.populations) != 1 or self.populations[0].spatial is not None:
+            return False
+        sub = self.populations[0].sed
+        # A PopulationSEDModel wraps its template as ``.sed``; a plain SEDModel
+        # does not, so this distinguishes hierarchical from single-galaxy.
+        return getattr(sub, "sed", sub) is sub
+
+    @property
+    def ssp_data(self):
+        """SSP grid of the inner SED. Delegated.
+
+        A **property**, not one of the auto-installed method delegations: callers
+        read ``model.ssp_data`` as an attribute, so installing it via
+        :func:`_install_inner_sed_delegations` would hand them a bound method and
+        thread that instead of the grid.
+
+        Load-bearing for JIT data threading. ``Fitter._build_data_args`` reads this
+        to populate ``data_args["_jit_inputs"]``, and did so inside a
+        ``contextlib.suppress(AttributeError, TypeError)``. While this property was
+        missing, that read raised, the suppress swallowed it, and the whole
+        ``_jit_inputs`` assignment was skipped — so the SSP grid closure-captured
+        into every compiled loss on the *canonical* inference surface. On a real
+        grid (15x93x5994 float64) it inlined twice as hex, 267.6 MB of a 274.6 MB
+        program, and XLA compilation was OOM-killed. Guarded by
+        ``tests/contract/test_loss_ssp_threading.py``.
+        """
+        return self._single_inner_sed("ssp_data").ssp_data
 
     @property
     def hybrid(self):
@@ -390,9 +441,26 @@ class ForwardModel:
             params, index_defs, **kwargs
         )
 
-    def predict_state(self, params):
-        """Delegate to :meth:`SEDModel.predict_state` on the inner SED."""
-        return self._inner_sed_for_delegation().predict_state(params)
+    def predict_state(self, params, fixed_values=None, ssp_data=None, template_data=None):
+        """Delegate to :meth:`SEDModel.predict_state` on the inner SED.
+
+        The three optional arguments are the **JIT-threading** channel: when the
+        loss builder has them, it passes the SSP grid and template arrays in rather
+        than letting the forward close over them, which keeps them out of the
+        compiled program as constants.
+
+        This signature must track :meth:`SEDModel.predict_state`. It previously took
+        ``params`` only, so the threaded feature-channel call raised ``TypeError``
+        here — invisible, because the caller only reached this branch when
+        ``_jit_inputs`` was populated, and a missing ``ssp_data`` delegation meant it
+        never was. Two omissions masking each other.
+        """
+        return self._inner_sed_for_delegation().predict_state(
+            params,
+            fixed_values=fixed_values,
+            ssp_data=ssp_data,
+            template_data=template_data,
+        )
 
     def predict_derived(self, params):
         """Delegate to :meth:`SEDModel.predict_derived` on the inner SED."""
@@ -816,6 +884,24 @@ class ForwardModel:
         state = getattr(inner, "approx", None)
         return state if isinstance(state, ApproxState) else ApproxState()
 
+    @property
+    def approx_configs(self) -> tuple:
+        """The wrapped SED's active precompute **configs**, in ``approx=`` form.
+
+        Delegates to :attr:`SEDModel.approx_configs` for the same reason
+        :attr:`approx` does: one spelling, one answer, whether asked of the SED
+        or of the wrapper. Lets a caller add a LUT family without discarding
+        another's settings.
+
+        Returns
+        -------
+        tuple
+            Active config objects; empty for an exact model.
+        """
+        inner = self._inner_sed_for_delegation()
+        configs = getattr(inner, "approx_configs", ())
+        return tuple(configs)
+
     def _has_modern_approx(self) -> bool:
         """Whether the wrapped SED carries a build-time ``approx=`` LUT."""
         inner = self._inner_sed_for_delegation()
@@ -992,11 +1078,45 @@ class ForwardModel:
 
                 from tengri.observation.line_flux_data import LineFluxData
 
+                # Censoring rides with the value it belongs to, so a limit
+                # cannot drift out of alignment with its line. Reading only
+                # [0] and [1] here is what silently turned a non-detection
+                # into a measurement (#1460).
+                markers = [
+                    (v.line_values[n][2] if len(v.line_values[n]) > 2 else None)
+                    for n in line_names
+                ]
+                upper = [m == "upper" for m in markers]
+                lower = [m == "lower" for m in markers]
+
+                # This rebuild replaces the schema's ``line_fluxes`` wholesale.
+                # If the user declared limits there and supplied none here,
+                # dropping them would be silent and would bias the fit, so say
+                # so instead. The deprecation on ``Observation(line_fluxes=...)``
+                # points at ``Data``, and limits have to make that trip too.
+                declared = getattr(self.observation, "line_fluxes", None)
+                declared_mask = getattr(declared, "limit_mask", None)
+                if declared_mask is not None and not any(upper) and not any(lower):
+                    flagged = [
+                        nm
+                        for nm, flag in zip(getattr(declared, "names", ()), declared_mask)
+                        if float(flag) != 0.0
+                    ]
+                    raise ValueError(
+                        f"Observation.line_fluxes marks {flagged} as censored "
+                        "limits, but Data.lines supplies no limit markers — "
+                        "those flags would be dropped and the lines fit as "
+                        "detections. Pass them with the values instead: "
+                        "Data(lines={'<line>': (flux, err, 'upper')})."
+                    )
+
                 temp_line_flux_data = LineFluxData(
                     names=line_names,
                     wavelengths=wavelengths_arr,
                     fluxes=line_fluxes_arr,
                     errors=line_errors_arr,
+                    is_upper_limit=jnp.asarray(upper) if any(upper) else None,
+                    is_lower_limit=jnp.asarray(lower) if any(lower) else None,
                 )
 
                 # Use dataclasses.replace to create a new Observation with the

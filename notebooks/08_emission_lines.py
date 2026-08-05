@@ -69,11 +69,10 @@ warnings.filterwarnings(
 )
 
 from pathlib import Path
+from _setup import FIG_DIR
 from tengri import plot
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 # Quickstart palette + 3-galaxy comparison palette (SF / composite / older)
 C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
@@ -91,7 +90,6 @@ from tengri import (
     Parameters,
     Uniform,
     Observation,
-    load_ssp_data,
     list_nebular_backends,
     describe,
 )
@@ -100,7 +98,7 @@ from tengri.observation import Photometry
 # Cue/CloudyGrid backends need a *bare-stellar* SSP (no baked-in nebular).
 # The wNE variants (with-Nebular-Emission baked in) silently under-predict
 # line luminosities by 4–7 dex when fed to Cue — see CueWNESSPWarning.
-ssp_data = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
+ssp_data = tg.load_ssp("fsps_prsc_miles_chabrier", download=True)
 print(
     f"SSP: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ"
 )
@@ -135,7 +133,7 @@ for band in _candidate_filters:
 if not phot_bands_list:
     phot_bands_list = ["2mass_j", "2mass_h", "2mass_ks"]
 
-phot_obs = Photometry.from_names(phot_bands_list, cache_dir="data/filters")
+phot_obs = Photometry.from_names(phot_bands_list)
 obs = Observation(photometry=phot_obs)
 print(f"Photometry ({phot_obs.n_filters} bands): {', '.join(phot_obs.names)}")
 
