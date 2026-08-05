@@ -52,7 +52,6 @@ _TIGHT = 1e-5
 # ``adaf_spectrum``, so the preset reproduces the monolithic to the Type-1/2
 # mask floor. (The Phase-1 documented-divergence gate was retired once the
 # monolithic path was unified onto the faithful physics.)
-_KUBOTA_GAP = "kubota_done disc block normalization ~39% off monolithic (#944)"
 _SKIRTOR_GAP = (
     "monolithic skirtor uses CIGALE's joint disc+torus energy balance; the "
     "powerlaw-disc + skirtor-torus composition differs ~96% (#944)"
@@ -72,10 +71,13 @@ _CASES = [
     pytest.param("cat3d_wind", U.cat3d_wind_agn, id="cat3d_wind"),
     pytest.param("adaf", U.adaf_agn, id="adaf"),
     pytest.param("richards2006", richards2006, id="richards2006"),
-    pytest.param("kubota_done", U.kubota_done_full_agn, marks=_gap(_KUBOTA_GAP), id="kubota_done"),
-    pytest.param(
-        "kubota_done_full", U.kubota_done_full_agn, marks=_gap(_KUBOTA_GAP), id="kubota_done_full"
-    ),
+    # Was _KUBOTA_GAP (#944, "~39% off monolithic"). Not a block normalization
+    # bug: the monolithic kubota_done_disc defaulted agn_cos_inc to 0.5 while the
+    # composable block defaulted it to cos(30 deg), and this test supplies
+    # neither. Unifying both onto the declared default closed the gap to the
+    # tight rtol, so the strict xfail flipped to xpass and the marker goes.
+    pytest.param("kubota_done", U.kubota_done_full_agn, id="kubota_done"),
+    pytest.param("kubota_done_full", U.kubota_done_full_agn, id="kubota_done_full"),
     pytest.param("skirtor", U.skirtor_agn, marks=_gap(_SKIRTOR_GAP), id="skirtor"),
     pytest.param(
         "unified_nlr_blr", U.unified_nlr_blr, marks=_gap(_UNLRBLR_GAP), id="unified_nlr_blr"

@@ -303,6 +303,10 @@ def nlr_synthesizer_spectra_block(
     *,
     agn_nlr_cf: float = 0.1,
     agn_nlr_logU: float = -2.0,
+    # Differs from the declared agn_nlr_logn default (3.0, the Feltre+2016 grid
+    # centre): this block reproduces Synthesizer's UnifiedAGN, and 4.0 sits at
+    # the grid edge, which reads as that code's own NLR-density convention.
+    # Left as-is rather than unified — NOT verified against upstream Synthesizer.
     agn_nlr_logn: float = 4.0,
     agn_nlr_logZ: float = -2.0,
     **_params,

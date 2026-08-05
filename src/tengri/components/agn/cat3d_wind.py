@@ -65,7 +65,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._deprecated import deprecated_alias
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import (
     bolometric_integral_nu as _bolometric_integral_nu,
     wavelength_to_nu as _wavelength_to_nu,
@@ -147,7 +147,7 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
     def cat3d_wind_grid(
         wavelength: jnp.ndarray,
         agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_cos_inc: float = 0.86602540378443864,
+        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
         agn_a_cat3d: float = -2.0,
         agn_fwd_cat3d: float = 1.0,
         agn_torus_frac: float = 0.5,

@@ -99,7 +99,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
 from tengri.components.agn._phys import bolometric_integral_nu as _bolometric_integral_nu
 from tengri.components.dust.attenuation import smc as smc_curve
 
@@ -676,7 +676,7 @@ def compute_qsogen_sed(
     agn_emline_scale: float = _DEFAULT_EMLINE_SCALE,
     agn_ebv: float = _DEFAULT_EBV,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_lum_ratio: float = 1.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_bcnorm: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -771,7 +771,7 @@ def compute_qsogen_sed(
 def qsogen(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_lum_ratio: float = 1.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_plslp1: float = _DEFAULT_PLSLP1,
     agn_plslp2: float = _DEFAULT_PLSLP2,
     agn_plbrk: float = _DEFAULT_PLBRK,

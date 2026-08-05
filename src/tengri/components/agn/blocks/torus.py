@@ -42,6 +42,7 @@ __all__ = [
     "skirtor_torus_block",
 ]
 
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 _RV_SMC: float = 2.93
@@ -60,7 +61,7 @@ def cat3d_wind_torus_block(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_a_cat3d: float = -2.0,
     agn_fwd_cat3d: float = 1.0,
     agn_torus_frac: float = 0.5,
@@ -227,7 +228,7 @@ def nenkova_agnfitter_torus_block(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
     **_params,
 ) -> Array:
@@ -351,7 +352,7 @@ def skirtor_torus_block(
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
     agn_radius_ratio: float = 20.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
     agn_polar_ebv: float = 0.03,
     agn_polar_T: float = 100.0,
