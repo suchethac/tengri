@@ -64,12 +64,13 @@ _RICHARDS2006_BOL_INTEGRAL = float(
 )
 
 # L_sun in erg/s (IAU 2015)
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.utils.physics_constants import L_SUN as _L_SUN_ERG_S
 
 
 def richards2006_disc(
     wavelength: jnp.ndarray,
-    log_lbol: float = 45.0,
+    log_lbol: float = DEFAULT_AGN_LOG_LBOL,
 ) -> jnp.ndarray:
     r"""Richards+2006 mean quasar SED at a chosen bolometric luminosity.
 
@@ -83,7 +84,8 @@ def richards2006_disc(
         Rest-frame wavelength grid [Å]. Values outside the template's
         coverage (30.5 Å — 3×10⁸ Å) yield 0.
     log_lbol : float, optional
-        Bolometric luminosity in :math:`\log_{10}(L_\odot)`. Default: 45.0.
+        Bolometric luminosity in :math:`\log_{10}(L/L_\odot)`. Defaults to
+        the declared ``agn_log_lbol`` default.
 
     Returns
     -------
@@ -124,7 +126,7 @@ def richards2006_disc(
 # This function is retained for backward compatibility if imported directly.
 def richards2006(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 45.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = 1.0,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -141,7 +143,7 @@ def richards2006(
         Rest-frame wavelength grid [Å].
     agn_log_lbol : float, optional
         Total AGN bolometric luminosity, :math:`\\log_{10}(L_\\odot)`.
-        Default: 45.0.
+        Defaults to the declared ``agn_log_lbol`` default.
     agn_lum_ratio : float, optional
         Fraction of bolometric luminosity emitted by this component.
         Default: 1.0.
