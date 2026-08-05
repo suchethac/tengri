@@ -11,6 +11,81 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+# ── Network guard ────────────────────────────────────────────────────────
+#
+# No test may reach the network. This exists because two tests that did
+# reddened main (#1546): they called ``load_ssp_data`` on a gitignored 114 MB
+# path, so the loader fell through to downloading it. On runners where DNS
+# worked they passed *by fetching 114 MB per job*; on the one where it did not
+# they failed with ``Temporary failure in name resolution``.
+#
+# That is the shape worth blocking. A network-dependent test is not reliably
+# red — it is *occasionally green*, so it survives review, passes CI, and then
+# breaks main when a runner happens to have no DNS. The same defect reached
+# main once before through the gallery (#1486).
+#
+# Blocking makes it fail immediately and locally instead, with a message that
+# names the fixture to use. Opt out with ``@pytest.mark.network`` for a test
+# whose subject genuinely IS the download path — though note every existing
+# such test mocks the transport rather than needing this marker.
+
+#: Addresses a test may still reach: loopback (a local fixture server) and
+#: AF_UNIX paths. Everything else is refused.
+_LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost", "0.0.0.0", ""})
+
+
+class NetworkAccessDuringTest(RuntimeError):
+    """Raised when a test tries to reach the network."""
+
+
+def _network_refusal(target: str) -> NetworkAccessDuringTest:
+    return NetworkAccessDuringTest(
+        f"This test tried to reach the network ({target}).\n\n"
+        "Tests must be hermetic: a networked test is not reliably red, it is "
+        "occasionally green, so it passes review and CI and then breaks main "
+        "on a runner without DNS (#1546, and #1486 before it).\n\n"
+        "If you need an SSP grid, use the `synthetic_ssp_wide` fixture (no "
+        "file, no network, 100 A - 1 mm). For a real library, use the "
+        "`ssp_data_fsps` / `ssp_data_wne` fixtures, which skip when the data "
+        "is absent instead of downloading it.\n\n"
+        "If the download path genuinely IS the subject, mark the test "
+        "`@pytest.mark.network` — but prefer mocking the transport, which is "
+        "what every existing download test does."
+    )
+
+
+@pytest.fixture(autouse=True)
+def _forbid_network(request, monkeypatch):
+    """Refuse outbound connections for the duration of each test.
+
+    Guards both chokepoints: ``getaddrinfo`` catches anything addressed by
+    hostname (the CI failure mode exactly), and ``socket.connect`` catches a
+    bare IP that never resolves a name.
+    """
+    if request.node.get_closest_marker("network"):
+        return
+
+    import socket
+
+    real_getaddrinfo = socket.getaddrinfo
+    real_connect = socket.socket.connect
+
+    def guarded_getaddrinfo(host, *args, **kwargs):
+        if host not in _LOOPBACK:
+            raise _network_refusal(f"DNS lookup for {host!r}")
+        return real_getaddrinfo(host, *args, **kwargs)
+
+    def guarded_connect(self, address, *args, **kwargs):
+        host = address[0] if isinstance(address, tuple) else address
+        # AF_UNIX addresses are str paths and stay allowed.
+        if isinstance(host, str) and host not in _LOOPBACK and not host.startswith("/"):
+            raise _network_refusal(f"connect to {host!r}")
+        return real_connect(self, address, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", guarded_getaddrinfo)
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Skip-tally hook: surface how many parity-sweep tests actually ran
 # vs. skipped due to missing data. Without this, the test report says
@@ -57,17 +132,19 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # pragma: no
 # the compilation machinery clear this env var themselves.
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
-# No test may reach the network.  ``load_ssp_data`` fails *open*: given a path
-# that does not exist whose basename is in the known-SSP catalog, it fetches
-# the grid rather than raising.  That turns "this test names a grid the repo
-# does not ship" into a silent tens-of-megabytes download on a dev machine,
-# and into a DNS failure 800 s into a CI shard — which is how #1528's tests
-# reddened main.  Disabling it makes the real defect surface immediately, as
-# a FileNotFoundError naming the file.  The one test that exercises the
-# auto-download path clears this itself and fakes the fetch
-# (tests/contract/test_ssp_nebular_metadata.py), mirroring how
-# TENGRI_DISABLE_PRECOMP_CACHE is disabled globally and opted back into.
-os.environ.setdefault("TENGRI_DISABLE_SSP_AUTODOWNLOAD", "1")
+# TENGRI_DISABLE_SSP_AUTODOWNLOAD used to be set here, to stop a test that
+# named an absent grid from silently fetching it (#1528 reddened main that
+# way).  Do not put it back.  ``load_ssp_data`` no longer fetches unless asked
+# — ``download=False`` is the library default (#1553) — so the suite is
+# protected by the API rather than by an env var this file has to remember to
+# set, and the network guard above catches anything that still tries.
+#
+# Re-adding it as a third layer would make things worse, not safer: it trips
+# before the network guard does, so *its* message would win, and the one
+# ``load_ssp_data`` raised said "tengri.download_ssp() fetches the default
+# FSPS grid to data/" — right for a user at a REPL, exactly backwards for the
+# test author who actually reads it, since downloading is the defect there.
+# When guards stack, the narrowest one owns the error message.
 
 from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw
 from tengri.components.stellar.sps.dsps_wrapper import SSPData

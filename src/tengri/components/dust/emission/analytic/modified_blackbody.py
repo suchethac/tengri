@@ -12,6 +12,7 @@ import jax.numpy as jnp
 
 from tengri.components.dust.emission._component_base import EmissionComponent
 from tengri.parameters.priors import Fixed
+from tengri.parameters.resolve import require_redshift
 
 __all__ = ["ModifiedBlackbodyIRSEDComponent"]
 
@@ -94,7 +95,9 @@ class ModifiedBlackbodyIRSEDComponent(EmissionComponent):
         """
         from tengri.components.dust.emission import modified_blackbody as mbb_fn
 
-        z = jnp.asarray(p.get("redshift", 0.0))
+        z = jnp.asarray(
+            require_redshift(p, "components.dust.emission.analytic.modified_blackbody.predict")
+        )
         sed = mbb_fn(
             wave,
             L_ir,

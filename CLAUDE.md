@@ -377,8 +377,15 @@ Every inference backend (MAP, MCMC, VI, NSS, …) receives an
    ```
 
 The parametrised conformance suite
-(`tests/unit/inference/test_backend_conformance.py`) picks up the new
-entry automatically — no test-file edits required.
+(`tests/inference/test_backend_conformance.py`) picks up the new entry
+automatically — no test-file edits required. But `tests/inference/` is
+auto-marked `slow` (`_SLOW_TREES` in `tests/conftest.py`) and so is
+**deselected from the default run and from the PR gate**. Adding a
+backend and seeing green tells you nothing; run it explicitly:
+
+```bash
+.venv/bin/pytest tests/inference/test_backend_conformance.py -q -m slow
+```
 
 **JIT rule** (non-negotiable): `InferenceContext` must never be hashed
 into a JIT key or passed through `jax.jit` / `jax.vmap` / `jax.lax.scan`

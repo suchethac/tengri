@@ -120,8 +120,15 @@ def test_table_sfh_without_arrays_still_refuses(synthetic_ssp_wide, synthetic_to
     model = _build(synthetic_ssp_wide, synthetic_tophat_obs)
     stellar = _stellar_of(model)
 
+    # ``redshift`` is supplied so the refusal proves what this test is about.
+    # compute_joint_weights needs z before it can route a tabulated SFH (it
+    # derives t_obs from it), so a dict omitting BOTH raises about the redshift
+    # first and never reaches the sfh_t_gyr guard — passing for the wrong
+    # reason. Isolating the missing input keeps the assertion pointed at #1395.
     with pytest.raises(ValueError, match="sfh_t_gyr"):
-        stellar.compute_joint_weights({"dust_tau_diff": jnp.asarray(0.3)})
+        stellar.compute_joint_weights(
+            {"dust_tau_diff": jnp.asarray(0.3), "redshift": jnp.asarray(0.1)}
+        )
 
 
 def test_table_sfh_weights_are_not_zero(synthetic_ssp_wide, synthetic_tophat_obs):
