@@ -241,6 +241,75 @@ def test_vector_latents_expand_to_one_name_per_degree_of_freedom():
     assert names == ("dust_tau_bc", "psd_xi[0]", "psd_xi[1]", "psd_xi[2]", "sfh_dpl_alpha")
 
 
+# ── Restricting to one block ──────────────────────────────────────────────────
+
+
+def test_restrict_rediagonalizes_the_block_rather_than_slicing_the_modes():
+    """The sub-block has its own eigenvectors; slicing the full ones is wrong.
+
+    Built so the two disagree: a precision matrix whose block is *not* aligned
+    with the global eigenbasis. Slicing would inherit the global directions and
+    report a different number.
+    """
+    from tengri.inference.information import information_from_precision
+
+    precision = np.array(
+        [
+            [3.0, 1.0, 0.5],
+            [1.0, 3.0, 0.5],
+            [0.5, 0.5, 2.0],
+        ]
+    )
+    info = information_from_precision(precision, names=("blk_a", "blk_b", "other"))
+    block = info.restrict("blk_")
+
+    # The truth: eigenvalues of the 2x2 top-left block are 3 +/- 1 = {2, 4}.
+    np.testing.assert_allclose(np.sort(block.eigenvalues), [2.0, 4.0], rtol=1e-12)
+    assert block.n_eff == pytest.approx(0.5 + 0.75, rel=1e-12)
+    assert block.names == ("blk_a", "blk_b")
+
+
+def test_precision_round_trips_through_the_decomposition():
+    """``restrict`` rebuilds the matrix from V and lambda, so that must be exact."""
+    from tengri.inference.information import information_from_precision
+
+    rng = np.random.default_rng(3)
+    root = rng.standard_normal((5, 5))
+    precision = root @ root.T + np.eye(5)
+
+    info = information_from_precision(precision, names=tuple("abcde"))
+
+    np.testing.assert_allclose(info.precision(), precision, atol=1e-10)
+
+
+def test_restricting_to_a_block_is_the_conditional_not_the_marginal():
+    """With a coupled block, conditioning gives *more* information than the whole.
+
+    Stating which one a number is matters: the block's own count and the
+    model's total answer different questions and need not be ordered.
+    """
+    from tengri.inference.information import information_from_precision
+
+    precision = np.array([[5.0, 2.0], [2.0, 5.0]])
+    info = information_from_precision(precision, names=("psd_xi[0]", "dust_tau"))
+
+    only_field = info.restrict("psd_xi")
+    assert only_field.n_total == 1
+    # Conditional precision for the single kept parameter is the raw diagonal, 5.
+    assert only_field.eigenvalues[0] == pytest.approx(5.0)
+    assert only_field.n_eff == pytest.approx(0.8, rel=1e-12)
+
+
+def test_an_unknown_prefix_lists_what_is_available():
+    """A typo'd prefix must not silently return an empty, zero-information block."""
+    from tengri.inference.information import information_from_precision
+
+    info = information_from_precision(np.eye(2), names=("psd_xi[0]", "dust_tau"))
+
+    with pytest.raises(ValueError, match="No parameter starts with"):
+        info.restrict("sfh_field_xi")  # the component spelling, not the latent one
+
+
 def test_latent_names_follow_ravel_order_exactly():
     """``ravel_pytree`` walks dict keys sorted; the names must agree or shift."""
     from jax.flatten_util import ravel_pytree

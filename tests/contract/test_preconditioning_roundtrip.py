@@ -36,10 +36,25 @@ The tests divide the work by what each statistic can actually resolve:
   standardization), and carries its own negative control: it undoes the inverse map
   on the same draws it just passed and requires the bar to notice. A guard whose
   threshold has never been shown to be reachable is not a guard.
-* :func:`test_preconditioning_leaves_the_posterior_unchanged` — a second, weaker
-  angle, gated on convergence. Kept because it is sensitive to a *partial* mapping
-  error that still lands in the typical set; it is no longer the only thing standing
-  between a whitened posterior and a published number.
+* A second, weaker angle — comparing the two arms' posterior means — lives in
+  ``tests/integration/test_preconditioning_posterior_invariance.py``. It is
+  sensitive to a *partial* mapping error that still lands in the typical set, which
+  the deficit would not notice, but it is gated on convergence and costs 155 s
+  against this file's 53 s, so it stays in the nightly tier.
+
+**Why this file is in ``tests/contract/``.** The heavy trees are auto-marked
+``slow`` by directory (``_SLOW_TREES`` in ``tests/conftest.py``), so while all of
+this sat in ``tests/integration/`` it ran *only* on the nightly schedule —
+including through both pull requests that rewrote it (#1525, #1526), whose green
+boards showed ``slow: skipped`` beside twelve passing jobs. A guard against a
+silent failure that no pull request runs is a guard in name only.
+
+Measured 2026-08-04: this file is ~53 s of sampling at ~4.8 GB peak. The mean
+comparison that stayed behind was 71 % of the old file's runtime on its own,
+because its ``precondition=False`` arm samples an unwhitened ``cond ~ 1e5``
+posterior and NUTS pays for that in tree depth — the very effect under test. That
+split is why gating this file costs the ``contract`` shard minutes rather than
+tens of minutes.
 """
 
 from __future__ import annotations
@@ -132,31 +147,6 @@ def _fit(model, data, noise, *, precondition, method="mcmc_nuts"):
 #: undone sit at **2527x**. Any bar from 20 to 1000 separates them. 20 is ~2x above
 #: the theoretical p99 and still 126x below the failure.
 _DEFICIT_GATE = 20.0
-
-#: Split-R-hat above which a chain is not converged enough for its posterior mean
-#: to mean anything. The usual 1.05.
-_RHAT_GATE = 1.05
-
-#: Largest gap between the two arms' posterior means, in units of the Monte Carlo
-#: standard error *of that gap* (#1498).
-#:
-#: The previous form divided by the posterior **width**, which is the wrong scale. It
-#: asked "did the mean move a lot?" when the question is "did it move further than
-#: two finite chains could have moved it by chance?". Dividing by the MCSE is better
-#: on both sides at once: a badly-mixed chain has a large MCSE and so *widens* the bar
-#: instead of tripping it, while a real basis error clears any bar by an order of
-#: magnitude. Measured: **0.58** between two healthy arms, **31.2** against a
-#: forgotten inverse map, and ~3.2 for the historical CI failure that opened #1498 —
-#: which the old ``< 1.0`` bar reported as a bug at 2.13 sd.
-_Z_GATE = 5.0
-
-#: Minimum number of free parameters the mean comparison must actually reach.
-#:
-#: The model has 7. This loop used to iterate ``plain.samples``, which is 19 entries
-#: of which **13 are ``Fixed`` constants** — zero variance, scoring ``0 / 1e-3 = 0``
-#: and passing for free. It looked like broad coverage and was six parameters. There
-#: was no counter at all, so a loop that reached nothing would have passed silently.
-_MIN_COMPARED = 5
 
 
 @pytest.fixture(scope="module")
@@ -316,81 +306,6 @@ def test_preconditioned_samples_respect_the_prior_support(method, objective):
         assert draws.max() <= float(high) + 1e-8, f"{name} above prior support"
         checked += 1
     assert checked > 0, "no bounded priors were checked — the guard would pass vacuously"
-
-
-def test_preconditioning_leaves_the_posterior_unchanged(objective):
-    """Same posterior, different coordinates — a second angle on the invariant.
-
-    Weaker than the deficit guard, and deliberately secondary. Two independent
-    250/250 NUTS runs buy an effective sample size of about **2.5** on this model, so
-    a comparison of their means has little power however it is scaled — and a *skip*
-    here now costs nothing that matters, because the mapping is guarded
-    unconditionally by :func:`test_preconditioned_samples_respect_the_prior_support`.
-    It is kept because it is sensitive to a different failure: a *partial* mapping
-    error that still lands the draws in the typical set, which the deficit would not
-    notice.
-
-    Two changes make it stable where #1498 was not:
-
-    * the gap is scaled by its **Monte Carlo standard error** rather than by the
-      posterior width, so poor mixing widens the bar instead of tripping it
-      (:data:`_Z_GATE`);
-    * it stays gated on convergence, because an unconverged chain is somewhere else
-      entirely and the MCSE does not describe that.
-
-    Preconditioning is documented to mix *worse* on exactly this configuration
-    (D=8 dust, median ESS/s ratio 0.62, range 0.10–1.13), so both matter.
-    """
-    model = objective.model
-    plain = _fit(model, objective.data, objective.noise, precondition=False)
-    preconditioned = _fit(model, objective.data, objective.noise, precondition=True)
-
-    unconverged = {
-        arm: {k: round(v, 3) for k, v in fit.rhat().items() if v > _RHAT_GATE}
-        for arm, fit in (("plain", plain), ("preconditioned", preconditioned))
-    }
-    if any(unconverged.values()):
-        pytest.skip(
-            "posterior means are not comparable — split-R-hat above "
-            f"{_RHAT_GATE} in: { {k: v for k, v in unconverged.items() if v} }. "
-            "A mean shift here would be mixing, not a whitening-mapping bug; the "
-            "mapping itself is covered unconditionally by the deficit guard."
-        )
-
-    ess_plain = plain.effective_sample_size()
-    ess_pre = preconditioned.effective_sample_size()
-
-    def _ess(table, name):
-        """ESS, floored at 1. An unknown ESS must widen the bar, never narrow it."""
-        value = float(table.get(name, 1.0))
-        return value if np.isfinite(value) and value >= 1.0 else 1.0
-
-    compared = 0
-    for name in model.spec.free_params:
-        if name not in plain.samples or name not in preconditioned.samples:
-            continue
-        a = np.asarray(plain.samples[name])
-        b = np.asarray(preconditioned.samples[name])
-        if a.ndim != 1:
-            continue
-        # MCSE of the difference between two independent chain means.
-        mcse = float(np.sqrt(a.var() / _ess(ess_plain, name) + b.var() / _ess(ess_pre, name)))
-        if not np.isfinite(mcse) or mcse <= 0.0:
-            continue
-        z = abs(float(np.mean(a) - np.mean(b))) / mcse
-        compared += 1
-        assert z < _Z_GATE, (
-            f"{name}: posterior means differ by {z:.1f} Monte Carlo standard errors "
-            f"({np.mean(a):.4f} vs {np.mean(b):.4f}, ESS {_ess(ess_plain, name):.0f} "
-            f"and {_ess(ess_pre, name):.0f}) — too large to be sampling noise, so the "
-            "draws are probably still in whitened coordinates"
-        )
-
-    assert compared >= _MIN_COMPARED, (
-        f"only {compared} free parameters were compared, below the {_MIN_COMPARED} "
-        f"this model should reach ({len(model.spec.free_params)} are free) — the "
-        "comparison has quietly stopped covering the posterior"
-    )
 
 
 def test_gradients_through_the_real_model_are_exact_and_finite(objective):

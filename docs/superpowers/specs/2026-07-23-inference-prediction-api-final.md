@@ -24,7 +24,7 @@ throughout this document follow this table.
 | [1316](https://github.com/suchethac/tengri/issues/1316) | `fit_batch(redshift_col=…)` recompiles per galaxy | W2 | ✓ shipped |
 | [1317](https://github.com/suchethac/tengri/issues/1317) | `Catalog`: one noun, table-in/out, name-matching, union-LUT + presence mask | W2 | ✓ shipped |
 | [1318](https://github.com/suchethac/tengri/issues/1318) | Retire `lean=`; surface-derived cache policy; `forward.prewarm()` | W3 | ✓ shipped |
-| [1319](https://github.com/suchethac/tengri/issues/1319) | Hierarchical as `ForwardModel(mode="hierarchical", shared=…)`; Population classes dissolve | W4 | ◆ deferred past Paper I |
+| [1319](https://github.com/suchethac/tengri/issues/1319) | Hierarchical as `ForwardModel(mode="hierarchical", shared=…)`; Population classes dissolve | W4 | ◆ two-track (decision 23): standardization a must; realistic fits two-step ([PR #1479](https://github.com/suchethac/tengri/pull/1479) ✓) |
 | [1321](https://github.com/suchethac/tengri/issues/1321) | Observation = pure instrument; introduce `Data` record | W5 | ✓ shipped |
 | [1395](https://github.com/suchethac/tengri/issues/1395) | `sfh_model="table"` slips past the fast-path guard → zero SFH, zero lines, no warning | W6 blocker | ✓ shipped (now raises) |
 | [1396](https://github.com/suchethac/tengri/issues/1396) | `Catalog.from_histories` + `simulate`: mock catalogs from simulation SFH/Z tables | W6 | ◆ open |
@@ -314,7 +314,9 @@ post   = cat.fit(method="mcmc_nuts", key=key, forward_chunk_size=64)
 
 **Shapes (union path) ✓.** Rectangular over the union: `flux`, `noise` `(N, n_union)`, plus **two distinct channels** (§3.3): `presence (N, n_union)` bool — `False` = band absent, χ² skips it — and `censor (N, n_union)` in `{0,1,−1}` for limits in bands that *were* observed. The model predicts all `n_union` bands from the single union LUT; the masks select per galaxy. A band a galaxy has but the union lacks → **raise**. (The presence mask is a **new channel**, not a reuse of `data_mask` — that name already means censoring, with boolean arrays rejected by design.)
 
-### 6.4 Hierarchical — one joint model; data at fit (W4, [#1319](https://github.com/suchethac/tengri/issues/1319), deferred)
+### 6.4 Hierarchical — one joint model; data at fit (W4, [#1319](https://github.com/suchethac/tengri/issues/1319))
+
+> **Two-track decision (2026-08-05, decisions log 23):** this section is Track A — the binding standardization target. At realistic N the *production* fit is Track B: two-step estimation — MAP/Laplace-fit each galaxy, then fit the population over the interim posteriors ([PR #1479](https://github.com/suchethac/tengri/pull/1479); status in `docs/dev/hierarchical-psd-handoff.md`). The joint fit below is the small-N / validation form.
 
 Your science case: N galaxies, each with per-galaxy parameters θᵢ (mass, dust, its SFH latent field ξᵢ), sharing **one** burstiness statistic — the PSD hyperparameters σ, τ take a single value for the whole population, and every galaxy's data pulls on it.
 
@@ -558,7 +560,7 @@ Implementation ordering, absorbed-backlog mapping, and the near-term method focu
 | **W2 dep** | fit-time `params=` plumbing (per-row z injection; unknown-kwarg validation) | ✓ shipped | [#1329](https://github.com/suchethac/tengri/issues/1329) |
 | **W2** | `Catalog` noun: table-in/out, name-matching, `flux_unit=`, NaN policy, union-LUT + presence mask, `to_table()`; `fit_batch` cliff + deprecation | ✓ shipped | [#1316](https://github.com/suchethac/tengri/issues/1316), [#1317](https://github.com/suchethac/tengri/issues/1317) |
 | **W3** | `forward.prewarm()`; retire `lean` → surface-derived policy | ✓ shipped (Catalog sweep **withdrawn**, not pending — [#1344](https://github.com/suchethac/tengri/issues/1344) closed; see §W3 above) | [#1318](https://github.com/suchethac/tengri/issues/1318) |
-| **W4** | hierarchical: `mode="hierarchical"` + `shared=`, data at fit, scaling contract; Population classes dissolve | ◆ deferred past Paper I | [#1319](https://github.com/suchethac/tengri/issues/1319) |
+| **W4** | hierarchical: `mode="hierarchical"` + `shared=`, data at fit, scaling contract; Population classes dissolve | ◆ two-track (decision 23): Track A standardization a must; Track B two-step estimator first instance merged ([PR #1479](https://github.com/suchethac/tengri/pull/1479)) | [#1319](https://github.com/suchethac/tengri/issues/1319) |
 | **W5** | Observation razor + `Data` record + `mode=` validation | ✓ shipped | [#1321](https://github.com/suchethac/tengri/issues/1321) |
 | **W6** | simulation catalogs: `Catalog.from_histories` + `simulate(lines=…)`, LUT-fast (§8.1) | ◆ | [#1396](https://github.com/suchethac/tengri/issues/1396), [#1395](https://github.com/suchethac/tengri/issues/1395) |
 | — | per-axis `FeaturePrecomp.n_grid` | ✓ shipped | [#1311](https://github.com/suchethac/tengri/issues/1311) |
@@ -594,6 +596,7 @@ Chronological, with rationale — the *why*, not just the *what*.
 20. **Deliverable = this spec; implementation = the tracked issues.**
 21. **Simulation histories are records, not parameters** (§8.1) — an SFH/Z table from a hydro sim or SAM enters at the action via `Catalog.from_histories(...)`, never at model construction. This is the §3 uniform rule applied unchanged, not an extension of it: the `table` SFH already declares zero free parameters and takes its arrays at runtime. `from_histories` is a classmethod returning a `Catalog`, so `.fit()` on a simulated catalog keeps its meaning (fit dust or redshift at a known SFH).
 22. **`simulate` is one verb with two sources.** Parameters or tabulated histories supply the SFH; `noise=` is the only thing separating a noiseless prediction from a draw. Splitting these into separate nouns would duplicate the chunking, the LUT wiring, and the table-OUT leg for no conceptual gain.
+23. **W4 is two-track (user decision, 2026-08-05): standardization is a must; the realistic hierarchical fit is two-step.** Track A — the §6.4 construction (`mode="hierarchical"` + `shared=`, data at fit, scaling contract; Population classes dissolve) plus the flat backend seam ([#1394](https://github.com/suchethac/tengri/issues/1394) → [PR #1531](https://github.com/suchethac/tengri/pull/1531)) stays binding. Track B — at realistic N the production path is *two-step*: MAP/Laplace-fit each galaxy individually, then fit the population over the interim posteriors ([PR #1479](https://github.com/suchethac/tengri/pull/1479) merged: first instance, shared SFH-PSD (σ, τ); known per-galaxy-bias ceiling at N ≈ 32–64 — status and traps in `docs/dev/hierarchical-psd-handoff.md`). The §6.4 joint fit remains the small-N / validation form, not the production default. Neither track waits on the other.
 
 ---
 
@@ -602,6 +605,6 @@ Chronological, with rationale — the *why*, not just the *what*.
 - **No public API is removed.** `Fitter`, `CatalogFitter` (→ alias of `Catalog`), `PopulationFitter` (deprecated shim), `fit_batch` (→ alias) stay importable; `sed.fit` is un-deprecated, not added; `Observation(line_fluxes=…)` warns and forwards.
 - **`ForwardModel.fit` remains the canonical inference surface**; `sed.fit` is sugar over it.
 - **`Fitter` stays internal** — the cache-reuse mechanism, never taught.
-- **W4 (hierarchical dissolution) is deferred** past Paper I; recorded here so it is not lost.
+- **W4 is two-track** (decision 23, 2026-08-05) — no longer an undated deferral: the §6.4 standardization is a must; the realistic-N production path is the two-step estimator (per-galaxy MAP/Laplace → population fit, [PR #1479](https://github.com/suchethac/tengri/pull/1479)).
 - **IFU/spatial detailed shapes are deferred** with the spatial extension work; §8's shape contract reserves the space.
 - **The deep `InferenceContext`/backend decoupling (ADR-0010) is out of scope** — internal hygiene, no user-visible payoff, gates nothing here.
