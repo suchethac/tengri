@@ -559,6 +559,11 @@ class CB19Backend:
     name = "cb19_grid"
     has_free_params = True
 
+    #: erg/s per [Lsun] for this backend's line catalog (#1559). IAU 2015 —
+    #: the CB_19 tabulation and ``_HB_PER_QH_LSUN`` above are both built on it.
+    #: Cue overrides this with its own training convention; see CueBackend.
+    lsun_erg: float = _LSUN_ERG
+
     def __init__(
         self,
         sed_type: str = "SSP",

@@ -22,7 +22,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import jax.numpy as jnp
+import numpy as np
 
+from tengri.components.nebular._constants import _LSUN_ERG
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
@@ -32,7 +34,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
-from tengri.utils.scale import log10_add, log10_magnitude
+from tengri.utils.scale import log10_magnitude
 
 __all__ = ["NebularSEDComponent", "NebularSEDComponentConfig"]
 
@@ -594,33 +596,20 @@ class NebularSEDComponent:
         # so the Cue line-catalog forward is not run.
         if not use_grid and hasattr(self.backend, "predict_nebular_line_luminosities"):
             try:
-                log_line_lums = None
                 if self.config.backend == "cue":
                     # #303: opt into the full Cue catalog (~271 species)
                     # instead of the default 128 CLOUDY/FSPS subset, so
                     # users can read HeII 1640, HeI 10830, [OIII] 4363,
                     # etc. via pred.lines.get(wavelength).
                     cue_cloudyfsps_only = not self.config.cue_full_catalog
-                    # Cue returns erg/s (~1e41), which does not fit float32.
-                    # ``_with_log10`` hands back the log taken *before* the
-                    # L_sun multiply that overflows, from the same forward pass
-                    # — the linear value is unchanged (#1534).
-                    (
-                        line_waves,
-                        line_lums,
-                        log_line_lums,
-                    ) = self.backend.predict_nebular_line_luminosities_with_log10(
+                    line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
                         **common_kwargs,
                         **cue_extras,
                         template_data=template_data,
                         cloudyfsps_only=cue_cloudyfsps_only,
                     )
                     if _dig_kwargs is not None:
-                        (
-                            _,
-                            line_lums_dig,
-                            log_line_lums_dig,
-                        ) = self.backend.predict_nebular_line_luminosities_with_log10(
+                        _, line_lums_dig = self.backend.predict_nebular_line_luminosities(
                             **_dig_kwargs,
                             **cue_extras,
                             template_data=template_data,
@@ -628,15 +617,6 @@ class NebularSEDComponent:
                         )
                         _f = jnp.asarray(_dig_frac)
                         line_lums = (1.0 - _f) * line_lums + _f * line_lums_dig
-                        # Same convex blend in log space. Exponentiating to
-                        # reuse the linear result would reintroduce the very
-                        # overflow the log form exists to avoid, so the weights
-                        # go in as log offsets: a zero weight becomes ``-inf``,
-                        # which ``log10_add`` already reads as "no term here".
-                        log_line_lums = log10_add(
-                            log_line_lums + log10_magnitude(1.0 - _f),
-                            log_line_lums_dig + log10_magnitude(_f),
-                        )
                 else:  # cloudy_grid, cb19, mappings
                     line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
                         ssp_weights=ssp_weights,
@@ -713,21 +693,35 @@ class NebularSEDComponent:
                     converted = jnp.where(in_optical, line_waves * n_refr, line_waves)
                     line_waves = jnp.where(looks_air, converted, line_waves)
 
-                # log companion (#1534). ``log10_magnitude`` keeps a line with
-                # no flux (``-inf``) distinct from a corrupt one (``+inf``),
-                # #1527.
+                # THE unit seam (#1559). Every backend returns [Lsun]; the
+                # published ``line_lums`` DerivedKey is [erg/s], and
+                # ``predict_line_fluxes`` divides by 4 pi d_L^2 with no further
+                # conversion. This one multiply is what reconciles them.
                 #
-                # Only Cue needs the upstream form: it is the one backend whose
-                # line catalog is [erg/s] (~1e41, past the float32 ceiling), so
-                # its log has to be taken before the L_sun multiply. The other
-                # three return [Lsun] (~1e8, measured), which float32 holds
-                # exactly, so taking their log here loses nothing.
-                if log_line_lums is None:
-                    log_line_lums = log10_magnitude(line_lums)
+                # It used to live inside CueBackend and nowhere else, so Cue
+                # came out right and CloudyGrid / CB19 / MappingsPhoto came out
+                # a factor L_sun too faint — invisible to every per-backend
+                # test, because a global scale cancels in the line ratios and
+                # monotonicity checks they all use.
+                #
+                # The constant is the *backend's*, not a global. Cue's network
+                # was trained on L_sun = 3.839e33 and the grid backends are
+                # tabulated against IAU 3.828e33; using one value for both puts
+                # a systematic 0.287% on whichever backend it does not belong
+                # to. That is far too small for the units test to catch, so it
+                # would have shipped.
+                lsun_erg = getattr(self.backend, "lsun_erg", _LSUN_ERG)
+
+                # The log companion (#1534) is taken on the [Lsun] side, before
+                # the multiply that leaves the float32 window: taken after, the
+                # value is already ``inf`` and its log carries nothing.
+                # ``log10_magnitude`` keeps a dark line (``-inf``) distinct from
+                # a corrupt one (``+inf``), #1527.
+                log_line_lums = log10_magnitude(line_lums) + float(np.log10(lsun_erg))
                 state = state.with_(
                     derived=state.derived.with_(
                         line_waves=line_waves,
-                        line_lums=line_lums,
+                        line_lums=line_lums * lsun_erg,
                         log_line_lums=log_line_lums,
                     )
                 )

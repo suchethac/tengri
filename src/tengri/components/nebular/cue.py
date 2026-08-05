@@ -120,7 +120,7 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,
     L_SUN_CUE as _LSUN_ERG,  # 3.839e33 — Cue training convention, NOT IAU 2015
 )
-from tengri.utils.scale import LN10, log10_magnitude, pow10
+from tengri.utils.scale import LN10, pow10
 
 _LOG_LSUN = jnp.log10(_LSUN_ERG)
 _LOG_4PI = jnp.log10(4.0 * jnp.pi)
@@ -918,6 +918,17 @@ class CueBackend:
 
     """
 
+    #: erg/s per [Lsun] for **this backend's** line catalog, read by
+    #: :class:`~tengri.components.nebular.component.NebularSEDComponent` at the
+    #: one seam that publishes ``line_lums`` in erg/s (#1559).
+    #:
+    #: Cue is the exception, deliberately: its network was trained against
+    #: ``L_sun = 3.839e33``, not IAU 2015's 3.828e33 (CLAUDE.md, "Physical
+    #: constants"). Converting its output with the IAU value biases every Cue
+    #: line by +0.287% — systematic, and far too small for a units test to see,
+    #: which is exactly the kind of error that survives.
+    lsun_erg: float = _LSUN_ERG
+
     def __init__(
         self,
         weights_path: str,
@@ -1456,37 +1467,7 @@ class CueBackend:
             ionspec_logLratio3=i7[6],
         )
 
-    def predict_nebular_line_luminosities(self, **kwargs) -> tuple[jnp.ndarray, jnp.ndarray]:
-        """Predict emission line luminosities [erg/s].
-
-        Thin wrapper over :meth:`predict_nebular_line_luminosities_with_log10`,
-        which carries the full signature and documentation. Bit-identical to
-        computing ``lum * L_sun`` directly — the two cannot drift because there
-        is one implementation.
-
-        Parameters
-        ----------
-        **kwargs
-            Forwarded verbatim to
-            :meth:`predict_nebular_line_luminosities_with_log10`.
-
-        Returns
-        -------
-        wavelengths : ndarray, shape (n_lines,)
-            Emission line wavelengths (vacuum) [Angstrom].
-        luminosities : ndarray, shape (n_lines,)
-            Emission line luminosities [erg/s]. **Overflows float32** for a
-            real galaxy (~1e41 erg/s against a 3.4e38 ceiling); reach for the
-            ``log10`` sibling when running in pure float32.
-
-        Notes
-        -----
-        **JIT-compatible**: yes.
-        """
-        wav, lum, _log_lum = self.predict_nebular_line_luminosities_with_log10(**kwargs)
-        return wav, lum
-
-    def predict_nebular_line_luminosities_with_log10(
+    def predict_nebular_line_luminosities(
         self,
         ssp_weights: jnp.ndarray | None = None,
         ssp_log_ages_yr: jnp.ndarray | None = None,
@@ -1513,16 +1494,8 @@ class CueBackend:
         ionspec_logLratio3: float | None = None,
         template_data: Any | None = None,
         **_kwargs,
-    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-        """Predict emission line luminosities, in both linear and log10 form.
-
-        Returns the log10 alongside the linear because the log **cannot be
-        recovered from the linear afterwards**: the Cue forward runs in
-        ``L_sun`` (peak ~1e22, comfortably inside float32) and only the final
-        ``* L_sun`` conversion pushes the result past the float32 ceiling. Taken
-        after that multiply, ``log10`` sees ``inf`` and returns ``inf``; taken
-        before it, the same quantity is an ordinary number plus a constant
-        offset. One forward pass serves both (#1534).
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Predict emission line luminosities [Lsun].
 
         Supports two calling conventions:
 
@@ -1564,22 +1537,25 @@ class CueBackend:
         wavelengths : ndarray, shape (n_lines,)
             Emission line wavelengths (vacuum) [Angstrom].
         luminosities : ndarray, shape (n_lines,)
-            Emission line luminosities [erg/s]. Overflows float32 for a real
-            galaxy — see ``log_luminosities``.
-        log_luminosities : ndarray, shape (n_lines,)
-            ``log10`` of the same luminosities [dex re erg/s], evaluated before
-            the ``L_sun`` conversion so it stays finite in pure float32.
-            ``-inf`` marks a line with exactly zero luminosity; ``+inf`` marks
-            one whose value was already corrupt upstream (#1527).
+            Emission line luminosities **[Lsun]**, matching CloudyGrid, CB19 and
+            MappingsPhoto. :class:`~tengri.components.nebular.component.NebularSEDComponent`
+            applies the single ``* L_sun`` before publishing
+            ``state.derived["line_lums"]`` in erg/s.
 
         Notes
         -----
         **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-        **float32 range**: the log form adds a constant
-        ``log10(L_sun) = 33.58`` to a quantity whose float32 magnitude peaks
-        around 1e22, so it never leaves range. The linear form is the same
-        product evaluated in linear space, and is unchanged.
+        **Units (#1559)**: this returned [erg/s] until 2026-08, alone among the
+        four backends, while the component applied no conversion to any of them.
+        Cue therefore came out right and the other three came out a factor
+        ``L_sun = 3.839e33`` too faint. Both halves are fixed together: the
+        conversion is now the component's, once, for everyone.
+
+        **float32**: [Lsun] peaks around 1e22 here against a 3.4e38 ceiling, so
+        this return is representable. Only the erg/s form the component
+        publishes is not — which is why it also publishes ``log_line_lums``,
+        derived at that seam from this value.
 
         **High-level mode**: When ``ssp_weights``, ``ssp_log_ages_yr``,
         and ``log_z`` are provided, Q_H and ionizing spectrum parameters
@@ -1624,9 +1600,7 @@ class CueBackend:
             neb_fdust=neb_fdust,
             template_data=template_data,
         )
-        # ``lum`` is [Lsun] and float32-safe here; the multiply below is what
-        # leaves the float32 window. Take the log on this side of it.
-        return wav, lum * _LSUN_ERG, log10_magnitude(lum) + _LOG_LSUN
+        return wav, lum
 
     def predict_nebular_continuum(
         self,

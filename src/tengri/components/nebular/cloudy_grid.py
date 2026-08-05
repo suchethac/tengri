@@ -396,6 +396,11 @@ class CloudyGridBackend:
 
     """
 
+    #: erg/s per [Lsun] for this backend's line catalog (#1559). IAU 2015, the
+    #: convention the CLOUDY grid is tabulated in. See CueBackend for the one
+    #: backend that deviates.
+    lsun_erg: float = _LSUN_ERG
+
     def __init__(
         self,
         grid_path: str,

@@ -789,7 +789,10 @@ def extract_line_luminosity(
     line_waves : array, shape (n_lines,)
         Rest-frame line wavelengths from nebular model.
     line_lums : array, shape (n_lines,)
-        Line luminosities in Lsun.
+        Line luminosities. **Unit-preserving**: this function indexes and sums,
+        so the output carries whatever unit the input did. Its caller
+        :func:`~tengri.forward.component_factory.state_to_emission_lines`
+        passes ``state.derived["line_lums"]``, which is [erg/s].
     target_waves : tuple of float
         Target wavelength(s) in Angstrom. For doublets, pass both
         components (e.g., ``(3727.12, 3730.12)`` for [OII]).
@@ -797,8 +800,16 @@ def extract_line_luminosity(
     Returns
     -------
     float
-        Total line luminosity in Lsun. Returns NaN if ``line_waves``
-        is empty (no nebular model).
+        Total line luminosity, in the same unit as ``line_lums``. Returns NaN
+        if ``line_waves`` is empty (no nebular model).
+
+    Notes
+    -----
+    This said "Lsun" on both sides until #1559, at which point the only caller
+    had been passing erg/s for some time. Nothing computed the wrong answer —
+    the function never converts — but the docstring was evidence for the belief
+    that the published catalog was in Lsun, which is how three backends came to
+    publish it that way.
     """
     if line_waves.shape[0] == 0:
         return jnp.array(jnp.nan)

@@ -1039,7 +1039,16 @@ def state_to_emission_lines(state: Any):
     -------
     EmissionLines
         Headline scalars (``halpha``, ``hbeta``, ``oiii_5007``, ...) plus
-        the full ``all_waves`` / ``all_lums`` arrays — all in Lsun.
+        the full ``all_waves`` / ``all_lums`` arrays — all in **[erg/s]**,
+        passed through unconverted from ``state.derived["line_lums"]``, whose
+        ``DerivedKey`` declares that unit and which
+        :meth:`~tengri.forward.sed_model.SEDModel.predict_line_fluxes` consumes
+        as such.
+
+        This said "Lsun" until #1559. It was wrong then too — the bridge has
+        never converted anything — and it was the documentation three backends
+        were written against, which is how they came to publish [Lsun] into an
+        [erg/s] key and emit line fluxes a factor 3.839e33 too faint.
 
     Notes
     -----
