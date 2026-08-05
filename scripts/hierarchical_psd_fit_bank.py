@@ -85,6 +85,16 @@ def main():
     ap.add_argument("--out", default="psd_bank", help="checkpoint directory")
     ap.add_argument("--start", type=int, default=0, help="first galaxy index")
     ap.add_argument("--end", type=int, default=None, help="one past last galaxy index")
+    ap.add_argument(
+        "--only",
+        type=int,
+        nargs="+",
+        default=None,
+        help="fit exactly these galaxy indices, ignoring --start/--end. For "
+        "repairing a scattered subset -- e.g. the ~14%% of galaxies whose "
+        "Laplace Hessian collapsed (#1537) -- without paying a model rebuild "
+        "per galaxy the way one invocation each would.",
+    )
     ap.add_argument("--n-warmup", type=int, default=1000)
     ap.add_argument("--n-samples", type=int, default=1000)
     ap.add_argument("--n-chains", type=int, default=4)
@@ -190,8 +200,16 @@ def main():
     err = np.asarray(pop.table["phot_flux_err"])
     keys = jax.random.split(jax.random.PRNGKey(1234), args.n)
 
+    targets = list(range(args.start, end)) if args.only is None else sorted(set(args.only))
+    if args.only is not None and (min(targets) < 0 or max(targets) >= args.n):
+        raise SystemExit(
+            f"--only indices must lie in [0, {args.n}); got "
+            f"{min(targets)}..{max(targets)}. Galaxy i is only the same galaxy "
+            "across runs when --n matches the bank it came from."
+        )
+    span = f"{len(targets)} listed" if args.only is not None else f"[{args.start}, {end})"
     print(
-        f"bank {args.out}: galaxies [{args.start}, {end}) of {args.n}  "
+        f"bank {args.out}: galaxies {span} of {args.n}  "
         f"chains {args.n_chains}x({args.n_warmup}+{args.n_samples}) "
         f"L={args.n_leapfrog_steps} thin={args.thin}",
         flush=True,
@@ -199,7 +217,7 @@ def main():
 
     t_start = time.time()
     n_done = 0
-    for i in range(args.start, end):
+    for i in targets:
         path = os.path.join(args.out, f"gal_{i:04d}.npz")
         if os.path.exists(path):
             continue
@@ -310,6 +328,40 @@ def main():
         xi = xi_full[:: args.thin]
         sig = sig_full[:: args.thin]
         tau = tau_full[:: args.thin]
+
+        # Reject degenerate draws BEFORE checkpointing. A sampler whose chains
+        # never move returns the right number of samples, all identical, with
+        # zero divergences -- and the downstream estimator happily consumes them.
+        # Measured: a 2-chain mcmc_nuts run produced seven such fits out of nine,
+        # every draw bit-identical, R-hat 1e13 purely because the within-chain
+        # variance underflowed. Writing those would poison the bank silently, so
+        # skip and let the caller retry rather than record a fit that is not one.
+        flat_xi = np.asarray(xi).reshape(-1, np.asarray(xi).shape[-1])
+        n_draw, n_node = flat_xi.shape
+        # Count DISTINCT draws, not a variance threshold. A variance floor is the
+        # wrong instrument: chains frozen at their four starting points still
+        # jitter by ~1e-7 in float64, which cleared an earlier 1e-8 cutoff while
+        # the ensemble held four unique rows out of four thousand. The covariance
+        # total is the second check because it is the statistic the estimator
+        # actually consumes -- a healthy fit returns ~13-15 of 16, a dead one 0.00.
+        n_unique = len(np.unique(flat_xi, axis=0))
+        cov_total = float(np.linalg.eigvalsh(np.cov(flat_xi, rowvar=False)).sum())
+        degenerate = (
+            not np.isfinite(cov_total)
+            or n_unique < max(10, 0.01 * n_draw)
+            or cov_total < 0.05 * n_node
+        )
+        if degenerate:
+            print(
+                f"  gal {i:4d}: REJECTED — degenerate draws "
+                f"({n_unique} unique of {n_draw}, xi covariance total "
+                f"{cov_total:.3f} of {n_node}); the chains never moved. "
+                "Not checkpointed.",
+                flush=True,
+            )
+            del post, xi_full, sig_full, tau_full
+            gc.collect()
+            continue
 
         # Write to a temporary name and rename, so a kill mid-write cannot leave
         # a truncated .npz that the analysis would later load as valid.
