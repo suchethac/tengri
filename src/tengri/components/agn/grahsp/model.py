@@ -34,6 +34,7 @@ from typing import NamedTuple
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.grahsp.attenuation import attenuation_factors
 from tengri.components.agn.grahsp.balmer import balmer_continuum
 from tengri.components.agn.grahsp.bbb import floor_disc_xray, sbpl_bbb
@@ -378,7 +379,7 @@ def evaluate_grahsp_agn(
 
 def compute_grahsp_sed(
     wavelength: Array,
-    agn_log_lbol: float = 45.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = 1.0,
     agn_grahsp_l5100: float | None = None,
     agn_grahsp_uvslope: float = _DEFAULT_UVSLOPE,
@@ -436,7 +437,8 @@ def compute_grahsp_sed(
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Å].
     agn_log_lbol : float, optional
-        :math:`\log_{10}(L_\mathrm{bol}/L_\odot)`. Default ``45.0``.
+        :math:`\log_{10}(L_\mathrm{bol}/L_\odot)`. Defaults to the declared
+        ``agn_log_lbol`` default.
     agn_lum_ratio : float, optional
         Fraction of bolometric luminosity carried by this AGN component.
         Default ``1.0``.

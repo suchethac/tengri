@@ -48,6 +48,7 @@ __all__ = [
     "slone_netzer_sed",
 ]
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 
@@ -109,7 +110,7 @@ def create_slone_netzer_from_grid(grid_path: str) -> Callable:
 
     def slone_netzer_grid(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 11.0,
+        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
         agn_log_mbh: float = 8.6,
         agn_log_ledd: float = -2.0,
         **_kwargs,

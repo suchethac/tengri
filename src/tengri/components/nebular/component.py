@@ -27,6 +27,7 @@ import numpy as np
 from tengri.components.nebular._constants import _LSUN_ERG
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.parameters.priors import Fixed, Uniform
+from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -778,7 +779,7 @@ class NebularSEDComponent:
         ):
             from tengri.observation.photometry import lnu_filter_integral
 
-            z = jnp.asarray(params.get("redshift", 0.0))
+            z = jnp.asarray(require_redshift(params, "components.nebular.component.apply"))
             # Filter-integrate nebular_sed directly via ``lnu_filter_integral``
             # (ADR-0016, #398.e). Replaces the previous
             # ``compute_flux_density(..., dl_cm=1) × inv_cosmology`` dance

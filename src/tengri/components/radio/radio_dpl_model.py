@@ -16,6 +16,7 @@ import jax.numpy as jnp
 from tengri.components.radio.radio import radio_total_dpl
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Fixed, Uniform
+from tengri.parameters.resolve import require_redshift
 
 __all__ = ["RadioDPL"]
 
@@ -138,7 +139,7 @@ class RadioDPL(SEDModelComponent):
         L_ir = jnp.asarray(inputs.get("L_ir", 0.0))
         L_agn_bol = jnp.asarray(inputs.get("L_agn_bol", 0.0))
         log_mstar = jnp.asarray(inputs.get("log_mstar", 10.0))
-        redshift = jnp.asarray(p.get("redshift", 0.0))
+        redshift = jnp.asarray(require_redshift(p, "components.radio.radio_dpl_model.predict"))
 
         addition = radio_total_dpl(
             wavelength=wave,

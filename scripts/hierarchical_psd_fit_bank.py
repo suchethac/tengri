@@ -35,6 +35,7 @@ import json
 import os
 import resource
 import time
+import warnings
 
 import jax
 import numpy as np
@@ -51,6 +52,7 @@ from scripts.hierarchical_psd_recovery_run import (
 from tengri import Fitter, Parameters, Uniform, load_ssp_data
 from tengri.analysis.diagnostics.autocorrelation import split_rhat
 from tengri.analysis.population_mocks import make_population
+from tengri.config.exceptions import LaplaceNotAtModeWarning
 from tengri.inference.population.reconstruct import centered_fields
 
 SSP_PATH = "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
@@ -116,6 +118,16 @@ def main():
         "because a dense matrix at D=26 risks the 20+ GB warmup in CLAUDE.md.",
     )
     ap.add_argument("--n-map-steps", type=int, default=4000, help="laplace only")
+    ap.add_argument(
+        "--max-map-escalations",
+        type=int,
+        default=3,
+        help=(
+            "laplace only: how many times to triple n_map_steps while the fit "
+            "reports it is not at a mode (#1537). 0 disables. Default 3 spans "
+            "1x-27x, which covered every galaxy measured so far."
+        ),
+    )
     ap.add_argument(
         "--min-eigenvalue",
         type=float,
@@ -224,6 +236,7 @@ def main():
 
         t0 = time.time()
         fitter = Fitter(fit_model, flux[i], err[i])
+        map_steps_used = args.n_map_steps
         if args.method == "laplace":
             # min_eigenvalue is a variance CEILING, not a regularizer.
             #
@@ -245,13 +258,44 @@ def main():
             # are unit-normal in unbounded space; it is NOT universal, and a
             # parameter whose unbounded prior is much wider than unit would be
             # over-constrained by it.
-            post = fitter.run(
-                "laplace",
-                key=keys[i],
-                n_map_steps=args.n_map_steps,
-                n_samples=args.n_samples * args.n_chains,
-                min_eigenvalue=args.min_eigenvalue,
-            )
+            # Escalate n_map_steps until the expansion point IS a mode.
+            #
+            # cov = H^-1 is a covariance only at a stationary point, and run_map
+            # takes a fixed number of Adam steps with no convergence test. At
+            # 4000 steps, 9 of the first 64 galaxies came back on a slope --
+            # |grad| up to 3e5, and a xi covariance total of 5.2 against a prior
+            # total of 16, i.e. a posterior 3x too narrow with nothing raised.
+            # Measured at 40000 steps: all 9 repaired, covtot 16.6-17.7 (#1537).
+            #
+            # A fixed 10x is not a rule though -- it is one bank's answer. The
+            # honest version is to ask the fit whether it converged and keep
+            # going while it says no, which is what LaplaceNotAtModeWarning is
+            # for. Galaxies that need more get more; the rest pay nothing.
+            map_steps = args.n_map_steps
+            for _attempt in range(args.max_map_escalations + 1):
+                with warnings.catch_warnings(record=True) as caught:
+                    warnings.simplefilter("always", LaplaceNotAtModeWarning)
+                    post = fitter.run(
+                        "laplace",
+                        key=keys[i],
+                        n_map_steps=map_steps,
+                        n_samples=args.n_samples * args.n_chains,
+                        min_eigenvalue=args.min_eigenvalue,
+                    )
+                map_steps_used = map_steps
+                if not any(isinstance(w.message, LaplaceNotAtModeWarning) for w in caught):
+                    break
+                map_steps *= 3
+            else:
+                # Exhausted the ladder. Record it rather than drop the galaxy:
+                # excluding fits on an inferred quantity biases the population,
+                # and the decrement is written to the npz so the pooling step
+                # can weigh or report them explicitly.
+                print(
+                    f"  gal {i:4d}: STILL not at a mode after {map_steps // 3} "
+                    f"steps (decrement {post.diagnostics['newton_decrement']:.4g})",
+                    flush=True,
+                )
         elif args.method == "mcmc_nuts":
             # The explicit per-galaxy MAP is NOT an optimization -- it is a
             # correctness requirement. Every sampler backend routes its
@@ -376,6 +420,12 @@ def main():
             rhat_tau=np.asarray(float(rhat.get("sfh_field_psd_tau_myr", np.nan))),
             rhat_xi_max=np.asarray(float(np.max(np.asarray(rhat["psd_xi"])))),
             rhat_field=rhat_field,
+            # The convergence check R-hat cannot perform for a Laplace fit.
+            # R-hat is ~1 by construction on i.i.d. Gaussian draws; the Newton
+            # decrement is the number that separates a mode from a slope, so it
+            # is the one worth carrying to the pooling step (#1537).
+            newton_decrement=np.asarray(float(post.diagnostics.get("newton_decrement", np.nan))),
+            map_steps_used=np.asarray(int(map_steps_used)),
         )
         os.replace(tmp, path)
 

@@ -44,6 +44,7 @@ from tengri.components.xray.xray import (
     xray_total_lopez24_terms,
     xray_total_terms,
 )
+from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -262,7 +263,11 @@ class XRaySEDComponent:
 
                 ft_pad = state.derived.get("phot_filter_trans_padded")
                 derived_overrides["xray_phot_lnu_precomp"] = lnu_filter_integral_batch(
-                    L_xray, wave, fw_pad, ft_pad, jnp.asarray(params.get("redshift", 0.0))
+                    L_xray,
+                    wave,
+                    fw_pad,
+                    ft_pad,
+                    jnp.asarray(require_redshift(params, "components.xray.component.apply")),
                 )
             else:
                 derived_overrides["xray_phot_lnu_precomp"] = _emit(filter_eff)

@@ -757,6 +757,23 @@ def parse_groups(**kwargs) -> Parameters:
         structural_kwargs.get("radio_agn_model"), frozenset()
     )
 
+    # Which dust.emission params the selected IR engine actually reads. The
+    # sub-block's partition spans every engine it can dispatch to — 22 names
+    # across nine — so an unscoped ``emission={'*': FREE}`` frees whichever of
+    # those carry free registry defaults, whichever engine is selected. Under
+    # ``schreiber2016`` (a two-parameter model) that freed six parameters
+    # belonging to DL07/DL14/MBB/THEMIS, each provably inert — sweeping one
+    # across its full support leaves the dust IR SED bit-identical — while the
+    # engine's own ``dust_T`` stayed pinned, though it moves that SED by 94%
+    # (#1482). Scoping mirrors the AGN and radio blocks above. ``None`` when the
+    # engine declares nothing introspectable; the wildcard then keeps its
+    # unscoped behavior rather than guessing which names are live.
+    dust_emission_wildcard_params = (
+        _declared_param_names(structural_params.dust_emission)
+        if structural_params.dust_emission is not None
+        else None
+    )
+
     # Outcome of every *active* ``all_params: FREE`` wildcard, keyed by the
     # group it was written in. ``FREE`` resolves to the registry default, which
     # for most parameters is a ``Fixed`` scalar — so a wildcard can legally
@@ -851,6 +868,8 @@ def parse_groups(**kwargs) -> Parameters:
             wildcard_active = param_name in radio_sf_active
         elif group == "radio.agn":
             wildcard_active = param_name in radio_agn_active
+        elif group == "dust.emission" and dust_emission_wildcard_params is not None:
+            wildcard_active = param_name in dust_emission_wildcard_params
         final_dist, tag = _resolve_value(
             param_name,
             group_dict,
@@ -953,7 +972,12 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
     Parameters
     ----------
     component_type : str
-        Registry key, e.g. ``"dale2014"``.
+        Grammar type name as written in the spec, e.g. ``"dale2014"`` or
+        ``"dl07"``. Grammar names that are aliases (``dl07`` -> ``draine_li2007``,
+        ``mbb`` -> ``modified_blackbody``) are resolved through
+        ``_EMISSION_TYPE_ALIASES`` first; looking them up raw misses the class
+        and reports the engine as declaration-free, which silently disables both
+        the guard and the wildcard scoping for five production engines.
 
     Returns
     -------
@@ -961,10 +985,23 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
         Prefixed names (``dust_alpha_dale``, ...), or ``None`` when the type is
         not a registered component or declares nothing — the caller then leaves
         that group unnarrowed rather than guessing.
-    """
-    from tengri.forward.component_factory import _REGISTRY
 
-    cls = _REGISTRY.get(component_type)
+    Notes
+    -----
+    An empty ``_priors`` must stay ``None`` (unnarrowed), **not** an empty
+    frozenset. The two are not the same question, and two registered engines
+    sit on opposite sides of it: ``pah_drude`` is genuinely parameter-free (a
+    pure template shape), while ``energy_balance_split`` reads six real knobs
+    (``dust_T_warm``, ``dust_f_cold``, ``dust_L_agn_ir``, ...) that are declared
+    in ``components/dust/_params.py`` rather than on the class, because
+    re-declaring them alongside the attenuator's would raise a duplicate
+    declaration. Nothing introspectable separates the two cases, so returning an
+    empty set here would silently pin all six of the latter's parameters — the
+    very failure this narrowing exists to prevent.
+    """
+    from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES, _REGISTRY
+
+    cls = _REGISTRY.get(_EMISSION_TYPE_ALIASES.get(component_type, component_type))
     priors = getattr(cls, "_priors", None)
     if not priors:
         return None
@@ -1376,6 +1413,42 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
                 "kernel."
             )
         result["age_kernel"] = age_kernel
+
+    # ``field_centering`` is a structural setting too: WHICH COORDINATES the GP
+    # field latent is sampled in, not a physical parameter. ``a = 1`` is the
+    # shipped non-centered map ``s = L(sigma, tau) xi``; ``a < 1`` moves
+    # amplitude dependence out of that map (#1355). Validated here, beside
+    # ``age_kernel``, so an out-of-range value or a request on a field-less SFH
+    # fails at ``SEDModel.build`` rather than at the first prediction.
+    if "field_centering" in sfh_dict:
+        centering = sfh_dict["field_centering"]
+        try:
+            centering = float(centering)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"sfh field_centering must be a number between 0 and 1, got "
+                f"{centering!r}. 1.0 (default) is the non-centered "
+                f"parameterization; 0.0 is fully centered (#1355)."
+            ) from None
+        if not 0.0 <= centering <= 1.0:
+            raise ValueError(
+                f"sfh field_centering must be between 0 and 1, got {centering!r}. "
+                f"It interpolates the parameterization: 1.0 (default) samples the "
+                f"standardized latent, 0.0 samples the field itself (#1355)."
+            )
+        _types = sfh_dict.get("type") or []
+        _types = _types if isinstance(_types, (list, tuple)) else [_types]
+        if "field" not in _types:
+            # An explicit request the model cannot serve must raise, not no-op:
+            # there is no GP field here to reparameterize, and silently keeping
+            # the value would be #1488's "selectable but inert" exactly.
+            raise ValueError(
+                f"sfh field_centering={centering!r} needs a GP-field SFH — it "
+                f"reparameterizes the field latent, and this SFH has no field "
+                f"component. Add it with sfh={{'type': ['dpl', 'field'], ...}}, "
+                f"or drop field_centering (#1355)."
+            )
+        result["field_centering"] = centering
 
     if sfh_type is None:
         result["mean_sfh_type"] = ["dpl", "field"]
@@ -1924,7 +1997,7 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 #: Per-group structural keys the grammar accepts on top of declared params.
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
-    "sfh": frozenset({"type", "*", "bin_edges_gyr", "age_kernel"}),
+    "sfh": frozenset({"type", "*", "bin_edges_gyr", "age_kernel", "field_centering"}),
     "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset(
         {

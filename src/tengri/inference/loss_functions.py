@@ -31,7 +31,9 @@ __all__ = [
 # ── Shared helpers (called inside traced closures) ───────────────────────
 
 
-def standardized_neg_log_prior(params_unbounded, free_names, *, stochastic):
+def standardized_neg_log_prior(
+    params_unbounded, free_names, *, stochastic, centering=1.0, psd_sigma_dex=None
+):
     r"""Negative log-prior of the standardized latents, up to a constant.
 
     Every prior is standardized, so the prior on the unbounded latents is
@@ -51,6 +53,17 @@ def standardized_neg_log_prior(params_unbounded, free_names, *, stochastic):
     stochastic : bool
         Whether the model carries a stochastic-SFH field. When ``True`` and
         ``"psd_xi"`` is present, the field latents are included.
+    centering : float, optional
+        Field parameterization ``a`` in ``[0, 1]`` [dimensionless]. Default
+        ``1.0``, the standardized map, where the field term is
+        :math:`\tfrac12 \xi^\top \xi` exactly as before. At ``a < 1`` the field
+        latent's prior is :math:`\mathcal{N}(0, \sigma_s^{2-2a} I)` and this
+        term is replaced by
+        :func:`~tengri.components.stellar.sfh.gp_sfh.drw_latent_log_prior`.
+    psd_sigma_dex : array_like, optional
+        Physical modulation amplitude :math:`\sigma` [dex]. Required when
+        ``centering < 1`` — the latent prior depends on it, which is precisely
+        what partial centering trades away. Ignored at ``a = 1``.
 
     Returns
     -------
@@ -76,6 +89,26 @@ def standardized_neg_log_prior(params_unbounded, free_names, *, stochastic):
     for name in free_names:
         penalty = penalty + jnp.sum(params_unbounded[name] ** 2)
     if stochastic and "psd_xi" in params_unbounded:
+        if float(centering) != 1.0:
+            # The prior travels with the map (#1355). At a < 1 the latent is no
+            # longer standardized: its variance is sigma_s^(2-2a), and the
+            # -n(1-a) log sigma_s normalizer couples it to a SAMPLED parameter,
+            # so omitting it does not shift the posterior by a constant — it
+            # changes the sigma marginal, silently, at every a.
+            if psd_sigma_dex is None:
+                raise ValueError(
+                    "centering < 1 needs psd_sigma_dex: the field latent's prior "
+                    "is N(0, sigma_s^(2-2a) I), which depends on the sampled "
+                    "amplitude. Passing None would silently target the "
+                    "standardized prior with a partially-centered map (#1355)."
+                )
+            from tengri.components.stellar.sfh.gp_sfh import drw_latent_log_prior
+
+            # 0.5 * xi^2 is a NEGATIVE log-prior up to a constant; the helper
+            # returns a normalized LOG-prior, so it enters negated.
+            return penalty * 0.5 - drw_latent_log_prior(
+                params_unbounded["psd_xi"], psd_sigma_dex, centering=centering
+            )
         penalty = penalty + jnp.sum(params_unbounded["psd_xi"] ** 2)
     return 0.5 * penalty
 
@@ -497,6 +530,9 @@ def build_loss_fn(fitter):
     fixed_values = fitter._fixed_values
     spec = fitter.spec
     stochastic = spec.stochastic
+    # Static: the field parameterization is a build-time choice, so it is read
+    # once here rather than per call (#1355).
+    field_centering = float(getattr(spec, "field_centering", 1.0))
     neg_log_lik = _build_data_neg_log_likelihood_fn(fitter)
 
     def loss_fn(params_unbounded, data_args):
@@ -527,7 +563,14 @@ def build_loss_fn(fitter):
         # The per-galaxy reduction lives in the helper — see its Notes for why a
         # rank-0 result is load-bearing rather than cosmetic.
         return e_lh + standardized_neg_log_prior(
-            params_unbounded, free_names, stochastic=stochastic
+            params_unbounded,
+            free_names,
+            stochastic=stochastic,
+            centering=field_centering,
+            # Physical sigma, read from the unstandardized dict: at a < 1 the
+            # latent prior depends on it, so it has to be the sampled value and
+            # not a constant.
+            psd_sigma_dex=(params.get("sfh_field_psd_sigma") if field_centering != 1.0 else None),
         )
 
     return loss_fn

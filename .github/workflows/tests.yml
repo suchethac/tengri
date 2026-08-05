@@ -288,6 +288,7 @@ jobs:
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
       - run: python tools/check_param_prefixes.py
+      - run: python tools/check_param_defaults.py
       - run: python tools/check_test_markers.py
       - run: python tools/check_single_dispatch.py
       - run: python tools/check_registry_completeness.py
