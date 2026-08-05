@@ -214,3 +214,75 @@ class TestTheCollapseItCatches:
         at_mode = _run(0.0)
         # H_yy at the mode is 0.01, so var = 100
         assert float(np.var(np.asarray(at_mode.samples["y"]))) == pytest.approx(100.0, rel=0.25)
+
+
+def _saddle_loss(params, _data_args):
+    """``0.5 x^2 - 0.5 y^2`` — an indefinite Hessian, ``diag(1, -1)``, everywhere.
+
+    A saddle has no minimum, so ``H^-1`` is not a covariance at any point on it.
+    """
+    return 0.5 * params["x"] ** 2 - 0.5 * params["y"] ** 2
+
+
+_SADDLE_GRAD = jax.jit(jax.value_and_grad(_saddle_loss))
+
+
+class TestAnIndefiniteHessianIsAlsoNotAMode:
+    """The guard must not fail open on the one case that breaks its own algebra.
+
+    ``d = 0.5 g^T H^-1 g`` assumes ``H`` is positive definite. With
+    ``regularize=False`` the eigenvalues are not floored, and a negative one
+    makes the sum **negative** -- so the check ``d > tol`` is False and nothing
+    warns, at a point that is definitively not a minimum. Measured before the
+    fix: decrement -2.0 with ``|grad| = 2.0`` at a saddle, silent.
+    """
+
+    def _run_saddle(self, y0, **kwargs):
+        return run_laplace(
+            key=jax.random.PRNGKey(0),
+            loss_fn=_saddle_loss,
+            data_args={},
+            map_params_unbounded={"x": jnp.asarray(0.0), "y": jnp.asarray(y0)},
+            to_physical_fn=lambda p: p,
+            model=None,
+            grad_fn=_SADDLE_GRAD,
+            n_samples=64,
+            regularize=False,
+            verbose=False,
+            **kwargs,
+        )
+
+    def test_it_warns_instead_of_reporting_a_negative_decrement(self):
+        """LOAD-BEARING. Neuter: drop the positive-definiteness branch.
+
+        Without it the decrement is -2.0 and the comparison silently passes.
+        """
+        with pytest.warns(LaplaceNotAtModeWarning):
+            self._run_saddle(2.0)
+
+    def test_the_decrement_is_never_negative(self):
+        """A predicted loss *drop* below zero is not a number to report; the
+        quadratic model simply has no minimum in that direction."""
+        with pytest.warns(LaplaceNotAtModeWarning) as rec:
+            post = self._run_saddle(2.0)
+        assert post.diagnostics["newton_decrement"] > 0.0
+        assert "indefinite" in str(rec[0].message).lower(), (
+            "the message must name the cause, since the remedy differs from an under-converged MAP"
+        )
+
+    def test_it_warns_even_at_a_stationary_saddle(self):
+        """The nastiest case: ``grad = 0`` exactly, so every gradient-based
+        check passes, yet ``H^-1`` is indefinite and sampling it is meaningless.
+        """
+        with pytest.warns(LaplaceNotAtModeWarning):
+            post = self._run_saddle(0.0)
+        assert post.diagnostics["grad_norm_at_expansion"] == pytest.approx(0.0, abs=1e-9)
+
+    def test_regularize_true_is_the_ordinary_path_and_stays_quiet(self):
+        """With the default flooring, a positive-definite Hessian at a mode must
+        not be dragged into this branch."""
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", LaplaceNotAtModeWarning)
+            _run(0.0)

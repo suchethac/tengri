@@ -84,8 +84,21 @@ def _newton_decrement(grad_flat, eigenvalues, eigenvectors):
     -------
     float
         Predicted loss drop [nats]. An offset of ``delta`` standard deviations
-        along one direction gives ``delta**2 / 2``.
+        along one direction gives ``delta**2 / 2``. ``inf`` when any eigenvalue
+        is non-positive: the quadratic model then has no minimum to descend to,
+        and the point cannot be a mode whatever the gradient does.
+
+    Notes
+    -----
+    The non-positive case is not a corner case to tidy away — it is the one
+    input that breaks the formula's own algebra. A negative eigenvalue makes
+    the sum **negative**, so a naive ``d > tol`` test reads as "converged" at a
+    saddle. Reachable whenever ``regularize=False`` leaves the spectrum
+    unfloored.
     """
+    eigenvalues = jnp.asarray(eigenvalues)
+    if not bool(jnp.all(eigenvalues > 0)):
+        return float("inf")
     projected = eigenvectors.T @ grad_flat
     return float(0.5 * jnp.sum(projected**2 / eigenvalues))
 
@@ -233,7 +246,23 @@ def run_laplace(
     grad_norm = float(jnp.linalg.norm(grad_flat))
     decrement = _newton_decrement(grad_flat, eigenvalues_clipped, eigenvectors)
 
-    if decrement > stationarity_tol:
+    indefinite = not bool(jnp.all(eigenvalues_clipped > 0))
+    if indefinite:
+        n_bad = int(jnp.sum(eigenvalues_clipped <= 0))
+        warnings.warn(
+            f"Laplace Hessian is indefinite at the expansion point: "
+            f"{n_bad}/{n_dim} eigenvalues are non-positive (most negative "
+            f"{float(jnp.min(eigenvalues_clipped)):.4g}), gradient norm "
+            f"{grad_norm:.4g}. The loss curves *downward* along those "
+            f"directions, so this is a saddle or a maximum, not a mode, and "
+            f"H^-1 is not a covariance — the draws are meaningless rather "
+            f"than merely mis-scaled. Leave regularize=True (the default) to "
+            f"floor the spectrum at min_eigenvalue, or re-run the optimizer "
+            f"from a different start.",
+            LaplaceNotAtModeWarning,
+            stacklevel=2,
+        )
+    elif decrement > stationarity_tol:
         warnings.warn(
             f"Laplace expansion point is not a mode: Newton decrement "
             f"{decrement:.4g} nats (tolerance {stationarity_tol:g}), gradient "
