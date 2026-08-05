@@ -15,7 +15,13 @@ pytestmark = pytest.mark.contract
 
 @pytest.fixture(autouse=True)
 def _reset_module_state(monkeypatch):
-    """Reset module-level state between tests."""
+    """Reset module-level state between tests.
+
+    ``_eviction_supported`` is forced True so the cap tests pin tengri's own
+    resolution logic rather than whether filelock happens to be installed in the
+    test environment; the two tests that care about that path override it.
+    """
+    monkeypatch.setattr(jax_cache, "_eviction_supported", lambda: True)
     monkeypatch.setattr(jax_cache, "_ENABLED_DIR", None)
     monkeypatch.delenv("TENGRI_DISABLE_JAX_CACHE", raising=False)
     monkeypatch.delenv("TENGRI_JAX_CACHE_DIR", raising=False)
@@ -124,3 +130,93 @@ def test_resolve_dir_falls_back_to_enabled(tmp_path):
 def test_resolve_dir_falls_back_to_default(monkeypatch, tmp_path):
     monkeypatch.setenv("TENGRI_JAX_CACHE_DIR", str(tmp_path))
     assert jax_cache._resolve_dir(None) == tmp_path
+
+
+# ---------------------------------------------------------------- size cap (#1507)
+#
+# The cache reached 141 GB on a 48 GB machine because nothing ever passed
+# max_size_bytes: enable_persistent_cache() supports the cap, __init__ called it
+# without one, and JAX does not evict by default. These pin the cap on.
+
+
+def test_max_size_bytes_sets_the_jax_cap(tmp_path):
+    jax_cache.enable_persistent_cache(tmp_path, max_size_bytes=3 * 1024**3)
+    assert jax.config.jax_compilation_cache_max_size == 3 * 1024**3
+
+
+def test_default_cap_is_applied_when_not_specified(tmp_path):
+    """The auto-enable path must bound the cache, not leave it unlimited."""
+    jax_cache.enable_persistent_cache(tmp_path)
+    cap = jax.config.jax_compilation_cache_max_size
+    assert cap > 0, "persistent cache enabled with no size cap — this is #1507"
+    assert cap == jax_cache.DEFAULT_MAX_CACHE_BYTES
+
+
+def test_cap_env_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("TENGRI_JAX_CACHE_MAX_GB", "2.5")
+    jax_cache.enable_persistent_cache(tmp_path)
+    assert jax.config.jax_compilation_cache_max_size == int(2.5 * 1024**3)
+
+
+def test_cap_env_override_zero_means_unbounded(monkeypatch, tmp_path):
+    """An explicit 0 opts out, for anyone who really wants an unbounded cache.
+
+    Must map to JAX's -1 sentinel, not literal 0: 0 is a zero-BYTE ceiling, which
+    would silently switch caching off rather than removing the cap.
+    """
+    monkeypatch.setenv("TENGRI_JAX_CACHE_MAX_GB", "0")
+    jax_cache.enable_persistent_cache(tmp_path)
+    assert jax.config.jax_compilation_cache_max_size == jax_cache.UNBOUNDED_CACHE
+    assert jax_cache.UNBOUNDED_CACHE == -1
+
+
+def test_cap_env_garbage_falls_back_to_default(monkeypatch, tmp_path):
+    monkeypatch.setenv("TENGRI_JAX_CACHE_MAX_GB", "not-a-number")
+    jax_cache.enable_persistent_cache(tmp_path)
+    assert jax.config.jax_compilation_cache_max_size == jax_cache.DEFAULT_MAX_CACHE_BYTES
+
+
+def test_enable_does_not_walk_the_cache_when_quiet(tmp_path, monkeypatch):
+    """The size is only needed for an INFO log line.
+
+    Walking the tree unconditionally costs ~3.5 us/file on every ``import
+    tengri``, which is wasted work whenever nobody is listening.
+    """
+    calls = []
+    monkeypatch.setattr(jax_cache, "cache_size_bytes", lambda *a, **k: calls.append(1) or 0)
+    monkeypatch.setattr(jax_cache.logger, "isEnabledFor", lambda level: False)
+    jax_cache.enable_persistent_cache(tmp_path)
+    assert calls == [], "cache was walked even though the log line is suppressed"
+
+
+def test_clear_cache_reports_what_it_freed(tmp_path, capsys):
+    (tmp_path / "blob").write_bytes(b"x" * 4096)
+    freed = jax_cache.clear_cache(tmp_path)
+    assert freed >= 4096, "clear_cache should report the bytes it reclaimed"
+
+
+def test_cap_stands_down_without_filelock(monkeypatch, tmp_path):
+    """No filelock means the cap BREAKS the cache, so we must not set one.
+
+    JAX gates jax_compilation_cache_max_size behind filelock and raises
+    "Please install the `filelock` package..." on every cache read when a cap is
+    set without it. Unbounded is bad; broken is worse.
+    """
+    monkeypatch.setattr(jax_cache, "_eviction_supported", lambda: False)
+    jax_cache.enable_persistent_cache(tmp_path)
+    assert jax.config.jax_compilation_cache_max_size == jax_cache.UNBOUNDED_CACHE
+
+
+def test_cap_applies_when_filelock_is_available(monkeypatch, tmp_path):
+    monkeypatch.setattr(jax_cache, "_eviction_supported", lambda: True)
+    jax_cache.enable_persistent_cache(tmp_path)
+    assert jax.config.jax_compilation_cache_max_size == jax_cache.DEFAULT_MAX_CACHE_BYTES
+
+
+def test_filelock_is_a_declared_dependency():
+    """The default cap is inert unless filelock ships with tengri."""
+    import re
+
+    text = (Path(__file__).resolve().parents[2] / "pyproject.toml").read_text()
+    deps = re.search(r"^dependencies = \[(.*?)^\]", text, re.S | re.M).group(1)
+    assert re.search(r'"filelock[><=]', deps), "filelock must be a runtime dependency"

@@ -229,6 +229,9 @@ def build_components(
     metallicity_model: str = "delta",
     n_grid: int = 256,
     lgmet_scatter: float = 0.2,
+    # SFH -> SSP age-weight kernel: "cic" (dense cloud-in-cell integrand),
+    # "dsps" (DSPS's histogram kernel), or None to auto-select (#964).
+    age_kernel: str | None = None,
     # Nebular
     nebular_backend: str | None = "baked_in",
     nebular_backend_instance: Any | None = None,
@@ -325,6 +328,11 @@ def build_components(
         SFH lookback-time grid resolution.
     lgmet_scatter : float
         Gaussian σ in log10(Z) for the DSPS triweight kernel [dex].
+    age_kernel : str or None
+        SFH→SSP age-weight kernel: ``"cic"`` (dense cloud-in-cell integrand),
+        ``"dsps"`` (DSPS's histogram kernel), or ``None`` (default) to
+        auto-select. See :class:`~tengri.components.stellar.component.StellarSEDComponentConfig`
+        for the accuracy/cost tradeoff (#964).
     nebular_backend : str | None
         ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cb19"``,
         ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit
@@ -375,6 +383,7 @@ def build_components(
                 metallicity_model=metallicity_model,
                 n_grid=n_grid,
                 lgmet_scatter=lgmet_scatter,
+                age_kernel=age_kernel,
             ),
             ssp_data=ssp_data,
         )
@@ -384,7 +393,7 @@ def build_components(
     # read ``state.derived["L_absorbed"]`` for the CIGALE-style
     # ``agn_power = L_abs × fracAGN/(1-fracAGN)`` cross-component
     # coupling (see ``agn/component.py`` and ``agn/_params.py:
-    # agn_fracAGN``). Note: although appended here, the topological sort
+    # agn_ir_frac``). Note: although appended here, the topological sort
     # places dust AFTER the nebular component (DustSEDComponent declares
     # ``sed_nebular`` an optional input) so the nebular continuum is
     # reddened by the HII-region dust, matching bagpipes/FSPS/CIGALE.
@@ -470,14 +479,14 @@ def build_components(
         components.append(shock_component_obj)
 
     # 4. AGN (optional) — placed after dust so ``state.derived["L_absorbed"]``
-    # is available for the CIGALE-coupled ``agn_fracAGN`` flow.
+    # is available for the CIGALE-coupled ``agn_ir_frac`` flow.
     if agn_model is not None:
         # NOTE (#721): ``dust_frac_agn`` (Dale2014's embedded quasar template) and
-        # the composable AGN's ``agn_fracAGN`` are two distinct AGN surfaces, both
+        # the composable AGN's ``agn_ir_frac`` are two distinct AGN surfaces, both
         # keyed off the same stellar ``L_absorbed`` — using both with positive
         # values double-counts AGN MIR. A *value-aware* guard cannot live here:
         # ``build_components`` sees only structural selectors, not the resolved
-        # ``dust_frac_agn``/``agn_fracAGN`` values (which may be FREE), so a
+        # ``dust_frac_agn``/``agn_ir_frac`` values (which may be FREE), so a
         # construction-time check would false-positive on legitimate models such
         # as ``recipes.composable_agn()`` (Dale2014 + composable AGN with
         # ``dust_frac_agn=0``). The value-aware guard therefore lives at

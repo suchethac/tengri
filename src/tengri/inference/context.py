@@ -214,20 +214,22 @@ class InferenceContext:
         neg_log_posterior_fn
             The combined :math:`\\mathcal{H}`.
         """
-        import jax.numpy as _jnp
 
         spec = self.fitter.spec
         free_names = self.fitter._free_names
         stochastic = spec.stochastic
 
+        from tengri.inference.loss_functions import standardized_neg_log_prior
+
         def log_prior(params_unbounded):
-            """log p(xi) = -0.5 * sum(xi^2) for the standardized N(0,I) prior."""
-            penalty = _jnp.zeros(())
-            for name in free_names:
-                penalty = penalty + params_unbounded[name] ** 2
-            if stochastic and "psd_xi" in params_unbounded:
-                penalty = penalty + _jnp.sum(params_unbounded["psd_xi"] ** 2)
-            return -0.5 * penalty
+            """log p(xi) = -0.5 * sum(xi^2) for the standardized N(0,I) prior.
+
+            Shares the objective's implementation rather than restating it. The
+            two disagreed on batched inputs: this one omitted the per-galaxy
+            reduction and returned shape ``(n_gal,)`` against the scalar its
+            docstring promised.
+            """
+            return -standardized_neg_log_prior(params_unbounded, free_names, stochastic=stochastic)
 
         return log_prior
 

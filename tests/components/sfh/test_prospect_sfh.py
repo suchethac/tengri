@@ -27,11 +27,11 @@ pytestmark = pytest.mark.bounds
 jax.config.update("jax_enable_x64", True)
 
 from tengri.components.stellar.sfh.mean_sfh import (
-    _pchip_slopes,
     snorm_burst,
     snorm_trunc_burst,
     spline,
 )
+from tengri.utils.grid_interp import _pchip_slopes
 
 _T = jnp.logspace(7, 10.14, 128)  # lookback times 10 Myr – 13.8 Gyr
 
@@ -55,9 +55,9 @@ class TestPchipSlopes:
 
         Monotonicity preservation: if y_{i-1} < y_i < y_{i+1}, then d_i ≥ 0.
         """
+        x = jnp.array([0.0, 1.0, 2.0, 3.0])
         y = jnp.array([0.0, 1.0, 3.0, 6.0])
-        h = jnp.diff(jnp.array([0.0, 1.0, 2.0, 3.0]))
-        d = _pchip_slopes(y, h)
+        d = _pchip_slopes(x, y)
         assert jnp.all(d >= 0.0)
 
     def test_monotone_decreasing_slopes_nonpositive(self):
@@ -65,9 +65,9 @@ class TestPchipSlopes:
 
         Monotonicity preservation: if y_{i-1} > y_i > y_{i+1}, then d_i ≤ 0.
         """
+        x = jnp.array([0.0, 1.0, 2.0, 3.0])
         y = jnp.array([6.0, 3.0, 1.0, 0.0])
-        h = jnp.diff(jnp.array([0.0, 1.0, 2.0, 3.0]))
-        d = _pchip_slopes(y, h)
+        d = _pchip_slopes(x, y)
         assert jnp.all(d <= 0.0)
 
     def test_local_extremum_gets_zero_slope(self):
@@ -75,9 +75,9 @@ class TestPchipSlopes:
 
         Interior extrema force zero slope to prevent overshoot.
         """
+        x = jnp.array([0.0, 1.0, 2.0])
         y = jnp.array([0.0, 1.0, 0.5])
-        h = jnp.diff(jnp.array([0.0, 1.0, 2.0]))
-        d = _pchip_slopes(y, h)
+        d = _pchip_slopes(x, y)
         # Interior slope at index 1 (local max) must be zero
         assert float(d[1]) == pytest.approx(0.0, abs=1e-12)
 
@@ -188,7 +188,15 @@ class TestSnormBurstSfh:
         no_burst_kwargs = {**self._KWARGS, "burst_sfr": 0.0}
         sfr_no_burst = snorm_burst(_T, **no_burst_kwargs)
 
-        old_mask = self._KWARGS["burst_age"] <= _T
+        # Skip the ONE cell straddling ``burst_age``. The SFH array is a
+        # quadrature integrand (the forward model turns it into mass parcels via
+        # ``trapezoid``), so the cell containing the burst edge carries the burst
+        # mass formed in its covered fraction -- it is not "outside" the burst
+        # (#1374). Beyond that cell the two must agree. The one-cell step is
+        # derived from the grid, not hard-coded, so this survives editing ``_T``.
+        cell_factor = float(_T[1] / _T[0])  # _T is log-spaced
+        old_mask = self._KWARGS["burst_age"] * cell_factor < _T
+        assert int(old_mask.sum()) > 10, "probe setup failed: too few nodes past the burst edge"
         # Renormalization can redistribute mass, so use moderate tolerance
         assert_allclose(sfr_with_burst[old_mask], sfr_no_burst[old_mask], rtol=0.3)
 
@@ -255,7 +263,15 @@ class TestSnormTruncBurstSfh:
         no_burst_kwargs = {**self._KWARGS, "burst_sfr": 0.0}
         sfr_no_burst = snorm_trunc_burst(_T, **no_burst_kwargs)
 
-        old_mask = self._KWARGS["burst_age"] <= _T
+        # Skip the ONE cell straddling ``burst_age``. The SFH array is a
+        # quadrature integrand (the forward model turns it into mass parcels via
+        # ``trapezoid``), so the cell containing the burst edge carries the burst
+        # mass formed in its covered fraction -- it is not "outside" the burst
+        # (#1374). Beyond that cell the two must agree. The one-cell step is
+        # derived from the grid, not hard-coded, so this survives editing ``_T``.
+        cell_factor = float(_T[1] / _T[0])  # _T is log-spaced
+        old_mask = self._KWARGS["burst_age"] * cell_factor < _T
+        assert int(old_mask.sum()) > 10, "probe setup failed: too few nodes past the burst edge"
         assert_allclose(sfr_with_burst[old_mask], sfr_no_burst[old_mask], rtol=0.3)
 
     def test_truncation_reduces_old_sfr_vs_snorm_burst(self):

@@ -30,12 +30,11 @@ import warnings
 
 # Keep the rendered tutorial clean: silence framework notices that do not
 # change the science shown here (baked-in nebular, the WavePrecomp blue-band
-# approximation, the intentional Fitter(sed_model, ...) LUT path, and
+# approximation, and
 # recipe/parameter-provenance notices). Genuine deprecations in user-facing
 # calls are fixed in the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
 warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
 warnings.filterwarnings("ignore", message=".*Composable AGN.*")
 warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
@@ -48,6 +47,7 @@ import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
+from _setup import FIG_DIR
 import tengri
 from tengri import (
     FIXED,
@@ -56,14 +56,11 @@ from tengri import (
     SEDModel,
     builders,
     citations,
-    load_ssp_data,
     plot,
     recipes,
 )
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 # %% [markdown]
 # ## Bird's eye
@@ -83,10 +80,7 @@ tengri.summary()
 tengri.list_known_ssps()
 
 # %%
-SSP = Path("../data/fsps_prsc_miles_chabrier.h5")
-if not SSP.exists():
-    SSP = Path(tengri.download_ssp("fsps_prsc_miles_chabrier"))
-ssp = load_ssp_data(str(SSP))
+ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
 
 # %% [markdown]
 # ## Star-formation history variants
@@ -273,8 +267,10 @@ tengri.search("Calzetti")
 #   `tengri.analysis.plotting`.
 # - **`tengri.observation`** — `Photometry`, `Spectroscopy`, `Observation`,
 #   `NoiseModel`, `LineList`, filter loaders.
-# - **`tengri.inference`** — `Fitter`, `CatalogFitter`, `PopulationFitter`,
-#   `VIConfig`, `InferenceContext`.
+# - **`tengri.inference`** — `Catalog` (many galaxies, one call),
+#   `VIConfig`, `InferenceContext`. Single-galaxy fits go through
+#   `ForwardModel.fit`; `Fitter` is an internal engine, not a surface to
+#   call directly.
 # - **`tengri.results`** — `Posterior`, `CatalogPosterior`,
 #   `PopulationPosterior`, `FitResult`, `MockData`, `Provenance`,
 #   `generate_mock`.

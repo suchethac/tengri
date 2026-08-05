@@ -40,7 +40,7 @@ class TestAdafJitGrad:
 
         @jax.jit
         def _run(wave):
-            return adaf_disc(wave, agn_log_lbol=42.0, agn_frac=0.1)
+            return adaf_disc(wave, agn_log_lbol=42.0, agn_lum_ratio=0.1)
 
         result = _run(wavelength)
         chex.assert_tree_all_finite(result)
@@ -54,7 +54,7 @@ class TestAdafJitGrad:
         from tengri.components.agn.disc import adaf_disc
 
         def loss_fn(lbol):
-            return jnp.sum(adaf_disc(optical_wavelength, agn_log_lbol=lbol, agn_frac=0.1))
+            return jnp.sum(adaf_disc(optical_wavelength, agn_log_lbol=lbol, agn_lum_ratio=0.1))
 
         g = float(jax.grad(loss_fn)(42.0))
         np.testing.assert_allclose(
@@ -74,7 +74,7 @@ class TestAdafJitGrad:
 
         def loss_fn(r_tr):
             return jnp.sum(
-                adaf_disc(optical_wavelength, agn_log_lbol=42.0, agn_frac=0.1, agn_r_tr=r_tr)
+                adaf_disc(optical_wavelength, agn_log_lbol=42.0, agn_lum_ratio=0.1, agn_r_tr=r_tr)
             )
 
         g = float(jax.grad(loss_fn)(100.0))
@@ -95,7 +95,7 @@ class TestAdafJitGrad:
         def loss_fn(delta):
             return jnp.sum(
                 adaf_disc(
-                    optical_wavelength, agn_log_lbol=42.0, agn_frac=0.1, agn_adaf_delta=delta
+                    optical_wavelength, agn_log_lbol=42.0, agn_lum_ratio=0.1, agn_adaf_delta=delta
                 )
             )
 
@@ -120,7 +120,9 @@ class TestAdafJitGrad:
 
         def loss_fn(beta):
             return jnp.sum(
-                adaf_disc(optical_wavelength, agn_log_lbol=42.0, agn_frac=0.1, agn_adaf_beta=beta)
+                adaf_disc(
+                    optical_wavelength, agn_log_lbol=42.0, agn_lum_ratio=0.1, agn_adaf_beta=beta
+                )
             )
 
         g = float(jax.grad(loss_fn)(0.5))

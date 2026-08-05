@@ -57,7 +57,7 @@ for lbol in log_lbol_values:
             "nlr": {"type": "none", "all_params": tengri.FIXED},
             "blr": {"type": "qsogen", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
             "log_lbol": lbol,
         },
         redshift=tengri.Fixed(0.0),

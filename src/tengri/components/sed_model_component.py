@@ -13,7 +13,7 @@ tuples from these class-level declarations.
 
 Concrete adapters like :class:`tengri.components.radio.RadioSEDComponent`
 and :class:`tengri.components.igm.IGMSEDComponent` follow
-this pattern. See :doc:`docs/dev/forward-model-architecture.md` §3.1 and
+this pattern. See :doc:`docs/dev/archive/forward-model-architecture.md` §3.1 and
 :doc:`docs/dev/sed-model-components.md` for the full authoring guide.
 
 Examples
@@ -257,7 +257,7 @@ class SEDModelComponent:
     --------
     SEDComponent : the Protocol this class implements.
     ParamDeclaration, DerivedKey : contract types.
-    docs/dev/forward-model-architecture.md : the architecture design.
+    docs/dev/archive/forward-model-architecture.md : the architecture design.
     docs/dev/sed-model-components.md : detailed authoring guide.
     """
 
@@ -417,8 +417,8 @@ class SEDModelComponent:
         result = []
         for name, prior in self._priors.items():
             full_name = self.parameter_prefix + name
-            description = getattr(prior, "description", "")
-            units = getattr(prior, "units", "")
+            description = prior.description
+            units = prior.units
             result.append(
                 ParamDeclaration(name=full_name, prior=prior, description=description, units=units)
             )

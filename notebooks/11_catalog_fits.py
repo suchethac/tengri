@@ -25,8 +25,8 @@
 # The good news is that a catalog of independent galaxies is
 # **embarrassingly parallel**: each galaxy is its own low-dimensional posterior,
 # and nothing couples them. The naive way to exploit that is a Python `for` loop
-# over `Fitter` — correct, but it pays the JIT compile and walks the galaxies one
-# at a time. `CatalogFitter` does the same fits as **one vectorized program**:
+# over per-galaxy fits — correct, but it pays the JIT compile and walks the
+# galaxies one at a time. `Catalog` does the same fits as **one vectorized program**:
 # `forward_chunk_size=K` galaxies advance their chains *together* on every
 # sampler step, and the compiled graph is `O(1)` in the catalog size `N`. On a
 # GPU those `K` chains fill the card's lanes at once — that is the throughput win.
@@ -38,22 +38,14 @@
 # the whole point is how fast a catalog goes through.
 
 # %%
-import os
+from _setup import FIG_DIR, quiet
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+quiet()
 
+# Notebook-specific: we pair the wNE SSP with baked-in nebular, as intended.
 import warnings
 
-# Keep the rendered tutorial clean: silence framework notices that do not change
-# the science shown here. Genuine deprecations in user-facing calls are fixed in
-# the code, not hidden.
-warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
-warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
-warnings.filterwarnings(
-    "ignore", message=".*wNE.*"
-)  # we pair the wNE SSP with baked-in neb, as intended
-warnings.filterwarnings("ignore", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message=".*wNE.*")
 
 import time
 from pathlib import Path
@@ -74,11 +66,9 @@ from tengri import (
     WavePrecomp,
     plot,
 )
-from tengri.inference.catalog_fitter import CatalogFitter
+from tengri import Catalog, ForwardModel
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 C_POST, C_TRUTH = "#3a76d9", "0.15"
 
@@ -173,7 +163,7 @@ print(f"WavePrecomp LUT built in {build_wall:.1f} s (one-time; content-hash-cach
 #
 # `N` galaxies spread across redshift and stellar mass, each a noisy realization
 # of its own truth at a fixed depth (SNR 20). The catalog is a list of
-# `{"flux_obs", "noise"}` dicts — the public `CatalogFitter` input. Truths are
+# `{"flux_obs", "noise"}` dicts, stacked into the table `Catalog` ingests. Truths are
 # drawn once so we can score the recovery at the end.
 
 # %%
@@ -209,7 +199,7 @@ print(
 # %% [markdown]
 # ## Fit the catalog in parallel — timed in detail
 #
-# One call fits the whole catalog. `CatalogFitter.run("mcmc_hmc",
+# One call fits the whole catalog. `Catalog.fit(method="mcmc_hmc",
 # forward_chunk_size=K)` builds a **single** JIT'd HMC program and streams the `N`
 # galaxies through `jax.lax.map(..., batch_size=K)`: `K` galaxies advance their
 # chains *together* on every sampler step, and the compiled graph is `O(1)` in the
@@ -234,12 +224,22 @@ FIT_KW = dict(
 )
 
 
+# The Catalog noun takes a table of named columns; stack the per-galaxy dicts.
+forward = ForwardModel.build(sed=model)
+band_names = list(forward.observation.photometry.names)
+flux_arr = np.stack([np.asarray(g["flux_obs"]) for g in galaxies])  # (N, n_bands)
+noise_arr = np.stack([np.asarray(g["noise"]) for g in galaxies])
+table = {}
+for j, b in enumerate(band_names):
+    table[b] = flux_arr[:, j]
+    table[f"{b}_err"] = noise_arr[:, j]
+cat = Catalog(forward, table, flux_unit="cgs_fnu")  # free redshift -> no redshift_col
+
+
 def fit_catalog(K):
     """Fit the whole catalog with chunk size K; return (wall seconds, CatalogPosterior)."""
     t0 = time.perf_counter()
-    cp = CatalogFitter(model, galaxies, data_type="photometry").run(
-        key=jax.random.PRNGKey(0), forward_chunk_size=K, **FIT_KW
-    )
+    cp = cat.fit(key=jax.random.PRNGKey(0), forward_chunk_size=K, **FIT_KW)
     jax.block_until_ready(cp.posteriors[0].samples["redshift"])
     return time.perf_counter() - t0, cp
 
@@ -448,7 +448,7 @@ plt.show()
 #   **per-galaxy HMC** (`mcmc_hmc`; `mcmc_nuts` vectorizes too), not VI. HMC's
 #   fixed-length trajectories keep the per-posterior cost predictable, which is
 #   what a catalog rewards — the measured time per posterior is in the table above.
-# - **`CatalogFitter.run("mcmc_hmc", forward_chunk_size=K)`** fits the whole
+# - **`Catalog.fit(method="mcmc_hmc", forward_chunk_size=K)`** fits the whole
 #   catalog as *one* vectorized program: `K` galaxies advance per sampler step and
 #   the compiled graph is `O(1)` in the catalog size, so the compile is paid once
 #   and amortizes over the catalog. `K = 1` is the serial baseline; `K = N` is

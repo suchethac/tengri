@@ -3,7 +3,7 @@
 
 Validates that:
 - Parametric AGN (agn_log_lbol) enables fused kernel path
-- Legacy AGN (agn_frac) forces exact path
+- Legacy AGN (agn_lum_ratio) forces exact path
 - Fused AGN photometry produces finite, positive results
 - Gradients through AGN fused path are finite
 - Fused AGN approximation is within reasonable tolerance of exact path
@@ -65,11 +65,11 @@ def parametric_agn_spec():
         redshift=Fixed(0.1),
         agn_model="multicolor_agn",
         agn_log_lbol=Uniform(8.0, 12.0),
-        # agn_frac must be explicitly fixed: AGN params now carry free
+        # agn_lum_ratio must be explicitly fixed: AGN params now carry free
         # Uniform registry defaults (consistent with sfh/dust), so an
-        # unspecified agn_frac would default free and flip mode detection
+        # unspecified agn_lum_ratio would default free and flip mode detection
         # (``_agn_luminosity_mode = lbol_free and not frac_free``) to legacy.
-        agn_frac=Fixed(1.0),
+        agn_lum_ratio=Fixed(1.0),
         agn_alpha=Fixed(-1.0),
         agn_T_torus=Fixed(1000.0),
         agn_torus_frac=Fixed(0.5),
@@ -78,7 +78,7 @@ def parametric_agn_spec():
 
 @pytest.fixture(scope="module")
 def legacy_agn_spec():
-    """Parameters with legacy AGN (agn_frac is free)."""
+    """Parameters with legacy AGN (agn_lum_ratio is free)."""
     return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Fixed(1.5),
@@ -91,7 +91,7 @@ def legacy_agn_spec():
         dust_slope=Fixed(-0.7),
         redshift=Fixed(0.1),
         agn_model="multicolor_agn",
-        agn_frac=Uniform(0.01, 0.5),
+        agn_lum_ratio=Uniform(0.01, 0.5),
         agn_alpha=Fixed(-1.0),
         agn_T_torus=Fixed(1000.0),
     )
@@ -109,7 +109,7 @@ class TestAGNModeDetection:
         assert model._agn_luminosity_mode is True
 
     def test_legacy_mode_detected(self, legacy_agn_spec, synthetic_ssp, simple_filters):
-        """Legacy AGN (agn_frac free) sets _agn_luminosity_mode=False."""
+        """Legacy AGN (agn_lum_ratio free) sets _agn_luminosity_mode=False."""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = SEDModel(legacy_agn_spec, synthetic_ssp, filters=simple_filters)
@@ -271,7 +271,7 @@ class TestAGNFusedVsExact:
             redshift=Fixed(0.1),
             agn_model="multicolor_agn",
             agn_log_lbol=Uniform(8.0, 12.0),  # FREE → _agn_luminosity_mode=True
-            agn_frac=Fixed(1.0),  # fixed so mode stays parametric (see fixture note)
+            agn_lum_ratio=Fixed(1.0),  # fixed so mode stays parametric (see fixture note)
             agn_alpha=Fixed(-1.0),
             agn_T_torus=Fixed(1000.0),
             agn_torus_frac=Fixed(0.5),
@@ -335,7 +335,7 @@ class TestAGNPredictSED:
         lnu_high = agn_fn(
             wave,
             agn_log_lbol=12.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_alpha=-1.0,
             agn_T_torus=1000.0,
             agn_torus_frac=0.5,
@@ -344,7 +344,7 @@ class TestAGNPredictSED:
         lnu_low = agn_fn(
             wave,
             agn_log_lbol=8.0,
-            agn_frac=1.0,
+            agn_lum_ratio=1.0,
             agn_alpha=-1.0,
             agn_T_torus=1000.0,
             agn_torus_frac=0.5,

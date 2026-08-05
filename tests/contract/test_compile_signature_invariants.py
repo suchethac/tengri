@@ -90,7 +90,7 @@ class TestCompileSignatureInvariants:
         # sig is a tuple of (model_sig, fitter_sig)
         _, fitter_sig = sig
 
-        # fitter_sig should have exactly 15 fields:
+        # fitter_sig should have exactly 16 fields:
         # 1. data_type
         # 2. stochastic
         # 3. n_grid
@@ -109,13 +109,17 @@ class TestCompileSignatureInvariants:
         # (11-14 added 2026-07: observation feature channels are baked into
         # the loss closure, so they must key the engine/loss cache — else a
         # joint phot+lines Fitter reuses a photometry-only compiled loss.)
-        # 15. device count
-        # (15 added 2026-07: run(devices=...) bakes sharding constraints into
+        # 15. params_override key (#1329): the per-fit fixed-value override is
+        # baked into the loss closure via fitter._fixed_values, so two fits
+        # differing only by override must compile distinct losses — else fit #2
+        # silently reuses fit #1's baked redshift. None when no override.
+        # 16. device count
+        # (16 added 2026-07: run(devices=...) bakes sharding constraints into
         # the traced engine, so a multi-device run must not be served the
         # cached single-device one — that engine has no constraints and lets
         # the galaxy sharding propagate into the optimizer state.)
-        assert len(fitter_sig) == 15, (
-            f"fitter_sig field count changed from 15 to {len(fitter_sig)}. "
+        assert len(fitter_sig) == 16, (
+            f"fitter_sig field count changed from 16 to {len(fitter_sig)}. "
             "If intentional, update this assertion and the docstring."
         )
 

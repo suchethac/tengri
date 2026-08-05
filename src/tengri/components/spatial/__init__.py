@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Spatial physics blocks: surface-brightness profiles.
 
-See :doc:`docs/dev/forward-model-architecture.md` §3.2 for the
+See :doc:`docs/dev/archive/forward-model-architecture.md` §3.2 for the
 astronomer-facing authoring guide.
 """
 

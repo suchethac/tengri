@@ -63,7 +63,7 @@ try:
         "met_logzsol_0": jnp.asarray(-1.0),
         "met_logzsol_final": jnp.asarray(0.0),
         "agn_log_lbol": jnp.asarray(11.0),
-        "agn_frac": jnp.asarray(0.1),
+        "agn_lum_ratio": jnp.asarray(0.1),
         "dust_tau_bc": jnp.asarray(1.0),
         "dust_tau_diff": jnp.asarray(0.3),
         "dust_slope": jnp.asarray(-0.7),

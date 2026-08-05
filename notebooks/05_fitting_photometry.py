@@ -31,9 +31,9 @@
 #    credible interval means something.
 
 # %%
-import os
+from _setup import FIG_DIR, effective_wavelengths_um, quiet
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+quiet()
 
 import time
 from pathlib import Path
@@ -57,15 +57,11 @@ from tengri import (
     builders,
     cosmology,
     generate_mock,
-    load_ssp_data,
     plot,
 )
-from tengri.inference.fitter import Fitter
 from tengri.utils.conversions import lnu_to_fnu
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 
@@ -76,10 +72,7 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
-ssp_path = Path("../data") / f"{SSP_NAME}.h5"
-if not ssp_path.exists():
-    ssp_path = Path(tengri.download_ssp(SSP_NAME))
-ssp = load_ssp_data(str(ssp_path))
+ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 FILTERS = [
     "galex_fuv",
@@ -125,7 +118,7 @@ sed_model = SEDModel.build(
     stellar={"met_logzsol": Uniform(-1.5, 0.3)},
     redshift=Fixed(0.05),
 )
-forward = ForwardModel.build(sed=sed_model, observation=obs)
+forward = ForwardModel.build(sed=sed_model)
 print(sed_model.summary())
 print(f"\nFree parameters ({sed_model.spec.n_free}): {', '.join(sed_model.spec.free_params)}")
 
@@ -146,36 +139,29 @@ flux_obs = np.asarray(mock["flux_obs"])
 noise = np.asarray(mock["noise"])
 
 phot = obs.photometry
-wave_eff_um = (
-    np.array(
-        [
-            np.trapezoid(w * t, w) / np.trapezoid(t, w)
-            for w, t in zip(phot.filter_waves, phot.filter_trans)
-        ]
-    )
-    / 1e4
-)
+wave_eff_um = effective_wavelengths_um(phot)
 print(f"Mock: {len(flux_obs)} bands, SNR = 20")
 
 # %% [markdown]
-# ## Pre-warm and fit
+# ## Fit
 #
-# `Fitter.prewarm` compiles the sampler stack and runs NUTS window adaptation
-# once; the `run` reuses that cache. We use two parallel chains (via `jax.vmap`)
-# — enough for a genuine cross-chain split-R̂, and the `vmap` memory scales with
-# the chain count, so two keeps the peak well clear of the jetsam threshold on a
-# laptop (see docs/dev/notebook_orchestration_oom.md).
+# `forward.prewarm` compiles the sampler stack and runs NUTS window adaptation
+# once; the subsequent `forward.fit` reuses that compile cache. We use two
+# parallel chains (via `jax.vmap`) — enough for a genuine cross-chain split-R̂,
+# and the `vmap` memory scales with the chain count, so two keeps the peak well
+# clear of the jetsam threshold on a laptop (see docs/dev/notebook_orchestration_oom.md).
 
 # %%
-fitter = Fitter(forward, flux_obs, noise, data_type="photometry")
 t = time.perf_counter()
-fitter.prewarm(method="mcmc_nuts", n_chains=2)
+forward.prewarm(method="mcmc_nuts", n_chains=2)
 print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
 
-map_result = fitter.run(method="map", key=key_fit, n_steps=200)
+map_result = forward.fit(flux_obs, noise, method="map", key=key_fit, n_steps=200)
 
 t = time.perf_counter()
-posterior = fitter.run(
+posterior = forward.fit(
+    flux_obs,
+    noise,
     method="mcmc_nuts",
     key=key_fit,
     n_warmup=600,
@@ -187,7 +173,7 @@ print(f"  NUTS wall (2 chains × 600 = 1200 samples): {time.perf_counter() - t:6
 posterior.summary()
 
 # %% [markdown]
-# ## Convergence diagnostics
+# ## Convergence
 #
 # Before any science: did the chains converge? Split-R̂ should be < 1.01,
 # effective sample size (ESS) a healthy fraction of the 1200 draws, and
@@ -240,7 +226,7 @@ fig_tr.savefig(FIG_DIR / "05_traces.png", dpi=200, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## Derived properties
+# ## Recovery
 #
 # Stellar mass, SFR, sSFR rolled up from the SFH integral, with the input truth
 # alongside the posterior 16/50/84 percentiles.
@@ -277,7 +263,7 @@ for k in DERIVED_KEYS:
     print(f"{k:<14}{tstr:>14}{lo:>14.3e}{med:>14.3e}{hi:>14.3e}")
 
 # %% [markdown]
-# ## Posterior SED + posterior-predictive check
+# ## Posterior SED
 #
 # Posterior spectrum (median + 68% band), truth dashed, observed photometry
 # with error bars, residuals below. The residual panel is the

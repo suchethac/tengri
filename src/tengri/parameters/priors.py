@@ -47,6 +47,12 @@ class Distribution:
     ----------
     bounds : tuple[float, float]
         (lo, hi) — lower and upper bounds on the parameter value.
+    description : str
+        Human-readable summary of the quantity, surfaced by
+        ``describe_parameter`` and ``spec.summary()``. Empty when unset.
+    units : str
+        Physical units of the quantity, e.g. ``"erg/s"``, ``"yr"``,
+        ``"Msun/yr"``. Empty when dimensionless or unset.
 
     Methods
     -------
@@ -92,6 +98,15 @@ class Distribution:
     >>> sample = p1.sample(key)
     >>> log_p = p1.log_prob(sample)
     """
+
+    # Class-level defaults so that *every* distribution answers to
+    # ``.description`` and ``.units``. Before these existed, four of the
+    # seven subclasses raised AttributeError, which is why consumers read
+    # them as ``getattr(prior, "units", "")`` — a fail-open guard whose only
+    # job was to paper over an incomplete base class. Subclasses that accept
+    # the arguments shadow these with instance attributes.
+    description: str = ""
+    units: str = ""
 
     @property
     def is_fixed(self) -> bool:
@@ -734,6 +749,11 @@ class LogUniform(Distribution):
         Lower bound. Must be strictly positive.
     hi : float
         Upper bound. Must be greater than lo.
+    description : str, optional
+        Human-readable summary of the quantity, surfaced by
+        ``describe_parameter`` and ``spec.summary()``.
+    units : str, optional
+        Physical units, e.g. ``"erg/s"``. Empty for dimensionless quantities.
 
     Attributes
     ----------
@@ -795,13 +815,23 @@ class LogUniform(Distribution):
     >>> print(f"log p(1.0): {log_prob:.4f}")
     """
 
-    def __init__(self, lo: float, hi: float, *, default: float | None = None):
+    def __init__(
+        self,
+        lo: float,
+        hi: float,
+        description: str = "",
+        *,
+        units: str = "",
+        default: float | None = None,
+    ):
         if lo <= 0:
             raise ValueError(f"LogUniform requires lo > 0, got {lo}")
         if lo >= hi:
             raise ValueError(f"LogUniform requires lo < hi, got lo={lo}, hi={hi}")
         self._lo = float(lo)
         self._hi = float(hi)
+        self.description = description
+        self.units = units
         self._register_default(default)
 
     @property
@@ -944,6 +974,11 @@ class LogNormal(Distribution):
         Lower truncation bound. Default: 0.0 (ensures θ > 0).
     hi : float, optional
         Upper truncation bound. Default: +∞ (no upper truncation).
+    description : str, optional
+        Human-readable summary of the quantity, surfaced by
+        ``describe_parameter`` and ``spec.summary()``.
+    units : str, optional
+        Physical units, e.g. ``"erg/s"``. Empty for dimensionless quantities.
 
     Attributes
     ----------
@@ -999,7 +1034,9 @@ class LogNormal(Distribution):
         sigma: float = 1.0,
         lo: float = 0.0,
         hi: float = float("inf"),
+        description: str = "",
         *,
+        units: str = "",
         default: float | None = None,
     ):
         if sigma <= 0:
@@ -1008,6 +1045,8 @@ class LogNormal(Distribution):
         self._sigma = float(sigma)
         self._lo = float(lo)
         self._hi = float(hi)
+        self.description = description
+        self.units = units
         # Truncation constants in log space (lo = 0 → log lo = −inf → Φ = 0).
         log_lo = math.log(self._lo) if self._lo > 0 else float("-inf")
         log_hi = math.log(self._hi) if math.isfinite(self._hi) else float("inf")
@@ -1147,8 +1186,17 @@ class LogNormal(Distribution):
         return f"LogNormal({', '.join(parts)})"
 
     def __eq__(self, other) -> bool:
+        # Truncation is part of the prior's identity (#1292). Comparing only
+        # (mu, sigma) reported LogNormal(0, 1, hi=10) == LogNormal(0, 1, hi=1e9)
+        # -- and prior equality is what the builder-vs-dict and to_groups
+        # round-trip contracts use to prove two construction paths agree, so a
+        # blind spot here makes those tests vacuously green.
         return (
-            isinstance(other, LogNormal) and self._mu == other._mu and self._sigma == other._sigma
+            isinstance(other, LogNormal)
+            and self._mu == other._mu
+            and self._sigma == other._sigma
+            and self._lo == other._lo
+            and self._hi == other._hi
         )
 
 
@@ -1177,6 +1225,11 @@ class StudentT(Distribution):
         Lower truncation bound. Default: -∞ (no lower truncation).
     hi : float, optional
         Upper truncation bound. Default: +∞ (no upper truncation).
+    description : str, optional
+        Human-readable summary of the quantity, surfaced by
+        ``describe_parameter`` and ``spec.summary()``.
+    units : str, optional
+        Physical units, e.g. ``"erg/s"``. Empty for dimensionless quantities.
 
     Attributes
     ----------
@@ -1227,7 +1280,9 @@ class StudentT(Distribution):
         df: float = 3.0,
         lo: float = float("-inf"),
         hi: float = float("inf"),
+        description: str = "",
         *,
+        units: str = "",
         default: float | None = None,
     ):
         self._mu = float(mu)
@@ -1235,6 +1290,8 @@ class StudentT(Distribution):
         self._df = float(df)
         self._lo = float(lo)
         self._hi = float(hi)
+        self.description = description
+        self.units = units
         # Quantile machinery: closed forms for df ∈ {1, 2}; otherwise a
         # monotone (F, z) table for interpolation, built once here (the
         # NIFTy interpolation-operator pattern — no scipy dependency).
@@ -1397,6 +1454,20 @@ class StudentT(Distribution):
     def __repr__(self) -> str:
         return f"StudentT(mu={self._mu}, sigma={self._sigma}, df={self._df})"
 
+    def __eq__(self, other) -> bool:
+        # StudentT was the only one of the seven distributions without an
+        # __eq__ (#1292), so it fell back to identity: two Student-t priors
+        # built from the same numbers compared unequal, and Student-t could
+        # never take part in the construction-path equivalence contracts.
+        return (
+            isinstance(other, StudentT)
+            and self._mu == other._mu
+            and self._sigma == other._sigma
+            and self._df == other._df
+            and self._lo == other._lo
+            and self._hi == other._hi
+        )
+
 
 def _laplace_cdf_float(x: float, mu: float, b: float) -> float:
     """Laplace CDF at a Python float; handles ±inf exactly."""
@@ -1426,6 +1497,11 @@ class Laplace(Distribution):
         Lower truncation bound. Default: ``-inf``.
     hi : float, optional
         Upper truncation bound. Default: ``+inf``.
+    description : str, optional
+        Human-readable summary of the quantity, surfaced by
+        ``describe_parameter`` and ``spec.summary()``.
+    units : str, optional
+        Physical units, e.g. ``"erg/s"``. Empty for dimensionless quantities.
 
     Attributes
     ----------
@@ -1468,7 +1544,9 @@ class Laplace(Distribution):
         b: float = 1.0,
         lo: float = float("-inf"),
         hi: float = float("inf"),
+        description: str = "",
         *,
+        units: str = "",
         default: float | None = None,
     ):
         if b <= 0:
@@ -1479,6 +1557,8 @@ class Laplace(Distribution):
         self._b = float(b)
         self._lo = float(lo)
         self._hi = float(hi)
+        self.description = description
+        self.units = units
         self._cdf_lo = _laplace_cdf_float(self._lo, self._mu, self._b)
         self._cdf_hi = _laplace_cdf_float(self._hi, self._mu, self._b)
         self._truncated = self._cdf_lo > 0.0 or self._cdf_hi < 1.0

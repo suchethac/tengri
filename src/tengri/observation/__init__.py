@@ -22,6 +22,7 @@ accessible via direct imports (e.g.,
 
 from tengri.observation import constants, containers, physics
 from tengri.observation.aperture import apply_aperture_correction
+from tengri.observation.data import Data, ValidatedData
 from tengri.observation.eline_catalog import (
     CLOUDY_LINE_NAMES,
     CLOUDY_LINE_WAVELENGTHS,
@@ -73,6 +74,7 @@ __all__ = [
     "SSP_LIBRARY_RESOLUTIONS",
     "STANDARD_INDICES",
     "UPPER_LIMIT",
+    "Data",
     "Instrument",
     "LineFluxData",
     "LineList",
@@ -83,6 +85,7 @@ __all__ = [
     "SpectralIndexData",
     "SpectralIndexDef",
     "Spectroscopy",
+    "ValidatedData",
     "apply_aperture_correction",
     "apply_lsf",
     "apply_wavelength_mask",

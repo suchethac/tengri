@@ -46,24 +46,16 @@
 # [notebook 11](11_catalog_fits.py) for `fit_batch` at catalog scale.
 
 # %%
-import os
+from _setup import FIG_DIR, effective_wavelengths_um, quiet
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+quiet()
 
+# Notebook-specific: the dense-mass NUTS run below deliberately uses
+# dense_mass_matrix=True for convergence; its RAM caveat is discussed in the
+# summary, not repeated here.
 import warnings
 
-# Keep the rendered tutorial clean: silence framework notices that do not change
-# the science shown here. Genuine deprecations in user-facing calls are fixed in
-# the code, not hidden.
-warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
-warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
-warnings.filterwarnings("ignore", message=".*Composable AGN.*")
-# The dense-mass NUTS run below deliberately uses dense_mass_matrix=True for
-# convergence; its RAM caveat is discussed in the summary, not repeated here.
 warnings.filterwarnings("ignore", message=".*dense_mass_matrix.*")
-warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 import time
 from pathlib import Path
@@ -79,6 +71,7 @@ from tengri import (
     FREE,
     FeaturePrecomp,
     Fixed,
+    ForwardModel,
     LineList,
     Observation,
     Photometry,
@@ -86,16 +79,12 @@ from tengri import (
     Uniform,
     WavePrecomp,
     cosmology,
-    load_ssp_data,
     plot,
 )
-from tengri.inference.fitter import Fitter
 from tengri.observation import LineFluxData
 from tengri.utils.conversions import lnu_to_fnu
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 C_POST, C_TRUTH, C_DATA, C_LINE = "#3a76d9", "0.15", "#c3372a", "#2e8b57"
 
@@ -106,15 +95,12 @@ C_POST, C_TRUTH, C_DATA, C_LINE = "#3a76d9", "0.15", "#c3372a", "#2e8b57"
 # optical lines a FastSpecFit spectrum delivers: the [O II] doublet, the Balmer
 # lines, [O III], [N II], and [S II]. The line wavelengths come straight from
 # the built-in `LineList`; the observed fluxes and their errors go into a
-# `LineFluxData`, which the `Observation` carries alongside the photometry. The
-# `Fitter` then fits both channels through one likelihood — no extra wiring.
+# `LineFluxData`, which the `Observation` carries alongside the photometry.
+# `model.fit` then fits both channels through one likelihood — no extra wiring.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"  # bare-stellar SSP (Cue adds the nebular emission)
-ssp_path = Path("../data") / f"{SSP_NAME}.h5"
-if not ssp_path.exists():
-    ssp_path = Path(tengri.download_ssp(SSP_NAME))
-ssp = load_ssp_data(str(ssp_path))
+ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 Z_GAL = 0.1
 FILTERS = ["des_g", "des_r", "des_z", "wise_w1", "wise_w2", "wise_w3", "wise_w4"]
@@ -232,7 +218,7 @@ flux_phot = p_phot + _rng.normal(size=p_phot.shape) * n_phot
 flux_line = p_line + _rng.normal(size=p_line.shape) * n_line
 
 # The observed line fluxes live in the Observation the fit model carries; the
-# observed photometry is passed to the Fitter. This is the public joint-fit API.
+# observed photometry is passed to `model.fit`. This is the public joint-fit API.
 line_data = LineFluxData(
     names=tuple(LINE_NAMES),
     fluxes=jnp.asarray(flux_line),
@@ -274,16 +260,22 @@ MAP_KW = dict(method="map", key=jax.random.PRNGKey(1), n_steps=200)
 
 
 def timed_map(model, label):
-    fitter = Fitter(model, flux_phot, n_phot, data_type="photometry")
-    assert "line_flux_obs" in fitter._data_args, "line likelihood not active"
+    # The line likelihood is active because the Observation carries line_fluxes;
+    # the data passed here is photometry, and the observation says so, so there
+    # is no channel to declare.
+    assert model.observation.line_fluxes is not None, "line likelihood not active"
+    forward = ForwardModel.build(sed=model)
     t0 = time.perf_counter()
-    fitter.run(**MAP_KW)  # first call pays the JIT compile
+    forward.fit(flux_phot, n_phot, **MAP_KW)  # pays the JIT compile
     cold = time.perf_counter() - t0
     t0 = time.perf_counter()
-    post = fitter.run(**MAP_KW)  # a second run re-traces the step -> wall ~= cold
+    # A second fit re-traces the step, so its wall time is ~= the first (see #1350:
+    # each fit currently clears the JAX caches, which is why the compile is not
+    # reused). The number that isolates the physics is post.wall_time_s below.
+    post = forward.fit(flux_phot, n_phot, **MAP_KW)
     warm = time.perf_counter() - t0
     loop = post.wall_time_s  # the compiled optimization loop, compile excluded
-    print(f"  {label:22s} run() wall {warm:5.2f}s   compiled step {loop:5.2f}s")
+    print(f"  {label:22s} fit() wall {warm:5.2f}s   compiled step {loop:5.2f}s")
     return post, cold, warm, loop
 
 
@@ -294,7 +286,7 @@ print(
     f"\n  compiled-step speedup: {loop_e / loop_f:.1f}x   (fast {loop_f * 1e3:.0f} ms vs exact {loop_e * 1e3:.0f} ms of compute)"
 )
 print(
-    f"  run() wall is ~{warm_f:.1f}s on either path — that is per-call JIT compile, not the fit."
+    f"  fit() wall is ~{warm_f:.1f}s on either path — that is per-call JIT compile, not the fit."
 )
 
 # %% [markdown]
@@ -317,7 +309,9 @@ print(
 # %%
 N_WARMUP, N_SAMPLES, N_CHAINS, N_LEAPFROG = 500, 300, 2, 100
 t0 = time.perf_counter()
-posterior = Fitter(model_fast, flux_phot, n_phot, data_type="photometry").run(
+posterior = ForwardModel.build(sed=model_fast).fit(
+    flux_phot,
+    n_phot,
     method="mcmc_hmc",
     key=jax.random.PRNGKey(7),
     n_warmup=N_WARMUP,
@@ -410,15 +404,7 @@ _fixed = model_fast.spec.get_fixed_values()
 draws = [{**_fixed, **{k: jnp.asarray(v[i]) for k, v in posterior.samples.items()}} for i in _sidx]
 
 # Effective wavelength of each band (transmission-weighted), for placing the points.
-wave_eff_um = (
-    np.array(
-        [
-            np.trapezoid(w * t, w) / np.trapezoid(t, w)
-            for w, t in zip(phot_obs.filter_waves, phot_obs.filter_trans)
-        ]
-    )
-    / 1e4
-)
+wave_eff_um = effective_wavelengths_um(phot_obs)
 
 # Model photometry per draw (the band-integrated F_nu the fit is matching).
 phot_draws = np.stack([np.asarray(model_fast.predict_photometry(d)) for d in draws])
@@ -588,7 +574,7 @@ plt.show()
 # %% [markdown]
 # ## Measured times, together
 #
-# Two columns, because they answer different questions. **`run() wall`** is the
+# Two columns, because they answer different questions. **`fit() wall`** is the
 # single-galaxy interactive cost — dominated by the per-call JIT compile, which
 # is why exact and fast are closer here than the compute alone would suggest.
 # **`compiled step`** is the optimization once compiled: the marginal per-galaxy
@@ -596,12 +582,12 @@ plt.show()
 # where the look-up table earns its keep.
 
 # %%
-print(f"{'fit':<34}{'run() wall':>13}{'compiled step':>15}")
+print(f"{'fit':<34}{'fit() wall':>13}{'compiled step':>15}")
 print("-" * 62)
 print(f"{'MAP, exact wave grid':<34}{warm_e:>10.2f} s{loop_e:>12.2f} s")
 print(f"{'MAP, WavePrecomp+FeaturePrecomp':<34}{warm_f:>10.2f} s{loop_f:>12.2f} s")
 print(
-    f"\nCompiled-step speedup: {loop_e / loop_f:.1f}x. The run() wall (~{warm_f:.0f}s) is per-call JIT"
+    f"\nCompiled-step speedup: {loop_e / loop_f:.1f}x. The fit() wall (~{warm_f:.0f}s) is per-call JIT"
 )
 print("compile, not the fit — a catalog amortizes it once with fit_batch and pays only the")
 print("compiled step per galaxy. The FeaturePrecomp line grid is likewise a one-time build")
@@ -614,7 +600,7 @@ print(
 #
 # - A **FastSpecFit-style catalog** — broadband photometry + emission-line
 #   fluxes — is fit through one `Observation` carrying both, with the lines in a
-#   `LineFluxData`. No extra wiring: the `Fitter` picks up the line likelihood.
+#   `LineFluxData`. No extra wiring: the fit picks up the line likelihood.
 # - Model a catalog line flux with **`predict_line_fluxes`** — pure, deblended,
 #   absorption-corrected emission, the same quantity FastSpecFit's `LINE_FLUX`
 #   reports (Gaussian on a continuum-subtracted spectrum). A window-integrated

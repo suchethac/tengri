@@ -5,7 +5,9 @@ Iterates ``_BACKENDS`` and verifies each entry satisfies the
 ``BackendEntry`` contract described in ADR-0010:
 
 - ``name`` matches its registry key.
-- ``tier`` is one of ``"primary"`` / ``"experimental"``.
+- ``tier`` is one of the known tiers in
+  :data:`~tengri.inference._backend_registry.TIERS`
+  (``"primary"`` / ``"experimental"`` / ``"broken"``).
 - ``runner`` is callable.
 - ``requires`` declares only importable packages (or is reported as
   ``missing_dep`` by :func:`~tengri.inference._strategy.resolve_status`).
@@ -29,7 +31,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri.inference._backend_registry import _BACKENDS, BackendEntry, all_backends
+from tengri.inference._backend_registry import _BACKENDS, TIERS, BackendEntry, all_backends
 from tengri.inference._strategy import BackendStatus, resolve_status
 
 # Build the parametrization list at import time so test IDs are
@@ -49,10 +51,11 @@ def test_entry_has_callable_runner(name: str) -> None:
 
 @pytest.mark.parametrize("name", _REGISTERED_NAMES)
 def test_entry_tier_is_known(name: str) -> None:
+    # ``TIERS`` is the registry's own source of truth; asserting against it
+    # (rather than a hardcoded set) means this test cannot go stale the next
+    # time a tier is added — as it did when ``"broken"`` landed (#1287, #1295).
     entry = _BACKENDS[name]
-    assert entry.tier in {"primary", "experimental"}, (
-        f"{name}: tier={entry.tier!r} not in {{primary, experimental}}"
-    )
+    assert entry.tier in TIERS, f"{name}: tier={entry.tier!r} not in {sorted(TIERS)}"
 
 
 @pytest.mark.parametrize("name", _REGISTERED_NAMES)

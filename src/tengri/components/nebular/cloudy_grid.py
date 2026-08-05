@@ -114,8 +114,10 @@ from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
     _interp_index_weight,
+    _qh_bilinear,
     compute_qh,
     render_nebular_lines,
+    sanitize_qh_table,
 )
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
@@ -606,7 +608,7 @@ class CloudyGridBackend:
         # Sanitize: replace Inf/NaN with 0 (can arise from SSP grids
         # with incomplete UV coverage or numerical overflow in the
         # ionizing photon integral).
-        self._qh_table = jnp.where(jnp.isfinite(qh_raw), qh_raw, 0.0)
+        self._qh_table = sanitize_qh_table(qh_raw, backend_name="CloudyGridBackend")
         # Store as JAX arrays so dynamic indexing works inside jax.grad/vmap
         self._qh_log_met = jnp.asarray(ssp_data.ssp_lgmet)
         self._qh_log_age = jnp.asarray(ssp_data.ssp_lg_age_gyr + 9.0)  # log(age/yr)
@@ -646,22 +648,14 @@ class CloudyGridBackend:
         log_age_yr: float,
     ) -> float:
         """Get Q_H at a specific (logZ, logAge) via interpolation."""
-        if self._qh_table is None:
-            return 0.0
-
-        iz, wz = _interp_index_weight(log_z, self._qh_log_met)
-        ia, wa = _interp_index_weight(log_age_yr, self._qh_log_age)
-
-        q00 = self._qh_table[iz, ia]
-        q01 = self._qh_table[iz, ia + 1]
-        q10 = self._qh_table[iz + 1, ia]
-        q11 = self._qh_table[iz + 1, ia + 1]
-
-        q0 = q00 * (1 - wa) + q01 * wa
-        q1 = q10 * (1 - wa) + q11 * wa
-        # Floor to 0: prevents negative/NaN Q_H from metallicity grid
-        # extrapolation when SSP grid doesn't fully cover CLOUDY range.
-        return jnp.maximum(q0 * (1 - wz) + q1 * wz, 0.0)
+        return _qh_bilinear(
+            self._qh_table,
+            self._qh_log_met,
+            self._qh_log_age,
+            log_z,
+            log_age_yr,
+            missing=0.0,
+        )
 
     def _make_interp_fn(
         self,

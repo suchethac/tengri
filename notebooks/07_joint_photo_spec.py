@@ -28,24 +28,9 @@
 # HMC), with one `Observation` carrying both channels.
 
 # %%
-import os
+from _setup import FIG_DIR, HMC_VALIDATED, effective_wavelengths_um, quiet
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
-import warnings
-
-# Keep the rendered tutorial clean: silence framework notices that do not
-# change the science shown here (baked-in nebular, the WavePrecomp blue-band
-# approximation, the intentional Fitter(sed_model, ...) LUT path, and
-# recipe/parameter-provenance notices). Genuine deprecations in user-facing
-# calls are fixed in the code, not hidden.
-warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
-warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
-warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
-warnings.filterwarnings("ignore", message=".*Composable AGN.*")
-warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
-warnings.filterwarnings("ignore", category=RuntimeWarning)
+quiet()
 
 import time
 from pathlib import Path
@@ -59,7 +44,9 @@ import tengri
 from tengri import (
     FIXED,
     FREE,
+    Data,
     Fixed,
+    ForwardModel,
     Observation,
     Photometry,
     SEDModel,
@@ -69,20 +56,16 @@ from tengri import (
     WavePrecomp,
     builders,
     cosmology,
-    load_ssp_data,
     plot,
 )
-from tengri.inference.fitter import Fitter
 from tengri.utils.conversions import lnu_to_fnu
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 C_POST, C_TRUTH, C_DATA, C_SPEC = "#3a76d9", "0.15", "#c3372a", "#d98a3a"
 
 # %% [markdown]
-# ## Observation: photometry + an optical spectrum
+# ## Stellar library and observation
 #
 # Twelve UV–MIR bands (GALEX → WISE) plus an SDSS-like R≈2000 optical spectrum,
 # 3800–9200 Å observed — at z = 0.05 that covers the 4000 Å break, Hβ, the Mgb
@@ -94,10 +77,7 @@ C_POST, C_TRUTH, C_DATA, C_SPEC = "#3a76d9", "0.15", "#c3372a", "#d98a3a"
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
-ssp_path = Path("../data") / f"{SSP_NAME}.h5"
-if not ssp_path.exists():
-    ssp_path = Path(tengri.download_ssp(SSP_NAME))
-ssp = load_ssp_data(str(ssp_path))
+ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 Z_GAL = 0.05
 FILTERS = [
@@ -122,6 +102,15 @@ obs_phot = Observation(photometry=phot_obs)
 obs_joint = Observation(photometry=phot_obs, spectroscopy=spec_obs)
 
 
+# %% [markdown]
+# ## Build the model
+#
+# One builder, called twice: the same physics and the same free parameters
+# against two different observations, so any difference in the posteriors
+# comes from the data and not from the model.
+
+
+# %%
 def build(obs, approx=None):
     return SEDModel.build(
         ssp_data=ssp,
@@ -156,7 +145,7 @@ model_joint = build(obs_joint, approx=SpectrumPrecomp())
 print(f"Free parameters ({model_joint.spec.n_free}): {', '.join(model_joint.spec.free_params)}")
 
 # %% [markdown]
-# ## Mock data
+# ## Mock observation
 #
 # A single truth (metallicity chosen in the interior of the prior, away from
 # the edge), and one self-consistent realization of both channels generated
@@ -183,23 +172,15 @@ _rng = np.random.default_rng(0)
 flux_phot = p_phot + _rng.normal(size=p_phot.shape) * n_phot
 flux_spec = p_spec + _rng.normal(size=p_spec.shape) * n_spec
 
-wave_eff_um = (
-    np.array(
-        [
-            np.trapezoid(w * t, w) / np.trapezoid(t, w)
-            for w, t in zip(phot_obs.filter_waves, phot_obs.filter_trans)
-        ]
-    )
-    / 1e4
-)
+wave_eff_um = effective_wavelengths_um(phot_obs)
 print(f"Truth metallicity log(Z/Zsun) = {float(truth['met_logzsol']):+.2f}")
 print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum (SNR 30/pix)")
 
 # %% [markdown]
-# ## Two fits: photometry-only, then joint
+# ## Fit
 #
-# Both use the same validated HMC recipe (dense mass, n_warmup=1000,
-# n_leapfrog=20) and both run on lookup tables (WavePrecomp for photometry,
+# Both use `HMC_VALIDATED`, the recipe shared across the fitting notebooks
+# (dense mass, n_warmup=1000, n_leapfrog=20), and both run on lookup tables (WavePrecomp for photometry,
 # SpectrumPrecomp's dual LUT for the joint fit). Each fit is a couple of
 # minutes: the recipe does 32,000 gradient evaluations (1600 iterations × 20
 # leapfrog steps), plus a one-time JIT compile of the forward+likelihood
@@ -208,20 +189,12 @@ print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum 
 # with the pixel count, not with the number of free parameters. The two fits
 # run sequentially in one process, per the OOM-orchestration rule.
 
+
 # %%
-HMC = dict(
-    n_warmup=1000,
-    n_samples=600,
-    n_leapfrog_steps=20,
-    dense_mass_matrix=True,
-    target_accept_rate=0.9,
-    key=key_fit,
-)
-
-
-def run(model, data, noise, data_type, label):
+def run(model, data, label):
+    """Fit one model to one Data record and report its convergence."""
     t0 = time.perf_counter()
-    post = Fitter(model, data, noise, data_type=data_type).run("mcmc_hmc", **HMC)
+    post = ForwardModel.build(sed=model).fit(data, key=key_fit, **HMC_VALIDATED)
     rmax = max(float(v) for v in post.rhat().values())
     print(
         f"  {label:12s} {time.perf_counter() - t0:6.0f}s   max R-hat {rmax:.3f}   "
@@ -231,10 +204,12 @@ def run(model, data, noise, data_type, label):
 
 
 print("Fitting (photometry, then joint):")
-post_phot = run(model_phot, flux_phot, n_phot, "photometry", "photometry")
-data_joint = np.concatenate([flux_phot, flux_spec])
-noise_joint = np.concatenate([n_phot, n_spec])
-post_joint = run(model_joint, data_joint, noise_joint, "joint", "joint")
+post_phot = run(model_phot, Data(photometry=(flux_phot, n_phot)), "photometry")
+post_joint = run(
+    model_joint,
+    Data(photometry=(flux_phot, n_phot), spectrum=(flux_spec, n_spec)),
+    "joint",
+)
 
 # %% [markdown]
 # ## Constraint widths: joint vs single-modality
@@ -285,7 +260,7 @@ fig.savefig(FIG_DIR / "07_constraint_widths.png", dpi=200, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## Recovery table
+# ## Recovery
 #
 # Truth vs joint-posterior 16/50/84. With converged chains (R̂ < 1.05) the
 # intervals are trustworthy; the spectrum pulls metallicity and the dust split
@@ -305,7 +280,7 @@ for p in params:
 print(f"\n68% coverage: {n_cov}/{len(params)}")
 
 # %% [markdown]
-# ## Both datasets on one SED
+# ## Posterior SED
 #
 # Observed photometry (labeled by band) and the optical spectrum on a single
 # F_ν axis, joint posterior model SED behind them. The shaded band marks the

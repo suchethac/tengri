@@ -167,7 +167,7 @@ All edge case tests (F1-F4) passed with excellent performance:
 **Test B1 (AGN disc + SKIRTOR)**: 
 - **Result**: JIT=~21s, RAM=~0.2GB, PASSED
 - **Issue Fixed**: Test used invalid params `agn_disc_alpha_ox`, `agn_torus_model`, `agn_torus_tau_v`
-- **Fix Applied**: Updated to `agn_model="kubota_done"`, `agn_frac`, `agn_tau_skirtor`, `agn_oa_skirtor`
+- **Fix Applied**: Updated to `agn_model="kubota_done"`, `agn_lum_ratio`, `agn_tau_skirtor`, `agn_oa_skirtor`
 - **Status**: Parameter validation passing, AGN model working correctly
 
 **Test B2 (qsogen)**: Bug appears fixed (see Finding #3)
@@ -346,7 +346,7 @@ All tested models: <0.2GB RAM (laptop-friendly).
 - Performance thresholds (`PerformanceThresholds` class) clear and documented
 
 **Minor Issues Fixed**:
-- Parameter naming: `agn_disc_alpha_ox` → `agn_frac` (invalid param)
+- Parameter naming: `agn_disc_alpha_ox` → `agn_lum_ratio` (invalid param)
 - Test E1: `result["peak_ram_mb"]` → `result["ram_gb"]` (dict key typo)
 
 ---

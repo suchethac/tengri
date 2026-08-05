@@ -147,9 +147,64 @@ class TengriIOError(TengriError, OSError):
 class AGNDustDoubleCountWarning(UserWarning):
     """Composable AGN and Dale2014 ``dust_frac_agn`` both inject AGN IR.
 
-    The composable AGN (``agn_fracAGN > 0``) and Dale2014's embedded quasar
+    The composable AGN (``agn_ir_frac > 0``) and Dale2014's embedded quasar
     template (``dust_frac_agn > 0``) are two distinct AGN surfaces, both keyed
     off the same stellar ``L_absorbed``. Using both with positive values
     double-counts AGN mid/far-IR (ADR-0018 §5, issue #721). Pick one surface;
     filter this category if the overlap is deliberate.
+    """
+
+
+class WildcardPartialFreeWarning(UserWarning):
+    """``all_params: FREE`` freed only some of the parameters it covered.
+
+    ``FREE`` resolves each parameter to its declared ``free_prior``. A parameter
+    with no ``free_prior`` falls back to its ``prior`` — a ``Fixed`` scalar — and
+    stays pinned. When a group holds both kinds, the wildcard frees one subset
+    and silently leaves the rest frozen, and the fit reports a posterior with
+    that physics held constant (issue #1474).
+
+    A partial result is not always a defect: ``dust_Rv`` is fixed by definition
+    for a Calzetti law, and ``dust_delta`` applies only to the Noll-modified
+    variant. Whether a parameter *should* be freeable is a per-parameter physics
+    question — so this warns rather than raising. Filter this category when the
+    partial free is deliberate.
+
+    See Also
+    --------
+    tengri.config.exceptions.ParameterError
+        Raised instead when the wildcard frees *nothing*, which is never
+        intended.
+    """
+
+
+class LaplaceNotAtModeWarning(UserWarning):
+    """The Laplace expansion point is not a stationary point of the loss.
+
+    ``cov = H^-1`` is a covariance only at a mode. Away from one the Hessian
+    describes the curvature of a *slope*: still symmetric, still positive
+    definite, still invertible, so the fit returns a full sample set with
+    plausible marginals and nothing fails (issue #1537).
+
+    ``run_map`` runs a fixed number of Adam steps with no convergence test, so
+    an under-converged expansion point is the ordinary way this happens. The
+    resulting posterior is typically far too *narrow*, because a point on a
+    steep slope has much higher curvature than the mode it is sliding toward.
+
+    No between-chain statistic can catch it: Laplace draws are i.i.d. from the
+    fitted Gaussian, so R-hat is ~1 and the divergence count is 0 however wrong
+    the Gaussian is. Only the shape is wrong.
+
+    Measured severity is reported as the Newton decrement
+    ``d = 0.5 g^T H^-1 g`` [nats], the loss drop a quadratic model predicts
+    between the expansion point and the true mode. An offset of ``delta``
+    standard deviations along one direction gives ``d = delta^2 / 2``.
+
+    Raise ``n_map_steps``, or pass an already-converged ``init_from``. Filter
+    this category when an off-mode expansion is deliberate.
+
+    See Also
+    --------
+    tengri.inference.backends.laplace.run_laplace
+        Emits this warning; reports ``newton_decrement`` in ``diagnostics``.
     """

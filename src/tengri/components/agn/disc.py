@@ -53,7 +53,7 @@ from tengri.components.agn._phys import (
     ring_area as _ring_area,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight
+from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight, resample_template
 from tengri.utils.interpolation import edges_for_grid as _edges_for_grid
 from tengri.utils.physics_constants import (
     G_GRAV as _G_GRAV,
@@ -72,7 +72,7 @@ from tengri.utils.physics_constants import (
 def powerlaw_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_alpha: float = -1.0,
     agn_T_max: float = 1e5,
     **_kwargs,
@@ -96,7 +96,7 @@ def powerlaw_disc(
         Rest-frame wavelength grid. [Angstrom]
     agn_log_lbol : float
         Total AGN bolometric luminosity. [log10(L_sun)]
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Fraction of bolometric luminosity emitted by this disc component.
         Default: 1.0. [dimensionless, 0–1]
     agn_alpha : float, optional
@@ -161,7 +161,7 @@ def powerlaw_disc(
     integral = jnp.trapezoid(shape[sort_idx], nu[sort_idx])
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
-    l_nu_erg = l_bol_erg * agn_frac * shape / integral_safe
+    l_nu_erg = l_bol_erg * agn_lum_ratio * shape / integral_safe
     return l_nu_erg
 
 
@@ -491,7 +491,7 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
 def multicolor_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_log_mbh: float = 8.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
@@ -514,7 +514,7 @@ def multicolor_disc(
         Rest-frame wavelength grid. [Angstrom]
     agn_log_lbol : float
         Total AGN bolometric luminosity. [log10(L_sun)]
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Fraction of bolometric luminosity emitted by the disc.
         Default: 1.0. [dimensionless, 0–1]
     agn_log_mbh : float, optional
@@ -676,8 +676,8 @@ def multicolor_disc(
     # a CIGALE-like rise below ~100 A; "wien" recovers the bare thin disc.
     l_nu_intrinsic = _apply_euv_tail(wavelength, nu, l_nu_intrinsic, euv_tail)
 
-    # Renormalize to requested L_bol * agn_frac
-    l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac
+    # Renormalize to requested L_bol * agn_lum_ratio
+    l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
     # Sort by ascending frequency before integrating (nu descends when wave ascends).
     # Using jnp.abs() on a descending-x trapezoid is brittle — sort explicitly.
     _nu = _wavelength_to_nu(wavelength)
@@ -1266,7 +1266,7 @@ def compute_l2500(
 def kubota_done_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_log_mbh: float = 8.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
@@ -1325,7 +1325,7 @@ def kubota_done_disc(
     agn_log_lbol : float
         Total AGN bolometric luminosity (all three zones).
         [log10(L_sun)]
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Fraction of bolometric luminosity emitted by the disc system (all zones).
         Default: 1.0. [dimensionless, 0–1]
     agn_log_mbh : float, optional
@@ -1433,7 +1433,7 @@ def kubota_done_disc(
     The reference QSOSED/RELAGN codes use non-differentiable operations
     (root solvers, C implementations). Tengri's JAX reimplementation makes
     key approximations documented in the code (see
-    ``docs/dev/design/agn-kd-model.md``):
+    ``docs/dev/archive/design/agn_kd_model.md``):
 
     - R_hot: 40-step JAX-compatible bisection (exact to ~10^{-12}).
     - Warm zone: precomputed nthcomp templates with (Γ_w, kT_e) interpolation
@@ -1483,7 +1483,7 @@ def kubota_done_disc(
         l_edd,
     )
 
-    l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac
+    l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
 
     l_nu_total, scale = _compute_zone_luminosities(
         nu,
@@ -1513,7 +1513,7 @@ def kubota_done_disc(
 def adaf_disc(
     wavelength,
     agn_log_lbol,
-    agn_frac=1.0,
+    agn_lum_ratio=1.0,
     agn_log_mbh=8.0,
     agn_adaf_beta=0.5,
     agn_adaf_delta=0.1,
@@ -1536,7 +1536,7 @@ def adaf_disc(
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
         log10 of bolometric luminosity [Lsun].
-    agn_frac, agn_log_mbh, agn_adaf_beta, agn_adaf_delta, agn_adaf_alpha
+    agn_lum_ratio, agn_log_mbh, agn_adaf_beta, agn_adaf_delta, agn_adaf_alpha
         Forwarded to :func:`adaf_spectrum` (see there).
 
     Returns
@@ -1549,7 +1549,7 @@ def adaf_disc(
     return adaf_spectrum(
         wavelength,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=agn_frac,
+        agn_lum_ratio=agn_lum_ratio,
         agn_log_mbh=agn_log_mbh,
         agn_adaf_alpha=agn_adaf_alpha,
         agn_adaf_beta=agn_adaf_beta,
@@ -1706,7 +1706,7 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
         point = (agn_log_mbh, agn_log_mdot, agn_astar)
         lnu_template = _interp_nd_triweight(grid_jax, axes, edges, point, scatters=scatters)
         # Interpolate grid wavelength → observation wavelength
-        lnu_interp = jnp.interp(wavelength, wave_grid, lnu_template, left=0.0, right=0.0)
+        lnu_interp = resample_template(wavelength, wave_grid, lnu_template, left=0.0, right=0.0)
         # Inclination scaling from reference cos_inc = 0.5
         return lnu_interp * (2.0 * agn_cos_inc)
 

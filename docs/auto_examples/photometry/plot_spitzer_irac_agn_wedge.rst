@@ -109,7 +109,7 @@ ApJ 748, 142.
     # luminosity alone leaves them unchanged. What actually moves a galaxy
     # across the wedge is the relative AGN-to-host contribution in the
     # mid-IR — that is what we sweep here.
-    def composite_photometry(ssp, agn_frac, redshift):
+    def composite_photometry(ssp, agn_lum_ratio, redshift):
         model = tengri.SEDModel.build(
             ssp_data=ssp,
             observation=tengri.Observation(photometry=obs_irac.photometry),
@@ -130,7 +130,7 @@ ApJ 748, 142.
             agn={
                 "type": "composable",
                 "all_params": tengri.FIXED,
-                "agn_frac": agn_frac,  # 0 = pure host, 1 = AGN-dominated
+                "agn_lum_ratio": agn_lum_ratio,  # 0 = pure host, 1 = AGN-dominated
                 "agn_log_lbol": 12.5,
                 "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": {"type": "skirtor", "all_params": tengri.FIXED},

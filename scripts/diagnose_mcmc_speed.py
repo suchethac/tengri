@@ -86,10 +86,12 @@ rng_key = jax.random.PRNGKey(42)
 init_params = fitter._initialize_unbounded(rng_key)
 init_flat, unravel_fn = ravel_pytree(init_params)
 
+
 # Create log prob function (negative loss)
 def log_prob_flat(position):
     params = unravel_fn(position)
     return -loss_fn(params, data_args)
+
 
 print(f"\nModel configuration:")
 print(f"  Number of free params (D): {len(init_flat)}")
@@ -99,7 +101,7 @@ jax.clear_caches()
 t0 = time.perf_counter()
 log_p = log_prob_flat(init_flat)
 t1 = time.perf_counter()
-print(f"   First call (with JIT): {(t1-t0)*1000:.1f} ms")
+print(f"   First call (with JIT): {(t1 - t0) * 1000:.1f} ms")
 print(f"   Log prob value: {log_p:.2f}")
 
 # Warmup
@@ -109,7 +111,7 @@ for _ in range(3):
 t0 = time.perf_counter()
 log_p = log_prob_flat(init_flat)
 t1 = time.perf_counter()
-print(f"   After warmup: {(t1-t0)*1000:.3f} ms")
+print(f"   After warmup: {(t1 - t0) * 1000:.3f} ms")
 
 print("\n2. Measuring gradient evaluation time...")
 grad_fn = jax.grad(log_prob_flat)
@@ -118,7 +120,7 @@ jax.clear_caches()
 t0 = time.perf_counter()
 grad = grad_fn(init_flat)
 t1 = time.perf_counter()
-print(f"   First call (with JIT): {(t1-t0)*1000:.1f} ms")
+print(f"   First call (with JIT): {(t1 - t0) * 1000:.1f} ms")
 
 # Warmup
 for _ in range(3):
@@ -127,19 +129,19 @@ for _ in range(3):
 t0 = time.perf_counter()
 grad = grad_fn(init_flat)
 t1 = time.perf_counter()
-print(f"   After warmup: {(t1-t0)*1000:.3f} ms")
+print(f"   After warmup: {(t1 - t0) * 1000:.3f} ms")
 print(f"   Gradient norm: {jnp.linalg.norm(grad):.2e}")
 
 print("\n3. Measuring 100 sequential evaluations...")
 t0 = time.perf_counter()
 for i in range(100):
-    theta_i = init_flat + jax.random.normal(
-        jax.random.fold_in(rng_key, i), (len(init_flat),)
-    ) * 0.01
+    theta_i = (
+        init_flat + jax.random.normal(jax.random.fold_in(rng_key, i), (len(init_flat),)) * 0.01
+    )
     _ = log_prob_flat(theta_i)
 t1 = time.perf_counter()
-print(f"   Total time: {(t1-t0)*1000:.1f} ms")
-print(f"   Per evaluation: {(t1-t0)*1000/100:.3f} ms")
+print(f"   Total time: {(t1 - t0) * 1000:.1f} ms")
+print(f"   Per evaluation: {(t1 - t0) * 1000 / 100:.3f} ms")
 
 print("\n4. Estimating NUTS time for 20 warmup + 20 samples...")
 # NUTS typically does ~10-15 gradient evaluations per iteration
@@ -157,5 +159,5 @@ t0 = time.perf_counter()
 for _ in range(10):
     _ = model.predict_rest_sed(theta_dict)
 t1 = time.perf_counter()
-print(f"   10 model.predict_rest_sed() calls: {(t1-t0)*1000:.1f} ms")
-print(f"   Per call: {(t1-t0)*1000/10:.3f} ms")
+print(f"   10 model.predict_rest_sed() calls: {(t1 - t0) * 1000:.1f} ms")
+print(f"   Per call: {(t1 - t0) * 1000 / 10:.3f} ms")

@@ -67,14 +67,29 @@ def data_dirs() -> list[Path]:
     list of pathlib.Path
         In order: ``$TENGRI_DATA_DIR`` (or the deprecated ``$TENGRI_DATA``) if
         set; each ancestor of the working directory with a ``data/``
-        subdirectory; and ``~/tengri/data``. Directories are returned whether or
-        not they exist — callers test the file they want.
+        subdirectory; ``~/tengri/data``; the working directory itself; and the
+        source tree beside the installed package. Directories are returned
+        whether or not they exist — callers test the file they want.
 
     Notes
     -----
     The ancestor walk exists because sphinx-gallery ``chdir``s into each
     script's directory before exec, so a hand-written ``"data/foo.h5"`` would
     otherwise resolve under ``examples/<section>/``.
+
+    The last two groups exist so this function is a superset of the per-module
+    grid locators it replaces (#1431). Those searched
+    ``Path(__file__).resolve().parents[4] / "data/<name>.h5"`` and the bare
+    ``<root>/<name>.h5``, plus the same two relative to the working directory —
+    so the working directory *itself* and the package's own source root are both
+    needed here, not only their ``data/`` subdirectories.
+
+    Package-relative resolution is anchored on this module's location rather
+    than counted in ``parents[N]`` hops. Depth counting has to be re-derived
+    every time a file moves between directory levels: ``dust/emission/`` still
+    carries a legacy ``parents[4]`` alongside its real ``parents[5]`` for
+    exactly that reason. Anchoring here means callers at any depth get the same
+    answer.
     """
     out: list[Path] = []
     env = _env_data_dir()
@@ -82,7 +97,41 @@ def data_dirs() -> list[Path]:
         out.append(env)
     out.extend(parent / "data" for parent in [Path.cwd(), *Path.cwd().parents])
     out.append(Path.home() / "tengri" / "data")
-    return out
+    # Bare working directory: covers a grid file sitting next to the script.
+    out.append(Path.cwd())
+    out.extend(package_data_dirs())
+    # Deduplicate, first occurrence wins so $TENGRI_DATA_DIR keeps precedence.
+    # Running from the repo root makes cwd and the package root coincide, and
+    # the FileNotFoundError from data_path() lists what was searched.
+    seen: set[Path] = set()
+    return [d for d in out if not (d in seen or seen.add(d))]
+
+
+def package_data_dirs() -> list[Path]:
+    """Data directories beside the installed package, independent of the cwd.
+
+    Returns
+    -------
+    list of pathlib.Path
+        ``<source-root>/data`` and the bare ``<source-root>``, where the source
+        root is resolved from this module's own location. For a ``src/`` layout
+        checkout that is the repository root; for an installed wheel it is
+        whatever sits above ``site-packages/tengri`` and simply will not
+        contain the files, which is harmless — callers test the file they want.
+
+    Notes
+    -----
+    This is the cwd-independent half of :func:`data_dirs`. It matters when the
+    process runs from an unrelated working directory: the ancestor walk finds
+    nothing, but a source checkout still has its ``data/`` beside the package.
+
+    Anchored on ``__file__`` of this module (``src/tengri/_data_setup.py``), so
+    the two hops to the source root are fixed no matter which component calls
+    it. That is the property the per-module ``parents[N]`` locators lacked.
+    """
+    pkg_root = Path(__file__).resolve().parent  # <src>/tengri
+    source_root = pkg_root.parent.parent  # <src>/tengri -> <src> -> <root>
+    return [source_root / "data", source_root]
 
 
 def download_dir() -> Path:
@@ -229,23 +278,36 @@ def find_ssp_files() -> list[Path]:
     return out
 
 
-def list_known_ssps() -> dict[str, str]:
-    """Return a dict of known SSP names and their filenames.
+def list_known_ssps():
+    """Return the known SSP names and their filenames.
 
     Returns
     -------
-    dict[str, str]
-        Mapping of short SSP identifier (e.g., ``"fsps_prsc_miles_chabrier"``)
-        to filename (e.g., ``"fsps_prsc_miles_chabrier.h5"``).
+    _RegistryTable
+        One row per SSP: ``{"name": ..., "kind": "ssp", "filename": ...}``.
+        Renders as a table in a notebook.
+
+        This used to return ``dict[str, str]``, one of only two ``list_*``
+        that did (#1285). Use ``.to_dict("filename")`` for the old mapping,
+        or ``.names()`` for just the identifiers. Membership tests
+        (``"name" in ...``) still work, because a row's ``name`` is what
+        ``.names()`` reports — but ``in`` on the table itself checks rows,
+        so prefer ``in ....names()``.
 
     Examples
     --------
     >>> import tengri
-    >>> ssps = tengri.list_known_ssps()
-    >>> "fsps_prsc_miles_chabrier" in ssps
+    >>> "fsps_prsc_miles_chabrier" in tengri.list_known_ssps().names()
     True
     """
-    return _KNOWN_SSPS.copy()
+    from tengri.registry import _RegistryTable
+
+    return _RegistryTable(
+        [
+            {"name": name, "kind": "ssp", "filename": filename}
+            for name, filename in sorted(_KNOWN_SSPS.items())
+        ]
+    )
 
 
 def list_available_ssps() -> list[dict]:
@@ -306,7 +368,11 @@ def list_available_ssps() -> list[dict]:
                 "downloaded": _ssp_file_present(filename),
             }
         )
-    return sorted(out, key=lambda r: (r["family"], r["imf"]))
+    from tengri.registry import _RegistryTable
+
+    # Already list[dict]; wrapping only adds the table repr, so every existing
+    # caller keeps working unchanged (#1285).
+    return _RegistryTable(sorted(out, key=lambda r: (r["family"], r["imf"])))
 
 
 def _ssp_file_present(filename: str) -> bool:
@@ -358,7 +424,7 @@ def _resolve_ssp_filename(name: str) -> str:
         # layer decide rather than refusing something that exists.
         return name
     raise KeyError(
-        f"Unknown SSP name: {name!r}. Known names: {list(list_known_ssps().keys())}. "
+        f"Unknown SSP name: {name!r}. Known names: {list_known_ssps().names()}. "
         f"Pass a bare catalog filename ending in '.h5' to fetch something the "
         f"curated table does not list."
     )

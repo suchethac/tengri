@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.inference._backend_registry import DEFAULT_METHOD
 from tengri.parameters.defaults import UNSET as _UNSET
 
 if TYPE_CHECKING:
@@ -406,6 +407,10 @@ def fit_batch(
 ) -> list:
     """Fit a batch of galaxies from a catalog, one row at a time.
 
+    .. deprecated:: 2026-07
+        Use :class:`Catalog` directly for new code. ``fit_batch`` will be
+        removed in a future release.
+
     Accepts pandas.DataFrame, astropy.table.Table, or list of dicts.
     Supports checkpoint resume via ``output_dir``.
 
@@ -445,6 +450,16 @@ def fit_batch(
     """
     import os
     import time
+    import warnings
+
+    # One-shot deprecation warning
+    warnings.warn(
+        "fit_batch is deprecated; use Catalog instead. "
+        "Catalog provides vectorized fitting and requires explicit flux_unit "
+        "(fit_batch assumed cgs). See #1317, #1316.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     from tengri.forward.sed_model import SEDModel as ModelClass
     from tengri.inference.fitter import Fitter
@@ -479,6 +494,53 @@ def fit_batch(
             f"Got {type(catalog)}"
         )
 
+    # ── Consolidation (#1336): unless per-galaxy checkpointing is requested,
+    # route the whole batch through Catalog — the one fitting code path. Catalog
+    # owns ingestion, unit conversion, and per-galaxy redshift; we unwrap its
+    # CatalogPosterior back to the legacy list-of-Posterior. The output_dir
+    # checkpoint/resume path below keeps the per-row loop (Catalog has no
+    # persistence layer), so every fit_batch feature is preserved.
+    if output_dir is None:
+        from tengri.forward.forward_model import ForwardModel
+        from tengri.inference.catalog import Catalog
+
+        fwd = ForwardModel.build(sed=model)
+        # Forward an explicit approx= (the legacy loop passed it to every Fitter).
+        # "auto" is the default and Catalog/Fitter already resolve it, so only a
+        # non-default value needs applying — dropping it would silently change the
+        # fit's approximation policy.
+        if approx != "auto":
+            fwd = fwd.with_approx(approx)
+        band_names = list(fwd.observation.photometry.names)
+        if len(flux_cols) != len(band_names) or len(err_cols) != len(band_names):
+            raise ValueError(
+                f"flux_cols/err_cols must have one entry per observation band "
+                f"({len(band_names)}); got {len(flux_cols)} flux, {len(err_cols)} err."
+            )
+        # fit_batch's flux_cols/err_cols are POSITIONAL (catalog column names,
+        # mapped to the model's bands in order) — the catalog columns need not be
+        # named after the bands. Rename them to the observation band names so
+        # Catalog can name-match, preserving fit_batch's positional contract.
+        table: dict = {}
+        for band, fcol, ecol in zip(band_names, flux_cols, err_cols):
+            table[band] = np.asarray([float(row[fcol]) for row in rows])
+            table[f"{band}_err"] = np.asarray([float(row[ecol]) for row in rows])
+        if redshift_col is not None:
+            table["_fit_batch_z"] = np.asarray([float(row[redshift_col]) for row in rows])
+        cat = Catalog(
+            fwd,
+            table,
+            flux_unit="cgs_fnu",  # fit_batch always assumed cgs f_nu
+            redshift_col="_fit_batch_z" if redshift_col is not None else None,
+        )
+        fit_key = kwargs.pop("key", None)
+        if fit_key is None:
+            fit_key = jax.random.PRNGKey(0)
+        # Forward verbose so fit_batch(verbose=False) still silences progress
+        # (the engine's per-galaxy "N galaxies done" line honors it).
+        post = cat.fit(method=method, key=fit_key, verbose=verbose, **kwargs)
+        return list(post.posteriors)
+
     if output_dir is not None:
         os.makedirs(output_dir, exist_ok=True)
 
@@ -486,6 +548,17 @@ def fit_batch(
     results: list = []
     n_skipped = 0
     t0 = time.time()
+
+    # Warn loudly once if redshift_col is set but catalog_z_range is not
+    if redshift_col is not None and getattr(model, "_catalog_z_range", None) is None:
+        warnings.warn(
+            "fit_batch(redshift_col=...) without WavePrecomp(catalog_z_range=...) "
+            "recompiles the forward model for EVERY row (one compile per galaxy). "
+            "Build the model with approx=WavePrecomp(catalog_z_range=(zmin, zmax)) "
+            "to compile once. See #1316.",
+            UserWarning,
+            stacklevel=2,
+        )
 
     for i, row in enumerate(rows):
         gal_id = str(row[id_col]) if id_col is not None else str(i)
@@ -684,7 +757,7 @@ def catalog_summary(
 def fit_population(
     model: SEDModel,
     observations_list: list,
-    method: str = "vi",
+    method: str = DEFAULT_METHOD,
     population_prior: dict | None = None,
     **kwargs,
 ):
@@ -863,11 +936,11 @@ def build_model_from_config(
         expanded.setdefault("redshift", float(redshift))
 
     # --- Inject AGN parametric mode if AGN enabled ---
-    # Default to agn_log_lbol (parametric) instead of agn_frac.
+    # Default to agn_log_lbol (parametric) instead of agn_lum_ratio.
     # Parametric mode is compatible with all kernel paths (hybrid,
     # compositional) because L_bol is specified directly, avoiding
     # the circular dependency L_AGN = f × (L_stellar + L_AGN).
-    if agn is not None and "agn_frac" not in expanded and "agn_log_lbol" not in expanded:
+    if agn is not None and "agn_lum_ratio" not in expanded and "agn_log_lbol" not in expanded:
         expanded["agn_log_lbol"] = Uniform(8.0, 12.0)
 
     # --- Build Parameters ---
@@ -997,6 +1070,43 @@ def fit_model(
     if method is _UNSET:
         method = get_inference_defaults().get("method", "vi")
 
+    # --- A Data record goes to the canonical surface, not through here (#1366) ---
+    #
+    # ``SEDModel.fit`` is documented as sugar for
+    # ``ForwardModel.build(sed=self).fit(...)``, but only ``ForwardModel.fit``
+    # knew how to unpack a ``Data``. A record therefore fell through to the
+    # positional-argument check below and the user got a message about
+    # ``(flux, noise)`` tuples that never mentioned ``Data`` -- implying the call
+    # shape was wrong rather than that this surface did not support the type.
+    # Everything ``Data`` carries (censoring, line fluxes, joint
+    # photometry+spectrum) was unreachable from the one-liner we teach.
+    #
+    # Forwarding rather than re-implementing is deliberate: ``Data`` unpacking is
+    # ~70 lines that ends by rebuilding the Observation for line fluxes, and a
+    # second copy would drift. One record type, one validation seam
+    # (``Data.validate_against``), reached from both verbs.
+    from tengri.observation.data import Data as _Data
+
+    if isinstance(data, _Data):
+        from tengri.forward.forward_model import ForwardModel
+
+        if photometry is not None or spectrum is not None:
+            raise TypeError(
+                "fit(Data, photometry=... / spectrum=...) is ambiguous: the Data "
+                "record already carries every channel. Pass the record alone."
+            )
+        if data_type is not None:
+            # ForwardModel.fit has no data_type parameter, so forwarding it would
+            # drop it silently. It is redundant anyway -- which channels exist is
+            # already determined by which fields the record carries.
+            raise TypeError(
+                "fit(Data, data_type=...) is redundant: the Data record already "
+                "declares its channels (photometry=, spectrum=, lines=). Drop "
+                "data_type."
+            )
+        forward = ForwardModel.build(sed=model)
+        return forward.fit(data, noise, method=method, approx=approx, **kwargs)
+
     # --- Resolve data arrays ---
     if photometry is not None or spectrum is not None:
         if photometry is not None and spectrum is not None:
@@ -1027,7 +1137,33 @@ def fit_model(
             data_type = "photometry"
 
     # --- Build fitter ---
-    fitter = Fitter(model, data, noise, data_type=data_type, approx=approx)
+    # When SEDModel.fit() delegates to fit_model(), silence the Fitter(sed_model)
+    # deprecation warning since SEDModel.fit is now un-deprecated sugar (#1322).
+    import warnings
+
+    from tengri.inference.fitter import split_fitter_kwargs
+
+    # ``params`` is the per-fit Fixed-value override (#1329); constructor-owned
+    # kwargs (calibration_marginalize, likelihood, ...) go to Fitter(...) and
+    # the rest to run() — spec §7's fit-time flags (#1378).
+    params_override = kwargs.pop("params", None)
+    ctor_kwargs, kwargs = split_fitter_kwargs(kwargs)
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Fitter\\(sed_model.*",
+            category=DeprecationWarning,
+        )
+        fitter = Fitter(
+            model,
+            data,
+            noise,
+            data_type=data_type,
+            approx=approx,
+            params_override=params_override,
+            **ctor_kwargs,
+        )
     model.fitter_ = fitter
 
     # --- Optional MAP warm start ---

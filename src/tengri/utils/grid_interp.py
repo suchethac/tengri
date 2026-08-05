@@ -35,6 +35,7 @@ __all__ = [
     "PreintegratedLines",
     "interp_nd_pchip",
     "interp_nd_triweight",
+    "pchip_interp_1d",
     "preintegrate_grid",
     "preintegrate_lines",
     "slice_fixed_axes",
@@ -760,12 +761,18 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     return jnp.concatenate([first[None], interior, last[None]], axis=0)
 
 
-def _pchip_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq) -> jnp.ndarray:
-    """Evaluate the monotone-cubic interpolant at scalar ``xq`` over axis 0."""
+def _pchip_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq, *, extrapolate: bool = False):
+    """Evaluate the monotone-cubic interpolant at ``xq`` over axis 0.
+
+    ``extrapolate=False`` (the default, and what the tensor-product path uses)
+    clamps queries to ``[x[0], x[-1]]``, so outside the table the value is held
+    at the boundary node. ``extrapolate=True`` lets the edge cubic continue past
+    the end nodes, which is what the ProSpect ``spline`` SFH relies on.
+    """
     n = x.shape[0]
     slopes = _pchip_slopes(x, y)
 
-    xq_c = jnp.clip(xq, x[0], x[-1])
+    xq_c = xq if extrapolate else jnp.clip(xq, x[0], x[-1])
     i = jnp.clip(jnp.searchsorted(x, xq_c) - 1, 0, n - 2)
     xi = x[i]
     h = x[i + 1] - xi
@@ -799,6 +806,75 @@ def _linear_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq) -> jnp.ndarray:
 
 #: Per-axis evaluators selectable via ``interp_nd_pchip(..., kinds=...)``.
 _EVAL_AXIS0 = {"pchip": _pchip_eval_axis0, "linear": _linear_eval_axis0}
+
+
+def pchip_interp_1d(
+    x: jnp.ndarray,
+    y: jnp.ndarray,
+    xq: jnp.ndarray,
+    *,
+    extrapolate: bool = False,
+) -> jnp.ndarray:
+    """Monotone piecewise-cubic (PCHIP) interpolation of a 1-D table.
+
+    The single 1-D PCHIP entry point for the package. Shape-preserving tangents
+    follow Fritsch & Carlson (1980) [1]_ with SciPy's boundary rule, so the
+    result matches :class:`scipy.interpolate.PchipInterpolator` to round-off,
+    passes exactly through every node, and never overshoots on monotone data.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Strictly ascending node coordinates [any consistent unit].
+    y : array_like, shape (n,)
+        Node values [any unit].
+    xq : array_like, shape (m,)
+        Query coordinates, same unit as ``x``. Need not be sorted.
+    extrapolate : bool, optional
+        If ``False`` (default), queries outside ``[x[0], x[-1]]`` are clamped to
+        the boundary node value. If ``True``, the edge cubic continues past the
+        end nodes.
+
+    Returns
+    -------
+    ndarray, shape (m,)
+        Interpolated values [same unit as ``y``].
+
+    Notes
+    -----
+    **JIT/grad/vmap compatible**: yes. Interior tangents are the *weighted*
+    harmonic mean of the two bracketing secants,
+
+    .. math::
+
+        \\frac{w_0 + w_1}{w_0/\\delta_0 + w_1/\\delta_1}, \\quad
+        w_0 = 2h_1 + h_0, \\quad w_1 = h_1 + 2h_0,
+
+    where :math:`h_i` are the interval widths and :math:`\\delta_i` the secant
+    slopes. The weights matter only on a **non-uniform** grid — dropping them
+    reduces to the unweighted harmonic mean, which is a silent error wherever
+    the nodes are not equally spaced.
+
+    The division inputs are gated on the same monotonicity condition as the
+    output (the "double ``where``" pattern). Gating only the output lets the
+    denominator pass through zero on non-monotonic data, and the discarded
+    ``inf`` then forms ``0 * inf = NaN`` in the reverse pass.
+
+    References
+    ----------
+    .. [1] F. N. Fritsch and R. E. Carlson, "Monotone Piecewise Cubic
+       Interpolation," SIAM J. Numer. Anal., 17(2), 238-246 (1980).
+       https://doi.org/10.1137/0717021
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> x = jnp.array([0.0, 1.0, 2.0, 3.0])
+    >>> y = jnp.array([0.0, 1.0, 3.0, 6.0])
+    >>> pchip_interp_1d(x, y, jnp.array([0.0, 1.5, 3.0]))
+    Array([0.        , 1.86666667, 6.        ], dtype=float64)
+    """
+    return _pchip_eval_axis0(x, y, xq, extrapolate=extrapolate)
 
 
 def interp_nd_pchip(
@@ -881,6 +957,160 @@ def interp_nd_pchip(
     for ax, p, kind in zip(axes, point, kinds, strict=True):
         reduced = _EVAL_AXIS0[kind](ax, reduced, p)
     return reduced
+
+
+def resample_template(
+    wave_out: jnp.ndarray,
+    wave_in: jnp.ndarray,
+    flux_in: jnp.ndarray,
+    *,
+    left: float = 0.0,
+    right: float = 0.0,
+    log_flux: bool = True,
+) -> jnp.ndarray:
+    """Resample a tabulated template onto a wavelength grid, in log space.
+
+    Interpolates linearly in :math:`\\log \\lambda` and (by default) in
+    :math:`\\log F`, i.e. a power law between adjacent nodes:
+
+    .. math::
+
+        F(\\lambda) = F_i \\left(\\frac{\\lambda}{\\lambda_i}\\right)^{s_i},
+        \\qquad
+        s_i = \\frac{\\ln(F_{i+1}/F_i)}{\\ln(\\lambda_{i+1}/\\lambda_i)}
+
+    where :math:`\\lambda` is wavelength [Angstrom], :math:`F` the tabulated
+    quantity (any units; returned unchanged), and :math:`s_i` the local
+    log-log slope [dimensionless].
+
+    Template libraries are stored on coarse, log-spaced wavelength grids and
+    evaluated on a much finer model grid — SKIRTOR v3 is 136 points
+    (:math:`R \\sim 7`) against model grids oversampling it ~150x. SED tails
+    (Rayleigh-Jeans, modified blackbody, synchrotron) are power laws, which
+    this form reproduces exactly at any sampling density. Interpolating
+    linearly in linear :math:`\\lambda` instead lays a straight chord across a
+    convex curve, so it overestimates one-sidedly; that bias reaches 3.3 % in
+    the 70 and 160 micron bands for SKIRTOR v3.
+
+    Parameters
+    ----------
+    wave_out : array_like, shape (n_out,)
+        Query wavelengths [Angstrom]. Need not be sorted.
+    wave_in : array_like, shape (n_in,)
+        Native template wavelengths [Angstrom], strictly ascending.
+    flux_in : array_like, shape (n_in,)
+        Tabulated values at ``wave_in`` (any units).
+    left, right : float, optional
+        Values returned below ``wave_in[0]`` and above ``wave_in[-1]``.
+        Default 0.0 for both, matching an SED template that has no support
+        outside its tabulated range. Pass 1.0 for a multiplicative factor.
+    log_flux : bool, optional
+        Interpolate in log flux (default True). Set False for signed
+        quantities, where the log is undefined; log wavelength is still used.
+
+    Returns
+    -------
+    ndarray, shape (n_out,)
+        Resampled values, in the units of ``flux_in``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp`` ops with gathers on traced indices.
+
+    **Gradient-safe**: yes. Intervals with a non-positive endpoint fall back to
+    linear-in-flux, gated with the double-``where`` pattern so the discarded
+    ``log`` branch never forms ``0 * inf`` in the VJP.
+
+    Exact at the native nodes to floating-point precision, and never overshoots
+    the two bracketing node values.
+    """
+    n = wave_in.shape[0]
+    lx = jnp.log(wave_in)
+    lxq = jnp.log(wave_out)
+
+    i = jnp.clip(jnp.searchsorted(lx, lxq) - 1, 0, n - 2)
+    x0, x1 = lx[i], lx[i + 1]
+    y0, y1 = flux_in[i], flux_in[i + 1]
+
+    h = x1 - x0
+    t = jnp.clip((lxq - x0) / jnp.where(h > 0.0, h, 1.0), 0.0, 1.0)
+
+    linear = y0 + t * (y1 - y0)
+    if log_flux:
+        # Gate the log INPUTS on the same condition as the output (double-where):
+        # feeding a non-positive endpoint to log() yields -inf, and the outer
+        # where() would then form 0 * inf = NaN in the reverse pass.
+        both_pos = (y0 > 0.0) & (y1 > 0.0)
+        y0_safe = jnp.where(both_pos, y0, 1.0)
+        y1_safe = jnp.where(both_pos, y1, 1.0)
+        ly0 = jnp.log(y0_safe)
+        out = jnp.where(both_pos, jnp.exp(ly0 + t * (jnp.log(y1_safe) - ly0)), linear)
+    else:
+        out = linear
+
+    out = jnp.where(wave_out < wave_in[0], left, out)
+    return jnp.where(wave_out > wave_in[-1], right, out)
+
+
+def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
+    """Integrate ``y`` over ``x`` treating each segment as a power law.
+
+    The integral of the interpolant :func:`resample_template` builds, so a
+    template normalized with this function still integrates to the same value
+    after resampling. Over one segment, with
+    :math:`s = \\ln(y_1/y_0) / \\ln(x_1/x_0)`:
+
+    .. math::
+
+        \\int_{x_0}^{x_1} y_0 (x/x_0)^{s}\\, dx
+        = x_0 y_0 \\, a \\, \\frac{e^{u} - 1}{u},
+        \\qquad a = \\ln\\frac{x_1}{x_0}, \\quad u = a + \\ln\\frac{y_1}{y_0}
+
+    Written with ``expm1(u)/u`` rather than the textbook
+    :math:`(x_1 y_1 - x_0 y_0)/(s+1)` because that form is 0/0 at
+    :math:`s = -1` — a real case, since :math:`\\nu F_\\nu` flat is exactly
+    :math:`s = -1`.
+
+    Parameters
+    ----------
+    x : array_like, shape (n,)
+        Monotonic, strictly positive abscissa (wavelength [Angstrom] or
+        frequency [Hz]). Descending ``x`` returns a negative integral, matching
+        ``jnp.trapezoid``, so existing ``-trapezoid(lnu, nu)`` call sites keep
+        their sign convention.
+    y : array_like, shape (n,)
+        Values at ``x`` (any units).
+
+    Returns
+    -------
+    ndarray, shape ()
+        The integral, in units of ``x`` times ``y``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    **Gradient-safe**: yes — segments with a non-positive endpoint fall back to
+    the trapezoid rule under a double-``where``, so the discarded ``log``
+    branch cannot form ``0 * inf`` in the VJP.
+    """
+    x0, x1 = x[:-1], x[1:]
+    y0, y1 = y[:-1], y[1:]
+
+    positive = (y0 > 0.0) & (y1 > 0.0)
+    y0_safe = jnp.where(positive, y0, 1.0)
+    y1_safe = jnp.where(positive, y1, 1.0)
+
+    a = jnp.log(x1 / x0)
+    u = a + jnp.log(y1_safe) - jnp.log(y0_safe)
+    # expm1(u)/u, continued to its finite limit 1 + u/2 as u -> 0.
+    small = jnp.abs(u) < 1e-7
+    u_safe = jnp.where(small, 1.0, u)
+    ratio = jnp.where(small, 1.0 + 0.5 * u, jnp.expm1(u_safe) / u_safe)
+
+    power_law = x0 * y0_safe * a * ratio
+    trapezoid = 0.5 * (y0 + y1) * (x1 - x0)
+    return jnp.sum(jnp.where(positive, power_law, trapezoid))
 
 
 def slice_fixed_axes(

@@ -93,7 +93,7 @@ from __future__ import annotations
 import difflib
 import warnings
 
-from tengri.config.exceptions import ParameterError
+from tengri.config.exceptions import ParameterError, WildcardPartialFreeWarning
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Distribution, Fixed
@@ -137,8 +137,9 @@ def _expand_free(param_name: str, registry_default: Distribution) -> Distributio
     when asked to be free, normally the same range ``bound_check`` enforces.
     When it does, ``FREE`` genuinely frees. When it does not, this returns the
     Fixed default unchanged and
-    :func:`_check_wildcard_freed_something` refuses the request loudly rather
-    than pretending it worked.
+    :func:`_check_wildcard_freed_something` says so rather than pretending it
+    worked — refusing outright when the group freed nothing, and warning with
+    :class:`WildcardPartialFreeWarning` when it freed only a subset.
 
     Parameters
     ----------
@@ -311,7 +312,7 @@ _LAZY_DUST_EMISSION_TYPES = frozenset(
         "dl07_tabulated",
         # AGNfitter-rX DH02_CE01 legacy cold-dust library: an engine-only
         # tabulated model registered lazily in DUST_EMISSION_MODELS (no
-        # SEDModelComponent port), so it is not discovered via the _REGISTRY
+        # SEDModelComponent), so it is not discovered via the _REGISTRY
         # scan and must be declared here to be an accepted dust.emission type.
         "dh02_ce01",
     }
@@ -390,14 +391,39 @@ _IGM_TYPE_ALIASES = {
 
 
 def _valid_radio_types() -> frozenset[str]:
-    """Derive accepted ``radio.type`` values from :data:`RADIO_MODELS`."""
-    from tengri.components.radio import RADIO_MODELS
+    """Derive accepted ``radio={'type': ...}`` values from :data:`RADIO_MODELS`
+    and SEDModelComponent radio variants.
 
-    return frozenset(RADIO_MODELS.keys())
+    RADIO_MODELS contains the legacy ``radio={'type': 'condon92'|'none'}``
+    path; SEDModelComponent models like ``radio_powerlaw`` and ``radio_dpl``
+    are also valid ``type`` values and must be discoverable to users.
+    Both derive from the registry so the menu and the builder cannot drift
+    (the failure mode behind #1120).
+    """
+    from tengri.components.radio import RADIO_MODELS
+    from tengri.forward.component_factory import _REGISTRY
+
+    # Legacy function-based models: 'condon92', 'none'
+    valid_types = set(RADIO_MODELS.keys())
+
+    # SEDModelComponent models: 'radio_powerlaw', 'radio_dpl'
+    # Filter for components that start with 'radio_' to avoid including the
+    # main 'radio' dispatcher component
+    radio_component_models = {name for name in _REGISTRY if name.startswith("radio_")}
+    valid_types.update(radio_component_models)
+
+    return frozenset(valid_types)
 
 
 def _valid_xray_types() -> frozenset[str]:
-    """Derive accepted ``xray.type`` values from :data:`XRAY_MODELS`.
+    """Derive accepted ``xray={'type': ...}`` values from :data:`XRAY_MODELS`
+    and SEDModelComponent X-ray variants.
+
+    XRAY_MODELS contains the function-based models (``simple``, ``lopez24``,
+    ``yang20`` alias, ``none`` disable). SEDModelComponent models like
+    ``xray_aird`` and ``agn_xray_corona`` are also valid ``type`` values and
+    must be discoverable to users. Both derive from the registry so the menu
+    and the builder cannot drift (the failure mode behind #1120).
 
     ``"yang20"`` is registered in :data:`XRAY_MODELS` as an alias of
     ``"simple"``: tengri's X-ray component already implements the
@@ -406,8 +432,18 @@ def _valid_xray_types() -> frozenset[str]:
     missing. See ``components/xray/xray.py`` for the formulas.
     """
     from tengri.components.xray import XRAY_MODELS
+    from tengri.forward.component_factory import _REGISTRY
 
-    return frozenset(XRAY_MODELS.keys())
+    # Function-based models: 'none', 'simple', 'yang20', 'lopez24'
+    valid_types = set(XRAY_MODELS.keys())
+
+    # SEDModelComponent models: 'xray_aird', 'agn_xray_corona'
+    # Filter for components that contain 'xray_' to include both xray-prefixed
+    # and agn_xray components
+    xray_component_models = {name for name in _REGISTRY if "xray_" in name}
+    valid_types.update(xray_component_models)
+
+    return frozenset(valid_types)
 
 
 def _valid_dust_laws() -> frozenset[str]:
@@ -478,7 +514,7 @@ _VALID_AGN_ATTEN_TYPES = _agn_block_types("attenuation")
 #: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)
 _AGN_PARTITION = {
     # Shared params (no sub-block prefix)
-    "agn_frac": "agn",
+    "agn_lum_ratio": "agn",
     "agn_log_lbol": "agn",
     "agn_alpha": "agn",
     "agn_log_mbh": "agn",
@@ -884,7 +920,9 @@ def parse_groups(**kwargs) -> Parameters:
     # Runs after key validation so a typo is reported before this, which is
     # the more fundamental error.
     if not allow_empty_wildcard:
-        _check_wildcard_freed_something(wildcard_free_outcome)
+        _check_wildcard_freed_something(
+            _narrow_outcome_to_selected_component(wildcard_free_outcome, structural_params)
+        )
 
     # ── Construct final Parameters ────────────────────────────────────
 
@@ -899,16 +937,142 @@ def parse_groups(**kwargs) -> Parameters:
     return final_params
 
 
+#: Sub-block group name -> the ``structural_params`` attribute naming the
+#: component selected for it. Only groups listed here are narrowed; add an
+#: entry when another sub-block's parameter partition is wider than any one
+#: component's declarations.
+_SUBBLOCK_COMPONENT_ATTR: dict[str, str] = {"dust.emission": "dust_emission"}
+
+
+def _declared_param_names(component_type: str) -> frozenset[str] | None:
+    """Prefixed parameter names a registered component declares.
+
+    Reads the class-level ``_priors`` that ``SEDModelComponent.__init_subclass__``
+    populates, so no instance is built.
+
+    Parameters
+    ----------
+    component_type : str
+        Registry key, e.g. ``"dale2014"``.
+
+    Returns
+    -------
+    frozenset of str or None
+        Prefixed names (``dust_alpha_dale``, ...), or ``None`` when the type is
+        not a registered component or declares nothing — the caller then leaves
+        that group unnarrowed rather than guessing.
+    """
+    from tengri.forward.component_factory import _REGISTRY
+
+    cls = _REGISTRY.get(component_type)
+    priors = getattr(cls, "_priors", None)
+    if not priors:
+        return None
+    prefix = getattr(cls, "parameter_prefix", "")
+    return frozenset(prefix + name for name in priors)
+
+
+def _narrow_outcome_to_selected_component(
+    outcome: dict[str, list[tuple[str, bool]]],
+    structural_params,
+) -> dict[str, list[tuple[str, bool]]]:
+    """Restrict a sub-block's wildcard outcome to its selected component's params.
+
+    A sub-block's parameter partition spans every backend it can dispatch to —
+    ``dust.emission`` covers 22 names across nine engines. Seven of those carry
+    distribution registry defaults and so are freed by ``'*': FREE`` whichever
+    engine is selected, which makes the group-level ``any(freed)`` test in
+    :func:`_check_wildcard_freed_something` unfalsifiable: it cannot fire even
+    when the selected engine got none of *its* parameters freed (#1482).
+
+    ``dale2014`` declares ``dust_alpha_dale`` and ``dust_frac_agn``; both default
+    to ``Fixed`` scalars, so ``emission={'type':'dale2014','*':FREE}`` freed seven
+    parameters belonging to THEMIS, DL07/DL14, MBB and Schreiber, and none the
+    engine reads. Narrowing to the declared set restores the guard.
+
+    Parameters
+    ----------
+    outcome : dict
+        Group name -> list of ``(param_name, was_freed)``.
+    structural_params : StructuralParams
+        Carries the selected component per sub-block.
+
+    Returns
+    -------
+    dict
+        ``outcome`` with narrowed sub-block entries; other groups pass through.
+    """
+    narrowed = dict(outcome)
+    for group, attr in _SUBBLOCK_COMPONENT_ATTR.items():
+        if group not in narrowed:
+            continue
+        component_type = getattr(structural_params, attr, None)
+        if component_type is None:
+            continue
+        declared = _declared_param_names(component_type)
+        if declared is None:
+            continue  # unregistered or declaration-free: keep the old behavior
+        freed = {name for name, was_freed in narrowed[group] if was_freed}
+        # Rebuild from the declared set, not by filtering: a declared parameter
+        # the wildcard never covered must count as not-freed, or dropping it
+        # would empty the list and skip the check entirely.
+        narrowed[group] = [(name, name in freed) for name in sorted(declared)]
+    return narrowed
+
+
+def _format_stuck(group: str, stuck: list[str]) -> tuple[str, str, str]:
+    """Render the pinned-parameter list and a short-form example for a group.
+
+    Parameters
+    ----------
+    group : str
+        Group name, possibly dotted for a sub-block (``'agn.torus'``).
+    stuck : list of str
+        Fully-prefixed names of the parameters that stayed ``Fixed``.
+
+    Returns
+    -------
+    shown : str
+        Comma-joined names, truncated with a ``(+N more)`` tail.
+    top : str
+        Top-level group name — what the caller writes as the kwarg.
+    short : str
+        First stuck name with its group prefix stripped — the short form the
+        caller writes inside the group dict.
+    """
+    # Show enough that the caller can see what they meant to free without
+    # scrolling; groups run to ~22 params at the widest (dust.emission).
+    _LIMIT = 12
+    shown = ", ".join(stuck[:_LIMIT]) + (
+        f", ... (+{len(stuck) - _LIMIT} more)" if len(stuck) > _LIMIT else ""
+    )
+    top = group.split(".")[0]
+    prefix = f"{top}_"
+    example = stuck[0]
+    short = example[len(prefix) :] if example.startswith(prefix) else example
+    return shown, top, short
+
+
 def _check_wildcard_freed_something(
     outcome: dict[str, list[tuple[str, bool]]],
 ) -> None:
-    """Raise if an ``all_params: FREE`` wildcard freed no parameter at all.
+    """Adjudicate what an ``all_params: FREE`` wildcard actually freed.
 
-    ``FREE`` means "use the registry default", and most registry defaults are
-    ``Fixed`` scalars — so the wildcard can resolve cleanly while leaving every
-    parameter in the group pinned. The fit then runs to completion with that
-    physics frozen, which is indistinguishable from success at the call site.
-    Freeing nothing is never what the caller asked for, so refuse it.
+    ``FREE`` resolves each parameter to its declared ``free_prior``. A parameter
+    with no ``free_prior`` falls back to its ``prior`` — a ``Fixed`` scalar — and
+    stays pinned. A group can therefore hold both kinds, and the wildcard frees
+    one subset while leaving the rest frozen. The fit then runs to completion
+    with that physics constant, which is indistinguishable from success at the
+    call site.
+
+    Three outcomes, three responses:
+
+    * freed everything — silent, the request was honored;
+    * freed nothing — :class:`ParameterError`, since that is never intended;
+    * freed some — :class:`WildcardPartialFreeWarning` naming what stayed pinned
+      (issue #1474). A warning rather than a refusal because a partial free is
+      sometimes correct: ``dust_Rv`` is fixed by definition under a Calzetti law,
+      and six of the ten shipped recipes free a strict subset today.
 
     Parameters
     ----------
@@ -921,21 +1085,37 @@ def _check_wildcard_freed_something(
     ------
     ParameterError
         If any group's wildcard freed zero of the parameters it covered.
+
+    Warns
+    -----
+    WildcardPartialFreeWarning
+        If a group's wildcard freed some, but not all, of them.
     """
     for group, entries in sorted(outcome.items()):
-        if not entries or any(freed for _, freed in entries):
+        if not entries:
             continue
-        stuck = [name for name, _ in entries]
-        # Show enough that the caller can see what they meant to free without
-        # scrolling; groups run to ~22 params at the widest (dust.emission).
-        _LIMIT = 12
-        shown = ", ".join(stuck[:_LIMIT]) + (
-            f", ... (+{len(stuck) - _LIMIT} more)" if len(stuck) > _LIMIT else ""
-        )
-        # Short form is what the caller writes inside the group dict.
-        prefix = f"{group.split('.')[0]}_"
-        example = stuck[0]
-        short = example[len(prefix) :] if example.startswith(prefix) else example
+        stuck = [name for name, freed in entries if not freed]
+        if not stuck:
+            # Freed everything it covered — exactly what was asked for.
+            continue
+
+        shown, top, short = _format_stuck(group, stuck)
+
+        if len(stuck) < len(entries):
+            warnings.warn(
+                f"'all_params: FREE' freed {len(entries) - len(stuck)} of "
+                f"{len(entries)} parameters in group {group!r}. These have no "
+                f"declared prior, only Fixed defaults, so they stay pinned:\n"
+                f"  {shown}\n"
+                f"The fit will run with that physics held constant. Pass "
+                f"explicit priors for the ones you meant to vary, e.g. "
+                f"{top}={{{short!r}: Uniform(lo, hi)}}, or filter "
+                f"WildcardPartialFreeWarning if this is deliberate.",
+                WildcardPartialFreeWarning,
+                stacklevel=3,
+            )
+            continue
+
         raise ParameterError(
             f"'all_params: FREE' freed 0 of {len(stuck)} parameters in group "
             f"{group!r}. These have no declared prior, only Fixed defaults:\n"
@@ -944,7 +1124,7 @@ def _check_wildcard_freed_something(
             f"default to Fixed — so the wildcard would leave every one of them "
             f"pinned and the fit would silently not vary this physics.\n"
             f"Pass explicit priors instead, e.g. "
-            f"{group.split('.')[0]}={{{short!r}: Uniform(lo, hi)}}."
+            f"{top}={{{short!r}: Uniform(lo, hi)}}."
         )
 
 
@@ -1161,6 +1341,41 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     # apply to this — it's a config, not a free parameter.
     if "bin_edges_gyr" in sfh_dict:
         result["bin_edges_gyr"] = sfh_dict["bin_edges_gyr"]
+
+    # ``age_kernel`` is likewise a structural setting, not a free parameter:
+    # which kernel integrates the SFH onto the SSP age grid ("cic" / "dsps").
+    # Validated here so a typo fails at build time with the valid set, rather
+    # than silently falling back to the default at the first prediction (#964).
+    if "age_kernel" in sfh_dict:
+        from tengri.components.stellar.component import VALID_AGE_KERNELS
+
+        age_kernel = sfh_dict["age_kernel"]
+        if age_kernel is not None and age_kernel not in VALID_AGE_KERNELS:
+            raise ValueError(
+                f"Unknown sfh age_kernel {age_kernel!r}. "
+                f"Valid: {', '.join(repr(k) for k in VALID_AGE_KERNELS)} "
+                f"(or None to auto-select). 'cic' is the accuracy default; "
+                f"'dsps' selects DSPS's histogram kernel for cross-code "
+                f"comparison (biases the optical CSP +1.2 %, #964)."
+            )
+        # Pass 0b has already folded any ``sfh={'field': {...}}`` sub-block into
+        # the type list, so the incompatible pair is knowable HERE — at
+        # ``SEDModel.build`` — rather than at the first prediction, which for a
+        # fit means after warmup has already started. The component-level
+        # ``_resolve_age_kernel`` still guards direct construction.
+        _types = sfh_dict.get("type") or []
+        if age_kernel == "cic" and "field" in (
+            _types if isinstance(_types, (list, tuple)) else [_types]
+        ):
+            raise NotImplementedError(
+                "sfh age_kernel='cic' is not supported with a GP-field SFH — "
+                "the field draw is defined on its own coarse lookback grid, so "
+                "there is no dense integrand to cloud-in-cell (#964). Drop the "
+                "field modulator to use the CIC kernel, or set "
+                "age_kernel='dsps' explicitly to acknowledge the field path's "
+                "kernel."
+            )
+        result["age_kernel"] = age_kernel
 
     if sfh_type is None:
         result["mean_sfh_type"] = ["dpl", "field"]
@@ -1709,7 +1924,7 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 #: Per-group structural keys the grammar accepts on top of declared params.
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
-    "sfh": frozenset({"type", "*", "bin_edges_gyr"}),
+    "sfh": frozenset({"type", "*", "bin_edges_gyr", "age_kernel"}),
     "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset(
         {
@@ -1778,12 +1993,21 @@ def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[s
     Used by :func:`_validate_user_keys` to recognize per-parameter overrides
     when walking a user's group dict.
     """
+    from tengri.parameters._aliases import legacy_names_for
+
     out: set[str] = set()
     for full_name, owner in param_partition.items():
         if owner != group:
             continue
         out.add(full_name)
         out.add(_extract_short_name(full_name, {}))
+        # Legacy spellings stay accepted so a rename does not turn a working
+        # group dict into "Unknown key" (#1296). The override lookup warns
+        # when one is actually used; admitting them here only stops the
+        # validator rejecting them first.
+        for legacy_full in legacy_names_for(full_name):
+            out.add(legacy_full)
+            out.add(_extract_short_name(legacy_full, {}))
     return out
 
 
@@ -2389,6 +2613,23 @@ def _resolve_value(
         override_key = short_name
     elif param_name != short_name and param_name in group_dict:
         override_key = param_name
+    else:
+        # A renamed parameter also invalidates its *short* key: after
+        # agn_frac -> agn_lum_ratio, `agn={'frac': 0.5}` became "Unknown key"
+        # (#1296). Accept the legacy spelling, both short and full, and warn
+        # -- the full-name alias map alone does not cover the grammar's short
+        # form, because the short form is derived by stripping the prefix.
+        from tengri.parameters._aliases import _warn_once_if_legacy, legacy_names_for
+
+        for legacy_full in legacy_names_for(param_name):
+            legacy_short = _extract_short_name(legacy_full, group_dict)
+            for candidate in (legacy_short, legacy_full):
+                if candidate in group_dict:
+                    _warn_once_if_legacy(candidate, short_name)
+                    override_key = candidate
+                    break
+            if override_key is not None:
+                break
 
     # Check for per-param override
     if override_key is not None:

@@ -258,14 +258,17 @@ without breaking working notebooks.
 | `tengri.NebularConfig` | `tengri.config.NebularConfig` | yes (direct import) | no |
 | `tengri.SEDModelConfig` | `tengri.config.SEDModelConfig` | yes (direct import) | no |
 | `tengri.SFHConfig` | `tengri.config.SFHConfig` | yes (direct import) | no |
-| `tengri.Photometry` | `tengri.observation.Photometry` | yes (direct import) | no |
-| `tengri.Spectroscopy` | `tengri.observation.Spectroscopy` | yes (direct import) | no |
-| `tengri.NoiseModel` | `tengri.observation.NoiseModel` | yes (direct import) | no |
-| `tengri.Observation` | `tengri.observation.Observation` | yes (direct import) | no |
-| `tengri.LineList` | `tengri.observation.LineList` | yes (direct import) | no |
 | `tengri.LineFluxData` | `tengri.observation.LineFluxData` | yes (`__getattr__` shim) | **yes** |
 | `tengri.SpectralIndexDef` | `tengri.observation.SpectralIndexDef` | yes (`__getattr__` shim) | **yes** |
 | `tengri.SpectralIndexData` | `tengri.observation.SpectralIndexData` | yes (`__getattr__` shim) | **yes** |
+
+**Re-promoted in #1338:** the instrument-schema family — `Observation`,
+`Photometry`, `Spectroscopy`, `NoiseModel`, `LineList` — was moved back into
+`tengri.__all__` (and `ALLOWED_TOP_LEVEL`), matching how `Data` (#1321) and
+`Catalog` (#1317) are advertised. Advertising the records/nouns while hiding the
+schema objects you build them from was a discoverability asymmetry; the family
+is the natural top-level surface for constructing an `Observation` /
+`ForwardModel` / `Catalog`, so it is advertised, not demoted.
 
 The three names that still warn — `LineFluxData`, `SpectralIndexDef`,
 `SpectralIndexData` — are rarely-used (line-flux measurements and Lick
@@ -809,7 +812,7 @@ deprecated to consolidate the maintenance burden on one API.
 **production** status. Its Kerr ray-tracing grid has no committed composable block
 yet; migration is deferred to a follow-up when a composable disc block is added.
 
-**Double-counting guard (#721):** When both composable AGN (`agn_fracAGN > 0`) and
+**Double-counting guard (#721):** When both composable AGN (`agn_ir_frac > 0`) and
 Dale2014 dust emission with embedded quasar (`dust_frac_agn > 0`) are active in
 the same model, a `UserWarning` alerts users to the double-count risk. Recommend
 setting `dust_frac_agn=0` when using real AGN. See
@@ -897,6 +900,68 @@ it is now what `FeaturePrecomp` calls for the Cue backend.
 | ------------------------------------------- | --------------------------------------------- | ------------- |
 | `model.enable_fast_nebular(waves, n_grid=…)` | `approx=FeaturePrecomp(n_grid=…)` at build     | Both supported |
 | (no build-time surface for baked-in lines)   | `approx=FeaturePrecomp()`                      | New            |
+
+---
+
+## `Data` — the measurement record (2026-07, #1321)
+
+Wave 1 of the inference/prediction API redesign splits the old hybrid
+`Observation` into two objects (spec §3): `Observation` is the pure instrument
+**schema** (which filters, which spectrograph, which lines), and the new
+`Data` is the per-galaxy measurement **record** (the flux/error values, censor
+flags, line values). One galaxy's measurements no longer force a fresh
+`Observation` — and therefore no recompile:
+
+```python
+from tengri import Data
+
+fwd.fit(Data(photometry=(flux, err)), ...)   # bare arrays remain sugar
+```
+
+`Data` is validated against the model's `Observation` in exactly one seam,
+`Data.validate_against(observation)` — the single place shape mismatches, NaN
+policy, boolean-censor traps, and unknown line names fail loudly with the
+offending channel named.
+
+| Name          | Canonical path        | Advertised (`__all__`)? | Warns? |
+| ------------- | --------------------- | ----------------------- | ------ |
+| `tengri.Data` | `tengri.observation.Data` | **yes** (new top-level) | no     |
+
+`Data` is a genuinely new class, not a relocated one, so it is advertised at
+top level rather than listed in the Phase-2 relocation table above. Its razor
+partner `Observation` remains importable but not advertised from the earlier
+Phase-2 cleanup; re-promoting the object-model family to `__all__` is a
+separate decision, tracked outside this wave.
+
+---
+
+## `Catalog` — the catalog-fitting noun (2026-07, #1317)
+
+Wave 2 adds `tengri.Catalog`, the astronomer-facing surface for fitting a table
+of galaxies: table-in, table-out, name-matched columns, explicit units, eager
+validation at construction. It wraps the existing per-galaxy engine
+(`CatalogFitter`, now a deprecated alias):
+
+```python
+from tengri import Catalog
+
+cat = Catalog(fwd, table, flux_unit="cgs_fnu", redshift_col="z")
+post = cat.fit(method="map")           # MAP default; "mcmc_nuts" for posteriors
+```
+
+Per-galaxy redshift (via `redshift_col`) is injected into each galaxy's fit as a
+fixed-value override that reaches the forward pass (the `fit(params=)` seam,
+#1329) — not merely the reported params. It requires the model to carry a
+`Fixed` redshift and a `WavePrecomp(catalog_z_range=...)` covering the table's
+redshift span, validated at construction.
+
+| Name             | Canonical path                    | Advertised (`__all__`)? | Warns? |
+| ---------------- | --------------------------------- | ----------------------- | ------ |
+| `tengri.Catalog` | `tengri.inference.catalog.Catalog` | **yes** (new top-level) | no     |
+| `tengri.CatalogFitter` | `tengri.inference.catalog_fitter` | no (deprecated alias)   | on direct submodule import |
+
+`CatalogFitter` stays importable as a one-shot-deprecation alias of the internal
+engine; new code should use `Catalog`.
 
 ---
 

@@ -54,9 +54,16 @@ jax.config.update("jax_enable_x64", True)
 
 SSP_FILE = "data/ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 FILTERS = [
-    "galex_fuv", "galex_nuv",
-    "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "2mass_j", "2mass_h", "2mass_ks",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
 ]
 LINE_NAMES = ["Halpha", "Hbeta", "OIII_5007", "OII_3727"]
 LINE_WAVES_REST_AA = jnp.array([6564.61, 4862.68, 5008.24, 3727.09])
@@ -95,10 +102,9 @@ def make_spec(psd_sigma: float, psd_tau_myr: float) -> Parameters:
 
 def build_joint_predict(model: SEDModel):
     line_centers_obs = LINE_WAVES_REST_AA * (1.0 + Z_FIX)
-    waves_per_line = jnp.stack([
-        jnp.linspace(c - LINE_WINDOW_AA, c + LINE_WINDOW_AA, LINE_NPIX)
-        for c in line_centers_obs
-    ])
+    waves_per_line = jnp.stack(
+        [jnp.linspace(c - LINE_WINDOW_AA, c + LINE_WINDOW_AA, LINE_NPIX) for c in line_centers_obs]
+    )
     waves_concat = waves_per_line.reshape(-1)
 
     @jax.jit
@@ -107,16 +113,15 @@ def build_joint_predict(model: SEDModel):
         spec = model.predict_spectrum(params, waves_concat)
         spec_per = spec.reshape(LINE_WAVES_REST_AA.shape[0], LINE_NPIX)
         cont = 0.5 * (spec_per[:, 0] + spec_per[:, -1])
-        line_flux = jax.vmap(
-            lambda f, w, c: jnp.trapezoid(f - c, w)
-        )(spec_per, waves_per_line, cont)
+        line_flux = jax.vmap(lambda f, w, c: jnp.trapezoid(f - c, w))(
+            spec_per, waves_per_line, cont
+        )
         return phot, line_flux
 
     return joint_predict
 
 
-def draw_pool(sigma: float, tau: float, ssp_data, obs: Observation,
-              m: int = M_MOCK):
+def draw_pool(sigma: float, tau: float, ssp_data, obs: Observation, m: int = M_MOCK):
     spec = make_spec(sigma, tau)
     model = SEDModel(spec, ssp_data, observation=obs)
     predict = build_joint_predict(model)
@@ -149,8 +154,9 @@ def combined_z(z_obs: np.ndarray) -> float:
     return float(np.sqrt(np.nansum(z_obs**2)))
 
 
-def project_n_for_threshold(pool_a: np.ndarray, pool_b: np.ndarray,
-                            z_target: float = 3.0) -> float:
+def project_n_for_threshold(
+    pool_a: np.ndarray, pool_b: np.ndarray, z_target: float = 3.0
+) -> float:
     """N where combined z reaches z_target. Closed-form: combined z scales
     as sqrt(N), so N_target = N_ref * (z_target / z_at_N_ref)^2."""
     n_ref = 100
@@ -160,8 +166,7 @@ def project_n_for_threshold(pool_a: np.ndarray, pool_b: np.ndarray,
     return n_ref * (z_target / z_ref) ** 2
 
 
-def plot_disc_curves(pairs: list[tuple], pools: dict, label_for: callable,
-                     title: str, fname: str):
+def plot_disc_curves(pairs: list[tuple], pools: dict, label_for: callable, title: str, fname: str):
     """Z vs N curves for a list of (key_a, key_b) pairs."""
     fig, (ax_combined, ax_per_obs) = plt.subplots(1, 2, figsize=(14, 5.5))
     n_grid = np.logspace(1, 5, 50)  # N = 10 .. 1e5
@@ -176,20 +181,26 @@ def plot_disc_curves(pairs: list[tuple], pools: dict, label_for: callable,
         # combined z scales as sqrt(N/100)
         cz_curve = cz_at_100 * np.sqrt(n_grid / 100)
         n_3sig = project_n_for_threshold(pools[key_a], pools[key_b], 3.0)
-        ax_combined.plot(n_grid, cz_curve, color=c,
-                         label=f"{label_for(key_a)} vs {label_for(key_b)}  "
-                               f"(N₃σ={n_3sig:.0f})")
+        ax_combined.plot(
+            n_grid,
+            cz_curve,
+            color=c,
+            label=f"{label_for(key_a)} vs {label_for(key_b)}  (N₃σ={n_3sig:.0f})",
+        )
 
         # Per-observable bar (z @ N=500, Burnham-comparable)
         z500 = z_per_obs(pools[key_a], pools[key_b], 500)
-        ax_per_obs.plot(np.arange(n_obs_total), np.abs(z500), "o-", color=c,
-                        label=f"{label_for(key_a)} vs {label_for(key_b)}",
-                        markersize=4)
+        ax_per_obs.plot(
+            np.arange(n_obs_total),
+            np.abs(z500),
+            "o-",
+            color=c,
+            label=f"{label_for(key_a)} vs {label_for(key_b)}",
+            markersize=4,
+        )
 
-    ax_combined.axhline(3, color="black", lw=0.8, ls="--", alpha=0.6,
-                        label="3σ threshold")
-    ax_combined.axhline(5, color="gray", lw=0.8, ls=":", alpha=0.5,
-                        label="5σ threshold")
+    ax_combined.axhline(3, color="black", lw=0.8, ls="--", alpha=0.6, label="3σ threshold")
+    ax_combined.axhline(5, color="gray", lw=0.8, ls=":", alpha=0.5, label="5σ threshold")
     ax_combined.set_xscale("log")
     ax_combined.set_yscale("log")
     ax_combined.set_xlabel("N (galaxies)")
@@ -201,8 +212,7 @@ def plot_disc_curves(pairs: list[tuple], pools: dict, label_for: callable,
     ax_per_obs.axhline(1, color="gray", ls=":", alpha=0.5)
     ax_per_obs.axhline(3, color="black", ls="--", alpha=0.6)
     ax_per_obs.set_xticks(np.arange(n_obs_total))
-    ax_per_obs.set_xticklabels(FILTERS + LINE_NAMES, rotation=45, ha="right",
-                                fontsize=8)
+    ax_per_obs.set_xticklabels(FILTERS + LINE_NAMES, rotation=45, ha="right", fontsize=8)
     ax_per_obs.set_ylabel("|z| at N=500")
     ax_per_obs.set_title("Per-observable contribution at N=500\n(Burnham et al. 2026 use N≈500)")
     ax_per_obs.grid(alpha=0.3)
@@ -236,7 +246,8 @@ def main() -> None:
         ((2.0, 20.0), (3.0, 20.0)),
     ]
     plot_disc_curves(
-        sigma_pairs_at_tau20, pools,
+        sigma_pairs_at_tau20,
+        pools,
         lambda k: f"σ={k[0]}",
         title=r"σ_PSD discrimination at fixed τ=20 Myr  (joint = 10 phot + 4 lines)",
         fname="joint_disc_sigma.png",
@@ -252,7 +263,8 @@ def main() -> None:
         ((2.0, 100.0), (2.0, 300.0)),
     ]
     plot_disc_curves(
-        tau_pairs_at_sig2, pools,
+        tau_pairs_at_sig2,
+        pools,
         lambda k: f"τ={k[1]:.0f}",
         title=r"τ_PSD discrimination at fixed σ=2.0  (joint = 10 phot + 4 lines)",
         fname="joint_disc_tau.png",
@@ -260,24 +272,32 @@ def main() -> None:
 
     # === Headline summary table ===
     print("\n=== σ_PSD discrimination at τ=20 Myr ===")
-    print(f"{'pair':30s} | {'z@N=128':>9s} | {'z@N=512':>9s} | {'z@N=2048':>9s} | {'N for 3σ':>10s}")
+    print(
+        f"{'pair':30s} | {'z@N=128':>9s} | {'z@N=512':>9s} | {'z@N=2048':>9s} | {'N for 3σ':>10s}"
+    )
     for ka, kb in sigma_pairs_at_tau20:
         z128 = combined_z(z_per_obs(pools[ka], pools[kb], 128))
         z512 = combined_z(z_per_obs(pools[ka], pools[kb], 512))
         z2k = combined_z(z_per_obs(pools[ka], pools[kb], 2048))
         n3 = project_n_for_threshold(pools[ka], pools[kb], 3.0)
-        print(f"σ={ka[0]}↔{kb[0]} (τ=20)              | "
-              f"{z128:9.2f} | {z512:9.2f} | {z2k:9.2f} | {n3:10.0f}")
+        print(
+            f"σ={ka[0]}↔{kb[0]} (τ=20)              | "
+            f"{z128:9.2f} | {z512:9.2f} | {z2k:9.2f} | {n3:10.0f}"
+        )
 
     print("\n=== τ_PSD discrimination at σ=2.0 ===")
-    print(f"{'pair':30s} | {'z@N=128':>9s} | {'z@N=512':>9s} | {'z@N=2048':>9s} | {'N for 3σ':>10s}")
+    print(
+        f"{'pair':30s} | {'z@N=128':>9s} | {'z@N=512':>9s} | {'z@N=2048':>9s} | {'N for 3σ':>10s}"
+    )
     for ka, kb in tau_pairs_at_sig2:
         z128 = combined_z(z_per_obs(pools[ka], pools[kb], 128))
         z512 = combined_z(z_per_obs(pools[ka], pools[kb], 512))
         z2k = combined_z(z_per_obs(pools[ka], pools[kb], 2048))
         n3 = project_n_for_threshold(pools[ka], pools[kb], 3.0)
-        print(f"τ={ka[1]:.0f}↔{kb[1]:.0f} Myr (σ=2)            | "
-              f"{z128:9.2f} | {z512:9.2f} | {z2k:9.2f} | {n3:10.0f}")
+        print(
+            f"τ={ka[1]:.0f}↔{kb[1]:.0f} Myr (σ=2)            | "
+            f"{z128:9.2f} | {z512:9.2f} | {z2k:9.2f} | {n3:10.0f}"
+        )
 
     print(f"\nFigures: {OUT_DIR}/joint_disc_sigma.png  and  {OUT_DIR}/joint_disc_tau.png")
 

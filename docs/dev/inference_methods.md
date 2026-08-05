@@ -22,10 +22,9 @@ This document consolidates and expands:
 8. [Performance Benchmarks](#8-performance-benchmarks)
 9. [Posterior Sampling](#9-posterior-sampling)
 10. [Block Gibbs for Hierarchical Models](#10-block-gibbs-for-hierarchical-models)
-11. [OptimizationSchedule API](#11-optimizationschedule-api)
-12. [Convergence Diagnostics](#12-convergence-diagnostics)
-13. [Quick Reference](#13-quick-reference)
-14. [References](#14-references)
+11. [Convergence Diagnostics](#11-convergence-diagnostics)
+12. [Quick Reference](#12-quick-reference)
+13. [References](#13-references)
 
 ---
 
@@ -164,6 +163,177 @@ M(xi) = J_full^T H_noise J_full + I
 where `J_full` includes derivatives of both the signal and noise model, and `H_noise`
 is the Hessian of the noise-model likelihood. The `variable_noise_metric_vec` function
 handles this generalization.
+
+### 2.5 The Same Metric for HMC (`precondition=True`)
+
+The metric above is what makes the VI methods work: geoVI and MGVI re-evaluate it at the
+current position on every iteration, so the geometry they see is always locally white.
+NIFTy does the same thing (`nifty8/re/evi.py`), and standardization exists precisely so
+the prior's contribution is exactly `I` and only `J^T N^{-1} J` has to be computed.
+
+A Hamiltonian sampler cannot do that. Its mass matrix is estimated once during warmup
+and then frozen, so it gets no benefit from the standardized prior when the likelihood
+curvature varies. On the correlated-field posterior the gap is wide — measured at
+n_grid=16 with emission lines (D=25):
+
+```
+cond(grad^2 H) at the MAP        1.1e5      (eigenvalues 0.81 ... 9.0e4)
+```
+
+No diagonal mass matrix covers that, and a dense one estimated from warmup draws is both
+noisy and memory-hungry.
+
+`precondition` (**opt-in — default off**; pass `True` to enable) supplies the metric
+analytically instead. It is a **linear change of variables**, not a mass matrix:
+
+```
+G = -grad^2 log p   at the initial point, eigenvalue MAGNITUDES floored at 1.0
+G_alpha = V diag(lambda^alpha) V^T        spectrum capped at MAX_METRIC_CONDITION
+G_alpha = L L^T,  A = L^{-T}              so  A A^T = G^{-alpha}
+
+sample  H(A zeta)   instead of   H(xi),   then map draws back with   xi = A zeta
+```
+
+`alpha` is the **whitening strength** — `precondition=True` uses
+`DEFAULT_WHITENING_STRENGTH` (0.5), `precondition=1.0` is full whitening, and any float
+in `[0, 1]` is accepted. §2.5.1 is why the default is not 1.
+
+The magnitude (`max(|lambda|, 1.0)`, saddle-free Newton) matters at a non-stationary
+expansion point: a steeply *negative* direction is treated as steep, not flat — a
+signed floor left one unconverged-MAP fit mis-scaled by 51x. At a true stationary
+point all eigenvalues are positive and the two are identical.
+
+Because the map is linear its Jacobian is constant, so the posterior is unchanged — only
+the geometry the integrator sees. The eigenvalue floor of 1.0 is the prior's exact
+contribution: the Gauss-Newton likelihood term is positive semi-definite, so anything
+below 1 is residual curvature (the term Gauss-Newton drops).
+
+The metric is formally position-dependent, so a single one built at the MAP is an
+approximation. Measured, it holds across the region a chain actually visits:
+
+| point | preconditioned cond |
+|---|---|
+| at the MAP | 1.23 |
+| timescale latents at +2 sd | 2.62 (raw cond there: 1.2e4) |
+| random 1-sd jitter | 2.05 |
+
+#### 2.5.1 Why the default strength is 0.5, not 1
+
+Full whitening has no floor under it. Measured on single-galaxy photometry fits, it
+ranged from **0.10x to 5.76x ESS/s across seeds of the same model** — a 58x spread, above
+1 in exactly half of usable pairs, with the sign flipping *within* one configuration
+across seeds. The post-warmup step size explains the outcome at **r = +0.92** (log-log),
+and 7 of 9 fits had preconditioning *lower* it.
+
+The mechanism is exact rather than statistical. Write the true precision as `H` and the
+metric actually used as `G = H^gamma`, where `gamma = 1` means a perfect metric. For any
+`A` with `A A^T = G^{-alpha}`, the eigenvalues of the whitened precision `A^T H A` are the
+generalized eigenvalues of the pencil `(H, G^alpha)` — they do not depend on which root
+was chosen — so
+
+```
+cond_whitened = cond(H) ** |1 - alpha*gamma|
+```
+
+Preconditioning is therefore worse than doing nothing exactly when `gamma > 2/alpha`:
+
+| `gamma` | `alpha = 1` (full) | `alpha = 0.5` (default) |
+|---|---|---|
+| 1 (perfect metric) | **1.0** | `cond^0.5` |
+| 2 | `cond` — *identical to no preconditioning* | **1.0** |
+| 3 | `cond^2` — *worse than the original problem* | `cond^0.5` |
+
+There is no plateau: past `gamma = 2` full whitening amplifies as `cond^(gamma-1)`,
+unbounded. And `gamma != 1` is the **normal** case, not a pathological one — a
+single-point Hessian at the MAP is a *modal* curvature estimate, and wherever the
+posterior is non-Gaussian that is not the curvature of the bulk.
+
+Halving the exponent doubles the tolerated misspecification (`gamma <= 4`) and costs only
+a `cond^0.5` residual when the metric happens to be exact. Ill-conditioning here runs
+`1e5`–`3e8`, so `cond^0.5` is still a 300x–17000x improvement on the raw problem.
+
+`MAX_METRIC_CONDITION` (1e8) is a backstop, not the mechanism: the smallest eigenvalues
+are the least reliably estimated and the most damaging when wrong.
+
+**`gamma` is measurable, and it sits just under the cliff.** Whiten fully, then evaluate
+the curvature one posterior standard deviation away in the whitened frame; were the metric
+exact that would be `I`. Inverting the law gives `gamma ~ 1 + log(S)/log(cond)`. Measured
+(median over 6 jitter directions, one seed per configuration):
+
+| config | D | cond @ MAP | whitened @ 1 sd | `gamma` | optimal `alpha` = 1/`gamma` |
+|---|---|---|---|---|---|
+| `d7` | 7 | 7.8e4 | 8.9e3 | 1.81 | 0.55 |
+| `d8dust` | 8 | 7.9e4 | 4.6e3 | 1.75 | 0.57 |
+| `d8met` | 8 | 8.0e4 | 5.1e3 | 1.76 | 0.57 |
+
+This is the quantitative account of the sign instability. At `gamma ~ 1.8` full whitening
+leaves `cond^0.8` — barely better than doing nothing — and any seed-to-seed variation in
+the effective `gamma` crosses 2, where the sign flips to amplification. Full whitening was
+not unlucky; it was parked on a knife edge. At `alpha = 0.5` the exponent is `|1 - 0.9|`
+= 0.1, well inside the safe region.
+
+It also argues **against** per-problem auto-tuning: `gamma` is stable at 1.75–1.81 across
+every configuration measured, so a tuner would return ~0.56 every time. The fixed default
+is the right shape of fix, not a simplification.
+
+**Practical notes.**
+
+- Pass `init_from` a MAP result so the metric is built where the chain will be.
+- Cost is not a constraint below the cap: the dense Hessian is **flat at ~2 s** from
+  D=25 to D=521 (`jax.hessian` is `jacfwd(jacrev)`, which vectorizes rather than taking
+  D sequential backward passes), and `eigh` + Cholesky is 0.11 s / 2.2 MB at D=521.
+  Only the `O(D^3)` factorization grows — hence the 1024 cap. "Easy low-dimensional"
+  posteriors turned out not to exist here: the simplest configuration measured
+  (double-power-law + photometry, D=7) already had raw cond 8.5e4.
+- **Why it is opt-in.** Not because of [#1397](https://github.com/suchethac/tengri/issues/1397),
+  despite that being the original stated reason here. Those notebook failures were
+  caused by a **sub-band node gradient underflowing to NaN** inside the model;
+  preconditioning was the first thing to notice, not the cause, and with the root fix
+  `notebooks/07` returns to its pre-preconditioning R-hat. The reason that survives is
+  measured on the *fixed* code: on `recipes.mock_recovery_minimal()` (D=7), 4 seeds of
+  4 converge without preconditioning (R-hat 0.997-1.007) and none converge with it at
+  full strength (1.055-2.689), at 4x to 25x worse ESS/s. The whitening strength
+  ([#1442](https://github.com/suchethac/tengri/issues/1442)) bounds that damage but does
+  not overturn the conclusion — see the sweep below.
+- **The conditioning win is not a demonstrated sampling win — at any strength.** Three
+  arms, one frozen source (`b17b319d8`), 3 configs x 3 seeds x {off, `alpha=1`,
+  `alpha=0.5`}, 27 fits, 0 failures. Restricted to the 8 cells where **off itself
+  converged**:
+
+  | arm | broke convergence | aggregate ESS/s vs off* |
+  |---|---|---|
+  | `alpha = 1` (full) | **5 of 8** | **0.57x** |
+  | `alpha = 0.5` (default) | **2 of 8**, both marginal (1.063, 1.064) | **0.79x** |
+
+  \* an unusable fit scores 0 rather than being dropped. **Gating on convergence and then
+  taking a median is survivorship bias**: full whitening's gated median is 1.05x, computed
+  over only the 3 cells where it did not break the fit. The gate is right for comparing
+  sampling efficiency and wrong for deciding whether to enable something.
+
+  Partial whitening is strictly better on both axes, and repairs the catastrophic cases —
+  `d8dust` seed 3 went from R-hat **1.437** at a 0.04x step size (full) to R-hat **1.004**
+  at 1.13x (half). But **neither arm beats `off`**, which converged in 8 of 9 cells and
+  had the best aggregate throughput. Even at the measured-optimal strength the geometry
+  win does not become a sampling win: NUTS's warmup adaptation is already doing that work,
+  and a frozen metric partly competes with it. This is why the feature is opt-in.
+- The `D=8` degradation is **dimensional, not metallicity-specific**: a second `D=8` cell
+  varying the dust slope instead (`d8dust`) agreed with free metallicity (`d8met`).
+- **Never benchmark this on one seed.** The pre-fix numbers in the history of this
+  document (1.87x at D=7, 0.84x at D=8) came from single-arm medians on a source tree
+  that still carried the sub-band gradient bug
+  ([#1420](https://github.com/suchethac/tengri/issues/1420)) and from too few seeds to see
+  the spread. Gate on *both* arms converging before computing any ratio, and print the
+  excluded pairs — an exclusion is often the most informative row.
+- **Where it is most likely to pay.** All three HMC backends force `use_dense = False`
+  above D=30, so above that threshold the competitor is a *diagonal* mass matrix, which
+  cannot represent rotation at all. Below D=30 the competitor is an empirical dense
+  covariance from warmup — a far stronger baseline, and where the 0.84x was measured.
+- Which backends accept the flag is a **declared registry capability**
+  (`register_backend(..., accepts_precondition=True)`), not a list maintained by hand.
+  Today that is the Hamiltonian family; gradient-free and self-tuning kernels
+  (`mcmc_raytrace`, `mcmc_ess`, `mcmc_mclmc`) do not declare it, because whitening the
+  integrator's metric is meaningless for them. Passing `precondition=True` to a backend
+  that has not declared it raises at dispatch and names the ones that have.
 
 ---
 
@@ -427,7 +597,7 @@ Fresh scouts every 5 iterations. Deterministic refinement in between. This gives
 - **Good posterior quality** (nonlinear curving captures banana shapes)
 
 The refresh interval of 5 is the default (`_RESAMPLE_EVERY = 5` in `fitter.py`). It can
-be adjusted via `OptimizationSchedule.vi(resample_every=N)`.
+is fixed at 5 inside `backends/vi/nifty.py`; it is not a user parameter (`OptimizationSchedule` was deleted as dead code, #1293).
 
 ---
 
@@ -1075,110 +1245,7 @@ Compile time: ~60s (one-time, cached to XLA disk cache).
 
 ---
 
-## 11. OptimizationSchedule API
-
-The `OptimizationSchedule` class provides a unified interface for controlling what
-happens at each iteration. It wraps a callable `f(iteration: int) -> BlockStep`.
-
-### 11.1 Factory Methods
-
-```python
-from tengri.vi_config import OptimizationSchedule, BlockStep, BlockSchedule
-
-# --- Recommended geoVI (default when you call fitter.run("native_geovi")) ---
-sched = OptimizationSchedule.geovi(
-    n_iterations=15,      # total iterations
-    resample_every=5,     # fresh samples every N iterations
-    n_samples=3,          # samples per iteration (doubled by mirror)
-)
-
-# --- EVI: cheap MGVI warmup, then geoVI ---
-sched = OptimizationSchedule.evi(
-    n_iterations=20,
-    transition=10,        # switch from MGVI to geoVI at iteration 10
-    resample_every=5,     # geoVI refresh rate after transition
-    n_samples=3,
-)
-
-# --- Pure MGVI (fastest, least accurate) ---
-sched = OptimizationSchedule.mgvi(
-    n_iterations=15,
-    n_samples=3,
-)
-
-# --- Block Gibbs for structured problems ---
-sched = OptimizationSchedule.gibbs(
-    blocks=(
-        BlockStep(
-            sample_mode="nonlinear_resample",
-            constants=("sfh_field_xi",),     # freeze SFH during physical param update
-        ),
-        BlockStep(
-            sample_mode="linear_resample",
-            constants=(),                     # joint update for cross-correlations
-        ),
-    ),
-    n_iterations=15,       # outer cycles (total steps = 15 * 2 blocks = 30)
-    resample_every=5,      # nonlinear blocks switch to update between refreshes
-)
-
-# --- Fully custom ---
-sched = OptimizationSchedule.custom(
-    get_step=lambda i: BlockStep(
-        sample_mode="nonlinear_resample" if i % 3 == 0 else "nonlinear_update",
-        n_samples=6 if i < 5 else 3,
-    ),
-    n_iterations=25,
-    description="custom: resample every 3, more samples early",
-)
-```
-
-### 11.2 BlockStep
-
-Each iteration is described by a `BlockStep`:
-
-```python
-@dataclass(frozen=True)
-class BlockStep:
-    sample_mode: str = "nonlinear_resample"
-    constants: tuple[str, ...] = ()           # frozen params (still sampled)
-    point_estimates: tuple[str, ...] = ()     # frozen params (residual zeroed)
-    n_samples: int | None = None              # override default n_samples
-```
-
-### 11.3 BlockSchedule
-
-For the hierarchical fitter, `BlockSchedule` provides pre-built schedules:
-
-```python
-from tengri.vi_config import BlockSchedule
-
-# Individual galaxy: 2 blocks (physical + SFH)
-sched = BlockSchedule.individual_geovi()
-
-# Hierarchical: 3 blocks (shared PSD + per-gal physical + per-gal SFH)
-sched = BlockSchedule.hierarchical()
-```
-
-### 11.4 Passing Schedules to fitter.run()
-
-The schedule is used internally by the fast/NIFTy backends to resolve the `sample_mode`
-callable. For the native backend, the schedule is consumed by `run_evi_geovi` as a
-static `sample_mode` string.
-
-```python
-# The schedule is implicit when using standard methods:
-result = fitter.run("native_geovi", n_iterations=15)
-# This internally creates OptimizationSchedule.geovi(n_iterations=15)
-
-# For explicit control, pass schedule directly:
-sched = OptimizationSchedule.geovi(resample_every=8, n_samples=6)
-result = fitter.run("native_geovi", schedule=sched)
-```
-
----
-
-## 12. Convergence Diagnostics
+## 11. Convergence Diagnostics
 
 ### 12.1 Chi-squared per Degree of Freedom
 
@@ -1261,7 +1328,7 @@ Stan/ArviZ/BlackJAX thresholds).
 
 ---
 
-## 13. Quick Reference
+## 12. Quick Reference
 
 ### Method Selection Cheat Sheet
 
@@ -1315,7 +1382,7 @@ VIConfig(
 
 ---
 
-## 14. References
+## 13. References
 
 - Frank, P., Leike, R., Ensslin, T.A. (2021). "Geometric Variational Inference."
   Entropy 23(7):853. arXiv:2105.10470

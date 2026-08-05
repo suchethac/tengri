@@ -125,7 +125,7 @@ def richards2006_disc(
 def richards2006(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 45.0,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """Richards+2006 BBB composite — registered model entry point.
@@ -142,7 +142,7 @@ def richards2006(
     agn_log_lbol : float, optional
         Total AGN bolometric luminosity, :math:`\\log_{10}(L_\\odot)`.
         Default: 45.0.
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Fraction of bolometric luminosity emitted by this component.
         Default: 1.0.
     **_kwargs
@@ -155,4 +155,4 @@ def richards2006(
         Spectral luminosity density [erg/s/Hz].
     """
     sed = richards2006_disc(wavelength, log_lbol=agn_log_lbol)
-    return sed * agn_frac
+    return sed * agn_lum_ratio

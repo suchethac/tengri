@@ -32,6 +32,7 @@ tengri.observation.constants : module-level constants (line catalogs, status fla
 
 from __future__ import annotations
 
+from tengri.observation.data import Data, ValidatedData
 from tengri.observation.instrument import Instrument, list_instruments
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.line_list import LineList
@@ -43,6 +44,7 @@ from tengri.observation.spectral_indices import SpectralIndexData, SpectralIndex
 from tengri.observation.spectroscopy import Spectroscopy
 
 __all__ = [
+    "Data",
     "Instrument",
     "LineFluxData",
     "LineList",
@@ -53,5 +55,6 @@ __all__ = [
     "SpectralIndexData",
     "SpectralIndexDef",
     "Spectroscopy",
+    "ValidatedData",
     "list_instruments",
 ]

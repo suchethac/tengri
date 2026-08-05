@@ -368,7 +368,11 @@ def _assemble_grid(
         raise FileNotFoundError(f"missing extracted dir {inner}; run with --download")
     # Use the canonical (lgU=0, st, std) sample as the wavelength reference.
     ref_path = inner / pahspec_filename(
-        first_starlight, 0.0, "st", "std", slab=bool(first_slab),
+        first_starlight,
+        0.0,
+        "st",
+        "std",
+        slab=bool(first_slab),
     )
     if not ref_path.exists():
         raise FileNotFoundError(f"reference file missing: {ref_path}")
@@ -401,7 +405,11 @@ def _assemble_grid(
                 for i_i, ion in enumerate(ION_LEVELS):
                     for i_s, sz in enumerate(SIZE_DISTS):
                         path = inner / pahspec_filename(
-                            sl, lgU, ion, sz, slab=bool(is_slab),
+                            sl,
+                            lgU,
+                            ion,
+                            sz,
+                            slab=bool(is_slab),
                         )
                         if not path.exists():
                             continue

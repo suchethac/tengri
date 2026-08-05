@@ -37,7 +37,6 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
-from pathlib import Path
 
 import jax.numpy as jnp
 import numpy as np
@@ -46,7 +45,7 @@ from tengri.components.agn._phys import (
     bolometric_integral_nu as _bolometric_integral_nu,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.utils.grid_interp import interp_nd_pchip
+from tengri.utils.grid_interp import interp_nd_pchip, resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -179,7 +178,7 @@ def create_nenkova_agnfitter_from_grid(grid_path: str) -> Callable:
 
         # Node-exact PCHIP interpolation on cos(incl) axis.
         template = interp_nd_pchip(grid_jax, (cos_inc_axis,), (agn_cos_inc,))
-        sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
+        sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
         nu = _wavelength_to_nu(wavelength)
         integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
         l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
@@ -201,12 +200,14 @@ _NOT_FOUND_MSG = (
 
 
 def _find_nenkova_agnfitter_grid() -> str:
-    base = Path(__file__).resolve().parents[4]
-    for rel in _GRID_SEARCH_PATHS:
-        for candidate in (base / rel, Path(rel)):
-            if candidate.is_file():
-                return str(candidate)
-    raise FileNotFoundError(_NOT_FOUND_MSG)
+    from tengri._data_setup import data_path
+
+    # _GRID_SEARCH_PATHS[-1] is the bare filename; data_path searches every
+    # directory the old parents[4] walk reached, plus $TENGRI_DATA_DIR (#1431).
+    try:
+        return str(data_path(_GRID_SEARCH_PATHS[-1]))
+    except FileNotFoundError:
+        raise FileNotFoundError(_NOT_FOUND_MSG) from None
 
 
 @functools.cache

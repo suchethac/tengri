@@ -20,6 +20,11 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
+# Imported at module scope, not inside ``load_ssp``, so the fetch is a visible
+# dependency of this module rather than a hidden one. ``_data_setup`` imports
+# only the standard library, so there is no cycle to avoid.
+from tengri._data_setup import download_ssp
+
 
 class SSPData(NamedTuple):
     """Immutable container for SSP template library.
@@ -149,7 +154,7 @@ _LOAD_SSP_PRESETS: dict[str, str] = {
 }
 
 
-def load_ssp(name: str | None = None) -> "SSPData":
+def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
     """Load an SSP grid by short name, walking parent dirs for ``data/``.
 
     Convenience wrapper around :func:`load_ssp_data` for tutorial and
@@ -167,6 +172,12 @@ def load_ssp(name: str | None = None) -> "SSPData":
         ``tengri.download_ssp()`` fetches and the one the Cue/CloudyGrid nebular
         backends require. For the nebular-baked demo grid pass the alias
         explicitly: ``load_ssp("prsc_miles_chabrier_wNE")``.
+    download : bool, optional
+        Fetch the grid from the hosted catalog if it is not found locally.
+        Default ``False``, which raises instead — a default-on fetch would
+        turn any mistyped grid name into a silent multi-tens-of-megabyte
+        download (#1486). Pass ``True`` in tutorials and gallery scripts,
+        where a fresh checkout is expected not to have the grid yet.
 
     Returns
     -------
@@ -176,23 +187,40 @@ def load_ssp(name: str | None = None) -> "SSPData":
     Raises
     ------
     FileNotFoundError
-        If no ``data/<filename>.h5`` exists in any ancestor directory.
+        If the grid exists in none of :func:`~tengri._data_setup.data_dirs`
+        and either ``download`` is ``False`` or the grid is not one the
+        catalog hosts. The message names the directories searched.
+
+    Notes
+    -----
+    ``download=True`` makes this the single call a script needs, replacing the
+    resolve-test-fetch-load sequence each one used to carry. That sequence
+    began with a working-directory-relative path, so it looked in the wrong
+    place — and therefore re-downloaded — whenever the script ran from
+    anywhere but its own directory (#1486). The resolver here is
+    cwd-independent: it honors ``$TENGRI_DATA_DIR``, walks every ancestor for
+    ``data/``, and falls back to the package's own source tree.
 
     Examples
     --------
     >>> from tengri import load_ssp
     >>> ssp = load_ssp()  # default bare-stellar grid (== download_ssp())
     >>> ssp = load_ssp("prsc_miles_chabrier_wNE")  # nebular-baked demo grid
+    >>> ssp = load_ssp(download=True)  # fetch it if this checkout lacks it
     """
     from pathlib import Path
 
     from tengri._data_setup import _KNOWN_SSPS, DEFAULT_SSP
 
     if name is None:
+        catalog_key = DEFAULT_SSP
         filename = _KNOWN_SSPS[DEFAULT_SSP]
     elif name in _LOAD_SSP_PRESETS:
+        # Produced locally, not hosted — so there is nothing to fall back to.
+        catalog_key = None
         filename = _LOAD_SSP_PRESETS[name]
     elif name in _KNOWN_SSPS:
+        catalog_key = name
         filename = _KNOWN_SSPS[name]
     else:
         # Accept an explicit absolute/relative path to an .h5 file directly
@@ -202,6 +230,7 @@ def load_ssp(name: str | None = None) -> "SSPData":
         if as_path.suffix == ".h5" and as_path.exists():
             return load_ssp_data(str(as_path))
         filename = name if name.endswith(".h5") else name + ".h5"
+        catalog_key = next((k for k, v in _KNOWN_SSPS.items() if v == filename), None)
 
     from tengri._data_setup import TENGRI_DATA_ENV, data_dirs
 
@@ -209,13 +238,23 @@ def load_ssp(name: str | None = None) -> "SSPData":
         candidate = directory / filename
         if candidate.exists():
             return load_ssp_data(str(candidate))
+
+    if download and catalog_key is not None:
+        return load_ssp_data(str(download_ssp(catalog_key)))
+
+    catalog_note = (
+        f"{filename!r} is not in the download catalog, so download=True cannot "
+        f"fetch it — the wNE (with-nebular-emission) grids are produced locally. "
+        if download
+        else "Call tengri.download_ssp('<short_name>') to fetch a bundled SSP "
+        "(tengri.list_known_ssps() lists them), "
+    )
     raise FileNotFoundError(
         f"SSP file {filename!r} not found. Looked in: "
         f"{', '.join(str(d) for d in data_dirs()[:4])} (and further ancestors). "
-        f"Call tengri.download_ssp('<short_name>') to fetch a bundled SSP "
-        f"(tengri.list_known_ssps() lists them), place the file under "
-        f"<project_root>/data/, or set ${TENGRI_DATA_ENV} to the directory "
-        f"holding it."
+        f"{catalog_note}"
+        f"place the file under <project_root>/data/, or set ${TENGRI_DATA_ENV} "
+        f"to the directory holding it."
     )
 
 
@@ -1675,10 +1714,29 @@ _LGMET_HI = 0.5
 
 @jax.jit
 def _tw_cuml_kern(x, m, h):
-    """Triweight kernel CDF (same as DSPS _tw_cuml_kern).
+    """Triweight kernel CDF — bit-exact mirror of DSPS ``_tw_cuml_kern``.
 
     Cumulative distribution of the triweight kernel with support |z| < 3.
     Returns 0 for z < -3, 1 for z > 3, smooth polynomial between.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    **Do not consolidate this with** :func:`tengri.utils.interpolation.tw_cuml_kern`.
+    The two evaluate the same polynomial but in different forms, deliberately:
+
+    - ``utils.interpolation`` (and ``utils.diffndhist``) use Horner's method,
+      chosen for fewer FLOPs and better conditioning.
+    - **this copy uses the direct-power form**, because it reproduces upstream
+      DSPS term-for-term so that ``compute_lgmet_weights`` stays bit-comparable
+      with ``dsps.utils._tw_cuml_kern``.
+
+    Measured difference between the two forms over ``z`` in [-4, 4]:
+    ``3.3e-16`` in float64 and ``2.4e-7`` in float32 — about 1 ulp, so either
+    form is numerically fine in isolation. Rewriting this one to Horner would
+    silently drop the upstream-parity property, which is the only reason the
+    duplicate exists (#1401).
     """
     z = (x - m) / h
     val = -5.0 * z**7 / 69984.0 + 7.0 * z**5 / 2592.0 - 35.0 * z**3 / 864.0 + 35.0 * z / 96.0 + 0.5

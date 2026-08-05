@@ -49,9 +49,25 @@ class TestXRayRegistry:
         assert "simple" in XRAY_MODELS
 
     def test_validator_derived_from_registry(self):
-        from tengri.components.xray import XRAY_MODELS
+        """Verify the grammar menu includes both function models and SEDModelComponent models.
 
-        assert _valid_xray_types() == frozenset(XRAY_MODELS.keys())
+        Issue #1120: the menu must include SEDModelComponent entries
+        (xray_aird, agn_xray_corona) so they are discoverable to users.
+        Without this, only the legacy function-based models (simple, none)
+        would be in the menu, making the component variants silently unreachable.
+        """
+        from tengri.components.xray import XRAY_MODELS
+        from tengri.forward.component_factory import _REGISTRY
+
+        # Function-based models (the old path)
+        function_models = frozenset(XRAY_MODELS.keys())
+
+        # SEDModelComponent models (the new additions)
+        component_models = frozenset(name for name in _REGISTRY if "xray_" in name)
+
+        # The menu should be the union of both
+        expected = function_models | component_models
+        assert _valid_xray_types() == expected
 
     def test_list_xray_models_shape(self):
         rows = tengri.list_xray_models()
@@ -82,9 +98,25 @@ class TestRadioRegistry:
         assert "condon92" in RADIO_MODELS
 
     def test_validator_derived_from_registry(self):
-        from tengri.components.radio import RADIO_MODELS
+        """Verify the grammar menu includes both function models and SEDModelComponent models.
 
-        assert _valid_radio_types() == frozenset(RADIO_MODELS.keys())
+        Issue #1120: the menu must include SEDModelComponent entries
+        (radio_powerlaw, radio_dpl) so they are discoverable to users.
+        Without this, only the legacy function-based models (condon92, none)
+        would be in the menu, making the component variants silently unreachable.
+        """
+        from tengri.components.radio import RADIO_MODELS
+        from tengri.forward.component_factory import _REGISTRY
+
+        # Function-based models (the old path)
+        function_models = frozenset(RADIO_MODELS.keys())
+
+        # SEDModelComponent models (the new additions)
+        component_models = frozenset(name for name in _REGISTRY if name.startswith("radio_"))
+
+        # The menu should be the union of both
+        expected = function_models | component_models
+        assert _valid_radio_types() == expected
 
     def test_list_radio_models_shape(self):
         rows = tengri.list_radio_models()

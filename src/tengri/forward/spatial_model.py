@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""SpatialModel — SubModel composer over a list of :class:`SpatialComponent`s.
+"""SpatialModel — SubModel composer over a list of :class:`SpatialComponent` objects.
 
 Mirror of :class:`tengri.forward.sed_model.SEDModel` on the spatial side,
 at the SubModel layer. Holds a list of :class:`SpatialComponent`
@@ -60,7 +60,7 @@ def default_grid_kpc(
 
 @dataclass(frozen=True)
 class SpatialModel:
-    """Composer over a list of :class:`SpatialComponent`s.
+    """Composer over a list of :class:`SpatialComponent` objects.
 
     Satisfies :class:`tengri.protocols.SubModel` — has ``name``,
     :meth:`declared_parameters`, and :meth:`run`.

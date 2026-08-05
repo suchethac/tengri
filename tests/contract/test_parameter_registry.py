@@ -53,17 +53,24 @@ class TestRegistryShape:
 
 class TestListParameters:
     def test_no_filter_returns_all_sorted(self):
-        ls = list_parameters()
-        assert ls == sorted(ls)
-        assert set(ls) == set(registry().keys())
+        # Returns a _RegistryTable since #1285; ``.names()`` is the old shape.
+        names = list_parameters().names()
+        assert names == sorted(names)
+        assert set(names) == set(registry().keys())
 
     def test_prefix_filter(self):
-        ls = list_parameters(prefix="radio_")
-        assert all(n.startswith("radio_") for n in ls)
-        assert len(ls) >= 3  # radio has at least 3 declared parameters
+        names = list_parameters(prefix="radio_").names()
+        assert all(n.startswith("radio_") for n in names)
+        assert len(names) >= 3  # radio has at least 3 declared parameters
 
     def test_unknown_prefix_returns_empty(self):
-        assert list_parameters(prefix="nonexistent_") == []
+        assert list_parameters(prefix="nonexistent_").names() == []
+
+    def test_rows_carry_description_and_units(self):
+        """The point of returning a table: the metadata is no longer thrown away."""
+        rows = list_parameters(prefix="dust_")
+        assert rows, "no dust_ parameters in this build"
+        assert set(rows[0]) >= {"name", "description", "units", "owner"}
 
 
 class TestDescribeParameter:
@@ -87,7 +94,7 @@ class TestDescribeParameter:
         # name. The closest free parameter name should still be
         # suggested if within edit-distance 2. Use a deliberately close
         # typo of a known parameter to exercise the hint path.
-        known = list_parameters(prefix="dust_")
+        known = list_parameters(prefix="dust_").names()
         if not known:
             pytest.skip("no dust_ parameters in this build")
         target = known[0]

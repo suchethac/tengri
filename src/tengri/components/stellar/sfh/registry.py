@@ -42,7 +42,7 @@ import jax.numpy as jnp
 from tengri.components.stellar.sfh.dense_basis import dense_basis, dense_basis_pure
 from tengri.components.stellar.sfh.gp_sfh import (
     compute_sqrt_power_drw,
-    drw_linear_gp_from_xi,
+    drw_innovations_gp_from_xi,
     gp_from_xi,
     make_log_age_grid,
 )
@@ -1625,10 +1625,55 @@ _register(
         name="field",
         fn=_field_fn_placeholder,
         params={
-            # Stochastic SFH (DRW correlated field) defaults: σ ≈ 0.3 dex
-            # corresponds to a "moderately bursty" galaxy (Caplar & Tacchella
-            # 2019 typical PSD amplitude); τ = 100 Myr matches the Iyer+2020
-            # decorrelation timescale measured from SFR(t) of EAGLE galaxies.
+            # Stochastic SFH (DRW correlated field).
+            #
+            # THE PRIORS BELOW ARE DELIBERATELY UNIFORM AND UNINFORMATIVE. The
+            # literature supports a narrower, measured prior on tau (see below);
+            # uniform is kept so the data, not the prior, drives the posterior,
+            # and so a recovered value can be compared against the measurement
+            # rather than assuming it. Both options are documented here so the
+            # choice stays visible.
+            #
+            # What a DRW is, in this literature's terms: its PSD is
+            # 1/(1 + (2 pi f tau)^2) — slope 2 above the break, flat below. That
+            # is exactly the alpha = 2 single-break case of Caplar & Tacchella
+            # [1]_, so the model family matches their assumed form rather than
+            # approximating it. It CANNOT represent the three-break PSD of
+            # Tacchella, Forbes & Caplar [2]_ (inflow correlation time, gas
+            # equilibrium timescale, molecular cloud lifetime); that needs a
+            # flexible per-timescale PSD, not a single (sigma, tau).
+            #
+            # tau — MEASURED VALUE, not what is set here. Caplar & Tacchella [1]_
+            # infer tau_break = 178 (+104, -66) Myr assuming alpha = 2, i.e.
+            # galaxies lose memory of prior activity on ~200 Myr. The default of
+            # 100 Myr below is LOW against that, and Uniform(10, 500) places most
+            # of its mass above it. A measured-centered alternative would be a
+            # lognormal about 178 Myr carrying the asymmetric +104/-66 spread.
+            #
+            # sigma — no PSD amplitude in dex is quoted by either reference; the
+            # 0.3 dex default is consistent with the observed star-forming
+            # main-sequence scatter (~0.2-0.4 dex) that [1]_ models.
+            #
+            # Recent context, NOT verified to this level of detail: Kravtsov &
+            # Belokurov, "Stochastic star formation and the abundance of z>10
+            # UV-bright galaxies", arXiv:2405.04578 (2024), require SFR
+            # stochasticity rising with redshift (scatter in M_UV of ~0.75-2.0
+            # mag) to reproduce the z>10 UV luminosity function. Their PSD form
+            # and timescale were not confirmed against the text and must be read
+            # from the paper before being cited for a number.
+            #
+            # References
+            # ----------
+            # .. [1] N. Caplar & S. Tacchella, "Stochastic modeling of
+            #    star-formation histories I: the scatter of the star-forming main
+            #    sequence", MNRAS, 487, 3845 (2019). arXiv:1901.07556.
+            # .. [2] S. Tacchella, J. C. Forbes & N. Caplar, "Stochastic
+            #    modelling of star-formation histories II: star-formation
+            #    variability from molecular clouds and gas inflow", MNRAS (2020).
+            #    DOI: 10.1093/mnras/staa1838. arXiv:2006.09382.
+            # .. [3] K. G. Iyer et al., "The star formation history and
+            #    variability of galaxies", MNRAS, 498, 430 (2020). [EAGLE
+            #    decorrelation timescale; the source of the 100 Myr default]
             "sfh_field_psd_sigma": ParamDef(
                 "PSD amplitude (dex)",
                 _lo_nonneg,
@@ -1887,6 +1932,7 @@ def compute_field_gp(
     d_log_age: float,
     field_model: str = "drw",
     log_age_grid: jnp.ndarray | None = None,
+    centering: float = 1.0,
 ) -> tuple[jnp.ndarray, float]:
     """Compute GP realization and lognormal correction for the field component.
 
@@ -1924,11 +1970,15 @@ def compute_field_gp(
 
     ``field_model="drw"`` builds a damped random walk stationary in **linear
     (physical) time** — the covariance ``(sigma ln10)^2 exp(-|t_i-t_j|/tau)`` at
-    physical times ``t_i = 10**u_i``, realized via Cholesky (#865). ``psd_sigma``
-    is then the modulation std in dex and ``psd_tau_yr`` the physical
-    decorrelation timescale. Other PSD models keep the Fourier/log-age
-    construction (:func:`gp_from_xi`). See
-    :func:`tengri.components.stellar.sfh.gp_sfh.drw_linear_gp_from_xi`.
+    physical times ``t_i = 10**u_i`` (#865). ``psd_sigma`` is then the modulation
+    std in dex and ``psd_tau_yr`` the physical decorrelation timescale. It is
+    realized via the exact OU state-space (innovations) recursion
+    (:func:`~tengri.components.stellar.sfh.gp_sfh.drw_innovations_gp_from_xi`),
+    which for a Markov covariance *is* the Cholesky factor — the same ``xi -> SFH``
+    map as a dense Cholesky, computed in ``O(n)`` instead of ``O(n^3)`` and without
+    the positive-definiteness jitter, so the realized prior is the exact ``K``. The
+    posterior geometry is unchanged by this (#1301 is not addressed by it). Other
+    PSD models keep the Fourier/log-age construction (:func:`gp_from_xi`).
 
     Examples
     --------
@@ -1952,9 +2002,36 @@ def compute_field_gp(
         # Iyer+2020 timescale). Replaces the former Fourier/log-age construction,
         # whose correlation length was fixed in dex (scale-free) and only matched
         # the physical timescale near a single reference age.
+        #
+        # Realized via the exact OU state-space (innovations) recursion rather
+        # than a dense Cholesky. For a Markov covariance the recursion *is* the
+        # Cholesky factor (lower-triangular, positive diagonal, M M^T = K — and
+        # that factor is unique), so the ``xi -> SFH`` map is numerically
+        # identical: O(n) instead of O(n^3), and jitter-free, so the prior is the
+        # exact K rather than K + 1e-6 var I. It does NOT change the posterior
+        # geometry and is therefore not a fix for the #1301 divergences; the
+        # zero-rotation Fourier basis (a different prior) is tracked in #1333.
+        # The dense Cholesky (``drw_linear_gp_from_xi``) is retained as the oracle.
         if log_age_grid is None:
             log_age_grid = make_log_age_grid(n_grid)
-        return drw_linear_gp_from_xi(xi, psd_sigma, psd_tau_yr, log_age_grid)
+        if float(centering) == 1.0:
+            # Bit-identical default: the production O(n) recursion, untouched.
+            return drw_innovations_gp_from_xi(xi, psd_sigma, psd_tau_yr, log_age_grid)
+        # Partial centering (#1355). ``a < 1`` moves amplitude dependence out of
+        # the xi -> SFH map, which is where the funnel lives: s = L(sigma,tau) xi
+        # is BILINEAR, and no fixed metric linearizes a multiplicative coupling,
+        # so preconditioning cannot reach it.
+        #
+        # The caller MUST pair this with the matching latent log-prior
+        # (drw_latent_log_prior). At a < 1 the prior on zeta is
+        # N(0, sigma_s^(2-2a) I), not N(0, I); omitting the -n(1-a) log sigma_s
+        # normalizer leaves a sampler that runs cleanly, reports nothing, and
+        # targets a DIFFERENT posterior at every a.
+        from tengri.components.stellar.sfh.gp_sfh import drw_partial_gp_from_zeta
+
+        return drw_partial_gp_from_zeta(
+            xi, psd_sigma, psd_tau_yr, log_age_grid, centering=centering
+        )
 
     # Other PSD models (e.g. flex-PSD) keep the Fourier/log-age construction.
     sqrt_power_fn = FIELD_MODEL_REGISTRY[field_model]

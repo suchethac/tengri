@@ -359,7 +359,9 @@ def test_roundtrip():
                 max_error = float("nan")
 
             print(f"{name}:")
-            print(f"  {n_clipped}/{len(xi)} values clipped, testing remaining {len(xi) - n_clipped}")
+            print(
+                f"  {n_clipped}/{len(xi)} values clipped, testing remaining {len(xi) - n_clipped}"
+            )
             print(f"  Max round-trip error (non-clipped): {max_error:.6e}")
         else:
             # No clipping, check all values

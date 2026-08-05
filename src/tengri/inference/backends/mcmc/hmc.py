@@ -24,6 +24,7 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
 )
+from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
 
 logger = logging.getLogger(__name__)
@@ -73,8 +74,9 @@ def run_hmc(
     n_chains=1,
     n_leapfrog_steps=10,
     target_accept_rate=0.85,
-    dense_mass_matrix=True,
+    dense_mass_matrix=None,
     chain_method="vmap",
+    precondition: bool | float | None = None,
     verbose=True,
 ):
     """HMC sampling via BlackJAX.
@@ -104,8 +106,19 @@ def run_hmc(
         Number of leapfrog integration steps per proposal.
     target_accept_rate : float
         Target acceptance rate for step size adaptation.
-    dense_mass_matrix : bool
-        Use dense mass matrix. Set False for D>30.
+    dense_mass_matrix : bool or None, default None
+        ``None`` (auto) switches to diagonal at D >= 8, the same policy NUTS
+        uses (:func:`~tengri.inference.backends.mcmc.nuts._resolve_dense_mass_matrix`,
+        #319). ``True`` / ``False`` force the choice.
+
+        This used to default to ``True``, which combined with the
+        ``n_dim <= 30`` cap below meant HMC ran a **dense** mass matrix over
+        the whole D = 8-30 band — exactly the band where NUTS deliberately
+        switches to diagonal to dodge the 20+ GB warmup spike. Measured
+        consequence: ``mcmc_hmc`` at D = 9 peaked at 13.47 GB and was
+        SIGKILLed, while ``mcmc_nuts`` at the same D was already diagonal
+        (#1413, #1454). The high-D advisory could not catch it either — it
+        fires above D = 30, by which point HMC has *stopped* using dense.
     chain_method : {"vmap", "sequential", "parallel"}, default "vmap"
         How ``n_chains > 1`` chains are executed.
 
@@ -121,6 +134,16 @@ def run_hmc(
           importing jax; falls back to ``"vmap"`` with a warning if fewer than
           ``n_chains`` devices are visible.
 
+    precondition : bool, float or None, default None
+        Sample in metric-whitened coordinates (#1301): the metric is built
+        analytically at the initial point and the chain samples ``H(A zeta)``
+        with ``A A^T = G^-alpha``, draws mapped back exactly — the posterior is
+        unchanged, only the integrator's geometry. **Opt-in** (#1397): ``None``
+        (default) and ``False`` are off; ``True`` uses
+        :data:`~tengri.inference.preconditioning.DEFAULT_WHITENING_STRENGTH`, and
+        a float in ``[0, 1]`` sets the strength (``1.0`` is full whitening).
+        Full whitening amplifies a misspecified metric without bound (#1442).
+        See :mod:`tengri.inference.preconditioning`.
     verbose : bool
         Print progress.
     """
@@ -143,9 +166,29 @@ def run_hmc(
         fitter,
         init_params,
     )
+
+    # Metric preconditioning (#1301) — see ``run_nuts`` for the rationale. Linear change
+    # of variables, so the posterior is untouched; draws are mapped back below.
+    problem = prepare_preconditioning(
+        log_posterior_flat_2arg, init_flat, data_args, precondition=precondition
+    )
+    log_posterior_flat_2arg, init_flat = problem.logdensity, problem.init_flat
+
     n_dim = len(init_flat)
 
-    use_dense = dense_mass_matrix and n_dim <= 30
+    # One definition of the policy, shared with NUTS, rather than a second
+    # heuristic that drifts from it (#1454). The `n_dim <= 30` cap stays as a
+    # backstop for an explicit `dense_mass_matrix=True` on a large problem.
+    from tengri.inference.backends.mcmc.nuts import (
+        _maybe_warn_high_memory_nuts,
+        _resolve_dense_mass_matrix,
+    )
+
+    use_dense = _resolve_dense_mass_matrix(dense_mass_matrix, n_dim) and n_dim <= 30
+    # HMC carries the same O(D^2) warmup cost as NUTS, so it gets the same
+    # warning. It never had one: the shared high-D advisory keys on method name
+    # and fires above D = 30, where HMC has already fallen back to diagonal.
+    _maybe_warn_high_memory_nuts(n_dim, use_dense, getattr(fitter, "spec", None))
 
     if verbose:
         burnin_msg = f", {n_burnin} burn-in" if n_burnin > 0 else ""
@@ -160,7 +203,7 @@ def run_hmc(
 
     t0 = time.time()
 
-    adapt_key = ("hmc", not use_dense)
+    adapt_key = ("hmc", not use_dense, problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     def ld_1arg(pos):
@@ -255,6 +298,9 @@ def run_hmc(
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
+
+    # Leave the whitened coordinates before the draws are read as parameters.
+    positions = problem.restore(positions)
 
     samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)

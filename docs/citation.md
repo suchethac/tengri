@@ -70,7 +70,7 @@ glued them together.
 - [Prospector](https://github.com/bd-j/prospector) (Johnson et al.
   2021): Bayesian SED fitting on FSPS; tengri reproduces its stellar,
   dust, nebular, AGN-torus, and IGM paths and bit-checks the
-  tengri↔FSPS SSP port. See
+  tengri↔FSPS SSP repackaging. See
   [Reproduction → Prospector](reproduction/prospector).
 
 ## Inheriting credit automatically

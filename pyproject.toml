@@ -43,6 +43,12 @@ dependencies = [
     "nifty8[re]>=8.5",
     "astroquery>=0.4",
     "tomli>=2.0; python_version < '3.11'",
+    # JAX gates `jax_compilation_cache_max_size` behind filelock: set the cap
+    # without it and JAX raises on EVERY persistent-cache read, which disables the
+    # cache instead of bounding it. tengri caps the cache by default (#1507), so
+    # this is required for that default to work. jax_cache.py still checks at
+    # runtime and degrades to unbounded rather than broken if it is absent.
+    "filelock>=3.0",
 ]
 
 [project.urls]
@@ -55,7 +61,7 @@ Issues = "https://github.com/suchethac/tengri/issues"
 tengri = "tengri.cli:main"
 
 [project.optional-dependencies]
-nuts = ["blackjax>=1.0"]
+nuts = ["blackjax>=1.6"]
 optax = ["optax>=0.2"]
 # Grain-model attenuation laws (wd01_*, d03_*, hd23_*) wrap the
 # dust-extinction package rather than reimplementing the profiles.
@@ -70,7 +76,7 @@ grain-dust = ["dust-extinction>=1.0"]
 gpu = ["jax[cuda12]>=0.4.20"]
 metal = ["jax-metal>=0.1.0"]
 all = [
-    "blackjax>=1.0",
+    "blackjax>=1.6",
     "optax>=0.2",
     # Grain-model attenuation laws (wd01_*, d03_*, hd23_*) need this; without
     # it those laws raise ImportError at predict time, so "[all]" must ship it.
@@ -96,7 +102,7 @@ dev = [
     # pytest still hits them via tests in test_map_*.py etc. Bundle into dev
     # so CI green. Not propagated to runtime install for end users.
     "optax>=0.2",
-    "blackjax>=1.0",
+    "blackjax>=1.6",
     "jaxopt>=0.8",
     # Required by tests/unit/test_physical_amplitudes.py for grain-model dust
     # laws (D03/HD23/WD01). Runtime imports inside attenuation.py are guarded,
@@ -202,6 +208,7 @@ testpaths = ["tests"]
 addopts = "--tb=short -m 'not crossval and not slow and not benchmark' -n auto --dist=loadfile"
 markers = [
     "slow: heavy end-to-end tests (inference/integration trees); excluded from the default run",
+    "network: test genuinely exercises a network path; exempt from the conftest network guard (#1546)",
     "crossval: cross-validation tests against community SED codes (bagpipes, etc.)",
     "benchmark: asserts a wall-clock ratio; run serially (`-m benchmark -n 0`), never under -n auto",
     "conservation: energy/mass/photon balance across a transformation",

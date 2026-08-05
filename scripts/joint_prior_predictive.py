@@ -42,9 +42,16 @@ jax.config.update("jax_enable_x64", True)
 SSP_FILE = "data/ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
 FILTERS = [
-    "galex_fuv", "galex_nuv",
-    "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "2mass_j", "2mass_h", "2mass_ks",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
 ]
 LINE_NAMES = ["Halpha", "Hbeta", "OIII_5007", "OII_3727"]
 LINE_WAVES_REST_AA = jnp.array([6564.61, 4862.68, 5008.24, 3727.09])  # vacuum
@@ -82,10 +89,9 @@ def make_spec(psd_sigma_fixed: float) -> Parameters:
 def build_joint_predict(model: SEDModel):
     """Return jitted ``params -> (phot[10], line_flux[4])``."""
     line_centers_obs = LINE_WAVES_REST_AA * (1.0 + Z_FIX)
-    waves_per_line = jnp.stack([
-        jnp.linspace(c - LINE_WINDOW_AA, c + LINE_WINDOW_AA, LINE_NPIX)
-        for c in line_centers_obs
-    ])  # (4, 41)
+    waves_per_line = jnp.stack(
+        [jnp.linspace(c - LINE_WINDOW_AA, c + LINE_WINDOW_AA, LINE_NPIX) for c in line_centers_obs]
+    )  # (4, 41)
     waves_concat = waves_per_line.reshape(-1)
 
     @jax.jit
@@ -142,8 +148,11 @@ def plot_separability(all_phot, all_lines):
             log_vals = np.log10(np.abs(arr) + 1e-40)
             log_vals = log_vals[np.isfinite(log_vals)]
             ax.hist(
-                log_vals, bins=30, alpha=0.45, color=colors[j],
-                label=fr"$\sigma_{{\rm PSD}}={sigma}$",
+                log_vals,
+                bins=30,
+                alpha=0.45,
+                color=colors[j],
+                label=rf"$\sigma_{{\rm PSD}}={sigma}$",
             )
         ax.set_title(name, fontsize=10)
         ax.set_xlabel(r"$\log_{10}$(flux)", fontsize=8)
@@ -191,10 +200,10 @@ def plot_population_stats(all_phot, all_lines):
     for i, name in enumerate(FILTERS + LINE_NAMES):
         c = cmap(i / n_obs)
         ls = "-" if i < n_phot else "--"
-        ax_std.plot(sigmas, stds[i], "o", linestyle=ls, color=c, label=name,
-                    markersize=5)
-        ax_mean.plot(sigmas, means[i] - means[i, 0], "o", linestyle=ls,
-                     color=c, label=name, markersize=5)
+        ax_std.plot(sigmas, stds[i], "o", linestyle=ls, color=c, label=name, markersize=5)
+        ax_mean.plot(
+            sigmas, means[i] - means[i, 0], "o", linestyle=ls, color=c, label=name, markersize=5
+        )
 
     ax_std.set_xlabel(r"$\sigma_{\rm PSD}$ (mock truth)")
     ax_std.set_ylabel(r"std across galaxies of $\log_{10}$(observable)")
@@ -203,7 +212,9 @@ def plot_population_stats(all_phot, all_lines):
     ax_std.legend(fontsize=7, ncol=2, loc="best")
 
     ax_mean.set_xlabel(r"$\sigma_{\rm PSD}$ (mock truth)")
-    ax_mean.set_ylabel(r"$\Delta$ mean $\log_{10}$(observable)  (relative to $\sigma_{\rm PSD}=0.5$)")
+    ax_mean.set_ylabel(
+        r"$\Delta$ mean $\log_{10}$(observable)  (relative to $\sigma_{\rm PSD}=0.5$)"
+    )
     ax_mean.set_title("Mean shift vs σ_PSD\n(systematic = identifiable)")
     ax_mean.grid(alpha=0.3)
     ax_mean.axhline(0, color="black", lw=0.5)
@@ -223,12 +234,10 @@ def plot_population_stats(all_phot, all_lines):
 
 def report_ks(all_phot, all_lines):
     n_phot = len(FILTERS)
-    pairs = [(SIGMA_VALUES[0], SIGMA_VALUES[-1]),
-             (SIGMA_VALUES[1], SIGMA_VALUES[2])]
+    pairs = [(SIGMA_VALUES[0], SIGMA_VALUES[-1]), (SIGMA_VALUES[1], SIGMA_VALUES[2])]
 
     print("\n=== KS test (per-observable, log10 of flux) ===")
-    print(f"{'observable':18s} | "
-          + "  |  ".join([f"σ={a}↔{b} (KS, p)" for a, b in pairs]))
+    print(f"{'observable':18s} | " + "  |  ".join([f"σ={a}↔{b} (KS, p)" for a, b in pairs]))
     for i, name in enumerate(FILTERS + LINE_NAMES):
         out = []
         for sig_a, sig_b in pairs:
@@ -261,14 +270,16 @@ def main() -> None:
         all_phot[sigma] = phot
         all_lines[sigma] = lines
         # Sanity: a single observable's median + spread
-        print(f"  log10 Hα flux: median={np.median(np.log10(np.abs(lines[:, 0]) + 1e-40)):.3f}, "
-              f"std={np.std(np.log10(np.abs(lines[:, 0]) + 1e-40)):.3f}")
+        print(
+            f"  log10 Hα flux: median={np.median(np.log10(np.abs(lines[:, 0]) + 1e-40)):.3f}, "
+            f"std={np.std(np.log10(np.abs(lines[:, 0]) + 1e-40)):.3f}"
+        )
 
     plot_separability(all_phot, all_lines)
-    print(f"\nWrote {OUT_DIR/'joint_prior_predictive_hist.png'}")
+    print(f"\nWrote {OUT_DIR / 'joint_prior_predictive_hist.png'}")
 
     stds, means = plot_population_stats(all_phot, all_lines)
-    print(f"Wrote {OUT_DIR/'joint_prior_predictive_popstats.png'}")
+    print(f"Wrote {OUT_DIR / 'joint_prior_predictive_popstats.png'}")
 
     report_ks(all_phot, all_lines)
 

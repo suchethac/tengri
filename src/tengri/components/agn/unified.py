@@ -105,7 +105,7 @@ Usage::
     # Use a named configuration. agn_log_lbol = 11 → L_bol ≈ 4e44 erg/s
     # (a typical bright Seyfert nucleus).
     model_fn = resolve_agn_model("multicolor_agn")
-    l_nu = model_fn(wavelength, agn_log_lbol=11.0, agn_frac=0.1, ...)
+    l_nu = model_fn(wavelength, agn_log_lbol=11.0, agn_lum_ratio=0.1, ...)
 
     # Or use the generic combiner directly.
     l_nu = unified_agn(wavelength, agn_log_lbol=11.0, disc_model="multicolor", ...)
@@ -451,7 +451,7 @@ _AGN_PRESETS = {
     # ``agn_norm='conserving'`` reproduces the monolithic disc+torus functions'
     # energy-conserving normalization bit-exactly (verified 3e-7 for
     # multicolor/silva04/cat3d_wind); ``'independent'`` was a #941 regression
-    # that mis-scaled the disc/torus by an ``agn_frac`` factor (~2x, 99% off).
+    # that mis-scaled the disc/torus by an ``agn_lum_ratio`` factor (~2x, 99% off).
     "multicolor_agn": {
         "agn_disc_block": "multicolor",
         "agn_torus_block": "silva04",
@@ -612,7 +612,7 @@ def unified_agn(
     l_disc = disc_fn(
         wavelength,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=1.0 - agn_torus_frac,
+        agn_lum_ratio=1.0 - agn_torus_frac,
         **kwargs,
     )
     l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
@@ -637,7 +637,7 @@ def unified_agn(
 def multicolor_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 0.1,
+    agn_lum_ratio: float = 0.1,
     agn_log_mbh: float = 8.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
@@ -659,7 +659,7 @@ def multicolor_agn(
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
         log10 of bolometric luminosity [Lsun].
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         AGN luminosity fraction [dimensionless]. Default 0.1.
     agn_log_mbh : float, optional
         log10 of black hole mass [Msun]. Default 8.0.
@@ -703,7 +703,7 @@ def multicolor_agn(
         agn_log_nh_silva=agn_log_nh_silva,
         agn_torus_frac=agn_torus_frac,
     )
-    return l_nu * agn_frac
+    return l_nu * agn_lum_ratio
 
 
 # kubota_done alias removed — use composable blocks instead:
@@ -713,7 +713,7 @@ def multicolor_agn(
 def kubota_done_full_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 0.1,
+    agn_lum_ratio: float = 0.1,
     agn_log_mbh: float = 8.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
@@ -742,7 +742,7 @@ def kubota_done_full_agn(
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
         log10 of bolometric luminosity [Lsun].
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         AGN luminosity fraction [dimensionless]. Default 0.1.
     agn_log_mbh : float, optional
         log10 of black hole mass [Msun]. Default 8.0.
@@ -790,7 +790,7 @@ def kubota_done_full_agn(
     l_disc = kubota_done_disc(
         wavelength,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=1.0 - agn_torus_frac,
+        agn_lum_ratio=1.0 - agn_torus_frac,
         agn_log_mbh=agn_log_mbh,
         agn_log_ledd=agn_log_ledd,
         agn_a_spin=agn_a_spin,
@@ -812,13 +812,13 @@ def kubota_done_full_agn(
         agn_torus_frac=agn_torus_frac,
     )
 
-    return (l_disc + l_torus) * agn_frac
+    return (l_disc + l_torus) * agn_lum_ratio
 
 
 def skirtor_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 11.0,
-    agn_frac: float = 0.1,
+    agn_lum_ratio: float = 0.1,
     agn_tau_skirtor: float = 7.0,
     agn_p_skirtor: float = 1.0,
     agn_q_skirtor: float = 1.0,
@@ -839,7 +839,7 @@ def skirtor_agn(
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float, optional
         log10 of bolometric luminosity [Lsun]. Default 11.0.
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         AGN luminosity fraction [dimensionless]. Default 0.1.
     agn_tau_skirtor : float, optional
         Optical depth at 9.7 um [dimensionless], range [3, 11]. Default 7.0.
@@ -867,7 +867,7 @@ def skirtor_agn(
     l_disc = powerlaw_disc(
         wavelength,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=1.0 - agn_torus_frac,
+        agn_lum_ratio=1.0 - agn_torus_frac,
     )
     l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
 
@@ -884,13 +884,13 @@ def skirtor_agn(
         agn_torus_frac=agn_torus_frac,
     )
 
-    return (l_disc + l_torus) * agn_frac
+    return (l_disc + l_torus) * agn_lum_ratio
 
 
 def skirtor_stalevski_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 11.0,
-    agn_frac: float = 0.1,
+    agn_lum_ratio: float = 0.1,
     agn_tau_skirtor: float = 7.0,
     agn_p_skirtor: float = 1.0,
     agn_q_skirtor: float = 1.0,
@@ -922,7 +922,7 @@ def skirtor_stalevski_agn(
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float, optional
         log10 of bolometric luminosity [Lsun]. Default 11.0.
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         AGN luminosity fraction (host scaling) [dimensionless]. Default 0.1.
     agn_tau_skirtor : float, optional
         Optical depth at 9.7 um [dimensionless], grid range [3, 11]. Default 7.0.
@@ -937,7 +937,7 @@ def skirtor_stalevski_agn(
     -------
     ndarray, shape (n_wave,)
         L_nu [erg/s/Hz], total SKIRTOR SED scaled to
-        ``10**agn_log_lbol * L_sun * agn_frac``.
+        ``10**agn_log_lbol * L_sun * agn_lum_ratio``.
 
     Notes
     -----
@@ -965,13 +965,13 @@ def skirtor_stalevski_agn(
     )
     if has_radius_ratio:
         kw["agn_radius_ratio"] = agn_radius_ratio
-    return fn(wavelength, **kw) * agn_frac
+    return fn(wavelength, **kw) * agn_lum_ratio
 
 
 def silva04_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 11.0,
-    agn_frac: float = 0.1,
+    agn_lum_ratio: float = 0.1,
     agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
     agn_ebv_disc: float = 0.0,
@@ -985,7 +985,7 @@ def silva04_agn(
         Rest-frame wavelength. [Å]
     agn_log_lbol : float, optional
         ``log10(L_bol / L_sun)``. Default 11.0.
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Overall AGN luminosity fraction applied on top of the
         disc-plus-torus sum. Default 0.1.
     agn_log_nh_silva : float, optional
@@ -1011,7 +1011,7 @@ def silva04_agn(
     l_disc = powerlaw_disc(
         wavelength,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=1.0 - agn_torus_frac,
+        agn_lum_ratio=1.0 - agn_torus_frac,
     )
     l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
     l_torus = silva04_sed(
@@ -1020,13 +1020,13 @@ def silva04_agn(
         agn_log_nh_silva=agn_log_nh_silva,
         agn_torus_frac=agn_torus_frac,
     )
-    return (l_disc + l_torus) * agn_frac
+    return (l_disc + l_torus) * agn_lum_ratio
 
 
 def cat3d_wind_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 11.0,
-    agn_frac: float = 0.1,
+    agn_lum_ratio: float = 0.1,
     agn_cos_inc: float = 0.86602540378443864,
     agn_a_cat3d: float = -2.0,
     agn_fwd_cat3d: float = 1.0,
@@ -1042,7 +1042,7 @@ def cat3d_wind_agn(
         Rest-frame wavelength. [Å]
     agn_log_lbol : float, optional
         ``log10(L_bol / L_sun)``. Default 11.0.
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         Overall AGN luminosity fraction applied on top of the
         disc-plus-torus sum. Default 0.1.
     agn_cos_inc : float, optional
@@ -1074,7 +1074,7 @@ def cat3d_wind_agn(
     l_disc = powerlaw_disc(
         wavelength,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=1.0 - agn_torus_frac,
+        agn_lum_ratio=1.0 - agn_torus_frac,
     )
     l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
     l_torus = cat3d_wind_sed(
@@ -1085,13 +1085,13 @@ def cat3d_wind_agn(
         agn_fwd_cat3d=agn_fwd_cat3d,
         agn_torus_frac=agn_torus_frac,
     )
-    return (l_disc + l_torus) * agn_frac
+    return (l_disc + l_torus) * agn_lum_ratio
 
 
 def adaf_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_frac: float = 0.1,
+    agn_lum_ratio: float = 0.1,
     agn_log_mbh: float = 8.0,
     agn_adaf_alpha: float = 0.3,
     agn_adaf_beta: float = 0.5,
@@ -1116,7 +1116,7 @@ def adaf_agn(
         Rest-frame wavelength [Angstrom].
     agn_log_lbol : float
         log10 of bolometric luminosity [Lsun].
-    agn_frac : float, optional
+    agn_lum_ratio : float, optional
         AGN luminosity fraction [dimensionless]. Default 0.1.
     agn_log_mbh : float, optional
         log10 of black hole mass [Msun]. Default 8.0.
@@ -1154,7 +1154,7 @@ def adaf_agn(
     l_disc = adaf_spectrum(
         wavelength,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=1.0 - agn_torus_frac,
+        agn_lum_ratio=1.0 - agn_torus_frac,
         agn_log_mbh=agn_log_mbh,
         agn_adaf_alpha=agn_adaf_alpha,
         agn_adaf_beta=agn_adaf_beta,
@@ -1170,7 +1170,7 @@ def adaf_agn(
         agn_torus_frac=agn_torus_frac,
     )
 
-    return (l_disc + l_torus) * agn_frac
+    return (l_disc + l_torus) * agn_lum_ratio
 
 
 def relagn_agn(
@@ -1347,7 +1347,7 @@ def unified_nlr_blr(
     agn_a_spin: float = 0.0,
     agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
-    agn_frac: float = 0.1,
+    agn_lum_ratio: float = 0.1,
     agn_blr_fwhm: float = 5000.0,
     agn_nlr_fwhm: float = 500.0,
     agn_polar_ebv: float = 0.0,
@@ -1492,7 +1492,7 @@ def unified_nlr_blr(
         Torus covering factor (fraction of L_bol intercepted by torus).
         In Synthesizer this is derived as ``theta_torus / 90°``; here it is
         an independent free parameter. Default 0.5.
-    agn_frac : float
+    agn_lum_ratio : float
         Overall AGN fraction scaling. Default 0.1.
     agn_blr_fwhm : float
         BLR line FWHM [km/s]. Synthesizer uses ``velocity_dispersion_blr``;
@@ -1615,7 +1615,7 @@ def unified_nlr_blr(
     l_disc = multicolor_disc(
         wavelength,
         agn_log_lbol=agn_log_lbol,
-        agn_frac=1.0 - agn_torus_frac,
+        agn_lum_ratio=1.0 - agn_torus_frac,
         agn_log_mbh=agn_log_mbh,
         agn_log_ledd=agn_log_ledd,
         agn_a_spin=agn_a_spin,
@@ -1708,7 +1708,7 @@ def unified_nlr_blr(
 
     # --- Total ---
     l_total = l_disc_masked + l_torus + l_nlr + l_blr + l_xray_contrib + l_radio_contrib
-    return l_total * agn_frac
+    return l_total * agn_lum_ratio
 
 
 # ── Pluggable NLR/BLR backend factories ──────────────────────────

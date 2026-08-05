@@ -114,10 +114,10 @@ All unit translations are implemented in `core/parameters.py :: translate_to_int
 
 | Verb | Meaning | Examples |
 |------|---------|---------|
-| `compute_*` | Pure function, returns new array | `compute_blr_sed()`, `compute_dust_attenuation()` |
+| `compute_*` | Pure function, returns new array | `compute_blr_sed()`, `compute_csp_sed()` |
 | `load_*` | Reads from disk | `load_ssp_data()`, `load_cloudy_grid()` |
-| `build_*` | Factory returning a callable/kernel | `build_fused_photometry()` |
-| `apply_*` | Transform a spectrum in-pipeline | `apply_lsf()`, `apply_igm()` |
+| `build_*` | Factory returning a callable/kernel | `build_kernel()`, `build_dl07_photometry_lookup()` |
+| `apply_*` | Transform a spectrum in-pipeline | `apply_lsf()`, `apply_lyman_cutoff()` |
 | `resolve_*` | Registry lookup by string key | `resolve_dust_law()`, `resolve_sfh()` |
 | bare name | SFH shape functions registered as **registry keys** in `SFH_REGISTRY` ONLY (see §6) | `tsnorm`, `dpl` |
 
@@ -144,12 +144,34 @@ The public surface uses exactly these verbs. Anything else is a contract violati
 | Verb | Meaning | Module | Examples |
 |------|---------|--------|----------|
 | `predict_*` | Forward model → observable or derived property | core | `predict_photometry()`, `predict_spectrum()` |
-| `measure_*` | Model-free extraction from spectra | `measure` | `measure_index_jax()`, `measure_equivalent_width()` |
+| `measure_*` | Extraction requiring no `SEDModel` — array in, number out | `measure` | `measure_index_jax()`, `measure_line_flux_jax()` |
 | `mock*` | Synthesize data | `results` | `generate_mock()` |
 | `fit*` | Inference entry point | `inference` | `Fitter.run()`, `PopulationFitter.run()` |
 | `plot_*` | Visualization | `plot` | `plot_sed_fit()`, `plot_sfh()` |
 
-**Rationale:** These verbs signal intent immediately. A user reading `model.predict_*` knows the call is deterministic and returns observables; `measure_*` signals model-free extraction; `fit*` signals inference.
+**Rationale:** These verbs signal intent immediately. A user reading `model.predict_*` knows the call is deterministic and returns observables; `measure_*` signals extraction that needs no model; `fit*` signals inference.
+
+**"Model-free" means no `SEDModel` — it does NOT mean "observed data."** This
+distinction has already cost one wrong turn, so it is written down here. `measure`
+is defined by what it does *not* require — a model and a forward pass — never by
+where its input came from. Every operator is array-in / number-out, and the same
+one measures a spectrum tengri just predicted, one exported to disk, and one the
+user reduced themselves; `measure.from_prediction()` measures a `Prediction`
+directly. Reading "model-free" as "consumes observed data" is what motivated a
+proposed `from_observed` entry point during API Phase 3 — a split by input
+provenance that nothing needed and that was correctly never built. Do not
+reintroduce it. ("Model-free" also does not mean *reduction* tools: continuum
+placement, sky subtraction and bad-pixel repair are a pipeline's job. See the
+`tengri.measure` module docstring, which is the long form of this paragraph.)
+
+**The verb can be carried by the module rather than the prefix.** The public
+façade spells them `measure.spectral_index()`, `measure.line_flux()` and
+`measure.photometry()` — no `measure_` prefix, because `tengri.measure` already
+supplies it. The `measure_*`-prefixed engines they dispatch to live in
+`observation/`. Note also that measuring an equivalent width is a *mode* of
+`measure.spectral_index()` (break / EW / slope), not a function of its own; the
+array-returning diagnostic is `compute_equivalent_widths()` under the `compute_*`
+verb.
 
 ### 4b.2 The property-catalog contract
 

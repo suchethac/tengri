@@ -117,10 +117,10 @@ class TestPowerlawDiscPhysics:
     """Simple power-law disc must obey basic SED physics."""
 
     def test_luminosity_normalization(self):
-        """Integrated L_nu * dnu should equal L_bol * agn_frac."""
+        """Integrated L_nu * dnu should equal L_bol * agn_lum_ratio."""
         from tengri.components.agn.disc import powerlaw_disc
 
-        l_nu = powerlaw_disc(WAVE, agn_log_lbol=11.0, agn_frac=0.5)
+        l_nu = powerlaw_disc(WAVE, agn_log_lbol=11.0, agn_lum_ratio=0.5)
         nu = 2.99792458e10 / (WAVE * 1e-8)
         sort_idx = jnp.argsort(nu)
         l_bol_integrated = float(jnp.trapezoid(l_nu[sort_idx], nu[sort_idx]))

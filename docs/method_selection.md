@@ -1,6 +1,6 @@
 # Choosing an inference method
 
-`Fitter.run("...")` dispatches to one of ~19 backends. They are not
+`forward.fit(..., method="...")` dispatches to one of ~19 backends. They are not
 interchangeable: some are exact samplers, some are fast approximations, and a
 few are still experimental. The authoritative, always-current list — with
 per-method tier, dependencies, and validation notes — is a function call:
@@ -44,7 +44,7 @@ The table below is a decision aid; when it disagrees with
 NUTS/VI warmup can peak well above the resident forward model — 20+ GB on
 `dense_basis` D≈8 with `dense_mass_matrix=True`. Run **one** NUTS/VI fit per Python
 process, and drop to `dense_mass_matrix=False` or `mcmc_hmc` on D ≥ 8. The
-fitting tutorials ([05](spine/05_fitting_photometry),
+fitting tutorials ([quickstart](spine/00_quickstart),
 [06](spine/06_fitting_spectroscopy),
 [07](spine/07_joint_photo_spec)) follow these rules; see also
 [Known limitations](known_limitations).
@@ -59,4 +59,5 @@ transparently via an interpolation table. Every entry in `tengri.recipes` uses
 it. For spectroscopy, `approx=SpectrumPrecomp()` pre-rebins the SSP to the
 spectrum pixels; on a joint observation either opt-in builds both the
 photometry and spectrum tables. See
-[Joint fitting](joint_fitting) and [Known limitations](known_limitations).
+[Joint photometry + spectroscopy](spine/07_joint_photo_spec) and
+[Known limitations](known_limitations).

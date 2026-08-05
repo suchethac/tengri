@@ -22,6 +22,7 @@ from tengri.inference.backends.mcmc._shared import (
     _set_cached_adaptation,
     _vmap_chains,
 )
+from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
 
 logger = logging.getLogger(__name__)
@@ -86,12 +87,19 @@ def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> N
                 "the original report)"
             )
     warnings.warn(
+        # The `mcmc_hmc` recommendation is sound only because HMC now shares
+        # this same auto-policy. While HMC defaulted to `dense_mass_matrix=True`
+        # gated on `n_dim <= 30`, it used a DENSE matrix across the whole D =
+        # 8-30 band, so this advice sent an OOM-ing user to the more expensive
+        # sampler — measured at 13.47 GB and SIGKILLed at D = 9 (#1413, #1454).
+        # With both on diagonal above D = 8, HMC's fixed-length trajectory is
+        # genuinely lighter than NUTS's adaptive doubling.
         f"NUTS warmup with dense_mass_matrix=True at D={n_dim} can "
         f"peak at 20+ GB of RAM{heavy_sfh_hint}. If you're on a "
         "32 GB machine and the fit is OOM-ing, pass "
         "`dense_mass_matrix=False` (diagonal mass matrix; small "
         "convergence cost) or switch to `method='mcmc_hmc'` "
-        "(less memory-intensive at warmup). See issue #319.",
+        "(fixed-length trajectory; lighter warmup). See issue #319.",
         stacklevel=3,
     )
 
@@ -109,6 +117,7 @@ def run_nuts(
     max_num_doublings=10,
     dense_mass_matrix: bool | None = None,
     pathfinder_warmstart=False,
+    precondition: bool | float | None = None,
     verbose=True,
 ):
     """NUTS sampling via BlackJAX.
@@ -181,7 +190,7 @@ def run_nuts(
         nb06's well-conditioned spec posterior; the cap matters only
         when NUTS is hitting deep trees, which is workload-specific.
         Compile cost scales with this knob but is typically <3s at
-        warm cache (see docs/inference/compilation_diagnostics.md).
+        warm cache (see docs/performance/compilation.md).
     dense_mass_matrix : bool or None, optional
         Use a dense (full) mass matrix instead of diagonal. Captures
         parameter correlations (e.g. age-dust-metallicity) and
@@ -214,6 +223,43 @@ def run_nuts(
 
         - Zhang et al. 2022, "Pathfinder: Parallel quasi-Newton variational
           inference", JMLR 23, 306, arXiv:2108.03782.
+
+    precondition : bool, float or None, default None
+        Sample in metric-whitened coordinates. **Opt-in** (#1397): ``None``
+        (default) and ``False`` are off — a NaN MAP init makes the metric
+        non-finite and turned working fits into hard errors, so the feature must
+        be asked for. ``True`` enables it at
+        :data:`~tengri.inference.preconditioning.DEFAULT_WHITENING_STRENGTH`, and
+        a float in ``[0, 1]`` sets the whitening strength directly (``1.0`` is
+        full whitening, ``0.0`` is off).
+
+        Every tengri parameter is standardized, so the prior contributes exactly
+        ``I`` to the metric and everything left is the likelihood's — which on the
+        correlated-field posterior spans ``cond(grad^2 H) ~ 1e5``, far beyond what
+        any single mass matrix estimated from warmup draws can cover. This builds
+        the metric analytically at the initial point instead and samples
+        ``H(A zeta)`` with ``A A^T = G^-alpha``, mapping draws back with
+        ``xi = A zeta``.
+
+        The map is **linear**, so its Jacobian is constant and the posterior is
+        unchanged — only the geometry the integrator sees. Pass ``init_from`` a
+        MAP result so the metric is built where the chain will actually be.
+
+        **The strength is not cosmetic.** For a true precision ``H`` and a metric
+        ``G = H^gamma``, whitening leaves ``cond = cond(H) ** |1 - alpha*gamma|``,
+        so full whitening (``alpha=1``) is worse than doing nothing as soon as
+        ``gamma > 2`` and amplifies without bound past that. Measured on
+        single-galaxy photometry fits, full whitening ranged from 0.10x to 5.76x
+        ESS/s across seeds *of the same model* (#1442). The default strength halves
+        the exponent and doubles the tolerated misspecification.
+
+        Costs one dense ``(D, D)`` Hessian up front (``O(D)`` backward passes),
+        so it is worthwhile at moderate ``D`` and on stiff posteriors, not on
+        easy low-dimensional ones.
+
+        This is the metric NIFTy hands to MGVI/geoVI (``I + J^T N^-1 J``); the
+        difference is that NIFTy recomputes it every iteration while a
+        Hamiltonian sampler needs one fixed metric for the whole chain.
 
     verbose : bool
         Print progress.
@@ -251,6 +297,26 @@ def run_nuts(
     )
 
     n_dim = len(init_flat)
+
+    # Metric preconditioning (#1301). Every parameter is standardized, so the prior
+    # contributes exactly I to the metric and the rest is the likelihood's — which on
+    # every configuration measured spans cond 8.5e4 to 3.1e8, far beyond what a mass
+    # matrix estimated from warmup draws can cover. Sample the whitened coordinates
+    # instead and map the draws back; the map is linear, so the posterior is unchanged.
+    problem = prepare_preconditioning(
+        log_posterior_flat_2arg, init_flat, data_args, precondition=precondition
+    )
+    log_posterior_flat_2arg, init_flat = problem.logdensity, problem.init_flat
+    if problem.enabled and verbose:
+        # Report the geometry, not the fact that a function was called. Whether the
+        # metric was excellent or useless is the whole difference between a 5.76x
+        # speedup and a 0.10x slowdown, and it used to be invisible from the log.
+        logger.info(
+            "NUTS preconditioning: strength=%.2f, cond %.2e -> %.2e at the initial point",
+            problem.strength,
+            problem.metric_condition,
+            problem.whitened_condition,
+        )
 
     # Resolve auto-policy (default since #319). Explicit True/False
     # from the caller is honored as-is.
@@ -297,7 +363,9 @@ def run_nuts(
                 n_dim**2,
             )
 
-    adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart))
+    # ``precondition`` changes the sampled geometry, so a cached step size and mass
+    # matrix from the un-preconditioned run must not be reused.
+    adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     if cached is not None:
@@ -396,6 +464,11 @@ def run_nuts(
     n_divergent = int(jnp.sum(divergent))
 
     wall_time = time.time() - t0
+
+    # Back out of the whitened coordinates before anything interprets the draws as
+    # parameters. ``positions`` is (n_draw, D), so ``zeta @ A^T`` applies ``xi = A zeta``
+    # row-wise.
+    positions = problem.restore(positions)
 
     samples_phys = _vmap_samples_to_physical(positions, unravel_fn, context.to_physical)
     best_params = _mean_params(samples_phys)

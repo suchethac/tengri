@@ -109,8 +109,9 @@ def main() -> int:
         f.create_dataset("single_u", data=single_u, dtype=np.float64, compression="gzip")
         f.create_dataset("powerlaw", data=powerlaw, dtype=np.float64, compression="gzip")
         # (n_umin, n_alpha, n_wave) alpha-reshaping ratio (float32, gzip).
-        f.create_dataset("powerlaw_alpha_ratio", data=ratio_f32, dtype=np.float32,
-                         compression="gzip")
+        f.create_dataset(
+            "powerlaw_alpha_ratio", data=ratio_f32, dtype=np.float32, compression="gzip"
+        )
         for k, v in fsps_attrs.items():
             f.attrs[k] = v
         f.attrs["alpha_axis"] = (
@@ -121,8 +122,7 @@ def main() -> int:
         )
         f.attrs["alpha_axis_generated_by"] = "scripts/build_themis_alpha_axis.py"
     print(
-        f"Wrote {fsps_path}: powerlaw_alpha_ratio={ratio_f32.shape}, "
-        f"alpha_grid={ALPHA_GRID.shape}"
+        f"Wrote {fsps_path}: powerlaw_alpha_ratio={ratio_f32.shape}, alpha_grid={ALPHA_GRID.shape}"
     )
     return 0
 

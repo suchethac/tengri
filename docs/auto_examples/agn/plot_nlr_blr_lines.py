@@ -59,7 +59,7 @@ def _build(lines_type):
         agn={
             "all_params": tengri.FIXED,
             "log_lbol": 12.5,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},
             "nlr": {"type": mapping["nlr_type"], "all_params": tengri.FIXED},

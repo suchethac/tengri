@@ -44,7 +44,11 @@ def benchmark_mode(fitter, mode, n_warmup=5, n_measure=20):
 
 def main():
     print("Loading SSP data...")
-    ssp_path = Path(__file__).parent.parent / "data" / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    ssp_path = (
+        Path(__file__).parent.parent
+        / "data"
+        / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    )
     if not ssp_path.exists():
         print(f"  ❌ SSP data not found at {ssp_path}")
         print("  Available SSP files should be in data/ directory")
@@ -143,4 +147,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

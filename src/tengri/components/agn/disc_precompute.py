@@ -90,7 +90,7 @@ def _build_grid_powerlaw(
     redshift: float,
     alpha_grid: np.ndarray,
     agn_log_lbol: float = 45.0,  # log10(L_sun) ~ brightest quasar
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
     agn_T_max: float = 1e5,
 ) -> PreintegratedGrid:
     """Preintegrate powerlaw_disc over a 1D grid of alpha values.
@@ -108,7 +108,7 @@ def _build_grid_powerlaw(
     agn_log_lbol : float
         Reference bolometric luminosity [log10(L_sun)]. Default is a
         bright quasar.
-    agn_frac : float
+    agn_lum_ratio : float
         Disc fraction. Default 1.0.
     agn_T_max : float
         UV cutoff temperature [K]. Default 1e5.
@@ -133,7 +133,7 @@ def _build_grid_powerlaw(
             _powerlaw_disc(
                 jnp.asarray(wave_rest),
                 agn_log_lbol=agn_log_lbol,
-                agn_frac=agn_frac,
+                agn_lum_ratio=agn_lum_ratio,
                 agn_alpha=float(alpha),
                 agn_T_max=agn_T_max,
             )
@@ -162,7 +162,7 @@ def _build_grid_ss(
     redshift: float,
     mbh_grid: np.ndarray,
     lbol_grid: np.ndarray,
-    agn_frac: float = 1.0,
+    agn_lum_ratio: float = 1.0,
 ) -> PreintegratedGrid:
     """Preintegrate disc_ss (Shakura-Sunyaev) over 2D grid of (M_bh, L_bol).
 
@@ -187,7 +187,7 @@ def _build_grid_ss(
     lbol_grid : ndarray, shape (n_lbol,)
         Bolometric luminosity grid [log10(L_sun)]. Drives the disc temperature
         profile via the derived Eddington ratio.
-    agn_frac : float
+    agn_lum_ratio : float
         Disc fraction. Default 1.0.
 
     Returns
@@ -210,7 +210,7 @@ def _build_grid_ss(
                 _multicolor_disc(
                     jnp.asarray(wave_rest),
                     agn_log_lbol=float(lbol),
-                    agn_frac=agn_frac,
+                    agn_lum_ratio=agn_lum_ratio,
                     agn_log_mbh=float(mbh),
                     agn_a_spin=0.0,  # non-spinning for simplicity
                     agn_cos_inc=0.5,  # 60 degree inclination

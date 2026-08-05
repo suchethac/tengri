@@ -2,8 +2,8 @@
 """Unified observation configuration for tengri SED fitting.
 
 Bundles photometric and/or spectroscopic setup with noise configuration
-into a single declarative object. Inspired by Synthesizer's Instrument
-pattern, adapted for tengri's JAX/differentiable inference context.
+into a single declarative object. Follows the same Instrument pattern as
+Synthesizer, in tengri's JAX/differentiable inference context.
 
 The Observation class is a frozen configuration container — it never
 enters JAX-traced code. It configures what the Model precomputes and
@@ -24,6 +24,8 @@ from tengri.observation.spectral_indices import SpectralIndexData
 from tengri.observation.spectroscopy import Spectroscopy
 from tengri.parameters.priors import Distribution
 from tengri.utils.scale import LOG10_4PI, apply_log10_scale
+
+_OBSERVATION_DEPRECATION_WARNED = False
 
 
 def _restband_lnu(state) -> jnp.ndarray:
@@ -79,12 +81,17 @@ def _restband_lnu(state) -> jnp.ndarray:
     for c in contribs[1:]:
         total = total + c
 
-    # Dust reddens the stellar + nebular bucket, exactly as in the observed band.
-    # Everything else (AGN, radio, X-ray) carries its own attenuation already.
+    # Dust reddens the stellar + nebular + shock bucket, exactly as in the
+    # observed band. Everything else (AGN, radio, X-ray) carries its own
+    # attenuation already. Shock rides with nebular rather than in the
+    # unattenuated remainder because the exact path sums sed_shock into
+    # sed_intrinsic *before* dust, so it is reddened there too (#1375).
     stellar = state.derived.get("stellar_restband_lnu_precomp")
     nebular = state.derived.get("nebular_restband_lnu_precomp")
+    shock = state.derived.get("shock_restband_lnu_precomp")
     stellar = stellar if stellar is not None else jnp.zeros_like(total)
     nebular = nebular if nebular is not None else jnp.zeros_like(total)
+    nebular = nebular + (shock if shock is not None else jnp.zeros_like(total))
     unattenuated = total - stellar - nebular
 
     a_bc = state.derived.get("dust_bc_restband_attenuation_precomp")
@@ -190,8 +197,29 @@ class Observation:
     line_fluxes: LineFluxData | None = None
     spectral_indices: SpectralIndexData | None = None
     line_ratios: LineRatioData | None = None
+    lines: object | None = None
 
     def __post_init__(self):
+        # Emit one-shot deprecation warning for value-carrying fields
+        global _OBSERVATION_DEPRECATION_WARNED
+        if not _OBSERVATION_DEPRECATION_WARNED and (
+            self.line_fluxes is not None
+            or self.spectral_indices is not None
+            or self.line_ratios is not None
+        ):
+            import warnings
+
+            warnings.warn(
+                "Observation(line_fluxes=...) / spectral_indices=... / "
+                "line_ratios=... carries measured values on the instrument schema "
+                "and is deprecated: declare WHICH lines with "
+                "lines=LineList.from_names([...]) and supply the VALUES per galaxy "
+                "via Data(lines=...). See #1321.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            _OBSERVATION_DEPRECATION_WARNED = True
+
         if (
             self.photometry is None
             and self.spectroscopy is None
@@ -203,8 +231,6 @@ class Observation:
                 "Observation requires at least one of photometry, spectroscopy, "
                 "line_fluxes, line_ratios, or spectral_indices."
             )
-
-    # ── Capability queries ────────────────────────────────────────
 
     @property
     def can_do_photometry(self) -> bool:
@@ -993,6 +1019,25 @@ class Observation:
         nebular_phi_for_dust = (
             nebular_phi_for_dust if nebular_phi_for_dust is not None else jnp.zeros_like(total_phi)
         )
+        # Shock joins the young-limit bucket rather than the unattenuated
+        # remainder: the exact path sums ``sed_shock`` into ``sed_intrinsic``
+        # before dust runs, so it is reddened by the same screen. Leaving it in
+        # ``unattenuated_phi`` would make the LUT read high wherever the screen
+        # bites, and only for models that enable shock (#1375, #851).
+        #
+        # KNOWN RESIDUAL. Like the nebular bucket, shock is a single number per
+        # filter, so the screen is applied at λ_eff rather than evaluated across
+        # the band the way the stellar sub-band quadrature does (#1122). That
+        # approximation is worse for shock than for a smooth continuum, because
+        # shock emission is line-dominated and the lines sit where the screen
+        # differs most from its band average. Measured LUT-vs-exact on synthetic
+        # SDSS-like bands, shock frac=1.0: 2.4 % at z=0.05/tau_bc=0.5, 5.1 % at
+        # z=0.5/tau_bc=2, 8.3 % at z=1/tau_bc=2. With tau=0 the two paths agree
+        # to roundoff, which localizes the whole residual here rather than in
+        # the filter integration. Fixing it means giving shock a sub-band LUT.
+        shock_phi_for_dust = state.derived.get("shock_phot_lnu_precomp")
+        if shock_phi_for_dust is not None:
+            nebular_phi_for_dust = nebular_phi_for_dust + shock_phi_for_dust
         dust_attenuable_phi = stellar_phi + nebular_phi_for_dust
         unattenuated_phi = total_phi - dust_attenuable_phi
 

@@ -745,25 +745,53 @@ def _ghmc_chain_scan(
 # ---------------------------------------------------------------------------
 
 
-@functools.partial(jax.jit, static_argnums=(2,))
-def _mclmc_sample_scan(state, keys, kernel, L, step_size):
-    """JIT-compiled MCLMC sampling scan over multiple steps."""
+@functools.partial(jax.jit, static_argnums=(2, 5))
+def _mclmc_sample_scan(state, keys, kernel, L, step_size, logdensity_fn, inverse_mass_matrix):
+    """JIT-compiled MCLMC sampling scan over multiple steps.
+
+    Requires blackjax >= 1.6, whose kernel takes ``logdensity_fn`` and
+    ``inverse_mass_matrix`` per step rather than baking them in at
+    ``build_kernel`` time (#1177). Arguments are passed by keyword so a
+    future position change cannot silently misbind them.
+    """
 
     def _step(s, k):
         """Advance MCLMC sampler by one step, returning updated state and position."""
-        s, _info = kernel(k, s, L, step_size)
+        s, _info = kernel(
+            rng_key=k,
+            state=s,
+            logdensity_fn=logdensity_fn,
+            inverse_mass_matrix=inverse_mass_matrix,
+            L=L,
+            step_size=step_size,
+        )
         return s, s.position
 
     return jax.lax.scan(_step, state, keys)
 
 
-@functools.partial(jax.jit, static_argnums=(2,))
-def _adjusted_mclmc_sample_scan(state, keys, kernel, step_size, n_integration_steps):
-    """JIT-compiled adjusted MCLMC sampling scan over multiple steps."""
+@functools.partial(jax.jit, static_argnums=(2, 5))
+def _adjusted_mclmc_sample_scan(
+    state, keys, kernel, step_size, n_integration_steps, logdensity_fn, inverse_mass_matrix
+):
+    """JIT-compiled adjusted MCLMC sampling scan over multiple steps.
+
+    Requires blackjax >= 1.6 (see :func:`_mclmc_sample_scan`).
+    """
 
     def _step(s, k):
         """Advance adjusted MCLMC sampler by one step, returning position and divergence flag."""
-        s, info = kernel(k, s, step_size, n_integration_steps)
+        s, info = kernel(
+            rng_key=k,
+            state=s,
+            logdensity_fn=logdensity_fn,
+            step_size=step_size,
+            # blackjax >= 1.6 unpacks this as ``(num_integration_steps,) =
+            # integration_steps_params`` — a bare scalar raises
+            # "iteration over a 0-d array".
+            integration_steps_params=(n_integration_steps,),
+            inverse_mass_matrix=inverse_mass_matrix,
+        )
         return s, (s.position, info.is_divergent)
 
     return jax.lax.scan(_step, state, keys)

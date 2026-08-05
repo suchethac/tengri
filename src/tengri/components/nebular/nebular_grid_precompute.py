@@ -80,6 +80,87 @@ _MET_AXIS_DENSITY_FACTOR = 2
 #: snapping never creates a near-degenerate interpolation cell.
 _SNAP_MERGE_FRAC = 0.25
 
+#: Points used for an axis the caller did not resolve explicitly — both the
+#: scalar default and the per-axis fallback for a dict that omits an axis.
+_DEFAULT_N_GRID = 16
+
+#: Fewest points an interpolation axis can carry. One knot cannot interpolate;
+#: an axis that should not vary belongs fixed in the spec, not shrunk to a point.
+_MIN_N_GRID = 2
+
+
+def validate_n_grid(n_grid):
+    """Validate a scalar or per-axis ``n_grid`` before any grid is built.
+
+    Parameters
+    ----------
+    n_grid : int or dict
+        Points per free ionization axis. A scalar applies to every axis; a dict
+        ``{axis_name: n}`` sets axes individually and falls back to
+        :data:`_DEFAULT_N_GRID` for any it omits.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    TypeError
+        If ``n_grid``, or any dict value, is not an integer.
+    ValueError
+        If a dict key names something that is not a griddable axis, or any
+        resolution is below :data:`_MIN_N_GRID`.
+
+    Notes
+    -----
+    Runs both at :class:`~tengri.forward.sed_model.FeaturePrecomp` construction
+    and again inside :func:`precompute_nebular_grid`, so a misspelled axis raises
+    where it was written. Before #1311 an unrecognized key was silently dropped
+    by the ``dict.get(name, default)`` lookup and the axis quietly took the
+    default resolution — the user got a grid they did not ask for, with no
+    warning.
+    """
+
+    def _check_one(value, where):
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)):
+            raise TypeError(
+                f"n_grid{where} must be an integer; got {type(value).__name__} ({value!r})."
+            )
+        if int(value) < _MIN_N_GRID:
+            raise ValueError(
+                f"n_grid{where} must be >= {_MIN_N_GRID} (an interpolation axis needs at "
+                f"least two knots); got {value}. To drop an axis entirely, fix its "
+                f"parameter in the spec rather than shrinking its grid."
+            )
+
+    if isinstance(n_grid, dict):
+        unknown = sorted(k for k in n_grid if k not in _CANDIDATE_AXES)
+        if unknown:
+            raise ValueError(
+                f"n_grid names {unknown!r}, which are not griddable ionization axes. "
+                f"Valid axes are {', '.join(_CANDIDATE_AXES)}. Axes omitted from the "
+                f"dict default to {_DEFAULT_N_GRID}."
+            )
+        for name, value in n_grid.items():
+            _check_one(value, f"[{name!r}]")
+    else:
+        _check_one(n_grid, "")
+
+
+#: Grid nodes evaluated per vmapped batch at build time.
+#:
+#: The build vmaps one Cue forward per node. vmap is *batched*, not streamed, so a
+#: single call over every node holds every node's intermediates live at once, and
+#: peak memory scales with the node count: a three-axis grid at ``n_grid=8``
+#: (16 x 8 x 8 = 1024 nodes, ~11 MB of intermediates each) peaked at **11.7 GB**,
+#: enough to OOM a 16 GB CI runner or an ordinary laptop (#1361).
+#:
+#: Chunking bounds that peak at ``chunk x per-node`` while evaluating exactly the
+#: same nodes — vmap applies no cross-node reduction, so the per-node result does
+#: not depend on who else is in the batch. Grids at or below this size take the
+#: single-call path unchanged, so the common one-axis grid is untouched.
+_BUILD_CHUNK_NODES = 64
+
 
 @dataclasses.dataclass(frozen=True)
 class NebularGridTable:
@@ -256,11 +337,16 @@ def precompute_nebular_grid(
         (``neb_logU`` / ``neb_logZ_gas``) at ``n_grid``; the ``met_logzsol`` axis
         also starts at ``n_grid`` and then gains the interior SSP metallicity nodes
         (see ``snap_met_to_ssp_nodes``), so it ends up slightly larger. Pass a dict
-        ``{axis_name: n}`` to set each axis explicitly (unspecified axes default to
-        16). Validate any accuracy claim with a dense sweep strictly inside the grid
-        range, never with random draws — a narrow feature hides from random draws,
-        and an error that ignores ``n_grid`` is an unresolved kink, not interpolation
-        error.
+        ``{axis_name: n}`` to set each axis explicitly; omitted axes take
+        :data:`_DEFAULT_N_GRID`, and an explicit per-axis number is used verbatim
+        (the unsnapped-met densification applies only to the default). Keys are
+        validated against :data:`_CANDIDATE_AXES`, so a misspelled axis raises
+        instead of silently selecting the default (#1311). Since build cost is the
+        *product* over axes, per-axis resolution is the lever for a model whose
+        axes differ in sensitivity. Validate any accuracy claim with a dense sweep
+        strictly inside the grid range, never with random draws — a narrow feature
+        hides from random draws, and an error that ignores ``n_grid`` is an
+        unresolved kink, not interpolation error.
     ranges : dict, optional
         Override ``{param: (lo, hi)}`` grid bounds. Defaults to each free param's
         prior support (else :data:`_DEFAULT_RANGE`).
@@ -283,7 +369,11 @@ def precompute_nebular_grid(
     Notes
     -----
     **Build cost**: ``n_grid ** n_free_axes`` forward evaluations, once at
-    construction (not JIT'd — a build-time loop over concrete grid points).
+    construction. They are JIT'd and vmapped over the grid — one compile, not one
+    eager forward per node — and evaluated in batches of
+    :data:`_BUILD_CHUNK_NODES` so peak memory is bounded by the chunk rather than
+    by the node count (#1361). (This note previously described a build-time loop
+    over concrete grid points; that was the pre-vmap implementation.)
 
     **Accuracy** (dense 401-point sweep inside the bounds; FSPS/MILES, dpl SFH,
     z = 0.15, met the only free axis; worst-case relative error, requires the
@@ -297,6 +387,8 @@ def precompute_nebular_grid(
     snapped + linear                  30      0.28 %      0.15 %
     ==========================  ========  ==========  ==========
     """
+    validate_n_grid(n_grid)
+
     spec = model.spec
     free = set(spec.free_params)
     axis_names = tuple(p for p in _CANDIDATE_AXES if p in free)
@@ -305,15 +397,22 @@ def precompute_nebular_grid(
     met_nodes = _ssp_met_nodes(model) if snap_met_to_ssp_nodes else None
 
     # Per-axis resolution matched to the physics. A scalar ``n_grid`` resolves every
-    # axis at ``n_grid``; a dict ``{axis: n}`` sets each explicitly. An UNSNAPPED met
-    # axis is densified by ``_MET_AXIS_DENSITY_FACTOR`` because it must resolve the
-    # SSP-node kinks by brute force; a snapped one gets the nodes for free.
+    # axis at ``n_grid``; a dict ``{axis: n}`` sets each explicitly and the rest fall
+    # back to ``_DEFAULT_N_GRID``. An UNSNAPPED met axis is densified by
+    # ``_MET_AXIS_DENSITY_FACTOR`` because it must resolve the SSP-node kinks by brute
+    # force; a snapped one gets the nodes for free. Densification applies to the
+    # *default* only: a per-axis number is an explicit request and is honored verbatim,
+    # so ``{'met_logzsol': 30}`` builds 30 knots rather than silently doubling to 60.
     def _axis_n(name):
         if isinstance(n_grid, dict):
-            return int(n_grid.get(name, 16))
+            if name in n_grid:
+                return int(n_grid[name])
+            requested = _DEFAULT_N_GRID
+        else:
+            requested = n_grid
         if name == "met_logzsol" and met_nodes is None:
-            return int(n_grid * _MET_AXIS_DENSITY_FACTOR)
-        return int(n_grid)
+            return int(requested * _MET_AXIS_DENSITY_FACTOR)
+        return int(requested)
 
     # Guard: an UNSNAPPED free met axis cannot resolve the C0 kinks the ionizing-
     # spectrum tables put at every SSP metallicity node, so the forbidden lines
@@ -406,6 +505,24 @@ def precompute_nebular_grid(
 
     pts_arr = jnp.asarray([[float(v) for v in pt] for pt in points])  # (n_points, n_axes)
 
+    def _in_chunks(fn, pts, n_out):
+        """Run the vmapped ``fn`` over ``pts`` in batches of ``_BUILD_CHUNK_NODES``.
+
+        Each chunk is forced to completion before the next is dispatched. Without
+        that, JAX's async dispatch queues every chunk and holds all their
+        intermediates live anyway — which is the very thing chunking is for.
+        """
+        n = pts.shape[0]
+        if n <= _BUILD_CHUNK_NODES:
+            return fn(pts)
+        parts = []
+        for i in range(0, n, _BUILD_CHUNK_NODES):
+            part = fn(pts[i : i + _BUILD_CHUNK_NODES])
+            parts.append(jax.block_until_ready(part))
+        if n_out == 1:
+            return jnp.concatenate(parts, axis=0)
+        return tuple(jnp.concatenate([p[k] for p in parts], axis=0) for k in range(n_out))
+
     if has_phot:
 
         @jax.jit
@@ -414,7 +531,8 @@ def precompute_nebular_grid(
             line, phot = _row_traced(row, want_phot=True)
             return line, phot
 
-        line_all, phot_all = _eval_both(pts_arr)  # (n_points, n_line), (n_points, n_phot)
+        # (n_points, n_line), (n_points, n_phot)
+        line_all, phot_all = _in_chunks(_eval_both, pts_arr, 2)
     else:
 
         @jax.jit
@@ -423,7 +541,7 @@ def precompute_nebular_grid(
             line, _ = _row_traced(row, want_phot=False)
             return line
 
-        line_all = _eval_line(pts_arr)  # (n_points, n_line)
+        line_all = _in_chunks(_eval_line, pts_arr, 1)  # (n_points, n_line)
         phot_all = None
 
     # Sanity: the vmapped first node must reproduce the eager reference forward.

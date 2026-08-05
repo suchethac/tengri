@@ -243,6 +243,74 @@ def render_nebular_lines(
 # ── Ionizing photon rate ──────────────────────────────────────────
 
 
+class QHTableOverflowError(ValueError):
+    """The Q_H table cannot be represented in the working float dtype (#1491)."""
+
+
+def sanitize_qh_table(qh_raw, *, backend_name: str):
+    """Replace non-finite Q_H entries with zero — but only when zero is honest.
+
+    Parameters
+    ----------
+    qh_raw : array_like, shape (n_met, n_age)
+        Raw ionizing photon rate per SSP grid point. [1/s]
+    backend_name : str
+        Backend class name, for the error message.
+
+    Returns
+    -------
+    ndarray, shape (n_met, n_age)
+        ``qh_raw`` with non-finite entries set to 0.0.
+
+    Raises
+    ------
+    QHTableOverflowError
+        When the non-finite entries are dtype overflow rather than bad input.
+
+    Notes
+    -----
+    The zeroing exists for SSP grids with incomplete UV coverage, where a
+    non-finite Q_H really does mean "no usable ionizing flux here" and 0.0 is
+    the honest answer.
+
+    It is wrong for the *other* way an entry goes non-finite. Q_H reaches
+    ~1e47 photons/s, and float32 tops out at 3.4e38, so in a float32 build the
+    integral overflows on healthy input — and the guard then rewrites a real
+    ionizing budget to exactly zero, i.e. no nebular emission, silently.
+    Measured on ``fsps_prsc_miles_chabrier.h5``: **0 of 1395** entries
+    non-finite in float64, **861 of 1395 (61.7%)** in float32 (#1491).
+
+    Overflow is separable from bad input by its signature: it needs the working
+    dtype to be too narrow to hold the *finite* entries that survived. A grid
+    with patchy UV coverage loses a few bins and the survivors sit far below the
+    dtype ceiling; an overflow leaves the survivors pressed against it. This
+    checks that rather than guessing from the count.
+
+    Float64 behavior is unchanged — the condition cannot fire when the finite
+    entries are orders below 1.8e308.
+    """
+    finite = jnp.isfinite(qh_raw)
+    n_bad = int(jnp.sum(~finite))
+    if n_bad:
+        largest_finite = float(jnp.max(jnp.where(finite, jnp.abs(qh_raw), 0.0)))
+        ceiling = float(jnp.finfo(jnp.result_type(qh_raw)).max)
+        if largest_finite > 0.01 * ceiling:
+            raise QHTableOverflowError(
+                f"{backend_name}: {n_bad} of {qh_raw.size} Q_H grid entries overflowed "
+                f"{jnp.result_type(qh_raw)} (largest finite entry {largest_finite:.3e} sits "
+                f"against the {ceiling:.3e} ceiling). Q_H reaches ~1e47 photons/s, which "
+                "float32 cannot represent, so these are healthy SSP bins lost to dtype "
+                "range — not a grid with missing UV coverage. Zeroing them would remove "
+                "the ionizing budget from most of the grid and silently produce no "
+                "nebular emission. Build this backend under float64 "
+                "(the default; `jax.enable_x64(True)`). Pure-float32 support needs the "
+                "line-luminosity unit change tracked as #1206 item 3, because the line "
+                "luminosities this backend returns (~1e40 erg/s) are not float32 "
+                "numbers either. See #1491."
+            )
+    return jnp.where(finite, qh_raw, 0.0)
+
+
 @jax.jit
 def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
     r"""Compute hydrogen-ionizing photon production rate Q_H from an SSP spectrum.
@@ -348,6 +416,82 @@ def _interp_index_weight(
     dx = grid[idx + 1] - grid[idx]
     w = jnp.where(dx > 0, (x_clipped - grid[idx]) / dx, 0.0)
     return idx, w
+
+
+def _qh_bilinear(
+    qh_table,
+    qh_log_met: jnp.ndarray,
+    qh_log_age: jnp.ndarray,
+    log_z: float,
+    log_age_yr: float,
+    *,
+    missing: float,
+) -> jnp.ndarray:
+    r"""Bilinear interpolation of an ionizing photon rate table, floored at zero.
+
+    The single implementation behind every nebular backend's ``_get_qh_at``.
+    It was previously copied into three backends, and the copies diverged: the
+    CB19 backend lost the non-negativity floor its siblings carried (#1405).
+
+    Parameters
+    ----------
+    qh_table : array_like, shape (n_met, n_age) or None
+        Ionizing photon rate Q_H on the (metallicity, age) grid [1/s].
+        ``None`` selects the ``missing`` fallback.
+    qh_log_met : array_like, shape (n_met,)
+        Table metallicity axis, absolute ``log10(Z)``, sorted ascending.
+    qh_log_age : array_like, shape (n_age,)
+        Table age axis, ``log10(age/yr)``, sorted ascending.
+    log_z : float
+        Query metallicity, absolute ``log10(Z)``.
+    log_age_yr : float
+        Query age, ``log10(age/yr)``.
+    missing : float
+        Value returned when ``qh_table`` is ``None``. Backend-specific and
+        deliberately not unified: Q_H is consumed multiplicatively, so ``1.0``
+        means "no Q_H scaling" and ``0.0`` means "no ionizing photons".
+
+    Returns
+    -------
+    ndarray, shape ()
+        Interpolated Q_H [1/s], clamped to be non-negative.
+
+    Notes
+    -----
+    .. math::
+
+        Q_H = (1 - w_z)\,[(1 - w_a) Q_{00} + w_a Q_{01}]
+            + w_z\,[(1 - w_a) Q_{10} + w_a Q_{11}]
+
+    with :math:`w_z, w_a \in [0, 1]` the linear weights from
+    :func:`_interp_index_weight` along the metallicity and age axes. That
+    function clips its query to the grid, so this is a convex combination of
+    four table entries and never extrapolates — a negative result is only
+    reachable from negative table entries, and is unphysical.
+
+    The result is floored with ``jnp.maximum(..., 0.0)``. **NaN is deliberately
+    not removed**: ``jnp.maximum(nan, 0.0)`` is ``nan``, and a NaN Q_H means the
+    table is broken upstream. Propagating it makes that visible where a silent
+    zero would not.
+
+    **JIT-compatible**: yes — the only Python-level branch is on ``qh_table
+    is None``, which is structural, not traced.
+
+    """
+    if qh_table is None:
+        return jnp.asarray(missing)
+
+    iz, wz = _interp_index_weight(log_z, qh_log_met)
+    ia, wa = _interp_index_weight(log_age_yr, qh_log_age)
+
+    q00 = qh_table[iz, ia]
+    q01 = qh_table[iz, ia + 1]
+    q10 = qh_table[iz + 1, ia]
+    q11 = qh_table[iz + 1, ia + 1]
+
+    q0 = q00 * (1 - wa) + q01 * wa
+    q1 = q10 * (1 - wa) + q11 * wa
+    return jnp.maximum(q0 * (1 - wz) + q1 * wz, 0.0)
 
 
 # ── Metallicity convention converters ─────────────────────────────

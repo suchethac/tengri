@@ -39,12 +39,11 @@ import warnings
 
 # Keep the rendered tutorial clean: silence framework notices that do not
 # change the science shown here (baked-in nebular, the WavePrecomp blue-band
-# approximation, the intentional Fitter(sed_model, ...) LUT path, and
-# recipe/parameter-provenance notices). Genuine deprecations in user-facing
+# approximation, and recipe/parameter-provenance notices). Genuine
+# deprecations in user-facing
 # calls are fixed in the code, not hidden.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
-warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
 warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
 warnings.filterwarnings("ignore", message=".*Composable AGN.*")
 warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
@@ -58,21 +57,19 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
+from _setup import FIG_DIR
 import tengri
 from tengri import (
-    Fitter,
+    ForwardModel,
     Observation,
     Photometry,
     SEDModel,
     generate_mock,
-    load_ssp_data,
     plot,
     recipes,
 )
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 # %% [markdown]
 # ## A minimal star-forming galaxy
@@ -82,10 +79,7 @@ FIG_DIR.mkdir(exist_ok=True)
 # physics. Five free parameters; tractable in seconds.
 
 # %%
-SSP = Path("../data/fsps_prsc_miles_chabrier.h5")
-if not SSP.exists():
-    SSP = Path(tengri.download_ssp("fsps_prsc_miles_chabrier"))
-ssp = load_ssp_data(str(SSP))
+ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
 
 obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "wise_w1"])
@@ -239,7 +233,8 @@ _ = forward(batch_params).block_until_ready()
 t_batch = perf_counter() - t0
 
 t0 = perf_counter()
-posterior = Fitter(model, flux_obs, noise, data_type="photometry").run(
+posterior = ForwardModel.build(sed=model).fit(
+    flux_obs, noise,
     method="mcmc_nuts",
     key=jax.random.PRNGKey(2),
     n_warmup=300,

@@ -78,7 +78,7 @@ model_agn_only = tengri.SEDModel.build(
         "torus": {"type": "skirtor", "all_params": tengri.FIXED},
         "all_params": tengri.FIXED,
         "log_lbol": 12.0,
-        "frac": 1.0,
+        "lum_ratio": 1.0,
     },
     redshift=tengri.Fixed(0.0),
 )
@@ -102,7 +102,7 @@ model_with_dust = tengri.SEDModel.build(
         "blr": {"type": "none", "all_params": tengri.FIXED},
         "all_params": tengri.FIXED,
         "log_lbol": 12.5,
-        "frac": 1.0,
+        "lum_ratio": 1.0,
     },
     redshift=tengri.Fixed(0.05),
 )

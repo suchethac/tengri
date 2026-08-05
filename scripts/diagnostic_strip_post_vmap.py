@@ -32,9 +32,11 @@ OUT_PATH = Path("analysis/diagnostic_strip_post_vmap.json")
 
 def find_baseline_cell(rows, n_gal: int, method: str, K: int) -> dict | None:
     for r in rows:
-        if (r.get("n_gal") == n_gal
-                and r.get("method") == method
-                and r.get("forward_chunk_size") == K):
+        if (
+            r.get("n_gal") == n_gal
+            and r.get("method") == method
+            and r.get("forward_chunk_size") == K
+        ):
             return r
     return None
 
@@ -59,22 +61,29 @@ def main() -> None:
         if baseline is None:
             print(f"  no baseline cell — running post-vmap only")
         else:
-            print(f"  baseline wall_s = {baseline.get('wall_s'):.1f}, "
-                  f"σ median = {baseline.get('psd_sigma_summary', {}).get('median', '?')}")
+            print(
+                f"  baseline wall_s = {baseline.get('wall_s'):.1f}, "
+                f"σ median = {baseline.get('psd_sigma_summary', {}).get('median', '?')}"
+            )
 
         t0 = time.time()
         try:
             row = spawn(
-                n_gal=n_gal, method=method,
-                n_iterations=N_ITER, n_samples=N_SAMP,
-                forward_chunk_size=K, compile_timeout=2400,
+                n_gal=n_gal,
+                method=method,
+                n_iterations=N_ITER,
+                n_samples=N_SAMP,
+                forward_chunk_size=K,
+                compile_timeout=2400,
             )
         except Exception as exc:
             row = {"error": repr(exc), "wall_s": -1.0}
         wall_outer = time.time() - t0
 
         post = {
-            "cell": cell, "n_iterations": N_ITER, "n_samples": N_SAMP,
+            "cell": cell,
+            "n_iterations": N_ITER,
+            "n_samples": N_SAMP,
             "wall_s": row.get("wall_s"),
             "wall_s_warm": row.get("wall_s_warm"),
             "rss_delta_gb": row.get("rss_delta_gb"),
@@ -89,8 +98,7 @@ def main() -> None:
             post["baseline_wall_s"] = baseline.get("wall_s")
             post["baseline_psd_sigma_summary"] = baseline.get("psd_sigma_summary")
             post["baseline_psd_tau_summary"] = baseline.get("psd_tau_summary")
-            if (baseline.get("wall_s") and post["wall_s"]
-                    and post["wall_s"] > 0):
+            if baseline.get("wall_s") and post["wall_s"] and post["wall_s"] > 0:
                 post["wall_speedup"] = baseline["wall_s"] / post["wall_s"]
 
         results.append(post)

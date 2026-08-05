@@ -18,6 +18,7 @@ import contextlib
 import functools
 import logging
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 __all__ = ["Posterior"]
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 _PROPERTY_CHUNK = 64
 
 
-class PosteriorProperties:
+class PosteriorProperties(Mapping):
     r"""The property catalog lifted over the sample axis.
 
     The topology-agnostic seam of contract §1 — **same names, more axes**. Every
@@ -105,6 +106,20 @@ class PosteriorProperties:
 
     def __iter__(self):
         return iter(sorted(self._model().available_properties))
+
+    def __len__(self) -> int:
+        """Number of available properties.
+
+        Present so the class satisfies the mapping protocol it already almost
+        implemented. ``__getitem__`` / ``__iter__`` / ``__contains__`` /
+        ``keys`` all worked, so the object read as a dict right up to ``len()``
+        and ``.items()`` — the two calls one reaches for first when inspecting
+        a fit result — which raised a bare ``TypeError`` / ``AttributeError``
+        with nothing naming the supported surface (#1459). Registering as a
+        :class:`collections.abc.Mapping` below supplies ``items``, ``values``,
+        ``get`` and equality from this method plus the two that existed.
+        """
+        return len(self._model().available_properties)
 
     def keys(self):
         """Available property names — identical to the model's."""
@@ -446,9 +461,12 @@ class Posterior:
 
         Examples
         --------
-        >>> derived = result.derived
-        >>> stellar_masses = derived["stellar_mass"]  # Shape (n_samples,)
-        >>> med, lo, hi = np.percentile(stellar_masses, [50, 16, 84])
+        Prefer :attr:`properties` — the same names, every property the model
+        publishes rather than a hardcoded five, and credible intervals
+        without a manual percentile call:
+
+        >>> stellar_masses = result.properties["stellar_mass"]  # (n_samples,)
+        >>> lo, med, hi = result.properties.ci("stellar_mass")
         """
         warnings.warn(
             "Posterior.derived is deprecated; use Posterior.properties instead. "
@@ -672,7 +690,7 @@ class Posterior:
         --------
         >>> labels = result.bpt_class()
         >>> import numpy as np
-        >>> agn_frac = float(np.mean(np.asarray(labels) == "AGN"))
+        >>> agn_lum_ratio = float(np.mean(np.asarray(labels) == "AGN"))
         """
         x, y = self.bpt_nii()  # log_nii_ha, log_oiii_hb
         x_arr = np.asarray(x)
@@ -1049,6 +1067,51 @@ class Posterior:
         return result
 
     # ── Summary statistics ────────────────────────────────────────
+
+    def information(self, params=None):
+        """How much of this posterior the data measured, mode by mode.
+
+        A flexible model always *returns* a posterior; this reports how much of
+        it the data determined and how much is the prior reflected back.
+
+        Parameters
+        ----------
+        params : dict of str to float, optional
+            Point to expand around, in physical units. Default ``None`` uses
+            this fit's own point estimate.
+
+        Returns
+        -------
+        ParameterInformation
+            ``n_eff``, per-mode shrinkage, and the per-parameter attribution.
+            ``print(info.summary())`` is the intended first look.
+
+        Warns
+        -----
+        RuntimeWarning
+            If the expansion point is not a mode, in which case the curvature
+            is not the posterior precision and ``n_eff`` means nothing. This
+            fires more often than expected: on a 25-parameter field model an
+            under-converged MAP reported ``n_eff`` 17.6 where the converged fit
+            gives 4.9.
+
+        See Also
+        --------
+        tengri.parameter_information : the same measurement as a free function.
+
+        Notes
+        -----
+        Costs one dense Hessian of the log-posterior, i.e. :math:`O(D)` gradient
+        evaluations. Not JIT-compatible; call it on a finished fit.
+
+        Examples
+        --------
+        >>> post = model.fit(data, noise, method="map")  # doctest: +SKIP
+        >>> print(post.information().summary())  # doctest: +SKIP
+        """
+        from tengri.inference.information import parameter_information
+
+        return parameter_information(self, params)
 
     def stats(self) -> dict:
         """Median and 68% credible intervals for all parameters.
@@ -1540,10 +1603,37 @@ class Posterior:
             raise ValueError("R-hat requires samples (not a MAP result).")
         from tengri.analysis.diagnostics.autocorrelation import rhat as _rhat
 
-        return _rhat(
+        result = _rhat(
             {k: np.asarray(v) for k, v in self.samples.items()},
             exclude_prefixes=exclude_prefixes,
         )
+        # A frozen chain must not leave silently (#1438). Static parameters are
+        # dropped above -- ordinary for a pinned one, but when EVERY parameter is
+        # static the chain never moved and there is no convergence to report. The
+        # empty dict that fell out of here was the worst possible answer: split
+        # R-hat cannot see a frozen chain either (within- and between-chain
+        # variance are both zero, so it scores ~1.0), and the documented idiom
+        # ``max(rhat().values())`` then raised "max() iterable argument is empty"
+        # -- a message about a builtin, for a dead fit.
+        if not result and self.samples:
+            n_draw = max((int(np.asarray(v).size) for v in self.samples.values()), default=0)
+            n_divergent = self.diagnostics.get("n_divergent") if self.diagnostics else None
+            divergence_note = (
+                f" The sampler reported {n_divergent} divergent transition(s)."
+                if n_divergent
+                else ""
+            )
+            raise ValueError(
+                f"the chain did not move: every one of {n_draw} draws is identical "
+                f"for every parameter, so there is no split-R-hat to compute."
+                f"{divergence_note} This is a dead fit, not a converged one — R-hat "
+                "cannot detect it (both variances are zero, so it reads ~1.0). The "
+                "usual cause is an adapted step size above the model's stability "
+                "limit, where acceptance collapses to zero: re-run with a shorter "
+                "warmup, a lower target_accept_rate, or an explicit smaller "
+                "step_size, and check the divergence count."
+            )
+        return result
 
     def diagnostics_summary(self) -> str:
         """Print a diagnostics summary with ESS and credible intervals.

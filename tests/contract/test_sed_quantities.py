@@ -87,11 +87,30 @@ class TestMassWeightedAge:
         # Weighted average: (10*1 + 1*10) / 11 = 20/11 ≈ 1.82 Gyr
         assert result < 2.0
 
-    def test_zero_weights(self):
+    def test_zero_weights_returns_nan(self):
+        """Zero total mass has no mass-weighted age, so the answer is NaN (#1404).
+
+        **This assertion was inverted deliberately.** It previously required
+        ``jnp.isfinite(result)`` — "no NaN or inf" — which the clamped denominator
+        satisfied by returning exactly ``0.0``. But a mass-weighted age of zero
+        Gyr reads as "every star just formed" rather than "there is no mass to
+        weight by", and it flowed into ``pred.properties`` looking like a real
+        measurement. Finiteness was a robustness preference, not a physics
+        requirement; the quantity is genuinely undefined here.
+
+        NaN-for-degenerate is already this file's convention — see
+        ``TestLineExtraction.test_empty_returns_nan`` — and the property catalog
+        tests assert it too (``test_property_catalog.py``, halpha / bpt_nii).
+        """
         weights = jnp.array([0.0, 0.0])
         ages = jnp.array([1e9, 3e9])
         result = compute_mass_weighted_age(weights, ages)
-        assert jnp.isfinite(result)  # no NaN or inf
+        assert jnp.isnan(result), f"expected NaN for zero total weight, got {float(result)!r}"
+
+    def test_nonzero_weights_stay_finite(self):
+        """The #1404 guard is a gate on den>0; the ordinary path is untouched."""
+        result = compute_mass_weighted_age(jnp.array([1.0, 1.0]), jnp.array([1e9, 3e9]))
+        assert jnp.isfinite(result)
 
 
 # ── Mass-weighted metallicity ─────────────────────────────────────

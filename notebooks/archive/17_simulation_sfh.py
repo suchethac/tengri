@@ -403,7 +403,7 @@ spec_agn = ParamSpec(
     dust_gamma_dl=Fixed(0.02),
     dust_qpah=Fixed(3.5),
     agn_model="simple",
-    agn_frac=Fixed(0.1),
+    agn_lum_ratio=Fixed(0.1),
     redshift=Fixed(z_demo),
     apply_igm=False,
 )
@@ -426,7 +426,7 @@ spec_full = ParamSpec(
     dust_gamma_dl=Fixed(0.02),
     dust_qpah=Fixed(3.5),
     agn_model="simple",
-    agn_frac=Fixed(0.1),
+    agn_lum_ratio=Fixed(0.1),
     redshift=Fixed(z_demo),
     apply_igm=True,
 )
@@ -500,7 +500,7 @@ spec_var = ParamSpec(
     dust_tau_diff=Uniform(0.0, 2.0),
     dust_law_bc="kriek_conroy",
     agn_model="simple",
-    agn_frac=Uniform(0.0, 0.3),
+    agn_lum_ratio=Uniform(0.0, 0.3),
     redshift=Fixed(1.0),
 )
 model_var = SEDModel(spec_var, ssp, filters=filters)

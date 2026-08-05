@@ -7,7 +7,7 @@ side of the forward model. Each spatial component owns one piece of the
 a flat aperture, etc. — plus the parameters and precomputed tensors that
 go with it.
 
-See architecture spec ``docs/dev/forward-model-architecture.md`` §3.2
+See architecture spec ``docs/dev/archive/forward-model-architecture.md`` §3.2
 for the astronomer-facing convenience base ``SpatialModelComponent``
 that satisfies this Protocol with auto-discovery and a default apply().
 """

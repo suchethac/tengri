@@ -53,18 +53,34 @@ from tengri.inference.backends.vi.nifty import (
 )
 
 
-def _mcmc_auto_pick(context, *, key, init_from=None, **kw):
+def _mcmc_auto_pick(context, *, key, init_from=None, precondition=None, **kw):
     """``mcmc`` auto-dispatcher: NUTS for low-D, raytrace for high-D.
 
     Threshold is looked up at call time (not import time) so this
     module has no import dependency on ``fitter.py`` — keeps the
     package import graph one-way and lets ``inference/__init__.py``
     rely on plain alphabetical import ordering.
+
+    ``precondition`` is named explicitly rather than left in ``**kw`` because which
+    branch runs decides whether it can be honored, and the two branches disagree.
+    Which one *is* capable comes from the registry, not from a name written here.
     """
+    from tengri.inference._backend_registry import check_capabilities, get_backend
     from tengri.inference.fitter import _MCMC_AUTO_D_THRESHOLD
 
     if context.spec.n_free <= _MCMC_AUTO_D_THRESHOLD:
-        return _ctx_run_nuts(context, key=key, init_from=init_from, **kw)
+        return _ctx_run_nuts(
+            context, key=key, init_from=init_from, precondition=precondition, **kw
+        )
+
+    # High-D branch. Ray tracing is not a Hamiltonian sampler, so today it has no
+    # integrator metric to whiten — but that is the registry's fact to state, not
+    # this function's. Refuse an explicit request rather than drop it silently; a
+    # bare ``precondition=None`` is the auto-policy and resolves to off.
+    selected = get_backend("mcmc_raytrace")
+    check_capabilities(selected, {"precondition": precondition})
+    if selected.accepts_precondition:
+        kw["precondition"] = precondition
     return _ctx_run_raytrace(context, key=key, init_from=init_from, **kw)
 
 
@@ -83,7 +99,7 @@ register_backend(
     tier="primary",
     short_doc=(
         "NIFTy geoVI variational inference (cold ~100s, ~20 GB RSS at D=6-7 — "
-        "memory-heavy; consider mcmc_ghmc for faster turnaround on D<10)"
+        "memory-heavy; consider mcmc_hmc for faster turnaround on D<10)"
     ),
     aliases=("vi_nonlinear",),
     requires=("nifty8",),
@@ -144,7 +160,7 @@ register_backend(
 
 register_backend(
     "native_vi_nonlinear",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[UNSTABLE] Pure JAX geoVI — segfaults on DPL/dense_basis "
         "photometry mocks (validated 2026-05-22, issue #231). Use 'vi' instead."
@@ -161,7 +177,7 @@ register_backend(
 
 register_backend(
     "native_vi_linear",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[UNSTABLE] Pure JAX MGVI — segfaults on DPL/dense_basis "
         "photometry mocks (validated 2026-05-22, issue #231). Use 'vi_linear' instead."
@@ -184,6 +200,7 @@ register_backend(
     short_doc="Auto MCMC: NUTS for low-D, raytrace for high-D",
     requires=("blackjax",),  # NUTS branch needs it; raytrace branch is pure JAX
     legacy_fitter=False,
+    accepts_precondition=True,
 )(_mcmc_auto_pick)
 
 register_backend(
@@ -195,6 +212,7 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    accepts_precondition=True,
 )(_ctx_run_nuts)
 
 register_backend(
@@ -226,6 +244,7 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    accepts_precondition=True,
 )(_ctx_run_hmc)
 
 register_backend(
@@ -238,11 +257,12 @@ register_backend(
     ),
     requires=("blackjax",),
     legacy_fitter=False,
+    accepts_precondition=True,
 )(_ctx_run_dynamic_hmc)
 
 register_backend(
     "mcmc_ghmc",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[POOR MIXING] Generalized HMC — fast (cold ~17s) but R-hat ≈ "
         "2.5-3.1 and ESS ≈ 1 on D=6-7 mocks even with 1000 warmup + 2000 "
@@ -255,11 +275,12 @@ register_backend(
 
 register_backend(
     "mcmc_mclmc",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[POOR MIXING] Microcanonical Langevin MC — fast warm call (~2s) "
         "but R-hat ≈ 1.7 / 1.13 and ESS ≈ 1 on D=6-7 mocks at 4000 samples. "
-        "Do not use for science until tuning is investigated."
+        "Do not use for science until tuning is investigated. "
+        "Requires blackjax >= 1.6."
     ),
     requires=("blackjax",),
     legacy_fitter=False,
@@ -269,7 +290,10 @@ register_backend(
 register_backend(
     "mcmc_adjusted_mclmc",
     tier="experimental",
-    short_doc="Adjusted microcanonical Langevin (cold ~60s, ~3x compile premium over mclmc)",
+    short_doc=(
+        "Adjusted microcanonical Langevin (cold ~60s, ~3x compile premium over "
+        "mclmc). Requires blackjax >= 1.6."
+    ),
     requires=("blackjax",),
     legacy_fitter=False,
 )(_ctx_run_adjusted_mclmc)
@@ -297,7 +321,7 @@ register_backend(
 
 register_backend(
     "pathfinder",
-    tier="experimental",
+    tier="broken",
     short_doc=(
         "[UNSTABLE] Pathfinder VI — segfaults on DPL/dense_basis photometry "
         "mocks (validated 2026-05-22, issue #231); use 'laplace' or 'vi' instead"

@@ -24,11 +24,22 @@ otherwise. ``--fix`` rewrites files in place (case-preserving) and exits 0.
 
 Allowlist
 ---------
-External data-contract strings keep their upstream spelling because the literal
-must match bytes on disk / an upstream API. The only such cases are the
-Synthesizer grid HDF5 dataset keys (see ``ALLOWED_TOKENS``). Add new exceptions
-there with a one-line justification — never to silence a genuine British
-spelling in tengri's own code.
+Two escapes, and which one you pick matters:
+
+``ALLOWED_TOKENS``
+    Whole tokens that must keep their upstream spelling because the literal has
+    to match bytes on disk or an upstream API — the Synthesizer grid HDF5 keys,
+    and title-case words distinctive enough to be unambiguous.
+
+``ALLOWED_PHRASES``
+    Multi-word phrases, checked positionally. Use this whenever the British word
+    is an **ordinary English word** — a verbatim paper title, say. A token entry
+    for a common word exempts it repo-wide: a bare ``"modelling"`` added for one
+    citation let three unrelated prose uses through and turned the guard's own
+    "this word is flagged" test red.
+
+Add new exceptions with a one-line justification — never to silence a genuine
+British spelling in tengri's own code.
 """
 
 import argparse
@@ -73,6 +84,48 @@ ALLOWED_TOKENS = frozenset(
     }
 )
 
+# Verbatim phrases that must keep British spelling, scoped to the phrase.
+#
+# Use this, NOT ``ALLOWED_TOKENS``, whenever the British word is an ordinary
+# English word rather than a data-contract key. A bare ``"modelling"`` entry was
+# added here for the Tacchella+2020 title and exempted the word *everywhere* —
+# three unrelated prose uses sailed through the guard, and
+# ``test_british_words_are_flagged[modelling-modeling]`` went red because the
+# guard no longer flagged a word it is supposed to flag. A token allowlist
+# cannot express "only inside this citation"; a phrase can.
+ALLOWED_PHRASES = (
+    # Tacchella, Forbes & Caplar 2020, "Stochastic modelling of star-formation
+    # histories II", MNRAS. DOI 10.1093/mnras/staa1838, arXiv:2006.09382.
+    # MNRAS is a British journal and paper II's published title uses -lling;
+    # paper I's uses -ling. Both are reproduced exactly, per the citation rule
+    # in CLAUDE.md ("never write citations from memory").
+    "modelling of star-formation histories",
+)
+
+
+def allowed_spans(text: str) -> list[tuple[int, int]]:
+    """Character ranges in ``text`` covered by an :data:`ALLOWED_PHRASES` match.
+
+    Parameters
+    ----------
+    text : str
+        File contents to scan.
+
+    Returns
+    -------
+    spans : list of (int, int)
+        Half-open ``(start, end)`` character offsets, unsorted and possibly
+        overlapping.
+    """
+    spans = []
+    for phrase in ALLOWED_PHRASES:
+        start = text.find(phrase)
+        while start != -1:
+            spans.append((start, start + len(phrase)))
+            start = text.find(phrase, start + 1)
+    return spans
+
+
 # ---- American-invariant words the rules would otherwise mangle ----
 INVARIANT = frozenset(
     {
@@ -114,6 +167,14 @@ INVARIANT = frozenset(
         "exercised",
         "exercises",
         "exercising",
+        # "advise" is -ise in American English too, exactly like the "exercise",
+        # "surprise" and "revise" families already listed here. It was simply
+        # missing, so the checker demanded the non-word "advized".
+        "advise",
+        "advised",
+        "advises",
+        "advising",
+        "advisable",
         "precise",
         "concise",
         "surprise",
@@ -167,6 +228,34 @@ INVARIANT = frozenset(
         "reprise",
         "incise",
         "incised",
+        # Missing inflections of verbs already listed above. The -ise -> -ize rule is
+        # applied per *word form*, not per lemma, so a family with a gap fails on
+        # exactly the absent form and nowhere else: "promise", "promised" and
+        # "promises" were all present, so the checker passed on those and demanded
+        # the non-word "promizing" for the participle alone. Same shape as the
+        # "advise"/"advising" gap noted above, which is why the fix is the family and
+        # not the one word that happened to surface.
+        "promising",
+        "devising",
+        "disguising",
+        "premised",
+        "premising",
+        "surmises",
+        "surmising",
+        "apprises",
+        "apprising",
+        "enterprising",
+        "franchised",
+        "franchises",
+        "franchising",
+        "merchandising",
+        "chastised",
+        "chastises",
+        "chastising",
+        "reprised",
+        "reprises",
+        "incises",
+        "incising",
         "analyses",  # plural noun of 'analysis' (invariant) — protect the noun
         "four",
         "hour",
@@ -335,9 +424,38 @@ YSE_SUFFIX = [
 ]
 
 
+# Invariant ``-ise`` words, longest first, for the suffix test in ``_is_invariant``.
+# Deliberately NOT the whole INVARIANT set: it also protects ``-our`` nouns
+# (``our``, ``hour``, ``four``), and matching those as tails would exempt
+# ``colour`` from the OUR -> OR rule. ``-yse`` is left out for the same reason —
+# ``analyses`` is invariant, but ``catalyses`` must still become ``catalyzes``.
+_ISE_TAILS = tuple(
+    sorted(
+        (w for w in INVARIANT if any(w.endswith(suf) for suf, _ in ISE_SUFFIX) and len(w) >= 4),
+        key=len,
+        reverse=True,
+    )
+)
+
+
+def _is_invariant(word: str) -> bool:
+    """True if ``word`` is American-invariant, including prefixed forms.
+
+    The ISE rule is decided by the *tail* of a word, so the exemption has to be
+    decided by the tail too. An exact-match table leaves a fresh gap at every
+    prefixed and inflected form, which is how this checker came to demand the
+    non-words ``advized``, ``promizing`` and ``unsurprizing`` — three one-word
+    patches to one missing rule. Matching on the tail covers ``unsurprising``
+    from ``surprising`` and ``sunrise`` from ``rise`` without a new entry.
+    """
+    if word in INVARIANT:
+        return True
+    return any(word != tail and word.endswith(tail) for tail in _ISE_TAILS)
+
+
 def to_american(word: str) -> str | None:
     """American spelling of lowercase British ``word``, or None if not British."""
-    if word in INVARIANT:
+    if _is_invariant(word):
         return None
     for table in (OUR, TRE, OGUE, DLL, GREY, MISC):
         if word in table:
@@ -367,6 +485,7 @@ def _case_preserve(src: str, repl: str) -> str:
 
 def scan_text(text: str):
     """Yield (line, col, british, american) violations for one file's text."""
+    spans = allowed_spans(text)
     for tok in TOKEN_RE.finditer(text):
         token = tok.group(0)
         if token in ALLOWED_TOKENS:
@@ -376,17 +495,27 @@ def scan_text(text: str):
             if american is None:
                 continue
             pos = tok.start() + sub.start()
+            if any(lo <= pos < hi for lo, hi in spans):
+                continue
             line = text.count("\n", 0, pos) + 1
             col = pos - (text.rfind("\n", 0, pos))
             yield line, col, sub.group(0), american
 
 
 def fix_text(text: str) -> str:
-    """Return ``text`` with every British subword rewritten (case-preserving)."""
+    """Return ``text`` with every British subword rewritten (case-preserving).
+
+    Honors :data:`ALLOWED_PHRASES` as well as :data:`ALLOWED_TOKENS` — otherwise
+    ``--fix`` would silently rewrite the verbatim citation that the scan
+    deliberately skips, and the next scan would pass on corrupted text.
+    """
+    spans = allowed_spans(text)
 
     def repl_token(m: re.Match) -> str:
         token = m.group(0)
         if token in ALLOWED_TOKENS:
+            return token
+        if any(lo <= m.start() < hi for lo, hi in spans):
             return token
 
         def repl_sub(s: re.Match) -> str:
@@ -465,6 +594,7 @@ def main() -> int:
     print(
         "\nFix: use American spelling. If the string is an external data-contract "
         "key that must keep British spelling, add it to ALLOWED_TOKENS in "
+        "(or, for a verbatim citation or other prose phrase, ALLOWED_PHRASES in) "
         "tools/check_british_spelling.py with a justification."
     )
     return 1

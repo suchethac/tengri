@@ -32,7 +32,7 @@ class TestParameterValidation:
         """Parameters with valid prefixes pass even without registry context."""
         assert is_valid_param_name("sfh_dpl_alpha")
         assert is_valid_param_name("dust_tau_bc")
-        assert is_valid_param_name("agn_frac")
+        assert is_valid_param_name("agn_lum_ratio")
         assert is_valid_param_name("redshift")
 
     def test_unknown_prefix_fails(self):
@@ -45,7 +45,7 @@ class TestParameterValidation:
         """Parameters that look valid by prefix must be checked against registry."""
         import tengri
 
-        registered = set(tengri.list_parameters())
+        registered = set(tengri.list_parameters().names())
 
         # dust_tau_bc is a known good registered parameter
         assert "dust_tau_bc" in registered
@@ -63,7 +63,7 @@ class TestParameterValidation:
         """Registry membership is necessary when registered_params is provided."""
         import tengri
 
-        registered = set(tengri.list_parameters())
+        registered = set(tengri.list_parameters().names())
 
         # redshift is in the registry
         assert "redshift" in registered
@@ -81,7 +81,7 @@ class TestParameterValidation:
         # Test with registry context
         import tengri
 
-        registered = set(tengri.list_parameters())
+        registered = set(tengri.list_parameters().names())
         assert "redshift" in registered
         assert is_valid_param_name("redshift", registered)
 

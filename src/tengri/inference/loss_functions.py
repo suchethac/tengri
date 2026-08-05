@@ -23,9 +23,59 @@ __all__ = [
     "build_loglikelihood_unbounded_fn",
     "build_logprior_fn",
     "build_loss_fn",
+    "standardized_neg_log_prior",
 ]
 
 # ── Shared helpers (called inside traced closures) ───────────────────────
+
+
+def standardized_neg_log_prior(params_unbounded, free_names, *, stochastic):
+    r"""Negative log-prior of the standardized latents, up to a constant.
+
+    Every prior is standardized, so the prior on the unbounded latents is
+    :math:`\mathcal{N}(0, I)` and this is
+
+    .. math::
+
+        -\log p(\xi) = \tfrac{1}{2} \sum_i \xi_i^2 + \text{const.}
+
+    Parameters
+    ----------
+    params_unbounded : dict of str to array_like
+        Latents in unbounded (standardized) space. Entries may be scalars for a
+        single galaxy or shape ``(n_gal,)`` for a hierarchical fit.
+    free_names : sequence of str
+        Names of the free scalar parameters to include.
+    stochastic : bool
+        Whether the model carries a stochastic-SFH field. When ``True`` and
+        ``"psd_xi"`` is present, the field latents are included.
+
+    Returns
+    -------
+    ndarray, scalar
+        :math:`\tfrac12 \sum \xi^2` [dimensionless]. **Always rank 0**, whatever
+        the rank of the inputs.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: pure reductions, called inside traced closures.
+
+    The reduction to a scalar is the whole reason this is a function rather than
+    two inline loops. Hierarchical fits (``PopulationSEDModel``) carry per-galaxy
+    parameters of shape ``(n_gal,)`` or higher rank; without ``jnp.sum`` on every
+    term the "penalty" keeps that shape, and an objective that is a vector either
+    broadcasts into nonsense or fails somewhere unrelated to the cause.
+    ``InferenceContext.log_prior_fn`` restated this rule without the reduction and
+    returned shape ``(n_gal,)`` against a docstring promising a scalar — harmless
+    only because nothing in ``src/`` called it. This is also the single seam a
+    change of field parameterization has to touch (#1355).
+    """
+    penalty = jnp.zeros(())
+    for name in free_names:
+        penalty = penalty + jnp.sum(params_unbounded[name] ** 2)
+    if stochastic and "psd_xi" in params_unbounded:
+        penalty = penalty + jnp.sum(params_unbounded["psd_xi"] ** 2)
+    return 0.5 * penalty
 
 
 def _unstandardize_parameters(params_unbounded, spec, free_names, fixed_values, stochastic):
@@ -42,7 +92,16 @@ def _unstandardize_parameters(params_unbounded, spec, free_names, fixed_values, 
     for name, val in fixed_values.items():
         params[name] = val
     if stochastic and "psd_xi" in params_unbounded:
+        # Publish under BOTH names. The sampler's vector keys the GP latents
+        # ``psd_xi``, but ``StellarSEDComponent`` reads ``sfh_field_xi`` and
+        # silently falls back to ``jnp.zeros(n_grid)`` when it is absent
+        # (components/stellar/component.py). Attaching only ``psd_xi`` therefore
+        # pinned the GP field to zero for the whole fit: no exception, no
+        # warning, just exp(0 - K0/2) = constant and a likelihood with exactly
+        # zero gradient w.r.t. the latents. The burstiness degrees of freedom
+        # were sampled from their prior and never reached the SED.
         params["psd_xi"] = params_unbounded["psd_xi"]
+        params["sfh_field_xi"] = params_unbounded["psd_xi"]
     return spec.resolve_mirrors(params)
 
 
@@ -436,6 +495,14 @@ def build_loss_fn(fitter):
         params = _unstandardize_parameters(
             params_unbounded, spec, free_names, fixed_values, stochastic
         )
+        # Per-galaxy runtime redshift override (batched catalog path, #1337 phase 2).
+        # When the caller threads a redshift through ``data_args`` it replaces the
+        # baked fixed value, so ONE compiled program serves every per-galaxy redshift
+        # (via the ``catalog_z_range`` ztable LUT). No single-galaxy fit ever sets
+        # ``data_args["redshift"]``, so ``params`` is unchanged there and the emitted
+        # program is byte-identical.
+        if "redshift" in data_args:
+            params = {**params, "redshift": data_args["redshift"]}
         e_lh = neg_log_lik(params, data_args)
 
         # Prior contributions (IFT Hamiltonian).
@@ -448,18 +515,11 @@ def build_loss_fn(fitter):
         # cancels the prior density and leaves the isotropic quadratic
         # term. Exact for Uniform, Gaussian, LogUniform, LogNormal,
         # StudentT priors.  Reference: tengri paper §2.2 + Appendix A.
-        # Sum across batched per-galaxy axes too: hierarchical fits
-        # (PopulationSEDModel) have per-galaxy xi with shape (N,) or
-        # higher rank. The prior penalty must reduce to a scalar so
-        # the loss is a single number. ``jnp.sum`` is a no-op for
-        # rank-0 xi (single-galaxy fits) and reduces (N,) → scalar
-        # for hierarchical.
-        prior_penalty = 0.0
-        for name in free_names:
-            prior_penalty = prior_penalty + jnp.sum(params_unbounded[name] ** 2)
-        if stochastic and "psd_xi" in params_unbounded:
-            prior_penalty = prior_penalty + jnp.sum(params_unbounded["psd_xi"] ** 2)
-        return e_lh + 0.5 * prior_penalty
+        # The per-galaxy reduction lives in the helper — see its Notes for why a
+        # rank-0 result is load-bearing rather than cosmetic.
+        return e_lh + standardized_neg_log_prior(
+            params_unbounded, free_names, stochastic=stochastic
+        )
 
     return loss_fn
 

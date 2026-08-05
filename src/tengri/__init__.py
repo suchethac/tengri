@@ -4,41 +4,77 @@
 A modular, fully differentiable JAX pipeline:
 PSD-governed GP → SFH → DSPS SED → photometry/spectroscopy.
 
-Module organization by tier
-===========================
+Where the public API lives
+==========================
 
-``__all__`` is organized into tiers reflecting common workflows. For a first fit,
-start with **Core** (classes + distributions). For more granularity, explore
-**Physics submodules** (component registries) and **Introspection** (discovery).
+There are three surfaces, and they are deliberately not the same set. This
+section used to claim ``__all__`` was a tiered map of everything below, which
+was wrong in both directions — it advertised eleven names ``__all__`` excludes
+and omitted sixty-five it contains (#1283).
 
-**Core (user-facing classes for a first fit):**
-  ``SEDModel``, ``Parameters``, ``Observation``, ``Photometry``, ``Spectroscopy``,
-  ``NoiseModel``, ``Fitter``, ``Posterior``, ``Prediction``, ``FREE``, ``FIXED``,
-  ``Fixed``, ``Uniform``, ``Gaussian``, ``LogNormal``, ``LogUniform``, ``StudentT``,
-  ``Laplace``, ``load_ssp``, ``Galaxy``, ``VIConfig``.
+**1. The canonical import path is the sub-namespace.** For the objects a fit is
+made of, import from the layer that owns them::
 
-**Physics submodules (component namespaces):**
-  ``agn``, ``dust``, ``nebular``, ``stellar``, ``sfh``, ``sps``, ``igm``, ``radio``,
-  ``xray``, ``observation``, ``filters``, ``citations``, ``config``, ``cosmology``,
-  ``pipeline``, ``preprocessing``, ``presets``, ``results``, ``units``, ``io``.
+    from tengri.observation import Photometry, Spectroscopy, NoiseModel, Observation
+    from tengri.inference import Fitter, Posterior, VIConfig
 
-**Toolkit (analysis, batching, model construction):**
-  ``builders``, ``recipes``, ``measure``, ``vmap_chunked``, ``WavePrecomp``,
-  ``SpectrumPrecomp``, ``SSPData``, ``Population``, ``PopulationSEDModel``,
-  ``SpatialModel``, ``SpatialSEDModel``, ``ForwardModel``, ``Instrument``,
-  ``LineList``, ``plot``.
+These are also reachable as ``tengri.Photometry`` and appear in
+``dir(tengri)``, so tab-completion finds them; that spelling is tolerated, not
+canonical. See ``docs/dev/api_migration_v0.x.md``.
 
-**Introspection (discovery and diagnostics):**
-  ``help``, ``summary``, ``describe``, ``search``, ``explain``, ``examples``,
-  ``tutorial``, ``doctor``, all ``list_*``, ``describe_*``, ``cite_components``,
-  and ``suggest_parameters``.
+**2. ``__all__`` is the star-import surface**, kept deliberately narrower than
+"everything public" so that ``from tengri import *`` does not dump the whole
+package into a namespace. Names above are excluded on purpose — their absence
+from ``import *`` is the design, not a defect.
 
-**Exceptions:**
-  ``TengriError``, ``ParameterError``, ``ConfigError``, ``BackendError``,
-  ``InferenceError``, ``TengriIOError``.
+**3. ``dir(tengri)`` is the discovery surface** — a curated subset sized for
+tab-completion rather than completeness.
 
-Everything in ``__all__`` remains importable from ``tengri`` for backward
-compatibility. For more detail, see ``docs/dev/api_migration_v0.x.md``.
+Building a first fit
+====================
+
+::
+
+    import tengri
+    from tengri.observation import Photometry, Observation, NoiseModel
+
+    obs = Observation(photometry=Photometry.from_names([...]))
+    sed = tengri.SEDModel.build(
+        ssp_data=ssp, observation=obs, **tengri.recipes.star_forming_photometry()
+    )
+    fwd = tengri.ForwardModel.build(sed=sed, observation=obs)
+    post = fwd.fit(flux, flux_err, method="vi")  # canonical entry point
+
+``tengri.help()`` prints the same path with the discovery verbs alongside it.
+
+What is in the package
+======================
+
+**Model construction:** ``SEDModel``, ``ForwardModel``, ``recipes``,
+``builders``, ``Parameters``, ``parse_groups``, and the ``FREE``/``FIXED``
+sentinels with the seven distributions (``Uniform``, ``Gaussian``, ``Fixed``,
+``LogUniform``, ``LogNormal``, ``StudentT``, ``Laplace``).
+
+**Physics namespaces:** ``agn``, ``dust``, ``nebular``, ``stellar``, ``sfh``,
+``sps``, ``igm``, ``radio``, ``xray``.
+
+**Layer modules:** ``observation``, ``filters``, ``inference``, ``cosmology``,
+``units``, ``plot``, ``citations``, ``config``, ``io``, ``pipeline``,
+``presets``, ``preprocessing``, ``results``.
+
+**Toolkit:** precompute configs (``WavePrecomp``, ``FeaturePrecomp``,
+``SpectrumPrecomp``), population and spatial models, SSP loading, instruments,
+line lists, spectral indices, ``fit_batch``, ``generate_mock``.
+
+**Introspection:** ``help``, ``summary``, ``describe``, ``search``, ``explain``,
+``examples``, ``tutorial``, ``doctor``, every ``list_*`` and ``describe_*``,
+``cite_components``, ``suggest_parameters``.
+
+**Exceptions:** ``TengriError`` and its subclasses ``ParameterError``,
+``ConfigError``, ``BackendError``, ``InferenceError``, ``TengriIOError``.
+
+``tengri.list_all()`` enumerates every registry live; prefer it to any list
+written down here, which can only go stale.
 """
 
 # Silence the JAX/absl/XLA C++ chatter that prints on first JAX touch:
@@ -391,6 +427,7 @@ from tengri.registry import (
     describe_recipe,
     describe_sfh_model,
     help,
+    list_age_kernels,
     list_agn_blocks,
     list_agn_models,
     list_all,
@@ -464,7 +501,12 @@ __all__ = [  # noqa: RUF022
     "Parameters",
     "ParameterRecord",
     "parse_groups",
-    # Observations
+    # Observations — the instrument-schema family, re-promoted (#1338)
+    "Observation",
+    "Photometry",
+    "Spectroscopy",
+    "NoiseModel",
+    "LineList",
     # Inference
     # Results
     # High-level facade
@@ -515,6 +557,7 @@ __all__ = [  # noqa: RUF022
     "data_path",
     # Components & physics
     "FilterConvention",
+    "Data",
     "CompositeIndexDef",
     "SpectralIndexDef",
     "SpectralIndexData",
@@ -534,6 +577,8 @@ __all__ = [  # noqa: RUF022
     "gp_noise_covariance",
     "matern32_kernel",
     "fit_batch",
+    # Catalog fitting — the astronomer-facing noun (#1317)
+    "Catalog",
     "compute_mass_remaining_fraction",
     "recipe_parameters",
     # ========== Tier 4: INTROSPECTION (discovery & diagnostics) ==========
@@ -545,6 +590,7 @@ __all__ = [  # noqa: RUF022
     "examples",
     "tutorial",
     # Component discovery
+    "list_age_kernels",
     "list_agn_blocks",
     "list_agn_models",
     "list_all",
@@ -631,10 +677,13 @@ from tengri.analysis.plotting import (
     safe_corner,
     setup_style,
 )
+from tengri.inference.catalog import Catalog
 from tengri.inference.catalog_fitter import CatalogFitter
 from tengri.inference.fitter import Fitter
 from tengri.inference.hierarchical import PopulationFitter
+from tengri.inference.information import ParameterInformation, parameter_information
 from tengri.inference.vi_config import VIConfig
+from tengri.observation.data import Data
 from tengri.observation.instrument import Instrument, list_instruments
 from tengri.observation.line_list import LineList
 from tengri.observation.noise_model import NoiseModel
@@ -666,6 +715,7 @@ _CURATED_DIR = (
     "help",
     "summary",
     "describe",
+    "list_age_kernels",
     "list_agn_blocks",
     "list_agn_models",
     "list_dust_emission_models",
@@ -707,7 +757,11 @@ _CURATED_DIR = (
     "recipes",
     "FeaturePrecomp",
     "WavePrecomp",
-    "Fitter",
+    # ``Fitter`` is deliberately absent: it is the cache-reuse mechanism, not a
+    # taught noun (api_migration_v0.x.md). It stays importable — no public API
+    # is removed — it just must not be what tab-completion suggests first. The
+    # canonical multi-galaxy entry point is ``Catalog``, below (#1455).
+    "Catalog",
     "fit_batch",
     "Observation",
     "Photometry",
@@ -727,8 +781,17 @@ _CURATED_DIR = (
     "StudentT",
     # 4.  Result types (+ hierarchical / spatial model classes)
     "Posterior",
+    "ParameterInformation",
+    "parameter_information",
     "PopulationSEDModel",
-    "PopulationFitter",
+    # ``PopulationFitter`` is deliberately absent too, and the reason is worth
+    # stating because two documents look like they disagree. It is the
+    # canonical *name* for the class (NAMING_CONTRACT, vs the retired
+    # ``HierarchicalFitter``), AND its taught construction form
+    # ``PopulationFitter(model_factory, galaxies, ...)`` raises a
+    # DeprecationWarning pointing at ForwardModel + PopulationSEDModel (#211,
+    # #1319). Both are true at different levels; a constructor that warns is
+    # not a fresh-user entry point.
     "PopulationPosterior",
     "SpatialSEDModel",
     # 5.  Convenience

@@ -73,7 +73,7 @@ flux = model.predict_photometry(params)
 noise = flux * 0.1
 
 forward = ForwardModel.build(sed=model, observation=obs)
-fitter = Fitter(forward, flux, noise)
+result = forward.fit(flux, noise, method="mcmc_nuts")
 ```
 
 ## The four discovery calls

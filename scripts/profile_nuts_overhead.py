@@ -22,9 +22,9 @@ from tengri.parameters.priors import Fixed, Uniform
 
 def profile_gradient_computation(fitter, n_evals=50):
     """Profile gradient computation time."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("GRADIENT COMPUTATION PROFILING")
-    print("="*80)
+    print("=" * 80)
 
     # Get loss function
     loss_fn = fitter._get_or_build_loss_fn(mode="auto")
@@ -44,7 +44,9 @@ def profile_gradient_computation(fitter, n_evals=50):
     compile_time = time.perf_counter() - t0
     print(f"  Compile time: {compile_time:.3f}s")
     print(f"  Loss: {loss_val:.4f}")
-    print(f"  Grad norm: {jnp.linalg.norm(jnp.concatenate([g.ravel() for g in jax.tree_util.tree_leaves(grad)])):.4f}")
+    print(
+        f"  Grad norm: {jnp.linalg.norm(jnp.concatenate([g.ravel() for g in jax.tree_util.tree_leaves(grad)])):.4f}"
+    )
 
     # Additional warmup
     for _ in range(10):
@@ -64,18 +66,18 @@ def profile_gradient_computation(fitter, n_evals=50):
 
     print(f"\n  Steady-state gradient timing:")
     print(f"    Mean: {mean_time_ms:.3f} ± {std_time_ms:.3f} ms")
-    print(f"    Min: {np.min(times_arr)*1000:.3f} ms")
-    print(f"    Max: {np.max(times_arr)*1000:.3f} ms")
-    print(f"    Median: {np.median(times_arr)*1000:.3f} ms")
+    print(f"    Min: {np.min(times_arr) * 1000:.3f} ms")
+    print(f"    Max: {np.max(times_arr) * 1000:.3f} ms")
+    print(f"    Median: {np.median(times_arr) * 1000:.3f} ms")
 
     return mean_time_ms
 
 
 def profile_nuts_step(fitter, n_steps=50):
     """Profile a single NUTS step."""
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("NUTS STEP PROFILING")
-    print("="*80)
+    print("=" * 80)
 
     from numpyro.infer import NUTS
     from numpyro import sample, distributions as dist
@@ -128,9 +130,9 @@ def profile_nuts_step(fitter, n_steps=50):
 
     print(f"\n  Steady-state NUTS step timing:")
     print(f"    Mean: {mean_time_ms:.3f} ± {std_time_ms:.3f} ms")
-    print(f"    Min: {np.min(times_arr)*1000:.3f} ms")
-    print(f"    Max: {np.max(times_arr)*1000:.3f} ms")
-    print(f"    Median: {np.median(times_arr)*1000:.3f} ms")
+    print(f"    Min: {np.min(times_arr) * 1000:.3f} ms")
+    print(f"    Max: {np.max(times_arr) * 1000:.3f} ms")
+    print(f"    Median: {np.median(times_arr) * 1000:.3f} ms")
 
     # Estimate 500 steps
     estimated_500_s = (mean_time_ms * 500) / 1000
@@ -140,13 +142,17 @@ def profile_nuts_step(fitter, n_steps=50):
 
 
 def main():
-    print("="*80)
+    print("=" * 80)
     print("NUTS OVERHEAD DEEP DIVE")
-    print("="*80)
+    print("=" * 80)
 
     # Load SSP data
     print("\nLoading SSP data...")
-    ssp_path = Path(__file__).parent.parent / "data" / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    ssp_path = (
+        Path(__file__).parent.parent
+        / "data"
+        / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+    )
     if not ssp_path.exists():
         print(f"  ❌ SSP data not found at {ssp_path}")
         return
@@ -176,10 +182,18 @@ def main():
     )
 
     filter_names = [
-        "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp",
-        "hst_f125w", "hst_f140w", "hst_f160w",
-        "vista_ks", "irac_36", "irac_45",
-        "herschel_160", "herschel_250",
+        "hst_f606w",
+        "hst_f775w",
+        "hst_f814w",
+        "hst_f850lp",
+        "hst_f125w",
+        "hst_f140w",
+        "hst_f160w",
+        "vista_ks",
+        "irac_36",
+        "irac_45",
+        "herschel_160",
+        "herschel_250",
     ]
     filters = load_filter_set(filter_names)
     observation = Observation(photometry=Photometry.from_filter_set(filters))
@@ -206,14 +220,16 @@ def main():
         nuts_time_ms = None
 
     # Analysis
-    print("\n" + "="*80)
+    print("\n" + "=" * 80)
     print("ANALYSIS")
-    print("="*80)
+    print("=" * 80)
 
     print(f"\n  Gradient computation: {grad_time_ms:.3f} ms/call")
     if nuts_time_ms is not None:
         print(f"  Full NUTS step: {nuts_time_ms:.3f} ms/step")
-        print(f"  NUTS overhead: {nuts_time_ms - grad_time_ms:.3f} ms/step ({(nuts_time_ms/grad_time_ms - 1)*100:.1f}%)")
+        print(
+            f"  NUTS overhead: {nuts_time_ms - grad_time_ms:.3f} ms/step ({(nuts_time_ms / grad_time_ms - 1) * 100:.1f}%)"
+        )
 
         print(f"\n  Estimated 500 NUTS steps: {(nuts_time_ms * 500) / 1000:.1f}s")
         print(f"  Observed test_a2: 73.9s")

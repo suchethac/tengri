@@ -79,12 +79,12 @@ def test_richards2006_registered_in_agn_models():
 
 @pytest.mark.regression_paper
 def test_richards2006_agn_frac_scaling():
-    """``agn_frac`` linearly scales the SED."""
+    """``agn_lum_ratio`` linearly scales the SED."""
     from tengri.components.agn import richards2006
 
     wave = jnp.logspace(2, 5, 100)
-    full = richards2006(wave, agn_log_lbol=12.0, agn_frac=1.0)
-    half = richards2006(wave, agn_log_lbol=12.0, agn_frac=0.5)
+    full = richards2006(wave, agn_log_lbol=12.0, agn_lum_ratio=1.0)
+    half = richards2006(wave, agn_log_lbol=12.0, agn_lum_ratio=0.5)
     np.testing.assert_allclose(np.asarray(half), 0.5 * np.asarray(full), rtol=1e-6)
 
 
