@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.inference._sample_utils import _mean_params
+from tengri.inference.likelihoods.gaussian import standardized_residual
 
 # CG convergence constants matching NIFTy (6 * machine epsilon / tiny).
 _EPS_F64 = 6.0 * jnp.finfo(jnp.float64).eps
@@ -638,7 +639,7 @@ def run_native_vi(
                     pred = fitter.model.predict_spectrum(phys)
                 else:
                     pred = jnp.zeros_like(fitter.data)
-                chi2 = jnp.sum(((fitter.data - pred) / fitter.noise) ** 2)
+                chi2 = jnp.sum(standardized_residual(fitter.data, pred, fitter.noise) ** 2)
                 prior = jnp.sum(converged_flat**2)
                 return 0.5 * chi2 + 0.5 * prior
 
@@ -697,7 +698,7 @@ def run_native_vi(
                     pred = fitter.model.predict_spectrum(phys)
                 else:
                     pred = jnp.zeros_like(fitter.data)
-                chi2 = float(jnp.sum(((fitter.data - pred) / fitter.noise) ** 2))
+                chi2 = float(jnp.sum(standardized_residual(fitter.data, pred, fitter.noise) ** 2))
                 prior = float(jnp.sum(converged_flat**2))
                 loss = 0.5 * chi2 + 0.5 * prior
             seed_losses.append(loss)
@@ -797,7 +798,9 @@ def run_native_vi(
     # Check chi2/dof
     if fitter.data_type == "photometry":
         pred = fitter.model.predict_photometry(best_params)
-        chi2_dof = float(jnp.sum(((fitter.data - pred) / fitter.noise) ** 2)) / len(fitter.data)
+        chi2_dof = float(
+            jnp.sum(standardized_residual(fitter.data, pred, fitter.noise) ** 2)
+        ) / len(fitter.data)
         if chi2_dof > 5.0:
             diag_warnings.append(f"Poor fit: chi2/dof={chi2_dof:.1f} (expected ~1)")
         elif chi2_dof < 0.1:
@@ -906,7 +909,7 @@ def build_native_vi_linear_engine(signal_response, data, noise, flatten, unflatt
 
     def hamiltonian(xi):
         pred = signal_response(unflatten(xi))
-        chi2 = jnp.sum(((data - pred) / noise) ** 2)
+        chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
         return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
 
     H_vg = jax.value_and_grad(hamiltonian)
@@ -1080,7 +1083,7 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
 
     def hamiltonian(xi):
         pred = signal_response(unflatten(xi))
-        chi2 = jnp.sum(((data - pred) / noise) ** 2)
+        chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
         return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
 
     H_vg = jax.value_and_grad(hamiltonian)
@@ -1308,7 +1311,7 @@ def build_native_vi_catalog_linear_engine(signal_response, flatten, unflatten):
 
     def hamiltonian_fn(xi, data, noise):
         pred = signal_response(unflatten(xi))
-        chi2 = jnp.sum(((data - pred) / noise) ** 2)
+        chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
         return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
 
     def _metric_vec_with_noise_inv(xi, v, noise_inv):
@@ -1485,7 +1488,7 @@ def build_native_vi_catalog_nonlinear_engine(signal_response, flatten, unflatten
 
     def hamiltonian_fn(xi, data, noise):
         pred = signal_response(unflatten(xi))
-        chi2 = jnp.sum(((data - pred) / noise) ** 2)
+        chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
         return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
 
     def _metric_vec_with_noise_inv(xi, v, noise_inv):

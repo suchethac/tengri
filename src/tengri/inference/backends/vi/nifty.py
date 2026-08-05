@@ -24,6 +24,7 @@ import jax.numpy as jnp
 
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params
+from tengri.inference.likelihoods.gaussian import standardized_residual
 
 
 def run_nifty_fast_vi(
@@ -209,7 +210,9 @@ def run_nifty_fast_vi(
     chi2_dof = None
     if fitter.data_type == "photometry" and best_params:
         pred = fitter.model.predict_photometry(best_params)
-        chi2_dof = float(jnp.sum(((fitter.data - pred) / fitter.noise) ** 2)) / len(fitter.data)
+        chi2_dof = float(
+            jnp.sum(standardized_residual(fitter.data, pred, fitter.noise) ** 2)
+        ) / len(fitter.data)
 
     if verbose:
         print(

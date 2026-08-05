@@ -24,12 +24,24 @@ dependency the compiler must respect. It is semantically the identity: float64
 values and gradients are bit-exact against the pre-fix expression, and the cost
 is -1.6% against a 2.2% A/A noise floor, i.e. unmeasurable.
 
-**Six sites, not one.** ``diag_gaussian_chi2`` was the one that was reported, but
-the same grouping appeared open-coded in five more — line fluxes, line ratios and
-spectral indices in ``loss_functions``, the NIFTy Hamiltonian in ``jit_engine``,
-and the population χ² in ``hierarchical``. All were measured to NaN identically,
-and all now route through the helper.
+**Eleven sites, not one — and the first count of six was itself too low.**
+``diag_gaussian_chi2`` was reported; five more were found by hand (line fluxes,
+line ratios and spectral indices in ``loss_functions``, the NIFTy Hamiltonian in
+``jit_engine``, the population χ² in ``hierarchical``). A guard was then written
+that parametrized over *those five by name* — and was green while five further
+sites sat open-coded in ``standardized.py`` and the native/NIFTy VI backends.
+Three of them were missed twice, because the first sweep's regex assumed a bare
+identifier and they divide by ``fitter.noise``.
+
+So :func:`test_no_open_coded_chi2_remains` iterates the **tree**, not a list, and
+normalizes whitespace before matching so a reformatted call cannot hide in a line
+break. A guard keyed on a hand-maintained list is green on precisely the item
+nobody thought to add — which is what happened here, in the guard written to
+prevent it.
 """
+
+import pathlib
+import re
 
 import jax
 import jax.numpy as jnp
@@ -160,41 +172,67 @@ def test_the_folded_reciprocal_is_gone_from_the_compiled_module():
     )
 
 
-@pytest.mark.parametrize(
-    "site",
-    [
-        "loss_functions.line_fluxes",
-        "loss_functions.line_ratios",
-        "loss_functions.indices",
-        "jit_engine.hamiltonian",
-        "hierarchical.population_chi2",
-    ],
-)
-def test_every_open_coded_chi2_site_was_converted(site):
-    """The generalization: five more sites had the identical grouping.
+#: ``(<anything>) / <name-or-attribute>) ** 2`` — the divide-then-square shape.
+#: Matched against whitespace-normalized source so a call broken across lines by
+#: the formatter still matches; ``[\w\.\[\]"']`` so ``fitter.noise`` and
+#: ``all_noise[i]`` are seen, which a bare-identifier pattern missed three times.
+_OPEN_CODED_CHI2 = re.compile(r"\)\s*/\s*[A-Za-z_][\w\.\[\]\"']*\s*\)\s*\*\*\s*2")
 
-    Measured vulnerable before the fix — a bare ``((d - p) / n) ** 2`` under a
-    closure jit returns NaN in float32 exactly as ``diag_gaussian_chi2`` did.
-    This asserts each source site now goes through the helper rather than
-    re-deriving, because the next person to open-code it gets the bug back.
+#: Scoped to ``inference/`` on purpose. The identical *shape* appears in Gaussian
+#: line profiles and parameter priors (``((wave - center) / sigma_ang) ** 2``),
+#: where sigma is a line width in Angstrom of order 1-100 and nothing is near the
+#: float32 boundary. Widening the sweep to all of ``src/`` would flag those and
+#: force an allowlist, and an allowlist is the hand-maintained list again.
+_SWEPT = "inference"
+
+
+def _inference_sources():
+    root = pathlib.Path(__file__).resolve().parents[3] / "src" / "tengri" / _SWEPT
+    return sorted(root.rglob("*.py"))
+
+
+def test_the_sweep_can_see_the_source_tree():
+    """Guard the guard: a sweep over zero files passes without testing anything."""
+    files = _inference_sources()
+    assert len(files) > 20, (
+        f"only {len(files)} files found under src/tengri/{_SWEPT} — the sweep below is "
+        "vacuous. Fix the path, do not delete the test"
+    )
+
+
+def test_no_open_coded_chi2_remains():
+    """The generalization, by iteration rather than by list.
+
+    A bare ``((d - p) / n) ** 2`` under a closure jit returns NaN in float32
+    exactly as ``diag_gaussian_chi2`` did — measured, not inferred. Every site
+    must route through the helper, because the next person to open-code one gets
+    the bug back silently.
     """
-    import inspect
+    offenders = []
+    for path in _inference_sources():
+        source = path.read_text()
+        for match in _OPEN_CODED_CHI2.finditer(source):
+            line = source[: match.start()].count("\n") + 1
+            snippet = " ".join(source[max(0, match.start() - 60) : match.end()].split())
+            offenders.append(f"{path.name}:{line}  ...{snippet}")
 
-    module_name, _ = site.split(".", 1)
-    module = {
-        "loss_functions": "tengri.inference.loss_functions",
-        "jit_engine": "tengri.inference.jit_engine",
-        "hierarchical": "tengri.inference.hierarchical",
-    }[module_name]
-    source = inspect.getsource(__import__(module, fromlist=["_"]))
+    assert not offenders, (
+        "open-coded divide-then-square chi2 found — these are NaN in pure float32 under "
+        "a closure jit (#1535). Route them through standardized_residual:\n  "
+        + "\n  ".join(offenders)
+    )
 
-    assert "standardized_residual" in source, (
-        f"{module} no longer imports standardized_residual — its chi2 site has been "
-        "open-coded again and is NaN in pure float32 under a closure jit (#1535)"
-    )
-    assert ") / noise) ** 2" not in source and ") / all_noise) ** 2" not in source, (
-        f"{module} contains an open-coded divide-then-square chi2 again"
-    )
+
+def test_every_converted_module_still_imports_the_helper():
+    """The converse: a module cannot pass the sweep by deleting its chi2 entirely."""
+    missing = []
+    for path in _inference_sources():
+        source = path.read_text()
+        if "def standardized_residual" in source:
+            continue  # the module that defines it does not import it
+        if "standardized_residual(" in source and "import standardized_residual" not in source:
+            missing.append(path.name)
+    assert not missing, f"{missing} call standardized_residual without importing it"
 
 
 def test_a_bare_open_coded_chi2_still_demonstrates_the_hazard():
