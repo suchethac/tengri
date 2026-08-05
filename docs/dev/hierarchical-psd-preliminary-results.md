@@ -249,6 +249,14 @@ it resolves for two independent reasons:
    hierarchical posterior over (σ, τ, ξ) directly and never forms that Hessian.
    The pathology is not merely absent from this sample, it is unavailable to
    this estimator.
+
+   *Since resolved (2026-08-05, handoff §4i-bis): it is a **MAP** artifact, not
+   a Hessian one. The finite-difference Hessian matches `jax.hessian` to five
+   digits on every affected galaxy; `run_map` was returning a non-stationary
+   point and `run_laplace` inverted the Hessian there. This strengthens the
+   argument rather than weakening it — joint NUTS has no MAP-and-invert step at
+   all, so the narrower attribution is still one the joint path cannot express.
+   Raising `n_map_steps` 10× repairs 9 of 9 collapsed fits.*
 2. **The bias runs the wrong way to rescue the conclusion.** A collapsed ξ
    posterior manufactures *false constraint* — that is precisely what drives
    B2's spuriously tight τ of 12–31 Myr. The claim here is that τ is
