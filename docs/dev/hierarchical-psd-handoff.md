@@ -61,14 +61,18 @@ differently-wrong cross-check.
 ## 2. Where it stands
 
 > **RESOLVED 2026-08-05 — the N ceiling below was a fitting bug, not a
-> statistical one.** The bank was fit at `--n-map-steps 4000`, which leaves ~14%
-> of galaxies at a **non-stationary** point; `run_laplace` then inverted the
+> statistical one.** The bank was fit at `--n-map-steps 4000`, which leaves
+> galaxies at a **non-stationary** point; `run_laplace` then inverted the
 > Hessian there and returned a far-too-narrow posterior with nothing raised.
-> Refitting the N=64 bank at 40 000 steps repairs **9 of 9** collapsed fits and
-> σ recovers to **0.743–0.812** (truth 0.75) with no railing. §4i-bis has the
-> measurement; the tables below are the pre-fix record. **τ remains
-> unidentified at z≈0.1 — that part is a real information limit (§4b) and is
-> unchanged.**
+> Refitting with the MAP converged removes the railing entirely and **σ covers
+> truth at every N from 4 to 128** (§4i-ter). The tables below are the pre-fix
+> record.
+>
+> **τ, however, is now a sharper problem than this document has been calling
+> it.** "Unidentified — it reads the prior" is no longer accurate: on the
+> converged bank τ *tightens* with N toward ~15 Myr against a truth of 150,
+> excluding truth and getting more confident. That is a **biased** estimator,
+> not an uninformative one, and it is the open problem. See §4i-ter.
 
 ### Works
 
@@ -936,6 +940,72 @@ rail and σ covers truth, matching the exclusion result.
 > cache, the first NUTS batch, and this). In all three `n_divergent` was **0**.
 > **A zero divergence count is equally consistent with a sampler that took no
 > steps at all.**
+
+---
+
+## 4i-ter. The converged bank — σ is fixed, and τ is BIASED, not unidentified
+
+The whole bank refit with `run_laplace` escalating `n_map_steps` while the fit
+reports it is not at a mode (`--max-map-escalations`, tripling up to 27×). This
+supersedes the flat `40000` of §4i-bis: 10× was one bank's answer, not a rule.
+
+**Per-galaxy, before any pooling** (138 galaxies):
+
+| `n_map_steps` used | galaxies | share |
+|---|---|---|
+| 4 000 (converged first try) | 63 | 45.7% |
+| 12 000 | 21 | 15.2% |
+| 36 000 | 51 | 37.0% |
+| 108 000 | 3 | 2.2% |
+
+Newton decrement: median 0.0060, **max 0.091 — none above the 0.1 tolerance**.
+ξ covariance total: median 13.69, **min 11.96 — none below 6.0**, against 9 of
+the first 64 before.
+
+**54.3% of galaxies needed escalation.** §4h's ξ-spectrum flag found ~14%, so
+that flag was a proxy for the worst tail, not a census of the defect — which
+is what "the failure is a continuum, not a category" means quantitatively. Any
+future claim of the form "X% of fits are affected" should be read as "X% were
+bad enough for my chosen threshold to notice."
+
+### σ: fixed at every N
+
+| N | σ 68% — pre-fix | σ 68% — converged | τ 68% Myr (truth 150) | ESS |
+|---|---|---|---|---|
+| 4 | 0.692–0.930 ok | 0.680–0.910 ok | 11.5–28.1 | 63.9 |
+| 8 | 0.699–0.894 ok | 0.693–0.874 ok | 11.6–27.4 | 78.8 |
+| 16 | 0.757–0.944 | 0.740–0.875 ok | 11.9–27.0 | 60.1 |
+| 32 | 0.753–0.918 | 0.715–0.816 ok | 12.0–25.4 | 53.9 |
+| 64 | **0.958–0.995 MISS** | **0.741–0.813 ok** | 13.2–25.6 | 65.8 |
+| 128 | **0.970–0.996 MISS** | **0.741–0.795 ok** | 12.5–20.2 | 53.9 |
+
+σ slope **−0.428 ± 0.010** (PASS, near the ideal −0.5 for √N pooling). The
+railing that defined §2's "N ceiling" is gone: σ covers truth at every N, and
+the interval tightens monotonically from 0.230 wide at N=4 to 0.054 at N=128.
+
+### τ: the correction this document owes
+
+**"τ is unidentified — it reads the prior" is no longer accurate**, and it was
+the reading this handoff carried from §4b through §4i-bis. On the converged
+bank τ *tightens* with N — upper bound 28.1 → 20.2, slope **−0.191 ± 0.050**
+excluding zero — converging on **~15 Myr against a truth of 150**.
+
+An unidentified parameter returns the prior width and covers truth by accident.
+This one **excludes truth and grows more confident with N**. That is a *biased*
+estimator, which is strictly worse than an uninformative one: pooling shrinks
+the interval around the wrong value instead of widening it.
+
+Note the sign flip that makes this legible. The pre-fix bank railed **high**
+(434–491 Myr at N=64); the converged bank converges **low** (12–20). Same
+estimator, opposite direction — so the old railing was never τ's behavior at
+all, it was the collapsed fits. What is left underneath is τ's real pathology,
+and it was hidden by a louder one the whole time.
+
+ESS is 54–79 throughout, so this is not weight degeneracy.
+
+**The decisive follow-up** is whether τ keeps tightening at N = 256/512/1024.
+Continued tightening confirms bias; a plateau at the prior width would mean
+something else. That run is in flight.
 
 ---
 
