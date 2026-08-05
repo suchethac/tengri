@@ -61,6 +61,8 @@ import jax
 import numpy as np
 import matplotlib.pyplot as plt
 
+import tengri
+from _setup import FIG_DIR
 from tengri import (
     Fixed,
     Observation,
@@ -69,7 +71,6 @@ from tengri import (
     SEDModel,
     Uniform,
     builders,
-    load_ssp_data,
     parse_groups,
     recipes,
 )
@@ -77,8 +78,6 @@ from tengri import cosmology, plot, units
 from tengri.parameters.sentinels import FIXED, FREE
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 # Quickstart palette + a curated sequential set for the multi-model tours
 # below. The viridis-style palette spans cool→warm so a 5-element legend
@@ -89,8 +88,7 @@ PALETTE_SEQ = ["#1f4e79", "#2e7ab0", "#4ba6c8", "#e07a3a", "#a02c2c"]  # cool �
 # Load SSP grid: bare-stellar FSPS+MILES (required by Cue nebular backend
 # used in the canonical recipes; wNE files cannot be paired with Cue).
 _ssp_name = "fsps_prsc_miles_chabrier.h5"
-_repo_root = next(p for p in [Path.cwd(), *Path.cwd().parents] if (p / "pyproject.toml").exists())
-ssp = load_ssp_data(str(_repo_root / "data" / _ssp_name))
+ssp = tengri.load_ssp(_ssp_name, download=True)
 
 # Lightweight photometry (pre-downloaded, no SVO API calls)
 # Span optical → IR for meaningful SED comparisons
