@@ -351,50 +351,6 @@ jobs:
     #   regression-d 19m · components 19m · contract 18m · regression-b1 17m
     #   regression-b2 9m · regression-a 6m · regression-c 4m · physics 3m
     #
-    # STOP: adding shards does not make this job finish sooner. Measured, twice.
-    #
-    # Every timing note in this file before 2026-07-29 quoted the duration of the
-    # SLOWEST SHARD and called it the wall clock. That is not the wall clock. Only
-    # six jobs run at once — the concurrency cap was 6 in both runs below — so
-    # shards queue, and the stage span is (time the longest shard waits for a
-    # slot) + (how long it then runs). Splitting trades one term for the other.
-    #
-    # The A/B, same suite, same day:
-    #
-    #                        shards  slowest shard  test job-min  STAGE SPAN
-    #   run 30438809385         8       22m41s          103        40.6 min
-    #   run 30462704147        11       16m48s          113        40.7 min
-    #
-    # The slowest shard fell 6 min and the span did not move, because the queue
-    # absorbed exactly what the split gave back: the longest shard got its slot
-    # 18 min in before, 24 min in after. Total work rose 10 min — each extra job
-    # re-pays checkout, pip install and cache restore. Matrix order does not help:
-    # GitHub dispatched in neither run's declared order, so the long shards cannot
-    # be scheduled first on purpose.
-    #
-    # The 11-shard split was therefore REVERTED. What survives is what did not
-    # depend on the speed claim: one split mechanism, `-maxdepth 1` in place of a
-    # stale-able --ignore list, and `--durations=25`.
-    #
-    # The levers that DO move the span, in order of measured size:
-    #
-    #   1. Less total work. Span scales with it under a fixed cap. Two files are
-    #      13% of all test time (per-test numbers from run 30462704147):
-    #        tests/regression/test_issue_1134_ztable_accuracy.py   450 s
-    #          (a 4-point sweep; the [800] point alone is 193 s)
-    #        tests/unit/inference/test_cache_policy.py             364 s
-    #          (one test, test_forward_prewarm_*, is 257 s of it)
-    #      Per-job setup is another ~2 min x 8 jobs = ~16 min of the 103.
-    #   2. A higher concurrency cap. That is an account/plan setting, not a
-    #      workflow one, and it costs money — so it is a decision, not a patch.
-    #
-    # Historical note, kept because it is the same error one level down: this
-    # block previously asserted the top four shards were a 17-19 min near-tie.
-    # Re-measured 2026-07-29 they were 22m41s / 20m54s / 18m30s / 14m24s — an
-    # 8.3 min spread. It has now gone stale four times. State no timing claim
-    # here without its date and run id, and re-measure from a completed run's job
-    # durations — never from progress percentages (see the 2.3x error below).
-    #
     # RE-MEASURED 2026-08-04, main @dd2da7acf (run 30864997361, all green). The
     # near-tie above is GONE and the numbers have gone stale exactly as this block
     # warns they do — `contract` leads the next shard by 7.3 min:
@@ -402,12 +358,60 @@ jobs:
     #   regression-b2 12.6m · regression-a 6.2m · regression-c 5.2m · physics 3.3m
     #
     # Dated, per this block's own rule, and not a standing claim. `contract` sits at
-    # 60% of its 50-min budget and sets a ~30 min wall clock, so work landing there
-    # is no longer free. That is why #1498's preconditioning guard was SPLIT rather
-    # than moved in whole: the 53 s four-backend deficit sweep went to
-    # `tests/contract/`, and the 155 s posterior-mean comparison stayed in the
-    # nightly tier as `tests/integration/test_preconditioning_posterior_invariance.py`.
+    # 60% of its 50-min budget, so work landing there is no longer free. That is why
+    # #1498's preconditioning guard was SPLIT rather than moved in whole: the 53 s
+    # four-backend deficit sweep went to `tests/contract/`, and the 155 s
+    # posterior-mean comparison stayed in the nightly tier as
+    # `tests/integration/test_preconditioning_posterior_invariance.py`.
     # Re-measure before adding to `contract`; `physics` at 3.3m has the headroom.
+    #
+    # WHAT "WALL CLOCK" MEANS HERE, because getting this wrong cost a revert.
+    #
+    # The stage span is (time the slowest shard waits for a runner) + (how long it
+    # then runs). Both terms are real, and the FIRST one is not constant:
+    #
+    #   run           max concurrent  slowest  span   queue delay
+    #   30961248218        13          33.1m   33.1m     0.0
+    #   30961940073         8          14.7m   14.7m     0.0
+    #   30963578913        10          20.8m   21.5m     0.7
+    #   30961912638        13          28.4m   31.7m     3.3
+    #   30963846228         8          19.2m   25.1m     6.0
+    #   30961618196        10          27.5m   34.5m     6.9
+    #     -> queue delay across 6 runs: min 0.0, MEDIAN 3.3, max 6.9 min
+    #
+    # So in the normal case span ~= slowest shard + ~3 min, and splitting the
+    # slowest shard pays back roughly 1:1. Hence the splits below.
+    #
+    # The trap, recorded because it is convincing and wrong. An A/B run on
+    # 2026-07-29 measured 8 shards (run 30438809385) against 11 (run 30462704147)
+    # and found the span UNCHANGED — 40.6 vs 40.7 min — even though the slowest
+    # shard fell from 22m41s to 16m48s. That result is real but unrepresentative:
+    # both runs happened to land in heavy account contention, with max concurrency
+    # 6 and queue delays of 17.9 and 23.9 min — outliers against the 0.0-6.9 min
+    # range above. Under a queue that deep the span is set by total work, and
+    # splitting only adds to it (+10 job-min: every extra job re-pays checkout,
+    # pip install and cache restore). n=2 in the worst regime was generalised into
+    # "sharding is not the lever", and the split was reverted on it. It should not
+    # have been. Sample the queue delay before drawing that conclusion again.
+    #
+    # Net: splitting is ~1:1 when runners are free and roughly neutral when they
+    # are not, so it is worth doing — but it is bounded by the SLOWEST FILE, since
+    # `--dist=loadfile` pins a whole file to one worker. Reducing total work is the
+    # lever that has no ceiling. Two files are 13% of all test time (per-test
+    # numbers from run 30462704147, via `--durations=25`):
+    #   tests/regression/test_issue_1134_ztable_accuracy.py  450 s
+    #     (a 4-point sweep; the [800] point alone is 193 s)
+    #   tests/unit/inference/test_cache_policy.py            364 s
+    #     (one test, test_forward_prewarm_*, is 257 s of it)
+    # Note the second: `tests/unit` is described below as "~2 min, free inside this
+    # shard's budget". That justification is stale by an order of magnitude.
+    #
+    # Historical note, same error one level down: this block previously asserted
+    # the top four shards were a 17-19 min near-tie. Re-measured 2026-07-29 they
+    # were 22m41s / 20m54s / 18m30s / 14m24s — an 8.3 min spread. It has now gone
+    # stale five times. State no timing claim here without its date and run id, and
+    # re-measure from a completed run's job durations — never from progress
+    # percentages (see the 2.3x error below).
     #
     # regression and physics were ONE shard until 2026-07. They were split because
     # the paired shard walked back into the 16 GB ceiling: it died at ~21-22 min and
@@ -447,8 +451,21 @@ jobs:
         # (~0.66 GB/test never released). Fix that and `-n 2` should come back —
         # revisit with a measurement, not an assumption. See #1346.
         include:
-          - shard: contract
-            paths: tests/contract
+          # Split in two: 30.2m on 2026-08-04, the pole by 7.3 min, and 310 files
+          # on one runner. `nproc` stays 2, so each runner's peak is unchanged --
+          # this buys span only.
+          - shard: contract-1
+            paths: ""
+            split_dir: tests/contract
+            split_part: "1"
+            split_of: "2"
+            nproc: 2
+            budget: 50
+          - shard: contract-2
+            paths: ""
+            split_dir: tests/contract
+            split_part: "2"
+            split_of: "2"
             nproc: 2
             budget: 50
           # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
@@ -460,8 +477,22 @@ jobs:
           # inside this shard's budget. `tools/check_test_paths_covered.py`
           # (lint job) now fails the build if any test tree escapes the matrix
           # again.
-          - shard: components
-            paths: tests/components tests/unit
+          # Split in two: 22.9m on 2026-08-04. `tests/unit` rides with part 1 --
+          # see the note above about its "~2 min" claim being stale; if part 1
+          # comes back much heavier than part 2, that is where to look first.
+          - shard: components-1
+            paths: ""
+            split_dir: tests/components
+            split_part: "1"
+            split_of: "2"
+            extra_paths: tests/unit
+            nproc: 2
+            budget: 50
+          - shard: components-2
+            paths: ""
+            split_dir: tests/components
+            split_part: "2"
+            split_of: "2"
             nproc: 2
             budget: 50
           # regression is split FOUR ways, each SERIAL. Two independent knobs,
@@ -532,12 +563,25 @@ jobs:
           # directory, one shard -- so the maxdepth is available without
           # implying a shard count. Still SERIAL: this holds the memory-heaviest
           # files (test_field_latents_reach_likelihood.py at 4.06 GB).
-          - shard: regression-d
+          # Split in two: 21.5m on 2026-08-04. Still SERIAL -- this holds the
+          # memory-heaviest files (test_field_latents_reach_likelihood.py at
+          # 4.06 GB), and splitting changes span without changing a runner's peak,
+          # which is what makes it safe here. Bounded below by its slowest FILE:
+          # test_issue_1134_ztable_accuracy.py is 450 s on its own.
+          - shard: regression-d1
             paths: ""
             split_dir: tests/regression
             split_maxdepth: "1"
             split_part: "1"
-            split_of: "1"
+            split_of: "2"
+            nproc: 1
+            budget: 50
+          - shard: regression-d2
+            paths: ""
+            split_dir: tests/regression
+            split_maxdepth: "1"
+            split_part: "2"
+            split_of: "2"
             nproc: 1
             budget: 50
           - shard: physics
@@ -750,8 +794,21 @@ jobs:
         # measure: #1362 (chunked fast-grid build) shrinks the underlying
         # allocation; revisit -n 2 once it lands.
         include:
-          - shard: contract
-            paths: tests/contract
+          # Split in two: 30.2m on 2026-08-04, the pole by 7.3 min, and 310 files
+          # on one runner. `nproc` stays 2, so each runner's peak is unchanged --
+          # this buys span only.
+          - shard: contract-1
+            paths: ""
+            split_dir: tests/contract
+            split_part: "1"
+            split_of: "2"
+            nproc: 2
+            budget: 50
+          - shard: contract-2
+            paths: ""
+            split_dir: tests/contract
+            split_part: "2"
+            split_of: "2"
             nproc: 2
             budget: 50
           # `tests/unit` rides along here (2026-07-26). It was in NO shard: the
@@ -763,8 +820,22 @@ jobs:
           # inside this shard's budget. `tools/check_test_paths_covered.py`
           # (lint job) now fails the build if any test tree escapes the matrix
           # again.
-          - shard: components
-            paths: tests/components tests/unit
+          # Split in two: 22.9m on 2026-08-04. `tests/unit` rides with part 1 --
+          # see the note above about its "~2 min" claim being stale; if part 1
+          # comes back much heavier than part 2, that is where to look first.
+          - shard: components-1
+            paths: ""
+            split_dir: tests/components
+            split_part: "1"
+            split_of: "2"
+            extra_paths: tests/unit
+            nproc: 2
+            budget: 50
+          - shard: components-2
+            paths: ""
+            split_dir: tests/components
+            split_part: "2"
+            split_of: "2"
             nproc: 2
             budget: 50
           # regression is split FOUR ways, each SERIAL. Two independent knobs,
@@ -835,12 +906,25 @@ jobs:
           # directory, one shard -- so the maxdepth is available without
           # implying a shard count. Still SERIAL: this holds the memory-heaviest
           # files (test_field_latents_reach_likelihood.py at 4.06 GB).
-          - shard: regression-d
+          # Split in two: 21.5m on 2026-08-04. Still SERIAL -- this holds the
+          # memory-heaviest files (test_field_latents_reach_likelihood.py at
+          # 4.06 GB), and splitting changes span without changing a runner's peak,
+          # which is what makes it safe here. Bounded below by its slowest FILE:
+          # test_issue_1134_ztable_accuracy.py is 450 s on its own.
+          - shard: regression-d1
             paths: ""
             split_dir: tests/regression
             split_maxdepth: "1"
             split_part: "1"
-            split_of: "1"
+            split_of: "2"
+            nproc: 1
+            budget: 50
+          - shard: regression-d2
+            paths: ""
+            split_dir: tests/regression
+            split_maxdepth: "1"
+            split_part: "2"
+            split_of: "2"
             nproc: 1
             budget: 50
           - shard: physics
