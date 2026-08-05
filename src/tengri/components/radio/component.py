@@ -61,6 +61,7 @@ from tengri.components.radio.radio import (
     radio_total_dpl_terms,
     radio_total_terms,
 )
+from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -346,7 +347,7 @@ class RadioSEDComponent:
         and not on the sum (#1109).
         """
         model = self.config.agn_radio_model
-        z = jnp.asarray(params.get("redshift", 0.0))
+        z = jnp.asarray(require_redshift(params, "components.radio.component.emission_terms"))
 
         # Float32 routing (#1206): only when the forward grid is float32 do we
         # bypass the linear ``L_ir`` (~1e43) / ``L_agn_bol`` (~1e46) — which
@@ -525,7 +526,7 @@ class RadioSEDComponent:
         # because they are no longer in AGN_RADIO_MODELS. That validation
         # lives in RadioSEDComponentConfig.__post_init__.
         wave = state.wave
-        z = jnp.asarray(params.get("redshift", 0.0))
+        z = jnp.asarray(require_redshift(params, "components.radio.component.apply"))
         inputs = self.emitter_inputs(state.derived)
 
         def _emit(w):

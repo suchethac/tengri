@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
 from tengri.components.agn.unified import register_agn_model
 
@@ -25,7 +26,7 @@ __all__ = ["composable"]
 )
 def composable(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 45.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = 1.0,
     agn_disc_block: str = "none",
     agn_nlr_block: str = "none",
@@ -47,7 +48,8 @@ def composable(
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
     agn_log_lbol : float, optional
-        :math:`\log_{10}(L_{\rm bol}/L_\odot)`. Default ``45.0``.
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`. Defaults to the declared
+        ``agn_log_lbol`` default.
     agn_lum_ratio : float, optional
         Overall AGN fraction scaling [dimensionless]. Default ``1.0``.
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \

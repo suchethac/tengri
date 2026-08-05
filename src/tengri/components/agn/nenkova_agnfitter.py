@@ -41,6 +41,7 @@ from collections.abc import Callable
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import (
     bolometric_integral_nu as _bolometric_integral_nu,
     wavelength_to_nu as _wavelength_to_nu,
@@ -129,7 +130,7 @@ def create_nenkova_agnfitter_from_grid(grid_path: str) -> Callable:
 
     def nenkova_agnfitter_grid(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 10.0,
+        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
         agn_cos_inc: float = 0.5,
         agn_torus_frac: float = 0.5,
         **_kwargs,

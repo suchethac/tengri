@@ -32,6 +32,56 @@ from tengri.inference.fitter import resolve_method
 from tengri.inference.likelihoods.gaussian import standardized_residual
 from tengri.utils.transforms import to_bounded, to_unbounded
 
+#: Acceptance below which a Ray Tracing chain is treated as not having sampled.
+#:
+#: Not a tuning knob — a separator between "mixed poorly" and "did not move".
+#: The observed failure sits at 3.4e-10, orders below anything a working chain
+#: produces, so the exact value is uncritical. 1e-4 leaves room for a genuinely
+#: bad but non-degenerate run to come back and be judged on its own diagnostics
+#: rather than refused here.
+_DEGENERATE_ACCEPT_RATE: float = 1e-4
+
+
+class DegenerateChainError(RuntimeError):
+    """A sampler returned draws that never moved from their initialization.
+
+    Distinct from a convergence warning. This is not a chain that mixed badly;
+    it is a chain that did not sample. Raised rather than warned because the
+    draws are indistinguishable from a successful fit by inspection — they
+    carry the MAP solution, so they look like a plausible answer (#1530).
+    """
+
+
+def chain_is_degenerate(chain, accept_rate: float) -> bool:
+    """Whether a finished chain failed to sample at all.
+
+    Split out from the sampler so the decision can be tested against synthetic
+    chains, without paying for a hierarchical fit to reach it. A guard whose
+    only exercise is an end-to-end run tends to be tested in one direction
+    (it fires) and not the other (it does not fire on a healthy chain).
+
+    Parameters
+    ----------
+    chain : array_like, shape (n_samples, n_dim)
+        Post-burn-in draws.
+    accept_rate : float
+        Mean acceptance probability over the same draws.
+
+    Returns
+    -------
+    bool
+        True when the chain never moved.
+
+    Notes
+    -----
+    Both conditions are needed. ``accept_rate`` is an *expectation*, so a chain
+    can carry a small mean acceptance and still contain one unique row; and a
+    chain can contain near-duplicate rows while genuinely having moved, which
+    the exact-uniqueness test correctly leaves alone.
+    """
+    n_unique = int(jnp.unique(jnp.asarray(chain), axis=0).shape[0])
+    return n_unique <= 1 or float(accept_rate) < _DEGENERATE_ACCEPT_RATE
+
 
 @dataclass
 class PopulationPosterior:
@@ -1978,6 +2028,7 @@ class PopulationFitter:
         step_size=None,
         memory_mode="low",
         posterior_chunk_size=None,
+        allow_degenerate=False,
         verbose=True,
     ):
         """Hierarchical Ray Tracing (flat parameter vector).
@@ -2158,6 +2209,39 @@ class PopulationFitter:
                 ]
             )
 
+        # A chain that accepted nothing has not sampled (#1530). Its draws are
+        # the initialization repeated n_steps times — and because that
+        # initialization is a MAP solve, the numbers look *reasonable*. Measured
+        # at D=516: acceptance 3.4e-10, all 500 draws collapsing to one point,
+        # reporting sigma_PSD=2.05 beside MAP's 2.13. That reads as two
+        # estimators agreeing; it is one number echoed back. Nothing raised, and
+        # `tier="primary"` means `check_usable` does not gate this backend, so
+        # using Ray Tracing to cross-check MAP was silently self-confirming.
+        #
+        # Tested on the realized chain, not on `accept_rate` alone: acceptance is
+        # an expectation, so a chain can carry a small mean acceptance while
+        # never actually having moved.
+        _accept_rate = float(jnp.mean(accept_prob_post))
+        _n_unique = int(jnp.unique(chain, axis=0).shape[0])
+        if not allow_degenerate and chain_is_degenerate(chain, _accept_rate):
+            raise DegenerateChainError(
+                f"Ray Tracing accepted essentially nothing at D={D}: acceptance "
+                f"{_accept_rate:.3g}, and the {int(chain.shape[0])} post-burn-in "
+                f"draws collapse to {_n_unique} unique point(s). Those draws are "
+                f"the MAP initialization repeated, not a posterior — and they "
+                f"look plausible, which is exactly why returning them is unsafe.\n\n"
+                f"step_size={float(step_size):.3g} is too large for this "
+                f"dimension. Acceptance falls off a cliff rather than degrading "
+                f"gently — measured at D=516, 3e-3 gives 53% and 4e-3 gives "
+                f"zero — so the working value can sit under a factor of two "
+                f"below where you are. Halve it and retry, keeping the largest "
+                f"value that holds acceptance in roughly the 50-90% band; going "
+                f"far smaller is not safer, it just buys 99% acceptance with "
+                f"steps too short to explore.\n\n"
+                f"Pass allow_degenerate=True to receive the chain regardless; "
+                f"that is for debugging the sampler, not for inference."
+            )
+
         shared_arr = jax.vmap(extract_shared)(chain)  # (n_samples, 2)
         shared_samples = {
             "psd_sigma": shared_arr[:, 0],
@@ -2184,7 +2268,12 @@ class PopulationFitter:
                 "n_burnin": n_burnin,
                 "n_steps": n_steps,
                 "n_samples": chain.shape[0],
-                "accept_rate": float(jnp.mean(accept_prob_post)),
+                "accept_rate": _accept_rate,
+                # Published so a caller can judge mixing without catching an
+                # exception. `accept_rate` alone cannot distinguish "moved
+                # rarely" from "never moved"; this can.
+                "n_unique_draws": _n_unique,
+                "step_size": float(step_size),
                 "D_total": D,
             },
         )

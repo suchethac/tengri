@@ -236,6 +236,9 @@ def build_components(
     # SFH -> SSP age-weight kernel: "cic" (dense cloud-in-cell integrand),
     # "dsps" (DSPS's histogram kernel), or None to auto-select (#964).
     age_kernel: str | None = None,
+    # GP-field parameterization: 1.0 = non-centered (shipped), a < 1 moves
+    # amplitude dependence out of the xi -> SFH map (#1355).
+    field_centering: float = 1.0,
     # Nebular
     nebular_backend: str | None = "baked_in",
     nebular_backend_instance: Any | None = None,
@@ -388,6 +391,7 @@ def build_components(
                 n_grid=n_grid,
                 lgmet_scatter=lgmet_scatter,
                 age_kernel=age_kernel,
+                field_centering=field_centering,
             ),
             ssp_data=ssp_data,
         )

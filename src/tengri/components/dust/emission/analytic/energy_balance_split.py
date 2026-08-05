@@ -13,6 +13,7 @@ from typing import ClassVar
 import jax.numpy as jnp
 
 from tengri.components.dust.emission._component_base import EmissionComponent
+from tengri.parameters.resolve import require_redshift
 
 __all__ = ["EnergyBalanceSplitIRSEDComponent"]
 
@@ -148,7 +149,9 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
         from tengri.components.dust.emission.emission import energy_balance_split as ebs_fn
         from tengri.utils.scale import apply_log10_scale, log10_add
 
-        z = jnp.asarray(p.get("redshift", 0.0))
+        z = jnp.asarray(
+            require_redshift(p, "components.dust.emission.analytic.energy_balance_split.predict")
+        )
 
         # Affine budget in log space: L_ir_total = L_ir + dust_L_agn_ir. Both
         # terms are ~1e43 erg/s (inf in float32); log10_add sums their log

@@ -41,6 +41,7 @@ import jax.numpy as jnp
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.unified import resolve_agn_model
 from tengri.components.xray.xray import COS_INC_REF_30DEG as _XRAY_COS_INC_REF_30DEG
+from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -547,7 +548,7 @@ class AGNSEDComponent:
         ):
             from tengri.observation.photometry import lnu_filter_integral
 
-            z = jnp.asarray(params.get("redshift", 0.0))
+            z = jnp.asarray(require_redshift(params, "components.agn.component.apply"))
             # Filter-integrate L_agn directly via ``lnu_filter_integral``
             # (ADR-0016, #398.e). Replaces the previous
             # ``compute_flux_density(..., dl_cm=1) × inv_cosmology`` dance
