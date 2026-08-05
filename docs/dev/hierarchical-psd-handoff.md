@@ -1149,6 +1149,59 @@ remove it).
 > unconstrained modes have been re-drawn from the *fitted* OU rather than left
 > at prior amplitude, and see whether τ recovers.
 
+### …and the roughness hypothesis is REFUTED
+
+Tested directly with a normalized adjacent-node roughness
+`R = <Σ_j (m_{j+1} − m_j)²> / <var(m)>`, on 120 galaxies × 200 draws, against
+two matched synthetic controls on the same grid:
+
+| arm | median R | p16 | p84 |
+|---|---|---|---|
+| bank — reconstructed fields | **22.26** | 18.37 | 25.25 |
+| OU at each galaxy's own fitted (σ, τ) | 22.09 | 21.26 | 23.36 |
+| OU at truth (0.75, 150 Myr) | 22.37 | 21.68 | 22.96 |
+
+Ratios: bank/ou-fitted **1.007**, bank/ou-truth **0.995**. The reconstructed
+fields are *not* rougher than genuine OU draws. The hypothesis above is wrong.
+
+**The statistic is not blind — that was checked.** R against τ at σ=0.75,
+20 000 draws:
+
+| τ [Myr] | 5 | 15 | 50 | 150 | 500 | 2000 |
+|---|---|---|---|---|---|---|
+| R | 28.33 | 26.27 | 24.27 | 22.51 | 20.74 | 18.21 |
+
+Monotone over a 55% range, so a null result here means something. (Worth the
+check: R gave nearly the same value at τ=150 and τ=218, which looked like
+insensitivity until the full sweep showed otherwise.)
+
+### The contradiction this leaves, which is now the whole problem
+
+The bank's fields score R = 22.26, i.e. they look like OU draws at
+**τ ≈ 150–220 Myr** — consistent with their own fitted median of 218 Myr. A
+field at τ = 12 Myr would score ≈ 26.5, far outside the bank's p16–p84.
+
+**So the fields carry approximately the right correlation structure, and the
+estimator returns 11–14 Myr from them.**
+
+Every other explanation is now excluded by measurement:
+
+| suspect | status |
+|---|---|
+| non-stationary MAP (§4i) | excluded — all fits provably at a mode |
+| Laplace Gaussian approximation | amplifies ×2.8, but NUTS still tilts +0.377 |
+| importance-weight degeneracy | excluded — ESS 31–79 |
+| collapsed ξ posteriors (§4h) | excluded — 0 of 1024 below covtot 6.0 |
+| field correlation structure | **excluded — R matches OU at the fitted τ** |
+
+What remains is the estimator's own reading: the B2 ratio, `p_0`, or the
+density evaluation. That collides head-on with §4b ("B2 is sound given exact
+posteriors") and §4g ("`p_0` is correct to 0.005 nats"). **One of those
+premises must fail, and identifying which is the next step.** The most likely
+candidate is that §4b's analytic toy differs from the real case in a way that
+matters — it has no nuisance parameters, a linear projection, and an exactly
+Gaussian posterior, and the real case has none of those.
+
 Not purely a ridge effect, though: at **fixed** truth σ the pooled surface
 still prefers τ=15 over τ=150 by 19.4 nats. Both a genuine short-τ preference
 at fixed σ *and* a ridge that carries σ upward.
