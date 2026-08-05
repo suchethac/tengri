@@ -122,22 +122,6 @@ def _george_linear_kernel(
     return xx**order / jnp.exp(log_gamma2)
 
 
-def combined_kernel(
-    x1: jnp.ndarray,
-    x2: jnp.ndarray,
-    variance: float,
-    length_scale: float,
-) -> jnp.ndarray:
-    """Matérn 3/2 + Linear kernel — generic (non-george) backward-compat form.
-
-    Kept for testing; **not used** by :func:`dense_basis`. The SFH path uses
-    :func:`_george_combined_kernel` for exact george parity.
-    """
-    return matern32_kernel(x1, x2, variance, length_scale) + linear_kernel(
-        x1, x2, variance, length_scale
-    )
-
-
 def _george_combined_kernel(
     x1: jnp.ndarray,
     x2: jnp.ndarray,
@@ -175,7 +159,21 @@ def _george_combined_kernel(
 # ── GP interpolation ──────────────────────────────────────────────
 
 
-_NUGGET = 1e-4  # Diagonal jitter for GP numerical stability
+# Diagonal jitter that keeps the Cholesky factorization well posed.
+#
+# This was 1e-4, which is ~300x larger than the real diagonal noise
+# (``yerr**2 ~ 3.3e-7`` at the user quantiles) and therefore set the smoothing
+# on its own. Measured against ``dense_basis.gp_sfh.gp_interpolator`` over three
+# quantile configurations, max |tengri - upstream| on the cumulative mass:
+#
+#     nugget   1e-4     1e-6     1e-8     1e-10    0
+#     dev      3.8e-2   2.9e-3   3.1e-5   3.0e-7   3.8e-9
+#
+# 1e-8 puts us 3 orders closer to upstream while keeping a comfortable
+# conditioning margin. Duplicate quantile times (possible after sort+clip) are
+# regularized by ``yerr**2``, not by this term, so lowering it does not put the
+# degenerate case at risk.
+_NUGGET = 1e-8
 
 
 def gp_interpolate(
@@ -183,14 +181,14 @@ def gp_interpolate(
     y_train: jnp.ndarray,
     y_err: jnp.ndarray,
     x_eval: jnp.ndarray,
-    variance: float,
-    length_scale: float,
 ) -> jnp.ndarray:
-    """GP conditional mean via Cholesky decomposition.
+    """GP conditional mean with the dense_basis kernel — the one GP path here.
 
-    Uses Cholesky instead of ``jnp.linalg.solve`` because it exploits the
-    positive-definite structure of the kernel matrix, giving ~2x speedup and
-    better numerical stability. Cholesky with a nugget avoids NaN failures.
+    Both :func:`dense_basis` and :func:`dense_basis_pure` interpolate the
+    cumulative-mass quantiles through this function, so they cannot drift apart.
+    The kernel is :func:`_george_combined_kernel`, which reproduces the
+    hyperparameters ``dense_basis`` hands to ``george`` — the kernel is built
+    from ``y_train`` itself, so there is nothing to tune here.
 
     Parameters
     ----------
@@ -199,13 +197,9 @@ def gp_interpolate(
     y_train : array_like, shape (n_train,)
         Training values [dimensionless].
     y_err : array_like, shape (n_train,)
-        Measurement errors [dimensionless].
+        Per-point noise, added in quadrature on the diagonal [dimensionless].
     x_eval : array_like, shape (n_eval,)
         Evaluation points [dimensionless].
-    variance : float
-        GP signal variance σ² [dimensionless].
-    length_scale : float
-        GP length scale ℓ [dimensionless].
 
     Returns
     -------
@@ -216,92 +210,29 @@ def gp_interpolate(
     -----
     **JIT-compatible**: yes — uses ``jax.scipy.linalg.cho_factor`` and ``cho_solve``.
 
-    The 1e-4 nugget adds <0.1% relative error, negligible vs measurement noise.
+    Cholesky exploits the positive-definite structure of the kernel matrix,
+    which is both faster and better conditioned than a general solve. The
+    :data:`_NUGGET` jitter keeps the factorization well posed; at 1e-8 it leaves
+    the interpolant within ~3e-5 of upstream on a cumulative mass normalized to
+    [0, 1].
+
+    Implements the same interpolation as ``dense_basis`` (Iyer et al. 2019 [1]_)
+    with ``interpolator='gp_george'``, that package's default.
+
+    References
+    ----------
+    .. [1] K. G. Iyer et al., "Nonparametric Star Formation History
+       Reconstruction with Gaussian Processes I: Counting Major Episodes of
+       Star Formation," ApJ, 879, 116 (2019). arXiv:1901.02877.
+       https://doi.org/10.3847/1538-4357/ab2052
     """
-    k_train = combined_kernel(x_train, x_train, variance, length_scale)
+    k_train = _george_combined_kernel(x_train, x_train, y_train)
     k_train = k_train + jnp.diag(y_err**2) + _NUGGET * jnp.eye(k_train.shape[0])
-    k_eval = combined_kernel(x_eval, x_train, variance, length_scale)
+    k_eval = _george_combined_kernel(x_eval, x_train, y_train)
     # Cholesky: L L^T = K, then solve L L^T α = y in two triangular steps
     cho_factor = jax.scipy.linalg.cho_factor(k_train)
     alpha = jax.scipy.linalg.cho_solve(cho_factor, y_train)
     return k_eval @ alpha
-
-
-# ── Monotone cubic interpolation (PCHIP) — no matrix solve needed ─
-
-
-def pchip_interpolate(
-    x_train: jnp.ndarray,
-    y_train: jnp.ndarray,
-    x_eval: jnp.ndarray,
-) -> jnp.ndarray:
-    """Monotone Piecewise Cubic Hermite Interpolating Polynomial (PCHIP).
-
-    Guaranteed monotonic (no overshoots), C1 continuous, no matrix solve.
-    Ideal for cumulative mass curves where monotonicity is a physical constraint.
-
-    Parameters
-    ----------
-    x_train : array_like, shape (n,)
-        Sorted training x-values (strictly increasing) [dimensionless].
-    y_train : array_like, shape (n,)
-        Training y-values [dimensionless].
-    x_eval : array_like, shape (m,)
-        Evaluation points [dimensionless].
-
-    Returns
-    -------
-    ndarray, shape (m,)
-        Interpolated values at x_eval [dimensionless].
-
-    Notes
-    -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and searchsorted.
-
-    Uses the Fritsch-Carlson (1980) algorithm for slope calculation.
-    """
-    n = x_train.shape[0]
-    h = jnp.diff(x_train)
-    delta = jnp.diff(y_train) / jnp.maximum(h, 1e-30)
-
-    # Fritsch-Carlson slopes: harmonic mean of adjacent secants
-    # where both have the same sign; zero at local extrema.
-    d = jnp.zeros(n)
-    # Interior points
-    for i in range(1, n - 1):
-        d_left = delta[i - 1]
-        d_right = delta[i]
-        same_sign = d_left * d_right > 0
-        # Harmonic mean (monotonicity-preserving)
-        hm = 2.0 * d_left * d_right / jnp.maximum(d_left + d_right, 1e-30)
-        d = d.at[i].set(jnp.where(same_sign, hm, 0.0))
-    # Endpoint slopes: one-sided
-    d = d.at[0].set(delta[0])
-    d = d.at[n - 1].set(delta[n - 1])
-
-    # Evaluate cubic Hermite basis on each interval
-    # Find which interval each x_eval falls in
-    idx = jnp.searchsorted(x_train, x_eval, side="right") - 1
-    idx = jnp.clip(idx, 0, n - 2)
-
-    x0 = x_train[idx]
-    x1 = x_train[idx + 1]
-    y0 = y_train[idx]
-    y1 = y_train[idx + 1]
-    d0 = d[idx]
-    d1 = d[idx + 1]
-
-    dx = x1 - x0
-    t = (x_eval - x0) / jnp.maximum(dx, 1e-30)
-    t = jnp.clip(t, 0.0, 1.0)
-
-    # Hermite basis functions
-    h00 = 2 * t**3 - 3 * t**2 + 1
-    h10 = t**3 - 2 * t**2 + t
-    h01 = -2 * t**3 + 3 * t**2
-    h11 = t**3 - t**2
-
-    return h00 * y0 + h10 * dx * d0 + h01 * y1 + h11 * dx * d1
 
 
 # ── Quantile point construction (matching dense_basis exactly) ────
@@ -562,12 +493,7 @@ def dense_basis(
     # the Matern length scale (off by √ vs. george's metric convention) and
     # (b) used a generic linear kernel instead of george's order=2 form.
     t_eval = jnp.linspace(0.0, 1.0, _DEFAULT_RES)
-    k_train = _george_combined_kernel(time_q, time_q, mass_q)
-    k_train = k_train + jnp.diag(yerr**2) + _NUGGET * jnp.eye(k_train.shape[0])
-    k_eval = _george_combined_kernel(t_eval, time_q, mass_q)
-    cho = jax.scipy.linalg.cho_factor(k_train)
-    alpha = jax.scipy.linalg.cho_solve(cho, mass_q)
-    m_cumul = k_eval @ alpha
+    m_cumul = gp_interpolate(time_q, mass_q, yerr, t_eval)
 
     # --- SFR = sfh_scale * diff(cumulative_mass) ---
     # (dense_basis lines 165-168)
@@ -634,13 +560,12 @@ def dense_basis(
 def _build_quantile_points_pure(
     tx_fracs: jnp.ndarray,
     n_param: int,
-) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Build sorted (time, mass) quantile points for PCHIP interpolation.
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Build sorted (time, mass) quantile points and the GP noise array.
 
-    No noise array needed — PCHIP passes through points exactly.
-
-    Returns (time_q, mass_q) with n_param+3 points:
-    (0,0), (0.01,0), (tx_i, mass_i), (1,1).
+    Returns (time_q, mass_q, yerr) with n_param+3 points:
+    (0,0), (0.01,0), (tx_i, mass_i), (1,1). The user quantiles sit at indices
+    ``2 : 2+n_param``, which is where ``dense_basis`` puts its noise.
     """
     mass_quantiles = jnp.linspace(0.0, 1.0, n_param + 2)
     time_quantiles = jnp.concatenate(
@@ -667,7 +592,12 @@ def _build_quantile_points_pure(
         ]
     )
 
-    return time_q, mass_q
+    # Same noise rule as the SFR-constrained path: only the user quantiles
+    # carry slack, so the GP is pinned at the (0,0)/(0.01,0)/(1,1) anchors.
+    yerr = jnp.zeros(time_q.shape[0])
+    yerr = yerr.at[2 : 2 + n_param].set(0.001 / jnp.sqrt(jnp.maximum(n_param, 1.0)))
+
+    return time_q, mass_q, yerr
 
 
 def dense_basis_pure(
@@ -704,7 +634,7 @@ def dense_basis_pure(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``pchip_interpolate``.
+    **JIT-compatible**: yes — uses ``gp_interpolate``.
 
     **Approximation**: Replaces the GP with monotone PCHIP (Piecewise Cubic
     Hermite Interpolating Polynomial), which guarantees a monotonically
@@ -748,11 +678,12 @@ def dense_basis_pure(
     tx_fracs = jnp.clip(tx_fracs, 0.02, 0.99)
 
     # Build quantile points (NO SFR constraints)
-    time_q, mass_q = _build_quantile_points_pure(tx_fracs, n_param)
+    time_q, mass_q, yerr = _build_quantile_points_pure(tx_fracs, n_param)
 
-    # PCHIP interpolation of cumulative mass (monotonic, no matrix solve)
+    # GP interpolation of cumulative mass — the same 'gp_george' path
+    # dense_basis uses by default, shared with dense_basis() above.
     t_eval = jnp.linspace(0.0, 1.0, _DEFAULT_RES)
-    m_cumul = pchip_interpolate(time_q, mass_q, t_eval)
+    m_cumul = gp_interpolate(time_q, mass_q, yerr, t_eval)
     m_cumul = jnp.clip(m_cumul, 0.0, 1.0)
 
     # SFR = sfh_scale * diff(cumulative_mass)

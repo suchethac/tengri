@@ -38,6 +38,7 @@ os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
 
 import warnings
+
 warnings.filterwarnings("ignore")
 
 from tengri import (
@@ -68,10 +69,10 @@ print()
 
 def run_sfh_test(sfh_name: str, spec: Parameters, true_params: dict) -> bool:
     """Run MAP + vi for a given SFH spec. Returns True on success, False on NaN."""
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Testing SFH: {sfh_name}  (D = {spec.n_free} free params)")
     print(f"  Free params: {spec.free_params}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     try:
         model = SEDModel(spec, ssp_data, observation=obs)
@@ -80,7 +81,9 @@ def run_sfh_test(sfh_name: str, spec: Parameters, true_params: dict) -> bool:
         # Generate mock
         key = jax.random.PRNGKey(42)
         mock = model.mock_spectrum(true_params, WAVE_OBS, snr=30.0, key=key)
-        print(f"  Mock spectrum: min={float(mock.flux_obs.min()):.3e}, max={float(mock.flux_obs.max()):.3e}")
+        print(
+            f"  Mock spectrum: min={float(mock.flux_obs.min()):.3e}, max={float(mock.flux_obs.max()):.3e}"
+        )
 
         fitter = Fitter(model, mock.flux_obs, mock.noise)
 
@@ -206,7 +209,7 @@ print("ISOLATION SUMMARY")
 print("=" * 60)
 print(f"  exp         (analytic, no solve) : {'OK' if ok_exp else 'FAILED'}")
 print(f"  dpl         (analytic, no solve) : {'OK' if ok_dpl else 'FAILED'}")
-print(f"  dense_basis (GP, linalg.solve)   : {'OK' if ok_db  else 'FAILED'}")
+print(f"  dense_basis (GP, linalg.solve)   : {'OK' if ok_db else 'FAILED'}")
 print()
 if ok_exp and ok_dpl and not ok_db:
     print("DIAGNOSIS: NaN is isolated to the dense_basis GP kernel solve path.")

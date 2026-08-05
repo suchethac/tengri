@@ -93,16 +93,16 @@ _REF = "CB_19"
 # Mapping: semantic name → likely DB column name
 _PARAM_COLS: dict[str, str] = {
     "ref": "ref",
-    "sed_type": "SFH",         # 'SSP' or 'CSF'; may be 'type', 'SEDtype', 'SED_type'
-    "imf": "IMF",              # 'Kroupa01' or 'x030'
-    "mup": "Mup",              # upper mass limit: 100 or 300 (M_sun); may be 'M_up'
-    "log_age": "log_age",      # log10(age/yr); may be 'age' (not log), 'log_t'
-    "log_u": "logU",           # log10(U); may be 'log_U', 'LogU'
-    "log_nh": "log_nH",        # log10(n_H/cm⁻³); may be 'Hden' (linear!), 'log_dens'
-    "log_oh": "log_OH",        # log10(O/H)_total; may be 'log_OHtot', 'logOH', 'abund'
-    "log_co": "log_CO",        # log10(C/O); may be 'log_COtot'
-    "dno": "log_NO",           # ΔN/O or log(N/O); may be 'dNO', 'NO', 'log_NO'
-    "hbfrac": "HbFrac",        # Hβ fraction [0–1]; may be 'hbfrac', 'Hbfrac'
+    "sed_type": "SFH",  # 'SSP' or 'CSF'; may be 'type', 'SEDtype', 'SED_type'
+    "imf": "IMF",  # 'Kroupa01' or 'x030'
+    "mup": "Mup",  # upper mass limit: 100 or 300 (M_sun); may be 'M_up'
+    "log_age": "log_age",  # log10(age/yr); may be 'age' (not log), 'log_t'
+    "log_u": "logU",  # log10(U); may be 'log_U', 'LogU'
+    "log_nh": "log_nH",  # log10(n_H/cm⁻³); may be 'Hden' (linear!), 'log_dens'
+    "log_oh": "log_OH",  # log10(O/H)_total; may be 'log_OHtot', 'logOH', 'abund'
+    "log_co": "log_CO",  # log10(C/O); may be 'log_COtot'
+    "dno": "log_NO",  # ΔN/O or log(N/O); may be 'dNO', 'NO', 'log_NO'
+    "hbfrac": "HbFrac",  # Hβ fraction [0–1]; may be 'hbfrac', 'Hbfrac'
 }
 
 # ---------------------------------------------------------------------------
@@ -115,43 +115,43 @@ _PARAM_COLS: dict[str, str] = {
 # References for vacuum wavelengths: NIST ASD, line_catalog.py (tengri)
 _LINE_MAP: list[tuple[str, float, str]] = [
     # UV
-    ("LyA_1216A",    1215.67,  "HI_1216"),
-    ("CIV_1549A",    1549.48,  "CIV_1549"),
-    ("HeII_1640A",   1640.42,  "HeII_1640"),
-    ("CIII_1909A",   1908.73,  "CIII_1909"),
-    ("MgII_2796A",   2796.35,  "MgII_2796"),
-    ("MgII_2803A",   2803.53,  "MgII_2803"),
+    ("LyA_1216A", 1215.67, "HI_1216"),
+    ("CIV_1549A", 1549.48, "CIV_1549"),
+    ("HeII_1640A", 1640.42, "HeII_1640"),
+    ("CIII_1909A", 1908.73, "CIII_1909"),
+    ("MgII_2796A", 2796.35, "MgII_2796"),
+    ("MgII_2803A", 2803.53, "MgII_2803"),
     # Optical
-    ("NeIII_3869A",  3869.06,  "NeIII_3869"),
-    ("OII_3726A",    3726.03,  "OII_3726"),
-    ("OII_3729A",    3728.82,  "OII_3729"),
-    ("Hg_4340A",     4340.47,  "HI_4340"),
-    ("HeII_4686A",   4685.68,  "HeII_4686"),
-    ("Hb_4861A",     4862.68,  "HI_4861"),     # reference line (ratio = 1.0)
-    ("O3_4959A",     4960.30,  "OIII_4959"),
-    ("O3_5007A",     5008.24,  "OIII_5007"),
-    ("O3_4363A",     4364.44,  "OIII_4363"),   # auroral line
-    ("HeI_5876A",    5877.25,  "HeI_5876"),
-    ("OI_6300A",     6302.04,  "OI_6300"),
-    ("NII_6548A",    6549.86,  "NII_6548"),
-    ("Ha_6563A",     6564.61,  "HI_6563"),
-    ("NII_6583A",    6585.27,  "NII_6583"),
-    ("SII_6716A",    6718.29,  "SII_6716"),
-    ("SII_6731A",    6732.67,  "SII_6731"),
-    ("ArIII_7135A",  7137.77,  "ArIII_7136"),
-    ("NII_5755A",    5756.19,  "NII_5755"),    # auroral line
-    ("OII_7320A",    7321.99,  "OII_7320"),
-    ("OII_7330A",    7332.21,  "OII_7330"),
+    ("NeIII_3869A", 3869.06, "NeIII_3869"),
+    ("OII_3726A", 3726.03, "OII_3726"),
+    ("OII_3729A", 3728.82, "OII_3729"),
+    ("Hg_4340A", 4340.47, "HI_4340"),
+    ("HeII_4686A", 4685.68, "HeII_4686"),
+    ("Hb_4861A", 4862.68, "HI_4861"),  # reference line (ratio = 1.0)
+    ("O3_4959A", 4960.30, "OIII_4959"),
+    ("O3_5007A", 5008.24, "OIII_5007"),
+    ("O3_4363A", 4364.44, "OIII_4363"),  # auroral line
+    ("HeI_5876A", 5877.25, "HeI_5876"),
+    ("OI_6300A", 6302.04, "OI_6300"),
+    ("NII_6548A", 6549.86, "NII_6548"),
+    ("Ha_6563A", 6564.61, "HI_6563"),
+    ("NII_6583A", 6585.27, "NII_6583"),
+    ("SII_6716A", 6718.29, "SII_6716"),
+    ("SII_6731A", 6732.67, "SII_6731"),
+    ("ArIII_7135A", 7137.77, "ArIII_7136"),
+    ("NII_5755A", 5756.19, "NII_5755"),  # auroral line
+    ("OII_7320A", 7321.99, "OII_7320"),
+    ("OII_7330A", 7332.21, "OII_7330"),
     # Near-IR
-    ("SIII_9069A",   9071.11,  "SIII_9069"),
-    ("SIII_9532A",   9533.23,  "SIII_9531"),
+    ("SIII_9069A", 9071.11, "SIII_9069"),
+    ("SIII_9532A", 9533.23, "SIII_9531"),
     # Mid-IR (verify column names with --discover; wavelengths in Å)
     # [NeII] 12.81 μm = 128130 Å; [NeIII] 15.56 μm = 155600 Å
     # [OIV] 25.89 μm = 258870 Å; [OIII] 88.3 μm = 882800 Å
-    ("NeII_128100A",  128130.0, "NeII_128100"),
+    ("NeII_128100A", 128130.0, "NeII_128100"),
     ("NeIII_155600A", 155600.0, "NeIII_155600"),
-    ("OIV_258900A",   258870.0, "OIV_258900"),
-    ("OIII_882800A",  882800.0, "OIII_882800"),
+    ("OIV_258900A", 258870.0, "OIV_258900"),
+    ("OIII_882800A", 882800.0, "OIII_882800"),
 ]
 
 # Reference Hβ column (ratio denominator — must be in _LINE_MAP)
@@ -167,9 +167,7 @@ _KNOWN_IMFS = ["Kroupa01", "x030"]
 _KNOWN_MUPS = [100.0, 300.0]
 _KNOWN_LOG_U = np.array([-4.0, -3.5, -3.0, -2.5, -2.0, -1.5], dtype=np.float32)
 _KNOWN_LOG_NH = np.array([1.0, 2.0, 3.0, 4.0], dtype=np.float32)
-_KNOWN_LOG_OH = np.array(
-    [-5.06, -4.06, -3.45, -3.20, -3.12, -2.86, -2.58], dtype=np.float32
-)
+_KNOWN_LOG_OH = np.array([-5.06, -4.06, -3.45, -3.20, -3.12, -2.86, -2.58], dtype=np.float32)
 _KNOWN_LOG_CO = np.array([-1.0, -0.36, 0.15], dtype=np.float32)
 _KNOWN_DNO = np.array([-0.25, 0.0, 0.25], dtype=np.float32)
 
@@ -222,19 +220,70 @@ def _discover_schema(co) -> None:
         if any(
             col.startswith(p)
             for p in (
-                "HI_", "HeI_", "HeII_", "OI_", "OII_", "OIII_", "NI_", "NII_",
-                "NIII_", "SII_", "SIII_", "NeII_", "NeIII_", "NeV_", "ArII_",
-                "ArIII_", "ArIV_", "CII_", "CIII_", "CIV_", "MgI_", "MgII_",
-                "SiII_", "SiIII_", "FeII_", "FeIII_", "CI_", "OIV_",
+                "HI_",
+                "HeI_",
+                "HeII_",
+                "OI_",
+                "OII_",
+                "OIII_",
+                "NI_",
+                "NII_",
+                "NIII_",
+                "SII_",
+                "SIII_",
+                "NeII_",
+                "NeIII_",
+                "NeV_",
+                "ArII_",
+                "ArIII_",
+                "ArIV_",
+                "CII_",
+                "CIII_",
+                "CIV_",
+                "MgI_",
+                "MgII_",
+                "SiII_",
+                "SiIII_",
+                "FeII_",
+                "FeIII_",
+                "CI_",
+                "OIV_",
             )
         ):
             line_like.append((col, val))
-        elif col_lower in (
-            "ref", "logU", "log_u", "hden", "log_nh", "log_nH", "log_age", "age",
-            "sfh", "imf", "mup", "m_up", "log_oh", "log_co", "log_no", "dno",
-            "hbfrac", "log_OHtot", "log_COtot", "log_NOtot", "modelid",
-            "model_id", "log_t", "type", "sfh_type", "sedtype", "sed_type",
-        ) or col_lower == col_lower:
+        elif (
+            col_lower
+            in (
+                "ref",
+                "logU",
+                "log_u",
+                "hden",
+                "log_nh",
+                "log_nH",
+                "log_age",
+                "age",
+                "sfh",
+                "imf",
+                "mup",
+                "m_up",
+                "log_oh",
+                "log_co",
+                "log_no",
+                "dno",
+                "hbfrac",
+                "log_OHtot",
+                "log_COtot",
+                "log_NOtot",
+                "modelid",
+                "model_id",
+                "log_t",
+                "type",
+                "sfh_type",
+                "sedtype",
+                "sed_type",
+            )
+            or col_lower == col_lower
+        ):
             param_like.append((col, val))
         else:
             other.append((col, val))
@@ -312,7 +361,7 @@ def _query_axes(co) -> dict[str, np.ndarray | list[str]]:
     for r in cur.fetchall():
         age_val = float(r[p["log_age"]])
         if age_val > 20:
-            age_val = np.log10(age_val)   # stored as linear age
+            age_val = np.log10(age_val)  # stored as linear age
         if r[p["sed_type"]] == "SSP":
             age_ssp_raw.append(age_val)
         else:
@@ -351,7 +400,7 @@ def _query_axes(co) -> dict[str, np.ndarray | list[str]]:
 # Data fetching
 # ---------------------------------------------------------------------------
 
-_CHUNK = 20_000   # rows per fetch
+_CHUNK = 20_000  # rows per fetch
 
 
 def _fetch_cb19(
@@ -397,9 +446,7 @@ def _fetch_cb19(
         # Round to 4dp to handle float precision issues
         return {round(float(v), 4): i for i, v in enumerate(age_arr)}
 
-    age_idx_maps = {
-        st: _make_age_idx_map(age_arrays[st]) for st in axes["sed_types"]
-    }
+    age_idx_maps = {st: _make_age_idx_map(age_arrays[st]) for st in axes["sed_types"]}
 
     # Allocate output arrays: keyed by (sed_type, imf, mup_str)
     def _make_key(sed: str, imf: str, mup: float) -> str:
@@ -409,14 +456,14 @@ def _fetch_cb19(
         n_age = len(age_arrays[sed])
         return np.full(
             (
-                len(axes["log_OH"]),    # 0: metallicity
-                n_age,                  # 1: age
-                len(axes["log_U"]),     # 2: ionization
-                len(axes["log_nH"]),   # 3: density
-                len(axes["log_CO"]),   # 4: C/O
-                len(axes["dNO"]),      # 5: ΔN/O
-                len(axes["HbFrac"]),   # 6: matter-bounded
-                _N_LINES,              # 7: lines
+                len(axes["log_OH"]),  # 0: metallicity
+                n_age,  # 1: age
+                len(axes["log_U"]),  # 2: ionization
+                len(axes["log_nH"]),  # 3: density
+                len(axes["log_CO"]),  # 4: C/O
+                len(axes["dNO"]),  # 5: ΔN/O
+                len(axes["HbFrac"]),  # 6: matter-bounded
+                _N_LINES,  # 7: lines
             ),
             np.nan,
             dtype=np.float32,
@@ -430,9 +477,7 @@ def _fetch_cb19(
                 grids[key] = _make_arr(sed)
 
     # Build SELECT query
-    param_sel = ", ".join(
-        f"`{v}` AS {k}" for k, v in _PARAM_COLS.items() if k != "ref"
-    )
+    param_sel = ", ".join(f"`{v}` AS {k}" for k, v in _PARAM_COLS.items() if k != "ref")
     line_sel = ", ".join(f"`{c}`" for c in line_db_cols)
     limit_clause = f"LIMIT {limit}" if limit is not None else ""
     sql = (
@@ -523,15 +568,9 @@ def _fetch_cb19(
 
                 # Determine which line columns actually exist (first valid row)
                 if existing_line_cols is None:
-                    existing_line_cols = [
-                        li
-                        for li, col in enumerate(line_db_cols)
-                        if col in row
-                    ]
+                    existing_line_cols = [li for li, col in enumerate(line_db_cols) if col in row]
                     missing = [
-                        _LINE_MAP[li][2]
-                        for li in range(_N_LINES)
-                        if li not in existing_line_cols
+                        _LINE_MAP[li][2] for li in range(_N_LINES) if li not in existing_line_cols
                     ]
                     if missing:
                         print(
@@ -549,9 +588,7 @@ def _fetch_cb19(
                             float(val) / hb_ref
                         )
                 # Hβ itself = 1.0 by definition
-                hb_li = next(
-                    (li for li, e in enumerate(_LINE_MAP) if e[2] == _HB_COL), None
-                )
+                hb_li = next((li for li, e in enumerate(_LINE_MAP) if e[2] == _HB_COL), None)
                 if hb_li is not None and hb_li in existing_line_cols:
                     grids[key][i_oh, i_age, i_u, i_nh, i_co, i_dno, i_hb, hb_li] = 1.0
 
@@ -576,7 +613,7 @@ def _fetch_cb19(
 # Source: Osterbrock & Ferland 2006, Table 4.4; T_e=10^4 K, n_e=10^2 cm⁻³
 # See also Byler+2017 (ApJ 840 44), eq.1 and conversion factor.
 # L_Hβ/Q_H = 4.78e-13 erg/photon / 3.828e33 erg/Lsun
-_HB_PER_QH_LSUN = 4.78e-13 / 3.828e33   # Lsun per (photon s⁻¹) = Lsun s / photon
+_HB_PER_QH_LSUN = 4.78e-13 / 3.828e33  # Lsun per (photon s⁻¹) = Lsun s / photon
 
 
 def _write_hdf5(
@@ -645,9 +682,7 @@ def _write_hdf5(
         ax.create_dataset("log_age_yr_ssp", data=axes["log_age_ssp"], **opts)
         ax["log_age_yr_ssp"].attrs["description"] = "log10(age/yr) for SSP models"
         ax.create_dataset("log_age_yr_csf", data=axes["log_age_csf"], **opts)
-        ax["log_age_yr_csf"].attrs["description"] = (
-            "log10(age/yr) for CSF (constant SFR) models"
-        )
+        ax["log_age_yr_csf"].attrs["description"] = "log10(age/yr) for CSF (constant SFR) models"
 
         # Line catalog
         dt_str = h5py.special_dtype(vlen=str)
@@ -663,16 +698,14 @@ def _write_hdf5(
         for key, arr in sorted(grids.items()):
             grp = f.create_group(f"grids/{key}")
             parts = key.split("/")
-            grp.attrs["sed_type"] = parts[0]   # SSP or CSF
+            grp.attrs["sed_type"] = parts[0]  # SSP or CSF
             grp.attrs["imf"] = parts[1]
             grp.attrs["mup_msun"] = float(parts[2].lstrip("mu"))
             grp.attrs["array_axes"] = (
                 "0:log_OH_total, 1:log_age_yr, 2:log_U, 3:log_nH, "
                 "4:log_CO, 5:dNO, 6:HbFrac, 7:line_index"
             )
-            grp.attrs["log_age_key"] = (
-                "log_age_yr_ssp" if parts[0] == "SSP" else "log_age_yr_csf"
-            )
+            grp.attrs["log_age_key"] = "log_age_yr_ssp" if parts[0] == "SSP" else "log_age_yr_csf"
             ds = grp.create_dataset("line_ratios", data=arr, **opts)
             ds.attrs["units"] = "dimensionless (ratio relative to Hβ)"
             ds.attrs["description"] = (

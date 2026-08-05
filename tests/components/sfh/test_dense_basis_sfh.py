@@ -29,7 +29,8 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 from tengri.components.stellar.sfh.dense_basis import (
     _build_quantile_points,
-    combined_kernel,
+    _george_combined_kernel,
+    _george_linear_kernel,
     dense_basis,
     gp_interpolate,
     linear_kernel,
@@ -95,20 +96,30 @@ class TestLinearKernel:
 
 
 class TestCombinedKernel:
-    """Tests for the Matérn 3/2 + Linear combined kernel."""
+    """Tests for the george-faithful Matérn 3/2 + Linear kernel.
+
+    ``dense_basis`` builds ``var(y) * (Matern32(median(y)) + Linear(median(y),
+    order=2))``; the hyperparameters come from the training values, so these
+    tests pass ``y_train`` rather than a variance/length-scale pair.
+    """
 
     def test_positive_definite(self) -> None:
         x = jnp.linspace(0.1, 1.0, 8)
-        k = combined_kernel(x, x, variance=1.0, length_scale=0.3)
+        y = jnp.linspace(0.0, 1.0, 8)
+        k = _george_combined_kernel(x, x, y)
         eigvals = jnp.linalg.eigvalsh(k)
         assert jnp.all(eigvals > -1e-10)
 
     def test_is_sum_of_components(self) -> None:
         x1 = jnp.array([0.1, 0.5, 0.9])
         x2 = jnp.array([0.2, 0.6])
-        k_comb = combined_kernel(x1, x2, variance=1.0, length_scale=0.3)
-        k_m = matern32_kernel(x1, x2, variance=1.0, length_scale=0.3)
-        k_l = linear_kernel(x1, x2, variance=1.0, length_scale=0.3)
+        y = jnp.array([0.0, 0.4, 1.0])
+        variance = jnp.var(y)
+        med = jnp.median(y)
+        k_comb = _george_combined_kernel(x1, x2, y)
+        # george's Matern32 metric is a squared length scale, so ell = sqrt(med).
+        k_m = matern32_kernel(x1, x2, variance, jnp.sqrt(med))
+        k_l = variance * _george_linear_kernel(x1, x2, log_gamma2=med, order=2)
         assert jnp.allclose(k_comb, k_m + k_l, atol=1e-12)
 
 
@@ -123,7 +134,7 @@ class TestGPInterpolation:
         x_train = jnp.array([0.0, 0.3, 0.6, 1.0])
         y_train = jnp.array([0.0, 0.3, 0.8, 1.0])
         y_err = jnp.full(4, 0.001)
-        y_pred = gp_interpolate(x_train, y_train, y_err, x_train, 0.1, 0.3)
+        y_pred = gp_interpolate(x_train, y_train, y_err, x_train)
         assert jnp.allclose(y_pred, y_train, atol=0.01)
 
     def test_interpolation_monotonic_for_monotonic_data(self) -> None:
@@ -132,7 +143,7 @@ class TestGPInterpolation:
         y_train = jnp.array([0.0, 0.2, 0.5, 0.8, 1.0])
         y_err = jnp.full(5, 0.001)
         x_eval = jnp.linspace(0.01, 0.99, 100)
-        y_pred = gp_interpolate(x_train, y_train, y_err, x_eval, 0.1, 0.3)
+        y_pred = gp_interpolate(x_train, y_train, y_err, x_eval)
         # Allow small non-monotonicity from GP smoothing
         n_violations = jnp.sum(jnp.diff(y_pred) < -0.01)
         assert n_violations <= 2, f"Too many monotonicity violations: {n_violations}"
@@ -193,9 +204,7 @@ class TestGPCumulativeMassAccuracy:
             log_sfr_inst=0.0,
             age_universe_yr=13.47e9,
         )
-        variance = jnp.var(mass_q)
-        length_scale = jnp.maximum(jnp.median(mass_q), 1e-10)
-        m_pred = gp_interpolate(time_q, mass_q, yerr, tx, variance, length_scale)
+        m_pred = gp_interpolate(time_q, mass_q, yerr, tx)
         # Should match 25%, 50%, 75% mass fractions
         expected = jnp.array([0.25, 0.5, 0.75])
         assert jnp.allclose(m_pred, expected, atol=0.05), (

@@ -99,8 +99,22 @@ class TestSKIRTORAnalytic:
         # matching the canonical param default) — a pure 1e-34 rescale of the SED
         # (l_scale is linear in 10**agn_log_lbol). The values are now physical
         # (~1e29 erg/s/Hz for a 1e10 Lsun AGN).
+        #
+        # Re-frozen again when template wavelength resampling moved from linear
+        # (``jnp.interp``) to log lambda + log flux (``resample_template``). Only
+        # the two mid-interval samples move, and they move DOWN, which is the
+        # expected sign: a straight chord across a convex log-log curve sits
+        # above it, so the old values were biased high.
+        #
+        #   idx 166 (0.4606 um, 0.389 native cells from a node): -6.24 %
+        #   idx 333 (21.71 um,  0.068 native cells from a node): -0.069 %
+        #   idx 499 (1000 um,   0.000 cells — exactly ON a node): unchanged to 1e-15
+        #   idx 0   (0.01 um, below template support):            0.0, unchanged
+        #
+        # The node-exact sample not moving at all is the load-bearing check here:
+        # it shows this is an interpolation change between nodes, not a rescale.
         indices = [0, len(wave) // 3, 2 * len(wave) // 3, -1]
-        golden_values = [0.0, 6.380747e24, 3.525502e29, 3.607845e24]
+        golden_values = [0.0, 5.982589e24, 3.523055e29, 3.607845e24]
         for idx, golden in zip(indices, golden_values):
             np.testing.assert_allclose(
                 float(sed[idx]),

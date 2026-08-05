@@ -37,7 +37,7 @@ from tengri._deprecated import deprecated_alias
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
 )
-from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight
+from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight, resample_template
 from tengri.utils.interpolation import edges_for_grid
 
 #: Speed of light in Å/s. Used for L_λ ↔ L_ν conversions on SKIRTOR's
@@ -211,7 +211,12 @@ def _interpolate_and_normalize(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp.interp`` and ``jax.vmap``.
+    **JIT-compatible**: yes — uses ``resample_template`` and ``jax.vmap``.
+
+    The template is put on the user wavelength grid by
+    :func:`~tengri.utils.grid_interp.resample_template`, which interpolates in
+    log λ and log flux. The native SKIRTOR grid is coarse (136 points, R ~ 7),
+    and its tails are power laws, which that form reproduces exactly.
 
     **Citation**: matches CIGALE skirtor2016 processing (see
     ``scripts/download_skirtor_templates.py``).
@@ -230,7 +235,7 @@ def _interpolate_and_normalize(
     integral_lam = jnp.trapezoid(template, wave_grid)
     integral_safe = jnp.maximum(jnp.abs(integral_lam), 1e-100)
     template_lam = l_scale * template / integral_safe  # erg/s/Å
-    sed_lam = jnp.interp(wavelength, wave_grid, template_lam, left=0.0, right=0.0)
+    sed_lam = resample_template(wavelength, wave_grid, template_lam, left=0.0, right=0.0)
     # L_λ → L_ν: L_ν = L_λ × λ²/c (c in Å/s).
     return sed_lam * wavelength**2 / _C_AA_PER_S
 
@@ -687,8 +692,8 @@ def skirtor_disc_dust_ratio(
 
     # --- R on the native template grid (CIGALE convention) ---
     # Bring the analytic disc shape + reddening onto the native grid.
-    disc_n = jnp.interp(wave_grid, wave, disc_lambda_unreddened, left=0.0, right=0.0)
-    ext_n = jnp.interp(wave_grid, wave, disc_ext_fac, left=1.0, right=1.0)
+    disc_n = resample_template(wave_grid, wave, disc_lambda_unreddened, left=0.0, right=0.0)
+    ext_n = resample_template(wave_grid, wave, disc_ext_fac, left=1.0, right=1.0)
     int_disk0 = jnp.trapezoid(disk_0_n, wave_grid)
     shape_n = disc_n / jnp.maximum(jnp.trapezoid(disc_n, wave_grid), 1e-30)
     disk_analytic = shape_n * int_disk0
@@ -705,7 +710,7 @@ def skirtor_disc_dust_ratio(
     # used for the disc output bolometric).
     R_faceon = int_disk0 / int_dust
     # ``incl_ratio`` on the *user* grid for the disc-shape reweighting.
-    incl_ratio = jnp.interp(wave, wave_grid, incl_n, left=0.0, right=0.0)
+    incl_ratio = resample_template(wave, wave_grid, incl_n, left=0.0, right=0.0)
     # ``incl_ratio`` = disk(i)/disk(0) is the wavelength-dependent SKIRTOR
     # inclination attenuation of the disc continuum (CIGALE
     # ``SKIRTOR.disk(i)/AGN1.disk(0)``); the caller applies it to the disc
@@ -860,7 +865,7 @@ def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
         l_scale = 10.0**agn_log_lbol * _L_SUN * frac_agn
         bolo = jnp.trapezoid(spec[order], nu_g[order])
         spec_n = spec * (l_scale / jnp.maximum(jnp.abs(bolo), 1e-100))
-        return jnp.interp(wavelength, wave_g, spec_n, left=0.0, right=0.0)
+        return resample_template(wavelength, wave_g, spec_n, left=0.0, right=0.0)
 
     return fn
 
@@ -980,7 +985,7 @@ def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
         # Interpolate to user wave grid; clip to [0, 1.5] so numerical
         # noise can't introduce un-physically large amplifications
         # (face-on baseline is the maximum disc visibility).
-        ratio = jnp.interp(wavelength, wave_grid, ratio_template, left=1.0, right=1.0)
+        ratio = resample_template(wavelength, wave_grid, ratio_template, left=1.0, right=1.0)
         return jnp.clip(ratio, 0.0, 1.5)
 
     return disc_attenuation

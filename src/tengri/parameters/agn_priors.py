@@ -130,7 +130,7 @@ def agn_prior_agn_fraction_floor(
     -------
     float
         Log-prior penalty contribution (≤ 0). Smooth Gaussian with σ = 0.5
-        (AGNfitter-style clipped Gaussian from line 416, adapted for floor).
+        (AGNfitter-style clipped Gaussian, with a floor).
 
     Notes
     -----

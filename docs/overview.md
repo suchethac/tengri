@@ -16,7 +16,7 @@ gas, AGN, the IGM, radio, and X-ray, all driven by one shared set of
 physical parameters. Inference is also modular: the `Fitter`
 interface delegates to optimizers from `optax`, samplers from
 `BlackJAX`, and variational inference from `NIFTy.re`, so adopting a
-new backend is a registration, not a port.
+new backend is a registration, not a rewrite.
 
 Contributions are welcome (new SFH families, dust laws, AGN
 templates, observation modes, samplers) through the issue tracker

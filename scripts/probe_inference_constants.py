@@ -68,9 +68,7 @@ def build_toy_photometry_setup(n_bands=12, n_age=30):
     flux_errors = fluxes * 0.1
 
     obs = Observation(
-        photometry=Photometry(
-            fluxes=fluxes, flux_errors=flux_errors, filter_set=filters
-        ),
+        photometry=Photometry(fluxes=fluxes, flux_errors=flux_errors, filter_set=filters),
     )
 
     # Minimal parameter spec: fixed redshift, free SFH + dust
@@ -127,9 +125,7 @@ def extract_hlo_constants(hlo_text, min_bytes=1e6):
         dtype_str = match.group(2)
 
         # Rough estimate: f64 = 8 bytes, f32 = 4, i64 = 8, i32 = 4
-        dtype_bytes = {"f64": 8, "f32": 4, "i64": 8, "i32": 4}.get(
-            dtype_str, 8
-        )
+        dtype_bytes = {"f64": 8, "f32": 4, "i64": 8, "i32": 4}.get(dtype_str, 8)
         estimated_size = int(bytes_str) * dtype_bytes
 
         if estimated_size > min_bytes:

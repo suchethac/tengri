@@ -26,8 +26,17 @@ jax.config.update("jax_enable_x64", True)
 # SSP and filter setup
 SSP_PATH = Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 FILTER_NAMES = [
-    "hst_f435w", "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp",
-    "hst_f125w", "hst_f140w", "hst_f160w", "vista_ks", "irac_36", "irac_45",
+    "hst_f435w",
+    "hst_f606w",
+    "hst_f775w",
+    "hst_f814w",
+    "hst_f850lp",
+    "hst_f125w",
+    "hst_f140w",
+    "hst_f160w",
+    "vista_ks",
+    "irac_36",
+    "irac_45",
 ]
 
 print("Loading SSP data...")
@@ -63,9 +72,9 @@ params = Parameters(
 model = SEDModel(params, ssp_data, observation=obs)
 fitter = Fitter(model, data=flux_obs, noise=noise)
 
-print("="*60)
+print("=" * 60)
 print("MAP INITIALIZATION SENSITIVITY ANALYSIS")
-print("="*60)
+print("=" * 60)
 
 # Run many trials with different keys to find fast vs slow cases
 print("\n1. Screening run: 50 different RNG keys")
@@ -89,7 +98,9 @@ for i in range(50):
     keys_list.append(key_i)
 
     if i % 10 == 9:
-        print(f"  Trials {i-8}-{i+1}: {np.mean(runtimes[-10:]):.3f}s ± {np.std(runtimes[-10:]):.3f}s")
+        print(
+            f"  Trials {i - 8}-{i + 1}: {np.mean(runtimes[-10:]):.3f}s ± {np.std(runtimes[-10:]):.3f}s"
+        )
 
 runtimes = np.array(runtimes)
 mean_runtime = np.mean(runtimes)
@@ -99,7 +110,7 @@ print(f"\nOverall:")
 print(f"  Mean: {mean_runtime:.3f}s ± {std_runtime:.3f}s")
 print(f"  Min: {np.min(runtimes):.3f}s")
 print(f"  Max: {np.max(runtimes):.3f}s")
-print(f"  Variance: {std_runtime/mean_runtime:.1%}")
+print(f"  Variance: {std_runtime / mean_runtime:.1%}")
 
 # Find fast and slow cases
 threshold_fast = np.percentile(runtimes, 10)
@@ -134,14 +145,16 @@ for i, idx in enumerate(fast_idx[:3]):
     params_unbounded = fitter._unbounded_from_posterior(result)
     final_loss = loss_fn(params_unbounded, data_args)
 
-    print(f"  Fast {i+1}:")
+    print(f"  Fast {i + 1}:")
     print(f"    Runtime: {t:.3f}s (screening: {runtimes[idx]:.3f}s)")
     print(f"    Final loss: {float(final_loss):.1f}")
-    fast_results.append({
-        "runtime": t,
-        "loss": float(final_loss),
-        "params": result.params,
-    })
+    fast_results.append(
+        {
+            "runtime": t,
+            "loss": float(final_loss),
+            "params": result.params,
+        }
+    )
 
 print("\nSlow cases:")
 slow_results = []
@@ -155,14 +168,16 @@ for i, idx in enumerate(slow_idx[:3]):
     params_unbounded = fitter._unbounded_from_posterior(result)
     final_loss = loss_fn(params_unbounded, data_args)
 
-    print(f"  Slow {i+1}:")
+    print(f"  Slow {i + 1}:")
     print(f"    Runtime: {t:.3f}s (screening: {runtimes[idx]:.3f}s)")
     print(f"    Final loss: {float(final_loss):.1f}")
-    slow_results.append({
-        "runtime": t,
-        "loss": float(final_loss),
-        "params": result.params,
-    })
+    slow_results.append(
+        {
+            "runtime": t,
+            "loss": float(final_loss),
+            "params": result.params,
+        }
+    )
 
 # Compare final losses
 fast_losses = [r["loss"] for r in fast_results]
@@ -179,9 +194,9 @@ else:
     print("  ✓ Similar final losses")
     print("     Variance is runtime-only, not optimization quality")
 
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("DIAGNOSIS")
-print("="*60)
+print("=" * 60)
 
 # Hypothesis testing
 if np.mean(runtimes[slow_idx]) > 2 * np.mean(runtimes[fast_idx]):
@@ -201,7 +216,7 @@ slow_screening_times = [runtimes[idx] for idx in slow_idx[:3]]
 slow_rerun_times = [r["runtime"] for r in slow_results]
 for i, (t_screen, t_rerun) in enumerate(zip(slow_screening_times, slow_rerun_times)):
     ratio = t_screen / t_rerun
-    print(f"  Slow case {i+1}: {t_screen:.3f}s → {t_rerun:.3f}s ({ratio:.1f}× change)")
+    print(f"  Slow case {i + 1}: {t_screen:.3f}s → {t_rerun:.3f}s ({ratio:.1f}× change)")
 
 if all(t_rerun < 0.5 for t_rerun in slow_rerun_times):
     print("\n⚠️  CRITICAL: 'Slow' cases became fast on re-run!")

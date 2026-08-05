@@ -21,6 +21,7 @@ in a notebook or REPL — no need to wrap them in `pprint`.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from tengri._display import _display
@@ -1043,6 +1044,76 @@ def list_igm_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
+#: The SFH→SSP age-weight kernels, as a menu. Not a registry-backed dispatch
+#: (there are exactly two, hand-written in the stellar component), but a
+#: structural axis of ``SEDModel.build`` all the same — and a builder-accepted
+#: value named by no menu is undiscoverable by construction (#1446).
+_AGE_KERNELS: tuple[tuple[str, str, str], ...] = (
+    (
+        "cic",
+        "production",
+        "Cloud-in-cell on a 16x dense integrand — the accuracy default (#964)",
+    ),
+    (
+        "dsps",
+        "comparison",
+        "DSPS histogram kernel — cross-code parity only; biases optical CSP +1.2 %",
+    ),
+)
+
+
+def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
+    """List the SFH→SSP age-weight kernels selectable via ``sfh={'age_kernel': ...}``.
+
+    The kernel decides how the star-formation history is integrated onto the SSP
+    age grid. ``'cic'`` splits each ``SFR(t)*dt`` parcel between its bracketing
+    SSP nodes with log-age cloud-in-cell weights on a dense integrand;
+    ``'dsps'`` hands the coarse per-SSP-age table to DSPS's histogram kernel,
+    which interpolates ``log10(M(<t))`` in ``log10(t)``.
+
+    They are not interchangeable. The DSPS kernel annihilates the mass of any
+    table segment straddling the SFH's maximum age — the first SSP node older
+    than the SFH start keeps ~1e-5 of its share — which biases the optical CSP
+    +1.2 % versus FSPS / bagpipes / a dense reference (#964). It is offered for
+    comparison against DSPS-native pipelines, not for science.
+
+    Leaving ``age_kernel`` unset auto-selects: ``'cic'`` on the parametric path,
+    ``'dsps'`` on the GP-field path (whose draw lives on its own coarse lookback
+    grid, so there is no dense integrand to cloud-in-cell).
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter to one status — ``"production"`` or ``"comparison"``.
+
+    Returns
+    -------
+    _RegistryTable
+        One row per kernel: ``name``, ``status``, ``short_doc``.
+
+    See also: :func:`list_sfh_models`, :mod:`tengri.builders.sfh`.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.list_age_kernels()  # doctest: +SKIP
+    """
+    out = [
+        {
+            "name": name,
+            "kind": "age_kernel",
+            "status": st,
+            "citation": "hearin2021" if name == "dsps" else "",
+            "short_doc": doc,
+            "use": f"SEDModel.build(sfh={{'age_kernel': {name!r}}})",
+        }
+        for name, st, doc in _AGE_KERNELS
+    ]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
 _COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
     (
         "stellar",
@@ -1688,6 +1759,7 @@ def _menu_listers() -> tuple:
         list_dust_laws,
         list_dust_emission_models,
         list_sfh_models,
+        list_age_kernels,
         list_nebular_backends,
         list_xray_models,
         list_radio_models,
@@ -1695,6 +1767,31 @@ def _menu_listers() -> tuple:
         list_shock_models,
         list_igm_models,
     )
+
+
+def _menu_name_aliases() -> dict[str, tuple[str, callable]]:
+    """Map each menu's own name, in prose, to that menu.
+
+    Derived from :func:`_menu_listers` rather than hand-written, because a
+    hand-written copy is a second source of truth that drifts the day a menu
+    is added — the failure this module has already had twice (#1120, #1446).
+    ``list_age_kernels`` becomes ``"age kernels"`` and ``"age kernel"``, so a
+    new menu is searchable by its own name the moment it is registered.
+
+    This is deliberately separate from the hand-written concept synonyms in
+    :func:`search`: those map words a beginner invents ("extinction") onto a
+    menu, which cannot be derived from anything.
+    """
+    out: dict[str, tuple[str, callable]] = {}
+    for fn in _menu_listers():
+        stem = fn.__name__.removeprefix("list_")
+        plural = stem.replace("_", " ")
+        forms = {plural}
+        if plural.endswith("s"):
+            forms.add(plural[:-1])
+        for form in forms:
+            out[form] = (f"{fn.__name__}()", fn)
+    return out
 
 
 def describe(name: str) -> _DescribeRecord:
@@ -1800,25 +1897,121 @@ def list_recipes() -> _RegistryTable:
         doc = inspect.getdoc(fn) or ""
         short_doc = doc.split("\n\n", 1)[0].strip().replace("\n", " ")
         ssp_req = _parse_ssp_requirement(doc)
+        # Calling the recipe is cheap — it returns a kwargs dict and builds
+        # nothing — so the table can report what each one actually needs
+        # rather than what its prose claims.
+        try:
+            data_status = _recipe_data_status(fn())
+        except Exception:
+            data_status = "unknown"
         out.append(
             {
                 "name": name,
                 "kind": "recipe",
                 "short_doc": short_doc,
                 "ssp_requirement": ssp_req,
+                "data": data_status,
                 "use": f"recipes.{name}() → SEDModel.build(ssp_data=ssp, **recipe)",
             }
         )
     return _RegistryTable(out)
 
 
+#: Component types whose data ships separately from tengri, mapped to the
+#: ``kind`` argument their loader resolves. Keyed by the value a recipe puts in
+#: a block's ``type``.
+_EXTERNAL_GRID_BLOCKS: dict[str, str] = {
+    "synthesizer": "nlr",
+    "synthesizer_spectra": "nlr",
+}
+
+
+def _recipe_data_status(kwargs: dict) -> str:
+    """Report whether a recipe's non-SSP data is present on this machine.
+
+    ``list_recipes`` presented all ten recipes as equals while one of them —
+    ``unified_agn`` — cannot produce a number without a Synthesizer AGN grid
+    that does not ship with tengri. A recipe is by definition the thing a new
+    user is told to start from, so "this one needs a download" belongs in the
+    table rather than in a traceback (#1462 §3).
+
+    The check calls the **loader's own resolver** rather than re-deriving the
+    search path. A second copy of "where does this file live" would drift, and
+    a column that says ``ready`` while the loader disagrees is worse than no
+    column at all.
+
+    Returns
+    -------
+    str
+        ``"ready"`` when nothing extra is needed, or a short note naming what
+        is missing. Never raises: an unresolvable requirement is the answer,
+        not an error.
+    """
+    needed: set[str] = set()
+
+    def _walk(node):
+        if isinstance(node, dict):
+            block_type = node.get("type")
+            if isinstance(block_type, str) and block_type in _EXTERNAL_GRID_BLOCKS:
+                needed.add(_EXTERNAL_GRID_BLOCKS[block_type])
+            for value in node.values():
+                _walk(value)
+        elif isinstance(node, (list, tuple)):
+            for value in node:
+                _walk(value)
+
+    _walk(kwargs)
+    if not needed:
+        return "ready"
+
+    from tengri.components.agn.blocks.nlr import _resolve_synthesizer_grid
+
+    missing = []
+    for kind in sorted(needed):
+        try:
+            _resolve_synthesizer_grid(kind)
+        except Exception:
+            missing.append(kind)
+    if not missing:
+        return "ready"
+    kinds = "/".join(k.upper() for k in missing)
+    return f"needs Synthesizer AGN {kinds} grid (synthesizer-download --agn-test-grids)"
+
+
 def _parse_ssp_requirement(doc: str) -> str:
-    """Pull the ``**SSP requirement:**`` value from a recipe docstring."""
-    for line in doc.splitlines():
+    """Pull the ``**SSP requirement:**`` value from a recipe docstring.
+
+    The requirement is a *paragraph*, not a line. Numpydoc wraps it at the
+    line limit, and every docstring puts the label first and the consequence
+    second — so a first-line-only read keeps ``bare-stellar (Cue nebular
+    backend; see`` and drops ``doing so raises CueWNESSPError``. Read to the
+    paragraph break instead, matching how ``short_doc`` is derived just above.
+    """
+    lines = doc.splitlines()
+    for i, line in enumerate(lines):
         if "SSP requirement" in line:
             after = line.split(":", 1)[1] if ":" in line else line
-            return after.replace("*", "").strip()
+            parts = [after]
+            for cont in lines[i + 1 :]:
+                # A blank line ends the paragraph; a new ``**Field:**`` marker
+                # ends it too, for docstrings that run fields together.
+                if not cont.strip() or cont.lstrip().startswith("**"):
+                    break
+                parts.append(cont)
+            return _plain_text(" ".join(p.strip() for p in parts))
     return "any"
+
+
+def _plain_text(text: str) -> str:
+    """Strip the reST inline markup a docstring carries but a table should not.
+
+    ``list_recipes()`` renders in a terminal, not in Sphinx, so ``:func:`x```
+    and ````x```` reach the user as literal punctuation. Dropping the roles and
+    the backticks leaves the prose the docstring author actually wrote.
+    """
+    out = re.sub(r":(?:func|meth|class|mod|data|attr|ref):`~?([^`]*)`", r"\1", text)
+    out = out.replace("``", "").replace("*", "")
+    return " ".join(out.split()).strip()
 
 
 def describe_recipe(name: str) -> _DescribeRecord:
@@ -2185,10 +2378,19 @@ def search(query: str) -> _RegistryTable:
         "emission line": ("list_nebular_backends()", list_nebular_backends),
         "emission lines": ("list_nebular_backends()", list_nebular_backends),
     }
-    if q in _CONCEPT_ALIAS:
-        call, fn = _CONCEPT_ALIAS[q]
-        _display(f"  '{query}' → tengri.{call} (the menu these models live in)\n")
-        return fn()
+    # Concept synonyms are hand-curated; the menu's own name in prose is
+    # derived from _menu_listers(). Consult both, and try the query with
+    # hyphens normalized so "x-ray models" reaches list_xray_models() and
+    # "star-forming" keeps working. Concept synonyms win on a tie: they are
+    # the more specific statement of intent.
+    _spellings = (q, q.replace("-", " "), q.replace("-", ""))
+    _menu_names = _menu_name_aliases()
+    for table in (_CONCEPT_ALIAS, _menu_names):
+        for spelling in _spellings:
+            if spelling in table:
+                call, fn = table[spelling]
+                _display(f"  '{query}' → tengri.{call} (the menu these models live in)\n")
+                return fn()
 
     # ``kind`` and ``use`` are structural/internal — searching them gives
     # spurious 100%-of-table hits (e.g. "filter" matching every filter

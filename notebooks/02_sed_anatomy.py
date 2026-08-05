@@ -65,6 +65,7 @@ warnings.filterwarnings("ignore", message=".*Composable AGN.*")
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 logging.getLogger("jax").setLevel(logging.ERROR)
 
+from _setup import FIG_DIR
 import tengri
 from tengri import (
     FIXED,
@@ -76,14 +77,11 @@ from tengri import (
     Uniform,
     builders,
     citations,
-    load_ssp_data,
     plot,
     recipes,
 )
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 # %% [markdown]
 # ## Setup — bare-stellar SSP and panchromatic filters
@@ -92,10 +90,7 @@ FIG_DIR.mkdir(exist_ok=True)
 # so every component has somewhere to be visible.
 
 # %%
-SSP = Path("../data/fsps_prsc_miles_chabrier.h5")
-if not SSP.exists():
-    SSP = Path(tengri.download_ssp("fsps_prsc_miles_chabrier"))
-ssp = load_ssp_data(str(SSP))
+ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
 
 filters = [
     "galex_fuv",

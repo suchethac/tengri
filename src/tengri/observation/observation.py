@@ -2,8 +2,8 @@
 """Unified observation configuration for tengri SED fitting.
 
 Bundles photometric and/or spectroscopic setup with noise configuration
-into a single declarative object. Inspired by Synthesizer's Instrument
-pattern, adapted for tengri's JAX/differentiable inference context.
+into a single declarative object. Follows the same Instrument pattern as
+Synthesizer, in tengri's JAX/differentiable inference context.
 
 The Observation class is a frozen configuration container — it never
 enters JAX-traced code. It configures what the Model precomputes and

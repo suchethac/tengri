@@ -28,7 +28,6 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
-from pathlib import Path
 
 import jax
 import matplotlib.pyplot as plt
@@ -40,7 +39,7 @@ from tengri import (
     Observation,
     Photometry,
     SEDModel,
-    load_ssp_data,
+    load_ssp,
 )
 from tengri.analysis.plotting import setup_style
 
@@ -52,13 +51,10 @@ setup_style()
 # 1. Setup: bare-stellar SSP and wavelength grid for integration
 # ============================================================================
 
-# Load a bare-stellar SSP (required for Cue nebular). If not found, download.
-ssp_path = Path("data/fsps_prsc_miles_chabrier.h5")
-if not ssp_path.exists():
-    import tengri
-
-    ssp_path = Path(tengri.download_ssp("fsps_prsc_miles_chabrier"))
-ssp = load_ssp_data(str(ssp_path))
+# Load a bare-stellar SSP (required for Cue nebular). `load_ssp` walks parent
+# directories for `data/`, so it finds the committed grid whatever the working
+# directory is — the gallery runner executes each example from its own folder.
+ssp = load_ssp("fsps_prsc_miles_chabrier")
 
 # Redshift
 z = 0.05
