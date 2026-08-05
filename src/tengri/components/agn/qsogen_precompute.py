@@ -35,6 +35,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.qsogen import compute_qsogen_sed as _compute_qsogen_sed
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
@@ -60,7 +61,7 @@ def _build_grid_qsogen(
     redshift: float,
     plslp1_grid: np.ndarray,
     ebv_grid: np.ndarray,
-    agn_log_lbol: float = 45.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = 1.0,
     # Fixed parameters (not varied in precomputation):
     agn_plslp2: float = 0.593,

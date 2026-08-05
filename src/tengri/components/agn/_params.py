@@ -44,7 +44,7 @@ enforced by ``tools/check_param_prefixes.py``.
 from __future__ import annotations
 
 from tengri.parameters.priors import Fixed, LogUniform, Uniform
-from tengri.protocols.component import ParamDeclaration
+from tengri.protocols.component import ParamDeclaration, declared_default
 
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
@@ -804,4 +804,13 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
 )
 
-__all__ = ["PARAMS"]
+#: Default ``agn_log_lbol`` for standalone model functions, read from the
+#: declaration above rather than repeated as a literal (ADR-0011). Every
+#: ``agn_log_lbol=`` signature default in this package must use this name: a
+#: bare ``skirtor_sed(wave)`` and a bare ``qsogen(wave)`` then agree on what
+#: "a typical AGN" means, and neither can drift out of the declared prior.
+#: Units are ``log10(L_bol / L_sun)`` — *not* ``log10(erg/s)``, the confusion
+#: that put nine entry points at 45.0, some 1e33 too luminous (#1200, #1560).
+DEFAULT_AGN_LOG_LBOL = declared_default(PARAMS, "agn_log_lbol")
+
+__all__ = ["DEFAULT_AGN_LOG_LBOL", "PARAMS"]

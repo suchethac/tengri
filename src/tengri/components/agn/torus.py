@@ -34,6 +34,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
     bolometric_integral_nu as _bolometric_integral_nu,
@@ -329,7 +330,7 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
 
     def nenkova_grid(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 10.0,
+        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
         agn_tau: float = 30.0,
         agn_torus_frac: float = 0.5,
         **_kwargs,

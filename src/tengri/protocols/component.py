@@ -24,7 +24,7 @@ mutating their inputs. This matches the global coding rule
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple, Protocol, runtime_checkable
 
@@ -50,6 +50,7 @@ __all__ = [
     "SEDComponent",
     "SEDComponentConfig",
     "SEDComponentState",
+    "declared_default",
 ]
 
 
@@ -145,6 +146,61 @@ class ParamDeclaration(NamedTuple):
     bound_error: str = ""
     units: str = ""
     free_prior: Any = None
+
+
+def declared_default(params: Sequence[ParamDeclaration], name: str) -> float:
+    """Read a parameter's default out of its declaration.
+
+    Use this to write a standalone model function's signature default::
+
+        def skirtor_grid(wavelength, agn_log_lbol=DEFAULT_AGN_LOG_LBOL, ...):
+
+    instead of repeating the number as a literal. A literal is a second copy
+    of a value the declaration already owns, and the two drift: nine AGN
+    entry points shipped ``agn_log_lbol=45.0`` — the ``log10(erg/s)``
+    magnitude — against a declaration reading ``log10(L/L_sun)``, so a bare
+    call was ~1e33 too luminous and sat 31 dex outside the prior a fit can
+    reach (#1200, #1560).
+
+    Parameters
+    ----------
+    params : sequence of ParamDeclaration
+        The declaring component's ``PARAMS`` tuple.
+    name : str
+        Parameter name to look up, e.g. ``"agn_log_lbol"``.
+
+    Returns
+    -------
+    float
+        The declared default.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` is not declared in ``params``.
+    ValueError
+        If the declaration carries no ``default`` to read.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable — import-time lookup over a static
+    tuple, never traced.
+
+    Enforces the ADR-0011 rule that the prior object is a parameter's single
+    source of truth. ``tools/check_param_defaults.py`` guards the converse:
+    no signature default may fall outside its declared prior's support.
+    """
+    for declaration in params:
+        if declaration.name != name:
+            continue
+        default = getattr(declaration.prior, "default", None)
+        if default is None:
+            raise ValueError(
+                f"{name!r} is declared but its prior carries no default to read; "
+                f"give the declaration a `default=` or state the value explicitly."
+            )
+        return float(default)
+    raise KeyError(f"{name!r} is not declared in the supplied PARAMS tuple.")
 
 
 class DerivedKey(NamedTuple):

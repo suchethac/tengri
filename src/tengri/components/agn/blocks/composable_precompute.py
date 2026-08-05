@@ -44,6 +44,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.blocks.recipe import Recipe
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
@@ -147,7 +148,7 @@ def precompute(
     axis_grids: Mapping[str, np.ndarray],
     fixed_values: Mapping[str, float] | None = None,
     wave_rest: np.ndarray | None = None,
-    agn_log_lbol_default: float = 45.0,
+    agn_log_lbol_default: float = DEFAULT_AGN_LOG_LBOL,
 ) -> dict:
     r"""Build a preintegrated photometry grid for a composable AGN recipe.
 
@@ -176,7 +177,8 @@ def precompute(
         ``np.logspace(2.0, 6.0, 1500)`` (100 Å to 1e6 Å, log-spaced).
     agn_log_lbol_default : float, optional
         Default ``agn_log_lbol`` when not in ``fixed_values`` or
-        ``axis_grids``. Default ``45.0``.
+        ``axis_grids``. Defaults to the declared
+        ``agn_log_lbol`` default.
 
     Returns
     -------

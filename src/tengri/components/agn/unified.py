@@ -129,6 +129,7 @@ from collections.abc import Callable
 
 import jax.numpy as jnp
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.adaf import adaf_spectrum
 from tengri.components.agn.blr import compute_blr_sed
 from tengri.components.agn.cat3d_wind import cat3d_wind_sed
@@ -817,7 +818,7 @@ def kubota_done_full_agn(
 
 def skirtor_agn(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 11.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = 0.1,
     agn_tau_skirtor: float = 7.0,
     agn_p_skirtor: float = 1.0,
@@ -889,7 +890,7 @@ def skirtor_agn(
 
 def skirtor_stalevski_agn(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 11.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = 0.1,
     agn_tau_skirtor: float = 7.0,
     agn_p_skirtor: float = 1.0,
@@ -970,7 +971,7 @@ def skirtor_stalevski_agn(
 
 def silva04_agn(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 11.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = 0.1,
     agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
@@ -1025,7 +1026,7 @@ def silva04_agn(
 
 def cat3d_wind_agn(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 11.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = 0.1,
     agn_cos_inc: float = 0.86602540378443864,
     agn_a_cat3d: float = -2.0,
@@ -1337,7 +1338,7 @@ def _sigmoid_mask(
 
 def unified_nlr_blr(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 11.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_cos_inc: float = 0.86602540378443864,
     agn_theta_torus: float = 30.0,
     agn_nlr_cf: float = 0.1,

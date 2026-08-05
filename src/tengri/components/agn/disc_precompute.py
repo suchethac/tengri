@@ -44,6 +44,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.disc import (
     multicolor_disc as _multicolor_disc,
     powerlaw_disc as _powerlaw_disc,
@@ -89,7 +90,7 @@ def _build_grid_powerlaw(
     filter_trans: list,
     redshift: float,
     alpha_grid: np.ndarray,
-    agn_log_lbol: float = 45.0,  # log10(L_sun) ~ brightest quasar
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = 1.0,
     agn_T_max: float = 1e5,
 ) -> PreintegratedGrid:
@@ -106,8 +107,8 @@ def _build_grid_powerlaw(
     alpha_grid : ndarray, shape (n_alpha,)
         Power-law spectral index grid.
     agn_log_lbol : float
-        Reference bolometric luminosity [log10(L_sun)]. Default is a
-        bright quasar.
+        Reference bolometric luminosity [log10(L/L_sun)].
+        Defaults to the declared ``agn_log_lbol`` default.
     agn_lum_ratio : float
         Disc fraction. Default 1.0.
     agn_T_max : float

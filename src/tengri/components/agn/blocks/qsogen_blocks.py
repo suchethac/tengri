@@ -36,6 +36,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.qsogen import (
     _DEFAULT_BBNORM,
@@ -273,6 +274,6 @@ def qsogen_smc_block(wavelength: Array, **params) -> Array:
     # log_lbol). For a scalar pure-attenuation block, JIT folds it cleanly.
     comps = _qsogen_components(
         wave_aa,
-        **_resolve_qsogen_kwargs(params, agn_log_lbol=45.0),
+        **_resolve_qsogen_kwargs(params, agn_log_lbol=DEFAULT_AGN_LOG_LBOL),
     )
     return comps["smc_factor"]

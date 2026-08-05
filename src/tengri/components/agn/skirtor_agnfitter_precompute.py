@@ -29,6 +29,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.skirtor_agnfitter import _load_skirtor_agnfitter_arrays
 from tengri.forward.precompute.templates import (
     precompute_template_photometry,
@@ -192,7 +193,7 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
     grid_jax = jnp.asarray(grid_phot)
 
     def skirtor_agnfitter_photometry(
-        agn_log_lbol: float = 11.0,
+        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
         agn_oa_skirtor: float = 40.0,
         agn_incl_skirtor: float = 30.0,
         agn_tv_skirtor: float = 7.0,

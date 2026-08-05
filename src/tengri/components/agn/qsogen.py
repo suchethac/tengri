@@ -99,6 +99,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import bolometric_integral_nu as _bolometric_integral_nu
 from tengri.components.dust.attenuation import smc as smc_curve
 
@@ -674,7 +675,7 @@ def compute_qsogen_sed(
     agn_bbnorm: float = _DEFAULT_BBNORM,
     agn_emline_scale: float = _DEFAULT_EMLINE_SCALE,
     agn_ebv: float = _DEFAULT_EBV,
-    agn_log_lbol: float = 45.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = 1.0,
     agn_bcnorm: float = 0.0,
     **_kwargs,
@@ -718,7 +719,8 @@ def compute_qsogen_sed(
     agn_ebv : float
         E(B-V) dust reddening [mag]. Default 0.0 (no reddening).
     agn_log_lbol : float
-        log10(L_bol / Lsun). Bolometric luminosity. Default 45.0.
+        log10(L_bol / Lsun). Bolometric luminosity. Defaults to the declared
+        ``agn_log_lbol`` default.
         [log10(L_sun)]
     agn_lum_ratio : float
         Overall AGN fraction scaling. Default 1.0. [dimensionless]
@@ -768,7 +770,7 @@ def compute_qsogen_sed(
 # This function is retained for backward compatibility if imported directly.
 def qsogen(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 45.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = 1.0,
     agn_plslp1: float = _DEFAULT_PLSLP1,
     agn_plslp2: float = _DEFAULT_PLSLP2,
@@ -790,7 +792,8 @@ def qsogen(
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength grid [Angstrom].
     agn_log_lbol : float, optional
-        Total AGN bolometric luminosity [log10(L_sun)]. Default: 45.0.
+        Total AGN bolometric luminosity [log10(L_sun)]. Defaults to the declared
+        ``agn_log_lbol`` default.
     agn_lum_ratio : float, optional
         Fraction of bolometric luminosity emitted by this component.
         Default: 1.0. [dimensionless, 0–1]

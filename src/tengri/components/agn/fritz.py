@@ -36,6 +36,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri._deprecated import deprecated_alias
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
     bolometric_integral_nu as _bolometric_integral_nu,
@@ -207,7 +208,7 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
 
     def fritz_grid(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 10.0,
+        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
         agn_torus_frac: float = 0.5,
         agn_fritz_r_ratio: float = 60.0,
         agn_fritz_tau: float = 1.0,
@@ -314,7 +315,7 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
 
     def fritz_components(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 10.0,
+        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
         agn_torus_frac: float = 0.5,
         agn_fritz_r_ratio: float = 60.0,
         agn_fritz_tau: float = 1.0,
