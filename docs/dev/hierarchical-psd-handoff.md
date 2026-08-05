@@ -992,7 +992,7 @@ bad enough for my chosen threshold to notice."
 σ slope **−0.439 ± 0.007**, τ slope **−0.373 ± 0.050** — both PASS the
 width-scaling gate. **Pooling works mechanically; it converges to the wrong
 point.** That is the one-line summary of this whole section: the widths shrink
-as ~1/√N exactly as they should, around a centre that is not truth.
+as ~1/√N exactly as they should, around a center that is not truth.
 
 The railing that defined §2's "N ceiling" is gone — σ moves from 0.96–0.99 to
 0.74–0.79 — and σ covers truth at N = 4…128.
@@ -1058,10 +1058,10 @@ one of them, in the bottom ~4% of the prior range.
 
 **Note the sign flip.** Pre-fix the pool railed to the **upper** corner
 (434–491 against a 500 bound); converged, it concentrates at the **lower**
-corner. Two opposite corner-seeking behaviours from one estimator — which
+corner. Two opposite corner-seeking behaviors from one estimator — which
 retroactively explains a puzzle in the old data. §2's table shows τ apparently
 "covering truth at N=32" (61.9–153.4) *before* the fix. That was never
-recovery: it was **two errors of opposite sign partially cancelling** at
+recovery: it was **two errors of opposite sign partially canceling** at
 intermediate N. Fixing the fitting bug unmasked the estimator one.
 
 Two explanations are already excluded: ESS is 45–79 throughout, so it is not
@@ -1140,7 +1140,7 @@ A mechanism consistent with every number above, and with the fact that the pull
 
 1. Ten broadbands constrain `n_eff ≈ 3–4` of 16 field modes (§4b).
 2. The constrained modes are the **smooth**, low-frequency ones — that is what
-   broadband colours see.
+   broadband colors see.
 3. So the posterior shrinks the smooth modes toward their fitted values while
    the ~12 rough modes stay at full prior amplitude.
 4. The reconstructed field is then **relatively richer in high-frequency power
