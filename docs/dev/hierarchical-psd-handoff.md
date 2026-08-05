@@ -1102,11 +1102,52 @@ reproduces the same short-lag power. The σ misses at N=256/512 and τ's bias ar
 plausibly the same slide along one ridge, which would explain why σ's error
 appears only once the interval is tight enough to resolve 4%.
 
-The two displacements are consistent in size and sign with a single slide:
-**σ +4.5%, τ −92%**, both measured on the converged bank at N=512. Testing that
-directly — does the pooled posterior lie along the constant-short-lag-power
-locus through truth? — is the cheapest next diagnostic, and it needs no new
-fits.
+The two displacements are **σ +4.5%, τ −92%** on the converged bank at N=512.
+
+**Tested, and the simple ridge is refuted.** No combination is conserved
+between truth and the pooled mode:
+
+| combination | truth (0.750, 150) | mode (0.832, 11.4) | ratio |
+|---|---|---|---|
+| σ²/τ | 0.00375 | 0.06072 | 16× |
+| σ²τ | 84.38 | 7.89 | 10.7× |
+| σ² | 0.5625 | 0.6922 | 1.23× |
+
+So it is not a slide along a degeneracy. σ² is closest to invariant but still
+23% off.
+
+### Hypothesis (NOT yet measured): prior roughness in the unconstrained modes
+
+The grid geometry is suggestive. Node spacing on the 16-node age grid runs
+0.888 Myr to 6.49 Gyr, **median 75.9 Myr** — and the pooled τ of 11.4 Myr sits
+*below* that median, with 10 of 15 gaps exceeding it.
+
+A mechanism consistent with every number above, and with the fact that the pull
+**survives NUTS** (+0.377 nats/galaxy):
+
+1. Ten broadbands constrain `n_eff ≈ 3–4` of 16 field modes (§4b).
+2. The constrained modes are the **smooth**, low-frequency ones — that is what
+   broadband colours see.
+3. So the posterior shrinks the smooth modes toward their fitted values while
+   the ~12 rough modes stay at full prior amplitude.
+4. The reconstructed field is then **relatively richer in high-frequency power
+   than a genuine OU draw** at the same (σ, τ) — smooth part shrunk, rough part
+   not.
+5. The estimator infers τ from that roughness and reads the excess as a short
+   correlation time; σ rises to absorb the extra variance (+23% in σ²).
+
+Because this is a property of the *posterior* rather than of the Gaussian
+approximation, it would survive an exact sampler — which is what the Laplace
+vs NUTS tilts show (+1.044 vs +0.377: NUTS reduces it by ~64% but does not
+remove it).
+
+> **This is a hypothesis, not a measurement.** It is consistent with the tilt
+> decomposition, the non-conserved combinations, the grid spacing, and the
+> n_eff count — but none of those tests it directly. The falsifiable prediction
+> is that the bias scales with how *few* modes are constrained: adding bands or
+> spectroscopy should shrink it. The direct test is to pool fields whose
+> unconstrained modes have been re-drawn from the *fitted* OU rather than left
+> at prior amplitude, and see whether τ recovers.
 
 Not purely a ridge effect, though: at **fixed** truth σ the pooled surface
 still prefers τ=15 over τ=150 by 19.4 nats. Both a genuine short-τ preference
