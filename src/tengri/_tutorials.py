@@ -48,7 +48,7 @@ _FIRST_FIT = _Tutorial(
         # 1. Pick the bands and load a SSP grid
         photometry = tengri.Photometry.from_names(
             tengri.list_filters(survey="SDSS").names()
-            + tengri.list_filters(instrument="2MASS").names()
+            + tengri.list_filters(survey="2MASS").names()
         )
         ssp = tengri.load_ssp_data("data/ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 
@@ -69,7 +69,8 @@ _FIRST_FIT = _Tutorial(
         # 3. Generate mock photometry from a known truth point
         obs = tengri.Observation(photometry=photometry)
         model = tengri.SEDModel(spec, ssp, observation=obs)
-        mock = tengri.generate_mock(model, key=jax.random.PRNGKey(0), snr=20.0)
+        truth = spec.sample(jax.random.PRNGKey(0))   # the truth point to recover
+        mock = tengri.generate_mock(model, truth, key=jax.random.PRNGKey(1), snr=20.0)
 
         # 4. Fit it back
         fitter = tengri.Fitter(model, data=mock["flux_obs"], noise=mock["noise"])
@@ -364,19 +365,34 @@ _HIERARCHICAL = _Tutorial(
         # population-level hyperparameters (e.g. PSD amplitude / timescale
         # for the IFT correlated-field SFH prior).
 
+        import jax
+        import tengri
         from tengri import PopulationFitter
 
+        # What is shared is fixed by the model, not chosen per call: the PSD
+        # amplitude and timescale of the correlated-field SFH prior. You supply
+        # a factory that takes those two and returns a model built with them.
+        def model_factory(psd_sigma, psd_tau_myr):
+            spec = tengri.Parameters(
+                mean_sfh_type=["dpl", "field"],
+                sfh_field_psd_sigma=psd_sigma,
+                sfh_field_psd_tau_myr=psd_tau_myr,
+            )
+            return tengri.SEDModel(spec, ssp_data, observation=obs)
+
+        galaxies = [                           # one dict per galaxy
+            {"flux_obs": g1_flux, "noise": g1_noise},
+            {"flux_obs": g2_flux, "noise": g2_noise},
+        ]
+
         pop = PopulationFitter(
-            model=model,                       # one SEDModel
-            galaxy_data=[                      # list of (data, noise) per galaxy
-                (g1_flux, g1_noise),
-                (g2_flux, g2_noise),
-                ...
-            ],
-            shared_params=("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"),
+            model_factory,
+            galaxies,
+            psd_sigma_prior=(0.1, 4.0),        # uniform prior on sigma_PSD
+            psd_tau_prior=(1.0, 300.0),        # uniform prior on tau_PSD [Myr]
         )
 
-        posterior = pop.run("vi")
+        posterior = pop.run("vi", key=jax.random.PRNGKey(0))
         # → returns a PopulationPosterior with population + per-galaxy posteriors
 
         # See PopulationFitter docstring for the full hierarchical pattern.
@@ -606,7 +622,8 @@ _USE_CASES = _Tutorial(
         ─────────────────────────────────────────────────────
         Synthetic galaxy → fit it back → check truth in the posterior.
 
-            mock = tengri.generate_mock(model, key=jax.random.PRNGKey(0), snr=20.0)
+            truth = model.spec.sample(jax.random.PRNGKey(0))
+            mock = tengri.generate_mock(model, truth, key=jax.random.PRNGKey(1), snr=20.0)
             posterior = model.fit(mock["flux_obs"], mock["noise"], method="mcmc_nuts")
             posterior.plot_corner(truths=mock["params"])
 
@@ -614,7 +631,7 @@ _USE_CASES = _Tutorial(
         ─────────────────────────────────
         Same data, different physics; compare via Bayes factor / WAIC.
 
-            for agn_model in (None, "skirtor", "kubota_done_full"):
+            for agn_model in (None, "skirtor", "kubota_done"):
                 spec_i = tengri.Parameters(..., agn_model=agn_model)
                 model_i = tengri.SEDModel(spec_i, ssp, observation=obs)
                 results[agn_model] = model_i.fit(data, noise, method="nss")
@@ -661,14 +678,15 @@ _MOCK_RECOVERY = _Tutorial(
         obs = tengri.Observation(
             photometry=tengri.Photometry.from_names(
                 tengri.list_filters(survey="SDSS").names()
-                + tengri.list_filters(instrument="2MASS").names()
+                + tengri.list_filters(survey="2MASS").names()
             )
         )
         model = tengri.SEDModel(spec, ssp_data, observation=obs)
 
-        # 2. Generate a mock at SNR=20 — returns flux_obs, noise, params (truth)
-        mock = tengri.generate_mock(model, key=jax.random.PRNGKey(0), snr=20.0)
-        truth = mock["params"]   # the ground-truth parameter dict
+        # 2. Sample the truth point, then generate a mock at SNR=20
+        #    — generate_mock returns flux_obs, noise, and params (the truth)
+        truth = spec.sample(jax.random.PRNGKey(0))
+        mock = tengri.generate_mock(model, truth, key=jax.random.PRNGKey(1), snr=20.0)
 
         # 3. Fit it back — MAP for speed, then NUTS for posterior
         fitter = tengri.Fitter(model, data=mock["flux_obs"], noise=mock["noise"])
@@ -681,7 +699,7 @@ _MOCK_RECOVERY = _Tutorial(
 
         # 5. For Paper-I-style validation: repeat with N seeds, check coverage
         for seed in range(20):
-            mock = tengri.generate_mock(model, key=jax.random.PRNGKey(seed))
+            mock = tengri.generate_mock(model, truth, key=jax.random.PRNGKey(seed))
             ...
         """
     ).strip(),
@@ -705,7 +723,7 @@ _COMPARE_MODELS = _Tutorial(
         import tengri
         results = {}
 
-        for agn_model in (None, "skirtor", "kubota_done_full", "cat3d_wind"):
+        for agn_model in (None, "skirtor", "kubota_done", "cat3d_wind"):
             spec = tengri.Parameters(
                 mean_sfh_type="dpl",
                 agn_model=agn_model,                # the only thing that changes
@@ -759,14 +777,20 @@ _JOINT_PHOT_SPEC = _Tutorial(
         # 1. Photometry side (same as a phot-only fit)
         photometry = tengri.Photometry.from_names(
             tengri.list_filters(survey="SDSS").names()
-            + tengri.list_filters(instrument="2MASS").names()
+            + tengri.list_filters(survey="2MASS").names()
         )
 
         # 2. Spectroscopy side — pass the spectral grid + LSF
         spectroscopy = tengri.Spectroscopy(
-            wave_obs=spec_wavelengths,    # observed-frame [Angstrom]
-            R=2000.0,                      # resolving power
-            mask=valid_pixels_mask,        # bool, True = use the pixel
+            wave_obs=spec_wavelengths,     # observed-frame [Angstrom]
+            resolution=2000.0,             # resolving power R
+        )
+
+        # Masking is done on the *noise*, not declared on Spectroscopy:
+        # masked pixels get noise = inf, which drops them from the likelihood.
+        spec_errors = tengri.observation.apply_wavelength_mask(
+            spec_errors, spec_wavelengths,
+            mask_ranges=[(5560, 5590), (7580, 7680)],   # telluric A/B bands
         )
 
         # 3. Bundle into one Observation
