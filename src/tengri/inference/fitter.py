@@ -205,6 +205,35 @@ def _maybe_warn_legacy_sedmodel(model) -> None:
         )
 
 
+def _population_sed(model):
+    """The :class:`PopulationSEDModel` inside ``model``, or ``None``.
+
+    Parameters
+    ----------
+    model : object
+        Candidate forward model.
+
+    Returns
+    -------
+    PopulationSEDModel or None
+        The population SubModel when ``model`` is a ``ForwardModel`` wrapping
+        exactly one, otherwise ``None``.
+    """
+    try:
+        from tengri.forward.forward_model import ForwardModel
+        from tengri.forward.population_sed_model import PopulationSEDModel
+    except ImportError:
+        return None
+
+    if not isinstance(model, ForwardModel):
+        return None
+    populations = getattr(model, "populations", ())
+    if len(populations) != 1:
+        return None
+    pop_sed = getattr(populations[0], "sed", None)
+    return pop_sed if isinstance(pop_sed, PopulationSEDModel) else None
+
+
 def _maybe_extract_batched_data(model):
     """Auto-extract ``(data, noise)`` from a ForwardModel's population.
 
@@ -216,21 +245,9 @@ def _maybe_extract_batched_data(model):
     Explicit ``data=`` and ``noise=`` always override this default —
     auto-extraction only fires when both are ``None``.
     """
-    try:
-        from tengri.forward.forward_model import ForwardModel
-        from tengri.forward.population_sed_model import PopulationSEDModel
-    except ImportError:
+    pop_sed = _population_sed(model)
+    if pop_sed is None:
         return None, None
-
-    if not isinstance(model, ForwardModel):
-        return None, None
-    populations = getattr(model, "populations", ())
-    if len(populations) != 1:
-        return None, None
-    pop_sed = getattr(populations[0], "sed", None)
-    if not isinstance(pop_sed, PopulationSEDModel):
-        return None, None
-
     return pop_sed.batched_data()
 
 
@@ -1244,6 +1261,12 @@ class Fitter:
         # forward is written for a single-population SED forward and mis-broadcasts
         # the galaxy axis on a hierarchical one. Absent on SEDModel, where threading
         # has always been valid, so default True.
+        #
+        # Consequence worth stating: excluded topologies fall back to the eager
+        # ``_build_prediction`` path, which closure-captures the SSP grid — so
+        # hierarchical fits keep paying the baking cost #1496 removed for
+        # single-galaxy ones (measured 5.7 h / 6.25 GB for a joint NUTS at N=4,
+        # D=98). Fixing that needs the batched forward (#211), not a wider gate.
         _supports = getattr(model, "_supports_jit_threading", None)
         _threadable = _supports() if callable(_supports) else True
         if _threadable and all(

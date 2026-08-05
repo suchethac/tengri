@@ -20,6 +20,11 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
+# Imported at module scope, not inside ``load_ssp``, so the fetch is a visible
+# dependency of this module rather than a hidden one. ``_data_setup`` imports
+# only the standard library, so there is no cycle to avoid.
+from tengri._data_setup import download_ssp
+
 
 class SSPData(NamedTuple):
     """Immutable container for SSP template library.
@@ -149,7 +154,7 @@ _LOAD_SSP_PRESETS: dict[str, str] = {
 }
 
 
-def load_ssp(name: str | None = None) -> "SSPData":
+def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
     """Load an SSP grid by short name, walking parent dirs for ``data/``.
 
     Convenience wrapper around :func:`load_ssp_data` for tutorial and
@@ -167,6 +172,12 @@ def load_ssp(name: str | None = None) -> "SSPData":
         ``tengri.download_ssp()`` fetches and the one the Cue/CloudyGrid nebular
         backends require. For the nebular-baked demo grid pass the alias
         explicitly: ``load_ssp("prsc_miles_chabrier_wNE")``.
+    download : bool, optional
+        Fetch the grid from the hosted catalog if it is not found locally.
+        Default ``False``, which raises instead — a default-on fetch would
+        turn any mistyped grid name into a silent multi-tens-of-megabyte
+        download (#1486). Pass ``True`` in tutorials and gallery scripts,
+        where a fresh checkout is expected not to have the grid yet.
 
     Returns
     -------
@@ -176,23 +187,40 @@ def load_ssp(name: str | None = None) -> "SSPData":
     Raises
     ------
     FileNotFoundError
-        If no ``data/<filename>.h5`` exists in any ancestor directory.
+        If the grid exists in none of :func:`~tengri._data_setup.data_dirs`
+        and either ``download`` is ``False`` or the grid is not one the
+        catalog hosts. The message names the directories searched.
+
+    Notes
+    -----
+    ``download=True`` makes this the single call a script needs, replacing the
+    resolve-test-fetch-load sequence each one used to carry. That sequence
+    began with a working-directory-relative path, so it looked in the wrong
+    place — and therefore re-downloaded — whenever the script ran from
+    anywhere but its own directory (#1486). The resolver here is
+    cwd-independent: it honors ``$TENGRI_DATA_DIR``, walks every ancestor for
+    ``data/``, and falls back to the package's own source tree.
 
     Examples
     --------
     >>> from tengri import load_ssp
     >>> ssp = load_ssp()  # default bare-stellar grid (== download_ssp())
     >>> ssp = load_ssp("prsc_miles_chabrier_wNE")  # nebular-baked demo grid
+    >>> ssp = load_ssp(download=True)  # fetch it if this checkout lacks it
     """
     from pathlib import Path
 
     from tengri._data_setup import _KNOWN_SSPS, DEFAULT_SSP
 
     if name is None:
+        catalog_key = DEFAULT_SSP
         filename = _KNOWN_SSPS[DEFAULT_SSP]
     elif name in _LOAD_SSP_PRESETS:
+        # Produced locally, not hosted — so there is nothing to fall back to.
+        catalog_key = None
         filename = _LOAD_SSP_PRESETS[name]
     elif name in _KNOWN_SSPS:
+        catalog_key = name
         filename = _KNOWN_SSPS[name]
     else:
         # Accept an explicit absolute/relative path to an .h5 file directly
@@ -202,6 +230,7 @@ def load_ssp(name: str | None = None) -> "SSPData":
         if as_path.suffix == ".h5" and as_path.exists():
             return load_ssp_data(str(as_path))
         filename = name if name.endswith(".h5") else name + ".h5"
+        catalog_key = next((k for k, v in _KNOWN_SSPS.items() if v == filename), None)
 
     from tengri._data_setup import TENGRI_DATA_ENV, data_dirs
 
@@ -209,13 +238,23 @@ def load_ssp(name: str | None = None) -> "SSPData":
         candidate = directory / filename
         if candidate.exists():
             return load_ssp_data(str(candidate))
+
+    if download and catalog_key is not None:
+        return load_ssp_data(str(download_ssp(catalog_key)))
+
+    catalog_note = (
+        f"{filename!r} is not in the download catalog, so download=True cannot "
+        f"fetch it — the wNE (with-nebular-emission) grids are produced locally. "
+        if download
+        else "Call tengri.download_ssp('<short_name>') to fetch a bundled SSP "
+        "(tengri.list_known_ssps() lists them), "
+    )
     raise FileNotFoundError(
         f"SSP file {filename!r} not found. Looked in: "
         f"{', '.join(str(d) for d in data_dirs()[:4])} (and further ancestors). "
-        f"Call tengri.download_ssp('<short_name>') to fetch a bundled SSP "
-        f"(tengri.list_known_ssps() lists them), place the file under "
-        f"<project_root>/data/, or set ${TENGRI_DATA_ENV} to the directory "
-        f"holding it."
+        f"{catalog_note}"
+        f"place the file under <project_root>/data/, or set ${TENGRI_DATA_ENV} "
+        f"to the directory holding it."
     )
 
 
@@ -231,7 +270,7 @@ def _load_float(dataset) -> jnp.ndarray:
     return jnp.asarray(dataset[:], dtype=jnp.result_type(float))
 
 
-def load_ssp_data(filepath: str) -> SSPData:
+def load_ssp_data(filepath: str, *, download: bool = False) -> SSPData:
     """Load SSP templates from a DSPS-format HDF5 file.
 
     Reads stellar population synthesis templates stored in HDF5 format
@@ -244,6 +283,10 @@ def load_ssp_data(filepath: str) -> SSPData:
     filepath : str
         Path to HDF5 file. Expected fields: ssp_wave, ssp_flux,
         ssp_lg_age_gyr, ssp_lgmet. Optional: ssp_mass_remaining, ssp_alpha_fe.
+    download : bool, optional
+        Fetch the grid from the hosted catalog when ``filepath`` does not
+        exist and its basename is one the catalog ships. Default ``False``,
+        which raises instead. See Notes for why the default is off.
 
     Returns
     -------
@@ -254,15 +297,33 @@ def load_ssp_data(filepath: str) -> SSPData:
     ------
     ImportError
         If h5py is not installed.
+    FileNotFoundError
+        If ``filepath`` does not exist and was not fetched. The message
+        distinguishes a grid the catalog hosts (recoverable with
+        ``download=True``) from one it does not (must already be on disk).
     KeyError
         If required HDF5 fields are missing.
     OSError
-        If filepath does not exist or is not readable.
+        If filepath exists but is not readable.
 
     Notes
     -----
     **JIT-compatible**: yes — only file I/O occurs; returned SSPData is
     immutable and suitable for use in JAX operations.
+
+    **The fetch is opt-in, and the default changed in v0.9.** This function
+    used to fetch whenever the path was absent and the *basename* matched the
+    catalog. Because it matched on the basename alone, a mistyped **directory**
+    was not reported — ``load_ssp_data("/wrong/dir/fsps_prsc_miles_chabrier.h5")``
+    wrote ~67 MB into ``/wrong/dir/`` and returned a grid, so the caller never
+    learned the path was wrong. It also put a third-party host on the critical
+    path of anything that merely named a grid, which reddened CI twice (#1486,
+    #1528). ``download=False`` reports the path instead. This matches
+    :func:`load_ssp`, which has defaulted to ``False`` since #1536.
+
+    **Prefer :func:`load_ssp`** when you want resolution rather than a literal
+    path: it walks every ancestor for a ``data/`` directory, honors
+    ``$TENGRI_DATA_DIR``, and so does not depend on the working directory.
 
     **File format**: Standard DSPS HDF5 layout. See DSPS documentation
     and distributed templates on halos.as.arizona.edu for format details.
@@ -284,25 +345,41 @@ def load_ssp_data(filepath: str) -> SSPData:
     import warnings
     from pathlib import Path
 
-    fp = Path(filepath)
-    if not fp.exists() and not os.environ.get("TENGRI_DISABLE_SSP_AUTODOWNLOAD"):
-        # Auto-fetch from the public catalog if the basename is known. This
-        # must run BEFORE the existence check below — #1015 placed the
-        # raise first, which silently made this branch unreachable.
-        from tengri._data_setup import _KNOWN_SSPS, KNOWN_SSP_FILENAMES, download_ssp
+    from tengri._data_setup import KNOWN_SSP_FILENAMES, TENGRI_DATA_ENV
 
-        if fp.name in KNOWN_SSP_FILENAMES:
-            short = next(k for k, v in _KNOWN_SSPS.items() if v == fp.name)
-            print(f"[tengri] {fp} not found — fetching '{short}' from public catalog...")
-            download_ssp(short, dest=fp.parent if fp.parent != Path("") else "data")
+    fp = Path(filepath)
+    in_catalog = fp.name in KNOWN_SSP_FILENAMES
+
+    if not fp.exists() and download and in_catalog:
+        # Must run BEFORE the existence check below — #1015 placed the raise
+        # first, which silently made this branch unreachable. Gated on
+        # ``download`` since v0.9: the match is on the basename only, so an
+        # unconditional fetch answers a wrong *directory* by writing the grid
+        # into it (#1548).
+        from tengri._data_setup import _KNOWN_SSPS, download_ssp
+
+        short = next(k for k, v in _KNOWN_SSPS.items() if v == fp.name)
+        print(f"[tengri] {fp} not found — fetching '{short}' from public catalog...")
+        download_ssp(short, dest=fp.parent if fp.parent != Path("") else "data")
 
     if not os.path.isfile(filepath):
+        if in_catalog:
+            remedy = (
+                f"The catalog ships {fp.name!r}, so this is recoverable: "
+                f"tengri.load_ssp() finds it in any ancestor data/ directory with no "
+                f"network call, and load_ssp_data(..., download=True) fetches it into "
+                f"{fp.parent if fp.parent != Path('') else Path('data')}/. "
+            )
+        else:
+            remedy = (
+                f"{fp.name!r} is not in the download catalog, so fetching this path "
+                "cannot help. tengri.list_known_ssps() shows the grids "
+                "tengri.download_ssp() can retrieve; locally generated grids (ssp_*, "
+                "including the wNE variants) must already be on disk. "
+            )
         raise FileNotFoundError(
-            f"SSP file not found: '{filepath}'. Pre-formatted grids are one "
-            "call away: tengri.download_ssp() fetches the default FSPS grid "
-            "to data/, and tengri.list_known_ssps() shows the alternatives "
-            "(BC03, BPASS, ProGeny, ...). Already have grids elsewhere? "
-            "Point TENGRI_DATA_DIR at that directory."
+            f"SSP file not found: '{filepath}'. {remedy}"
+            f"Already have grids elsewhere? Point ${TENGRI_DATA_ENV} at that directory."
         )
 
     with h5py.File(filepath, "r") as f:

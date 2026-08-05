@@ -153,6 +153,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # property catalog introspection (API consolidation #1045/#1043)
         "describe_property",
         "list_properties",
+        "list_age_kernels",
         "list_agn_blocks",
         "list_agn_models",
         "list_all",

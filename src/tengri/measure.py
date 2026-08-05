@@ -90,6 +90,7 @@ from tengri.observation.spectral_indices import (
     SpectralIndexDef,
     measure_index_jax,
 )
+from tengri.parameters.resolve import require_redshift
 from tengri.utils.filter_convention import FilterConvention
 
 __all__ = [
@@ -423,7 +424,7 @@ def from_prediction(pred, *, indices=None, lines=None, filters=_UNSET):
         out[key] = spectral_index(wave, lnu, name)
 
     if lines:
-        z = params.get("redshift", 0.0)
+        z = require_redshift(params, "measure.from_prediction")
         for name in lines:
             key = name if isinstance(name, str) else name.name
             out[key] = line_flux(wave, lnu, name, redshift=z)

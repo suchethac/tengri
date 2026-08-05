@@ -13,6 +13,7 @@ import functools
 import jax
 import jax.numpy as jnp
 
+from tengri.parameters.resolve import require_redshift
 from tengri.units import fnu_to_ab_mag, lnu_to_fnu
 
 # FilterConvention + the bandpass weight live in a leaf module so the exact
@@ -605,7 +606,7 @@ def project_photometry(state, params, photometry, *, dl_cm=None) -> jnp.ndarray:
     """
     from tengri.cosmology import luminosity_distance
 
-    z = jnp.asarray(params.get("redshift", 0.0))
+    z = jnp.asarray(require_redshift(params, "observation.photometry.project_photometry"))
     if dl_cm is None:
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
     else:

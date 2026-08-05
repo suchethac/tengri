@@ -119,7 +119,9 @@ print(f"  compositional: {pred_compositional}")
 print(f"\nDifferences:")
 print(f"  _traceable vs auto:          {jnp.max(jnp.abs(pred_traceable - pred_auto)):.2e}")
 print(f"  _traceable vs exact:         {jnp.max(jnp.abs(pred_traceable - pred_exact)):.2e}")
-print(f"  _traceable vs compositional: {jnp.max(jnp.abs(pred_traceable - pred_compositional)):.2e}")
+print(
+    f"  _traceable vs compositional: {jnp.max(jnp.abs(pred_traceable - pred_compositional)):.2e}"
+)
 print(f"  auto vs compositional:       {jnp.max(jnp.abs(pred_auto - pred_compositional)):.2e}")
 
 # Check chi-squared

@@ -15,13 +15,22 @@ then transforms samples to physical space.
 from __future__ import annotations
 
 import time
+import warnings
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
+from tengri.config.exceptions import LaplaceNotAtModeWarning
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+
+# Newton decrement above which the expansion point is reported as off-mode
+# [nats]. An offset of ``delta`` standard deviations along a single direction
+# gives ``d = delta^2 / 2``, so this is ~0.45 sigma. Measured on a 64-galaxy
+# DRW-field population: converged fits scored 0.0005-0.075, under-converged
+# ones 1.3 upward (issue #1537).
+DEFAULT_STATIONARITY_TOL = 0.1
 
 
 def _finite_diff_hessian(grad_fn, theta_flat, unravel_fn, data_args, eps=1e-5):
@@ -54,6 +63,46 @@ def _finite_diff_hessian(grad_fn, theta_flat, unravel_fn, data_args, eps=1e-5):
     return jnp.asarray(H)
 
 
+def _newton_decrement(grad_flat, eigenvalues, eigenvectors):
+    """Loss drop a quadratic model predicts between here and the mode [nats].
+
+    ``d = 0.5 g^T H^-1 g``, evaluated in the Hessian eigenbasis so no second
+    inverse is needed. Zero exactly at a stationary point, and invariant under
+    affine reparameterization — unlike ``||g||``, which rescales with the
+    parameters and so cannot carry a fixed threshold.
+
+    Parameters
+    ----------
+    grad_flat : array_like, shape (n_dim,)
+        Gradient of the loss at the expansion point, in unbounded space.
+    eigenvalues : array_like, shape (n_dim,)
+        Hessian eigenvalues, already floored to be positive.
+    eigenvectors : array_like, shape (n_dim, n_dim)
+        Corresponding eigenvectors, as columns.
+
+    Returns
+    -------
+    float
+        Predicted loss drop [nats]. An offset of ``delta`` standard deviations
+        along one direction gives ``delta**2 / 2``. ``inf`` when any eigenvalue
+        is non-positive: the quadratic model then has no minimum to descend to,
+        and the point cannot be a mode whatever the gradient does.
+
+    Notes
+    -----
+    The non-positive case is not a corner case to tidy away — it is the one
+    input that breaks the formula's own algebra. A negative eigenvalue makes
+    the sum **negative**, so a naive ``d > tol`` test reads as "converged" at a
+    saddle. Reachable whenever ``regularize=False`` leaves the spectrum
+    unfloored.
+    """
+    eigenvalues = jnp.asarray(eigenvalues)
+    if not bool(jnp.all(eigenvalues > 0)):
+        return float("inf")
+    projected = eigenvectors.T @ grad_flat
+    return float(0.5 * jnp.sum(projected**2 / eigenvalues))
+
+
 def run_laplace(
     *,
     key,
@@ -66,6 +115,7 @@ def run_laplace(
     n_samples=2000,
     regularize=True,
     min_eigenvalue=1e-6,
+    stationarity_tol=DEFAULT_STATIONARITY_TOL,
     verbose=True,
 ):
     """Run Laplace approximation from a MAP estimate.
@@ -95,6 +145,12 @@ def run_laplace(
         Clip small Hessian eigenvalues to ensure positive definiteness.
     min_eigenvalue : float
         Minimum eigenvalue threshold (only if regularize=True).
+    stationarity_tol : float
+        Newton decrement [nats] above which the expansion point is reported as
+        off-mode via :class:`~tengri.config.exceptions.LaplaceNotAtModeWarning`.
+        Default 0.1, an offset of ~0.45 standard deviations. Raise it to
+        silence the check; the decrement is reported in ``diagnostics`` either
+        way.
     verbose : bool
         Print progress.
 
@@ -102,6 +158,29 @@ def run_laplace(
     -------
     Posterior
         Samples from the Gaussian approximation, with Laplace log-evidence.
+
+    Warns
+    -----
+    LaplaceNotAtModeWarning
+        When the Newton decrement exceeds ``stationarity_tol``, meaning
+        ``map_params_unbounded`` is not a stationary point of ``loss_fn`` and
+        ``H^-1`` is therefore not a covariance (issue #1537).
+
+    Notes
+    -----
+    ``cov = H^-1`` holds only at a mode. ``run_map`` takes a fixed number of
+    Adam steps with no convergence test, so an under-converged expansion point
+    reaches here routinely and produces a confident, plausible, wrong
+    posterior — typically far too narrow, since a point on a steep slope
+    carries much higher curvature than the mode below it. The Newton decrement
+
+    .. math::
+
+        d = \\tfrac{1}{2}\\, g^{T} H^{-1} g
+
+    measures this, where :math:`g` is the loss gradient at the expansion point
+    and :math:`H` the (eigenvalue-floored) Hessian; :math:`d` is in nats and is
+    zero exactly at a mode.
     """
     from tengri.inference.posterior import Posterior
 
@@ -155,6 +234,51 @@ def run_laplace(
     if verbose and n_clipped > 0:
         print(f"  Regularized: {n_clipped}/{n_dim} eigenvalues clipped")
 
+    # Is the expansion point actually a mode?  cov = H^-1 only means covariance
+    # there; nothing upstream guarantees it, and nothing downstream can detect
+    # it (i.i.d. Gaussian draws score R-hat ~ 1 whatever the shape).
+    if grad_fn is not None:
+        _, grad_at_map = grad_fn(map_params_unbounded, data_args)
+    else:
+        grad_at_map = jax.grad(lambda p: loss_fn(p, data_args))(map_params_unbounded)
+    grad_flat, _ = ravel_pytree(grad_at_map)
+
+    grad_norm = float(jnp.linalg.norm(grad_flat))
+    decrement = _newton_decrement(grad_flat, eigenvalues_clipped, eigenvectors)
+
+    indefinite = not bool(jnp.all(eigenvalues_clipped > 0))
+    if indefinite:
+        n_bad = int(jnp.sum(eigenvalues_clipped <= 0))
+        warnings.warn(
+            f"Laplace Hessian is indefinite at the expansion point: "
+            f"{n_bad}/{n_dim} eigenvalues are non-positive (most negative "
+            f"{float(jnp.min(eigenvalues_clipped)):.4g}), gradient norm "
+            f"{grad_norm:.4g}. The loss curves *downward* along those "
+            f"directions, so this is a saddle or a maximum, not a mode, and "
+            f"H^-1 is not a covariance — the draws are meaningless rather "
+            f"than merely mis-scaled. Leave regularize=True (the default) to "
+            f"floor the spectrum at min_eigenvalue, or re-run the optimizer "
+            f"from a different start.",
+            LaplaceNotAtModeWarning,
+            stacklevel=2,
+        )
+    elif decrement > stationarity_tol:
+        warnings.warn(
+            f"Laplace expansion point is not a mode: Newton decrement "
+            f"{decrement:.4g} nats (tolerance {stationarity_tol:g}), gradient "
+            f"norm {grad_norm:.4g}. The loss still drops by ~{decrement:.4g} "
+            f"nats toward the true mode, so H^-1 describes the curvature of a "
+            f"slope rather than a peak and the posterior is likely far too "
+            f"narrow. Raise n_map_steps (10x converged every affected fit in "
+            f"issue #1537), or pass an already-converged init_from. "
+            f"Set stationarity_tol to silence this.",
+            LaplaceNotAtModeWarning,
+            stacklevel=2,
+        )
+
+    if verbose:
+        print(f"  Newton decrement: {decrement:.4g} nats (|grad| {grad_norm:.4g})")
+
     # Draw samples from N(theta_MAP, H^{-1})
     samples_flat = jax.random.multivariate_normal(key, theta_flat, cov, shape=(n_samples,))
 
@@ -188,6 +312,8 @@ def run_laplace(
             "eigenvalues": eigenvalues_clipped,
             "n_clipped_eigenvalues": n_clipped,
             "condition_number": float(eigenvalues_clipped[-1] / eigenvalues_clipped[0]),
+            "newton_decrement": decrement,
+            "grad_norm_at_expansion": grad_norm,
         },
         loss_history=None,
         _model=model,

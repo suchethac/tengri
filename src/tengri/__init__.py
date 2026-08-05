@@ -427,6 +427,7 @@ from tengri.registry import (
     describe_recipe,
     describe_sfh_model,
     help,
+    list_age_kernels,
     list_agn_blocks,
     list_agn_models,
     list_all,
@@ -589,6 +590,7 @@ __all__ = [  # noqa: RUF022
     "examples",
     "tutorial",
     # Component discovery
+    "list_age_kernels",
     "list_agn_blocks",
     "list_agn_models",
     "list_all",
@@ -679,6 +681,7 @@ from tengri.inference.catalog import Catalog
 from tengri.inference.catalog_fitter import CatalogFitter
 from tengri.inference.fitter import Fitter
 from tengri.inference.hierarchical import PopulationFitter
+from tengri.inference.information import ParameterInformation, parameter_information
 from tengri.inference.vi_config import VIConfig
 from tengri.observation.data import Data
 from tengri.observation.instrument import Instrument, list_instruments
@@ -712,6 +715,7 @@ _CURATED_DIR = (
     "help",
     "summary",
     "describe",
+    "list_age_kernels",
     "list_agn_blocks",
     "list_agn_models",
     "list_dust_emission_models",
@@ -777,6 +781,8 @@ _CURATED_DIR = (
     "StudentT",
     # 4.  Result types (+ hierarchical / spatial model classes)
     "Posterior",
+    "ParameterInformation",
+    "parameter_information",
     "PopulationSEDModel",
     # ``PopulationFitter`` is deliberately absent too, and the reason is worth
     # stating because two documents look like they disagree. It is the

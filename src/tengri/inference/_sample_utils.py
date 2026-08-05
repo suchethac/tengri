@@ -9,6 +9,7 @@ them here removes ~50 duplicated blocks across the backends.
 
 from __future__ import annotations
 
+import hashlib
 from collections import OrderedDict
 from collections.abc import Callable
 from threading import Lock
@@ -16,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 if TYPE_CHECKING:
     from jax import Array
@@ -88,6 +90,46 @@ def _mean_params(samples_phys: dict[str, Array]) -> dict[str, Array]:
     return {k: jnp.mean(v, axis=0) for k, v in samples_phys.items()}
 
 
+#: Per-fitter inputs that change the posterior and so must invalidate a cached
+#: MAP. Everything else in ``data_args`` (spectroscopic covariance, line fluxes)
+#: hangs off ``model.observation``, which is already the cache key.
+_FINGERPRINTED_ATTRS = ("data", "noise", "data_mask", "presence", "_runtime_redshift")
+
+
+def _data_fingerprint(fitter: Any) -> str:
+    """Content hash of the observations this fitter was constructed against.
+
+    The MAP cache lives in a per-model namespace keyed on the model object,
+    which says nothing about the data. Reusing one model across a catalog —
+    the ordinary loop — then hands every galaxy the first galaxy's MAP as its
+    starting point (issue #1529). Hashing the data separates targets while
+    keeping the intended win: a genuine refit of the same target still hits,
+    including across sessions, because this keys on content and not identity.
+
+    Parameters
+    ----------
+    fitter : Fitter
+        Fitter whose ``data``/``noise`` (and optional mask, presence and
+        runtime redshift) identify the target.
+
+    Returns
+    -------
+    str
+        Hex digest. Cost is linear in the data bytes — negligible beside the
+        thousands of forward passes a MAP run would otherwise repeat.
+    """
+    digest = hashlib.blake2b(digest_size=16)
+    for name in _FINGERPRINTED_ATTRS:
+        value = getattr(fitter, name, None)
+        if value is None:
+            digest.update(b"\x00none")
+            continue
+        array = np.asarray(value)
+        digest.update(f"{name}|{array.shape}|{array.dtype}|".encode())
+        digest.update(array.tobytes())
+    return digest.hexdigest()
+
+
 def _maybe_map_init(
     fitter: Any,
     key: Array,
@@ -100,20 +142,32 @@ def _maybe_map_init(
     Resolution order:
 
     1. Explicit ``init_from`` from caller — converted to unbounded.
-    2. Cached MAP point on the model (populated by a previous fit or by
-       :meth:`Fitter.load_cache`) — used directly, no fresh MAP run.
+    2. Cached MAP point on the model, **if it was fit to this same data**
+       (populated by a previous fit or by :meth:`Fitter.load_cache`) — used
+       directly, no fresh MAP run.
     3. Run a short MAP optimization to find a good starting point.
        Caches the result so subsequent calls / sessions can skip step 3.
+
+    Step 2 is gated on :func:`_data_fingerprint`. Without that gate a loop that
+    reuses one model across a catalog silently starts every galaxy from the
+    first galaxy's MAP, which killed six of eight NUTS fits with R-hat up to
+    10.74 and zero divergences (issue #1529).
     """
     if init_from is not None:
         return fitter._unbounded_from_posterior(init_from), key
 
-    # Cached MAP point (from a prior fit or load_cache)?
+    # Cached MAP point (from a prior fit or load_cache) for THIS data?
 
     from tengri.inference._model_cache import _default_owner as _model_cache_owner
 
     mc = _model_cache_owner.get_or_compile_model(fitter.model)
+    fingerprint = _data_fingerprint(fitter)
     cached_map = mc.get("map_params_physical")
+    if cached_map is not None and mc.get("map_data_fingerprint") != fingerprint:
+        # Same model, different target: the cached point belongs to another
+        # galaxy and would seed this fit somewhere its sampler may not recover
+        # from. Fall through to a fresh MAP.
+        cached_map = None
     if cached_map is not None:
         # Build a minimal posterior-like shim to reuse _unbounded_from_posterior.
         class _Shim:
@@ -137,8 +191,10 @@ def _maybe_map_init(
     map_result = fitter._run_map(
         key=map_key, n_steps=n_map_steps, n_restarts=_MAP_INIT_RESTARTS, verbose=False
     )
-    # Cache the physical MAP params so future runs/sessions skip MAP.
+    # Cache the physical MAP params so future runs/sessions skip MAP. Stamped
+    # with the data it was fit to, so it can never be reused for another target.
     mc["map_params_physical"] = {k: jnp.asarray(v) for k, v in map_result.params.items()}
+    mc["map_data_fingerprint"] = fingerprint
     init_params = fitter._unbounded_from_posterior(map_result)
     if verbose:
         print(f"  MAP init done (loss={map_result.diagnostics['final_loss']:.2f})")

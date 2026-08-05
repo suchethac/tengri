@@ -38,8 +38,18 @@ citation (`tengri.cite_all()` and `CITATION.cff` handle this).
 | File | Scientific source | Build path | Usage |
 | --- | --- | --- | --- |
 | `cb19_templates.h5` | Charlot & Bruzual 2019 (CB19) | upstream CB19 release | Not redistributed at the upstream — request from authors; cite Charlot & Bruzual 2003, 2019. **Do not redistribute as part of tengri sdist/wheel.** |
-| `fsps_prsc_miles_chabrier.h5.1` | FSPS Padova/MILES with Chabrier IMF | generated from upstream FSPS / python-fsps | FSPS itself MIT; python-fsps MIT; SSP grid derived under those terms |
+| `fsps_prsc_miles_chabrier.h5` | FSPS with PARSEC isochrones and the MILES library, Chabrier IMF — the default grid (`DEFAULT_SSP`) | generated from upstream FSPS / python-fsps | FSPS itself MIT; python-fsps MIT; SSP grid derived under those terms |
+| `ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5` | The same PARSEC / MILES / Chabrier grid with FSPS nebular emission switched on (log U = -3.0, log Z_gas = 0.0) | generated from upstream FSPS / python-fsps | as above |
+| `bpss_stars_c3k_a_chabrier.h5` | BPASS binary population synthesis with the C3K alpha-enhanced library, Chabrier IMF | generated from upstream BPASS | Paper-published data; cite Eldridge, Stanway et al. 2017 (PASA 34, e058) |
 | `fsps_mass_remaining_chabrier.h5` | FSPS mass-loss tables, Chabrier IMF | derived from FSPS | FSPS itself MIT; python-fsps MIT |
+
+SSP filenames follow `<code>_<isochrone>_<library>_<imf>`. The token tables that
+turn each field into a citation live in
+[`src/tengri/citations/associations.py`](../src/tengri/citations/associations.py)
+— consult them before writing a row here. In particular `prsc` is **PARSEC** and
+`pdva` is **Padova**: different isochrone sets, two characters apart. `stars`
+(as in `bpss_stars_…`) is not a stellar library — it records that BPASS supplies
+its own isochrones internally.
 
 ## Nebular / emission-line grids
 

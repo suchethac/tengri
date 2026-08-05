@@ -494,3 +494,198 @@ def test_simulate_noise_points_at_the_open_issue(fwd_table_sfh):
     cat = _histories_catalog(fwd_table_sfh)
     with pytest.raises(NotImplementedError, match="1312"):
         cat.simulate(noise=object())
+
+
+# ── #1396 acceptance criterion 6: the parametric round-trip ───────────────
+#
+# "Round-trip validation: a tabulated history that reproduces a parametric SFH
+# gives photometry matching the parametric model's, to tolerance — the test
+# that proves the histories are actually being used."
+#
+# This is the one criterion of #1396 that was never written, and its absence is
+# how #1522 shipped green: every other test in this file asserts a **ratio**
+# between galaxies, and the truncation there multiplies every galaxy by the
+# same factor, which a ratio divides straight out. This test compares against
+# an external reference instead — the same analytic SFH, evaluated by the other
+# arm of the code — so a common factor has nowhere to hide.
+
+_RT_LOG_MASS = 10.0  # log10(M_formed / Msun)
+_RT_TAU_GYR = 2.0  # delayed-tau timescale [Gyr]
+_RT_AGE_GYR = 10.0  # lookback time of formation [Gyr]
+
+# Measured on e107f0600: the matched arms differ by 1.9e-4 in color and 1.0e-4
+# in normalization. That residual is a fixed difference between the two arms'
+# quadratures, NOT table sampling — it is invariant over n_t = 128…4096
+# (1.73e-4 → 1.86e-4). The tolerance sits 5x above it; see the negative control
+# below for what it can still resolve.
+_RT_RTOL = 1e-3
+
+
+@pytest.fixture(scope="module")
+def age_reddening_ssp():
+    """A synthetic SSP whose spectral SLOPE varies with age.
+
+    ``synthetic_ssp_wide`` cannot carry this test. Its flux is *separable* —
+
+        base(wave) * (1 + 0.15*(age - mean)) * (1 + 0.10*(lgmet - mean))
+
+    — so the wavelength shape is identical at every age and age only rescales
+    the amplitude. On that fixture the SED **shape** cannot respond to the star
+    formation history at all: measured, doubling tau moves the colors by
+    3.6e-14 (machine noise), so any "the colors match" assertion passes no
+    matter what the code does. Here each age gets its own power-law index, so
+    young ages are blue and old ages red, and the colors become a real
+    observable that the SFH drives.
+    """
+    import jax.numpy as jnp
+
+    from tengri.components.stellar.sps.dsps_wrapper import SSPData
+
+    wave = jnp.logspace(2.0, 7.0, 1600)  # 100 Å – 1 mm, as synthetic_ssp_wide
+    lg_age = jnp.linspace(-3.0, 1.14, 25)  # log10(age/Gyr): ~1 Myr – 13.8 Gyr
+    lgmet = jnp.array([-4.0, -2.65, -1.3])
+    slope = -2.0 + 0.6 * (lg_age - lg_age.mean())  # redder with age
+    shape = (wave[None, :] / 5000.0) ** slope[:, None]
+    flux = shape[None, :, :] * (1.0 + 0.10 * (lgmet - lgmet.mean()))[:, None, None]
+    return SSPData(
+        ssp_wave=wave,
+        ssp_flux=jnp.abs(flux) + 1e-12,
+        ssp_lg_age_gyr=lg_age,
+        ssp_lgmet=lgmet,
+    )
+
+
+@pytest.fixture(scope="module")
+def roundtrip_arms(age_reddening_ssp, synthetic_tophat_obs):
+    """The two arms of the round-trip: one parametric model, one tabulated.
+
+    Same SSP, same filters, same redshift, same dust (off) — the SFH
+    *representation* is the only difference between them.
+    """
+    from tengri import FIXED, ForwardModel, SEDModel
+    from tengri.cosmology import age_at_z
+    from tengri.parameters.priors import Fixed
+
+    def _build(sfh):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            sed = SEDModel.build(
+                ssp_data=age_reddening_ssp,
+                observation=synthetic_tophat_obs,
+                sfh=sfh,
+                dust={
+                    "type": "two_component",
+                    "all_params": FIXED,
+                    "tau_bc": 0.0,
+                    "tau_diff": 0.0,
+                },
+                neb={"type": "none"},
+                redshift=Fixed(_Z_OBS),
+            )
+            return ForwardModel.build(sed=sed, observation=synthetic_tophat_obs), sed
+
+    par_fwd, par_sed = _build(
+        {
+            "type": "delayed",
+            "all_params": FIXED,
+            "log_total_mass": _RT_LOG_MASS,
+            "tau_gyr": _RT_TAU_GYR,
+            "age_gyr": _RT_AGE_GYR,
+        }
+    )
+    tab_fwd, _ = _build({"type": "table"})
+    return par_fwd, par_sed, tab_fwd, float(age_at_z(_Z_OBS))
+
+
+def _delayed_history(t_univ_gyr, tau_gyr, n_t=512):
+    """Sample the delayed-tau SFH as a cosmic-time table [Gyr], [Msun/yr].
+
+    ``sfhdelayed`` renormalizes to ``10**log_total_mass`` by a trapezoid over
+    the lookback grid it is handed, so that grid must **ascend** — hand it a
+    descending one and the normalization comes back negative (measured: a mass
+    of -3.8e58 Msun). Build in ascending lookback, then flip to ascending
+    cosmic time, which is the orientation ``from_histories`` wants.
+    """
+    from tengri.components.stellar.sfh.mean_sfh import sfhdelayed
+
+    t_lb_gyr = np.linspace(0.0, t_univ_gyr, n_t)
+    sfr_lb = np.asarray(sfhdelayed(t_lb_gyr * 1e9, _RT_LOG_MASS, tau_gyr * 1e9, _RT_AGE_GYR * 1e9))
+    return (t_univ_gyr - t_lb_gyr)[::-1], np.maximum(sfr_lb[::-1], 0.0)
+
+
+def _parametric_prediction(par_fwd, par_sed):
+    import jax.numpy as jnp
+
+    params = {k: jnp.asarray(v) for k, v in par_fwd.spec.get_fixed_values().items()}
+    flux = np.asarray(par_fwd.predict_photometry(params))
+    mass = float(
+        np.asarray(par_sed.predict_properties(params, names=("stellar_mass",))["stellar_mass"])
+    )
+    return flux, mass
+
+
+def _tabulated_prediction(tab_fwd, t_gyr, sfr):
+    from tengri import Catalog
+
+    mock = Catalog.from_histories(tab_fwd, t_gyr=t_gyr[None, :], sfr=sfr[None, :]).simulate(
+        properties=("stellar_mass",)
+    )
+    return np.asarray(mock.photometry)[0], float(np.asarray(mock.properties["stellar_mass"])[0])
+
+
+def test_the_roundtrip_ssp_actually_has_color_evolution(roundtrip_arms):
+    """Guard the guard: the fixture must be non-separable, or criterion 6 is void.
+
+    If someone swaps this SSP back to a separable one, the round-trip below
+    keeps passing while testing nothing. Pin the property the test depends on:
+    the parametric model's five bands must span a real color range.
+    """
+    par_fwd, par_sed, _tab, _t = roundtrip_arms
+    flux, _mass = _parametric_prediction(par_fwd, par_sed)
+
+    colors = flux / flux[0]
+    assert colors.min() < 0.5, f"SSP has no color evolution; bands span {colors}"
+
+
+def test_roundtrip_tabulated_history_matches_the_parametric_model(roundtrip_arms):
+    """#1396 criterion 6: the same SFH, tabulated, must give the same photometry.
+
+    Both arms are handed the identical analytic delayed-tau SFH. The parametric
+    arm evaluates it internally on the SSP age grid; the tabulated arm receives
+    it as (t, SFR) columns through ``Catalog.from_histories``. Photometry,
+    colors and formed mass must all agree.
+    """
+    par_fwd, par_sed, tab_fwd, t_univ = roundtrip_arms
+
+    f_par, m_par = _parametric_prediction(par_fwd, par_sed)
+    t_gyr, sfr = _delayed_history(t_univ, _RT_TAU_GYR)
+    f_tab, m_tab = _tabulated_prediction(tab_fwd, t_gyr, sfr)
+
+    # Ratio, never bare allclose — these fluxes are ~1e-13, far below the
+    # default atol=1e-8, which would call any two of them equal.
+    assert np.allclose(f_tab / f_par, 1.0, rtol=_RT_RTOL), f"flux ratio {f_tab / f_par}"
+    assert np.allclose(m_tab / m_par, 1.0, rtol=_RT_RTOL), f"mass ratio {m_tab / m_par}"
+
+    colors = (f_tab / f_tab[0]) / (f_par / f_par[0])
+    assert np.allclose(colors, 1.0, rtol=_RT_RTOL), f"color ratio {colors}"
+
+
+def test_roundtrip_rejects_a_history_that_does_not_match(roundtrip_arms):
+    """Negative control: the round-trip must FAIL on the wrong history.
+
+    Without this the tolerance above is unfalsifiable — and on the shipped
+    ``synthetic_ssp_wide`` it genuinely would have been. Feeding a tau twice
+    the parametric model's moves the colors by 9.2e-2, some 92x the tolerance;
+    a 1 % tau error already lands at 1.3e-3, just outside it. That is the
+    test's measured resolving power.
+    """
+    par_fwd, par_sed, tab_fwd, t_univ = roundtrip_arms
+
+    f_par, _m_par = _parametric_prediction(par_fwd, par_sed)
+    t_gyr, sfr = _delayed_history(t_univ, 2.0 * _RT_TAU_GYR)
+    f_tab, _m_tab = _tabulated_prediction(tab_fwd, t_gyr, sfr)
+
+    colors = (f_tab / f_tab[0]) / (f_par / f_par[0])
+    assert not np.allclose(colors, 1.0, rtol=_RT_RTOL), (
+        f"a 2x tau error must not pass the round-trip; color ratio {colors}"
+    )

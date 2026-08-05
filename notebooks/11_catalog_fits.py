@@ -38,7 +38,7 @@
 # the whole point is how fast a catalog goes through.
 
 # %%
-from _setup import quiet
+from _setup import FIG_DIR, quiet
 
 quiet()
 
@@ -69,8 +69,6 @@ from tengri import (
 from tengri import Catalog, ForwardModel
 
 plot.setup_style()
-FIG_DIR = Path("_figs")
-FIG_DIR.mkdir(exist_ok=True)
 
 C_POST, C_TRUTH = "#3a76d9", "0.15"
 

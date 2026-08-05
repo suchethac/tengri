@@ -98,33 +98,33 @@ _PROJECT_ID = 1  # Allen08 — MAPPINGS V re-evaluation of Allen+2008 grid
 
 _LINE_MAP: list[tuple[str, float, str, list[str]]] = [
     # UV (emis_UVB: 938–1527 Å)
-    ("LyA_1216A",   1216.0, "UVB", ["HI_1216"]),
+    ("LyA_1216A", 1216.0, "UVB", ["HI_1216"]),
     # UV (emis_UVC: 1527–3000 Å)
-    ("CIV_1549A",   1549.0, "UVC", ["CIV_1548", "CIV_1551"]),
-    ("HeII_1640A",  1640.0, "UVC", ["HeII_1640"]),
-    ("CIII_1909A",  1909.0, "UVC", ["CIII_1907", "CIII_1909"]),
-    ("MgII_2796A",  2796.0, "UVC", ["MgII_2796"]),
-    ("MgII_2803A",  2803.0, "UVC", ["MgII_2803"]),
+    ("CIV_1549A", 1549.0, "UVC", ["CIV_1548", "CIV_1551"]),
+    ("HeII_1640A", 1640.0, "UVC", ["HeII_1640"]),
+    ("CIII_1909A", 1909.0, "UVC", ["CIII_1907", "CIII_1909"]),
+    ("MgII_2796A", 2796.0, "UVC", ["MgII_2796"]),
+    ("MgII_2803A", 2803.0, "UVC", ["MgII_2803"]),
     # Optical (emis_VI: 3000–7500 Å)
-    ("OII_3726A",   3726.0, "VI",  ["OII_3726"]),
-    ("OII_3729A",   3729.0, "VI",  ["OII_3729"]),
-    ("Hg_4341A",    4341.0, "VI",  ["HI_4340"]),
-    ("Hb_4861A",    4861.0, "VI",  ["HI_4861"]),      # reference (ratio=1.0)
-    ("O3_4959A",    4959.0, "VI",  ["OIII_4959"]),
-    ("O3_5007A",    5007.0, "VI",  ["OIII_5007"]),
-    ("HeI_5876A",   5876.0, "VI",  ["HeI_5876"]),
-    ("OI_6300A",    6300.0, "VI",  ["OI_6300"]),
-    ("HA_6563A",    6563.0, "VI",  ["HI_6563"]),
-    ("NII_6548A",   6548.0, "VI",  ["NII_6548"]),
-    ("NII_6583A",   6583.0, "VI",  ["NII_6583"]),
-    ("SII_6716A",   6716.0, "VI",  ["SII_6716"]),
-    ("SII_6731A",   6731.0, "VI",  ["SII_6731"]),
-    ("ArIII_7135A", 7135.0, "VI",  ["ArIII_7136"]),
-    ("OII_7320A",   7320.0, "VI",  ["OII_7320"]),
-    ("OII_7330A",   7330.0, "VI",  ["OII_7330"]),
+    ("OII_3726A", 3726.0, "VI", ["OII_3726"]),
+    ("OII_3729A", 3729.0, "VI", ["OII_3729"]),
+    ("Hg_4341A", 4341.0, "VI", ["HI_4340"]),
+    ("Hb_4861A", 4861.0, "VI", ["HI_4861"]),  # reference (ratio=1.0)
+    ("O3_4959A", 4959.0, "VI", ["OIII_4959"]),
+    ("O3_5007A", 5007.0, "VI", ["OIII_5007"]),
+    ("HeI_5876A", 5876.0, "VI", ["HeI_5876"]),
+    ("OI_6300A", 6300.0, "VI", ["OI_6300"]),
+    ("HA_6563A", 6563.0, "VI", ["HI_6563"]),
+    ("NII_6548A", 6548.0, "VI", ["NII_6548"]),
+    ("NII_6583A", 6583.0, "VI", ["NII_6583"]),
+    ("SII_6716A", 6716.0, "VI", ["SII_6716"]),
+    ("SII_6731A", 6731.0, "VI", ["SII_6731"]),
+    ("ArIII_7135A", 7135.0, "VI", ["ArIII_7136"]),
+    ("OII_7320A", 7320.0, "VI", ["OII_7320"]),
+    ("OII_7330A", 7330.0, "VI", ["OII_7330"]),
     # Near-IR (emis_IR: >7500 Å)
-    ("SIII_9069A",  9069.0, "IR",  ["SIII_9069"]),
-    ("SIII_9532A",  9532.0, "IR",  ["SIII_9531"]),
+    ("SIII_9069A", 9069.0, "IR", ["SIII_9069"]),
+    ("SIII_9532A", 9532.0, "IR", ["SIII_9531"]),
 ]
 
 _LINE_NAMES = [e[0] for e in _LINE_MAP]
@@ -133,10 +133,10 @@ _N_LINES = len(_LINE_NAMES)
 
 # Map table abbreviation → actual table name
 _TABLE_NAME = {
-    "VI":  "emis_VI",
+    "VI": "emis_VI",
     "UVB": "emis_UVB",
     "UVC": "emis_UVC",
-    "IR":  "emis_IR",
+    "IR": "emis_IR",
 }
 
 # Hβ reference column (always in emis_VI)
@@ -223,7 +223,7 @@ def _fetch_component(
     # Build {abund_id: axis_index}
     abund_idx = {aid: i for i, aid in enumerate(abund_ids)}
     v_vals = velocities.tolist()
-    n_vals = np.power(10.0, log_densities).tolist()   # back to cm⁻³ for matching
+    n_vals = np.power(10.0, log_densities).tolist()  # back to cm⁻³ for matching
     b_vals = b_fields.tolist()
 
     # Group lines by emis table to minimise queries
@@ -282,8 +282,11 @@ def _fetch_component(
             """
 
         cur = co.cursor()
-        print(f"    Querying {tbl_name} ({len(line_indices)} lines, {component}) ... ",
-              end="", flush=True)
+        print(
+            f"    Querying {tbl_name} ({len(line_indices)} lines, {component}) ... ",
+            end="",
+            flush=True,
+        )
         if tbl == "VI":
             cur.execute(sql, (project_id, component))
         else:
@@ -455,13 +458,11 @@ def main() -> None:
         sys.exit(1)
 
     print("\nDiscovering grid axes ...")
-    velocities, log_densities, b_fields, abund_ids, abund_names = _query_axes(
-        co, args.project
-    )
+    velocities, log_densities, b_fields, abund_ids, abund_names = _query_axes(co, args.project)
 
     components = [
-        ("shock",              "shock_ratios"),
-        ("precursor",          "precursor_ratios"),
+        ("shock", "shock_ratios"),
+        ("precursor", "precursor_ratios"),
         ("shock_plus_precursor", "combined_ratios"),
     ]
 
@@ -469,8 +470,13 @@ def main() -> None:
     for db_component, key in components:
         print(f"\nFetching component: {db_component}")
         all_ratios[key] = _fetch_component(
-            co, args.project, db_component,
-            velocities, log_densities, b_fields, abund_ids,
+            co,
+            args.project,
+            db_component,
+            velocities,
+            log_densities,
+            b_fields,
+            abund_ids,
         )
 
     co.close()
@@ -480,7 +486,7 @@ def main() -> None:
     n_total = int(np.prod(shape))
     n_valid = int(np.sum(~np.isnan(all_ratios["combined_ratios"])))
     print(f"\nGrid shape : {shape}")
-    print(f"Populated  : {n_valid:,}/{n_total:,} entries ({100*n_valid/n_total:.1f}%)")
+    print(f"Populated  : {n_valid:,}/{n_total:,} entries ({100 * n_valid / n_total:.1f}%)")
 
     print(f"\n=== Writing {out_path} ===")
     _write_hdf5(

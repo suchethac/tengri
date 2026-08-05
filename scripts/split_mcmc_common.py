@@ -21,22 +21,22 @@ ORIGINAL_COMMIT = "18948ad"
 
 # Scan functions each sampler needs from _shared.py
 _SAMPLER_SCAN_IMPORTS: dict[str, list[str]] = {
-    "raytrace":    [],
-    "nuts":        ["_nuts_burnin_scan", "_nuts_sample_scan"],
-    "hmc":         ["_hmc_burnin_scan", "_hmc_sample_scan"],
+    "raytrace": [],
+    "nuts": ["_nuts_burnin_scan", "_nuts_sample_scan"],
+    "hmc": ["_hmc_burnin_scan", "_hmc_sample_scan"],
     "dynamic_hmc": ["_dynamic_hmc_burnin_scan", "_dynamic_hmc_sample_scan"],
-    "ghmc":        ["_ghmc_burnin_scan", "_ghmc_sample_scan"],
-    "mclmc":       ["_adjusted_mclmc_sample_scan", "_mclmc_sample_scan"],
+    "ghmc": ["_ghmc_burnin_scan", "_ghmc_sample_scan"],
+    "mclmc": ["_adjusted_mclmc_sample_scan", "_mclmc_sample_scan"],
 }
 
 # Kernel getters each sampler needs
 _SAMPLER_KERNEL_IMPORTS: dict[str, list[str]] = {
-    "raytrace":    [],
-    "nuts":        [],
-    "hmc":         ["_get_hmc_kernel"],
+    "raytrace": [],
+    "nuts": [],
+    "hmc": ["_get_hmc_kernel"],
     "dynamic_hmc": ["_get_dynamic_hmc_kernel"],
-    "ghmc":        ["_get_ghmc_kernel"],
-    "mclmc":       [],
+    "ghmc": ["_get_ghmc_kernel"],
+    "mclmc": [],
 }
 
 _BASE_IMPORTS = """\
@@ -115,13 +115,23 @@ def main() -> None:
 
     # ── _shared.py — all infrastructure before run_* ──────────────────────
     shared_fns = [
-        "_get_nuts_kernel", "_get_hmc_kernel", "_get_dynamic_hmc_kernel", "_get_ghmc_kernel",
-        "_nuts_sample_scan", "_nuts_burnin_scan",
-        "_hmc_sample_scan", "_hmc_burnin_scan",
-        "_dynamic_hmc_sample_scan", "_dynamic_hmc_burnin_scan",
-        "_ghmc_sample_scan", "_ghmc_burnin_scan",
-        "_mclmc_sample_scan", "_adjusted_mclmc_sample_scan",
-        "_get_flat_logdensity", "_get_cached_adaptation", "_set_cached_adaptation",
+        "_get_nuts_kernel",
+        "_get_hmc_kernel",
+        "_get_dynamic_hmc_kernel",
+        "_get_ghmc_kernel",
+        "_nuts_sample_scan",
+        "_nuts_burnin_scan",
+        "_hmc_sample_scan",
+        "_hmc_burnin_scan",
+        "_dynamic_hmc_sample_scan",
+        "_dynamic_hmc_burnin_scan",
+        "_ghmc_sample_scan",
+        "_ghmc_burnin_scan",
+        "_mclmc_sample_scan",
+        "_adjusted_mclmc_sample_scan",
+        "_get_flat_logdensity",
+        "_get_cached_adaptation",
+        "_set_cached_adaptation",
     ]
     shared_bodies = []
     for fn in shared_fns:
@@ -143,30 +153,28 @@ def main() -> None:
         "from jax.flatten_util import ravel_pytree\n\n"
         "from tengri.inference._model_cache import get_model_cache\n"
         "from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical\n"
-        "\n\n"
-        + "\n\n\n".join(shared_bodies)
-        + "\n"
+        "\n\n" + "\n\n\n".join(shared_bodies) + "\n"
     )
     write_file(MCMC_DIR / "_shared.py", shared_content)
 
     # ── per-sampler files ──────────────────────────────────────────────────
     sampler_map: dict[str, list[str]] = {
-        "nuts":        ["run_nuts"],
-        "hmc":         ["run_hmc"],
+        "nuts": ["run_nuts"],
+        "hmc": ["run_hmc"],
         "dynamic_hmc": ["run_dynamic_hmc"],
-        "ghmc":        ["run_ghmc"],
-        "mclmc":       ["run_mclmc", "run_adjusted_mclmc"],
+        "ghmc": ["run_ghmc"],
+        "mclmc": ["run_mclmc", "run_adjusted_mclmc"],
     }
     # raytrace.py already exists with the low-level sample_raytrace implementation;
     # we append run_raytrace (the high-level Fitter wrapper) rather than overwriting.
     # run_elliptical_slice is already in elliptical_slice.py — just re-exported.
 
     sampler_labels = {
-        "nuts":        "NUTS (No-U-Turn Sampler) via BlackJAX",
-        "hmc":         "Standard Hamiltonian Monte Carlo via BlackJAX",
+        "nuts": "NUTS (No-U-Turn Sampler) via BlackJAX",
+        "hmc": "Standard Hamiltonian Monte Carlo via BlackJAX",
         "dynamic_hmc": "Dynamic HMC via BlackJAX",
-        "ghmc":        "Generalized HMC via BlackJAX",
-        "mclmc":       "MCLMC and Adjusted MCLMC via BlackJAX",
+        "ghmc": "Generalized HMC via BlackJAX",
+        "mclmc": "MCLMC and Adjusted MCLMC via BlackJAX",
     }
 
     # ── Append run_raytrace to existing raytrace.py ───────────────────────
@@ -214,19 +222,15 @@ def main() -> None:
         content = (
             f'"""{sampler_labels[module_name]}.\n\n'
             "Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc.common``.\n"
-            '"""\n\n'
-            + _sampler_imports(module_name)
-            + "\n\n"
-            + "\n\n\n".join(bodies)
-            + "\n"
+            '"""\n\n' + _sampler_imports(module_name) + "\n\n" + "\n\n\n".join(bodies) + "\n"
         )
         write_file(MCMC_DIR / f"{module_name}.py", content)
 
     # ── thin re-export hub: common.py ─────────────────────────────────────
-    public_fns = (
-        sorted(fn for fns in sampler_map.values() for fn in fns)
-        + ["run_elliptical_slice", "run_raytrace"]
-    )
+    public_fns = sorted(fn for fns in sampler_map.values() for fn in fns) + [
+        "run_elliptical_slice",
+        "run_raytrace",
+    ]
     hub_lines = [
         '"""MCMC samplers — re-export hub preserving the original public API.',
         "",

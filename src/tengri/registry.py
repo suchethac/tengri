@@ -21,6 +21,7 @@ in a notebook or REPL — no need to wrap them in `pprint`.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from tengri._display import _display
@@ -1043,6 +1044,76 @@ def list_igm_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
+#: The SFH→SSP age-weight kernels, as a menu. Not a registry-backed dispatch
+#: (there are exactly two, hand-written in the stellar component), but a
+#: structural axis of ``SEDModel.build`` all the same — and a builder-accepted
+#: value named by no menu is undiscoverable by construction (#1446).
+_AGE_KERNELS: tuple[tuple[str, str, str], ...] = (
+    (
+        "cic",
+        "production",
+        "Cloud-in-cell on a 16x dense integrand — the accuracy default (#964)",
+    ),
+    (
+        "dsps",
+        "comparison",
+        "DSPS histogram kernel — cross-code parity only; biases optical CSP +1.2 %",
+    ),
+)
+
+
+def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
+    """List the SFH→SSP age-weight kernels selectable via ``sfh={'age_kernel': ...}``.
+
+    The kernel decides how the star-formation history is integrated onto the SSP
+    age grid. ``'cic'`` splits each ``SFR(t)*dt`` parcel between its bracketing
+    SSP nodes with log-age cloud-in-cell weights on a dense integrand;
+    ``'dsps'`` hands the coarse per-SSP-age table to DSPS's histogram kernel,
+    which interpolates ``log10(M(<t))`` in ``log10(t)``.
+
+    They are not interchangeable. The DSPS kernel annihilates the mass of any
+    table segment straddling the SFH's maximum age — the first SSP node older
+    than the SFH start keeps ~1e-5 of its share — which biases the optical CSP
+    +1.2 % versus FSPS / bagpipes / a dense reference (#964). It is offered for
+    comparison against DSPS-native pipelines, not for science.
+
+    Leaving ``age_kernel`` unset auto-selects: ``'cic'`` on the parametric path,
+    ``'dsps'`` on the GP-field path (whose draw lives on its own coarse lookback
+    grid, so there is no dense integrand to cloud-in-cell).
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter to one status — ``"production"`` or ``"comparison"``.
+
+    Returns
+    -------
+    _RegistryTable
+        One row per kernel: ``name``, ``status``, ``short_doc``.
+
+    See also: :func:`list_sfh_models`, :mod:`tengri.builders.sfh`.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.list_age_kernels()  # doctest: +SKIP
+    """
+    out = [
+        {
+            "name": name,
+            "kind": "age_kernel",
+            "status": st,
+            "citation": "hearin2021" if name == "dsps" else "",
+            "short_doc": doc,
+            "use": f"SEDModel.build(sfh={{'age_kernel': {name!r}}})",
+        }
+        for name, st, doc in _AGE_KERNELS
+    ]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
 _COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
     (
         "stellar",
@@ -1614,6 +1685,33 @@ def list_components() -> _RegistryTable:
     return _RegistryTable(out)
 
 
+def _inference_method_row(entry, target: object | None = None) -> dict:
+    """Build the table row for one backend entry.
+
+    Shared by :func:`list_inference_methods` and
+    :func:`describe_inference_method` so the menu and the per-name lookup
+    can never disagree about what a backend is.
+    """
+    from tengri.inference._strategy import resolve_status
+
+    use = _usage_hint(entry.name, "inference_method")
+    if entry.tier == "broken":
+        # Advice that raises is the bug, not the help (#1364). The plain
+        # ``fitter.run("pathfinder")`` hint is refused by the tier gate, and
+        # a broken backend only became visible here at all once describe
+        # stopped hiding it (#1560) — so ship the invocation that works.
+        use = f'fitter.run("{entry.name}", allow_unvalidated=True)  # tier=broken'
+    return {
+        "name": entry.name,
+        "kind": "inference_method",
+        "tier": entry.tier,
+        "short_doc": entry.short_doc,
+        "requires": list(entry.requires),
+        "status": resolve_status(entry, target).value,
+        "use": use,
+    }
+
+
 def list_inference_methods(
     *, tier: str | None = None, target: object | None = None
 ) -> _RegistryTable:
@@ -1641,24 +1739,14 @@ def list_inference_methods(
         (see :class:`tengri.inference._strategy.BackendStatus`).
     """
     from tengri.inference._backend_registry import all_backends
-    from tengri.inference._strategy import resolve_status
 
     # Broken backends are listed only on explicit request. Offering a sampler
     # that returns R-hat ~ 3 in the same table as one that works is what let
     # users pick it on the strength of its speed (#1287).
-    out = []
-    for entry in all_backends(include_broken=tier == "broken"):
-        out.append(
-            {
-                "name": entry.name,
-                "kind": "inference_method",
-                "tier": entry.tier,
-                "short_doc": entry.short_doc,
-                "requires": list(entry.requires),
-                "status": resolve_status(entry, target).value,
-                "use": _usage_hint(entry.name, "inference_method"),
-            }
-        )
+    out = [
+        _inference_method_row(entry, target)
+        for entry in all_backends(include_broken=tier == "broken")
+    ]
     if tier:
         out = [m for m in out if m["tier"] == tier]
     return _RegistryTable(out)
@@ -1688,6 +1776,7 @@ def _menu_listers() -> tuple:
         list_dust_laws,
         list_dust_emission_models,
         list_sfh_models,
+        list_age_kernels,
         list_nebular_backends,
         list_xray_models,
         list_radio_models,
@@ -1695,6 +1784,31 @@ def _menu_listers() -> tuple:
         list_shock_models,
         list_igm_models,
     )
+
+
+def _menu_name_aliases() -> dict[str, tuple[str, callable]]:
+    """Map each menu's own name, in prose, to that menu.
+
+    Derived from :func:`_menu_listers` rather than hand-written, because a
+    hand-written copy is a second source of truth that drifts the day a menu
+    is added — the failure this module has already had twice (#1120, #1446).
+    ``list_age_kernels`` becomes ``"age kernels"`` and ``"age kernel"``, so a
+    new menu is searchable by its own name the moment it is registered.
+
+    This is deliberately separate from the hand-written concept synonyms in
+    :func:`search`: those map words a beginner invents ("extinction") onto a
+    menu, which cannot be derived from anything.
+    """
+    out: dict[str, tuple[str, callable]] = {}
+    for fn in _menu_listers():
+        stem = fn.__name__.removeprefix("list_")
+        plural = stem.replace("_", " ")
+        forms = {plural}
+        if plural.endswith("s"):
+            forms.add(plural[:-1])
+        for form in forms:
+            out[form] = (f"{fn.__name__}()", fn)
+    return out
 
 
 def describe(name: str) -> _DescribeRecord:
@@ -1758,6 +1872,17 @@ def describe(name: str) -> _DescribeRecord:
                 f"({_how(matches[0])}). The others: {others}."
             )
         return _DescribeRecord(record)
+
+    # The sweep above walks the *curated* menus, so it cannot see a name the
+    # menu hides by design: a ``tier="broken"`` backend, or an alias that
+    # rows under its canonical name. Both are still dispatchable, and this
+    # generic entry point must answer for them exactly as
+    # :func:`describe_inference_method` does (#1560).
+    from tengri.inference._backend_registry import lookup_backend
+
+    if lookup_backend(name) is not None:
+        return describe_inference_method(name)
+
     raise KeyError(
         f"Unknown name '{name}'.  Try tengri.summary() for a menu of every "
         "core class, AGN model, dust law, SFH variant, nebular backend, "
@@ -1882,12 +2007,39 @@ def _recipe_data_status(kwargs: dict) -> str:
 
 
 def _parse_ssp_requirement(doc: str) -> str:
-    """Pull the ``**SSP requirement:**`` value from a recipe docstring."""
-    for line in doc.splitlines():
+    """Pull the ``**SSP requirement:**`` value from a recipe docstring.
+
+    The requirement is a *paragraph*, not a line. Numpydoc wraps it at the
+    line limit, and every docstring puts the label first and the consequence
+    second — so a first-line-only read keeps ``bare-stellar (Cue nebular
+    backend; see`` and drops ``doing so raises CueWNESSPError``. Read to the
+    paragraph break instead, matching how ``short_doc`` is derived just above.
+    """
+    lines = doc.splitlines()
+    for i, line in enumerate(lines):
         if "SSP requirement" in line:
             after = line.split(":", 1)[1] if ":" in line else line
-            return after.replace("*", "").strip()
+            parts = [after]
+            for cont in lines[i + 1 :]:
+                # A blank line ends the paragraph; a new ``**Field:**`` marker
+                # ends it too, for docstrings that run fields together.
+                if not cont.strip() or cont.lstrip().startswith("**"):
+                    break
+                parts.append(cont)
+            return _plain_text(" ".join(p.strip() for p in parts))
     return "any"
+
+
+def _plain_text(text: str) -> str:
+    """Strip the reST inline markup a docstring carries but a table should not.
+
+    ``list_recipes()`` renders in a terminal, not in Sphinx, so ``:func:`x```
+    and ````x```` reach the user as literal punctuation. Dropping the roles and
+    the backticks leaves the prose the docstring author actually wrote.
+    """
+    out = re.sub(r":(?:func|meth|class|mod|data|attr|ref):`~?([^`]*)`", r"\1", text)
+    out = out.replace("``", "").replace("*", "")
+    return " ".join(out.split()).strip()
 
 
 def describe_recipe(name: str) -> _DescribeRecord:
@@ -2053,10 +2205,59 @@ def describe_nebular_backend(name: str) -> _DescribeRecord:
 
 
 def describe_inference_method(name: str) -> _DescribeRecord:
-    """Return the descriptor row for one inference backend (MAP / VI / NUTS / NSS / …)."""
-    return _describe_from_list(
-        name, list_inference_methods, "inference method", "list_inference_methods"
-    )
+    """Return the descriptor row for one inference backend (MAP / VI / NUTS / NSS / …).
+
+    Resolves any name the fitter dispatches: every tier — including
+    ``"broken"``, which :func:`list_inference_methods` hides by default
+    (#1287) — and every registered alias.
+
+    ``list`` and ``describe`` answer different questions. ``list`` asks
+    "what should I pick?", so it curates. ``describe`` asks "what is this
+    name?", so it must not: a name the fitter accepts is never "unknown".
+    Deriving this lookup from the curated listing reported six dispatchable
+    names as unknown (#1560) — the five broken backends, plus
+    ``"vi_nonlinear"``, a ``tier="primary"`` alias named in ``fit()``'s own
+    docstring. A confidently wrong answer is worse than a warning (#1446).
+
+    Parameters
+    ----------
+    name : str
+        A method name or alias, as passed to ``fit(method=...)``.
+
+    Returns
+    -------
+    _DescribeRecord
+        Fields: ``{name, kind, tier, short_doc, requires, status, use}``,
+        plus ``alias_of`` when ``name`` is an alias. Check ``tier`` before
+        acting on the result — ``"broken"`` backends resolve here but are
+        refused by ``Fitter.run`` without ``allow_unvalidated=True``.
+
+    Raises
+    ------
+    KeyError
+        If no backend is registered under ``name``.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.describe_inference_method("vi_nonlinear")["alias_of"]
+    'vi'
+    """
+    from tengri.inference._backend_registry import lookup_backend
+
+    entry = lookup_backend(name)
+    if entry is None:
+        from tengri.inference._backend_registry import _BACKENDS
+
+        known = sorted(_BACKENDS)
+        raise KeyError(
+            f"Unknown inference method '{name}'. Known names: {known}. "
+            "See list_inference_methods() for the full menu."
+        )
+    row = _inference_method_row(entry)
+    if name != entry.name:
+        row = {**row, "name": name, "alias_of": entry.name}
+    return _DescribeRecord(row)
 
 
 def suggest_parameters(
@@ -2254,10 +2455,19 @@ def search(query: str) -> _RegistryTable:
         "emission line": ("list_nebular_backends()", list_nebular_backends),
         "emission lines": ("list_nebular_backends()", list_nebular_backends),
     }
-    if q in _CONCEPT_ALIAS:
-        call, fn = _CONCEPT_ALIAS[q]
-        _display(f"  '{query}' → tengri.{call} (the menu these models live in)\n")
-        return fn()
+    # Concept synonyms are hand-curated; the menu's own name in prose is
+    # derived from _menu_listers(). Consult both, and try the query with
+    # hyphens normalized so "x-ray models" reaches list_xray_models() and
+    # "star-forming" keeps working. Concept synonyms win on a tie: they are
+    # the more specific statement of intent.
+    _spellings = (q, q.replace("-", " "), q.replace("-", ""))
+    _menu_names = _menu_name_aliases()
+    for table in (_CONCEPT_ALIAS, _menu_names):
+        for spelling in _spellings:
+            if spelling in table:
+                call, fn = table[spelling]
+                _display(f"  '{query}' → tengri.{call} (the menu these models live in)\n")
+                return fn()
 
     # ``kind`` and ``use`` are structural/internal — searching them gives
     # spurious 100%-of-table hits (e.g. "filter" matching every filter
