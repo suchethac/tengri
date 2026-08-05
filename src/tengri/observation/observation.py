@@ -23,6 +23,7 @@ from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectral_indices import SpectralIndexData
 from tengri.observation.spectroscopy import Spectroscopy
 from tengri.parameters.priors import Distribution
+from tengri.parameters.resolve import require_redshift
 from tengri.utils.scale import LOG10_4PI, apply_log10_scale
 
 _OBSERVATION_DEPRECATION_WARNED = False
@@ -768,7 +769,7 @@ class Observation:
         from tengri.observation.photometry import compute_flux_density_batch, project_photometry
         from tengri.observation.spectrum import project_spectrum
 
-        z = jnp.asarray(params.get("redshift", 0.0))
+        z = jnp.asarray(require_redshift(params, "observation.observation.predict"))
         if dl_cm is None:
             dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         else:
@@ -1178,7 +1179,7 @@ class Observation:
         else:
             total_lnu = total_phi
 
-        z = jnp.asarray(params.get("redshift", 0.0))
+        z = jnp.asarray(require_redshift(params, "observation.observation.predict_via_precomp"))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         log10_cos = jnp.log10(1.0 + z) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)
         phot_fnu = apply_log10_scale(total_lnu, log10_cos)
@@ -1352,7 +1353,9 @@ class Observation:
         # else: no dust LUT published — leave total_spec_lnu unattenuated.
 
         # Apply cosmology: observed F_ν = L_ν / (4π·d_L²) × (1 + z)
-        z = jnp.asarray(params.get("redshift", 0.0))
+        z = jnp.asarray(
+            require_redshift(params, "observation.observation.predict_spectrum_via_precomp")
+        )
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
         log10_cos = jnp.log10(1.0 + z) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)
         spec_fnu = apply_log10_scale(total_spec_lnu, log10_cos)

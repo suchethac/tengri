@@ -9,8 +9,11 @@ Legend:
 - **✓ works today** — the API exists and behaves as written.
 - **◆ proposed** — the shape this spec commits to; not yet built. (This file lives under `docs/superpowers/specs/`, a design-doc location, and legitimately names not-yet-built API.)
 
-**Tracking issues.** Status reconciled against `main` on 2026-07-26; the ✓/◆ markers
-throughout this document follow this table.
+**Tracking issues.** Status reconciled against `main` on 2026-08-05; the ✓/◆ markers
+throughout this document follow this table. Reconciliation is against **behavior on
+`main`**, not against issue-closure state — an issue can stay open on a residual while
+the API it describes is shipped and taught, and (as #1344 showed) a closed issue can
+leave half its spec unbuilt.
 
 | # | Title | Work item | Status |
 |---|---|---|---|
@@ -27,7 +30,8 @@ throughout this document follow this table.
 | [1319](https://github.com/suchethac/tengri/issues/1319) | Hierarchical as `ForwardModel(mode="hierarchical", shared=…)`; Population classes dissolve | W4 | ◆ two-track (decision 23): standardization a must; realistic fits two-step ([PR #1479](https://github.com/suchethac/tengri/pull/1479) ✓) |
 | [1321](https://github.com/suchethac/tengri/issues/1321) | Observation = pure instrument; introduce `Data` record | W5 | ✓ shipped |
 | [1395](https://github.com/suchethac/tengri/issues/1395) | `sfh_model="table"` slips past the fast-path guard → zero SFH, zero lines, no warning | W6 blocker | ✓ shipped (now raises) |
-| [1396](https://github.com/suchethac/tengri/issues/1396) | `Catalog.from_histories` + `simulate`: mock catalogs from simulation SFH/Z tables | W6 | ◆ open |
+| [1396](https://github.com/suchethac/tengri/issues/1396) | `Catalog.from_histories` + `simulate`: mock catalogs from simulation SFH/Z tables | W6 | ✓ shipped, round-trip test included (see §8.1 for residuals) |
+| [1522](https://github.com/suchethac/tengri/issues/1522) | Tabulated SFH silently dropped mass older than the SSP grid's oldest age | W6 defect | ✓ fixed (mass conserved; color approximation now warns) |
 
 ---
 
@@ -51,7 +55,7 @@ ForwardModel      ONE observed scene, one joint model. Combines SED + spatial +
       │  run many, independently
       ▼
 Catalog           MANY independent ForwardModel problems, vmapped/chunked.  ✓
-                  One noun, action verbs: .fit() ✓ / .predict() ✓ / .simulate() ◆
+                  One noun, action verbs: .fit() ✓ / .predict() ✓ / .simulate() ✓
 ```
 
 **Rule of thumb.** Eyeballing physics with no instrument → `SEDModel`. Anything you observe, fit, or that has non-trivial output shape → `ForwardModel`. Many independent galaxies → `Catalog`.
@@ -64,7 +68,7 @@ Catalog           MANY independent ForwardModel problems, vmapped/chunked.  ✓
 |---|---|---|---|---|
 | `SEDModel` | ✓ (rest-frame; standalone LUT photometry) | `sed.fit()` sugar → ForwardModel ✓ | one SED | the simple object; no observation required to exist |
 | `ForwardModel` | ✓ recommended | ✓ canonical | scalar → cube → summed → `(N, …)` | authoritative observation; `mode=` inferred or asserted ✓ |
-| `Catalog` ✓ | `.predict()` mocks ✓ · `.simulate()` ◆ | `.fit()` → `CatalogPosterior` ✓ | `(N, …)` | one noun; `CatalogFitter` is a deprecated alias |
+| `Catalog` ✓ | `.predict()` mocks ✓ · `.simulate()` ✓ | `.fit()` → `CatalogPosterior` ✓ | `(N, …)` | one noun; `CatalogFitter` is a deprecated alias |
 | `Fitter` | — | internal only | — | the cache-reuse mechanism; never taught |
 
 ---
@@ -276,8 +280,9 @@ post = cat.fit(method="mcmc_nuts", key=key,
 post["stellar_mass"]                                               # (N_galaxies,)
 
 mock = cat.predict(param_table, chunk_size=4096)                   # ✓ → (N, n_filters)
+Catalog.from_histories(...).simulate(lines=...)                    # ✓ sim SFH/Z tables, §8.1
 # future: cat.simulate(noise=..., key=...)                         # ◆ #1312 — noisy draws, SBI
-# future: Catalog.from_histories(...).simulate(lines=...)          # ◆ #1396 — sim SFH/Z tables, §8.1
+#                                                                  #   (refused today, not ignored)
 ```
 
 **Column matching ✓: by name, by default.** Filters have registry names, so table columns `sdss_r` / `sdss_r_err` match automatically; `flux_cols=`/`err_cols=` remain as explicit positional overrides (validated by count). The swapped-column silent failure dies. Censor flags via `censor_cols=`.
@@ -401,7 +406,7 @@ Preserved rules (NAMING_CONTRACT §4b): `predict()` takes `params` and nothing e
 
 **Shape contract for non-scalar scenes ◆:** accessors return the scene's natural shape — multi-population: summed by default, per-component via the existing `predict_*_components` surface (`forward_model.py:234` ✓); hierarchical: `(N, …)` with N from the params' leading axis; IFU: cube-shaped (detailed spec deferred with the spatial work). **Multi-population namespacing ◆:** parameters, priors, and `post.properties` keys use the dotted `"{pop}.{param}"` prefix, consistent with the `agn.L_bolometric` derived-state convention.
 
-### 8.1 Simulation catalogs — SFH/Z histories in, photometry + lines out ◆ ([#1396](https://github.com/suchethac/tengri/issues/1396))
+### 8.1 Simulation catalogs — SFH/Z histories in, photometry + lines out ✓ ([#1396](https://github.com/suchethac/tengri/issues/1396))
 
 The other direction of `simulate`: you already know each galaxy's star formation
 history, because a hydrodynamic simulation, a semi-analytic model, or an empirical
@@ -420,7 +425,7 @@ fwd = ForwardModel.build(
     approx=(WavePrecomp(catalog_z_range=(0.0, 3.0)), FeaturePrecomp()),
 )
 
-cat = Catalog.from_histories(                    # ◆
+cat = Catalog.from_histories(                    # ✓
     fwd,
     t_gyr    = t_gyr,                # (n_t,) shared grid, or (N, n_t)  [Gyr, cosmic time]
     sfr      = sfr,                  # (N, n_t)                         [Msun/yr]
@@ -429,14 +434,15 @@ cat = Catalog.from_histories(                    # ◆
     params   = {"dust_tau_v": tau},  # (N,) per-galaxy scalars
 )
 
-mock = cat.simulate(lines=("Halpha", "OIII_5007"), chunk_size=4096)   # ◆
+mock = cat.simulate(lines=("Halpha", "OIII_5007"), chunk_size=4096)   # ✓
 
 mock.photometry                  # (N, n_filters)  [erg/s/cm²/Hz]
 mock.lines["Halpha"]             # (N,)            [erg/s/cm²]
 mock.properties["stellar_mass"]  # (N,)
-mock.to_table()                  # parquet/FITS — the §9.3 table-OUT leg
+mock.to_table()                  # flat column dict, parquet/FITS-ready — the §9.3 table-OUT leg
 
-noisy = cat.simulate(..., noise=obs.noise, key=key)   # ◆ composes with #1312
+noisy = cat.simulate(..., noise=obs.noise, key=key)   # ◆ #1312 — raises today, does not
+                                                      #   silently return a noiseless mock
 ```
 
 `from_histories` is a classmethod, not a new noun — the result **is** a `Catalog`, so
@@ -463,19 +469,81 @@ compile** — the §9.4 compile-reuse contract, applied to histories instead of 
 scalar parameters (§9.1). Fixed `n_t` ⇒ one compile signature; ragged histories are
 padded or shape-bucketed via `n_pad`, exactly as ragged catalogs are.
 
-**Not yet true.** Four gaps, all measured ([#1396](https://github.com/suchethac/tengri/issues/1396)):
-`Catalog.predict` reads only `spec.free_params`, so the history arrays are never seen;
-its `np.stack(…, axis=1)` cannot mix `(N,)` scalars with `(N, n_t)` histories; it
-returns photometry only, with no line channel; and the `FeaturePrecomp` weight path
-used to silently return a **zero** SFH for `sfh={'type':'table'}`
+**Shipped.** The four gaps this section used to list are closed
+([#1396](https://github.com/suchethac/tengri/issues/1396)). For the record, they were:
+`Catalog.predict` read only `spec.free_params`, so the history arrays were never seen;
+its `np.stack(…, axis=1)` could not mix `(N,)` scalars with `(N, n_t)` histories; it
+returned photometry only, with no line channel; and the `FeaturePrecomp` weight path
+silently returned a **zero** SFH for `sfh={'type':'table'}`
 ([#1395](https://github.com/suchethac/tengri/issues/1395)) — photometry still looked
-correct, which made the zero lines and zero stellar mass harder to spot.
+correct, which made the zero lines and zero stellar mass harder to spot. All four are
+replaced by one uniform column channel (`name → array` with any trailing shape) plus a
+guard that now raises. The one-compile claim is asserted by a test that measures
+`jit(vmap(...))` against bare `vmap` (236 dispatches vs 1) and fails if the `jit` is
+removed.
 
-The fourth gap is **closed**: `compute_joint_weights` now refuses a tabulated SFH
-with a reason, so the fast path falls back to the exact forward instead of laundering
-a zero. That makes the failure loud; it does **not** yet make the fast path *serve*
-tabulated histories, which is the W6 work proper. The exact forward handles tabulated
-histories correctly today; it is the fast path and the catalog seam that need building.
+**Closed since this section was written** ([#1538](https://github.com/suchethac/tengri/pull/1538),
+on `main` as `547cee357`). Both are recorded rather than deleted, because the second
+explains how the first shipped green:
+
+- **A tabulated SFH silently dropped mass older than the SSP grid's oldest age bin**
+  ([#1522](https://github.com/suchethac/tengri/issues/1522), closed) — the one that
+  mattered most here, because a simulation history starts at t≈0 by construction. With
+  a PARSEC/MILES SSP (oldest bin 12.589 Gyr) a constant SFH lost 8.8% of its mass at
+  z=0 and an exponentially-declining one lost **46%**; the photometry carried the same
+  factor. The CIC integrand now extends past the oldest template, so that mass lands
+  on it instead of falling off the end: `stellar_mass / table integral` = 0.99998244 on
+  a grid short enough to truncate, *identical* to a grid where nothing falls off. What
+  remains is a **color** approximation — those stars wear the oldest template's
+  spectrum, no older one existing — announced by `SFHBeyondSSPGridWarning` rather than
+  left silent. `age_kernel='dsps'` still truncates, its histogram kernel having no bin
+  past the last template, and says so.
+- **The parametric round-trip test is now on `main`** — #1396's acceptance list called
+  for "a tabulated history that reproduces a parametric SFH gives photometry matching
+  the parametric model's — the test that proves the histories are actually being used",
+  and it was the one criterion never written. Every test shipped before it compared
+  table against table, on a *synthetic* SSP, with ratio-only assertions. Truncation is
+  a common factor and a ratio divides it out, which is exactly how the defect above
+  passed 33 of them. Measured agreement between the arms: 1.9e-4 in color, 1.8e-5 in
+  formed mass, with the resolving power pinned by a negative control rather than
+  assumed (τ×2 moves the color by 9.2e-2, 92× the tolerance).
+
+  Writing it surfaced a second blind spot in the fixture, not the code: `synthetic_ssp_wide`
+  is **separable** — `base(wave) * f(age) * g(met)` — so its wavelength shape is identical
+  at every age and the SED shape cannot respond to the SFH at all. Doubling τ moves its
+  colors by 3.6e-14. Any color assertion written against that fixture is unfalsifiable,
+  which is a trap for more than this section.
+
+**Residuals — what is still not true.** Measured on `main`, 2026-08-05:
+
+1. `simulate(lines=…)` accepts only the five `DESI_LINES` names, and the error advising
+   "pass `LineDef` objects directly" raises that same error when you do — `by_name` is
+   keyed by string. [OII]λ3727 and Lyα are unreachable.
+2. `simulate()` hardcodes `fast=True` with no `fast=` parameter, so a model outside the
+   fast path's supported chain cannot simulate lines at all — not even slowly. Refusing
+   to degrade silently is right; having no escape hatch is not.
+3. `_map_chunks` crashes with bare `ZeroDivisionError` / `IndexError` on `N=0` (an
+   ordinary empty selection cut) and on `chunk_size ≤ 0`, below the domain-error
+   standard the rest of the file holds to.
+4. #1396 records that `compute_joint_weights` supports **delta metallicity only**, so
+   the `met={'type':'table'}` in the example above falls back to the exact forward —
+   correct, but it forfeits the fast line path that motivates the example.
+
+The last of the four original gaps — the silent zero — is **closed twice over**.
+`compute_joint_weights` now refuses a
+tabulated SFH with a reason rather than laundering a zero, which made the failure loud
+— and the window-LUT line path then went further and *serves* tabulated histories
+outright. Measured on `main` 2026-08-03, `measure_line_fluxes(params, defs, fast=True)`
+against a `sfh={'type':'table'}` model agrees with the exact forward to **1 ULP**
+(`max |fast/exact − 1| = 2.2e-16`) on Hα and [OIII]λ5007. `_require_feature_fast_eligible`
+gates on the *component chain*, not the SFH type, so a table is eligible wherever a
+parametric SFH is.
+
+One asymmetry survives, and it is why `Catalog._prediction_columns` exists: the fast
+path reads fixed scalars (`met_logzsol`, `dust_tau_bc`, …) straight out of `params` and
+raises `KeyError` on a free-params-only dict that `fast=False` accepts happily. The
+catalog merges `spec.get_fixed_values()` so every channel sees a complete dict; a
+direct caller has to do it themselves, and nothing says so.
 
 ---
 
@@ -562,7 +630,7 @@ Implementation ordering, absorbed-backlog mapping, and the near-term method focu
 | **W3** | `forward.prewarm()`; retire `lean` → surface-derived policy | ✓ shipped (Catalog sweep **withdrawn**, not pending — [#1344](https://github.com/suchethac/tengri/issues/1344) closed; see §W3 above) | [#1318](https://github.com/suchethac/tengri/issues/1318) |
 | **W4** | hierarchical: `mode="hierarchical"` + `shared=`, data at fit, scaling contract; Population classes dissolve | ◆ two-track (decision 23): Track A standardization a must; Track B two-step estimator first instance merged ([PR #1479](https://github.com/suchethac/tengri/pull/1479)) | [#1319](https://github.com/suchethac/tengri/issues/1319) |
 | **W5** | Observation razor + `Data` record + `mode=` validation | ✓ shipped | [#1321](https://github.com/suchethac/tengri/issues/1321) |
-| **W6** | simulation catalogs: `Catalog.from_histories` + `simulate(lines=…)`, LUT-fast (§8.1) | ◆ | [#1396](https://github.com/suchethac/tengri/issues/1396), [#1395](https://github.com/suchethac/tengri/issues/1395) |
+| **W6** | simulation catalogs: `Catalog.from_histories` + `simulate(lines=…)`, LUT-fast (§8.1) | ✓ shipped, including the parametric round-trip test whose absence had let [#1522](https://github.com/suchethac/tengri/issues/1522) through (see §8.1 for the four remaining residuals) | [#1396](https://github.com/suchethac/tengri/issues/1396), [#1395](https://github.com/suchethac/tengri/issues/1395), [#1522](https://github.com/suchethac/tengri/issues/1522) |
 | — | per-axis `FeaturePrecomp.n_grid` | ✓ shipped | [#1311](https://github.com/suchethac/tengri/issues/1311) |
 | — | flexibly-summarized `CatalogPosterior` | ✓ shipped | [#1313](https://github.com/suchethac/tengri/issues/1313) |
 | — | `simulate` for SBI (the noise draw) | ◆ future | [#1312](https://github.com/suchethac/tengri/issues/1312) |

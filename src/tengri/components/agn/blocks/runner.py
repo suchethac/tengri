@@ -138,6 +138,7 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
 )
 
 #: Speed of light in Å × Hz, used for L_λ → L_ν conversion.
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.utils.physics_constants import C_AA as C_AA_PER_S
 
 #: Selector keys recognized by the runner. Match the canonical pipeline order.
@@ -722,7 +723,7 @@ agn_torus_block, agn_attenuation_block : str
 
 def composable_agn_l_nu(
     wavelength: Array,
-    agn_log_lbol: float = 45.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_lum_ratio: float = 1.0,
     agn_disc_block: str = "none",
     agn_nlr_block: str = "none",
@@ -746,7 +747,8 @@ def composable_agn_l_nu(
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
     agn_log_lbol : float, optional
-        :math:`\log_{10}(L_{\rm bol}/L_\odot)`. Default ``45.0``.
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`. Defaults to the declared
+        ``agn_log_lbol`` default.
     agn_lum_ratio : float, optional
         Overall AGN fraction scaling [dimensionless]. Default ``1.0``.
     agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \

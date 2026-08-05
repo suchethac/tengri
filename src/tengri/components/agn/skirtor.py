@@ -34,6 +34,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri._deprecated import deprecated_alias
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
 )
@@ -287,7 +288,7 @@ def _load_skirtor_grid_data(grid_path: str) -> SKIRTORGrid:
 def _skirtor_grid_sed(
     wavelength: jnp.ndarray,
     grid_data: SKIRTORGrid,
-    agn_log_lbol: float = 10.0,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_tau_skirtor: float = 7.0,
     agn_p_skirtor: float = 1.0,
     agn_q_skirtor: float = 1.0,
@@ -406,7 +407,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
 
     def skirtor_grid(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 10.0,
+        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
         agn_tau_skirtor: float = 7.0,
         agn_p_skirtor: float = 1.0,
         agn_q_skirtor: float = 1.0,
@@ -529,7 +530,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
 
     def skirtor_components(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 10.0,
+        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
         agn_tau_skirtor: float = 7.0,
         agn_p_skirtor: float = 1.0,
         agn_q_skirtor: float = 1.0,

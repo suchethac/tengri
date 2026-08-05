@@ -128,12 +128,13 @@ def test_cloudy_refuses_flagged_ssp(monkeypatch):
 
 
 def test_known_catalog_autodownload_is_reachable(tmp_path, monkeypatch):
-    """A missing known-catalog basename must trigger the auto-fetch, not raise.
+    """``download=True`` on a missing known-catalog basename must fetch, not raise.
 
     Regression: #1015 moved the (improved) FileNotFoundError ahead of the
     auto-download block, making the fetch unreachable for every missing
     file — a silent behavioral break invisible to tests that only pin the
-    error message.
+    error message.  The opt-in is what changed in v0.9 (#1548 follow-up);
+    the ordering this pins did not, so the branch is still reachable.
     """
     calls: list[str] = []
 
@@ -145,9 +146,8 @@ def test_known_catalog_autodownload_is_reachable(tmp_path, monkeypatch):
 
     import tengri._data_setup as data_setup
 
-    monkeypatch.delenv("TENGRI_DISABLE_SSP_AUTODOWNLOAD", raising=False)
     monkeypatch.setattr(data_setup, "download_ssp", fake_download)
-    ssp = load_ssp_data(str(tmp_path / "fsps_prsc_miles_chabrier.h5"))
+    ssp = load_ssp_data(str(tmp_path / "fsps_prsc_miles_chabrier.h5"), download=True)
     assert calls, "auto-download was never attempted for a known catalog basename"
     assert ssp.ssp_flux.shape[0] > 0
 

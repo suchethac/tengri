@@ -360,6 +360,10 @@ def test_radio_powerlaw_actually_reads_L_ir_when_published():
     comp = RadioPowerLawSEDComponent()
     wave = jnp.geomspace(1e6, 1e9, 64)  # radio wavelengths (Å)
     params = {
+        # Observed-frame emission needs a redshift; the framework supplies one,
+        # so a direct apply() must too. Explicit rather than defaulted, so the
+        # test names the frame it asserts in (#1432).
+        "redshift": jnp.asarray(0.0),
         "radio_q_ir": jnp.asarray(2.64),
         "radio_alpha_sf": jnp.asarray(0.8),
         "radio_loudness": jnp.asarray(0.0),

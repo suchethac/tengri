@@ -61,14 +61,25 @@ differently-wrong cross-check.
 ## 2. Where it stands
 
 > **RESOLVED 2026-08-05 — the N ceiling below was a fitting bug, not a
-> statistical one.** The bank was fit at `--n-map-steps 4000`, which leaves ~14%
-> of galaxies at a **non-stationary** point; `run_laplace` then inverted the
+> statistical one.** The bank was fit at `--n-map-steps 4000`, which leaves
+> galaxies at a **non-stationary** point; `run_laplace` then inverted the
 > Hessian there and returned a far-too-narrow posterior with nothing raised.
-> Refitting the N=64 bank at 40 000 steps repairs **9 of 9** collapsed fits and
-> σ recovers to **0.743–0.812** (truth 0.75) with no railing. §4i-bis has the
-> measurement; the tables below are the pre-fix record. **τ remains
-> unidentified at z≈0.1 — that part is a real information limit (§4b) and is
-> unchanged.**
+> Refitting with the MAP converged removes the railing entirely and **σ covers
+> truth at every N from 4 to 128** (§4i-ter). The tables below are the pre-fix
+> record.
+>
+> **τ, however, is now a sharper problem than this document has been calling
+> it.** "Unidentified — it reads the prior" is no longer accurate: on the
+> converged bank at N=1024 τ is **11.5–13.7 Myr** against a truth of 150 —
+> excluding truth and tightening with N. That is a **biased** estimator, not an
+> uninformative one. σ carries a smaller version of the same problem (~3.7%
+> high, missing at N ≥ 256). Both width-scaling slopes PASS, so **pooling works
+> mechanically and converges to the wrong point.**
+>
+> §4i-ter has the full curve and, more usefully, the elimination: the MAP, the
+> Gaussian approximation, weight degeneracy, collapsed ξ posteriors and the
+> fields' own correlation structure are all now excluded **by measurement**.
+> What is left is the estimator's reading of the fields.
 
 ### Works
 
@@ -936,6 +947,277 @@ rail and σ covers truth, matching the exclusion result.
 > cache, the first NUTS batch, and this). In all three `n_divergent` was **0**.
 > **A zero divergence count is equally consistent with a sampler that took no
 > steps at all.**
+
+---
+
+## 4i-ter. The converged bank — σ is fixed, and τ is BIASED, not unidentified
+
+The whole bank refit with `run_laplace` escalating `n_map_steps` while the fit
+reports it is not at a mode (`--max-map-escalations`, tripling up to 27×). This
+supersedes the flat `40000` of §4i-bis: 10× was one bank's answer, not a rule.
+
+**Per-galaxy, before any pooling** (138 galaxies):
+
+| `n_map_steps` used | galaxies | share |
+|---|---|---|
+| 4 000 (converged first try) | 63 | 45.7% |
+| 12 000 | 21 | 15.2% |
+| 36 000 | 51 | 37.0% |
+| 108 000 | 3 | 2.2% |
+
+Newton decrement: median 0.0060, **max 0.091 — none above the 0.1 tolerance**.
+ξ covariance total: median 13.69, **min 11.96 — none below 6.0**, against 9 of
+the first 64 before.
+
+**54.3% of galaxies needed escalation.** §4h's ξ-spectrum flag found ~14%, so
+that flag was a proxy for the worst tail, not a census of the defect — which
+is what "the failure is a continuum, not a category" means quantitatively. Any
+future claim of the form "X% of fits are affected" should be read as "X% were
+bad enough for my chosen threshold to notice."
+
+### σ: the railing is gone; a small high bias may remain
+
+| N | σ 68% — pre-fix | σ 68% — converged | τ 68% Myr (truth 150) | ESS |
+|---|---|---|---|---|
+| 4 | 0.692–0.930 ok | 0.680–0.910 ok | 11.5–28.1 | 63.9 |
+| 8 | 0.699–0.894 ok | 0.693–0.874 ok | 11.6–27.4 | 78.8 |
+| 16 | 0.757–0.944 | 0.740–0.875 ok | 11.9–27.0 | 60.1 |
+| 32 | 0.753–0.918 | 0.715–0.816 ok | 12.0–25.4 | 53.9 |
+| 64 | **0.958–0.995 MISS** | **0.741–0.813 ok** | 13.2–25.6 | 65.8 |
+| 128 | **0.970–0.996 MISS** | **0.741–0.795 ok** | 12.5–20.2 | 53.9 |
+| 256 | **0.985–0.997 MISS** | **0.765–0.803 MISS** | 12.5–17.7 | 45.0 |
+| 512 | **0.986–0.997 MISS** | **0.771–0.798 MISS** | 11.2–14.5 | 30.7 |
+| 1024 | **0.986–0.997 MISS** | **0.768–0.789 MISS** | 11.5–13.7 | 30.5 |
+
+σ slope **−0.439 ± 0.007**, τ slope **−0.373 ± 0.050** — both PASS the
+width-scaling gate. **Pooling works mechanically; it converges to the wrong
+point.** That is the one-line summary of this whole section: the widths shrink
+as ~1/√N exactly as they should, around a center that is not truth.
+
+The railing that defined §2's "N ceiling" is gone — σ moves from 0.96–0.99 to
+0.74–0.79 — and σ covers truth at N = 4…128.
+
+**It misses at N=256, 512 and 1024**, converging on **~0.778, about 3.7%
+high**. At N=1024 truth sits 0.018 outside a 0.021-wide interval. That is the
+signature of a *biased but consistent* estimator: coverage survives while the
+interval is wide enough to swallow the bias, then fails as pooling tightens it.
+
+τ misses at **all nine** N, converging on ~12.6 Myr against a truth of 150.
+
+> ⚠ **Do not score this as "two misses in eight trials".** The N values are
+> nested subsets of the *same* galaxies, so they are not independent draws and
+> no binomial argument applies. What makes it convincing is the *convergence on
+> a fixed wrong value*: a sampling fluctuation does not tighten around 0.784,
+> a bias does. The **magnitude** still rests on one realization — coverage
+> across ≥3 realizations is acceptance criterion 6 and remains unrun — so quote
+> the direction and the mechanism, not "4.5%" as a calibrated number.
+
+An earlier revision of this section called the single N=256 miss "suggestive,
+not conclusive" and said not to quote a bias at all. N=512 supersedes that.
+
+### τ: the correction this document owes
+
+**"τ is unidentified — it reads the prior" is no longer accurate**, and it was
+the reading this handoff carried from §4b through §4i-bis. On the converged
+bank τ *tightens* with N — upper bound 28.1 → 20.2, slope **−0.191 ± 0.050**
+excluding zero — converging on **~15 Myr against a truth of 150**.
+
+An unidentified parameter returns the prior width and covers truth by accident.
+This one **excludes truth and grows more confident with N**. That is a *biased*
+estimator, which is strictly worse than an uninformative one: pooling shrinks
+the interval around the wrong value instead of widening it.
+
+Note the sign flip that makes this legible. The pre-fix bank railed **high**
+(434–491 Myr at N=64); the converged bank converges **low** (12–20). Same
+estimator, opposite direction — so the old railing was never τ's behavior at
+all, it was the collapsed fits. What is left underneath is τ's real pathology,
+and it was hidden by a louder one the whole time.
+
+ESS is 54–79 throughout, so this is not weight degeneracy.
+
+### τ: confirmed biased, and it is an ESTIMATOR effect
+
+N=256 settled the bias-vs-plateau question: τ keeps tightening (upper bound
+28.1 → 20.2 → 17.7), slope **−0.262 ± 0.054**, excluding zero. **7 of 7 N
+values miss**, all in the same direction, by an order of magnitude. That is not
+the ~1/3 miss rate a 68% interval is entitled to.
+
+**The pooled answer lies far outside what any single galaxy supports.** With
+the interim τ prior at 10–500 Myr:
+
+| quantity | value |
+|---|---|
+| per-galaxy τ posterior medians | **222.9** (p16 151.1, p84 252.6) |
+| prior median, if uninformative | 255.0 |
+| truth | 150 |
+| **pooled τ, N=256** | **12.5–17.7** |
+
+The per-galaxy posteriors *are* mildly informative — pulled from 255 down
+toward truth. The pooled result then lands an order of magnitude below every
+one of them, in the bottom ~4% of the prior range.
+
+**Note the sign flip.** Pre-fix the pool railed to the **upper** corner
+(434–491 against a 500 bound); converged, it concentrates at the **lower**
+corner. Two opposite corner-seeking behaviors from one estimator — which
+retroactively explains a puzzle in the old data. §2's table shows τ apparently
+"covering truth at N=32" (61.9–153.4) *before* the fix. That was never
+recovery: it was **two errors of opposite sign partially canceling** at
+intermediate N. Fixing the fitting bug unmasked the estimator one.
+
+Two explanations are already excluded: ESS is 45–79 throughout, so it is not
+weight degeneracy, and every per-galaxy fit is now provably at its mode, so it
+is not §4i's non-stationary expansion.
+
+> A hierarchical posterior *can* legitimately concentrate outside the range of
+> the individual point estimates — it is a product of broad likelihoods whose
+> shapes may agree somewhere none of them peaks. So this is a strong, localized
+> anomaly, not yet a proven estimator bug. It is, however, now the **only**
+> open problem, and it is much better localized than "τ is unidentified".
+
+### Where τ's pull comes from — Laplace amplifies it ~2.8×, but does not create it
+
+Per-galaxy tilt toward the short-τ corner, at truth σ, for the 17 galaxies
+that have **both** a converged Laplace fit and an `mcmc_nuts` fit:
+
+    tilt_i = log Z_i(sigma_truth, 15 Myr) - log Z_i(sigma_truth, 150 Myr)
+
+| draws | mean tilt [nats/galaxy] | × N=256 |
+|---|---|---|
+| Laplace | **+1.044** | +267 |
+| `mcmc_nuts` | **+0.377** | +97 |
+
+Positive = prefers 15 Myr. **Both do.** The Gaussian approximation roughly
+triples the pull but is not its origin — so **refitting the bank with NUTS
+would cut τ's bias by about two-thirds and still rail low.** That is worth
+knowing before spending the compute: NUTS is ~600 s/galaxy against ~10 s.
+
+> ⚠ **The raw numbers from this probe were −1.258 and −1.925 — the opposite
+> sign.** `SharedGrid.log_prior` carries the **quadrature weight**, and the τ
+> grid is log-spaced, so that weight scales as τ: `log_prior(15) −
+> log_prior(150) = log(15/150) = −2.3026` exactly. Calling
+> `shared_log_posterior` once per galaxy adds it once per galaxy instead of
+> once, which for 17 galaxies is 16 spurious copies — enough to flip the sign.
+> A consistency check (sum of individual tilts vs the pooled surface at the
+> same nodes) caught it: −21.39 against +15.45, reconciling exactly as
+> 16 × (−2.3026). **Never read a per-galaxy `shared_log_posterior` value
+> without subtracting `grid.log_prior`.**
+
+### σ and τ are probably ONE displacement, not two biases
+
+| | σ | τ Myr |
+|---|---|---|
+| pooled mode (17 galaxies, full grid) | **0.832** | **11.4** |
+| truth | 0.750 | 150 |
+
+σ high *and* τ short is exactly the degeneracy direction of the OU kernel
+`(σ ln10)² exp(−|Δt|/τ)`: more variance with a shorter correlation time
+reproduces the same short-lag power. The σ misses at N=256/512 and τ's bias are
+plausibly the same slide along one ridge, which would explain why σ's error
+appears only once the interval is tight enough to resolve 4%.
+
+The two displacements are **σ +4.5%, τ −92%** on the converged bank at N=512.
+
+**Tested, and the simple ridge is refuted.** No combination is conserved
+between truth and the pooled mode:
+
+| combination | truth (0.750, 150) | mode (0.832, 11.4) | ratio |
+|---|---|---|---|
+| σ²/τ | 0.00375 | 0.06072 | 16× |
+| σ²τ | 84.38 | 7.89 | 10.7× |
+| σ² | 0.5625 | 0.6922 | 1.23× |
+
+So it is not a slide along a degeneracy. σ² is closest to invariant but still
+23% off.
+
+### Hypothesis (NOT yet measured): prior roughness in the unconstrained modes
+
+The grid geometry is suggestive. Node spacing on the 16-node age grid runs
+0.888 Myr to 6.49 Gyr, **median 75.9 Myr** — and the pooled τ of 11.4 Myr sits
+*below* that median, with 10 of 15 gaps exceeding it.
+
+A mechanism consistent with every number above, and with the fact that the pull
+**survives NUTS** (+0.377 nats/galaxy):
+
+1. Ten broadbands constrain `n_eff ≈ 3–4` of 16 field modes (§4b).
+2. The constrained modes are the **smooth**, low-frequency ones — that is what
+   broadband colors see.
+3. So the posterior shrinks the smooth modes toward their fitted values while
+   the ~12 rough modes stay at full prior amplitude.
+4. The reconstructed field is then **relatively richer in high-frequency power
+   than a genuine OU draw** at the same (σ, τ) — smooth part shrunk, rough part
+   not.
+5. The estimator infers τ from that roughness and reads the excess as a short
+   correlation time; σ rises to absorb the extra variance (+23% in σ²).
+
+Because this is a property of the *posterior* rather than of the Gaussian
+approximation, it would survive an exact sampler — which is what the Laplace
+vs NUTS tilts show (+1.044 vs +0.377: NUTS reduces it by ~64% but does not
+remove it).
+
+> **This is a hypothesis, not a measurement.** It is consistent with the tilt
+> decomposition, the non-conserved combinations, the grid spacing, and the
+> n_eff count — but none of those tests it directly. The falsifiable prediction
+> is that the bias scales with how *few* modes are constrained: adding bands or
+> spectroscopy should shrink it. The direct test is to pool fields whose
+> unconstrained modes have been re-drawn from the *fitted* OU rather than left
+> at prior amplitude, and see whether τ recovers.
+
+### …and the roughness hypothesis is REFUTED
+
+Tested directly with a normalized adjacent-node roughness
+`R = <Σ_j (m_{j+1} − m_j)²> / <var(m)>`, on 120 galaxies × 200 draws, against
+two matched synthetic controls on the same grid:
+
+| arm | median R | p16 | p84 |
+|---|---|---|---|
+| bank — reconstructed fields | **22.26** | 18.37 | 25.25 |
+| OU at each galaxy's own fitted (σ, τ) | 22.09 | 21.26 | 23.36 |
+| OU at truth (0.75, 150 Myr) | 22.37 | 21.68 | 22.96 |
+
+Ratios: bank/ou-fitted **1.007**, bank/ou-truth **0.995**. The reconstructed
+fields are *not* rougher than genuine OU draws. The hypothesis above is wrong.
+
+**The statistic is not blind — that was checked.** R against τ at σ=0.75,
+20 000 draws:
+
+| τ [Myr] | 5 | 15 | 50 | 150 | 500 | 2000 |
+|---|---|---|---|---|---|---|
+| R | 28.33 | 26.27 | 24.27 | 22.51 | 20.74 | 18.21 |
+
+Monotone over a 55% range, so a null result here means something. (Worth the
+check: R gave nearly the same value at τ=150 and τ=218, which looked like
+insensitivity until the full sweep showed otherwise.)
+
+### The contradiction this leaves, which is now the whole problem
+
+The bank's fields score R = 22.26, i.e. they look like OU draws at
+**τ ≈ 150–220 Myr** — consistent with their own fitted median of 218 Myr. A
+field at τ = 12 Myr would score ≈ 26.5, far outside the bank's p16–p84.
+
+**So the fields carry approximately the right correlation structure, and the
+estimator returns 11–14 Myr from them.**
+
+Every other explanation is now excluded by measurement:
+
+| suspect | status |
+|---|---|
+| non-stationary MAP (§4i) | excluded — all fits provably at a mode |
+| Laplace Gaussian approximation | amplifies ×2.8, but NUTS still tilts +0.377 |
+| importance-weight degeneracy | excluded — ESS 31–79 |
+| collapsed ξ posteriors (§4h) | excluded — 0 of 1024 below covtot 6.0 |
+| field correlation structure | **excluded — R matches OU at the fitted τ** |
+
+What remains is the estimator's own reading: the B2 ratio, `p_0`, or the
+density evaluation. That collides head-on with §4b ("B2 is sound given exact
+posteriors") and §4g ("`p_0` is correct to 0.005 nats"). **One of those
+premises must fail, and identifying which is the next step.** The most likely
+candidate is that §4b's analytic toy differs from the real case in a way that
+matters — it has no nuisance parameters, a linear projection, and an exactly
+Gaussian posterior, and the real case has none of those.
+
+Not purely a ridge effect, though: at **fixed** truth σ the pooled surface
+still prefers τ=15 over τ=150 by 19.4 nats. Both a genuine short-τ preference
+at fixed σ *and* a ridge that carries σ upward.
 
 ---
 
