@@ -367,38 +367,53 @@ jobs:
     #
     # WHAT "WALL CLOCK" MEANS HERE, because getting this wrong cost a revert.
     #
-    # The stage span is (time the slowest shard waits for a runner) + (how long it
-    # then runs). Both terms are real, and the FIRST one is not constant:
+    # The stage span is bounded below by BOTH of these terms:
     #
-    #   run           max concurrent  slowest  span   queue delay
-    #   30961248218        13          33.1m   33.1m     0.0
-    #   30961940073         8          14.7m   14.7m     0.0
-    #   30963578913        10          20.8m   21.5m     0.7
-    #   30961912638        13          28.4m   31.7m     3.3
-    #   30963846228         8          19.2m   25.1m     6.0
-    #   30961618196        10          27.5m   34.5m     6.9
-    #     -> queue delay across 6 runs: min 0.0, MEDIAN 3.3, max 6.9 min
+    #     span >= max( slowest shard , W / C )    W = total shard-minutes
+    #                                             C = concurrent runners
     #
-    # So in the normal case span ~= slowest shard + ~3 min, and splitting the
-    # slowest shard pays back roughly 1:1. Hence the splits below.
+    # Splitting shrinks the first term and GROWS the second — every extra job
+    # re-pays checkout, pip install and cache restore, ~2 min. So a split pays
+    # only while the slowest shard is the binding term, and turns neutral once
+    # W/C binds. Which term binds is the whole question, and it is measurable.
     #
-    # The trap, recorded because it is convincing and wrong. An A/B run on
-    # 2026-07-29 measured 8 shards (run 30438809385) against 11 (run 30462704147)
-    # and found the span UNCHANGED — 40.6 vs 40.7 min — even though the slowest
-    # shard fell from 22m41s to 16m48s. That result is real but unrepresentative:
-    # both runs happened to land in heavy account contention, with max concurrency
-    # 6 and queue delays of 17.9 and 23.9 min — outliers against the 0.0-6.9 min
-    # range above. Under a queue that deep the span is set by total work, and
-    # splitting only adds to it (+10 job-min: every extra job re-pays checkout,
-    # pip install and cache restore). n=2 in the worst regime was generalised into
-    # "sharding is not the lever", and the split was reverted on it. It should not
-    # have been. Sample the queue delay before drawing that conclusion again.
+    # Measured 2026-08-05 over six runs, scoped to the `test` matrix ONLY:
     #
-    # Net: splitting is ~1:1 when runners are free and roughly neutral when they
-    # are not, so it is worth doing — but it is bounded by the SLOWEST FILE, since
-    # `--dist=loadfile` pins a whole file to one worker. Reducing total work is the
-    # lever that has no ceiling. Two files are 13% of all test time (per-test
-    # numbers from run 30462704147, via `--durations=25`):
+    #   run           n   span    slowest     W    peakC   W/C     binds
+    #   30961248218   8   33.3m   33.1m     133m     7    19.0m   slowest
+    #   30961940073   8   21.8m   14.7m      50m     7     7.2m   slowest
+    #   30963578913   8   38.5m   33.1m     135m     8    16.9m   slowest
+    #   30961912638   8   38.6m   28.4m     116m     6    19.2m   slowest
+    #   30963846228   8   33.0m   24.9m     106m     7    15.1m   slowest
+    #   30961618196   8   37.9m   27.5m     114m     6    19.0m   slowest
+    #
+    # Six for six the SLOWEST SHARD binds, sitting 8-16 min above W/C. That gap
+    # is the headroom the splits below spend, and it also says where to stop:
+    # once the poles come down to ~W/C (~17-19 min here), further splitting buys
+    # nothing and starts adding setup cost.
+    #
+    # The trap, recorded because it is convincing and wrong. An A/B on 2026-07-29
+    # measured 8 shards (run 30438809385) against 11 (run 30462704147) and found
+    # the span unchanged — 50.0 vs 52.0 min — though the slowest shard fell from
+    # 22.7 to 16.8 min. That result is real, but in both runs W/C BOUND: effective
+    # concurrency collapsed to 4 and 6 under account contention, giving W/C of
+    # 25.8 and 18.9 min against slowest shards of 22.7 and 16.8. No split can help
+    # in that regime. n=2 drawn from it was generalised into "sharding is not the
+    # lever" and the split was reverted. It should not have been.
+    #
+    # HOW to measure, because the first correction here was itself mismeasured.
+    # An earlier version of this block quoted "max concurrent 13" for run
+    # 30961248218 — a run with 8 test shards. It had counted every job in the run,
+    # `integration` (42.8m) and lint/smoke/security/gallery included, and its
+    # span/slowest columns were off by up to 17 min for the same reason. Scope to
+    # the matrix whose shape you are arguing about, and take queue delay from the
+    # jobs API as `started_at` - `created_at` per job, never as a run-level
+    # difference. Both mistakes flatter the split; neither is on its side.
+    #
+    # Both terms are floored by the SLOWEST FILE, since `--dist=loadfile` pins a
+    # whole file to one worker. Reducing total work is the only lever with no
+    # ceiling. Two files are 13% of all test time (per-test numbers from run
+    # 30462704147, via `--durations=25`):
     #   tests/regression/test_issue_1134_ztable_accuracy.py  450 s
     #     (a 4-point sweep; the [800] point alone is 193 s)
     #   tests/unit/inference/test_cache_policy.py            364 s
