@@ -419,6 +419,11 @@ class Parameters:
         # A structural setting, not a free parameter; forwarded to
         # ``build_components(age_kernel=...)``. See #964.
         self.age_kernel = kwargs.pop("age_kernel", None)
+        # GP-field parameterization: which coordinates the field latent is
+        # sampled in. 1.0 = the shipped non-centered map; a < 1 moves amplitude
+        # dependence out of it. A structural setting, not a free parameter, and
+        # it must travel with the matching latent prior. See #1355.
+        self.field_centering = float(kwargs.pop("field_centering", 1.0))
         # MW foreground extinction screen — applied at the
         # observed-frame SED boundary, independent of host-galaxy dust
         # (#297). ``foreground_ebmv_mw=0.0`` is the no-op default.

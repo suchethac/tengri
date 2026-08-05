@@ -218,6 +218,7 @@ class InferenceContext:
         spec = self.fitter.spec
         free_names = self.fitter._free_names
         stochastic = spec.stochastic
+        field_centering = float(getattr(spec, "field_centering", 1.0))
 
         from tengri.inference.loss_functions import standardized_neg_log_prior
 
@@ -228,8 +229,21 @@ class InferenceContext:
             two disagreed on batched inputs: this one omitted the per-galaxy
             reduction and returned shape ``(n_gal,)`` against the scalar its
             docstring promised.
+
+            At ``field_centering < 1`` the field term is no longer standardized
+            and depends on sigma, so the amplitude is read from the same dict —
+            see :func:`standardized_neg_log_prior` (#1355).
             """
-            return -standardized_neg_log_prior(params_unbounded, free_names, stochastic=stochastic)
+            psd_sigma_dex = None
+            if field_centering != 1.0:
+                psd_sigma_dex = params_unbounded.get("sfh_field_psd_sigma")
+            return -standardized_neg_log_prior(
+                params_unbounded,
+                free_names,
+                stochastic=stochastic,
+                centering=field_centering,
+                psd_sigma_dex=psd_sigma_dex,
+            )
 
         return log_prior
 
