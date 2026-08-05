@@ -1040,12 +1040,11 @@ class SEDProperties(_CachedBase):
 
 # ── Emission line properties (lazy) ───────────────────────────────
 
-# Floor used in BPT and other line-ratio diagnostics to avoid log10(0)
-# when a line is undetected at this S/N. Set well below any realistic
-# flux (typical detection limits ≈ 1e-18 erg/s/cm²) so the floor never
-# affects detected lines but yields a finite, sortable −∞-equivalent
-# value for missing lines.
-_LINE_RATIO_FLOOR = 1e-50
+# ``_LINE_RATIO_FLOOR = 1e-50`` stood here until #1568, described as the floor
+# "used in BPT and other line-ratio diagnostics to avoid log10(0)". It had no
+# readers — the BPT ratios live in ``NebularSEDComponent`` and use that module's
+# own floor. Removed rather than made representable: a dead constant that is
+# also 0.0 in float32 is the worst of both, since it reads as a live guard.
 
 
 class LineProperties(_CachedBase):

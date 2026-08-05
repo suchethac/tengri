@@ -116,10 +116,12 @@ from tengri.components.nebular._shared import (
     _interp_index_weight,
     _qh_bilinear,
     compute_qh,
+    compute_qh_log10,
     render_nebular_lines,
     sanitize_qh_table,
 )
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
+from tengri.utils.scale import pow10
 
 # ── Ionizing-spectrum warnings ────────────────────────────────────
 
@@ -241,6 +243,14 @@ def load_cloudy_grid(filepath: str) -> CloudyGridData:
 # Vectorized over metallicity and age dimensions
 _compute_qh_grid = jax.vmap(
     jax.vmap(compute_qh, in_axes=(None, 0)),
+    in_axes=(None, 0),
+)
+
+#: Log-domain sibling. The linear form overflows float32 on healthy input
+#: (Q_H ~ 1e46 against a 3.4e38 ceiling), so the table is built from this and
+#: stored normalized (#1568).
+_compute_log_qh_grid = jax.vmap(
+    jax.vmap(compute_qh_log10, in_axes=(None, 0)),
     in_axes=(None, 0),
 )
 
@@ -454,6 +464,9 @@ class CloudyGridBackend:
 
         # Precompute Q_H table and young-age index from SSP if provided
         self._qh_table = None
+        #: log10 of the scalar ``_qh_table`` is normalized by (#1568); 0.0 means
+        #: "already in photons/s", which is the identity for a missing table.
+        self._log_qh_scale = 0.0
         self._young_idx = None  # indices of SSP age bins with nebular emission
         if ssp_data is not None:
             self._precompute_qh(ssp_data)
@@ -608,12 +621,26 @@ class CloudyGridBackend:
         ssp_wave = ssp_data.ssp_wave
         ssp_flux = ssp_data.ssp_flux  # (n_met, n_age, n_wave)
 
-        # Compute Q_H for each (met, age) — vectorized
-        qh_raw = _compute_qh_grid(ssp_wave, ssp_flux)
+        # Compute Q_H for each (met, age) — vectorized, in the log domain and
+        # stored normalized by its own peak (#1568). Q_H reaches ~1e46
+        # photons/s/Msun; the linear build overflowed every entry to ``inf`` in
+        # float32 and ``sanitize_qh_table`` then rewrote the lot to 0.0, so
+        # every CloudyGrid line and the whole nebular continuum came out
+        # silently zero. Same defect and same fix as CB19.
+        #
+        # Bilinear interpolation is linear, so interpolating ``table / scale``
+        # is exactly interpolating ``table`` and dividing — float64 unchanged.
+        log_qh_raw = _compute_log_qh_grid(ssp_wave, ssp_flux)
+        finite = jnp.isfinite(log_qh_raw)
+        self._log_qh_scale = float(jnp.max(jnp.where(finite, log_qh_raw, -jnp.inf)))
+        if not np.isfinite(self._log_qh_scale):
+            self._log_qh_scale = 0.0
         # Sanitize: replace Inf/NaN with 0 (can arise from SSP grids
         # with incomplete UV coverage or numerical overflow in the
         # ionizing photon integral).
-        self._qh_table = sanitize_qh_table(qh_raw, backend_name="CloudyGridBackend")
+        self._qh_table = sanitize_qh_table(
+            pow10(log_qh_raw - self._log_qh_scale), backend_name="CloudyGridBackend"
+        )
         # Store as JAX arrays so dynamic indexing works inside jax.grad/vmap
         self._qh_log_met = jnp.asarray(ssp_data.ssp_lgmet)
         self._qh_log_age = jnp.asarray(ssp_data.ssp_lg_age_gyr + 9.0)  # log(age/yr)
@@ -630,8 +657,13 @@ class CloudyGridBackend:
         # baked-in nebular emission (wNE) and predictions will be unreliable.
         very_young_mask = ssp_log_ages <= _YOUNG_LOG_AGE_MAX_WNE
         if very_young_mask.any():
-            qh_young = np.array(self._qh_table)[:, very_young_mask]
-            if float(qh_young.max()) < _WNE_QH_THRESHOLD:
+            # Compare in log space against the *absolute* Q_H — ``_qh_table`` is
+            # peak-normalized now, so its raw max is ~1 and would trip this
+            # threshold for every SSP (#1568).
+            log_qh_young = np.array(log_qh_raw)[:, very_young_mask]
+            qh_young_max = 10.0 ** float(np.nanmax(log_qh_young))
+            qh_young = np.array([qh_young_max])  # for the message below
+            if qh_young_max < _WNE_QH_THRESHOLD:
                 msg = (
                     "CloudyGridBackend received a wNE (with-Nebular-Emission) "
                     f"SSP. Max Q_H for bins younger than 10 Myr is "
@@ -802,7 +834,10 @@ class CloudyGridBackend:
             """Compute weighted line luminosity contribution for one SSP age bin."""
             qh_i = self._get_qh_at(log_z, log_age_i)
             log_lum_per_qh = _interp_lines(neb_logZ_gas, log_age_i, neb_logU)
-            return weight_i * qh_i * (10.0**log_lum_per_qh) * k_factor
+            # ``qh_i`` is peak-normalized and ``log_lum_per_qh`` is ~-46, so the
+            # scale goes back in *inside* the exponent: the sum is O(1) and
+            # neither 1e-46 nor 1e46 ever exists as a float32 array (#1568).
+            return weight_i * qh_i * pow10(log_lum_per_qh + self._log_qh_scale) * k_factor
 
         # vmap over young age bins only, then sum
         all_contribs = jax.vmap(_line_contrib_one_age)(
@@ -916,7 +951,9 @@ class CloudyGridBackend:
             """Compute weighted nebular continuum contribution for one SSP age bin."""
             qh_i = self._get_qh_at(log_z, log_age_i)
             log_cont_per_qh = _interp_cont(neb_logZ_gas, log_age_i, neb_logU)
-            return weight_i * qh_i * (10.0**log_cont_per_qh) * k_factor
+            # Same seam as the line channel: fold the Q_H normalization back
+            # in inside the exponent rather than materializing it (#1568).
+            return weight_i * qh_i * pow10(log_cont_per_qh + self._log_qh_scale) * k_factor
 
         all_contribs = jax.vmap(_cont_contrib_one_age)(
             young_ages, young_weights

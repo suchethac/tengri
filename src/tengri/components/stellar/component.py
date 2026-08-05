@@ -1173,6 +1173,7 @@ __all__ = [
     "StellarSEDComponentState",
 ]
 
+
 #: Smallest sub-band weight whose node wavelength ``sub_num / sub_phi`` still has
 #: a representable **derivative** (#1397). The value is a ratio of two tiny
 #: numbers and stays finite far below this, but the quotient rule needs
@@ -1183,7 +1184,22 @@ __all__ = [
 #: is still nonzero. Sub-bands under this floor carry no measurable flux, so
 #: their node falls back to the band effective wavelength exactly as an
 #: identically-zero sub-band does.
-_SUBBAND_LIVE_FLOOR: float = 1e-150
+def _subband_live_floor() -> float:
+    """The ``1e-150`` liveness floor above, made representable (#1568).
+
+    ``1e-150`` is far below float32's smallest subnormal (1.4e-45), so in
+    float32 ``jnp.abs(sub_phi) > _subband_live_floor()`` degenerated to
+    ``> 0.0`` — exactly the ``sub_phi != 0.0`` test the comment above explains
+    is insufficient, and which #1397 replaced this floor *because* it does not
+    protect the backward pass.
+
+    Evaluated at trace time so it resolves against the working dtype; float64
+    keeps ``1e-150`` unchanged.
+    """
+    from tengri.utils.scale import representable_floor
+
+    return representable_floor(1e-150)
+
 
 # Lyman limit — wavelengths below this contribute to the ionizing
 # photon rate (matches :mod:`tengri.components.nebular.ionizing_spectrum`).
@@ -2722,8 +2738,8 @@ class StellarSEDComponent:
                 # Sub-bands with no usable weight contribute nothing, but their
                 # node still goes through the 1/λ dust law — keep it finite and
                 # positive. The floor (not ``!= 0.0``) is what keeps the node's
-                # DERIVATIVE finite; see ``_SUBBAND_LIVE_FLOOR`` (#1397).
-                live = jnp.abs(sub_phi) > _SUBBAND_LIVE_FLOOR
+                # DERIVATIVE finite; see ``_subband_live_floor`` (#1397).
+                live = jnp.abs(sub_phi) > _subband_live_floor()
                 derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
                     live,
                     _flux_weighted_node(sub_num, jnp.where(live, sub_phi, 1.0)),
@@ -2824,8 +2840,8 @@ class StellarSEDComponent:
                 # Sub-bands with no usable weight cannot change the result, but
                 # their node still goes through the 1/λ dust law — keep it finite
                 # and positive. The floor (not ``!= 0.0``) is what keeps the
-                # node's DERIVATIVE finite; see ``_SUBBAND_LIVE_FLOOR`` (#1397).
-                live = jnp.abs(sub_phi) > _SUBBAND_LIVE_FLOOR
+                # node's DERIVATIVE finite; see ``_subband_live_floor`` (#1397).
+                live = jnp.abs(sub_phi) > _subband_live_floor()
                 derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
                     live,
                     _flux_weighted_node(sub_num, jnp.where(live, sub_phi, 1.0)),
@@ -2876,8 +2892,8 @@ class StellarSEDComponent:
                 # unscaled sums. Sub-bands with no usable weight keep a finite,
                 # positive node: a zero would go to inf through the 1/λ dust law.
                 # The floor (not ``!= 0.0``) is what keeps the node's DERIVATIVE
-                # finite; see ``_SUBBAND_LIVE_FLOOR`` (#1397).
-                rb_live = jnp.abs(rb_phi) > _SUBBAND_LIVE_FLOOR
+                # finite; see ``_subband_live_floor`` (#1397).
+                rb_live = jnp.abs(rb_phi) > _subband_live_floor()
                 derived_overrides["stellar_restband_subband_waves_precomp"] = jnp.where(
                     rb_live,
                     rb_num / jnp.where(rb_live, rb_phi, 1.0),

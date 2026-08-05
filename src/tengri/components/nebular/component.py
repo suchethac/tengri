@@ -864,7 +864,24 @@ class NebularSEDComponent:
 # Lines group property registration (Phase 1B)
 # ─────────────────────────────────────────────────────────────────────
 
-_LINE_RATIO_FLOOR = 1e-300  # Floor for safe division in ratios
+
+def _line_ratio_floor() -> float:
+    """The guard floor these line ratios divide by, made representable (#1568).
+
+    ``1e-300`` is far below float32's smallest subnormal (1.4e-45), so in
+    float32 every ``jnp.maximum(x, _line_ratio_floor())`` below was
+    ``jnp.maximum(x, 0.0)`` — the floor did not clamp, and a dark line divided
+    by another dark line gave ``0/0 = NaN`` rather than the finite ratio the
+    clamp exists to produce.
+
+    Evaluated at trace time, not import time: ``representable_floor`` resolves
+    against the *working* dtype, so a module-level constant computed once at
+    import would be pinned to whichever dtype happened to be active then.
+    float64 keeps ``1e-300`` exactly.
+    """
+    from tengri.utils.scale import representable_floor
+
+    return representable_floor(1e-300)
 
 
 def _line_luminosity_helper(state, params, line_key):
@@ -952,7 +969,7 @@ def _bpt_nii_fn(state, params):
     nii_6584 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["nii_6584"])
     halpha = extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"])
     return jnp.log10(
-        jnp.maximum(nii_6584, _LINE_RATIO_FLOOR) / jnp.maximum(halpha, _LINE_RATIO_FLOOR)
+        jnp.maximum(nii_6584, _line_ratio_floor()) / jnp.maximum(halpha, _line_ratio_floor())
     )
 
 
@@ -973,7 +990,7 @@ def _bpt_sii_fn(state, params):
     halpha = extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"])
     sii_total = sii_6717 + sii_6731
     return jnp.log10(
-        jnp.maximum(sii_total, _LINE_RATIO_FLOOR) / jnp.maximum(halpha, _LINE_RATIO_FLOOR)
+        jnp.maximum(sii_total, _line_ratio_floor()) / jnp.maximum(halpha, _line_ratio_floor())
     )
 
 
@@ -992,7 +1009,7 @@ def _o3hb_fn(state, params):
     oiii_5007 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_5007"])
     hbeta = extract_line_luminosity(line_waves, line_lums, KEY_LINES["hbeta"])
     return jnp.log10(
-        jnp.maximum(oiii_5007, _LINE_RATIO_FLOOR) / jnp.maximum(hbeta, _LINE_RATIO_FLOOR)
+        jnp.maximum(oiii_5007, _line_ratio_floor()) / jnp.maximum(hbeta, _line_ratio_floor())
     )
 
 
@@ -1014,7 +1031,7 @@ def _r23_fn(state, params):
     hbeta = extract_line_luminosity(line_waves, line_lums, KEY_LINES["hbeta"])
     numerator = oii + oiii_4959 + oiii_5007
     return jnp.log10(
-        jnp.maximum(numerator, _LINE_RATIO_FLOOR) / jnp.maximum(hbeta, _LINE_RATIO_FLOOR)
+        jnp.maximum(numerator, _line_ratio_floor()) / jnp.maximum(hbeta, _line_ratio_floor())
     )
 
 
@@ -1033,7 +1050,7 @@ def _o32_fn(state, params):
     oiii_5007 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_5007"])
     oii = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oii"])
     return jnp.log10(
-        jnp.maximum(oiii_5007, _LINE_RATIO_FLOOR) / jnp.maximum(oii, _LINE_RATIO_FLOOR)
+        jnp.maximum(oiii_5007, _line_ratio_floor()) / jnp.maximum(oii, _line_ratio_floor())
     )
 
 
@@ -1051,7 +1068,7 @@ def _balmer_decrement_fn(state, params):
     line_lums = jnp.asarray(derived["line_lums"])
     halpha = extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"])
     hbeta = extract_line_luminosity(line_waves, line_lums, KEY_LINES["hbeta"])
-    return halpha / jnp.maximum(hbeta, _LINE_RATIO_FLOOR)
+    return halpha / jnp.maximum(hbeta, _line_ratio_floor())
 
 
 from tengri.forward.properties import Property, register_properties

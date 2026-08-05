@@ -15,9 +15,28 @@ import jax.numpy as jnp
 from tengri.inference._sample_utils import _mean_params
 from tengri.inference.likelihoods.gaussian import standardized_residual
 
-# CG convergence constants matching NIFTy (6 * machine epsilon / tiny).
-_EPS_F64 = 6.0 * jnp.finfo(jnp.float64).eps
-_TINY_F64 = 6.0 * jnp.finfo(jnp.float64).tiny
+
+def _cg_eps() -> float:
+    """CG relative-tolerance floor, ``6 * eps`` of the **working** dtype.
+
+    NIFTy's constant, but resolved against the dtype actually in use rather
+    than pinned to float64 (#1568). float64's ``6 * eps`` is 1.33e-15; asking a
+    float32 solve (``eps`` = 1.19e-7) to reach that is asking for a tolerance
+    eight decades below its own resolution, so the criterion is unreachable and
+    the solver runs to its iteration cap instead of converging.
+    """
+    return 6.0 * float(jnp.finfo(jnp.result_type(float)).eps)
+
+
+def _cg_tiny() -> float:
+    """CG absolute-residual floor, ``6 * tiny`` of the **working** dtype.
+
+    float64's ``6 * tiny`` is 1.335e-307, which is **0.0** in float32 — so
+    ``(gamma >= 0.0) & (gamma <= _cg_tiny())`` degenerated to ``gamma == 0.0``
+    and the "residual is numerically zero, stop" branch fired only on an exact
+    zero (#1568).
+    """
+    return 6.0 * float(jnp.finfo(jnp.result_type(float)).tiny)
 
 
 def _cg_solve(
@@ -128,7 +147,7 @@ def _cg_solve(
         r_step = r - q * alpha
         r = jnp.where((i % 20 == 0) & (info < -1), r_reset, r_step)
         gamma = jnp.dot(r, r)
-        info = jnp.where((gamma >= 0.0) & (gamma <= _TINY_F64) & (info != -1), jnp.int32(0), info)
+        info = jnp.where((gamma >= 0.0) & (gamma <= _cg_tiny()) & (info != -1), jnp.int32(0), info)
         if norm_ord == 1:
             r_norm = jnp.sum(jnp.abs(r))
         else:
@@ -142,7 +161,7 @@ def _cg_solve(
         energy = jnp.dot((r - b) / 2, pos)
         energy_diff = prev_energy - energy
         info = jnp.where(
-            energy_diff < -_EPS_F64 * jnp.abs(energy),
+            energy_diff < -_cg_eps() * jnp.abs(energy),
             jnp.where(info < -1, i, info),
             info,
         )
