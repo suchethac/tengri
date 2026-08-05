@@ -968,7 +968,7 @@ is what "the failure is a continuum, not a category" means quantitatively. Any
 future claim of the form "X% of fits are affected" should be read as "X% were
 bad enough for my chosen threshold to notice."
 
-### σ: fixed at every N
+### σ: the railing is gone; a small high bias may remain
 
 | N | σ 68% — pre-fix | σ 68% — converged | τ 68% Myr (truth 150) | ESS |
 |---|---|---|---|---|
@@ -978,10 +978,23 @@ bad enough for my chosen threshold to notice."
 | 32 | 0.753–0.918 | 0.715–0.816 ok | 12.0–25.4 | 53.9 |
 | 64 | **0.958–0.995 MISS** | **0.741–0.813 ok** | 13.2–25.6 | 65.8 |
 | 128 | **0.970–0.996 MISS** | **0.741–0.795 ok** | 12.5–20.2 | 53.9 |
+| 256 | **0.985–0.997 MISS** | **0.765–0.803 MISS** | 12.5–17.7 | 45.0 |
 
-σ slope **−0.428 ± 0.010** (PASS, near the ideal −0.5 for √N pooling). The
-railing that defined §2's "N ceiling" is gone: σ covers truth at every N, and
-the interval tightens monotonically from 0.230 wide at N=4 to 0.054 at N=128.
+σ slope **−0.438 ± 0.009** (PASS, near the ideal −0.5 for √N pooling). The
+railing that defined §2's "N ceiling" is gone — σ moves from 0.96–0.99 to
+0.74–0.80 — and it covers truth at N = 4…128.
+
+**It misses at N=256**, by 0.015 on a 0.038-wide interval, centering on ~0.784
+or about 4% high. That is the signature of a *biased but consistent* estimator:
+coverage survives while the interval is wide enough to swallow the bias, then
+fails as pooling tightens it.
+
+> ⚠ **One miss in seven is not evidence.** These are **68%** credible intervals
+> on a **single** population realization, and a well-calibrated 68% interval is
+> supposed to miss about a third of the time. The nesting and the consistent
+> centering above truth are *suggestive*, not conclusive. Settling it requires
+> coverage across ≥3 realizations — acceptance criterion 6, still unrun. Do not
+> quote "σ is biased 4% high" from this table.
 
 ### τ: the correction this document owes
 
@@ -1003,9 +1016,44 @@ and it was hidden by a louder one the whole time.
 
 ESS is 54–79 throughout, so this is not weight degeneracy.
 
-**The decisive follow-up** is whether τ keeps tightening at N = 256/512/1024.
-Continued tightening confirms bias; a plateau at the prior width would mean
-something else. That run is in flight.
+### τ: confirmed biased, and it is an ESTIMATOR effect
+
+N=256 settled the bias-vs-plateau question: τ keeps tightening (upper bound
+28.1 → 20.2 → 17.7), slope **−0.262 ± 0.054**, excluding zero. **7 of 7 N
+values miss**, all in the same direction, by an order of magnitude. That is not
+the ~1/3 miss rate a 68% interval is entitled to.
+
+**The pooled answer lies far outside what any single galaxy supports.** With
+the interim τ prior at 10–500 Myr:
+
+| quantity | value |
+|---|---|
+| per-galaxy τ posterior medians | **222.9** (p16 151.1, p84 252.6) |
+| prior median, if uninformative | 255.0 |
+| truth | 150 |
+| **pooled τ, N=256** | **12.5–17.7** |
+
+The per-galaxy posteriors *are* mildly informative — pulled from 255 down
+toward truth. The pooled result then lands an order of magnitude below every
+one of them, in the bottom ~4% of the prior range.
+
+**Note the sign flip.** Pre-fix the pool railed to the **upper** corner
+(434–491 against a 500 bound); converged, it concentrates at the **lower**
+corner. Two opposite corner-seeking behaviours from one estimator — which
+retroactively explains a puzzle in the old data. §2's table shows τ apparently
+"covering truth at N=32" (61.9–153.4) *before* the fix. That was never
+recovery: it was **two errors of opposite sign partially cancelling** at
+intermediate N. Fixing the fitting bug unmasked the estimator one.
+
+Two explanations are already excluded: ESS is 45–79 throughout, so it is not
+weight degeneracy, and every per-galaxy fit is now provably at its mode, so it
+is not §4i's non-stationary expansion.
+
+> A hierarchical posterior *can* legitimately concentrate outside the range of
+> the individual point estimates — it is a product of broad likelihoods whose
+> shapes may agree somewhere none of them peaks. So this is a strong, localized
+> anomaly, not yet a proven estimator bug. It is, however, now the **only**
+> open problem, and it is much better localized than "τ is unidentified".
 
 ---
 
