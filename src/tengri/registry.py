@@ -21,6 +21,7 @@ in a notebook or REPL — no need to wrap them in `pprint`.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from tengri._display import _display
@@ -1768,6 +1769,31 @@ def _menu_listers() -> tuple:
     )
 
 
+def _menu_name_aliases() -> dict[str, tuple[str, callable]]:
+    """Map each menu's own name, in prose, to that menu.
+
+    Derived from :func:`_menu_listers` rather than hand-written, because a
+    hand-written copy is a second source of truth that drifts the day a menu
+    is added — the failure this module has already had twice (#1120, #1446).
+    ``list_age_kernels`` becomes ``"age kernels"`` and ``"age kernel"``, so a
+    new menu is searchable by its own name the moment it is registered.
+
+    This is deliberately separate from the hand-written concept synonyms in
+    :func:`search`: those map words a beginner invents ("extinction") onto a
+    menu, which cannot be derived from anything.
+    """
+    out: dict[str, tuple[str, callable]] = {}
+    for fn in _menu_listers():
+        stem = fn.__name__.removeprefix("list_")
+        plural = stem.replace("_", " ")
+        forms = {plural}
+        if plural.endswith("s"):
+            forms.add(plural[:-1])
+        for form in forms:
+            out[form] = (f"{fn.__name__}()", fn)
+    return out
+
+
 def describe(name: str) -> _DescribeRecord:
     """Universal lookup across every menu.
 
@@ -1953,12 +1979,39 @@ def _recipe_data_status(kwargs: dict) -> str:
 
 
 def _parse_ssp_requirement(doc: str) -> str:
-    """Pull the ``**SSP requirement:**`` value from a recipe docstring."""
-    for line in doc.splitlines():
+    """Pull the ``**SSP requirement:**`` value from a recipe docstring.
+
+    The requirement is a *paragraph*, not a line. Numpydoc wraps it at the
+    line limit, and every docstring puts the label first and the consequence
+    second — so a first-line-only read keeps ``bare-stellar (Cue nebular
+    backend; see`` and drops ``doing so raises CueWNESSPError``. Read to the
+    paragraph break instead, matching how ``short_doc`` is derived just above.
+    """
+    lines = doc.splitlines()
+    for i, line in enumerate(lines):
         if "SSP requirement" in line:
             after = line.split(":", 1)[1] if ":" in line else line
-            return after.replace("*", "").strip()
+            parts = [after]
+            for cont in lines[i + 1 :]:
+                # A blank line ends the paragraph; a new ``**Field:**`` marker
+                # ends it too, for docstrings that run fields together.
+                if not cont.strip() or cont.lstrip().startswith("**"):
+                    break
+                parts.append(cont)
+            return _plain_text(" ".join(p.strip() for p in parts))
     return "any"
+
+
+def _plain_text(text: str) -> str:
+    """Strip the reST inline markup a docstring carries but a table should not.
+
+    ``list_recipes()`` renders in a terminal, not in Sphinx, so ``:func:`x```
+    and ````x```` reach the user as literal punctuation. Dropping the roles and
+    the backticks leaves the prose the docstring author actually wrote.
+    """
+    out = re.sub(r":(?:func|meth|class|mod|data|attr|ref):`~?([^`]*)`", r"\1", text)
+    out = out.replace("``", "").replace("*", "")
+    return " ".join(out.split()).strip()
 
 
 def describe_recipe(name: str) -> _DescribeRecord:
@@ -2325,10 +2378,19 @@ def search(query: str) -> _RegistryTable:
         "emission line": ("list_nebular_backends()", list_nebular_backends),
         "emission lines": ("list_nebular_backends()", list_nebular_backends),
     }
-    if q in _CONCEPT_ALIAS:
-        call, fn = _CONCEPT_ALIAS[q]
-        _display(f"  '{query}' → tengri.{call} (the menu these models live in)\n")
-        return fn()
+    # Concept synonyms are hand-curated; the menu's own name in prose is
+    # derived from _menu_listers(). Consult both, and try the query with
+    # hyphens normalized so "x-ray models" reaches list_xray_models() and
+    # "star-forming" keeps working. Concept synonyms win on a tie: they are
+    # the more specific statement of intent.
+    _spellings = (q, q.replace("-", " "), q.replace("-", ""))
+    _menu_names = _menu_name_aliases()
+    for table in (_CONCEPT_ALIAS, _menu_names):
+        for spelling in _spellings:
+            if spelling in table:
+                call, fn = table[spelling]
+                _display(f"  '{query}' → tengri.{call} (the menu these models live in)\n")
+                return fn()
 
     # ``kind`` and ``use`` are structural/internal — searching them gives
     # spurious 100%-of-table hits (e.g. "filter" matching every filter
