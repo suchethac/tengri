@@ -743,7 +743,7 @@ def slone_netzer_disc_block(
     agn_log_lbol: float,
     *,
     # Deliberately NOT DEFAULT_AGN_LOG_MBH: the SN12 grid's log_mbh axis starts
-    # at 7.4, so the declared 7.0 would be silently clipped. 8.6 is grid centre.
+    # at 7.4, so the declared 7.0 would be silently clipped. 8.6 is grid center.
     agn_log_mbh: float = 8.6,
     agn_log_ledd: float = -2.0,
     **_params,

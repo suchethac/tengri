@@ -112,7 +112,7 @@ def create_slone_netzer_from_grid(grid_path: str) -> Callable:
         agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
         # Deliberately NOT DEFAULT_AGN_LOG_MBH: the SN12 grid's log_mbh axis
         # starts at 7.4, so the declared 7.0 would be silently clipped by the
-        # jnp.clip below. 8.6 is the grid's centre node.
+        # jnp.clip below. 8.6 is the grid's center node.
         agn_log_mbh: float = 8.6,
         agn_log_ledd: float = -2.0,
         **_kwargs,
