@@ -2024,6 +2024,10 @@ class SEDModel:
         self._sfh_settings = sfh_settings
         self._uses_stochastic_sfh = spec.stochastic
         self._gp_kernel = sfh_settings.get("sfh_field_model", "drw")
+        # GP-field parameterization (#1355): 1.0 is the shipped non-centered
+        # map. Read once here so every ``compute_field_gp`` call site in this
+        # class shares one value — the knob was previously reachable by none.
+        self._field_centering = float(getattr(spec, "field_centering", 1.0))
 
         # Warn if any burst-width SFH parameter is narrower than the
         # local SSP grid spacing at the burst peak — see #299. The
@@ -2745,6 +2749,7 @@ class SEDModel:
                 d_log_age=float(self.d_log_age),
                 field_model=self._gp_kernel,
                 log_age_grid=self.log_age_grid,
+                centering=self._field_centering,
             )
             kw["gp_x"] = gp_x
             kw["k0_half"] = k0_half
@@ -2779,6 +2784,7 @@ class SEDModel:
                 d_log_age=float(self.d_log_age),
                 field_model=self._gp_kernel,
                 log_age_grid=self.log_age_grid,
+                centering=self._field_centering,
             )
             kw["gp_x"] = gp_x
             kw["k0_half"] = k0_half
@@ -3564,6 +3570,13 @@ class SEDModel:
         # differing only in ``age_kernel`` share a compiled kernel and the
         # second silently returns the first's photometry.
         age_kernel = str(getattr(self.spec, "age_kernel", None) or "auto")
+        # GP-field parameterization (#1355). Same hazard as ``age_kernel``: a
+        # different ``centering`` changes the xi -> SFH map without changing the
+        # graph shape, so without this entry two models differing only in
+        # ``field_centering`` share a compiled kernel and the second returns the
+        # first's photometry — which would make the A/B this knob exists for
+        # report a null result.
+        field_centering = round(float(getattr(self.spec, "field_centering", 1.0)), 8)
 
         # Alpha-Fe evolution
         alpha_fe_evolving = bool(self._alpha_fe_evolving)
@@ -3814,6 +3827,7 @@ class SEDModel:
             stochastic,
             n_grid,
             age_kernel,
+            field_centering,
             alpha_fe_evolving,
             z_fixed,
             catalog_z_range,
@@ -6952,6 +6966,7 @@ class SEDModel:
             n_grid=int(getattr(self.spec, "n_grid", 256)),
             lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
             age_kernel=getattr(self.spec, "age_kernel", None),
+            field_centering=float(getattr(self.spec, "field_centering", 1.0)),
             nebular_backend=neb_backend_name,
             nebular_backend_instance=neb_backend_instance,
             cue_full_catalog=bool(getattr(self.spec, "cue_full_catalog", False)),

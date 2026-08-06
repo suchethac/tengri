@@ -1414,6 +1414,42 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
             )
         result["age_kernel"] = age_kernel
 
+    # ``field_centering`` is a structural setting too: WHICH COORDINATES the GP
+    # field latent is sampled in, not a physical parameter. ``a = 1`` is the
+    # shipped non-centered map ``s = L(sigma, tau) xi``; ``a < 1`` moves
+    # amplitude dependence out of that map (#1355). Validated here, beside
+    # ``age_kernel``, so an out-of-range value or a request on a field-less SFH
+    # fails at ``SEDModel.build`` rather than at the first prediction.
+    if "field_centering" in sfh_dict:
+        centering = sfh_dict["field_centering"]
+        try:
+            centering = float(centering)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"sfh field_centering must be a number between 0 and 1, got "
+                f"{centering!r}. 1.0 (default) is the non-centered "
+                f"parameterization; 0.0 is fully centered (#1355)."
+            ) from None
+        if not 0.0 <= centering <= 1.0:
+            raise ValueError(
+                f"sfh field_centering must be between 0 and 1, got {centering!r}. "
+                f"It interpolates the parameterization: 1.0 (default) samples the "
+                f"standardized latent, 0.0 samples the field itself (#1355)."
+            )
+        _types = sfh_dict.get("type") or []
+        _types = _types if isinstance(_types, (list, tuple)) else [_types]
+        if "field" not in _types:
+            # An explicit request the model cannot serve must raise, not no-op:
+            # there is no GP field here to reparameterize, and silently keeping
+            # the value would be #1488's "selectable but inert" exactly.
+            raise ValueError(
+                f"sfh field_centering={centering!r} needs a GP-field SFH — it "
+                f"reparameterizes the field latent, and this SFH has no field "
+                f"component. Add it with sfh={{'type': ['dpl', 'field'], ...}}, "
+                f"or drop field_centering (#1355)."
+            )
+        result["field_centering"] = centering
+
     if sfh_type is None:
         result["mean_sfh_type"] = ["dpl", "field"]
         return
@@ -1961,7 +1997,7 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 #: Per-group structural keys the grammar accepts on top of declared params.
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
-    "sfh": frozenset({"type", "*", "bin_edges_gyr", "age_kernel"}),
+    "sfh": frozenset({"type", "*", "bin_edges_gyr", "age_kernel", "field_centering"}),
     "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset(
         {

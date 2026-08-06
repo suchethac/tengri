@@ -11,7 +11,7 @@ from tengri.components.stellar.sfh.registry import compute_field_gp
 __all__ = ["centered_fields"]
 
 
-def centered_fields(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
+def centered_fields(xi, psd_sigma_dex, psd_tau_yr, log_age_grid, centering=1.0):
     r"""SFH log-modulation implied by stored latents and hyperparameters.
 
     tengri stores the field in non-centered coordinates: the posterior samples
@@ -41,6 +41,13 @@ def centered_fields(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
         Damping timescale [yr].
     log_age_grid : array_like, shape (n,)
         ``log10(age / yr)`` nodes, monotone.
+    centering : float, optional
+        The ``sfh={'field_centering': a}`` the fit was run with, in ``[0, 1]``
+        [dimensionless]. Default ``1.0`` (non-centered), which is what stored
+        latents mean unless the model set otherwise. **Pass the model's value**:
+        reconstructing an ``a < 1`` fit with the default silently applies a
+        different map to the samples, which is the exact drift this function's
+        delegation to ``compute_field_gp`` exists to prevent (#1355).
 
     Returns
     -------
@@ -78,7 +85,13 @@ def centered_fields(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
 
     def one(xi_1d, sigma, tau):
         gp_x, k0_half = compute_field_gp(
-            xi_1d, sigma, tau, n_grid, d_log_age, log_age_grid=log_age_grid
+            xi_1d,
+            sigma,
+            tau,
+            n_grid,
+            d_log_age,
+            log_age_grid=log_age_grid,
+            centering=centering,
         )
         return gp_x - k0_half
 
