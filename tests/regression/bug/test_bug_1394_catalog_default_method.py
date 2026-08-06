@@ -85,11 +85,43 @@ def test_population_default_matches_its_own_error_message():
     (default) ...)`` for an unknown method. That string outlived ``b7c4fa1e2``,
     which moved the real default to ``native_vi_linear``, so the class told
     users one thing and did another.
+
+    **What this can still catch, after #1576.** The advice now reads its
+    marker from ``inspect.signature(cls.run)``, so a signature/advice
+    *disagreement* is no longer possible to express — the two derive from one
+    source. Stating that plainly matters, because an assertion downstream of
+    the thing that guarantees it is unfalsifiable, and a green tautology reads
+    like protection it is not providing.
+
+    Two failure modes remain reachable, and both are asserted below:
+
+    * the signature default is not a dispatchable method at all, and
+    * the ``(default)`` marker is dropped from the message entirely.
+
+    Verified by mutation: deleting the marker turns this red. The *drift* this
+    test was originally written for is now caught by
+    ``test_each_default_is_the_specific_agreed_choice`` instead, which pins
+    the agreed value rather than the agreement.
     """
     default = _default_of(PopulationFitter.run)
+
+    # The default must actually be dispatchable...
     src = inspect.getsource(PopulationFitter.run)
-    assert f"{default!r} (default)".replace('"', "'") in src.replace('"', "'"), (
-        f"the ValueError advice must name the real default ({default!r})"
+    body = src.split("_method_map = {")[1].split("}")[0]
+    assert f'"{default}"' in body, f"the signature default {default!r} is not in _method_map"
+
+    # ...and the advice must mark it as the default.
+    #
+    # Asserted against the produced message rather than against the source
+    # text of ``run``. This used to grep for the literal ``'<default>'
+    # (default)`` in the source, which could only pass while the list was
+    # hand-written -- the very thing #1576 removed. Checking the real output
+    # is strictly stronger: it still catches a signature/advice disagreement,
+    # and additionally catches a message that is built correctly but never
+    # reaches the caller.
+    message = PopulationFitter._unknown_method_message("__no_such_method__", {default: None})
+    assert f"{default!r} (default)" in message, (
+        f"the ValueError advice must name the real default ({default!r}); got: {message}"
     )
 
 

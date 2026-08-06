@@ -151,8 +151,8 @@ def test_the_docstring_documents_every_dispatchable_method() -> None:
     assert not missing, f"dispatchable but undocumented in run(): {sorted(missing)}"
 
 
-def test_the_broken_tier_is_labelled_in_the_docstring_not_hidden() -> None:
-    """Broken backends stay documented, marked broken — labelled, not disappeared."""
+def test_the_broken_tier_is_labeled_in_the_docstring_not_hidden() -> None:
+    """Broken backends stay documented, marked broken — labeled, not disappeared."""
     doc = PopulationFitter.run.__doc__
     broken = [m for m in METHOD_MAP if (e := lookup_backend(m)) is not None and e.tier == "broken"]
     assert broken, "no broken backend; this test would be vacuous"
@@ -164,7 +164,7 @@ def test_the_broken_tier_is_labelled_in_the_docstring_not_hidden() -> None:
 def test_the_message_names_the_escape_hatch() -> None:
     """Omitting broken backends must not mean pretending they do not exist.
 
-    Same principle #1560 settled on the discovery side: labelled, not
+    Same principle #1560 settled on the discovery side: labeled, not
     disappeared. The message points at both the flag and the menu.
     """
     msg = _message()
