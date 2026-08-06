@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""N=8 pilot measurement for interim prior choice.
+"""Pilot measurement for interim prior choice.
 
 Sweeps the interim prior bounds over four widths and records ESS vs breadth.
 This determines the trade-off between importance-weight degeneracy and
@@ -76,10 +76,30 @@ def _build_model_and_mock(n_galaxies=8):
 #: #1529 was about -- at a quarter of the cost.
 _N_SMOKE = 2
 
+#: Posterior draws per galaxy, and the stride `fit_interim` thins them by
+#: before the population step.
+#:
+#: Pinned here rather than left to the defaults because the shape assertion
+#: below is *derived* from them. `fit_interim` returns `n_samples // thin`
+#: draws, not `n_samples`: it thins to bound the estimator's (n_nodes, N, K)
+#: table, which is what OOM-kills the sweep. This test asserted the raw 1000
+#: and so could only ever pass on an UNthinned result -- it was stale from the
+#: day thinning landed, and nothing caught it because two upstream bugs (#1529,
+#: #1575) meant the assertion was never reached.
+_N_SAMPLES = 1000
+_THIN = 8
+_N_KEPT = _N_SAMPLES // _THIN
+
 
 @pytest.mark.slow
-def test_interim_fit_runs_n8_photometry():
-    """Smoke test: the interim fit completes without error on a small population."""
+def test_interim_fit_completes_on_a_small_population():
+    """Smoke test: the interim fit completes without error on a small population.
+
+    The galaxy count lives in ``_N_SMOKE``, not in this name. The previous name
+    said ``n8`` and the body had already been cut to two -- the same kind of
+    drift between a stated value and the value actually used that produced
+    #1575 one line below.
+    """
     from tengri.inference.population import fit_interim
 
     model, mock = _build_model_and_mock(n_galaxies=_N_SMOKE)
@@ -110,10 +130,12 @@ def test_interim_fit_runs_n8_photometry():
         interim_bounds=interim_bounds,
         n_leapfrog_steps=100,
         dense_mass_matrix=True,
+        n_samples=_N_SAMPLES,
+        thin=_THIN,
     )
 
     # Verify shapes
-    assert result.fields.shape == (_N_SMOKE, 1000, 16)  # (N, K, n_grid)
+    assert result.fields.shape == (_N_SMOKE, _N_KEPT, 16)  # (N, K, n_grid)
     assert result.times_yr.shape == (16,)
     assert result.ess.shape == (_N_SMOKE,)
     assert result.n_divergent.shape == (_N_SMOKE,)
