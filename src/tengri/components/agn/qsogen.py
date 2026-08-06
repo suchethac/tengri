@@ -176,12 +176,17 @@ def _load_emline_template_arrays():
     FileNotFoundError
         If the template file is not found in any of the searched locations.
     """
+    from tengri._data_setup import find_data
+
+    # find_data covers the old parents[4] and cwd-relative candidates, plus
+    # $TENGRI_DATA_DIR (#1431); the /tmp path is the upstream drop location.
     candidates = [
-        Path(__file__).resolve().parents[4] / "data" / "qsogen_emline_template.dat",
-        Path("data/qsogen_emline_template.dat"),
+        find_data("qsogen_emline_template.dat"),
         Path("/tmp/qsogen/qsosed_emlines_20210625.dat"),
     ]
     for path in candidates:
+        if path is None:
+            continue
         if path.is_file():
             data = np.genfromtxt(str(path), unpack=True)
             # Materialize each row as a fully-realized np.ndarray (not generator)
