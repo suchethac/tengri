@@ -27,11 +27,14 @@ the thing under test. When the seam moves, these move with it.
 
 The assertions stop at *reachability* — a backend dispatches and returns a
 populated ``PopulationPosterior``. They deliberately do not assert posterior
-quality, because at least one primary-tier backend currently returns a
-degenerate chain here (``mcmc_raytrace``: 0 % acceptance, 500 draws collapsing
-to a single unique point — issue #1530). Folding a quality bar into this file
-would conflate "the seam dispatches" with "the sampler works", and those two
-fail for unrelated reasons.
+quality: folding a quality bar into this file would conflate "the seam
+dispatches" with "the sampler works", and those two fail for unrelated
+reasons. ``mcmc_raytrace`` is the exception that proves the rule: at this
+fixture's hierarchical D its chain is genuinely degenerate (measured
+acceptance ~1e-117, 500 draws collapsing to one unique point — #1530), and
+since #1569 the run *raises* ``DegenerateChainError`` instead of returning
+MAP echoes. Reachability for raytrace therefore means dispatching far enough
+to hit that guard — asserted below as its own case.
 """
 
 from __future__ import annotations
@@ -50,6 +53,7 @@ from tengri import (
     SEDModel,
     Uniform,
 )
+from tengri.inference.hierarchical import DegenerateChainError
 
 pytestmark = pytest.mark.contract
 
@@ -98,12 +102,12 @@ def population():
     return factory, galaxies
 
 
-@pytest.mark.parametrize("method", ["map", "mcmc_raytrace"])
+@pytest.mark.parametrize("method", ["map"])
 def test_backend_dispatches_and_returns_a_populated_posterior(population, method):
     """The seam actually reaches the backend and gets a result back.
 
-    Two backends, chosen because prior measurement puts both near 1.5 GB peak.
-    The heavier ones do not belong in a suite that has to finish —
+    Chosen because prior measurement puts it near 1.5 GB peak. The heavier
+    ones do not belong in a suite that has to finish —
     ``vi_nonlinear_fast`` was SIGKILLed at 9.42 GB on this same 2-galaxy
     problem.
     """
@@ -120,6 +124,27 @@ def test_backend_dispatches_and_returns_a_populated_posterior(population, method
         values = np.asarray(draws)
         assert values.size > 0, f"{method}: {name} is empty"
         assert np.all(np.isfinite(values)), f"{method}: {name} carries non-finite draws"
+
+
+def test_raytrace_reaches_the_sampler_and_the_degeneracy_guard_fires(population):
+    """Raytrace dispatches through the seam — and refuses its degenerate chain.
+
+    At this fixture's hierarchical D (~500 with the stochastic field latents),
+    raytrace acceptance is ~1e-117 and 500 post-burn-in draws collapse to one
+    unique point (#1530). Since #1569 that outcome *raises*
+    ``DegenerateChainError`` instead of returning MAP-echo draws that look
+    like a plausible answer. The raise IS the correct behavior: this test
+    pins both that the seam reaches the sampler and that the guard stays.
+
+    If this test starts failing because raytrace returns a populated
+    posterior, that is news (the sampler mixes at hierarchical D now) — move
+    the method back into the populated-posterior case above.
+    """
+    factory, galaxies = population
+    fitter = PopulationFitter(factory, galaxies)
+
+    with pytest.raises(DegenerateChainError):
+        fitter.run("mcmc_raytrace", key=jax.random.PRNGKey(0))
 
 
 def test_an_unsupported_method_names_what_was_asked_for(population):
