@@ -543,34 +543,36 @@ class PopulationFitter:
             of magnitude between them (82 vs 6 Myr) — which is why reaching
             them has to be a deliberate act rather than a default.
 
-            **MCMC**
-
-            - ``"mcmc_raytrace"`` — Ray Tracing on flat vector.
-            - ``"mcmc_ess"`` — **not** elliptical slice sampling here. ESS is a
-              :class:`~tengri.inference.fitter.Fitter`-only method; on this class
-              the name is an alias onto ``native_vi_linear``, so it is refused
-              with the rest of the broken tier. Use ``mcmc_raytrace``, or run ESS
-              per-galaxy through ``Fitter``.
-
-            **Pure-JAX (lax.while_loop, no NIFTy) — tier="broken"**
-
-            Faster on paper (3–4x NIFTy MGVI on CPU; O(1) memory in N) but
-            registered ``tier="broken"``: ``[UNSTABLE]``, segfaults on
-            DPL/dense_basis photometry mocks (#231). Both refuse to run without
-            ``allow_unvalidated=True``.
-
-            - ``"native_vi_linear"`` — MGVI inside ``lax.while_loop``.
-            - ``"native_vi_nonlinear"`` — geoVI inside ``lax.while_loop``.
-
             .. note::
                ``native_vi_linear`` was the default from ``b7c4fa1e2`` until
                2026-07. It was chosen for speed *before* the segfault was
                validated (#231, 2026-05-22), and the tier change never
                propagated back to the signature — this method's own
                ``ValueError`` for an unknown method went on naming
-               ``vi_nonlinear_fast`` "(default)" the whole time. There is no
-               NUTS option here: ``mcmc_nuts`` is not in the hierarchical
-               ``_method_map`` and raises.
+               ``vi_nonlinear_fast`` "(default)" the whole time.
+
+            **MCMC and MAP (through the flat seam)**
+
+            - ``"mcmc_raytrace"`` — Ray Tracing on the flat vector. At
+              hierarchical D the chain is typically degenerate, and the run
+              raises :class:`DegenerateChainError` rather than returning
+              MAP-echo draws (#1530).
+            - ``"mcmc"`` — pinned to NUTS, deliberately diverging from the
+              single-galaxy auto-pick (raytrace above D~20): hierarchical D
+              grows with the catalog, so that auto-pick would select the
+              guaranteed-degenerate sampler.
+            - ``"mcmc_nuts"``, ``"mcmc_hmc"`` — NUTS / static-leapfrog HMC on
+              the flat vector.
+            - ``"map"`` — Adam MAP on the flat vector.
+            - ``"pathfinder"`` — tier="broken" (OOM-killed the process on a
+              measured 2-galaxy problem); requires ``allow_unvalidated=True``.
+            - ``"mcmc_ess"``, ``"mcmc_dynamic_hmc"``, ``"mcmc_ghmc"``,
+              ``"mcmc_mclmc"``, ``"mcmc_adjusted_mclmc"``, ``"laplace"`` —
+              refused with ``NotImplementedError`` and a per-name reason (see
+              :data:`~tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED`):
+              their real drivers are not wired at the seam yet, and running a
+              stand-in algorithm under the requested name would be silent
+              substitution.
 
         key : PRNGKey, optional
             Random key for reproducibility. If None, uses PRNGKey(0).
@@ -678,7 +680,9 @@ class PopulationFitter:
             # property of the problem, not of the sampler — there is nothing
             # left to special-case per backend.
             if method in FLAT_SAMPLERS:
-                return run_flat_sampler(self, method, key=key, **kwargs)
+                return run_flat_sampler(
+                    self, method, key=key, allow_unvalidated=allow_unvalidated, **kwargs
+                )
             # Refuse the ones the seam knowingly cannot drive with a specific
             # reason rather than a generic "unknown method". A backend that is
             # absent because nobody wired it up and one that is absent because

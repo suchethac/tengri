@@ -6,11 +6,15 @@
 with them but because the only flat-vector formulation lived *inside*
 ``_run_raytrace`` as a set of closures, reachable by exactly one sampler.
 
-This seam drives **19 of 20**. ``nss`` is deliberately excluded — see
-:data:`FLAT_UNSUPPORTED`. The prior transform it would need is exact and is
-provided here; what is missing is a real nested sampler on top of it, and a
-blind rejection stand-in returns biased samples rather than an approximation
-(#1429).
+This seam drives the NUTS / HMC / MAP / pathfinder family. Every other
+registered name is either driven by ``PopulationFitter``'s own runners or
+refused with a stated reason — see :data:`FLAT_UNSUPPORTED`. A name is driven
+here only when the driver runs the algorithm the name promises; a stand-in
+(the first draft ran plain HMC under five distinct-algorithm names) is silent
+substitution, not support. ``nss`` is the founding entry of the refused set:
+the prior transform it would need is exact and is provided here; what is
+missing is a real nested sampler on top of it, and a blind rejection stand-in
+returns biased samples rather than an approximation (#1429).
 
 This module lifts that formulation out. Once the problem is
 ``(init_flat, log_likelihood, log_prior, prior_transform)`` on an unconstrained
@@ -67,17 +71,24 @@ __all__ = ["FLAT_SAMPLERS", "FlatProblem", "build_flat_problem", "run_flat_sampl
 #: is the single edit that makes it available hierarchically. The literal that
 #: preceded this named two backends and went stale the moment a third gained the
 #: same capability (#1394).
+#:
+#: A name may appear here only when its driver runs the algorithm the name
+#: promises. The first draft mapped five distinct-algorithm names (ESS, dynamic
+#: HMC, GHMC, MCLMC, adjusted MCLMC) onto the plain static-leapfrog ``"hmc"``
+#: driver and ``laplace`` onto the bare ``"map"`` point estimate — the result's
+#: diagnostics recorded the requested name while a different algorithm ran.
+#: Those names now live in :data:`FLAT_UNSUPPORTED` until their real drivers
+#: are wired.
 FLAT_SAMPLERS: dict[str, str] = {
     "mcmc_nuts": "nuts",
     "mcmc_hmc": "hmc",
-    "mcmc_dynamic_hmc": "hmc",
-    "mcmc_ghmc": "hmc",
-    "mcmc_mclmc": "hmc",
-    "mcmc_adjusted_mclmc": "hmc",
-    "mcmc_ess": "hmc",
+    # Pinned to NUTS, unlike the single-galaxy auto-pick (NUTS for low-D,
+    # raytrace above D~20): hierarchical D grows with the catalog, and at that
+    # D raytrace degenerates and raises DegenerateChainError by design
+    # (#1530). Auto-picking it would make the generic name a guaranteed
+    # failure.
     "mcmc": "nuts",
     "map": "map",
-    "laplace": "map",
     "pathfinder": "nuts_pathfinder",
 }
 
@@ -94,6 +105,50 @@ FLAT_UNSUPPORTED: dict[str, str] = {
         "silently truncated -- and therefore biased -- sample set. The prior "
         "transform this seam provides is exact and correct; what is missing is "
         "the sampler on top of it. See #1429."
+    ),
+    "mcmc_ess": (
+        "elliptical slice sampling has no driver at this seam yet. The flat "
+        "problem is tailor-made for it -- the prior is exactly iid N(0,1), "
+        "which is the ellipse ESS needs (see backends/mcmc/elliptical_slice.py "
+        "for the single-galaxy driver to adapt, honoring the data_args "
+        "compile-reuse contract). Running the static-leapfrog HMC driver under "
+        "this name instead would be silent substitution. Use mcmc_nuts or "
+        "mcmc_hmc hierarchically, or run ESS per-galaxy through Fitter."
+    ),
+    "mcmc_dynamic_hmc": (
+        "this seam's only HMC driver is static-leapfrog, a different algorithm "
+        "from the dynamic trajectory-length HMC this name promises. "
+        "_dynamic_hmc_full_scan in backends/mcmc/_shared.py is the near-drop-in "
+        "driver to wire; until then use mcmc_hmc, which is honestly the "
+        "algorithm that would have run."
+    ),
+    "mcmc_ghmc": (
+        "this seam's only HMC driver is static-leapfrog, a different algorithm "
+        "from the persistent-momentum generalized HMC this name promises. "
+        "_ghmc_full_scan in backends/mcmc/_shared.py is the near-drop-in driver "
+        "to wire; until then use mcmc_hmc, which is honestly the algorithm that "
+        "would have run."
+    ),
+    "mcmc_mclmc": (
+        "microcanonical Langevin MC needs its own (L, step size) adaptation, "
+        "not the HMC window adaptation this seam runs. _mclmc_sample_scan in "
+        "backends/mcmc/_shared.py provides the sampling half but not the "
+        "tuning. Use mcmc_nuts or mcmc_hmc hierarchically."
+    ),
+    "mcmc_adjusted_mclmc": (
+        "adjusted microcanonical Langevin MC needs its own (L, step size) "
+        "adaptation, not the HMC window adaptation this seam runs. "
+        "_adjusted_mclmc_sample_scan in backends/mcmc/_shared.py provides the "
+        "sampling half but not the tuning. Use mcmc_nuts or mcmc_hmc "
+        "hierarchically."
+    ),
+    "laplace": (
+        "a Laplace approximation is MAP plus a Gaussian covariance from the "
+        "curvature at a verified mode; this seam's map driver computes no "
+        "covariance, so driving laplace with it would silently drop the error "
+        "bars that distinguish laplace from map. Use ``map`` for the "
+        "hierarchical point estimate, or run laplace per-galaxy through "
+        "Fitter."
     ),
 }
 
@@ -399,11 +454,11 @@ def run_flat_sampler(
     memory_mode : {"low", "high"}
         Passed to :func:`build_flat_problem`.
     map_steps, map_learning_rate : int, float
-        Gradient-ascent settings for the ``map`` / ``laplace`` drivers.
+        Gradient-ascent settings for the ``map`` driver.
     allow_unvalidated : bool
         Opt in to ``tier="broken"`` backends, exactly as ``Fitter.run`` does.
-        Required for ``pathfinder``/``mcmc_ghmc``/``mcmc_mclmc``, which stay
-        reachable but are not safe by default.
+        Required for ``pathfinder``, the one tier="broken" name this seam
+        drives — reachable, but not safe by default.
     verbose : bool
 
     Returns

@@ -51,8 +51,9 @@ def _tier(name):
 def test_every_registered_backend_is_accounted_for():
     """No backend is silently absent: it either has a runner or a stated reason.
 
-    19 of 20 are driven. ``nss`` is in FLAT_UNSUPPORTED with an explanation,
-    which is the honest state — see the module docstring. The failure this
+    Every registered backend is either driven (``_method_map`` or
+    ``FLAT_SAMPLERS``) or refused with an explanation (``FLAT_UNSUPPORTED``) —
+    that is the honest state; see the module docstring. The failure this
     guards is a backend that is missing from BOTH tables, i.e. refused with a
     generic error and no reason anyone can find later.
     """
@@ -112,19 +113,105 @@ def test_broken_tier_backends_stay_gated():
 
 
 def test_no_method_is_silently_substituted_for_another():
-    """``mcmc_ess`` used to be rewritten to ``native_vi_linear`` with no warning.
+    """A ``FLAT_SAMPLERS`` entry must run the algorithm its name promises.
 
+    ``mcmc_ess`` used to be rewritten to ``native_vi_linear`` with no warning.
     That silently handed back MGVI — and after #231 a tier="broken" backend — to
     a caller who asked for elliptical slice sampling, with nothing in the result
     to reveal it. Silent substitution is never the right repair for an
     unsupported method: support it, or raise.
+
+    The seam's first draft repeated the pattern one layer down: five
+    distinct-algorithm names (ESS, dynamic HMC, GHMC, MCLMC, adjusted MCLMC)
+    all mapped onto the plain static-leapfrog ``"hmc"`` driver, and ``laplace``
+    onto the bare ``"map"`` point estimate — the result's diagnostics recorded
+    the requested name while a different algorithm ran. Until a name's real
+    driver is wired at the seam, the honest state is refusal with a stated
+    reason and a working alternative.
     """
     src = inspect.getsource(PopulationFitter.run)
     assert "_HIERARCHICAL_OVERRIDES" not in src, (
         "a silent method-substitution table has come back; support the method "
         "through the flat seam or raise, but do not swap it out"
     )
-    assert "mcmc_ess" in FLAT_SAMPLERS, "mcmc_ess must be genuinely supported now"
+
+    # Every surviving entry names the algorithm its driver actually runs. An
+    # addition here is welcome exactly when its real driver is wired — edit
+    # this set in the same commit as the wiring, never before.
+    assert set(FLAT_SAMPLERS) == {"mcmc", "mcmc_nuts", "mcmc_hmc", "map", "pathfinder"}, (
+        "FLAT_SAMPLERS gained or lost a name; if the new name's driver truly "
+        "implements that algorithm, update this set in the same commit"
+    )
+
+    substituted = {
+        "mcmc_ess",
+        "mcmc_dynamic_hmc",
+        "mcmc_ghmc",
+        "mcmc_mclmc",
+        "mcmc_adjusted_mclmc",
+        "laplace",
+    }
+    for name in sorted(substituted):
+        assert name not in FLAT_SAMPLERS, (
+            f"{name!r} is mapped onto a driver that runs a different algorithm"
+        )
+        assert name in FLAT_UNSUPPORTED, f"{name!r} must be refused with a stated reason"
+        reason = FLAT_UNSUPPORTED[name]
+        assert any(alt in reason for alt in ("mcmc_nuts", "mcmc_hmc", "``map``", "Fitter")), (
+            f"{name!r}'s refusal must hand the caller a working alternative"
+        )
+
+
+class _SentinelReached(Exception):
+    """Raised by the stubbed builder: reaching it proves every gate passed."""
+
+
+def test_the_allow_unvalidated_opt_in_reaches_the_inner_gate(monkeypatch):
+    """``run()`` must forward ``allow_unvalidated`` into ``run_flat_sampler``.
+
+    The seam documents the opt-in as required for its tier="broken" names, but
+    ``PopulationFitter.run`` declares ``allow_unvalidated`` as a named kwarg —
+    so it is CONSUMED from ``**kwargs``, and without explicit forwarding the
+    inner ``check_usable`` always sees the default False. The documented
+    opt-in then refuses every flat-seam broken-tier method even when the
+    caller said yes.
+
+    The fit itself is irrelevant here, so ``build_flat_problem`` is replaced
+    with a sentinel; with the builder stubbed out, nothing touches the fitter
+    before the sentinel fires, so a bare uninitialized instance suffices.
+    """
+    import tengri.inference._hierarchical_flat as hf
+
+    def _sentinel(*args, **kwargs):
+        raise _SentinelReached
+
+    monkeypatch.setattr(hf, "build_flat_problem", _sentinel)
+    stub = object.__new__(PopulationFitter)
+
+    with pytest.raises(_SentinelReached):
+        PopulationFitter.run(stub, "pathfinder", allow_unvalidated=True)
+
+
+def test_the_gate_still_refuses_a_broken_tier_method_without_the_opt_in(monkeypatch):
+    """Control for the forwarding test: no opt-in, no dispatch.
+
+    If this ever reaches the sentinel, the outer gate is gone and the
+    forwarding test above is proving nothing.
+    """
+    import tengri.inference._hierarchical_flat as hf
+
+    def _sentinel(*args, **kwargs):
+        raise _SentinelReached
+
+    monkeypatch.setattr(hf, "build_flat_problem", _sentinel)
+    stub = object.__new__(PopulationFitter)
+
+    with pytest.raises(Exception) as exc:
+        PopulationFitter.run(stub, "pathfinder")
+    assert not isinstance(exc.value, _SentinelReached), (
+        "the outer tier gate is gone: a broken-tier method dispatched with no opt-in"
+    )
+    assert "pathfinder" in str(exc.value) or "unvalidated" in str(exc.value).lower()
 
 
 def test_the_unknown_method_error_derives_its_list():
