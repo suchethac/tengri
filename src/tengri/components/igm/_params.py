@@ -22,7 +22,7 @@ parameter family:
 from __future__ import annotations
 
 from tengri.parameters.priors import Fixed, Uniform
-from tengri.protocols.component import ParamDeclaration
+from tengri.protocols.component import ParamDeclaration, declared_default
 
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
@@ -97,4 +97,10 @@ DLA_PARAMS: tuple[ParamDeclaration, ...] = (
     ),
 )
 
-__all__ = ["DLA_PARAMS", "PARAMS", "PATCHY_PARAMS"]
+#: Default DLA column for standalone calls, read from the declaration above
+#: (ADR-0011). ``igm_absorption`` previously hardcoded 20.0, which is *below*
+#: the 20.3 threshold that defines a damped Lyman-alpha system — so the default
+#: "DLA" was a sub-DLA.
+DEFAULT_DLA_LOG_N_HI = declared_default(DLA_PARAMS, "dla_log_n_hi")
+
+__all__ = ["DEFAULT_DLA_LOG_N_HI", "DLA_PARAMS", "PARAMS", "PATCHY_PARAMS"]

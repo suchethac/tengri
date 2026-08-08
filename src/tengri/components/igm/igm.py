@@ -20,6 +20,7 @@ Coefficient tables from eazy-py (Brammer et al.):
 import jax
 import jax.numpy as jnp
 
+from tengri.components.igm._params import DEFAULT_DLA_LOG_N_HI
 from tengri.components.igm.dla import _A_LYA, _F_LYA, _NU_LYA, _WL_LYA
 from tengri.cosmology import PLANCK18
 from tengri.utils.physics_constants import C_CGS
@@ -995,7 +996,7 @@ def igm_absorption(
     igm_model: str = "inoue",
     use_dla: bool = False,
     dla_z: float = 0.0,
-    dla_log_n_hi: float = 20.0,
+    dla_log_n_hi: float = DEFAULT_DLA_LOG_N_HI,
     dla_temp: float = 1e4,
     dla_b_turb: float = 0.0,
 ) -> jnp.ndarray:
