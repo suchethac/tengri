@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Contract test for the N=8 interim fit on photometry.
+"""Contract test for the interim fit on photometry.
 
 Asserts that ``fit_interim`` returns well-formed output: field/time/ESS/divergence
 shapes, a R-hat dict carrying ``psd_xi``, and finite positive ESS throughout.
@@ -32,8 +32,13 @@ _SSP_EXISTS = _SSP_FILE.is_file()
 pytestmark = pytest.mark.skipif(not _SSP_EXISTS, reason=f"SSP file not found: {_SSP_FILE}")
 
 
-def _build_model_and_mock(n_galaxies=8):
-    """Build a stochastic-SFH model and generate a mock population."""
+def _build_model_and_mock(n_galaxies):
+    """Build a stochastic-SFH model and generate a mock population.
+
+    ``n_galaxies`` is required, not defaulted. It defaulted to 8 while the only
+    caller passed something else -- a dead stated value of exactly the kind
+    this module's bug history is made of.
+    """
     from tengri import Observation, Photometry, SEDModel, recipes
     from tengri.analysis.population_mocks import make_population
     from tengri.sps.dsps_wrapper import load_ssp_data
@@ -72,17 +77,60 @@ def _build_model_and_mock(n_galaxies=8):
     return model, mock
 
 
+#: Galaxies in the interim smoke test. Two, not eight.
+#:
+#: This is a "completes without error" test: it asserts shapes, finite ESS and
+#: accessible R-hat, none of which need a population. Eight galaxies cost
+#: 50m34s locally and ~169 min on CI (measured 3.34x), which alone consumed the
+#: `slow (integration)` 180-minute budget and blocked unrelated PRs (#1543).
+#: Two exercise the identical code path -- including the per-galaxy loop that
+#: #1529 was about -- at a quarter of the cost.
+_N_SMOKE = 2
+
+#: Posterior draws per galaxy, and the stride `fit_interim` thins them by
+#: before the population step.
+#:
+#: Pinned here rather than left to the defaults because the shape assertion
+#: below is *derived* from them. `fit_interim` returns `n_samples // thin`
+#: draws, not `n_samples`: it thins to bound the estimator's (n_nodes, N, K)
+#: table, which is what OOM-kills the sweep. This test asserted the raw 1000
+#: and so could only ever pass on an UNthinned result -- it was stale from the
+#: day thinning landed, and nothing caught it because two upstream bugs (#1529,
+#: #1575) meant the assertion was never reached.
+_N_SAMPLES = 1000
+_THIN = 8
+_N_KEPT = _N_SAMPLES // _THIN
+
+
 @pytest.mark.slow
-def test_interim_fit_runs_n8_photometry():
-    """Smoke test: interim fit with N=8 galaxies completes without error."""
+def test_interim_fit_completes_on_a_small_population():
+    """Smoke test: the interim fit completes without error on a small population.
+
+    The galaxy count lives in ``_N_SMOKE``, not in this name. The previous name
+    said ``n8`` and the body had already been cut to two -- the same kind of
+    drift between a stated value and the value actually used that produced
+    #1575 one line below.
+    """
     from tengri.inference.population import fit_interim
 
-    model, mock = _build_model_and_mock(n_galaxies=8)
+    model, mock = _build_model_and_mock(n_galaxies=_N_SMOKE)
 
-    # Narrow interim priors to test convergence
+    # Narrowed interim priors, but they MUST still contain the injected truth.
+    #
+    # This read (50.0, 200.0) against a mock generated at tau_true_myr = 350.
+    # The truth sat 1.75x outside the support the fit was allowed to reach, so
+    # the optimizer walked to a boundary that is at infinity in unbounded space
+    # and all 8 MAP restarts returned a non-finite loss -- 50 minutes into the
+    # run, with a message advising learning_rate/n_restarts tuning that cannot
+    # reach a mode outside the support (issue #1575).
+    #
+    # It survived review because the truths were validated against the NOMINAL
+    # bounds (10, 500), where 350 passes, and the interim bounds were narrowed
+    # afterwards without re-checking. fit_interim now asserts this itself; the
+    # widened upper bound below is what makes the fixture valid.
     interim_bounds = {
         "sigma_bounds": (0.5, 1.5),
-        "tau_bounds_myr": (50.0, 200.0),
+        "tau_bounds_myr": (50.0, 500.0),
     }
 
     key = jax.random.PRNGKey(0)
@@ -93,13 +141,15 @@ def test_interim_fit_runs_n8_photometry():
         interim_bounds=interim_bounds,
         n_leapfrog_steps=100,
         dense_mass_matrix=True,
+        n_samples=_N_SAMPLES,
+        thin=_THIN,
     )
 
     # Verify shapes
-    assert result.fields.shape == (8, 1000, 16)  # (N, K, n_grid)
+    assert result.fields.shape == (_N_SMOKE, _N_KEPT, 16)  # (N, K, n_grid)
     assert result.times_yr.shape == (16,)
-    assert result.ess.shape == (8,)
-    assert result.n_divergent.shape == (8,)
+    assert result.ess.shape == (_N_SMOKE,)
+    assert result.n_divergent.shape == (_N_SMOKE,)
     assert isinstance(result.rhat, dict)
     assert "psd_xi" in result.rhat  # Field convergence should be present
     assert result.wall_time_s > 0.0
