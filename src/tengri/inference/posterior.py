@@ -2735,7 +2735,14 @@ class Posterior:
         names = list(self._CURATED_DIR)
         model = self.__dict__.get("_model")
         if model is not None:
-            with contextlib.suppress(Exception):
+            # AttributeError only: not every model type carries
+            # ``available_properties``, and that absence is the expected case
+            # this guard exists for. Catching everything also swallowed genuine
+            # failures *inside* ``available_properties`` — which is a property,
+            # so it runs real code — and the only symptom was a short tab-
+            # completion list. A `__dir__` that silently under-reports is
+            # indistinguishable from a model that has fewer properties.
+            with contextlib.suppress(AttributeError):
                 names.extend(model.available_properties)
         return sorted(set(names))
 

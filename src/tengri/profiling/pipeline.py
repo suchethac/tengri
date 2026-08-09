@@ -138,8 +138,22 @@ def _time_step(name: str, fn, n: int = 200, grad_fn=None) -> StepTiming:
 
     t_grad = None
     if grad_fn is not None:
-        with contextlib.suppress(Exception):
+        # Broad by design: a step whose gradient does not compile is a real
+        # result for a profiler, and should not abort the rest of the report.
+        # ``t_grad`` staying None is already visible in the output, so the log
+        # only has to say *why* — otherwise a missing timing reads as "not
+        # measured" when it means "measurement failed".
+        try:
             t_grad, _ = bench(grad_fn, n=n, warmup=3)
+        except Exception as exc:  # noqa: BLE001 - profiling must not abort
+            import logging
+
+            logging.getLogger(__name__).debug(
+                "gradient timing for step %r unavailable (%s: %s)",
+                name,
+                type(exc).__name__,
+                exc,
+            )
 
     return StepTiming(name=name, mean_us=t_fwd, grad_us=t_grad, array_mb=mem)
 

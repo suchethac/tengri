@@ -106,6 +106,26 @@ _MANY_EVAL_SAMPLERS = frozenset(
 )
 
 
+def _prewarm_logger():
+    """Logger for the best-effort prewarm paths.
+
+    Prewarm legitimately catches everything — any exception a real fit can
+    raise can surface during warmup, and narrowing the type would let some
+    escape and abort a run that was going to succeed. So the catch stays broad
+    and the failure becomes *visible* instead: a warmup that silently stopped
+    working is indistinguishable from one that ran, and the only symptom is
+    compile cost reappearing where it was supposed to have been paid already.
+
+    ``debug`` rather than ``warning``: some configurations legitimately cannot
+    prewarm, and a per-fit warning would be noise that teaches people to ignore
+    it. Enable with ``logging.getLogger("tengri.inference.fitter").setLevel(
+    logging.DEBUG)``.
+    """
+    import logging
+
+    return logging.getLogger(__name__)
+
+
 def _warn_if_exact_forward_path(model, backend_name: str) -> None:
     """Warn when a many-evaluation sampler runs on the exact photometry path.
 
@@ -2119,10 +2139,22 @@ class Fitter:
             return
         if n_chains is not None and n_chains > 1:
             warmup_kw["n_chains"] = n_chains
-            import contextlib
-
-            with contextlib.suppress(Exception):
+            # Broad by design — this is a warmup, and any exception a real fit
+            # can raise can surface here too, so narrowing the type would just
+            # let some failures escape and abort a run that was going to work.
+            # What was wrong is that the failure left no trace: a warmup that
+            # silently stopped working looks exactly like one that ran, and the
+            # only symptom is the compile cost reappearing in the real fit.
+            try:
                 self.run(method=method, key=key, verbose=False, prewarm=False, **warmup_kw)
+            except Exception as exc:
+                _prewarm_logger().debug(
+                    "multi-chain warmup for method=%r did not complete (%s: %s); "
+                    "the fit continues and will compile on first use",
+                    method,
+                    type(exc).__name__,
+                    exc,
+                )
 
     def _auto_prewarm(self, key) -> None:
         """JIT-compile the shared loss/grad + predict surface before the fit loop.
@@ -2145,27 +2177,40 @@ class Fitter:
         Best-effort: every step is wrapped so a failure here never masks the
         genuine error the real :meth:`run` would raise.
         """
-        import contextlib
 
         import jax as _jax
 
         if key is None:
             key = _jax.random.PRNGKey(0)
         # Loss + gradient: the forward-heavy compile shared by every backend.
-        with contextlib.suppress(Exception):
+        try:
             grad_fn = self._get_or_build_grad_fn()
             init = self._initialize_unbounded(key)
             _jax.block_until_ready(grad_fn(init, self._data_args))
+        except Exception as exc:
+            _prewarm_logger().debug(
+                "gradient prewarm skipped (%s: %s); the fit continues and pays "
+                "this compile on its first evaluation",
+                type(exc).__name__,
+                exc,
+            )
         # Post-fit predict surface on the fit model (LUT-honoring accessors).
         # The wrappers are memoized per model: ``self.model.predict_photometry``
         # builds a NEW bound-method object on every attribute access, so a bare
         # ``jax.jit(...)`` here got a fresh cache entry and recompiled on every
         # fit — the warming step was the one thing that never stayed warm. It cost
         # two compiles per galaxy on a sequential catalog.
-        with contextlib.suppress(Exception):
+        try:
             warm_p = self.spec.sample(key)
             for _name in ("predict_photometry", "predict_properties"):
                 _jax.block_until_ready(_memoized_predict_jit(self.model, _name)(warm_p))
+        except Exception as exc:
+            _prewarm_logger().debug(
+                "predict-surface prewarm skipped (%s: %s); post-fit accessors "
+                "will compile on first access",
+                type(exc).__name__,
+                exc,
+            )
 
     def save_cache(self, path) -> None:
         """Persist this model's adaptation cache (step size + mass matrix) to disk.

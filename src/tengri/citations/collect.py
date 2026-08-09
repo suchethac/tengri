@@ -249,7 +249,14 @@ def _citable_chain(obj: Any) -> list[Any]:
         # ForwardModel exposes its wrapped SED only through this accessor.
         inner = getattr(cur, "_inner_sed_for_delegation", None)
         if callable(inner):
-            with contextlib.suppress(Exception):
+            # The accessor raises deliberately on a multi-population forward,
+            # where ``populations[0]`` would be an arbitrary pick — that refusal
+            # is what this guard is for, and it arrives as ValueError/TypeError.
+            # Catching everything meant a citation silently going missing looked
+            # identical to a model that legitimately has none, and a bibliography
+            # that quietly drops a reference is worse than one that fails to
+            # build.
+            with contextlib.suppress(AttributeError, TypeError, ValueError):
                 queue.append(inner())
     return chain
 
