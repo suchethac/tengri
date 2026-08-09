@@ -1811,6 +1811,64 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
         result["dla"] = True
 
 
+def _legacy_radio_type_to_blocks(radio_type: str) -> tuple[str, str]:
+    """Resolve a legacy ``radio={'type': X}`` name onto ``(sf_mode, agn_model)``.
+
+    Parameters
+    ----------
+    radio_type : str
+        A member of :func:`_valid_radio_types` other than ``"none"``.
+
+    Returns
+    -------
+    tuple of (str, str)
+        ``(radio_sfr_mode, radio_agn_model)`` — the two attributes that
+        decide which radio physics runs.
+
+    Notes
+    -----
+    ``condon92`` predates the SF/AGN split and names the *composite*
+    (``radio_total``), not a third AGN model, so it resolves to both
+    defaults. The SEDModelComponent variants that
+    :func:`_valid_radio_types` folds in — ``radio_dpl``,
+    ``radio_powerlaw`` — each name exactly one axis, so strip the
+    ``radio_`` prefix and route the remainder to whichever axis
+    registers it.
+
+    Deriving the mapping from ``AGN_RADIO_MODELS`` / ``SF_RADIO_MODELS``
+    rather than spelling it out keeps this in step with the registry the
+    validator already reads: a hand-written third list is how the radio
+    error message and the dust menu each drifted out of agreement with
+    the builder. A ``radio_*`` component whose stripped name matches
+    neither axis raises here rather than silently taking the defaults —
+    that silent path is #1461, where ``radio_dpl`` was accepted and the
+    single power-law ran in place of the Martinez-Ramirez+2024 double
+    power-law.
+    """
+    from tengri.components.radio.component import AGN_RADIO_MODELS, SF_RADIO_MODELS
+
+    sf_default, agn_default = "bell2003", "powerlaw"
+    if radio_type == "condon92":
+        return sf_default, agn_default
+
+    # ``"none"`` is the only name in both tuples and never reaches here,
+    # so the AGN-first order below cannot be ambiguous.
+    block = radio_type.removeprefix("radio_")
+    if block in AGN_RADIO_MODELS:
+        return sf_default, block
+    if block in SF_RADIO_MODELS:
+        return block, agn_default
+
+    raise ValueError(
+        f"radio type '{radio_type}' is accepted by the grammar but names "
+        f"neither a star-forming model {SF_RADIO_MODELS} nor an AGN model "
+        f"{AGN_RADIO_MODELS}. It was registered as a radio component "
+        "without a matching sf/agn block, so there is nothing for the "
+        "forward model to run. Select it explicitly instead, e.g. "
+        "radio={'agn': {'type': 'dpl'}}."
+    )
+
+
 def _translate_radio(radio_dict: dict, result: dict) -> None:
     """Translate radio group with composable SF + AGN sub-blocks.
 
@@ -1830,6 +1888,11 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     .. code-block:: python
 
         radio = {"type": "condon92"}  # radio on with default sf/agn models
+        radio = {"type": "radio_dpl"}  # == radio={'agn': {'type': 'dpl'}}
+
+    The legacy name is resolved onto the two axes by
+    :func:`_legacy_radio_type_to_blocks` rather than assumed to be the
+    default pair — accepting a name and then ignoring it is #1461.
 
     Raises if both 'type' and 'sf'/'agn' sub-blocks are present.
     """
@@ -1851,7 +1914,7 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             "or radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}} (new)."
         )
 
-    # Legacy form: radio={'type': 'X'} → interpret as SF variant with default AGN
+    # Legacy form: radio={'type': 'X'} → resolve X onto the sf/agn axes
     if has_legacy_type and not has_sf_block and not has_agn_block:
         radio_type = radio_dict["type"]
         valid_radio = _valid_radio_types()
@@ -1861,9 +1924,9 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
         result["radio"] = radio_type != "none"
         if radio_type != "none":
-            # Legacy 'type' predates the SF/AGN split → default both models.
-            result["radio_sfr_mode"] = "bell2003"
-            result["radio_agn_model"] = "powerlaw"
+            sf_variant, agn_variant = _legacy_radio_type_to_blocks(radio_type)
+            result["radio_sfr_mode"] = sf_variant
+            result["radio_agn_model"] = agn_variant
         return
 
     # New composable form: extract SF and AGN sub-blocks

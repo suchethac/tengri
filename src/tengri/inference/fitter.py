@@ -106,6 +106,26 @@ _MANY_EVAL_SAMPLERS = frozenset(
 )
 
 
+def _prewarm_logger():
+    """Logger for the best-effort prewarm paths.
+
+    Prewarm legitimately catches everything — any exception a real fit can
+    raise can surface during warmup, and narrowing the type would let some
+    escape and abort a run that was going to succeed. So the catch stays broad
+    and the failure becomes *visible* instead: a warmup that silently stopped
+    working is indistinguishable from one that ran, and the only symptom is
+    compile cost reappearing where it was supposed to have been paid already.
+
+    ``debug`` rather than ``warning``: some configurations legitimately cannot
+    prewarm, and a per-fit warning would be noise that teaches people to ignore
+    it. Enable with ``logging.getLogger("tengri.inference.fitter").setLevel(
+    logging.DEBUG)``.
+    """
+    import logging
+
+    return logging.getLogger(__name__)
+
+
 def _warn_if_exact_forward_path(model, backend_name: str) -> None:
     """Warn when a many-evaluation sampler runs on the exact photometry path.
 
@@ -622,6 +642,7 @@ class Fitter:
         data_type=None,
         data_mask=None,
         presence=None,
+        line_flux_data=None,
         calibration_marginalize=False,
         cal_n_poly=3,
         cal_prior_sigma=1.0,
@@ -714,6 +735,12 @@ class Fitter:
                     f"presence shape {presence.shape} does not match data shape {self.data.shape}"
                 )
         self.presence = presence
+        # Per-galaxy emission-line values (#1599). The Observation carries the
+        # line *schema* -- names, wavelengths, and whether each is a limit --
+        # which is shared across a catalog; only the measured values differ per
+        # galaxy. Both the data args and the compile key read this through
+        # ``_resolved_line_fluxes`` so they cannot disagree.
+        self._line_flux_override = line_flux_data
         self.data_type = self._resolve_data_type(data_type, model)
         self.spec = model.spec
 
@@ -927,6 +954,29 @@ class Fitter:
         """
         obs = getattr(model, "observation", None)
         return getattr(obs, "line_fluxes", None) is not None
+
+    def _resolved_line_fluxes(self):
+        """The line-flux config this fit actually scores against.
+
+        Returns
+        -------
+        LineFluxData or None
+            The ``line_flux_data=`` override when one was supplied, else the
+            Observation's own ``line_fluxes``.
+
+        Notes
+        -----
+        Read by :meth:`_build_data_args` *and* by :meth:`compile_signature`.
+        They must resolve identically: the signature keys on whether a limit
+        mask is present, which selects the censored-vs-Gaussian adapter at
+        build time, while the mask values ride through the data args. If the
+        two read different objects, a fit can compile the Gaussian adapter and
+        then be handed a censored mask (#1599).
+        """
+        if self._line_flux_override is not None:
+            return self._line_flux_override
+        obs = getattr(self.model, "observation", None)
+        return getattr(obs, "line_fluxes", None) if obs is not None else None
 
     def _fits_lines(self, model) -> bool:
         """Whether any emission-line channel is fit, measured or marginalized."""
@@ -1221,7 +1271,7 @@ class Fitter:
             if spec_cfg is not None and getattr(spec_cfg, "has_covariance", False):
                 args["spec_cov_inv"] = spec_cfg.cov_inv
 
-            line_flux_cfg = getattr(obs, "line_fluxes", None)
+            line_flux_cfg = self._resolved_line_fluxes()
             if line_flux_cfg is not None:
                 args["line_flux_obs"] = line_flux_cfg.fluxes
                 args["line_flux_err"] = line_flux_cfg.errors
@@ -1463,7 +1513,7 @@ class Fitter:
         from tengri.observation.noise import has_noise_model
 
         obs = getattr(self.model, "observation", None)
-        line_flux_cfg = getattr(obs, "line_fluxes", None) if obs is not None else None
+        line_flux_cfg = self._resolved_line_fluxes()
         line_flux_key = (
             (
                 tuple(round(float(w), 6) for w in np.asarray(line_flux_cfg.wavelengths)),
@@ -2119,10 +2169,22 @@ class Fitter:
             return
         if n_chains is not None and n_chains > 1:
             warmup_kw["n_chains"] = n_chains
-            import contextlib
-
-            with contextlib.suppress(Exception):
+            # Broad by design — this is a warmup, and any exception a real fit
+            # can raise can surface here too, so narrowing the type would just
+            # let some failures escape and abort a run that was going to work.
+            # What was wrong is that the failure left no trace: a warmup that
+            # silently stopped working looks exactly like one that ran, and the
+            # only symptom is the compile cost reappearing in the real fit.
+            try:
                 self.run(method=method, key=key, verbose=False, prewarm=False, **warmup_kw)
+            except Exception as exc:
+                _prewarm_logger().debug(
+                    "multi-chain warmup for method=%r did not complete (%s: %s); "
+                    "the fit continues and will compile on first use",
+                    method,
+                    type(exc).__name__,
+                    exc,
+                )
 
     def _auto_prewarm(self, key) -> None:
         """JIT-compile the shared loss/grad + predict surface before the fit loop.
@@ -2145,27 +2207,40 @@ class Fitter:
         Best-effort: every step is wrapped so a failure here never masks the
         genuine error the real :meth:`run` would raise.
         """
-        import contextlib
 
         import jax as _jax
 
         if key is None:
             key = _jax.random.PRNGKey(0)
         # Loss + gradient: the forward-heavy compile shared by every backend.
-        with contextlib.suppress(Exception):
+        try:
             grad_fn = self._get_or_build_grad_fn()
             init = self._initialize_unbounded(key)
             _jax.block_until_ready(grad_fn(init, self._data_args))
+        except Exception as exc:
+            _prewarm_logger().debug(
+                "gradient prewarm skipped (%s: %s); the fit continues and pays "
+                "this compile on its first evaluation",
+                type(exc).__name__,
+                exc,
+            )
         # Post-fit predict surface on the fit model (LUT-honoring accessors).
         # The wrappers are memoized per model: ``self.model.predict_photometry``
         # builds a NEW bound-method object on every attribute access, so a bare
         # ``jax.jit(...)`` here got a fresh cache entry and recompiled on every
         # fit — the warming step was the one thing that never stayed warm. It cost
         # two compiles per galaxy on a sequential catalog.
-        with contextlib.suppress(Exception):
+        try:
             warm_p = self.spec.sample(key)
             for _name in ("predict_photometry", "predict_properties"):
                 _jax.block_until_ready(_memoized_predict_jit(self.model, _name)(warm_p))
+        except Exception as exc:
+            _prewarm_logger().debug(
+                "predict-surface prewarm skipped (%s: %s); post-fit accessors "
+                "will compile on first access",
+                type(exc).__name__,
+                exc,
+            )
 
     def save_cache(self, path) -> None:
         """Persist this model's adaptation cache (step size + mass matrix) to disk.
@@ -2677,6 +2752,7 @@ class Fitter:
         from tengri.inference._backend_registry import (
             check_capabilities,
             check_requires,
+            check_unknown_kwargs,
             check_usable,
             get_backend,
         )
@@ -2740,6 +2816,9 @@ class Fitter:
         # ``run_nifty_vi`` or ``run_map`` — functions the caller never mentioned.
         # Raises ValueError, matching the answer ``method='mcmc'`` already gave.
         check_capabilities(entry, kwargs)
+        # Same answer for every other unrecognized name, so a typo or an
+        # unsupported channel names the method instead of the runner (#1469).
+        check_unknown_kwargs(entry, kwargs)
 
         # Compile the loss/grad + predict surface up front so the fit loop runs
         # warm and the persistent JAX cache is populated.

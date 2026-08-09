@@ -57,6 +57,28 @@ def ssp():
     return load_ssp_data(path)
 
 
+# Bare-stellar grids, for the additive nebular backends below (#1579). Every
+# entry in ``_NEB_BACKEND`` adds nebular emission on top of the stellar
+# continuum, so all three need a grid that does not already contain it --
+# CueBackend and CloudyGridBackend refuse a nebular-included one outright.
+# ``ssp`` above resolves to the wNE grid first, so ``test_nebular_e2e`` was
+# building exactly that refused pairing and only survived because conftest's
+# TENGRI_ALLOW_WNE_CUE=1 disabled the check along with the Q_H heuristic it
+# was written for.
+_BARE_SSP_CANDIDATES = [
+    "data/fsps_prsc_miles_chabrier.h5",
+    "data/bc03_pdva_stelib_chabrier.h5",
+]
+
+
+@pytest.fixture(scope="module")
+def bare_ssp():
+    path = next((p for p in _BARE_SSP_CANDIDATES if Path(p).is_file()), None)
+    if path is None:
+        pytest.skip("No bare-stellar SSP grid available under data/.")
+    return load_ssp_data(path)
+
+
 @pytest.fixture(scope="module")
 def obs():
     return Observation(photometry=Photometry.from_names(list(_FILTERS)))
@@ -220,13 +242,13 @@ _NEB_BACKEND = {
 
 
 @pytest.mark.parametrize("neb_type", list(_NEB_BACKEND))
-def test_nebular_e2e(ssp, obs, neb_type):
+def test_nebular_e2e(bare_ssp, obs, neb_type):
     """Each nebular grammar key dispatches to NebularSEDComponent + its backend and predicts."""
     from tengri.components.nebular.component import NebularSEDComponent
 
     try:
         model = _silent_build(
-            ssp_data=ssp,
+            ssp_data=bare_ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
             neb={"type": neb_type, "*": FIXED},

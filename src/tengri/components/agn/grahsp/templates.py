@@ -16,11 +16,12 @@ import h5py
 import numpy as np
 from jax import Array
 
+from tengri._data_setup import package_or_env_data_path
+
 __all__ = ["DEFAULT_TEMPLATE_PATH", "GRAHSPTemplates", "load_grahsp_templates"]
 
-DEFAULT_TEMPLATE_PATH: Path = (
-    Path(__file__).resolve().parents[5] / "data" / "grahsp" / "grahsp_templates.h5"
-)
+#: Honors $TENGRI_DATA_DIR before the package's own ``data/`` (#1431).
+DEFAULT_TEMPLATE_PATH: Path = package_or_env_data_path("grahsp/grahsp_templates.h5")
 
 
 @dataclass(frozen=True)

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import gc
+import logging
 import time
 from typing import Any, NamedTuple
 
@@ -12,6 +13,8 @@ import numpy as np
 from tengri.inference.population.reconstruct import centered_fields
 
 __all__ = ["InterimResult", "fit_interim"]
+
+logger = logging.getLogger(__name__)
 
 
 class InterimResult(NamedTuple):
@@ -44,6 +47,63 @@ class InterimResult(NamedTuple):
     # Defaulted fields must follow every non-default one in a NamedTuple.
     rhat_median: dict[str, Any] | None = None
     rhat_frac_above_1p01: dict[str, Any] | None = None
+
+
+#: Injected-truth keys this guard knows how to check, mapped to the
+#: ``interim_bounds`` entry that must contain them.
+_TRUTH_TO_BOUNDS = {
+    "sfh_field_psd_sigma": ("sigma_bounds", "sigma", ""),
+    "sfh_field_psd_tau_myr": ("tau_bounds_myr", "tau", " Myr"),
+}
+
+
+def _assert_truth_within_interim_bounds(mock, interim_bounds):
+    """Refuse a mock whose injected truth lies outside the interim support.
+
+    ``make_population`` validates each truth against the *model's* prior, but
+    ``fit_interim`` then overrides the shared PSD priors with
+    ``interim_bounds`` — so a truth that was reachable before the override can
+    be unreachable after it, and nothing re-checked (issue #1575).
+
+    The failure this prevents is expensive and misdirects: the optimizer walks
+    to a boundary that sits at infinity in unbounded space, every MAP restart
+    returns a non-finite loss, and the resulting message advises tuning
+    ``learning_rate``/``n_restarts`` — none of which can reach a mode outside
+    the support. On the N=8 PSD pilot that arrived 50 minutes into the run.
+
+    Parameters
+    ----------
+    mock : MockPopulation
+        Population carrying ``truth_params``. Real data has no injected truth,
+        so an absent or unrelated ``truth_params`` is skipped rather than
+        rejected.
+    interim_bounds : dict
+        ``{"sigma_bounds": (lo, hi), "tau_bounds_myr": (lo, hi)}``, the bounds
+        the fit will actually use.
+
+    Raises
+    ------
+    ValueError
+        If any galaxy's injected truth falls outside the matching bounds.
+        Bounds are inclusive: a truth exactly on an edge is inside the support.
+    """
+    for galaxy, truths in enumerate(getattr(mock, "truth_params", None) or []):
+        for name, (bounds_key, label, unit) in _TRUTH_TO_BOUNDS.items():
+            if name not in truths or bounds_key not in interim_bounds:
+                continue
+            value = float(np.asarray(truths[name]))
+            lo, hi = (float(b) for b in interim_bounds[bounds_key])
+            if lo <= value <= hi:
+                continue
+            raise ValueError(
+                f"Injected truth {label}={value:g}{unit} (galaxy {galaxy}) is OUTSIDE "
+                f"the interim_bounds[{bounds_key!r}] = ({lo:g}, {hi:g}) this fit will "
+                f"use. The truth is unreachable, so every MAP restart diverges to a "
+                f"non-finite loss and no optimizer setting recovers it. Either move "
+                f"the injected truth inside these bounds or widen interim_bounds to "
+                f"contain it. Note make_population validated this truth against the "
+                f"MODEL's prior, which interim_bounds overrides (issue #1575)."
+            )
 
 
 def fit_interim(
@@ -119,6 +179,12 @@ def fit_interim(
     import jax
 
     t0 = time.time()
+
+    # Before anything expensive: is the truth even reachable under the bounds
+    # this fit will use? Checked here rather than in make_population because
+    # interim_bounds overrides the priors make_population validated against.
+    _assert_truth_within_interim_bounds(mock, interim_bounds)
+
     n_galaxies = len(mock.table)
     log_age_grid = model.log_age_grid
 
@@ -227,14 +293,6 @@ def fit_interim(
     sigma_stacked = np.stack(all_sigma, axis=0)
     tau_yr_stacked = np.stack(all_tau_myr, axis=0) * 1e6
 
-    # DEBUG: Print shapes before centered_fields
-    print("[DEBUG] Before centered_fields:")
-    print(f"  xi_stacked.shape = {xi_stacked.shape} (expect (N, K, 16))")
-    print(f"  sigma_stacked.shape = {sigma_stacked.shape} (expect (N, K))")
-    print(f"  tau_yr_stacked.shape = {tau_yr_stacked.shape} (expect (N, K))")
-    print(f"  log_age_grid.shape = {log_age_grid.shape} (expect (16,))")
-    print(f"  log_age_grid last value: {log_age_grid[-1]}")
-
     # Thin the chains before reconstructing fields.
     #
     # The estimator materializes a (n_nodes, N, K) table: at 60x60 nodes, N=12
@@ -246,10 +304,18 @@ def fit_interim(
     # discards mostly redundant information while cutting the table 8x. Monte
     # Carlo error scales with ESS, not with the raw sample count.
     if thin > 1:
+        n_draws_before = xi_stacked.shape[1]
         xi_stacked = xi_stacked[:, ::thin, :]
         sigma_stacked = sigma_stacked[:, ::thin]
         tau_yr_stacked = tau_yr_stacked[:, ::thin]
-        print(f"  thinned by {thin}: K {xi_stacked.shape[1] * thin} -> {xi_stacked.shape[1]}")
+        # Reported because it changes the returned shape: callers asserting on
+        # `fields` see n_samples // thin draws, not n_samples (#1575).
+        logger.info(
+            "thinned by %d: %d -> %d draws per galaxy",
+            thin,
+            n_draws_before,
+            xi_stacked.shape[1],
+        )
 
     # Reconstruct centered fields
     fields_centered = centered_fields(

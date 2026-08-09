@@ -129,7 +129,12 @@ from collections.abc import Callable
 
 import jax.numpy as jnp
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LOG_MBH,
+    DEFAULT_AGN_LUM_RATIO,
+)
 from tengri.components.agn.adaf import adaf_spectrum
 from tengri.components.agn.blr import compute_blr_sed
 from tengri.components.agn.cat3d_wind import cat3d_wind_sed
@@ -193,16 +198,12 @@ def _find_relagn_grid() -> str:
     FileNotFoundError
         If no grid file is found. Run ``scripts/build_relagn_disc_grid.py``.
     """
-    from pathlib import Path
+    from tengri._data_setup import find_data
 
-    base = Path(__file__).resolve().parents[4]
-    candidates = [
-        base / "data" / "relagn_disc_grid.h5",
-        Path("data/relagn_disc_grid.h5"),
-    ]
-    for p in candidates:
-        if p.is_file():
-            return str(p)
+    # Honors $TENGRI_DATA_DIR as well as the repo root (#1431).
+    found = find_data("relagn_disc_grid.h5")
+    if found is not None:
+        return str(found)
     raise FileNotFoundError(
         "RELAGN disc grid not found. Run: "
         "conda run -n henv python scripts/build_relagn_disc_grid.py"
@@ -638,11 +639,11 @@ def unified_agn(
 def multicolor_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_lum_ratio: float = 0.1,
-    agn_log_mbh: float = 8.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
     **_kwargs,
@@ -714,11 +715,11 @@ def multicolor_agn(
 def kubota_done_full_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_lum_ratio: float = 0.1,
-    agn_log_mbh: float = 8.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_f_hard: float = 0.02,
     agn_gamma_warm: float = 2.5,
     agn_kt_warm: float = 0.2,
@@ -819,12 +820,12 @@ def kubota_done_full_agn(
 def skirtor_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_lum_ratio: float = 0.1,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_tau_skirtor: float = 7.0,
     agn_p_skirtor: float = 1.0,
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
     agn_ebv_disc: float = 0.0,
     **_kwargs,
@@ -891,13 +892,13 @@ def skirtor_agn(
 def skirtor_stalevski_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_lum_ratio: float = 0.1,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_tau_skirtor: float = 7.0,
     agn_p_skirtor: float = 1.0,
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
     agn_radius_ratio: float = 20.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Raw Stalevski (2016) SKIRTOR SED — the published radiative-transfer output.
@@ -972,7 +973,7 @@ def skirtor_stalevski_agn(
 def silva04_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_lum_ratio: float = 0.1,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
     agn_ebv_disc: float = 0.0,
@@ -1027,8 +1028,8 @@ def silva04_agn(
 def cat3d_wind_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_lum_ratio: float = 0.1,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_a_cat3d: float = -2.0,
     agn_fwd_cat3d: float = 1.0,
     agn_torus_frac: float = 0.5,
@@ -1092,8 +1093,8 @@ def cat3d_wind_agn(
 def adaf_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_lum_ratio: float = 0.1,
-    agn_log_mbh: float = 8.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_adaf_alpha: float = 0.3,
     agn_adaf_beta: float = 0.5,
     agn_adaf_delta: float = 0.1,
@@ -1176,10 +1177,10 @@ def adaf_agn(
 
 def relagn_agn(
     wavelength: jnp.ndarray,
-    agn_log_mbh: float = 8.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_mdot: float = -1.0,
     agn_astar: float = 0.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
     agn_log_nh_silva: float = 23.0,
     agn_ebv_disc: float = 0.0,
@@ -1339,18 +1340,20 @@ def _sigmoid_mask(
 def unified_nlr_blr(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_theta_torus: float = 30.0,
     agn_nlr_cf: float = 0.1,
     agn_blr_cf: float = 0.1,
-    agn_log_mbh: float = 7.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
     agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
-    agn_lum_ratio: float = 0.1,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_blr_fwhm: float = 5000.0,
     agn_nlr_fwhm: float = 500.0,
+    # Differs from the declared agn_polar_ebv default (0.03) on purpose: polar
+    # reddening here is opt-in, so the default is the no-op.
     agn_polar_ebv: float = 0.0,
     nlr_fn: "Callable | None" = None,
     blr_fn: "Callable | None" = None,

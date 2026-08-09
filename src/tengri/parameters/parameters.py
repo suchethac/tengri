@@ -681,6 +681,18 @@ class Parameters:
                 _ebv_dist = self._distributions.get("agn_polar_ebv")
                 if _ebv_dist is not None and _ebv_dist.is_fixed:
                     recipe_params = {"agn_polar_ebv": float(_ebv_dist.value)}
+            # Rule 9 needs the range each parameter can actually take, not its
+            # value: a prior's bounds, or (v, v) for a fixed one. Every
+            # Distribution defines .bounds, so read it directly rather than
+            # behind a blanket except — a guard against a silent failure must
+            # not itself fail silently. A string-valued Fixed (a categorical
+            # choice) reports (None, None) and is skipped.
+            param_support: dict[str, tuple[float, float]] = {}
+            for _name, _dist in self._distributions.items():
+                _lo, _hi = _dist.bounds
+                if _lo is None or _hi is None:
+                    continue
+                param_support[_name] = (float(_lo), float(_hi))
             validate_block_recipe(
                 agn_disc_block=self.agn_disc_block,
                 agn_nlr_block=self.agn_nlr_block,
@@ -689,6 +701,7 @@ class Parameters:
                 agn_torus_block=self.agn_torus_block,
                 agn_attenuation_block=self.agn_attenuation_block,
                 params=recipe_params,
+                param_support=param_support,
             )
 
         # E fix (#846): the physical disc blocks (multicolor, kubota_done) now
@@ -983,27 +996,40 @@ class Parameters:
         (wheel installs, grid not generated) so the caller can raise the
         listing error instead.
         """
-        from pathlib import Path
+        from tengri._data_setup import find_data
 
-        candidate = Path(__file__).resolve().parents[3] / "data" / "cloudy_grid_mist.h5"
-        return str(candidate) if candidate.is_file() else None
+        # Honors $TENGRI_DATA_DIR as well as the repo root (#1431).
+        candidate = find_data("cloudy_grid_mist.h5")
+        return str(candidate) if candidate is not None else None
 
     @staticmethod
     def _raise_missing_grid_path():
         """Raise ValueError listing available CLOUDY grids."""
-        from pathlib import Path
+        from tengri._data_setup import data_dirs
 
         # Repo-level data/ — where convert_fsps_cloudy_grid.py writes grids.
         # (An earlier revision listed the packaged src/tengri/data/ directory,
         # which never contains CLOUDY grids, so the listing was always empty.)
-        data_dir = Path(__file__).resolve().parents[3] / "data"
-        grids = sorted(data_dir.glob("cloudy_grid_*.h5"))
-        grid_list = "\n".join(f"  {g.name}" for g in grids) if grids else "  (none found)"
+        # Listing every searched directory keeps the message honest for users
+        # whose grids live under $TENGRI_DATA_DIR (#1431).
+        searched = data_dirs()
+        seen: set[str] = set()
+        grids = [
+            g
+            for d in searched
+            for g in sorted(d.glob("cloudy_grid_*.h5"))
+            if not (g.name in seen or seen.add(g.name))
+        ]
+        # Full paths, not bare names: with several search directories, a bare
+        # name no longer says which one the grid came from.
+        grid_list = "\n".join(f"  {g}" for g in grids) if grids else "  (none found)"
+        where = ", ".join(str(d) for d in searched[:3])
         raise ValueError(
             f"The CLOUDY nebular backend needs a grid file. Pass one via "
             f"neb={{'type': 'cloudy', 'grid': 'data/cloudy_grid_<iso>.h5'}} "
             f"(or the flat kwarg cloudy_grid_path=...). "
-            f"Available grids in {data_dir}/:\n{grid_list}\n"
+            f"Searched {where} (and further ancestors); set $TENGRI_DATA_DIR to "
+            f"point elsewhere. Available grids:\n{grid_list}\n"
             f"Generate them with scripts/convert_fsps_cloudy_grid.py, and "
             f"match the grid isochrone to your SSP for consistency."
         )

@@ -7,7 +7,6 @@ Does not replace existing result types; wraps them so downstream code can access
 
 from __future__ import annotations
 
-import contextlib
 import datetime as _dt
 import platform as _platform
 import sys as _sys
@@ -28,11 +27,29 @@ __all__ = [
     "MockData",
     "PopulationPosterior",
     "Posterior",
+    "ResultSerializationError",
     "generate_mock",
     "posteriors_to_dataframe",
 ]
 
 __version_fallback__ = "0.0.0"
+
+
+class ResultSerializationError(RuntimeError):
+    """A saved fit is missing data that was asked to be written.
+
+    Raised by :meth:`FitResult.save` when one or more sample entries could not
+    be written. The file is still created and holds everything that *could* be
+    written, with the omitted names recorded in its ``samples.skipped_keys``
+    attribute — so the failure is recoverable, not fatal.
+    :meth:`FitResult.load` reads that attribute back and warns, so a later
+    reader of an incomplete file learns of it too.
+
+    It raises rather than warning because the failure is invisible in the
+    artifact: a saved fit that silently lacks its samples looks exactly like a
+    complete one until someone loads it, potentially long after the run that
+    produced it is gone.
+    """
 
 
 @dataclass(frozen=True)
@@ -388,21 +405,33 @@ class FitResult:
         ------
         ImportError
             If h5py is not installed.
-        RuntimeError
-            If inner result cannot be serialized.
+        ResultSerializationError
+            If any sample entry could not be written, or if the inner
+            result's ``to_dict()`` raised. A subclass of ``RuntimeError``.
+            The file is still created and holds every entry that *could*
+            be written, so the failure is recoverable.
 
         Notes
         -----
-        The HDF5 schema version is ``v1``. Inner result serialization
-        is best-effort:
+        The HDF5 schema version is ``v1``. The inner result contributes a
+        ``/tengri_fitresult/samples`` group, populated from whichever of these
+        is available:
 
-        - Posterior with .samples dict → stored as /samples/{param} datasets
-        - Objects with .to_dict() → stored under /inner_data
-        - Otherwise → stored as a JSON string in /inner_json attribute
+        - ``.samples`` dict -> one dataset per key
+        - else ``.to_dict()`` -> one dataset per key
+        - else nothing; the group is created but left empty
+
+        Serialization is per-key, not all-or-nothing: an entry h5py has no
+        dtype for costs exactly that entry, and its name is recorded in the
+        group's ``skipped_keys`` attribute *and* raised. Until 2026-08 the
+        whole block sat under ``contextlib.suppress(Exception)``, so an
+        unwritable entry silently took every entry after it with it and
+        ``save`` still returned normally — this docstring already promised the
+        ``RuntimeError`` that the code did not raise.
 
         See Also
         --------
-        load : Inverse operation.
+        load : Inverse operation. Warns if the file records skipped keys.
 
         Examples
         --------
@@ -454,19 +483,59 @@ class FitResult:
                 data=np.array(self.citation_keys, dtype=h5py.string_dtype()),
             )
 
-            # Serialize inner result
+            # Serialize inner result.
+            #
+            # This whole block used to sit under `contextlib.suppress(Exception)`,
+            # so the first unwritable value abandoned every entry after it while
+            # `save()` returned normally. Measured with
+            # `{"good": ndarray, "bad": object()}`: the file kept `good`, dropped
+            # `bad`, and said nothing. A partial silent write, whose extent
+            # depends on dict order — an unwritable first key costs everything
+            # behind it. Of the ten blanket suppressors this is the only one that
+            # loses data rather than merely hiding a diagnostic.
+            #
+            # Two changes. Per-key failures no longer abandon the remaining
+            # keys, so one bad entry costs exactly one entry regardless of where
+            # it sits in the dict. And whatever could not be written is recorded
+            # on the group and raised, so the caller learns at save time rather
+            # than at load time.
             samples_grp = grp.create_group("samples")
-            with contextlib.suppress(Exception):
-                # Try to extract samples dict from Posterior
-                if hasattr(self.inner, "samples") and isinstance(self.inner.samples, dict):
-                    for key, val in self.inner.samples.items():
-                        samples_grp.create_dataset(key, data=np.array(val))
-                elif hasattr(self.inner, "to_dict"):
-                    # Fallback: call .to_dict() if available
-                    inner_dict = self.inner.to_dict()
-                    for key, val in inner_dict.items():
-                        with contextlib.suppress(TypeError, ValueError):
-                            samples_grp.create_dataset(key, data=np.array(val))
+            skipped: list[str] = []
+
+            source: dict | None = None
+            if isinstance(getattr(self.inner, "samples", None), dict):
+                source = self.inner.samples
+            elif hasattr(self.inner, "to_dict"):
+                try:
+                    source = self.inner.to_dict()
+                except Exception as exc:
+                    raise ResultSerializationError(
+                        f"{type(self.inner).__name__}.to_dict() raised while saving to "
+                        f"{path!r}: {exc!r}. Nothing was written for `samples`."
+                    ) from exc
+            if not isinstance(source, dict):
+                source = {}
+
+            for key, val in source.items():
+                try:
+                    samples_grp.create_dataset(key, data=np.array(val))
+                except (TypeError, ValueError) as exc:
+                    # h5py has no dtype for this value. Keep going: one
+                    # unwritable entry must not cost the others.
+                    skipped.append(f"{key} ({type(val).__name__}: {exc})")
+
+            if skipped:
+                samples_grp.attrs["skipped_keys"] = json.dumps(skipped)
+                raise ResultSerializationError(
+                    f"{len(skipped)} of {len(source)} sample entries could not be "
+                    f"written to {path!r} and are missing from the file:\n  "
+                    + "\n  ".join(skipped)
+                    + "\n\nEverything else was written, and the names above are "
+                    "recorded in the file's `samples.skipped_keys` attribute. "
+                    "This raises rather than passing quietly because a saved fit "
+                    "that silently lacks its samples is indistinguishable from a "
+                    "complete one until you try to use it."
+                )
 
     @classmethod
     def load(cls, path: str) -> FitResult:
@@ -552,6 +621,23 @@ class FitResult:
                 for key in grp["samples"]:
                     samples[key] = grp["samples"][key][()]
                 inner["samples"] = samples
+
+                # `save` raises on entries it could not write, but that raise is
+                # heard once, by whoever ran the fit. The person who loads the
+                # file later — possibly on another machine, after the run is
+                # gone — would otherwise see a dict that looks complete. The
+                # record has to be read where the incomplete data is used, or
+                # writing it just moves the silence downstream.
+                if "skipped_keys" in grp["samples"].attrs:
+                    dropped = json.loads(grp["samples"].attrs["skipped_keys"])
+                    _warnings.warn(
+                        f"{path!r} is an incomplete save: {len(dropped)} sample "
+                        f"entr{'y' if len(dropped) == 1 else 'ies'} could not be "
+                        "written when it was created and are absent from the "
+                        "loaded result:\n  " + "\n  ".join(dropped),
+                        UserWarning,
+                        stacklevel=2,
+                    )
 
             return cls(
                 inner=inner,

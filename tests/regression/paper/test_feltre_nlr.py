@@ -29,8 +29,12 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-_GRID_PATH = Path(__file__).resolve().parents[2] / "data" / "feltre_grid.h5"
-_GRID_AVAILABLE = _grid_available = _GRID_PATH.exists()
+from tengri._data_setup import find_data
+
+# parents[2] is tests/ from tests/regression/paper/, so this pointed at
+# tests/data/ — which never exists, and the tests below never ran (#1431).
+_GRID_PATH = find_data("feltre_grid.h5")
+_GRID_AVAILABLE = _grid_available = _GRID_PATH is not None
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:

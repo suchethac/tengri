@@ -35,7 +35,9 @@ try:
 except ImportError:  # numpy < 1.26
     from numpy import trapz as _np_trapezoid  # type: ignore[no-redef]
 
+from tengri._deprecated import deprecated_alias
 from tengri.observation.photometry import FilterCurve
+from tengri.registry import _RegistryTable
 
 # ── Registry: short name -> SVO Filter Profile Service ID ─────────
 
@@ -734,126 +736,127 @@ def list_available_filters(
     group_by: str = "facility",
     compute_properties: bool = False,
     cache_dir: str | None = None,
-) -> dict[str, str]:
-    """Print and return the filter registry, optionally grouped by facility.
+) -> _RegistryTable:
+    """List every filter alias in the registry, as a table.
 
     Parameters
     ----------
     group_by : str
-        Grouping key. ``"facility"`` (default) groups by telescope/instrument.
-        ``"none"`` lists filters alphabetically without grouping.
-        Default: ``"facility"``.
+        Row ordering. ``"facility"`` (default) sorts by telescope /
+        instrument and then by name; ``"none"`` sorts alphabetically by
+        name alone. Default: ``"facility"``.
     compute_properties : bool
-        If ``True``, load each filter's transmission curve and display
-        effective wavelength and FWHM columns. This triggers SVO
-        downloads for any filters not yet cached. Default: ``False``.
+        If ``True``, add ``lambda_eff`` and ``fwhm`` columns. This loads
+        every transmission curve and triggers SVO downloads for any
+        filter not yet cached. Default: ``False``.
     cache_dir : str, optional
         Override cache directory for filter downloads. Default: ``None``.
 
     Returns
     -------
-    dict
-        Copy of ``FILTER_REGISTRY`` (short name -> SVO ID). Also prints
-        the registry to stdout in human-readable format.
+    _RegistryTable
+        One row per alias, with columns ``name`` (the short alias
+        :func:`load_filter` accepts), ``facility`` and ``svo_id``.
 
     Notes
     -----
-    This function is primarily for interactive exploration of available
-    filters. For programmatic use, access ``FILTER_REGISTRY`` directly.
+    Returned a plain ``dict`` and printed the registry to stdout before
+    #1574. Every discovery verb returns a table (#1285), and the table
+    prints itself, so the stdout side effect is gone.
+    ``.to_dict("svo_id")`` reproduces the old ``{alias: svo_id}`` mapping.
 
+    Examples
+    --------
+    >>> list_available_filters()
+    >>> list_available_filters().filter(facility__contains="JWST")
+    >>> list_available_filters().to_dict("svo_id")  # the pre-#1574 shape
     """
-    if group_by == "none":
-        _print_flat_listing(compute_properties, cache_dir)
-    else:
-        _print_grouped_listing(compute_properties, cache_dir)
-    return dict(FILTER_REGISTRY)
-
-
-def _print_flat_listing(compute_properties: bool, cache_dir: str | None) -> None:
-    """Print filter registry as a flat (non-grouped) alphabetical list."""
-    if compute_properties:
-        hdr = f"{'Name':<22s} {'SVO ID':<35s} {'lambda_eff':>12s} {'FWHM':>10s}"
-        print(hdr)
-        print("-" * len(hdr))
-        for name in sorted(FILTER_REGISTRY):
-            kwargs = {"cache_dir": cache_dir} if cache_dir is not None else {}
-            info = filter_info(name, **kwargs)
-            print(
-                f"{name:<22s} {info['svo_id']:<35s} "
-                f"{info['lambda_eff_str']:>12s} {info['fwhm_str']:>10s}"
-            )
-    else:
-        hdr = f"{'Name':<22s} {'SVO ID':<35s}"
-        print(hdr)
-        print("-" * len(hdr))
-        for name, svo_id in sorted(FILTER_REGISTRY.items()):
-            print(f"{name:<22s} {svo_id:<35s}")
-    print(f"\nTotal: {len(FILTER_REGISTRY)} filters")
-
-
-def _print_grouped_listing(compute_properties: bool, cache_dir: str | None) -> None:
-    """Print filter registry grouped by facility/telescope."""
-    groups: dict[str, list[str]] = {}
-    for name in sorted(FILTER_REGISTRY):
-        fac = _infer_facility(name)
-        groups.setdefault(fac, []).append(name)
-
-    for fac in sorted(groups):
-        names = groups[fac]
-        print(f"\n{'=' * 60}")
-        print(f"  {fac}  ({len(names)} filters)")
-        print(f"{'=' * 60}")
+    names = sorted(FILTER_REGISTRY)
+    if group_by != "none":
+        names.sort(key=lambda n: (_infer_facility(n), n))
+    kwargs = {"cache_dir": cache_dir} if cache_dir is not None else {}
+    rows: list[dict] = []
+    for name in names:
+        row = {
+            "name": name,
+            "kind": "filter_alias",
+            "facility": _infer_facility(name),
+            "svo_id": FILTER_REGISTRY[name],
+            "use": f'tengri.load_filter("{name}")',
+        }
         if compute_properties:
-            hdr = f"  {'Name':<22s} {'lambda_eff':>12s} {'FWHM':>10s}"
-            print(hdr)
-            print(f"  {'-' * (len(hdr) - 2)}")
-            kwargs = {"cache_dir": cache_dir} if cache_dir is not None else {}
-            for name in names:
-                info = filter_info(name, **kwargs)
-                print(f"  {name:<22s} {info['lambda_eff_str']:>12s} {info['fwhm_str']:>10s}")
-        else:
-            for name in names:
-                print(f"  {name:<22s} {FILTER_REGISTRY[name]}")
-    print(f"\nTotal: {len(FILTER_REGISTRY)} filters across {len(groups)} facilities")
+            info = filter_info(name, **kwargs)
+            row["lambda_eff"] = info["lambda_eff_str"]
+            row["fwhm"] = info["fwhm_str"]
+        rows.append(row)
+    return _RegistryTable(rows)
 
 
 # ── User-facing filter discovery helpers ──────────────────────────
 # Thin convenience functions for discoverability on top of load_filter_set
 
 
-def list_filters(instrument: str | None = None) -> list[str]:
-    """Return sorted list of filter names shipped with tengri.
+def list_filter_aliases(instrument: str | None = None) -> _RegistryTable:
+    """List the short filter aliases that :func:`load_filter` accepts.
 
     Parameters
     ----------
     instrument : str, optional
-        Filter by instrument prefix (case-insensitive, substring match).
-        E.g., "sdss", "jwst", "hst". Default: None (return all).
+        Keep only aliases containing this substring (case-insensitive).
+        E.g. ``"sdss"``, ``"jwst"``, ``"hst"``. Default: ``None`` (all).
 
     Returns
     -------
-    list of str
-        Sorted filter names. Empty list if no matches.
+    _RegistryTable
+        One row per alias, with columns ``name`` (the short alias, e.g.
+        ``"sdss_r"``) and ``svo_id``. ``.names()`` returns the plain
+        sorted list of strings this gave before #1574.
 
     Notes
     -----
-    Filtering is permissive: matches if the instrument string appears
-    anywhere in the filter name (case-insensitive).
+    This answers a *different question* from :func:`tengri.list_filters`,
+    which lists the SVO curve-file stems shipped in ``data/filters/``
+    (e.g. ``"SLOAN_SDSS_r"``). This lists the short aliases the loaders
+    accept (e.g. ``"sdss_r"``). Both spellings load the same curve.
+
+    Both functions were once named ``list_filters`` — one name, two
+    parameters (``survey`` vs ``instrument``), two return types and two
+    value spaces, so a reader could not tell which one they held
+    (#1574). The old name survives here as a deprecated alias.
+
+    Matching is permissive: the substring may appear anywhere in the
+    alias, not only at the start.
 
     Examples
     --------
-    >>> all_filters = list_filters()
-    >>> sdss_filters = list_filters(instrument="sdss")
-    >>> len(sdss_filters)
-    5
+    >>> list_filter_aliases(instrument="sdss").names()
+    >>> list_filter_aliases().to_dict("svo_id")  # {alias: SVO ID}
     """
-    names = sorted(FILTER_REGISTRY.keys())
+    names = sorted(FILTER_REGISTRY)
+    if instrument is not None:
+        needle = instrument.lower()
+        names = [name for name in names if needle in name.lower()]
+    return _RegistryTable(
+        [
+            {
+                "name": name,
+                "kind": "filter_alias",
+                "svo_id": FILTER_REGISTRY[name],
+                "use": f'tengri.load_filter("{name}")',
+            }
+            for name in names
+        ]
+    )
 
-    if instrument is None:
-        return names
 
-    instrument_lower = instrument.lower()
-    return [name for name in names if instrument_lower in name.lower()]
+#: Deprecated since #1574: this and the top-level ``tengri.list_filters``
+#: answered different questions under one name. Use
+#: :func:`list_filter_aliases`.
+list_filters = deprecated_alias(
+    list_filter_aliases,
+    old_name="tengri.observation.filters.list_filters",
+    new_name="tengri.observation.filters.list_filter_aliases",
+)
 
 
 def load(names: list[str]):
@@ -906,21 +909,36 @@ def describe(name: str) -> str:
     Parameters
     ----------
     name : str
-        Filter short name from the registry.
+        Filter short name from the registry (``"sdss_r"``) or the SVO-style
+        curve-file stem (``"SLOAN_SDSS_r"``). Both resolve to the same curve.
 
     Returns
     -------
     str
         Human-readable description. Format:
-        "<name>: lambda_eff ~ X.XXX μm (range A–B μm)" or similar on failure.
+        "<name>: lambda_eff ~ X.XXX μm (range A–B μm)".
+
+    Raises
+    ------
+    KeyError
+        If no filter by that name exists.
 
     Notes
     -----
-    If the filter fails to load, returns a fallback description.
     Effective wavelength is computed as the transmission-weighted mean.
+
+    Until #1611 the whole body sat under a bare ``except Exception`` that
+    returned ``"<name>: (filter found; no summary available)"`` — for an
+    unknown name too, so the message asserted the opposite of what had
+    happened and an unknown filter was indistinguishable from a curve that
+    failed to load. The lookup is now outside the ``try``, so an unknown name
+    raises the loader's own ``KeyError``, and only the numeric summary is
+    guarded.
     """
+    # Outside the try on purpose: an unknown name must raise, and
+    # load_filter_set already says so with a message that lists the menus.
+    fc = load_filter_set([name])[2][0]
     try:
-        fc = load_filter_set([name])[2][0]
         wave_np = np.asarray(fc.wave)
         trans_np = np.asarray(fc.trans)
 
@@ -932,12 +950,6 @@ def describe(name: str) -> str:
             wave_max = wave_np[nonzero].max()
         else:
             wave_min, wave_max = wave_np.min(), wave_np.max()
-
-        def format_wave(w):
-            if w >= 1e4:
-                return f"{w / 1e4:.2f}"
-            else:
-                return f"{w:.0f}"
 
         if lam_eff >= 1e4:
             unit = "μm"
@@ -957,8 +969,8 @@ def describe(name: str) -> str:
 
         return f"{name}: λ_eff ~ {lam_eff_fmt} {unit} (range {min_fmt}–{max_fmt} {range_unit})"
 
-    except Exception:
-        return f"{name}: (filter found; no summary available)"
+    except Exception as exc:  # curve loaded, but its numbers are unusable
+        return f"{name}: (curve loaded; summary unavailable — {type(exc).__name__})"
 
 
 def suggest(
@@ -998,7 +1010,7 @@ def suggest(
 
     Examples
     --------
-    >>> suggest(z=3.0, coverage="visible_to_nir")  # z=3 galaxies, optical→NIR
+    >>> suggest(redshift=3.0, coverage="visible_to_nir")  # z=3 galaxies, optical→NIR
     ['jwst_f115w', 'jwst_f150w', ...]
     """
     # Coverage presets (rest-frame, Angstrom)
@@ -1021,7 +1033,7 @@ def suggest(
     lam_obs_max = lam_rest_max * (1 + redshift)
 
     # Load all filters and compute effective wavelengths
-    all_names = list_filters()
+    all_names = list_filter_aliases().names()
     if not all_names:
         return []
 

@@ -31,7 +31,6 @@ from __future__ import annotations
 import functools
 import logging
 from collections.abc import Iterable
-from pathlib import Path
 
 import numpy as np
 
@@ -40,19 +39,19 @@ logger = logging.getLogger(__name__)
 
 # ── Data file resolution ──────────────────────────────────────────
 
-# ``src/tengri/forward/wavelength_extension.py`` → parents[3] is the project root.
-_DATA_CANDIDATES = [
-    Path(__file__).resolve().parents[3] / "data",
-    Path.cwd() / "data",
-]
-
 
 def _find_data_file(filename: str) -> str | None:
-    """Locate a data file in the standard ``data/`` directories."""
-    for d in _DATA_CANDIDATES:
-        candidate = d / filename
-        if candidate.is_file():
-            return str(candidate)
+    """Locate a data file in the standard ``data/`` directories.
+
+    Honors ``$TENGRI_DATA_DIR`` ahead of the package's own tree (#1431). The
+    previous candidate list also bound ``Path.cwd()`` at *import*, so a process
+    that changed directory afterwards kept searching the old one.
+    """
+    from tengri._data_setup import find_data
+
+    found = find_data(filename)
+    if found is not None:
+        return str(found)
     return None
 
 

@@ -88,6 +88,13 @@ class Catalog:
         Emission-line error column names, bound positionally the same way.
         If None, use ``"{name}_err"`` for each line, matching the ``err_cols``
         convention.
+    line_censor_cols : list[str], optional
+        Emission-line censoring-flag columns, bound positionally the same
+        way: 0 (detected), 1 (upper limit), -1 (lower limit). This is the
+        catalog-scale form of ``Data(lines={'Halpha': (f, e, 'upper')})``.
+        ``censor_cols`` is the *photometric* band axis and cannot express a
+        line limit. Non-detection is a per-galaxy property, so declaring the
+        flag on the Observation would apply it to the whole catalog.
     missing : {"error", "mask"}, default "error"
         Policy for NaN flux values. ``"error"`` raises with guidance on
         ``missing="mask"``; ``"mask"`` sets presence to False for that cell.
@@ -122,6 +129,7 @@ class Catalog:
         censor_cols=None,
         line_cols=None,
         line_err_cols=None,
+        line_censor_cols=None,
         missing="error",
     ):
         """Initialize a Catalog with eager ingestion and validation.
@@ -148,6 +156,7 @@ class Catalog:
                 censor_cols=censor_cols,
                 line_cols=line_cols,
                 line_err_cols=line_err_cols,
+                line_censor_cols=line_censor_cols,
                 missing=missing,
             )
             self._catalog_arrays = ca
@@ -322,6 +331,13 @@ class Catalog:
             if ca.line_flux_obs is not None:
                 galaxy_dict["line_flux_obs"] = ca.line_flux_obs[i]
                 galaxy_dict["line_flux_err"] = ca.line_flux_err[i]
+                # Per-galaxy line limits (#1469). Threaded for every galaxy
+                # once any censor column is given -- including the all-zero
+                # "detected" rows -- so the censored adapter is selected once
+                # for the catalog. Threading it only for flagged galaxies
+                # would split the compile key and recompile per pattern.
+                if ca.line_censor is not None:
+                    galaxy_dict["line_censor"] = ca.line_censor[i]
             galaxies.append(galaxy_dict)
 
         # Delegate to the existing engine.

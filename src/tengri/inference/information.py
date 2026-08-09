@@ -487,20 +487,3 @@ def latent_names(latent: dict) -> tuple[str, ...]:
         else:
             names.extend(f"{key_name}[{i}]" for i in range(value.size))
     return tuple(names)
-
-
-def _point_estimate(posterior, context) -> dict:
-    """Best available expansion point from a finished fit, in physical units.
-
-    Prefers the fit's own point estimate. Falls back to per-parameter medians of
-    the samples, which is not the joint mode but is the closest thing a sampler
-    hands back without re-optimizing.
-    """
-    if getattr(posterior, "params", None):
-        return dict(posterior.params)
-    samples = getattr(posterior, "samples", None) or {}
-    return {
-        name: float(np.median(np.asarray(samples[name])))
-        for name in context.spec.free_params
-        if name in samples
-    }

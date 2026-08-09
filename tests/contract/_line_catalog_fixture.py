@@ -21,7 +21,16 @@ from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.line_measurement import default_line_defs
 
 
-def build_two_galaxy_catalog(*, halpha, ssp, obs_base, n_line_cols=None):
+def build_two_galaxy_catalog(
+    *,
+    halpha,
+    ssp,
+    obs_base,
+    n_line_cols=None,
+    is_upper_limit=None,
+    line_censor=None,
+    line_censor_cols=None,
+):
     """Build a two-row catalog whose galaxies differ only in Halpha flux.
 
     Parameters
@@ -34,6 +43,15 @@ def build_two_galaxy_catalog(*, halpha, ssp, obs_base, n_line_cols=None):
         Observation (e.g., synthetic_tophat_obs).
     n_line_cols : int or None
         If specified, intentionally mismatch line column count for testing.
+    is_upper_limit : array_like, shape (n_lines,) or None
+        Declare the limit on the *Observation schema* -- the same flag for
+        every galaxy. Used to check whether a schema-level limit survives
+        the catalog seam.
+    line_censor : array_like, shape (N,) or None
+        Per-galaxy censor flags for Halpha (0 detected, 1 upper, -1 lower),
+        written to the table as a ``halpha_limit`` column.
+    line_censor_cols : list of str or None
+        Passed straight through to ``Catalog(line_censor_cols=...)``.
 
     Returns
     -------
@@ -105,6 +123,7 @@ def build_two_galaxy_catalog(*, halpha, ssp, obs_base, n_line_cols=None):
         fluxes=np.array([line_obs_g0]),
         errors=np.array([line_error_base]),
         wavelengths=np.array([halpha_wave]),
+        is_upper_limit=(None if is_upper_limit is None else np.asarray(is_upper_limit)),
     )
     obs = Observation(
         photometry=obs_base.photometry,
@@ -163,6 +182,11 @@ def build_two_galaxy_catalog(*, halpha, ssp, obs_base, n_line_cols=None):
         "halpha_flux": line_obs,
         "halpha_err": line_err,
     }
+    if line_censor is not None:
+        # dtype is NOT coerced: a boolean column must stay boolean so the
+        # ingest guard can refuse it. Casting here would launder exactly the
+        # include-mask/censor-flag confusion the guard exists to catch.
+        table["halpha_limit"] = np.asarray(line_censor)
 
     # Create catalog with line columns
     if n_line_cols is not None and n_line_cols != len(line_names):
@@ -170,6 +194,10 @@ def build_two_galaxy_catalog(*, halpha, ssp, obs_base, n_line_cols=None):
         line_cols = [f"halpha_flux_{i}" for i in range(n_line_cols)]
     else:
         line_cols = ["halpha_flux"]
+
+    catalog_kwargs = {}
+    if line_censor_cols is not None:
+        catalog_kwargs["line_censor_cols"] = line_censor_cols
 
     cat = Catalog(
         model,
@@ -179,6 +207,7 @@ def build_two_galaxy_catalog(*, halpha, ssp, obs_base, n_line_cols=None):
         err_cols=["flux_1_err", "flux_2_err", "flux_3_err", "flux_4_err", "flux_5_err"],
         line_cols=line_cols,
         line_err_cols=["halpha_err"],
+        **catalog_kwargs,
     )
 
     return cat, truth

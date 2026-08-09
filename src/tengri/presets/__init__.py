@@ -12,7 +12,7 @@ Quick start::
     model, params = synthesizer_default()
 
     # List all available presets
-    presets = list_presets()  # dict[str, dict]
+    presets = list_presets()  # _RegistryTable, one row per preset
 
     # Get full details on one preset
     details = describe_preset("synthesizer_default")

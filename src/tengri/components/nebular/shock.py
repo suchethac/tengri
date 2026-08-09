@@ -211,9 +211,11 @@ def _load_mappings_grids() -> dict | None:
     Returns the cached grid dict on subsequent calls.  Returns ``None`` and
     emits ``DeprecationWarning`` if the file is absent.
     """
-    # Locate HDF5 relative to the package root (…/tengri/src/tengri → …/tengri)
-    _here = Path(__file__).parents[4]
-    h5_path = _here / "data" / "mappings_templates.h5"
+    from tengri._data_setup import find_data
+
+    # Honors $TENGRI_DATA_DIR as well as the package root (#1431). The sentinel
+    # below wants a path to test, so fall back to a non-existent one.
+    h5_path = find_data("mappings_templates.h5") or Path("mappings_templates.h5")
 
     if not h5_path.exists():
         warnings.warn(
