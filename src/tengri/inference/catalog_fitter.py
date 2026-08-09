@@ -645,6 +645,49 @@ class _CatalogFitterOriginal:
     #: NUTS/HMC chains per ``lax.map`` step (per-galaxy warmup, diagonal mass).
     _MCMC_VMAPPABLE: frozenset = frozenset({"mcmc_nuts", "mcmc_hmc"})
 
+    def _galaxy_line_fluxes(self, galaxy):
+        """This galaxy's emission-line values on the shared line schema.
+
+        Parameters
+        ----------
+        galaxy : dict
+            One entry of ``self.galaxies``; carries ``line_flux_obs`` /
+            ``line_flux_err`` when the catalog was built with ``line_cols``.
+
+        Returns
+        -------
+        LineFluxData or None
+            ``None`` when this catalog threads no per-galaxy lines, in which
+            case the Fitter falls back to the Observation's own values.
+
+        Notes
+        -----
+        The vmapped branch stacks these values into the batched loss, but the
+        sequential branch built its per-galaxy ``Fitter`` without them, so
+        every galaxy was scored against the *template* Observation's line
+        flux -- the substitution #1480's guard exists to prevent (#1599).
+
+        Only the measured values are per-galaxy. Names, wavelengths and the
+        limit flags are the instrument schema and stay shared, so replacing
+        them here would change the compile key and force a recompile per
+        galaxy.
+        """
+        if "line_flux_obs" not in galaxy:
+            return None
+
+        import dataclasses
+
+        obs = getattr(self.model, "observation", None)
+        template = getattr(obs, "line_fluxes", None) if obs is not None else None
+        if template is None:
+            return None
+
+        return dataclasses.replace(
+            template,
+            fluxes=jnp.asarray(galaxy["line_flux_obs"]),
+            errors=jnp.asarray(galaxy["line_flux_err"]),
+        )
+
     def __init__(self, model, galaxies, data_type="photometry"):
         from tengri.inference.jit_engine import CompileCache
 
@@ -1458,6 +1501,7 @@ class _CatalogFitterOriginal:
                 galaxy["noise"],
                 data_type=self.data_type,
                 presence=presence,
+                line_flux_data=self._galaxy_line_fluxes(galaxy),
                 cache=self.cache,
                 params_override=override,
             )
