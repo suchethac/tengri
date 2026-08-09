@@ -75,8 +75,23 @@ def test_deprecation_is_one_shot(monkeypatch):
             line_fluxes=line_flux_data,
         )
 
-    # Should see exactly one warning, not three
-    assert len(record) == 1
+    # Count the deprecation itself, not every warning raised in the block.
+    # `pytest.warns` applies its category/match filters only to decide whether
+    # to FAIL; the recorder it returns still collects everything, so a bare
+    # `len(record)` asserts "exactly one warning of any kind happened here" —
+    # which an unrelated library warning breaks. A JAX compilation-cache
+    # UserWarning does exactly that, making this fail order-dependently with
+    # `assert 2 == 1` (#1584).
+    deprecations = [
+        w
+        for w in record
+        if issubclass(w.category, DeprecationWarning) and "Data" in str(w.message)
+    ]
+    assert len(deprecations) == 1, (
+        f"the deprecation must fire once for three constructions; got "
+        f"{len(deprecations)} matching, out of {len(record)} total warnings: "
+        f"{[(w.category.__name__, str(w.message)) for w in record]}"
+    )
 
 
 def test_data_lines_resolve_through_schema():

@@ -741,6 +741,74 @@ def _ghmc_chain_scan(
 
 
 # ---------------------------------------------------------------------------
+# Elliptical slice (no warmup: the exact-prior ellipse needs no tuning)
+# ---------------------------------------------------------------------------
+
+
+@functools.partial(jax.jit, static_argnums=(2,))
+def _ess_full_scan(
+    init_flat,
+    chain_keys,
+    loglikelihood_fn_2arg,
+    data_args,
+):
+    """Outer JIT: BlackJAX elliptical slice init + sampling chain.
+
+    ESS proposes along ellipses drawn from the exact N(0, I) prior, which
+    guarantees acceptance with no step size, mass matrix, or warmup to tune
+    (Murray, Adams & MacKay 2010 [1]_). It therefore takes the log-LIKELIHOOD
+    only — handing it the full posterior would double-count the prior the
+    ellipse already encodes. Burn-in discard is done by the caller
+    Python-side, so changing ``n_burnin`` while keeping ``n_chain`` constant
+    does not trigger recompilation.
+
+    Parameters
+    ----------
+    init_flat : ndarray, shape (D,)
+        Initial position in unbounded latent space, where every coordinate
+        carries an iid standard-normal prior.
+    chain_keys : ndarray, shape (n_chain, 2)
+        Pre-split keys (``n_chain = n_burnin + n_samples``).
+    loglikelihood_fn_2arg : callable (static)
+        ``log_L(position, data_args)`` — the Gaussian data term ALONE, no
+        prior. Taking the data as a traced argument keeps one compiled
+        program serving every catalog, same as the other scans here.
+    data_args : pytree (traced)
+        Observed data tensors; changing these does NOT trigger recompilation.
+
+    Returns
+    -------
+    positions : ndarray, shape (n_chain, D)
+        Caller slices ``[n_burnin:]``.
+    subiters : ndarray, shape (n_chain,)
+        Ellipse-shrinkage iterations per step — ESS's only tuning-free
+        diagnostic; caller slices ``[n_burnin:]``.
+
+    References
+    ----------
+    .. [1] Murray, I., Adams, R. P., & MacKay, D. J. C. 2010, "Elliptical
+       slice sampling", Proceedings of AISTATS 2010, JMLR W&CP 9, 541-548,
+       arXiv:1001.0175.
+    """
+    import blackjax
+
+    def ll(pos):
+        return loglikelihood_fn_2arg(pos, data_args)
+
+    n_dim = init_flat.shape[0]
+    ess = blackjax.elliptical_slice(ll, mean=jnp.zeros(n_dim), cov=jnp.eye(n_dim))
+    state = ess.init(init_flat)
+
+    def _step(s, k):
+        """Advance ESS by one step, returning position and subiteration count."""
+        s, info = ess.step(k, s)
+        return s, (s.position, info.subiter)
+
+    _, (positions, subiters) = jax.lax.scan(_step, state, chain_keys)
+    return positions, subiters
+
+
+# ---------------------------------------------------------------------------
 # MCLMC scans (no burn-in phase; adaptation tunes L and step_size jointly)
 # ---------------------------------------------------------------------------
 

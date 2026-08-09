@@ -40,6 +40,13 @@ SED_CASES: list[tuple[str, str, str, str, dict]] = [
         {"agn_log_lbol": 11.0, "agn_cos_inc": 0.7, "agn_torus_frac": 0.4},
     ),
     (
+        "slone_netzer",
+        "tengri.components.agn.slone_netzer",
+        "slone_netzer_sed",
+        "load_slone_netzer_default_grid",
+        {"agn_log_lbol": 11.0, "agn_log_mbh": 8.6, "agn_log_ledd": -2.0},
+    ),
+    (
         "fritz",
         "tengri.components.agn.fritz",
         "fritz_sed",

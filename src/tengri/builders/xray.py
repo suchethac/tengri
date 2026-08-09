@@ -3,7 +3,7 @@
 
 """Callable factories for X-ray config dicts.
 
-Variants come from :data:`tengri.parameters.groups._VALID_XRAY_TYPES`
+Variants come from :data:`tengri.components.xray._models.XRAY_MODELS`
 (currently ``none`` and ``simple``). Like :mod:`tengri.builders.radio`,
 the free-parameter set is shared across variants — the variant string
 selects the physics model.

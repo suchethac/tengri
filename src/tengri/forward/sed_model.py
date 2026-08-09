@@ -2791,7 +2791,7 @@ class SEDModel:
     def _get_internal_params(self, params):
         """Translate public param dict to internal names with unit conversion.
 
-        Thin wrapper around :func:`tengri._param_translate.get_internal_params`.
+        Thin wrapper around :func:`tengri.parameters.translate.get_internal_params`.
         """
         return get_internal_params(params, self._param_map, self.spec, self._uses_stochastic_sfh)
 

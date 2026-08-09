@@ -80,6 +80,8 @@ and a one-line description.
 
 .. autofunction:: tengri.list_shock_models
 
+.. autofunction:: tengri.list_metallicity_modes
+
 .. autofunction:: tengri.list_igm_models
 
 .. autofunction:: tengri.list_inference_methods

@@ -199,6 +199,14 @@ _NOT_WALKED = {
     # So no citation is lost either way and there is nothing kernel-specific to
     # add to the walk.
     "list_age_kernels": "stellar already cites dsps unconditionally; cic is tengri's own (#964)",
+    # ``MetModelSpec`` carries no references field at all -- its five fields are
+    # ``name``, ``fn``, ``params``, ``settings``, ``internal_param_map`` -- so
+    # there is nothing mode-specific for the walk to resolve. All ten modes are
+    # parameterizations of the same SSP metallicity axis, and the stellar
+    # component's unconditional ``citations() -> ("dsps",)`` already covers the
+    # SSP/MDF machinery every one of them runs through. Give a mode its own
+    # reference and this entry must move to ``_WALKED``.
+    "list_metallicity_modes": "MetModelSpec has no references field; stellar cites dsps",
 }
 
 

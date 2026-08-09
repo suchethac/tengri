@@ -112,11 +112,12 @@ def test_unknown_kwargs_still_fail_loudly(model, mock_data):
     """Routing must not create a silent kwarg sink — typos still raise, by name.
 
     The rule is "loud", not "``TypeError``". Which exception surfaces depends on
-    *where* the name is caught, and that moved: originally Python itself rejected
-    it inside the runner (``run_map() got an unexpected keyword argument``),
-    whereas #1605 added a pre-dispatch check in ``_backend_registry`` that
-    rejects it earlier and raises ``ValueError`` — deliberately, for parity with
-    ``check_capabilities``, since the caller never called that runner.
+    *where* the name is caught, and that moved twice in one day: Python itself
+    rejected it inside the runner (``run_map() got an unexpected keyword
+    argument``), then #1605 added a pre-dispatch check in ``_backend_registry``
+    raising ``ValueError``, then #1629 settled it back to ``TypeError`` so the
+    same mistake fails the same way from either layer. ``check_capabilities``
+    still answers ``ValueError``, for *declared capability* names only.
 
     Pinning the type pinned the layer, so an improvement to the error broke this
     test while the guarded behavior was intact. Assert the invariant instead:
