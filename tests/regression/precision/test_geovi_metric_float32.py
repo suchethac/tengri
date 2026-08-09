@@ -450,11 +450,13 @@ _ALLOWED = {
         "components/igm/meiksin06.py",
         "lambda_n = lambda_limit / (1.0 - 1.0 / (n_idx.astype(jnp.float64) ** 2))",
     ),
-    # KNOWN OPEN, deliberately not fixed here (reported separately):
-    # tau = 1/sigma_eff ~ 3e29, so tau**2 ~ 1e59 overflows and 1/tau**2
-    # underflows to 0 in float32. The variable-noise Hessian needs the whole
-    # metric rescaled, not a spelling change -- a design task, not this fix.
-    ("observation/noise.py", "H_tt = residual**2 + 1.0 / tau**2"),
+    # (`observation/noise.py`'s `H_tt = residual**2 + 1.0/tau**2` used to sit
+    # here as a known-open, on the expectation that the variable-noise Hessian
+    # needed the whole metric rescaled. It did not — both blocks factor into
+    # representable pieces. Fixed in #1617, not exempted. The entry also named
+    # only H_tt, because the guard's pattern matches `1.0 / x**2` and the
+    # equally-broken `H_ff = tau**2` one line above contains no division: an
+    # allowlist entry inherits its guard's blind spots.)
     # (The calibration `inv_var = 1.0/max(obs_err**2, 1e-30)` entry used to sit
     # here, filed as a Tier-B float32 known-open. That was wrong: the floor
     # bound in float64 too and collapsed the polynomial. Fixed, not exempted —

@@ -54,6 +54,8 @@ from dataclasses import dataclass
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.scale import whiten
+
 # ── Core noise computation (pure JAX, JIT-compatible) ─────────────
 
 
@@ -520,15 +522,38 @@ def variable_noise_metric_vec(
     # Forward + JVP: get outputs and directional derivatives
     (f, tau), (Jv_f, Jv_tau) = jax.jvp(signal_noise_fn, (xi_d,), (v_d,))
 
-    # Hessian blocks of E(f, τ) — all diagonal in data space
+    # Hessian blocks of E(f, τ) — all diagonal in data space.
+    #
+    # Applied in factored form (#1617). Written directly, two of the four blocks
+    # are destroyed in float32 at a real photometric sigma, in opposite
+    # directions — measured, not inferred:
+    #
+    #     H_ff = tau**2               1.111e+59  ->  inf
+    #     H_tt = r**2 + 1/tau**2      3.611e-56  ->  0.0   (both terms underflow)
+    #
+    # The second is the dangerous one: the curvature along the noise direction
+    # is silently *removed* rather than poisoned, so the metric stays finite and
+    # looks usable. Each block factors into representable pieces, so no
+    # rescaling of the metric is needed:
+    #
+    #     H_ff Jv_f    = tau**2 Jv_f          = (Jv_f/sigma)/sigma,  sigma = 1/tau
+    #     H_tt Jv_tau  = ((r tau)**2 + 1) Jv_tau / tau**2
+    #
+    # ``r_std = residual * tau`` is the standardized residual — O(1) by
+    # construction — so neither underflowing term is ever formed. ``whiten``
+    # carries the optimization_barrier that stops XLA re-associating the pairs
+    # back into the overflowing square (#1535/#1588).
     residual = data - f
-    H_ff = tau**2
-    H_tt = residual**2 + 1.0 / tau**2
-    H_ft = -2.0 * residual * tau
+    sigma_eff = 1.0 / tau  # ~3e-30, representable where tau**2 is not
+    r_std = residual * tau  # standardized residual, O(1)
+    H_ft = -2.0 * r_std  # == -2 * residual * tau
+
+    h_ff_jv = whiten(whiten(Jv_f, sigma_eff), sigma_eff)  # tau**2 * Jv_f
+    h_tt_jv = (r_std**2 + 1.0) * whiten(whiten(Jv_tau, tau), tau)
 
     # H_E @ [Jv_f, Jv_tau]
-    w_f = H_ff * Jv_f + H_ft * Jv_tau
-    w_t = H_ft * Jv_f + H_tt * Jv_tau
+    w_f = h_ff_jv + H_ft * Jv_tau
+    w_t = H_ft * Jv_f + h_tt_jv
 
     # J^T @ w via VJP
     _, vjp_fn = jax.vjp(signal_noise_fn, xi_d)
