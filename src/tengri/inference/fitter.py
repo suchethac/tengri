@@ -642,6 +642,7 @@ class Fitter:
         data_type=None,
         data_mask=None,
         presence=None,
+        line_flux_data=None,
         calibration_marginalize=False,
         cal_n_poly=3,
         cal_prior_sigma=1.0,
@@ -734,6 +735,12 @@ class Fitter:
                     f"presence shape {presence.shape} does not match data shape {self.data.shape}"
                 )
         self.presence = presence
+        # Per-galaxy emission-line values (#1599). The Observation carries the
+        # line *schema* -- names, wavelengths, and whether each is a limit --
+        # which is shared across a catalog; only the measured values differ per
+        # galaxy. Both the data args and the compile key read this through
+        # ``_resolved_line_fluxes`` so they cannot disagree.
+        self._line_flux_override = line_flux_data
         self.data_type = self._resolve_data_type(data_type, model)
         self.spec = model.spec
 
@@ -947,6 +954,29 @@ class Fitter:
         """
         obs = getattr(model, "observation", None)
         return getattr(obs, "line_fluxes", None) is not None
+
+    def _resolved_line_fluxes(self):
+        """The line-flux config this fit actually scores against.
+
+        Returns
+        -------
+        LineFluxData or None
+            The ``line_flux_data=`` override when one was supplied, else the
+            Observation's own ``line_fluxes``.
+
+        Notes
+        -----
+        Read by :meth:`_build_data_args` *and* by :meth:`compile_signature`.
+        They must resolve identically: the signature keys on whether a limit
+        mask is present, which selects the censored-vs-Gaussian adapter at
+        build time, while the mask values ride through the data args. If the
+        two read different objects, a fit can compile the Gaussian adapter and
+        then be handed a censored mask (#1599).
+        """
+        if self._line_flux_override is not None:
+            return self._line_flux_override
+        obs = getattr(self.model, "observation", None)
+        return getattr(obs, "line_fluxes", None) if obs is not None else None
 
     def _fits_lines(self, model) -> bool:
         """Whether any emission-line channel is fit, measured or marginalized."""
@@ -1241,7 +1271,7 @@ class Fitter:
             if spec_cfg is not None and getattr(spec_cfg, "has_covariance", False):
                 args["spec_cov_inv"] = spec_cfg.cov_inv
 
-            line_flux_cfg = getattr(obs, "line_fluxes", None)
+            line_flux_cfg = self._resolved_line_fluxes()
             if line_flux_cfg is not None:
                 args["line_flux_obs"] = line_flux_cfg.fluxes
                 args["line_flux_err"] = line_flux_cfg.errors
@@ -1483,7 +1513,7 @@ class Fitter:
         from tengri.observation.noise import has_noise_model
 
         obs = getattr(self.model, "observation", None)
-        line_flux_cfg = getattr(obs, "line_fluxes", None) if obs is not None else None
+        line_flux_cfg = self._resolved_line_fluxes()
         line_flux_key = (
             (
                 tuple(round(float(w), 6) for w in np.asarray(line_flux_cfg.wavelengths)),
@@ -2722,6 +2752,7 @@ class Fitter:
         from tengri.inference._backend_registry import (
             check_capabilities,
             check_requires,
+            check_unknown_kwargs,
             check_usable,
             get_backend,
         )
@@ -2785,6 +2816,9 @@ class Fitter:
         # ``run_nifty_vi`` or ``run_map`` — functions the caller never mentioned.
         # Raises ValueError, matching the answer ``method='mcmc'`` already gave.
         check_capabilities(entry, kwargs)
+        # Same answer for every other unrecognized name, so a typo or an
+        # unsupported channel names the method instead of the runner (#1469).
+        check_unknown_kwargs(entry, kwargs)
 
         # Compile the loss/grad + predict surface up front so the fit loop runs
         # warm and the persistent JAX cache is populated.
