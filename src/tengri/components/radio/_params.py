@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Free-parameter declarations owned by the radio component.
 
-Single source of truth for radio priors. ``tengri.parameters._param_defs``
+Single source of truth for radio priors. ``tengri.parameters._builders``
 derives its legacy ``_RADIO_PARAMS`` bucket dict from this tuple, and
 :meth:`RadioSEDComponent.declared_parameters` returns it directly.
 Drift between the two paths is structurally impossible because they

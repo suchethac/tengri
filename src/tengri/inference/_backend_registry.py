@@ -289,7 +289,7 @@ def refuse_if_broken(method: str, *, allow_unvalidated: bool = False) -> None:
     Unknown names return silently: name validation belongs to
     ``resolve_method``, and a hierarchical method can legitimately have no
     registry entry — ``evi_nifty`` is dispatched by
-    :func:`~tengri.inference.hierarchical.fit_hierarchical` but registered
+    :func:`~tengri.inference.hierarchical.PopulationFitter` but registered
     nowhere. Raising here would turn a missing registration into a broken
     user call.
 

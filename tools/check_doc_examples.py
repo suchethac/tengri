@@ -28,6 +28,8 @@ What it checks
    attribute must exist on it.
 3. ``f(...)`` — every call whose callee resolves must *bind* against the
    real signature.
+4. ``:func:`~tengri.a.B``` — every Sphinx cross-reference target beginning
+   ``tengri.`` must resolve.
 
 Check 3 exists because a name that resolves still gets the reader a
 ``TypeError``. ``tengri.tutorial("first_fit")`` — the first thing a new user
@@ -44,6 +46,26 @@ The three surfaces that ship copy-pasteable code are all in scope: docstring
 examples, published pages, and the ``tengri.tutorial()`` blocks — which are
 plain strings inside ``_tutorials.py``, so no docstring-based guard saw them
 before.
+
+Check 4 covers a fourth surface: the cross-reference. ``docs/api/*.rst`` are
+autodoc stubs, so **the docstrings are the API reference**, and a
+``:func:`~tengri.X.Y``` in one becomes a link on the published page.
+``nitpicky`` is off, so a target that does not exist renders as a dead link
+and produces no build warning — the same hole that motivated this guard, in a
+syntax it did not read. 19 targets were dead when the check was added (#1616),
+including ``tengri.components.radio.RadioSEDComponent``, whose class had been
+renamed ``RadioPowerLawSEDComponent``.
+
+Two subtleties, both of which produced false positives before they were
+handled, and both of which any re-implementation must keep:
+
+* **Targets wrap.** A long path breaks across lines inside a docstring;
+  Sphinx joins it, so whitespace must be collapsed before resolving.
+* **Attributes shadow modules.** ``tengri.components.agn.qsogen`` is both a
+  submodule *and* a re-exported function, and the function wins on attribute
+  access — so a plain ``getattr`` walk calls the real target
+  ``...qsogen.compute_qsogen_sed`` missing. Resolution therefore tries every
+  module-prefix / attribute-suffix split, longest module first.
 
 Deliberately narrow. Classes tengri does not export are skipped, so
 internal types (``PipelineState.derived``, ``ForwardState.derived``) never
@@ -334,6 +356,49 @@ def bind_violations(code: str, namespace: dict, resolve) -> list[tuple[str, str]
     return found
 
 
+#: ``:func:`~tengri.a.B``` / ``:class:`text <tengri.a.B>``` — Sphinx roles.
+XREF = re.compile(r":(func|meth|class|attr|data|exc|obj|mod):`~?([^`<>]*?)(?:\s*<([^`>]+)>)?`")
+
+
+def xref_targets(text: str) -> list[str]:
+    """Every ``tengri.*`` cross-reference target in *text*, whitespace-joined.
+
+    A long target wraps across lines inside a docstring and Sphinx joins it,
+    so collapsing whitespace here is required — not cosmetic. Without it every
+    wrapped role reads as dead.
+    """
+    out = []
+    for m in XREF.finditer(text):
+        target = re.sub(r"\s+", "", m.group(3) or m.group(2)).rstrip("()")
+        if target.startswith("tengri"):
+            out.append(target)
+    return out
+
+
+def xref_resolves(dotted: str) -> bool:
+    """Resolve a dotted path by module-prefix split, longest module first.
+
+    A plain ``getattr`` walk is wrong: ``tengri.components.agn.qsogen`` is both
+    a submodule and a re-exported function, and the function shadows the module
+    on attribute access, so the walk calls a live target dead.
+    """
+    import importlib
+
+    parts = dotted.split(".")
+    for cut in range(len(parts), 0, -1):
+        try:
+            obj = importlib.import_module(".".join(parts[:cut]))
+        except Exception:
+            continue
+        for attr in parts[cut:]:
+            obj = getattr(obj, attr, None)
+            if obj is None:
+                break
+        else:
+            return True
+    return False
+
+
 def check(verbose: bool = False) -> list[str]:
     resolve = public_api()
     violations: list[str] = []
@@ -357,6 +422,27 @@ def check(verbose: bool = False) -> list[str]:
         raise SystemExit(
             "check_doc_examples is broken: the signature check no longer rejects a "
             "call with an unexpected keyword. Refusing to report a clean run."
+        )
+
+    # And for check 4. Both halves are asserted: that a dead target is rejected,
+    # and that a live one — wrapped across lines, and behind the qsogen
+    # module/function shadow — is still accepted. A resolver that says "no" to
+    # everything would also make the sweep look clean after the fixes land.
+    if xref_resolves("tengri.forward.SEDModel.build"):
+        raise SystemExit(
+            "check_doc_examples is broken: the cross-reference check no longer "
+            "rejects a target that does not exist. Refusing to report a clean run."
+        )
+    for live in ("tengri.SEDModel.build", "tengri.components.agn.qsogen.compute_qsogen_sed"):
+        if not xref_resolves(live):
+            raise SystemExit(
+                f"check_doc_examples is broken: {live} should resolve but did not. "
+                "Refusing to report violations from a resolver this strict."
+            )
+    if xref_targets(":func:`~tengri.a.\n    b`") != ["tengri.a.b"]:
+        raise SystemExit(
+            "check_doc_examples is broken: a wrapped cross-reference target is no "
+            "longer joined, so every wrapped role would read as dead."
         )
 
     targets: list[tuple[Path, list[str]]] = []
@@ -451,6 +537,29 @@ def check(verbose: bool = False) -> list[str]:
             checked += 1
             violations.append(f"{origin}: `{dotted}(...)` does not bind — {err}")
         checked += 1
+
+    # 4. Every Sphinx cross-reference target must resolve. docs/api/*.rst are
+    #    autodoc stubs, so the docstrings ARE the reference: a dead target is a
+    #    dead link on the published page, and nitpicky is off so -W is silent.
+    for path in sorted((REPO / "src" / "tengri").rglob("*.py")):
+        if is_excluded(path):
+            continue
+        rel = path.relative_to(REPO)
+        for target in xref_targets(path.read_text(encoding="utf-8", errors="replace")):
+            checked += 1
+            if verbose:
+                print(f"  {rel}: xref {target}")
+            if not xref_resolves(target):
+                violations.append(f"{rel}: cross-reference `{target}` does not resolve")
+    for pattern in ("*.md", "*.rst"):
+        for path in sorted((REPO / "docs").rglob(pattern)):
+            if is_excluded(path):
+                continue
+            rel = path.relative_to(REPO)
+            for target in xref_targets(path.read_text(encoding="utf-8", errors="replace")):
+                checked += 1
+                if not xref_resolves(target):
+                    violations.append(f"{rel}: cross-reference `{target}` does not resolve")
 
     print(f"checked {checked} references across {len(targets)} files")
     return sorted(set(violations))
