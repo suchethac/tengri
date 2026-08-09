@@ -2535,20 +2535,32 @@ class StellarSEDComponent:
             # smooth-grid interpolant used throughout tengri for SSP, CLOUDY,
             # and SKIRTOR grids — C²-continuous, kernel-supported on the
             # 3-bandwidth neighborhood. See issue #438.
-            from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
+            from tengri.utils.interpolation import (
+                apply_grid_window,
+                compute_grid_window,
+                edges_for_grid,
+            )
 
             ztable = self._state.ssp_phot_ztable
             z = jnp.asarray(require_redshift(params, "components.stellar.component.apply"))
             z_grid = ztable.z_grid
             z_edges = edges_for_grid(z_grid)
             # Match grid-cell width for the kernel bandwidth (Hearin 2023
-            # convention): smooth across one neighbor on each side.
-            z_scatter = 0.5 * (z_grid[1] - z_grid[0])
-            w_z = compute_grid_weights(z, z_grid, scatter=z_scatter, edges=z_edges)
+            # convention): smooth across one neighbor on each side. Given in
+            # CELLS, not in z: the window width is a shape, and 0.5 * (z_grid[1]
+            # - z_grid[0]) is a tracer under jit even though z_grid is a
+            # constant, so it cannot size anything.
+            # Windowed, not dense. The kernel is supported on five nodes; the
+            # other n_z - 5 weights are EXACTLY zero, so contracting the full
+            # axis multiplied the whole (n_z, n_met, n_age, n_filt) table by
+            # zeros. That was 87% of the free-redshift gradient arithmetic —
+            # 128 MFLOP at n_z=250 against 2.7 MFLOP at fixed z. Identical
+            # values and gradients; the cost simply stops tracking n_z.
+            z_start, w_z = compute_grid_window(z, z_grid, bandwidth_cells=0.5, edges=z_edges)
 
             def _interp(table):
-                # table: (n_z, ...). Contract axis 0 with kernel weights.
-                return jnp.tensordot(w_z, table, axes=([0], [0]))
+                # table: (n_z, ...). Contract the supported window of axis 0.
+                return apply_grid_window(table, z_start, w_z)
 
             # ssp_phot_table: (n_z, n_met, n_age, n_filt); interp along axis 0.
             ssp_phot_at_z = _interp(ztable.ssp_phot_table)

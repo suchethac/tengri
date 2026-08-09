@@ -19,7 +19,6 @@ Usage
 
 from __future__ import annotations
 
-import contextlib
 import dataclasses
 import time
 from typing import Any
@@ -145,7 +144,7 @@ def _time_step(name: str, fn, n: int = 200, grad_fn=None) -> StepTiming:
         # measured" when it means "measurement failed".
         try:
             t_grad, _ = bench(grad_fn, n=n, warmup=3)
-        except Exception as exc:  # noqa: BLE001 - profiling must not abort
+        except Exception as exc:
             import logging
 
             logging.getLogger(__name__).debug(
@@ -455,7 +454,3 @@ def profile_pipeline(
         report.config_name = config_name
 
     return report
-
-
-
-

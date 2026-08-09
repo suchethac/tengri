@@ -236,6 +236,47 @@ def find_data(*filenames: str) -> Path | None:
     return None
 
 
+def require_data(filename: str, not_found_msg: str) -> str:
+    """Locate ``filename``, or raise ``FileNotFoundError`` with a curated message.
+
+    The raising companion to :func:`find_data`, for the component grid locators
+    whose absence is a hard error and whose message names the build or download
+    step. Hoisted from six byte-identical bodies (#1431).
+
+    Parameters
+    ----------
+    filename : str
+        Basename of the grid file, e.g. ``"cat3d_wind_torus_grid.h5"``.
+    not_found_msg : str
+        Message to raise when the file is absent. Replaces :func:`data_path`'s
+        generic text *entirely* rather than wrapping it.
+
+    Returns
+    -------
+    str
+        Path to the file, as a string — the shape the loaders take.
+
+    Raises
+    ------
+    FileNotFoundError
+        With exactly ``not_found_msg`` when the file exists in no data directory.
+
+    Notes
+    -----
+    ``data_path`` names the directories it searched, which is the more useful
+    message for a *misconfigured* install; ``not_found_msg`` names the grid to
+    fetch, which is the more useful one for a *missing* grid. The locators are
+    the missing-grid case, so the curated text wins outright — pinned by
+    ``tests/contract/test_data_file_resolution.py``. The generic text is
+    deliberately not appended: an astronomer who sees a build command should not
+    have to read past a directory listing to find it.
+    """
+    try:
+        return str(data_path(filename))
+    except FileNotFoundError:
+        raise FileNotFoundError(not_found_msg) from None
+
+
 def package_or_env_data_path(filename: str) -> Path:
     """Locate ``filename`` without consulting the working directory.
 

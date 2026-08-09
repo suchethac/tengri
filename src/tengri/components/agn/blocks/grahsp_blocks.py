@@ -19,7 +19,7 @@ Block names within each category mirror the upstream module names::
     attenuation   → ``"grahsp_biatten"``  (SMC-like broken PL)
 
 All free parameters retain the ``agn_grahsp_*`` prefix from
-:mod:`tengri.parameters._param_defs`.
+:mod:`tengri.parameters._builders`.
 """
 
 from __future__ import annotations

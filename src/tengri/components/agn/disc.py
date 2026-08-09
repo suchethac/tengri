@@ -1668,51 +1668,89 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
     if not __import__("pathlib").Path(grid_path).exists():
         raise FileNotFoundError(f"RELAGN disc grid not found: {grid_path}")
 
-    cached = _load_relagn_disc_grid(grid_path)
-    grid_jax = cached["grid_jax"]
-    axes = cached["axes"]
-    edges = cached["edges"]
-    scatters = cached["scatters"]
-    wave_grid = cached["wave_grid"]
+    return functools.partial(relagn_disc_from_grid, _load_relagn_disc_grid(grid_path))
 
-    def relagn_disc(
-        wavelength: jnp.ndarray,
-        agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-        agn_log_mdot: float = -1.0,
-        agn_astar: float = 0.0,
-        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        """RELAGN outer disc from relativistic template grid.
 
-        Parameters
-        ----------
-        wavelength : ndarray, shape (n_wave,)
-            Rest-frame wavelength. [Å]
-        agn_log_mbh : float
-            log₁₀(M_BH / M_sun). [dimensionless]
-        agn_log_mdot : float
-            log₁₀(Ṁ / Ṁ_Edd). [dimensionless]
-        agn_astar : float
-            Dimensionless BH spin, prograde only (0 to 0.998). [dimensionless]
-        agn_cos_inc : float
-            Cosine of inclination angle (1 = face-on). [dimensionless]
+def load_relagn_default_grid() -> dict:
+    """Load the packaged RELAGN disc grid (discovery + cache).
 
-        Returns
-        -------
-        ndarray, shape (n_wave,)
-            Specific luminosity L_ν. [erg s⁻¹ Hz⁻¹]
+    This is the ``template_loader`` the RELAGN disc block registers, so the
+    forward model can hoist the ~27 MB library out of the JIT trace and hand
+    it to the block as an argument.
 
-        Notes
-        -----
-        **JIT-compatible**: yes.
-        **Gradient-safe**: yes — triweight kernel, C²-continuous.
-        """
-        point = (agn_log_mbh, agn_log_mdot, agn_astar)
-        lnu_template = _interp_nd_triweight(grid_jax, axes, edges, point, scatters=scatters)
-        # Interpolate grid wavelength → observation wavelength
-        lnu_interp = resample_template(wavelength, wave_grid, lnu_template, left=0.0, right=0.0)
-        # Inclination scaling from reference cos_inc = 0.5
-        return lnu_interp * (2.0 * agn_cos_inc)
+    Returns
+    -------
+    dict
+        Template arrays; see :func:`_load_relagn_disc_grid`.
 
-    return relagn_disc
+    Raises
+    ------
+    FileNotFoundError
+        If ``data/relagn_disc_grid.h5`` is not present.
+
+    Notes
+    -----
+    ``_find_relagn_grid`` is imported inside the body on purpose:
+    :mod:`tengri.components.agn.unified` imports *this* module, so a
+    module-level import would close the cycle.
+    """
+    from tengri.components.agn.unified import _find_relagn_grid
+
+    return _load_relagn_disc_grid(_find_relagn_grid())
+
+
+def relagn_disc_from_grid(
+    grid: dict,
+    wavelength: jnp.ndarray,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_mdot: float = -1.0,
+    agn_astar: float = 0.0,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""RELAGN outer disc from the relativistic template grid.
+
+    Parameters
+    ----------
+    grid : dict
+        Template arrays from :func:`_load_relagn_disc_grid`. Taken as an
+        **argument** rather than closed over, so the forward model can thread
+        the ~27 MB library through ``jax.jit`` as a ``Parameter`` instead of
+        baking it into the graph as ``Constant`` ops (#1383).
+    wavelength : ndarray, shape (n_wave,)
+        Rest-frame wavelength. [Å]
+    agn_log_mbh : float
+        :math:`\log_{10}(M_{\rm BH}/M_\odot)`. [dimensionless]
+    agn_log_mdot : float
+        :math:`\log_{10}(\dot M / \dot M_{\rm Edd})`. [dimensionless]
+    agn_astar : float
+        Dimensionless BH spin, prograde only (0 to 0.998). [dimensionless]
+    agn_cos_inc : float
+        Cosine of inclination (1 = face-on). [dimensionless]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Disc :math:`L_\nu`. [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    **Gradient-safe**: yes — triweight kernel, C²-continuous.
+
+    **Inclination**: grid stored at cos_inc = 0.5; scaled by 2·cos_inc.
+    """
+    point = (agn_log_mbh, agn_log_mdot, agn_astar)
+    lnu_template = _interp_nd_triweight(
+        jnp.asarray(grid["grid_jax"]),
+        tuple(jnp.asarray(a) for a in grid["axes"]),
+        tuple(jnp.asarray(e) for e in grid["edges"]),
+        point,
+        scatters=grid["scatters"],
+    )
+    # Interpolate grid wavelength -> observation wavelength
+    lnu_interp = resample_template(
+        wavelength, jnp.asarray(grid["wave_grid"]), lnu_template, left=0.0, right=0.0
+    )
+    # Inclination scaling from reference cos_inc = 0.5
+    return lnu_interp * (2.0 * agn_cos_inc)
