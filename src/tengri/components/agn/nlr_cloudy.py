@@ -88,36 +88,33 @@ _SYNTHESIZER_BLR_BACKEND: SynthesizerBLRBackend | None = None
 _CUE_AGN_BACKEND = None  # lazy CueBackend for the AGN-ionized NLR block
 
 
-def _build_outside_trace(factory):
-    """Construct a backend with concrete arrays, whatever the trace context.
+def _eager_construction():
+    """Build a cached backend outside whatever trace the caller is inside.
 
-    Every accessor in this module caches its backend in a module-level global.
-    Built *inside* a JIT trace, a backend either captures
-    ``DynamicJaxprTracer`` values that then escape the trace scope
-    (``UnexpectedTracerError`` on the next eager call — the Cue backend), or
-    fails outright where its ``__init__`` takes a Python ``bool()`` of an array
-    (``TracerBoolConversionError`` — the Feltre backend's descending-axis
-    check). Either way the global outlives the trace, so **whichever caller
-    traces first decides whether the rest of the process works**.
+    Every accessor below is a lazy singleton, so the **first** caller decides
+    what the cache holds for the rest of the process. That is fine until the
+    first caller is inside a ``jax.jit`` trace: any ``jnp`` operation run while
+    a trace is active returns a tracer bound to that trace, however concrete
+    its inputs are. The backend is then cached full of tracers, and the next
+    reader — a later test, the next fit — fails with ``UnexpectedTracerError``
+    naming the loader rather than whoever poisoned it.
 
-    ``jax.ensure_compile_time_eval`` forces the constructor's ``jnp`` work to
-    evaluate eagerly, so the cached instance holds concrete arrays regardless
-    of who builds it. Same defect class as the GRAHSP template cache (#1462).
+    Three of these four constructors reach ``jnp``:
+    :class:`CueBackend` via ``load_cue_weights`` (16x12 stacked network
+    parameters), and ``FeltreNLRBackend`` / ``SynthesizerNLRBackend`` via
+    ``jnp.sort`` (which ``SynthesizerBLRBackend`` inherits).
 
-    Parameters
-    ----------
-    factory : callable
-        Zero-argument callable returning the backend.
-
-    Returns
-    -------
-    object
-        Whatever ``factory`` returns, built with concrete arrays.
+    Only the Cue path had actually been caught, as the ``test_cue_nlr_grammar``
+    failure on main — and it reproduced only under a particular test order,
+    which is why it passed locally and failed in CI. The others are the same
+    construction under the same cache and differ only in whether anything has
+    happened to call them from inside a trace yet. Guarding the cache boundary
+    rather than the three constructors keeps the rule in one place: *a lazy
+    singleton must not let its first caller decide.*
     """
     import jax
 
-    with jax.ensure_compile_time_eval():
-        return factory()
+    return jax.ensure_compile_time_eval()
 
 
 def get_feltre_backend(grid_path: str | None = None) -> FeltreNLRBackend:
@@ -145,9 +142,10 @@ def get_feltre_backend(grid_path: str | None = None) -> FeltreNLRBackend:
     """
     global _FELTRE_BACKEND
     if grid_path is not None or _FELTRE_BACKEND is None:
-        _FELTRE_BACKEND = _build_outside_trace(
-            lambda: FeltreNLRBackend() if grid_path is None else FeltreNLRBackend(grid_path)
-        )
+        with _eager_construction():
+            _FELTRE_BACKEND = (
+                FeltreNLRBackend() if grid_path is None else FeltreNLRBackend(grid_path)
+            )
     return _FELTRE_BACKEND
 
 
@@ -172,7 +170,8 @@ def get_synthesizer_nlr_backend(grid_path: str) -> SynthesizerNLRBackend:
     """
     global _SYNTHESIZER_BACKEND
     if _SYNTHESIZER_BACKEND is None or _SYNTHESIZER_BACKEND.grid_path != grid_path:
-        _SYNTHESIZER_BACKEND = _build_outside_trace(lambda: SynthesizerNLRBackend(grid_path))
+        with _eager_construction():
+            _SYNTHESIZER_BACKEND = SynthesizerNLRBackend(grid_path)
     return _SYNTHESIZER_BACKEND
 
 
@@ -196,7 +195,8 @@ def get_synthesizer_blr_backend(grid_path: str) -> SynthesizerBLRBackend:
     """
     global _SYNTHESIZER_BLR_BACKEND
     if _SYNTHESIZER_BLR_BACKEND is None or _SYNTHESIZER_BLR_BACKEND.grid_path != grid_path:
-        _SYNTHESIZER_BLR_BACKEND = _build_outside_trace(lambda: SynthesizerBLRBackend(grid_path))
+        with _eager_construction():
+            _SYNTHESIZER_BLR_BACKEND = SynthesizerBLRBackend(grid_path)
     return _SYNTHESIZER_BLR_BACKEND
 
 
@@ -376,9 +376,8 @@ def get_cue_agn_backend(weights_path: str | None = None):
     if weights_path is not None or _CUE_AGN_BACKEND is None:
         from tengri.components.nebular.cue import CueBackend
 
-        _CUE_AGN_BACKEND = _build_outside_trace(
-            lambda: CueBackend(weights_path or _DEFAULT_CUE_WEIGHTS_PATH)
-        )
+        with _eager_construction():
+            _CUE_AGN_BACKEND = CueBackend(weights_path or _DEFAULT_CUE_WEIGHTS_PATH)
     return _CUE_AGN_BACKEND
 
 
