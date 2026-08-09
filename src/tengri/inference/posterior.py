@@ -2098,28 +2098,87 @@ class Posterior:
                     eline.create_dataset("wavelengths", data=np.asarray(self.eline_wavelengths))
 
     @staticmethod
+    def _write_diagnostic(container, key, val, path: str, skipped: list[str]) -> None:
+        """Write one diagnostics entry into ``container``, or record that it could not be.
+
+        Recurses into nested dicts, so a nested array or list is stored exactly
+        the way a top-level one is.
+
+        Until 2026-08 this was an ``if/elif`` chain with no ``else`` and a
+        nested branch that handled only int/float/str. Anything it had no
+        clause for was dropped without a word — measured on
+        ``{"a_float", "a_str", "a_none", "a_list_of_str", "nested":
+        {"inner_float", "inner_none", "inner_list"}}``, three of the eight keys
+        vanished: ``a_none``, ``nested.inner_none`` and ``nested.inner_list``.
+        A ``None`` matched no branch at either level, and a list matched none
+        when nested.
+
+        Parameters
+        ----------
+        container : h5py.Group
+            Group to write into — the diagnostics group, or a nested subgroup.
+        key : str
+            Entry name within ``container``.
+        val : object
+            Value to store.
+        path : str
+            Dotted prefix of ``key`` for reporting, e.g. ``"nested."``. Empty
+            at the top level.
+        skipped : list of str
+            Accumulator, appended in place for entries h5py cannot hold.
+        """
+        if isinstance(val, dict):
+            sub = container.create_group(key)
+            for k2, v2 in val.items():
+                Posterior._write_diagnostic(sub, k2, v2, f"{path}{key}.", skipped)
+            return
+        if isinstance(val, (int, float, np.integer, np.floating)):
+            container.attrs[key] = float(val)
+            return
+        if isinstance(val, str):
+            container.attrs[key] = val
+            return
+        if isinstance(val, (np.ndarray, jnp.ndarray)):
+            container.create_dataset(key, data=np.asarray(val))
+            return
+        if isinstance(val, (list, tuple)):
+            try:
+                container.create_dataset(key, data=np.asarray(val))
+            except (TypeError, ValueError):
+                container.attrs[key] = str(val)
+            return
+        # No representation for this type — including ``None``, which h5py
+        # cannot store as an attribute. Recorded rather than invented: writing
+        # ``str(None)`` would load back as the string "None", which is a
+        # different wrong answer from an absent key.
+        skipped.append(f"{path}{key} ({type(val).__name__})")
+
+    @staticmethod
     def _save_diagnostics(f, diagnostics: dict) -> None:
-        """Save diagnostics dict to HDF5, handling nested dicts and mixed types."""
+        """Save diagnostics dict to HDF5, handling nested dicts and mixed types.
+
+        Entries h5py cannot hold are named in the group's ``skipped_keys``
+        attribute and warned about. This warns rather than raising, unlike
+        :meth:`tengri.results.FitResult.save`: diagnostics are metadata about a
+        fit, so losing one should be visible but must not cost the samples.
+        """
         grp = f.create_group("diagnostics")
+        skipped: list[str] = []
         for key, val in diagnostics.items():
-            if isinstance(val, dict):
-                sub = grp.create_group(key)
-                for k2, v2 in val.items():
-                    if isinstance(v2, (int, float, np.integer, np.floating)):
-                        sub.attrs[k2] = float(v2)
-                    elif isinstance(v2, str):
-                        sub.attrs[k2] = v2
-            elif isinstance(val, (int, float, np.integer, np.floating)):
-                grp.attrs[key] = float(val)
-            elif isinstance(val, str):
-                grp.attrs[key] = val
-            elif isinstance(val, (np.ndarray, jnp.ndarray)):
-                grp.create_dataset(key, data=np.asarray(val))
-            elif isinstance(val, (list, tuple)):
-                try:
-                    grp.create_dataset(key, data=np.asarray(val))
-                except (TypeError, ValueError):
-                    grp.attrs[key] = str(val)
+            Posterior._write_diagnostic(grp, key, val, "", skipped)
+        if skipped:
+            import json
+
+            grp.attrs["skipped_keys"] = json.dumps(skipped)
+            warnings.warn(
+                f"{len(skipped)} diagnostic entr"
+                f"{'y' if len(skipped) == 1 else 'ies'} could not be written to "
+                "HDF5 and are absent from the saved file:\n  " + "\n  ".join(skipped) + "\n"
+                "The names are recorded in the file's `diagnostics.skipped_keys` "
+                "attribute. Everything else was written.",
+                UserWarning,
+                stacklevel=3,
+            )
 
     @classmethod
     def load(cls, path: str, model=None) -> Posterior:
@@ -2204,27 +2263,52 @@ class Posterior:
         )
 
     @staticmethod
-    def _load_diagnostics(f) -> dict:
-        """Load diagnostics dict from HDF5."""
-        diagnostics: dict = {}
-        if "diagnostics" not in f:
-            return diagnostics
-        grp = f["diagnostics"]
+    def _read_diagnostic_group(grp) -> dict:
+        """Read one diagnostics group, recursing to whatever depth it has.
+
+        Mirrors :meth:`_write_diagnostic`. The previous reader descended
+        exactly one level and read only ``attrs`` there, so a nested dataset
+        would have been written and then never read back — the asymmetry that
+        made adding nested array support pointless on its own.
+        """
+        out: dict = {}
         for key in grp.attrs:
-            diagnostics[key] = grp.attrs[key]
-            if isinstance(diagnostics[key], bytes):
-                diagnostics[key] = diagnostics[key].decode()
+            if key == "skipped_keys":
+                continue  # bookkeeping, not a diagnostic
+            val = grp.attrs[key]
+            out[key] = val.decode() if isinstance(val, bytes) else val
         for key in grp:
             item = grp[key]
             if hasattr(item, "shape"):
-                diagnostics[key] = np.asarray(item[:])
+                out[key] = np.asarray(item[:])
             else:
-                sub = {}
-                for k2 in item.attrs:
-                    sub[k2] = item.attrs[k2]
-                    if isinstance(sub[k2], bytes):
-                        sub[k2] = sub[k2].decode()
-                diagnostics[key] = sub
+                out[key] = Posterior._read_diagnostic_group(item)
+        return out
+
+    @staticmethod
+    def _load_diagnostics(f) -> dict:
+        """Load diagnostics dict from HDF5.
+
+        Warns if the file records entries that could not be written when it was
+        saved. The save-time warning is heard once, by whoever ran the fit;
+        without this, a later reader sees a diagnostics dict that looks whole.
+        """
+        if "diagnostics" not in f:
+            return {}
+        grp = f["diagnostics"]
+        diagnostics = Posterior._read_diagnostic_group(grp)
+        if "skipped_keys" in grp.attrs:
+            import json
+
+            dropped = json.loads(grp.attrs["skipped_keys"])
+            warnings.warn(
+                f"{len(dropped)} diagnostic entr"
+                f"{'y was' if len(dropped) == 1 else 'ies were'} dropped when "
+                "this file was written and are absent from the loaded "
+                "diagnostics:\n  " + "\n  ".join(dropped),
+                UserWarning,
+                stacklevel=3,
+            )
         return diagnostics
 
     # ── Plotting ──────────────────────────────────────────────────

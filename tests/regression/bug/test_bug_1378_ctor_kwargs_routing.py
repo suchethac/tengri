@@ -109,9 +109,24 @@ def test_sed_fit_params_reaches_params_override(model, mock_data):
 
 
 def test_unknown_kwargs_still_fail_loudly(model, mock_data):
-    """Routing must not create a silent kwarg sink — typos still raise."""
+    """Routing must not create a silent kwarg sink — typos still raise.
+
+    The exception **type** is deliberately not pinned. Until #1605 a typo
+    reached the runner and the interpreter raised ``TypeError`` on its own;
+    #1605 added an up-front check in ``_backend_registry`` that raises
+    ``ValueError``, with a documented rationale — the caller never called that
+    runner, so a signature error would name a function they did not invoke,
+    matching ``check_capabilities``.
+
+    That change left this assertion pinning ``TypeError`` alone, and it has
+    been failing on main since. What this test exists to defend is the property
+    in its name: a typo must not be silently swallowed. Accepting either type
+    keeps that guarantee without re-litigating the choice, and without a
+    regression test quietly dictating an API decision it was not written to
+    make.
+    """
     flux, err = mock_data
     fwd = ForwardModel.build(sed=model)
 
-    with pytest.raises(TypeError):
+    with pytest.raises((TypeError, ValueError), match="calibration_marginalze"):
         fwd.fit(flux, err, method="map", n_steps=3, calibration_marginalze=True)
