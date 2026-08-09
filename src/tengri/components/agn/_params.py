@@ -301,12 +301,19 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # Fritz et al. (2006) smooth-dust torus (CIGALE ``fritz2006``). Defaults
     # match the fritz_torus_block; allowed values are the SimpleDatabase grid
     # nodes (triweight-interpolated). See scripts/build_fritz2006_grid.py.
+    # Every range below is the axis extent measured from
+    # data/fritz2006_torus_grid.h5, following ``agn_fritz_psy`` beneath: the
+    # tabulation is what the interpolator can serve, so a wider prior would clip
+    # to an edge template and carry exactly zero gradient there (#1586). The
+    # grids quoted in these descriptions were checked against the file and agree.
     ParamDeclaration(
         "agn_fritz_r_ratio",
         Fixed(60.0),
         "Fritz2006 torus outer/inner radius ratio (grid: 10, 30, 60, 100, 150)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        # r_ratio_axis: 5 nodes, [10, 150].
+        free_prior=Uniform(10.0, 150.0, "Fritz2006 torus radius ratio", default=60.0),
     ),
     ParamDeclaration(
         "agn_fritz_tau",
@@ -314,11 +321,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Fritz2006 equatorial optical depth at 9.7 um (grid: 0.1, 0.3, 0.6, 1, 2, 3, 6, 10)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        # tau_axis: 8 nodes, [0.1, 10].
+        free_prior=Uniform(0.1, 10.0, "Fritz2006 equatorial optical depth", default=1.0),
     ),
     ParamDeclaration(
         "agn_fritz_beta",
         Fixed(-0.5),
         "Fritz2006 radial dust density power-law index (grid: -1, -0.75, -0.5, -0.25, 0)",
+        # beta_axis: 5 nodes, [-1, 0].
+        free_prior=Uniform(-1.0, 0.0, "Fritz2006 radial density index", default=-0.5),
     ),
     ParamDeclaration(
         "agn_fritz_gamma",
@@ -326,6 +337,8 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Fritz2006 polar dust density gradient (grid: 0, 2, 4, 6)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        # gamma_axis: 4 nodes, [0, 6].
+        free_prior=Uniform(0.0, 6.0, "Fritz2006 polar density gradient", default=4.0),
     ),
     ParamDeclaration(
         "agn_fritz_oa",
@@ -334,6 +347,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo > 0,
         "must be > 0",
         units="deg",
+        # opening_angle_axis: 3 nodes, [20, 60]. Note the default sits on the
+        # grid's upper edge, so this range opens the parameter downward only.
+        free_prior=Uniform(20.0, 60.0, "Fritz2006 half-opening angle", units="deg", default=60.0),
     ),
     ParamDeclaration(
         "agn_fritz_psy",
@@ -731,6 +747,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "(Grandi 1982; paper ABC). 0 disables; only added for agn_type=1.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        # Deliberately NO free_prior, on evidence rather than physics: the
+        # validator bounds it below but nothing bounds it above, the description
+        # states no interval, and the GRAHSP paper's abstract (arXiv:2405.19297)
+        # does not carry the prior table. Declaring an upper end would be
+        # inventing one. Same posture as radio_alpha_thin / radio_alpha_thick.
     ),
     ParamDeclaration(
         "agn_grahsp_tor_temp",
@@ -738,6 +759,10 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "GRAHSP MN12 template-torus temperature blend (paper TORtemp), in "
         "[-1, +1]; >0 warms towards the 75th-percentile template, <0 cools "
         "towards the 25th. Used only when the torus model is 'mn12'.",
+        # The interval is stated in the description and is intrinsic to the
+        # quantity: it interpolates between the 25th- and 75th-percentile
+        # templates, so +/-1 are the endpoints of the blend, not a convention.
+        free_prior=Uniform(-1.0, 1.0, "MN12 torus temperature blend", default=0.0),
     ),
     ParamDeclaration(
         "agn_grahsp_tor_cutoff_um",
@@ -746,6 +771,12 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "(paper TORcutoff; 1.2 Mor&Netzer, 1.7 Lyu&Rieke). Torus model 'mn12'.",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        # Brackets the two published choices this description names -- 1.2 um
+        # (Mor & Netzer) and 1.7 um (Lyu & Rieke) -- with margin either side
+        # rather than pinning the fit to one group's convention.
+        free_prior=Uniform(
+            1.0, 2.0, "MN12 torus short-wavelength cutoff", units="um", default=1.2
+        ),
     ),
     # CIGALE skirtor2016 disc-shape modulator (Boquien+2019). The skirtor2016
     # grid samples delta in [-0.5, 0.5]; for the adaf_lopez2024 block it is a

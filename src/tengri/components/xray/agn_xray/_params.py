@@ -26,12 +26,20 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Fixed(0.0),
         "Offset on Just+2007 alpha_ox(L_2500)",
         units="dex",
+        # Deliberately NO free_prior, for the same reason as its sibling
+        # ``xray_delta_alpha_ox``: the sensible width of an offset on an
+        # empirical relation is that relation's intrinsic scatter, which is not
+        # recorded here. Kept consistent with the sibling so the two spellings
+        # of this quantity cannot drift apart.
     ),
     ParamDeclaration(
         "agn_xray_e_cut",
         Fixed(300.0),
         "High-energy cutoff",
         units="keV",
+        # Matches its sibling ``xray_E_cut``, whose description states the
+        # typical 100-500 keV interval; the two spellings must agree.
+        free_prior=Uniform(100.0, 500.0, "AGN X-ray cutoff energy", units="keV", default=300.0),
     ),
 )
 
