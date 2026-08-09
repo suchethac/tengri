@@ -50,6 +50,7 @@ import numpy as np
 import pytest
 
 from tengri.observation.noise import variable_noise_metric_vec
+from tengri.utils.scale import whiten
 
 pytestmark = pytest.mark.regression_bug
 
@@ -69,6 +70,17 @@ def _problem(rng):
     a_t = rng.standard_normal((_N_BAND, _N_PARAM)) / _SIGMA
     data = jnp.asarray(_FLUX * (1.0 + 0.05 * rng.standard_normal(_N_BAND)))
     return jnp.asarray(a_f), jnp.asarray(a_t), data
+
+
+def _run_with(a_f, a_t, data, xi, v):
+    """``variable_noise_metric_vec`` on an explicit problem (no fixture rebuild)."""
+
+    def signal_noise_fn(x):
+        return a_f @ x, jnp.abs(a_t @ x) + 1.0 / _SIGMA
+
+    return variable_noise_metric_vec(
+        xi, v, signal_noise_fn, data, unflatten=lambda z: z, flatten=lambda z: z
+    )
 
 
 def _run(dtype_x64, seed=0):
@@ -114,15 +126,56 @@ def test_variable_noise_metric_is_finite_in_float32():
     )
 
 
-def test_variable_noise_metric_is_nonzero_in_float32():
-    """Finite is not enough: H_tt collapsing to 0.0 is finite and wrong.
+def _metric_with_h_tt_zeroed(a_f, a_t, data, xi, v):
+    """The metric with the noise-direction curvature deleted.
 
-    A metric that silently loses its noise-direction curvature still inverts,
-    still converges, and reports nothing — the failure mode #1542 called out as
-    more dangerous than a NaN.
+    This is the *shape* of the silent failure: ``H_tt`` underflowing to exactly
+    0.0 removes this block rather than poisoning it, so the metric stays finite
+    and inverts happily.
     """
-    got = _run(False)
-    assert np.any(np.abs(got) > 0.0), "the float32 metric is identically zero"
+
+    def signal_noise_fn(x):
+        return a_f @ x, jnp.abs(a_t @ x) + 1.0 / _SIGMA
+
+    (f, tau), (jv_f, jv_tau) = jax.jvp(signal_noise_fn, (xi,), (v,))
+    residual = data - f
+    r_std = residual * tau
+    h_ft = -2.0 * r_std
+    sigma_eff = 1.0 / tau
+    w_f = whiten(whiten(jv_f, sigma_eff), sigma_eff) + h_ft * jv_tau
+    w_t = h_ft * jv_f  # + H_tt * Jv_tau, deliberately dropped
+    _, vjp_fn = jax.vjp(signal_noise_fn, xi)
+    (jtw,) = vjp_fn((w_f, w_t))
+    return jtw + v
+
+
+def test_the_noise_direction_curvature_is_actually_present():
+    """H_tt collapsing to 0.0 is finite and wrong — pin the *varying* part.
+
+    An earlier version of this test asserted ``any(|metric| > 0)``. That cannot
+    fail: the metric returns ``flatten(JTw) + v``, so the identity prior ``v``
+    alone satisfies it before the Hessian contributes anything — measured, the
+    check passed with the noise-direction curvature removed entirely. **An
+    existence check on a quantity carrying an additive constant cannot test the
+    varying part.**
+
+    So compare against the collapse itself rather than against zero.
+    """
+    with jax.enable_x64(False):
+        rng = np.random.default_rng(0)
+        a_f, a_t, data = _problem(rng)
+        xi = jnp.asarray(rng.standard_normal(_N_PARAM))
+        v = jnp.asarray(rng.standard_normal(_N_PARAM))
+        real = np.asarray(_run_with(a_f, a_t, data, xi, v), dtype=np.float64)
+        collapsed = np.asarray(_metric_with_h_tt_zeroed(a_f, a_t, data, xi, v), dtype=np.float64)
+
+    denom = np.maximum(np.abs(real), 1e-300)
+    rel = np.max(np.abs(real - collapsed) / denom)
+    assert rel > 1e-2, (
+        f"the float32 metric is within {rel:.3e} of one computed with the "
+        "noise-direction curvature deleted, so H_tt is contributing nothing — "
+        "the silent half of #1617"
+    )
 
 
 def _metric_old(a_f, a_t, data, xi, v):

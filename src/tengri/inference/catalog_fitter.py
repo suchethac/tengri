@@ -23,6 +23,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
+from tengri.inference._batching import AUTO, resolve_forward_chunk_size
 from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
@@ -882,7 +883,7 @@ class _CatalogFitterOriginal:
         method="mcmc_nuts",
         *,
         key,
-        forward_chunk_size=1,
+        forward_chunk_size=AUTO,
         n_pad: int | str | None = None,
         devices=None,
         store: str | None = None,
@@ -1197,7 +1198,7 @@ class _CatalogFitterOriginal:
         method_tag,
         *,
         key,
-        forward_chunk_size=1,
+        forward_chunk_size=AUTO,
         n_pad: int | str | None = None,
         store: str = "full",
         percentiles: tuple = DEFAULT_PERCENTILES,
@@ -1212,8 +1213,16 @@ class _CatalogFitterOriginal:
         from tengri.inference.posterior import Posterior
 
         t0 = time.time()
-        K = max(1, int(forward_chunk_size))
         n_gal = self.n_galaxies
+        # K galaxies per dispatch (#1189). AUTO by default: one galaxy per
+        # dispatch is the anti-pattern. This path already requires uniform
+        # n_data (``_validate_uniform_data`` below runs regardless of K), so
+        # homogeneous=True holds here.
+        K = resolve_forward_chunk_size(
+            forward_chunk_size,
+            n_gal=n_gal,
+            n_data_per_gal=len(self.galaxies[0]["flux_obs"]) if n_gal else None,
+        )
         n_padded = _resolve_n_padded(n_gal, K, n_pad)
         n_pad_extra = n_padded - n_gal
 
@@ -1356,7 +1365,7 @@ class _CatalogFitterOriginal:
         method_tag,
         *,
         key,
-        forward_chunk_size=1,
+        forward_chunk_size=AUTO,
         n_pad: int | str | None = None,
         devices=None,
         store: str = "full",
@@ -1397,8 +1406,16 @@ class _CatalogFitterOriginal:
 
         sampler = "nuts" if method_tag == "mcmc_nuts" else "hmc"
         t0 = time.time()
-        K = max(1, int(forward_chunk_size))
         n_gal = self.n_galaxies
+        # K galaxies per dispatch (#1189). AUTO by default: one galaxy per
+        # dispatch is the anti-pattern. This path already requires uniform
+        # n_data (``_validate_uniform_data`` below runs regardless of K), so
+        # homogeneous=True holds here.
+        K = resolve_forward_chunk_size(
+            forward_chunk_size,
+            n_gal=n_gal,
+            n_data_per_gal=len(self.galaxies[0]["flux_obs"]) if n_gal else None,
+        )
         dev_list = self._resolve_devices(devices)
         n_dev = len(dev_list) if dev_list else 1
         if n_dev > 1:

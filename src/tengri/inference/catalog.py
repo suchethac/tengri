@@ -12,6 +12,7 @@ import warnings
 import jax
 import numpy as np
 
+from tengri.inference._batching import AUTO
 from tengri.inference.catalog_fitter import (
     CatalogPosterior,
     _CatalogFitterOriginal as CatalogFitter,
@@ -239,7 +240,7 @@ class Catalog:
         method="map",
         *,
         key,
-        forward_chunk_size=1,
+        forward_chunk_size=AUTO,
         n_pad=None,
         store=None,
         percentiles=None,
