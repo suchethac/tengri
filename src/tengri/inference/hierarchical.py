@@ -29,6 +29,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.inference._batching import AUTO, resolve_forward_chunk_size
 from tengri.inference._hierarchical_flat import (
     FLAT_SAMPLERS,
     FLAT_UNSUPPORTED,
@@ -804,7 +805,7 @@ class PopulationFitter:
         n_samples=3,
         n_posterior_samples=500,
         posterior_chunk_size=None,
-        forward_chunk_size=1,
+        forward_chunk_size=AUTO,
         memory_mode="low",
         kl_rtol=1e-2,
         n_seeds=3,
@@ -859,17 +860,27 @@ class PopulationFitter:
         from tengri.inference.backends.vi.native import build_native_vi_nonlinear_engine
 
         n_gal = self.n_galaxies
-        K = max(1, int(forward_chunk_size))
+        # K galaxies per dispatch (#1189). Default is AUTO, not 1: a dispatch
+        # carrying one galaxy is the anti-pattern, not a slow path.
+        _sizes = {len(g["flux_obs"]) for g in self.galaxies}
+        _homogeneous = len(_sizes) == 1
+        n_data_per_gal = next(iter(_sizes)) if _homogeneous else None
+        K = resolve_forward_chunk_size(
+            forward_chunk_size,
+            n_gal=n_gal,
+            n_data_per_gal=n_data_per_gal,
+            homogeneous=_homogeneous,
+        )
         # batch_size=K in lax.map handles non-divisible N internally — no padding needed.
-        if K > 1:
-            n_data_per_gal = len(self.galaxies[0]["flux_obs"])
-            for g in self.galaxies[1:]:
-                if len(g["flux_obs"]) != n_data_per_gal:
-                    raise ValueError(
-                        "forward_chunk_size > 1 requires all galaxies to have the same "
-                        f"number of data points; got {n_data_per_gal} and {len(g['flux_obs'])}."
-                    )
-        else:
+        # Only an EXPLICIT K > 1 can reach this: AUTO resolves to 1 when the
+        # catalog is heterogeneous, so widening never turns a working fit into
+        # an error.
+        if K > 1 and not _homogeneous:
+            raise ValueError(
+                "forward_chunk_size > 1 requires all galaxies to have the same "
+                f"number of data points; got sizes {sorted(_sizes)}."
+            )
+        if K == 1:
             n_data_per_gal = None
         spec = self._spec
         stochastic = spec.stochastic
@@ -1169,7 +1180,7 @@ class PopulationFitter:
         n_samples=3,
         n_posterior_samples=500,
         posterior_chunk_size=None,
-        forward_chunk_size=1,
+        forward_chunk_size=AUTO,
         memory_mode="low",
         kl_rtol=1e-2,
         n_seeds=3,
@@ -1209,17 +1220,27 @@ class PopulationFitter:
         from jax.flatten_util import ravel_pytree
 
         n_gal = self.n_galaxies
-        K = max(1, int(forward_chunk_size))
+        # K galaxies per dispatch (#1189). Default is AUTO, not 1: a dispatch
+        # carrying one galaxy is the anti-pattern, not a slow path.
+        _sizes = {len(g["flux_obs"]) for g in self.galaxies}
+        _homogeneous = len(_sizes) == 1
+        n_data_per_gal = next(iter(_sizes)) if _homogeneous else None
+        K = resolve_forward_chunk_size(
+            forward_chunk_size,
+            n_gal=n_gal,
+            n_data_per_gal=n_data_per_gal,
+            homogeneous=_homogeneous,
+        )
         # batch_size=K in lax.map handles non-divisible N internally — no padding needed.
-        if K > 1:
-            n_data_per_gal = len(self.galaxies[0]["flux_obs"])
-            for g in self.galaxies[1:]:
-                if len(g["flux_obs"]) != n_data_per_gal:
-                    raise ValueError(
-                        "forward_chunk_size > 1 requires all galaxies to have the same "
-                        f"number of data points; got {n_data_per_gal} and {len(g['flux_obs'])}."
-                    )
-        else:
+        # Only an EXPLICIT K > 1 can reach this: AUTO resolves to 1 when the
+        # catalog is heterogeneous, so widening never turns a working fit into
+        # an error.
+        if K > 1 and not _homogeneous:
+            raise ValueError(
+                "forward_chunk_size > 1 requires all galaxies to have the same "
+                f"number of data points; got sizes {sorted(_sizes)}."
+            )
+        if K == 1:
             n_data_per_gal = None
         spec = self._spec
         stochastic = spec.stochastic
