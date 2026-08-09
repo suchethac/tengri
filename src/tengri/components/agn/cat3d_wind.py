@@ -66,12 +66,7 @@ import numpy as np
 
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._phys import (
-    bolometric_integral_nu as _bolometric_integral_nu,
-    wavelength_to_nu as _wavelength_to_nu,
-)
 from tengri.components.agn._template_grid import TorusTemplateGrid, torus_lnu_from_grid
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
     "cat3d_wind_analytic",

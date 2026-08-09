@@ -20,14 +20,17 @@ from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.cat3d_wind import cat3d_wind_sed, load_cat3d_wind_default_grid
 from tengri.components.agn.disc_cigale import schartmann2005_disk_spectrum
 from tengri.components.agn.fritz import fritz_sed, load_fritz_default_grid
-from tengri.components.agn.nenkova_agnfitter import nenkova_agnfitter_sed
+from tengri.components.agn.nenkova_agnfitter import (
+    load_nenkova_agnfitter_default_grid,
+    nenkova_agnfitter_sed,
+)
 from tengri.components.agn.polar_dust import (
     anisotropic_polar_luminosity,
     polar_dust_emission,
     smc_extinction_curve,
 )
 from tengri.components.agn.silva04 import load_silva04_default_grid, silva04_sed
-from tengri.components.agn.skirtor import _load_skirtor_default_grid, skirtor_sed
+from tengri.components.agn.skirtor import SKIRTORBundle, load_skirtor_bundle, skirtor_sed
 from tengri.components.agn.skirtor_agnfitter import (
     load_skirtor_agnfitter_default_grid,
     skirtor_agnfitter_sed,
@@ -231,6 +234,7 @@ def nenkova_torus_block(
     citation="Nenkova et al. 2008, ApJ, 685, 160; Martínez-Ramírez et al. 2024, A&A, 688, A46",
     status="production",
     short_doc="Nenkova et al. 2008 CLUMPY torus (AGNfitter-rX NK0_mean_1p templates)",
+    template_loader=load_nenkova_agnfitter_default_grid,
 )
 def nenkova_agnfitter_torus_block(
     wavelength: Array,
@@ -239,6 +243,7 @@ def nenkova_agnfitter_torus_block(
     *,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
+    templates=None,
     **_params,
 ) -> Array:
     r"""Nenkova+ 2008 CLUMPY torus (AGNfitter-rX) block.
@@ -261,6 +266,7 @@ def nenkova_agnfitter_torus_block(
         agn_log_lbol=agn_log_lbol,
         agn_cos_inc=agn_cos_inc,
         agn_torus_frac=agn_torus_frac,
+        _template=templates,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 
@@ -363,7 +369,7 @@ def skirtor_agnfitter_torus_block(
     citation="Stalevski et al. 2016, MNRAS, 458, 2288",
     status="production",
     short_doc="Stalevski et al. 2016 SKIRTOR torus with polar dust",
-    template_loader=_load_skirtor_default_grid,
+    template_loader=load_skirtor_bundle,
 )
 def skirtor_torus_block(
     wavelength: Array,
@@ -467,7 +473,9 @@ def skirtor_torus_block(
         agn_radius_ratio=agn_radius_ratio,
         agn_cos_inc=agn_cos_inc,
         agn_torus_frac=agn_torus_frac,
-        _template=templates,
+        # The block owns the torus cube; the runner separately consumes
+        # ``bundle.disc_dust`` for the CIGALE R-tie.
+        _template=templates.torus if isinstance(templates, SKIRTORBundle) else templates,
     )
     L_lambda_thermal = L_nu_skirtor_scaled * _C_AA_PER_S / wave_aa**2
 

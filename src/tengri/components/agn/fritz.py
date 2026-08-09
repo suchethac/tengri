@@ -29,7 +29,6 @@ References
 
 import functools
 from collections.abc import Callable
-from typing import NamedTuple
 from pathlib import Path
 from typing import NamedTuple
 

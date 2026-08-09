@@ -250,7 +250,7 @@ def collect_block_templates(recipe: dict[str, str]) -> dict[str, object]:
             continue
         try:
             templates[f"{category}/{name}"] = loader()
-        except Exception:  # noqa: BLE001 — see Notes: degrade to baking, never fail the build.
+        except Exception:
             continue
     return templates
 

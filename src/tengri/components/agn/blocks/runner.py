@@ -68,7 +68,7 @@ from tengri.components.agn.blocks.torus_screen import (
 )
 from tengri.components.agn.polar_dust import _RV_SMC, smc_extinction_curve
 from tengri.components.agn.reddening import redden_disc
-from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
+from tengri.components.agn.skirtor import SKIRTORBundle, skirtor_disc_dust_ratio
 from tengri.utils.physics_constants import L_SUN
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
@@ -509,10 +509,14 @@ agn_torus_block, agn_attenuation_block : str
     # (0.5) can never drift between the sites that debit the disc.
     _torus_frac = jnp.clip(jnp.asarray(params.get("agn_torus_frac", 0.5)), 0.0, 1.0)
     if _agn_norm == "cigale_joint" and agn_torus_block == "skirtor":
+        _skirtor_bundle = _templates_for("torus", agn_torus_block)
         _disc_R, _disc_incl, _disc_R_faceon = skirtor_disc_dust_ratio(
             wave,
             L_lambda_disc,
             _disc_ext,
+            _template=(
+                _skirtor_bundle.disc_dust if isinstance(_skirtor_bundle, SKIRTORBundle) else None
+            ),
             agn_tau_skirtor=params.get("agn_tau_skirtor", 7.0),
             agn_p_skirtor=params.get("agn_p_skirtor", 1.0),
             agn_q_skirtor=params.get("agn_q_skirtor", 1.0),

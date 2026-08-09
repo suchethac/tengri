@@ -19,7 +19,7 @@ from typing import Any
 import numpy as np
 from jax.extend.core import ClosedJaxpr, Jaxpr, Literal
 
-__all__ = ["iter_baked_arrays", "baked_bytes", "baked_mb"]
+__all__ = ["baked_bytes", "baked_mb", "iter_baked_arrays"]
 
 
 def _iter_sub_jaxprs(value: Any) -> Iterator[Jaxpr]:

@@ -24,7 +24,9 @@ from __future__ import annotations
 import pathlib
 import warnings
 
+import chex
 import jax
+import jax.numpy as jnp
 import pytest
 
 from tengri import FIXED, SEDModel
@@ -33,6 +35,7 @@ from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed
 
+from ._equivalence_cases import SED_CASES
 from ._jaxpr_consts import baked_mb
 
 pytestmark = pytest.mark.contract
@@ -136,3 +139,40 @@ def test_torus_template_threads_as_argument(ssp, obs, torus):
         f"the block as a traced argument via template_state, not via a "
         f"module-level cached loader called at trace time."
     )
+
+
+# ── Equivalence: threading must not move a single number ─────────────────────
+
+
+@pytest.mark.parametrize(
+    "name,module,sed_fn,loader_fn,kwargs", SED_CASES, ids=[c[0] for c in SED_CASES]
+)
+def test_threaded_grid_matches_closure_path(name, module, sed_fn, loader_fn, kwargs):
+    """Passing the grid in must give the identical SED to loading it inside.
+
+    The fix moved each family from a closed-over grid to one passed as an
+    argument. That is meant to be pure plumbing, so the two paths must agree
+    **exactly** — a tolerance here would hide a real change in the science.
+    """
+    import importlib
+
+    mod = importlib.import_module(module)
+    loader = getattr(mod, loader_fn, None)
+    if loader is None:
+        pytest.fail(
+            f"{module}.{loader_fn} is missing — the block cannot declare a template_loader"
+        )
+    try:
+        grid = loader()
+    except FileNotFoundError:
+        pytest.skip(f"{name} grid not available on disk")
+
+    wave = jnp.linspace(1.0e4, 5.0e5, 512)
+    fn = getattr(mod, sed_fn)
+    closure_result = fn(wave, **kwargs)
+    threaded_result = fn(wave, _template=grid, **kwargs)
+
+    # Guard against a vacuous comparison: a family that returned all zeros
+    # would pass any equality check.
+    assert float(jnp.max(jnp.abs(closure_result))) > 0.0, f"{name} produced an all-zero SED"
+    chex.assert_trees_all_close(threaded_result, closure_result, rtol=0.0, atol=0.0)
