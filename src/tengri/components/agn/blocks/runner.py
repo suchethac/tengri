@@ -475,7 +475,7 @@ agn_torus_block, agn_attenuation_block : str
     # time — which bakes it into the graph as constants.
     #
     # Keys are ``"<category>/<name>"``, matching ``collect_block_templates``.
-    # ``"grahsp"`` is still honoured so callers holding the old flat bundle
+    # ``"grahsp"`` is still honored so callers holding the old flat bundle
     # keep working. When a stage has no entry, the block falls back to its own
     # cached load.
     _legacy_grahsp = template_state.get("grahsp") if template_state is not None else None
