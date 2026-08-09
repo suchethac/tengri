@@ -235,6 +235,11 @@ def _build_prediction(
     # meant to avoid — a fast path that is a no-op. So when lines are the only
     # feature channel and the model carries the precompute, the full-grid forward
     # is not built at all.
+    # NB: reading ``model.approx.feature_precomp`` here instead looks like the
+    # obvious fix for the flag/config disagreement below, and it is a PESSIMIZATION:
+    # it forces ``needs_state=False``, and computing the lines separately costs more
+    # than sharing one ``predict_state`` with the photometry channel. Measured on a
+    # 10-parameter Cue model: 5,021,451 -> 5,859,984 gradient FLOPs (+16.7%).
     fast_lines = bool(getattr(model, "_fast_line_measurement", False))
     needs_state = has_line_ratios or has_indices or (has_line_fluxes and not fast_lines)
     if not needs_state:
