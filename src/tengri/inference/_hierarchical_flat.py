@@ -7,7 +7,8 @@ with them but because the only flat-vector formulation lived *inside*
 ``_run_raytrace`` as a set of closures, reachable by exactly one sampler.
 
 This seam drives the NUTS / HMC / dynamic-HMC / GHMC / elliptical-slice /
-MAP / pathfinder family. Every other registered name is either driven by ``PopulationFitter``'s
+MCLMC / adjusted-MCLMC / MAP / pathfinder family. Every other registered name
+is either driven by ``PopulationFitter``'s
 own runners or refused with a stated reason — see :data:`FLAT_UNSUPPORTED`. A
 name is driven here only when the driver runs the algorithm the name promises;
 a stand-in (the first draft ran plain HMC under five distinct-algorithm names)
@@ -79,8 +80,9 @@ __all__ = ["FLAT_SAMPLERS", "FlatProblem", "build_flat_problem", "run_flat_sampl
 #: driver and ``laplace`` onto the bare ``"map"`` point estimate — the result's
 #: diagnostics recorded the requested name while a different algorithm ran.
 #: Dynamic HMC, GHMC and elliptical slice have since gained their real
-#: ``_shared.py`` full-scan drivers and rejoined; the rest live in
-#: :data:`FLAT_UNSUPPORTED` until their real drivers are wired.
+#: ``_shared.py`` full-scan drivers and rejoined; the MCLMC pair followed with
+#: their blackjax ``(adjusted_)mclmc_find_L_and_step_size`` tuning. The rest
+#: live in :data:`FLAT_UNSUPPORTED` until their real drivers are wired.
 FLAT_SAMPLERS: dict[str, str] = {
     "mcmc_nuts": "nuts",
     "mcmc_hmc": "hmc",
@@ -89,6 +91,8 @@ FLAT_SAMPLERS: dict[str, str] = {
     # The flat prior is exactly the iid N(0,1) the ESS ellipse assumes, so
     # the sampler's one structural requirement holds by construction here.
     "mcmc_ess": "ess",
+    "mcmc_mclmc": "mclmc",
+    "mcmc_adjusted_mclmc": "adjusted_mclmc",
     # Pinned to NUTS, unlike the single-galaxy auto-pick (NUTS for low-D,
     # raytrace above D~20): hierarchical D grows with the catalog, and at that
     # D raytrace degenerates and raises DegenerateChainError by design
@@ -112,19 +116,6 @@ FLAT_UNSUPPORTED: dict[str, str] = {
         "silently truncated -- and therefore biased -- sample set. The prior "
         "transform this seam provides is exact and correct; what is missing is "
         "the sampler on top of it. See #1429."
-    ),
-    "mcmc_mclmc": (
-        "microcanonical Langevin MC needs its own (L, step size) adaptation, "
-        "not the HMC window adaptation this seam runs. _mclmc_sample_scan in "
-        "backends/mcmc/_shared.py provides the sampling half but not the "
-        "tuning. Use mcmc_nuts or mcmc_hmc hierarchically."
-    ),
-    "mcmc_adjusted_mclmc": (
-        "adjusted microcanonical Langevin MC needs its own (L, step size) "
-        "adaptation, not the HMC window adaptation this seam runs. "
-        "_adjusted_mclmc_sample_scan in backends/mcmc/_shared.py provides the "
-        "sampling half but not the tuning. Use mcmc_nuts or mcmc_hmc "
-        "hierarchically."
     ),
     "laplace": (
         "a Laplace approximation is MAP plus a Gaussian covariance from the "
@@ -388,6 +379,36 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     )
 
 
+def _require_finite_tuning(L, step_size, method, n_warmup):
+    """Refuse a non-finite (L, step size) tuning instead of sampling with it.
+
+    A starved MCLMC tuner produces NaN parameters, and the chain then never
+    moves — measured on the 2-galaxy D=516 fixture at ``n_warmup=60``:
+    ``L=nan``, ``step_size=nan``, 60 post-tuning draws all equal to the init
+    point. That output LOOKS like a plausible populated posterior, which is
+    the #1530 failure mode; #1569 made raytrace's version of it a loud
+    ``DegenerateChainError``, and this is the MCLMC family's version. The
+    fraction-based tuning phases starve below a few hundred steps; the same
+    fixture tunes finite at ``n_warmup=500``.
+    """
+    import numpy as np
+
+    if np.isfinite(float(L)) and np.isfinite(float(step_size)):
+        return
+    from tengri.inference.hierarchical import DegenerateChainError
+
+    raise DegenerateChainError(
+        f"{method}: the (L, step size) tuner returned non-finite values "
+        f"(L={float(L)!r}, step_size={float(step_size)!r}) after "
+        f"n_warmup={n_warmup} tuning steps, and a chain run with them never "
+        f"moves — every draw would be a copy of the initialization, which "
+        f"looks like a posterior and is not one. The fraction-based tuning "
+        f"phases starve at short warmup; raise n_warmup to a few hundred "
+        f"(the single-galaxy default is 500; n_warmup=500 tunes this family "
+        f"finite on the reference 2-galaxy problem)."
+    )
+
+
 def run_flat_sampler(
     fitter,
     method,
@@ -405,6 +426,7 @@ def run_flat_sampler(
     map_learning_rate=0.05,
     ghmc_alpha=0.8,
     ghmc_delta=0.65,
+    mclmc_target_accept_rate=0.65,
     allow_unvalidated=False,
     verbose=True,
     **_ignored,
@@ -422,7 +444,9 @@ def run_flat_sampler(
         Window adaptation / discarded / retained chain lengths (MCMC drivers).
         The ``ess`` driver has no warmup — its exact-prior ellipse needs no
         tuning, so ``n_warmup`` and the HMC-family knobs below are ignored
-        there; only ``n_burnin`` / ``n_samples`` apply.
+        there; only ``n_burnin`` / ``n_samples`` apply. The MCLMC family is
+        the mirror image: ``n_warmup`` sets the (L, step size) tuning length,
+        which consumes the transient, so ``n_burnin`` is ignored there.
     n_leapfrog : int
         Leapfrog steps per HMC proposal.
     max_num_doublings : int
@@ -458,6 +482,13 @@ def run_flat_sampler(
     ghmc_delta : float
         GHMC proposal step-size scaling [dimensionless]. Same default as the
         single-galaxy ``run_ghmc``.
+    mclmc_target_accept_rate : float
+        Metropolis acceptance target for the ``adjusted_mclmc`` driver's
+        tuner [dimensionless]. Same default (0.65) as the single-galaxy
+        ``run_adjusted_mclmc`` — deliberately NOT the HMC-family
+        ``target_accept_rate``, whose 0.8 default tunes a different
+        proposal mechanism. Unused by the unadjusted ``mclmc`` driver,
+        which has no accept/reject step.
     allow_unvalidated : bool
         Opt in to ``tier="broken"`` backends, exactly as ``Fitter.run`` does.
         Required for ``pathfinder`` and ``mcmc_ghmc``, the tier="broken" names
@@ -617,6 +648,87 @@ def run_flat_sampler(
             "mean_subiter": float(jnp.mean(subiters[n_burnin:])),
             "n_burnin": n_burnin,
         }
+
+    elif driver in ("mclmc", "adjusted_mclmc"):
+        import blackjax
+
+        from tengri.inference.backends.mcmc._shared import (
+            _adjusted_mclmc_sample_scan,
+            _mclmc_sample_scan,
+        )
+
+        # blackjax's (adjusted_)mclmc_find_L_and_step_size takes a ONE-argument
+        # logdensity, so the data must close over here — one compile per
+        # catalog for this family, exactly as the single-galaxy backends
+        # behave. The (ld2, data_args) reuse contract is not reachable through
+        # the tuner API without reimplementing the tuner.
+        def _ld_1arg(pos):
+            return ld2(pos, data_args)
+
+        # No burn-in phase: the (L, step size) tuning consumes the transient,
+        # so the chain is n_samples long and n_burnin is ignored.
+        tune_key, init_key, ckey = jax.random.split(key_run, 3)
+        chain_keys = jax.random.split(ckey, n_samples)
+        if driver == "mclmc":
+            kernel = blackjax.mcmc.mclmc.build_kernel(
+                integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
+            )
+            state = blackjax.mcmc.mclmc.init(prob.init_flat, _ld_1arg, init_key)
+            state, params, _ = blackjax.mclmc_find_L_and_step_size(
+                mclmc_kernel=kernel,
+                logdensity_fn=_ld_1arg,
+                num_steps=n_warmup,
+                state=state,
+                rng_key=tune_key,
+                diagonal_preconditioning=True,
+            )
+            _require_finite_tuning(params.L, params.step_size, method, n_warmup)
+            _, chain = _mclmc_sample_scan(
+                state,
+                chain_keys,
+                kernel,
+                params.L,
+                params.step_size,
+                _ld_1arg,
+                params.inverse_mass_matrix,
+            )
+            extra = {
+                "L": float(params.L),
+                "step_size": float(params.step_size),
+                "n_warmup": n_warmup,
+            }
+        else:
+            kernel = blackjax.mcmc.adjusted_mclmc.build_kernel(
+                integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
+            )
+            state = blackjax.mcmc.adjusted_mclmc.init(prob.init_flat, _ld_1arg)
+            state, params, _ = blackjax.adjusted_mclmc_find_L_and_step_size(
+                mclmc_kernel=kernel,
+                logdensity_fn=_ld_1arg,
+                num_steps=n_warmup,
+                state=state,
+                rng_key=tune_key,
+                target=mclmc_target_accept_rate,
+                diagonal_preconditioning=True,
+            )
+            _require_finite_tuning(params.L, params.step_size, method, n_warmup)
+            n_integration_steps = jnp.ceil(params.L / params.step_size).astype(int)
+            _, (chain, divergent) = _adjusted_mclmc_sample_scan(
+                state,
+                chain_keys,
+                kernel,
+                params.step_size,
+                n_integration_steps,
+                _ld_1arg,
+                params.inverse_mass_matrix,
+            )
+            extra = {
+                "L": float(params.L),
+                "step_size": float(params.step_size),
+                "n_integration_steps": int(n_integration_steps),
+                "divergent": int(jnp.sum(divergent)),
+                "n_warmup": n_warmup,
+            }
 
     elif driver == "map":
         import optax
