@@ -34,7 +34,12 @@ jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.regression_bug
 
-_SSP = "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+# Bare-stellar: the test below builds ``recipes.star_forming_photometry()``,
+# which selects Cue, and Cue refuses a nebular-included grid (#1579). This read
+# the wNE grid and only worked because conftest's TENGRI_ALLOW_WNE_CUE=1 --
+# meant for the synthetic fixtures' unphysical Q_H -- also disabled the
+# metadata check. Both grids are committed, so the skip guard is unchanged.
+_SSP = "data/fsps_prsc_miles_chabrier.h5"
 
 
 def _tophat(center, frac=0.16, n=40):

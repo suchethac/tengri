@@ -80,11 +80,6 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
-from tengri.utils.sed_quantities import (
-    KEY_LINES,
-    extract_line_luminosity,
-)
-
 
 class _SEDCallable:
     """A callable SED accessor that refuses to be mistaken for an array.
@@ -784,11 +779,6 @@ class SEDProperties(_CachedBase):
         self._pred._ensure_sed()
         return self._pred._cache["sed_total"]
 
-    def _sed_intrinsic(self):
-        """Retrieve cached intrinsic (unattenuated) SED, computing if necessary."""
-        self._pred._ensure_sed()
-        return self._pred._cache.get("sed_intrinsic")
-
     @property
     def l_bol(self):
         """Bolometric luminosity.
@@ -1110,13 +1100,6 @@ class LineProperties(_CachedBase):
     >>> pred.lines.bpt_nii  # log10([NII]6584 / Hα)
     Array(-0.45, dtype=float64)
     """
-
-    def _get_line(self, name):
-        """Extract emission line luminosity from cached grid, computing if necessary."""
-        self._pred._ensure_lines()
-        lw = self._pred._cache["line_waves"]
-        ll = self._pred._cache["line_lums"]
-        return extract_line_luminosity(lw, ll, KEY_LINES[name])
 
     # --- Individual lines ---
 

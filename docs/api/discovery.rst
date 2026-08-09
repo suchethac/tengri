@@ -30,6 +30,8 @@ help panel, and an install/environment health check.
 
 .. autofunction:: tengri.examples
 
+.. autofunction:: tengri.print_logo
+
 Look up & search
 ----------------
 
@@ -86,6 +88,8 @@ and a one-line description.
 
 .. autofunction:: tengri.list_filters
 
+.. autofunction:: tengri.list_instruments
+
 .. autofunction:: tengri.list_components
 
 .. autofunction:: tengri.list_plots
@@ -132,6 +136,8 @@ and inference backend it uses. Composable AGN models fan out into each
 of their block slots (disc, torus, NLR, BLR, Fe II, attenuation).
 
 .. autofunction:: tengri.cite
+
+.. autofunction:: tengri.print_citations
 
 .. autofunction:: tengri.cite_components
 

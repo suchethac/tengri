@@ -181,7 +181,13 @@ def preload_emission_model(name: str) -> Callable:
         import numpy as _np
 
         _dummy_wave = _np.linspace(1e3, 1e7, 5, dtype=_np.float64)
-        with contextlib.suppress(Exception):
+        # Only the side effect is wanted (templates into the registry), so the
+        # returned SED is discarded. Narrowed from `Exception`: a missing or
+        # unreadable template file is the tolerable case, while a TypeError or
+        # ValueError from calling the model means the dummy-input convention no
+        # longer matches its signature — a bug that would otherwise sit here
+        # invisibly, with the only symptom being templates that never preload.
+        with contextlib.suppress(OSError, KeyError):
             DUST_EMISSION_MODELS[name](_dummy_wave, 1.0)
     return DUST_EMISSION_MODELS[name]
 
