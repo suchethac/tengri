@@ -908,7 +908,9 @@ Two things to take from that grid, both counter-intuitive:
 1. **A photometry-only Cue fit is ~11x slower than the same fit with a line
    channel attached**, and `FeaturePrecomp` is what recovers it (**14x** over
    `WavePrecomp` alone). Adding data makes the fit faster, which is backwards;
-   treat the photometry-only number as a defect to be fixed, not a budget.
+   treat the photometry-only number as a defect to be fixed, not a budget. It is
+   tracked as issue #1596 — until that lands, the opt-in is effectively required
+   for broadband-only Cue work rather than optional.
 2. **With a line channel present the opt-ins do essentially nothing** — all three
    rows agree to within run-to-run noise. Do not assume `approx=` is buying
    speed; measure it. Notebook

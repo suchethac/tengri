@@ -512,6 +512,11 @@ class FeaturePrecomp:
        nothing. Measure before assuming either way; see
        ``docs/dev/api_migration_v0.x.md`` for the full grid.
 
+       That a photometry-only fit is *slower* than the same fit with an extra
+       data channel is a defect, not a property of the method — tracked as
+       issue #1596. Until it is fixed, treat this opt-in as required rather
+       than optional for broadband-only Cue work.
+
     The line wavelengths default to those of ``Observation.line_fluxes`` — the
     model already knows which lines it is being fitted against — so the common
     case needs no arguments at all.
