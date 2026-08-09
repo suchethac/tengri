@@ -831,9 +831,22 @@ class CueWNESSPError(ValueError):
 
     Detection
     ---------
-    During ``CueBackend.__init__`` with ``ssp_data`` set, if the maximum
-    ``log10(Q_H)`` across SSP bins younger than 10 Myr is below 44 (~3 dex
-    below the physical floor for bare stellar populations).
+    Two independent checks run during ``CueBackend.__init__`` when
+    ``ssp_data`` is set. They differ in kind, and so does their bypass:
+
+    1. **Declaration** — ``ssp_data.nebular == "included"``, resolved by
+       :func:`load_ssp_data` from the ``nebular_included`` HDF5 attribute
+       or the ``wNE`` filename convention. Checked first, because the
+       retained-LyC wNE class keeps a physical-looking ``Q_H`` that no
+       heuristic can catch. **Not bypassable** (#1579): a declaration has
+       no false-positive mode, and Cue on top of baked-in nebular emission
+       is double-counting in every case.
+    2. **Q_H heuristic** — the maximum ``log10(Q_H)`` across SSP bins
+       younger than 10 Myr falling outside ``[44, 52]``, on either side of
+       the physical 47-50 range for bare stellar populations. This one is a
+       suspicion with routine false positives (synthetic test grids read
+       ~62), so it is downgradable to ``CueWNESSPWarning`` by setting
+       ``TENGRI_ALLOW_WNE_CUE=1``.
 
     Resolution
     ----------
@@ -843,12 +856,10 @@ class CueWNESSPError(ValueError):
        ``data/``: ``fsps_prsc_miles_chabrier.h5``, ``fsps_mist_c3k_a_chabrier.h5``.
        The hosted catalog at https://halos.as.arizona.edu/suchethacooray/
        ssp-spectra/ ships only bare-stellar SSPs.
-    2. **Pass ssp_data=None** to ``CueBackend`` and provide Q_H externally.
+    2. **Keep the SSP and drop** ``neb={'type': 'cue'}`` — a wNE grid's
+       baked-in nebular backend already models the lines.
+    3. **Pass ssp_data=None** to ``CueBackend`` and provide Q_H externally.
        Suitable when you have your own ionizing-spectrum source.
-    3. **Bypass the check** (advanced) by setting environment variable
-       ``TENGRI_ALLOW_WNE_CUE=1``. Use only if you have separately validated
-       that the wNE SSP's surviving Q_H is correct for your science case.
-       The error becomes a ``CueWNESSPWarning`` in this mode.
     """
 
 
@@ -959,7 +970,16 @@ class CueBackend:
         # can catch it. The flag comes from the ``nebular_included`` HDF5
         # attribute or the wNE filename convention via ``load_ssp_data``.
         if getattr(ssp_data, "nebular", "unknown") == "included":
-            msg = (
+            # Deliberately NOT bypassable by TENGRI_ALLOW_WNE_CUE (#1579).
+            # That switch exists for the Q_H *heuristic* below, whose false
+            # positives are routine — the synthetic fixtures trip it, which
+            # is why tests/conftest.py sets it suite-wide. This branch is a
+            # *declaration*, not a suspicion: it reads the nebular_included
+            # attribute (or the wNE filename), and there is no science case
+            # for Cue on top of baked-in nebular emission. Wiring both to one
+            # switch let the fixture accommodation silently license real wNE
+            # grids, and the N=8 PSD pilot fit a double-counted model for it.
+            raise CueWNESSPError(
                 "CueBackend received an SSP flagged nebular-included (wNE): "
                 "nebular continuum and lines are already baked into the "
                 "templates, so adding Cue on top double-counts nebular "
@@ -969,14 +989,8 @@ class CueBackend:
                 "  1. Use a bare-stellar SSP (e.g. fsps_prsc_miles_chabrier.h5;\n"
                 "     see tengri.data.download_ssp / list_remote_ssps).\n"
                 "  2. Keep this SSP and drop neb={'type': 'cue'} — the\n"
-                "     baked-in nebular backend already models the lines.\n"
-                "  3. Bypass for testing: set TENGRI_ALLOW_WNE_CUE=1\n"
-                "     (downgrades to a warning)."
+                "     baked-in nebular backend already models the lines."
             )
-            if os.environ.get("TENGRI_ALLOW_WNE_CUE"):
-                warnings.warn(msg, CueWNESSPWarning, stacklevel=3)
-            else:
-                raise CueWNESSPError(msg)
 
         result = precompute_ionizing_params_table(
             np.array(ssp_data.ssp_wave),
