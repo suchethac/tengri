@@ -34,6 +34,77 @@ def _field_mean(sigma_dex):
     return -0.5 * (jnp.asarray(sigma_dex) * jnp.log(10.0)) ** 2
 
 
+#: Beyond this, ``exp(-|t_i - t_j| / tau)`` underflows to 1 and ``ou_logpdf`` returns NaN.
+_TAU_NAN_THRESHOLD_YR = 1.0e20
+_AGE_UNIVERSE_YR = 1.38e10
+
+
+def _validate_grid_bounds(sigma_bounds, tau_bounds_yr):
+    """Reject bounds whose grid would be NaN instead of an error (#1585).
+
+    Both axes are positive by construction and the quadrature runs in
+    ``log(tau)``, so a non-positive, equal, or inverted bound yields an
+    intact-looking all-NaN grid and raises nothing. ``log_prior`` stays finite
+    over that grid under the default ``"log_uniform"`` prior, so no downstream
+    field reports the corruption either.
+
+    Parameters
+    ----------
+    sigma_bounds : tuple of float
+        ``(lo, hi)`` amplitude support [dex].
+    tau_bounds_yr : tuple of float
+        ``(lo, hi)`` timescale support [yr].
+
+    Raises
+    ------
+    ValueError
+        If either bound pair is non-positive or not strictly increasing, or if
+        the upper tau bound exceeds the ``ou_logpdf`` underflow threshold.
+    """
+    sigma_lower, sigma_upper = (float(b) for b in sigma_bounds)
+    tau_lower, tau_upper = (float(b) for b in tau_bounds_yr)
+
+    if tau_upper > _TAU_NAN_THRESHOLD_YR:
+        raise ValueError(
+            f"tau_bounds_yr[1]={tau_upper:.2e} yr exceeds {_TAU_NAN_THRESHOLD_YR:.2e} yr "
+            f"(the underflow threshold where ou_logpdf returns NaN). "
+            f"The age of the universe is {_AGE_UNIVERSE_YR:.2e} yr; bounds this large "
+            f"suggest a units error (e.g., Myr where years are expected)."
+        )
+    if tau_lower <= 0.0:
+        raise ValueError(
+            f"tau_bounds_yr[0]={tau_lower:.3g} yr must be positive. The tau grid is "
+            f"geometric and the quadrature runs in log(tau), so a non-positive lower "
+            f"bound returns an all-NaN grid rather than raising -- and log_prior stays "
+            f"finite over it, so nothing downstream reports the corruption. A "
+            f"correlation timescale has no negative branch. Bounds centered on a truth "
+            f"and scaled symmetrically (as in a prior-breadth sweep) cross zero once "
+            f"the half-width exceeds the center; clip them at a small positive value."
+        )
+    if tau_lower >= tau_upper:
+        raise ValueError(
+            f"tau_bounds_yr must be strictly increasing, got "
+            f"({tau_lower:.3g}, {tau_upper:.3g}) yr. The node spacing d_log_tau would be "
+            f"zero or negative, making every log_volume entry -inf or NaN while the tau "
+            f"nodes themselves stay finite."
+        )
+    if sigma_lower <= 0.0:
+        raise ValueError(
+            f"sigma_bounds[0]={sigma_lower:.3g} dex must be positive. sigma is a "
+            f"modulation amplitude that reaches the DRW kernel only through "
+            f"var=(sigma*ln10)^2, which is even -- a negative node returns a density "
+            f"bit-identical to its positive mirror, so quadrature there double-counts "
+            f"the amplitude axis on unphysical support. sigma=0 divides by that "
+            f"variance and yields NaN. Use a small positive lower bound (e.g. 0.01)."
+        )
+    if sigma_lower >= sigma_upper:
+        raise ValueError(
+            f"sigma_bounds must be strictly increasing, got "
+            f"({sigma_lower:.3g}, {sigma_upper:.3g}) dex. The node spacing d_sigma would "
+            f"be zero or negative, making every log_volume entry -inf or NaN."
+        )
+
+
 @dataclass(frozen=True)
 class SharedGrid:
     """Quadrature grid over the shared ``(sigma, tau)`` block.
@@ -80,6 +151,16 @@ class SharedGrid:
         error (e.g., Myr passed where years are expected). Bounds that exceed
         1e20 yr will raise ``ValueError``.
 
+        **Both axes must be positive and strictly increasing.** sigma is an
+        amplitude [dex] and tau a correlation timescale [yr]; neither has a
+        negative branch. Bounds that violate this are rejected rather than
+        propagated, because the grid is geometric in tau and the quadrature runs
+        in ``log(tau)``: a non-positive or inverted bound produces an
+        intact-looking, entirely NaN grid and raises nothing on its own. Note
+        that ``log_prior`` stays finite over such a grid under the default
+        ``"log_uniform"`` prior, so it cannot be used to detect the problem
+        (issue #1585).
+
         Parameters
         ----------
         sigma_bounds : tuple of float
@@ -114,18 +195,10 @@ class SharedGrid:
         Raises
         ------
         ValueError
-            If the upper tau bound exceeds 1e20 yr.
+            If either bound pair is non-positive or not strictly increasing, if the
+            upper tau bound exceeds 1e20 yr, or if ``tau_prior`` is unrecognized.
         """
-        tau_upper = float(tau_bounds_yr[1])
-        nan_threshold_yr = 1e20
-        if tau_upper > nan_threshold_yr:
-            age_universe_yr = 1.38e10
-            raise ValueError(
-                f"tau_bounds_yr[1]={tau_upper:.2e} yr exceeds {nan_threshold_yr:.2e} yr "
-                f"(the underflow threshold where ou_logpdf returns NaN). "
-                f"The age of the universe is {age_universe_yr:.2e} yr; bounds this large "
-                f"suggest a units error (e.g., Myr where years are expected)."
-            )
+        _validate_grid_bounds(sigma_bounds, tau_bounds_yr)
 
         if tau_prior not in ("log_uniform", "uniform"):
             raise ValueError(

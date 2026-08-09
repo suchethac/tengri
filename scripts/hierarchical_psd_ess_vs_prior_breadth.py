@@ -93,6 +93,14 @@ def build_model_and_mock(ssp_path, n_galaxies):
 def bounds_for_width(width_mult):
     """Interim bounds at a given multiple of the nominal width.
 
+    Widening is symmetric about the center until a lower bound would reach the
+    nominal floor, then one-sided. Both axes are positive by construction --
+    ``sigma`` is an amplitude [dex] and ``tau`` a correlation timescale [yr] --
+    so an unclipped symmetric scaling walks them through zero: at
+    ``width_mult >= 1.21`` for sigma and ``>= 1.43`` for tau, which is two of
+    the four widths this sweep ships. Before #1585 that produced an all-NaN
+    quadrature grid and no error; ``SharedGrid.uniform`` now rejects it.
+
     Parameters
     ----------
     width_mult : float
@@ -101,15 +109,17 @@ def bounds_for_width(width_mult):
     Returns
     -------
     sigma_bounds : tuple of float
-        ``(lo, hi)`` [dex], symmetric about ``SIGMA_CENTER``.
+        ``(lo, hi)`` [dex], centered on ``SIGMA_CENTER`` and floored at
+        ``NOMINAL_SIGMA[0]``.
     tau_bounds_myr : tuple of float
-        ``(lo, hi)`` [Myr], symmetric about ``TAU_CENTER_MYR``.
+        ``(lo, hi)`` [Myr], centered on ``TAU_CENTER_MYR`` and floored at
+        ``NOMINAL_TAU_MYR[0]``.
     """
     s_half = 0.5 * (NOMINAL_SIGMA[1] - NOMINAL_SIGMA[0]) * width_mult
     t_half = 0.5 * (NOMINAL_TAU_MYR[1] - NOMINAL_TAU_MYR[0]) * width_mult
     return (
-        (SIGMA_CENTER - s_half, SIGMA_CENTER + s_half),
-        (TAU_CENTER_MYR - t_half, TAU_CENTER_MYR + t_half),
+        (max(SIGMA_CENTER - s_half, NOMINAL_SIGMA[0]), SIGMA_CENTER + s_half),
+        (max(TAU_CENTER_MYR - t_half, NOMINAL_TAU_MYR[0]), TAU_CENTER_MYR + t_half),
     )
 
 
