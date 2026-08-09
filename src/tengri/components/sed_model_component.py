@@ -11,8 +11,8 @@ define ``inputs`` and ``outputs`` dicts to declare the cross-component contract.
 The base class auto-derives :class:`ParamDeclaration` and :class:`DerivedKey`
 tuples from these class-level declarations.
 
-Concrete adapters like :class:`tengri.components.radio.RadioSEDComponent`
-and :class:`tengri.components.igm.IGMSEDComponent` follow
+Concrete adapters like :class:`tengri.components.radio.component.RadioSEDComponent`
+and :class:`tengri.components.igm.component.IGMSEDComponent` follow
 this pattern. See :doc:`docs/dev/archive/forward-model-architecture.md` §3.1 and
 :doc:`docs/dev/sed-model-components.md` for the full authoring guide.
 

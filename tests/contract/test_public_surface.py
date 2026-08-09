@@ -104,6 +104,7 @@ EXPECTED_ALL = frozenset(
         "list_filters",
         "list_igm_models",
         "list_inference_methods",
+        "list_metallicity_modes",
         "list_nebular_backends",
         "list_parameters",
         "list_plots",

@@ -477,7 +477,7 @@ _MET_MODE_DISCRIMINATORS: tuple[tuple[str, frozenset[str]], ...] = (
 def infer_met_mode(provided_keys: set[str] | frozenset[str]) -> str:
     """Infer the metallicity mode from the parameter keys a user provided.
 
-    Used by :class:`tengri.parameters.Parameters` when ``met_mode`` is
+    Used by :class:`tengri.Parameters` when ``met_mode`` is
     not set explicitly: presence of mode-specific keys (e.g.
     ``met_logzsol_0`` and ``met_logzsol_final``) implies the
     corresponding mode (``"ramp"``).

@@ -2,7 +2,7 @@
 """Free-parameter declarations owned by the X-ray component.
 
 Single source of truth for the ``xray_*`` priors.
-``tengri.parameters._param_defs`` derives its legacy ``_XRAY_PARAMS``
+``tengri.parameters._builders`` derives its legacy ``_XRAY_PARAMS``
 bucket from this tuple, and :meth:`XRaySEDComponent.declared_parameters`
 returns it directly. Drift between the two paths is structurally
 impossible because they share the same in-memory list.

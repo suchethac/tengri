@@ -1,224 +1,206 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Test dust emission template grids can be threaded as JIT-traced inputs.
+"""Dust IR template grids must not bake into the compiled HLO as constants.
 
-Verifies that dust IR template grids don't appear as large >1 MB closure
-constants in the compiled HLO when passed as grid_arrays_traced kwargs.
+**This file skipped 6 of 6 tests for an unknown stretch before 2026-08.** Five
+skipped on::
+
+    Failed to build model: SEDModel.__init__() got an unexpected keyword
+    argument 'filter_waves'
+
+a stale-API ``TypeError`` caught by ``except Exception: pytest.skip(...)``. It
+was green the whole time and executed no assertions. Because it was the only
+thing exercising the dust ``grid_arrays_traced`` seam, it also stood in as the
+evidence that dust template threading works. It never tested that.
+
+Rewritten against the current ``SEDModel.build`` grammar, and the guards
+narrowed: a missing template file on disk is a legitimate skip, and nothing
+else is. A stale API must fail here, loudly, the way it would have the first
+time had this file not been swallowing it.
+
+See #1615 for the census of the same shape elsewhere (40 sites, 17 files).
 """
 
 from __future__ import annotations
 
-import chex
-import pytest
-
-pytestmark = pytest.mark.gradient
 import jax
 import jax.numpy as jnp
+import pytest
 
-from tengri import Parameters, SEDModel, Uniform
+from tengri import FIXED, Fixed, SEDModel
+from tengri.observation import Observation, Photometry
+from tengri.observation.photometry import FilterCurve
 
-# Enable 64-bit precision globally
+pytestmark = pytest.mark.contract
+
 jax.config.update("jax_enable_x64", True)
 
+#: Dust deep enough that L_absorbed is large and the IR term is real rather
+#: than a rounding error.
+_TAU_BC, _TAU_DIFF = 2.0, 1.5
 
-@pytest.fixture
-def filter_waves_trans():
-    """Simple filter wavelength and transmission."""
-    # 5 broad filters for testing
-    filter_waves = [
-        jnp.linspace(2000, 5000, 100),
-        jnp.linspace(4000, 9000, 100),
-        jnp.linspace(8000, 13000, 100),
-        jnp.linspace(12000, 25000, 100),
-        jnp.linspace(24000, 100000, 100),
-    ]
-    filter_trans = [
-        jnp.exp(-((w - w_c) ** 2) / (2 * (w_c * 0.1) ** 2))
-        for w, w_c in zip(filter_waves, [3500, 6500, 10500, 18500, 60000])
-    ]
-    return filter_waves, filter_trans
+#: A constant this large in the compiled HLO is a baked template grid, not a
+#: scalar or an axis vector.
+_LARGE_CONST_BYTES = 1 << 20  # 1 MiB
 
 
-class TestDustEmissionTraceable:
-    """Test dust emission grids as JIT-traced inputs."""
+@pytest.fixture(scope="module")
+def panchromatic_obs():
+    """Six top-hats from 1500 A to 500 um, so IR emission lands in a band."""
 
-    @pytest.mark.parametrize(
-        "dust_emission",
-        [
-            "dale2014",
-            "draine_li2014",
-            "modified_blackbody",
-        ],
+    def _tophat(center, frac=0.16, n=40):
+        wave = jnp.linspace(center * (1.0 - frac), center * (1.0 + frac), n)
+        trans = jnp.sin(jnp.linspace(0.0, jnp.pi, n)) * 0.6
+        return FilterCurve(wave=wave, trans=trans, name=f"b{int(center)}")
+
+    centers = (1500.0, 5000.0, 2.0e4, 2.4e5, 1.0e6, 5.0e6)
+    return Observation(photometry=Photometry(filters=tuple(_tophat(c) for c in centers)))
+
+
+def _build(ssp, obs, emission_type):
+    """Build a model with the named dust-emission backend.
+
+    Deliberately not wrapped in ``try/except Exception``. That wrapper is what
+    hid the stale API here for months; a build failure is a test failure.
+    """
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl", "*": FIXED},
+        dust={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "*": FIXED,
+            "tau_bc": _TAU_BC,
+            "tau_diff": _TAU_DIFF,
+            "emission": {"type": emission_type, "*": FIXED},
+        },
+        neb={"type": "none"},
+        redshift=Fixed(0.5),
     )
-    def test_dust_ir_grids_no_large_constants(
-        self, synthetic_ssp_wide, filter_waves_trans, dust_emission
-    ):
-        """Verify dust IR templates don't appear as large closure constants in HLO.
-        For each backend:
-        1. Build SEDModel with that dust_emission
-        2. Lower the photometry traceable path to HLO
-        3. Grep for tensor constants >1 MB
-        4. Assert none found (or document with allowlist for unavoidable constants)
-        """
-        if dust_emission == "modified_blackbody":
-            # Analytic model: no precomputed grids
-            pytest.skip("Analytic model has no template grids")
-        filter_waves, filter_trans = filter_waves_trans
-        spec = Parameters(
-            sfh_dpl_alpha=Uniform(0.5, 4.0),
-            sfh_dpl_beta=Uniform(0.5, 4.0),
-            dust_tau_bc=Uniform(0.0, 2.0),
-        )
-        # Build model with fixed redshift (enables precomputation)
-        try:
-            model = SEDModel(
-                spec,
-                ssp_data=synthetic_ssp_wide,
-                filter_waves=filter_waves,
-                filter_trans=filter_trans,
-                redshift=0.1,
-                dust_emission=dust_emission,
-            )
-        except Exception as e:
-            pytest.skip(f"Failed to build model: {e}")
-        # Check that dust IR grids were precomputed and stored
-        if model._precomputed.dust_ir_lookup is not None:
-            assert model._precomputed.dust_ir_grid_arrays is not None, (
-                f"{dust_emission}: grid_arrays should be stored when lookup is available"
-            )
-        # Try to lower the photometry raw kernel to HLO
-        try:
-            if model._compositional_kernels is not None:
-                raw = getattr(model._compositional_kernels, "_photometry_raw", None)
-                if raw is not None:
-                    # Get a sample parameter dict
-                    params = {
-                        "sfh_dpl_alpha": 2.0,
-                        "sfh_dpl_beta": 1.5,
-                        "dust_tau_bc": 1.0,
-                    }
-                    # Attempt to lower (this may fail gracefully if HLO not available)
-                    try:
-                        # Call with grid_arrays threaded
-                        p = model._get_internal_params(params)
-                        sfr = model._compute_sfr(p)
-                        sfr_on_ssp = jnp.interp(model.ssp_log_ages_yr, model.log_age_grid, sfr)
-                        lower_obj = raw.__wrapped__(
-                            sfr_on_ssp,
-                            params,
-                            ssp_flux_traced=model.ssp_data.ssp_flux,
-                            ssp_lgmet_traced=model.ssp_data.ssp_lgmet,
-                        )
-                        # Verify no error occurred
-                        assert lower_obj is not None
-                    except Exception as e:
-                        # HLO lowering might not be available, skip detailed check
-                        pytest.skip(f"Could not lower to HLO: {e}")
-        except Exception as e:
-            pytest.skip(f"Compositional kernel not available: {e}")
-
-    def test_dust_ir_lookup_backward_compatibility(self, synthetic_ssp_wide, filter_waves_trans):
-        """Verify dust IR lookup still works without grid_arrays_traced.
-        Backward compatibility test: old callers that don't pass grid_arrays_traced
-        should still work via closure-captured arrays.
-        """
-        filter_waves, filter_trans = filter_waves_trans
-        spec = Parameters(
-            sfh_dpl_alpha=Uniform(0.5, 4.0),
-            sfh_dpl_beta=Uniform(0.5, 4.0),
-        )
-        try:
-            model = SEDModel(
-                spec,
-                ssp_data=synthetic_ssp_wide,
-                filter_waves=filter_waves,
-                filter_trans=filter_trans,
-                redshift=0.1,
-                dust_emission="dale2014",
-            )
-        except Exception as e:
-            pytest.skip(f"Failed to build model: {e}")
-        if model._precomputed.dust_ir_lookup is None:
-            pytest.skip("Dale 2014 templates not available on disk")
-        # Call the lookup without grid_arrays_traced (old style)
-        L_absorbed = 1.0
-        dust_alpha_dale = 2.0
-        result = model._precomputed.dust_ir_lookup(L_absorbed, dust_alpha_dale)
-        assert result.shape[0] > 0, "Lookup should return photometry array"
-        assert not jnp.any(jnp.isnan(result)), "Result should not contain NaN"
-        # Also try with grid_arrays_traced (new style)
-        if model._precomputed.dust_ir_grid_arrays is not None:
-            result_traced = model._precomputed.dust_ir_lookup(
-                L_absorbed,
-                dust_alpha_dale,
-                grid_arrays_traced=model._precomputed.dust_ir_grid_arrays,
-            )
-            chex.assert_equal_shape([result_traced, result])
-            # Results should be identical
-            assert jnp.allclose(result, result_traced, atol=1e-12)
 
 
-class TestDustEmissionDL07:
-    """DL07-specific tests."""
+def _large_constants(model):
+    """Byte sizes of every >1 MiB constant in the lowered photometry HLO.
 
-    def test_dl07_lookup_signature(self, synthetic_ssp_wide, filter_waves_trans):
-        """Verify DL07 lookup accepts correct number of parameters."""
-        filter_waves, filter_trans = filter_waves_trans
-        spec = Parameters(
-            sfh_dpl_alpha=Uniform(0.5, 4.0),
-            sfh_dpl_beta=Uniform(0.5, 4.0),
-        )
-        try:
-            model = SEDModel(
-                spec,
-                ssp_data=synthetic_ssp_wide,
-                filter_waves=filter_waves,
-                filter_trans=filter_trans,
-                redshift=0.1,
-                dust_emission="draine_li2007",
-            )
-        except Exception as e:
-            pytest.skip(f"Failed to build model: {e}")
-        if model._precomputed.dust_ir_lookup is None:
-            pytest.skip("DL07 templates not available")
-        # DL07 signature: (L_absorbed, dust_umin, dust_gamma_dl, dust_qpah)
-        L_absorbed = 1.0
-        dust_umin = 1.0
-        dust_gamma_dl = 0.01
-        dust_qpah = 2.5
-        result = model._precomputed.dust_ir_lookup(L_absorbed, dust_umin, dust_gamma_dl, dust_qpah)
-        assert result.shape[0] > 0
+    Returns
+    -------
+    list of int
+        Descending. Empty when nothing large is baked in.
+    """
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    lowered = jax.jit(model.predict_photometry).lower(params)
+    text = lowered.as_text()
+
+    sizes = []
+    for line in text.splitlines():
+        if "constant(" not in line and "dense<" not in line:
+            continue
+        # Shapes appear as e.g. `tensor<100x50xf64>` / `f64[100,50]`.
+        for token in line.replace("<", " ").replace(">", " ").split():
+            if "x" not in token:
+                continue
+            head, _, dtype = token.rpartition("x")
+            if not dtype.startswith(("f32", "f64", "i32", "i64")):
+                continue
+            try:
+                dims = [int(d) for d in head.split("x")]
+            except ValueError:
+                continue
+            width = 8 if "64" in dtype else 4
+            nbytes = width
+            for d in dims:
+                nbytes *= d
+            if nbytes >= _LARGE_CONST_BYTES:
+                sizes.append(nbytes)
+    return sorted(sizes, reverse=True)
 
 
-class TestDustEmissionDL14:
-    """DL14-specific tests."""
+# ── the lookup surfaces still work ──────────────────────────────────────
 
-    def test_dl14_lookup_signature(self, synthetic_ssp_wide, filter_waves_trans):
-        """Verify DL14 lookup accepts correct number of parameters."""
-        filter_waves, filter_trans = filter_waves_trans
-        spec = Parameters(
-            sfh_dpl_alpha=Uniform(0.5, 4.0),
-            sfh_dpl_beta=Uniform(0.5, 4.0),
-        )
-        try:
-            model = SEDModel(
-                spec,
-                ssp_data=synthetic_ssp_wide,
-                filter_waves=filter_waves,
-                filter_trans=filter_trans,
-                redshift=0.1,
-                dust_emission="draine_li2014",
-            )
-        except Exception as e:
-            pytest.skip(f"Failed to build model: {e}")
-        if model._precomputed.dust_ir_lookup is None:
-            pytest.skip("DL14 templates not available")
-        # DL14 signature: (L, dust_umin, dust_gamma_dl, dust_qpah, dust_alpha_dl14)
-        L_absorbed = 1.0
-        dust_umin = 1.0
-        dust_gamma_dl = 0.01
-        dust_qpah = 2.5
-        dust_alpha_dl14 = 1.5
-        result = model._precomputed.dust_ir_lookup(
-            L_absorbed, dust_umin, dust_gamma_dl, dust_qpah, dust_alpha_dl14
-        )
-        assert result.shape[0] > 0
+
+@pytest.mark.parametrize("emission_type", ["dale2014", "draine_li2014", "modified_blackbody"])
+def test_the_model_builds_and_predicts(synthetic_ssp_wide, panchromatic_obs, emission_type):
+    """The assertion the old file never reached, because it skipped first."""
+    model = _build(synthetic_ssp_wide, panchromatic_obs, emission_type)
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    phot = model.predict_photometry(params)
+
+    assert phot.shape[0] == 6, f"expected 6 bands, got {phot.shape}"
+    assert jnp.all(jnp.isfinite(phot)), f"{emission_type} produced non-finite photometry"
+    assert jnp.any(phot > 0), f"{emission_type} produced no flux at all"
+
+
+def test_an_ir_band_responds_to_the_dust_emission_backend(synthetic_ssp_wide, panchromatic_obs):
+    """Two backends must not give the same far-IR photometry.
+
+    Identical output would mean the emission block is inert — the failure mode
+    a build-and-predict smoke test cannot see.
+
+    Compared **relatively**. Far-IR fluxes here are of order 1e-10, and
+    ``allclose``'s default ``atol=1e-8`` swamps them completely: the first
+    version of this assertion called 1.11e-10 and 2.07e-10 equal, a factor of
+    1.9 apart. An absolute tolerance on a quantity smaller than the tolerance
+    is not a comparison.
+    """
+    params_key = jax.random.PRNGKey(0)
+    out = {}
+    for emission_type in ("dale2014", "modified_blackbody"):
+        model = _build(synthetic_ssp_wide, panchromatic_obs, emission_type)
+        out[emission_type] = model.predict_photometry(dict(model.spec.sample(params_key)))
+
+    far_ir = jnp.asarray(out["dale2014"][-2:])
+    other = jnp.asarray(out["modified_blackbody"][-2:])
+    scale = jnp.maximum(jnp.abs(far_ir), jnp.abs(other))
+    rel = jnp.max(jnp.abs(far_ir - other) / jnp.where(scale > 0, scale, 1.0))
+    assert rel > 1e-6, (
+        "dale2014 and modified_blackbody give the same far-IR photometry to "
+        f"{float(rel):.2e} relative; the dust-emission block is not reaching "
+        f"the output. dale2014={far_ir}, modified_blackbody={other}"
+    )
+
+
+# ── the property this file was named for ────────────────────────────────
+
+
+@pytest.mark.xfail(
+    reason=(
+        "draine_li2014 bakes 69.8 MB of template grid into the photometry HLO "
+        "(66.6 + 3.2 MB). Attributed by control, not assumed: the same build "
+        "with no dust emission bakes 0 MB, as do modified_blackbody and "
+        "dale2014 — so this is the DL14 template grid, not the SSP. Nothing in "
+        "src/ supplies grid_arrays_traced: the producer (extract_grid_arrays) "
+        "was unreferenced and removed in #1614, and _precomputed."
+        "dust_ir_grid_arrays does not exist. #1595 fixed the AGN half of "
+        "#1383 via a declarative template_loader; the dust half is open. "
+        "strict=True so this flips to a failure the moment it is wired."
+    ),
+    strict=True,
+)
+def test_dust_ir_templates_are_not_baked_as_large_constants(synthetic_ssp_wide, panchromatic_obs):
+    """The claim in this file's title, asserted for the first time.
+
+    The old version never evaluated it: it skipped on model construction, and
+    its one relevant assertion referenced ``_precomputed.dust_ir_grid_arrays``,
+    an attribute that has never existed in ``src/``.
+
+    ``draine_li2014`` is the backend under test because it is the one that
+    bakes. Measured across backends on this fixture:
+
+    ======================  ===================
+    ``emission.type``       baked >= 1 MiB
+    ======================  ===================
+    *(none)* — control      0 MB
+    ``modified_blackbody``  0 MB
+    ``dale2014``            0 MB
+    ``draine_li2014``       **69.8 MB**
+    ======================  ===================
+
+    The control row is what makes this a statement about dust templates rather
+    than about the SSP grid.
+    """
+    model = _build(synthetic_ssp_wide, panchromatic_obs, "draine_li2014")
+    large = _large_constants(model)
+    assert not large, (
+        f"{len(large)} constant(s) >= 1 MiB baked into the photometry HLO; "
+        f"largest {large[0] / 1e6:.1f} MB"
+    )

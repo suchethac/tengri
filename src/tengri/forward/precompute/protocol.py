@@ -4,7 +4,7 @@
 Each component that supports preintegration (wavelength-integral cached against
 filter curves, optionally with parameter-axis triweight interpolation) exposes
 a module that satisfies :class:`PrecomputeModule`. This makes
-:class:`~tengri.forward.SEDModel` discover and wire precompute uniformly across
+:class:`~tengri.SEDModel` discover and wire precompute uniformly across
 every physics component via :mod:`tengri.forward.precompute.registry`.
 
 Shape of a compliant module

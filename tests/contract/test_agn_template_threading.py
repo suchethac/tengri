@@ -137,20 +137,15 @@ def test_baseline_bare_stellar_bakes_almost_nothing(ssp, obs):
 # ``strict=True`` on purpose: when one of these is fixed, this test starts
 # FAILING as XPASS, which is the signal to delete its row. A non-strict xfail
 # would silently absorb the fix and let the row rot.
-_KNOWN_BAKING: dict[tuple[str, str], str] = {
-    ("disc", "relagn"): "27.5 MB — _load_relagn_disc_grid closure (#1383)",
-    ("disc", "kubota_done"): "23.0 MB — closure-captured disc grid (#1383)",
-    ("disc", "schartmann2005_skirtor_atten"): "10.0 MB — SKIRTOR grid closure (#1383)",
-    ("disc", "slone_netzer"): "1.8 MB — closure-captured disc grid (#1383)",
-    ("nlr", "cue"): "8.5 MB — Cue NLR weights closure (#1383)",
-}
+_KNOWN_BAKING: dict[tuple[str, str], str] = {}
 
-# Not a threading defect: this block raises TracerBoolConversionError under
-# jit regardless of where its templates live. Tracked separately so a genuine
-# JIT-safety bug is not filed away as a performance issue.
-_KNOWN_NOT_JITTABLE: dict[tuple[str, str], str] = {
-    ("nlr", "feltre"): "TracerBoolConversionError under jit — JIT-safety bug, not baking",
-}
+# Blocks that fail this guard for a reason OTHER than baking — a genuine
+# JIT-safety bug should not be filed away as a performance issue. Empty now
+# that the Feltre NLR block is jittable (#1640): it was raising
+# TracerBoolConversionError from a Python bool() in its constructor and
+# ConcretizationTypeError from an int() around jnp.argmin, neither of which
+# had anything to do with where its templates lived.
+_KNOWN_NOT_JITTABLE: dict[tuple[str, str], str] = {}
 
 
 def _all_block_cases():
