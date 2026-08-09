@@ -19,6 +19,14 @@ Property 2 is the point of the change, so it is asserted directly, with the
 dense contraction alongside as a control — a cost instrument that cannot see
 the n_z scaling of the OLD code cannot be trusted to certify its absence in
 the new code.
+
+Property 2 is about the COMPILED GRAPH, not the clock. FLOPs and bytes are
+exact and machine-independent, which is why they are asserted here; they are
+also a poor predictor of time. Measured end to end, this change removed 6.8x
+of the free-redshift gradient's FLOPs and 5.1x of its ``bytes accessed`` and
+bought about 1.9x of wall clock — because ``bytes accessed`` counts logical
+operand bytes per op, not DRAM traffic after XLA fusion. Do not convert the
+numbers this test asserts into a speedup; measure one.
 """
 
 from __future__ import annotations
