@@ -349,6 +349,33 @@ def _model_catalog_z_range(model):
     return getattr(model, "_catalog_z_range", None)
 
 
+def fit_surface_ctor_names() -> frozenset[str]:
+    """Names the fit surfaces accept but route to ``Fitter.__init__``.
+
+    Returns
+    -------
+    frozenset of str
+        The constructor's keyword parameters, minus the ones the surfaces
+        pass positionally.
+
+    Notes
+    -----
+    Read off the live signature so it cannot drift from the constructor.
+    :func:`split_fitter_kwargs` uses it to decide routing;
+    :func:`~tengri.inference._backend_registry.check_unknown_kwargs` uses it
+    to suggest a documented ``fit()`` option that is not a runner parameter.
+    Both must mean the same thing by "constructor-routed", which is why this
+    is one function rather than the same comprehension written twice.
+    """
+    import inspect
+
+    return frozenset(
+        name
+        for name in inspect.signature(Fitter.__init__).parameters
+        if name not in _FIT_SURFACE_POSITIONAL
+    )
+
+
 def split_fitter_kwargs(kwargs):
     """Split a fit-surface ``**kwargs`` dict into (constructor, run) halves (#1378).
 
@@ -375,13 +402,7 @@ def split_fitter_kwargs(kwargs):
         Everything else, for ``Fitter.run`` (unknown names still fail loudly
         there, as before).
     """
-    import inspect
-
-    ctor_names = {
-        name
-        for name in inspect.signature(Fitter.__init__).parameters
-        if name not in _FIT_SURFACE_POSITIONAL
-    }
+    ctor_names = fit_surface_ctor_names()
     ctor_kwargs = {k: v for k, v in kwargs.items() if k in ctor_names}
     run_kwargs = {k: v for k, v in kwargs.items() if k not in ctor_names}
     return ctor_kwargs, run_kwargs
@@ -2818,7 +2839,10 @@ class Fitter:
         check_capabilities(entry, kwargs)
         # Same answer for every other unrecognized name, so a typo or an
         # unsupported channel names the method instead of the runner (#1469).
-        check_unknown_kwargs(entry, kwargs)
+        # Constructor-routed names go in as suggestion candidates only: they
+        # are documented fit() options, so a typo'd one must be correctable
+        # even though the runner does not declare it.
+        check_unknown_kwargs(entry, kwargs, also_accepted=fit_surface_ctor_names())
 
         # Compile the loss/grad + predict surface up front so the fit loop runs
         # warm and the persistent JAX cache is populated.

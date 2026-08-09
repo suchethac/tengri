@@ -371,7 +371,9 @@ def check_capabilities(entry: BackendEntry, kwargs: dict) -> None:
         )
 
 
-def check_unknown_kwargs(entry: BackendEntry, kwargs: dict) -> None:
+def check_unknown_kwargs(
+    entry: BackendEntry, kwargs: dict, also_accepted: frozenset[str] = frozenset()
+) -> None:
     """Refuse a kwarg the backend's runner does not declare.
 
     :func:`check_capabilities` gives this answer for the handful of *declared
@@ -391,6 +393,11 @@ def check_unknown_kwargs(entry: BackendEntry, kwargs: dict) -> None:
         The backend about to be dispatched.
     kwargs : dict
         Keyword arguments destined for ``entry.runner``.
+    also_accepted : frozenset of str, optional
+        Names the calling *surface* accepts but routes elsewhere -- the
+        ``Fitter.__init__`` parameters ``split_fitter_kwargs`` sends to
+        construction. Used for suggestions only, never to widen the
+        rejection, since a correctly spelled one never reaches this check.
 
     Raises
     ------
@@ -446,9 +453,20 @@ def check_unknown_kwargs(entry: BackendEntry, kwargs: dict) -> None:
         return
 
     offered = sorted(accepted - set(_CAPABILITY_FIELDS))
+    # Suggest against everything the *surface* takes, not just this runner.
+    # Constructor-routed options are documented fit() kwargs, so a typo'd one
+    # must be correctable even though it is not a runner parameter -- without
+    # this, ``calibration_marginalze`` was rejected with a list that could not
+    # contain ``calibration_marginalize``, and no correction offered.
+    #
+    # Suggestions only: the rejection set above is untouched. A correctly
+    # spelled constructor kwarg is routed away by ``split_fitter_kwargs`` and
+    # never arrives here, so accepting one would only move its failure deeper
+    # into the backend.
+    suggestable = sorted(set(offered) | set(also_accepted))
     hints = []
     for name in unknown:
-        close = difflib.get_close_matches(name, offered, n=1, cutoff=0.6)
+        close = difflib.get_close_matches(name, suggestable, n=1, cutoff=0.6)
         if close:
             hints.append(f"{name} -> {close[0]}")
     hint_str = f" Did you mean: {', '.join(hints)}?" if hints else ""
