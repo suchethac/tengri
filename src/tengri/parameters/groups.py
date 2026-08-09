@@ -3074,7 +3074,21 @@ def parameters_to_groups(spec: Parameters) -> dict:
 
     **Roundtrip guarantee**: The output dict, when passed to
     parse_groups(**output), produces a Parameters with identical
-    free/fixed partitions and distributions.
+    free/fixed partitions and distributions, *and* identical structural
+    settings — every non-parameter key ``parse_groups`` accepts
+    (``_GROUP_STRUCTURAL_KEYS``) is emitted back whenever it differs from
+    its default.
+
+    Structural settings were outside this guarantee until #964, and the
+    narrow wording is why that went unnoticed: ``sfh['age_kernel']``,
+    ``agn['norm']`` and the WG00 dust selectors were accepted, stored, and
+    then silently reverted to their defaults on the next round-trip. The
+    rules now live in ``_STRUCTURAL_ROUNDTRIP``, and
+    ``tests/contract/test_structural_settings_roundtrip.py`` asserts the two
+    tables cannot drift apart again.
+
+    Only *non-default* values are emitted, so an untouched group stays
+    absent from the output rather than growing noise.
 
     Examples
     --------
