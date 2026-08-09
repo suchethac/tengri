@@ -583,8 +583,6 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
     ~tengri.recipes : Curated recipe functions.
     describe_parameter : Look up a single parameter by name.
     """
-    from tengri.parameters.groups import parse_groups
-
     # Translate recipe to Parameters (no SSP data needed).
     #
     # ``_allow_empty_wildcard``: this is a *discovery* call, not a model the
@@ -593,7 +591,21 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
     # ``all_params`` regardless of free/fixed, so a wildcard that frees nothing
     # is harmless here — unlike in user model construction, where it silently
     # pins the physics being fitted.
-    params = parse_groups(**recipe_dict, _allow_empty_wildcard=True)
+    #
+    # ``AdvisoryWarning`` is silenced for the same reason: an advisory tells a
+    # user that the model they are about to fit will not behave as intended,
+    # which is meaningless for a throwaway Parameters built only to read names
+    # off. Without this the builder factory discovery, which runs at
+    # ``import tengri`` and frees every variant's parameters, would emit them
+    # before the user has built anything (#1586).
+    import warnings as _warnings
+
+    from tengri.config.exceptions import AdvisoryWarning
+    from tengri.parameters.groups import parse_groups
+
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("ignore", AdvisoryWarning)
+        params = parse_groups(**recipe_dict, _allow_empty_wildcard=True)
 
     # Get the list of parameter names to introspect
     if free_only:
