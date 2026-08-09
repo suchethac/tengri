@@ -48,11 +48,17 @@ attenuation)::
 
 from __future__ import annotations
 
+import math
 import warnings
 
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn.blocks._grid_support import (
+    block_grid_support,
+    is_contained,
+    live_fraction,
+)
 from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,
     resolve_agn_block,
@@ -172,6 +178,7 @@ def validate_block_recipe(
     agn_torus_block: str,
     agn_attenuation_block: str,
     params: dict | None = None,
+    param_support: dict[str, tuple[float, float]] | None = None,
 ) -> list[str]:
     r"""Check a block recipe for suspicious / unphysical combinations.
 
@@ -209,6 +216,14 @@ def validate_block_recipe(
     7. **Polar-dust block with E(B-V)=0** — the ``polar_dust`` attenuation
        block is a no-op when ``agn_polar_ebv = 0``; warn to surface unset
        params before the user wonders why the SED is unattenuated.
+    9. **Support wider than the block's template grid** — a template-backed
+       block interpolates over fixed axes and *clips* outside them, so the
+       excess is bit-identical to the edge node and its gradient is exactly
+       zero. A prior wider than the grid therefore contains parameter space
+       a fit can never move through, silently. Warn with the live fraction
+       and the grid extent. See
+       :mod:`tengri.components.agn.blocks._grid_support` for why this cannot
+       be expressed on the parameter declaration itself (#1586).
 
     Parameters
     ----------
@@ -216,8 +231,12 @@ def validate_block_recipe(
 agn_torus_block, agn_attenuation_block : str
         Selectors for each pipeline stage.
     params : dict, optional
-        Free parameter dict; reserved for future per-impl param-presence
-        checks. Currently unused but accepted for forward compatibility.
+        Concrete parameter values, used by Rule 7 to surface a no-op
+        ``agn_polar_ebv``. Values may legitimately be absent or traced.
+    param_support : dict[str, tuple[float, float]], optional
+        ``{param_name: (lo, hi)}`` — the range each parameter can actually
+        take, i.e. a prior's bounds or ``(v, v)`` for a fixed value. Consumed
+        by Rule 9; when omitted, that rule is skipped.
 
     Returns
     -------
@@ -311,6 +330,59 @@ agn_torus_block, agn_attenuation_block : str
 
     # (Rule 8, the adaf-deprecation steer, was removed once the faithful
     # Mahadevan 1997 ADAF rewrite landed in #898 — the block is now production.)
+
+    # Rule 9: a template-backed block's grid axes are a SECOND support that no
+    # parameter declaration records. Outside them jnp.clip is flat, so the SED
+    # is bit-identical and the gradient is exactly 0.0 — a fit gets no signal
+    # and cannot move the parameter, with nothing raised or warned (#1586).
+    # Checked per (block, param) because the same parameters are shared with
+    # grid-free analytic discs that legitimately want the wider support.
+    if param_support:
+        for category, name in selectors.items():
+            for pname, (g_lo, g_hi) in block_grid_support(category, name).items():
+                active = param_support.get(pname)
+                if active is None:
+                    continue
+                a_lo, a_hi = active
+                if is_contained(active, (g_lo, g_hi)):
+                    continue  # no reachable value can be clipped
+                live = live_fraction(active, (g_lo, g_hi))
+                dead_pct = 100.0 * (1.0 - live)
+                extent = f"[{g_lo:g}, {g_hi:g}]"
+                if a_lo == a_hi:
+                    detail = (
+                        f"the fixed value {a_lo:g} lies outside the grid extent "
+                        f"{extent}, so it is clipped onto the nearest edge node"
+                    )
+                elif not (math.isfinite(a_lo) and math.isfinite(a_hi)):
+                    # An unbounded prior (e.g. an untruncated Gaussian) is NOT
+                    # inert — most of its mass may sit on the grid. Only the
+                    # tails clip, so say that and do not quote a percentage:
+                    # the fraction of an infinite support is not informative.
+                    detail = (
+                        f"its support [{a_lo:g}, {a_hi:g}] is unbounded, so the "
+                        f"tails beyond the grid extent {extent} are clipped onto "
+                        "an edge node"
+                    )
+                elif live == 0.0:
+                    detail = (
+                        f"its whole range [{a_lo:g}, {a_hi:g}] lies outside the "
+                        f"grid extent {extent}, so the parameter is entirely "
+                        "inert — every value gives the same SED"
+                    )
+                else:
+                    detail = (
+                        f"{dead_pct:.0f}% of its range [{a_lo:g}, {a_hi:g}] lies "
+                        f"outside the grid extent {extent} and is silently "
+                        "clipped onto an edge node"
+                    )
+                _emit(
+                    f"Composable AGN: {pname} with the {name!r} {category} "
+                    f"block — {detail}. The SED there is bit-identical to the "
+                    "edge node and the gradient is exactly zero, so a fit "
+                    f"cannot move it. Narrow {pname} to {extent}, or select a "
+                    f"{category} block with no template grid."
+                )
 
     return issues
 
