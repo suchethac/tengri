@@ -92,6 +92,8 @@ from __future__ import annotations
 
 import difflib
 import warnings
+from collections.abc import Callable
+from typing import NamedTuple
 
 from tengri.config.exceptions import ParameterError, WildcardPartialFreeWarning
 from tengri.parameters._builders import _resolve_lazy_bucket
@@ -2059,6 +2061,156 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
 }
 
 
+class _Structural(NamedTuple):
+    """One structural (non-parameter) group setting and how it round-trips.
+
+    ``_GROUP_STRUCTURAL_KEYS`` says which keys :func:`parse_groups` *accepts*;
+    this says how :func:`parameters_to_groups` gives each one *back*. Keeping
+    both declarative is the point — when the emit side was hand-written
+    per-group it silently covered only three of the eight groups, so
+    ``sfh['age_kernel']``, ``agn['norm']`` and the WG00 dust selectors were
+    accepted, stored, and then dropped on the next ``to_groups()`` (#964).
+
+    Attributes
+    ----------
+    key : str
+        Name the setting carries inside its group dict (grammar side).
+    attr : str
+        Attribute :class:`~tengri.parameters.parameters.Parameters` stores it
+        on (spec side).
+    default : object
+        Value the spec holds when the user did not set the key. The key is
+        emitted only when the spec differs from this, so an untouched group
+        stays absent from the round-trip rather than growing noise.
+    only_types : tuple of str or None
+        Emit only when the group's resolved ``type`` is one of these. Guards
+        settings whose mere presence *implies* a backend — a ``neb['grid']``
+        emitted onto a non-CLOUDY spec would switch the backend on re-parse.
+    resolved_default : callable or None
+        ``callable(spec)`` returning the value the spec would hold had the
+        user not set the key, for defaults resolved at construction rather
+        than fixed literals (CLOUDY's auto-located grid path). Overrides
+        ``default`` when given.
+    """
+
+    key: str
+    attr: str
+    default: object
+    only_types: tuple[str, ...] | None = None
+    resolved_default: Callable[[Parameters], object] | None = None
+
+
+#: How every plain structural setting round-trips: group -> settings.
+#:
+#: "Plain" means the grammar value and the stored value are the same object,
+#: so a default comparison is enough to decide whether to emit. The dust
+#: attenuation laws and their per-component overrides are deliberately absent:
+#: they carry inheritance rules and a flattened override dict, and stay
+#: hand-written in :func:`_add_structural_settings`.
+_STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
+    "sfh": (
+        _Structural("bin_edges_gyr", "bin_edges_gyr", None),
+        _Structural("age_kernel", "age_kernel", None),
+        _Structural("field_centering", "field_centering", 1.0),
+    ),
+    "stellar": (
+        # Always-emit would force a stellar={} entry onto every round-trip,
+        # which noisily breaks existing diff-against-from_groups call sites.
+        _Structural("met_mode", "met_mode", "delta"),
+    ),
+    "dust": (
+        # Witt & Gordon (2000) screen selectors (FSPS dust_type=3). Only read
+        # by the parser when the dust type is wg00, so a non-WG00 spec always
+        # holds the defaults and never emits them.
+        _Structural("dust_curve", "dust_wg00_curve", "mw", only_types=("wg00",)),
+        _Structural("geometry", "dust_wg00_geometry", "shell", only_types=("wg00",)),
+        _Structural("structure", "dust_wg00_structure", "homogeneous", only_types=("wg00",)),
+    ),
+    "neb": (
+        _Structural("full_catalog", "cue_full_catalog", False, only_types=("cue",)),
+        _Structural(
+            "grid",
+            "cloudy_grid_path",
+            None,
+            only_types=("cloudy",),
+            # Parameters fills an unset path with the grid matching the default
+            # SSP family; emitting *that* would bake a machine-specific
+            # absolute path into a portable grammar dict, so compare against it.
+            resolved_default=lambda spec: spec._default_cloudy_grid(),
+        ),
+    ),
+    "shock": (
+        _Structural("norm", "shock_norm", "frac"),
+        _Structural("abundance", "shock_abundance", "solar"),
+        _Structural("component", "shock_component", "combined"),
+    ),
+    "igm": (
+        # Without this the patchy-reionization params (bubble_mpc, x_HI) were
+        # emitted while the toggle that legalizes them was not, so re-parsing
+        # a patchy spec raised "Unknown key 'bubble_mpc' in group 'igm'".
+        _Structural("patchy", "igm_patchy", False),
+    ),
+    "agn": (_Structural("norm", "agn_norm", "cigale_joint"),),
+    "foreground": (
+        # The MW screen declares no fitted parameters, so its group never
+        # entered the per-group emit loop at all — see the no-parameter pass
+        # at the end of parameters_to_groups.
+        _Structural("ebmv_mw", "foreground_ebmv_mw", 0.0),
+        _Structural("law", "foreground_law", "cardelli"),
+        _Structural("rv", "foreground_rv", 3.1),
+    ),
+}
+
+
+def _differs_from_default(value: object, default: object) -> bool:
+    """True when a structural setting has been moved off its default.
+
+    Parameters
+    ----------
+    value : object
+        Value read off the spec.
+    default : object
+        Value the spec holds when the user did not set the key.
+
+    Returns
+    -------
+    bool
+        Whether the setting must be emitted. Array-valued settings
+        (``sfh['bin_edges_gyr']``) compare elementwise, so a plain ``!=``
+        would raise in a boolean context.
+    """
+    if value is None or default is None:
+        return value is not default
+    if isinstance(value, (list, tuple)) or hasattr(value, "shape"):
+        import numpy as np
+
+        return not np.array_equal(np.asarray(value), np.asarray(default))
+    return bool(value != default)
+
+
+def _emit_declared_structural(group_name: str, group_output: dict, spec: Parameters) -> None:
+    """Emit every non-default plain structural setting for one group.
+
+    Parameters
+    ----------
+    group_name : str
+        Group name (e.g. ``'sfh'``).
+    group_output : dict
+        Group dict to fill (modified in place). Its ``'type'`` entry, when
+        already present, gates the ``only_types`` settings.
+    spec : Parameters
+        The Parameters object to read settings from.
+    """
+    group_type = group_output.get("type")
+    for entry in _STRUCTURAL_ROUNDTRIP.get(group_name, ()):
+        if entry.only_types is not None and group_type not in entry.only_types:
+            continue
+        default = entry.default if entry.resolved_default is None else entry.resolved_default(spec)
+        value = getattr(spec, entry.attr, default)
+        if _differs_from_default(value, default):
+            group_output[entry.key] = value
+
+
 def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[str]:
     """Return the set of short and full names every declared param exposes
     under ``group`` (e.g. ``"agn.torus"`` → ``{"tau_skirtor", "agn_tau_skirtor", ...}``).
@@ -3017,6 +3169,22 @@ def parameters_to_groups(spec: Parameters) -> dict:
                 # For now, only add 'none' types and other explicit settings
                 result[group_name] = {"type": type_value}
 
+    # Groups carrying structural settings but owning no declared parameters
+    # never entered the per-group loop above, so their settings would vanish
+    # from the round-trip entirely. The MW foreground screen (#297) is the
+    # standing case: it has three settings and no fitted parameters.
+    for group_name in sorted(_STRUCTURAL_ROUNDTRIP):
+        if group_name in result:
+            continue
+        type_value = _extract_group_type(group_name, spec)
+        pending: dict = {} if type_value is None else {"type": type_value}
+        n_before = len(pending)
+        _emit_declared_structural(group_name, pending, spec)
+        # Emit the group only when a setting actually fired — a bare type is
+        # the business of the block above, which knows which are non-default.
+        if len(pending) > n_before:
+            result[group_name] = pending
+
     # Handle top-level parameters (redshift, apply_igm)
     if "redshift" in spec.all_params:
         result["redshift"] = spec.get_distribution("redshift")
@@ -3103,7 +3271,16 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         The group dict to fill (modified in place).
     spec : Parameters
         The Parameters object.
+
+    Notes
+    -----
+    Plain settings come from the declarative ``_STRUCTURAL_ROUNDTRIP`` table.
+    Only the dust attenuation laws stay hand-written below: they carry
+    inheritance rules (``law_diff`` defaults to ``law_bc``), a flattened
+    override dict, and two booleans stored as a float cutoff.
     """
+    _emit_declared_structural(group_name, group_output, spec)
+
     if group_name == "dust":
         # Add law_bc and law_diff if non-default
         if spec.dust_law_bc != "power_law":
@@ -3132,21 +3309,6 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         # Round-trip the FSPS-parity energy-balance toggle (non-default only).
         if bool(getattr(spec, "dust_eb_include_lyc", False)):
             group_output["eb_include_lyc"] = True
-    elif group_name == "stellar":
-        # Emit met_mode whenever it's non-default (default = 'delta').
-        # Always-emit would force a stellar={} entry on every round-trip, which
-        # noisily breaks existing diff-against-from_groups call sites.
-        if getattr(spec, "met_mode", "delta") != "delta":
-            group_output["met_mode"] = spec.met_mode
-    elif group_name == "shock":
-        # Round-trip the shock normalization + categorical knobs (only when
-        # non-default), mirroring the neb/dust structural round-trip (#851).
-        if getattr(spec, "shock_norm", "frac") != "frac":
-            group_output["norm"] = spec.shock_norm
-        if getattr(spec, "shock_abundance", "solar") != "solar":
-            group_output["abundance"] = spec.shock_abundance
-        if getattr(spec, "shock_component", "combined") != "combined":
-            group_output["component"] = spec.shock_component
 
 
 def _analyze_wildcard_intent(
