@@ -87,24 +87,59 @@ ship in `scripts/`:
   process whose RSS exceeds `LIMIT_GB` (default 10). Catches one
   runaway JIT compile or fit.
 - `scripts/python_total_oom_guard.sh` — watches the **machine-wide
-  total** RSS of all python processes and, when the sum exceeds
-  `TOTAL_LIMIT_GB` (default 75% of physical RAM), SIGKILLs the most
-  memory-hungry processes first until the total is back under the
-  limit. This catches what the per-process guard cannot: many
+  total** RSS of all python processes and sheds the most memory-hungry
+  ones first. This catches what the per-process guard cannot: many
   individually-modest workers (pytest-xdist, parallel sessions,
   orphaned kernels) that together sum past physical RAM.
 
+The total guard has two independent triggers, because either alone has
+a blind spot:
+
+| Trigger | Fires when | Catches |
+| --- | --- | --- |
+| sum-RSS | python RSS sums past `TOTAL_LIMIT_GB` (default 75% of RAM) | the classic "30 workers × 4 GB" blow-up, early |
+| pressure | available memory < `AVAIL_PCT_MIN` (10%) | a limit set *above* what the workload ever reaches while the box suffocates anyway |
+
+There is also a `SWAP_MAX_GB` trigger, **off by default, and you should
+leave it off on macOS.** Swap in use is not an emergency reading there:
+the kernel grows the swap file on demand and never shrinks it, so any
+box up for a few days sits permanently above a fixed threshold.
+Measured 2026-08-09: swap pinned at 20+ GB for hours while available
+memory stayed a healthy 22–29%. Enabled, it wanted to fire every tick
+forever — which would have killed 8 GB out of every `pytest -n auto`
+run 60 s after it started. Available memory is the signal that actually
+predicts death; swap is logged every tick for diagnosis only.
+
+**Install it as a LaunchAgent rather than backgrounding it by hand:**
+
 ```bash
-scripts/python_oom_guard.sh &                            # per-process limit
-TOTAL_LIMIT_GB=30 scripts/python_total_oom_guard.sh &    # machine-wide budget
+scripts/install_oom_guard_agent.sh          # start at login, restart if it dies
+scripts/install_oom_guard_agent.sh --uninstall
 ```
 
-Both log kills to `/tmp` (`python_oom_guard.log`,
-`python_total_oom_guard.log`). The total guard also appends the global
-RSS every poll, so after an incident you can see the ramp, and supports
-`DRY_RUN=1` to preview which processes a limit would shed. Set limits
-so your heaviest legitimate fit stays under them — NUTS on a model with
-template dust emission can briefly cross 10 GB during compile.
+A `nohup ... &` daemon does not survive logout or reboot and nothing
+restarts it if it dies — and because its `/tmp` log is periodically
+reaped, there is no evidence it was ever gone. On 2026-08-09 a machine
+reached ~120 GB of summed python RSS with the guard installed but dead
+for weeks. The agent logs to `~/Library/Logs/tengri-oomguard.log`,
+outside `/tmp`, so that evidence survives.
+
+Two behaviors worth knowing before you tune it:
+
+- **`MIN_KILL_MB` is a preference, not a veto.** If the shed target
+  cannot be met without going below it, the guard goes below it. A
+  single-pass guard with a 512 MB floor facing 200 workers of 300 MB
+  selects nobody and logs a warning while the machine dies.
+- **Pressure trips are gated on `PRESSURE_MIN_PYTHON_GB`** (default 8):
+  the guard only sheds if python actually holds that much. Swap
+  pressure is often chronic and not always python's fault, and killing
+  2 GB of python cannot fix a 20 GB shortfall caused by something else.
+  The gate also makes shedding self-limiting.
+
+`DRY_RUN=1` previews the kill plan without signaling anything, and
+both daemons honor `EXCLUDE_RE`. Set limits so your heaviest
+legitimate fit stays under them — NUTS on a model with template dust
+emission can briefly cross 10 GB during compile.
 
 ## When to file a bug
 

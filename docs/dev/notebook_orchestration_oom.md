@@ -148,12 +148,44 @@ Three scripts cover the three failure shapes:
   python process over `LIMIT_GB` (default 10), whichever session
   spawned it.
 - `scripts/python_total_oom_guard.sh` — daemon; watches the
-  **machine-wide total** python RSS and sheds the most memory-hungry
-  processes first once the sum crosses `TOTAL_LIMIT_GB` (default 75%
-  of RAM). This is the only guard that survives the multi-session
-  case: N parallel worktrees each under their own per-tree limit can
-  still jointly exceed physical RAM, and no per-tree monitor can see
-  the others.
+  **machine-wide total** python RSS *and* real OS memory pressure, and
+  sheds the most memory-hungry processes first. This is the only guard
+  that survives the multi-session case: N parallel worktrees each under
+  their own per-tree limit can still jointly exceed physical RAM, and no
+  per-tree monitor can see the others.
+
+**Install the total guard as a LaunchAgent — do not background it by
+hand:**
+
+```bash
+scripts/install_oom_guard_agent.sh
+```
+
+`nohup ... & disown` is not enough. It dies at logout and reboot, nothing
+restarts it, and its `/tmp` log gets reaped, so the *absence leaves no
+trace*. On 2026-08-09 a machine hit ~120 GB of summed python RSS with the
+guard installed but dead for weeks; the only clue was a missing log file.
+`KeepAlive` in the agent also covers silent death mid-session.
+
+Three traps this guard had to be taught, all of which made it look
+healthy while doing nothing:
+
+1. **A sum-RSS limit can sit above what the workload ever reaches.**
+   Measured on the incident machine: python summed to 12–16 GB against a
+   30 GB limit — never tripping — while the box suffocated. Hence the
+   second trigger on `AVAIL_PCT_MIN` (available memory), which is what
+   the kernel is actually short of. Do **not** reach for the
+   `SWAP_MAX_GB` trigger on macOS: swap there grows on demand and never
+   shrinks, so it reads as a permanent emergency on any long-uptime
+   machine and would kill 8 GB out of every `pytest -n auto` run.
+2. **A `MIN_KILL_MB` floor must never veto the whole candidate list.**
+   66% of python RSS on that machine sat below the 512 MB floor. The
+   selector now runs a second pass that ignores the floor when the shed
+   target cannot otherwise be met.
+3. **Don't shed when shedding cannot help.** Pressure trips require
+   python to hold at least `PRESSURE_MIN_PYTHON_GB` (default 8),
+   otherwise a chronic swap condition re-trips every cooldown and
+   eventually kills every python process for no benefit.
 
 For a single-fit limit, 20 GB is comfortable; 10 GB cuts into
 legitimate single-NUTS-fit workloads on the dale2014 pipeline. If your
