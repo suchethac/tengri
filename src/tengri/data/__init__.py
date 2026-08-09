@@ -104,14 +104,6 @@ def local_ssp_path(name: str, dest_dir: str | os.PathLike = "data") -> Path:
     return Path(dest_dir) / name
 
 
-def _format_bytes(n: int) -> str:
-    for unit in ("B", "KiB", "MiB", "GiB"):
-        if n < 1024:
-            return f"{n:.1f} {unit}"
-        n /= 1024  # type: ignore[assignment]
-    return f"{n:.1f} TiB"
-
-
 def download_ssp(
     name: str,
     dest_dir: str | os.PathLike | None = None,
@@ -176,20 +168,3 @@ def download_ssp(
         stacklevel=2,
     )
     return _download_ssp(name, dest=dest_dir, force=overwrite, progress=progress)
-
-
-def download_ssps(
-    names: Iterable[str],
-    dest_dir: str | os.PathLike = "data",
-    *,
-    overwrite: bool = False,
-    progress: bool = True,
-) -> list[Path]:
-    """Download multiple SSP files; convenience wrapper around :func:`download_ssp`.
-
-    Returns
-    -------
-    list[pathlib.Path]
-        One path per input ``name``, in order.
-    """
-    return [download_ssp(name, dest_dir, overwrite=overwrite, progress=progress) for name in names]

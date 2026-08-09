@@ -109,9 +109,35 @@ def test_sed_fit_params_reaches_params_override(model, mock_data):
 
 
 def test_unknown_kwargs_still_fail_loudly(model, mock_data):
-    """Routing must not create a silent kwarg sink — typos still raise."""
+    """Routing must not create a silent kwarg sink — typos still raise, by name.
+
+    The rule is "loud", not "``TypeError``". Which exception surfaces depends on
+    *where* the name is caught, and that moved twice in one day: Python itself
+    rejected it inside the runner (``run_map() got an unexpected keyword
+    argument``), then #1605 added a pre-dispatch check in ``_backend_registry``
+    raising ``ValueError``, then #1629 settled it back to ``TypeError`` so the
+    same mistake fails the same way from either layer. ``check_capabilities``
+    still answers ``ValueError``, for *declared capability* names only.
+
+    Pinning the type pinned the layer, so an improvement to the error broke this
+    test while the guarded behavior was intact. Assert the invariant instead:
+    it raises, and the message shows the pre-dispatch guard is what caught it.
+
+    Match on ``does not accept``, not on the kwarg name. The name alone does not
+    discriminate — **both** layers put it in the message, the runner's as
+    ``run_map() got an unexpected keyword argument 'calibration_marginalze'``.
+    With ``check_fit_kwargs`` neutered to a silent return, the kwarg falls
+    through to the runner and dies at ``fitter.py`` with that ``TypeError``, so
+    a name-only match (or a bare ``pytest.raises``) passes with the guard
+    deleted — green on the exact regression this test exists to catch. Measured
+    on ``main`` at 04231b02e: mutation applied, test still passed.
+
+    ``does not accept`` appears only in the registry's message, so it separates
+    "refused up front" from "died inside", which is the distinction #1378 is
+    about. The type stays unpinned — the layer may move again.
+    """
     flux, err = mock_data
     fwd = ForwardModel.build(sed=model)
 
-    with pytest.raises(TypeError):
+    with pytest.raises((TypeError, ValueError), match=r"does not accept"):
         fwd.fit(flux, err, method="map", n_steps=3, calibration_marginalze=True)

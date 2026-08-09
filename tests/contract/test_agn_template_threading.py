@@ -138,10 +138,7 @@ def test_baseline_bare_stellar_bakes_almost_nothing(ssp, obs):
 # FAILING as XPASS, which is the signal to delete its row. A non-strict xfail
 # would silently absorb the fix and let the row rot.
 _KNOWN_BAKING: dict[tuple[str, str], str] = {
-    ("disc", "relagn"): "27.5 MB — _load_relagn_disc_grid closure (#1383)",
     ("disc", "kubota_done"): "23.0 MB — closure-captured disc grid (#1383)",
-    ("disc", "schartmann2005_skirtor_atten"): "10.0 MB — SKIRTOR grid closure (#1383)",
-    ("disc", "slone_netzer"): "1.8 MB — closure-captured disc grid (#1383)",
     ("nlr", "cue"): "8.5 MB — Cue NLR weights closure (#1383)",
 }
 

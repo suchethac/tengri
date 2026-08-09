@@ -110,9 +110,16 @@ specialist/figures/
 examples/**/*.png
 
 # Internal research outputs (not for distribution)
+#
+# Anchored with a leading slash: these name directories at the REPO ROOT.
+# Unanchored, `profiling/` also matched `src/tengri/profiling/` -- a real,
+# tracked package -- and ruff respects .gitignore inside a git repository, so
+# CI silently linted 1464 files instead of 1468 and those four were invisible
+# to `ruff check`. Two defects sat in them unreported (#1598). Keep the slash;
+# `explore/` had the same latent hazard and is anchored for the same reason.
 analysis/figures/
-explore/
-profiling/
+/explore/
+/profiling/
 notebook_execution.log
 notebook_metrics.json
 

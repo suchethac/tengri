@@ -380,7 +380,7 @@ def make_agebins_from_zred(
     90% of the universe age; the oldest bin spans 90–100% of the universe age.
 
     This is a **setup-time utility** — call it when building a
-    :class:`~tengri.parameters.Parameters` object, not inside the forward
+    :class:`~tengri.Parameters` object, not inside the forward
     model. The returned array is plain NumPy so it can be passed as the
     ``bin_edges_gyr`` argument to :func:`continuity` or
     :func:`dirichlet`.

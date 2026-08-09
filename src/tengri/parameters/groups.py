@@ -92,6 +92,8 @@ from __future__ import annotations
 
 import difflib
 import warnings
+from collections.abc import Callable
+from typing import NamedTuple
 
 from tengri.config.exceptions import ParameterError, WildcardPartialFreeWarning
 from tengri.parameters._builders import _resolve_lazy_bucket
@@ -1809,6 +1811,64 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
         result["dla"] = True
 
 
+def _legacy_radio_type_to_blocks(radio_type: str) -> tuple[str, str]:
+    """Resolve a legacy ``radio={'type': X}`` name onto ``(sf_mode, agn_model)``.
+
+    Parameters
+    ----------
+    radio_type : str
+        A member of :func:`_valid_radio_types` other than ``"none"``.
+
+    Returns
+    -------
+    tuple of (str, str)
+        ``(radio_sfr_mode, radio_agn_model)`` — the two attributes that
+        decide which radio physics runs.
+
+    Notes
+    -----
+    ``condon92`` predates the SF/AGN split and names the *composite*
+    (``radio_total``), not a third AGN model, so it resolves to both
+    defaults. The SEDModelComponent variants that
+    :func:`_valid_radio_types` folds in — ``radio_dpl``,
+    ``radio_powerlaw`` — each name exactly one axis, so strip the
+    ``radio_`` prefix and route the remainder to whichever axis
+    registers it.
+
+    Deriving the mapping from ``AGN_RADIO_MODELS`` / ``SF_RADIO_MODELS``
+    rather than spelling it out keeps this in step with the registry the
+    validator already reads: a hand-written third list is how the radio
+    error message and the dust menu each drifted out of agreement with
+    the builder. A ``radio_*`` component whose stripped name matches
+    neither axis raises here rather than silently taking the defaults —
+    that silent path is #1461, where ``radio_dpl`` was accepted and the
+    single power-law ran in place of the Martinez-Ramirez+2024 double
+    power-law.
+    """
+    from tengri.components.radio.component import AGN_RADIO_MODELS, SF_RADIO_MODELS
+
+    sf_default, agn_default = "bell2003", "powerlaw"
+    if radio_type == "condon92":
+        return sf_default, agn_default
+
+    # ``"none"`` is the only name in both tuples and never reaches here,
+    # so the AGN-first order below cannot be ambiguous.
+    block = radio_type.removeprefix("radio_")
+    if block in AGN_RADIO_MODELS:
+        return sf_default, block
+    if block in SF_RADIO_MODELS:
+        return block, agn_default
+
+    raise ValueError(
+        f"radio type '{radio_type}' is accepted by the grammar but names "
+        f"neither a star-forming model {SF_RADIO_MODELS} nor an AGN model "
+        f"{AGN_RADIO_MODELS}. It was registered as a radio component "
+        "without a matching sf/agn block, so there is nothing for the "
+        "forward model to run. Select it explicitly instead, e.g. "
+        "radio={'agn': {'type': 'dpl'}}."
+    )
+
+
 def _translate_radio(radio_dict: dict, result: dict) -> None:
     """Translate radio group with composable SF + AGN sub-blocks.
 
@@ -1828,6 +1888,11 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     .. code-block:: python
 
         radio = {"type": "condon92"}  # radio on with default sf/agn models
+        radio = {"type": "radio_dpl"}  # == radio={'agn': {'type': 'dpl'}}
+
+    The legacy name is resolved onto the two axes by
+    :func:`_legacy_radio_type_to_blocks` rather than assumed to be the
+    default pair — accepting a name and then ignoring it is #1461.
 
     Raises if both 'type' and 'sf'/'agn' sub-blocks are present.
     """
@@ -1849,7 +1914,7 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             "or radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}} (new)."
         )
 
-    # Legacy form: radio={'type': 'X'} → interpret as SF variant with default AGN
+    # Legacy form: radio={'type': 'X'} → resolve X onto the sf/agn axes
     if has_legacy_type and not has_sf_block and not has_agn_block:
         radio_type = radio_dict["type"]
         valid_radio = _valid_radio_types()
@@ -1859,9 +1924,9 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
         result["radio"] = radio_type != "none"
         if radio_type != "none":
-            # Legacy 'type' predates the SF/AGN split → default both models.
-            result["radio_sfr_mode"] = "bell2003"
-            result["radio_agn_model"] = "powerlaw"
+            sf_variant, agn_variant = _legacy_radio_type_to_blocks(radio_type)
+            result["radio_sfr_mode"] = sf_variant
+            result["radio_agn_model"] = agn_variant
         return
 
     # New composable form: extract SF and AGN sub-blocks
@@ -2057,6 +2122,156 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "agn.lines": frozenset({"type", "*"}),
     "foreground": frozenset({"ebmv_mw", "law", "rv"}),
 }
+
+
+class _Structural(NamedTuple):
+    """One structural (non-parameter) group setting and how it round-trips.
+
+    ``_GROUP_STRUCTURAL_KEYS`` says which keys :func:`parse_groups` *accepts*;
+    this says how :func:`parameters_to_groups` gives each one *back*. Keeping
+    both declarative is the point — when the emit side was hand-written
+    per-group it silently covered only three of the eight groups, so
+    ``sfh['age_kernel']``, ``agn['norm']`` and the WG00 dust selectors were
+    accepted, stored, and then dropped on the next ``to_groups()`` (#964).
+
+    Attributes
+    ----------
+    key : str
+        Name the setting carries inside its group dict (grammar side).
+    attr : str
+        Attribute :class:`~tengri.parameters.parameters.Parameters` stores it
+        on (spec side).
+    default : object
+        Value the spec holds when the user did not set the key. The key is
+        emitted only when the spec differs from this, so an untouched group
+        stays absent from the round-trip rather than growing noise.
+    only_types : tuple of str or None
+        Emit only when the group's resolved ``type`` is one of these. Guards
+        settings whose mere presence *implies* a backend — a ``neb['grid']``
+        emitted onto a non-CLOUDY spec would switch the backend on re-parse.
+    resolved_default : callable or None
+        ``callable(spec)`` returning the value the spec would hold had the
+        user not set the key, for defaults resolved at construction rather
+        than fixed literals (CLOUDY's auto-located grid path). Overrides
+        ``default`` when given.
+    """
+
+    key: str
+    attr: str
+    default: object
+    only_types: tuple[str, ...] | None = None
+    resolved_default: Callable[[Parameters], object] | None = None
+
+
+#: How every plain structural setting round-trips: group -> settings.
+#:
+#: "Plain" means the grammar value and the stored value are the same object,
+#: so a default comparison is enough to decide whether to emit. The dust
+#: attenuation laws and their per-component overrides are deliberately absent:
+#: they carry inheritance rules and a flattened override dict, and stay
+#: hand-written in :func:`_add_structural_settings`.
+_STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
+    "sfh": (
+        _Structural("bin_edges_gyr", "bin_edges_gyr", None),
+        _Structural("age_kernel", "age_kernel", None),
+        _Structural("field_centering", "field_centering", 1.0),
+    ),
+    "stellar": (
+        # Always-emit would force a stellar={} entry onto every round-trip,
+        # which noisily breaks existing diff-against-from_groups call sites.
+        _Structural("met_mode", "met_mode", "delta"),
+    ),
+    "dust": (
+        # Witt & Gordon (2000) screen selectors (FSPS dust_type=3). Only read
+        # by the parser when the dust type is wg00, so a non-WG00 spec always
+        # holds the defaults and never emits them.
+        _Structural("dust_curve", "dust_wg00_curve", "mw", only_types=("wg00",)),
+        _Structural("geometry", "dust_wg00_geometry", "shell", only_types=("wg00",)),
+        _Structural("structure", "dust_wg00_structure", "homogeneous", only_types=("wg00",)),
+    ),
+    "neb": (
+        _Structural("full_catalog", "cue_full_catalog", False, only_types=("cue",)),
+        _Structural(
+            "grid",
+            "cloudy_grid_path",
+            None,
+            only_types=("cloudy",),
+            # Parameters fills an unset path with the grid matching the default
+            # SSP family; emitting *that* would bake a machine-specific
+            # absolute path into a portable grammar dict, so compare against it.
+            resolved_default=lambda spec: spec._default_cloudy_grid(),
+        ),
+    ),
+    "shock": (
+        _Structural("norm", "shock_norm", "frac"),
+        _Structural("abundance", "shock_abundance", "solar"),
+        _Structural("component", "shock_component", "combined"),
+    ),
+    "igm": (
+        # Without this the patchy-reionization params (bubble_mpc, x_HI) were
+        # emitted while the toggle that legalizes them was not, so re-parsing
+        # a patchy spec raised "Unknown key 'bubble_mpc' in group 'igm'".
+        _Structural("patchy", "igm_patchy", False),
+    ),
+    "agn": (_Structural("norm", "agn_norm", "cigale_joint"),),
+    "foreground": (
+        # The MW screen declares no fitted parameters, so its group never
+        # entered the per-group emit loop at all — see the no-parameter pass
+        # at the end of parameters_to_groups.
+        _Structural("ebmv_mw", "foreground_ebmv_mw", 0.0),
+        _Structural("law", "foreground_law", "cardelli"),
+        _Structural("rv", "foreground_rv", 3.1),
+    ),
+}
+
+
+def _differs_from_default(value: object, default: object) -> bool:
+    """True when a structural setting has been moved off its default.
+
+    Parameters
+    ----------
+    value : object
+        Value read off the spec.
+    default : object
+        Value the spec holds when the user did not set the key.
+
+    Returns
+    -------
+    bool
+        Whether the setting must be emitted. Array-valued settings
+        (``sfh['bin_edges_gyr']``) compare elementwise, so a plain ``!=``
+        would raise in a boolean context.
+    """
+    if value is None or default is None:
+        return value is not default
+    if isinstance(value, (list, tuple)) or hasattr(value, "shape"):
+        import numpy as np
+
+        return not np.array_equal(np.asarray(value), np.asarray(default))
+    return bool(value != default)
+
+
+def _emit_declared_structural(group_name: str, group_output: dict, spec: Parameters) -> None:
+    """Emit every non-default plain structural setting for one group.
+
+    Parameters
+    ----------
+    group_name : str
+        Group name (e.g. ``'sfh'``).
+    group_output : dict
+        Group dict to fill (modified in place). Its ``'type'`` entry, when
+        already present, gates the ``only_types`` settings.
+    spec : Parameters
+        The Parameters object to read settings from.
+    """
+    group_type = group_output.get("type")
+    for entry in _STRUCTURAL_ROUNDTRIP.get(group_name, ()):
+        if entry.only_types is not None and group_type not in entry.only_types:
+            continue
+        default = entry.default if entry.resolved_default is None else entry.resolved_default(spec)
+        value = getattr(spec, entry.attr, default)
+        if _differs_from_default(value, default):
+            group_output[entry.key] = value
 
 
 def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[str]:
@@ -2922,7 +3137,21 @@ def parameters_to_groups(spec: Parameters) -> dict:
 
     **Roundtrip guarantee**: The output dict, when passed to
     parse_groups(**output), produces a Parameters with identical
-    free/fixed partitions and distributions.
+    free/fixed partitions and distributions, *and* identical structural
+    settings — every non-parameter key ``parse_groups`` accepts
+    (``_GROUP_STRUCTURAL_KEYS``) is emitted back whenever it differs from
+    its default.
+
+    Structural settings were outside this guarantee until #964, and the
+    narrow wording is why that went unnoticed: ``sfh['age_kernel']``,
+    ``agn['norm']`` and the WG00 dust selectors were accepted, stored, and
+    then silently reverted to their defaults on the next round-trip. The
+    rules now live in ``_STRUCTURAL_ROUNDTRIP``, and
+    ``tests/contract/test_structural_settings_roundtrip.py`` asserts the two
+    tables cannot drift apart again.
+
+    Only *non-default* values are emitted, so an untouched group stays
+    absent from the output rather than growing noise.
 
     Examples
     --------
@@ -3017,6 +3246,22 @@ def parameters_to_groups(spec: Parameters) -> dict:
                 # For now, only add 'none' types and other explicit settings
                 result[group_name] = {"type": type_value}
 
+    # Groups carrying structural settings but owning no declared parameters
+    # never entered the per-group loop above, so their settings would vanish
+    # from the round-trip entirely. The MW foreground screen (#297) is the
+    # standing case: it has three settings and no fitted parameters.
+    for group_name in sorted(_STRUCTURAL_ROUNDTRIP):
+        if group_name in result:
+            continue
+        type_value = _extract_group_type(group_name, spec)
+        pending: dict = {} if type_value is None else {"type": type_value}
+        n_before = len(pending)
+        _emit_declared_structural(group_name, pending, spec)
+        # Emit the group only when a setting actually fired — a bare type is
+        # the business of the block above, which knows which are non-default.
+        if len(pending) > n_before:
+            result[group_name] = pending
+
     # Handle top-level parameters (redshift, apply_igm)
     if "redshift" in spec.all_params:
         result["redshift"] = spec.get_distribution("redshift")
@@ -3103,7 +3348,16 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         The group dict to fill (modified in place).
     spec : Parameters
         The Parameters object.
+
+    Notes
+    -----
+    Plain settings come from the declarative ``_STRUCTURAL_ROUNDTRIP`` table.
+    Only the dust attenuation laws stay hand-written below: they carry
+    inheritance rules (``law_diff`` defaults to ``law_bc``), a flattened
+    override dict, and two booleans stored as a float cutoff.
     """
+    _emit_declared_structural(group_name, group_output, spec)
+
     if group_name == "dust":
         # Add law_bc and law_diff if non-default
         if spec.dust_law_bc != "power_law":
@@ -3132,21 +3386,6 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         # Round-trip the FSPS-parity energy-balance toggle (non-default only).
         if bool(getattr(spec, "dust_eb_include_lyc", False)):
             group_output["eb_include_lyc"] = True
-    elif group_name == "stellar":
-        # Emit met_mode whenever it's non-default (default = 'delta').
-        # Always-emit would force a stellar={} entry on every round-trip, which
-        # noisily breaks existing diff-against-from_groups call sites.
-        if getattr(spec, "met_mode", "delta") != "delta":
-            group_output["met_mode"] = spec.met_mode
-    elif group_name == "shock":
-        # Round-trip the shock normalization + categorical knobs (only when
-        # non-default), mirroring the neb/dust structural round-trip (#851).
-        if getattr(spec, "shock_norm", "frac") != "frac":
-            group_output["norm"] = spec.shock_norm
-        if getattr(spec, "shock_abundance", "solar") != "solar":
-            group_output["abundance"] = spec.shock_abundance
-        if getattr(spec, "shock_component", "combined") != "combined":
-            group_output["component"] = spec.shock_component
 
 
 def _analyze_wildcard_intent(

@@ -978,62 +978,124 @@ def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
 
         return _identity_att
 
+    return functools.partial(skirtor_disc_attenuation_from_grid, _disc_atten_bundle(raw))
+
+
+class SKIRTORDiscAttenGrid(NamedTuple):
+    """SKIRTOR disc-column arrays for the inclination attenuation ratio.
+
+    Carried as a pytree so the forward model can thread the ~10 MB disc cube
+    into ``jax.jit`` as an argument instead of closing over it, which would
+    freeze it into the graph as ``Constant`` ops (#1383).
+
+    Attributes
+    ----------
+    disk : ndarray
+        SKIRTOR disc template cube.
+    wave_grid : ndarray, shape (n_wave,)
+        Template rest-frame wavelength grid [Angstrom].
+    axes : tuple of ndarray
+        The SKIRTOR parameter axes.
+    edges : tuple of ndarray
+        Triweight bin edges derived from ``axes``.
+    """
+
+    disk: jnp.ndarray
+    wave_grid: jnp.ndarray
+    axes: tuple[jnp.ndarray, ...]
+    edges: tuple[jnp.ndarray, ...]
+
+
+def _disc_atten_bundle(raw: dict) -> SKIRTORDiscAttenGrid:
+    """Pack raw SKIRTOR arrays into a :class:`SKIRTORDiscAttenGrid`."""
     with jax.ensure_compile_time_eval():
-        disk_grid = jnp.array(raw["disk"])
-        wave_grid = jnp.array(raw["wave"])
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
-        edges = tuple(edges_for_grid(ax) for ax in axes)
+        return SKIRTORDiscAttenGrid(
+            disk=jnp.array(raw["disk"]),
+            wave_grid=jnp.array(raw["wave"]),
+            axes=axes,
+            edges=tuple(edges_for_grid(ax) for ax in axes),
+        )
 
-    def disc_attenuation(
-        wavelength: jnp.ndarray,
-        agn_tau_skirtor: float = 7.0,
-        agn_p_skirtor: float = 1.0,
-        agn_q_skirtor: float = 1.0,
-        agn_oa_skirtor: float = 40.0,
-        agn_radius_ratio: float = 20.0,
-        agn_cos_inc: float = 0.86602540378443864,  # cos(30°)
-    ) -> jnp.ndarray:
-        r"""Wavelength-dependent disc attenuation factor at chosen i.
 
-        Returns ``SKIRTOR.disk(i) / SKIRTOR.disk(i=0)`` interpolated to
-        the requested wavelength grid.
-        """
-        point_i = (
-            agn_tau_skirtor,
-            agn_p_skirtor,
-            agn_q_skirtor,
-            agn_oa_skirtor,
-            agn_radius_ratio,
-            agn_cos_inc,
-        )
-        point_face = (
-            agn_tau_skirtor,
-            agn_p_skirtor,
-            agn_q_skirtor,
-            agn_oa_skirtor,
-            agn_radius_ratio,
-            1.0,  # cos_inc = 1 = face-on
-        )
-        disk_at_i = interp_nd_triweight(
-            disk_grid, axes, edges, _match_point_to_axes(point_i, axes)
-        )
-        disk_at_face = interp_nd_triweight(
-            disk_grid, axes, edges, _match_point_to_axes(point_face, axes)
-        )
-        # Safe ratio: where face-on is zero (shouldn't be, but be safe),
-        # return 0 attenuation (no contribution).
-        ratio_template = jnp.where(
-            disk_at_face > 1e-30,
-            disk_at_i / jnp.maximum(disk_at_face, 1e-30),
-            0.0,
-        )
-        # Interpolate to user wave grid; clip to [0, 1.5] so numerical
-        # noise can't introduce un-physically large amplifications
-        # (face-on baseline is the maximum disc visibility).
-        ratio = resample_template(wavelength, wave_grid, ratio_template, left=1.0, right=1.0)
-        return jnp.clip(ratio, 0.0, 1.5)
+def skirtor_disc_attenuation_from_grid(
+    grid: SKIRTORDiscAttenGrid | None,
+    wavelength: jnp.ndarray,
+    agn_tau_skirtor: float = 7.0,
+    agn_p_skirtor: float = 1.0,
+    agn_q_skirtor: float = 1.0,
+    agn_oa_skirtor: float = 40.0,
+    agn_radius_ratio: float = 20.0,
+    agn_cos_inc: float = 0.86602540378443864,  # cos(30 deg)
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""Wavelength-dependent disc attenuation factor at a chosen inclination.
 
-    return disc_attenuation
+    Returns ``SKIRTOR.disk(i) / SKIRTOR.disk(i=0)`` interpolated onto the
+    requested wavelength grid.
+
+    Parameters
+    ----------
+    grid : SKIRTORDiscAttenGrid or None
+        Disc-column template arrays, passed as an **argument** so they thread
+        through JIT. ``None`` (a v2 grid, which carries no separate disc
+        column) yields identity attenuation.
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor, agn_oa_skirtor, \
+agn_radius_ratio, agn_cos_inc : float, optional
+        SKIRTOR grid coordinates.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Attenuation factor, clipped to ``[0, 1.5]`` [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes — the triweight kernel is
+    C2-continuous.
+    """
+    if grid is None:
+        return jnp.ones_like(jnp.asarray(wavelength))
+
+    disk_grid = jnp.asarray(grid.disk)
+    wave_grid = jnp.asarray(grid.wave_grid)
+    axes = tuple(jnp.asarray(a) for a in grid.axes)
+    edges = tuple(jnp.asarray(e) for e in grid.edges)
+
+    point_i = (
+        agn_tau_skirtor,
+        agn_p_skirtor,
+        agn_q_skirtor,
+        agn_oa_skirtor,
+        agn_radius_ratio,
+        agn_cos_inc,
+    )
+    point_face = (
+        agn_tau_skirtor,
+        agn_p_skirtor,
+        agn_q_skirtor,
+        agn_oa_skirtor,
+        agn_radius_ratio,
+        1.0,  # cos_inc = 1 = face-on
+    )
+    disk_at_i = interp_nd_triweight(disk_grid, axes, edges, _match_point_to_axes(point_i, axes))
+    disk_at_face = interp_nd_triweight(
+        disk_grid, axes, edges, _match_point_to_axes(point_face, axes)
+    )
+    # Safe ratio: where face-on is zero (shouldn't be, but be safe),
+    # return 0 attenuation (no contribution).
+    ratio_template = jnp.where(
+        disk_at_face > 1e-30,
+        disk_at_i / jnp.maximum(disk_at_face, 1e-30),
+        0.0,
+    )
+    # Interpolate to user wave grid; clip to [0, 1.5] so numerical noise can't
+    # introduce un-physically large amplifications (face-on baseline is the
+    # maximum disc visibility).
+    ratio = resample_template(wavelength, wave_grid, ratio_template, left=1.0, right=1.0)
+    return jnp.clip(ratio, 0.0, 1.5)
 
 
 @functools.cache
@@ -1046,14 +1108,46 @@ def _load_skirtor_disc_attenuation():
     return create_skirtor_disc_attenuation_from_grid(path)
 
 
-def skirtor_disc_attenuation(*args, **kwargs):
+@functools.cache
+def load_skirtor_disc_atten_grid() -> SKIRTORDiscAttenGrid | None:
+    """Load the packaged SKIRTOR disc-column arrays (discovery + cache).
+
+    This is the ``template_loader`` the SKIRTOR-attenuated disc block
+    registers, so the forward model can hoist the ~10 MB disc cube out of
+    the JIT trace.
+
+    Returns
+    -------
+    SKIRTORDiscAttenGrid or None
+        ``None`` for a v2 grid, which carries no separate disc column —
+        the attenuation is then identity.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no SKIRTOR grid is present on disk.
+    """
+    raw = _load_grid_arrays(_find_skirtor_grid())
+    if "disk" not in raw:
+        return None
+    return _disc_atten_bundle(raw)
+
+
+def skirtor_disc_attenuation(*args, _template: SKIRTORDiscAttenGrid | None = None, **kwargs):
     r"""SKIRTOR inclination-dependent disc attenuation factor (auto-loaded).
 
-    Wraps :func:`_load_skirtor_disc_attenuation`. Identity-1.0 when the
-    v3 disc grid is unavailable (v2 fallback). See
-    :func:`create_skirtor_disc_attenuation_from_grid` for the signature
-    and physics.
+    Identity-1.0 when the v3 disc grid is unavailable (v2 fallback). See
+    :func:`skirtor_disc_attenuation_from_grid` for the signature and physics.
+
+    Parameters
+    ----------
+    _template : SKIRTORDiscAttenGrid, optional
+        Pre-loaded disc arrays, threaded in as a JIT argument by the forward
+        model. When ``None`` (default) the grid is loaded from disk and — if
+        this call happens under trace — baked into the graph as constants.
     """
+    if _template is not None:
+        return skirtor_disc_attenuation_from_grid(_template, *args, **kwargs)
     return _load_skirtor_disc_attenuation()(*args, **kwargs)
 
 

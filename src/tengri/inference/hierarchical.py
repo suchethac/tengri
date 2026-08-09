@@ -307,7 +307,7 @@ class PopulationPosterior:
 
         Notes
         -----
-        Reuses :func:`tengri.analysis.diagnostics.rhat` and
+        Reuses :func:`tengri.analysis.diagnostics.autocorrelation.rhat` and
         :func:`tengri.analysis.diagnostics.effective_sample_size`. Static
         (zero-variance) parameters are dropped silently.
 
@@ -640,6 +640,10 @@ class PopulationFitter:
             - ``"mcmc_nuts"``, ``"mcmc_hmc"``, ``"mcmc_dynamic_hmc"`` — NUTS /
               static-leapfrog HMC / dynamic trajectory-length HMC on the flat
               vector.
+            - ``"mcmc_ess"`` — elliptical slice sampling, gradient-free. The
+              flat parameterization's prior is exactly the iid N(0,1) the ESS
+              ellipse assumes, so its one structural requirement holds by
+              construction; no step size or warmup exists to tune.
             - ``"mcmc_ghmc"`` — generalized (persistent-momentum) HMC;
               tier="broken" ([POOR MIXING] on the single-galaxy benchmarks),
               requires ``allow_unvalidated=True``. Always uses a diagonal mass
@@ -647,7 +651,7 @@ class PopulationFitter:
             - ``"map"`` — Adam MAP on the flat vector.
             - ``"pathfinder"`` — tier="broken" (OOM-killed the process on a
               measured 2-galaxy problem); requires ``allow_unvalidated=True``.
-            - ``"mcmc_ess"``, ``"mcmc_mclmc"``, ``"mcmc_adjusted_mclmc"``,
+            - ``"mcmc_mclmc"``, ``"mcmc_adjusted_mclmc"``,
               ``"laplace"`` — refused with ``NotImplementedError`` and a
               per-name reason (see
               :data:`~tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED`):

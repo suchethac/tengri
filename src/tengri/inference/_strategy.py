@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Inference-backend introspection helpers.
 
-Mirrors the role of :mod:`tengri.forward._kernels.strategy` (ADR-0004) on
-the inference side:
+Mirrors the role the forward-model kernel-strategy module played (ADR-0004)
+on the inference side. That module has since been removed — ``tengri.
+KernelStrategy`` is now a tombstone object — so it is named here as history
+rather than cross-referenced:
 
 - :class:`BackendStatus` makes the difference between *missing optional
   dep*, *incompatible with the given spec*, and *ready to run* legible —

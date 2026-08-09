@@ -6,8 +6,8 @@
 with them but because the only flat-vector formulation lived *inside*
 ``_run_raytrace`` as a set of closures, reachable by exactly one sampler.
 
-This seam drives the NUTS / HMC / dynamic-HMC / GHMC / MAP / pathfinder
-family. Every other registered name is either driven by ``PopulationFitter``'s
+This seam drives the NUTS / HMC / dynamic-HMC / GHMC / elliptical-slice /
+MAP / pathfinder family. Every other registered name is either driven by ``PopulationFitter``'s
 own runners or refused with a stated reason — see :data:`FLAT_UNSUPPORTED`. A
 name is driven here only when the driver runs the algorithm the name promises;
 a stand-in (the first draft ran plain HMC under five distinct-algorithm names)
@@ -78,14 +78,17 @@ __all__ = ["FLAT_SAMPLERS", "FlatProblem", "build_flat_problem", "run_flat_sampl
 #: HMC, GHMC, MCLMC, adjusted MCLMC) onto the plain static-leapfrog ``"hmc"``
 #: driver and ``laplace`` onto the bare ``"map"`` point estimate — the result's
 #: diagnostics recorded the requested name while a different algorithm ran.
-#: Dynamic HMC and GHMC have since gained their real ``_shared.py`` full-scan
-#: drivers and rejoined; the rest live in :data:`FLAT_UNSUPPORTED` until their
-#: real drivers are wired.
+#: Dynamic HMC, GHMC and elliptical slice have since gained their real
+#: ``_shared.py`` full-scan drivers and rejoined; the rest live in
+#: :data:`FLAT_UNSUPPORTED` until their real drivers are wired.
 FLAT_SAMPLERS: dict[str, str] = {
     "mcmc_nuts": "nuts",
     "mcmc_hmc": "hmc",
     "mcmc_dynamic_hmc": "dynamic_hmc",
     "mcmc_ghmc": "ghmc",
+    # The flat prior is exactly the iid N(0,1) the ESS ellipse assumes, so
+    # the sampler's one structural requirement holds by construction here.
+    "mcmc_ess": "ess",
     # Pinned to NUTS, unlike the single-galaxy auto-pick (NUTS for low-D,
     # raytrace above D~20): hierarchical D grows with the catalog, and at that
     # D raytrace degenerates and raises DegenerateChainError by design
@@ -109,15 +112,6 @@ FLAT_UNSUPPORTED: dict[str, str] = {
         "silently truncated -- and therefore biased -- sample set. The prior "
         "transform this seam provides is exact and correct; what is missing is "
         "the sampler on top of it. See #1429."
-    ),
-    "mcmc_ess": (
-        "elliptical slice sampling has no driver at this seam yet. The flat "
-        "problem is tailor-made for it -- the prior is exactly iid N(0,1), "
-        "which is the ellipse ESS needs (see backends/mcmc/elliptical_slice.py "
-        "for the single-galaxy driver to adapt, honoring the data_args "
-        "compile-reuse contract). Running the static-leapfrog HMC driver under "
-        "this name instead would be silent substitution. Use mcmc_nuts or "
-        "mcmc_hmc hierarchically, or run ESS per-galaxy through Fitter."
     ),
     "mcmc_mclmc": (
         "microcanonical Langevin MC needs its own (L, step size) adaptation, "
@@ -189,6 +183,11 @@ class FlatProblem:
     #: ``(flat, data_args) -> scalar``. The form samplers must use: with the data
     #: supplied as a traced argument, one compiled program serves every catalog.
     log_prob_with_data: Callable | None = None
+    #: ``(flat, data_args) -> scalar``. The LIKELIHOOD alone in the same
+    #: data-as-argument form — for samplers that handle the prior themselves
+    #: (elliptical slice encodes the exact N(0,1) prior in its ellipse; handing
+    #: it ``log_prob_with_data`` would double-count the prior).
+    log_likelihood_with_data: Callable | None = None
 
 
 def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_steps=80):
@@ -385,6 +384,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         extract_shared=extract_shared,
         data_args=_data_args,
         log_prob_with_data=log_prob_with_data,
+        log_likelihood_with_data=log_likelihood_with_data,
     )
 
 
@@ -420,6 +420,9 @@ def run_flat_sampler(
     key : PRNGKey
     n_warmup, n_burnin, n_samples : int
         Window adaptation / discarded / retained chain lengths (MCMC drivers).
+        The ``ess`` driver has no warmup — its exact-prior ellipse needs no
+        tuning, so ``n_warmup`` and the HMC-family knobs below are ignored
+        there; only ``n_burnin`` / ``n_samples`` apply.
     n_leapfrog : int
         Leapfrog steps per HMC proposal.
     max_num_doublings : int
@@ -594,6 +597,25 @@ def run_flat_sampler(
             "step_size": float(step_size),
             "divergent": int(jnp.sum(divergent[n_burnin:])),
             "n_warmup": n_warmup,
+        }
+
+    elif driver == "ess":
+        from tengri.inference.backends.mcmc._shared import _ess_full_scan
+
+        n_chain = n_burnin + n_samples
+        chain_keys = jax.random.split(key_run, n_chain)
+        positions, subiters = _ess_full_scan(
+            prob.init_flat,
+            chain_keys,
+            prob.log_likelihood_with_data,
+            data_args,
+        )
+        chain = positions[n_burnin:]
+        # No step size, no divergences: the exact-prior ellipse accepts by
+        # construction. Subiterations are ESS's only knob-free diagnostic.
+        extra = {
+            "mean_subiter": float(jnp.mean(subiters[n_burnin:])),
+            "n_burnin": n_burnin,
         }
 
     elif driver == "map":

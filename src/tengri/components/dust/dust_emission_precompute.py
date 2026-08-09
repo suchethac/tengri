@@ -506,7 +506,7 @@ def precompute_draine2021_pah_photometry(
         Source redshift; defaults to rest-frame photometry.
     starlight, ionization, size_distribution, slab :
         Categorical PAHspec axes to slice.  See
-        :class:`tengri.components.dust.draine2021_pah_component.Draine2021PAHConfig`
+        :class:`tengri.components.dust.Draine2021PAHIRConfig`
         for valid values.
 
     Returns
@@ -1090,75 +1090,6 @@ def precompute(
         units=units,
     )
     return _auto_collapse(preint, AXIS_PARAMS.get(model_name, ()), parameters)
-
-
-def extract_grid_arrays(preint, *, model_name: str) -> tuple | None:
-    """Extract JIT-traceable grid arrays from a precompute result.
-
-    Returns a tuple of arrays that can be passed as grid_arrays_traced
-    to the corresponding build_*_lookup function. Used to thread IR
-    template grids through the JIT boundary as runtime inputs rather
-    than closure-captured constants.
-
-    Parameters
-    ----------
-    preint : dict or PreintegratedGrid
-        Precomputed photometry grid from ``precompute()``.
-    model_name : str
-        Dust model identifier.
-
-    Returns
-    -------
-    tuple or None
-        Tuple of arrays in model-specific order, or None if not applicable.
-
-    Notes
-    -----
-    **JIT-compatible**: no — returns arrays for factory-time use.
-
-    **Gradient-safe**: no — used at model initialization time.
-    """
-    if model_name in ("draine_li2007", "dl07"):
-        return (
-            jnp.asarray(preint["single_u_phot"]),
-            jnp.asarray(preint["powerlaw_phot"]),
-            jnp.asarray(preint["umin_grid"]),
-            jnp.asarray(preint["qpah_grid"]),
-        )
-    if model_name == "astrodust":
-        return (
-            jnp.asarray(preint["single_u_phot"]),
-            jnp.asarray(preint["powerlaw_phot"]),
-            jnp.asarray(preint["q_grid"]),
-            jnp.asarray(preint["umin_grid"]),
-        )
-    if model_name == "themis":
-        return (
-            jnp.asarray(preint["single_u_phot"]),
-            jnp.asarray(preint["powerlaw_phot"]),
-            jnp.asarray(preint["q_grid"]),
-            jnp.asarray(preint["umin_grid"]),
-        )
-    if model_name == "draine_li2014":
-        return (
-            jnp.asarray(preint["single_u_phot"]),
-            jnp.asarray(preint["powerlaw_phot"]),
-            jnp.asarray(preint["qpah_grid"]),
-            jnp.asarray(preint["umin_grid"]),
-            jnp.asarray(preint["alpha_grid"]),
-        )
-    if model_name == "bosa":
-        return (
-            jnp.asarray(preint["phot"]),
-            jnp.asarray(preint["log_ltir_grid"]),
-            jnp.asarray(preint["log_ssfr_grid"]),
-        )
-    if model_name == "dale2014":
-        return (
-            jnp.asarray(preint["phot"]),
-            jnp.asarray(preint["alpha_grid"]),
-        )
-    return None
 
 
 def build_lookup(preint, *, model_name: str):

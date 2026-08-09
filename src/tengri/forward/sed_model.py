@@ -71,10 +71,6 @@ from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import ParameterMapError
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.approx_policy import BAND_PROJECTION_KEYS, ApproxPolicy
-from tengri.forward.pipeline import (
-    interp_metallicity,
-    interp_metallicity_evolving,
-)
 from tengri.forward.sed_model_types import (
     MockData,
     PriorPredictive,
@@ -2710,7 +2706,7 @@ class SEDModel:
     def _get_internal_params(self, params):
         """Translate public param dict to internal names with unit conversion.
 
-        Thin wrapper around :func:`tengri._param_translate.get_internal_params`.
+        Thin wrapper around :func:`tengri.parameters.translate.get_internal_params`.
         """
         return get_internal_params(params, self._param_map, self.spec, self._uses_stochastic_sfh)
 
@@ -8087,14 +8083,6 @@ class SEDModel:
             Age of universe in Gyr.
         """
         return age_at_z(z)
-
-    def _interp_metallicity(self, log_z):
-        """Dispatch metallicity interpolation (single Z value)."""
-        return interp_metallicity(self, log_z)
-
-    def _interp_metallicity_evolving(self, log_z_per_age):
-        """Dispatch evolving metallicity interpolation (per-age Z)."""
-        return interp_metallicity_evolving(self, log_z_per_age)
 
     def _method_recommendation(self) -> tuple[str, str]:
         """Return (method_name, reason) for the recommended inference method."""

@@ -289,7 +289,7 @@ def refuse_if_broken(method: str, *, allow_unvalidated: bool = False) -> None:
     Unknown names return silently: name validation belongs to
     ``resolve_method``, and a hierarchical method can legitimately have no
     registry entry — ``evi_nifty`` is dispatched by
-    :func:`~tengri.inference.hierarchical.fit_hierarchical` but registered
+    :func:`~tengri.inference.hierarchical.PopulationFitter` but registered
     nowhere. Raising here would turn a missing registration into a broken
     user call.
 
@@ -369,6 +369,103 @@ def check_capabilities(entry: BackendEntry, kwargs: dict) -> None:
             f"Backends that do: {capable}. "
             f"Drop the argument, or choose one of those methods."
         )
+
+
+def check_unknown_kwargs(entry: BackendEntry, kwargs: dict) -> None:
+    """Refuse a kwarg the backend's runner does not declare.
+
+    :func:`check_capabilities` gives this answer for the handful of *declared
+    capability* kwargs. This gives it for every other unknown name, which
+    otherwise traveled all the way into the runner and surfaced as
+    ``TypeError: run_map() got an unexpected keyword argument 'lines'`` --
+    naming a function the caller never mentioned, inside a backend they did
+    not choose (#1469).
+
+    The check sits at the dispatch seam, so every fit surface that forwards
+    ``**kwargs`` -- ``SEDModel.fit``, ``ForwardModel.fit``, ``Catalog.fit`` --
+    is covered by one rule rather than each growing its own validation.
+
+    Parameters
+    ----------
+    entry : BackendEntry
+        The backend about to be dispatched.
+    kwargs : dict
+        Keyword arguments destined for ``entry.runner``.
+
+    Raises
+    ------
+    TypeError
+        If ``kwargs`` carries a name the runner cannot accept.
+
+        This raised ``ValueError`` when the check landed, on the grounds that
+        "the caller never called that runner". The concrete harm that argued
+        against ``TypeError`` was the *message* — ``run_map() got an
+        unexpected keyword argument 'lines'`` names an internal function the
+        caller never chose (#1469) — and rewriting the message already fixed
+        that; the exception *type* was never what caused the confusion.
+
+        Meanwhile the type is what callers catch, and the same user mistake
+        raises ``TypeError`` everywhere else: from Python itself, and from
+        ``SEDModel.build`` for a kwarg it does not take. Two types for one
+        mistake is the inconsistency, so this is ``TypeError`` and #1378's
+        regression test — which pins exactly that — passes again.
+
+    Notes
+    -----
+    Runners that declare ``**kwargs`` are skipped -- they accept anything, so
+    there is nothing to reject. Capability names are let through because
+    :func:`check_capabilities` has already vetted them.
+
+    The accepted list is read off the live signature, so it cannot drift from
+    what the backend actually takes. Advice that its own caller would refuse
+    is the failure in #1576.
+    """
+    import difflib
+    import inspect
+
+    try:
+        params = inspect.signature(entry.runner).parameters
+    except (TypeError, ValueError):  # pragma: no cover - unintrospectable runner
+        return
+
+    if any(p.kind is p.VAR_KEYWORD for p in params.values()):
+        return
+
+    # The first parameter is the dispatch target (``context`` or ``fitter``,
+    # depending on ``legacy_fitter``) and is always passed positionally.
+    names = list(params)
+    accepted = {
+        name for name, p in params.items() if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY)
+    }
+    accepted -= {names[0]} if names else set()
+    accepted -= {"key", "init_from"}
+    accepted |= set(_CAPABILITY_FIELDS)
+
+    unknown = sorted(k for k in kwargs if k not in accepted)
+    if not unknown:
+        return
+
+    offered = sorted(accepted - set(_CAPABILITY_FIELDS))
+    hints = []
+    for name in unknown:
+        close = difflib.get_close_matches(name, offered, n=1, cutoff=0.6)
+        if close:
+            hints.append(f"{name} -> {close[0]}")
+    hint_str = f" Did you mean: {', '.join(hints)}?" if hints else ""
+
+    # TypeError, not ValueError: this is "the callable does not take that
+    # keyword", which is what Python raises for the same mistake, and what
+    # the rest of tengri already raises for a kwarg `SEDModel.build` refuses.
+    # #1378's regression test pins it — a misspelled fit option must fail the
+    # same way whether the rejection comes from Python or from this check.
+    raise TypeError(
+        f"Inference method '{entry.name}' does not accept {unknown}. "
+        f"It takes: {offered}.{hint_str} "
+        "Arguments that are not fit options belong to the model or the data, "
+        "not to fit() -- emission lines, for example, are supplied when the "
+        "problem is built (Data(lines=...) for one galaxy, "
+        "Catalog(line_cols=...) for a catalog)."
+    )
 
 
 def lookup_backend(name: str) -> BackendEntry | None:
