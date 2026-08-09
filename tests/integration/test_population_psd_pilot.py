@@ -26,7 +26,23 @@ jax.config.update("jax_enable_x64", True)
 
 # ── Skip guard ─────────────────────────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-_SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+
+#: Bare-stellar, because the recipe below needs it (#1579).
+#:
+#: This read the wNE grid, whose nebular continuum and lines are baked into
+#: the templates, while ``recipes.stochastic_sfh_jwst()`` selects the Cue
+#: backend -- whose docstring states "SSP requirement: bare-stellar" and which
+#: raises ``CueWNESSPError`` on a flagged grid. The fit therefore added Cue's
+#: nebular emission on top of emission the templates already contained, so
+#: every quantity it produced was measured on a model tengri refuses to build
+#: in production.
+#:
+#: It ran only because ``tests/conftest.py`` set ``TENGRI_ALLOW_WNE_CUE=1``
+#: suite-wide for the *synthetic* fixtures' unphysical Q_H, and that one
+#: switch also disabled the metadata check. The switch is now heuristic-only,
+#: so this pairing fails loudly rather than fitting quietly. Both grids are
+#: committed, so the skip guard reaches the same environments as before.
+_SSP_FILE = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 _SSP_EXISTS = _SSP_FILE.is_file()
 
 pytestmark = pytest.mark.skipif(not _SSP_EXISTS, reason=f"SSP file not found: {_SSP_FILE}")

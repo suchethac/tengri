@@ -112,8 +112,68 @@ def test_cue_refuses_flagged_ssp(monkeypatch):
         CueBackend(str(weights), ssp_data=_synthetic_ssp("included"))
 
 
+def test_flag_refusal_survives_the_heuristic_bypass(monkeypatch):
+    """``TENGRI_ALLOW_WNE_CUE`` downgrades the Q_H heuristic, never the flag (#1579).
+
+    The two checks in ``_precompute_ionizing_params`` differ in kind. The
+    ``nebular`` flag is a *declaration* read from the ``nebular_included``
+    HDF5 attribute or the wNE filename — it has no false-positive mode. The
+    Q_H band is a *heuristic* whose false positives are routine: the
+    synthetic SSP fixtures are unphysical by construction (young-bin
+    log Q_H ~ 62), which is the only reason ``tests/conftest.py`` sets the
+    bypass suite-wide.
+
+    One switch over both meant that accommodation silently licensed real
+    wNE grids too, and ``test_population_psd_pilot.py`` fit a
+    double-counted nebular model for it.
+    """
+    pytest.importorskip("h5py")
+    weights = Path("data/cue_weights.npz")
+    if not weights.exists():
+        pytest.skip("cue weights not available")
+    from tengri.components.nebular.cue import CueBackend, CueWNESSPError
+
+    monkeypatch.setenv("TENGRI_ALLOW_WNE_CUE", "1")
+    with pytest.raises(CueWNESSPError, match="nebular-included"):
+        CueBackend(str(weights), ssp_data=_synthetic_ssp("included"))
+
+
+def test_heuristic_stays_bypassable(monkeypatch):
+    """The narrowing must not remove the escape hatch the fixtures depend on (#1579).
+
+    Companion to the test above: an *unflagged* grid whose Q_H lands outside
+    the band is a suspicion, not a declaration, so the bypass must still
+    downgrade it to a warning. Without this, "narrowed the guard" would be
+    indistinguishable from "deleted the escape hatch" and the ~20 structural
+    Cue tests on the synthetic fixture would go red.
+    """
+    pytest.importorskip("h5py")
+    weights = Path("data/cue_weights.npz")
+    if not weights.exists():
+        pytest.skip("cue weights not available")
+    from tengri.components.nebular.cue import CueBackend, CueWNESSPError, CueWNESSPWarning
+
+    unflagged = _synthetic_ssp("bare")
+
+    # The arm must genuinely trip the heuristic, or the bypass below proves
+    # nothing: a grid that never triggers the check passes either way.
+    monkeypatch.delenv("TENGRI_ALLOW_WNE_CUE", raising=False)
+    with pytest.raises(CueWNESSPError, match="log10"):
+        CueBackend(str(weights), ssp_data=unflagged)
+
+    monkeypatch.setenv("TENGRI_ALLOW_WNE_CUE", "1")
+    with pytest.warns(CueWNESSPWarning):
+        CueBackend(str(weights), ssp_data=unflagged)
+
+
 def test_cloudy_refuses_flagged_ssp(monkeypatch):
-    """CloudyGridBackend must refuse a nebular-included grid the same way."""
+    """CloudyGridBackend must refuse a nebular-included grid, bypass set or not.
+
+    The second arm mirrors ``test_flag_refusal_survives_the_heuristic_bypass``
+    (#1579): ``TENGRI_ALLOW_WNE_CLOUDY_GRID`` covers this backend's Q_H
+    heuristic, which has routine false positives, not the metadata
+    declaration, which has none.
+    """
     grid = Path("data/cloudy_grid_mist.h5")
     if not grid.exists():
         pytest.skip("cloudy grid not available")
@@ -123,6 +183,10 @@ def test_cloudy_refuses_flagged_ssp(monkeypatch):
     )
 
     monkeypatch.delenv("TENGRI_ALLOW_WNE_CLOUDY_GRID", raising=False)
+    with pytest.raises(CloudyGridWNESSPError, match="nebular-included"):
+        CloudyGridBackend(str(grid), ssp_data=_synthetic_ssp("included"))
+
+    monkeypatch.setenv("TENGRI_ALLOW_WNE_CLOUDY_GRID", "1")
     with pytest.raises(CloudyGridWNESSPError, match="nebular-included"):
         CloudyGridBackend(str(grid), ssp_data=_synthetic_ssp("included"))
 

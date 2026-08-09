@@ -35,7 +35,15 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 _DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-_SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+
+# Bare-stellar, because `recipes.stochastic_sfh_jwst()` below selects the Cue
+# nebular backend, whose docstring states "SSP requirement: bare-stellar".
+# This defaulted to the wNE grid -- nebular already baked into the templates --
+# so the sweep added Cue's emission on top of emission that was already there.
+# Inherited from test_population_psd_pilot.py when #1543 extracted the sweep;
+# both are fixed under #1579, which also stopped TENGRI_ALLOW_WNE_CUE from
+# disabling the metadata check that would otherwise have refused this.
+_SSP_FILE = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 
 # Nominal interim bounds; widths below are multiples of these spans.
 NOMINAL_SIGMA = (0.01, 1.0)

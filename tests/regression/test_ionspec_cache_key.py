@@ -11,8 +11,11 @@ process loaded first silently supplied the ionizing spectrum for the other.
 The poison also reaches disk, under a filename hashed from the same colliding key, so it
 outlives the process — on CI and on a laptop — until someone clears the cache. When the
 wNE table wins the race, a bare model's Q_H is wrong by 4–7 dex, and the guard that
-exists for exactly that (``CueWNESSPError``) is disarmed suite-wide by conftest's
-``TENGRI_ALLOW_WNE_CUE=1``.
+exists for exactly that (``CueWNESSPError``) cannot catch it: the model under fit is the
+*bare* one, so only the Q_H heuristic branch could fire, and that branch is still
+downgraded suite-wide by conftest's ``TENGRI_ALLOW_WNE_CUE=1``. (#1579 narrowed that
+switch to the heuristic — the metadata branch is now unbypassable — which does not help
+here, because an unflagged grid was never reaching the metadata branch.)
 
 **What this bug is NOT.** The first version of this docstring claimed the collision was
 the cause of #1154 (fast-vs-exact photometry drifting 20.9%). It is not, and the way that
