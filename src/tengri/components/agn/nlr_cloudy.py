@@ -326,12 +326,25 @@ def get_cue_agn_backend(weights_path: str | None = None):
     ------
     FileNotFoundError
         If the weights file does not exist at the resolved path.
+
+    Notes
+    -----
+    Construction runs inside ``jax.ensure_compile_time_eval()``. Without it,
+    a backend first built *inside* a JIT trace captures ``DynamicJaxprTracer``
+    values, and because it is cached in a module-level global that poisoned
+    instance outlives the trace — every later out-of-trace call then raises
+    ``UnexpectedTracerError``. Whoever traces a Cue-NLR model first decides
+    whether the rest of the process works, which makes the failure depend on
+    execution order. Same defect class as the GRAHSP template cache (#1462).
     """
     global _CUE_AGN_BACKEND
     if weights_path is not None or _CUE_AGN_BACKEND is None:
+        import jax
+
         from tengri.components.nebular.cue import CueBackend
 
-        _CUE_AGN_BACKEND = CueBackend(weights_path or _DEFAULT_CUE_WEIGHTS_PATH)
+        with jax.ensure_compile_time_eval():
+            _CUE_AGN_BACKEND = CueBackend(weights_path or _DEFAULT_CUE_WEIGHTS_PATH)
     return _CUE_AGN_BACKEND
 
 
