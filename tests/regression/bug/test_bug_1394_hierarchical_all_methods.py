@@ -139,13 +139,16 @@ def test_no_method_is_silently_substituted_for_another():
     # addition here is welcome exactly when its real driver is wired — edit
     # this set in the same commit as the wiring, never before.
     # mcmc_dynamic_hmc and mcmc_ghmc joined when the seam gained their real
-    # _shared.py full-scan drivers (they spent one commit refused, wired next).
+    # _shared.py full-scan drivers (they spent one commit refused, wired next);
+    # mcmc_ess followed once _ess_full_scan existed — the flat prior is exactly
+    # the iid N(0,1) its ellipse assumes.
     assert set(FLAT_SAMPLERS) == {
         "mcmc",
         "mcmc_nuts",
         "mcmc_hmc",
         "mcmc_dynamic_hmc",
         "mcmc_ghmc",
+        "mcmc_ess",
         "map",
         "pathfinder",
     }, (
@@ -154,7 +157,6 @@ def test_no_method_is_silently_substituted_for_another():
     )
 
     substituted = {
-        "mcmc_ess",
         "mcmc_mclmc",
         "mcmc_adjusted_mclmc",
         "laplace",
@@ -262,9 +264,16 @@ def test_every_flat_sampler_names_a_real_backend_and_driver(name):
     """No entry may name a backend that does not exist or a driver that is not implemented."""
     assert name in _BACKENDS, f"{name!r} is in FLAT_SAMPLERS but not registered"
     driver = FLAT_SAMPLERS[name]
-    assert driver in {"nuts", "hmc", "dynamic_hmc", "ghmc", "nuts_pathfinder", "map", "nss"}, (
-        f"{name!r} declares unknown driver {driver!r}"
-    )
+    assert driver in {
+        "nuts",
+        "hmc",
+        "dynamic_hmc",
+        "ghmc",
+        "ess",
+        "nuts_pathfinder",
+        "map",
+        "nss",
+    }, f"{name!r} declares unknown driver {driver!r}"
 
 
 def test_flat_problem_exposes_a_separable_posterior():
