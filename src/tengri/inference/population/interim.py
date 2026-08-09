@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import gc
+import logging
 import time
 from typing import Any, NamedTuple
 
@@ -12,6 +13,8 @@ import numpy as np
 from tengri.inference.population.reconstruct import centered_fields
 
 __all__ = ["InterimResult", "fit_interim"]
+
+logger = logging.getLogger(__name__)
 
 
 class InterimResult(NamedTuple):
@@ -290,14 +293,6 @@ def fit_interim(
     sigma_stacked = np.stack(all_sigma, axis=0)
     tau_yr_stacked = np.stack(all_tau_myr, axis=0) * 1e6
 
-    # DEBUG: Print shapes before centered_fields
-    print("[DEBUG] Before centered_fields:")
-    print(f"  xi_stacked.shape = {xi_stacked.shape} (expect (N, K, 16))")
-    print(f"  sigma_stacked.shape = {sigma_stacked.shape} (expect (N, K))")
-    print(f"  tau_yr_stacked.shape = {tau_yr_stacked.shape} (expect (N, K))")
-    print(f"  log_age_grid.shape = {log_age_grid.shape} (expect (16,))")
-    print(f"  log_age_grid last value: {log_age_grid[-1]}")
-
     # Thin the chains before reconstructing fields.
     #
     # The estimator materializes a (n_nodes, N, K) table: at 60x60 nodes, N=12
@@ -309,10 +304,18 @@ def fit_interim(
     # discards mostly redundant information while cutting the table 8x. Monte
     # Carlo error scales with ESS, not with the raw sample count.
     if thin > 1:
+        n_draws_before = xi_stacked.shape[1]
         xi_stacked = xi_stacked[:, ::thin, :]
         sigma_stacked = sigma_stacked[:, ::thin]
         tau_yr_stacked = tau_yr_stacked[:, ::thin]
-        print(f"  thinned by {thin}: K {xi_stacked.shape[1] * thin} -> {xi_stacked.shape[1]}")
+        # Reported because it changes the returned shape: callers asserting on
+        # `fields` see n_samples // thin draws, not n_samples (#1575).
+        logger.info(
+            "thinned by %d: %d -> %d draws per galaxy",
+            thin,
+            n_draws_before,
+            xi_stacked.shape[1],
+        )
 
     # Reconstruct centered fields
     fields_centered = centered_fields(

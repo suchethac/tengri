@@ -681,6 +681,18 @@ class Parameters:
                 _ebv_dist = self._distributions.get("agn_polar_ebv")
                 if _ebv_dist is not None and _ebv_dist.is_fixed:
                     recipe_params = {"agn_polar_ebv": float(_ebv_dist.value)}
+            # Rule 9 needs the range each parameter can actually take, not its
+            # value: a prior's bounds, or (v, v) for a fixed one. Every
+            # Distribution defines .bounds, so read it directly rather than
+            # behind a blanket except — a guard against a silent failure must
+            # not itself fail silently. A string-valued Fixed (a categorical
+            # choice) reports (None, None) and is skipped.
+            param_support: dict[str, tuple[float, float]] = {}
+            for _name, _dist in self._distributions.items():
+                _lo, _hi = _dist.bounds
+                if _lo is None or _hi is None:
+                    continue
+                param_support[_name] = (float(_lo), float(_hi))
             validate_block_recipe(
                 agn_disc_block=self.agn_disc_block,
                 agn_nlr_block=self.agn_nlr_block,
@@ -689,6 +701,7 @@ class Parameters:
                 agn_torus_block=self.agn_torus_block,
                 agn_attenuation_block=self.agn_attenuation_block,
                 params=recipe_params,
+                param_support=param_support,
             )
 
         # E fix (#846): the physical disc blocks (multicolor, kubota_done) now

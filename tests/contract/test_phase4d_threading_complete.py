@@ -4,11 +4,17 @@
 Tests for Category A (CB19/MAPPINGS wiring), Category B (dust IR template
 threading), and Category C (AGN SKIRTOR template threading).
 
-The contract:
-* Category A: CB19 and MAPPINGS nebular backends dispatch properly and their
-  grids are detected by _template_data_for_jit().
-* Category B: Dust IR emission templates thread through JIT as Parameters.
-* Category C: SKIRTOR torus templates thread through JIT as Parameters.
+What this file actually covers: backend dispatch and smoke-level JIT
+compilation for the CB19 / MAPPINGS nebular backends, dust IR emission, and
+the monolithic SKIRTOR model.
+
+It does **not** verify that any template threads as a ``Parameter`` rather
+than baking in as a ``Constant``, though its tests were once named and
+docstring'd as if it did — and stayed green while 31 MB of SKIRTOR grid baked
+into every graph (#1383, #1549). That invariant needs a jaxpr constant count
+taken on the surface where the template data is an argument; it lives in
+``test_agn_template_threading.py``. Do not re-add threading claims here
+without a measurement to back them.
 """
 
 from __future__ import annotations
@@ -16,7 +22,9 @@ from __future__ import annotations
 import pathlib
 import warnings
 
+import chex
 import jax
+import jax.numpy as jnp
 import pytest
 
 from tengri import Parameters, SEDModel
@@ -100,8 +108,13 @@ class TestCB19Wiring:
         # Verify that the spec accepts CB19 as a valid backend
         assert spec.nebular_backend == "cb19"
 
-    def test_cb19_template_detected_in_jit_inputs(self, ssp_bare, obs):
-        """CB19 backend grid is detected by _template_data_for_jit()."""
+    def test_cb19_backend_exposes_a_grid(self, ssp_bare, obs):
+        """The CB19 backend carries a ``.grid`` attribute.
+
+        Renamed from ``..._template_detected_in_jit_inputs``: the body never
+        called ``_template_data_for_jit()``, so the old name asserted a
+        threading property this test does not measure (#1549).
+        """
         try:
             from tengri.components.nebular.cloudy_cb19 import CB19Backend
 
@@ -134,8 +147,11 @@ class TestCB19Wiring:
 
         assert spec.nebular_backend == "mappings"
 
-    def test_mappings_template_detected_in_jit_inputs(self, ssp_bare, obs):
-        """MAPPINGS backend grid is detected by _template_data_for_jit()."""
+    def test_mappings_backend_exposes_a_grid(self, ssp_bare, obs):
+        """The MAPPINGS backend carries a ``.grid`` attribute.
+
+        Renamed for the same reason as the CB19 case above (#1549).
+        """
         try:
             from tengri.components.nebular.mappings_photo import MappingsPhotoStellarBackend
 
@@ -197,23 +213,17 @@ class TestDustIRTemplateThreading:
         except FileNotFoundError:
             pytest.skip("Dale2014 template not available")
 
-        # Get fixed params
         fixed_params = spec.get_fixed_values()
 
-        # Non-JIT path - just ensure it runs without error
-        try:
-            phot_non_jit = model.predict_photometry(fixed_params)
-            assert phot_non_jit is not None
-        except Exception as e:
-            pytest.fail(f"Non-JIT path failed: {e}")
+        phot_non_jit = model.predict_photometry(fixed_params)
+        phot_jit = jax.jit(lambda p: model.predict_photometry(p))(fixed_params)
 
-        # JIT path - ensure JIT compilation succeeds
-        try:
-            predict_jit = jax.jit(lambda p: model.predict_photometry(p))
-            phot_jit = predict_jit(fixed_params)
-            assert phot_jit is not None
-        except Exception as e:
-            pytest.fail(f"JIT path failed: {e}")
+        # The test's whole claim is agreement, so compare the two. It used to
+        # assert each was separately `not None` and never compare them, which
+        # would pass even if the JIT path returned different fluxes.
+        chex.assert_tree_all_finite(phot_non_jit)
+        assert float(jnp.max(jnp.abs(phot_non_jit))) > 0.0, "all-zero photometry proves nothing"
+        chex.assert_trees_all_close(phot_jit, phot_non_jit, rtol=1e-12, atol=0.0)
 
 
 # ── Category C: AGN SKIRTOR template threading ──────────────────────────────────
@@ -237,8 +247,18 @@ class TestAGNSKIRTORTemplateThreading:
         except (FileNotFoundError, ValueError) as e:
             pytest.skip(f"SKIRTOR grid not available or config issue: {e}")
 
-    def test_skirtor_template_jit_compatibility(self, ssp_wne, obs):
-        """SKIRTOR model JIT-compiles without baking templates into HLO."""
+    def test_skirtor_model_jit_compiles(self, ssp_wne, obs):
+        """The monolithic SKIRTOR model compiles under jit.
+
+        A smoke test, and named like one. It was previously called
+        ``..._jit_compatibility`` and docstring'd "without baking templates
+        into HLO" while asserting only ``result is not None`` — a property
+        true of any model that compiles at all. It stayed green through the
+        entire period in which 31 MB of SKIRTOR grid baked into every graph
+        (#1383). The invariant its old name claimed is now measured, on the
+        surface where it is falsifiable, in
+        ``test_agn_template_threading.py``.
+        """
         spec = _base_spec(
             agn_model="skirtor",
             agn_log_lbol=Fixed(45.0),
@@ -251,16 +271,14 @@ class TestAGNSKIRTORTemplateThreading:
         except (FileNotFoundError, ValueError):
             pytest.skip("SKIRTOR grid not available")
 
-        # JIT should compile without error
         fixed_vals = model.spec.get_fixed_values()
+        predict_jit = jax.jit(lambda p: model.predict_photometry(p))
+        result = predict_jit(fixed_vals)
 
-        try:
-            # Use predict_photometry instead of predict_observables
-            predict_jit = jax.jit(lambda p: model.predict_photometry(p))
-            result = predict_jit(fixed_vals)
-            assert result is not None
-        except Exception as e:
-            pytest.fail(f"SKIRTOR JIT failed: {e}")
+        # Assert something the compile actually has to produce: finite fluxes
+        # of the right shape, not merely "not None".
+        chex.assert_tree_all_finite(result)
+        assert result.shape == (len(obs.photometry.filters),)
 
 
 # ── Regression tests: Phase 4-B and 4-C still pass ─────────────────────────────

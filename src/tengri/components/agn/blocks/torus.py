@@ -17,18 +17,24 @@ import jax.numpy as jnp
 from jax import Array
 
 from tengri.components.agn.blocks._protocol import register_agn_block
-from tengri.components.agn.cat3d_wind import cat3d_wind_sed
+from tengri.components.agn.cat3d_wind import cat3d_wind_sed, load_cat3d_wind_default_grid
 from tengri.components.agn.disc_cigale import schartmann2005_disk_spectrum
-from tengri.components.agn.fritz import fritz_sed
-from tengri.components.agn.nenkova_agnfitter import nenkova_agnfitter_sed
+from tengri.components.agn.fritz import fritz_sed, load_fritz_default_grid
+from tengri.components.agn.nenkova_agnfitter import (
+    load_nenkova_agnfitter_default_grid,
+    nenkova_agnfitter_sed,
+)
 from tengri.components.agn.polar_dust import (
     anisotropic_polar_luminosity,
     polar_dust_emission,
     smc_extinction_curve,
 )
-from tengri.components.agn.silva04 import silva04_sed
-from tengri.components.agn.skirtor import skirtor_sed
-from tengri.components.agn.skirtor_agnfitter import skirtor_agnfitter_sed
+from tengri.components.agn.silva04 import load_silva04_default_grid, silva04_sed
+from tengri.components.agn.skirtor import SKIRTORBundle, load_skirtor_bundle, skirtor_sed
+from tengri.components.agn.skirtor_agnfitter import (
+    load_skirtor_agnfitter_default_grid,
+    skirtor_agnfitter_sed,
+)
 from tengri.components.agn.torus import nenkova_torus
 from tengri.utils.physics_constants import L_SUN
 
@@ -55,6 +61,7 @@ _L_SUN_ERG: float = L_SUN
     citation="Hönig & Kishimoto 2017, ApJ, 838, L20",
     status="production",
     short_doc="Hönig & Kishimoto 2017 CAT3D-wind torus",
+    template_loader=load_cat3d_wind_default_grid,
 )
 def cat3d_wind_torus_block(
     wavelength: Array,
@@ -65,6 +72,7 @@ def cat3d_wind_torus_block(
     agn_a_cat3d: float = -2.0,
     agn_fwd_cat3d: float = 1.0,
     agn_torus_frac: float = 0.5,
+    templates=None,
     **_params,
 ) -> Array:
     r"""Hönig & Kishimoto CAT3D-wind torus block.
@@ -84,6 +92,7 @@ def cat3d_wind_torus_block(
         agn_a_cat3d=agn_a_cat3d,
         agn_fwd_cat3d=agn_fwd_cat3d,
         agn_torus_frac=agn_torus_frac,
+        _template=templates,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 
@@ -94,6 +103,7 @@ def cat3d_wind_torus_block(
     citation="Fritz et al. 2006, A&A, 470, 221",
     status="production",
     short_doc="Fritz et al. 2006 smooth-dust torus",
+    template_loader=load_fritz_default_grid,
 )
 def fritz_torus_block(
     wavelength: Array,
@@ -107,6 +117,7 @@ def fritz_torus_block(
     agn_fritz_oa: float = 60.0,
     agn_fritz_psy: float = 0.001,
     agn_torus_frac: float = 0.5,
+    templates=None,
     **_params,
 ) -> Array:
     r"""Fritz+ 2006 smooth-dust torus block.
@@ -163,6 +174,7 @@ def fritz_torus_block(
         agn_fritz_gamma=agn_fritz_gamma,
         agn_fritz_oa=agn_fritz_oa,
         agn_fritz_psy=agn_fritz_psy,
+        _template=templates,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 
@@ -222,6 +234,7 @@ def nenkova_torus_block(
     citation="Nenkova et al. 2008, ApJ, 685, 160; Martínez-Ramírez et al. 2024, A&A, 688, A46",
     status="production",
     short_doc="Nenkova et al. 2008 CLUMPY torus (AGNfitter-rX NK0_mean_1p templates)",
+    template_loader=load_nenkova_agnfitter_default_grid,
 )
 def nenkova_agnfitter_torus_block(
     wavelength: Array,
@@ -230,6 +243,7 @@ def nenkova_agnfitter_torus_block(
     *,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
+    templates=None,
     **_params,
 ) -> Array:
     r"""Nenkova+ 2008 CLUMPY torus (AGNfitter-rX) block.
@@ -252,6 +266,7 @@ def nenkova_agnfitter_torus_block(
         agn_log_lbol=agn_log_lbol,
         agn_cos_inc=agn_cos_inc,
         agn_torus_frac=agn_torus_frac,
+        _template=templates,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 
@@ -262,6 +277,7 @@ def nenkova_agnfitter_torus_block(
     citation="Silva et al. 2004, MNRAS, 355, 973",
     status="production",
     short_doc="Silva et al. 2004 smooth torus model",
+    template_loader=load_silva04_default_grid,
 )
 def silva04_torus_block(
     wavelength: Array,
@@ -270,11 +286,19 @@ def silva04_torus_block(
     *,
     agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
+    templates=None,
     **_params,
 ) -> Array:
     r"""Silva+ 2004 smooth-torus block.
 
     Indexed by :math:`\log_{10}(N_{\rm H}/{\rm cm}^{-2})`.
+
+    Parameters
+    ----------
+    templates : Silva04Grid, optional
+        Pre-loaded template grid, threaded in by the forward model. When
+        ``None`` the block loads it from disk, which bakes the library into
+        the graph as constants if this runs under trace.
 
     References
     ----------
@@ -287,6 +311,7 @@ def silva04_torus_block(
         agn_log_lbol=agn_log_lbol,
         agn_log_nh_silva=agn_log_nh_silva,
         agn_torus_frac=agn_torus_frac,
+        _template=templates,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 
@@ -297,6 +322,7 @@ def silva04_torus_block(
     citation="Stalevski et al. 2016, MNRAS, 458, 2288",
     status="production",
     short_doc="Stalevski et al. 2016 SKIRTOR_mean_3p AGNfitter-rX torus",
+    template_loader=load_skirtor_agnfitter_default_grid,
 )
 def skirtor_agnfitter_torus_block(
     wavelength: Array,
@@ -307,6 +333,7 @@ def skirtor_agnfitter_torus_block(
     agn_incl_skirtor: float = 30.0,
     agn_tv_skirtor: float = 7.0,
     agn_torus_frac: float = 0.5,
+    templates=None,
     **_params,
 ) -> Array:
     r"""Stalevski+ 2016 SKIRTOR_mean_3p (AGNfitter-rX) torus block.
@@ -331,6 +358,7 @@ def skirtor_agnfitter_torus_block(
         agn_incl_skirtor=agn_incl_skirtor,
         agn_tv_skirtor=agn_tv_skirtor,
         agn_torus_frac=agn_torus_frac,
+        _template=templates,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 
@@ -341,6 +369,7 @@ def skirtor_agnfitter_torus_block(
     citation="Stalevski et al. 2016, MNRAS, 458, 2288",
     status="production",
     short_doc="Stalevski et al. 2016 SKIRTOR torus with polar dust",
+    template_loader=load_skirtor_bundle,
 )
 def skirtor_torus_block(
     wavelength: Array,
@@ -357,6 +386,7 @@ def skirtor_torus_block(
     agn_polar_ebv: float = 0.03,
     agn_polar_T: float = 100.0,
     agn_polar_beta: float = 1.6,
+    templates=None,
     **_params,
 ) -> Array:
     r"""Stalevski+ 2016 SKIRTOR torus block + CIGALE-faithful polar dust.
@@ -443,6 +473,9 @@ def skirtor_torus_block(
         agn_radius_ratio=agn_radius_ratio,
         agn_cos_inc=agn_cos_inc,
         agn_torus_frac=agn_torus_frac,
+        # The block owns the torus cube; the runner separately consumes
+        # ``bundle.disc_dust`` for the CIGALE R-tie.
+        _template=templates.torus if isinstance(templates, SKIRTORBundle) else templates,
     )
     L_lambda_thermal = L_nu_skirtor_scaled * _C_AA_PER_S / wave_aa**2
 
