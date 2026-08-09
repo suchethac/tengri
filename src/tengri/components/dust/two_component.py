@@ -191,15 +191,24 @@ class DustSEDComponentConfig(SEDComponentConfig):
 
 @dataclass(frozen=True)
 class DustSEDComponentState(SEDComponentState):
-    """State for dust component, optionally caching emission templates for JIT threading.
+    """State for the dust component — the component name, and nothing else.
 
-    When ``wave_precomp=True`` is set on the parent SEDModel, this holds
-    pre-loaded dust IR emission templates as JAX arrays, so they thread
-    through JIT as Parameter ops rather than baking into HLO Constants.
+    This class carried a ``dust_emission_templates`` field until 2026-08,
+    documented as holding pre-loaded IR templates so they would thread through
+    JIT as Parameter ops rather than bake into HLO Constants. Nothing ever set
+    it: the only construction site passes ``name`` alone, and no reader existed
+    anywhere in the package. The docstring described a mechanism that never ran,
+    which is worse than no docstring — it answers "are the dust templates
+    threaded?" with a confident yes.
+
+    They are not. Threading dust IR templates is still open work, tracked
+    alongside the AGN torus case (#1383, fixed for AGN by the declarative
+    ``template_loader`` in #1595). Removing the inert field does not change
+    behavior; it stops the field from standing in as evidence that the job
+    is done.
     """
 
     name: str = "dust"
-    dust_emission_templates: Any | None = None
 
 
 @dataclass(frozen=True)
