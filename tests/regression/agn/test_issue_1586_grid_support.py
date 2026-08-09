@@ -41,12 +41,17 @@ question they answer is simply a different one:
   *declared prior*. Here the default sits comfortably inside ``[6, 10]``; it is
   the prior itself that overruns the grid.
 * ``tests/contract/test_agn_block_consumes.py`` perturbs every parameter across
-  its prior to find inert ones, but it exempts ``slone_netzer`` (whose grid is
-  absent from CI) and detects only *fully* inert parameters, not 98%-dead ones.
+  its prior to find inert ones, but it exempts ``slone_netzer`` and detects only
+  *fully* inert parameters, not 98%-dead ones. (That exemption is justified in
+  ``_consumes.py`` as "requires a data grid absent from CI" — but
+  ``data/slone_netzer_disc_grid.h5`` is git-tracked, as are the ``cat3d_wind``
+  and ``grahsp`` grids, so the stated reason no longer holds.)
 
-The grid is not installed in CI, so the data-dependent facts below skip there.
-The rule's own logic is driven with a synthetic support table and therefore
-gates everywhere.
+The grid *is* shipped, so every test below runs in CI. The ``_sn12_grid`` skip
+is a safety net for a stripped install, not the expected path — if these start
+skipping, the data file has gone missing rather than the check being untested.
+Rule 9's own logic is additionally driven with a synthetic support table so it
+stays testable independently of any data file.
 """
 
 from __future__ import annotations
