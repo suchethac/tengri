@@ -2243,7 +2243,13 @@ class SEDModel:
         if self._dust_emission_model in _TEMPLATE_BASED_EMISSION_MODELS:
             from tengri.components.dust.emission import preload_emission_model
 
-            with contextlib.suppress(Exception):
+            # Same reasoning as the AGN backend warm below: this exists only to
+            # pull templates into the registry before the JIT trace, since
+            # loading them inside it raises UnexpectedTracerError. A load
+            # failure here is recoverable — the exact path still works — but a
+            # *bug* in the loader should not be. Narrowed to the
+            # data/dependency family so it is not both.
+            with contextlib.suppress(ImportError, OSError, KeyError):
                 preload_emission_model(self._dust_emission_model)
 
         # Identity entries for dust-emission params now come from the
@@ -2413,7 +2419,15 @@ class SEDModel:
                 if self._agn_blr_block in ("synthesizer", "synthesizer_spectra"):
                     blr_grid = _resolve_blr_grid("blr")
 
-                with contextlib.suppress(Exception):
+                # Warming a cache: these backends load lazily at predict time
+                # anyway, so a failure here costs latency, not correctness. The
+                # failures worth tolerating are the data/dependency ones —
+                # Synthesizer absent, grid file missing or unreadable. Catching
+                # everything also swallowed genuine bugs *inside* the loaders
+                # (a TypeError from a changed signature, say), and the only
+                # symptom was the first predict paying a cost this line existed
+                # to remove.
+                with contextlib.suppress(ImportError, OSError, KeyError):
                     from tengri.components.agn.nlr_cloudy import (
                         get_synthesizer_blr_backend,
                         get_synthesizer_nlr_backend,
