@@ -95,8 +95,21 @@ sphinx_gallery_conf = {
     # Locally we execute (default). On CI (e.g. GitHub Actions sets CI=true) we
     # use the pre-rendered docs/auto_examples/ that the developer committed so
     # the cloud build doesn't need SSP grids, RELAGN, or ~20 GB of optional
-    # data. Run `make html` locally and commit the regenerated auto_examples/
-    # before pushing if you want fresh galleries.
+    # data.
+    #
+    # To refresh a render, use `python tools/regen_gallery.py <basename>` and
+    # commit what it writes. This comment used to say "run make html and commit
+    # the regenerated auto_examples/", which destroys stale pages (#1236):
+    # sphinx-gallery rewrites a page whose source md5 no longer matches its
+    # stamp, but `filename_pattern` above stops it being executed, so it comes
+    # back without the output execution produced. Measured on a single-example
+    # build while 60 examples were stale: 195 files, 45,204 deletions, exit 0.
+    #
+    # A page that is already fresh is not rewritten at all — a full build over
+    # a fresh gallery was measured to change nothing. So the damage is
+    # proportional to the drift, and the freshness gate that keeps drift at
+    # zero is also what keeps a plain build safe. regen_gallery.py is still the
+    # right tool while anything is stale: it restores every non-target page.
     "plot_gallery": "False" if os.environ.get("CI", "").lower() == "true" else "True",
     # Skip re-execution of examples whose source + md5 haven't changed since the
     # last build. Cuts incremental regen from ~25 min to seconds when only one
