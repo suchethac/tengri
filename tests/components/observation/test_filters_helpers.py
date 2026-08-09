@@ -1,9 +1,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Contract tests for filter discovery helpers (tengri.observation.filters namespace).
 
-Frozen: list_filters() sorted and non-empty; instrument filtering case-insensitive;
-load() raises on unknown filters; describe() includes wavelength info; suggest()
-returns sorted by λ_eff, raises on unknown coverage, accepts documented presets.
+Frozen: list_filter_aliases() sorted and non-empty; instrument filtering
+case-insensitive; load() raises on unknown filters; describe() includes
+wavelength info; suggest() returns sorted by λ_eff, raises on unknown coverage,
+accepts documented presets.
+
+Called ``list_filters`` until #1574, when it was renamed to say which question
+it answers — ``tengri.list_filters`` lists SVO curve-file stems, this lists the
+short aliases the loaders take. The old name is a deprecated alias.
 """
 
 import numpy as np
@@ -12,7 +17,7 @@ import pytest
 from tengri.observation.filters import (
     compute_effective_wavelength,
     describe,
-    list_filters,
+    list_filter_aliases,
     load,
     suggest,
 )
@@ -20,35 +25,35 @@ from tengri.observation.filters import (
 pytestmark = pytest.mark.bounds
 
 
-class TestListFilters:
-    """list_filters: sorted, non-empty, instrument filtering."""
+class TestListFilterAliases:
+    """list_filter_aliases: sorted, non-empty, instrument filtering."""
 
-    def test_list_filters_nonempty_and_sorted(self):
-        """list_filters() returns non-empty sorted list."""
-        result = list_filters()
-        if not result:
+    def test_list_filter_aliases_nonempty_and_sorted(self):
+        """list_filter_aliases().names() returns a non-empty sorted list."""
+        names = list_filter_aliases().names()
+        if not names:
             pytest.skip("Filter library is empty in this environment")
-        assert len(result) > 0
-        assert result == sorted(result)
-        assert all(isinstance(name, str) for name in result)
+        assert len(names) > 0
+        assert names == sorted(names)
+        assert all(isinstance(name, str) for name in names)
 
-    def test_list_filters_instrument_filter_case_insensitive(self):
+    def test_list_filter_aliases_instrument_filter_case_insensitive(self):
         """Instrument filter is case-insensitive: sdss == SDSS."""
-        result = list_filters(instrument="sdss")
-        result_upper = list_filters(instrument="SDSS")
+        result = list_filter_aliases(instrument="sdss").names()
+        result_upper = list_filter_aliases(instrument="SDSS").names()
         assert result == result_upper
 
-    def test_list_filters_instrument_filter_sdss(self):
+    def test_list_filter_aliases_instrument_filter_sdss(self):
         """Instrument='sdss' returns SDSS filters (sdss_*) only."""
-        result = list_filters(instrument="sdss")
-        if not result:
+        names = list_filter_aliases(instrument="sdss").names()
+        if not names:
             pytest.skip("No SDSS filters in registry")
-        assert all("sdss" in name.lower() for name in result)
+        assert all("sdss" in name.lower() for name in names)
 
-    def test_list_filters_instrument_no_matches(self):
-        """Unknown instrument returns empty list."""
-        result = list_filters(instrument="nonexistent_instrument_xyz")
-        assert result == []
+    def test_list_filter_aliases_instrument_no_matches(self):
+        """Unknown instrument returns an empty table."""
+        result = list_filter_aliases(instrument="nonexistent_instrument_xyz")
+        assert result.names() == []
 
 
 class TestLoad:

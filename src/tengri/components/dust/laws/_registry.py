@@ -13,8 +13,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
+
+if TYPE_CHECKING:  # annotation only — see the local import in list_laws (#843)
+    from tengri.registry import _RegistryTable
 
 # ── Attenuation law catalog ─────────────────────────────────────
 
@@ -165,37 +169,60 @@ _HEADLINE_LAWS: dict[str, tuple[str, dict]] = {
 }
 
 
-def list_laws(headline: bool = True) -> dict[str, Callable[[jnp.ndarray], jnp.ndarray]]:
-    """Return attenuation laws as a dict of one-arg callables.
+def list_laws(headline: bool = True) -> _RegistryTable:
+    """List the attenuation laws, each row carrying a one-arg callable.
 
-    Each value is ``fn(wave_aa) -> k(wave)`` at the law's canonical
-    parameters with ``tau_V = 1``. Use for plotting k(lambda) comparisons
-    without restating each law's argument signature.
+    The ``fn`` column holds ``fn(wave_aa) -> k(wave)`` at the law's
+    canonical parameters with ``tau_V = 1``. Use for plotting k(lambda)
+    comparisons without restating each law's argument signature.
 
     Parameters
     ----------
     headline : bool, optional
-        If True (default) return the 6 textbook laws keyed by display
-        label with citation. If False return every registered law keyed
-        by registry name with no kwargs baked in.
+        If True (default) list the 6 textbook laws, named by display
+        label with citation. If False list every registered law by
+        registry name with no kwargs baked in.
 
     Returns
     -------
-    dict
-        ``{label: fn(wave_aa) -> k(wave)}``.
+    _RegistryTable
+        One row per law, with columns ``name`` and ``fn``. ``fn`` holds a
+        live callable and is hidden from the printed table.
+
+    Notes
+    -----
+    Returned ``{label: callable}`` before #1574; every discovery verb
+    returns a table (#1285). ``.to_dict("fn")`` reproduces that mapping
+    exactly, so ``for label, fn in list_laws().items()`` becomes
+    ``for label, fn in list_laws().to_dict("fn").items()``.
 
     Examples
     --------
     >>> from tengri.dust import list_laws
-    >>> for label, fn in list_laws().items():
+    >>> for label, fn in list_laws().to_dict("fn").items():
     ...     plt.plot(wave, fn(wave), label=label)
     """
+    # Imported here, not at module scope: this module is a leaf by design
+    # so the law modules and the attenuation facade can import it without
+    # a cycle (#843, see the module docstring).
+    from tengri.registry import _RegistryTable
+
     if headline:
-        return {
-            label: (lambda w, _n=name, _kw=kwargs: DUST_LAWS[_n](w, **_kw))
+        rows = [
+            {
+                "name": label,
+                "kind": "dust_law",
+                "law": name,
+                "fn": (lambda w, _n=name, _kw=kwargs: DUST_LAWS[_n](w, **_kw)),
+            }
             for label, (name, kwargs) in _HEADLINE_LAWS.items()
-        }
-    return {name: fn for name, fn in DUST_LAWS.items()}
+        ]
+    else:
+        rows = [
+            {"name": name, "kind": "dust_law", "law": name, "fn": fn}
+            for name, fn in DUST_LAWS.items()
+        ]
+    return _RegistryTable(rows)
 
 
 # ── Utility: Drude profile for the 2175 Angstrom UV bump ──────────

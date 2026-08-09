@@ -14,7 +14,7 @@ Examples
 >>> from tengri import Instrument
 >>> inst = Instrument.JWST_NIRCam()  # premade
 >>> obs = inst.observation()  # ready-to-fit Observation
->>> Instrument.list()  # registry as a list of dicts
+>>> Instrument.list()  # registry as a table
 
 Custom instruments::
 
@@ -30,12 +30,12 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Callable
-from typing import Any
 
 from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectroscopy import Spectroscopy
+from tengri.registry import _RegistryTable
 
 __all__ = ["Instrument", "list_instruments"]
 
@@ -197,16 +197,29 @@ class Instrument:
         )
 
     @classmethod
-    def list(cls) -> list[dict[str, Any]]:
-        """Return all premade instruments as a list of ``{name, n_bands, description}`` dicts."""
-        return [
-            {
-                "name": fac().name,
-                "n_bands": len(fac().filter_names),
-                "description": fac().description,
-            }
-            for fac in _PREMADE_FACTORIES
-        ]
+    def list(cls) -> _RegistryTable:
+        """Return every premade instrument as a table.
+
+        Returns
+        -------
+        _RegistryTable
+            One row per premade instrument, with columns ``name``,
+            ``n_bands`` and ``description``. Returned a plain
+            ``list[dict]`` before #1574; every discovery verb returns a
+            table (#1285).
+        """
+        return _RegistryTable(
+            [
+                {
+                    "name": fac().name,
+                    "kind": "instrument",
+                    "n_bands": len(fac().filter_names),
+                    "description": fac().description,
+                    "use": f"tengri.Instrument.{fac.__name__}()",
+                }
+                for fac in _PREMADE_FACTORIES
+            ]
+        )
 
 
 _PREMADE_FACTORIES: tuple[Callable[[], Instrument], ...] = (
@@ -222,6 +235,6 @@ _PREMADE_FACTORIES: tuple[Callable[[], Instrument], ...] = (
 )
 
 
-def list_instruments() -> list[dict[str, Any]]:
+def list_instruments() -> _RegistryTable:
     """Module-level alias for :meth:`Instrument.list`."""
     return Instrument.list()
