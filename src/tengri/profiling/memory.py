@@ -249,5 +249,3 @@ def profile_memory(model) -> MemoryReport:
 
 
 # ── Memory scaling ────────────────────────────────────────────────
-
-

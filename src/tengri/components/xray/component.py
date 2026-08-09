@@ -117,7 +117,7 @@ class XRaySEDComponent:
 
         Returns the canonical :data:`PARAMS` tuple from
         :mod:`tengri.components.xray._params`. The legacy ``_XRAY_PARAMS``
-        bucket in :mod:`tengri.parameters._param_defs` is a derived view
+        bucket in :mod:`tengri.parameters._builders` is a derived view
         of the same tuple, so the two registration paths agree by
         construction.
         """

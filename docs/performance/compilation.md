@@ -153,6 +153,52 @@ ratios are the durable part.
 > free redshift — see the default below — so a benchmark that leaves it
 > out measures the fixed-z path and will not reproduce any of this.
 
+## Runtime cost: free redshift is ~7x a gradient, not ~1x
+
+Build cost is paid once. The gradient cost is paid every leapfrog step, and
+for a sampler that is the number that sets your wall clock.
+
+Measured on the compiled gradient graph (`cost_analysis`, so these are exact
+and do not depend on the machine), five SDSS bands, `WavePrecomp(n_z=250)`
+over z ∈ [0.5, 12]:
+
+| model | FLOPs per gradient |
+| --- | --- |
+| fixed redshift | 2.7 M |
+| free redshift, `igm={'type': 'none'}` | 17.9 M |
+| free redshift, with IGM | 18.8 M |
+
+Free redshift interpolates the SSP × filter table, the sub-band quadrature
+tensors and the sub-band IGM transmission to the sampled z on every call. That
+is ~7x a fixed-z gradient, and it is the dominant term in any photometric-
+redshift fit.
+
+**Budgeting a sampler.** Multiply it out before you launch:
+
+```
+gradients = (n_warmup + n_samples) * n_leapfrog_steps
+```
+
+`fit_interim(n_warmup=300, n_samples=1000, n_leapfrog_steps=100)` is 130,000
+gradients **per galaxy**. At a free-redshift gradient of a few milliseconds
+that is minutes to tens of minutes per galaxy — so an eight-galaxy population
+fit is hours, and it is hours whether or not anything is wrong. If a fit is
+taking longer than you expect, compute this product first: it usually explains
+the whole thing, and no amount of profiling will make 130,000 gradients cheap.
+
+**`n_z` is not the speed knob it looks like.** It sets the accuracy of the z
+interpolation (the default 250 is calibrated for <1% error), and it no longer
+buys speed: the interpolation contracts only the five grid nodes the triweight
+kernel actually supports, so the per-gradient cost is the same at `n_z=250` as
+at `n_z=10` — byte for byte in the compiled graph. Lower it for build time and
+memory if you need to, not for gradient throughput.
+
+> **A note on reading `cost_analysis`.** Its `bytes accessed` field counts
+> logical operand bytes per operation, not DRAM traffic after fusion. The
+> windowing change above cut FLOPs 6.8x and `bytes accessed` 5.1x and moved
+> the clock about 1.9x. Use these counters to find where cost lives; use a
+> stopwatch to find out what it costs.
+
 ## The redshift default is fixed, not free
 
 `SEDModel.build(...)` with no `redshift=` argument pins the redshift to

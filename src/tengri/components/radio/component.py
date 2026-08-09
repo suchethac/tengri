@@ -183,7 +183,7 @@ class RadioSEDComponent:
 
         Returns the canonical :data:`PARAMS` tuple from
         :mod:`tengri.components.radio._params`. The legacy
-        ``_RADIO_PARAMS`` bucket in :mod:`tengri.parameters._param_defs`
+        ``_RADIO_PARAMS`` bucket in :mod:`tengri.parameters._builders`
         is derived from the same tuple, so the two registration paths
         are guaranteed to agree.
 

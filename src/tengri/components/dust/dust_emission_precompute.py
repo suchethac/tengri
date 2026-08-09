@@ -506,7 +506,7 @@ def precompute_draine2021_pah_photometry(
         Source redshift; defaults to rest-frame photometry.
     starlight, ionization, size_distribution, slab :
         Categorical PAHspec axes to slice.  See
-        :class:`tengri.components.dust.draine2021_pah_component.Draine2021PAHConfig`
+        :class:`tengri.components.dust.Draine2021PAHIRConfig`
         for valid values.
 
     Returns

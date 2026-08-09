@@ -16,8 +16,8 @@ Cross-component publications
 
 - ``state.derived["L_agn_bol"]`` (scalar, erg/s) — bolometric AGN
   luminosity. Consumed by
-  :class:`tengri.components.xray.XRaySEDComponent` and
-  :class:`tengri.components.radio.RadioSEDComponent` via their
+  :class:`tengri.components.xray.component.XRaySEDComponent` and
+  :class:`tengri.components.radio.component.RadioSEDComponent` via their
   documented fallback (``state.derived.get("L_agn_bol", 0.0)``).
 - ``state.derived["sed_agn"]`` — the AGN SED contribution
   (erg/s/Hz, shape n_wave) for diagnostics.
@@ -152,7 +152,7 @@ class AGNSEDComponent:
 
         Returns the canonical :data:`PARAMS` tuple from
         :mod:`tengri.components.agn._params`. The legacy ``_AGN_PARAMS``
-        bucket in :mod:`tengri.parameters._param_defs` is a derived view
+        bucket in :mod:`tengri.parameters._builders` is a derived view
         of the same tuple (plus the ``neb_xid`` orphan kept in the
         registry for the Feltre NLR backend).
 

@@ -181,14 +181,12 @@ def create_wg00_from_grid(
 
 def _find_wg00_grid() -> str:
     """Locate the vendored WG00 grid relative to the package root or CWD."""
-    from tengri._data_setup import data_path
+    from tengri._data_setup import require_data
 
-    # _GRID_SEARCH_PATHS[-1] is the bare filename; data_path searches every
-    # directory the old parents[4] walk reached, plus $TENGRI_DATA_DIR (#1431).
-    try:
-        return str(data_path(_GRID_SEARCH_PATHS[-1]))
-    except FileNotFoundError:
-        raise FileNotFoundError(_NOT_FOUND_MSG) from None
+    # _GRID_SEARCH_PATHS[-1] is the bare filename; require_data searches every
+    # directory the old parents[4] walk reached, plus $TENGRI_DATA_DIR (#1431),
+    # and re-raises _NOT_FOUND_MSG verbatim when the grid is absent.
+    return require_data(_GRID_SEARCH_PATHS[-1], _NOT_FOUND_MSG)
 
 
 @functools.cache

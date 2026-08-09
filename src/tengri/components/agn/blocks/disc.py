@@ -17,14 +17,22 @@ from jax import Array
 
 from tengri.components.agn.adaf import adaf_spectrum
 from tengri.components.agn.blocks._protocol import register_agn_block
-from tengri.components.agn.disc import kubota_done_disc, multicolor_disc
+from tengri.components.agn.disc import (
+    kubota_done_disc,
+    load_relagn_default_grid,
+    multicolor_disc,
+)
 from tengri.components.agn.disc_cigale import (
     adaf_disk_spectrum,
     schartmann2005_disk_spectrum,
     skirtor_disk_spectrum,
 )
 from tengri.components.agn.richards2006_disc import richards2006_disc
-from tengri.components.agn.skirtor import skirtor_disc_attenuation
+from tengri.components.agn.skirtor import (
+    load_skirtor_disc_atten_grid,
+    skirtor_disc_attenuation,
+)
+from tengri.components.agn.slone_netzer import load_slone_netzer_default_grid
 from tengri.utils.physics_constants import L_SUN
 
 __all__ = [
@@ -292,6 +300,7 @@ def cigale_schartmann_disc_block(
     citation="Stalevski et al. 2016, MNRAS, 458, 2288",
     status="production",
     short_doc="Schartmann 2005 disc with SKIRTOR self-attenuation",
+    template_loader=load_skirtor_disc_atten_grid,
 )
 def cigale_schartmann_skirtor_attenuated_disc_block(
     wavelength: Array,
@@ -303,6 +312,7 @@ def cigale_schartmann_skirtor_attenuated_disc_block(
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
     agn_cos_inc: float = 0.86602540378443864,  # cos(30°), CIGALE i=30 default
+    templates=None,
     **_params,
 ) -> Array:
     r"""CIGALE ``skirtor2016 disk_type=1`` disc with SKIRTOR self-attenuation.
@@ -377,6 +387,7 @@ def cigale_schartmann_skirtor_attenuated_disc_block(
         agn_q_skirtor=agn_q_skirtor,
         agn_oa_skirtor=agn_oa_skirtor,
         agn_cos_inc=agn_cos_inc,
+        _template=templates,
     )
     return L_lambda_analytic * att
 
@@ -593,6 +604,7 @@ def multicolor_disc_block(
     citation="Hagen & Done 2023, MNRAS, 521, 251",
     status="production",
     short_doc="RELAGN relativistic Kerr accretion disc (grid-backed)",
+    template_loader=load_relagn_default_grid,
 )
 def relagn_disc_block(
     wavelength: Array,
@@ -602,6 +614,7 @@ def relagn_disc_block(
     agn_log_mdot: float = -1.0,
     agn_astar: float = 0.0,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    templates=None,
     **_params,
 ) -> Array:
     r"""RELAGN relativistic Kerr accretion disc block.
@@ -661,12 +674,14 @@ def relagn_disc_block(
        accretion disc model for high spin and high inclination. High-spin AGN.
        https://doi.org/10.1093/mnras/stad478
     """
-    from tengri.components.agn.disc import create_relagn_disc_from_grid
-    from tengri.components.agn.unified import _find_relagn_grid
+    from tengri.components.agn.disc import relagn_disc_from_grid
 
     wave_aa = jnp.asarray(wavelength)
-    disc_fn = create_relagn_disc_from_grid(_find_relagn_grid())
-    L_nu = disc_fn(
+    # ``templates`` is threaded in by the forward model. Loading the grid here
+    # instead bakes ~27 MB into the graph as Constant ops (#1383).
+    grid = templates if templates is not None else load_relagn_default_grid()
+    L_nu = relagn_disc_from_grid(
+        grid,
         wave_aa,
         agn_log_mbh=agn_log_mbh,
         agn_log_mdot=agn_log_mdot,
@@ -737,6 +752,7 @@ def richards2006_disc_block(
     citation="Slone & Netzer 2012, MNRAS, 426, 656",
     status="production",
     short_doc="Slone & Netzer 2012 alpha-disc library interpolation",
+    template_loader=load_slone_netzer_default_grid,
 )
 def slone_netzer_disc_block(
     wavelength: Array,
@@ -751,6 +767,7 @@ def slone_netzer_disc_block(
     # Rule 9 of validate_block_recipe checks the active support at composition.
     agn_log_mbh: float = 8.6,
     agn_log_ledd: float = -2.0,
+    templates=None,
     **_params,
 ) -> Array:
     r"""Slone & Netzer (2012) alpha-disc block.
@@ -788,5 +805,6 @@ def slone_netzer_disc_block(
         agn_log_lbol=agn_log_lbol,
         agn_log_mbh=agn_log_mbh,
         agn_log_ledd=agn_log_ledd,
+        _template=templates,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2

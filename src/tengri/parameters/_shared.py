@@ -5,7 +5,7 @@ Single source of truth for redshift, metallicity, noise, and spectroscopy
 parameters. These are the "non-domain-owned" parameters that don't belong
 to any single component — they apply globally to every model.
 
-``tengri.parameters._param_defs`` derives its legacy ``_NON_SFH_PARAMS``
+``tengri.parameters._builders`` derives its legacy ``_NON_SFH_PARAMS``
 bucket dict from this tuple, and the registry walker in
 :mod:`tengri.parameters.registry` picks these up directly via the
 :data:`PARAMS` tuple.

@@ -336,6 +336,8 @@ def _usage_hint(name: str, kind: str) -> str:
         return f"SEDModel.build(..., radio={{'type': '{name}'}})"
     if kind == "shock_model":
         return f"SEDModel.build(..., shock={{'type': '{name}'}})"
+    if kind == "metallicity_mode":
+        return f"SEDModel.build(..., stellar={{'met_mode': '{name}'}})"
     if kind == "igm_model":
         return f"SEDModel.build(..., igm={{'type': '{name}'}})"
     if kind == "component":
@@ -353,7 +355,7 @@ def _usage_hint(name: str, kind: str) -> str:
 # was another of that formula's phantoms; it is real now, but it names the
 # structural axis only — the formula still guesses wrong for every other group.)
 _COMPONENT_MENUS: dict[str, str] = {
-    "stellar": "list_sfh_models()",
+    "stellar": "list_sfh_models() / list_metallicity_modes()",
     "dust": "list_dust_models() / list_dust_laws() / list_dust_emission_models()",
     "agn": "list_agn_models() / list_agn_blocks()",
     "nebular": "list_nebular_backends()",
@@ -440,6 +442,32 @@ def _entry_to_dict(name: str, entry: Any, *, kind: str) -> dict:
     if details:
         out["param_details"] = details
     return out
+
+
+def _component_entry(name: str, *, kind: str) -> dict:
+    """Build a menu row for a name that lives in the ``SEDModelComponent`` registry.
+
+    Several grammar axes accept the union of a legacy ``*_MODELS`` dict and the
+    ``_REGISTRY`` components carrying the matching prefix. The legacy entries
+    are dataclasses with ``status`` / ``citation`` / ``short_doc`` attributes;
+    the component classes carry none of those, so their summary is taken from
+    the first line of the class docstring. Deriving it here — rather than
+    listing these names in a metadata table — keeps the menu honest when a new
+    component is registered: the row appears with whatever docstring it has,
+    instead of the name silently going missing.
+    """
+    from tengri.forward.component_factory import _REGISTRY
+
+    cls = _REGISTRY.get(name)
+    doc_lines = (getattr(cls, "__doc__", "") or "").strip().splitlines()
+    return {
+        "name": name,
+        "kind": kind,
+        "status": getattr(cls, "status", "production"),
+        "citation": getattr(cls, "citation", ""),
+        "short_doc": doc_lines[0].strip() if doc_lines else "",
+        "use": _usage_hint(name, kind),
+    }
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -732,23 +760,25 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
     dust (DL07, DL14, Dale+2014, THEMIS, MBB, …). For UV/optical
     **attenuation** laws, see :func:`list_dust_laws`.
 
-    Derived from the SAME source as the ``SEDModel.build`` grammar validator
-    (:func:`tengri.parameters.groups._valid_dust_emission_types`): the
-    ``_REGISTRY`` emission components (those publishing ``sed_dust_ir``) plus the
-    canonical grammar alias map. The ``DUST_EMISSION_MODELS`` loader cache is
-    **not** consulted — it is load-only — so the menu and the validator can
-    never drift (closes #495).
+    Calls the ``SEDModel.build`` grammar validator itself
+    (:func:`tengri.parameters.groups._valid_dust_emission_types`) rather than
+    re-deriving what it derives. The ``DUST_EMISSION_MODELS`` loader cache is
+    **not** consulted — it is load-only (closes #495).
+
+    The call matters. This menu used to re-implement the validator's
+    derivation (``_REGISTRY`` components publishing ``sed_dust_ir``, union the
+    alias map) under a docstring promising the two "can never drift". They
+    drifted anyway: the validator also unions ``_LAZY_DUST_EMISSION_TYPES``,
+    which is declared inside ``groups.py`` and is therefore invisible from
+    here, so ``dh02_ce01`` was builder-accepted and named by no menu. A copy of
+    a derivation is a second source of truth no matter how faithful it is on
+    the day it is written.
     """
     # Import triggers component registration into _REGISTRY + the alias map.
     import tengri.components.dust.emission  # noqa: F401
-    from tengri.components.sed_model_component import _REGISTRY
-    from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES
+    from tengri.parameters.groups import _valid_dust_emission_types
 
-    names = {
-        name
-        for name, cls in _REGISTRY.items()
-        if "sed_dust_ir" in {o.name for o in getattr(cls, "_outputs_tuple", ())}
-    } | set(_EMISSION_TYPE_ALIASES)
+    names = set(_valid_dust_emission_types())
 
     out = []
     for name in names:
@@ -847,12 +877,26 @@ def list_xray_models(*, status: str | None = None) -> _RegistryTable:
     and optional thermal hot-gas emission. The ``'none'`` entry disables
     the whole block.
 
+    Names come from the grammar validator itself
+    (:func:`tengri.parameters.groups._valid_xray_types`), which accepts the
+    union of :data:`XRAY_MODELS` and the ``SEDModelComponent`` X-ray variants
+    in ``_REGISTRY``. Reading only ``XRAY_MODELS`` — as this menu did — hid
+    ``xray_aird`` and ``agn_xray_corona`` from every discovery surface from the
+    moment #1323 made them builder-reachable, while the validator's own
+    docstring asserted the menu and builder "cannot drift".
+
     See also: :func:`list_radio_models`, :func:`list_igm_models`,
     :mod:`tengri.builders.xray`.
     """
     from tengri.components.xray._models import XRAY_MODELS
+    from tengri.parameters.groups import _valid_xray_types
 
-    out = [_entry_to_dict(n, e, kind="xray_model") for n, e in XRAY_MODELS.items()]
+    out = [
+        _entry_to_dict(n, XRAY_MODELS[n], kind="xray_model")
+        if n in XRAY_MODELS
+        else _component_entry(n, kind="xray_model")
+        for n in _valid_xray_types()
+    ]
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
@@ -866,12 +910,26 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
     power-law via the radio-loudness parameter. ``'none'`` disables
     the block.
 
+    Names come from the grammar validator itself
+    (:func:`tengri.parameters.groups._valid_radio_types`), which accepts the
+    union of :data:`RADIO_MODELS` and the ``SEDModelComponent`` radio variants
+    in ``_REGISTRY`` — so ``radio_powerlaw`` and ``radio_dpl`` are listed here
+    rather than being builder-only. This is the ``radio={'type': ...}`` axis;
+    the ``radio={'sf'/'agn': ...}`` sub-blocks live in
+    :func:`list_radio_blocks`.
+
     See also: :func:`list_xray_models`, :func:`list_igm_models`,
     :mod:`tengri.builders.radio`.
     """
     from tengri.components.radio._models import RADIO_MODELS
+    from tengri.parameters.groups import _valid_radio_types
 
-    out = [_entry_to_dict(n, e, kind="radio_model") for n, e in RADIO_MODELS.items()]
+    out = [
+        _entry_to_dict(n, RADIO_MODELS[n], kind="radio_model")
+        if n in RADIO_MODELS
+        else _component_entry(n, kind="radio_model")
+        for n in _valid_radio_types()
+    ]
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
@@ -1022,6 +1080,77 @@ def list_shock_models(*, status: str | None = None) -> _RegistryTable:
                 "use": _usage_hint(name, "shock_model"),
             }
         )
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+# Metallicity modes — the ``stellar={'met_mode': ...}`` axis. Names are NOT
+# listed here: :func:`list_metallicity_modes` derives them from ``MET_REGISTRY``
+# itself, the same dict ``_translate_stellar`` validates against, so a mode
+# added to the physics cannot be missing from the menu. This table carries only
+# the prose, lifted from each mode's section header in ``met_registry.py``.
+_METALLICITY_MODE_METADATA: dict[str, dict[str, str]] = {
+    "delta": {"short_doc": "Single metallicity (the default)"},
+    "ramp": {"short_doc": "Linear evolving metallicity"},
+    "two_step": {"short_doc": "Step function at a lookback time"},
+    "psb_two_step": {"short_doc": "Step at post-starburst burst age"},
+    "bins": {"short_doc": "Per-bin metallicities (pairs with continuity SFH)"},
+    "bins_continuity": {"short_doc": "Cumulative delta-log-Z steps"},
+    "chem_evol": {"short_doc": "Gas-regulator model (Z derived from SFH)"},
+    "table": {"short_doc": "User-provided Z(t)"},
+    "massmap_lin": {"short_doc": "Linear metallicity tied to cumulative mass formed"},
+    "massmap_box": {"short_doc": "Closed-box metallicity tied to cumulative mass formed"},
+}
+
+
+def list_metallicity_modes(*, status: str | None = None) -> _RegistryTable:
+    """List the metallicity modes — the ``stellar={'met_mode': ...}`` choice.
+
+    The metallicity axis is structural in the same sense as the SFH or dust
+    axis: it decides whether a fit carries one metallicity, an evolving one, or
+    a per-bin vector, and which ``met_*`` parameters exist as a result.
+
+    Names derive from :data:`MET_REGISTRY`, the dict
+    ``parameters.groups._translate_stellar`` validates against, so this menu
+    cannot advertise a mode the builder rejects or omit one it accepts. Until
+    this menu existed the axis had **no** discovery surface at all: nine of its
+    ten values resolved to nothing, and ``describe('table')`` answered with the
+    unrelated *SFH* table model.
+
+    Parameters
+    ----------
+    status : str, optional
+        Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
+        ``"deprecated"``.
+
+    Returns
+    -------
+    _RegistryTable
+        List of metadata dicts. Prints as a table in a notebook.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.list_metallicity_modes()
+    """
+    from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
+
+    out: list[dict] = []
+    for name in MET_REGISTRY:
+        meta = _METALLICITY_MODE_METADATA.get(name, {})
+        entry = {
+            "name": name,
+            "kind": "metallicity_mode",
+            "status": meta.get("status", "production"),
+            "citation": meta.get("citation", ""),
+            "short_doc": meta.get("short_doc", ""),
+            "use": _usage_hint(name, "metallicity_mode"),
+        }
+        params = tuple(getattr(MET_REGISTRY[name], "params", {}) or ())
+        if params:
+            entry["params"] = list(params)
+        out.append(entry)
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
@@ -1801,6 +1930,7 @@ def _menu_listers() -> tuple:
         list_dust_emission_models,
         list_sfh_models,
         list_age_kernels,
+        list_metallicity_modes,
         list_nebular_backends,
         list_xray_models,
         list_radio_models,
@@ -2478,6 +2608,12 @@ def search(query: str) -> _RegistryTable:
         "reddening": ("list_dust_laws()", list_dust_laws),
         "emission line": ("list_nebular_backends()", list_nebular_backends),
         "emission lines": ("list_nebular_backends()", list_nebular_backends),
+        # Without these, "metallicity" substring-matches only the modes whose
+        # terse short_doc happens to use the word — 5 of 10, silently omitting
+        # the gas-regulator and per-bin models.
+        "metallicity": ("list_metallicity_modes()", list_metallicity_modes),
+        "chemical evolution": ("list_metallicity_modes()", list_metallicity_modes),
+        "chemical enrichment": ("list_metallicity_modes()", list_metallicity_modes),
     }
     # Concept synonyms are hand-curated; the menu's own name in prose is
     # derived from _menu_listers(). Consult both, and try the query with
