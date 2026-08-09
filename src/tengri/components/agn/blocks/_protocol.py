@@ -83,6 +83,7 @@ __all__ = [
     "AGN_NORM_POLICIES",
     "BLOCK_CATEGORIES",
     "BlockCategory",
+    "collect_block_templates",
     "register_agn_block",
     "resolve_agn_block",
 ]
@@ -99,6 +100,18 @@ AGN_BLOCKS: dict[str, dict[str, Callable]] = {cat: {} for cat in BLOCK_CATEGORIE
 # Enables introspection (list_agn_blocks, describe_agn_block) while keeping
 # resolve_agn_block() returning a bare callable for backward compatibility.
 AGN_BLOCK_META: dict[tuple[str, str], dict[str, str]] = {}
+
+# Parallel dict: (category, name) -> zero-arg callable returning the block's
+# template library as a JAX pytree.
+#
+# This is the threading registry. A block backed by a template library MUST
+# declare its loader here (via ``register_agn_block(template_loader=...)``),
+# because that is the only thing that tells the forward model which grids to
+# hoist out of the trace and hand to ``jax.jit`` as arguments. A block that
+# omits it and instead calls its module-level cached loader from inside the
+# trace freezes the entire library into the graph as ``Constant`` ops — 31 MB
+# for SKIRTOR, 17 MB for Fritz. See ``collect_block_templates``.
+AGN_BLOCK_TEMPLATE_LOADERS: dict[tuple[str, str], Callable[[], object]] = {}
 
 # Cross-block normalization policies (``agn_norm``). Single source of truth
 # shared by the runner (``compose_l_nu``) and the grammar validator
@@ -128,6 +141,7 @@ def register_agn_block(
     citation: str = "",
     status: str = "production",
     short_doc: str = "",
+    template_loader: Callable[[], object] | None = None,
 ) -> Callable:
     """Decorator factory: register a block implementation in
     :data:`AGN_BLOCKS`.
@@ -148,6 +162,13 @@ def register_agn_block(
     short_doc : str, optional
         One-line description (e.g., "Power-law continuum with 2 free params").
         Default ``""``.
+    template_loader : callable, optional
+        Zero-argument callable returning this block's template library as a
+        JAX pytree (e.g. :func:`~tengri.components.agn.silva04.load_silva04_default_grid`).
+        Declaring it makes the forward model load the library **outside** the
+        JIT trace and pass it to the block as a traced argument. Blocks with
+        no template library leave this ``None`` (default). The block must
+        then accept the library via its ``templates`` keyword.
 
     Returns
     -------
@@ -187,9 +208,51 @@ def register_agn_block(
             "status": status,
             "short_doc": short_doc,
         }
+        if template_loader is not None:
+            AGN_BLOCK_TEMPLATE_LOADERS[(category, name)] = template_loader
         return fn
 
     return decorator
+
+
+def collect_block_templates(recipe: dict[str, str]) -> dict[str, object]:
+    """Load the template libraries a block recipe needs, outside any trace.
+
+    Parameters
+    ----------
+    recipe : dict
+        Maps block category to selected block name, e.g.
+        ``{"torus": "skirtor", "disc": "multicolor"}``. Unknown categories
+        and unregistered names are ignored.
+
+    Returns
+    -------
+    dict
+        Maps ``"<category>/<name>"`` to that block's template pytree. Blocks
+        that declare no loader are absent. Empty if nothing needs threading.
+
+    Notes
+    -----
+    **JIT-compatible**: no, deliberately — this performs the HDF5 I/O that
+    must happen *before* tracing so the arrays can be passed in as
+    arguments. Calling it inside a trace defeats its entire purpose.
+
+    A loader that raises (missing data file, unreadable grid) is skipped
+    rather than propagated: the block will then fall back to its own
+    on-disk load and merely bake, which is slow but still correct. Failing
+    the whole model build here would turn a performance regression into an
+    outage.
+    """
+    templates: dict[str, object] = {}
+    for category, name in recipe.items():
+        loader = AGN_BLOCK_TEMPLATE_LOADERS.get((category, name))
+        if loader is None:
+            continue
+        try:
+            templates[f"{category}/{name}"] = loader()
+        except Exception:  # noqa: BLE001 — see Notes: degrade to baking, never fail the build.
+            continue
+    return templates
 
 
 def resolve_agn_block(category: BlockCategory, name: str) -> Callable:

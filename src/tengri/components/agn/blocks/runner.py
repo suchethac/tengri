@@ -394,18 +394,35 @@ agn_torus_block, agn_attenuation_block : str
     (e.g. α_ox in X-ray corona).
     """
     wave = jnp.asarray(wavelength)
-    # If templates are pre-loaded, forward them under a stable kwarg name
-    # blocks recognize (``templates``). When None, blocks fall back to their
-    # own lru_cache load. We strip the kwarg afterwards so blocks that don't
-    # take it never see it.
-    grahsp_templates = template_state.get("grahsp") if template_state is not None else None
+
+    # Pre-loaded template libraries are forwarded to each stage under a stable
+    # kwarg name blocks recognize (``templates``). The lookup is PER STAGE:
+    # every block family has its own library, so handing the same bundle to
+    # all six stages (as this did until the threading fix) can only ever feed
+    # one family and silently leaves the rest to load their own grid at trace
+    # time — which bakes it into the graph as constants.
+    #
+    # Keys are ``"<category>/<name>"``, matching ``collect_block_templates``.
+    # ``"grahsp"`` is still honoured so callers holding the old flat bundle
+    # keep working. When a stage has no entry, the block falls back to its own
+    # cached load.
+    _legacy_grahsp = template_state.get("grahsp") if template_state is not None else None
+
+    def _templates_for(category: str, name: str):
+        """Resolve the pre-loaded library for one stage, if any."""
+        if template_state is None:
+            return _legacy_grahsp
+        found = template_state.get(f"{category}/{name}")
+        return _legacy_grahsp if found is None else found
+
+    disc_templates = _templates_for("disc", agn_disc_block)
 
     # Stage 1: disc continuum (L_lambda [erg/s/Å]).
     disc_fn = resolve_agn_block("disc", agn_disc_block)
     L_lambda_disc = disc_fn(
         wave,
         agn_log_lbol=agn_log_lbol,
-        templates=grahsp_templates,
+        templates=disc_templates,
         **params,
     )
     # Disc dust obscuration (agn_ebv_disc, Prévot SMC). Applied on the composable
@@ -444,7 +461,7 @@ agn_torus_block, agn_attenuation_block : str
     L_lambda_disc_30deg = disc_fn(
         wave,
         agn_log_lbol=agn_log_lbol,
-        templates=grahsp_templates,
+        templates=disc_templates,
         **{**params, "agn_cos_inc": _COS_30DEG},
     )
     L_2500_intrinsic = jnp.interp(2500.0, wave, L_lambda_disc_30deg) * (2500.0**2 / C_AA_PER_S)
@@ -579,7 +596,7 @@ agn_torus_block, agn_attenuation_block : str
             wave,
             agn_log_lbol=agn_log_lbol,
             l5100_disc=l5100_disc,
-            templates=grahsp_templates,
+            templates=_templates_for("nlr", agn_nlr_block),
             **params,
         )
     )
@@ -590,7 +607,7 @@ agn_torus_block, agn_attenuation_block : str
             wave,
             agn_log_lbol=agn_log_lbol,
             l5100_disc=l5100_disc,
-            templates=grahsp_templates,
+            templates=_templates_for("blr", agn_blr_block),
             **params,
         )
     )
@@ -603,7 +620,7 @@ agn_torus_block, agn_attenuation_block : str
         wave,
         agn_log_lbol=agn_log_lbol,
         l5100_disc=l5100_disc,
-        templates=grahsp_templates,
+        templates=_templates_for("feii", agn_feii_block),
         **params,
     )
 
@@ -631,7 +648,7 @@ agn_torus_block, agn_attenuation_block : str
         wave,
         agn_log_lbol=agn_log_lbol,
         l5100_disc=l5100_disc,
-        templates=grahsp_templates,
+        templates=_templates_for("torus", agn_torus_block),
         **params,
     )
 

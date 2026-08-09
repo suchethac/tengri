@@ -63,7 +63,7 @@ from tengri.components.agn._phys import (
     bolometric_integral_nu as _bolometric_integral_nu,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.utils.grid_interp import interp_nd_pchip, resample_template
+from tengri.components.agn._template_grid import TorusTemplateGrid, torus_lnu_from_grid
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -108,8 +108,9 @@ def _load_skirtor_agnfitter_arrays(grid_path: str) -> dict:
         }
 
 
-def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
-    """Load SKIRTOR_mean_3p grid and return a JAX-native interpolation closure.
+@functools.cache
+def load_skirtor_agnfitter_grid(grid_path: str) -> TorusTemplateGrid:
+    """Load a SKIRTOR_mean_3p grid HDF5 into a :class:`TorusTemplateGrid` pytree.
 
     Parameters
     ----------
@@ -118,9 +119,8 @@ def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
 
     Returns
     -------
-    callable
-        ``fn(wavelength, agn_log_lbol, agn_oa_skirtor, agn_incl_skirtor,
-        agn_tv_skirtor, agn_torus_frac, **_) -> L_nu [erg/s/Hz]``.
+    TorusTemplateGrid
+        Template arrays with axes ``(oa, incl, tau_V)``, as numpy arrays.
 
     Raises
     ------
@@ -132,90 +132,104 @@ def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` and monotone-cubic interpolation.
-
-    **Gradient-safe**: yes — node-exact PCHIP gives C¹-continuous gradients across the three
-    parameter axes.
+    **JIT-compatible**: no — performs HDF5 I/O. Call outside the trace and
+    pass the result in as an argument.
     """
     raw = _load_skirtor_agnfitter_arrays(grid_path)
-
-    grid_jax = jnp.asarray(raw["template"])
-    wave_grid = jnp.asarray(raw["wavelength"])
-    axes = (
-        jnp.asarray(raw["oa_axis"]),
-        jnp.asarray(raw["incl_axis"]),
-        jnp.asarray(raw["tv_axis"]),
+    return TorusTemplateGrid(
+        template=np.asarray(raw["template"]),
+        axes=(
+            np.asarray(raw["oa_axis"]),
+            np.asarray(raw["incl_axis"]),
+            np.asarray(raw["tv_axis"]),
+        ),
+        wave_grid=np.asarray(raw["wavelength"]),
     )
 
-    def skirtor_agnfitter_grid(
-        wavelength: jnp.ndarray,
-        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_oa_skirtor: float = 40.0,
-        agn_incl_skirtor: float = 30.0,
-        agn_tv_skirtor: float = 7.0,
-        agn_torus_frac: float = 0.5,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        r"""SKIRTOR_mean_3p torus SED at a single (oa, incl, tv) node.
 
-        Parameters
-        ----------
-        wavelength : array_like, shape (n_wave,)
-            Rest-frame wavelength grid. [Å]
-        agn_log_lbol : float, optional
-            ``log10(L_bol / L_sun)``. Default 11.0.
-        agn_oa_skirtor : float, optional
-            Half-opening angle [deg]. Default 40.0.
-        agn_incl_skirtor : float, optional
-            Inclination angle [deg]. Default 30.0.
-        agn_tv_skirtor : float, optional
-            Equatorial optical depth τ_9.7. Default 7.0.
-        agn_torus_frac : float, optional
-            Fraction of L_bol reprocessed by the torus. Default 0.5.
+def skirtor_agnfitter_sed_from_grid(
+    grid: TorusTemplateGrid,
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
+    agn_oa_skirtor: float = 40.0,
+    agn_incl_skirtor: float = 30.0,
+    agn_tv_skirtor: float = 7.0,
+    agn_torus_frac: float = 0.5,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""SKIRTOR_mean_3p torus SED at a single (oa, incl, tv) node.
 
-        Returns
-        -------
-        ndarray, shape (n_wave,)
-            Spectral luminosity density. [erg/s/Hz]
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    agn_log_lbol : float, optional
+        ``log10(L_bol / L_sun)``. Default 11.0.
+    agn_oa_skirtor : float, optional
+        Half-opening angle [deg]. Default 40.0.
+    agn_incl_skirtor : float, optional
+        Inclination angle [deg]. Default 30.0.
+    agn_tv_skirtor : float, optional
+        Equatorial optical depth τ_9.7. Default 7.0.
+    agn_torus_frac : float, optional
+        Fraction of L_bol reprocessed by the torus. Default 0.5.
 
-        Notes
-        -----
-        .. math::
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density. [erg/s/Hz]
 
-            L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
-                             \frac{T(\lambda;\,\theta,\,i,\,\tau_{9.7})}
-                                  {\int T(\nu;\,\theta,\,i,\,\tau_{9.7})
-                                   \,\mathrm{d}\nu}
+    Notes
+    -----
+    .. math::
 
-        where θ is the half-opening angle, i is inclination, and τ_9.7 is
-        the equatorial optical depth.
+        L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
+                         \frac{T(\lambda;\,\theta,\,i,\,\tau_{9.7})}
+                              {\int T(\nu;\,\theta,\,i,\,\tau_{9.7})
+                               \,\mathrm{d}\nu}
 
-        **JIT-compatible**: yes.
+    where θ is the half-opening angle, i is inclination, and τ_9.7 is
+    the equatorial optical depth.
 
-        **Approximation**: the grid is drawn from the ``SKIRTOR_mean_3p``
-        library (Stalevski et al. 2016 [1]_, [2]_) as packaged by
-        AGNfitter-rX [3]_, which averages out secondary parameters
-        (clumpiness p, q, radial index) of the full SKIRTOR parameter space.
-        This averaged-grid variant differs from tengri's default full-grid
-        SKIRTOR implementation (which follows X-CIGALE conventions). For
-        AGNfitter-faithful torus modeling, use this component; for X-CIGALE
-        faithful modeling, use the default SKIRTOR.
-        """
-        template = interp_nd_pchip(
-            grid_jax,
-            axes,
-            (agn_oa_skirtor, agn_incl_skirtor, agn_tv_skirtor),
-        )
-        sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
-        # Template is shape-only: renormalize by the frequency integral and scale
-        # by L_bol * torus_frac, exactly as the cat3d_wind / silva04 torus blocks
-        # and the skirtor_agnfitter precompute path do (lnu = L_SUN * T / int T dnu).
-        nu = _wavelength_to_nu(wavelength)
-        integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
-        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
-        return l_scale * sed / integral_safe
+    **JIT-compatible**: yes.
 
-    return skirtor_agnfitter_grid
+    **Approximation**: the grid is drawn from the ``SKIRTOR_mean_3p``
+    library (Stalevski et al. 2016 [1]_, [2]_) as packaged by
+    AGNfitter-rX [3]_, which averages out secondary parameters
+    (clumpiness p, q, radial index) of the full SKIRTOR parameter space.
+    This averaged-grid variant differs from tengri's default full-grid
+    SKIRTOR implementation (which follows X-CIGALE conventions). For
+    AGNfitter-faithful torus modeling, use this component; for X-CIGALE
+    faithful modeling, use the default SKIRTOR.
+    """
+    return torus_lnu_from_grid(
+        grid,
+        wavelength,
+        (agn_oa_skirtor, agn_incl_skirtor, agn_tv_skirtor),
+        agn_log_lbol=agn_log_lbol,
+        agn_torus_frac=agn_torus_frac,
+    )
+
+
+def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
+    """Load a SKIRTOR_mean_3p grid and bind it to the SED evaluator.
+
+    Retained for callers holding the historical closure API; new code should
+    prefer :func:`load_skirtor_agnfitter_grid` plus
+    :func:`skirtor_agnfitter_sed_from_grid`, which keeps the grid threadable.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``skirtor_mean3p_torus_grid.h5``.
+
+    Returns
+    -------
+    callable
+    """
+    return functools.partial(
+        skirtor_agnfitter_sed_from_grid, load_skirtor_agnfitter_grid(grid_path)
+    )
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (
@@ -241,12 +255,31 @@ def _find_skirtor_agnfitter_grid() -> str:
         raise FileNotFoundError(_NOT_FOUND_MSG) from None
 
 
+def load_skirtor_agnfitter_default_grid() -> TorusTemplateGrid:
+    """Load the packaged SKIRTOR_mean_3p grid pytree (discovery + cache).
+
+    This is the ``template_loader`` the torus block registers.
+
+    Returns
+    -------
+    TorusTemplateGrid
+
+    Raises
+    ------
+    FileNotFoundError
+        If no SKIRTOR_mean_3p grid HDF5 is present on disk.
+    """
+    return load_skirtor_agnfitter_grid(_find_skirtor_agnfitter_grid())
+
+
 @functools.cache
 def _load_skirtor_agnfitter_default() -> Callable:
     return create_skirtor_agnfitter_from_grid(_find_skirtor_agnfitter_grid())
 
 
-def skirtor_agnfitter_sed(*args, **kwargs) -> jnp.ndarray:
+def skirtor_agnfitter_sed(
+    *args, _template: TorusTemplateGrid | None = None, **kwargs
+) -> jnp.ndarray:
     """SKIRTOR_mean_3p torus (auto-loaded from the packaged HDF5 grid).
 
     Parameters
@@ -277,5 +310,7 @@ def skirtor_agnfitter_sed(*args, **kwargs) -> jnp.ndarray:
     directory or the current working directory. To use a non-standard grid
     location, call :func:`create_skirtor_agnfitter_from_grid` directly.
     """
+    if _template is not None:
+        return skirtor_agnfitter_sed_from_grid(_template, *args, **kwargs)
     fn = _load_skirtor_agnfitter_default()
     return fn(*args, **kwargs)
