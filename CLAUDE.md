@@ -446,7 +446,7 @@ Every new issue and PR MUST be labelled. Pick at minimum **one area:** label; ad
 - `area:inference` — VI/MCMC/NUTS/MAP backends, `InferenceContext`
 - `area:population` — `PopulationSEDModel`, hierarchical PSD fits
 - `area:spatial` — `SpatialSEDModel`, fiber, aperture, multi-component spatial
-- `area:examples` — sphinx-gallery scripts under `docs/examples/`
+- `area:examples` — sphinx-gallery scripts under `examples/` (rendered into `docs/auto_examples/`)
 - `area:notebooks` — jupytext fundamentals/quickstart notebooks
 - `area:docs` — user/dev docs (not gallery, not ADR)
 - `area:adr` — architecture decision records under `docs/adr/`
@@ -495,3 +495,4 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 - `tools/check_british_spelling.py` — CI guard for American-English spelling (NAMING_CONTRACT §10); `--fix` to auto-rewrite
 - `tools/check_reimplementation_language.py` — CI guard for the credit rule above: fails on "ported from" / "copied from" / "adapted from" and on "port" beside a reference-code name. Code "implements"; data is "repackaged". Files that must quote the banned wording are allowlisted in `EXCLUDE_FILES`
 - `tools/check_doc_examples.py` — CI guard that every symbol named in a `src/` docstring or published doc actually exists (`docs/api/*.rst` are autodoc stubs, so docstrings *are* the API reference, and no doctest runner executes them). Runs in the `smoke` job. `docs/dev/` is out of scope by design: design notes and parity audits legitimately name removed or not-yet-built API
+- `tools/check_claude_md_paths.py` — CI guard that every repo path named in **this file** exists. The guard above resolves *symbols*; this one resolves *paths*, and nothing did before `area:examples` spent an unknown stretch pointing at a *docs/examples/* that has never existed. **Code markup on a path in this file is an assertion that the path exists** — that is the rule the guard enforces, so write a path you are describing rather than citing (a removed one, a hypothetical) as plain text. A token resolves against the repo root or against `src/tengri/` (this file writes `parameters/groups.py` and 16 others package-relative). Bare basenames (`cue.py`) are references, not paths, and are deliberately not checked
