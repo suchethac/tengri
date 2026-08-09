@@ -28,22 +28,45 @@
 #   scripts/install_oom_guard_agent.sh
 #
 # Config (env):
-#   TOTAL_LIMIT_GB   python RSS budget [GB]; default 75% of physical RAM
-#   AVAIL_PCT_MIN    trip when available memory falls below this % of RAM;
-#                    default 10. 0 disables the availability trigger. This is
-#                    the pressure signal that actually predicts death: it is
-#                    what the kernel is short of and cannot reclaim.
-#   SWAP_MAX_GB      trip when swap in use exceeds this [GB]; default 0 =
-#                    DISABLED, and you almost certainly want to leave it off
-#                    on macOS. Swap there is not an emergency reading: the
-#                    kernel grows the swap file on demand and does not shrink
-#                    it, so a box merely up for a few days sits permanently
-#                    above any fixed threshold. Enabling it made the guard
-#                    want to fire on every tick forever (measured 2026-08-09:
-#                    swap pinned at 20+ GB for hours while available memory
-#                    stayed a healthy 22-29%), which would have killed 8 GB
-#                    out of every pytest run 60 s after it started. Swap is
-#                    logged every tick regardless, for diagnosis.
+#   TOTAL_LIMIT_GB   python RSS budget [GB]; default 75% of physical RAM.
+#                    WEAKEST of the triggers, and it CANNOT be the only one:
+#                    RSS counts only resident pages, so every page the kernel
+#                    swaps out stops being counted and this number SHRINKS as
+#                    the machine thrashes harder. Measured 2026-08-10 either
+#                    side of a manual rescue, three minutes apart:
+#                      34 python procs, box thrashing  -> total 12.88 GB
+#                      10 python procs, box healthy    -> total 23.83 GB
+#                    A 32 GB limit was therefore unreachable in exactly the
+#                    condition it existed to catch. Keep it as a backstop for
+#                    a genuine resident-memory runaway; do not rely on it.
+#   AVAIL_PCT_MIN    HARD floor: trip whenever available memory is below this %
+#                    of RAM, on its own. Default 10. 0 disables.
+#   AVAIL_PCT_SOFT   SOFT threshold, default 20: trips only in CONJUNCTION with
+#                    swap above SWAP_MAX_GB. macOS holds available memory up
+#                    *by* swapping, so during the 2026-08-10 incident it sat at
+#                    17-18% for the whole event and never reached the 10% hard
+#                    floor, while swap ran to 43 GB. Neither signal alone is
+#                    both sensitive and quiet; their conjunction is.
+#   SWAP_MAX_GB      swap-in-use level [GB] that counts as pressure; default 20.
+#                    This was 0 (disabled) and that is why the guard missed the
+#                    2026-08-10 event. The reasoning for disabling it was FALSE:
+#                    it claimed macOS never shrinks the swap file. Measured
+#                    across that incident, swap went 8.47 -> 43.23 -> 8.47 GB,
+#                    reclaiming 35 GB within minutes of the pressure clearing.
+#                    The earlier "chronic 20+ GB baseline" was not a baseline at
+#                    all -- it was the opening hours of the same thrash. Swap is
+#                    the one signal that tracked the event monotonically. Keep
+#                    this well ABOVE the working baseline (~8.5 GB here), which
+#                    is what makes it quiet; a threshold set near baseline is
+#                    the actual trap.
+#   SWAP_GROWTH_GB   trip when swap grows by this much [GB] within
+#                    SWAP_GROWTH_WINDOW_SEC; default 3. Catches the ramp before
+#                    the absolute level is alarming, and is immune to whatever
+#                    the baseline happens to be. On 2026-08-10 swap climbed
+#                    6.33 -> 17.06 GB in four minutes before any level trigger
+#                    would have fired. 0 disables.
+#   SWAP_GROWTH_WINDOW_SEC
+#                    sliding window for SWAP_GROWTH_GB [s]; default 120
 #   SHED_GB          how much RSS to shed per pressure trip [GB]; default 8
 #   PRESSURE_MIN_PYTHON_GB
 #                    a PRESSURE trip only sheds if python itself holds at least
@@ -86,11 +109,17 @@ detect_ram_kb() {
     fi
 }
 
-RAM_KB=$(detect_ram_kb)
+# RAM_KB_OVERRIDE is a test hook: available-memory percentages are meaningless
+# unless the denominator is fixed, so a fixture that pins avail_kb must pin RAM
+# too or the same numbers mean different things on every machine.
+RAM_KB="${RAM_KB_OVERRIDE:-$(detect_ram_kb)}"
 RAM_GB=$(( RAM_KB / 1048576 ))
 TOTAL_LIMIT_GB="${TOTAL_LIMIT_GB:-$(( RAM_GB * 3 / 4 ))}"
 AVAIL_PCT_MIN="${AVAIL_PCT_MIN:-10}"
-SWAP_MAX_GB="${SWAP_MAX_GB:-0}"
+AVAIL_PCT_SOFT="${AVAIL_PCT_SOFT:-20}"
+SWAP_MAX_GB="${SWAP_MAX_GB:-20}"
+SWAP_GROWTH_GB="${SWAP_GROWTH_GB:-3}"
+SWAP_GROWTH_WINDOW_SEC="${SWAP_GROWTH_WINDOW_SEC:-120}"
 SHED_GB="${SHED_GB:-8}"
 PRESSURE_MIN_PYTHON_GB="${PRESSURE_MIN_PYTHON_GB:-8}"
 COOLDOWN_SEC="${COOLDOWN_SEC:-60}"
@@ -104,9 +133,10 @@ MAX_TICKS="${MAX_TICKS:-0}"
 PS_FIXTURE="${PS_FIXTURE:-}"
 PRESSURE_FIXTURE="${PRESSURE_FIXTURE:-}"
 
-case "$TOTAL_LIMIT_GB$AVAIL_PCT_MIN$SWAP_MAX_GB$SHED_GB$PRESSURE_MIN_PYTHON_GB$COOLDOWN_SEC$INTERVAL_SEC$MIN_KILL_MB" in
+case "$TOTAL_LIMIT_GB$AVAIL_PCT_MIN$AVAIL_PCT_SOFT$SWAP_MAX_GB$SWAP_GROWTH_GB$SWAP_GROWTH_WINDOW_SEC$SHED_GB$PRESSURE_MIN_PYTHON_GB$COOLDOWN_SEC$INTERVAL_SEC$MIN_KILL_MB" in
     *[!0-9]*)
-        echo "error: TOTAL_LIMIT_GB, AVAIL_PCT_MIN, SWAP_MAX_GB, SHED_GB," \
+        echo "error: TOTAL_LIMIT_GB, AVAIL_PCT_MIN, AVAIL_PCT_SOFT, SWAP_MAX_GB," \
+             "SWAP_GROWTH_GB, SWAP_GROWTH_WINDOW_SEC, SHED_GB," \
              "PRESSURE_MIN_PYTHON_GB, COOLDOWN_SEC, INTERVAL_SEC, MIN_KILL_MB" \
              "must be non-negative integers" >&2
         exit 64 ;;
@@ -116,6 +146,7 @@ LIMIT_KB=$(( TOTAL_LIMIT_GB * 1024 * 1024 ))
 MIN_KILL_KB=$(( MIN_KILL_MB * 1024 ))
 SHED_KB=$(( SHED_GB * 1024 * 1024 ))
 SWAP_MAX_KB=$(( SWAP_MAX_GB * 1024 * 1024 ))
+SWAP_GROWTH_KB=$(( SWAP_GROWTH_GB * 1024 * 1024 ))
 PRESSURE_MIN_PYTHON_KB=$(( PRESSURE_MIN_PYTHON_GB * 1024 * 1024 ))
 SELF_PID=$$
 
@@ -130,7 +161,13 @@ kb_to_gb() { awk -v k="$1" 'BEGIN{printf "%.2f", k / 1048576}'; }
 # every INTERVAL_SEC under load.
 read_pressure() {
     if [[ -n "$PRESSURE_FIXTURE" ]]; then
-        read -r AVAIL_KB SWAP_USED_KB < "$PRESSURE_FIXTURE"
+        # One "avail_kb swap_used_kb" line per tick, so a test can drive a ramp
+        # rather than a constant -- without that, the swap-growth trigger has no
+        # way to be exercised at all. Past the last line the fixture holds its
+        # final value, so a one-line file behaves as a constant.
+        _line=$(sed -n "$(( ${tick:-0} + 1 ))p" "$PRESSURE_FIXTURE")
+        [[ -z "$_line" ]] && _line=$(tail -n 1 "$PRESSURE_FIXTURE")
+        read -r AVAIL_KB SWAP_USED_KB <<< "$_line"
         return
     fi
     if [[ "$(uname)" == "Darwin" ]]; then
@@ -153,7 +190,9 @@ read_pressure() {
 }
 
 echo "[total-guard $(date +%H:%M:%S)] start pid=$SELF_PID limit=${TOTAL_LIMIT_GB}GB (ram=${RAM_GB}GB)" \
-     "avail_min=${AVAIL_PCT_MIN}% swap_max=${SWAP_MAX_GB}GB shed=${SHED_GB}GB" \
+     "avail_min=${AVAIL_PCT_MIN}% avail_soft=${AVAIL_PCT_SOFT}%" \
+     "swap_max=${SWAP_MAX_GB}GB swap_growth=+${SWAP_GROWTH_GB}GB/${SWAP_GROWTH_WINDOW_SEC}s" \
+     "shed=${SHED_GB}GB" \
      "pressure_min_python=${PRESSURE_MIN_PYTHON_GB}GB cooldown=${COOLDOWN_SEC}s" \
      "interval=${INTERVAL_SEC}s min_kill=${MIN_KILL_MB}MB dry_run=${DRY_RUN} log=$LOG" | tee -a "$LOG"
 
@@ -161,6 +200,8 @@ trap 'echo "[total-guard $(date +%H:%M:%S)] stop pid=$SELF_PID" | tee -a "$LOG";
 
 tick=0
 last_kill_epoch=0
+swap_hist_t=()
+swap_hist_v=()
 while true; do
     # One process-table snapshot per tick: collect every python process as a
     # tab-separated "rss_kb pid args" line and sum the total.
@@ -202,9 +243,26 @@ while true; do
 
     read_pressure
     avail_pct=$(( AVAIL_KB * 100 / RAM_KB ))
+    now_epoch=$(date +%s)
+
+    # Sliding window of swap readings, so growth is measured against the oldest
+    # sample still inside SWAP_GROWTH_WINDOW_SEC. A single "reference sample,
+    # reset every window" would straddle boundaries and miss a climb that spans
+    # two of them; keeping the samples costs ~40 entries at the default cadence.
+    swap_hist_t+=("$now_epoch")
+    swap_hist_v+=("$SWAP_USED_KB")
+    while (( ${#swap_hist_t[@]} > 1 )) \
+          && (( now_epoch - swap_hist_t[0] > SWAP_GROWTH_WINDOW_SEC )); do
+        swap_hist_t=("${swap_hist_t[@]:1}")
+        swap_hist_v=("${swap_hist_v[@]:1}")
+    done
+    swap_growth_kb=$(( SWAP_USED_KB - swap_hist_v[0] ))
+    swap_growth_span=$(( now_epoch - swap_hist_t[0] ))
+    (( swap_growth_kb < 0 )) && swap_growth_kb=0
 
     echo "$(date +%H:%M:%S) total=$(kb_to_gb "$total_kb")GB n=$n_procs limit=${TOTAL_LIMIT_GB}GB" \
-         "avail=${avail_pct}% swap=$(kb_to_gb "$SWAP_USED_KB")GB" >> "$LOG"
+         "avail=${avail_pct}% swap=$(kb_to_gb "$SWAP_USED_KB")GB" \
+         "swap_d=+$(kb_to_gb "$swap_growth_kb")GB/${swap_growth_span}s" >> "$LOG"
 
     # Decide whether to shed, and by how much. Both triggers reduce to a
     # single "shed this many KB" target so victim selection has one code path.
@@ -215,11 +273,28 @@ while true; do
         target_kb=$(( total_kb - LIMIT_KB ))
     fi
     pressure=""
+
+    # Hard floor: available memory alone, no corroboration needed.
     if (( AVAIL_PCT_MIN > 0 && avail_pct < AVAIL_PCT_MIN )); then
         pressure="available ${avail_pct}% < ${AVAIL_PCT_MIN}%"
     fi
-    if (( SWAP_MAX_KB > 0 && SWAP_USED_KB > SWAP_MAX_KB )); then
-        pressure="${pressure:+$pressure; }swap $(kb_to_gb "$SWAP_USED_KB")GB > ${SWAP_MAX_GB}GB"
+
+    # Conjunction: neither of these is both sensitive and quiet on its own.
+    # macOS keeps available memory up *by* swapping, so on 2026-08-10 avail sat
+    # at 17-18% for the entire event and never reached the 10% hard floor --
+    # while swap ran to 43 GB. Requiring both keeps a merely-busy box silent.
+    if (( AVAIL_PCT_SOFT > 0 && SWAP_MAX_KB > 0 )) \
+       && (( avail_pct < AVAIL_PCT_SOFT && SWAP_USED_KB > SWAP_MAX_KB )); then
+        pressure="${pressure:+$pressure; }available ${avail_pct}% < ${AVAIL_PCT_SOFT}%"
+        pressure="$pressure with swap $(kb_to_gb "$SWAP_USED_KB")GB > ${SWAP_MAX_GB}GB"
+    fi
+
+    # Rate: swap climbing fast is an emergency at ANY baseline, which is what
+    # makes this the one trigger that cannot be defeated by a box whose normal
+    # swap happens to sit high.
+    if (( SWAP_GROWTH_KB > 0 && swap_growth_kb > SWAP_GROWTH_KB )); then
+        pressure="${pressure:+$pressure; }swap +$(kb_to_gb "$swap_growth_kb")GB"
+        pressure="$pressure in ${swap_growth_span}s"
     fi
     if [[ -n "$pressure" ]]; then
         if (( total_kb >= PRESSURE_MIN_PYTHON_KB )); then
@@ -234,7 +309,8 @@ while true; do
         fi
     fi
 
-    now_epoch=$(date +%s)
+    # now_epoch was taken with the swap sample above, so the cooldown is
+    # measured against the same instant the trigger was evaluated at.
     if [[ -n "$reason" ]] && (( now_epoch - last_kill_epoch < COOLDOWN_SEC )); then
         echo "[total-guard $(date +%H:%M:%S)] would shed ($reason) but cooling down" \
              "$(( COOLDOWN_SEC - (now_epoch - last_kill_epoch) ))s — freed memory lags the kill" >> "$LOG"

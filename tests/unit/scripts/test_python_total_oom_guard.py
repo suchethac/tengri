@@ -35,13 +35,28 @@ def _write_ps(path: Path, procs: list[tuple[int, int, str]]) -> Path:
     return path
 
 
-def _write_pressure(path: Path, avail_kb: int, swap_used_kb: int) -> Path:
-    path.write_text(f"{avail_kb} {swap_used_kb}\n")
+def _write_pressure(path: Path, avail_kb: int, swap_used_kb) -> Path:
+    """Write one pressure sample per tick.
+
+    ``swap_used_kb`` may be a sequence to drive a ramp across ticks; a scalar is
+    a constant. The guard holds the last line once the fixture is exhausted.
+    """
+    samples = swap_used_kb if isinstance(swap_used_kb, (list, tuple)) else [swap_used_kb]
+    path.write_text("".join(f"{avail_kb} {s}\n" for s in samples))
     return path
 
 
-def _run_guard(tmp_path: Path, ps_procs, *, avail_kb, swap_used_kb, **env_overrides):
-    """Run one guard tick against fixtures and return the log text."""
+def _run_guard(
+    tmp_path: Path, ps_procs, *, avail_kb, swap_used_kb, shipped_defaults=False, **env_overrides
+):
+    """Run one guard tick against fixtures and return the log text.
+
+    ``shipped_defaults=True`` omits the threshold neutralizers so the guard runs
+    the configuration a real machine gets. Any test asking "would the guard as
+    installed have caught this?" MUST use it: setting the thresholds by hand
+    proves only that some configuration works, never that the shipped default
+    does — and a wrong default was the whole of the 2026-08-10 miss.
+    """
     log = tmp_path / "guard.log"
     env = {
         "PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
@@ -53,10 +68,11 @@ def _run_guard(tmp_path: Path, ps_procs, *, avail_kb, swap_used_kb, **env_overri
         "DRY_RUN": "1",
         "MAX_TICKS": "1",
         "INTERVAL_SEC": "1",
-        # Neutralize the pressure triggers unless a test opts in.
-        "AVAIL_PCT_MIN": "0",
-        "SWAP_MAX_GB": "0",
     }
+    if not shipped_defaults:
+        # Neutralize the pressure triggers unless a test opts in. SWAP_MAX_GB=0
+        # also disables the avail-soft conjunction, which requires both halves.
+        env.update({"AVAIL_PCT_MIN": "0", "SWAP_MAX_GB": "0", "SWAP_GROWTH_GB": "0"})
     env.update({k: str(v) for k, v in env_overrides.items()})
     proc = subprocess.run(
         ["bash", str(GUARD)], env=env, capture_output=True, text=True, timeout=120
@@ -197,3 +213,117 @@ def test_excluded_processes_are_never_shed(tmp_path):
 
     assert 501 not in _victim_pids(log)
     assert 502 in _victim_pids(log)
+
+
+# The machine measured during the 2026-08-10 incident: 48 GiB of RAM, 34 python
+# processes whose *resident* pages summed to only 12.88 GB because the rest had
+# been paged out, available memory pinned at 18%, swap at 43 GB. Every trigger
+# as shipped was structurally unable to fire, and the user killed by hand.
+_RAM_KB_48 = 48 * GB
+_INCIDENT_AVAIL_KB = int(0.18 * _RAM_KB_48)
+_INCIDENT_SWAP_KB = 43 * GB
+_INCIDENT_PROCS = [(600 + i, 388 * MB, f"/venv/bin/python -m pytest w{i}") for i in range(34)]
+
+
+def test_the_2026_08_10_incident_now_trips(tmp_path):
+    """Available 18% + swap 43 GB must shed, though no single threshold is hit.
+
+    Neither half fires alone by design: 18% clears the 10% hard floor, and the
+    conjunction is what makes the pair sensitive without making either jumpy.
+    """
+    log = _run_guard(
+        tmp_path,
+        _INCIDENT_PROCS,
+        avail_kb=_INCIDENT_AVAIL_KB,
+        swap_used_kb=_INCIDENT_SWAP_KB,
+        shipped_defaults=True,
+        RAM_KB_OVERRIDE=_RAM_KB_48,
+        TOTAL_LIMIT_GB=32,
+    )
+
+    assert "TRIP" in log, f"guard stayed silent through the incident:\n{log}"
+    assert _victim_pids(log), "tripped but selected nobody"
+
+
+def test_the_incident_does_not_trip_the_sum_rss_limit(tmp_path):
+    """The sum-RSS trigger alone is blind here — that is why it cannot be the only one.
+
+    12.88 GB of resident pages against a 32 GB limit. Pinning this keeps the
+    regression honest: if someone 'fixes' the miss by lowering TOTAL_LIMIT_GB,
+    this test still shows the RSS axis never saw the emergency.
+    """
+    log = _run_guard(
+        tmp_path,
+        _INCIDENT_PROCS,
+        avail_kb=_INCIDENT_AVAIL_KB,
+        swap_used_kb=_INCIDENT_SWAP_KB,
+        RAM_KB_OVERRIDE=_RAM_KB_48,
+        TOTAL_LIMIT_GB=32,
+    )
+
+    assert "TRIP" not in log
+    assert "sum-rss" not in log
+
+
+def test_a_recovered_machine_holding_more_rss_does_not_trip(tmp_path):
+    """The control, and the point: MORE resident python, but healthy — stay quiet.
+
+    Ten processes summing to 23.8 GB with 44% available and swap back at 8.4 GB
+    is the *post-rescue* reading from the same box. A guard driven by resident
+    memory would shed here and not during the incident, i.e. exactly backwards.
+    """
+    procs = [(700 + i, int(2.38 * GB), f"/venv/bin/python -m pytest w{i}") for i in range(10)]
+    log = _run_guard(
+        tmp_path,
+        procs,
+        avail_kb=int(0.44 * _RAM_KB_48),
+        swap_used_kb=int(8.4 * GB),
+        shipped_defaults=True,
+        RAM_KB_OVERRIDE=_RAM_KB_48,
+        TOTAL_LIMIT_GB=32,
+    )
+
+    assert "TRIP" not in log, f"shed on a healthy machine:\n{log}"
+
+
+def test_swap_growth_trips_below_the_absolute_level(tmp_path):
+    """A fast climb is an emergency at any baseline — level triggers arrive late.
+
+    Swap ramps 6 -> 17 GB while staying under SWAP_MAX_GB=20 the whole time,
+    which is the real 00:53->00:57 ramp. Available stays at 30%, above both the
+    hard floor and the soft threshold, so growth is the only thing that can fire.
+    """
+    log = _run_guard(
+        tmp_path,
+        _INCIDENT_PROCS,
+        avail_kb=int(0.30 * _RAM_KB_48),
+        swap_used_kb=[6 * GB, 9 * GB, 13 * GB, 17 * GB],
+        shipped_defaults=True,
+        RAM_KB_OVERRIDE=_RAM_KB_48,
+        TOTAL_LIMIT_GB=32,
+        MAX_TICKS=4,
+    )
+
+    assert "TRIP" in log, f"missed an 11 GB swap ramp:\n{log}"
+    assert "swap +" in log
+
+
+def test_flat_high_swap_alone_does_not_trip(tmp_path):
+    """The trap the disabled trigger was guarding against, kept closed.
+
+    Swap parked at 25 GB with plenty of memory free is a box that swapped once
+    and recovered. Neither the conjunction (available is high) nor growth (flat)
+    may fire, or the guard kills 8 GB out of every long-running job.
+    """
+    log = _run_guard(
+        tmp_path,
+        _INCIDENT_PROCS,
+        avail_kb=int(0.40 * _RAM_KB_48),
+        swap_used_kb=[25 * GB, 25 * GB, 25 * GB],
+        shipped_defaults=True,
+        RAM_KB_OVERRIDE=_RAM_KB_48,
+        TOTAL_LIMIT_GB=32,
+        MAX_TICKS=3,
+    )
+
+    assert "TRIP" not in log, f"fired on flat, recovered swap:\n{log}"

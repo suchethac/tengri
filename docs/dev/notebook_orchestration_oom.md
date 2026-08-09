@@ -167,22 +167,34 @@ trace*. On 2026-08-09 a machine hit ~120 GB of summed python RSS with the
 guard installed but dead for weeks; the only clue was a missing log file.
 `KeepAlive` in the agent also covers silent death mid-session.
 
-Three traps this guard had to be taught, all of which made it look
+Five traps this guard had to be taught, all of which made it look
 healthy while doing nothing:
 
-1. **A sum-RSS limit can sit above what the workload ever reaches.**
-   Measured on the incident machine: python summed to 12–16 GB against a
-   30 GB limit — never tripping — while the box suffocated. Hence the
-   second trigger on `AVAIL_PCT_MIN` (available memory), which is what
-   the kernel is actually short of. Do **not** reach for the
-   `SWAP_MAX_GB` trigger on macOS: swap there grows on demand and never
-   shrinks, so it reads as a permanent emergency on any long-uptime
-   machine and would kill 8 GB out of every `pytest -n auto` run.
-2. **A `MIN_KILL_MB` floor must never veto the whole candidate list.**
+1. **Sum-RSS is blind to a swap emergency — it shrinks as the machine
+   thrashes.** RSS counts only resident pages. Measured 2026-08-10, same
+   box, three minutes apart: 34 python processes summed to **12.88 GB**
+   while thrashing at 18% available and 43 GB of swap; ten processes on
+   the recovered box summed to **23.83 GB**. A 32 GB limit is close to
+   unreachable in exactly the condition it exists to catch. Detect with
+   system-level signals; use RSS only to *rank* victims.
+2. **On macOS, available memory stays high *because* the kernel is
+   swapping.** It sat at 17–18% for the whole 2026-08-10 event and never
+   reached the 10% hard floor. Hence `AVAIL_PCT_SOFT` (20%), which fires
+   only in conjunction with `SWAP_MAX_GB` — neither half is both
+   sensitive and quiet alone.
+3. **Do not disable the swap trigger.** It defaulted to 0 on the claim
+   that macOS never shrinks its swap file, and that claim is false: swap
+   went 8.47 → 43.23 → 8.47 GB across one incident. The real trap is a
+   threshold set *near* the working baseline. Keep it well above, and add
+   a **growth** trigger (`SWAP_GROWTH_GB` over
+   `SWAP_GROWTH_WINDOW_SEC`), which is immune to the baseline entirely
+   and fires on the ramp — swap climbed 6 → 17 GB in four minutes before
+   any level trigger would have spoken.
+4. **A `MIN_KILL_MB` floor must never veto the whole candidate list.**
    66% of python RSS on that machine sat below the 512 MB floor. The
    selector now runs a second pass that ignores the floor when the shed
    target cannot otherwise be met.
-3. **Don't shed when shedding cannot help.** Pressure trips require
+5. **Don't shed when shedding cannot help.** Pressure trips require
    python to hold at least `PRESSURE_MIN_PYTHON_GB` (default 8),
    otherwise a chronic swap condition re-trips every cooldown and
    eventually kills every python process for no benefit.

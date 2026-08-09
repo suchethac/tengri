@@ -92,23 +92,45 @@ ship in `scripts/`:
   individually-modest workers (pytest-xdist, parallel sessions,
   orphaned kernels) that together sum past physical RAM.
 
-Two independent triggers are on by default, because either alone has a
-blind spot:
+Four triggers are on by default, because every one of them has a blind
+spot the others cover:
 
 | Trigger | Fires when | Catches |
 | --- | --- | --- |
-| sum-RSS | python RSS sums past `TOTAL_LIMIT_GB` (default 75% of RAM) | the classic "30 workers × 4 GB" blow-up, early |
-| pressure | available memory < `AVAIL_PCT_MIN` (10%) | a limit set *above* what the workload ever reaches while the box suffocates anyway |
+| sum-RSS | python RSS sums past `TOTAL_LIMIT_GB` (default 75% of RAM) | a resident-memory runaway. **Weakest — see below** |
+| avail hard | available memory < `AVAIL_PCT_MIN` (10%) | the box is out of memory outright |
+| avail + swap | available < `AVAIL_PCT_SOFT` (20%) **and** swap > `SWAP_MAX_GB` (20 GB) | swap thrash, where available memory never falls far because the kernel is *keeping* it up by paging |
+| swap growth | swap grows > `SWAP_GROWTH_GB` (3 GB) within `SWAP_GROWTH_WINDOW_SEC` (120 s) | the ramp, before any level is alarming — immune to whatever the baseline is |
 
-There is also a `SWAP_MAX_GB` trigger, **off by default, and you should
-leave it off on macOS.** Swap in use is not an emergency reading there:
-the kernel grows the swap file on demand and never shrinks it, so any
-box up for a few days sits permanently above a fixed threshold.
-Measured 2026-08-09: swap pinned at 20+ GB for hours while available
-memory stayed a healthy 22–29%. Enabled, it wanted to fire every tick
-forever — which would have killed 8 GB out of every `pytest -n auto`
-run 60 s after it started. Available memory is the signal that actually
-predicts death; swap is logged every tick for diagnosis only.
+**Do not rely on sum-RSS.** RSS counts only *resident* pages, so every
+page the kernel swaps out stops being counted: the number **shrinks as
+the machine thrashes harder**. Measured 2026-08-10, three minutes apart
+either side of a manual rescue on the same box:
+
+```
+01:19:50  total=12.88GB  n=34  avail=18%  swap=43.23GB   <- emergency
+01:22:24  total=23.83GB  n=10  avail=44%  swap= 8.40GB   <- after the rescue
+```
+
+Thirty-four processes summed to 12.9 GB; ten summed to 23.8 GB. A 32 GB
+limit was unreachable in exactly the condition it existed to catch.
+Detect with the system-level triggers; sum-RSS is a backstop, and RSS is
+still the right thing to *rank* victims by.
+
+**`SWAP_MAX_GB` used to default to 0 (disabled), and that is why the
+guard sat quiet through the 2026-08-10 incident.** The reasoning for
+disabling it was wrong: it claimed macOS never shrinks the swap file.
+Across that incident swap went 8.47 → 43.23 → 8.47 GB, reclaiming 35 GB
+within minutes of the pressure clearing. The "chronic 20+ GB baseline"
+recorded earlier was not a baseline — it was the opening hours of the
+same thrash.
+
+The real trap is a swap threshold set *near* the working baseline
+(~8.5 GB here), which fires forever. Keeping it well above baseline, and
+requiring available memory to be low at the same time, is what makes it
+both sensitive and quiet. `tests/unit/scripts/test_python_total_oom_guard.py`
+pins both directions: the incident must trip, and flat high swap on an
+otherwise healthy box must not.
 
 **Install it as a LaunchAgent rather than backgrounding it by hand:**
 

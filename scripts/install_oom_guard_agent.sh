@@ -48,9 +48,17 @@ fi
 # workload ever reaches while the box thrashes.
 TOTAL_LIMIT_GB="${TOTAL_LIMIT_GB:-32}"
 AVAIL_PCT_MIN="${AVAIL_PCT_MIN:-10}"
-# Off by default: macOS grows its swap file on demand and never shrinks it, so
-# a fixed "swap in use" threshold is a permanent trip on any long-uptime box.
-SWAP_MAX_GB="${SWAP_MAX_GB:-0}"
+AVAIL_PCT_SOFT="${AVAIL_PCT_SOFT:-20}"
+# NOT off. The claim that macOS "grows its swap file on demand and never
+# shrinks it" -- which is why this used to be pinned to 0 -- is false: measured
+# 2026-08-10, swap went 8.47 -> 43.23 -> 8.47 GB across one incident. Pinning
+# it to 0 here also silently overrode the guard's own default, so the script
+# could be fixed and the installed agent still miss. Every threshold this file
+# writes into the plist is an override; keep them equal to the script defaults
+# unless there is a reason, or fixing one layer will not fix the machine.
+SWAP_MAX_GB="${SWAP_MAX_GB:-20}"
+SWAP_GROWTH_GB="${SWAP_GROWTH_GB:-3}"
+SWAP_GROWTH_WINDOW_SEC="${SWAP_GROWTH_WINDOW_SEC:-120}"
 SHED_GB="${SHED_GB:-8}"
 PRESSURE_MIN_PYTHON_GB="${PRESSURE_MIN_PYTHON_GB:-8}"
 COOLDOWN_SEC="${COOLDOWN_SEC:-60}"
@@ -79,7 +87,10 @@ cat > "$PLIST" <<PLIST_EOF
     <dict>
         <key>TOTAL_LIMIT_GB</key><string>${TOTAL_LIMIT_GB}</string>
         <key>AVAIL_PCT_MIN</key><string>${AVAIL_PCT_MIN}</string>
+        <key>AVAIL_PCT_SOFT</key><string>${AVAIL_PCT_SOFT}</string>
         <key>SWAP_MAX_GB</key><string>${SWAP_MAX_GB}</string>
+        <key>SWAP_GROWTH_GB</key><string>${SWAP_GROWTH_GB}</string>
+        <key>SWAP_GROWTH_WINDOW_SEC</key><string>${SWAP_GROWTH_WINDOW_SEC}</string>
         <key>SHED_GB</key><string>${SHED_GB}</string>
         <key>PRESSURE_MIN_PYTHON_GB</key><string>${PRESSURE_MIN_PYTHON_GB}</string>
         <key>COOLDOWN_SEC</key><string>${COOLDOWN_SEC}</string>
@@ -133,9 +144,12 @@ echo "installed ${LABEL}"
 echo "  guard   : $GUARD_DST"
 echo "  plist   : $PLIST"
 echo "  log     : $LOG"
-swap_desc="off (recommended on macOS)"
-(( SWAP_MAX_GB > 0 )) && swap_desc=">${SWAP_MAX_GB}GB"
-echo "  limits  : sum-rss>${TOTAL_LIMIT_GB}GB | avail<${AVAIL_PCT_MIN}% | swap ${swap_desc}"
+swap_desc="off — the box is UNGUARDED against swap thrash"
+(( SWAP_MAX_GB > 0 )) && swap_desc=">${SWAP_MAX_GB}GB with avail<${AVAIL_PCT_SOFT}%"
+growth_desc="off"
+(( SWAP_GROWTH_GB > 0 )) && growth_desc="+${SWAP_GROWTH_GB}GB/${SWAP_GROWTH_WINDOW_SEC}s"
+echo "  limits  : sum-rss>${TOTAL_LIMIT_GB}GB (weak: RSS shrinks while swapping)"
+echo "            avail<${AVAIL_PCT_MIN}% hard | swap ${swap_desc} | growth ${growth_desc}"
 echo "  shed    : ${SHED_GB}GB per trip, ${COOLDOWN_SEC}s cooldown, min_kill=${MIN_KILL_MB}MB, dry_run=${DRY_RUN}"
 echo "  pressure trips only while python holds >= ${PRESSURE_MIN_PYTHON_GB}GB"
 echo
