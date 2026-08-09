@@ -49,7 +49,24 @@ pytestmark = pytest.mark.regression_bug
 _SIGMA = 3.0e-30
 _FLUX = 1.9e-28
 
-_SRC = Path(__file__).resolve().parents[3] / "src" / "tengri"
+_REPO = Path(__file__).resolve().parents[3]
+_SRC = _REPO / "src" / "tengri"
+
+#: Roots the class guard sweeps. `src/` is the code; `examples/` and
+#: `docs/dev/` are the surfaces that *teach* a spelling, and a doc showing the
+#: removed form is how it comes back — `docs/dev/inference_methods.md` still
+#: printed `vjp_fn(noise_inv * Jv)` after the code stopped doing it.
+#:
+#: Deliberately NOT swept: `tests/` (several legitimately build a dense
+#: reference covariance, `jnp.diag(1.0/err**2)`, or freeze the pre-fix
+#: arithmetic as a comparison arm — that is their job), `docs/auto_examples/`
+#: (generated from `examples/`), and `docs/dev/archive/` (historical record).
+_SWEPT_ROOTS = (
+    _REPO / "src" / "tengri",
+    _REPO / "examples",
+    _REPO / "docs" / "dev",
+)
+_SWEPT_SKIP = ("archive/",)
 
 
 def _f32(fn):
@@ -404,7 +421,9 @@ _SQRT_OF_INV_VARIANCE = re.compile(r"sqrt\(\s*[A-Za-z_][\w\.\[\]]*_inv\w*\s*\)",
 #: reST inline literals — prose *quoting* the banned spelling to explain it is
 #: documentation, not an instance of it. Stripped before matching so the
 #: allowlist below holds only genuine code decisions.
-_RST_LITERAL = re.compile(r"``[^`]*``")
+#: Matches both reST ``double`` and Markdown `single` backtick spans — the
+#: sweep now covers .md, where prose warning *against* a spelling quotes it.
+_RST_LITERAL = re.compile(r"`+[^`]*`+")
 
 #: ``(file, exact source text)`` pairs exempt from :data:`_INV_VARIANCE`, each
 #: with the reason it is not an inverse variance. Editing an exempt line
@@ -427,27 +446,53 @@ _ALLOWED = {
     # underflows to 0 in float32. The variable-noise Hessian needs the whole
     # metric rescaled, not a spelling change -- a design task, not this fix.
     ("observation/noise.py", "H_tt = residual**2 + 1.0 / tau**2"),
-    # KNOWN OPEN: the 1e-30 floor binds at a real spectroscopic sigma even in
-    # float64, so this is a units question before it is a precision one.
-    ("observation/calibration.py", "inv_var = 1.0 / jnp.maximum(obs_err**2, 1e-30)"),
+    # (The calibration `inv_var = 1.0/max(obs_err**2, 1e-30)` entry used to sit
+    # here, filed as a Tier-B float32 known-open. That was wrong: the floor
+    # bound in float64 too and collapsed the polynomial. Fixed, not exempted —
+    # see tests/regression/bug/test_calibration_variance_floor.py.)
     # Calibration-parameter prior width, an O(0.1) dimensionless quantity.
     ("observation/calibration.py", "prior_precision = 1.0 / (prior_sigma**2)"),
 }
 
 
-def _scan(pattern, allowed=frozenset()):
-    """Return ``[(relpath, lineno, text)]`` for every match under ``src/tengri``."""
+def _scan(pattern, allowed=frozenset(), roots=None, suffixes=(".py",)):
+    """Return ``[(relpath, lineno, text)]`` for every match under ``roots``."""
     hits = []
-    for path in sorted(_SRC.rglob("*.py")):
-        rel = path.relative_to(_SRC).as_posix()
-        for i, line in enumerate(path.read_text().splitlines(), start=1):
-            stripped = line.strip()
-            if (rel, stripped) in allowed:
-                continue
-            code = _RST_LITERAL.sub("", line.split("#", 1)[0])
-            if pattern.search(code):
-                hits.append((rel, i, stripped))
+    for root in roots or (_SRC,):
+        if not root.exists():
+            continue
+        for suffix in suffixes:
+            for path in sorted(root.rglob(f"*{suffix}")):
+                rel = path.relative_to(_REPO).as_posix()
+                if any(skip in rel for skip in _SWEPT_SKIP):
+                    continue
+                short = path.relative_to(root).as_posix()
+                for i, line in enumerate(path.read_text().splitlines(), start=1):
+                    stripped = line.strip()
+                    if (short, stripped) in allowed or (rel, stripped) in allowed:
+                        continue
+                    code = _RST_LITERAL.sub("", line.split("#", 1)[0])
+                    if pattern.search(code):
+                        hits.append((rel, i, stripped))
     return hits
+
+
+def test_no_doc_or_example_teaches_the_removed_metric_spelling():
+    """A doc that prints ``noise_inv * Jv`` is how the form comes back.
+
+    The code guard only ever scanned ``src/``, so
+    ``docs/dev/inference_methods.md`` went on teaching the exact expression the
+    fix removed, and a published gallery example hand-rolled it too.
+    """
+    hits = _scan(
+        re.compile(r"noise_inv\s*\*"),
+        roots=(_REPO / "examples", _REPO / "docs" / "dev"),
+        suffixes=(".py", ".md"),
+    )
+    assert not hits, (
+        "these TEACH the removed spelling; whiten twice instead "
+        "(tengri.utils.scale.whiten):\n" + "\n".join(f"  {p}:{n}: {t}" for p, n, t in hits)
+    )
 
 
 def test_inverse_variance_allowlist_has_no_stale_entries():
@@ -468,7 +513,7 @@ def test_inverse_variance_allowlist_has_no_stale_entries():
 
 def test_no_inverse_variance_construction_in_src():
     """No live site may build 1/sigma**2 — it is inf at real photometric sigma."""
-    hits = _scan(_INV_VARIANCE, allowed=_ALLOWED)
+    hits = _scan(_INV_VARIANCE, allowed=_ALLOWED, roots=_SWEPT_ROOTS)
     assert not hits, "1/sigma**2 is inf in float32; whiten twice instead:\n" + "\n".join(
         f"  {p}:{n}: {t}" for p, n, t in hits
     )

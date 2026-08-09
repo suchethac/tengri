@@ -1431,7 +1431,7 @@ def build_jit_engine(fitter, pos_dict):
             ``"nonlinear_sample"`` — reuse keys + curve (deterministic geoVI)
             ``"nonlinear_update"`` — re-curve existing residuals at new m
         data_args : dict
-            Data-dependent arguments (data, noise, noise_inv, etc.).
+            Data-dependent arguments (data, noise, sqrt_noise_inv, etc.).
 
         Returns
         -------
