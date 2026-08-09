@@ -394,10 +394,20 @@ def check_unknown_kwargs(entry: BackendEntry, kwargs: dict) -> None:
 
     Raises
     ------
-    ValueError
-        If ``kwargs`` carries a name the runner cannot accept. ``ValueError``
-        rather than ``TypeError`` for the same reason as
-        :func:`check_capabilities`: the caller never called that runner.
+    TypeError
+        If ``kwargs`` carries a name the runner cannot accept.
+
+        #1605 raised ``ValueError`` here, reasoning as :func:`check_capabilities`
+        does that the caller never called that runner. That argument is right
+        about the *message* -- which is why this no longer names ``run_map()`` --
+        but not about the type. From where the caller stands they passed a bad
+        keyword to ``fit()``, a function they did call, and an unexpected
+        keyword argument is a ``TypeError`` in Python. ``check_capabilities``
+        is the genuinely different case: an unsupported capability is a
+        value-domain problem, not a signature one.
+
+        Switching it also broke #1378's regression test, which pins this line
+        precisely so a typo cannot become a silent kwarg sink (#1630).
 
     Notes
     -----
@@ -442,7 +452,7 @@ def check_unknown_kwargs(entry: BackendEntry, kwargs: dict) -> None:
             hints.append(f"{name} -> {close[0]}")
     hint_str = f" Did you mean: {', '.join(hints)}?" if hints else ""
 
-    raise ValueError(
+    raise TypeError(
         f"Inference method '{entry.name}' does not accept {unknown}. "
         f"It takes: {offered}.{hint_str} "
         "Arguments that are not fit options belong to the model or the data, "
