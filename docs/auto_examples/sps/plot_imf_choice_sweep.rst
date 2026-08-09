@@ -21,11 +21,6 @@
 Initial Mass Function choice and stellar mass-to-light ratio
 ============================================================
 
-.. image:: images/sphx_glr_plot_imf_choice_sweep_001.png
-   :alt: plot imf choice sweep
-   :class: sphx-glr-single-img
-
-
 The Initial Mass Function (IMF) parameterizes the fraction of massive versus
 low-mass stars born during star formation. Chabrier, Kroupa, and Salpeter IMFs
 differ most in the high-mass end: Salpeter has more massive stars, producing
@@ -34,6 +29,28 @@ IMF while fixing SFH, age, and metallicity, overlaying rest-frame νL_ν to
 reveal the IMF signature in the SED continuum shape and M/L.
 
 .. GENERATED FROM PYTHON SOURCE LINES 12-73
+
+
+
+.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_imf_choice_sweep_001.png
+   :alt: plot imf choice sweep
+   :srcset: /auto_examples/sps/images/sphx_glr_plot_imf_choice_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-805/src/tengri/forward/sed_model.py:1303: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.2 Gyr is narrower than the SSP grid spacing 0.386 Gyr at peak sfh_tsnorm_peak_lbt_gyr=3 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.386 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 

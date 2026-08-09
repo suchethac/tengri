@@ -98,7 +98,7 @@ blocks consume. Before the registry fix this set was empty.
 
 .. code-block:: Python
 
-    agn_free = {"all_params": tengri.FREE, "log_lbol": 12.0, "frac": 1.0, **BLOCKS}
+    agn_free = {"all_params": tengri.FREE, "log_lbol": 12.0, "lum_ratio": 1.0, **BLOCKS}
     model_free = tengri.SEDModel.build(
         ssp, sfh=SFH, dust=DUST, agn=agn_free, redshift=tengri.Fixed(0.0)
     )
@@ -128,7 +128,7 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
 
 .. code-block:: Python
 
-    agn_fixed = {"all_params": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **BLOCKS}
+    agn_fixed = {"all_params": tengri.FIXED, "log_lbol": 12.0, "lum_ratio": 1.0, **BLOCKS}
     model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn_fixed, redshift=tengri.Fixed(0.0))
     base = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
@@ -175,6 +175,11 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
 
 
 
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 7.766 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_free_param_sensitivity.py:

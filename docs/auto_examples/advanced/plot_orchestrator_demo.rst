@@ -46,9 +46,11 @@ through the SEDModel.build() nested-dict grammar and recipes.
  .. code-block:: none
 
     chain: stellar → nebular → dust → dust_emission → agn → radio → xray → igm
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__lambda': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
     L_bol (stellar)        = 2.87e+43 erg/s
-    log_mstar              = 0.812  (6.49 Msun)
-    L_ir (dust)            = 3.92e+34 erg/s
+    log_mstar              = 0.794  (6.23 Msun)
+    L_ir (dust)            = 3.58e+34 erg/s
     L_agn_bol              = 3.83e+44 erg/s
 
 
@@ -182,6 +184,11 @@ through the SEDModel.build() nested-dict grammar and recipes.
     except ImportError as e:
         print(f"Orchestrator API not available: {e}")
         print("Use SEDModel.build() instead (see examples/quickstart and examples/advanced).")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.469 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_orchestrator_demo.py:
