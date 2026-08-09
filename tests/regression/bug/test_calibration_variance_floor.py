@@ -34,7 +34,7 @@ Two things make the measurement mean something. The O(1) control is
 *bit-identical* between the floored and unfloored arms, so the floor is the only
 difference at the small scales. And the unfloored arm recovers the truth
 **exactly at every scale** — the calibration polynomial is a flux-*ratio*, so
-its answer must be scale-invariant, which pins the correct behaviour
+its answer must be scale-invariant, which pins the correct behavior
 independently of any reference implementation.
 
 Why the existing suite missed it: ``test_known_calibration_recovery`` runs at

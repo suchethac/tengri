@@ -289,16 +289,40 @@ normal equations from `1/σ²` and returned NaN for `ln_L_marg`, `a_hat`, `a_cov
 *and* its gradient in float32, while its docstring promised "Gradient-safe:
 yes". It now whitens the design matrix.
 
-**Known open, deliberately not fixed with this change** (both are allowlisted in
-the guard with their reason, so neither is silently forgotten):
+**Both of #1588's "known open" items are now closed — and both of my reasons for
+deferring them were wrong.** They are kept here because the *errors* are the
+reusable part.
 
-- `observation/noise.py` `H_tt = residual**2 + 1.0/tau**2` — the
-  variable-covariance Hessian. τ = 1/σ_eff ~ 3e29, so τ² ~ 1e59 overflows *and*
-  1/τ² underflows to 0. This needs the whole metric rescaled, not a spelling
-  change.
-- `observation/calibration.py` `inv_var = 1.0/max(obs_err**2, 1e-30)` — at a
-  real spectroscopic σ the 1e-30 floor binds **in float64 too**, so the first
-  question is what units `obs_err` arrives in, not precision.
+- `observation/calibration.py` `inv_var = 1.0/max(obs_err**2, 1e-30)` —
+  deferred as *"the 1e-30 floor binds even in float64, so the first question is
+  what units `obs_err` arrives in, not precision."* There was no units question.
+  One measurement settled it (**#1604**): the unfloored answer recovers a known
+  truth **exactly at every flux scale**, which is what a flux *ratio* must do,
+  so the floor was simply in the wrong domain — variance, not σ. It was
+  collapsing the calibration polynomial in **float64**, the default: c_hat[0]
+  5.0e-02 → 7.5e-04 at F_λ, → 7.6e-26 at F_ν, on a path two registered
+  likelihoods reach.
+- `observation/noise.py` — deferred as *"this needs the whole metric rescaled,
+  not a spelling change."* It did not (**#1617**). Both blocks factor into
+  representable pieces and the existing `whiten` seam reaches them:
+  `H_ff·Jv_f = (Jv_f/σ)/σ` with σ = 1/τ, and
+  `H_tt·Jv_τ = ((r·τ)² + 1)·Jv_τ/τ²`, where `r·τ` is the standardized residual
+  and O(1) by construction.
+
+  That entry also named **only** `H_tt`, while `H_ff = tau**2` one line above is
+  equally `inf`. Not an oversight in judgement: the guard's pattern matches
+  `1.0 / x**2`, and `H_ff = tau**2` has no division, so the guard never saw it.
+  **An allowlist entry is written from a guard hit, so it inherits that guard's
+  blind spots** — it records what the guard matched, not what is broken.
+
+The generalizable lesson from both: an allowlist is where a deferred
+measurement goes to be forgotten. Each deferral here collapsed under a single
+measurement, and each was cheaper to run than to write down.
+
+The `H_tt` half is also the sharpest example in this document of why
+`isfinite` is not a sufficient check. Restoring only that underflow — keeping
+the `H_ff` fix — leaves the metric **finite, non-zero, and 49.4% wrong**. A
+finiteness guard passes that mutation clean.
 
 ---
 
