@@ -57,13 +57,22 @@ _SRC = _REPO / "src" / "tengri"
 #: removed form is how it comes back — `docs/dev/inference_methods.md` still
 #: printed `vjp_fn(noise_inv * Jv)` after the code stopped doing it.
 #:
-#: Deliberately NOT swept: `tests/` (several legitimately build a dense
-#: reference covariance, `jnp.diag(1.0/err**2)`, or freeze the pre-fix
-#: arithmetic as a comparison arm — that is their job), `docs/auto_examples/`
-#: (generated from `examples/`), and `docs/dev/archive/` (historical record).
+#: Scoped to the code and to the *developer* documentation that describes it.
+#:
+#: Deliberately NOT swept, and this is a scope judgement rather than an
+#: oversight:
+#:
+#: * `examples/` and `docs/auto_examples/` — the gallery's use of
+#:   `1/noise**2` is numpy/float64, where it is correct and stays correct. It
+#:   is not a defect, so sweeping there would be enforcing house style on
+#:   working code, and it drags the four committed render artifacts plus an md5
+#:   stamp along with every edit.
+#: * `tests/` — several legitimately build a dense reference covariance
+#:   (`jnp.diag(1.0/err**2)`) or freeze the pre-fix arithmetic as a comparison
+#:   arm. That is their job.
+#: * `docs/dev/archive/` — historical record.
 _SWEPT_ROOTS = (
     _REPO / "src" / "tengri",
-    _REPO / "examples",
     _REPO / "docs" / "dev",
 )
 _SWEPT_SKIP = ("archive/",)
@@ -477,17 +486,22 @@ def _scan(pattern, allowed=frozenset(), roots=None, suffixes=(".py",)):
     return hits
 
 
-def test_no_doc_or_example_teaches_the_removed_metric_spelling():
+def test_no_dev_doc_teaches_the_removed_metric_spelling():
     """A doc that prints ``noise_inv * Jv`` is how the form comes back.
 
     The code guard only ever scanned ``src/``, so
-    ``docs/dev/inference_methods.md`` went on teaching the exact expression the
-    fix removed, and a published gallery example hand-rolled it too.
+    ``docs/dev/inference_methods.md`` went on printing the exact expression the
+    fix removed — as the thing to write — while describing a ``metric_vec``
+    that no longer looked like that.
+
+    Scoped to ``docs/dev/``: this is about documentation that has gone *stale*
+    against the code it documents, not about house style. The gallery's
+    numpy/float64 ``1/noise**2`` is correct there and is left alone.
     """
     hits = _scan(
         re.compile(r"noise_inv\s*\*"),
-        roots=(_REPO / "examples", _REPO / "docs" / "dev"),
-        suffixes=(".py", ".md"),
+        roots=(_REPO / "docs" / "dev",),
+        suffixes=(".py", ".md", ".rst"),
     )
     assert not hits, (
         "these TEACH the removed spelling; whiten twice instead "

@@ -32,7 +32,9 @@ anything new is an error. Run with ``--list`` to print the inventory.
 from __future__ import annotations
 
 import argparse
+import ast
 import importlib
+import pathlib
 import pkgutil
 import sys
 import warnings
@@ -56,6 +58,48 @@ _ALLOWED: dict[str, str] = {
 }
 
 
+def _is_wrapped_at_every_use(module, attr: str) -> bool:
+    """True if every read of ``attr`` in its module is inside ``representable_floor``.
+
+    Remedy 2 in this tool's own message is "apply ``representable_floor`` at the
+    *use site*". Before this check that advice was unreachable: the scan reads
+    module-level floats, so a correctly-wrapped constant still tripped the gate
+    and the only way out was an ``_ALLOWED`` entry — i.e. the tool recommended a
+    fix that did not satisfy it. ``calibration._ERR_FLOOR`` was exactly that
+    case (#1604).
+
+    A constant reached only as ``representable_floor(NAME)`` never touches a
+    float32 array as itself: the wrapper raises it to the working dtype's
+    smallest normal first, which is the whole point of the remedy.
+    """
+    path = getattr(module, "__file__", None)
+    if not path or not path.endswith(".py"):
+        return False
+    try:
+        tree = ast.parse(pathlib.Path(path).read_text())
+    except (OSError, SyntaxError):
+        return False
+
+    wrapped: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        fname = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+        # Accept an aliased import too (``representable_floor as _representable_floor``).
+        if "representable_floor" in fname:
+            for a in node.args:
+                if isinstance(a, ast.Name) and a.id == attr:
+                    wrapped.add(id(a))
+
+    reads = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Name) and n.id == attr and isinstance(n.ctx, ast.Load)
+    ]
+    return bool(reads) and all(id(n) in wrapped for n in reads)
+
+
 def _scan() -> list[tuple[str, float]]:
     """Every module-level float that is nonzero in float64 and 0.0 in float32."""
     import tengri
@@ -66,20 +110,22 @@ def _scan() -> list[tuple[str, float]]:
         for mod in pkgutil.walk_packages(tengri.__path__, prefix="tengri."):
             try:
                 module = importlib.import_module(mod.name)
-            except Exception:  # noqa: BLE001 — optional deps / import-time guards
+            except Exception:
                 continue
             for attr in dir(module):
                 if attr.startswith("__"):
                     continue
                 try:
                     value = getattr(module, attr)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     continue
                 if type(value) is not float:
                     continue
                 if value == 0.0 or not np.isfinite(value):
                     continue
                 if abs(value) < _F32_SMALLEST_SUBNORMAL:
+                    if _is_wrapped_at_every_use(module, attr):
+                        continue  # remedy 2 applied — see _is_wrapped_at_every_use
                     hits.append((f"{mod.name}.{attr}", value))
     return sorted(set(hits))
 

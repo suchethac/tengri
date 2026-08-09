@@ -77,10 +77,7 @@ out = model.predict_photometry(FIDUCIAL_PARAMS)
 flux_fiducial = np.asarray(out)
 snr = 50.0  # S/N per filter
 noise = flux_fiducial / snr
-# Standardize before squaring rather than forming 1/sigma**2: at these flux
-# scales the reciprocal variance is ~1e59, which float32 cannot hold at all
-# (#1535/#1588). The two are algebraically identical here in float64 — this
-# spelling is the one that stays correct if you copy it into a fit.
+noise_inv = 1.0 / noise**2
 
 # Extract the two degenerate parameters
 free_names = ["sfh_dpl_log_total_mass", "dust_tau_bc"]
@@ -109,7 +106,7 @@ for i in range(2):
                 # Compute chi²
                 out = model.predict_photometry(p)
                 flux_model = np.asarray(out)
-                chi2 = np.sum(((flux_model - flux_fiducial) / noise) ** 2)
+                chi2 = np.sum((flux_model - flux_fiducial) ** 2 * noise_inv)
                 corners.append(0.5 * chi2)
 
         # Second mixed partial: (L_++ - L_+0 - L_0+ + L_00) / (δ²)
