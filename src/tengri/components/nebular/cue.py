@@ -340,6 +340,12 @@ def _load_subnet(npz: dict, prefix: str) -> SubNetWeights:
 def load_cue_weights(npz_path: str) -> CueWeights:
     """Load all Cue weights from the npz file.
 
+    .. note::
+
+       The returned arrays are always **concrete**, even when this is called
+       from inside a ``jax.jit`` trace. See :func:`_load_cue_weights_eager`
+       for why that has to be enforced rather than assumed.
+
     Parses the pre-trained Speculator neural network weights from a NumPy
     archive and constructs batched weight arrays for fast vectorized inference.
 
@@ -371,6 +377,36 @@ def load_cue_weights(npz_path: str) -> CueWeights:
     .. [2] Charlot & Fall 2000, "A simple model for the absorption of starlight
         by dust grains and its application to metal-rich galaxies", ApJ 539, 718
 
+    """
+    with jax.ensure_compile_time_eval():
+        return _load_cue_weights_eager(npz_path)
+
+
+def _load_cue_weights_eager(npz_path: str) -> CueWeights:
+    """Body of :func:`load_cue_weights`, always evaluated outside any trace.
+
+    Every ``jnp`` call below runs on values read straight off disk, so it looks
+    like it cannot produce a tracer. It can. **Any** ``jnp`` operation executed
+    while a trace is active returns a tracer bound to that trace, however
+    concrete its inputs are — so whether this function yields real arrays or
+    tracers is decided by its *caller's* context, not by anything here.
+
+    That matters because the result is cached: ``CueBackend`` holds it, and
+    ``nlr_cloudy._CUE_AGN_BACKEND`` holds the backend for the process. The first
+    caller therefore decides what every later caller gets. If the first call
+    happens inside a ``jax.jit`` trace, the cache is filled with tracers and the
+    next reader — a different test, a different fit — dies with
+    ``UnexpectedTracerError`` pointing here, far from whatever actually did it.
+
+    That is not hypothetical: it is the CI failure in
+    ``test_cue_nlr_grammar.py``, reported as ``float32[16,12]`` leaking from
+    line ``batched_param_shifts=jnp.stack(...)`` — 16 line sub-networks x 12
+    parameters. It passed locally and failed on CI purely because the two run
+    tests in a different order, so they disagreed about who warmed the cache.
+
+    ``jax.ensure_compile_time_eval`` makes the answer independent of the
+    caller. The docstring above already promised ``JIT-compatible: no``; this
+    enforces it instead of trusting every call site to honor it.
     """
     npz = dict(np.load(npz_path, allow_pickle=True))
 
