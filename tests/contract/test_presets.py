@@ -32,26 +32,27 @@ from tengri.presets import (
     quiescent,
     starforming,
 )
+from tengri.registry import _RegistryTable
 
 
 class TestListPresets:
     """Test the package preset registry menu (galaxy-type presets registered)."""
 
     def test_list_presets_nonempty(self):
-        """list_presets() returns a non-empty registry dict."""
+        """list_presets() returns a non-empty registry table (#1574)."""
         presets = list_presets()
-        assert isinstance(presets, dict)
+        assert isinstance(presets, _RegistryTable)
         assert len(presets) > 0
 
     def test_list_presets_contains_expected(self):
         """All six galaxy-type presets are registered in the package menu."""
-        presets = list_presets()
+        names = set(list_presets().names())
         expected = {"starforming", "quiescent", "high_z", "photoz", "jwst_spec", "agn_host"}
-        assert expected.issubset(presets.keys()), f"Missing: {expected - presets.keys()}"
+        assert expected.issubset(names), f"Missing: {expected - names}"
 
     def test_list_presets_entries_carry_metadata(self):
         """Registry entries expose short_doc and citations for the menu."""
-        entry = list_presets()["starforming"]
+        entry = next(row for row in list_presets() if row["name"] == "starforming")
         assert entry["short_doc"]
         assert "Calzetti_2000" in entry["citations"]
 
