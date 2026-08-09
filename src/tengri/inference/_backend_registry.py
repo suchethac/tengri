@@ -394,10 +394,21 @@ def check_unknown_kwargs(entry: BackendEntry, kwargs: dict) -> None:
 
     Raises
     ------
-    ValueError
-        If ``kwargs`` carries a name the runner cannot accept. ``ValueError``
-        rather than ``TypeError`` for the same reason as
-        :func:`check_capabilities`: the caller never called that runner.
+    TypeError
+        If ``kwargs`` carries a name the runner cannot accept.
+
+        This raised ``ValueError`` when the check landed, on the grounds that
+        "the caller never called that runner". The concrete harm that argued
+        against ``TypeError`` was the *message* — ``run_map() got an
+        unexpected keyword argument 'lines'`` names an internal function the
+        caller never chose (#1469) — and rewriting the message already fixed
+        that; the exception *type* was never what caused the confusion.
+
+        Meanwhile the type is what callers catch, and the same user mistake
+        raises ``TypeError`` everywhere else: from Python itself, and from
+        ``SEDModel.build`` for a kwarg it does not take. Two types for one
+        mistake is the inconsistency, so this is ``TypeError`` and #1378's
+        regression test — which pins exactly that — passes again.
 
     Notes
     -----
@@ -442,7 +453,12 @@ def check_unknown_kwargs(entry: BackendEntry, kwargs: dict) -> None:
             hints.append(f"{name} -> {close[0]}")
     hint_str = f" Did you mean: {', '.join(hints)}?" if hints else ""
 
-    raise ValueError(
+    # TypeError, not ValueError: this is "the callable does not take that
+    # keyword", which is what Python raises for the same mistake, and what
+    # the rest of tengri already raises for a kwarg `SEDModel.build` refuses.
+    # #1378's regression test pins it — a misspelled fit option must fail the
+    # same way whether the rejection comes from Python or from this check.
+    raise TypeError(
         f"Inference method '{entry.name}' does not accept {unknown}. "
         f"It takes: {offered}.{hint_str} "
         "Arguments that are not fit options belong to the model or the data, "
