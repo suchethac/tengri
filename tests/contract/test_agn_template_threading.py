@@ -228,3 +228,58 @@ def test_threaded_grid_matches_closure_path(name, module, sed_fn, loader_fn, kwa
     # would pass any equality check.
     assert float(jnp.max(jnp.abs(closure_result))) > 0.0, f"{name} produced an all-zero SED"
     chex.assert_trees_all_close(threaded_result, closure_result, rtol=0.0, atol=0.0)
+
+
+# ── Threading must survive a structural-cache hit ────────────────────────────
+
+
+def test_threading_survives_a_structural_cache_hit(ssp, obs):
+    """A second, structurally identical build must thread exactly as the first.
+
+    Every other test in this file builds **one** model, so all of them measure
+    the cache-*miss* path only — the path that works. The chain that
+    ``_template_data_for_jit`` walks is warmed inside
+    ``_get_or_build_predict_observables_jit`` *after* its structural-cache
+    early return, so the second structurally identical model in a process was
+    handed the first one's kernel, never built a chain, and threaded nothing —
+    silently reverting #1383 for every model but the first.
+
+    Two consequences, and only the second was ever visible:
+
+    * float64: identical numbers, but the library bakes again — a pure
+      performance regression that no value assertion can catch.
+    * pure float32: the baked path rounds differently, so the *gradient* moves
+      (measured ``d(nlp)/d(agn_log_lbol)`` 1.08004963 threaded vs 1.08004594
+      baked). That is what surfaced it, as an order-dependent failure in
+      ``tests/regression/precision/test_cross_precision_kernel_cache.py``.
+
+    Asserted on the second build's baked megabytes rather than on numbers, so a
+    failure names the threading rather than a downstream rounding symptom.
+    """
+    group = {
+        "type": "composable",
+        "all_params": FIXED,
+        "disc": {"type": "multicolor"},
+        "torus": {"type": "skirtor"},
+    }
+
+    try:
+        first = _traced_baked_mb(_build(ssp, obs, agn=group))
+        # A distinct instance with the same structure => same compile_signature
+        # => a structural-cache HIT. This is the realistic pattern: fit one
+        # galaxy, then build the next model in the same process.
+        second = _traced_baked_mb(_build(ssp, obs, agn=group))
+    except (FileNotFoundError, NotImplementedError) as exc:
+        pytest.skip(f"SKIRTOR torus unavailable: {exc}")
+
+    assert first < _BAKED_BUDGET_MB, (
+        f"precondition failed: even the FIRST build bakes {first:.2f} MB, so "
+        f"this test cannot tell a cache-hit regression from a broken baseline"
+    )
+    assert second < _BAKED_BUDGET_MB, (
+        f"the second structurally identical build bakes {second:.2f} MB "
+        f"(first: {first:.2f} MB, budget {_BAKED_BUDGET_MB} MB). Template "
+        f"threading is depending on process history: the structural-kernel "
+        f"cache returned the first model's kernel, so this model never built a "
+        f"component chain and `_template_data_for_jit()` failed open to None."
+    )

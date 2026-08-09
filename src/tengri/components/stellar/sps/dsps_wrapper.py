@@ -63,7 +63,7 @@ def canonical_dsps_kwargs(**kwargs):
     Under ``x64=True`` the canonical float *is* float64, so this is a no-op
     there and float64 results are bit-unchanged — the property that makes the
     pattern safe to apply at every DSPS boundary. Same treatment as
-    :func:`tengri.utils.interpolation.triweight_bin_weights` (#1206, #1448).
+    :func:`tengri.utils.interpolation.compute_grid_weights` (#1206, #1448).
 
     This lives beside the DSPS bindings so every call site in the tree can
     reach it without importing back into ``components/stellar/component.py``.

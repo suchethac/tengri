@@ -6618,9 +6618,29 @@ class SEDModel:
             ``"agn"``) carrying the threaded template data for that
             subsystem. Returns ``None`` if no components need threading.
         """
+        # Build the chain if it is not warm yet, rather than returning None.
+        #
+        # This must NOT depend on process history. The chain is otherwise warmed
+        # only inside ``_get_or_build_predict_observables_jit``, *after* its
+        # structural-cache early return — so a model whose kernel was already
+        # compiled by an earlier, structurally identical model never built a
+        # chain, this returned ``None``, and every template silently stopped
+        # threading. The affected blocks then fall back to their own on-disk
+        # load and bake, which is a *different numerical path*: measured
+        # d(nlp)/d(agn_log_lbol) = 1.08004963 threaded vs 1.08004594 baked on the
+        # same model. Both are "correct"; they are not the same number, and
+        # which one you got depended on what else had run in the process.
+        #
+        # ``compile_signature`` cannot see this — the two models are structurally
+        # identical, which is exactly why one was served the other's kernel. So
+        # the payload has to be made deterministic here rather than keyed there.
+        #
+        # Safe outside a trace: all three callers evaluate this to build the
+        # *arguments* of a jitted call, never inside one (``collect_block_templates``
+        # does HDF5 I/O and must stay eager).
         cached = getattr(self, "_cached_component_chain", None)
         if cached is None:
-            return None
+            cached = self._cached_component_chain = self._build_component_chain()
 
         from tengri.components.agn.blocks._protocol import collect_block_templates
         from tengri.components.agn.component import AGNSEDComponent
