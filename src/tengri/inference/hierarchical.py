@@ -637,14 +637,19 @@ class PopulationFitter:
               single-galaxy auto-pick (raytrace above D~20): hierarchical D
               grows with the catalog, so that auto-pick would select the
               guaranteed-degenerate sampler.
-            - ``"mcmc_nuts"``, ``"mcmc_hmc"`` — NUTS / static-leapfrog HMC on
-              the flat vector.
+            - ``"mcmc_nuts"``, ``"mcmc_hmc"``, ``"mcmc_dynamic_hmc"`` — NUTS /
+              static-leapfrog HMC / dynamic trajectory-length HMC on the flat
+              vector.
+            - ``"mcmc_ghmc"`` — generalized (persistent-momentum) HMC;
+              tier="broken" ([POOR MIXING] on the single-galaxy benchmarks),
+              requires ``allow_unvalidated=True``. Always uses a diagonal mass
+              matrix.
             - ``"map"`` — Adam MAP on the flat vector.
             - ``"pathfinder"`` — tier="broken" (OOM-killed the process on a
               measured 2-galaxy problem); requires ``allow_unvalidated=True``.
-            - ``"mcmc_ess"``, ``"mcmc_dynamic_hmc"``, ``"mcmc_ghmc"``,
-              ``"mcmc_mclmc"``, ``"mcmc_adjusted_mclmc"``, ``"laplace"`` —
-              refused with ``NotImplementedError`` and a per-name reason (see
+            - ``"mcmc_ess"``, ``"mcmc_mclmc"``, ``"mcmc_adjusted_mclmc"``,
+              ``"laplace"`` — refused with ``NotImplementedError`` and a
+              per-name reason (see
               :data:`~tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED`):
               their real drivers are not wired at the seam yet, and running a
               stand-in algorithm under the requested name would be silent

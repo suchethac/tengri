@@ -138,15 +138,23 @@ def test_no_method_is_silently_substituted_for_another():
     # Every surviving entry names the algorithm its driver actually runs. An
     # addition here is welcome exactly when its real driver is wired — edit
     # this set in the same commit as the wiring, never before.
-    assert set(FLAT_SAMPLERS) == {"mcmc", "mcmc_nuts", "mcmc_hmc", "map", "pathfinder"}, (
+    # mcmc_dynamic_hmc and mcmc_ghmc joined when the seam gained their real
+    # _shared.py full-scan drivers (they spent one commit refused, wired next).
+    assert set(FLAT_SAMPLERS) == {
+        "mcmc",
+        "mcmc_nuts",
+        "mcmc_hmc",
+        "mcmc_dynamic_hmc",
+        "mcmc_ghmc",
+        "map",
+        "pathfinder",
+    }, (
         "FLAT_SAMPLERS gained or lost a name; if the new name's driver truly "
         "implements that algorithm, update this set in the same commit"
     )
 
     substituted = {
         "mcmc_ess",
-        "mcmc_dynamic_hmc",
-        "mcmc_ghmc",
         "mcmc_mclmc",
         "mcmc_adjusted_mclmc",
         "laplace",
@@ -254,7 +262,7 @@ def test_every_flat_sampler_names_a_real_backend_and_driver(name):
     """No entry may name a backend that does not exist or a driver that is not implemented."""
     assert name in _BACKENDS, f"{name!r} is in FLAT_SAMPLERS but not registered"
     driver = FLAT_SAMPLERS[name]
-    assert driver in {"nuts", "hmc", "nuts_pathfinder", "map", "nss"}, (
+    assert driver in {"nuts", "hmc", "dynamic_hmc", "ghmc", "nuts_pathfinder", "map", "nss"}, (
         f"{name!r} declares unknown driver {driver!r}"
     )
 

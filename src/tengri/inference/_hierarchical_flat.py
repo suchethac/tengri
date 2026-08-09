@@ -6,12 +6,13 @@
 with them but because the only flat-vector formulation lived *inside*
 ``_run_raytrace`` as a set of closures, reachable by exactly one sampler.
 
-This seam drives the NUTS / HMC / MAP / pathfinder family. Every other
-registered name is either driven by ``PopulationFitter``'s own runners or
-refused with a stated reason — see :data:`FLAT_UNSUPPORTED`. A name is driven
-here only when the driver runs the algorithm the name promises; a stand-in
-(the first draft ran plain HMC under five distinct-algorithm names) is silent
-substitution, not support. ``nss`` is the founding entry of the refused set:
+This seam drives the NUTS / HMC / dynamic-HMC / GHMC / MAP / pathfinder
+family. Every other registered name is either driven by ``PopulationFitter``'s
+own runners or refused with a stated reason — see :data:`FLAT_UNSUPPORTED`. A
+name is driven here only when the driver runs the algorithm the name promises;
+a stand-in (the first draft ran plain HMC under five distinct-algorithm names)
+is silent substitution, not support. ``nss`` is the founding entry of the
+refused set:
 the prior transform it would need is exact and is provided here; what is
 missing is a real nested sampler on top of it, and a blind rejection stand-in
 returns biased samples rather than an approximation (#1429).
@@ -77,11 +78,14 @@ __all__ = ["FLAT_SAMPLERS", "FlatProblem", "build_flat_problem", "run_flat_sampl
 #: HMC, GHMC, MCLMC, adjusted MCLMC) onto the plain static-leapfrog ``"hmc"``
 #: driver and ``laplace`` onto the bare ``"map"`` point estimate — the result's
 #: diagnostics recorded the requested name while a different algorithm ran.
-#: Those names now live in :data:`FLAT_UNSUPPORTED` until their real drivers
-#: are wired.
+#: Dynamic HMC and GHMC have since gained their real ``_shared.py`` full-scan
+#: drivers and rejoined; the rest live in :data:`FLAT_UNSUPPORTED` until their
+#: real drivers are wired.
 FLAT_SAMPLERS: dict[str, str] = {
     "mcmc_nuts": "nuts",
     "mcmc_hmc": "hmc",
+    "mcmc_dynamic_hmc": "dynamic_hmc",
+    "mcmc_ghmc": "ghmc",
     # Pinned to NUTS, unlike the single-galaxy auto-pick (NUTS for low-D,
     # raytrace above D~20): hierarchical D grows with the catalog, and at that
     # D raytrace degenerates and raises DegenerateChainError by design
@@ -114,20 +118,6 @@ FLAT_UNSUPPORTED: dict[str, str] = {
         "compile-reuse contract). Running the static-leapfrog HMC driver under "
         "this name instead would be silent substitution. Use mcmc_nuts or "
         "mcmc_hmc hierarchically, or run ESS per-galaxy through Fitter."
-    ),
-    "mcmc_dynamic_hmc": (
-        "this seam's only HMC driver is static-leapfrog, a different algorithm "
-        "from the dynamic trajectory-length HMC this name promises. "
-        "_dynamic_hmc_full_scan in backends/mcmc/_shared.py is the near-drop-in "
-        "driver to wire; until then use mcmc_hmc, which is honestly the "
-        "algorithm that would have run."
-    ),
-    "mcmc_ghmc": (
-        "this seam's only HMC driver is static-leapfrog, a different algorithm "
-        "from the persistent-momentum generalized HMC this name promises. "
-        "_ghmc_full_scan in backends/mcmc/_shared.py is the near-drop-in driver "
-        "to wire; until then use mcmc_hmc, which is honestly the algorithm that "
-        "would have run."
     ),
     "mcmc_mclmc": (
         "microcanonical Langevin MC needs its own (L, step size) adaptation, "
@@ -413,6 +403,8 @@ def run_flat_sampler(
     memory_mode="low",
     map_steps=300,
     map_learning_rate=0.05,
+    ghmc_alpha=0.8,
+    ghmc_delta=0.65,
     allow_unvalidated=False,
     verbose=True,
     **_ignored,
@@ -455,10 +447,18 @@ def run_flat_sampler(
         Passed to :func:`build_flat_problem`.
     map_steps, map_learning_rate : int, float
         Gradient-ascent settings for the ``map`` driver.
+    ghmc_alpha : float
+        GHMC momentum persistence, in [0, 1] [dimensionless]. Same default as
+        the single-galaxy ``run_ghmc``. The GHMC driver always uses a diagonal
+        mass matrix (momentum-generator constraint), regardless of
+        ``dense_mass_matrix``.
+    ghmc_delta : float
+        GHMC proposal step-size scaling [dimensionless]. Same default as the
+        single-galaxy ``run_ghmc``.
     allow_unvalidated : bool
         Opt in to ``tier="broken"`` backends, exactly as ``Fitter.run`` does.
-        Required for ``pathfinder``, the one tier="broken" name this seam
-        drives — reachable, but not safe by default.
+        Required for ``pathfinder`` and ``mcmc_ghmc``, the tier="broken" names
+        this seam drives — reachable, but not safe by default.
     verbose : bool
 
     Returns
@@ -528,8 +528,13 @@ def run_flat_sampler(
     ld2 = prob.log_prob_with_data
     data_args = prob.data_args
 
-    if driver in ("nuts", "nuts_pathfinder", "hmc"):
-        from tengri.inference.backends.mcmc._shared import _hmc_full_scan, _nuts_full_scan
+    if driver in ("nuts", "nuts_pathfinder", "hmc", "dynamic_hmc", "ghmc"):
+        from tengri.inference.backends.mcmc._shared import (
+            _dynamic_hmc_full_scan,
+            _ghmc_full_scan,
+            _hmc_full_scan,
+            _nuts_full_scan,
+        )
 
         n_chain = n_burnin + n_samples
         wkey, ckey = jax.random.split(key_run)
@@ -545,6 +550,31 @@ def run_flat_sampler(
                 n_leapfrog,
                 dense_mass_matrix,
                 target_accept_rate,
+            )
+        elif driver == "dynamic_hmc":
+            positions, divergent, step_size, _imm = _dynamic_hmc_full_scan(
+                prob.init_flat,
+                wkey,
+                jax.random.fold_in(wkey, 1),
+                chain_keys,
+                ld2,
+                data_args,
+                n_warmup,
+                dense_mass_matrix,
+                target_accept_rate,
+            )
+        elif driver == "ghmc":
+            positions, divergent, step_size, _imm = _ghmc_full_scan(
+                prob.init_flat,
+                wkey,
+                jax.random.fold_in(wkey, 1),
+                chain_keys,
+                ld2,
+                data_args,
+                n_warmup,
+                target_accept_rate,
+                ghmc_alpha,
+                ghmc_delta,
             )
         else:
             positions, divergent, step_size, _imm = _nuts_full_scan(
