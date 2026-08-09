@@ -49,7 +49,12 @@ from __future__ import annotations
 
 import os
 
-__all__ = ["AUTO", "DEFAULT_MEMORY_BUDGET_GB", "resolve_forward_chunk_size"]
+__all__ = [
+    "AUTO",
+    "DEFAULT_MEMORY_BUDGET_GB",
+    "chunking_was_requested",
+    "resolve_forward_chunk_size",
+]
 
 #: Sentinel: derive K from the memory budget rather than taking it literally.
 AUTO = "auto"
@@ -154,3 +159,41 @@ def resolve_forward_chunk_size(
     per_galaxy = (_BASE_BYTES_PER_GALAXY + float(n_data_per_gal) * _BYTES_PER_DATUM) * chains
     k = int(budget_bytes // per_galaxy) if per_galaxy > 0 else 1
     return max(1, min(k, n_gal))
+
+
+def chunking_was_requested(forward_chunk_size) -> bool:
+    """True only when the caller explicitly asked for more than one galaxy per dispatch.
+
+    A method that cannot chunk needs to tell a caller their request is being
+    ignored — but only if there *was* a request. That question must be asked of
+    the **unresolved** argument, which is why it is a predicate here rather than
+    a comparison at the call site.
+
+    The obvious spelling, ``forward_chunk_size != 1``, was correct only while 1
+    was the default. When #1189 changed the default to :data:`AUTO` every caller
+    who passed nothing began satisfying it, so a plain ``run("map")`` warned that
+    a setting the user never set was being ignored. A literal that encodes a
+    default is a comparison against a value that can move.
+
+    Parameters
+    ----------
+    forward_chunk_size : int, ``"auto"``, or None
+        The argument exactly as the caller supplied it, before
+        :func:`resolve_forward_chunk_size`.
+
+    Returns
+    -------
+    bool
+        ``True`` for an explicit ``int >= 2``. ``False`` for :data:`AUTO`,
+        ``None``, and an explicit ``1`` — none of which ask for chunking, so
+        none of which have anything to ignore.
+
+    Notes
+    -----
+    Pure Python, no JAX. Validation belongs to
+    :func:`resolve_forward_chunk_size`: an unrecognized string returns ``False``
+    here and raises there, with the better message.
+    """
+    if forward_chunk_size is None or isinstance(forward_chunk_size, str):
+        return False
+    return int(forward_chunk_size) > 1

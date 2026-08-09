@@ -120,12 +120,23 @@ def test_unknown_kwargs_still_fail_loudly(model, mock_data):
 
     Pinning the type pinned the layer, so an improvement to the error broke this
     test while the guarded behavior was intact. Assert the invariant instead:
-    it raises, and the message names the offending kwarg so the typo is
-    actionable. That is strictly stronger than the original, which never
-    checked the message at all.
+    it raises, and the message shows the pre-dispatch guard is what caught it.
+
+    Match on ``does not accept``, not on the kwarg name. The name alone does not
+    discriminate — **both** layers put it in the message, the runner's as
+    ``run_map() got an unexpected keyword argument 'calibration_marginalze'``.
+    With ``check_fit_kwargs`` neutered to a silent return, the kwarg falls
+    through to the runner and dies at ``fitter.py`` with that ``TypeError``, so
+    a name-only match (or a bare ``pytest.raises``) passes with the guard
+    deleted — green on the exact regression this test exists to catch. Measured
+    on ``main`` at 04231b02e: mutation applied, test still passed.
+
+    ``does not accept`` appears only in the registry's message, so it separates
+    "refused up front" from "died inside", which is the distinction #1378 is
+    about. The type stays unpinned — the layer may move again.
     """
     flux, err = mock_data
     fwd = ForwardModel.build(sed=model)
 
-    with pytest.raises((TypeError, ValueError), match="calibration_marginalze"):
+    with pytest.raises((TypeError, ValueError), match=r"does not accept"):
         fwd.fit(flux, err, method="map", n_steps=3, calibration_marginalze=True)
