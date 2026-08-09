@@ -909,21 +909,36 @@ def describe(name: str) -> str:
     Parameters
     ----------
     name : str
-        Filter short name from the registry.
+        Filter short name from the registry (``"sdss_r"``) or the SVO-style
+        curve-file stem (``"SLOAN_SDSS_r"``). Both resolve to the same curve.
 
     Returns
     -------
     str
         Human-readable description. Format:
-        "<name>: lambda_eff ~ X.XXX μm (range A–B μm)" or similar on failure.
+        "<name>: lambda_eff ~ X.XXX μm (range A–B μm)".
+
+    Raises
+    ------
+    KeyError
+        If no filter by that name exists.
 
     Notes
     -----
-    If the filter fails to load, returns a fallback description.
     Effective wavelength is computed as the transmission-weighted mean.
+
+    Until #1611 the whole body sat under a bare ``except Exception`` that
+    returned ``"<name>: (filter found; no summary available)"`` — for an
+    unknown name too, so the message asserted the opposite of what had
+    happened and an unknown filter was indistinguishable from a curve that
+    failed to load. The lookup is now outside the ``try``, so an unknown name
+    raises the loader's own ``KeyError``, and only the numeric summary is
+    guarded.
     """
+    # Outside the try on purpose: an unknown name must raise, and
+    # load_filter_set already says so with a message that lists the menus.
+    fc = load_filter_set([name])[2][0]
     try:
-        fc = load_filter_set([name])[2][0]
         wave_np = np.asarray(fc.wave)
         trans_np = np.asarray(fc.trans)
 
@@ -960,8 +975,8 @@ def describe(name: str) -> str:
 
         return f"{name}: λ_eff ~ {lam_eff_fmt} {unit} (range {min_fmt}–{max_fmt} {range_unit})"
 
-    except Exception:
-        return f"{name}: (filter found; no summary available)"
+    except Exception as exc:  # curve loaded, but its numbers are unusable
+        return f"{name}: (curve loaded; summary unavailable — {type(exc).__name__})"
 
 
 def suggest(

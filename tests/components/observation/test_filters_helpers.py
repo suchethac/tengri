@@ -66,13 +66,20 @@ class TestLoad:
 
 
 class TestDescribe:
-    """describe: fallback on error, includes wavelength info."""
+    """describe: raises on unknown, includes wavelength info."""
 
-    def test_describe_fallback_on_unknown(self):
-        """Unknown filter returns fallback message with filter name."""
-        result = describe("nonexistent_filter_xyz")
-        assert "nonexistent_filter_xyz" in result
-        assert "found" in result.lower() or "summary" in result.lower()
+    def test_describe_raises_on_unknown(self):
+        """Unknown filter raises, like its sibling ``load`` (#1611).
+
+        This used to assert the opposite — that an unknown name returned a
+        fallback string. The string was ``"<name>: (filter found; no summary
+        available)"``, which states the filter *was* found, and made an unknown
+        name indistinguishable from a curve that failed to load. ``load()``
+        directly above already raises ``KeyError`` for the same input, so the
+        fallback was the odd one out rather than a policy.
+        """
+        with pytest.raises(KeyError):
+            describe("nonexistent_filter_xyz")
 
     def test_describe_includes_wavelength_info(self):
         """describe() includes wavelength information (λ_eff or range)."""
