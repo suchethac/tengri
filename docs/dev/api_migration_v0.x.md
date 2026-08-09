@@ -915,7 +915,11 @@ Two things to take from that grid, both counter-intuitive:
    rows agree to within run-to-run noise. Do not assume `approx=` is buying
    speed; measure it. Notebook
    [`10_fastspecfit_joint_fit`](../../notebooks/10_fastspecfit_joint_fit.py)
-   re-measures the three arms on every render for exactly this reason.
+   re-measures the three arms on every render for exactly this reason — with a
+   rotated arm order and an A/A control, because timing several arms in one
+   process otherwise measures which arm ran first. Before that harness landed,
+   that notebook published this same ratio as 18.6x, 12.6x, 1.0x and 3.2x on
+   unchanged code.
 
 `WavePrecomp` alone is worth only ~1.1x on a Cue model either way: the emulator,
 not the filter integration, is what dominates.

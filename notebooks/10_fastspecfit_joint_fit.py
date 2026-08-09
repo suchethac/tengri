@@ -280,7 +280,7 @@ print(
 # 18.6x, 12.6x, 1.0x and 3.2x on unchanged code, purely from what else the
 # machine happened to be doing.
 #
-# Two defences, both cheap:
+# Two defenses, both cheap:
 #
 # - **Interleave, rotate, and take the minimum.** Each arm is measured `N_REPS`
 #   times round-robin, and the order rotates by one each pass so no arm is
