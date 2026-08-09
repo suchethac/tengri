@@ -258,11 +258,16 @@ def _nthcomp_interp(
 ) -> jnp.ndarray:
     """Return the normalized nthcomp L_nu shape via trilinear interpolation.
 
-    Requires templates to have been loaded (``_TABLE_AVAILABLE`` is True).
-    Extrapolation beyond grid bounds is clamped to boundary values.
+    The custom-VJP kernel. ``table`` is primal argument 0 so the library can
+    be threaded through ``jax.jit`` as an argument; :func:`nthcomp_lnu_interp`
+    is the public entry point that resolves it. Extrapolation beyond grid
+    bounds is clamped to boundary values.
 
     Parameters
     ----------
+    table : NthcompTable
+        Template arrays. Also saved in the residuals, because the backward
+        pass re-evaluates the interpolation at ``gamma + eps``.
     nu : jnp.ndarray
         Frequency grid [Hz].
     gamma : scalar jnp array
