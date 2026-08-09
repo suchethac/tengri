@@ -1016,6 +1016,7 @@ def _compute_zone_luminosities(
     l_edd: float,
     l_bol_erg: float,
     agn_self_consistent_gamma: bool,
+    nthcomp_table=None,
 ) -> tuple:
     """Compute self-consistent luminosities of the three AGN zones.
 
@@ -1126,7 +1127,9 @@ def _compute_zone_luminosities(
         p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
         l_total = p_plain * _ring_area(r_cm, dr_ring, agn_cos_inc)
         kTbb_keV = _K_BOLTZ_KEV * t_ring
-        shape = _nthcomp_lnu_interp(nu, agn_gamma_warm, agn_kt_warm, kTbb_keV)
+        shape = _nthcomp_lnu_interp(
+            nu, agn_gamma_warm, agn_kt_warm, kTbb_keV, _template=nthcomp_table
+        )
         return shape * l_total
 
     l_nu_warm = jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0)
@@ -1284,6 +1287,7 @@ def kubota_done_disc(
     agn_r_warm_ratio: float = 2.0,
     n_radii: int = 50,
     agn_self_consistent_gamma: bool = False,
+    _template=None,
     **_kwargs,
 ) -> jnp.ndarray:
     """Kubota & Done (2018) three-zone accretion disc with self-consistent corona.
@@ -1507,6 +1511,7 @@ def kubota_done_disc(
         l_edd,
         l_bol_requested,
         agn_self_consistent_gamma,
+        nthcomp_table=_template,
     )
 
     return l_nu_total * scale

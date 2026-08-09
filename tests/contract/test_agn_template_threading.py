@@ -137,9 +137,7 @@ def test_baseline_bare_stellar_bakes_almost_nothing(ssp, obs):
 # ``strict=True`` on purpose: when one of these is fixed, this test starts
 # FAILING as XPASS, which is the signal to delete its row. A non-strict xfail
 # would silently absorb the fix and let the row rot.
-_KNOWN_BAKING: dict[tuple[str, str], str] = {
-    ("disc", "kubota_done"): "23.0 MB — closure-captured disc grid (#1383)",
-}
+_KNOWN_BAKING: dict[tuple[str, str], str] = {}
 
 # Blocks that fail this guard for a reason OTHER than baking — a genuine
 # JIT-safety bug should not be filed away as a performance issue. Empty now

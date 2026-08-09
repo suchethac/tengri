@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import functools
 import warnings
+from typing import NamedTuple
 
 import h5py
 import jax
@@ -138,31 +139,91 @@ def _clamp_interp_index(val: jnp.ndarray, grid: jnp.ndarray) -> tuple[jnp.ndarra
     return i_lo, jnp.clip(frac, 0.0, 1.0)
 
 
+class NthcompTable(NamedTuple):
+    """nthcomp Comptonization template arrays, as a JAX pytree.
+
+    Attributes
+    ----------
+    gamma : ndarray, shape (n_gamma,)
+        Photon-index axis.
+    kte : ndarray, shape (n_kte,)
+        Electron-temperature axis [keV].
+    ktbb : ndarray, shape (n_ktbb,)
+        Seed-blackbody-temperature axis [keV].
+    nu : ndarray, shape (n_nu,)
+        Template frequency grid [Hz].
+    table_log : ndarray, shape (n_gamma, n_kte, n_ktbb, n_nu)
+        ``log`` of the spectral shape.
+
+    Notes
+    -----
+    A pytree, so it can be handed to ``jax.jit`` as an argument. Closing over
+    these arrays instead freezes ~15 MB into every graph that touches a
+    Comptonized disc.
+    """
+
+    gamma: jnp.ndarray
+    kte: jnp.ndarray
+    ktbb: jnp.ndarray
+    nu: jnp.ndarray
+    table_log: jnp.ndarray
+
+
+def load_nthcomp_table() -> NthcompTable | None:
+    """Load the packaged nthcomp templates as a :class:`NthcompTable` pytree.
+
+    This is the ``template_loader`` the Comptonized disc blocks register.
+
+    Returns
+    -------
+    NthcompTable or None
+        ``None`` when the templates are absent — callers then fall back to
+        their analytic path, as they did before threading existed.
+
+    Notes
+    -----
+    **JIT-compatible**: no, deliberately — call it before tracing.
+    """
+    gamma, kte, ktbb, nu, table_log, available = _get_nthcomp_templates()
+    if not available:
+        return None
+    return NthcompTable(gamma=gamma, kte=kte, ktbb=ktbb, nu=nu, table_log=table_log)
+
+
 def _nthcomp_lnu_interp_impl(
     nu: jnp.ndarray,
     gamma: jnp.ndarray,
     kTe_keV: jnp.ndarray,
     kTbb_keV: jnp.ndarray,
+    table: NthcompTable | None = None,
 ) -> jnp.ndarray:
-    """Implementation of nthcomp interpolation (used by both forward and VJP)."""
-    if not _is_table_available():
-        raise RuntimeError(
-            "nthcomp templates not loaded. Run scripts/build_nthcomp_templates.py first."
-        )
+    """Implementation of nthcomp interpolation (used by both forward and VJP).
+
+    ``table`` carries the template arrays. Passing them in — rather than
+    reading the module-level cache here — is what lets the forward model
+    thread the ~15 MB library through ``jax.jit`` as a ``Parameter`` instead
+    of freezing it into the graph as ``Constant`` ops (#1383).
+    """
+    if table is None:
+        if not _is_table_available():
+            raise RuntimeError(
+                "nthcomp templates not loaded. Run scripts/build_nthcomp_templates.py first."
+            )
+        table = load_nthcomp_table()
 
     g = jnp.asarray(gamma, dtype=jnp.float32)
     t = jnp.asarray(kTe_keV, dtype=jnp.float32)
     b = jnp.asarray(kTbb_keV, dtype=jnp.float32)
 
-    gamma_jax = _get_gamma_jax()
-    kte_jax = _get_kte_jax()
-    ktbb_jax = _get_ktbb_jax()
+    gamma_jax = jnp.asarray(table.gamma)
+    kte_jax = jnp.asarray(table.kte)
+    ktbb_jax = jnp.asarray(table.ktbb)
     ig, fg = _clamp_interp_index(g, gamma_jax)
     it, ft = _clamp_interp_index(t, kte_jax)
     ib, fb = _clamp_interp_index(b, ktbb_jax)
 
-    table_jax = _get_table_jax()
-    nu_jax = _get_nu_jax()
+    table_jax = jnp.asarray(table.table_log)
+    nu_jax = jnp.asarray(table.nu)
 
     def _c(dg: int, dt: int, db: int) -> jnp.ndarray:
         """Return table value at the interpolation-cell corner offset (dg, dt, db)."""
@@ -188,7 +249,8 @@ def _nthcomp_lnu_interp_impl(
 
 
 @jax.custom_vjp
-def nthcomp_lnu_interp(
+def _nthcomp_interp(
+    table: NthcompTable,
     nu: jnp.ndarray,
     gamma: jnp.ndarray,
     kTe_keV: jnp.ndarray,
@@ -240,10 +302,11 @@ def nthcomp_lnu_interp(
        dominance in the torus emission," MNRAS, 283, 193 (1996).
        https://doi.org/10.1093/mnras/283.1.193
     """
-    return _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
+    return _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table)
 
 
 def _nthcomp_lnu_interp_fwd(
+    table: NthcompTable,
     nu: jnp.ndarray,
     gamma: jnp.ndarray,
     kTe_keV: jnp.ndarray,
@@ -254,10 +317,11 @@ def _nthcomp_lnu_interp_fwd(
     Computes the function value and saves residuals for backward differentiation.
     """
     # Compute the actual output via the implementation function
-    result = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
+    result = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table)
 
-    # Save residuals for the backward pass
-    residuals = (nu, gamma, kTe_keV, kTbb_keV)
+    # Save residuals for the backward pass. The table rides along because the
+    # backward pass re-evaluates the interpolation at gamma + eps.
+    residuals = (table, nu, gamma, kTe_keV, kTbb_keV)
     return result, residuals
 
 
@@ -276,14 +340,14 @@ def _nthcomp_lnu_interp_bwd(residuals: tuple, g_out: jnp.ndarray) -> tuple:
     are held fixed during typical inference workflows (gamma is the primary
     Comptonization parameter tuned during fitting).
     """
-    nu, gamma, kTe_keV, kTbb_keV = residuals
+    table, nu, gamma, kTe_keV, kTbb_keV = residuals
 
     # Finite-difference approximation for gamma (the problematic parameter)
     # Use adaptive epsilon based on gamma value
     eps = jnp.maximum(1e-6 * jnp.abs(gamma), 1e-6)
     gamma_plus = gamma + eps
-    result_plus = _nthcomp_lnu_interp_impl(nu, gamma_plus, kTe_keV, kTbb_keV)
-    result = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
+    result_plus = _nthcomp_lnu_interp_impl(nu, gamma_plus, kTe_keV, kTbb_keV, table)
+    result = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table)
 
     # Finite-difference gradient w.r.t. gamma (element-wise)
     # This gives the derivative of each output element w.r.t. gamma
@@ -315,8 +379,56 @@ def _nthcomp_lnu_interp_bwd(residuals: tuple, g_out: jnp.ndarray) -> tuple:
     g_kTe = jnp.zeros_like(kTe_keV)
     g_kTbb = jnp.zeros_like(kTbb_keV)
 
-    return (g_nu, g_gamma, g_kTe, g_kTbb)
+    # The template library is data, never a fit parameter, so its cotangent is
+    # structurally zero. It must still be returned: custom_vjp requires one
+    # cotangent per primal. Nothing consumes it, so XLA drops the zeros.
+    g_table = jax.tree.map(jnp.zeros_like, table)
+
+    return (g_table, g_nu, g_gamma, g_kTe, g_kTbb)
 
 
 # Register the VJP rule
-nthcomp_lnu_interp.defvjp(_nthcomp_lnu_interp_fwd, _nthcomp_lnu_interp_bwd)
+_nthcomp_interp.defvjp(_nthcomp_lnu_interp_fwd, _nthcomp_lnu_interp_bwd)
+
+
+def nthcomp_lnu_interp(
+    nu: jnp.ndarray,
+    gamma: jnp.ndarray,
+    kTe_keV: jnp.ndarray,
+    kTbb_keV: jnp.ndarray,
+    _template: NthcompTable | None = None,
+) -> jnp.ndarray:
+    """Normalized nthcomp :math:`L_\\nu` shape via trilinear interpolation.
+
+    Thin dispatcher over the custom-VJP kernel. See :func:`_nthcomp_interp`
+    for the physics and the gradient treatment.
+
+    Parameters
+    ----------
+    nu : ndarray, shape (n_nu,)
+        Frequency grid [Hz].
+    gamma, kTe_keV, kTbb_keV : Array
+        Photon index, electron temperature [keV], seed temperature [keV].
+        Each is clamped to the grid range.
+    _template : NthcompTable, optional
+        Pre-loaded templates, threaded in as a JIT argument by the forward
+        model. ``None`` (default) reads the module-level cache, which — under
+        trace — bakes ~15 MB into the graph as constants.
+
+    Returns
+    -------
+    ndarray, shape (n_nu,)
+        Non-negative spectral shape.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The gradient w.r.t. ``gamma`` is the
+    finite-difference rule registered on :func:`_nthcomp_interp`; the
+    template cotangent is structurally zero.
+    """
+    table = _template if _template is not None else load_nthcomp_table()
+    if table is None:
+        raise RuntimeError(
+            "nthcomp templates not loaded. Run scripts/build_nthcomp_templates.py first."
+        )
+    return _nthcomp_interp(table, nu, gamma, kTe_keV, kTbb_keV)
