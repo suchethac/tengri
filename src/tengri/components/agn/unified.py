@@ -198,16 +198,12 @@ def _find_relagn_grid() -> str:
     FileNotFoundError
         If no grid file is found. Run ``scripts/build_relagn_disc_grid.py``.
     """
-    from pathlib import Path
+    from tengri._data_setup import find_data
 
-    base = Path(__file__).resolve().parents[4]
-    candidates = [
-        base / "data" / "relagn_disc_grid.h5",
-        Path("data/relagn_disc_grid.h5"),
-    ]
-    for p in candidates:
-        if p.is_file():
-            return str(p)
+    # Honors $TENGRI_DATA_DIR as well as the repo root (#1431).
+    found = find_data("relagn_disc_grid.h5")
+    if found is not None:
+        return str(found)
     raise FileNotFoundError(
         "RELAGN disc grid not found. Run: "
         "conda run -n henv python scripts/build_relagn_disc_grid.py"

@@ -152,6 +152,7 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._data_setup import package_or_env_data_path
 from tengri.components.nebular._constants import (
     _C_CGS,
     _H_PLANCK,
@@ -160,8 +161,8 @@ from tengri.components.nebular._constants import (
 )
 from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES, SEGMENT_EDGES
 
-# Default path for the Feltre+2016 HDF5 grid
-_DEFAULT_FELTRE_GRID_PATH = Path(__file__).resolve().parents[4] / "data" / "feltre_grid.h5"
+# Default path for the Feltre+2016 HDF5 grid. Honors $TENGRI_DATA_DIR (#1431).
+_DEFAULT_FELTRE_GRID_PATH = package_or_env_data_path("feltre_grid.h5")
 
 # ── Physical constants ────────────────────────────────────────────
 _NU_LYMAN = _C_CGS / (911.76e-8)  # Lyman limit frequency [Hz]

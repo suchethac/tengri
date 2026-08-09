@@ -10,19 +10,21 @@ model data.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import chex
 import jax
 import jax.numpy as jnp
 import pytest
 
+from tengri._data_setup import find_data
+
 pytestmark = []
 
 jax.config.update("jax_enable_x64", True)
 
-_GRID_PATH = Path(__file__).resolve().parents[4] / "data" / "cat3d_wind_torus_grid.h5"
-_has_grid = _GRID_PATH.is_file()
+# parents[4] is one level above the repo root from tests/components/agn/, so
+# this guard was permanently true and the tests below never ran (#1431).
+_GRID_PATH = find_data("cat3d_wind_torus_grid.h5")
+_has_grid = _GRID_PATH is not None
 
 pytestmark = [
     pytest.mark.bounds,

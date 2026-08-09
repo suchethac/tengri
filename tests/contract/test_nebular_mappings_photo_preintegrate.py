@@ -17,20 +17,23 @@ Tests that require data/flury2024_grids.h5 are skipped gracefully when missing.
 from __future__ import annotations
 
 import importlib
-from pathlib import Path
 
 import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri._data_setup import find_data
+
 pytestmark = pytest.mark.contract
 
 # ── Fixtures ──────────────────────────────────────────────────────
 
-_MAPPINGS_H5 = Path(__file__).parents[3] / "data" / "flury2024_grids.h5"
+# parents[3] is one level above the repo root from tests/contract/, so this
+# guard was permanently true and the tests below never ran (#1431).
+_MAPPINGS_H5 = find_data("flury2024_grids.h5")
 _SKIP_NO_H5 = pytest.mark.skipif(
-    not _MAPPINGS_H5.exists(),
+    _MAPPINGS_H5 is None,
     reason="data/flury2024_grids.h5 not found; run scripts/build_flury2024_grids.py",
 )
 

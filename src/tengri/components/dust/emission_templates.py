@@ -29,7 +29,6 @@ Re-exported here from emission.py:
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 
 import jax.numpy as jnp
 
@@ -92,20 +91,21 @@ def _pdr_luminosity_weight(umin, umax, alpha):
     )
 
 
-# ── Template search paths (resolved once, reused for all models) ──
-
-_DATA_CANDIDATES = [
-    Path(__file__).resolve().parents[4] / "data",
-    Path("data"),
-]
+# ── Template search paths ─────────────────────────────────────────
 
 
 def _find_data_file(filename: str) -> str | None:
-    """Search standard data directories for a template file."""
-    for d in _DATA_CANDIDATES:
-        candidate = d / filename
-        if candidate.is_file():
-            return str(candidate)
+    """Search standard data directories for a template file.
+
+    Delegates to :func:`tengri._data_setup.find_data`, which is a superset of
+    the package-anchored and cwd-relative candidates this used to hold, and
+    additionally honors ``$TENGRI_DATA_DIR`` (#1431).
+    """
+    from tengri._data_setup import find_data
+
+    found = find_data(filename)
+    if found is not None:
+        return str(found)
     return None
 
 

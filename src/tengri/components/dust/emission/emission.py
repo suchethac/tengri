@@ -61,42 +61,29 @@ References
 import contextlib
 import functools
 from collections.abc import Callable
-from pathlib import Path
 
 import jax
 import jax.numpy as jnp
 
 # ── Template search paths (resolved once, reused for all models) ──
 
-_DATA_CANDIDATES = [
-    # Repo root for the src layout (src/tengri/components/dust/emission/ →
-    # five parents up). parents[4] was the repo root before this module moved
-    # into the emission/ subpackage; kept for any legacy flat layout. Both are
-    # harmless when they don't exist (is_file() check below).
-    Path(__file__).resolve().parents[5] / "data",
-    Path(__file__).resolve().parents[4] / "data",
-    Path("data"),
-]
-
 
 def _find_data_file(filename: str) -> str | None:
     """Search standard data directories for a template file.
 
-    Falls back to walking the CWD's parents (``tengri.data_path``) so
-    notebooks and scripts running from a subdirectory (e.g.
-    ``reproduction/prospector/``) still resolve ``<repo>/data/`` — the
-    static candidates only cover the source tree and a repo-root CWD.
-    """
-    for d in _DATA_CANDIDATES:
-        candidate = d / filename
-        if candidate.is_file():
-            return str(candidate)
-    from tengri._data_setup import data_path
+    Walks the CWD's parents so notebooks and scripts running from a
+    subdirectory (e.g. ``reproduction/prospector/``) still resolve
+    ``<repo>/data/``.
 
-    try:
-        return str(data_path(filename))
-    except FileNotFoundError:
-        return None
+    This previously tried a static package-anchored list *before* falling back
+    to the shared locator, which put ``$TENGRI_DATA_DIR`` last: a stale copy in
+    the source tree outranked the directory the user had configured. The shared
+    locator is a superset of that list and orders it correctly (#1431).
+    """
+    from tengri._data_setup import find_data
+
+    found = find_data(filename)
+    return str(found) if found is not None else None
 
 
 # ── Dust emission model catalog ──────────────────────────────────

@@ -199,6 +199,80 @@ def data_path(filename: str) -> Path:
     )
 
 
+def find_data(*filenames: str) -> Path | None:
+    """First of ``filenames`` present in any data directory, or ``None``.
+
+    The non-raising companion to :func:`data_path`, for the component grid
+    locators that have their own not-found message or a legitimate ``None``
+    result. Directory *names* are ignored: a caller may pass either a bare
+    ``"grid.h5"`` or the historical ``"data/grid.h5"``.
+
+    Parameters
+    ----------
+    *filenames : str
+        Candidate files in preference order.
+
+    Returns
+    -------
+    pathlib.Path or None
+        The first candidate that exists, searching every :func:`data_dirs`
+        entry for each name in turn. ``None`` if none of them exist anywhere.
+
+    Notes
+    -----
+    Preference is name-major, not directory-major: the first *filename* that
+    exists anywhere wins. The locators this replaces ranked their candidates by
+    scientific fidelity (SKIRTOR ``_v3`` over ``_v2`` over ``.npz``), so a
+    directory-major search would silently downgrade the grid whenever an older
+    file happened to sit earlier on the path.
+    """
+    dirs = data_dirs()
+    for filename in filenames:
+        name = Path(filename).name
+        for directory in dirs:
+            candidate = directory / name
+            if candidate.is_file():
+                return candidate
+    return None
+
+
+def package_or_env_data_path(filename: str) -> Path:
+    """Locate ``filename`` without consulting the working directory.
+
+    For module-level defaults, which are evaluated at import: :func:`data_path`
+    raises, and :func:`data_dirs` is cwd-dependent, so neither is safe to bind
+    to a constant or a default argument.
+
+    Parameters
+    ----------
+    filename : str
+        Basename of the data file, e.g. ``"cue_weights.npz"``.
+
+    Returns
+    -------
+    pathlib.Path
+        The file under ``$TENGRI_DATA_DIR`` if it is there, else under
+        :func:`package_data_dirs`. Falls back to the package-anchored path when
+        the file exists nowhere, so a missing grid stays a *load*-time error
+        naming a sensible path rather than an import-time failure.
+
+    Notes
+    -----
+    Deliberately excludes the cwd ancestor walk that :func:`data_dirs` performs.
+    An import-time constant would otherwise bind to whatever directory the
+    process happened to start in, making the resolved path depend on the caller's
+    cwd at import — the ``parents[N]`` anchoring this replaces was at least
+    cwd-independent, and that property is worth keeping.
+    """
+    env = _env_data_dir()
+    search = ([env] if env is not None else []) + package_data_dirs()
+    for directory in search:
+        candidate = directory / filename
+        if candidate.is_file():
+            return candidate
+    return package_data_dirs()[0] / filename
+
+
 SSP_BASE_URL = "https://halos.as.arizona.edu/suchethacooray/ssp-spectra/"
 
 #: The default SSP identifier — one constant consumed by BOTH

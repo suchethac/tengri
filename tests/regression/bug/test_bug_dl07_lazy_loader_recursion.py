@@ -25,10 +25,19 @@ from tengri.components.dust.emission import emission as E
 pytestmark = pytest.mark.regression_bug
 
 
-def test_repo_root_candidate_points_at_repo_data():
-    """The first static candidate must be <repo>/data under the src layout."""
+def test_repo_data_is_searched_without_depending_on_cwd():
+    """``<repo>/data`` must be searched, and not via a CWD-relative candidate.
+
+    Originally asserted ``_DATA_CANDIDATES[0] == <repo>/data`` — a static list
+    that has since been replaced by the shared locator (#1431), so pinning the
+    list's first element pins an implementation that no longer exists. The
+    invariant the bug was about is the one asserted here: the repo's own
+    ``data/`` is reachable from the package alone.
+    """
+    from tengri._data_setup import package_data_dirs
+
     repo_root = pathlib.Path(__file__).resolve().parents[3]
-    assert E._DATA_CANDIDATES[0] == repo_root / "data"
+    assert repo_root / "data" in package_data_dirs()
 
 
 def test_find_data_file_is_cwd_independent(tmp_path, monkeypatch):
