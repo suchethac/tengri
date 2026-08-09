@@ -109,9 +109,23 @@ def test_sed_fit_params_reaches_params_override(model, mock_data):
 
 
 def test_unknown_kwargs_still_fail_loudly(model, mock_data):
-    """Routing must not create a silent kwarg sink — typos still raise."""
+    """Routing must not create a silent kwarg sink — typos still raise, by name.
+
+    The rule is "loud", not "``TypeError``". Which exception surfaces depends on
+    *where* the name is caught, and that moved: originally Python itself rejected
+    it inside the runner (``run_map() got an unexpected keyword argument``),
+    whereas #1605 added a pre-dispatch check in ``_backend_registry`` that
+    rejects it earlier and raises ``ValueError`` — deliberately, for parity with
+    ``check_capabilities``, since the caller never called that runner.
+
+    Pinning the type pinned the layer, so an improvement to the error broke this
+    test while the guarded behavior was intact. Assert the invariant instead:
+    it raises, and the message names the offending kwarg so the typo is
+    actionable. That is strictly stronger than the original, which never
+    checked the message at all.
+    """
     flux, err = mock_data
     fwd = ForwardModel.build(sed=model)
 
-    with pytest.raises(TypeError):
+    with pytest.raises((TypeError, ValueError), match="calibration_marginalze"):
         fwd.fit(flux, err, method="map", n_steps=3, calibration_marginalze=True)
