@@ -28,11 +28,11 @@ parameters).
 import jax
 import jax.numpy as jnp
 
-from tengri.inference.likelihoods.gaussian import whiten
 from tengri.observation.eline_catalog import (
     DEFAULT_LINE_NAMES,  # noqa: F401 — re-exported for convenience
     DEFAULT_LINE_WAVELENGTHS,  # noqa: F401 — re-exported for convenience
 )
+from tengri.utils.scale import whiten
 
 # ── Public API ────────────────────────────────────────────────────
 

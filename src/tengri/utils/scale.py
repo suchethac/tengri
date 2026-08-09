@@ -68,6 +68,58 @@ def representable_floor(value: float) -> float:
     return max(float(value), float(jnp.finfo(jnp.result_type(float)).tiny))
 
 
+def whiten(x, sigma):
+    r""":math:`x / \sigma`, with the division made binding on the compiler.
+
+    The single seam through which every noise-weighting in tengri passes —
+    :math:`\chi^2` residuals, Gauss-Newton metrics, and the normal equations of
+    the analytic emission-line marginalization.
+
+    Dividing by :math:`\sigma` once is always representable; forming
+    :math:`1/\sigma^2` never is, at the :math:`\sigma \sim 10^{-30}` of a real
+    flux (:math:`1/\sigma^2 \sim 10^{59}` against a float32 ceiling of
+    :math:`3.4\times10^{38}`). Applying this **twice** is therefore the only
+    float32-safe spelling of :math:`N^{-1}`:
+
+    .. math::
+
+        J^\mathsf{T} N^{-1} J v \;=\; (J/\sigma)^\mathsf{T} (J/\sigma)\, v
+
+    Writing it in that order is not sufficient. Under ``jax.jit``, when
+    ``sigma`` is a compile-time constant, XLA re-associates
+    :math:`(x/\sigma)/\sigma` into :math:`x \cdot (1/\sigma^2)` and
+    constant-folds the reciprocal to ``inf``; ``0 * inf`` is ``NaN`` (#1535).
+    Measured: without the barrier the double division is finite eagerly and
+    NaN under ``jit``, with a literal ``inf`` in the compiled HLO. The
+    ``optimization_barrier`` makes the intended order a *data dependency*,
+    which the compiler must respect — a source-level grouping is only a
+    suggestion.
+
+    Parameters
+    ----------
+    x : array_like
+        Quantity to whiten — a residual, a Jacobian-vector product, or a
+        data-space vector.
+    sigma : array_like
+        1-σ uncertainty [same units as ``x``], broadcastable against ``x``.
+
+    Returns
+    -------
+    ndarray
+        ``x / sigma`` [dimensionless], shape of the broadcast inputs.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe, and it is only under JIT that the barrier does
+    anything. ``optimization_barrier`` is semantically the identity, so values
+    and derivatives are unchanged — verified bit-exact in float64.
+
+    Lives here rather than beside the Gaussian likelihood so that
+    ``observation/`` can use it without importing ``inference/`` (#1588).
+    """
+    return jax.lax.optimization_barrier(x / sigma)
+
+
 def pow10(x):
     """10**x, computed as ``exp(x·ln10)`` to preserve the input dtype.
 

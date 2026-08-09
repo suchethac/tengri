@@ -27,9 +27,14 @@ computation in tengri goes through here.
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 from jax.tree_util import Partial
+
+# The whitening primitive lives in utils/ so that ``observation/`` can reach it
+# without importing ``inference/`` — the layering runs
+# observation -> inference, never back (#1588). Re-exported here because every
+# likelihood in this module is written in terms of it.
+from tengri.utils.scale import whiten
 
 __all__ = [
     "diag_gaussian_chi2",
@@ -39,52 +44,6 @@ __all__ = [
     "standardized_residual",
     "whiten",
 ]
-
-
-def whiten(x: jnp.ndarray, sigma: jnp.ndarray) -> jnp.ndarray:
-    r""":math:`x / \sigma`, with the division made binding on the compiler.
-
-    The single seam through which every noise-weighting in tengri passes.
-    Dividing by :math:`\sigma` once is always representable; forming
-    :math:`1/\sigma^2` never is, at the :math:`\sigma \sim 10^{-30}` of a real
-    flux (:math:`1/\sigma^2 \sim 10^{59}` against a float32 ceiling of
-    :math:`3.4\times10^{38}`). Applying this twice is therefore the *only*
-    float32-safe spelling of :math:`N^{-1}`:
-
-    .. math::
-
-        J^\mathsf{T} N^{-1} J v
-        \;=\; (J/\sigma)^\mathsf{T} (J/\sigma)\, v
-
-    Writing it in that order is not sufficient. Under ``jax.jit``, when
-    ``sigma`` is a compile-time constant, XLA re-associates
-    :math:`(x/\sigma)/\sigma` into :math:`x \cdot (1/\sigma^2)` and
-    constant-folds the reciprocal to ``inf``; ``0 * inf`` is ``NaN`` (#1535).
-    The ``optimization_barrier`` turns the intended order into a *data
-    dependency*, which the compiler must respect — a source-level grouping is
-    only a suggestion.
-
-    Parameters
-    ----------
-    x : array_like
-        Quantity to whiten — a residual, a Jacobian-vector product, or a
-        data-space vector.
-    sigma : array_like
-        1-σ uncertainty, broadcastable against ``x``.
-
-    Returns
-    -------
-    ndarray
-        ``x / sigma``, same shape as the broadcast of the inputs.
-
-    Notes
-    -----
-    **JIT-compatible**: yes, and it is only under JIT that the barrier does
-    anything. Safe under ``grad``/``vmap``: ``optimization_barrier`` is
-    semantically the identity, so values and derivatives are unchanged —
-    verified bit-exact in float64.
-    """
-    return jax.lax.optimization_barrier(x / sigma)
 
 
 def inv_noise_std(noise: jnp.ndarray) -> jnp.ndarray:
