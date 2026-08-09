@@ -2707,6 +2707,7 @@ class Fitter:
         from tengri.inference._backend_registry import (
             check_capabilities,
             check_requires,
+            check_unknown_kwargs,
             check_usable,
             get_backend,
         )
@@ -2770,6 +2771,9 @@ class Fitter:
         # ``run_nifty_vi`` or ``run_map`` — functions the caller never mentioned.
         # Raises ValueError, matching the answer ``method='mcmc'`` already gave.
         check_capabilities(entry, kwargs)
+        # Same answer for every other unrecognized name, so a typo or an
+        # unsupported channel names the method instead of the runner (#1469).
+        check_unknown_kwargs(entry, kwargs)
 
         # Compile the loss/grad + predict surface up front so the fit loop runs
         # warm and the persistent JAX cache is populated.

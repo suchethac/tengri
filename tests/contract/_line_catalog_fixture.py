@@ -183,7 +183,10 @@ def build_two_galaxy_catalog(
         "halpha_err": line_err,
     }
     if line_censor is not None:
-        table["halpha_limit"] = np.asarray(line_censor, dtype=int)
+        # dtype is NOT coerced: a boolean column must stay boolean so the
+        # ingest guard can refuse it. Casting here would launder exactly the
+        # include-mask/censor-flag confusion the guard exists to catch.
+        table["halpha_limit"] = np.asarray(line_censor)
 
     # Create catalog with line columns
     if n_line_cols is not None and n_line_cols != len(line_names):

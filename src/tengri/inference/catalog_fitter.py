@@ -213,6 +213,112 @@ def _compute_summaries(samples, percentiles=None, reducers=None):
     return percentiles_dict, summary_dict
 
 
+#: The three engines a catalog method can dispatch to. ``sequential`` builds
+#: one :class:`~tengri.inference.fitter.Fitter` per galaxy; the other two
+#: compile a single loss and vmap the catalog through it.
+SEQUENTIAL = "sequential"
+MCMC_VMAPPED = "mcmc_vmapped"
+NATIVE_VI = "native_vi"
+
+_ALL_ENGINES = frozenset({SEQUENTIAL, MCMC_VMAPPED, NATIVE_VI})
+
+
+@dataclass(frozen=True)
+class GalaxyChannel:
+    """One per-galaxy data channel and the engines that can carry it.
+
+    Attributes
+    ----------
+    name : str
+        Short identifier, for messages and tests.
+    keys : tuple of str
+        The galaxy-dict keys this channel occupies. Several keys can belong
+        to one channel -- line fluxes travel as a value/error pair.
+    engines : frozenset of str
+        Engine kinds that actually thread it into the objective. An engine
+        absent here must refuse, not ignore.
+    what : str
+        Human-readable subject, opening the refusal message.
+    remedy : str
+        What the caller should do instead, as a full sentence.
+
+    Notes
+    -----
+    This table is the single place that knows which per-galaxy channels
+    exist. The knowledge used to be split between ``catalog.py``, which
+    writes the keys, and three engine branches that each read a hand-picked
+    subset -- so a channel added to one side and not the other was dropped
+    without a word. #1460, #1480 and #1599 are three instances of that one
+    shape.
+    """
+
+    name: str
+    keys: tuple[str, ...]
+    engines: frozenset[str]
+    what: str
+    remedy: str
+
+
+#: Every per-galaxy channel, and which engines thread it.
+#:
+#: Adding a channel means adding a row here *and* teaching the engines named
+#: in ``engines`` to read it. A key that appears on a galaxy dict without a
+#: row is refused outright, so the two halves cannot drift apart in silence.
+GALAXY_CHANNELS: tuple[GalaxyChannel, ...] = (
+    GalaxyChannel(
+        name="photometry",
+        keys=("flux_obs", "noise"),
+        engines=_ALL_ENGINES,
+        what="Per-galaxy photometry",
+        remedy="Every engine carries it, so this should be unreachable.",
+    ),
+    GalaxyChannel(
+        name="presence",
+        keys=("presence",),
+        engines=frozenset({SEQUENTIAL, MCMC_VMAPPED}),
+        what="Per-galaxy presence masks (heterogeneous photometry)",
+        remedy=(
+            "Use method='mcmc_nuts' (batched, presence-aware) or "
+            "method='map' (sequential). Batched native VI does not thread "
+            "them (experimental, off the critical path; see #1337)."
+        ),
+    ),
+    GalaxyChannel(
+        name="redshift",
+        keys=("redshift",),
+        engines=frozenset({SEQUENTIAL, MCMC_VMAPPED}),
+        what="Per-galaxy redshift",
+        remedy=(
+            "Use method='mcmc_nuts' / 'mcmc_hmc' (batched, runtime redshift) "
+            "or method='map' (sequential). Batched native VI does not thread "
+            "it (experimental, off the critical path; see #1337)."
+        ),
+    ),
+    GalaxyChannel(
+        name="line_fluxes",
+        keys=("line_flux_obs", "line_flux_err"),
+        engines=frozenset({SEQUENTIAL, MCMC_VMAPPED}),
+        what="Per-galaxy emission-line fluxes (line_cols=)",
+        remedy=(
+            "Use method='map' (sequential) or 'mcmc_nuts' / 'mcmc_hmc' "
+            "(batched). Batched native VI stacks only flux and noise."
+        ),
+    ),
+    GalaxyChannel(
+        name="line_censor",
+        keys=("line_censor",),
+        engines=frozenset({SEQUENTIAL}),
+        what="Per-galaxy emission-line limits (line_censor_cols=)",
+        remedy=(
+            "Use method='map' (or another sequential method), which honors "
+            "them per galaxy. The batched engines compile one loss for the "
+            "whole catalog and carry no per-galaxy limit mask, so dropping "
+            "the flags would fit every non-detection as a measurement."
+        ),
+    ),
+)
+
+
 def _resolve_n_padded(n_gal: int, K: int, n_pad: int | str | None) -> int:
     """Resolve the padded catalog size for the catalog VI engine.
 
@@ -645,6 +751,62 @@ class _CatalogFitterOriginal:
     #: NUTS/HMC chains per ``lax.map`` step (per-galaxy warmup, diagonal mass).
     _MCMC_VMAPPABLE: frozenset = frozenset({"mcmc_nuts", "mcmc_hmc"})
 
+    def _engine_kind(self, resolved: str) -> str:
+        """Which of the three engines ``resolved`` dispatches to."""
+        if resolved in self._NATIVE_VMAPPABLE:
+            return NATIVE_VI
+        if resolved in self._MCMC_VMAPPABLE:
+            return MCMC_VMAPPED
+        return SEQUENTIAL
+
+    def _refuse_unsupported_channels(self, resolved: str) -> None:
+        """Refuse per-galaxy channels the chosen engine cannot carry.
+
+        Parameters
+        ----------
+        resolved : str
+            The resolved method name, as returned by ``resolve_method``.
+
+        Raises
+        ------
+        NotImplementedError
+            If any galaxy carries a channel this engine does not thread, or
+            a key that :data:`GALAXY_CHANNELS` does not declare at all.
+
+        Notes
+        -----
+        One rule over one table, replacing a hand-written branch per channel.
+        The branches were the problem: a channel nobody wrote a branch for was
+        not refused, it was *dropped in silence*, because the engine simply
+        never read that key. Per-galaxy line fluxes reached the objective on
+        ``mcmc_nuts`` and not on ``map`` for exactly that reason (#1599), and
+        the same shape produced #1460 and #1480.
+
+        The unknown-key arm is what makes this hold going forward: adding a
+        key in ``catalog.py`` without declaring it here fails loudly on every
+        engine rather than working on whichever one happens to read it.
+        """
+        kind = self._engine_kind(resolved)
+        declared = {key: ch for ch in GALAXY_CHANNELS for key in ch.keys}
+        present = {key for galaxy in self.galaxies for key in galaxy}
+
+        for key in sorted(present):
+            channel = declared.get(key)
+            if channel is None:
+                raise NotImplementedError(
+                    f"Per-galaxy key {key!r} is not a declared catalog "
+                    "channel, so no engine is known to carry it and it would "
+                    "be silently dropped. Add it to GALAXY_CHANNELS in "
+                    "catalog_fitter.py, naming the engines that thread it."
+                )
+            if kind not in channel.engines:
+                carried = sorted(channel.engines)
+                raise NotImplementedError(
+                    f"{channel.what} is not threaded by method={resolved!r} "
+                    f"({kind}); it would be silently dropped. {channel.remedy} "
+                    f"Engines that carry it: {carried}."
+                )
+
     def _galaxy_line_fluxes(self, galaxy):
         """This galaxy's emission-line values on the shared line schema.
 
@@ -682,11 +844,19 @@ class _CatalogFitterOriginal:
         if template is None:
             return None
 
-        return dataclasses.replace(
-            template,
-            fluxes=jnp.asarray(galaxy["line_flux_obs"]),
-            errors=jnp.asarray(galaxy["line_flux_err"]),
-        )
+        replacements = {
+            "fluxes": jnp.asarray(galaxy["line_flux_obs"]),
+            "errors": jnp.asarray(galaxy["line_flux_err"]),
+        }
+        censor = galaxy.get("line_censor")
+        if censor is not None:
+            # Trinary flags -> the boolean pair LineFluxData stores. Rebuilt
+            # per galaxy because a non-detection is a property of the galaxy,
+            # not of the instrument (#1469).
+            censor = np.asarray(censor)
+            replacements["is_upper_limit"] = censor == 1
+            replacements["is_lower_limit"] = censor == -1
+        return dataclasses.replace(template, **replacements)
 
     def __init__(self, model, galaxies, data_type="photometry"):
         from tengri.inference.jit_engine import CompileCache
@@ -848,30 +1018,19 @@ class _CatalogFitterOriginal:
         _warn_if_nuts_high_dim(
             resolved, getattr(_spec, "n_free", None), surface="Catalog.fit / CatalogFitter.run"
         )
-        # Per-galaxy fixed-value overrides (e.g. redshift) and presence masks are
-        # threaded only through the sequential path today; the batched native/MCMC
-        # paths stack flux/noise and would SILENTLY DROP per-galaxy values. Fail loudly instead.
+        # Every per-galaxy channel is checked against the engine about to run,
+        # from one table (GALAXY_CHANNELS). Each channel used to carry its own
+        # hand-written branch here, and a channel whose branch nobody wrote was
+        # dropped in silence -- that is how per-galaxy line fluxes reached the
+        # objective on mcmc_nuts and not on map (#1599).
+        self._refuse_unsupported_channels(resolved)
         _has_pg_z = any("redshift" in g for g in self.galaxies)
-        if _has_pg_z and resolved in self._NATIVE_VMAPPABLE:
-            raise NotImplementedError(
-                "Per-galaxy redshift is not supported for batched native VI methods "
-                "(experimental, off the critical path). Use method='mcmc_nuts' / "
-                "'mcmc_hmc' (batched, runtime redshift) or method='map' (sequential). "
-                "See #1337."
-            )
         if _has_pg_z and resolved in self._MCMC_VMAPPABLE and self._catalog_z_range() is None:
             raise ValueError(
                 "Batched per-galaxy redshift requires a catalog_z_range so ONE "
                 "compiled program serves all redshifts. Build the model with "
                 "approx=WavePrecomp(catalog_z_range=(zmin, zmax)), or use "
                 "method='map' (sequential, recompiles per redshift). See #1337."
-            )
-        if resolved in self._NATIVE_VMAPPABLE and any("presence" in g for g in self.galaxies):
-            raise NotImplementedError(
-                "Per-galaxy presence masks are not yet supported for batched "
-                "native VI methods (experimental, off the critical path). "
-                "Use method='mcmc_nuts' (batched, presence-aware) or "
-                "method='map' (sequential) for heterogeneous photometry. See #1337."
             )
         if resolved in self._NATIVE_VMAPPABLE:
             return self._run_native(
