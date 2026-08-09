@@ -936,12 +936,6 @@ def describe(name: str) -> str:
         else:
             wave_min, wave_max = wave_np.min(), wave_np.max()
 
-        def format_wave(w):
-            if w >= 1e4:
-                return f"{w / 1e4:.2f}"
-            else:
-                return f"{w:.0f}"
-
         if lam_eff >= 1e4:
             unit = "μm"
             lam_eff_fmt = f"{lam_eff / 1e4:.3f}"
