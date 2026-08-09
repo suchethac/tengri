@@ -982,7 +982,58 @@ class Fitter:
             base = WavePrecomp()
         else:
             return None
-        return (base, FeaturePrecomp()) if self._fits_lines(model) else base
+        return (base, FeaturePrecomp()) if self._wants_feature_precomp(model) else base
+
+    def _wants_feature_precomp(self, model):
+        """Whether this fit should carry ``FeaturePrecomp``.
+
+        A line channel is the obvious trigger, and was the only one. But for a
+        **Cue-like** backend the per-Q_H grid replaces the *emulator call itself*,
+        not merely the line reconstruction, so it pays with no line channel at all
+        — the case a line-keyed condition can never reach.
+
+        Measured on a 10-parameter Cue model (free ``neb_logU`` / ``neb_logZ_gas``,
+        DECam *grz* + WISE), likelihood-gradient FLOPs read from the compiled HLO,
+        one process per arm with the persistent cache disabled:
+
+        =====================  ===========  =========
+        fit                    before       after
+        =====================  ===========  =========
+        photometry + lines      5,021,451   5,021,451
+        photometry only        82,526,904   3,737,260
+        =====================  ===========  =========
+
+        22x on the photometry-only column — and it also *repairs the gradient*.
+        On the un-tabulated path the loss is not smooth in ``met_logzsol``:
+        autodiff and central differences disagree by 24%, and the finite-difference
+        estimate swings between -45.9 and -80.4 as the step shrinks. Through the
+        grid the two agree to 7e-8, so every optimizer and NUTS run on a
+        photometry-only Cue fit was steering by an unreliable gradient. See #1596.
+
+        Same shape as the 2026-07 hole recorded in :meth:`_auto_approx_config`:
+        the trigger named a *channel* when the win belongs to the *backend*.
+        """
+        if self._fits_lines(model):
+            return True
+        # ``model`` is usually a ForwardModel, which delegates a fixed list of names
+        # to its inner SED and does NOT include the private backend — reading
+        # ``model._nebular_backend`` straight off it returns None, and the check
+        # then answers False for every ForwardModel fit without saying so.
+        backend = None
+        for attr in ("_inner_sed_for_delegation", "_single_inner_sed"):
+            sed = getattr(model, attr, None)
+            if callable(sed):
+                try:
+                    sed = sed()
+                except Exception:  # a model with no single inner SED (population/spatial)
+                    sed = None
+            if sed is not None:
+                backend = getattr(sed, "_nebular_backend", None)
+                if backend is not None:
+                    break
+        if backend is None:
+            backend = getattr(model, "_nebular_backend", None)
+        return backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
 
     def _add_feature_precomp(self, model):
         """Top up a build-time ``approx=`` with ``FeaturePrecomp`` for a lines fit.
