@@ -28,7 +28,6 @@ References
 import functools
 import warnings
 from collections.abc import Callable
-from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -380,11 +379,13 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
 
 
 def _find_nenkova_grid() -> str:
-    base = Path(__file__).resolve().parents[4]
-    for rel in _NENKOVA_GRID_SEARCH_PATHS:
-        for candidate in (base / rel, Path(rel)):
-            if candidate.is_file():
-                return str(candidate)
+    from tengri._data_setup import find_data
+
+    # Searches every directory the old parents[4] walk reached, plus
+    # $TENGRI_DATA_DIR (#1431).
+    found = find_data(*_NENKOVA_GRID_SEARCH_PATHS)
+    if found is not None:
+        return str(found)
     raise FileNotFoundError(_NENKOVA_NOT_FOUND_MSG)
 
 

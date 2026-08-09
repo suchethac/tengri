@@ -44,7 +44,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
 from tengri.components.agn.disc import (
     multicolor_disc as _multicolor_disc,
     powerlaw_disc as _powerlaw_disc,
@@ -91,7 +91,7 @@ def _build_grid_powerlaw(
     redshift: float,
     alpha_grid: np.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_lum_ratio: float = 1.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_T_max: float = 1e5,
 ) -> PreintegratedGrid:
     """Preintegrate powerlaw_disc over a 1D grid of alpha values.
@@ -163,7 +163,7 @@ def _build_grid_ss(
     redshift: float,
     mbh_grid: np.ndarray,
     lbol_grid: np.ndarray,
-    agn_lum_ratio: float = 1.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
 ) -> PreintegratedGrid:
     """Preintegrate disc_ss (Shakura-Sunyaev) over 2D grid of (M_bh, L_bol).
 

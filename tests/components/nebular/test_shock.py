@@ -10,11 +10,11 @@ tests that need the HDF5 are skipped with ``pytest.importorskip`` guard.
 from __future__ import annotations
 
 import warnings
-from pathlib import Path
 
 import jax.numpy as jnp
 import pytest
 
+from tengri._data_setup import find_data
 from tengri.components.dust.attenuation import resolve_dust_law
 from tengri.components.nebular.shock import (
     _FALLBACK_V,
@@ -25,10 +25,16 @@ from tengri.components.nebular.shock import (
 
 pytestmark = pytest.mark.bounds
 
-# Path to the optional HDF5 file (may not exist in CI)
-_HERE = Path(__file__).parents[2]
-_H5_PATH = _HERE / "data" / "mappings_templates.h5"
-_HAS_H5 = _H5_PATH.exists()
+# Path to the optional HDF5 file (may not exist in CI).
+#
+# This was ``Path(__file__).parents[2] / "data" / ...``, which is
+# ``tests/data/mappings_templates.h5`` — one level short of the repo root. The
+# file never exists there, so the five tests below skipped on *every* machine,
+# CI included, rather than only where the grid is genuinely absent. Asking the
+# same locator the code asks keeps the guard honest and picks up
+# $TENGRI_DATA_DIR (#1431).
+_H5_PATH = find_data("mappings_templates.h5")
+_HAS_H5 = _H5_PATH is not None
 
 h5_only = pytest.mark.skipif(not _HAS_H5, reason="data/mappings_templates.h5 not found")
 
@@ -221,14 +227,20 @@ def test_precursor_vs_shock_component():
 def test_fallback_without_h5(tmp_path, monkeypatch):
     """When data/mappings_templates.h5 is absent, a DeprecationWarning is emitted
     and shock_line_ratios still returns non-zero ratios."""
+    import tengri._data_setup as data_setup
     import tengri.components.nebular.shock as shock_module
 
     # Clear functools.cache so the loader re-runs on next call
     shock_module._load_mappings_grids.cache_clear()
 
-    # Point the HDF5 lookup to a non-existent path by monkeypatching __file__
-    fake_file = tmp_path / "shock.py"
-    monkeypatch.setattr(shock_module, "__file__", str(fake_file))
+    # Simulate absence at the locator. This used to monkeypatch
+    # ``shock_module.__file__``, which only worked while the lookup rebuilt the
+    # path from ``parents[4]``; that anchoring is gone (#1431) and the loader
+    # now asks ``find_data``, which does not consult the calling module's
+    # ``__file__`` at all. Pointing $TENGRI_DATA_DIR at an empty directory
+    # would not do it either — ``data_dirs()`` still walks the cwd ancestors
+    # and the package tree, where the real grid lives.
+    monkeypatch.setattr(data_setup, "find_data", lambda *names: None)
 
     try:
         with pytest.warns(DeprecationWarning, match="MAPPINGS grid file not found"):

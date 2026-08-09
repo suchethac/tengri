@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
 from tengri.components.agn.unified import register_agn_model
 
@@ -27,7 +27,7 @@ __all__ = ["composable"]
 def composable(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_lum_ratio: float = 1.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_disc_block: str = "none",
     agn_nlr_block: str = "none",
     agn_blr_block: str = "none",

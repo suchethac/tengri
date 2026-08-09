@@ -29,7 +29,6 @@ References
 
 import functools
 from collections.abc import Callable
-from pathlib import Path
 from typing import NamedTuple
 
 import jax
@@ -392,17 +391,23 @@ def _find_fritz_grid() -> str:
     and the download fail is :class:`FileNotFoundError` raised.
     """
 
-    base = Path(__file__).resolve().parents[4]
-    for rel in _GRID_SEARCH_PATHS:
-        for candidate in [base / rel, Path(rel)]:
-            if candidate.is_file():
-                return str(candidate)
+    from tengri._data_setup import find_data
+
+    # Must consult $TENGRI_DATA_DIR before falling through to the download
+    # below (#1431) — otherwise a user whose grids live off the source tree
+    # re-fetches a file they already have.
+    found = find_data(*_GRID_SEARCH_PATHS)
+    if found is not None:
+        return str(found)
 
     # Not on disk — try the public host (mirrors the SSP auto-fetch path).
     try:
         from tengri._data_setup import download_template
 
-        return str(download_template(_GRID_FILENAME, dest=base / "data"))
+        # dest defaults to download_dir(), which is data_dirs()[0] — so the
+        # loader above finds the file next time. The previous explicit
+        # repo-root dest wrote where $TENGRI_DATA_DIR users never look.
+        return str(download_template(_GRID_FILENAME))
     except Exception:
         raise FileNotFoundError(_NOT_FOUND_MSG) from None
 

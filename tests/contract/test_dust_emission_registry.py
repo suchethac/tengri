@@ -61,13 +61,14 @@ class TestLoaderUtilities:
         assert _find_data_file("__definitely_not_here__.npz") is None
 
     def test_find_data_file_present(self, tmp_path, monkeypatch):
-        # _DATA_CANDIDATES / _find_data_file live on the impl module; patch there
-        # (patching the package re-export would not affect the impl-module read).
+        # Redirect via $TENGRI_DATA_DIR rather than by patching a module-level
+        # candidate list: the env var is the mechanism users actually have, so
+        # this now exercises the real lookup instead of a test-only seam.
         from tengri.components.dust.emission import emission as em_impl
 
         fake_file = tmp_path / "test_dummy.npz"
         fake_file.write_bytes(b"")
-        monkeypatch.setattr(em_impl, "_DATA_CANDIDATES", [tmp_path])
+        monkeypatch.setenv("TENGRI_DATA_DIR", str(tmp_path))
         assert em_impl._find_data_file("test_dummy.npz") == str(fake_file)
 
 
